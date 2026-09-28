@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Platform images are published to Amazon ECR, the registry production pulls from, alongside GHCR. Every engine image — the API, the four operators, and the MinIO, clone-runner, syft and cosign images, which no pipeline published before — is tagged in ECR by its full commit SHA and, on a release, by its version. ECR tags are immutable, so an environment that pins one runs exactly one commit. The push role is assumed through GitHub OIDC; set the repository variables `ECR_REGISTRY` and `AWS_IMAGE_PUBLISH_ROLE_ARN` to enable it (#435).
 - `loopzero-ops kubeconform-schemas --chart DIR` generates strict kubeconform schemas from the CRDs a chart's pinned dependency ships; the Velero schemas are committed and refreshed by `task helm:sync-kubeconform-schemas` (#391)
 
 - `loopzero-ops validate-chart` renders one Helm chart and schema-validates the render, with no path on which a broken render reads as valid (#392)

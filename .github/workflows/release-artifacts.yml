@@ -1,6 +1,6 @@
 # AM6 — loopzero artifact pipeline, dual-channel + low-cost.
 #   develop push  → DEV channel: build only CHANGED services (paths-filter), tags :develop/:develop-<sha>, NO sign (cheap/fast)
-#   tag v*        → RELEASE channel: build ALL 5 services + ALL 13 charts, SBOM + provenance + keyless cosign
+#   tag v*        → RELEASE channel: build ALL 9 images + ALL 13 charts, SBOM + provenance + keyless cosign
 #   workflow_dispatch → build ALL (unsigned), manual
 # Low-cost levers: change-detection (dev), GHA layer cache (build-publish.yml), amd64-only, cancel-in-progress (dev only).
 name: artifacts
@@ -73,6 +73,10 @@ jobs:
             loopzero-platform-operator: ['operators/**', 'pkg/**']
             loopzero-tenant-operator: ['operators/**', 'pkg/**']
             loopzero-preview-operator: ['operators/**', 'pkg/**']
+            loopzero-minio: ['infra/images/minio/**']
+            loopzero-clone-runner: ['infra/images/clone-runner/**']
+            loopzero-syft-scanner: ['infra/images/syft-scanner/**']
+            loopzero-cosign-signer: ['infra/images/cosign-signer/**']
             charts: ['charts/**']
       - id: set
         env:
@@ -81,7 +85,7 @@ jobs:
           CHANGES: ${{ steps.filter.outputs.changes }}
         run: |
           set -euo pipefail
-          ALL='[{"image":"loopzero-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loopzero-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loopzero-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loopzero-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loopzero-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."}]'
+          ALL='[{"image":"loopzero-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loopzero-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loopzero-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loopzero-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loopzero-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."},{"image":"loopzero-minio","dockerfile":"infra/images/minio/Dockerfile","context":"infra/images/minio"},{"image":"loopzero-clone-runner","dockerfile":"infra/images/clone-runner/Dockerfile","context":"infra/images/clone-runner"},{"image":"loopzero-syft-scanner","dockerfile":"infra/images/syft-scanner/Dockerfile","context":"infra/images/syft-scanner"},{"image":"loopzero-cosign-signer","dockerfile":"infra/images/cosign-signer/Dockerfile","context":"infra/images/cosign-signer"}]'
           # A grouped block instead of three `>>` (SC2129): one redirect opens the file
           # once. Beyond style, it avoids the class of bug where one of the redirects is
           # written `>` by mistake and truncates what the earlier ones wrote — in
@@ -120,6 +124,10 @@ jobs:
       dockerfile: ${{ matrix.dockerfile }}
       context: ${{ matrix.context }}
       sign: ${{ needs.plan.outputs.sign == 'true' }}
+      # Amazon ECR, the registry production pulls from. Both are repository variables:
+      # unset, the reusable skips ECR entirely instead of failing the GHCR channel.
+      ecr_registry: ${{ vars.ECR_REGISTRY }}
+      aws_role_arn: ${{ vars.AWS_IMAGE_PUBLISH_ROLE_ARN }}
       # Provenance injected into the binary. Without it the version endpoint serves the
       # code's defaults and the /status dashboard showed `dev` as the production version —
       # worse than an empty cell, because it looks like data.

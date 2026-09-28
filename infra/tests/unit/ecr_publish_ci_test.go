@@ -1,0 +1,162 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+//
+// The platform images are published to Amazon ECR, the registry production pulls from.
+//
+// The repositories are created by loopzero-infra-live (`registry/ecr` unit) with IMMUTABLE
+// tags, so a push that reuses a tag is refused. That is the property that makes an image
+// reference traceable to one commit, and it is also why this file exists: the GHCR channel
+// moves `:develop` and `:latest` on every build, and copying those rules onto ECR would
+// fail on the second push of the day.
+//
+// Like split_operators_ci_test.go, there is deliberately no skip here. A workflow that
+// stops publishing to ECR must fail these tests, not make them vacuous.
+
+package unit
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"gopkg.in/yaml.v3"
+)
+
+const buildPublishWorkflow = ".github/workflows/build-publish.yml"
+
+// engineImageDockerfiles is every ECR repository this repository builds. The other two
+// repositories in the registry (loopzero-cloud, loopzero-dashboard) are built by loopzero-cloud.
+var engineImageDockerfiles = map[string]string{
+	"loopzero-api":               "api/Dockerfile",
+	"loopzero-tenant-operator":   "operators/Dockerfile.tenant-operator",
+	"loopzero-app-operator":      "operators/Dockerfile.app-operator",
+	"loopzero-preview-operator":  "operators/Dockerfile.preview-operator",
+	"loopzero-platform-operator": "operators/Dockerfile.platform-operator",
+	"loopzero-minio":             "infra/images/minio/Dockerfile",
+	"loopzero-clone-runner":      "infra/images/clone-runner/Dockerfile",
+	"loopzero-syft-scanner":      "infra/images/syft-scanner/Dockerfile",
+	"loopzero-cosign-signer":     "infra/images/cosign-signer/Dockerfile",
+}
+
+type workflowStep struct {
+	ID   string            `yaml:"id"`
+	Name string            `yaml:"name"`
+	If   string            `yaml:"if"`
+	Uses string            `yaml:"uses"`
+	With map[string]string `yaml:"with"`
+}
+
+type workflowFile struct {
+	On struct {
+		WorkflowCall struct {
+			Inputs map[string]any `yaml:"inputs"`
+		} `yaml:"workflow_call"`
+	} `yaml:"on"`
+	Jobs map[string]struct {
+		Permissions map[string]string `yaml:"permissions"`
+		With        map[string]any    `yaml:"with"`
+		Steps       []workflowStep    `yaml:"steps"`
+	} `yaml:"jobs"`
+}
+
+func loadWorkflow(t *testing.T, rel string) workflowFile {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(repoRoot(), rel))
+	if err != nil {
+		t.Fatalf("%s: cannot read the workflow this test guards: %v", rel, err)
+	}
+	var wf workflowFile
+	if err := yaml.Unmarshal(data, &wf); err != nil {
+		t.Fatalf("%s is not valid YAML: %v", rel, err)
+	}
+	return wf
+}
+
+// Every image the registry holds for this repository is in the release matrix, built
+// from a Dockerfile that is on disk. An image missing here is an ECR repository nothing
+// ever fills, and the environment pulling it fails at deploy time.
+func TestReleaseMatrixBuildsEveryEngineImage(t *testing.T) {
+	built := map[string]string{}
+	for _, img := range planMatrix(t, loadReleaseArtifactsPlan(t)) {
+		built[img.Image] = img.Dockerfile
+	}
+	for image, dockerfile := range engineImageDockerfiles {
+		got, ok := built[image]
+		if !ok {
+			t.Errorf("%s: %q is not in the release matrix — its ECR repository would stay empty", releaseArtifactsWorkflow, image)
+			continue
+		}
+		if got != dockerfile {
+			t.Errorf("%s: %q builds from %q, expected %q", releaseArtifactsWorkflow, image, got, dockerfile)
+		}
+		if _, err := os.Stat(filepath.Join(repoRoot(), got)); err != nil {
+			t.Errorf("%s: %q points at %q, which is not in this tree: %v", releaseArtifactsWorkflow, image, got, err)
+		}
+	}
+}
+
+// The images job hands the reusable workflow the ECR registry and the publish role, both
+// from repository variables rather than text, and grants the OIDC token the role needs.
+func TestImagesJobPublishesToECRThroughOIDC(t *testing.T) {
+	job, ok := loadWorkflow(t, releaseArtifactsWorkflow).Jobs["images"]
+	if !ok {
+		t.Fatalf("%s: no `images` job", releaseArtifactsWorkflow)
+	}
+	for input, want := range map[string]string{
+		"ecr_registry": "${{ vars.ECR_REGISTRY }}",
+		"aws_role_arn": "${{ vars.AWS_IMAGE_PUBLISH_ROLE_ARN }}",
+	} {
+		if got, _ := job.With[input].(string); got != want {
+			t.Errorf("%s: images.with.%s = %q, want %q", releaseArtifactsWorkflow, input, got, want)
+		}
+	}
+	if job.Permissions["id-token"] != "write" {
+		t.Errorf("%s: the images job must grant id-token: write — the ECR push role is assumed through OIDC", releaseArtifactsWorkflow)
+	}
+}
+
+func buildPublishStep(t *testing.T, id string) workflowStep {
+	t.Helper()
+	for _, s := range loadWorkflow(t, buildPublishWorkflow).Jobs["build-publish"].Steps {
+		if s.ID == id {
+			return s
+		}
+	}
+	t.Fatalf("%s: no step with id %q", buildPublishWorkflow, id)
+	return workflowStep{}
+}
+
+// ECR tags are immutable, so the ECR tag set may hold only tags that name one build:
+// the full commit SHA, and the release version. `:develop`, `:latest` and `X.Y` move by
+// design and would be refused on the second push.
+func TestBuildPublishTagsECROnlyWithImmutableTags(t *testing.T) {
+	tags := buildPublishStep(t, "meta-ecr").With["tags"]
+	if !strings.Contains(tags, "type=sha,format=long,prefix=") {
+		t.Errorf("%s: meta-ecr must tag the full commit SHA with no prefix; tags are:\n%s", buildPublishWorkflow, tags)
+	}
+	if !strings.Contains(tags, "type=semver,pattern={{version}}") {
+		t.Errorf("%s: meta-ecr must tag the release version; tags are:\n%s", buildPublishWorkflow, tags)
+	}
+	for _, moving := range []string{"type=raw", "{{major}}.{{minor}}", "type=ref"} {
+		if strings.Contains(tags, moving) {
+			t.Errorf("%s: meta-ecr carries %q, a tag that moves — ECR refuses it on the second push", buildPublishWorkflow, moving)
+		}
+	}
+}
+
+// The ECR half is opt-in: a caller that passes no registry (the other repositories of
+// the org call this workflow too) must not try to assume a role or log in.
+func TestBuildPublishECRStepsAreOptIn(t *testing.T) {
+	inputs := loadWorkflow(t, buildPublishWorkflow).On.WorkflowCall.Inputs
+	for _, in := range []string{"ecr_registry", "aws_role_arn"} {
+		if _, ok := inputs[in]; !ok {
+			t.Errorf("%s: missing workflow_call input %q", buildPublishWorkflow, in)
+		}
+	}
+	for _, id := range []string{"aws-credentials", "ecr-login", "meta-ecr"} {
+		if cond := buildPublishStep(t, id).If; !strings.Contains(cond, "inputs.ecr_registry != ''") {
+			t.Errorf("%s: step %q runs unconditionally (if: %q) — a caller without ECR would fail", buildPublishWorkflow, id, cond)
+		}
+	}
+}

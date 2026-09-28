@@ -50,6 +50,12 @@ on:
       #
       # The input still exists: anyone with a fleet of their own passes the label.
       runner:          { required: false, type: string,  default: '["ubuntu-latest"]' }
+      # Amazon ECR, the registry production pulls from (loopzero-infra-live `registry/ecr`).
+      # Empty = no ECR push: the other repositories of the org call this workflow too, and
+      # nothing here may assume an AWS role on their behalf. Both come from the CALLER's
+      # repository variables, so the account id is never fixed in text.
+      ecr_registry:    { required: false, type: string,  default: "" }      # e.g. 776217504929.dkr.ecr.us-east-1.amazonaws.com
+      aws_role_arn:    { required: false, type: string,  default: "" }      # role assumed through GitHub OIDC to push to ECR
     secrets:
       # Read-only deploy key for loopzero-contracts — the PREFERRED route since 2026-07-31. It
       # reaches exactly one repository, read-only, revocable on its own. The previous PAT died
@@ -158,6 +164,21 @@ jobs:
             type=ref,event=branch,enable=${{ github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/develop' }}
             type=sha,format=short,enable=${{ github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/develop' }}
 
+      # ECR tags are a SEPARATE set, because the repositories are IMMUTABLE: a push that
+      # reuses a tag is refused. `:develop`, `:latest` and `X.Y` move by design, so they would
+      # fail on the second push of the day. What remains names exactly one build — the full
+      # commit SHA on every event, and the release version on a tag — which is also what an
+      # environment pins to know which commit it runs.
+      - name: Compute ECR tags (immutable only)
+        id: meta-ecr
+        if: ${{ inputs.ecr_registry != '' }}
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ${{ inputs.ecr_registry }}/${{ inputs.image }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=semver,pattern={{version}}
+
       # --- Optional Trivy gate (build locally, scan, THEN push the cache-identical image) ---
       - name: Build for scan (Trivy gate)
         if: ${{ inputs.trivy }}
@@ -215,6 +236,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Same placement as the GHCR login, for the same reason: the ECR token is fetched after
+      # the slow build-for-scan so it is fresh at push time. The role is assumed through
+      # GitHub OIDC; no AWS key exists anywhere in GitHub.
+      - name: Assume the ECR publish role
+        id: aws-credentials
+        if: ${{ inputs.ecr_registry != '' }}
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ inputs.aws_role_arn }}
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        id: ecr-login
+        if: ${{ inputs.ecr_registry != '' }}
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
       - name: Login to Docker Hub (optional)
         if: ${{ inputs.dockerhub_image != '' && env.DOCKERHUB_TOKEN != '' }}
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -231,7 +268,11 @@ jobs:
           file: ${{ inputs.dockerfile }}
           push: true
           build-args: ${{ inputs.build_args }}
-          tags: ${{ steps.meta.outputs.tags }}
+          # One build, both registries: the ECR tags join the same push, so GHCR and ECR hold
+          # the same digest. A skipped meta-ecr leaves an empty line, which the action drops.
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ steps.meta-ecr.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           sbom: ${{ inputs.sign }}
           provenance: ${{ inputs.sign && 'mode=max' || 'false' }}
