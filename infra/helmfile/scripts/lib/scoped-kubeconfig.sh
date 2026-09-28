@@ -91,6 +91,11 @@ rules:
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]
     verbs: ["create", "update", "patch", "delete"]
+  # The per-plan PriorityClass the tenant reconcile writes on the cell (#408). Shared
+  # across tenants of a plan and never deleted with one, so no delete verb.
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["create", "update", "patch"]
 EOF
 
 # 4) ClusterRoleBinding

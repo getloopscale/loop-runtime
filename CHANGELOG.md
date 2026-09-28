@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Tenants on a freshly created cell now become Ready: the cell's scoped operator identity may write the plan PriorityClass the tenant reconcile creates, which it could only read before (#408)
+
 - task doctor now checks the Ory auth services in loopzero-auth, where setup installs them, instead of warning that a healthy install is missing them (#407)
 
 - The tenant-operator image builds again: every operator Dockerfile now compiles its command package instead of main.go alone, which broke once the tenant-operator config moved to its own file (#406)
