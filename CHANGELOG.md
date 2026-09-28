@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A cold setup now syncs the OpenBao AppRole role_id right after the vault bootstrap issues it, so loopzero-api boots with transit enabled instead of crash-looping until the post-cleanroom seeds run (#405)
+
 - The Tilt dev loop now applies the loopzero-api runtime ConfigMap and Secret in loopzero-system, where the API reads them; they landed in default and loopzero-api never started (#404)
 
 - The local dev loop starts the API again after a clean setup: it ran its own untracked copy of the database migrations with a client the host may not have, and it reloaded its own configuration forever; it now runs the same migration step as setup and settles (#403)

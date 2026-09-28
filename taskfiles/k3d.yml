@@ -261,6 +261,9 @@ tasks:
         fi
         task k3d:secrets:bootstrap
         bash infra/scripts/local/vault-bootstrap-dev.sh
+        # The bootstrap issues a new AppRole role_id every run and writes only the
+        # secret_id; loopzero-api refuses transit without the role_id, so sync it now (#405).
+        (cd cmd/loopzero-ops && go run . seed vault-role-id-sync)
 
   # ---------------------------------------------------------------------------
   # S0.3: Infrastructure install

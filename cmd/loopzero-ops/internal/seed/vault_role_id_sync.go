@@ -106,7 +106,13 @@ func (s *VaultRoleIDSyncSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("write %s into %s/%s: %v", openBaoVaultRoleIDKey, openBaoAppRoleNamespace, openBaoAppRoleSecret, err)}
 	}
 	// envFrom is read at container start: restart so the pod reads the new value.
+	// Setup runs this before the dev loop deploys loopzero-api (#405). With no Deployment
+	// nothing holds a stale value, and the first container start reads the Secret.
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore); err != nil {
+		if apierrors.IsNotFound(err) {
+			return Result{Verdict: PASS, Reason: fmt.Sprintf("canonical role_id written to %s/%s (first 8=%s…); loopzero-api not deployed yet, its first start reads it",
+				openBaoAppRoleNamespace, openBaoAppRoleSecret, roleID[:8])}
+		}
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("restart loopzero-api: %v", err)}
 	}
 	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient,

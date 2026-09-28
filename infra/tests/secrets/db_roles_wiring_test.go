@@ -101,7 +101,9 @@ func TestSetupWiresOpenBaoAfterNetworking(t *testing.T) {
 	}
 }
 
-func TestTheOpenBaoWiringRunsTheBootstrapOnlyWhenTheClusterExists(t *testing.T) {
+// secretsWireBody returns the shell text of task k3d:secrets:wire.
+func secretsWireBody(t *testing.T) string {
+	t.Helper()
 	raw, err := os.ReadFile("../../../taskfiles/k3d.yml")
 	if err != nil {
 		t.Fatalf("read taskfiles/k3d.yml: %v", err)
@@ -124,10 +126,31 @@ func TestTheOpenBaoWiringRunsTheBootstrapOnlyWhenTheClusterExists(t *testing.T) 
 			body.WriteString(s)
 		}
 	}
-	text := body.String()
+	return body.String()
+}
+
+func TestTheOpenBaoWiringRunsTheBootstrapOnlyWhenTheClusterExists(t *testing.T) {
+	text := secretsWireBody(t)
 	for _, want := range []string{"loopzero-secrets", "SKIP", "infra/scripts/local/vault-bootstrap-dev.sh"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("k3d:secrets:wire does not mention %q; it must skip without the cluster and run the bootstrap with it", want)
 		}
+	}
+}
+
+// The bootstrap issues a NEW AppRole role_id every run and writes only the secret_id.
+// loopzero-api refuses to boot with transit on and no role_id, and the dev loop turns
+// transit on — so the wiring that runs the bootstrap must sync the role_id right after
+// it, not leave it to a seed that runs once the cleanroom is already over (#405).
+func TestTheOpenBaoWiringSyncsTheRoleIDTheBootstrapIssued(t *testing.T) {
+	text := secretsWireBody(t)
+
+	boot := strings.Index(text, "vault-bootstrap-dev.sh")
+	sync := strings.Index(text, "seed vault-role-id-sync")
+	if sync < 0 {
+		t.Fatalf("k3d:secrets:wire never runs `loopzero-ops seed vault-role-id-sync`; body:\n%s", text)
+	}
+	if boot < 0 || sync < boot {
+		t.Errorf("the role-id sync (offset %d) must run after vault-bootstrap-dev.sh (offset %d)", sync, boot)
 	}
 }

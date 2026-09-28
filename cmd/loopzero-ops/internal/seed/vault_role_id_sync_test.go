@@ -260,3 +260,29 @@ func getDeploymentEnvValue(t *testing.T, cli ctrlclient.Client, name string) (bo
 	}
 	return false, ""
 }
+
+// The setup wires OpenBao before the dev loop deploys loopzero-api, and the vault bootstrap
+// issues a NEW role id every time it runs — so the sync has to run right after it, when
+// no loopzero-api Deployment exists yet. Nothing running means no stale value to replace:
+// the first container start reads the Secret the seed just wrote (#405).
+func TestVaultRoleIDSync_WritesTheRoleIDWhenLoopZeroAPIIsNotDeployedYet(t *testing.T) {
+	const roleID = "fresh-role-id-1234567890abcdef0123"
+	deps, _ := roleIDSyncDeps(t, roleID,
+		approleSecret(map[string][]byte{"OPENBAO_VAULT_SECRET_ID": []byte("secret-id-from-bootstrap")}))
+	if err := deps.CtrlClient.Delete(deps.Ctx, makeLoopZeroAPIDeploymentWithEnv(nil)); err != nil {
+		t.Fatalf("remove the loopzero-api Deployment: %v", err)
+	}
+
+	got := NewVaultRoleIDSyncSeed().Run(deps)
+
+	if got.Verdict != PASS {
+		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
+	}
+	sec, err := deps.Kube.GetSecret(deps.Ctx, "loopzero-system", "loopzero-openbao-approle")
+	if err != nil {
+		t.Fatalf("get the AppRole Secret: %v", err)
+	}
+	if string(sec.Data["OPENBAO_VAULT_ROLE_ID"]) != roleID {
+		t.Errorf("Secret OPENBAO_VAULT_ROLE_ID = %q, want %q", sec.Data["OPENBAO_VAULT_ROLE_ID"], roleID)
+	}
+}
