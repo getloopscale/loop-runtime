@@ -370,6 +370,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The cleanroom's before/after comparison now recognises the same workloads after a rebuild instead of reporting every renamed pod as missing, so the chain can pass end to end (#417)
+
+- The cleanroom chain can reach its dev-loop phase again: it started Tilt with process attributes the kernel refuses, so that phase failed before Tilt ran (#416)
+
 - A cold setup no longer rewrites tracked files with the host's container IPs: the committed cross-cluster addresses are container names, so a clean checkout stays clean (#264)
 
 - Inspecting a release id that does not exist through the admin API now answers 404 instead of 500 (#415)
