@@ -153,4 +153,10 @@ func TestTheOpenBaoWiringSyncsTheRoleIDTheBootstrapIssued(t *testing.T) {
 	if boot < 0 || sync < boot {
 		t.Errorf("the role-id sync (offset %d) must run after vault-bootstrap-dev.sh (offset %d)", sync, boot)
 	}
+	// The secrets bootstrap leaves kubectl on another cluster, and a seed inherits the
+	// active context unless CORE_CONTEXT pins it — measured: the sync then reported the
+	// AppRole Secret absent while it existed on core.
+	if !strings.Contains(text, "CORE_CONTEXT={{.CORE_CONTEXT}}") {
+		t.Errorf("the role-id sync must pin CORE_CONTEXT to the core context var; body:\n%s", text)
+	}
 }

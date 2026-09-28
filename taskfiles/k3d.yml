@@ -263,7 +263,8 @@ tasks:
         bash infra/scripts/local/vault-bootstrap-dev.sh
         # The bootstrap issues a new AppRole role_id every run and writes only the
         # secret_id; loopzero-api refuses transit without the role_id, so sync it now (#405).
-        (cd cmd/loopzero-ops && go run . seed vault-role-id-sync)
+        # CORE_CONTEXT pins the seed to core: the secrets bootstrap leaves kubectl elsewhere.
+        (cd cmd/loopzero-ops && CORE_CONTEXT={{.CORE_CONTEXT}} go run . seed vault-role-id-sync)
 
   # ---------------------------------------------------------------------------
   # S0.3: Infrastructure install
