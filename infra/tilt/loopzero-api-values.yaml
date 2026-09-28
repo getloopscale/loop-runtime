@@ -53,7 +53,11 @@ secrets:
   # Tilt Deployment lists this Secret AFTER that one in envFrom, so a literal here would
   # silently win with a stale value.
   minioAccessKey: "loopzero-admin"
-  databaseUrl: "postgres://loopzero:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
+  # #396 — the request pool connects as the non-owner loopzero_api role and the
+  # cross-tenant loops as loopzero_worker; loopzero-api refuses to boot on the owner. Both
+  # passwords are the standalone default `task db:roles` sets.
+  databaseUrl: "postgres://loopzero_api:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
+  loopzeroWorkerDatabaseUrl: "postgres://loopzero_worker:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
   loopzeroArgoCallbackSecret: "dev-callback-secret"
   minioSecretKey: "loopzero-dev-password"
   loopzeroServiceAuthSecret: "cleanroom-service-auth-secret-do-not-use-in-prod"

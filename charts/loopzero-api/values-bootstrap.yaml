@@ -109,12 +109,21 @@ secrets:
   keyRefs:
     - name: DATABASE_URL
       secretName: loopzero-db-credentials
-      key: uri
+      key: api-uri
       optional: true
       reason: >-
-        B35 — the credentials Secret stores the URL under `uri`. The Secret itself is
-        mounted non-optionally above, so a missing Secret already stops the pod; this entry
-        only renames the key, and the binary fails typed if the value is empty.
+        #396 — the request pool connects as the non-owner loopzero_api role, whose URL the
+        credentials Secret stores under `api-uri`; `uri` is the owner's and is for
+        migrations. The binary refuses to boot on a pool that can bypass RLS and fails
+        typed if the value is empty; the Secret itself is mounted non-optionally above.
+    - name: LOOPZERO_WORKER_DATABASE_URL
+      secretName: loopzero-db-credentials
+      key: worker-uri
+      optional: true
+      reason: >-
+        #396 — the background loops that span tenants connect as loopzero_worker. Optional
+        because a managed-database environment provides it only when it declares
+        LOOPZERO_WORKER_DB_URI; without it the API falls back to the request pool.
     - name: GITEA_TOKEN
       secretName: gitea-admin
       key: token

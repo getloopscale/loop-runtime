@@ -227,6 +227,7 @@ tasks:
       #
       # Sponsor "no WORKAROUNDs" closure of [[feedback_task_setup_chain_gap_helm_timeout]].
       - task: bootstrap:standalone:pre-db
+      - task: db:roles
       - task: db:migrate
       - task: bootstrap:standalone:post-db
       - task: dev:seed
