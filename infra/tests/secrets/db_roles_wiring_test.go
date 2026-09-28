@@ -85,3 +85,49 @@ func TestTheTiltAPIConnectsThroughTheRoleSplit(t *testing.T) {
 		t.Errorf("Tilt's LOOPZERO_WORKER_DATABASE_URL does not connect as loopzero_worker: %q", values.Secrets.WorkerDatabaseURL)
 	}
 }
+
+// The secrets cluster is optional (#398), and when it exists nothing handed
+// OpenBao's AppRole to loopzero-api: vault-bootstrap-dev.sh does the whole chain and
+// had no caller. Setup wires it after networking, which is the step that makes
+// the secrets cluster resolvable from core.
+func TestSetupWiresOpenBaoAfterNetworking(t *testing.T) {
+	steps := setupSteps(t)
+	wire, net := indexOf(steps, "k3d:secrets:wire"), indexOf(steps, "networking:setup")
+	if wire < 0 {
+		t.Fatalf("task setup never runs k3d:secrets:wire; steps: %v", steps)
+	}
+	if net < 0 || wire < net {
+		t.Errorf("k3d:secrets:wire (step %d) must run after networking:setup (step %d)", wire, net)
+	}
+}
+
+func TestTheOpenBaoWiringRunsTheBootstrapOnlyWhenTheClusterExists(t *testing.T) {
+	raw, err := os.ReadFile("../../../taskfiles/k3d.yml")
+	if err != nil {
+		t.Fatalf("read taskfiles/k3d.yml: %v", err)
+	}
+	var doc struct {
+		Tasks map[string]struct {
+			Cmds []any `yaml:"cmds"`
+		} `yaml:"tasks"`
+	}
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse taskfiles/k3d.yml: %v", err)
+	}
+	task, ok := doc.Tasks["k3d:secrets:wire"]
+	if !ok {
+		t.Fatal("taskfiles/k3d.yml declares no k3d:secrets:wire")
+	}
+	var body strings.Builder
+	for _, c := range task.Cmds {
+		if s, ok := c.(string); ok {
+			body.WriteString(s)
+		}
+	}
+	text := body.String()
+	for _, want := range []string{"loopzero-secrets", "SKIP", "infra/scripts/local/vault-bootstrap-dev.sh"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("k3d:secrets:wire does not mention %q; it must skip without the cluster and run the bootstrap with it", want)
+		}
+	}
+}

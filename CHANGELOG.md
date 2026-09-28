@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A cold `task setup` completes with or without the optional secrets cluster: a missing one no longer fails the cross-cluster DNS step, and when it exists setup now initialises OpenBao and hands the API its credentials, which nothing did before (#398)
+
 - The public CI job runs its diff-scoped quality gates again: it re-fetched the base branch without credentials and died before any gate ran, although its checkout already holds the full history (#370)
 
 - A fresh install with the in-cluster database starts the API again: `task setup` creates the `loopzero_api` and `loopzero_worker` roles before the migrations and hands the API their connection URLs, instead of the table owner's, which the API refuses to serve requests over (#396)

@@ -202,6 +202,7 @@ tasks:
       - task: validate:helm-deps
       - task: infra:install
       - task: networking:setup
+      - task: k3d:secrets:wire
       - task: crds:install
       # CANONICAL ORDER FIX 2026-06-15 (dev-public Cleanroom chain-gap closure):
       #

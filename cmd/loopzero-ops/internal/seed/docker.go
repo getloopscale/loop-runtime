@@ -24,7 +24,7 @@ func defaultDockerInspect(container string) (string, error) {
 		container, "--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}").Output()
 	if err != nil {
 		var ee *exec.ExitError
-		if errors.As(err, &ee) && strings.Contains(string(ee.Stderr), "No such object") {
+		if errors.As(err, &ee) && inspectSaysContainerIsAbsent(string(ee.Stderr)) {
 			return "", fmt.Errorf("%s: %w", container, errContainerAbsent)
 		}
 		return "", fmt.Errorf("docker inspect %s: %w", container, err)
@@ -35,6 +35,15 @@ func defaultDockerInspect(container string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no IPAddress found for %s (State.Running?)", container)
+}
+
+// inspectSaysContainerIsAbsent reports whether `docker inspect` failed because the
+// container does not exist. Docker changed the message's case — "Error: No such
+// object" in older releases, "error: no such object" now — and matching one spelling
+// turned the absent OPTIONAL secrets cluster into a fatal setup error (#398). Any
+// other failure (daemon down, permission) stays fatal.
+func inspectSaysContainerIsAbsent(stderr string) bool {
+	return strings.Contains(strings.ToLower(stderr), "no such object")
 }
 
 // defaultDockerNetworkInspect returns the IPv4 address (no CIDR) of the given

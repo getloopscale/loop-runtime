@@ -246,6 +246,22 @@ tasks:
           kubectl --context k3d-loopzero-secrets -n secrets-system exec openbao-0 -- bao status 2>/dev/null || echo "bao CLI not yet ready"
         fi
 
+  k3d:secrets:wire:
+    desc: |
+      Wire OpenBao into the core cluster when the optional secrets cluster exists:
+      install the chart, then init/unseal and hand loopzero-api its AppRole and SPKI pin
+      (infra/scripts/local/vault-bootstrap-dev.sh). Skips, saying so, when there is
+      no loopzero-secrets cluster — a self-hoster runs without OpenBao (#398).
+    cmds:
+      - |
+        if ! k3d cluster list -o json 2>/dev/null | grep -q '"name":"loopzero-secrets"'; then
+          echo "[k3d:secrets:wire] SKIP — no loopzero-secrets cluster: this install runs without OpenBao (the secrets cluster is optional)."
+          echo "[k3d:secrets:wire] The Tilt dev loop enables OpenBao transit and needs it: task k3d:secrets:create, then re-run this task."
+          exit 0
+        fi
+        task k3d:secrets:bootstrap
+        bash infra/scripts/local/vault-bootstrap-dev.sh
+
   # ---------------------------------------------------------------------------
   # S0.3: Infrastructure install
   # ---------------------------------------------------------------------------
