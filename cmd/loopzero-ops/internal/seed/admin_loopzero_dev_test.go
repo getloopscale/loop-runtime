@@ -23,6 +23,9 @@ type kratosAdminStub struct {
 	putSetPw     bool
 	loginFlowID  string
 	sessionValue string
+	// relativeAction makes the login flow carry a path-only ui.action, which is what
+	// Kratos renders when serve.public.base_url is "/" (standalone environments).
+	relativeAction bool
 }
 
 func newKratosStub(t *testing.T, existingIdentityID string) (*kratosAdminStub, *httptest.Server) {
@@ -57,10 +60,14 @@ func newKratosStub(t *testing.T, existingIdentityID string) (*kratosAdminStub, *
 		case r.URL.Path == "/self-service/login/browser" && r.Method == http.MethodGet:
 			// Emit a flow with action URL pointing back to this server.
 			stub.loginFlowID = "flow-abc"
+			action := srv.URL + "/self-service/login"
+			if stub.relativeAction {
+				action = "/self-service/login?flow=" + stub.loginFlowID
+			}
 			resp := map[string]any{
 				"id": stub.loginFlowID,
 				"ui": map[string]any{
-					"action": srv.URL + "/self-service/login",
+					"action": action,
 					"nodes":  []any{},
 				},
 			}
@@ -367,5 +374,30 @@ func TestAdminLoopzeroDevProvisionsTheTenantThroughTheEngine(t *testing.T) {
 	}
 	if (*sent)["admin_user_id"] != "kratos-id-1" {
 		t.Errorf("engine provisioned %q, want the Kratos identity", (*sent)["admin_user_id"])
+	}
+}
+
+// Standalone environments render Kratos with an empty public URL, so base_url is "/"
+// and the login flow's ui.action is a path. POSTing it as-is fails with "unsupported
+// protocol scheme" — measured on a cold standalone-multi cleanroom (#410). The action
+// must be resolved against the Kratos public URL the flow was fetched from.
+func TestKratosMintSessionCookie_ResolvesARelativeFlowAction(t *testing.T) {
+	stub, server := newKratosStub(t, "id-x")
+	defer server.Close()
+	stub.relativeAction = true
+	cfg := AdminLoopzeroDevConfig{
+		Email:           "admin@loopzero.example",
+		SeedPassword:    "pw",
+		PublicKratosURL: server.URL,
+		KratosAdminURL:  server.URL,
+	}
+
+	cookie, err := kratosMintSessionCookie(context.Background(), http.DefaultClient, cfg)
+
+	if err != nil {
+		t.Fatalf("mint with a relative ui.action: %v", err)
+	}
+	if cookie != "session-cookie-abc123" {
+		t.Errorf("cookie = %q, want session-cookie-abc123", cookie)
 	}
 }

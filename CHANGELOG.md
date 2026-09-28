@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The admin seed now mints its session on standalone environments, resolving the path-only login action Kratos renders there instead of failing with an unsupported URL (#410)
+
 - The chaos-mesh seed now waits for its install to roll out before verifying, instead of failing on every cold cluster with 0 of 6 pods counted (#409)
 
 - Tenants on a freshly created cell now become Ready: the cell's scoped operator identity may write the plan PriorityClass the tenant reconcile creates, which it could only read before (#408)

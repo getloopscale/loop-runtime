@@ -359,7 +359,13 @@ func kratosMintSessionCookie(ctx context.Context, base *http.Client, cfg AdminLo
 		submit["csrf_token"] = csrf
 	}
 	payload, _ := json.Marshal(submit)
-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, flow.UI.Action, bytes.NewReader(payload))
+	// Kratos renders a path-only action when serve.public.base_url is "/" (standalone
+	// environments, #410); resolve it against the public URL the flow came from.
+	action, err := resolveFlowAction(cfg.PublicKratosURL, flow.UI.Action)
+	if err != nil {
+		return "", err
+	}
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, action, bytes.NewReader(payload))
 	if err != nil {
 		return "", err
 	}
@@ -486,4 +492,18 @@ func adminWriteSessionFile(path, cookieValue string) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
+}
+
+// resolveFlowAction returns a Kratos flow ui.action as an absolute URL, resolving a
+// relative one against the public Kratos URL.
+func resolveFlowAction(publicKratosURL, action string) (string, error) {
+	base, err := url.Parse(publicKratosURL)
+	if err != nil {
+		return "", fmt.Errorf("parse public Kratos URL %q: %w", publicKratosURL, err)
+	}
+	ref, err := url.Parse(action)
+	if err != nil {
+		return "", fmt.Errorf("parse flow ui.action %q: %w", action, err)
+	}
+	return base.ResolveReference(ref).String(), nil
 }
