@@ -17,6 +17,7 @@ package cleanroom
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -50,8 +51,9 @@ var _ = Describe("Cleanroom canonical chain v2", Label("live", "cleanroom"), fun
 		Expect(repoRoot).ToNot(BeEmpty(), "could not locate repo root (set LOOPZERO_REPO_ROOT)")
 		opts = DefaultOptions(repoRoot)
 
-		// 45min budget for full chain (more than v1 mandate per mandate UNBREAKABLE).
-		ctx, cancel = context.WithTimeout(context.Background(), 45*time.Minute)
+		// 90min: setup alone is budgeted at 30-45min, then 4min of Tilt boot and up to
+		// 10min of doctor. A 45min context killed the chain before its own doctor gate.
+		ctx, cancel = context.WithTimeout(context.Background(), 90*time.Minute)
 	})
 
 	AfterEach(func() {
@@ -60,7 +62,7 @@ var _ = Describe("Cleanroom canonical chain v2", Label("live", "cleanroom"), fun
 
 	Context("when invoked end-to-end (Phase 0..5)", func() {
 		It("destroys k3d, recreates infra, gates doctor, and passes baseline diff", Label("full"), func() {
-			Skip("LIVE test — opt-in by running with `go test -tags=live -run TestCleanroomFullChain`")
+			skipUnlessDestroyConsented()
 			outcome, err := Run(ctx, opts)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(outcome).ToNot(BeNil())
@@ -73,7 +75,7 @@ var _ = Describe("Cleanroom canonical chain v2", Label("live", "cleanroom"), fun
 
 	Context("when invoked with --skip-cleanroom (debug iteration)", func() {
 		It("only runs Phase 4 doctor gate", Label("smoke"), func() {
-			Skip("LIVE test — opt-in by removing this skip in interactive runs")
+			// Destroys nothing: it gates the doctor against the clusters already up.
 			opts.SkipCleanroom = true
 			opts.SkipBaseline = true
 			outcome, err := Run(ctx, opts)
@@ -86,7 +88,7 @@ var _ = Describe("Cleanroom canonical chain v2", Label("live", "cleanroom"), fun
 
 	Context("when invoked with --skip-baseline (back-compat)", func() {
 		It("runs Phases 1-4 without Phase 0 + Phase 5", Label("partial"), func() {
-			Skip("LIVE test — opt-in by removing this skip in interactive runs")
+			skipUnlessDestroyConsented()
 			opts.SkipBaseline = true
 			outcome, err := Run(ctx, opts)
 			Expect(err).ToNot(HaveOccurred())
@@ -96,3 +98,12 @@ var _ = Describe("Cleanroom canonical chain v2", Label("live", "cleanroom"), fun
 		})
 	})
 })
+
+// skipUnlessDestroyConsented lets a spec that deletes the k3d clusters run only
+// when the caller said so. `task cleanroom:v2` grants it; a bare `go test -tags=live`
+// does not, and says what to set instead of skipping in silence.
+func skipUnlessDestroyConsented() {
+	if !DestroyConsented() {
+		Skip(fmt.Sprintf("destroys and recreates the k3d clusters — set %s=1 (task cleanroom:v2 does) to run it", DestroyConsentEnv))
+	}
+}

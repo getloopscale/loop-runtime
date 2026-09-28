@@ -1166,7 +1166,11 @@ tasks:
       Wall-clock budget ~30-45min. Requires LIVE k3d clusters.
       Phases: baseline pre + clean:all + setup + tilt up + doctor + baseline post-diff.
     cmds:
-      - go test -tags=live ./infra/tests/livetest/cleanroom/... -count=1 -timeout 1h -v
+      # The spec deletes the k3d clusters, so it needs explicit consent; without it
+      # every spec skips and this task used to exit 0 having run nothing (#393).
+      # Only the `full` spec: the other two are partial chains, not the canonical run.
+      # -ginkgo.timeout is separate from `go test -timeout` (Ginkgo defaults to 60min).
+      - LOOPZERO_CLEANROOM_DESTROY=1 go test -tags=live ./infra/tests/livetest/cleanroom/... -count=1 -timeout 2h -v -args -ginkgo.label-filter=full -ginkgo.timeout=2h
 
   cleanroom:v2:hermetic:
     desc: |

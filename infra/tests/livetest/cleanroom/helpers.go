@@ -54,6 +54,18 @@ type Options struct {
 	Err io.Writer
 }
 
+// DestroyConsentEnv names the explicit consent a spec needs before it deletes and
+// recreates the k3d clusters. A spec that destroys infrastructure must not run by
+// accident, and it must not refuse unconditionally either: that was #393, where
+// every spec skipped and `task cleanroom:v2` reported SUCCESS having run nothing.
+const DestroyConsentEnv = "LOOPZERO_CLEANROOM_DESTROY"
+
+// DestroyConsented reports whether the caller granted DestroyConsentEnv. Only the
+// exact value "1" counts, so a stray "false" or "0" can never read as consent.
+func DestroyConsented() bool {
+	return os.Getenv(DestroyConsentEnv) == "1"
+}
+
 // DefaultOptions returns canonical defaults — matching the v1 chain runner.
 func DefaultOptions(repoRoot string) Options {
 	return Options{

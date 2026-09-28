@@ -362,6 +362,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `task cleanroom:v2` now actually runs the cold-start chain: every spec used to skip unconditionally, so the task reported SUCCESS in milliseconds with no cluster destroyed or recreated; the destructive specs now run on explicit consent (`LOOPZERO_CLEANROOM_DESTROY=1`), which the task grants for the full-chain spec only (#393)
 - `task validate:helmfile-templates` passes: Velero objects are validated against generated schemas instead of failing, the offline render no longer needs `LOOPZERO_DB_PASSWORD`, and the `dev` environment's missing loopzero-cloud values layer was added (#391)
 
 - `task validate:manifests` now fails, naming the chart, when a chart fails to render or renders nothing; it used to pass over a broken render (Velero on every fresh clone), and it builds chart dependencies itself (#392)
