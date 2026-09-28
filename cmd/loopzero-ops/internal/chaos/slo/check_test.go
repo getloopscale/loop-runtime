@@ -3,7 +3,11 @@
 
 package slo
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+)
 
 func ip(n int) *int { return &n }
 
@@ -28,8 +32,8 @@ func TestCompare_SuccessRateBreach_Fail(t *testing.T) {
 	if v.Result != Fail {
 		t.Fatalf("want FAIL, got %s", v.Result)
 	}
-	if v.Result.ExitCode() != 2 {
-		t.Errorf("FAIL exit want 2, got %d", v.Result.ExitCode())
+	if v.Result.ExitCode() != exitcode.Failure {
+		t.Errorf("FAIL exit want %d, got %d", exitcode.Failure, v.Result.ExitCode())
 	}
 	if len(v.Reasons) != 1 {
 		t.Errorf("want 1 reason, got %v", v.Reasons)

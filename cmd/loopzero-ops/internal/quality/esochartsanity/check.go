@@ -24,15 +24,16 @@
 package esochartsanity
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const (
@@ -49,8 +50,18 @@ type Config struct {
 
 // Outcome is the summary.
 type Outcome struct {
-	Warn     bool // helm not on PATH
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations signals ≥ 1 assertion failed.
@@ -72,23 +83,23 @@ func Check(cfg Config) (Outcome, error) {
 	if _, err := os.Stat(chart); errors.Is(err, fs.ErrNotExist) {
 		return Outcome{}, ErrChartMissing
 	}
-	if _, err := exec.LookPath("helm"); err != nil {
-		return Outcome{Warn: true}, nil
+	if _, err := helmTemplate(chart, "vault-local"); errors.Is(err, helmrender.ErrHelmUnavailable) {
+		return Outcome{}, err
 	}
 
 	// Inventory expected count from values.yaml `^  - targetSecret:` entries.
 	valuesBytes, err := os.ReadFile(filepath.Join(chart, valuesRelPath))
 	if err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("read values.yaml: %v", err)}}, ErrViolations
+		return Outcome{Failures: []string{fmt.Sprintf("read values.yaml: %v", err)}, Violation: ErrViolations}, nil
 	}
 	expected := countMatches(valuesBytes, `(?m)^\s*-\s+targetSecret:`)
 	if expected == 0 {
-		return Outcome{Failures: []string{"inventory 0 targetSecret entries in values.yaml"}}, ErrViolations
+		return Outcome{Failures: []string{"inventory 0 targetSecret entries in values.yaml"}, Violation: ErrViolations}, nil
 	}
 
 	renderVL, err := helmTemplate(chart, "vault-local")
 	if err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("render vault-local: %v", err)}}, ErrViolations
+		return Outcome{Failures: []string{fmt.Sprintf("render vault-local: %v", err)}, Violation: ErrViolations}, nil
 	}
 
 	var failures []string
@@ -145,25 +156,20 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }
 
-// helmTemplate runs `helm template loopzero-external-secrets <chart> [--set envName=X]`.
+// helmTemplate renders the chart as release loopzero-external-secrets, with
+// envName set when non-empty.
 func helmTemplate(chartDir, envName string) ([]byte, error) {
-	args := []string{"template", "loopzero-external-secrets", chartDir}
+	var sets []string
 	if envName != "" {
-		args = append(args, "--set", "envName="+envName)
+		sets = []string{"envName=" + envName}
 	}
-	cmd := exec.Command("helm", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%v: %v\n%s", args, err, stderr.String())
-	}
-	return stdout.Bytes(), nil
+	out, err := helmrender.Helm{Release: "loopzero-external-secrets"}.Render(chartDir, sets)
+	return []byte(out), err
 }
 
 func countMatches(content []byte, pattern string) int {

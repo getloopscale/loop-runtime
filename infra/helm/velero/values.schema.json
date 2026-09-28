@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://loopzero.platform/schemas/velero/values.schema.json",
   "title": "velero DR backup chart values schema",
-  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on unreplaced REPLACE-AT-INSTALL-TIME placeholders. Critical because per binding memory feedback_velero_must_be_in_drill: 'Velero DEVE ESTA NO DRILL TEST' — silent placeholder leak in drill would cause Journey 12 to SKIP (Velero not installed) and mask drill prod-parity gap.",
+  "description": "Plan 2026-05-20 T2.5 ext — fail-fast on unreplaced REPLACE-AT-INSTALL-TIME placeholders. Critical because per binding memory feedback_velero_must_be_in_drill ('Velero MUST BE IN THE DRILL TEST') — silent placeholder leak in drill would cause Journey 12 to SKIP (Velero not installed) and mask drill prod-parity gap.",
   "type": "object",
   "properties": {
     "velero": {

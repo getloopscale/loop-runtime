@@ -21,7 +21,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"github.com/getloopscale/loopzero/api/internal/db"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/pkg/vault"
@@ -66,11 +70,10 @@ func TestSetupSecretStore_NilTransitFallsBackToLegacyAES(t *testing.T) {
 	if got == nil {
 		t.Fatalf("setupSecretStore: want non-nil got, got nil")
 	}
-	// Type assert: legacy path returns *store.PostgresSecretStore with
-	// vault field == nil. Cannot inspect the vault field directly
-	// (unexported), but we can use the type identity as proxy.
-	if _, ok := got.(*store.PostgresSecretStore); !ok {
-		t.Fatalf("setupSecretStore: want *store.PostgresSecretStore, got %T", got)
+	// Without transit the store has no write path (T10.3): a write is refused
+	// as an unavailable secrets backend before any database is touched.
+	if _, err := got.Set(context.Background(), "tn-1", "web", "production", "api", "DB_URL", []byte("v")); !errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+		t.Fatalf("a store without transit must refuse writes, got %v", err)
 	}
 }
 
@@ -84,26 +87,19 @@ func TestSetupSecretStore_NonNilTransitWiresVaultDispatch(t *testing.T) {
 	// unwired but readable (decryptFromStore prefix detection still
 	// dispatches when older rows surface).
 	fake := &fakeTransit{}
-	got, err := setupSecretStore(nil, "", fake, newTestLogger())
+	got, err := setupSecretStore(unreachableDB(), "", fake, newTestLogger())
 	if err != nil {
 		t.Fatalf("setupSecretStore: %v", err)
 	}
 	if got == nil {
 		t.Fatalf("setupSecretStore: want non-nil got, got nil")
 	}
-	// The wire-up itself is observable via the constructor return
-	// type — vault path returns *store.PostgresSecretStore with
-	// s.vault wired. To assert dispatch actually flows through the
-	// fake transit, we would need a live DBTX to call store.Set;
-	// that is covered in the integration tests
-	// (api/internal/db/transit_dispatch_test.go). At the boot-time
-	// wire boundary, the proof is "we reached the
-	// NewPostgresSecretStoreWithVault branch" — verified by Set
-	// raising an error here is acceptable (no DB) AND by the
-	// constructor not returning an error (which would happen if the
-	// adapter was nil).
-	if _, ok := got.(*store.PostgresSecretStore); !ok {
-		t.Fatalf("setupSecretStore: want *store.PostgresSecretStore, got %T", got)
+	// A write goes through the transit client before it reaches the database:
+	// with no database here the write fails afterwards, but the encrypt call is
+	// the proof the store was wired with transit.
+	_, _ = got.Set(context.Background(), "tn-1", "web", "production", "api", "DB_URL", []byte("v"))
+	if fake.encryptCalls != 1 {
+		t.Fatalf("transit Encrypt calls = %d, want 1", fake.encryptCalls)
 	}
 }
 
@@ -121,18 +117,42 @@ func TestSetupSecretStore_BadAESKeyReturnsError(t *testing.T) {
 	}
 }
 
-// O adapter que ligava os dois lados era cerimônia, não tradução. `pkg/vault.Transit` e
-// `store.VaultTransitClient` declaravam a MESMA forma — o doc do próprio adapter dizia
-// que *"signatures match byte-for-byte; only the method names differ"* — e a ponte
-// existia só para reconciliar `Encrypt` com `EncryptForTenant`.
+// The adapter that joined the two sides was ceremony, not translation. `pkg/vault.Transit` and
+// `store.VaultTransitClient` declared the SAME shape — the adapter's own doc said
+// *"signatures match byte-for-byte; only the method names differ"* — and the bridge
+// existed only to reconcile `Encrypt` with `EncryptForTenant`.
 //
-// Em Go isso não precisa de ponte: a interface é estrutural, e a raiz de composição
-// entrega um valor que satisfaz o que o consumidor pede. **Nenhum dos dois pacotes passa
-// a importar o outro** — que era a razão declarada para o adapter existir, e continua
-// verdadeira sem ele. Esta asserção mora aqui, na raiz de composição, que é o único lugar
-// que legitimamente conhece os dois lados.
+// In Go this needs no bridge: the interface is structural, and the composition root
+// hands over a value that satisfies what the consumer asks for. **Neither package starts
+// importing the other** — which was the stated reason for the adapter to exist, and stays
+// true without it. This assertion lives here, in the composition root, which is the only
+// place that legitimately knows both sides.
 //
-// `B-043`, bala 4: o adapter é **deletado**, não movido.
+// `B-043`, bullet 4: the adapter is **deleted**, not moved.
 func TestTransitClientSatisfiesTheStoreContractWithoutAnAdapter(t *testing.T) {
 	var _ store.VaultTransitClient = (vault.Transit)(nil)
 }
+
+// errUnreachableDB is what every statement on unreachableDB returns.
+var errUnreachableDB = errors.New("test database: unreachable")
+
+// unreachableDBTX is a db.DBTX whose every statement fails, so a store can be
+// driven up to its first database call without a database. It is deliberately
+// not a db.SqlcBridge: a sqlc-backed store then gets db.Generated's handle,
+// which fails every call too, and this composition-root test never has to
+// reach into the generated package (db-generated-boundary).
+type unreachableDBTX struct{}
+
+type unreachableRow struct{}
+
+func (unreachableRow) Scan(...any) error { return errUnreachableDB }
+
+func (unreachableDBTX) QueryRow(context.Context, string, ...any) db.Row { return unreachableRow{} }
+func (unreachableDBTX) Query(context.Context, string, ...any) (db.Rows, error) {
+	return nil, errUnreachableDB
+}
+func (unreachableDBTX) Exec(context.Context, string, ...any) (db.ExecResult, error) {
+	return db.ExecResult{}, errUnreachableDB
+}
+
+func unreachableDB() db.DBTX { return unreachableDBTX{} }

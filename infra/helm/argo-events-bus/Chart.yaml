@@ -1,6 +1,6 @@
 apiVersion: v2
 name: argo-events-bus
-description: T0.2 Cenário B POC — EventBus (JetStream NATS) CR for argo-events. Deployed AFTER argo-events (per Helmfile needs:) so CRDs are registered before this CR applies. Split from argo-events wrapper per FAANG-pattern (avoid CRD-before-CR install race).
+description: T0.2 Scenario B POC — EventBus (JetStream NATS) CR for argo-events. Deployed AFTER argo-events (per Helmfile needs:) so CRDs are registered before this CR applies. Split from argo-events wrapper per FAANG-pattern (avoid CRD-before-CR install race).
 version: 0.1.0
 appVersion: "2.4.4"
 type: application

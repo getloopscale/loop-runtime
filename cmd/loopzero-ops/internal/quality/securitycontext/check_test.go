@@ -182,3 +182,21 @@ func TestSortedAndMultipleCharts(t *testing.T) {
 		t.Errorf("charts should be sorted, got %v", o.Charts)
 	}
 }
+
+// A template the gate cannot read used to be skipped by a walk whose error was
+// discarded, so an unreadable file could hide the securityContext it holds and
+// the chart would be judged on the rest.
+func TestUnreadableTemplateIsAnError(t *testing.T) {
+	root := t.TempDir()
+	chart(t, root, "c", map[string]string{"templates/deploy.yaml": conformantTmpl})
+	// Named to sort before deploy.yaml: once a file matches, the answer is known
+	// and later files are not needed, so the unread one must come first.
+	link := filepath.Join(root, DefaultHelmDir, "c", "templates", "a-unreadable.yaml")
+	if err := os.Symlink(filepath.Join(root, "missing-target"), link); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Check(Config{Root: root}); err == nil {
+		t.Fatal("an unreadable template must be an error")
+	}
+}

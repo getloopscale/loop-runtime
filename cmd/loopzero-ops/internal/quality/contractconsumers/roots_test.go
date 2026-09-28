@@ -5,96 +5,94 @@ package contractconsumers
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
-// A raiz de consumidor que NAO EXISTE precisa reprovar alto.
+// A consumer root that does not exist must surface, never vanish.
 //
-// `git grep -- a b c` ignora em silencio os pathspecs que nao casam nada e devolve
-// os matches dos que casam. Medido em 2026-08-19: das tres raizes declaradas,
-// `cloud/dashboard/src/` e `cli/src/` **nao existem mais neste repositorio** — sairam
-// para `../loopzero-cloud` e `../loopzero-cli` na decomposicao (M4 e M2). Sobra `api/internal/`.
-//
-// Isso e' pior do que parece, e e' por isso que o teste e' de existencia e nao de
-// contagem: as duas raizes que sumiram eram as de TypeScript, e sao elas que carregam
-// os consumidores de FIO — os que leem o campo pelo nome do JSON e que o compilador
-// nao ve'. O que sobrou e' Go, onde `.<tag>` so' pode ser seletor de campo, e um campo
-// removido **quebra a compilacao**. Ou seja, a unica raiz viva e' aquela cujos
-// consumidores ja' tem outra guarda, e as que precisavam do gate sumiram.
-//
-// Enquanto isso for silencioso, o gate reporta PASS sobre uma populacao que nao existe
-// — a forma exata do B-040.
-func TestRaizDeConsumidorAusenteReprovaEmVezDeSumir(t *testing.T) {
-	raiz := t.TempDir()
-	// Um checkout git minimo: o Check chama `git` com -C nesta raiz.
-	if err := os.MkdirAll(filepath.Join(raiz, "api", "internal"), 0o755); err != nil {
+// `git grep -- a b c` silently ignores a pathspec that matches nothing. The two
+// TypeScript roots — the wire consumers the Go compiler cannot see — left this
+// repository at the decomposition and live in sibling checkouts that a clone
+// may not have. When they are absent the verdict covers only Go, and it must
+// say so (Partial) instead of reporting a full PASS.
+func TestMissingConsumerRootIsReportedAndMakesTheVerdictPartial(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "loopzero") // siblings would be ../loopzero-*
+	if err := os.MkdirAll(filepath.Join(root, "api", "internal"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	out, err := Check(Config{RepoRoot: raiz})
+	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	if out == nil {
-		t.Fatal("Check devolveu outcome nulo")
-	}
-	if len(out.MissingRoots) == 0 {
-		t.Fatalf("nenhuma raiz ausente reportada, e a arvore de teste so' tem api/internal — "+
-			"as outras duas raizes declaradas (%v) nao existem e o gate seguiu como se varresse tudo",
-			out.ScanRoots)
+	if len(out.MissingRoots) != 2 || !out.Partial {
+		t.Fatalf("want the two sibling roots missing and Partial=true, got missing=%v partial=%v",
+			out.MissingRoots, out.Partial)
 	}
 	for _, r := range out.MissingRoots {
 		if strings.Contains(r, "api/internal") {
-			t.Errorf("api/internal foi reportada como ausente e ela existe: %v", out.MissingRoots)
+			t.Errorf("api/internal was reported missing and it exists: %v", out.MissingRoots)
 		}
 	}
 }
 
-// A populacao real: as tres raizes declaradas, medidas contra ESTE repositorio.
-// Um mutante prova que o detector dispara; so' isto diz o que ele encontra no que
-// existe (`rules/testing.md` § 4.2). Resultado medido em 2026-08-19: **2 das 3
-// ausentes**, e sao as duas de TypeScript.
-func TestPopulacaoRealDasRaizesDeConsumidor(t *testing.T) {
-	raiz := repoRootParaTeste(t)
-	var ausentes []string
-	for _, r := range consumerRoots {
-		if _, err := os.Stat(filepath.Join(raiz, r)); err != nil {
-			ausentes = append(ausentes, r)
-		}
+// A consumer root that exists but cannot be grepped is an error, not zero
+// findings: the old code discarded `git grep`'s exit status entirely.
+func TestGrepFailureInAConsumerRootIsAnError(t *testing.T) {
+	root := t.TempDir() // not a git repository
+	if err := os.MkdirAll(filepath.Join(root, "api", "internal"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	t.Logf("raizes declaradas: %d; ausentes na arvore real: %d %v",
-		len(consumerRoots), len(ausentes), ausentes)
-	if len(consumerRoots) == 0 {
-		t.Fatal("nenhuma raiz declarada — verde sobre nada nao e' verde")
-	}
-	// Nao afirmo aqui que 2 ausentes seja o estado CORRETO — a decisao de para onde
-	// apontar (repos irmaos, tarefa cross-repo, ou aposentar a metade de consumidor)
-	// esta' no B-100 e e' de reuniao. O que este teste garante e' que o numero nao
-	// mude sem que alguem veja.
-	if len(ausentes) > 2 {
-		t.Errorf("%d raizes ausentes; eram 2 em 2026-08-19 (%v). A cobertura encolheu.",
-			len(ausentes), ausentes)
+	_, err := grepConsumersForTag(root, "apps", []consumerRoot{{Repo: ".", Path: "api/internal/"}})
+	if err == nil {
+		t.Fatal("want an error when git grep cannot run, got nil")
 	}
 }
 
-func repoRootParaTeste(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
+func TestGrepFindsReadsInASiblingCheckout(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "loopzero")
+	sibling := filepath.Join(parent, "loopzero-cli")
+	if err := os.MkdirAll(filepath.Join(sibling, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sibling, "src", "deploy.ts"), []byte("const n = p.apps;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = sibling
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	got, err := grepConsumersForTag(root, "apps", []consumerRoot{{Repo: "../loopzero-cli", Path: "src/"}})
 	if err != nil {
-		t.Fatalf("cwd: %v", err)
+		t.Fatal(err)
 	}
-	for i := 0; i < 12; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "api", "go.mod")); err == nil {
-			return dir
-		}
-		pai := filepath.Dir(dir)
-		if pai == dir {
-			break
-		}
-		dir = pai
+	if len(got) != 1 || got[0].ConsumerFile != "../loopzero-cli/src/deploy.ts" || got[0].ConsumerLine != 1 {
+		t.Fatalf("want one finding at ../loopzero-cli/src/deploy.ts:1, got %+v", got)
 	}
-	t.Fatal("nao achei a raiz do repositorio")
-	return ""
+}
+
+// The real population: the declared roots measured against this workspace.
+// A clone without the sibling checkouts misses at most the two sibling roots.
+func TestRealConsumerRootPopulation(t *testing.T) {
+	root := qtestutil.MustRepoRoot()
+	missing := missingConsumerRoots(root)
+	t.Logf("declared consumer roots: %d; missing here: %d %v", len(consumerRoots), len(missing), missing)
+	if len(consumerRoots) == 0 {
+		t.Fatal("no consumer root declared — green over nothing is not green")
+	}
+	for _, m := range missing {
+		if !strings.HasPrefix(m, "../") {
+			t.Errorf("an in-repository consumer root is missing: %s", m)
+		}
+	}
 }

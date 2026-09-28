@@ -50,8 +50,8 @@ type NamespaceLister interface {
 }
 
 // PodListerFactory yields a PodLister bound to a specific cell's read-scoped
-// client (over cellmgr.ClientFor). Per-cell so a tenant's pods are listed on the
-// cell PG says it lives on (INV I2), never a mutable CR mirror.
+// client (over SecretCellClientProvider.ClientFor). Per-cell so a tenant's pods
+// are listed on the cell PG says it lives on (INV I2), never a mutable CR mirror.
 type PodListerFactory interface {
 	PodListerForCell(ctx context.Context, cellID string) (PodLister, error)
 }
@@ -142,8 +142,25 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	}
 	wg.Wait()
 
-	return errors.Join(errs...)
+	if len(errs) == 0 {
+		return nil
+	}
+	return &PassError{Failed: len(errs), Total: len(tenants), Err: errors.Join(errs...)}
 }
+
+// PassError reports a pass in which some tenants could not be metered. Total
+// is the number of tenants listed for the pass, so Failed < Total means the
+// pass still metered someone.
+type PassError struct {
+	Failed, Total int
+	Err           error
+}
+
+func (e *PassError) Error() string {
+	return fmt.Sprintf("metering: %d of %d tenants failed: %v", e.Failed, e.Total, e.Err)
+}
+
+func (e *PassError) Unwrap() error { return e.Err }
 
 // meterTenant meters ONE active tenant for the cpu_core_seconds metric. Order
 // (SEPA-locked): resolve cell (skip if unplaced — cheapest guard) → enumerate

@@ -26,7 +26,8 @@ func TestAuth_CacheHit_DoesNotCallValidatorAgain(t *testing.T) {
 		memberships: []TenantMembership{{TenantID: "tn-1", Role: "owner"}},
 	}
 
-	handler := AuthWithTTL(validator, store, 5*time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, 5*time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -55,7 +56,8 @@ func TestAuth_MembershipStoreFails_Returns500(t *testing.T) {
 	}
 	store := &stubMembershipStore{err: errors.New("db connection refused")}
 
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -82,7 +84,8 @@ func TestAuth_MultipleTenants_WrongTenant_Returns403(t *testing.T) {
 			{TenantID: "tn-b", Role: "member"},
 		},
 	}
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -109,7 +112,8 @@ func TestAuth_BearerPrefix_CaseSensitive(t *testing.T) {
 	// "bearer" (lowercase) should be rejected
 	validator := &stubValidator{result: &TokenValidationResult{}}
 	store := &stubMembershipStore{}
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -127,13 +131,11 @@ func TestAuth_ServiceAuth_MissingIdentity_FallsToBearer(t *testing.T) {
 	// Service auth with valid secret but missing identity headers:
 	// valid secret passes, but empty userID/tenantID skips context injection,
 	// falls through to Bearer token extraction which returns 401 (no Authorization header).
-	oldSecret := ServiceAuthSecret
-	ServiceAuthSecret = "valid-secret"
-	defer func() { ServiceAuthSecret = oldSecret }()
 
 	store := &stubMembershipStore{}
 	validator := &stubValidator{}
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "valid-secret"})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -149,15 +151,12 @@ func TestAuth_ServiceAuth_MissingIdentity_FallsToBearer(t *testing.T) {
 }
 
 func TestAuth_ServiceAuth_MembershipNotFound_Returns403(t *testing.T) {
-	oldSecret := ServiceAuthSecret
-	ServiceAuthSecret = "valid-secret"
-	defer func() { ServiceAuthSecret = oldSecret }()
-
 	store := &stubMembershipStore{
 		memberships: []TenantMembership{{TenantID: "tn-other", Role: "owner"}},
 	}
 	validator := &stubValidator{}
-	handler := AuthWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "valid-secret"})
+	handler := authn.MiddlewareWithTTL(validator, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	}))
 
@@ -175,21 +174,13 @@ func TestAuth_ServiceAuth_MembershipNotFound_Returns403(t *testing.T) {
 }
 
 func TestAuth_ServiceAuth_PreviousSecret_DualKeyRotation(t *testing.T) {
-	oldSecret := ServiceAuthSecret
-	oldPrev := ServiceAuthSecretPrevious
-	ServiceAuthSecret = "new-secret"
-	ServiceAuthSecretPrevious = "old-secret"
-	defer func() {
-		ServiceAuthSecret = oldSecret
-		ServiceAuthSecretPrevious = oldPrev
-	}()
-
 	store := &stubMembershipStore{
 		memberships: []TenantMembership{{TenantID: "tn-1", Role: "admin"}},
 	}
 
 	var captured *UserContext
-	handler := AuthWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "new-secret", ServiceSecretPrevious: "old-secret"})
+	handler := authn.MiddlewareWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured = GetUserContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))

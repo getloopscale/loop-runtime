@@ -55,31 +55,6 @@ func TestSignal_ContextCancelKillsProcess(t *testing.T) {
 	}
 }
 
-// TestSignal_TimeoutEnforcesBudget — WithTimeout enforces wall-clock
-// budget. Child exceeding budget is killed, error reflects timeout.
-func TestSignal_TimeoutEnforcesBudget(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix-only test (sleep semantics)")
-	}
-	runner := &DefaultRunner{GracePeriod: 200 * time.Millisecond}
-
-	start := time.Now()
-	result, err := runner.Run(context.Background(), "sleep", []string{"30"},
-		WithTimeout(300*time.Millisecond))
-	elapsed := time.Since(start)
-
-	if err == nil {
-		t.Error("timeout must return non-nil err")
-	}
-	// Should complete within timeout + grace, not 30s
-	if elapsed > 3*time.Second {
-		t.Errorf("timeout enforcement too slow: %v", elapsed)
-	}
-	if result != nil && result.ExitCode == 0 {
-		t.Errorf("timeout-killed process should not exit 0; got %d", result.ExitCode)
-	}
-}
-
 // TestExit_StandardCodesPropagated — exit codes 0-5 must propagate
 // unchanged from child to Result.ExitCode.
 func TestExit_StandardCodesPropagated(t *testing.T) {

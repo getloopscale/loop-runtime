@@ -3,7 +3,11 @@
 
 package seed
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+)
 
 func TestVerdict_String(t *testing.T) {
 	cases := map[Verdict]string{PASS: "PASS", SKIP: "SKIP", FAIL: "FAIL"}
@@ -15,12 +19,13 @@ func TestVerdict_String(t *testing.T) {
 }
 
 func TestVerdict_ExitCode(t *testing.T) {
-	// PASS/SKIP are success (0); FAIL is 2 (build/exec failure class, CLAUDE.md Rule 4).
-	if PASS.ExitCode() != 0 || SKIP.ExitCode() != 0 {
-		t.Errorf("PASS/SKIP must exit 0, got %d/%d", PASS.ExitCode(), SKIP.ExitCode())
+	// PASS/SKIP are success; FAIL is loopzero-ops' one failure status, the same
+	// value a quality gate returns for a violation.
+	if PASS.ExitCode() != exitcode.OK || SKIP.ExitCode() != exitcode.OK {
+		t.Errorf("PASS/SKIP must exit %d, got %d/%d", exitcode.OK, PASS.ExitCode(), SKIP.ExitCode())
 	}
-	if FAIL.ExitCode() != 2 {
-		t.Errorf("FAIL must exit 2, got %d", FAIL.ExitCode())
+	if FAIL.ExitCode() != exitcode.Failure {
+		t.Errorf("FAIL must exit %d, got %d", exitcode.Failure, FAIL.ExitCode())
 	}
 }
 

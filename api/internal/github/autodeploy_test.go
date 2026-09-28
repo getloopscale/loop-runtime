@@ -9,6 +9,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -123,8 +124,9 @@ func TestExtractLoopZeroYaml_MalformedYaml(t *testing.T) {
 	if cfg != nil {
 		t.Fatal("expected nil config for malformed YAML")
 	}
-	if !strings.Contains(err.Error(), "parse loopzero.yaml") {
-		t.Errorf("expected 'parse loopzero.yaml' error, got: %v", err)
+	var invalid *InvalidDeployDescriptorError
+	if !errors.As(err, &invalid) {
+		t.Errorf("expected the deploy descriptor refusal, got: %v", err)
 	}
 }
 
@@ -277,11 +279,16 @@ func (f *fakeBuildCanceller) CancelQueuedBuilds(ctx context.Context, tenantID, p
 // at the GitHub API tarball download endpoint, and handles installation token requests.
 func newGitHubTarballServer(t *testing.T, loopzeroYamlContent string) *httptest.Server {
 	t.Helper()
-	tarball := makeTarGz(t, map[string]string{
+	return newGitHubTarballServerWithFiles(t, map[string]string{
 		"owner-repo-abc123/loopzero.yaml": loopzeroYamlContent,
 		"owner-repo-abc123/main.go":   "package main",
 	})
-	tarballBytes := tarball.Bytes()
+}
+
+// newGitHubTarballServerWithFiles serves a tarball holding exactly files.
+func newGitHubTarballServerWithFiles(t *testing.T, files map[string]string) *httptest.Server {
+	t.Helper()
+	tarballBytes := makeTarGz(t, files).Bytes()
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/tarball/") {
@@ -329,9 +336,10 @@ apps:
 	})
 
 	// Act
-	err := deployer.HandlePush(context.Background(),
-		"owner/repo", "main", "abc123def456",
-		1, "tenant-1", "my-app", "feat: add feature", "testuser")
+	err := deployer.HandlePush(context.Background(), PushRequest{
+		RepoFullName: "owner/repo", Branch: "main", CommitSHA: "abc123def456", InstallationID: 1,
+		TenantID: "tenant-1", ProjectName: "my-app", CommitMessage: "feat: add feature", SenderLogin: "testuser",
+	})
 
 	// Assert
 	if err != nil {
@@ -396,9 +404,10 @@ func TestHandlePush_DownloadFailure(t *testing.T) {
 	})
 
 	// Act
-	err := deployer.HandlePush(context.Background(),
-		"owner/repo", "main", "sha123",
-		1, "tenant-1", "project-1", "msg", "user")
+	err := deployer.HandlePush(context.Background(), PushRequest{
+		RepoFullName: "owner/repo", Branch: "main", CommitSHA: "sha123", InstallationID: 1,
+		TenantID: "tenant-1", ProjectName: "project-1", CommitMessage: "msg", SenderLogin: "user",
+	})
 
 	// Assert
 	if err == nil {
@@ -442,9 +451,10 @@ func TestHandlePush_NoLoopZeroYaml_ReturnsNil(t *testing.T) {
 	})
 
 	// Act
-	err := deployer.HandlePush(context.Background(),
-		"owner/repo", "main", "sha123",
-		1, "tenant-1", "project-1", "msg", "user")
+	err := deployer.HandlePush(context.Background(), PushRequest{
+		RepoFullName: "owner/repo", Branch: "main", CommitSHA: "sha123", InstallationID: 1,
+		TenantID: "tenant-1", ProjectName: "project-1", CommitMessage: "msg", SenderLogin: "user",
+	})
 
 	// Assert — no loopzero.yaml means not a LoopZero project, returns nil (not error)
 	if err != nil {
@@ -478,9 +488,10 @@ apps:
 	})
 
 	// Act
-	err := deployer.HandlePush(context.Background(),
-		"owner/repo", "main", "sha123",
-		1, "tenant-1", "my-app", "msg", "user")
+	err := deployer.HandlePush(context.Background(), PushRequest{
+		RepoFullName: "owner/repo", Branch: "main", CommitSHA: "sha123", InstallationID: 1,
+		TenantID: "tenant-1", ProjectName: "my-app", CommitMessage: "msg", SenderLogin: "user",
+	})
 
 	// Assert
 	if err == nil {
@@ -515,9 +526,10 @@ apps:
 	})
 
 	// Act
-	err := deployer.HandlePush(context.Background(),
-		"owner/repo", "main", "sha123",
-		1, "tenant-1", "my-app", "msg", "user")
+	err := deployer.HandlePush(context.Background(), PushRequest{
+		RepoFullName: "owner/repo", Branch: "main", CommitSHA: "sha123", InstallationID: 1,
+		TenantID: "tenant-1", ProjectName: "my-app", CommitMessage: "msg", SenderLogin: "user",
+	})
 
 	// Assert — should succeed despite cancel error
 	if err != nil {
@@ -536,9 +548,10 @@ func TestHandlePush_InvalidRepoName(t *testing.T) {
 	})
 
 	// Act
-	err := deployer.HandlePush(context.Background(),
-		"invalid-repo-no-slash", "main", "sha123",
-		1, "tenant-1", "project-1", "msg", "user")
+	err := deployer.HandlePush(context.Background(), PushRequest{
+		RepoFullName: "invalid-repo-no-slash", Branch: "main", CommitSHA: "sha123", InstallationID: 1,
+		TenantID: "tenant-1", ProjectName: "project-1", CommitMessage: "msg", SenderLogin: "user",
+	})
 
 	// Assert
 	if err == nil {
@@ -571,9 +584,10 @@ apps:
 	})
 
 	// Act
-	err := deployer.HandlePush(context.Background(),
-		"owner/repo", "main", "sha123",
-		1, "tenant-1", "my-app", "msg", "user")
+	err := deployer.HandlePush(context.Background(), PushRequest{
+		RepoFullName: "owner/repo", Branch: "main", CommitSHA: "sha123", InstallationID: 1,
+		TenantID: "tenant-1", ProjectName: "my-app", CommitMessage: "msg", SenderLogin: "user",
+	})
 
 	// Assert
 	if err != nil {
@@ -605,9 +619,10 @@ apps:
 	})
 
 	// Act
-	err := deployer.HandlePush(context.Background(),
-		"owner/repo", "main", "sha123",
-		1, "tenant-1", "my-app", "msg", "user")
+	err := deployer.HandlePush(context.Background(), PushRequest{
+		RepoFullName: "owner/repo", Branch: "main", CommitSHA: "sha123", InstallationID: 1,
+		TenantID: "tenant-1", ProjectName: "my-app", CommitMessage: "msg", SenderLogin: "user",
+	})
 
 	// Assert
 	if err == nil {

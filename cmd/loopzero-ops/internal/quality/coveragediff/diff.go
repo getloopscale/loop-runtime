@@ -17,18 +17,22 @@
 //     test files excluded).
 //   - Compute (covered_source / total_source) ratio.
 //   - PASS if no source lines OR ratio >= THRESHOLD (default 80%).
-//   - EC-7: empty diff (rename-only / docs-only PR) → PASS.
+//   - EC-7: empty diff (rename-only / docs-only PR) → PASS. A MISSING
+//     diff file is a gate error: the upstream step did not produce it.
 package coveragediff
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coverageparse"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -43,9 +47,8 @@ type Config struct {
 	DiffPath string
 
 	// LCOVPath is the merged lcov report (Go + CLI). Empty OR missing
-	// file → all source lines counted as uncovered.
-	// Required for meaningful results, but missing → silent-skip
-	// matches bash semantic.
+	// file → all source lines counted as uncovered, and a message says so.
+	// A file that exists but cannot be read or parsed is a gate error.
 	LCOVPath string
 
 	// Threshold percent — minimum coverage required on touched
@@ -85,6 +88,9 @@ type Outcome struct {
 	Messages []string
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // IsSourceFile returns true for `*.go`, `*.ts`, `*.tsx` files that
 // are NOT test files (matches bash is_source_file).
 func IsSourceFile(path string) bool {
@@ -123,13 +129,13 @@ func parseDiffLine(entry string) (string, int, bool) {
 }
 
 // Run executes the gate end-to-end. Returns (*Outcome, error). Outcome
-// drives caller exit code; error means the gate itself couldn't run
-// (missing diff file in non-EC-7 path).
+// drives caller exit code; error means the gate itself couldn't run.
 //
 // Errors:
 //
 //	OPS_USAGE          — invalid Config (missing DiffPath)
-//	OPS_DEPLOY_FAILURE — file I/O OR lcov parse failure
+//	OPS_DEPLOY_FAILURE — diff file missing or unreadable, lcov unreadable
+//	                     or unparseable, report not writable
 func Run(cfg Config) (*Outcome, error) {
 	if cfg.DiffPath == "" {
 		return nil, &loopzeroerrors.LoopZeroError{
@@ -142,9 +148,13 @@ func Run(cfg Config) (*Outcome, error) {
 		threshold = DefaultThreshold
 	}
 
-	// EC-7: empty/missing diff → PASS (rename-only / docs-only PR).
+	// EC-7 is a diff that EXISTS and is empty (rename-only / docs-only PR).
+	// A missing diff means the upstream step failed; that is a gate error.
 	info, err := os.Stat(cfg.DiffPath)
-	if err != nil || info.Size() == 0 {
+	if err != nil {
+		return nil, ioFailure(fmt.Sprintf("diff file %s is not readable — did the gitdiff step run?", cfg.DiffPath), err)
+	}
+	if info.Size() == 0 {
 		return &Outcome{
 			Pass:       true,
 			SkipReason: "empty-diff",
@@ -154,33 +164,71 @@ func Run(cfg Config) (*Outcome, error) {
 		}, nil
 	}
 
-	// Load LCOV line coverage (optional — missing file → empty map).
-	var lineCov coverageparse.LineCoverage
-	if cfg.LCOVPath != "" {
-		if f, openErr := os.Open(cfg.LCOVPath); openErr == nil {
-			lineCov, err = coverageparse.ParseLCOVLineCoverage(f)
-			_ = f.Close()
-			if err != nil {
-				return nil, &loopzeroerrors.LoopZeroError{
-					Code:    "OPS_DEPLOY_FAILURE",
-					Message: fmt.Sprintf("coveragediff: lcov parse failed: %v", err),
-					Cause:   err,
-				}
-			}
-		}
-		// Missing lcov file: silent skip; lineCov stays nil → IsCovered
-		// always returns false → every touched source line counted as
-		// uncovered (matches bash empty-LCOV behaviour).
+	lineCov, lcovNote, err := loadLineCoverage(cfg.LCOVPath)
+	if err != nil {
+		return nil, err
+	}
+	out, err := classifyDiff(cfg.DiffPath, lineCov)
+	if err != nil {
+		return nil, err
+	}
+	if lcovNote != "" {
+		out.Messages = append(out.Messages, lcovNote)
 	}
 
-	// Walk diff file + classify each line.
-	diffFile, err := os.Open(cfg.DiffPath) //nolint:gosec // caller-controlled
-	if err != nil {
-		return nil, &loopzeroerrors.LoopZeroError{
-			Code:    "OPS_DEPLOY_FAILURE",
-			Message: fmt.Sprintf("coveragediff: cannot open %s: %v", cfg.DiffPath, err),
-			Cause:   err,
+	// No source lines → PASS (test-only or non-source PR).
+	if out.TotalSource == 0 {
+		out.Pass = true
+		out.SkipReason = "no-source"
+		out.Messages = append(out.Messages,
+			"[coverage-diff] no source lines in diff — PASS (test-only or non-source PR)")
+		return out, nil
+	}
+
+	out.Ratio = coverageparse.RoundTo1Decimal(float64(out.CoveredSource) / float64(out.TotalSource) * 100)
+	out.Messages = append(out.Messages, fmt.Sprintf(
+		"[coverage-diff] touched source lines: %d / covered: %d = %.1f%%",
+		out.TotalSource, out.CoveredSource, out.Ratio,
+	))
+
+	if cfg.ReportPath != "" {
+		if err := writeReport(cfg.ReportPath, out, threshold); err != nil {
+			return out, err
 		}
+	}
+	applyThreshold(out, threshold)
+	return out, nil
+}
+
+// loadLineCoverage reads the lcov report. An empty path or a file that does
+// not exist yields no coverage, so every touched source line counts as
+// uncovered (the gate fails closed); the returned note says so. Any other
+// read or parse failure is a gate error.
+func loadLineCoverage(path string) (coverageparse.LineCoverage, string, error) {
+	if path == "" {
+		return nil, "", nil
+	}
+	f, err := os.Open(path) //nolint:gosec // caller-controlled
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Sprintf("[coverage-diff] lcov %s not found — every touched source line counts as uncovered", path), nil
+	}
+	if err != nil {
+		return nil, "", ioFailure(fmt.Sprintf("cannot open lcov %s", path), err)
+	}
+	defer func() { _ = f.Close() }()
+	lineCov, err := coverageparse.ParseLCOVLineCoverage(f)
+	if err != nil {
+		return nil, "", ioFailure("lcov parse failed", err)
+	}
+	return lineCov, "", nil
+}
+
+// classifyDiff walks the "path:line" diff file and counts touched source
+// lines, covered or not.
+func classifyDiff(diffPath string, lineCov coverageparse.LineCoverage) (*Outcome, error) {
+	diffFile, err := os.Open(diffPath) //nolint:gosec // caller-controlled
+	if err != nil {
+		return nil, ioFailure(fmt.Sprintf("cannot open %s", diffPath), err)
 	}
 	defer func() { _ = diffFile.Close() }()
 
@@ -188,15 +236,8 @@ func Run(cfg Config) (*Outcome, error) {
 	scanner := bufio.NewScanner(diffFile)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
-		entry := strings.TrimSpace(scanner.Text())
-		if entry == "" {
-			continue
-		}
-		path, ln, ok := parseDiffLine(entry)
-		if !ok {
-			continue
-		}
-		if !IsSourceFile(path) {
+		path, ln, ok := parseDiffLine(strings.TrimSpace(scanner.Text()))
+		if !ok || !IsSourceFile(path) {
 			continue
 		}
 		out.TotalSource++
@@ -207,49 +248,20 @@ func Run(cfg Config) (*Outcome, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, &loopzeroerrors.LoopZeroError{
-			Code:    "OPS_DEPLOY_FAILURE",
-			Message: fmt.Sprintf("coveragediff: scanner error: %v", err),
-			Cause:   err,
-		}
+		return nil, ioFailure("scanner error", err)
 	}
+	return out, nil
+}
 
-	// No source lines → PASS (test-only or non-source PR).
-	if out.TotalSource == 0 {
-		out.Pass = true
-		out.SkipReason = "no-source"
-		out.Messages = []string{
-			"[coverage-diff] no source lines in diff — PASS (test-only or non-source PR)",
-		}
-		return out, nil
-	}
-
-	// Compute ratio (rounded to 1 decimal).
-	rawRatio := float64(out.CoveredSource) / float64(out.TotalSource) * 100
-	out.Ratio = roundTo1Decimal(rawRatio)
-
-	out.Messages = append(out.Messages, fmt.Sprintf(
-		"[coverage-diff] touched source lines: %d / covered: %d = %.1f%%",
-		out.TotalSource, out.CoveredSource, out.Ratio,
-	))
-
-	// Optional report file.
-	if cfg.ReportPath != "" {
-		if err := writeReport(cfg.ReportPath, out, threshold); err != nil {
-			return out, err
-		}
-	}
-
-	// Threshold check.
+// applyThreshold sets Pass and appends the verdict messages.
+func applyThreshold(out *Outcome, threshold float64) {
 	if out.Ratio >= threshold {
 		out.Pass = true
 		out.Messages = append(out.Messages, fmt.Sprintf(
 			"[coverage-diff] PASS (%.1f%% >= %.0f%%)", out.Ratio, threshold,
 		))
-		return out, nil
+		return
 	}
-
-	// FAIL.
 	out.Pass = false
 	out.Messages = append(out.Messages, fmt.Sprintf(
 		"[coverage-diff] FAIL (%.1f%% < %.0f%%)", out.Ratio, threshold,
@@ -260,7 +272,15 @@ func Run(cfg Config) (*Outcome, error) {
 			out.Messages = append(out.Messages, "  "+l)
 		}
 	}
-	return out, nil
+}
+
+// ioFailure wraps a file I/O failure in the gate's typed error.
+func ioFailure(what string, err error) error {
+	return &loopzeroerrors.LoopZeroError{
+		Code:    "OPS_DEPLOY_FAILURE",
+		Message: fmt.Sprintf("coveragediff: %s: %v", what, err),
+		Cause:   err,
+	}
 }
 
 // writeReport emits a Markdown report (matches bash REPORT_FILE block).
@@ -295,10 +315,4 @@ func (o *Outcome) WriteMessages(w io.Writer) error {
 		}
 	}
 	return nil
-}
-
-// roundTo1Decimal rounds float to 1 decimal place via printf+ParseFloat.
-func roundTo1Decimal(f float64) float64 {
-	rounded, _ := strconv.ParseFloat(fmt.Sprintf("%.1f", f), 64)
-	return rounded
 }

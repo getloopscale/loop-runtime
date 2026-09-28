@@ -22,8 +22,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -64,10 +64,6 @@ type Config struct {
 
 	// DocPath overrides DefaultDocPath.
 	DocPath string
-
-	// Now is the timestamp injection point (Mode=Write writes a date
-	// header). Zero → time.Now().UTC().
-	Now time.Time
 }
 
 // Outcome captures the gate result.
@@ -78,6 +74,9 @@ type Outcome struct {
 	Generated string // the freshly generated table body
 	Messages  []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // listPkgDirs returns the sorted list of pkg/<X> subdirectory names that are
 // actually importable Go packages (excluding "tools" — explicit bash skip +
@@ -103,7 +102,11 @@ func listPkgDirs(pkgRoot string) ([]string, error) {
 		if name == "tools" {
 			continue
 		}
-		if !hasOwnGoSource(filepath.Join(pkgRoot, name)) {
+		ownSource, err := hasOwnGoSource(filepath.Join(pkgRoot, name))
+		if err != nil {
+			return nil, err
+		}
+		if !ownSource {
 			continue
 		}
 		dirs = append(dirs, name)
@@ -115,10 +118,10 @@ func listPkgDirs(pkgRoot string) ([]string, error) {
 // hasOwnGoSource reports whether dir contains a non-test .go file directly —
 // i.e. whether `import ".../pkg/<dir>"` resolves to anything. Sub-directories
 // are not consulted: those are separate packages with their own import paths.
-func hasOwnGoSource(dir string) bool {
+func hasOwnGoSource(dir string) (bool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return false
+		return false, err
 	}
 	for _, e := range entries {
 		if e.IsDir() {
@@ -126,10 +129,10 @@ func hasOwnGoSource(dir string) bool {
 		}
 		n := e.Name()
 		if strings.HasSuffix(n, ".go") && !strings.HasSuffix(n, "_test.go") {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // countConsumers walks all *.go files under root looking for the
@@ -144,7 +147,7 @@ func countConsumers(root, pkg string) (PkgRow, error) {
 
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return nil
+			return walkErr
 		}
 		if d.IsDir() {
 			n := d.Name()
@@ -164,7 +167,11 @@ func countConsumers(root, pkg string) (PkgRow, error) {
 		if strings.HasPrefix(rel, selfPrefix) || rel == filepath.ToSlash(selfPrefix[:len(selfPrefix)-1]) {
 			return nil
 		}
-		if !fileContainsImport(path, needle) {
+		imports, err := fileContainsImport(path, needle)
+		if err != nil {
+			return err
+		}
+		if !imports {
 			return nil
 		}
 		row.Total++
@@ -188,40 +195,46 @@ func countConsumers(root, pkg string) (PkgRow, error) {
 	return row, nil
 }
 
-// fileContainsImport scans path line-by-line for the literal needle.
-// Returns true on first hit. Returns false on I/O error (tolerated).
-func fileContainsImport(path string, needle []byte) bool {
+// fileContainsImport scans path line-by-line for the literal needle and
+// reports the first hit. A file that cannot be read is an error: counting it as
+// a non-consumer would publish a package in use as a dead-code candidate.
+func fileContainsImport(path string, needle []byte) (bool, error) {
 	f, err := os.Open(path) //nolint:gosec // operator-controlled
 	if err != nil {
-		return false
+		return false, err
 	}
 	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		if bytes.Contains(scanner.Bytes(), needle) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	if err := scanner.Err(); err != nil {
+		return false, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return false, nil
 }
 
 // renderTable produces the bash-compatible markdown table body.
 func renderTable(rows []PkgRow) string {
 	var sb strings.Builder
 	sb.WriteString("## Real Usage Matrix\n\n")
-	// D2 / plan helm-topology-index T1.2: a data NÃO entra no corpo comparado.
+	// D2 / plan helm-topology-index T1.2: the DATE deliberately stays out of the
+	// compared body.
 	//
-	// Um gate de frescor responde "o conteúdo divergiu da fonte?". Com a data aqui dentro ele
-	// passava a responder "isto foi gerado hoje?" — pergunta cuja resposta é "não" todo dia
-	// depois da meia-noite. Medido em 2026-08-08: bloqueou um push com a matriz idêntica, e a
-	// única saída era regenerar um arquivo que não mudou, o que treina o time a regenerar sem
-	// olhar. A data simplesmente sai: o git já registra quando o arquivo mudou, e um carimbo
-	// que ninguém compara não estava pagando o próprio custo.
-	sb.WriteString("Tabela gerada via grep de `import \"github.com/getloopscale/loopzero/pkg/X\"`.\n")
-	sb.WriteString("Atualizar via `task pkg:usage-matrix:write` (script: `loopzero-ops quality pkg-usage-matrix --write`).\n")
-	sb.WriteString("CI gate `task pkg:usage-matrix:check` falha se a tabela estiver out-of-date (gate PKG-G14).\n\n")
-	sb.WriteString("| Pacote | Total imports | api/internal | operators/internal | cloud | cli | Outros |\n")
+	// A freshness gate answers "has the content diverged from its source?". With the date
+	// inside, it started answering "was this generated today?" instead — a question whose
+	// answer is "no" every day after midnight. Measured 2026-08-08: it blocked a push over
+	// a matrix that was identical, and the only way out was regenerating a file that had
+	// not changed, which trains a team to regenerate without looking. So the date simply
+	// goes: git already records when the file changed, and a stamp nobody compares was not
+	// paying for itself.
+	sb.WriteString("Table generated by grepping for `import \"github.com/getloopscale/loopzero/pkg/X\"`.\n")
+	sb.WriteString("Regenerate with `task pkg:usage-matrix:write` (`loopzero-ops quality pkg-usage-matrix --write`).\n")
+	sb.WriteString("The `task pkg:usage-matrix:check` gate fails when the table is out of date (gate PKG-G14).\n\n")
+	sb.WriteString("| Package | Total imports | api/internal | operators/internal | cloud | cli | Other |\n")
 	sb.WriteString("|---|---:|---:|---:|---:|---:|---:|\n")
 	for _, r := range rows {
 		marker := ""
@@ -285,10 +298,6 @@ func Run(cfg Config, mode Mode) (*Outcome, error) {
 	docPath := cfg.DocPath
 	if docPath == "" {
 		docPath = DefaultDocPath
-	}
-	now := cfg.Now
-	if now.IsZero() {
-		now = time.Now().UTC()
 	}
 	resolvedDoc := resolvePath(root, docPath)
 	pkgRoot := filepath.Join(root, "pkg")

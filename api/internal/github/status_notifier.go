@@ -7,7 +7,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
+
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // RepositoryLookup finds the linked repo for a project (DIP).
@@ -15,9 +16,11 @@ type RepositoryLookup interface {
 	GetByProject(ctx context.Context, tenantID, projectName string) (repoFullName string, installationID int64, err error)
 }
 
-// BuildLookup finds a build's source commit SHA (DIP).
+// BuildLookup reads what the notifier needs from a build (DIP): its source
+// commit SHA, and the names of the apps it serves over HTTP.
 type BuildLookup interface {
 	GetCommitSHA(ctx context.Context, buildID string) (string, error)
+	GetServedAppNames(ctx context.Context, buildID string) ([]string, error)
 }
 
 // StatusNotifier updates GitHub commit status when builds complete.
@@ -62,15 +65,15 @@ func (n *StatusNotifier) OnBuildSucceeded(ctx context.Context, tenantID, project
 		return // not a GitHub-connected project
 	}
 
-	parts := strings.SplitN(repoFullName, "/", 2)
-	if len(parts) != 2 {
+	owner, repo, ok := splitOwnerRepo(repoFullName)
+	if !ok {
+		n.logger.Warn("github status: connected repository name is not owner/repo; status not set", "repo", repoFullName)
 		return
 	}
 
-	deployURL := fmt.Sprintf("https://%s-%s-%s-%s.%s",
-		tenantID, projectName, "api", environment, n.baseDomain)
+	deployURL := n.deployURL(ctx, tenantID, projectName, buildID, environment)
 
-	if err := n.appClient.SetCommitStatus(ctx, installationID, parts[0], parts[1], commitSHA, CommitStatus{
+	if err := n.appClient.SetCommitStatus(ctx, installationID, owner, repo, commitSHA, CommitStatus{
 		State:       "success",
 		TargetURL:   deployURL,
 		Description: fmt.Sprintf("Deployed to %s", environment),
@@ -80,6 +83,21 @@ func (n *StatusNotifier) OnBuildSucceeded(ctx context.Context, tenantID, project
 	} else {
 		n.logger.Info("github status: commit marked as success", "sha", commitSHA, "repo", repoFullName)
 	}
+}
+
+// deployURL is the public URL of the build's app when it serves exactly one,
+// built with the one hostname formula (naming.AppURL). With several served
+// apps there is no single URL to link, so none is guessed.
+func (n *StatusNotifier) deployURL(ctx context.Context, tenantID, projectName, buildID, environment string) string {
+	apps, err := n.buildLookup.GetServedAppNames(ctx, buildID)
+	if err != nil {
+		n.logger.Warn("github status: could not read the build's apps; linking no URL", "build_id", buildID, "error", err)
+		return ""
+	}
+	if len(apps) != 1 {
+		return ""
+	}
+	return naming.AppURL(tenantID, projectName, apps[0], environment, n.baseDomain)
 }
 
 // OnBuildFailed sets commit status to "failure" on GitHub.
@@ -93,12 +111,13 @@ func (n *StatusNotifier) OnBuildFailed(ctx context.Context, tenantID, projectNam
 		return
 	}
 
-	parts := strings.SplitN(repoFullName, "/", 2)
-	if len(parts) != 2 {
+	owner, repo, ok := splitOwnerRepo(repoFullName)
+	if !ok {
+		n.logger.Warn("github status: connected repository name is not owner/repo; status not set", "repo", repoFullName)
 		return
 	}
 
-	if err := n.appClient.SetCommitStatus(ctx, installationID, parts[0], parts[1], commitSHA, CommitStatus{
+	if err := n.appClient.SetCommitStatus(ctx, installationID, owner, repo, commitSHA, CommitStatus{
 		State:       "failure",
 		Description: "Build failed",
 		Context:     "loopzero/deploy",

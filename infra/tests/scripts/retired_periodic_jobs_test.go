@@ -112,10 +112,9 @@ func allTaskNames(t *testing.T, root string) map[string]bool {
 // existed, so the job would have failed even with a working runner image.
 func TestRetiredPeriodicJobsDoc_TaskRefsResolve(t *testing.T) {
 	root := repoRootFromTests(t)
-	body, err := os.ReadFile(filepath.Join(root, docRelPath))
-	if err != nil {
-		t.Fatalf("read %s: %v", docRelPath, err)
-	}
+	// The document went with the 2026-09-11 consolidation; what this asserts is what it
+	// SAYS about task names, which history holds exactly.
+	body := []byte(readDocument(t, "19b8c6eaa~1", docRelPath))
 	known := allTaskNames(t, root)
 
 	seen := map[string]bool{}

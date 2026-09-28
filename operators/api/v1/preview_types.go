@@ -75,6 +75,15 @@ type PreviewEnvironmentSpec struct {
 
 	// ReleaseID is the release associated with this preview.
 	ReleaseID string `json:"releaseId"`
+
+	// PublicURL is the user-facing URL of this preview, computed once by the
+	// API with pkg/naming.PreviewURL (tenant, project, entry app and the
+	// public preview domain). The controller reports it in Status.URL and
+	// never derives a URL of its own: the formula has one owner. Empty when
+	// the API has no public preview domain configured.
+	//
+	// +kubebuilder:validation:Optional
+	PublicURL string `json:"publicURL,omitempty"`
 }
 
 // PreviewEnvironmentStatus defines the observed state of a PreviewEnvironment.

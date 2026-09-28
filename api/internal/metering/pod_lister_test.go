@@ -6,12 +6,14 @@ package metering
 // pod_lister_test.go — the concrete PodListerFactory adapter (plan
 // metering-compute-loop T3.2, slice S3b). Unit-tests the client→[]corev1.Pod
 // mapping with client-go's fake clientset (a real boundary fake, no live
-// cluster); the cellmgr.ClientFor cell resolution is exercised at T6.1 LIVE.
+// cluster). Cell-client resolution itself is not exercised here.
 
 import (
 	"context"
 	"errors"
 	"testing"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,15 +27,21 @@ func podInNS(name, ns string) *corev1.Pod {
 	return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}}
 }
 
-// fakeCellClientProvider stands in for cellmgr — returns a canned client (or an
-// error) so the factory is testable without a live ClientManager.
+// fakeCellClientProvider stands in for the production CellClientProvider —
+// returns a canned client (or an error) so the factory is testable without a
+// live provider.
 type fakeCellClientProvider struct {
-	client kubernetes.Interface
-	err    error
+	client      kubernetes.Interface
+	err         error
+	invalidated []string
 }
 
 func (f *fakeCellClientProvider) ClientFor(ctx context.Context, cellID string) (kubernetes.Interface, error) {
 	return f.client, f.err
+}
+
+func (f *fakeCellClientProvider) Invalidate(cellID string) {
+	f.invalidated = append(f.invalidated, cellID)
 }
 
 func TestCellPodLister_SatisfiesInterfaces(t *testing.T) {
@@ -49,7 +57,7 @@ func TestCellPodLister_ListPods_ReturnsOnlyNamespacePods(t *testing.T) {
 	cs := fake.NewSimpleClientset(
 		podInNS("a1", "ns-a"), podInNS("a2", "ns-a"), podInNS("b1", "ns-b"),
 	)
-	lister := &cellPodLister{client: cs}
+	lister := &cellPodLister{client: cs, invalidate: func() {}}
 
 	pods, err := lister.ListPods(context.Background(), "ns-a")
 	if err != nil {
@@ -70,7 +78,7 @@ func TestCellPodLister_ListPods_ReturnsOnlyNamespacePods(t *testing.T) {
 // a valid Σreq=0, NOT a read failure).
 func TestCellPodLister_ListPods_EmptyNamespace_EmptyNotError(t *testing.T) {
 	cs := fake.NewSimpleClientset()
-	lister := &cellPodLister{client: cs}
+	lister := &cellPodLister{client: cs, invalidate: func() {}}
 
 	pods, err := lister.ListPods(context.Background(), "ns-empty")
 	if err != nil {
@@ -90,7 +98,7 @@ func TestCellPodLister_ListPods_ListError_Propagated_NotSwallowed(t *testing.T) 
 	cs.PrependReactor("list", "pods", func(ktesting.Action) (bool, runtime.Object, error) {
 		return true, nil, boom
 	})
-	lister := &cellPodLister{client: cs}
+	lister := &cellPodLister{client: cs, invalidate: func() {}}
 
 	pods, err := lister.ListPods(context.Background(), "ns-a")
 	if err == nil {
@@ -136,5 +144,29 @@ func TestCellPodListerFactory_PodListerForCell_ProviderError(t *testing.T) {
 	}
 	if !errors.Is(err, boom) {
 		t.Errorf("error must wrap the provider failure, got %v", err)
+	}
+}
+
+// A cell answering 401/403 means the cached credential died (rotated token,
+// recreated service account): the lister must drop it so the next pass
+// reads the current kubeconfig instead of failing forever.
+func TestCellPodLister_AuthFailureInvalidatesTheCellClient(t *testing.T) {
+	cs := fake.NewSimpleClientset()
+	cs.PrependReactor("list", "pods", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewUnauthorized("token expired")
+	})
+	provider := &fakeCellClientProvider{client: cs}
+	lister, err := NewCellPodListerFactory(provider).PodListerForCell(context.Background(), "cell-0")
+	if err != nil {
+		t.Fatalf("PodListerForCell: %v", err)
+	}
+
+	_, err = lister.ListPods(context.Background(), "ns")
+
+	if err == nil {
+		t.Fatal("ListPods swallowed the auth failure")
+	}
+	if len(provider.invalidated) != 1 || provider.invalidated[0] != "cell-0" {
+		t.Errorf("invalidated = %v, want [cell-0]", provider.invalidated)
 	}
 }

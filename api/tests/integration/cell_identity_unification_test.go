@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Estes testes provam as afirmacoes que a migracao 000061 faz sobre o banco, em vez de
-// confiar nelas. Ver docs/decisions/2026-08-09-cell-cluster-unification-adr.md e BACKLOG.md B-005.
+// These tests prove the claims migration 000061 makes about the database, instead of
+// trusting them. See docs/decisions/2026-08-09-cell-cluster-unification-adr.md and BACKLOG.md B-005.
 //
-// Exigem um PostgreSQL real com a migracao 000061 aplicada; pulam sem falhar quando nao ha banco
-// alcancavel, como os demais testes deste pacote.
+// They require a real PostgreSQL with migration 000061 applied; they skip without failing when no
+// database is reachable, like the other tests in this package.
 //
-// Enquanto pularem, a unificacao esta verificada por leitura e nao por execucao — e as duas
-// premissas que a migracao assume sobre o Postgres continuam sem prova. O caminho para executa-los
-// e a cadeia de .claude/rules/cleanroom-up-live-test-mandate.md, onde ha banco de pe depois do
-// setup + seeds. Rastreado em https://github.com/getloopscale/loopzero/issues/279
+// While they skip, the unification is verified by reading and not by execution — and the two
+// premises the migration assumes about Postgres remain unproven. The way to run them is the
+// .claude/rules/cleanroom-up-live-test-mandate.md chain, where a database is standing after
+// setup + seeds. Tracked in https://github.com/getloopscale/loopzero/issues/279
 package integration
 
 import (
@@ -23,8 +23,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// pgErrCodeNotNullViolation e o SQLSTATE que o Postgres devolve quando uma coluna NOT NULL
-// recebe NULL. Ele e exatamente o erro que NAO pode acontecer se o gatilho roda antes.
+// pgErrCodeNotNullViolation is the SQLSTATE Postgres returns when a NOT NULL column
+// receives NULL. It is exactly the error that must NOT happen if the trigger runs first.
 const pgErrCodeNotNullViolation = "23502"
 
 func cellTestPool(t *testing.T) *pgxpool.Pool {
@@ -33,106 +33,108 @@ func cellTestPool(t *testing.T) *pgxpool.Pool {
 	defer cancel()
 	pool, err := pgxpool.New(ctx, dbURL())
 	if err != nil {
-		// sem banco: nada a provar aqui. Rastreado em https://github.com/getloopscale/loopzero/issues/279
-		t.Skipf("pulando: sem PostgreSQL alcancavel: %v", err)
+		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loopzero/issues/279
+		t.Skipf("skipping: no reachable PostgreSQL: %v", err)
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		// sem banco: nada a provar aqui. Rastreado em https://github.com/getloopscale/loopzero/issues/279
-		t.Skipf("pulando: sem PostgreSQL alcancavel: %v", err)
+		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loopzero/issues/279
+		t.Skipf("skipping: no reachable PostgreSQL: %v", err)
 	}
 	return pool
 }
 
-// TestGatilhoResolveCellIdAntesDoNotNullReprovar prova a unica premissa da Opcao A do ADR.
+// TestTriggerResolvesCellIDBeforeNotNullRejects proves the single premise of the ADR's Option A.
 //
-// A migracao 000061 tirou o DEFAULT das quatro tabelas com gatilho, apostando que um INSERT que
-// omita `cell_id` e resolvido pelo gatilho BEFORE INSERT antes de a restricao NOT NULL olhar para
-// a linha. Se essa ordem nao valesse, todo INSERT que omite a coluna passaria a falhar em
-// producao — e o ADR registrou que afirmar isso sem provar era inaceitavel.
+// Migration 000061 removed the DEFAULT from the four tables with the trigger, betting that an
+// INSERT which omits `cell_id` is resolved by the BEFORE INSERT trigger before the NOT NULL
+// constraint looks at the row. If that order did not hold, every INSERT omitting the column would
+// start failing in production — and the ADR recorded that asserting it without proof was
+// unacceptable.
 //
-// A assercao e deliberadamente estreita: o INSERT pode falhar por outros motivos (chave
-// estrangeira, coluna obrigatoria do proprio teste), e isso nao interessa. O que o teste proibe e
-// UM erro especifico: violacao de NOT NULL em `cell_id`. Esse erro, e so ele, refutaria a ordem.
-func TestGatilhoResolveCellIdAntesDoNotNullReprovar(t *testing.T) {
+// The assertion is deliberately narrow: the INSERT may fail for other reasons (a foreign key, a
+// column the test itself requires), and that does not matter. What the test forbids is ONE
+// specific error: a NOT NULL violation on `cell_id`. That error, and only that one, would refute
+// the order.
+func TestTriggerResolvesCellIDBeforeNotNullRejects(t *testing.T) {
 	pool := cellTestPool(t)
 	defer pool.Close()
 	ctx := context.Background()
 
-	// Rollback sempre: o teste prova uma ordem, nao deixa dado.
+	// Always roll back: the test proves an order, it leaves no data.
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		// sem banco: nada a provar aqui. Rastreado em https://github.com/getloopscale/loopzero/issues/279
-		t.Skipf("pulando: nao foi possivel abrir transacao: %v", err)
+		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loopzero/issues/279
+		t.Skipf("skipping: could not open a transaction: %v", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	_, err = tx.Exec(ctx,
 		`INSERT INTO builds (id, tenant_id, project_id, environment, status)
-		 VALUES ('bld-cell-order-probe', 'tn-inexistente-de-proposito', 'proj', 'dev', 'PENDING')`)
+		 VALUES ('bld-cell-order-probe', 'tn-nonexistent-on-purpose', 'proj', 'dev', 'PENDING')`)
 
 	var pgErr *pgconn.PgError
 	if err != nil && asPgError(err, &pgErr) {
 		if pgErr.Code == pgErrCodeNotNullViolation && strings.Contains(pgErr.ColumnName, "cell_id") {
-			t.Fatalf("o NOT NULL de cell_id reprovou ANTES do gatilho resolver — a premissa da "+
-				"Opcao A do ADR nao vale neste Postgres, e a migracao 000061 precisa voltar para "+
-				"uma sentinela explicita (Opcao B). Erro: %v", pgErr)
+			t.Fatalf("the cell_id NOT NULL rejected BEFORE the trigger resolved — the premise of the "+
+				"ADR's Option A does not hold on this Postgres, and migration 000061 must go back to "+
+				"an explicit sentinel (Option B). Error: %v", pgErr)
 		}
 	}
-	// Qualquer outro desfecho — sucesso, FK, RAISE do proprio gatilho — confirma que a linha
-	// chegou ao gatilho antes de a restricao de nulidade decidir.
+	// Any other outcome — success, FK, the trigger's own RAISE — confirms the row reached the
+	// trigger before the nullability constraint decided.
 }
 
-// TestGatilhoFalhaAltoQuandoOTenantNaoTemCell prova a fase 4 da migracao.
+// TestTriggerFailsLoudlyWhenTenantHasNoCell proves phase 4 of the migration.
 //
-// Antes, um tenant sem cell fazia a linha ser gravada com a sentinela e o defeito reaparecia no
-// deploy, como roteamento errado. `.claude/rules/error-handling.md` § 2 pede o oposto, e a
-// migracao passou a levantar excecao nomeando o tenant.
-func TestGatilhoFalhaAltoQuandoOTenantNaoTemCell(t *testing.T) {
+// Before, a tenant with no cell made the row be written with the sentinel and the defect
+// resurfaced at deploy time, as wrong routing. `.claude/rules/error-handling.md` § 2 asks for the
+// opposite, and the migration now raises an exception naming the tenant.
+func TestTriggerFailsLoudlyWhenTenantHasNoCell(t *testing.T) {
 	pool := cellTestPool(t)
 	defer pool.Close()
 	ctx := context.Background()
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		// sem banco: nada a provar aqui. Rastreado em https://github.com/getloopscale/loopzero/issues/279
-		t.Skipf("pulando: nao foi possivel abrir transacao: %v", err)
+		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loopzero/issues/279
+		t.Skipf("skipping: could not open a transaction: %v", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	_, err = tx.Exec(ctx,
 		`INSERT INTO builds (id, tenant_id, project_id, environment, status)
-		 VALUES ('bld-cell-raise-probe', 'tn-que-nao-existe', 'proj', 'dev', 'PENDING')`)
+		 VALUES ('bld-cell-raise-probe', 'tn-that-does-not-exist', 'proj', 'dev', 'PENDING')`)
 	if err == nil {
-		t.Fatal("o INSERT com tenant inexistente foi aceito — o gatilho deveria ter levantado " +
-			"excecao em vez de gravar a linha com uma cell nao resolvida")
+		t.Fatal("the INSERT with a nonexistent tenant was accepted — the trigger should have raised " +
+			"an exception instead of writing the row with an unresolved cell")
 	}
-	if !strings.Contains(err.Error(), "cell_id nao resolvido") &&
+	if !strings.Contains(err.Error(), "cell_id not resolved") &&
 		!strings.Contains(err.Error(), "foreign key") {
-		t.Logf("erro observado (aceitavel se for FK, que barra antes): %v", err)
+		t.Logf("observed error (acceptable if it is the FK, which blocks first): %v", err)
 	}
 }
 
-// TestCatalogoNaoTemMaisAsIdentidadesAntigas prova que a fusao chegou ao catalogo.
+// TestCatalogueNoLongerHasTheOldIdentities proves the merge reached the catalogue.
 //
-// `cell-default` era sentinela e nao cell; `cell-1` nomeava a mesma maquina que ela. Se qualquer
-// uma sobreviver, a relacao 2:1 que a unificacao existe para eliminar continua de pe sob nomes
-// novos — o pior desfecho possivel, porque parece resolvido.
-func TestCatalogoNaoTemMaisAsIdentidadesAntigas(t *testing.T) {
+// `cell-default` was a sentinel, not a cell; `cell-1` named the same machine as it. If either
+// survives, the 2:1 relation the unification exists to eliminate is still standing under new
+// names — the worst possible outcome, because it looks resolved.
+func TestCatalogueNoLongerHasTheOldIdentities(t *testing.T) {
 	pool := cellTestPool(t)
 	defer pool.Close()
 	ctx := context.Background()
 
-	var sobreviventes int
+	var survivors int
 	err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM cells WHERE cell_id IN ('cell-default', 'cell-2')`).Scan(&sobreviventes)
+		`SELECT count(*) FROM cells WHERE cell_id IN ('cell-default', 'cell-2')`).Scan(&survivors)
 	if err != nil {
-		// sem banco: nada a provar aqui. Rastreado em https://github.com/getloopscale/loopzero/issues/279
-		t.Skipf("pulando: tabela cells indisponivel: %v", err)
+		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loopzero/issues/279
+		t.Skipf("skipping: cells table unavailable: %v", err)
 	}
-	if sobreviventes != 0 {
-		t.Errorf("o catalogo ainda tem %d identidade(s) antiga(s) — a migracao 000061 nao foi "+
-			"aplicada ou foi aplicada pela metade", sobreviventes)
+	if survivors != 0 {
+		t.Errorf("the catalogue still has %d old identit(y/ies) — migration 000061 was not "+
+			"applied, or was applied halfway", survivors)
 	}
 }
 

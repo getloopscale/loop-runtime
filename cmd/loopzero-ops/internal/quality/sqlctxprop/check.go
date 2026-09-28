@@ -1,36 +1,44 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package sqlctxprop enforces that sqlc-generated calls inside a
-// `withEnvironmentLock` (or equivalent transactional) block use the
-// tx-bound `Queries.WithTx(tx).<method>(...)` form rather than the
-// pool-bound form `Queries{}.<method>(...)`.
+// Package sqlctxprop enforces that a sqlc-backed store function which received
+// the caller's transaction runs every query on that transaction.
 //
-// T0.4 of plan 2026-05-29-sqlc-migration-plan v1.2.
+// Why (MEET-2026-05-29-001, R-DS-1): a query run on the connection pool inside a
+// transactional path executes on a different connection from the lock holder —
+// a silent violation of the environment lock (Rules 6 and 7).
 //
-// Why this gate exists (per MEET-2026-05-29-001 distributed-systems-engineer
-// R-DS-1):
+// # The shape this gate reads
 //
-//	The sqlc-generated Queries struct has BOTH a pool-bound form (executes
-//	against the connection pool) and a tx-bound form (`WithTx(tx)` clone
-//	that executes inside the caller's transaction). If a caller uses the
-//	pool-bound form INSIDE a `withEnvironmentLock` block, the inner call
-//	may execute on a DIFFERENT connection than the lock holder — silent
-//	lock violation. Rule 6 + Rule 7 invariant breach.
+// sqlc generates methods that take the database handle per call
+// (`q.Method(ctx, dbtx, ...)`), and the stores in api/internal/db/store pick it
+// with `s.gen(tx)`, where `s.gen(nil)` means the pool. So the invariant is
+// concrete: inside a function that has a `db.DBTX` parameter, no call may pass
+// `s.gen(nil)` or the store's `pool` field.
 //
-// Phase 0 baseline behavior: no sqlc-generated imports exist anywhere
-// in api/internal/{routes,services} yet, so the gate trivially passes.
-// First real exercise lands when Phase 1 stores convert.
+// An earlier version of this gate scanned api/internal/routes and
+// api/internal/services for `WithTx`. Neither may import the generated package
+// at all (db-generated-boundary forbids it), and the generated code has no
+// WithTx, so it could never fire. The scope and the rule now follow the code.
+//
+// # Limits
+//
+// The check is syntactic: a DBTX parameter marks a transactional function, and a
+// transaction passed on to a helper that then uses the pool is not followed.
 package sqlctxprop
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate.
@@ -39,7 +47,7 @@ type Config struct {
 	RepoRoot string
 }
 
-// Violation captures a sqlc-call-inside-lock without WithTx threading.
+// Violation is a pool-bound query inside a function that received a transaction.
 type Violation struct {
 	File     string
 	Line     int
@@ -51,13 +59,21 @@ type Violation struct {
 type Outcome struct {
 	Pass       bool
 	Violations []Violation
-	Scanned    int // count of .go files scanned
+	// Scanned counts the non-test files importing the generated package.
+	Scanned int
+	// TxFunctions counts the functions with a db.DBTX parameter that were checked.
+	TxFunctions int
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
+// ErrNothingScanned means the scan met no transactional function: the rule was
+// checked against nothing.
+var ErrNothingScanned = errors.New("no sqlc-backed function with a db.DBTX parameter was found — the gate checked nothing")
+
 const (
-	defaultRoutesDir    = "api/internal/routes"
-	defaultServicesDir  = "api/internal/services"
-	lockSentinel        = "withEnvironmentLock"
+	defaultStoreDir     = "api/internal/db/store"
 	generatedImportPath = "github.com/getloopscale/loopzero/api/internal/db/generated"
 )
 
@@ -66,262 +82,107 @@ func Check(cfg Config) (Outcome, error) {
 	if cfg.RepoRoot == "" {
 		cfg.RepoRoot = "."
 	}
-
-	var allViolations []Violation
-	scanned := 0
-
-	for _, sub := range []string{defaultRoutesDir, defaultServicesDir} {
-		dir := filepath.Join(cfg.RepoRoot, sub)
-		if _, err := os.Stat(dir); err != nil {
-			// Dir not present is acceptable on early phases.
-			continue
-		}
-		fileViolations, fileCount, err := walkDir(dir)
-		if err != nil {
-			return Outcome{}, err
-		}
-		allViolations = append(allViolations, fileViolations...)
-		scanned += fileCount
-	}
-
-	return Outcome{
-		Pass:       len(allViolations) == 0,
-		Violations: allViolations,
-		Scanned:    scanned,
-	}, nil
-}
-
-// ActionableFix returns the operator-facing message for FAIL output.
-func ActionableFix() string {
-	return "Replace `<store>.MethodName(...)` (pool-bound) with " +
-		"`<store>.WithTx(tx).MethodName(...)` (tx-bound) inside any " +
-		"`withEnvironmentLock` block. Rule 6 + Rule 7 invariant " +
-		"requires the lock holder's transaction to be threaded through " +
-		"every nested sqlc-generated call."
-}
-
-// walkDir walks dir for .go files (excluding *_test.go), parses each,
-// and collects violations.
-func walkDir(dir string) ([]Violation, int, error) {
-	var violations []Violation
-	count := 0
-
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(info.Name(), ".go") {
-			return nil
-		}
-		if strings.HasSuffix(info.Name(), "_test.go") {
-			return nil
-		}
-
-		count++
-
-		fileViolations, err := scanFile(path)
-		if err != nil {
-			return err
-		}
-		violations = append(violations, fileViolations...)
-		return nil
-	})
-
-	return violations, count, err
-}
-
-// scanFile parses a single .go file and returns violations found inside it.
-//
-// Algorithm:
-//  1. Parse file via go/parser.
-//  2. Check if file imports the sqlc-generated package (`api/internal/db/generated`).
-//     If NOT, file cannot have sqlc-generated calls — skip (zero violations).
-//  3. Walk AST top-down: find any CallExpr where the callee is
-//     `withEnvironmentLock`. For each, inspect the function-literal argument's
-//     body for nested CallExpr that look like sqlc-generated calls.
-//  4. A sqlc-generated call WITHOUT `.WithTx(...)` chain is a violation.
-//
-// Phase 0 baseline: no file imports generated/ yet, so all returns are empty.
-func scanFile(path string) ([]Violation, error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+	dir := filepath.Join(cfg.RepoRoot, defaultStoreDir)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		// Tolerate parse errors on files that may be mid-flight; surface
-		// upstream by returning error.
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+		return Outcome{}, fmt.Errorf("reading %s: %w", defaultStoreDir, err)
 	}
 
-	if !fileImportsGenerated(file) {
-		return nil, nil
+	var out Outcome
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return Outcome{}, fmt.Errorf("parsing %s: %w", path, err)
+		}
+		if !importsGenerated(file) {
+			continue
+		}
+		out.Scanned++
+		rel := filepath.ToSlash(filepath.Join(defaultStoreDir, name))
+		for _, decl := range file.Decls {
+			fd, ok := decl.(*ast.FuncDecl)
+			if !ok || fd.Body == nil || !hasDBTXParam(fd) {
+				continue
+			}
+			out.TxFunctions++
+			out.Violations = append(out.Violations, poolCalls(fset, rel, fd)...)
+		}
 	}
+	if out.TxFunctions == 0 {
+		return out, ErrNothingScanned
+	}
+	out.Pass = len(out.Violations) == 0
+	return out, nil
+}
 
-	var violations []Violation
+func importsGenerated(f *ast.File) bool {
+	for _, imp := range f.Imports {
+		if p, err := strconv.Unquote(imp.Path.Value); err == nil && p == generatedImportPath {
+			return true
+		}
+	}
+	return false
+}
 
-	// Walk for withEnvironmentLock call sites.
-	ast.Inspect(file, func(n ast.Node) bool {
-		callExpr, ok := n.(*ast.CallExpr)
+// hasDBTXParam reports whether fd takes a parameter of type DBTX (qualified or not).
+func hasDBTXParam(fd *ast.FuncDecl) bool {
+	for _, field := range fd.Type.Params.List {
+		switch t := field.Type.(type) {
+		case *ast.SelectorExpr:
+			if t.Sel.Name == "DBTX" {
+				return true
+			}
+		case *ast.Ident:
+			if t.Name == "DBTX" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// poolCalls reports each call in fd's body that hands the pool to a query:
+// `<x>.gen(nil)` or an argument `<x>.pool`.
+func poolCalls(fset *token.FileSet, file string, fd *ast.FuncDecl) []Violation {
+	var out []Violation
+	report := func(pos token.Pos, detail string) {
+		out = append(out, Violation{File: file, Line: fset.Position(pos).Line, Function: fd.Name.Name, Detail: detail})
+	}
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
-		if !isWithEnvironmentLockCall(callExpr) {
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "gen" &&
+			len(call.Args) == 1 && isNil(call.Args[0]) {
+			report(call.Pos(), "gen(nil) selects the connection pool inside a function that received a transaction")
 			return true
 		}
-		// Inspect the function-literal closure body for nested sqlc calls.
-		bodyViolations := scanLockClosure(callExpr, fset, path)
-		violations = append(violations, bodyViolations...)
-		// Continue walking; nested locks (unlikely) still get scanned.
+		for _, arg := range call.Args {
+			if sel, ok := arg.(*ast.SelectorExpr); ok && sel.Sel.Name == "pool" {
+				report(arg.Pos(), "the store's pool is passed to a query inside a function that received a transaction")
+			}
+		}
 		return true
 	})
-
-	return violations, nil
+	return out
 }
 
-// fileImportsGenerated returns true if the file imports the sqlc-generated
-// package. Phase 0 baseline: returns false for all files.
-func fileImportsGenerated(file *ast.File) bool {
-	for _, imp := range file.Imports {
-		if imp.Path == nil {
-			continue
-		}
-		// Strip quotes from import path literal.
-		path := strings.Trim(imp.Path.Value, `"`)
-		if path == generatedImportPath {
-			return true
-		}
-	}
-	return false
+func isNil(e ast.Expr) bool {
+	id, ok := e.(*ast.Ident)
+	return ok && id.Name == "nil"
 }
 
-// isWithEnvironmentLockCall returns true if the CallExpr's callee name
-// resolves to `withEnvironmentLock` (or `WithEnvironmentLock` for exported).
-func isWithEnvironmentLockCall(call *ast.CallExpr) bool {
-	switch fn := call.Fun.(type) {
-	case *ast.Ident:
-		return fn.Name == lockSentinel || fn.Name == "WithEnvironmentLock"
-	case *ast.SelectorExpr:
-		return fn.Sel != nil && (fn.Sel.Name == lockSentinel || fn.Sel.Name == "WithEnvironmentLock")
-	}
-	return false
-}
-
-// scanLockClosure inspects the function-literal closure argument of a
-// withEnvironmentLock call. For each call expression nested inside that
-// closure body, verifies that ANY identifier matching `Queries` or `*Queries`
-// has been through a `.WithTx(...)` chain.
-//
-// Heuristic: any call site `<x>.<Method>(...)` where `<x>` is a Queries-like
-// receiver AND the call is NOT preceded by `.WithTx(...)` is a violation.
-func scanLockClosure(call *ast.CallExpr, fset *token.FileSet, path string) []Violation {
-	var violations []Violation
-
-	// The last argument to withEnvironmentLock is typically the func closure.
-	if len(call.Args) == 0 {
-		return nil
-	}
-
-	for _, arg := range call.Args {
-		funcLit, ok := arg.(*ast.FuncLit)
-		if !ok {
-			continue
-		}
-		if funcLit.Body == nil {
-			continue
-		}
-
-		ast.Inspect(funcLit.Body, func(n ast.Node) bool {
-			innerCall, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if !looksLikeSqlcCall(innerCall) {
-				return true
-			}
-			if hasWithTxChain(innerCall) {
-				return true
-			}
-
-			pos := fset.Position(innerCall.Pos())
-			violations = append(violations, Violation{
-				File:     path,
-				Line:     pos.Line,
-				Function: callExprString(innerCall),
-				Detail:   "sqlc-generated call inside withEnvironmentLock closure WITHOUT .WithTx(tx) threading",
-			})
-			return true
-		})
-	}
-
-	return violations
-}
-
-// looksLikeSqlcCall heuristically detects calls against the sqlc-generated
-// Queries type. Since AST cannot resolve types without go/types, we use
-// the convention `<storeIdentifier>.<MethodName>(...)` where the method name
-// begins with a capital letter (Go exported). Phase 0 baseline: never matches.
-//
-// Refinement opportunity (T1.1+): once first store conversion lands, this
-// heuristic will be calibrated against real callsites; the gate can switch
-// to go/types if needed.
-func looksLikeSqlcCall(call *ast.CallExpr) bool {
-	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	if sel.Sel == nil {
-		return false
-	}
-	// Method name must start with a capital letter (Go exported).
-	name := sel.Sel.Name
-	if name == "" {
-		return false
-	}
-	if name[0] < 'A' || name[0] > 'Z' {
-		return false
-	}
-	// `WithTx` is the threading helper itself — not a sqlc method.
-	if name == "WithTx" {
-		return false
-	}
-	// Receiver may be: Ident (`queries.Foo`), SelectorExpr
-	// (`s.queries.Foo`), or CallExpr (`s.queries.WithTx(tx).Foo` — but
-	// that's the GOOD pattern handled by hasWithTxChain). Accept ident
-	// and selector-expr receivers as candidate sqlc calls.
-	switch sel.X.(type) {
-	case *ast.Ident, *ast.SelectorExpr:
-		return true
-	}
-	return false
-}
-
-// hasWithTxChain returns true if the call expression is part of a
-// `.WithTx(tx).<Method>(...)` chain.
-func hasWithTxChain(call *ast.CallExpr) bool {
-	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	// Walk back: sel.X may itself be a CallExpr to `.WithTx(...)`.
-	if innerCall, ok := sel.X.(*ast.CallExpr); ok {
-		if innerSel, ok := innerCall.Fun.(*ast.SelectorExpr); ok && innerSel.Sel != nil {
-			return innerSel.Sel.Name == "WithTx"
-		}
-	}
-	return false
-}
-
-// callExprString returns a short human-readable representation of a call site.
-func callExprString(call *ast.CallExpr) string {
-	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		recv := ""
-		if id, ok := sel.X.(*ast.Ident); ok {
-			recv = id.Name
-		}
-		if sel.Sel != nil {
-			return recv + "." + sel.Sel.Name + "(...)"
-		}
-	}
-	return "<call>"
+// ActionableFix returns the operator-facing remediation.
+func ActionableFix() string {
+	return "Pass the transaction: `s.gen(tx)` instead of `s.gen(nil)` or `s.pool`. " +
+		"A function that received a db.DBTX runs inside the caller's transaction; a query on the pool " +
+		"executes on another connection, outside withEnvironmentLock. If the query genuinely belongs " +
+		"outside the transaction, move it to a function that does not take one."
 }

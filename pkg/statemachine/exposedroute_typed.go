@@ -44,99 +44,27 @@ type ExposedRouteEvent string
 
 // Typed state constants (mirror the untyped const block above).
 const (
-	XRStateEmpty      ExposedRouteState = ""
-	XRStatePending    ExposedRouteState = "Pending"
-	XRStateCertIssued ExposedRouteState = "CertIssued"
-	XRStateReachable  ExposedRouteState = "Reachable"
-	XRStateFailed     ExposedRouteState = "Failed"
+	XRStateEmpty      = ExposedRouteState(ExposedRouteEmpty)
+	XRStatePending    = ExposedRouteState(ExposedRoutePending)
+	XRStateCertIssued = ExposedRouteState(ExposedRouteCertIssued)
+	XRStateReachable  = ExposedRouteState(ExposedRouteReachable)
+	XRStateFailed     = ExposedRouteState(ExposedRouteFailed)
 )
 
 // Typed event constants.
 const (
-	XREventCreate    ExposedRouteEvent = "Create"
-	XREventCertReady ExposedRouteEvent = "CertReady"
-	XREventProbeOK   ExposedRouteEvent = "ProbeOK"
-	XREventProbeFail ExposedRouteEvent = "ProbeFail"
-	XREventRetry     ExposedRouteEvent = "Retry"
+	XREventCreate    = ExposedRouteEvent(ExposedRouteCreate)
+	XREventCertReady = ExposedRouteEvent(ExposedRouteCertReady)
+	XREventProbeOK   = ExposedRouteEvent(ExposedRouteProbeOK)
+	XREventProbeFail = ExposedRouteEvent(ExposedRouteProbeFail)
+	XREventRetry     = ExposedRouteEvent(ExposedRouteRetry)
 )
 
-// ExposedRouteMachine is the typed wrapper around the shared *Machine
-// substrate. All operations are delegated to the underlying machine
-// after a same-bit-pattern cast to/from the untyped State/Event types.
-type ExposedRouteMachine struct {
-	inner *Machine
-}
+// ExposedRouteMachine is the typed ExposedRouteState machine.
+type ExposedRouteMachine = Typed[ExposedRouteState, ExposedRouteEvent]
 
-// NewExposedRouteTypedMachine constructs the typed ExposedRoute state
-// machine. Internally reuses NewExposedRouteMachine() so the transition
-// table + terminal set stay single-sourced — there is exactly ONE spec
-// for ExposedRoute, exposed via two surfaces (typed + untyped).
+// NewExposedRouteTypedMachine returns the typed machine over NewExposedRouteMachine(), which stays the
+// single source of the transition table and the terminal set.
 func NewExposedRouteTypedMachine() *ExposedRouteMachine {
-	return &ExposedRouteMachine{inner: NewExposedRouteMachine()}
-}
-
-// Transition runs a typed transition. Panics on invalid input,
-// matching the untyped Machine.Transition contract.
-func (m *ExposedRouteMachine) Transition(current ExposedRouteState, event ExposedRouteEvent) ExposedRouteState {
-	return ExposedRouteState(m.inner.Transition(State(current), Event(event)))
-}
-
-// TryTransition is the non-panicking variant — same contract as
-// Machine.TryTransition but typed.
-func (m *ExposedRouteMachine) TryTransition(current ExposedRouteState, event ExposedRouteEvent) (ExposedRouteState, error) {
-	next, err := m.inner.TryTransition(State(current), Event(event))
-	if err != nil {
-		return "", err
-	}
-	return ExposedRouteState(next), nil
-}
-
-// IsTerminal returns whether the given state is terminal. ExposedRoute
-// has no terminal states by design (lifecycle bound to parent CR
-// ownerRef), so this always returns false — but exposed for API
-// uniformity with other typed machines.
-func (m *ExposedRouteMachine) IsTerminal(s ExposedRouteState) bool {
-	return m.inner.IsTerminal(State(s))
-}
-
-// Name returns "ExposedRoute".
-func (m *ExposedRouteMachine) Name() string {
-	return m.inner.Name()
-}
-
-// IsKnownState mirrors Machine.IsKnownState in the typed surface.
-func (m *ExposedRouteMachine) IsKnownState(s ExposedRouteState) bool {
-	return m.inner.IsKnownState(State(s))
-}
-
-// IsKnownEvent mirrors Machine.IsKnownEvent in the typed surface.
-func (m *ExposedRouteMachine) IsKnownEvent(e ExposedRouteEvent) bool {
-	return m.inner.IsKnownEvent(Event(e))
-}
-
-// MustParseState wraps a raw string into an ExposedRouteState after
-// validating membership. Panics on unknown values — the typed
-// equivalent of Machine.MustParseState for callers reading from DB /
-// CR status fields.
-func (m *ExposedRouteMachine) MustParseState(s string) ExposedRouteState {
-	return ExposedRouteState(m.inner.MustParseState(s))
-}
-
-// MustParseEvent wraps a raw string into an ExposedRouteEvent after
-// validating membership.
-func (m *ExposedRouteMachine) MustParseEvent(e string) ExposedRouteEvent {
-	return ExposedRouteEvent(m.inner.MustParseEvent(e))
-}
-
-// ValidEvents returns the typed events valid from the given state.
-func (m *ExposedRouteMachine) ValidEvents(state ExposedRouteState) []ExposedRouteEvent {
-	untyped := m.inner.ValidEvents(State(state))
-	if untyped == nil {
-		return nil
-	}
-	out := make([]ExposedRouteEvent, len(untyped))
-	for i, e := range untyped {
-		out[i] = ExposedRouteEvent(e)
-	}
-	return out
+	return newTyped[ExposedRouteState, ExposedRouteEvent](NewExposedRouteMachine())
 }

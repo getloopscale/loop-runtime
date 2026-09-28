@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lines of code, from language to role to subtree</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-ink: #2d3142; --color-muted: #4f5d75; --color-accent: #eb6c36;
+      --font-sans: 'Geist', system-ui, sans-serif; --font-serif: 'Instrument Serif', serif; --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1280px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500;
+      letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+      letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .caption { margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px solid rgba(45,49,66,0.12);
+      font-family: var(--font-mono); font-size: 0.62rem; line-height: 1.9; color: var(--color-muted); }
+    .caption span { display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Sankey - DG-30</p>
+    <h1>Lines of code, from language to role to subtree</h1>
+    <svg viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="sankey-title sankey-desc">
+      <title id="sankey-title">Lines of code, from language to role to subtree</title>
+      <desc id="sankey-desc">One conserved quantity across three stages: every measured line counted once, split by the language it is written in, then by the role it plays, then by the subtree it lives in. Each column sums to the same total, which is what makes the band widths comparable.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+        <marker id="arrow-soft" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7a8399"/></marker>
+        <marker id="arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#4f5d75" stroke-width="1.2"/></marker>
+        <marker id="tri-hollow" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker>
+        <marker id="dia-filled" markerWidth="14" markerHeight="8" refX="13" refY="4" orient="auto"><polygon points="0 4, 7 0, 14 4, 7 8" fill="#2d3142"/></marker>
+        <marker id="dia-hollow" markerWidth="14" markerHeight="8" refX="13" refY="4" orient="auto"><polygon points="0 4, 7 0, 14 4, 7 8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      <text x="200" y="112" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">LANGUAGE</text><text x="620" y="112" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">ROLE</text><text x="1040" y="112" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">SUBTREE</text>
+      <path d="M 216,152 C 410.0,152 410.0,152 604,152 L 604,312 C 410.0,312 410.0,312 216,312 Z" fill="#eb6c36" fill-opacity="0.22"/><path d="M 216,472 C 410.0,472 410.0,524 604,524 L 604,656 C 410.0,656 410.0,604 216,604 Z" fill="#4f5d75" fill-opacity="0.12"/><path d="M 216,312 C 410.0,312 410.0,364 604,364 L 604,468 C 410.0,468 410.0,416 216,416 Z" fill="#4f5d75" fill-opacity="0.12"/><path d="M 216,604 C 410.0,604 410.0,468 604,468 L 604,484 C 410.0,484 410.0,620 216,620 Z" fill="#4f5d75" fill-opacity="0.12"/><path d="M 216,416 C 410.0,416 410.0,656 604,656 L 604,672 C 410.0,672 410.0,432 216,432 Z" fill="#4f5d75" fill-opacity="0.12"/><path d="M 216,620 C 410.0,620 410.0,312 604,312 L 604,324 C 410.0,324 410.0,632 216,632 Z" fill="#eb6c36" fill-opacity="0.22"/><path d="M 636,524 C 830.0,524 830.0,336 1024,336 L 1024,460 C 830.0,460 830.0,648 636,648 Z" fill="#4f5d75" fill-opacity="0.12"/><path d="M 636,152 C 830.0,152 830.0,460 1024,460 L 1024,556 C 830.0,556 830.0,248 636,248 Z" fill="#eb6c36" fill-opacity="0.22"/><path d="M 636,248 C 830.0,248 830.0,152 1024,152 L 1024,228 C 830.0,228 830.0,324 636,324 Z" fill="#eb6c36" fill-opacity="0.22"/><path d="M 636,364 C 830.0,364 830.0,556 1024,556 L 1024,628 C 830.0,628 830.0,436 636,436 Z" fill="#4f5d75" fill-opacity="0.12"/><path d="M 636,436 C 830.0,436 830.0,228 1024,228 L 1024,276 C 830.0,276 830.0,484 636,484 Z" fill="#4f5d75" fill-opacity="0.12"/><path d="M 636,648 C 830.0,648 830.0,276 1024,276 L 1024,300 C 830.0,300 830.0,672 636,672 Z" fill="#4f5d75" fill-opacity="0.12"/>
+      <rect x="184" y="152" width="32" height="280" rx="2" fill="rgba(45,49,66,0.10)" stroke="#4f5d75" stroke-width="1"/><text x="172" y="292" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="end">go</text><text x="172" y="306" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">380,717</text><rect x="184" y="472" width="32" height="160" rx="2" fill="rgba(45,49,66,0.10)" stroke="#4f5d75" stroke-width="1"/><text x="172" y="552" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="end">other languages</text><text x="172" y="566" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">220,630</text><rect x="604" y="152" width="32" height="172" rx="2" fill="rgba(45,49,66,0.10)" stroke="#4f5d75" stroke-width="1"/><text x="620" y="126" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">test</text><text x="620" y="140" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">235,401</text><rect x="604" y="364" width="32" height="120" rx="2" fill="rgba(45,49,66,0.10)" stroke="#4f5d75" stroke-width="1"/><text x="620" y="338" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">source</text><text x="620" y="352" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">163,647</text><rect x="604" y="524" width="32" height="148" rx="2" fill="rgba(45,49,66,0.10)" stroke="#4f5d75" stroke-width="1"/><text x="620" y="498" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">other roles</text><text x="620" y="512" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">202,299</text><rect x="1024" y="152" width="32" height="144" rx="2" fill="rgba(45,49,66,0.10)" stroke="#4f5d75" stroke-width="1"/><text x="1068" y="224" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="start">api</text><text x="1068" y="238" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start">195,878</text><rect x="1024" y="336" width="32" height="296" rx="2" fill="rgba(45,49,66,0.10)" stroke="#4f5d75" stroke-width="1"/><text x="1068" y="484" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="start">other subtrees</text><text x="1068" y="498" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="start">405,469</text>
+      <line x1="40" y1="736" x2="1240" y2="736" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/><text x="40" y="752" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text><rect x="116" y="744" width="16" height="10" rx="2" fill="rgba(79,93,117,0.12)" stroke="#4f5d75" stroke-width="1"/><text x="140" y="753" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">ordinary flow</text><rect x="236" y="744" width="16" height="10" rx="2" fill="rgba(235,108,54,0.22)" stroke="#eb6c36" stroke-width="1"/><text x="260" y="753" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">the test path</text><line x1="356" y1="749" x2="372" y2="749" stroke="#4f5d75" stroke-width="1.2"/><text x="380" y="753" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">k = 0.0007 px per line, one scale for the whole figure</text>
+    </svg>
+    <p class="caption"><span>Source: 109 `loc` metric rows carrying flow_from/flow_to. Every row is counted; stage 1 totals 601,347 lines and stage 2 totals 601,347, so the columns balance.</span><span>Aggregated to stay inside the 8-node / 12-ribbon budget: languages other than Go, roles other than test and source, and subtrees other than api/ are each one explicit node - nothing is dropped, which is what keeps the widths honest.</span></p>
+  </div>
+</body>
+</html>

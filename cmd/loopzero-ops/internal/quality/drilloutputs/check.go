@@ -25,6 +25,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // legacyPatterns are the v0/v1 + phantom-output regexes. The original bash used
@@ -76,6 +78,9 @@ type Outcome struct {
 	Pass     bool
 	Findings []string // "file:line: <trimmed content>"
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check scans cfg.Root for legacy drill-outputs consumer patterns.
 func Check(cfg Config) (*Outcome, error) {
@@ -132,9 +137,9 @@ func Check(cfg Config) (*Outcome, error) {
 }
 
 func scanFile(path string, out *Outcome) error {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path comes from walking the repo root
 	if err != nil {
-		return nil // unreadable file skipped
+		return fmt.Errorf("%s: unreadable, so it was never scanned: %w", path, err)
 	}
 	defer f.Close()
 	lineNum := 0

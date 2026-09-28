@@ -1,8 +1,8 @@
 -- Migration 000032: M2 runtime-envs per-project caps adjustment
 --
 -- Plan: .claude/knowledge-base/plans/2026-06-07-runtime-envs-per-project-m2-plan.md
--- ADR D4 — Sponsor verbatim 2026-06-07: "Continue evoluindo o plano ate
--- que ele passe" (T0.2 batch-approval, docs/operations.md).
+-- ADR D4 — Sponsor request 2026-06-07 (translated): "Keep evolving the plan
+-- until it passes" (T0.2 batch-approval, docs/operations.md).
 --
 -- NOTE on numbering — SEPA CRITICAL #1 (2026-06-07):
 -- Plan body originally cited migration number 000029. Post-merge with

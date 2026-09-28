@@ -4,7 +4,7 @@
 // Package nonewbash implements the D3 governance gate from
 // 2026-05-22-shell-script-strategic-plan: "Creation of new
 // bash scripts is FORBIDDEN by default; exceptions require entry in
-// .claude/rules/shell-scripts-allowlist.md".
+// infra/quality/shell-scripts-allowlist.md".
 //
 // The gate scans `git diff --diff-filter=AR base...head -- '*.sh'`
 // (added + renamed-to) and fails if any new script is not in the
@@ -19,12 +19,17 @@ package nonewbash
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check where to operate.
@@ -41,6 +46,9 @@ type Outcome struct {
 	Violations []string // human-readable per-violation messages
 }
 
+// Verdict is Pass when no new script sits outside the allowlist, Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // Check is the entry point invoked by `loopzero-ops quality no-new-bash`.
 // Returns outcome + error. Error is reserved for INFRASTRUCTURE failures
 // (git missing, allowlist unreadable, base-ref unreachable); policy
@@ -49,7 +57,23 @@ func Check(cfg Config) (*Outcome, error) {
 	// 1. Read allowlist
 	allowlistFull := filepath.Join(cfg.RepoRoot, cfg.AllowlistPath)
 	allowlistBytes, err := os.ReadFile(allowlistFull)
-	if err != nil {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		// AN ABSENT ALLOWLIST DECLARES NO EXEMPTIONS. It is not an infrastructure
+		// failure, and the difference decides whether this gate can run at all.
+		//
+		// The allowlist lived under `.claude/`, which `3d4075ca3` (2026-09-08)
+		// removed from tracking — so it exists in no clone, on no runner, and for
+		// no contributor. Measured 2026-09-16: this read exited 5 and blocked the
+		// repository's own pre-push hook.
+		//
+		// Absence reads as "nothing is exempt", the STRICTEST answer available and
+		// the one this gate is for: refusing new shell scripts. A gate whose
+		// default exempts nothing cannot be weakened by losing its file.
+		allowlistBytes = nil
+	case err != nil:
+		// Present and unreadable is a different claim, and stays fatal: calling it
+		// "no exemptions" would silently discard exemptions somebody wrote.
 		return nil, fmt.Errorf("read allowlist %s: %w", cfg.AllowlistPath, err)
 	}
 	allowed, err := parseAllowlist(string(allowlistBytes))
@@ -58,7 +82,7 @@ func Check(cfg Config) (*Outcome, error) {
 	}
 
 	// 2. EC-04 pre-flight: verify base-ref reachable
-	if err := verifyRefReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
+	if err := revrange.VerifyReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
 		return nil, err
 	}
 
@@ -82,23 +106,6 @@ func Check(cfg Config) (*Outcome, error) {
 	return outcome, nil
 }
 
-// verifyRefReachable does `git rev-parse --verify <ref>` to confirm presence.
-// On failure, returns a typed error with BASE_REF_UNREACHABLE and the actionable
-// hint to set fetch-depth: 0 in CI.
-func verifyRefReachable(repoRoot, ref string) error {
-	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", ref+"^{commit}")
-	cmd.Dir = repoRoot
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf(
-			"BASE_REF_UNREACHABLE: base ref %q not found in local git history. "+
-				"This typically means a shallow clone (default GitHub Actions checkout depth=1). "+
-				"Fix: set `fetch-depth: 0` on actions/checkout@v4 step, OR run "+
-				"`git fetch origin %s` before invoking the gate. Underlying: %v",
-			ref, ref, err)
-	}
-	return nil
-}
-
 // gitDiffAdded runs `git diff --name-only --diff-filter=AR base...head -- '*.sh'`
 // and returns the list of paths (added or renamed-to).
 //
@@ -112,7 +119,7 @@ func gitDiffAdded(repoRoot, base, head string) ([]string, error) {
 	cmd.Dir = repoRoot
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("git diff failed: %v\n%s", err, out)
+		return nil, fmt.Errorf("git diff failed: %w\n%s", err, out)
 	}
 	var paths []string
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
@@ -128,19 +135,6 @@ func gitDiffAdded(repoRoot, base, head string) ([]string, error) {
 	return paths, nil
 }
 
-// allowlistRowRe matches a Markdown table row whose first column ends in .sh.
-// Allows whitespace tolerance. Rejects placeholder tokens containing `<` or `>`
-// (used in template/example rows that should not be parsed as real entries).
-// Example matches:
-//
-//	| infra/scripts/foo.sh | 145 | reason |
-//	|infra/scripts/foo.sh|145|reason|
-//
-// Example rejected (placeholder syntax):
-//
-//	| <script-path-relative-to-repo-root>.sh | <LOC> | <reason> |
-var allowlistRowRe = regexp.MustCompile(`^\|\s*([^\s|<>]+\.sh)\s*\|`)
-
 // parseAllowlist extracts the set of allowed .sh paths from the markdown
 // content. Robust to:
 //   - empty file
@@ -153,15 +147,11 @@ func parseAllowlist(content string) (map[string]bool, error) {
 	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		line := scanner.Text()
-		match := allowlistRowRe.FindStringSubmatch(line)
-		if match == nil {
+		row, ok := shellscript.ParseAllowlistRow(line)
+		if !ok {
 			continue
 		}
-		path := strings.TrimSpace(match[1])
-		if path == "" {
-			continue
-		}
-		allowed[path] = true
+		allowed[row.Path] = true
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err

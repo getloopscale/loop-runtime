@@ -45,8 +45,8 @@ func readPath(t *testing.T, rel string) string {
 // preserve the existing Shamir path).
 //
 // LIVE acceptance (bao status reports Sealed=false + Seal Type=transit,
-// no shard file written) requires sponsor JUNTOS Cleanroom per
-// cleanroom-up-live-test-mandate § Sub-step 2.5 — NOT in scope here.
+// no shard file written) requires a joint sponsor Cleanroom run, following
+// the OpenBao init ceremony in docs/runbooks.md — NOT in scope here.
 //
 // This test is HERMETIC: pure source-level grep on the script + the
 // helmfile gotmpl. No kubectl, no helm, no `bao` invocation.

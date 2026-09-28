@@ -10,8 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -139,10 +137,6 @@ func TestTenantCRManager_ImplementsInterface(t *testing.T) {
 	var _ ports.TenantCRManager = (*TenantCRManager)(nil)
 }
 
-func TestTenantCRManager_ImplementsEnvironmentManager(t *testing.T) {
-	var _ environments.EnvironmentManager = (*TenantCRManager)(nil)
-}
-
 func TestTenantCRManager_AddEnvironment(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-add-env"
@@ -169,7 +163,7 @@ func TestTenantCRManager_AddEnvironment(t *testing.T) {
 	}
 }
 
-func TestTenantCRManager_AddEnvironment_Idempotent(t *testing.T) {
+func TestTenantCRManager_AddEnvironment_ReportsAnExistingTupleAndKeepsOneEntry(t *testing.T) {
 	mgr := newTenantMgr(t)
 	tenantID := "test-add-env-idem"
 
@@ -179,8 +173,8 @@ func TestTenantCRManager_AddEnvironment_Idempotent(t *testing.T) {
 	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); err != nil {
 		t.Fatalf("first AddEnvironment failed: %v", err)
 	}
-	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); err != nil {
-		t.Fatalf("second AddEnvironment (idempotent) failed: %v", err)
+	if err := mgr.AddEnvironment(context.Background(), tenantID, "testproj", "staging"); !errors.Is(err, ports.ErrEnvironmentExists) {
+		t.Fatalf("second AddEnvironment = %v, want ports.ErrEnvironmentExists", err)
 	}
 
 	envs, _ := mgr.ListEnvironments(context.Background(), tenantID)
@@ -489,5 +483,42 @@ func TestEnsureTenant_concurrentUpdate(t *testing.T) {
 	got := getTenant(t, mgr, tenantID)
 	if string(got.Spec.Plan) != "growth" {
 		t.Errorf("expected final plan 'growth' after concurrent updates, got %q", got.Spec.Plan)
+	}
+}
+
+// The Tenant CR names the cell the engine placed the tenant on. Without it the CRD
+// default cell-0 applies, and a tenant placed on cell-1 is provisioned on cell-0
+// while the engine routes its deploys to cell-1 (#412).
+func TestEnsureTenant_CreatesTheTenantOnItsPlacedCell(t *testing.T) {
+	mgr := newTenantMgr(t)
+
+	if err := mgr.EnsureTenant(context.Background(), "tn-placed", ports.TenantCRSpec{Plan: "starter", CellID: "cell-1"}); err != nil {
+		t.Fatalf("EnsureTenant: %v", err)
+	}
+
+	if got := getTenant(t, mgr, "tn-placed").Spec.CellID; got != "cell-1" {
+		t.Errorf("spec.cellID = %q, want cell-1", got)
+	}
+}
+
+// Moving a tenant is the admin pin's job — audited and atomic with the database.
+// EnsureTenant runs on every project create and must not move an existing tenant.
+func TestEnsureTenant_DoesNotMoveAnExistingTenant(t *testing.T) {
+	mgr := newTenantMgr(t)
+	ctx := context.Background()
+	if err := mgr.EnsureTenant(ctx, "tn-settled", ports.TenantCRSpec{Plan: "starter", CellID: "cell-0"}); err != nil {
+		t.Fatalf("first EnsureTenant: %v", err)
+	}
+
+	if err := mgr.EnsureTenant(ctx, "tn-settled", ports.TenantCRSpec{Plan: "pro", CellID: "cell-1"}); err != nil {
+		t.Fatalf("second EnsureTenant: %v", err)
+	}
+
+	got := getTenant(t, mgr, "tn-settled")
+	if got.Spec.CellID != "cell-0" {
+		t.Errorf("spec.cellID = %q, want cell-0 kept — a project create must not move the tenant", got.Spec.CellID)
+	}
+	if got.Spec.Plan != "pro" {
+		t.Errorf("spec.plan = %q, want pro (the update still applies)", got.Spec.Plan)
 	}
 }

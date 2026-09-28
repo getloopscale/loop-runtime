@@ -1,0 +1,50 @@
+# The environments of the platform helmfiles, declared ONCE.
+#
+# core, cell and build include this file through `bases:`, so an environment exists
+# for all three or for none. They used to declare their own `environments:` blocks,
+# and the lists had drifted: core knew seven environments and cell/build five, so
+# `LOOPZERO_HELMFILE_ENV=dev-public task setup` — the documented flow — got past the core
+# cluster and then stopped at the build cluster with "no releases found that matches
+# specified selector() and environment(dev-public)", exit 3.
+#
+# Behaviour that differs between environments is a VALUE in environments/<name>.yaml
+# (see the `profile:` block there), never a switch on the environment's name inside a
+# helmfile. Adding an environment is therefore one entry here plus one values file.
+#
+# The secrets helmfile is a different composition (its own cluster, its own
+# vault-local environment) and keeps its own list.
+
+environments:
+  dev:
+    values:
+      - environments/dev.yaml
+  prod:
+    values:
+      - environments/prod.yaml
+  standalone:
+    # Self-hosting profile — same charts, single cluster. ADR D6.
+    values:
+      - environments/standalone.yaml
+  standalone-multi:
+    # end-to-end-deploy-validation-plan T0.3 — separate k3d clusters in one host
+    # (core + build + cells). Used for local E2E validation.
+    values:
+      - environments/standalone-multi.yaml
+  standalone-public:
+    # T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+    # Same topology as standalone-multi, configured for the local-Caddy public-DNS
+    # demo flow. Retired as the default of `task infra:install:core-dashboard-only`
+    # by B-165; still reachable with an explicit ENV=standalone-public.
+    values:
+      - environments/standalone-public.yaml
+  dev-public:
+    # T2.1 of plan 2026-06-04-dev-public-domain-canonicalization. Variant of
+    # standalone-public using *-dev.loopzero.example hostnames. Used by
+    # `task dev-public:bootstrap` + `LOOPZERO_HELMFILE_ENV=dev-public task setup`.
+    values:
+      - environments/dev-public.yaml
+  drill:
+    # MEET-ASYNC-AMENDMENT-2026-05-12-003 — pre-prod chaos + maturity validation on
+    # DOKS clusters provisioned by infra/pulumi-drill/.
+    values:
+      - environments/drill.yaml

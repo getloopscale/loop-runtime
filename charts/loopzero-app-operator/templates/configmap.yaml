@@ -8,19 +8,8 @@ data:
   BASE_DOMAIN: {{ .Values.config.baseDomain | quote }}
   OPERATOR_INSECURE_SKIP_TLS: {{ .Values.config.operatorInsecureSkipTls | quote }}
   LOOPZERO_REQUIRE_CELL_0_KUBECONFIG: {{ .Values.config.loopzeroRequireRuntimeKubeconfig | quote }}
-  LOOPZERO_REAPER_GRACE_PERIOD_SECONDS: {{ .Values.config.loopzeroReaperGracePeriodSeconds | quote }}
   LOOPZERO_PPROF_ADDR: {{ .Values.config.loopzeroPprofAddr | quote }}
   LOOPZERO_PPROF_ENABLED: {{ .Values.config.loopzeroPprofEnabled | quote }}
   OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.otelExporterOtlpEndpoint | quote }}
   LOOPZERO_ENV: {{ .Values.config.loopzeroEnv | quote }}
   LOOPZERO_TRACING_ENABLED: {{ .Values.config.loopzeroTracingEnabled | quote }}
-  # T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
-  # Injected as ConfigMap keys (not Deployment env: block) for symmetry
-  # with the other operator config vars + Reloader-friendly rollout.
-  # Default OFF — binary reads ENABLED and skips the Runnable when
-  # false. When ENABLED=true, `main.go` fail-fasts on empty PG_URL /
-  # PROMETHEUS_URL (loud misconfig, no silent no-op).
-  LOOPZERO_DATA_PLANE_POLLER_ENABLED: {{ (.Values.dataPlanePoller.enabled | default false) | quote }}
-  LOOPZERO_DATA_PLANE_POLLER_PG_URL: {{ (.Values.dataPlanePoller.pgUrl | default "") | quote }}
-  LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL: {{ (.Values.dataPlanePoller.prometheusUrl | default "") | quote }}
-  LOOPZERO_DATA_PLANE_POLLER_INTERVAL: {{ (.Values.dataPlanePoller.interval | default "30s") | quote }}

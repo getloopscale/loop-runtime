@@ -10,9 +10,6 @@ Set-equal to the rendered ConfigMap keys (hermetic Go guard).
 | `ARGOCD_NAMESPACE` | `argocd` | operator runtime config |
 | `GITEA_ORG` | `loopzero` | operator runtime config |
 | `GITEA_URL` | (empty) | operator runtime config |
-| `HARBOR_ADMIN_USERNAME` | `admin` | operator runtime config |
-| `HARBOR_REGISTRY_HOST` | (empty) | operator runtime config |
-| `HARBOR_URL` | (empty) | operator runtime config |
 | `INGRESS_NAMESPACE` | `traefik` | operator runtime config |
 | `MINIO_ENDPOINT` | (empty) | operator runtime config |
 | `REGISTRY_CIDRS` | (empty) | operator runtime config |

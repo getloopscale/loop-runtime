@@ -2,9 +2,9 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package noshellwrap implements the D5 governance gate from
-// 2026-05-22-shell-script-strategic-plan: "Shell-wrap em Go is
-// PROIBIDO — Go code that shells out to a CLI when a native Go SDK exists is
-// dívida técnica."
+// 2026-05-22-shell-script-strategic-plan (translated): "Shell-wrap in Go is
+// FORBIDDEN — Go code that shells out to a CLI when a native Go SDK exists is
+// technical debt."
 //
 // Detection (AST-based, conservative):
 //
@@ -21,10 +21,10 @@
 //   - Dynamic CLIs (variable instead of literal) NOT detected — code review backstop
 //   - Non-Runner types with Run() method NOT distinguished — heuristic accepts
 //     occasional false positive in exchange for KISS implementation
-//   - Comments in unparseable Go files cause that file to be silently skipped
 package noshellwrap
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -33,11 +33,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ForbiddenCLI lists CLIs that have mature Go SDK alternatives. Shell-wrap of
 // these in production code (pkg/, cmd/) violates D5 unless suppressed with
-// //nolint:shell-wrap + justificativa.
+// //nolint:shell-wrap + a justification.
 var ForbiddenCLI = map[string]bool{
 	"pulumi":  true, // use github.com/pulumi/pulumi/sdk/v3 Automation API
 	"helm":    true, // use helm.sh/helm/v3 SDK
@@ -70,6 +72,9 @@ type Outcome struct {
 	Violations []string
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // excludedDirs — paths skipped during walk.
 var excludedDirs = map[string]bool{
 	"vendor":       true,
@@ -79,9 +84,13 @@ var excludedDirs = map[string]bool{
 	"testdata":     true,
 }
 
+// ErrNothingScanned means the root held no non-test Go file.
+var ErrNothingScanned = errors.New("no non-test Go file under the root — the gate read nothing")
+
 // Check is the entry point invoked by `loopzero-ops quality no-shell-wrap`.
 func Check(cfg Config) (*Outcome, error) {
 	outcome := &Outcome{Pass: true}
+	scanned := 0
 
 	err := filepath.WalkDir(cfg.Root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -99,10 +108,11 @@ func Check(cfg Config) (*Outcome, error) {
 		if strings.HasSuffix(d.Name(), "_test.go") {
 			return nil
 		}
+		scanned++
 		viols, scanErr := scanFile(path)
 		if scanErr != nil {
-			// Unparseable file — skip silently per documented limitation
-			return nil
+			// An unparseable file is the one whose shell-wraps would go unread.
+			return scanErr
 		}
 		if len(viols) > 0 {
 			outcome.Pass = false
@@ -112,6 +122,9 @@ func Check(cfg Config) (*Outcome, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("walk %s: %w", cfg.Root, err)
+	}
+	if scanned == 0 {
+		return nil, fmt.Errorf("%s: %w", cfg.Root, ErrNothingScanned)
 	}
 	return outcome, nil
 }

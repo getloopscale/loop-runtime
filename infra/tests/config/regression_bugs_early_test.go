@@ -13,6 +13,7 @@ package config
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -31,11 +32,11 @@ func TestB18RuntimeMaxNodesConfig(t *testing.T) {
 }
 
 func TestB16ClusterImagePolicyChartExists(t *testing.T) {
-	chartFile := "../../helm/admission-policies/Chart.yaml"
+	chartFile := "../../../charts/loopzero-admission-policies/Chart.yaml"
 	if _, err := os.Stat(chartFile); err != nil {
 		t.Fatalf("B16 regression: %s missing — was T0.1 reverted? %v", chartFile, err)
 	}
-	tplFile := "../../helm/admission-policies/templates/cluster-image-policy.yaml"
+	tplFile := "../../../charts/loopzero-admission-policies/templates/cluster-image-policy.yaml"
 	if _, err := os.Stat(tplFile); err != nil {
 		t.Fatalf("B16 regression: ClusterImagePolicy template missing: %v", err)
 	}
@@ -97,7 +98,6 @@ func TestB22KratosNeedsPostgresConditional(t *testing.T) {
 func TestB23ServiceMonitorDisabled(t *testing.T) {
 	files := []string{
 		"../../helm/postgresql/values.yaml",
-		"../../helm/harbor/values.yaml",
 	}
 	for _, f := range files {
 		data, err := os.ReadFile(f)
@@ -143,11 +143,10 @@ func TestB25MinioDistributedConditional(t *testing.T) {
 		start = 0
 	}
 	context := s[start:idx]
-	gateLegacy := strings.Contains(context, `{{- if ne .Environment.Name "standalone" }}`)
-	gateAllowlist := strings.Contains(context, `{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}`)
-	if !gateLegacy && !gateAllowlist {
-		t.Errorf("B25 regression: minio values-distributed.yaml must be gated to cloud profiles only (dev|prod)")
+	if !strings.Contains(context, `{{- if .Values.profile.highAvailability }}`) {
+		t.Errorf("B25 regression: minio values-distributed.yaml must be gated by profile.highAvailability")
 	}
+	assertHighAvailabilityOnlyInCloudProfiles(t, "B25")
 }
 
 func TestB26MetricsServerInstalledFalse(t *testing.T) {
@@ -167,7 +166,7 @@ func TestB27PostgresInitdbAllDBs(t *testing.T) {
 		t.Fatalf("read postgresql values.yaml: %v", err)
 	}
 	s := string(data)
-	required := []string{"CREATE DATABASE gitea", "CREATE DATABASE kratos", "CREATE DATABASE hydra", "CREATE DATABASE harbor"}
+	required := []string{"CREATE DATABASE gitea", "CREATE DATABASE kratos", "CREATE DATABASE hydra"}
 	for _, r := range required {
 		if !strings.Contains(s, r) {
 			t.Errorf("B27 regression: postgresql initdb missing `%s`", r)
@@ -191,10 +190,39 @@ func TestB28GiteaHaConditional(t *testing.T) {
 		end = len(s) - idx
 	}
 	block := s[idx : idx+10+end]
-	gateLegacy := strings.Contains(block, `{{- if ne .Environment.Name "standalone" }}`)
-	gateAllowlist := strings.Contains(block, `{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}`)
-	if !gateLegacy && !gateAllowlist {
-		t.Errorf("B28 regression: gitea values-ha.yaml must be gated to cloud profiles only (dev|prod)")
+	if !strings.Contains(block, `{{- if .Values.profile.highAvailability }}`) {
+		t.Errorf("B28 regression: gitea values-ha.yaml must be gated by profile.highAvailability")
+	}
+	assertHighAvailabilityOnlyInCloudProfiles(t, "B28")
+}
+
+// assertHighAvailabilityOnlyInCloudProfiles checks the other half of the B25/B28 gate: the
+// helmfiles read `profile.highAvailability`, and only the LoopZero Cloud environments (dev, prod)
+// set it. Self-hosting and local profiles run single-replica on commodity hardware.
+func assertHighAvailabilityOnlyInCloudProfiles(t *testing.T, bug string) {
+	t.Helper()
+	for _, env := range []string{"dev", "prod", "standalone", "standalone-multi", "standalone-public", "dev-public", "drill"} {
+		raw, err := os.ReadFile("../../helmfile/environments/" + env + ".yaml")
+		if err != nil {
+			t.Fatalf("%s: read %s env: %v", bug, env, err)
+		}
+		var doc struct {
+			Profile *struct {
+				HighAvailability *bool `yaml:"highAvailability"`
+			} `yaml:"profile"`
+		}
+		if err := yaml.Unmarshal(raw, &doc); err != nil {
+			t.Fatalf("%s: parse %s env: %v", bug, env, err)
+		}
+		if doc.Profile == nil || doc.Profile.HighAvailability == nil {
+			t.Errorf("%s: environments/%s.yaml does not declare profile.highAvailability", bug, env)
+			continue
+		}
+		want := env == "dev" || env == "prod"
+		if *doc.Profile.HighAvailability != want {
+			t.Errorf("%s regression: environments/%s.yaml sets profile.highAvailability=%v, want %v (HA is a LoopZero Cloud posture)",
+				bug, env, *doc.Profile.HighAvailability, want)
+		}
 	}
 }
 
@@ -224,10 +252,11 @@ func TestB31ImageTagsPinned(t *testing.T) {
 	// 27cfe6cd, ADR-0023 operator-split). The same tag-pinning invariant
 	// is now enforced for the 4 split-binary charts via the OCI-published
 	// `charts/loopzero-*-operator/values.yaml` files. Re-targeted to loopzero-api
-	// only (the surviving infra/helm chart of the original 3); split-
-	// operator tag-pinning is covered by the Helm CI per chart.
+	// only; split-operator tag-pinning is covered by the Helm CI per chart.
+	// The loopzero-api bootstrap defaults moved from infra/helm/loopzero-api/values.yaml
+	// to the values Helmfile installs the one chart with.
 	files := []string{
-		"../../helm/loopzero-api/values.yaml",
+		"../../../charts/loopzero-api/values-bootstrap.yaml",
 	}
 	// The shape rules used to live here as four whole-file regexes. They moved
 	// into `imageTagVerdict`, which judges the tag VALUE and states its reason —
@@ -279,27 +308,73 @@ func TestB35DatabaseUrlMapping(t *testing.T) {
 	// API's data-access layer); only loopzero-api and loopzero-cloud carry
 	// the env. See finding `concepts/operations/finding-2026-05-15-
 	// infra-tests-load-regression-obsolete.md`.
-	files := []string{
-		"../../helm/loopzero-api/templates/deployment.yaml",
-		"../../helm/loopzero-cloud/templates/deployment.yaml",
-	}
-	for _, f := range files {
+	//
+	// B35 was DATABASE_URL pointing at nothing. The invariant is that it maps to a
+	// key the setup actually writes into loopzero-db-credentials — not a fixed key name:
+	// loopzero-api reads `api-uri` since the role split (#396) and loopzero-cloud reads `uri`.
+	written := dbCredentialKeysWritten(t)
+	for _, f := range []string{
+		"../../../charts/loopzero-api/values-bootstrap.yaml",
+		"../../../charts/loopzero-cloud/values-bootstrap.yaml",
+	} {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)
 		}
-		s := string(data)
-		if !strings.Contains(s, "name: DATABASE_URL") {
-			t.Errorf("B35 regression: %s must export env DATABASE_URL", f)
+		var values struct {
+			Secrets struct {
+				KeyRefs []struct {
+					Name       string `yaml:"name"`
+					SecretName string `yaml:"secretName"`
+					Key        string `yaml:"key"`
+				} `yaml:"keyRefs"`
+			} `yaml:"secrets"`
 		}
-		if !strings.Contains(s, "key: uri") {
-			t.Errorf("B35 regression: %s must map secret key 'uri' to DATABASE_URL", f)
+		if err := yaml.Unmarshal(data, &values); err != nil {
+			t.Fatalf("parse %s: %v", f, err)
+		}
+		found := false
+		for _, ref := range values.Secrets.KeyRefs {
+			if ref.Name != "DATABASE_URL" {
+				continue
+			}
+			found = true
+			if ref.SecretName != "loopzero-db-credentials" {
+				t.Errorf("B35 regression: %s maps DATABASE_URL from %q, want loopzero-db-credentials", f, ref.SecretName)
+			}
+			if !written[ref.Key] {
+				t.Errorf("B35 regression: %s maps DATABASE_URL to key %q, which generate-secrets.sh never writes (writes %v)", f, ref.Key, written)
+			}
+		}
+		if !found {
+			t.Errorf("B35 regression: %s must export env DATABASE_URL", f)
 		}
 	}
 }
 
+// dbCredentialKeysWritten returns the keys generate-secrets.sh writes into
+// loopzero-db-credentials, read from its --from-literal flags.
+func dbCredentialKeysWritten(t *testing.T) map[string]bool {
+	t.Helper()
+	raw, err := os.ReadFile("../../../infra/helmfile/scripts/generate-secrets.sh")
+	if err != nil {
+		t.Fatalf("read generate-secrets.sh: %v", err)
+	}
+	s := string(raw)
+	from := strings.Index(s, "DB_ROLE_LITERALS=(")
+	to := strings.Index(s, `"${DB_ROLE_LITERALS[@]}"`)
+	if from < 0 || to < from {
+		t.Fatal("generate-secrets.sh no longer builds loopzero-db-credentials the way this test reads it")
+	}
+	keys := map[string]bool{}
+	for _, m := range regexp.MustCompile(`--from-literal=([a-z-]+)=`).FindAllStringSubmatch(s[from:to], -1) {
+		keys[m[1]] = true
+	}
+	return keys
+}
+
 func TestB40LoopZeroApiServicePort3001(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-api/values.yaml")
+	data, err := os.ReadFile("../../../charts/loopzero-api/values.yaml")
 	if err != nil {
 		t.Fatalf("read loopzero-api values.yaml: %v", err)
 	}
@@ -353,7 +428,7 @@ func TestB48SmokeArgocdHttp(t *testing.T) {
 }
 
 func TestB49LoopZeroCloudOryUrls(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-cloud/values.yaml")
+	data, err := os.ReadFile("../../../charts/loopzero-cloud/values-bootstrap.yaml")
 	if err != nil {
 		t.Fatalf("read loopzero-cloud values.yaml: %v", err)
 	}

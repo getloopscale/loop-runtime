@@ -5,6 +5,7 @@ package prodimagedigests
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,15 +54,22 @@ func scanChartValues(chartsRoot string, out *Outcome) error {
 		valuesPath := filepath.Join(chartDir, "values.yaml")
 
 		raw, err := os.ReadFile(filepath.Clean(valuesPath))
-		if err != nil {
+		if os.IsNotExist(err) {
 			continue // a directory under charts/ without values.yaml is not a chart
+		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", valuesPath, err)
 		}
 
 		// Only charts that DEFER to the helper are judged here. A chart writing
 		// a literal `image:` is already covered by the template scanner, and
 		// reporting it twice would give one defect two findings — which teaches
 		// the reader to add wrong.
-		if !chartDefersToHelper(chartDir) {
+		defers, err := chartDefersToHelper(chartDir)
+		if err != nil {
+			return err
+		}
+		if !defers {
 			continue
 		}
 
@@ -91,8 +99,8 @@ func scanChartValues(chartsRoot string, out *Outcome) error {
 			Kind: KindMissingDigest,
 			File: valuesPath,
 			Text: fmt.Sprintf(
-				"image.digest ausente — o chart usa `loopzero-common.image`, que prefere digest e "+
-					"cai para `tag: %s`; a referência efetiva do install padrão é mutável",
+				"image.digest missing — the chart uses `loopzero-common.image`, which prefers a digest and "+
+					"falls back to `tag: %s`; the effective reference of the default install is mutable",
 				orPlaceholder(doc.Image.Tag)),
 		})
 	}
@@ -100,29 +108,37 @@ func scanChartValues(chartsRoot string, out *Outcome) error {
 }
 
 // chartDefersToHelper reports whether any template in the chart resolves its
-// image through the canonical helper.
-func chartDefersToHelper(chartDir string) bool {
+// image through the canonical helper. A chart without a templates dir does not;
+// a template that cannot be read is an error, since it may be the one that does.
+func chartDefersToHelper(chartDir string) (bool, error) {
+	templates := filepath.Join(chartDir, "templates")
 	found := false
-	_ = filepath.WalkDir(filepath.Join(chartDir, "templates"),
-		func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() || !isYAML(path) {
-				return nil //nolint:nilerr // a missing templates dir is not a chart defect
+	err := filepath.WalkDir(templates, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			if path == templates && os.IsNotExist(err) {
+				return fs.SkipAll
 			}
-			b, rerr := os.ReadFile(filepath.Clean(path))
-			if rerr != nil {
-				return nil
-			}
-			if helperIncludeRe.Match(b) {
-				found = true
-			}
+			return err
+		}
+		if d.IsDir() || !isYAML(path) {
 			return nil
-		})
-	return found
+		}
+		b, err := os.ReadFile(filepath.Clean(path))
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		if helperIncludeRe.Match(b) {
+			found = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	return found, err
 }
 
 func orPlaceholder(tag string) string {
 	if strings.TrimSpace(tag) == "" {
-		return "(ausente — cai para .Chart.AppVersion)"
+		return "(missing — falls back to .Chart.AppVersion)"
 	}
 	return tag
 }

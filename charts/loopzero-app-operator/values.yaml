@@ -27,7 +27,6 @@ config:
   baseDomain: ""
   operatorInsecureSkipTls: "false"
   loopzeroRequireRuntimeKubeconfig: "false"
-  loopzeroReaperGracePeriodSeconds: "300"
   loopzeroPprofAddr: ""
   loopzeroPprofEnabled: "false"
   otelExporterOtlpEndpoint: ""
@@ -52,11 +51,33 @@ resources:
 
 serviceAccount:
   create: true
-  name: ""
+  # FIXED on purpose, against the Helm convention of deriving the name from the release
+  # (B-096, B-047). Two literal allowlists name this identity as a string, and neither
+  # moves when the release name does:
+  #   - the admission policies' system-actor exemption, at
+  #     charts/loopzero-admission-policies/values.yaml (systemActorExemptions.platformServiceAccounts)
+  #   - OpenBao's boundServiceAccountNames, on mount k8s-core, in
+  #     infra/helm/openbao-init/values.yaml
+  # With name: "" this chart rendered <release>-loopzero-app-operator, so an install under any release
+  # name other than the chart name put the operator outside both lists — and that failure
+  # appears as Forbidden during reconciliation, never as a failed install, which is why
+  # B-096 survived review.
+  # Widening the allowlist to a pattern was considered and rejected; the reason is
+  # recorded once, at charts/loopzero-api/values.yaml:202 — it turns a release name into a
+  # credential.
+  name: "loopzero-app-operator"
   automountServiceAccountToken: true
 
 rbac:
   create: true
+  # Cutover escape hatch, OFF by default. The operator reads Secrets only in
+  # loopzero-system, granted by a namespaced Role (templates/role-secret-access.yaml),
+  # and its manager caches Secrets in that namespace alone. An operator image
+  # built before that scoping lists Secrets in every namespace and fails
+  # without a cluster-wide grant; set this to true only while such an image
+  # runs against this chart, and back to false once it is replaced. It adds
+  # cluster-wide Secret READ to the ClusterRole — never write, never ConfigMaps.
+  legacyClusterWideSecrets: false
 
 startupProbe:
   enabled: true
@@ -123,43 +144,15 @@ nodeSelector: {}
 # from the cluster Secret. Default disabled — production cells set this to
 # true once the loopzero-cluster-kubeconfigs Secret is available, then bump
 # requireRunning=true to enforce fail-fast (ADR D3).
-# dataPlanePoller — T2.2 of plan dashboard-badge-data-plane-poller
-# (Red Team loopzero-cloud#128). When enabled, the app-operator registers a
-# manager.Runnable that scrapes kube_deployment_status_replicas_ready
-# from Prometheus every `interval` and persists per-(tenant, project, env)
-# snapshots into env_targets. Consumed by ListProjectsWithSummaryByTenant
-# LATERAL JOIN so the /projects list badge is data-plane-aware.
-#
-# Injected into the operator ConfigMap (envFrom) — the 4 keys are
-# ALWAYS present with defaults, so the CONFIG.md ↔ ConfigMap
-# set-equality gate is satisfied. Runtime fail-fast lives in the
-# binary (`operators/cmd/app-operator/main.go`): when ENABLED=true,
-# missing PG_URL / PROMETHEUS_URL exits non-zero.
-#
-# The chart's NetworkPolicy auto-adds `monitoring/prometheus:9090`
-# egress when this block sets `enabled: true` (see the loopzero-common
-# helper).
-dataPlanePoller:
-  enabled: false
-  # PG DSN for the LATERAL-JOIN table (env_targets). Same DB the engine
-  # uses; the poller UPDATEs env_targets.last_replicas_ready_{value,at}.
-  pgUrl: ""
-  # Prometheus base URL — the operator posts to `${prometheusUrl}/api/v1/query`.
-  # Typically the cluster-internal service DNS + port (e.g.
-  # `http://prometheus-server.monitoring.svc.cluster.local:80`).
-  prometheusUrl: ""
-  # Scrape cadence. 30s is the canonical default (blueprint Q6 + EC-7).
-  interval: "30s"
-
 cell0KubeconfigMount:
-  # Flipado em 2026-08-09. Ficou `false` desde o T1.4a do deep-review-remediation-plan,
-  # que deixou o mount default-off para um rollout gradual — e o flip nunca aconteceu.
+  # Flipped on 2026-08-09. It had been `false` since T1.4a of the deep-review-remediation-plan,
+  # which left the mount default-off for a gradual rollout — and the flip never happened.
   #
-  # Enquanto estava desligado, `appFactory` ficava nil e `reconcileWorkloadStatus`
-  # retornava na primeira linha SEM LOG (application_controller.go). O status do workload
-  # nunca era lido, e toda LoopZeroApplication ficava em Progressing para sempre: medido em
-  # 26 dias no app-dev, com os pods Running. O app-operator era o único dos quatro sem
-  # o kubeconfig do runtime — justamente o que lê o estado dos pods lá. Issue #274.
+  # While it was off, `appFactory` stayed nil and `reconcileWorkloadStatus`
+  # returned on its first line WITH NO LOG (application_controller.go). The workload status
+  # was never read, and every LoopZeroApplication stayed in Progressing forever: measured over
+  # 26 days on app-dev, with the pods Running. The app-operator was the only one of the four
+  # without the runtime kubeconfig — precisely the one that reads the pod state there. Issue #274.
   enabled: true
   # Path inside the container where the kubeconfig file appears.
   path: /etc/loopzero/runtime/kubeconfig

@@ -21,8 +21,9 @@
 #        but Resend's acceptance proves the pipeline end-to-end).
 #
 # Pre-conditions:
-#   - dev-public canonical chain ran (seed-admin-loopzero-dev.sh +
-#     patch-kratos-dev-public.sh) — identity for admin@loopzero.example
+#   - dev-public canonical chain ran (seed-admin-loopzero-dev.sh, and
+#     helmfile sync of ory-kratos with LOOPZERO_RESEND_API_KEY exported —
+#     `task dev-public:sync-kratos`) — identity for admin@loopzero.example
 #     present AND ConfigMap has the Bearer Resend key, NOT the
 #     placeholder REPLACE_VIA_LOOPZERO_RESEND_API_KEY string.
 #   - $RESEND_API_KEY exported (the operator's Resend account API key
@@ -30,7 +31,7 @@
 #     to confirm Resend received what Kratos sent.
 #   - kubectl context k3d-loopzero-core reachable.
 #
-# OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md INQUEBRÁVEL —
+# OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md UNBREAKABLE —
 # requires Cleanroom TOTAL precedence + the canonical seed chain.
 #
 # Exit codes:
@@ -115,8 +116,8 @@ except Exception:
 " 2>/dev/null)
     fi
     if [[ -z "${RESEND_API_KEY:-}" ]]; then
-      # Last resort: read from the live ConfigMap (the patch-kratos-dev-public
-      # script already substituted the real Bearer at helmfile-template time).
+      # Last resort: read from the live ConfigMap (helmfile substitutes the
+      # real Bearer at template time).
       RESEND_API_KEY=$(kubectl --context "$KUBE_CONTEXT" -n loopzero-auth get cm \
         ory-kratos-config -o jsonpath='{.data.kratos\.yaml}' 2>/dev/null \
         | grep -oE 'Bearer re_[A-Za-z0-9_]+' | head -1 | sed 's/Bearer //')

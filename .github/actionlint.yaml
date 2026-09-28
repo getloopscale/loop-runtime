@@ -1,24 +1,24 @@
-# Labels de runner que o actionlint deve aceitar em `runs-on`.
+# Runner labels actionlint must accept in `runs-on`.
 #
-# O DEFEITO QUE ISTO PREVINE: o actionlint valida `runs-on` contra a lista de
-# labels GitHub-hosted que conhece e REJEITA qualquer outra
-# (`label "..." is unknown`). Sem esta declaracao, no instante em que um workflow
-# passar a usar a label literal da Blacksmith, o gate de workflows falha em
-# TODOS os arquivos — nao so' no que mudou.
+# THE DEFECT THIS PREVENTS: actionlint validates `runs-on` against the list of
+# GitHub-hosted labels it knows and REJECTS any other
+# (`label "..." is unknown`). Without this declaration, the moment a workflow
+# starts using the literal Blacksmith label, the workflow gate fails on
+# EVERY file — not only on the one that changed.
 #
-# Passava despercebido enquanto o runner saia de uma expressao
-# (`fromJSON(vars.CI_RUNNER)`): actionlint nao avalia expressao estaticamente,
-# entao a label nunca era vista. Fixar a label literal — que e' o que o runbook
-# do umbrella manda fazer, porque `vars.CI_RUNNER` NAO resolve e cai em silencio
-# na frota antiga — torna a label visivel, e sem este arquivo o gate quebra.
+# It went unnoticed while the runner came out of an expression
+# (`fromJSON(vars.CI_RUNNER)`): actionlint does not evaluate expressions statically,
+# so the label was never seen. Pinning the literal label — which is what the
+# umbrella runbook says to do, because `vars.CI_RUNNER` does NOT resolve and silently
+# falls back to the old fleet — makes the label visible, and without this file the gate breaks.
 #
-# Por isso o runbook lista este arquivo como PRE-REQUISITO da migracao, nao como
-# zelo: ele entra ANTES da label, nunca depois.
+# That is why the runbook lists this file as a PREREQUISITE of the migration, not as
+# diligence: it lands BEFORE the label, never after.
 #
-# `self-hosted-runner.labels` e' a chave prevista para exatamente isto: labels
-# servidas por uma frota que nao e' a do GitHub. As da Blacksmith entram aqui
-# apesar do nome da chave — do ponto de vista do actionlint, qualquer runner
-# nao-GitHub-hosted e' "self-hosted".
+# `self-hosted-runner.labels` is the key intended for exactly this: labels
+# served by a fleet that is not GitHub's. Blacksmith's go here despite the
+# key's name — from actionlint's point of view, any non-GitHub-hosted runner
+# is "self-hosted".
 self-hosted-runner:
   labels:
     - blacksmith-8vcpu-ubuntu-2404

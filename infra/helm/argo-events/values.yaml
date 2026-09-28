@@ -1,4 +1,4 @@
-# T0.2 Cenário B POC — Argo Events defaults.
+# T0.2 Scenario B POC — Argo Events defaults.
 # Per ADR-2026-05-27-T0.2-RATIFIED D1.
 
 # Upstream chart subkey — overrides for argo-events helm chart 2.4.x.

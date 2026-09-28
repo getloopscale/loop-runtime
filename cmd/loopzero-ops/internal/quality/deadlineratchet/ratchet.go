@@ -20,6 +20,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/calendarday"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DateLayout is the ISO-8601 date layout for marker files.
@@ -40,7 +43,7 @@ type Spec struct {
 // Config drives a single evaluation.
 type Config struct {
 	Root string    // repo root (contains the marker/exception dir)
-	AsOf time.Time // reference "today"; zero value means time.Now().UTC()
+	AsOf time.Time // reference "today"; zero value means the local calendar day
 }
 
 // Outcome captures the result.
@@ -51,6 +54,19 @@ type Outcome struct {
 	Warn               bool   // in the (WarnDay, DeadlineDay] alert window
 	Blocked            bool   // days > DeadlineDay without a signed exception
 	ExceptionPermitted bool   // past deadline but a signed exception permitted it
+}
+
+// Verdict is Fail when the deadline blew with no signed exception, Skip while
+// the ratchet is dormant (no start marker yet), and Pass otherwise — a
+// warning window or a permitted exception warns without failing.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Blocked:
+		return verdict.Fail
+	case o.Dormant:
+		return verdict.Skip
+	}
+	return verdict.Pass
 }
 
 // Check evaluates the ratchet for spec against cfg.
@@ -82,11 +98,8 @@ func Check(spec Spec, cfg Config) (*Outcome, error) {
 		return nil, fmt.Errorf("cannot parse date %q in %s", dateStr, marker)
 	}
 
-	asOf := cfg.AsOf
-	if asOf.IsZero() {
-		asOf = time.Now().UTC()
-	}
-	days := int(asOf.Sub(start).Hours() / 24)
+	// Calendar days in the local clock: the marker is a hand-written date.
+	days := calendarday.DaysBetween(start, calendarday.Today(cfg.AsOf))
 
 	out := &Outcome{Date: dateStr, Days: days}
 	switch {

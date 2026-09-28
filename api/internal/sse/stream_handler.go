@@ -5,17 +5,13 @@ package sse
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
@@ -138,7 +134,7 @@ type StreamHandler struct {
 	pollInterval         time.Duration
 	safetyTimeout        time.Duration
 	maxConcurrentStreams int64
-	activeStreams        atomic.Int64
+	gate                 *Gate
 }
 
 // NewStreamHandler creates a StreamHandler with the given dependencies.
@@ -155,272 +151,201 @@ func NewStreamHandler(eventStore EventStore, buildStore BuildStoreReader, opts .
 	for _, opt := range opts {
 		opt(h)
 	}
+	h.gate = NewGate(h.maxConcurrentStreams)
 	return h
 }
 
 // ActiveStreams returns the current number of active SSE connections.
 func (h *StreamHandler) ActiveStreams() int64 {
-	return h.activeStreams.Load()
+	return h.gate.Active()
+}
+
+// pollCadence is how often a stream re-reads the event store: five poll
+// intervals, never faster than 3s. Nothing LISTENs for Postgres
+// notifications, so polling is the only delivery path and this cadence
+// bounds its load (one query per open stream per tick).
+func pollCadence(pollInterval time.Duration) time.Duration {
+	if d := pollInterval * 5; d >= 3*time.Second {
+		return d
+	}
+	return 3 * time.Second
 }
 
 // ServeHTTP handles the SSE stream request.
 func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	buildID := chi.URLParam(r, "id")
-	if buildID == "" {
-		http.Error(w, `{"code":"MISSING_PARAM","message":"build id is required"}`, http.StatusBadRequest)
-		return
-	}
-
-	// SEC-1: Verify tenant ownership — return 404 (not 403) to avoid leaking build existence.
-	// Per ADR-0030 + T2.3 closure: emit RFC 9457 problem+json (Stage C migration).
-	uc := auth.GetUserContext(r.Context())
-	if uc == nil {
-		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrUnauthorized)
-		return
-	}
-
-	// Verify build exists
-	build, err := h.buildStore.GetByID(r.Context(), buildID)
-	if err != nil {
-		if errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
-			errorshttp.WriteJSON(w, r, loopzeroerrors.ErrBuildNotFound)
-			return
-		}
-		h.logger.Error("stream handler: failed to fetch build",
-			"build_id", buildID,
-			"error", err,
-		)
-		errorshttp.WriteJSON(w, r, loopzeroerrors.NewLoopZeroError("INTERNAL_ERROR", "failed to fetch build", 0))
-		return
-	}
-
-	// SEC-1: Tenant isolation — user can only stream their own builds.
-	if build.TenantID != uc.TenantID {
-		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrBuildNotFound)
-		return
-	}
-
-	// BLOCKER-2: Enforce max concurrent SSE connections to prevent resource exhaustion.
-	current := h.activeStreams.Add(1)
-	if current > h.maxConcurrentStreams {
-		h.activeStreams.Add(-1)
-		h.logger.Warn("stream: max concurrent streams reached, rejecting",
-			"build_id", buildID, "active", current-1, "max", h.maxConcurrentStreams)
-		http.Error(w, `{"code":"TOO_MANY_STREAMS","message":"Too many active streams. Try again shortly."}`, http.StatusServiceUnavailable)
-		return
-	}
-	defer h.activeStreams.Add(-1)
-
-	// BLOCKER-1: Track active connections in Prometheus.
-	metrics.SSEConnectionsActive.Inc()
-	defer metrics.SSEConnectionsActive.Dec()
-
-	// Check if ResponseWriter supports flushing (required for SSE)
-	flusher, ok := w.(http.Flusher)
+	build, ok := h.authorizedBuild(w, r)
 	if !ok {
+		return
+	}
+	// BLOCKER-2: cap concurrent SSE connections to prevent resource exhaustion.
+	leave, ok := h.gate.Enter()
+	if !ok {
+		h.logger.Warn("stream: max concurrent streams reached, rejecting",
+			"build_id", build.ID, "active", h.gate.Active(), "max", h.gate.Max())
+		WriteTooManyStreams(w)
+		return
+	}
+	defer leave()
+
+	stream, err := Open(w)
+	if err != nil {
 		http.Error(w, `{"code":"INTERNAL_ERROR","message":"streaming not supported"}`, http.StatusInternalServerError)
 		return
 	}
-
-	// Set SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no") // Prevent proxy buffering (Nginx, CF)
-	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
-
-	// Determine starting event ID from Last-Event-ID header
-	var lastEventID int64
-	if leID := r.Header.Get("Last-Event-ID"); leID != "" {
-		parsed, parseErr := strconv.ParseInt(leID, 10, 64)
-		if parseErr == nil {
-			lastEventID = parsed
-		}
-	}
-
-	// Use a context that detects client disconnection
+	session := &buildStream{h: h, stream: stream, build: build, lastEventID: LastEventID(r)}
 	ctx := r.Context()
-
-	// Replay existing events (with or without Last-Event-ID)
-	var replayStart int64
-	if lastEventID > 0 {
-		replayStart = lastEventID
-	}
-
-	events, getErr := h.eventStore.GetAfter(ctx, buildID, replayStart)
-	if getErr != nil {
-		h.logger.Error("stream: GetAfter failed (replay)",
-			"build_id", buildID, "last_event_id", replayStart, "error", getErr)
-		return
-	}
-
-	// MOD-3: Handle journal expiration when reconnecting with Last-Event-ID.
-	// Only emit JOURNAL_EXPIRED when:
-	// 1. Client sent Last-Event-ID (reconnecting)
-	// 2. No events with id > Last-Event-ID exist
-	// 3. Events DO exist for this build (but with lower IDs — they were pruned)
-	// This prevents false positives when the build simply hasn't produced events yet.
-	if lastEventID > 0 && len(events) == 0 {
-		// Check if there are ANY events for this build (even with lower IDs).
-		// If there are none at all, this is not journal expiration — the build
-		// may just be starting. Only if events exist with ID <= lastEventID
-		// (meaning the journal was pruned) do we emit JOURNAL_EXPIRED.
-		allEvents, _ := h.eventStore.GetAfter(ctx, buildID, 0)
-		if len(allEvents) > 0 {
-			// Events exist but none with ID > lastEventID — journal was pruned.
-			if writeErr := writeSSEEvent(w, flusher, "0", "JOURNAL_EXPIRED", json.RawMessage(`{"reason":"Requested events are no longer available","action":"reconnect_without_last_event_id"}`)); writeErr != nil {
-				return
-			}
-			// If build is terminal and journal is gone, close the stream.
-			if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
-				return
-			}
+	if done, err := session.replay(ctx); done || err != nil {
+		if err != nil {
+			h.logger.Error("stream: replay failed", "build_id", build.ID, "error", err)
 		}
-		// If no events exist at all, this is a fresh build — fall through to poll loop.
-		// Reset lastEventID so the poll loop catches events from the beginning.
-		lastEventID = 0
-	}
-
-	// Send replayed events
-	for _, ev := range events {
-		if writeErr := writeSSEEvent(w, flusher, fmt.Sprintf("%d", ev.ID), ev.EventType, ev.Data); writeErr != nil {
-			return
-		}
-		lastEventID = ev.ID
-	}
-
-	// If a stream-terminal event was delivered during replay, close immediately.
-	if containsStreamTerminalEvent(events) {
 		return
 	}
 
 	h.logger.Info("stream: entering poll loop",
-		"build_id", buildID, "last_event_id", lastEventID, "build_status", build.Status)
-
-	// A-02 fix: Poll at a slower interval (fallback). The event store sends
-	// pg_notify('sse_events', buildID) on each Append. The notification
-	// channel notifies us to poll immediately. This reduces DB QPS from
-	// 200 (one per stream per second) to ~N (one per actual event).
-	// The pollInterval serves as a fallback in case NOTIFY is missed.
-	fallbackInterval := h.pollInterval * 5 // 5s fallback instead of 1s constant
-	if fallbackInterval < 3*time.Second {
-		fallbackInterval = 3 * time.Second
+		"build_id", build.ID, "last_event_id", session.lastEventID, "build_status", build.Status)
+	loop := Loop{Interval: pollCadence(h.pollInterval), Heartbeat: h.heartbeatInterval}
+	if err := loop.Run(ctx, stream, session.poll); err != nil {
+		h.logger.Warn("stream: closed", "build_id", build.ID, "error", err)
 	}
-	pollTicker := time.NewTicker(fallbackInterval)
-	heartbeatTicker := time.NewTicker(h.heartbeatInterval)
-	defer pollTicker.Stop()
-	defer heartbeatTicker.Stop()
+}
 
-	// Track when the build first became terminal, for the safety timeout.
-	// If it is already terminal (SUCCEEDED waiting for deploy events), start the clock now.
-	var buildTerminalSince time.Time
-	if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
-		buildTerminalSince = time.Now()
+// authorizedBuild resolves the build and enforces tenant ownership, writing
+// the error response itself when it answers false. SEC-1: a build owned by
+// another tenant answers 404, not 403, so its existence is not disclosed.
+func (h *StreamHandler) authorizedBuild(w http.ResponseWriter, r *http.Request) (*BuildInfo, bool) {
+	buildID := chi.URLParam(r, "id")
+	if buildID == "" {
+		http.Error(w, `{"code":"MISSING_PARAM","message":"build id is required"}`, http.StatusBadRequest)
+		return nil, false
 	}
+	uc := auth.GetUserContext(r.Context())
+	if uc == nil {
+		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrUnauthorized)
+		return nil, false
+	}
+	build, err := h.buildStore.GetByID(r.Context(), buildID)
+	if err != nil {
+		if errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+			errorshttp.WriteJSON(w, r, loopzeroerrors.ErrBuildNotFound)
+			return nil, false
+		}
+		h.logger.Error("stream handler: failed to fetch build", "build_id", buildID, "error", err)
+		errorshttp.WriteJSON(w, r, loopzeroerrors.NewLoopZeroError("INTERNAL_ERROR", "failed to fetch build"))
+		return nil, false
+	}
+	if build.TenantID != uc.TenantID {
+		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrBuildNotFound)
+		return nil, false
+	}
+	return build, true
+}
 
-	// LEVE-3: Track whether we need to re-fetch build status.
-	// Only re-fetch when the build is not yet terminal (status can still change).
-	buildIsTerminal := !buildTerminalSince.IsZero()
+// buildStream is one open build stream: the build-specific replay and
+// terminal policy on top of the shared Loop.
+//
+// The stream closes when a stream-terminal EVENT has been delivered, not
+// when the build reaches a terminal state: deploy events (Phase 2) arrive
+// after the build is marked SUCCEEDED. A build terminal for longer than the
+// safety timeout without such an event closes with stream.timeout.
+type buildStream struct {
+	h             *StreamHandler
+	stream        *Stream
+	build         *BuildInfo
+	lastEventID   int64
+	terminalSince time.Time
+}
 
-	// MOD-4: Track consecutive poll errors for retry logic.
-	var consecutivePollErrors int
-
-	for {
-		select {
-		case <-ctx.Done():
-			// Client disconnected
-			h.logger.Info("stream: client disconnected",
-				"build_id", buildID, "reason", ctx.Err())
-			return
-		case <-heartbeatTicker.C:
-			_, writeErr := fmt.Fprintf(w, ":heartbeat\n\n")
-			if writeErr != nil {
-				h.logger.Info("stream: heartbeat write failed (client gone)",
-					"build_id", buildID, "error", writeErr)
-				return
-			}
-			flusher.Flush()
-		case <-pollTicker.C:
-			// LEVE-3: Only re-check build status when it hasn't reached terminal yet.
-			if !buildIsTerminal {
-				build, err = h.buildStore.GetByID(ctx, buildID)
-				if err != nil {
-					if ctx.Err() != nil {
-						h.logger.Info("stream: poll cancelled (client gone)",
-							"build_id", buildID)
-						return
-					}
-					// MOD-4: Retry transient DB errors instead of closing immediately.
-					consecutivePollErrors++
-					h.logger.Warn("stream: GetByID failed in poll loop, retrying",
-						"build_id", buildID, "error", err,
-						"attempt", consecutivePollErrors, "max", maxPollRetries)
-					if consecutivePollErrors >= maxPollRetries {
-						h.logger.Error("stream: GetByID failed after max retries, closing",
-							"build_id", buildID, "error", err)
-						return
-					}
-					continue
-				}
-				consecutivePollErrors = 0
-
-				// Track when the build first became terminal (for safety timeout).
-				if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
-					buildTerminalSince = time.Now()
-					buildIsTerminal = true
-				}
-			}
-
-			// Poll for new events
-			newEvents, getErr := h.eventStore.GetAfter(ctx, buildID, lastEventID)
-			if getErr != nil {
-				if ctx.Err() != nil {
-					h.logger.Info("stream: poll cancelled (client gone)",
-						"build_id", buildID)
-					return
-				}
-				// MOD-4: Retry transient DB errors instead of closing immediately.
-				consecutivePollErrors++
-				h.logger.Warn("stream: GetAfter failed in poll loop, retrying",
-					"build_id", buildID, "error", getErr,
-					"attempt", consecutivePollErrors, "max", maxPollRetries)
-				if consecutivePollErrors >= maxPollRetries {
-					h.logger.Error("stream: GetAfter failed after max retries, closing",
-						"build_id", buildID, "error", getErr)
-					return
-				}
-				continue
-			}
-			consecutivePollErrors = 0
-
-			for _, ev := range newEvents {
-				if writeErr := writeSSEEvent(w, flusher, fmt.Sprintf("%d", ev.ID), ev.EventType, ev.Data); writeErr != nil {
-					return
-				}
-				lastEventID = ev.ID
-			}
-
-			// If a stream-terminal event was delivered, close the stream.
-			if containsStreamTerminalEvent(newEvents) {
-				h.logger.Info("stream: terminal event delivered, closing",
-					"build_id", buildID, "status", build.Status)
-				return
-			}
-
-			// Safety timeout: if build has been terminal for too long without a
-			// stream-terminal event, close with a diagnostic event. This covers
-			// edge cases where Phase 2 never starts (e.g., callback failure).
-			if !buildTerminalSince.IsZero() && time.Since(buildTerminalSince) > h.safetyTimeout {
-				h.logger.Warn("stream: safety timeout — build terminal but no deploy events arrived",
-					"build_id", buildID, "status", build.Status,
-					"terminal_since", buildTerminalSince)
-				_ = writeSSEEvent(w, flusher, "0", "stream.timeout", json.RawMessage(
-					`{"reason":"Build completed but deploy events were not received within the safety timeout","action":"check_build_status"}`))
-				return
-			}
+// replay sends the events after the resume anchor. It reports done when the
+// stream must close right away: a terminal event was replayed, or the
+// journal was pruned for a build that is already terminal.
+func (b *buildStream) replay(ctx context.Context) (bool, error) {
+	events, err := b.h.eventStore.GetAfter(ctx, b.build.ID, b.lastEventID)
+	if err != nil {
+		return true, fmt.Errorf("replay after %d: %w", b.lastEventID, err)
+	}
+	if b.lastEventID > 0 && len(events) == 0 {
+		done, err := b.handleEmptyResume(ctx)
+		if done || err != nil {
+			return true, err
 		}
 	}
+	if err := b.send(events); err != nil {
+		return true, err
+	}
+	if containsStreamTerminalEvent(events) {
+		return true, nil
+	}
+	if isBuildTerminal(b.build) {
+		b.terminalSince = time.Now()
+	}
+	return false, nil
+}
+
+// handleEmptyResume (MOD-3): a client resumed with Last-Event-ID and nothing
+// newer exists. If the build has events at all, the ones it asked for were
+// pruned — say JOURNAL_EXPIRED, and close when the build is terminal. If it
+// has none, it is a fresh build and the stream follows it from the start.
+func (b *buildStream) handleEmptyResume(ctx context.Context) (bool, error) {
+	all, err := b.h.eventStore.GetAfter(ctx, b.build.ID, 0)
+	if err != nil {
+		return true, fmt.Errorf("checking for a pruned journal: %w", err)
+	}
+	b.lastEventID = 0
+	if len(all) == 0 {
+		return false, nil
+	}
+	if err := b.stream.Send("0", "JOURNAL_EXPIRED",
+		[]byte(`{"reason":"Requested events are no longer available","action":"reconnect_without_last_event_id"}`)); err != nil {
+		return true, err
+	}
+	return isBuildTerminal(b.build), nil
+}
+
+// poll is one tick of the loop (a PollFunc).
+func (b *buildStream) poll(ctx context.Context) (bool, error) {
+	// LEVE-3: re-read the build only while it can still change.
+	if b.terminalSince.IsZero() {
+		build, err := b.h.buildStore.GetByID(ctx, b.build.ID)
+		if err != nil {
+			return false, fmt.Errorf("refreshing build status: %w", err)
+		}
+		b.build = build
+		if isBuildTerminal(build) {
+			b.terminalSince = time.Now()
+		}
+	}
+	events, err := b.h.eventStore.GetAfter(ctx, b.build.ID, b.lastEventID)
+	if err != nil {
+		return false, fmt.Errorf("reading events after %d: %w", b.lastEventID, err)
+	}
+	if err := b.send(events); err != nil {
+		return true, err
+	}
+	if containsStreamTerminalEvent(events) {
+		b.h.logger.Info("stream: terminal event delivered, closing", "build_id", b.build.ID, "status", b.build.Status)
+		return true, nil
+	}
+	if !b.terminalSince.IsZero() && time.Since(b.terminalSince) > b.h.safetyTimeout {
+		b.h.logger.Warn("stream: safety timeout — build terminal but no deploy events arrived",
+			"build_id", b.build.ID, "status", b.build.Status, "terminal_since", b.terminalSince)
+		return true, b.stream.Send("0", "stream.timeout",
+			[]byte(`{"reason":"Build completed but deploy events were not received within the safety timeout","action":"check_build_status"}`))
+	}
+	return false, nil
+}
+
+func (b *buildStream) send(events []SSEEvent) error {
+	for _, ev := range events {
+		if err := b.stream.SendEvent(ev); err != nil {
+			return err
+		}
+		b.lastEventID = ev.ID
+	}
+	return nil
+}
+
+func isBuildTerminal(b *BuildInfo) bool {
+	return statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(b.Status))
 }
 
 // =============================================================================
@@ -444,7 +369,7 @@ type ProjectStreamHandler struct {
 	heartbeatInterval    time.Duration
 	pollInterval         time.Duration
 	maxConcurrentStreams int64
-	activeStreams        atomic.Int64
+	gate                 *Gate
 }
 
 // ProjectStreamOption configures ProjectStreamHandler (used for testing).
@@ -482,6 +407,7 @@ func NewProjectStreamHandler(eventStore EventStore, opts ...ProjectStreamOption)
 	for _, opt := range opts {
 		opt(h)
 	}
+	h.gate = NewGate(h.maxConcurrentStreams)
 	return h
 }
 
@@ -492,124 +418,50 @@ func (h *ProjectStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		http.Error(w, `{"code":"MISSING_PARAM","message":"project name is required"}`, http.StatusBadRequest)
 		return
 	}
-
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
 		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrUnauthorized)
 		return
 	}
-
-	current := h.activeStreams.Add(1)
-	if current > h.maxConcurrentStreams {
-		h.activeStreams.Add(-1)
+	leave, ok := h.gate.Enter()
+	if !ok {
 		h.logger.Warn("project stream: max concurrent streams reached, rejecting",
-			"project", projectName, "active", current-1, "max", h.maxConcurrentStreams)
-		http.Error(w, `{"code":"TOO_MANY_STREAMS","message":"Too many active streams. Try again shortly."}`, http.StatusServiceUnavailable)
+			"project", projectName, "active", h.gate.Active(), "max", h.gate.Max())
+		WriteTooManyStreams(w)
 		return
 	}
-	defer h.activeStreams.Add(-1)
+	defer leave()
 
-	metrics.SSEConnectionsActive.Inc()
-	defer metrics.SSEConnectionsActive.Dec()
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	stream, err := Open(w)
+	if err != nil {
 		http.Error(w, `{"code":"INTERNAL_ERROR","message":"streaming not supported"}`, http.StatusInternalServerError)
 		return
 	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
-
-	var lastEventID int64
-	if leID := r.Header.Get("Last-Event-ID"); leID != "" {
-		if parsed, parseErr := strconv.ParseInt(leID, 10, 64); parseErr == nil {
-			lastEventID = parsed
-		}
-	}
-
 	ctx := r.Context()
-
-	events, getErr := h.eventStore.GetAfterForProject(ctx, uc.TenantID, projectName, lastEventID)
-	if getErr != nil {
-		h.logger.Error("project stream: GetAfterForProject failed (replay)",
-			"project", projectName, "last_event_id", lastEventID, "error", getErr)
+	lastEventID := LastEventID(r)
+	sendNew := func(ctx context.Context) (bool, error) {
+		events, err := h.eventStore.GetAfterForProject(ctx, uc.TenantID, projectName, lastEventID)
+		if err != nil {
+			return false, fmt.Errorf("reading project events after %d: %w", lastEventID, err)
+		}
+		for _, ev := range events {
+			if err := stream.SendEvent(ev); err != nil {
+				return true, err
+			}
+			lastEventID = ev.ID
+		}
+		// A project stream is a perpetual subscription: stream-terminal
+		// events of one build do not close it.
+		return false, nil
+	}
+	if _, err := sendNew(ctx); err != nil {
+		h.logger.Error("project stream: replay failed", "project", projectName, "error", err)
 		return
 	}
-	for _, ev := range events {
-		if writeErr := writeSSEEvent(w, flusher, fmt.Sprintf("%d", ev.ID), ev.EventType, ev.Data); writeErr != nil {
-			return
-		}
-		lastEventID = ev.ID
+	loop := Loop{Interval: pollCadence(h.pollInterval), Heartbeat: h.heartbeatInterval}
+	err = loop.Run(ctx, stream, sendNew)
+	if errors.Is(err, ErrPollRetriesExhausted) {
+		h.logger.Error("project stream: max retries exhausted, closing", "project", projectName, "error", err)
+		_ = stream.Send("0", "stream.error", []byte(`{"reason":"upstream poll failed repeatedly","action":"reconnect"}`))
 	}
-
-	fallbackInterval := h.pollInterval * 5
-	if fallbackInterval < 3*time.Second {
-		fallbackInterval = 3 * time.Second
-	}
-	pollTicker := time.NewTicker(fallbackInterval)
-	heartbeatTicker := time.NewTicker(h.heartbeatInterval)
-	defer pollTicker.Stop()
-	defer heartbeatTicker.Stop()
-
-	var consecutivePollErrors int
-	for {
-		select {
-		case <-ctx.Done():
-			h.logger.Info("project stream: client disconnected",
-				"project", projectName, "reason", ctx.Err())
-			return
-		case <-heartbeatTicker.C:
-			if _, writeErr := fmt.Fprintf(w, ":heartbeat\n\n"); writeErr != nil {
-				h.logger.Info("project stream: heartbeat write failed (client gone)",
-					"project", projectName, "error", writeErr)
-				return
-			}
-			flusher.Flush()
-		case <-pollTicker.C:
-			newEvents, pollErr := h.eventStore.GetAfterForProject(ctx, uc.TenantID, projectName, lastEventID)
-			if pollErr != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				consecutivePollErrors++
-				h.logger.Warn("project stream: poll failed, retrying",
-					"project", projectName, "error", pollErr,
-					"attempt", consecutivePollErrors, "max", maxPollRetries)
-				if consecutivePollErrors >= maxPollRetries {
-					h.logger.Error("project stream: max retries exhausted, closing",
-						"project", projectName, "error", pollErr)
-					_ = writeSSEEvent(w, flusher, "0", "stream.error", json.RawMessage(
-						`{"reason":"upstream poll failed repeatedly","action":"reconnect"}`))
-					return
-				}
-				continue
-			}
-			consecutivePollErrors = 0
-
-			for _, ev := range newEvents {
-				if writeErr := writeSSEEvent(w, flusher, fmt.Sprintf("%d", ev.ID), ev.EventType, ev.Data); writeErr != nil {
-					return
-				}
-				lastEventID = ev.ID
-			}
-		}
-	}
-}
-
-// writeSSEEvent writes a single SSE event in the standard format.
-// Returns an error if the write fails (e.g., client disconnected).
-func writeSSEEvent(w http.ResponseWriter, flusher http.Flusher, id string, eventType string, data json.RawMessage) error {
-	_, err := fmt.Fprintf(w, "id: %s\nevent: %s\ndata: %s\n\n", id, eventType, string(data))
-	if err != nil {
-		return err
-	}
-	flusher.Flush()
-	// BLOCKER-1: Track emitted events in Prometheus.
-	metrics.SSEEventsEmitted.WithLabelValues(eventType).Inc()
-	return nil
 }

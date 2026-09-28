@@ -15,20 +15,9 @@ image:
   tag: '{{ env "LOOPZERO_PLATFORM_OPERATOR_TAG" | default "drill-phase2-ce4e90f0" }}'
   pullPolicy: IfNotPresent
 
-# Bug #25 LIVE fix (2026-05-17 iter 18): operator chart auto-creates
-# Secret from .Values.secrets.giteaToken if needed.
-secrets:
-  create: true
-  giteaToken: '{{ env "GITEA_TOKEN_VAL" | default "drill-stub-token" }}'
-
-# Bug #26 LIVE fix (2026-05-17 iter 19): operator requires BUILD_KUBECONFIG +
-# CELL_0_KUBECONFIG env vars. Reference ConfigMaps pre-created by
-# drill-helmfile-bootstrap.sh Phase 2.7.
-kubeconfig:
-  build:
-    existingConfigMap: loopzero-build-kubeconfig
-  cell0:
-    existingConfigMap: loopzero-cell-0-kubeconfig
+# No `secrets:` or `kubeconfig:` here: the chart's schema declares neither (the
+# platform operator reads no Gitea token and no peer kubeconfig), so setting them
+# failed `helmfile -e drill sync` at schema validation.
 
 # Bug #28 LIVE fix (2026-05-17 iter 20): operators require BASE_DOMAIN env var
 # (from .Values.config.baseDomain). Drill domain matches Pulumi config loopzero-drill:domain.

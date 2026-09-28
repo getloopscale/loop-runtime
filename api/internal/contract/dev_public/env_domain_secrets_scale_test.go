@@ -92,7 +92,7 @@ func TestDevPublic_EnvDomainSecretsScale_EnvironmentsFlow(t *testing.T) {
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	// B: promote uses canonical {from,to} shape
-	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/teste/promote",
+	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/sample/promote",
 		strings.NewReader(`{"from":"staging","to":"production"}`))
 	req2.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-env"))
 	req2.Header.Set("Content-Type", "application/json")
@@ -177,7 +177,7 @@ func TestDevPublic_EnvDomainSecretsScale_RuntimeEnvFlow(t *testing.T) {
 	defer srv.Close()
 
 	t.Run("A_project_field_returns_201_with_echo", func(t *testing.T) {
-		body := `{"name":"K","project":"teste"}`
+		body := `{"name":"K","project":"sample"}`
 		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/runtime-envs", strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-runtime"))
 		req.Header.Set("Content-Type", "application/json")
@@ -301,7 +301,7 @@ func TestDevPublic_EnvDomainSecretsScale_SecretsZeroLeak(t *testing.T) {
 	srv := httptest.NewServer(mockSecretsHandler(t, true))
 	defer srv.Close()
 
-	sentinel := "M11-FASE-A-ZERO-LEAK-SENTINEL"
+	sentinel := "M11-PHASE-A-ZERO-LEAK-SENTINEL"
 	// Simulate: POST a secret with a sentinel value, then hit multiple LIVE-adjacent
 	// endpoints and assert the sentinel VALUE never leaks in response bodies.
 	body := fmt.Sprintf(`{"name":"leak-test","value":%q}`, sentinel)
@@ -339,7 +339,7 @@ func TestDevPublic_EnvDomainSecretsScale_SecretsOpenBaoUnavailable(t *testing.T)
 // (#F1/#R1 J-20 M11 remediation).
 func TestDevPublic_EnvDomainSecretsScale_ScaleFlow(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/projects/teste/scale", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/projects/sample/scale", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Header.Get("Authorization") == "" {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -379,7 +379,7 @@ func TestDevPublic_EnvDomainSecretsScale_ScaleFlow(t *testing.T) {
 	defer srv.Close()
 
 	t.Run("A_successful_scale_returns_200_with_monthly_cost", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/teste/scale",
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/sample/scale",
 			strings.NewReader(`{"replicas":2}`))
 		req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-scale"))
 		req.Header.Set("Content-Type", "application/json")
@@ -390,7 +390,7 @@ func TestDevPublic_EnvDomainSecretsScale_ScaleFlow(t *testing.T) {
 	})
 
 	t.Run("B_exceed_free_tier_returns_402_PLAN_UPGRADE_REQUIRED", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/teste/scale",
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/sample/scale",
 			strings.NewReader(`{"replicas":10}`))
 		req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-scale"))
 		req.Header.Set("Content-Type", "application/json")
@@ -403,7 +403,7 @@ func TestDevPublic_EnvDomainSecretsScale_ScaleFlow(t *testing.T) {
 	})
 
 	t.Run("C_HPA_target_below_min_returns_400_HPA_TARGET_OUT_OF_BOUNDS", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/teste/scale",
+		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/sample/scale",
 			strings.NewReader(`{"replicas":2,"hpa_target_cpu":5}`))
 		req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-scale"))
 		req.Header.Set("Content-Type", "application/json")
@@ -421,7 +421,7 @@ func TestDevPublic_EnvDomainSecretsScale_Readiness(t *testing.T) {
 	mux := http.NewServeMux()
 	var status atomic.Int32
 	status.Store(1) // start with replicas_ready_value = 1
-	mux.HandleFunc("/api/v1/projects/teste/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/projects/sample/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Header.Get("Authorization") == "" {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -437,7 +437,7 @@ func TestDevPublic_EnvDomainSecretsScale_Readiness(t *testing.T) {
 	defer srv.Close()
 
 	// Scenario A: signals consistent (status carries replicas_ready + replicas_desired).
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/projects/teste/status", nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/projects/sample/status", nil)
 	req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-ready"))
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -449,7 +449,7 @@ func TestDevPublic_EnvDomainSecretsScale_Readiness(t *testing.T) {
 	require.NotNil(t, s1["replicas_desired"])
 
 	// Scenario B: score deterministic across 2 consecutive calls (EC-6 no-flicker).
-	req2, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/projects/teste/status", nil)
+	req2, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/projects/sample/status", nil)
 	req2.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-ready"))
 	resp2, err := http.DefaultClient.Do(req2)
 	require.NoError(t, err)
@@ -463,14 +463,14 @@ func TestDevPublic_EnvDomainSecretsScale_Readiness(t *testing.T) {
 // TestDevPublic_EnvDomainSecretsScale_StatusURLProbe migrated from status-url-probe (J-25).
 func TestDevPublic_EnvDomainSecretsScale_StatusURLProbe(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/projects/teste/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/projects/sample/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Header.Get("Authorization") == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"url": "https://tn-243c747b30c41e51-teste-app-production.prod-dev.loopzero.example",
+			"url": "https://tn-243c747b30c41e51-sample-app-production.prod-dev.loopzero.example",
 			"active_release": map[string]any{
 				"build_id": "build-active-1",
 				"status":   "ACTIVE",
@@ -480,7 +480,7 @@ func TestDevPublic_EnvDomainSecretsScale_StatusURLProbe(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/projects/teste/status", nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/projects/sample/status", nil)
 	req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-status-probe"))
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)

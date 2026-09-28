@@ -10,16 +10,11 @@ Set-equal to the rendered ConfigMap keys (hermetic Go guard).
 | `BASE_DOMAIN` | (empty) | operator runtime config |
 | `OPERATOR_INSECURE_SKIP_TLS` | `false` | operator runtime config |
 | `LOOPZERO_REQUIRE_CELL_0_KUBECONFIG` | `false` | operator runtime config |
-| `LOOPZERO_REAPER_GRACE_PERIOD_SECONDS` | `300` | operator runtime config |
 | `LOOPZERO_PPROF_ADDR` | (empty) | operator runtime config |
 | `LOOPZERO_PPROF_ENABLED` | `false` | operator runtime config |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | (empty) | operator runtime config |
 | `LOOPZERO_ENV` | `production` | operator runtime config |
 | `LOOPZERO_TRACING_ENABLED` | `false` | operator runtime config |
-| `LOOPZERO_DATA_PLANE_POLLER_ENABLED` | `false` | T2.2 of plan dashboard-badge-data-plane-poller (#128) — feature gate for DataPlanePoller Runnable |
-| `LOOPZERO_DATA_PLANE_POLLER_PG_URL` | (empty) | PG DSN the poller UPDATEs env_targets with; required when ENABLED=true |
-| `LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL` | (empty) | Prometheus base URL the poller queries; required when ENABLED=true |
-| `LOOPZERO_DATA_PLANE_POLLER_INTERVAL` | `30s` | scrape cadence |
 
 ## Deliberately NOT chart-ConfigMap keys (deployment-set / platform-mounted)
 

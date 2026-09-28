@@ -26,7 +26,7 @@ import (
 //
 // The AUTONOMOUS deterministic proof of the fail-loud boundary already exists as
 // a hermetic unit test:
-//   api/internal/services/release/release_convergence_loop_test.go
+//   api/internal/release/release_convergence_loop_test.go
 // (the never-healthy config stays PENDING and is failed loud at the 180s
 // SyncTimeout in release_convergence_loop.go). This spec is the LIVE/E2E proof
 // that the boundary holds end-to-end through a real deploy.
@@ -40,7 +40,7 @@ var _ = Describe("c13: build-valid, health-destructive config fails loud (no cha
 	})
 
 	It("FAILs the release loud (SYNC_FAILED) within the 180s SyncTimeout, never a silent hang", func() {
-		// Expected LIVE flow (operator/sponsor JUNTOS per cleanroom-up-live-test-mandate.md):
+		// Expected LIVE flow (operator and sponsor together, on a live cluster):
 		//   1. deploy-path health preflight (NOT chaos-mesh).
 		//   2. deploy a build-valid but health-destructive .loopzero/services.json
 		//      (readiness path always 404s).
@@ -52,9 +52,9 @@ var _ = Describe("c13: build-valid, health-destructive config fails loud (no cha
 		//      event was emitted — never a silent hang, never a spurious ACTIVE.
 		//
 		// Autonomous deterministic proof (hermetic, already GREEN in unit tests):
-		//   api/internal/services/release/release_convergence_loop_test.go
+		//   api/internal/release/release_convergence_loop_test.go
 		Skip("operator LIVE-only — real deploy of a destructive .loopzero/services.json required; " +
-			"deterministic proof is api/internal/services/release/release_convergence_loop_test.go; " +
+			"deterministic proof is api/internal/release/release_convergence_loop_test.go; " +
 			"flow documented in this It block")
 
 		Expect(true).To(BeTrue(), "placeholder so future operator-LIVE runs have a green pivot")

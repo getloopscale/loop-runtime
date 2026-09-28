@@ -7,9 +7,9 @@
 // This gate used to assert that the shortcut CANONICAL-MIRRORED the upstream
 // task: matching helmfile selectors, matching kubectl waits, a total context
 // swap, a pre-flight citing `task setup`. Eighteen assertions on the SHAPE of
-// something the platform's own rule forbids in every tier
-// (.claude/rules/cleanroom-up-live-test-mandate.md: "é uma violação de
-// topologia, não um atalho").
+// something the platform's own topology forbids: installing OpenBao into the
+// core cluster is a topology violation, not a shortcut (CLAUDE.md § Four Planes;
+// docs/decisions.md § Open, 2026-09-09).
 //
 // A gate that verifies a violator is well-formed does worse than nothing: its
 // green is read as approval. B-047 measured exactly that — the rule prohibited,
@@ -55,17 +55,19 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const taskfileGlob = "taskfiles/*.yml"
 
 // mgmtContextVars are Taskfile variables that resolve to the core context.
 //
-// O nome do identificador guarda `mgmt` DE PROPOSITO: `MGMT_CONTEXT` segue sendo um
-// nome de variavel aceito na lista abaixo, e renomear o identificador sem renomear o
-// que ele casa faria o codigo dizer uma coisa e verificar outra. As MENSAGENS, que o
-// operador le, foram atualizadas para `core` — elas nomeavam um cluster que nao existe
-// mais desde o rename do B-001.
+// The identifier keeps `mgmt` ON PURPOSE: `MGMT_CONTEXT` is still an accepted
+// variable name in the list below, and renaming the identifier without renaming what
+// it matches would make the code say one thing and check another. The MESSAGES, which
+// the operator reads, were updated to `core` — they named a cluster that has not
+// existed since the B-001 rename.
 // Measured: Taskfile.yml defines CORE_CONTEXT: k3d-loopzero-core, and
 // taskfiles/infra.yml writes `--kube-context {{.CORE_CONTEXT}}` — the repo's
 // dominant style. A literal-only scan would miss the way the repo actually
@@ -93,20 +95,30 @@ type Outcome struct {
 	// LinesScanned proves the gate read something. A check that parsed nothing
 	// and reported success is the `PASS — 0 routes` shape of B-040.
 	LinesScanned int
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrForbiddenShortcut means the core-cluster OpenBao shortcut is present.
 var ErrForbiddenShortcut = errors.New(
-	"installing OpenBao into the core cluster is forbidden in EVERY tier " +
-		"(.claude/rules/cleanroom-up-live-test-mandate.md; " +
-		"ADR docs/decisions.md)")
+	"installing OpenBao into the core cluster is forbidden: it is a topology " +
+		"violation, not a shortcut (docs/decisions.md § Open, 2026-09-09)")
 
 // ErrNothingScanned means the taskfile could not be read or was empty, so
 // nothing was verified.
 var ErrNothingScanned = errors.New("taskfiles/k3d.yml produced no lines to scan; the boundary was not verified")
 
 // targetRe accepts any indentation and a trailing comment — an earlier version
-// required exactly two spaces and end-of-line, so `  x-in-core: # atalho` and a
+// required exactly two spaces and end-of-line, so `  x-in-core: # shortcut` and a
 // four-space target both slipped through.
 var targetRe = regexp.MustCompile(`^\s+([a-zA-Z0-9:_.-]*bootstrap-in-core[a-zA-Z0-9:_.-]*):\s*(#.*)?$`)
 
@@ -132,7 +144,7 @@ func Check(cfg Config) (Outcome, error) {
 	for _, rel := range files {
 		body, rerr := os.ReadFile(filepath.Join(root, rel))
 		if rerr != nil {
-			return out, fmt.Errorf("%w: %v", ErrNothingScanned, rerr)
+			return out, fmt.Errorf("%w: %w", ErrNothingScanned, rerr)
 		}
 		lines := joinContinuations(strings.Split(string(body), "\n"))
 		out.LinesScanned += len(lines)
@@ -142,7 +154,8 @@ func Check(cfg Config) (Outcome, error) {
 		return out, ErrNothingScanned
 	}
 	if len(out.Violations) > 0 {
-		return out, ErrForbiddenShortcut
+		out.Violation = ErrForbiddenShortcut
+		return out, nil
 	}
 	return out, nil
 }

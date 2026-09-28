@@ -24,21 +24,31 @@ type Tunnel struct {
 	Close     func()
 }
 
-// OpenTunnelForService picks the FIRST Ready pod matching podLabels in
-// namespace, opens a port-forward to remotePort, and (optionally) probes
-// probePath until it returns 200 OR 401. Returns the bound local port so
-// the caller can build "http://127.0.0.1:<port>" URLs for its API client.
-//
-// probePath is joined onto "http://localhost:<localPort>" — pass "" to
-// skip the probe (the tunnel may be dead but ready == "socket accepted").
-// A probe that never returns 200|401 within 30s is FAIL.
-func OpenTunnelForService(ctx context.Context, restCfg *rest.Config, cli ctrlclient.Client,
-	namespace string, podLabels map[string]string, remotePort int, probePath string,
-) (*Tunnel, error) {
+// TunnelTarget names the pod a tunnel reaches and how it is probed.
+type TunnelTarget struct {
+	// Context is the kubeconfig context; "" is the mgmt cluster.
+	Context   string
+	Namespace string
+	// PodLabels selects the pod; the FIRST Ready match is used.
+	PodLabels PodLabels
+	// RemotePort is the pod port forwarded to a free local port.
+	RemotePort int
+	// ProbePath is joined onto "http://localhost:<localPort>" and polled until
+	// it answers 200 or 401; "" skips the probe.
+	ProbePath string
+}
+
+// OpenTunnelForService picks the FIRST Ready pod matching target.PodLabels,
+// opens a port-forward to target.RemotePort and, when target.ProbePath is set,
+// polls it until it returns 200 or 401 (FAIL after 30s). Returns the bound
+// local port so the caller can build "http://127.0.0.1:<port>" URLs.
+// target.Context is resolved by the caller into restCfg and cli.
+func OpenTunnelForService(ctx context.Context, restCfg *rest.Config, cli ctrlclient.Client, target TunnelTarget) (*Tunnel, error) {
+	namespace, remotePort, probePath := target.Namespace, target.RemotePort, target.ProbePath
 	if restCfg == nil {
 		return nil, fmt.Errorf("port-forward: restCfg is nil (composition root did not wire it)")
 	}
-	podName, err := firstReadyPod(ctx, cli, namespace, podLabels)
+	podName, err := firstReadyPod(ctx, cli, namespace, target.PodLabels)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +148,10 @@ func probeTunnelReady(ctx context.Context, port int, path string) error {
 	target := fmt.Sprintf("http://localhost:%d%s", port, path)
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		if err != nil {
+			return fmt.Errorf("build tunnel probe request: %w", err)
+		}
 		resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
 		if err == nil {
 			code := resp.StatusCode

@@ -263,7 +263,7 @@ spec:
 // CRITICAL test: valueFrom.secretKeyRef pattern is the ESO-managed mode we
 // WANT. Gate must skip env vars sourced from K8s Secret via secretKeyRef.
 // LIVE-validated against 3 false positives in current repo (iter 26-T2.7):
-// cloudflared TUNNEL_TOKEN, harbor HARBOR_PASSWORD, loopzero-cloud
+// cloudflared TUNNEL_TOKEN, loopzero-cloud
 // LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY — all valueFrom.secretKeyRef.
 func TestCheck_SecretKeyRefPatternSkipped(t *testing.T) {
 	root := writeFixture(t, map[string]string{

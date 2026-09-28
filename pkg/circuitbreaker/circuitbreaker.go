@@ -4,7 +4,7 @@
 // Package circuitbreaker provides a generic in-memory circuit breaker.
 //
 // MEET-052: Extracted from api/internal/services/pg_circuit_breaker.go to be
-// reusable across API and operator provisioner clients (Gitea, Harbor, MinIO, ArgoCD).
+// reusable across API and operator provisioner clients (Gitea, MinIO, ArgoCD).
 //
 // State is per-process, not shared across replicas. This is acceptable because
 // each replica detects failure independently after openThreshold failures, and
@@ -21,7 +21,8 @@ import (
 )
 
 // ErrCircuitOpen is returned when the circuit breaker is open and no recovery
-// probe is due. Callers should treat this as a transient failure and retry later.
+// probe is due, or half-open with its single probe still in flight. Callers
+// should treat this as a transient failure and retry later.
 var ErrCircuitOpen = errors.New("circuit breaker is open")
 
 // State represents the circuit breaker state.
@@ -49,7 +50,7 @@ func (s State) String() string {
 
 // Config configures a circuit breaker instance.
 type Config struct {
-	// Name identifies the circuit breaker (e.g., "gitea", "harbor") for logging.
+	// Name identifies the circuit breaker (e.g., "gitea", "minio") for logging.
 	Name string
 
 	// OpenThreshold is the number of consecutive failures to open the circuit.
@@ -109,6 +110,22 @@ type Breaker struct {
 	successCount  int
 	openedAt      time.Time
 	onStateChange func(name string, from, to State)
+
+	// probeInFlight marks the one call half-open admits; probeStartedAt lets a
+	// probe that never reports be replaced after another retry interval.
+	probeInFlight  bool
+	probeStartedAt time.Time
+
+	// now is the clock the retry interval is measured on; nil means time.Now.
+	// Tests set it to move time deliberately instead of sleeping.
+	now func() time.Time
+}
+
+func (b *Breaker) clock() time.Time {
+	if b.now != nil {
+		return b.now()
+	}
+	return time.Now()
 }
 
 // defaultIsExcluded filters context cancellation/timeout errors so that
@@ -171,42 +188,49 @@ func Execute[T any](ctx context.Context, b *Breaker, fn func(ctx context.Context
 	// ctx.Err on entry.
 	result, err := fn(ctx)
 	if err != nil && b.isExcluded != nil && b.isExcluded(err) {
-		// Excluded: propagate but do NOT advance failure counter.
-		// We still record SUCCESS so that recovery probes can transition.
-		// Important: NOT recording ANYTHING would prevent half-open close.
-		// Compromise: only record success when no error path is exercised.
-		// For excluded errors we record nothing — consistent with mercari's
-		// "Ignore" pattern.
+		// Excluded: propagate but do NOT count it — the error is about the
+		// caller, not the dependency (mercari's "Ignore" pattern). The probe
+		// slot is released so half-open can admit the next probe.
+		b.releaseProbe()
 		return result, err
 	}
 	b.RecordResult(err)
 	return result, err
 }
 
-// PreCheck evaluates the circuit state. Returns ErrCircuitOpen if the circuit
-// is open and no recovery probe is due. Returns nil if the call may proceed.
+// PreCheck evaluates the circuit state. Returns nil when the call may proceed:
+// always when closed; when open, once the retry interval has elapsed (the
+// breaker turns half-open and this call becomes the recovery probe); when
+// half-open, only if no probe is in flight — at most one call reaches a
+// recovering dependency at a time. Otherwise returns ErrCircuitOpen.
+//
+// Every PreCheck that returns nil MUST be followed by RecordResult (Execute
+// does this), or the probe slot stays taken until another retry interval.
 func (b *Breaker) PreCheck() error {
-	b.mu.RLock()
-	state := b.state
-	openedAt := b.openedAt
-	b.mu.RUnlock()
-
-	if state == Closed {
-		return nil
-	}
-
-	if time.Since(openedAt) < b.retryInterval {
-		return ErrCircuitOpen
-	}
-
-	// Transition to half-open: allow one probe through
 	b.mu.Lock()
-	if b.state == Open {
-		b.transition(HalfOpen)
+	now := b.clock()
+	var change *stateChange
+	switch b.state {
+	case Closed:
+		b.mu.Unlock()
+		return nil
+	case Open:
+		if now.Sub(b.openedAt) < b.retryInterval {
+			b.mu.Unlock()
+			return ErrCircuitOpen
+		}
+		change = b.transition(HalfOpen)
 		b.successCount = 0
+	case HalfOpen:
+		if b.probeInFlight && now.Sub(b.probeStartedAt) < b.retryInterval {
+			b.mu.Unlock()
+			return ErrCircuitOpen
+		}
 	}
+	b.probeInFlight = true
+	b.probeStartedAt = now
 	b.mu.Unlock()
-
+	b.notify(change)
 	return nil
 }
 
@@ -214,31 +238,39 @@ func (b *Breaker) PreCheck() error {
 // Pass nil for success, non-nil for failure.
 func (b *Breaker) RecordResult(err error) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	change := b.record(err)
+	b.mu.Unlock()
+	b.notify(change)
+}
 
+// record applies one result. Caller must hold b.mu.
+func (b *Breaker) record(err error) *stateChange {
+	b.probeInFlight = false
 	if err != nil {
 		b.successCount = 0
 		b.failureCount++
-
-		if b.state == HalfOpen {
-			b.openedAt = time.Now()
-			b.transition(Open)
-			return
+		if b.state == HalfOpen || (b.state == Closed && b.failureCount >= b.openThreshold) {
+			b.openedAt = b.clock()
+			return b.transition(Open)
 		}
-
-		if b.failureCount >= b.openThreshold && b.state == Closed {
-			b.openedAt = time.Now()
-			b.transition(Open)
-		}
-	} else {
-		b.failureCount = 0
-		b.successCount++
-
-		if b.state == HalfOpen && b.successCount >= b.closeThreshold {
-			b.transition(Closed)
-			b.successCount = 0
-		}
+		return nil
 	}
+	b.failureCount = 0
+	b.successCount++
+	if b.state == HalfOpen && b.successCount >= b.closeThreshold {
+		b.successCount = 0
+		return b.transition(Closed)
+	}
+	return nil
+}
+
+// releaseProbe frees the half-open probe slot without recording an outcome —
+// for a call whose error says nothing about the dependency (Execute's
+// excluded errors).
+func (b *Breaker) releaseProbe() {
+	b.mu.Lock()
+	b.probeInFlight = false
+	b.mu.Unlock()
 }
 
 // State returns the current circuit breaker state.
@@ -253,11 +285,21 @@ func (b *Breaker) Name() string {
 	return b.name
 }
 
-// transition changes state and notifies the callback. Caller must hold b.mu.
-func (b *Breaker) transition(to State) {
+// stateChange is a transition to report once the lock is released.
+type stateChange struct{ from, to State }
+
+// transition changes state and returns the change to report. Caller must hold
+// b.mu; the callback runs later, in notify, outside the lock, so it may read
+// the breaker.
+func (b *Breaker) transition(to State) *stateChange {
 	from := b.state
 	b.state = to
-	if b.onStateChange != nil {
-		b.onStateChange(b.name, from, to)
+	return &stateChange{from: from, to: to}
+}
+
+// notify reports a state change to the callback. Caller must NOT hold b.mu.
+func (b *Breaker) notify(change *stateChange) {
+	if change != nil && b.onStateChange != nil {
+		b.onStateChange(b.name, change.from, change.to)
 	}
 }

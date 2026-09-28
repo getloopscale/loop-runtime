@@ -39,15 +39,17 @@ func (s *SecretsSeedDevSeed) Run(d Deps) Result {
 	if d.Creds == nil {
 		return Result{Verdict: SKIP, Reason: "dev-credentials.json absent (SKIP-graceful)"}
 	}
-	rootToken, err := readVaultUnsealRootToken()
+	rootToken, err := readVaultUnsealRootToken(d.Host)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("unseal: %v", err)}
 	}
 	if d.PortForwardCtor == nil {
 		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired"}
 	}
-	tunnel, err := d.PortForwardCtor(d.Ctx, vaultContextName, vaultNamespace,
-		PodLabels{"app.kubernetes.io/name": "openbao"}, vaultOpenBaoPortRemote, "")
+	tunnel, err := d.PortForwardCtor(d.Ctx, TunnelTarget{
+		Context: vaultContextName, Namespace: vaultNamespace, PodLabels: PodLabels{"app.kubernetes.io/name": "openbao"},
+		RemotePort: vaultOpenBaoPortRemote, ProbePath: "",
+	})
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("port-forward openbao: %v", err)}
 	}
@@ -143,15 +145,17 @@ func (s *SecretsSeedDevSeed) Verify(d Deps) Result {
 	if d.Creds == nil {
 		return Result{Verdict: SKIP, Reason: "dev-credentials.json absent"}
 	}
-	rootToken, err := readVaultUnsealRootToken()
+	rootToken, err := readVaultUnsealRootToken(d.Host)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
 	if d.PortForwardCtor == nil {
 		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired"}
 	}
-	tunnel, err := d.PortForwardCtor(d.Ctx, vaultContextName, vaultNamespace,
-		PodLabels{"app.kubernetes.io/name": "openbao"}, vaultOpenBaoPortRemote, "")
+	tunnel, err := d.PortForwardCtor(d.Ctx, TunnelTarget{
+		Context: vaultContextName, Namespace: vaultNamespace, PodLabels: PodLabels{"app.kubernetes.io/name": "openbao"},
+		RemotePort: vaultOpenBaoPortRemote, ProbePath: "",
+	})
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
@@ -172,7 +176,10 @@ func (s *SecretsSeedDevSeed) Verify(d Deps) Result {
 func openBaoKVPut(ctx context.Context, base, token, path string, data map[string]string) error {
 	body := map[string]interface{}{"data": data}
 	raw, _ := json.Marshal(body)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/"+path, bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/"+path, bytes.NewReader(raw))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Vault-Token", token)
 	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} // #nosec G402 -- dev-only cleanroom TLS
@@ -190,7 +197,10 @@ func openBaoKVPut(ctx context.Context, base, token, path string, data map[string
 
 // openBaoKVExists probes GET /v1/<path>. Returns (true, nil) on 200.
 func openBaoKVExists(ctx context.Context, base, token, path string) (bool, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/"+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/"+path, nil)
+	if err != nil {
+		return false, fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("X-Vault-Token", token)
 	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}} // #nosec G402 -- dev-only
 	resp, err := (&http.Client{Timeout: 10 * time.Second, Transport: tr}).Do(req)

@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFile(t *testing.T, path, body string) {
@@ -34,7 +36,7 @@ loki:
 func TestCheck_HappyPath_PASS(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, lokiValuesRel), canonical)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected nil, got %v; %v", err, outcome.Failures)
 	}
@@ -45,7 +47,7 @@ func TestCheck_HappyPath_PASS(t *testing.T) {
 
 func TestCheck_MissingFile_FAIL(t *testing.T) {
 	root := t.TempDir()
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -58,7 +60,7 @@ func TestCheck_ParseError_FAIL(t *testing.T) {
 	root := t.TempDir()
 	// Unterminated bracket → real YAML parse error.
 	writeFile(t, filepath.Join(root, lokiValuesRel), "loki: [unclosed\n")
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for parse error, got %v", err)
 	}
@@ -79,7 +81,7 @@ loki:
         priority: 10
 `
 	writeFile(t, filepath.Join(root, lokiValuesRel), broken)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -100,7 +102,7 @@ loki:
         priority: "high"
 `
 	writeFile(t, filepath.Join(root, lokiValuesRel), broken)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -121,7 +123,7 @@ loki:
         priority: 10
 `
 	writeFile(t, filepath.Join(root, lokiValuesRel), broken)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -131,21 +133,8 @@ loki:
 }
 
 func TestCheck_RealRepoPasses(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	root := cwd
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err == nil {
-			break
-		}
-		root = filepath.Dir(root)
-	}
-	if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err != nil {
-		t.Skipf("could not locate ROADMAP.md (skipping)")
-	}
-	outcome, err := Check(Config{RepoRoot: root})
+	root := qtestutil.Root(t)
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("real repo violation: %v; %v", err, outcome.Failures)
 	}

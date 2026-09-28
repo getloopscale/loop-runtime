@@ -40,7 +40,7 @@ import "testing"
 // long enough for connections on it to close cleanly.
 func TestRolloutHasScaleDownDelay(t *testing.T) {
 	ro := buildRollout(
-		RenderInput{TenantID: "tn-x", ProjectID: "proj", Environment: "production"},
+		scopeFor(t, RenderInput{TenantID: "tn-x", ProjectID: "proj", Environment: "production"}),
 		AppManifestInput{Name: "app", Type: "server", Port: 8080, ImageRef: "example/app:v1"},
 		8080,
 	)

@@ -23,7 +23,7 @@ func TestProperty_LoopZeroErrorErrorContainsCode(t *testing.T) {
 		if code == "" {
 			return true // empty code is degenerate; caller must validate
 		}
-		err := NewLoopZeroError(code, message, 0)
+		err := NewLoopZeroError(code, message)
 		return strings.Contains(err.Error(), code)
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 5000}); err != nil {
@@ -36,7 +36,7 @@ func TestProperty_LoopZeroErrorErrorContainsCode(t *testing.T) {
 // the Is implementation drifts from comparing Code.
 func TestProperty_LoopZeroErrorIsReflexive(t *testing.T) {
 	f := func(code, message string) bool {
-		err := NewLoopZeroError(code, message, 0)
+		err := NewLoopZeroError(code, message)
 		return errors.Is(err, err)
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
@@ -53,8 +53,8 @@ func TestProperty_LoopZeroErrorIsMatchesByCode(t *testing.T) {
 		if code == "" {
 			return true
 		}
-		a := NewLoopZeroError(code, msg1, 0)
-		b := NewLoopZeroError(code, msg2, 0)
+		a := NewLoopZeroError(code, msg1)
+		b := NewLoopZeroError(code, msg2)
 		return errors.Is(a, b) && errors.Is(b, a)
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 5000}); err != nil {
@@ -69,8 +69,8 @@ func TestProperty_LoopZeroErrorIsDifferentCodes(t *testing.T) {
 		if code1 == "" || code2 == "" || code1 == code2 {
 			return true
 		}
-		a := NewLoopZeroError(code1, msg, 0)
-		b := NewLoopZeroError(code2, msg, 0)
+		a := NewLoopZeroError(code1, msg)
+		b := NewLoopZeroError(code2, msg)
 		return !errors.Is(a, b)
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 5000}); err != nil {
@@ -86,7 +86,7 @@ func TestProperty_WrapPreservesCode(t *testing.T) {
 		if code == "" {
 			return true
 		}
-		original := NewLoopZeroError(code, message, 0)
+		original := NewLoopZeroError(code, message)
 		wrapped := original.Wrap(context)
 		return wrapped.Code == code
 	}
@@ -102,7 +102,7 @@ func TestProperty_WrapWithStackPreservesIs(t *testing.T) {
 		if code == "" {
 			return true
 		}
-		original := NewLoopZeroError(code, message, 0)
+		original := NewLoopZeroError(code, message)
 		wrapped := original.WrapWithStack(context)
 		return errors.Is(wrapped, original)
 	}
@@ -115,7 +115,7 @@ func TestProperty_WrapWithStackPreservesIs(t *testing.T) {
 // always include code + message keys. Transport contracts rely on this.
 func TestProperty_ToJSONHasCodeAndMessage(t *testing.T) {
 	f := func(code, message string) bool {
-		err := NewLoopZeroError(code, message, 0)
+		err := NewLoopZeroError(code, message)
 		m := err.ToJSON()
 		_, hasCode := m["code"]
 		_, hasMessage := m["message"]
@@ -136,7 +136,7 @@ func TestProperty_DeepWrapChainPreservesCode(t *testing.T) {
 		}
 		// Cap depth at 30 to stay below stackDepth=32 + leave room for runtime frames.
 		d := int(depth%30) + 1
-		original := NewLoopZeroError(code, "base", 0)
+		original := NewLoopZeroError(code, "base")
 		current := original
 		for i := 0; i < d; i++ {
 			current = current.Wrap("layer")

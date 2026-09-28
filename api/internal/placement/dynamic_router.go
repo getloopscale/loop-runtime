@@ -150,11 +150,12 @@ func (r *DynamicRouter) Resolve(_ context.Context, cellID string) (*CellConfig, 
 
 	r.mu.RLock()
 	cfg, ok := r.cells[cellID]
+	known := len(r.cells)
 	r.mu.RUnlock()
 
 	if !ok {
 		metrics.CellRoutingDecisions.WithLabelValues(cellID, "error").Inc()
-		return nil, fmt.Errorf("cell router: unknown cell_id %q (known: %d cells)", cellID, len(r.cells))
+		return nil, fmt.Errorf("cell router: unknown cell_id %q (known: %d cells)", cellID, known)
 	}
 	metrics.CellRoutingDecisions.WithLabelValues(cellID, "assigned").Inc()
 	return &cfg, nil

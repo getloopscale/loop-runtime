@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
 	"log/slog"
 	"os"
 	"strings"
@@ -23,20 +24,21 @@ import (
 // AuthDeps holds authentication and authorization components.
 type AuthDeps struct {
 	TokenValidator auth.TokenValidator
+	// Config is the authentication configuration read from the environment
+	// once, here. main completes it with the failure auditor (which needs the
+	// database) and builds the Authenticator the router uses.
+	Config auth.Config
 }
 
-// WireAuthFailureAuditor wires the package-level DefaultAuthAuditor used by
-// auth middleware failure paths (Phase A.4 of MEET-2026-05-12 T1.3).
+// buildAuthFailureAuditor returns the auditor that persists authentication
+// rejections to audit_log (Phase A.4 of MEET-2026-05-12 T1.3), or nil when
+// there is no database — the Authenticator then records nothing.
 //
-// Must be called AFTER setupDatabase. Nil-safe — if dbAdapter is nil
-// (test/dev mode), the auditor is also nil and failure paths skip
-// emission silently.
-//
-// EC-NEW-12: emission failures are fail-open — never block auth response.
-func WireAuthFailureAuditor(dbAdapter *db.PgxAdapter, logger *slog.Logger) {
+// EC-NEW-12: emission failures are fail-open — never block the auth response.
+func buildAuthFailureAuditor(dbAdapter *db.PgxAdapter, logger *slog.Logger, clientIP clientip.Resolver) *auth.AuthFailureAuditor {
 	if dbAdapter == nil {
 		logger.Warn("auth failure auditor: dbAdapter nil; failure emissions disabled")
-		return
+		return nil
 	}
 	writer := func(ctx context.Context, tenantID, action, actor, resourceType, resourceID, correlationID string, metadata map[string]any) error {
 		return store.WriteAuditLog(ctx, dbAdapter, store.AuditEntry{
@@ -49,8 +51,8 @@ func WireAuthFailureAuditor(dbAdapter *db.PgxAdapter, logger *slog.Logger) {
 			Metadata:      metadata,
 		})
 	}
-	auth.DefaultAuthAuditor = auth.NewAuthFailureAuditor(writer, logger)
 	logger.Info("auth failure auditor wired", "component", "audit_log")
+	return auth.NewAuthFailureAuditor(writer, logger, clientIP)
 }
 
 // setupAuth configures JWT validation (RSA-only) and service-to-service auth secrets.
@@ -75,37 +77,41 @@ func setupAuth(logger *slog.Logger) *AuthDeps {
 	tokenValidator := auth.NewJWTOnlyValidator(rsaValidator, nil)
 	logger.Info("JWT auth enabled (RSA-only)", "jwks_url", jwksURL)
 
-	// Service-to-service auth for internal proxy calls (cloud->engine).
-	// S1.2: Dual-key rotation — accepts current OR previous during rotation window.
-	auth.ServiceAuthSecret = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET")
-	auth.ServiceAuthSecretPrevious = os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS")
+	// A configured but unreachable replay-protection store fails the boot
+	// rather than silently dropping cross-replica replay protection.
+	nonceStore, err := setupServiceAuthNonceStore(logger)
+	if err != nil {
+		logger.Error("service-auth nonce store unavailable", "error", err)
+		os.Exit(1)
+	}
 
-	// MEET-052: Platform admin API key for cross-tenant operations.
-	// Dual-key rotation: accepts current OR previous during rotation window.
-	auth.AdminAPIKey = os.Getenv("LOOPZERO_ADMIN_API_KEY")
-	auth.AdminAPIKeyPrevious = os.Getenv("LOOPZERO_ADMIN_API_KEY_PREVIOUS")
-
-	// Ed25519 dual-control (ADR 2026-05-13-service-auth-ed25519-adoption).
-	// Reads LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT (+ optional ...PREVIOUS
-	// for the 7-day rotation overlap) and populates the middleware trust
-	// set. Per RFC Q5 fail-closed: malformed keys CRASH startup rather
-	// than silently leave the trust set empty.
-	loadServiceAuthEd25519Trust(logger)
-	loadServiceAuthRequireSignatureFlag()
-
-	// Replay-protection nonce store (ADR Q2). In-memory by default;
-	// switches to Redis-backed when LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR
-	// is set. Multi-replica API needs Redis for cross-replica replay
-	// protection; single-replica dev/test uses in-memory fallback.
-	setupServiceAuthNonceStore(logger)
+	// Service-to-service auth for internal proxy calls (cloud->engine), the
+	// operator (admin) service secret, and the platform-admin API key — each
+	// with a _PREVIOUS sibling for zero-downtime rotation (S1.2, MEET-052).
+	// Ed25519 dual-control (ADR 2026-05-13-service-auth-ed25519-adoption): a
+	// malformed key CRASHES startup rather than leaving the trust set empty
+	// (RFC Q5 fail-closed). The replay-protection nonce store is Redis-backed
+	// when LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR is set (ADR Q2).
+	cfg := auth.Config{
+		ServiceSecret:              os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET"),
+		ServiceSecretPrevious:      os.Getenv("LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS"),
+		AdminServiceSecret:         os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET"),
+		AdminServiceSecretPrevious: os.Getenv("LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS"),
+		AdminAPIKey:                os.Getenv("LOOPZERO_ADMIN_API_KEY"),
+		AdminAPIKeyPrevious:        os.Getenv("LOOPZERO_ADMIN_API_KEY_PREVIOUS"),
+		Ed25519PublicKeys:          loadServiceAuthEd25519Trust(logger),
+		RequireSignature:           serviceAuthRequireSignature(),
+		NonceStore:                 nonceStore,
+	}
 
 	return &AuthDeps{
 		TokenValidator: tokenValidator,
+		Config:         cfg,
 	}
 }
 
-// loadServiceAuthEd25519Trust reads the public-key env vars and
-// populates auth.ServiceAuthEd25519PublicKeys. Panics via
+// loadServiceAuthEd25519Trust reads the public-key env vars and returns the
+// Ed25519 trust set. Exits via
 // logger.Error + os.Exit(1) on parse failure per Q5 fail-closed.
 //
 // Split from the error-returning variant for caller ergonomics: tests
@@ -113,23 +119,25 @@ func setupAuth(logger *slog.Logger) *AuthDeps {
 // production entry-point loadServiceAuthEd25519Trust() converts the
 // error to a fatal log so an invalid key configuration is impossible
 // to miss.
-func loadServiceAuthEd25519Trust(logger *slog.Logger) {
-	if err := loadServiceAuthEd25519TrustE(); err != nil {
+func loadServiceAuthEd25519Trust(logger *slog.Logger) []ed25519.PublicKey {
+	trust, err := loadServiceAuthEd25519TrustE()
+	if err != nil {
 		logger.Error("service-auth Ed25519 trust-set load failed (fail-closed)", "error", err)
 		os.Exit(1)
 	}
-	if n := len(auth.ServiceAuthEd25519PublicKeys); n > 0 {
+	if n := len(trust); n > 0 {
 		logger.Info("service-auth Ed25519 dual-control enabled", "trusted_keys", n)
 	} else {
 		logger.Warn("service-auth Ed25519 trust set is empty — dual-control inert; signed requests will fail-closed (set LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT to enable)")
 	}
+	return trust
 }
 
-// loadServiceAuthEd25519TrustE is the error-returning loader. Returns
-// nil and leaves the trust set empty when both env vars are absent
+// loadServiceAuthEd25519TrustE is the error-returning loader. Returns an
+// empty trust set when both env vars are absent
 // (Phase 1 default before operator bootstrap). Returns an error when
 // either env var is present but malformed.
-func loadServiceAuthEd25519TrustE() error {
+func loadServiceAuthEd25519TrustE() ([]ed25519.PublicKey, error) {
 	current := os.Getenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT")
 	previous := os.Getenv("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS")
 
@@ -137,19 +145,18 @@ func loadServiceAuthEd25519TrustE() error {
 	if current != "" {
 		pub, err := decodeEd25519PublicKey(current)
 		if err != nil {
-			return fmt.Errorf("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT: %w", err)
+			return nil, fmt.Errorf("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT: %w", err)
 		}
 		trust = append(trust, pub)
 	}
 	if previous != "" {
 		pub, err := decodeEd25519PublicKey(previous)
 		if err != nil {
-			return fmt.Errorf("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS: %w", err)
+			return nil, fmt.Errorf("LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS: %w", err)
 		}
 		trust = append(trust, pub)
 	}
-	auth.ServiceAuthEd25519PublicKeys = trust
-	return nil
+	return trust, nil
 }
 
 // decodeEd25519PublicKey decodes a base64-encoded raw Ed25519 public
@@ -167,19 +174,18 @@ func decodeEd25519PublicKey(encoded string) (ed25519.PublicKey, error) {
 	return ed25519.PublicKey(raw), nil
 }
 
-// loadServiceAuthRequireSignatureFlag reads
-// LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE and flips the middleware Phase 2
-// gate. Accepts "true", "1", "yes" (case-insensitive). Any other value
+// serviceAuthRequireSignature reads LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE, the
+// middleware's Phase 2 gate. Accepts "true", "1", "yes" (case-insensitive). Any other value
 // — including empty — keeps the default false (Phase 1 accept-both).
 //
 // Per ADR Q3: the operator flips this only after the 7-day soak at
 // 100% present rate. Setting it true on a stack without a deployed
 // signer would block all cloud→engine traffic.
-func loadServiceAuthRequireSignatureFlag() {
+func serviceAuthRequireSignature() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE"))) {
 	case "true", "1", "yes":
-		auth.ServiceAuthRequireSignature = true
+		return true
 	default:
-		auth.ServiceAuthRequireSignature = false
+		return false
 	}
 }

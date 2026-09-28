@@ -7,7 +7,7 @@ package conditions
 // It replaces the deleted pkg/health.Phase enum (ADR-0028) with
 // a kstatus-aware mapping that respects observedGeneration discipline.
 //
-// Per ADR-0032 (substituto canônico de pkg/health).
+// Per ADR-0032 (canonical replacement for pkg/health).
 type Phase string
 
 const (

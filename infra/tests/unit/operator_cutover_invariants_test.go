@@ -5,10 +5,12 @@
 // Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
 //
 // Composite test matrix T-01..T-14 (condition C19) pinning the
-// operator-cutover scripts and Tilt-helmfile parity.
+// operator-split invariants and Tilt-helmfile parity.
 //
-// C1 — atomic cutover script exists + has the safety controls.
-// C6 — zero-Ready watcher script exists (background poller in cutover).
+// C1 — the atomic cutover script is gone with the completed split; see the
+//      note where T-01 and T-02 used to be.
+// C6 — the zero-Ready condition is watched by the ZeroReadyOperatorWindow
+//      alert (T-08).
 // C9 — T2.4 (Tilt → helmfile parity) validation lives same-PR. The
 //      test reads `Tiltfile` and asserts it consumes helmfile output
 //      rather than hardcoded yamls.
@@ -33,47 +35,20 @@ func repoRoot() string {
 	return filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
 }
 
-// T-01 — atomic cutover script exists + has zero-Ready watcher.
-func TestT01_AtomicCutoverScriptExists(t *testing.T) {
-	// F27 (M23 audit 2026-07-10): script relocated to `infra/scripts/production/`
-	// per shell-scripts-allowlist.md § infra/scripts/production/ (2026-05-23).
-	// Try canonical path first, then legacy.
-	path := filepath.Join(repoRoot(), "infra", "scripts", "production", "operator-cutover-execute.sh")
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		path = filepath.Join(repoRoot(), "infra", "scripts", "operator-cutover-execute.sh")
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("operator-cutover-execute.sh missing (tried production/ + legacy): %v", err)
-	}
-	text := string(data)
-
-	for _, must := range []string{
-		"ZERO_READY_THRESHOLD_SEC",  // C6 watcher threshold
-		"validate-matrix.sh",        // pre-flight gate
-		"AUTO_ROLLBACK",             // safety trap
-		"helmfile",                  // sync invocation
-		"--for=condition=Available", // explicit Ready wait
-		"PRE_FLIGHT_PASSED",         // trap discipline
-	} {
-		if !strings.Contains(text, must) {
-			t.Errorf("cutover script missing: %s", must)
-		}
-	}
-}
-
-// T-02 — rollback script exists + uses git-show-from-parent (no destructive ops).
-func TestT02_RollbackScriptExists(t *testing.T) {
-	// `infra/scripts/operator-cutover-rollback.sh` deleted in commit
-	// 27cfe6cd (2026-05-04, ADR-0023 / plan v1.1 T1.5 LOCAL cutover
-	// complete). The 4-binary split is canonical on the LOCAL stack;
-	// production rollout is governed by separate
-	// CHG-NNNN-OPERATOR-SPLIT-PROD per ADR-0023's 4-stage cutover and
-	// would author a new rollback script at cutover time. Re-enable
-	// this test (and update the path constant) when the prod-cutover
-	// PR lands.
-	t.Skip("rollback script removed post LOCAL cutover (commit 27cfe6cd) — re-enable when prod-cutover PR ships")
-}
+// T-01 and T-02 were REMOVED, not skipped (#240).
+//
+// T-01 pinned the text of infra/scripts/production/operator-cutover-execute.sh
+// and T-02 was a permanent t.Skip naming its rollback partner. Neither script
+// could run: the pre-flight called infra/tests/parity/validate-matrix.sh
+// (deleted in b61e6c307, 2026-07-07) and the failure trap called
+// infra/scripts/operator-cutover-rollback.sh (deleted in 27cfe6cd, 2026-05-04),
+// so every invocation stopped at the pre-flight and the advertised
+// auto-rollback had no code behind it. The operator split it orchestrated is
+// complete — T-08 below records that the post-cutover watchers were retired
+// for the same reason — so the script was deleted rather than repaired, and a
+// test asserting that a dead script still contains the word "validate-matrix.sh"
+// protected nothing. A future production cutover authors its own tooling, and
+// its own test, at the time it is planned.
 
 // T-03 — runbook exists with all required sections.
 // T-04 — invariants doc exists with I-1..I-8.
@@ -141,12 +116,9 @@ func TestT05_RbacSubsetWiredInCI(t *testing.T) {
 //     clustercredential-create.sh usage gate (no args -> exit 1 + "usage:"; bad
 //     cell-id -> exit 1 + "invalid cell-id"), which is script EXECUTION and does not
 //     belong in a static unit test; and (b) `bash infra/tests/parity/preflight.sh`,
-//     whose script is not in this tree at all. infra/tests/parity/ holds only
-//     standalone-values.yaml, while taskfiles/test.yml (`parity:preflight`,
-//     `validate:matrix`) and infra/tests/e2e/parity_install_test.go still invoke
-//     preflight.sh and validate-matrix.sh. That dangling reference is wider than
-//     this test and is not fixed here; it is written down so the next reader does
-//     not have to re-derive it.
+//     whose script is not in this tree at all. The callers that still invoked it
+//     and validate-matrix.sh were removed: the Taskfile ones on 2026-09-23, the
+//     Ginkgo parity specs and the orphaned infra/tests/parity/ values file in #240.
 //
 // The honest summary the old skip message could not give: four of Phase 5's checks
 // stopped being enforced when the workflow went, two are enforced again as of this
@@ -177,13 +149,30 @@ func TestT08_OperatorCutoverAlertsLoaded(t *testing.T) {
 		t.Fatalf("prometheusrule missing: %v", err)
 	}
 	text := string(data)
-	for _, alert := range []string{
-		"OperatorRestartRate24h",                 // C15
-		"OperatorReconcileLatencyPostCutover24h", // T2.1 paired
-		"ZeroReadyOperatorWindow",                // C6 alert pair
+
+	// `ZeroReadyOperatorWindow` is the one alert this file still carries, and the commit
+	// that retired the other two says why it was kept: zero ready operators is a condition
+	// that does not expire with a cutover.
+	if !strings.Contains(text, "ZeroReadyOperatorWindow") {
+		t.Error("missing alert: ZeroReadyOperatorWindow")
+	}
+
+	// The other two were RETIRED deliberately by `49b52c0a5` (2026-09-07), which recorded
+	// the evidence: both declare themselves "24h post-cutover" watchers of CHG-2026-04-30,
+	// and the operator split is complete — so they watch for a window that has closed.
+	//
+	// This test asserted their PRESENCE until 2026-09-16 and had been red since that
+	// commit, which is the shape worth naming: the chart moved with a recorded decision
+	// and the test kept asserting the state before it. Asserting their ABSENCE is the
+	// stronger form — it pins the decision, so a retired alert cannot drift back in
+	// without somebody re-opening the reasoning that retired it.
+	for _, retired := range []string{
+		"OperatorRestartRate24h",
+		"OperatorReconcileLatencyPostCutover24h",
 	} {
-		if !strings.Contains(text, alert) {
-			t.Errorf("missing alert: %s", alert)
+		if strings.Contains(text, retired) {
+			t.Errorf("%s was retired by 49b52c0a5 as a closed-window watcher and is back; "+
+				"re-open that reasoning before restoring it", retired)
 		}
 	}
 }
@@ -228,7 +217,9 @@ func TestT09_TilftileSplitOperatorMigrationStatus(t *testing.T) {
 //     subdirectory during a routes refactor (siblings: admin_evict.go,
 //     admin_release_inspect.go). The assertion still named the pre-move path and
 //     announced "T5.5 incomplete" for an endpoint that had shipped and never
-//     left. Path corrected in eb4ae31b1; the message below no longer draws that
+//     left. Path corrected in eb4ae31b1, and again when api/internal was
+//     organized by feature (2026-09-25) and the handler moved to the placement
+//     feature's placementhttp; the message below no longer draws that
 //     conclusion from a failed lookup.
 //
 //  2. The CLI half asserted a file in ANOTHER REPOSITORY. `cli/` was extracted
@@ -246,13 +237,13 @@ func TestT09_TilftileSplitOperatorMigrationStatus(t *testing.T) {
 // WHOLE test skipped — discarding the endpoint check that genuinely is ours.
 // A sibling repo's source is not this repo's to guarantee. What this repo does
 // guarantee is pinned where it can actually be executed:
-//   - api/tests/unit/control_surfaces_observable_test.go builds the router and
+//   - api/internal/server/control_surfaces_observable_test.go builds the router and
 //     asserts the AdminPin surface is recorded with its route.
-//   - api/internal/routes/admin/admin_pin_cell_test.go covers the handler and
+//   - api/internal/placement/placementhttp/admin_pin_cell_test.go covers the handler and
 //     its 403 without X-Service-Auth.
 //   - the cli<->engine seam has its own target: `task quality:contract:cross-repo`.
 func TestT10_AdminPinEndpointShipped(t *testing.T) {
-	path := filepath.Join(repoRoot(), "api", "internal", "routes", "admin", "admin_pin_cell.go")
+	path := filepath.Join(repoRoot(), "api", "internal", "placement", "placementhttp", "admin_pin_cell.go")
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("this guard could not find its subject at %s: %v\n"+
 			"Read that as: the GUARD is stale or the handler moved. It does not by "+
@@ -272,7 +263,7 @@ func TestT11_CellsMigrationPresent(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("000006_cells.up.sql missing: %v", err)
 	}
-	testPath := filepath.Join(repoRoot(), "api", "tests", "unit", "migration_006_cells_test.go")
+	testPath := filepath.Join(repoRoot(), "api", "internal", "db", "migration_006_cells_test.go")
 	if _, err := os.Stat(testPath); err != nil {
 		t.Errorf("migration_006_cells_test.go missing — C1 of T-1.3 incomplete: %v", err)
 	}

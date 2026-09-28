@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/version"
+	"github.com/getloopscale/loopzero/api/internal/version/versionhttp"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -27,7 +27,7 @@ import (
 // Two hermetic assertions (no live cluster, no heavy Config):
 //
 //  1. SpecPathsAreRegistered — every (method, path) documented in engine.yaml is
-//     actually registered in api/internal/server/router.go. Catches phantom spec
+//     actually registered by the router (api/internal/server). Catches phantom spec
 //     entries + method drift. chi path params use {name} syntax identical to
 //     OpenAPI, so no normalization is needed.
 //  2. VersionResponseConformsToSpec — a real handler response (the dep-free
@@ -37,14 +37,11 @@ import (
 //     coverage per plan ADR D4.
 
 const (
-	specPath   = "../../openapi/engine.yaml"
-	routerPath = "../server/router.go"
-	// routesDir holds helper-registered routes (e.g. RegisterDeployTimelineRoute
-	// mounts GET /api/v1/deploys/{deployID}/timeline) that router.go calls but does
-	// not spell out as a literal `.Get("...")`. Scanning it too keeps the
-	// spec⟺router contract honest for helper-registered routes. Monotonic: it only
-	// adds to the registered set, so it can never introduce a new phantom-spec fail.
-	routesDir = "../routes"
+	specPath = "../../openapi/engine.yaml"
+	// serverDir holds the router: router.go plus the per-family registrars
+	// (protected_routes.go) it delegates to. Every non-test file is scanned,
+	// so moving a registration between router files cannot hide it.
+	serverDir = "../server"
 )
 
 // registeredRouteRE matches chi registrations in either form:
@@ -64,46 +61,51 @@ func loadSpec(t *testing.T) *openapi3.T {
 	return doc
 }
 
-// registeredRoutes parses router.go and returns the set of "METHOD path" pairs.
+// registeredRoutes scans the router's source and returns the set of
+// "METHOD path" pairs it registers.
 func registeredRoutes(t *testing.T) map[string]bool {
 	t.Helper()
-	src, err := os.ReadFile(routerPath)
-	if err != nil {
-		t.Fatalf("read router.go: %v", err)
-	}
 	set := map[string]bool{}
-	scan := func(b []byte) {
+	scanTree(t, serverDir, set)
+	// The handler packages too, for helper-registered routes
+	// (RegisterDeployTimelineRoute mounts GET /api/v1/deploys/{deployID}/timeline
+	// without router.go spelling it).
+	//
+	// WALKED, not listed: when the families were split into subpackages (B-080) a
+	// top-level-only listing stopped reaching the helper and reported a registered
+	// route as phantom. Scanning more files only ADDS to the registered set, so it
+	// can never introduce a new phantom-spec failure.
+	for _, dir := range handlerDirs(t) {
+		scanTree(t, dir, set)
+	}
+	return set
+}
+
+// scanTree adds every chi registration found in the non-test .go files under
+// dir to set. An unreadable tree fails the test: a scan that silently read
+// nothing would report every documented route as phantom — or, worse, pass.
+func scanTree(t *testing.T, dir string, set map[string]bool) {
+	t.Helper()
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		n := info.Name()
+		if info.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+			return nil
+		}
+		b, err := os.ReadFile(filepath.Clean(path))
+		if err != nil {
+			return err
+		}
 		for _, m := range registeredRouteRE.FindAllStringSubmatch(string(b), -1) {
 			set[strings.ToUpper(m[1])+" "+m[2]] = true
 		}
-	}
-	scan(src)
-	// Also scan the routes tree for helper-registered routes (non-test .go).
-	//
-	// WALKED, not listed. The first version used os.ReadDir and saw only the top
-	// level, which was enough while `routes` was one flat package. The moment the
-	// families were split into subpackages (B-080), a route registered by a helper
-	// that had moved — RegisterDeployTimelineRoute, mounting
-	// GET /api/v1/deploys/{deployID}/timeline — became invisible, and this test
-	// reported it as a phantom spec entry. The route was registered the whole time;
-	// the scan had stopped reaching the file that spelled it.
-	//
-	// Monotonic either way: scanning more files only ADDS to the registered set, so
-	// it can never introduce a new phantom-spec failure.
-	_ = filepath.Walk(routesDir, func(path string, info os.FileInfo, werr error) error {
-		if werr != nil || info == nil || info.IsDir() {
-			return nil //nolint:nilerr // a missing subtree is not this test's failure
-		}
-		n := info.Name()
-		if !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
-			return nil
-		}
-		if b, rerr := os.ReadFile(filepath.Clean(path)); rerr == nil {
-			scan(b)
-		}
 		return nil
 	})
-	return set
+	if err != nil {
+		t.Fatalf("scanning %s for route registrations: %v", dir, err)
+	}
 }
 
 func TestEngineConformance_SpecPathsAreRegistered(t *testing.T) {
@@ -121,7 +123,7 @@ func TestEngineConformance_SpecPathsAreRegistered(t *testing.T) {
 	}
 	sort.Strings(missing)
 	if len(missing) > 0 {
-		t.Fatalf("engine.yaml documents %d route(s) NOT registered in router.go (phantom spec): %v",
+		t.Fatalf("engine.yaml documents %d route(s) NOT registered by the router (phantom spec): %v",
 			len(missing), missing)
 	}
 }
@@ -136,7 +138,7 @@ func TestEngineConformance_VersionResponseConformsToSpec(t *testing.T) {
 		t.Fatalf("build router from spec: %v", err)
 	}
 
-	srv := httptest.NewServer(version.VersionHandler())
+	srv := httptest.NewServer(versionhttp.VersionHandler())
 	defer srv.Close()
 
 	req, err := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/version", nil)

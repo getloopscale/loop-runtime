@@ -1,36 +1,19 @@
 version: "3"
 
-# taskfiles/test.yml — test orchestration: parity, validate-matrix.
-# Per Plan T1.3 + MEET-2026-05-03-062 (MEET-A): incremental migration; this is
-# Phase 3 (per-domain) iteration 1 — `parity:*` + `validate:matrix*`.
-# Future iterations expand to test:*, test:report:*, test:e2e:*, dead-code, lint.
+# taskfiles/test.yml — test orchestration: unit, e2e, load, dogfood, validation.
+# Every script a task here runs must exist: cmd/loopzero-ops
+# quality_taskfile_script_refs_test.go fails on a task that points at a
+# deleted script (29 such tasks were removed or repointed on 2026-09-23).
 
 tasks:
-  ops:build:
-    desc: Build the loopzero-ops gate binary to bin/loopzero-ops (D6 — canonical stable path)
-    # T0.3 of plan 2026-05-23-incremental-bash-to-go-migration. Replaces the
-    # develop-bkp anti-pattern of `(cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)`
-    # duplicated across ~15 call sites. Gates invoke `bin/loopzero-ops <gate>`, OR
-    # `go run ./cmd/loopzero-ops <gate>` for one-shot CI use (see docs/operations.md).
-    cmds:
-      - mkdir -p bin
-      - cd cmd/loopzero-ops && go build -o ../../bin/loopzero-ops .
-      - ./bin/loopzero-ops quality --help >/dev/null && echo "ops:build OK — bin/loopzero-ops ready"
-
-  parity:preflight:
-    desc: Run parity validation suite preflight (offline, <2s) — shellcheck + audit + dry-runs
-    cmds:
-      - bash infra/tests/parity/preflight.sh
-
   validate:matrix:
-    desc: Master validation matrix — every offline gate (Phase 8 T8.1)
+    desc: Master validation matrix — every offline gate (alias of `task test`)
+    # infra/tests/parity/validate-matrix.sh was deleted on 2026-07-07 (its
+    # parity checks have Ginkgo substitutes, Label("parity")); the offline
+    # suite it aggregated is `task test`. Kept as a name because the Taskfile
+    # public contract and README cite it.
     cmds:
-      - bash infra/tests/parity/validate-matrix.sh
-
-  validate:matrix:quick:
-    desc: validate:matrix without operators envtest (faster signal)
-    cmds:
-      - bash infra/tests/parity/validate-matrix.sh --quick
+      - task: test
 
   pkg:usage-matrix:check:
     desc: Verify docs/architecture.md Real Usage Matrix is up-to-date (gate PKG-G14)
@@ -76,20 +59,6 @@ tasks:
       # Now the Go unit test TestGolden_* (faithful port of audit-golden-test.sh).
       - go test ./cmd/loopzero-ops/internal/quality/regressionmatrix/...
 
-  parity:k3d-virgin:
-    desc: T5.1 — k3d virgin install (degrau 1, $0, ~10min)
-    cmds:
-      - bash infra/tests/parity/k3d-virgin-install.sh
-
-  parity:droplet:
-    desc: 'T6.1 — Droplet install (degrau 2, ~$0.50, ~30min). DRY_RUN=1 for offline preflight.'
-    cmds:
-      - bash infra/tests/parity/droplet-install.sh {{.CLI_ARGS}}
-
-  parity:doks:
-    desc: 'T7.1 — DOKS install (degrau 3, ~$5, ~60min). DRY_RUN=1 for offline preflight.'
-    cmds:
-      - bash infra/tests/parity/doks-install.sh {{.CLI_ARGS}}
   test:all:
     desc: Run everything — unit + integration + E2E (requires running clusters)
     cmds:
@@ -109,54 +78,54 @@ tasks:
       - cd operators && go test ./... -short
       - cd operators/api && go test ./... -short
       - cd api && go test ./... -short
-      # `helm/` (29 arquivos) nao rodava em task nenhuma — o mesmo defeito do
-      # B-088, um nivel abaixo do modulo. `scripts/` (11) e `config/` (5)
-      # tambem nao rodavam E estavam VERMELHOS, e por isso ficaram de fora:
-      # adiciona-los sem consertar o que acusavam deixaria o alvo vermelho, e
-      # um alvo vermelho vira alvo desligado.
+      # `helm/` (29 files) ran in no task at all — the same defect as
+      # B-088, one level below the module. `scripts/` (11) and `config/` (5)
+      # did not run either AND were RED, which is why they were left out:
+      # adding them without fixing what they flagged would leave the target red,
+      # and a red target becomes a switched-off target.
       #
-      # B-092 mediu os dois FAIL e os dois eram FALSOS, em formas diferentes.
-      # Um comparava a GRAFIA da fonte contra um repositorio que e MONTADO por
-      # template, entao a substring canonica nunca aparecia contigua. O outro
-      # aceitava `latest` e recusava a sentinela `SET-BY-CI` — permitindo o que
-      # a issue #232 rejeitou por nome e recusando o que ela escolheu.
+      # B-092 measured the two FAILs and both were FALSE, in different ways.
+      # One compared the source's SPELLING against a repository that is ASSEMBLED
+      # from a template, so the canonical substring never appeared contiguously. The
+      # other accepted `latest` and refused the `SET-BY-CI` sentinel — allowing what
+      # issue #232 rejected by name and refusing what it chose.
       #
-      # O segundo e o achado que justifica ligar isto: um teste que ninguem roda
-      # nao apenas deixa de proteger, ele CONGELA um contrato vencido, e
-      # bloquearia o desenho correto no dia em que fosse ligado.
+      # The second is the finding that justifies switching this on: a test nobody runs
+      # does not merely stop protecting, it FREEZES an expired contract, and
+      # would block the correct design on the day it was switched on.
       #
-      # E a varredura da populacao — nao so das duas subarvores que o item
-      # nomeava — achou uma terceira: `performance/` tem 23 arquivos de teste,
-      # roda em 37ms sem infraestrutura nenhuma, esta VERDE, e nao era alcancada
-      # por alvo nenhum. Passou despercebida porque o item contou as vermelhas.
+      # And sweeping the whole population — not only the two subtrees the item
+      # named — found a third: `performance/` has 23 test files,
+      # runs in 37ms with no infrastructure at all, is GREEN, and was reached
+      # by no target. It went unnoticed because the item counted the red ones.
       #
-      # `e2e/`, `chaos/`, `charts/` e `livetest/` seguem fora deste alvo por
-      # terem alvo proprio ou exigirem cluster, que e outra classe.
+      # `e2e/`, `chaos/`, `charts/` and `livetest/` stay outside this target because
+      # they have their own target or require a cluster, which is another class.
       # -count=1: these suites assert on files OUTSIDE their own module (Tiltfile,
       # api/**, infra/helm/**, go.work). Go's test cache keys on THIS module's
       # inputs, so none of those reads invalidate it. Measured 2026-09-05 with an
       # isolated GOCACHE: prime green, then DELETE
-      # api/internal/routes/admin/admin_pin_cell.go — the file T-10 exists to guard —
+      # api/internal/placement/placementhttp/admin_pin_cell.go — the file T-10 exists to guard —
       # and the suite still reports `ok (cached)`. Same for dropping a module from
       # go.work. Without the flag these guards report on a tree they never read.
       # Cost measured on this target: 1.31s -> 2.31s. B-169/B-170.
       - cd infra/tests && go test -count=1 ./unit/... ./helm/... ./scripts/... ./config/... ./performance/... -short
-      # cmd/loopzero-ops e onde vivem os 123 quality gates. Os testes que provam que
-      # um gate reprova o que deve reprovar nao rodavam por caminho nenhum —
-      # `quality:hermetic` fazia `go build`, nao `go test`. B-088.
+      # cmd/loopzero-ops is where the 123 quality gates live. The tests proving that
+      # a gate fails what it must fail ran through no path at all —
+      # `quality:hermetic` did `go build`, not `go test`. B-088.
       - cd cmd/loopzero-ops && go test ./... -short
-      # Construem sozinhos (o modulo nao declara require nenhum), entao GOWORK=off
-      # continua sendo a invocacao correta e hermetica. Nunca foram nomeados por
-      # task nenhuma. B-088.
+      # They build on their own (the module declares no require at all), so GOWORK=off
+      # is still the correct, hermetic invocation. No task ever named them.
+      # B-088.
       #
-      # Este comentario dizia "Fora do go.work por desenho" e deixou de ser verdade
-      # em 0f8a2e5f9 (B-170): `./tools/gen-service-auth-ed25519` ESTA no `use` do
-      # go.work desde 2026-08-31, porque sem isso `cd tools/... && go test ./...`
-      # falhava com "directory prefix . does not contain modules listed in go.work".
-      # GOWORK=off aqui e escolha de hermeticidade, nao consequencia de ausencia.
+      # This comment said "Outside go.work by design" and stopped being true
+      # in 0f8a2e5f9 (B-170): `./tools/gen-service-auth-ed25519` IS in go.work's `use`
+      # since 2026-08-31, because without it `cd tools/... && go test ./...`
+      # failed with "directory prefix . does not contain modules listed in go.work".
+      # GOWORK=off here is a choice of hermeticity, not a consequence of absence.
       #
-      # Eram dois; sobrou um. `tools/loopzero-dockerfile-lint` foi REMOVIDO em 2026-08-19
-      # (B-157): validava Dockerfile do usuario, caminho que saiu na T2.2.
+      # There were two; one is left. `tools/loopzero-dockerfile-lint` was REMOVED on 2026-08-19
+      # (B-157): it validated the user's Dockerfile, a path that left in T2.2.
       - cd tools/gen-service-auth-ed25519 && GOWORK=off go test ./... -short
 
   test:integration:
@@ -500,24 +469,24 @@ tasks:
         echo "PASS: No vulnerabilities at MEDIUM+ severity"
 
   lint:
-    desc: Lint de TODOS os modulos Go, com catraca por modulo (B-121/B-083/B-148)
+    desc: Lint ALL Go modules, with a per-module ratchet (B-121/B-083/B-148)
     cmds:
       - |
-        # CORRIGIDO 2026-08-18. Esta task rodava TRES modulos de NOVE, em tres entradas `cmds`
-        # separadas — e o Task aborta na primeira que sai != 0, entao um achado em `pkg`
-        # impedia `api` de ser medido. Foi por isso que o B-009 reportou "11 achados, todos em
-        # operators": `api` nunca tinha sido olhado.
+        # FIXED 2026-08-18. This task ran THREE modules out of NINE, in three separate `cmds`
+        # entries — and Task aborts on the first one that exits != 0, so a finding in `pkg`
+        # stopped `api` from being measured. That is why B-009 reported "11 findings, all in
+        # operators": `api` had never been looked at.
         #
-        # Medido no dia da correcao, modulo a modulo: os tres cobertos em 0, e 318 achados nos
-        # que ninguem olhava — 221 deles em `cmd/loopzero-ops`, o binario que executa os 130 gates
-        # deste repositorio. Mais 155 arquivos fora do `gofmt`, invisiveis porque nenhum linter
-        # de formatacao esta habilitado no .golangci.yml.
+        # Measured on the day of the fix, module by module: the three covered ones at 0, and 318
+        # findings in the ones nobody looked at — 221 of them in `cmd/loopzero-ops`, the binary that
+        # runs this repository's 130 gates. Plus 155 files outside `gofmt`, invisible because no
+        # formatting linter is enabled in .golangci.yml.
         #
-        # A `lint:strict` saiu junto: ela comparava um total agregado contra um baseline de 200
-        # (`api=140 + operators=60`) com os dois em ZERO. Duas tasks com vereditos opostos sobre
-        # a mesma coisa e pior que uma errada.
+        # `lint:strict` left with it: it compared an aggregate total against a baseline of 200
+        # (`api=140 + operators=60`) with both at ZERO. Two tasks with opposite verdicts about
+        # the same thing is worse than one wrong one.
         #
-        # A logica agora tem casa e teste em cmd/loopzero-ops/internal/quality/lintcoverage.
+        # The logic now has a home and a test in cmd/loopzero-ops/internal/quality/lintcoverage.
         if [ ! -x /tmp/loopzero-ops ]; then
           (cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)
         fi
@@ -525,27 +494,27 @@ tasks:
 
   validate:helm-deps:
     desc: |
-      Vendoriza as dependências de TODO chart que declara `dependencies:`, nas duas
-      árvores (`charts/` e `infra/helm/`). Fecha a condição C24 de
+      Vendors the dependencies of EVERY chart that declares `dependencies:`, in both
+      trees (`charts/` and `infra/helm/`). Closes condition C24 of
       MEET-INFRA-NORMALIZE-T3-operator-split.
 
-      Por que descoberta e não lista fixa: `charts/*/charts/` é gitignored, então um
-      clone novo não tem dependência nenhuma vendorizada. Enquanto esta task listava
-      9 charts à mão e só de `charts/`, `task setup` reprovava num clone limpo —
-      medido em 2026-08-10 no droplet app-dev, primeiro em `loopzero-crds` (dep local
-      `loopzero-common`) e, depois de corrigido, em `opencost` (dep remota, sob
-      `infra/helm/`). Uma lista fixa só cobre os charts que alguém lembrou de
-      adicionar; a descoberta cobre o que existe.
+      Why discovery and not a fixed list: `charts/*/charts/` is gitignored, so a
+      fresh clone has no vendored dependency at all. While this task listed
+      9 charts by hand and only from `charts/`, `task setup` failed on a clean clone —
+      measured on 2026-08-10 on the app-dev droplet, first on `loopzero-crds` (local dep
+      `loopzero-common`) and, once that was fixed, on `opencost` (remote dep, under
+      `infra/helm/`). A fixed list only covers the charts someone remembered to
+      add; discovery covers what exists.
 
-      Falha de dependência REMOTA não aborta: um chart cujo upstream saiu do ar ou
-      renomeou a versão não é motivo para impedir toda instalação nova, e as falhas
-      são impressas com o erro do upstream em vez de engolidas. Dependência local
-      (`file://`) é outra coisa — ela vive neste repositório, então falhar nela é
-      defeito nosso e aborta.
+      A REMOTE dependency failure does not abort: a chart whose upstream went offline or
+      renamed the version is no reason to block every fresh install, and the failures
+      are printed with the upstream's error instead of being swallowed. A local
+      dependency (`file://`) is another matter — it lives in this repository, so a
+      failure there is our defect and aborts.
     cmds:
       - |
         set -uo pipefail
-        falhas=0; ok=0
+        failures=0; ok=0
         for chart in charts/*/ infra/helm/*/; do
           [[ -f "$chart/Chart.yaml" ]] || continue
           grep -q "^dependencies:" "$chart/Chart.yaml" || continue
@@ -553,17 +522,17 @@ tasks:
              || helm dependency update "$chart" >/tmp/helm-dep.out 2>&1; then
             ok=$((ok+1))
           else
-            falhas=$((falhas+1))
-            echo "  [FALHA] $chart"
+            failures=$((failures+1))
+            echo "  [FAIL] $chart"
             tail -2 /tmp/helm-dep.out | sed 's/^/          /'
-            # Dependência local quebrada é defeito deste repositório, não do upstream.
+            # A broken local dependency is this repository's defect, not the upstream's.
             if grep -q "file://" "$chart/Chart.yaml"; then
-              echo "  [ABORT] $chart declara dependência file:// — isto e defeito nosso." >&2
+              echo "  [ABORT] $chart declares a file:// dependency — this is our defect." >&2
               exit 1
             fi
           fi
         done
-        echo "[validate:helm-deps] $ok chart(s) com dependências vendorizadas, $falhas com upstream indisponível"
+        echo "[validate:helm-deps] $ok chart(s) with vendored dependencies, $failures with an unavailable upstream"
 
   generate:rbac:
     desc: |
@@ -619,7 +588,8 @@ tasks:
       ADR-0026 D4 condition #5 / plan T4.3 — AST analyzer that detects
       RBAC anti-patterns the controller-gen pipeline can't catch:
         - wildcard markers (resources=*, verbs=*) — security style guide
-        - missing markers vs r.Client.X call sites (basic correlation)
+        - malformed markers (no verbs= clause)
+      It does NOT detect a call with no covering marker.
       See operators/hack/validate-rbac/KNOWN_GAPS.md for blind spots.
     cmds:
       - cd operators && go run ./hack/validate-rbac -dir internal/tenant
@@ -638,24 +608,41 @@ tasks:
       - kubeconform --strict infra/helm/postgresql/templates/pdb.yaml
       - kubeconform --strict infra/helm/gitea/templates/pdb.yaml
       - kubeconform --strict infra/helm/argocd/templates/pdb.yaml
-      # NetworkPolicies
-      # network-policies migrou de raw manifest para Helm chart (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5).
-      # `helm template` produz uma stream de YAML que kubeconform pode consumir via stdin.
-      - helm template network-policies infra/helm/network-policies/ | kubeconform --strict --summary
+      # Chart renders go through `loopzero-ops validate-chart`, never `helm template | kubeconform`:
+      # go-task runs a command without pipefail, so that pipe took kubeconform's status alone
+      # and a render that FAILED validated "0 resource found" and passed (#392 — Velero did
+      # exactly that on every fresh clone). validate-chart builds a chart's declared
+      # dependencies first (a fresh clone vendors none), and fails naming the chart on a
+      # render error, an empty render or a schema violation. Local strict schemas under
+      # infra/kubeconform-schemas/ are looked up before kubeconform's defaults.
+      # The repoinvariants test TestNoTaskfileCommandPipesARenderIntoKubeconform keeps the
+      # pipe from coming back.
+      - cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .
+      # network-policies migrated from a raw manifest to a Helm chart (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5).
+      - /tmp/loopzero-ops validate-chart --release network-policies --chart infra/helm/network-policies/
       # Internal LoopZero charts (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5+).
       # Skip Traefik IngressRoute and ClusterImagePolicy CRDs (not in default schema).
-      - helm template loopzero-api infra/helm/loopzero-api/ | kubeconform --strict --skip IngressRoute,Certificate --summary
-      - helm template loopzero-cloud infra/helm/loopzero-cloud/ | kubeconform --strict --skip IngressRoute,Certificate --summary
+      # loopzero-api and loopzero-cloud are one chart each (charts/), installed by Helmfile with
+      # their bootstrap values. ServiceMonitor is a CRD kind the default schema lacks.
+      - /tmp/loopzero-ops validate-chart --release loopzero-api --chart charts/loopzero-api/ -f charts/loopzero-api/values-bootstrap.yaml --skip IngressRoute,Certificate,ServiceMonitor
+      - /tmp/loopzero-ops validate-chart --release loopzero-cloud --chart charts/loopzero-cloud/ -f charts/loopzero-cloud/values-bootstrap.yaml --skip IngressRoute,Certificate,ExternalSecret
       # ADR-0023 / plan v1.1 T1.5: monolith charts deleted. The 4 split
       # operator charts live in charts/ (validated by validate:helm-charts target).
-      - helm template cloudflared infra/helm/cloudflared/ | kubeconform --strict --summary
-      - helm template smoke-test infra/helm/smoke-test/ | kubeconform --strict --summary
-      - helm template cluster-issuer infra/helm/cluster-issuer/ | kubeconform --strict --skip ClusterIssuer --summary
-      - helm template admission-policies infra/helm/admission-policies/ | kubeconform --strict --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule --summary
-      # velero-backup-dr-plan v1.0 / Validate — wrapper chart + schedules.
-      # Skip Velero CRD kinds (BackupStorageLocation, Schedule, etc.) which
-      # are not in default kubeconform schemas.
-      - helm template test infra/helm/velero/ -f infra/helm/velero/values-schedules.yaml --set velero.configuration.backupStorageLocation[0].bucket=test --set velero.configuration.backupStorageLocation[0].config.region=sfo3 --set velero.configuration.backupStorageLocation[0].config.s3Url=https://sfo3.digitaloceanspaces.com | kubeconform --strict --skip BackupStorageLocation,VolumeSnapshotLocation,Backup,Restore,Schedule,DownloadRequest,DeleteBackupRequest,PodVolumeBackup,PodVolumeRestore,BackupRepository,ServerStatusRequest --summary
+      - /tmp/loopzero-ops validate-chart --release cloudflared --chart infra/helm/cloudflared/
+      - /tmp/loopzero-ops validate-chart --release smoke-test --chart infra/helm/smoke-test/
+      - /tmp/loopzero-ops validate-chart --release cluster-issuer --chart infra/helm/cluster-issuer/ --skip ClusterIssuer
+      # The one admission-policies chart (charts/), installed by Helmfile on core and every
+      # cell; rendered with the core overlay too, because that is a second install shape.
+      - /tmp/loopzero-ops validate-chart --release admission-policies --chart charts/loopzero-admission-policies/ --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule
+      - /tmp/loopzero-ops validate-chart --release admission-policies-mgmt --chart charts/loopzero-admission-policies/ -f charts/loopzero-admission-policies/values-mgmt.yaml --skip ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding
+      # velero-backup-dr-plan v1.0 / Validate — wrapper chart + schedules, in the install
+      # shape of core.helmfile: values.yaml is passed explicitly because a `--set list[0].x`
+      # patches only a list that a -f file supplied. Without it the --set built a new
+      # one-field backupStorageLocation, the chart's values schema rejected the render, and
+      # the pipe this replaced reported that as a pass (#392).
+      # The Velero kinds (Schedule, BackupStorageLocation, ...) are validated, not skipped:
+      # their strict schemas are generated from the pinned chart's CRDs (#391).
+      - /tmp/loopzero-ops validate-chart --release test --chart infra/helm/velero/ -f infra/helm/velero/values.yaml -f infra/helm/velero/values-schedules.yaml --set velero.configuration.backupStorageLocation[0].bucket=test --set velero.configuration.backupStorageLocation[0].config.region=sfo3 --set velero.configuration.backupStorageLocation[0].config.s3Url=https://sfo3.digitaloceanspaces.com
       # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
       - kubeconform --strict --skip ServiceMonitor,PrometheusRule,Probe infra/helm/monitoring/manifests/
       # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate
@@ -672,7 +659,7 @@ tasks:
       (replacing pre-refactor bootstrap-shared.ts).
     cmds:
       - |
-        python3 infra/scripts/validate/helm-charts.py
+        python3 infra/scripts/validate/helm_charts.py
 
   validate:helmfile-scripts:
     desc: |
@@ -691,7 +678,7 @@ tasks:
     cmds:
       - |
         FAIL=0
-        for d in admission-policies cloudflared cluster-issuer network-policies smoke-test loopzero-api loopzero-cloud; do
+        for d in cloudflared cluster-issuer network-policies smoke-test; do
           if ! helm lint infra/helm/$d/ >/dev/null 2>&1; then
             echo "FAIL  $d (helm lint)"; FAIL=$((FAIL+1)); continue
           fi
@@ -705,7 +692,7 @@ tasks:
           echo "Internal-chart validation FAILED ($FAIL chart(s))"
           exit 1
         fi
-        echo "✓ All 9 internal Helm charts lint and render correctly"
+        echo "✓ All internal Helm charts lint and render correctly"
 
   validate:helmfile-templates:
     desc: |
@@ -717,19 +704,17 @@ tasks:
         - Schema drift between chart upgrades
       Uses local CRD schemas at infra/kubeconform-schemas/ for kinds not in
       the default kubeconform schema repository (CustomResourceDefinition).
+      The render is offline: LOOPZERO_DB_PASSWORD is a render-only placeholder set
+      by the script, never a real secret (#391).
     cmds:
       # Delegate to a shell script — keeps kubeconform's {{...}} template
       # placeholders out of Task's Go-template parser.
       - bash infra/kubeconform-schemas/validate-helmfile-templates.sh
-
-  validate:argocd-sync-waves:
-    desc: |
-      Validates that the 38 ArgoCD App-of-Apps Application manifests have a
-      coherent sync-wave ordering — e.g., cert-manager (wave -3) before traefik
-      (-2) before loopzero-api (2) before smoke-test (99). Catches manual edits
-      that would make ArgoCD try to create resources before their CRDs exist.
-    cmds:
-      - python3 infra/argocd-bootstrap/validate-sync-waves.py
+      # The Velero schemas the render was just checked against are generated from
+      # the chart version infra/helm/velero/Chart.lock pins; the render above built
+      # that dependency, so this is where a Velero upgrade without a schema refresh
+      # is caught (#391). Refresh: task helm:sync-kubeconform-schemas.
+      - cd cmd/loopzero-ops && go run . kubeconform-schemas --check --root ../.. --chart infra/helm/velero
 
   validate:layered-bootstrap:
     desc: |
@@ -737,7 +722,6 @@ tasks:
       offline test suite (helm lint, helmfile YAML structure, regression tests).
     cmds:
       - task: validate:internal-charts
-      - task: validate:argocd-sync-waves
       - task: validate:helmfile-templates
       - bash infra/helmfile/scripts/test_helpers/run-all.sh
       - go test ./infra/tests/config/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
@@ -788,12 +772,12 @@ tasks:
   migrate:tenants:
     desc: |
       F-04 (CHG-2026-04-29-DOGFOOD T3.3) — Reconcile Tenant + Environment
-      CRs duplicados entre namespaces para o canônico loopzero-system. Default
-      é dry-run; usar `task migrate:tenants -- --apply` para commit.
+      CRs duplicated across namespaces into the canonical loopzero-system. Default
+      is dry-run; use `task migrate:tenants -- --apply` to commit.
 
-      CRITICAL: este é o T1 fix (data cleanup). T3.1 (hard-code do
-      namespace no operator/API code) + T3.2 (ValidatingAdmissionPolicy
-      preventiva) ficam T2 governance per CLAUDE.md Pre-release rule
+      CRITICAL: this is the T1 fix (data cleanup). T3.1 (hard-coding the
+      namespace in operator/API code) + T3.2 (preventive
+      ValidatingAdmissionPolicy) stay T2 governance per CLAUDE.md Pre-release rule
       (touches tenant isolation contract).
     cmds:
       - bash infra/scripts/production/migrate-tenant-namespace.sh {{.CLI_ARGS}}
@@ -806,213 +790,6 @@ tasks:
       hermetic skip (compile-verify only).
     cmds:
       - LOOPZERO_E2E=1 go test ./infra/tests/e2e/ -run TestDeployHappyPath -v --ginkgo.label-filter="dogfood-repro"
-
-  test:dogfood:recovery:
-    desc: |
-      T5.4 of plan 2026-06-05-dashboard-journey-j04-recovery — aggregate
-      dogfood wrapper for Journey J-04 Recovery. Invokes:
-        1. T5.2 hermetic syntax check (allowlist + structure regression gate)
-        2. vitest hermetic suite (recovery.test.tsx + login.test.tsx — covers
-           Cenários B + F via DOM-state mocks, ~10s)
-        3. T5.1 LIVE bash (5 cenários A/C/C2/D/E against dev-public DNS,
-           skipped via --hermetic-only)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-recovery.sh {{.CLI_ARGS}}
-
-  test:dogfood:device:
-    desc: |
-      T5.1 of plan 2026-06-05-dashboard-journey-j05-device-success — aggregate
-      dogfood wrapper for Journey J-05 Device Success. Invokes:
-        1. T4.2 hermetic syntax check (LIVE bash structure regression gate)
-        2. T2.1 hermetic helm-values check (Hydra post_device_done_url contract)
-        3. vitest hermetic suite (device-success.test.tsx — 9 tests)
-        4. Playwright headless (e2e/device-success.spec.ts — 2 cenários,
-           SKIP=FAIL by default per EC-5; override with --allow-skip)
-        5. T4.2 LIVE bash (3 cenários A/B/C against dev-public DNS,
-           skipped via --hermetic-only)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json --allow-skip.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-device.sh {{.CLI_ARGS}}
-
-  test:dogfood:project-connect:
-    desc: |
-      T6.2 of plan 2026-06-05-dashboard-journey-j09-project-connect — aggregate
-      dogfood wrapper for Journey J-09 Project Connect. Invokes:
-        1. T4.1 hermetic syntax check (LIVE bash structure regression gate)
-        2. vitest project-connect.test.tsx (T1.2 + T2.2 + T3.1 — 10 tests)
-        3. Go engine tests (TestListRepositories + TestRepositories_Connect)
-        4. Go cloud tests (TestInitiateInstall + TestCallback — 14 tests)
-        5. Go webhook tests (TestWebhook + counter + correlation_id)
-        6. Playwright headless (e2e/project-connect.spec.ts — 4 cenários,
-           SKIP=FAIL by default per EC-5; override with --allow-skip)
-        7. T4.1 LIVE bash (4 cenários A/B/C/D against dev-public GitHub
-           webhook endpoint; SKIP if LOOPZERO_GITHUB_WEBHOOK_SECRET unset;
-           full bypass via --hermetic-only)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json --allow-skip.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-project-connect.sh {{.CLI_ARGS}}
-
-  test:dogfood:deployments:
-    desc: |
-      T7.3 of plan 2026-06-06-dashboard-journey-j17-deployments-realtime —
-      aggregate dogfood wrapper for Journey J-17 Deployments. Invokes:
-        1. T7.2 hermetic syntax check (LIVE bash structure regression gate)
-        2. vitest J-17 hooks + pages (use-deployments-list-stream,
-           use-deployments, deployments.tsx — 7+4+4 tests)
-        3. Go API tests for the J-17 backend surface
-           (api/internal/buildplane/argo + loki + routes — covers Layer 1+2+3 wrap,
-           LogQL filter, build_list + logs handlers)
-        4. T7.2 LIVE bash (4 cenários A/B/C/D against dev-public — REST
-           list + SSE wiring + Loki marker pipeline + preflight)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-deployments.sh {{.CLI_ARGS}}
-
-  test:dogfood:secrets:
-    desc: |
-      T6.2 of plan 2026-06-06-dashboard-journey-j22-secrets-crud v1.2.1 —
-      aggregate dogfood wrapper for Journey J-22 Secrets CRUD. Invokes:
-        1. T5.4 hermetic syntax check (23 assertions on the LIVE bash shape)
-        2. vitest J-22 (35 specs / 9 files: dotenv parser + use-secrets
-           env filter + 4 mutations + SecretsTable D1 masking +
-           AddSecretSheet canonical + RotateSecretDialog EC-13
-           expected_version + DeleteSecretDialog EC-19 case-sensitive +
-           BulkUploadSheet preview invariant + page URL state)
-        3. Go SecretHandler.Bulk tests (5 specs covering T1.1 results-
-           length invariant + T1.2 audit-per-key + T1.3 plan-limit 402 +
-           EC-18 size cap 413 + T5.2 EC-14 duplicate-key 400)
-        4. T5.3 LIVE bash (4 scenarios A create / B rotate-upsert /
-           C bulk / D ESO sync) against dev-public
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-secrets.sh {{.CLI_ARGS}}
-
-  test:dogfood:login:
-    desc: |
-      T5.2 of plan 2026-06-16-m0-j01-login-polish v1.1 SHIPPABLE 100.0 —
-      aggregate dogfood wrapper for J-01 Login polish (M0 Plan A v0.19.0).
-      Suite 0 pre-flight gates (per ADR D5):
-        - patch-kratos --check-only (read-only Cleanroom-survival gate, EC-9)
-        - Hydra OAuth clients probe ≥ 3 clients
-      Suites:
-        1. T4.4 hermetic syntax (19 assertions)
-        2. vitest J-01 (error-mapper + return-to + safe-redirect + 3 components, 46+ specs)
-        3. T4.2 LIVE bash dev-public scenarios A-E (OPERATOR HARD STOP)
-        4. Playwright OAuth denial (SKIP when no chromium)
-      Flags: --hermetic-only --live-only --skip-playwright --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-login.sh {{.CLI_ARGS}}
-
-  test:dogfood:register:
-    desc: |
-      M0 J-02 Register — aggregate dogfood wrapper.
-      Suites: hermetic syntax + loopzero-cloud go test ./internal/routes -run TestMe_
-      (provisioning snapshot T1.2 + lazy starter provision T1.3) + dashboard
-      vitest (register + completing-screen + provisioning hook) + LIVE bash
-      (dev-public, OPERATOR HARD STOP). Flags: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-register.sh {{.CLI_ARGS}}
-
-  test:dogfood:verification:
-    desc: |
-      M0 J-03 Verification — aggregate dogfood wrapper.
-      Suites: hermetic syntax + dashboard vitest (verification + ResendCooldownButton)
-      + LIVE bash (dev-public, OPERATOR HARD STOP). Flags: --hermetic-only
-      --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-verification.sh {{.CLI_ARGS}}
-
-  test:dogfood:overview:
-    desc: |
-      M1 J-06 Overview — aggregate dogfood wrapper.
-      Suites: hermetic syntax + dashboard vitest (useOverviewKPIs + OverviewKPIStrip
-      + overview page) + engine build_stats handler tests + LIVE bash (dev-public,
-      OPERATOR HARD STOP). Flags: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-overview.sh {{.CLI_ARGS}}
-
-  test:dogfood:domains:
-    desc: |
-      T5.2 of plan 2026-06-06-dashboard-journey-j11-domains v1.1 SHIPPABLE
-      93.2 — aggregate dogfood wrapper for the J-11 Domains polish slice.
-      Invokes:
-        1. T4.3 hermetic syntax test for the LIVE bash test (19 assertions)
-        2. vitest J-11 hooks + components — 20 specs GREEN
-        3. T4.2 LIVE bash dev-public-domains scenarios A+B+C
-           (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-domains.sh {{.CLI_ARGS}}
-
-  test:dogfood:readiness:
-    desc: |
-      T5.2 of plan 2026-06-06-dashboard-journey-j21-readiness v1.1 SHIPPABLE
-      94.0 — aggregate dogfood wrapper for the J-21 Readiness Score slice.
-      Invokes:
-        1. T4.4 hermetic syntax test for the LIVE bash test (15 assertions)
-        2. vitest J-21 hooks + components — 14 specs GREEN
-        3. T4.3 LIVE bash dev-public-readiness scenarios A+B
-           (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-readiness.sh {{.CLI_ARGS}}
-
-  test:dogfood:all:
-    desc: |
-      Phase 3+6 of plan 2026-06-15-100pct-dashboard-coverage-roadmap —
-      umbrella runner that invokes EVERY per-journey dogfood wrapper.
-      Maps to sponsor goal "Dogfood --full → all 12 dogfood wrappers".
-
-      Modes (exactly one required, passed via CLI_ARGS):
-        --hermetic-only  CI-safe (no cluster needed, ~5min)
-        --live-only      Operator + sponsor JUNTOS gate
-                         (requires Cleanroom TOTAL precedence)
-
-      Currently aggregates 12 wrappers covering 12 delivered journeys
-      (J-04/J-05/J-09/J-10/J-11/J-17+J-19/J-20/J-21/J-22 x2/J-23/J-25).
-      Roadmap Phase 3 adds 11 more wrappers for backlog journeys
-      (J-01/J-02/J-03/J-06/J-12/J-13/J-14/J-15/J-16/J-18/J-24).
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-all.sh {{.CLI_ARGS}}
-
-  test:dogfood:scale:
-    desc: |
-      T1.4 of plan 2026-06-15-code-review-49-findings-remediation (R1-F1
-      BLOCKER closure) — aggregate dogfood wrapper for the J-20 Scale
-      slice. Lines up with the J-21 + J-11 + J-19 + J-22 + J-25 canonical
-      3-script triplet pattern that J-20 v1.1 was missing.
-      Invokes:
-        1. T1.2 hermetic syntax test for the LIVE bash test (24 assertions)
-        2. Go pkg/enforcement scale tests (EC-2 + EC-3 + EC-4 absorption)
-        3. vitest J-20 scale components + hooks
-        4. T1.1 LIVE bash dev-public-scale-flow scenarios A+B+C
-           (OPERATOR HARD STOP per ADR D5 + cleanroom-up-live-test-mandate.md)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-scale.sh {{.CLI_ARGS}}
-
-  test:dogfood:secrets-openbao:
-    desc: |
-      T5.2 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 —
-      aggregate dogfood wrapper for the J-22 OpenBao Transit + ESO Sync
-      chain. Invokes:
-        1. T4.2 hermetic syntax check (38 assertions on the T4.1 LIVE
-           script shape)
-        2. go test -race ./pkg/vault/... (31 specs: TransitClient base
-           + EC-04 singleflight + EC-06 auto-create + Zeroize + Redaction
-           + RateLimit + EC-08 LRU eviction)
-        3. go test -race ./api/internal/routes (14 TestSecretBulk specs
-           covering T1.1 k8sSync wire + T1.2 cross-tenant 404 + T2.3
-           transit Encrypt + EC-01 continue-best-effort + EC-02 per-env
-           sync_status + EC-03 byte-identical 404)
-        4. T4.1 LIVE 6-scenario zero-leak proof against dev-public
-           (A PG vault:v1: prefix / B workload K8s Secret / C pod printenv
-           / D kubectl logs no leak / E kubectl describe no value leak /
-           F sentinel only in tenant ns) — operator HARD STOP
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-secrets-openbao.sh {{.CLI_ARGS}}
 
   test:dogfood:secrets-openbao:rehearsal:
     desc: |
@@ -1048,49 +825,6 @@ tasks:
     cmds:
       - bash infra/tests/e2e/live/dev-public-secrets-zero-leak_test.sh --rehearsal {{.CLI_ARGS}}
 
-  test:dogfood:environments:
-    desc: |
-      T5.1 of plan 2026-06-06-dashboard-journey-j10-environments v1.1 —
-      aggregate dogfood wrapper for Journey J-10 Environments. Invokes:
-        1. T4.4 hermetic syntax check (LIVE bash structure regression gate)
-        2. vitest J-10 dialogs + hooks + KPI + 402 modal (5 spec files,
-           26 specs: use-environments mutations, delete-environment-dialog,
-           promote-dialog canonical {from,to}, environment-kpi-row,
-           plan-limit-upgrade-modal)
-        3. Go API tests for the J-10 backend surface — promote handler
-           edge cases (11 tests: happy + 401 + 404 project + 400 from/to
-           missing + 404 no-active + 400 same-env + 409 lock + body code
-           assertions + RegressionV10BodyShape locking canonical
-           {from,to} vs v1.0 buggy {from_environment,to_environment})
-        4. T4.3 LIVE bash (4 cenários A create / B delete / C promote
-           canonical body shape / D preflight against dev-public)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-environments.sh {{.CLI_ARGS}}
-
-  test:dogfood:preview:
-    desc: |
-      J-23 #64 of the 4-task batch (sponsor verbatim 2026-06-07
-      "Adicionar teste de PR preview ao dogfood wrapper") — aggregate
-      dogfood wrapper for the preview-canonical chain. Invokes:
-        1. Hermetic syntax check on the LIVE bash test
-        2. Go canonical-destination helper unit tests (#69 fix in
-           tenant_gitops.go + tenant_controller.go)
-        3. Ginkgo preview controller envtest specs (#67 SA on
-           canonical preview namespace) — skipped with --skip-envtest
-        4. LIVE bash scenarios A-E against the cluster:
-           A pre-flight tenant + project in PG
-           B RBAC #65 — tenant-operator SA can list previewenvironments
-           C SA #67 — loopzero-app on canonical preview ns + automount=false
-           D destination #69 — ArgoCD App namespace matches canonical
-              loopzero-<tenant>-<project>-<env> formula
-           E TLS #68 — HTTPS via wildcard *.preview-dev.loopzero.example
-              returns 200 with Let's Encrypt cert (DNS-01 issued)
-      Flags forwarded to wrapper: --hermetic-only --live-only --json
-      --skip-envtest.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/dogfood-preview.sh {{.CLI_ARGS}}
-
   validate:slos:
     desc: |
       Validates Sloth SLO files in infra/sloth/ (Coverage Matrix #8 — closes
@@ -1111,16 +845,16 @@ tasks:
       prometheusrule-pulumi-state.yaml during iter 17 (medium→warning,
       high→critical normalization).
     cmds:
-      - python3 infra/helm/monitoring/validate-rules.py
+      - python3 infra/helm/monitoring/validate_rules.py
 
   validate:k8s-versions:
     desc: |
       Validates that K8s versions in Pulumi.{stack}.yaml are still supported by
       DigitalOcean. DOKS rotates patch versions ~quarterly — catches stale slugs
-      before bootstrap fails with 422 invalid version slug. Sprint 8 v3.2 / Pilar 2.
+      before bootstrap fails with 422 invalid version slug. Sprint 8 v3.2 / Pillar 2.
     cmds:
       - |
-        python3 infra/scripts/validate/k8s-versions.py
+        python3 infra/scripts/validate/k8s_versions.py
 
   chaos:install:
     desc: |
@@ -1133,8 +867,8 @@ tasks:
         set -e
         cd infra/helm/chaos-mesh
         helm dependency update
-        # Volta pela raiz do PROPRIO checkout. Era um caminho absoluto de uma
-        # maquina so — o alvo falhava em qualquer outro clone.
+        # Go back through the root of THIS checkout. It used to be an absolute path from
+        # a single machine — the target failed on any other clone.
         cd "{{.ROOT_DIR}}"
         for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
                     ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
@@ -1173,7 +907,7 @@ tasks:
     desc: |
       Composite Sprint 8 validation — runs all three Sprint 8 v3.2 checks
       (helm-charts, k8s-versions, manifests) plus pulumi vitest suite.
-      Use as PR gate. Sprint 8 v3.2 / Pilar 2.
+      Use as PR gate. Sprint 8 v3.2 / Pillar 2.
     cmds:
       - task: validate:helm-charts
       - task: validate:k8s-versions
@@ -1354,21 +1088,21 @@ tasks:
   helm:render:test:chart:
     desc: |
       Run render-time tests for a SINGLE chart (alias for `task helm:test:chart`).
-      Usage: task helm:render:test:chart -- loopzero-api
+      Usage: task helm:render:test:chart -- loopzero-api-published
     cmds:
       - task: helm:test:chart
 
   # ============================================================================
   # Pre-release test rigor — plan 2026-06-08-pre-release-test-rigor v1.2
   # Per ADR D1 (canonical entry) + ADR D8 (wall-clock 120 min budget).
-  # 4 Cenários extend cleanroom + dogfood + chaos-test + live-proof so the
+  # 4 Scenarios extend cleanroom + dogfood + chaos-test + live-proof so the
   # suite catches the 5 LIVE-only bugs that slipped past the prior gates
   # (dashboard-screens-review-fixes T5.3 sponsor walkthrough).
   # ============================================================================
 
   test:pre-release-rigor:scenario-2:
     desc: |
-      Cenário 2 (baseline match) — runs the cleanroom Phase 0 + Phase 5
+      Scenario 2 (baseline match) — runs the cleanroom Phase 0 + Phase 5
       baseline-capture + diff per T1.1 + T1.2. Verifies post-rebuild state
       structurally matches the pre-rebuild snapshot (volatile fields EC-7
       normalized). Internal budget ~45 min for full cleanroom; this task
@@ -1390,7 +1124,7 @@ tasks:
 
   test:pre-release-rigor:scenario-1:
     desc: |
-      Cenário 1 (webhook → autodeploy → HTTPS 200 chain) — runs T2.2 LIVE
+      Scenario 1 (webhook → autodeploy → HTTPS 200 chain) — runs T2.2 LIVE
       bash chain. EC-13 absorption: when invoked standalone (without
       scenario-2 having run first), the "baseline match" assertion is
       SKIP — the chain validation still proceeds. Plan T2.2.
@@ -1402,39 +1136,18 @@ tasks:
         fi
         bash infra/tests/e2e/live/dev-public-webhook-chain_test.sh
 
-  test:pre-release-rigor:scenario-4:
-    desc: |
-      Cenário 4 (dashboard API sanity via curl) — runs T3.1 live-proof
-      --check=api-sanity (4 endpoint shape assertions, catches iter-20
-      BuildListItem.Apps + T5.3 ProjectHealthCard regression classes).
-      Internal budget 5 min. Plan T3.1.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh --check=api-sanity
-
-  test:pre-release-rigor:scenario-3:
-    desc: |
-      Cenário 3 (chaos + webhook concurrent) — runs T4.1 C11 + T4.2 C12
-      sequentially. Internal budget 60 min per ADR D8 (25 min C11 + 30 min
-      C12 + 5 min cleanup margin). Plan T4.1 + T4.2.
-    cmds:
-      - bash infra/scripts/local/chaos-scenarios/c11-webhook-concurrent-podkill.sh
-      - bash infra/scripts/local/chaos-scenarios/c12-simul-prs-during-partition.sh
-
   test:pre-release-rigor:
     desc: |
-      Umbrella — runs all 4 Cenários of plan 2026-06-08-pre-release-test-rigor
-      in dependency order per ADR D1: scenario-2 (baseline) → scenario-1
-      (chain) → scenario-4 (api-sanity) → scenario-3 (chaos).
+      Umbrella — runs the pre-release rigor scenarios of plan
+      2026-06-08-pre-release-test-rigor in dependency order per ADR D1:
+      scenario-2 (baseline, ~45 min cleanroom) → scenario-1 (chain, ~20 min
+      webhook end-to-end).
 
-      (EC-4 / ADR D8) wall-clock budget 120 min total — revised upward
-      per ADR D8 + EC-4 absorption from the prior plan estimate. Per-Cenário
-      internal budgets:
-        scenario-2 baseline   ~45 min cleanroom
-        scenario-1 chain      ~20 min webhook end-to-end
-        scenario-4 api-sanity ~5 min
-        scenario-3 chaos      ~60 min (C11 25 + C12 30 + margin)
-      = 130 min real worst case; 120 min documented budget assumes
-      scenario-3 + scenario-4 partial overlap is operator-driven.
+      Scenario 3 (chaos C11/C12) and scenario 4 (api-sanity live-proof) were
+      retired: their scripts were deleted, so the tasks could only fail with
+      "No such file". Chaos coverage lives in chaos:v2:hermetic and the
+      live-proof checks were absorbed into the counter-proof chain
+      (infra/tests/livetest/counterproof, Layer 8) run by chain:v2:full.
 
       Default Task semantics provide fail-fast — if any scenario exits
       non-zero, the umbrella aborts (per ADR D6). No `ignore_error: true`
@@ -1444,18 +1157,20 @@ tasks:
     cmds:
       - task: test:pre-release-rigor:scenario-2
       - task: test:pre-release-rigor:scenario-1
-      - task: test:pre-release-rigor:scenario-4
-      - task: test:pre-release-rigor:scenario-3
 
   # T3.1+T3.5 of plan canonical-tests-rewrite-v2 v1.0 per ADR-2026-06-17-T3 D1.
   # Canonical chain runner v2 — replaces archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh.
   cleanroom:v2:
     desc: |
-      T3.1 v2 cleanroom canonical chain (Ginkgo) — 6 fases Phase 0..5.
+      T3.1 v2 cleanroom canonical chain (Ginkgo) — 6 phases, Phase 0..5.
       Wall-clock budget ~30-45min. Requires LIVE k3d clusters.
       Phases: baseline pre + clean:all + setup + tilt up + doctor + baseline post-diff.
     cmds:
-      - go test -tags=live ./infra/tests/livetest/cleanroom/... -count=1 -timeout 1h -v
+      # The spec deletes the k3d clusters, so it needs explicit consent; without it
+      # every spec skips and this task used to exit 0 having run nothing (#393).
+      # Only the `full` spec: the other two are partial chains, not the canonical run.
+      # -ginkgo.timeout is separate from `go test -timeout` (Ginkgo defaults to 60min).
+      - LOOPZERO_CLEANROOM_DESTROY=1 go test -tags=live ./infra/tests/livetest/cleanroom/... -count=1 -timeout 2h -v -args -ginkgo.label-filter=full -ginkgo.timeout=2h
 
   cleanroom:v2:hermetic:
     desc: |
@@ -1464,7 +1179,7 @@ tasks:
     cmds:
       - go test ./infra/tests/livetest/cleanroom/... -count=1 -timeout 1m
 
-  # T3.2 + T3.3 + T3.4 of plan canonical-tests-rewrite-v2 v1.0 — v2 dogfood / chaos / contra-prova
+  # T3.2 + T3.3 + T3.4 of plan canonical-tests-rewrite-v2 v1.0 — v2 dogfood / chaos / counter-proof
   dogfood:v2:hermetic:
     desc: |
       T3.2 v2 dogfood helper unit tests (hermetic). Validates Env + JWT loader +
@@ -1472,10 +1187,21 @@ tasks:
     cmds:
       - go test ./infra/tests/livetest/dogfood/... -count=1 -timeout 1m
 
+  dogfood:v2:journey:
+    desc: |
+      Run ONE v2 dogfood journey (LIVE Ginkgo spec) by its label, e.g.
+      `task dogfood:v2:journey JOURNEY=j04`. Replaces the per-journey
+      test:dogfood:* wrappers, which ran deleted archive/canonical-tests-v1
+      scripts. Requires dev-public UP + JWT seed (see dogfood:v2).
+    requires:
+      vars: [JOURNEY]
+    cmds:
+      - go test -tags=live ./infra/tests/livetest/dogfood/... -count=1 -timeout 1h -v -args -ginkgo.label-filter={{.JOURNEY}}
+
   dogfood:v2:
     desc: |
       T3.2 v2 dogfood per-journey LIVE Ginkgo specs. Requires dev-public UP +
-      JWT seed at ~/.loopzero/local-dogfood-token.txt. Gated por build tag `live`.
+      JWT seed at ~/.loopzero/local-dogfood-token.txt. Gated by build tag `live`.
     cmds:
       - go test -tags=live ./infra/tests/livetest/dogfood/... -count=1 -timeout 1h -v
 
@@ -1486,13 +1212,13 @@ tasks:
     cmds:
       - go test ./infra/tests/livetest/chaos/... -count=1 -timeout 1m
 
-  contraprova:v2:hermetic:
+  counterproof:v2:hermetic:
     desc: |
-      T3.4 v2 contra-prova helper unit tests (hermetic). Validates 8 camadas
+      T3.4 v2 counter-proof helper unit tests (hermetic). Validates 8 layers
       (chaos summary byte-grep / JUnit XML parse / git state / live-proof
       absorption per ADR D3). No LIVE deploy needed.
     cmds:
-      - go test ./infra/tests/livetest/contraprova/... -count=1 -timeout 1m
+      - go test ./infra/tests/livetest/counterproof/... -count=1 -timeout 1m
 
   livetest:v2:hermetic:
     desc: |
@@ -1502,30 +1228,30 @@ tasks:
       - task: cleanroom:v2:hermetic
       - task: dogfood:v2:hermetic
       - task: chaos:v2:hermetic
-      - task: contraprova:v2:hermetic
+      - task: counterproof:v2:hermetic
 
   # T3.5 of plan canonical-tests-rewrite-v2 v1.0 — chain runner v2 (Taskfile composition per ADR D2)
   chain:v2:full:
     desc: |
-      T3.5 v2 canonical chain runner — composes 6 fases via Taskfile.
+      T3.5 v2 canonical chain runner — composes 6 phases via Taskfile.
       Replaces archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh
-      Per ADR D2: bash mantido apenas como wrapper de `task X` calls; chain
+      Per ADR D2: bash kept only as a wrapper of `task X` calls; chain
       orchestration moves to Taskfile composition.
-      Wall-clock budget ~60-90min (~30-45min cleanroom + ~5min seeds + ~30-45min dogfood + ~15min contra-prova).
+      Wall-clock budget ~60-90min (~30-45min cleanroom + ~5min seeds + ~30-45min dogfood + ~15min counter-proof).
       Pre-condition: dev-public infra UP + JWT seeded.
     cmds:
-      - task: cleanroom:v2  # T3.1 6 fases
+      - task: cleanroom:v2  # T3.1 6 phases
       - bash infra/scripts/local/seed-post-cleanroom-all.sh --verify
       - task: dogfood:v2    # T3.2 per-journey LIVE specs
-      - go test -tags=live ./infra/tests/livetest/contraprova/... -count=1 -timeout 30m -v
-      - echo "T3.5 chain:v2:full ENGINEERING-COMPLETE — sponsor CP3 JUNTOS gate pending"
+      - go test -tags=live ./infra/tests/livetest/counterproof/... -count=1 -timeout 30m -v
+      - echo "T3.5 chain:v2:full ENGINEERING-COMPLETE — sponsor CP3 TOGETHER gate pending"
 
   chain:v2:engineering:
     desc: |
-      T3.5 engineering-only subset (cleanroom + dogfood + contra-prova,
-      no sponsor JUNTOS gate). Use for halt-loop iteration during Phase 3+4 dev.
+      T3.5 engineering-only subset (cleanroom + dogfood + counter-proof,
+      no sponsor TOGETHER gate). Use for halt-loop iteration during Phase 3+4 dev.
     cmds:
       - task: cleanroom:v2:hermetic
       - task: dogfood:v2:hermetic
       - task: chaos:v2:hermetic
-      - task: contraprova:v2:hermetic
+      - task: counterproof:v2:hermetic

@@ -28,12 +28,11 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- with .Values.global.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
+      {{- with (include "loopzero-common.imagePullSecrets" .) }}
+      {{- . | nindent 6 }}
       {{- end }}
       serviceAccountName: {{ include "loopzero-common.serviceAccountName" . }}
-      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken | default false }}
+      automountServiceAccountToken: {{ include "loopzero-common.automountServiceAccountToken" . }}
       # SSE streams (deploy.*, rollout.step) are served from this Deployment.
       # Without this the Kubernetes default of 30s applies and a rolling update
       # cuts a stream whose canary the renderer allows 300s to finish.
@@ -80,16 +79,10 @@ spec:
             - secretRef:
                 name: loopzero-service-auth
                 optional: true
-          {{- if or .Values.kubeconfig.build.existingConfigMap .Values.kubeconfig.cell0.existingConfigMap }}
+            {{- include "loopzero-common.additionalSecretSources" . | nindent 12 }}
+          {{- with (include "loopzero-api.env" . | trim) }}
           env:
-            {{- if .Values.kubeconfig.build.existingConfigMap }}
-            - name: BUILD_KUBECONFIG
-              value: /etc/loopzero/build-kubeconfig
-            {{- end }}
-            {{- if .Values.kubeconfig.cell0.existingConfigMap }}
-            - name: CELL_0_KUBECONFIG
-              value: /etc/loopzero/cell-0-kubeconfig
-            {{- end }}
+            {{- . | nindent 12 }}
           {{- end }}
           {{- include "loopzero-common.startupProbe" . | nindent 10 }}
           {{- with .Values.livenessProbe }}
@@ -103,8 +96,12 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - name: tmp
-              mountPath: /tmp
+            {{- include "loopzero-common.tmpVolumeMount" . | nindent 12 }}
+            {{- with .Values.kubeconfig.clusterSecret.name }}
+            - name: cluster-kubeconfigs
+              mountPath: /etc/loopzero/kubeconfigs
+              readOnly: true
+            {{- end }}
             {{- if .Values.kubeconfig.build.existingConfigMap }}
             - name: build-kubeconfig
               mountPath: /etc/loopzero/build-kubeconfig
@@ -119,7 +116,7 @@ spec:
             {{- end }}
             {{- if .Values.vault.enabled }}
             # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — projected SA
-            # token with bounded audience + expiration. Read by pkg/vault.Client
+            # token with bounded audience + expiration, for a Kubernetes-auth Vault login
             # at this path; sent to auth/k8s-core/login as JWT. TokenReview on
             # Vault side validates audience claim matches `vault.loopzero.io`,
             # preventing token re-use against the K8s API or other audiences.
@@ -128,9 +125,13 @@ spec:
               readOnly: true
             {{- end }}
       volumes:
-        - name: tmp
-          emptyDir:
-            sizeLimit: 512Mi
+        {{- include "loopzero-common.tmpVolume" . | nindent 8 }}
+        {{- with .Values.kubeconfig.clusterSecret.name }}
+        - name: cluster-kubeconfigs
+          secret:
+            secretName: {{ . | quote }}
+            optional: {{ $.Values.kubeconfig.clusterSecret.optional }}
+        {{- end }}
         {{- if .Values.kubeconfig.build.existingConfigMap }}
         - name: build-kubeconfig
           configMap:
@@ -152,7 +153,7 @@ spec:
         # audience=vault.loopzero.io binds the token cryptographically to the
         # Vault TokenReview check; REDACTED_SECRET_043 (1h) caps blast
         # radius if pod compromised + token exfiltrated. Kubelet auto-rotates
-        # token before expiry — pkg/vault.Client re-reads at Login() time.
+        # token before expiry; a Kubernetes-auth client must re-read it at login.
         - name: vault-sa-token
           projected:
             sources:

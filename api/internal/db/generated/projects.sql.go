@@ -93,10 +93,11 @@ func (q *Queries) GetProjectByName(ctx context.Context, db DBTX, arg GetProjectB
 	return i, err
 }
 
-const insertProject = `-- name: InsertProject :exec
+const insertProject = `-- name: InsertProject :one
 
 INSERT INTO projects (id, tenant_id, name, created_by)
 VALUES ($1, $2, $3, $4)
+RETURNING created_at
 `
 
 type InsertProjectParams struct {
@@ -121,15 +122,18 @@ type InsertProjectParams struct {
 // contract.
 // Caller supplies id (generated via GenerateProjectID() helper).
 // 23505 on (tenant_id, name) UNIQUE → domain.ErrProjectExists in
-// wrapper.
-func (q *Queries) InsertProject(ctx context.Context, db DBTX, arg InsertProjectParams) error {
-	_, err := db.Exec(ctx, insertProject,
+// wrapper. Returns the stored creation time, which the create response
+// carries (#411).
+func (q *Queries) InsertProject(ctx context.Context, db DBTX, arg InsertProjectParams) (pgtype.Timestamptz, error) {
+	row := db.QueryRow(ctx, insertProject,
 		arg.ID,
 		arg.TenantID,
 		arg.Name,
 		arg.CreatedBy,
 	)
-	return err
+	var created_at pgtype.Timestamptz
+	err := row.Scan(&created_at)
+	return created_at, err
 }
 
 const listProjectsByTenant = `-- name: ListProjectsByTenant :many
@@ -215,8 +219,8 @@ SELECT
   COALESCE(active_release.status, '')::text AS active_release_status_raw,
   -- T3.1 of plan dashboard-badge-data-plane-poller — closes Red Team
   -- loopzero-cloud#128. Surfaces the most recent data-plane readiness
-  -- snapshot persisted by the DataPlanePoller (Runnable in
-  -- loopzero-app-operator) into the dashboard /projects list so the badge
+  -- snapshot persisted by the api's readiness poller
+  -- (environments.ReadinessPoller) into the dashboard /projects list so the badge
   -- can distinguish control-plane ACTIVE + data-plane-serving from
   -- control-plane ACTIVE + data-plane-down. Prefers ` + "`" + `kind='permanent'` + "`" + `
   -- env_targets (production-flavor) because the badge on the list is
@@ -237,7 +241,7 @@ LEFT JOIN LATERAL (
   -- (non-preview) env; a project with zero permanent envs is by
   -- definition preview-only at the env_targets layer. Combined with
   -- the latest_build_environment + active_release_status signals in
-  -- enforcement.MapProjectStatus, this is the canonical disambiguator
+  -- projectstatus.MapProjectStatus, this is the canonical disambiguator
   -- the dashboard's "Live envs" / "URL hero" pair was missing.
   SELECT COUNT(*) AS cnt
   FROM environment_targets et
@@ -275,17 +279,27 @@ LEFT JOIN LATERAL (
 ) latest_build ON true
 LEFT JOIN LATERAL (
   -- Pick the most recent non-terminal release. The release-state SoT
-  -- prefers ACTIVE (currently serving) > ROLLING_BACK (in-flight) >
-  -- FAILED / ROLLBACK_FAILED (release-level failure). Terminal
-  -- historical states (SUPERSEDED, ROLLED_BACK, CANCELLED) are
-  -- excluded so the mapper falls back to the latest build instead of
-  -- attributing a stale release to the current truth. Sponsor
-  -- LIVE-caught 2026-06-18 (loopzerokit-example).
+  -- prefers ACTIVE (currently serving) > in flight (ROLLING_BACK, READY,
+  -- PENDING) > release-level failure (ROLLBACK_FAILED, SYNC_FAILED,
+  -- GIT_MIRROR_FAILED, DRIFT_ALERT), newest first within a rank. Historical
+  -- states (SUPERSEDED, ROLLED_BACK, CANCELLED, ARCHIVED) are excluded so the
+  -- mapper falls back to the latest build instead of attributing a stale
+  -- release to the current truth. Sponsor LIVE-caught 2026-06-18
+  -- (loopzerokit-example). The status set is the one
+  -- api/internal/projectstatus.MapProjectStatus decides on.
   SELECT r.status
   FROM releases r
   WHERE r.tenant_id = p.tenant_id AND r.project_id = p.name
-    AND r.status IN ('ACTIVE', 'ROLLING_BACK', 'FAILED', 'ROLLBACK_FAILED')
-  ORDER BY r.created_at DESC, r.id DESC
+    AND r.status IN ('ACTIVE', 'ROLLING_BACK', 'READY', 'PENDING',
+                     'ROLLBACK_FAILED', 'SYNC_FAILED', 'GIT_MIRROR_FAILED', 'DRIFT_ALERT')
+  ORDER BY CASE r.status
+             WHEN 'ACTIVE' THEN 0
+             WHEN 'ROLLING_BACK' THEN 1
+             WHEN 'READY' THEN 1
+             WHEN 'PENDING' THEN 1
+             ELSE 2
+           END,
+           r.created_at DESC, r.id DESC
   LIMIT 1
 ) active_release ON true
 LEFT JOIN LATERAL (
@@ -344,15 +358,15 @@ type ListProjectsWithSummaryByTenantRow struct {
 //     `framework` indicator. loopzero.yaml apps schema has `type` (server/
 //     static/worker/etc.), not `framework`; the dashboard renders as a
 //     Badge so the type string is the canonical "what is this app" label
-//   - active_release_status_raw: status string of the most recent
-//     ACTIVE-or-mid-flight release (ROLLING_BACK / ROLLBACK_FAILED /
-//     FAILED also surface here so the aggregate mapper can decide).
+//   - active_release_status_raw: status of the release that decides the
+//     project's status — ACTIVE first, then in flight, then a release-level
+//     failure (see the active_release LATERAL below).
 //     Sponsor LIVE-caught 2026-06-18: the dashboard's /projects status
 //     column was misreporting "Failed" for projects whose latest build
 //     was cancelled but whose earlier release was still ACTIVE serving
 //     production. The aggregate status MUST consider release state, not
 //     just latest build. Caller now calls
-//     pkg/enforcement.MapProjectStatus(active_release_status_raw,
+//     api/internal/projectstatus.MapProjectStatus(active_release_status_raw,
 //     last_deploy_status_raw) which prefers the release-state SoT and
 //     falls back to the build state only when no release is consultable.
 //

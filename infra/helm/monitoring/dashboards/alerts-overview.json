@@ -39,7 +39,7 @@
         "y": 0
       },
       "id": 100,
-      "title": "Status Geral",
+      "title": "Overall Status",
       "type": "row",
       "datasource": {
         "type": "prometheus",
@@ -327,77 +327,6 @@
       ]
     },
     {
-      "id": 6,
-      "title": "Registry Health",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 20,
-        "y": 1
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "text": "DOWN",
-                  "color": "red"
-                }
-              },
-              "type": "value"
-            },
-            {
-              "options": {
-                "1": {
-                  "text": "UP",
-                  "color": "green"
-                }
-              },
-              "type": "value"
-            }
-          ]
-        }
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value_and_name"
-      },
-      "targets": [
-        {
-          "expr": "up{job=\"harbor\"} or vector(0)",
-          "legendFormat": "Harbor",
-          "refId": "A"
-        }
-      ]
-    },
-    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -406,7 +335,7 @@
         "y": 6
       },
       "id": 200,
-      "title": "Alertas Ativos — Detalhes",
+      "title": "Active Alerts — Details",
       "type": "row",
       "datasource": {
         "type": "prometheus",
@@ -415,7 +344,7 @@
     },
     {
       "id": 7,
-      "title": "Alertas Firing (tabela descritiva)",
+      "title": "Firing Alerts (descriptive table)",
       "type": "table",
       "datasource": {
         "type": "prometheus",
@@ -427,7 +356,7 @@
         "x": 0,
         "y": 7
       },
-      "description": "Todos os alertas atualmente disparados com contexto completo",
+      "description": "All currently firing alerts with full context",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -566,7 +495,7 @@
         "y": 17
       },
       "id": 300,
-      "title": "Histórico de Alertas",
+      "title": "Alert History",
       "type": "row",
       "datasource": {
         "type": "prometheus",
@@ -575,7 +504,7 @@
     },
     {
       "id": 8,
-      "title": "Alertas ao Longo do Tempo",
+      "title": "Alerts Over Time",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -587,7 +516,7 @@
         "x": 0,
         "y": 18
       },
-      "description": "Timeline mostrando quando cada alerta esteve ativo",
+      "description": "Timeline showing when each alert was active",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -651,7 +580,7 @@
         "y": 26
       },
       "id": 400,
-      "title": "Indicadores que Disparam Alertas",
+      "title": "Indicators That Fire Alerts",
       "type": "row",
       "datasource": {
         "type": "prometheus",
@@ -672,7 +601,7 @@
         "x": 0,
         "y": 27
       },
-      "description": "Alerta dispara quando restarts > 3 em 15min. Mostra restarts por pod para identificar qual está quebrando.",
+      "description": "Alert fires when restarts > 3 in 15min. Shows restarts per pod to identify which one is breaking.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -718,73 +647,6 @@
       ]
     },
     {
-      "id": 10,
-      "title": "Harbor Canary Status (HarborCanaryFailing trigger)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 27
-      },
-      "description": "Alerta dispara quando canary job falha por 10+ min. Mostra status do Harbor e jobs recentes.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 15,
-            "lineInterpolation": "stepAfter"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "text": "DOWN",
-                  "color": "red"
-                }
-              },
-              "type": "value"
-            },
-            {
-              "options": {
-                "1": {
-                  "text": "UP",
-                  "color": "green"
-                }
-              },
-              "type": "value"
-            }
-          ]
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "expr": "up{job=\"harbor\"}",
-          "legendFormat": "Harbor exporter UP",
-          "refId": "A"
-        },
-        {
-          "expr": "kube_job_status_failed{namespace=\"loopzero-system\", job_name=~\"harbor-canary.*\"}",
-          "legendFormat": "Canary failed: {{job_name}}",
-          "refId": "B"
-        }
-      ]
-    },
-    {
       "id": 11,
       "title": "API Latency p99 (LoopZeroHighAPILatency trigger)",
       "type": "timeseries",
@@ -798,7 +660,7 @@
         "x": 0,
         "y": 34
       },
-      "description": "Alerta dispara quando p99 > 2s por 5min. Mostra latency com threshold marcado.",
+      "description": "Alert fires when p99 > 2s for 5min. Shows latency with the threshold marked.",
       "fieldConfig": {
         "defaults": {
           "unit": "s",
@@ -861,7 +723,7 @@
         "x": 12,
         "y": 34
       },
-      "description": "Alerta dispara quando taxa de falha > 30% por 10min. Mostra builds succeeded vs failed.",
+      "description": "Alert fires when the failure rate > 30% for 10min. Shows builds succeeded vs failed.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -932,7 +794,7 @@
     },
     {
       "id": 13,
-      "title": "DB Pool Saturation (headroom for HarborPGPoolExhaustion)",
+      "title": "DB Pool Saturation",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -944,7 +806,7 @@
         "x": 0,
         "y": 41
       },
-      "description": "Alerta dispara quando pool > 90%. Mostra uso atual vs max.",
+      "description": "Alert fires when pool > 90%. Shows current usage vs max.",
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
@@ -1013,7 +875,7 @@
         "x": 12,
         "y": 41
       },
-      "description": "Alerta dispara quando depth > 50. Mostra fila de reconciliação dos operators.",
+      "description": "Alert fires when depth > 50. Shows the operators' reconciliation queue.",
       "fieldConfig": {
         "defaults": {
           "custom": {

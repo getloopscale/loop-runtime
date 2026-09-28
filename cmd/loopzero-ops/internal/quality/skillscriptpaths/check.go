@@ -48,11 +48,14 @@ package skillscriptpaths
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrUnreachableInvocation means a SKILL.md tells an agent to run a script by a path
@@ -60,9 +63,10 @@ import (
 var ErrUnreachableInvocation = errors.New("a skill invokes a script by a path that does not resolve in the layout it runs in — the agent following it gets 'No such file or directory', and which layout it breaks in depends on how the ecosystem was installed")
 
 // ErrSkillsRootMissing means the skills directory is absent, so nothing was checked.
-// Absence is a FAILURE and not a skip: a gate that reports green over a tree it never
-// found is the shape of defect this whole gate exists to refuse.
-var ErrSkillsRootMissing = errors.New("the skills root is absent — nothing was scanned, and a green verdict over an unscanned tree is worthless")
+// The verdict is Skip with this reason printed, never a silent pass: the kit is a
+// gitignored dependency, and a clone without it has nothing of this repository's
+// own to verify.
+var ErrSkillsRootMissing = errors.New("the skills root is absent — it is the installed, gitignored kit, so nothing was verified on this machine")
 
 // invocationRE matches an interpreter followed by a bare `skills/...` path.
 //
@@ -88,6 +92,28 @@ type Outcome struct {
 	SkillsScanned int
 	FilesScanned  int
 	Findings      []Finding
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+	// Unverified is why the check could verify nothing on this machine
+	// (wrapping one of its Err* reasons), or nil.
+	Unverified error
+}
+
+// Verdict is Fail when the check found a violation, Skip when the kit is not
+// installed (a gitignored dependency, absent from every fresh clone — owner
+// decision, 2026-09-26), NotVerified when anything else left it unable to
+// verify, and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Violation != nil:
+		return verdict.Fail
+	case errors.Is(o.Unverified, ErrSkillsRootMissing):
+		return verdict.Skip
+	case o.Unverified != nil:
+		return verdict.NotVerified
+	}
+	return verdict.Pass
 }
 
 // Config selects the tree to scan.
@@ -142,8 +168,11 @@ func Check(cfg Config) (Outcome, error) {
 	root := filepath.Join(cfg.RepoRoot, cfg.SkillsRel)
 
 	entries, err := os.ReadDir(root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return Outcome{Unverified: fmt.Errorf("%w: %s", ErrSkillsRootMissing, root)}, nil
+	}
 	if err != nil {
-		return Outcome{}, fmt.Errorf("%w: %s", ErrSkillsRootMissing, root)
+		return Outcome{}, fmt.Errorf("reading %s: %w", root, err)
 	}
 
 	var out Outcome
@@ -154,8 +183,11 @@ func Check(cfg Config) (Outcome, error) {
 		out.SkillsScanned++
 		skillDoc := filepath.Join(root, e.Name(), "SKILL.md")
 		body, readErr := os.ReadFile(skillDoc)
-		if readErr != nil {
+		if errors.Is(readErr, fs.ErrNotExist) {
 			continue // a skill without a SKILL.md has no instruction to check
+		}
+		if readErr != nil {
+			return out, fmt.Errorf("reading %s: %w", skillDoc, readErr)
 		}
 		out.FilesScanned++
 		rel := filepath.Join(cfg.SkillsRel, e.Name(), "SKILL.md")
@@ -178,8 +210,11 @@ func Check(cfg Config) (Outcome, error) {
 	for _, sub := range []string{"rules", "commands", "."} {
 		dir := filepath.Join(eco, sub)
 		items, derr := os.ReadDir(dir)
+		if errors.Is(derr, fs.ErrNotExist) {
+			continue // an ecosystem without rules/ or commands/ has nothing there to check
+		}
 		if derr != nil {
-			continue
+			return out, fmt.Errorf("reading %s: %w", dir, derr)
 		}
 		for _, it := range items {
 			if it.IsDir() || !strings.HasSuffix(it.Name(), ".md") {
@@ -195,10 +230,13 @@ func Check(cfg Config) (Outcome, error) {
 			doc := filepath.Join(dir, it.Name())
 			body, rerr := os.ReadFile(doc) // #nosec G304 -- path built from the ecosystem root
 			if rerr != nil {
-				continue
+				return out, fmt.Errorf("reading %s: %w", doc, rerr)
 			}
 			out.FilesScanned++
-			rel, _ := filepath.Rel(cfg.RepoRoot, doc)
+			rel, relErr := filepath.Rel(cfg.RepoRoot, doc)
+			if relErr != nil {
+				return out, fmt.Errorf("locating %s under %s: %w", doc, cfg.RepoRoot, relErr)
+			}
 			for i, line := range strings.Split(string(body), "\n") {
 				for _, pth := range scanLine(line) {
 					out.Findings = append(out.Findings, Finding{
@@ -218,7 +256,8 @@ func Check(cfg Config) (Outcome, error) {
 	})
 
 	if len(out.Findings) > 0 {
-		return out, ErrUnreachableInvocation
+		out.Violation = ErrUnreachableInvocation
+		return out, nil
 	}
 	return out, nil
 }

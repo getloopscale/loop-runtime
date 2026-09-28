@@ -39,7 +39,8 @@ const (
 // +kubebuilder:rbac:groups=loopzero.io,resources=gitrepositorybindings,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=gitrepositorybindings/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=gitrepositorybindings/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=argocd,resources=secrets,verbs=get;list;watch;create;update;delete
 type GitRepositoryBindingReconciler struct {
 	client.Client
 	HTTPClient *http.Client
@@ -78,14 +79,8 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
-	// correlation-id from CR annotation into reconcile context (no-op se ausente).
+	// correlation-id from CR annotation into reconcile context (no-op when absent).
 	ctx = correlation.WithID(ctx, binding.GetAnnotations()["loopzero.io/correlation-id"])
-
-	// kstatus universal per ADR-0025 D3 condition #1.
-	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
-		func() *loopzerov1.GitRepositoryBinding { return &loopzerov1.GitRepositoryBinding{} },
-		func(x *loopzerov1.GitRepositoryBinding) *[]metav1.Condition { return &x.Status.Conditions },
-		gitRepositoryBindingDetailTypes)()
 
 	// Handle deletion with finalizer pattern.
 	if !binding.DeletionTimestamp.IsZero() {
@@ -120,7 +115,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 	// Step 1: Resolve credential from the referenced Secret.
 	token, err := r.resolveCredential(ctx, &binding, gen)
 	if err != nil {
-		if statusErr := r.Status().Patch(ctx, &binding, client.MergeFrom(base)); statusErr != nil {
+		if statusErr := r.patchStatus(ctx, &binding, base); statusErr != nil {
 			logger.Error(statusErr, "failed to update binding status after credential resolve error")
 		}
 		return ctrl.Result{RequeueAfter: constants.RequeueRepoBindingOnError}, nil
@@ -131,7 +126,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Step 3: Ensure ArgoCD Secret exists with correct data.
 	if err := r.ensureArgoCDSecret(ctx, &binding, token, hash, gen); err != nil {
-		if statusErr := r.Status().Patch(ctx, &binding, client.MergeFrom(base)); statusErr != nil {
+		if statusErr := r.patchStatus(ctx, &binding, base); statusErr != nil {
 			logger.Error(statusErr, "failed to update binding status after ArgoCD secret error")
 		}
 		return ctrl.Result{RequeueAfter: constants.RequeueRepoBindingOnError}, nil
@@ -154,7 +149,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 	// Step 7: Update observed generation.
 	binding.Status.ObservedGeneration = gen
 
-	if statusErr := r.Status().Patch(ctx, &binding, client.MergeFrom(base)); statusErr != nil {
+	if statusErr := r.patchStatus(ctx, &binding, base); statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
 
@@ -379,4 +374,13 @@ func SetupGitRepositoryBindingController(mgr ctrl.Manager, httpClient *http.Clie
 			Client:     mgr.GetClient(),
 			HTTPClient: httpClient,
 		})
+}
+
+// patchStatus is the single status writer of this controller. It folds the
+// kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
+// with a merge patch off base, so every write carries a Ready condition that
+// agrees with the conditions written beside it.
+func (r *GitRepositoryBindingReconciler) patchStatus(ctx context.Context, binding, base *loopzerov1.GitRepositoryBinding) error {
+	conditions.SetReadinessSummaryViaPkg(&binding.Status.Conditions, binding.Generation, gitRepositoryBindingDetailTypes)
+	return r.Status().Patch(ctx, binding, client.MergeFrom(base))
 }

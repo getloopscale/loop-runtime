@@ -6,12 +6,15 @@ package seed
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
 
 // StripeWebhookEndpointSeed is the Go port of
@@ -62,22 +65,32 @@ type stripeAPIWebhookEndpointList struct {
 	Data []stripeAPIWebhookEndpoint `json:"data"`
 }
 
-func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
+// precondition applies the one Stripe key rule (credshape) and the one
+// capability policy (Deps.MissingInput) shared with stripe-api-keys, so both
+// seeds give the same verdict on the same input.
+func (s *StripeWebhookEndpointSeed) precondition(d Deps) (Result, bool) {
 	if d.Creds == nil {
-		return Result{Verdict: SKIP, Reason: "creds absent (no --creds-file / dev-credentials.json)"}
+		return d.MissingInput(CapabilityBilling, "dev-credentials.json absent"), true
+	}
+	switch err := credshape.ParseStripeSecretKey(d.Creds.Stripe.APIKey); {
+	case errors.Is(err, credshape.ErrStripeKeyPlaceholder):
+		return d.MissingInput(CapabilityBilling, "stripe.api_key placeholder/absent"), true
+	case err != nil:
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("stripe.api_key: %v", err)}, true
+	}
+	return Result{}, false
+}
+
+func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
+	if r, stop := s.precondition(d); stop {
+		return r
 	}
 	apiKey := strings.TrimSpace(d.Creds.Stripe.APIKey)
-	if apiKey == "" {
-		return Result{Verdict: SKIP, Reason: "stripe.api_key empty"}
-	}
-	if !stripeAPIKeyLooksReal(apiKey) {
-		return Result{Verdict: SKIP, Reason: "stripe.api_key placeholder shape (expected rk_/sk_ + test/live)"}
-	}
 
-	base := osGetenvOr(stripeAPIEnv, stripeAPIDefaultBase)
-	targetURL := osGetenvOr(stripeWebhookURLEnv, stripeDefaultWebhookURL)
+	base := d.Host.envOr(stripeAPIEnv, stripeAPIDefaultBase)
+	targetURL := d.Host.envOr(stripeWebhookURLEnv, stripeDefaultWebhookURL)
 
-	existingID, err := stripeFindEndpointByURL(d.Ctx, base, apiKey, targetURL)
+	existingID, err := stripeFindEndpointByURL(d.Ctx, d.Host.stripeHTTP(), base, apiKey, targetURL)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("list endpoints: %v", err)}
 	}
@@ -89,23 +102,23 @@ func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would create Stripe endpoint url=%s + persist whsec + delegate materialize", targetURL)}
 	}
 	if existingID != "" {
-		if err := stripeDeleteEndpoint(d.Ctx, base, apiKey, existingID); err != nil {
+		if err := stripeDeleteEndpoint(d.Ctx, d.Host.stripeHTTP(), base, apiKey, existingID); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("delete stale endpoint %s: %v", existingID, err)}
 		}
 	}
-	created, err := stripeCreateEndpoint(d.Ctx, base, apiKey, targetURL)
+	created, err := stripeCreateEndpoint(d.Ctx, d.Host.stripeHTTP(), base, apiKey, targetURL)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("create endpoint: %v", err)}
 	}
 	if created.ID == "" || created.Secret == "" {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Stripe API did not return id/secret (id=%q whsec=%q)", created.ID, created.Secret)}
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Stripe API did not return id/secret (id=%q, secret present=%t)", created.ID, created.Secret != "")}
 	}
 	if !stripeWhsecCanonical(created.Secret) {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("returned whsec is placeholder shape (prefix=%.12s)", created.Secret)}
+		return Result{Verdict: FAIL, Reason: "Stripe returned a webhook secret with a placeholder shape (whsec_dev_* or not whsec_*)"}
 	}
 
 	// Persist to dev-credentials.json — mode 0600 preserved by writeJSONAtomically.
-	credsPath := stripeCredsPath()
+	credsPath := stripeCredsPath(d.Host)
 	if credsPath == "" {
 		return Result{Verdict: FAIL, Reason: "cannot resolve dev-credentials.json path (LOOPZERO_DEV_CREDENTIALS or $HOME/.loopzero/dev-credentials.json)"}
 	}
@@ -127,19 +140,16 @@ func (s *StripeWebhookEndpointSeed) Run(d Deps) Result {
 
 // Verify probes that the canonical webhook_secret + endpoint remain live.
 func (s *StripeWebhookEndpointSeed) Verify(d Deps) Result {
-	if d.Creds == nil {
-		return Result{Verdict: SKIP, Reason: "creds absent"}
+	if r, stop := s.precondition(d); stop {
+		return r
 	}
 	apiKey := strings.TrimSpace(d.Creds.Stripe.APIKey)
-	if !stripeAPIKeyLooksReal(apiKey) {
-		return Result{Verdict: SKIP, Reason: "stripe.api_key placeholder"}
-	}
 	if !stripeWhsecCanonical(d.Creds.Stripe.WebhookSecret) {
 		return Result{Verdict: FAIL, Reason: "stripe.webhook_secret placeholder — canonical seed did not run"}
 	}
-	base := osGetenvOr(stripeAPIEnv, stripeAPIDefaultBase)
-	targetURL := osGetenvOr(stripeWebhookURLEnv, stripeDefaultWebhookURL)
-	id, err := stripeFindEndpointByURL(d.Ctx, base, apiKey, targetURL)
+	base := d.Host.envOr(stripeAPIEnv, stripeAPIDefaultBase)
+	targetURL := d.Host.envOr(stripeWebhookURLEnv, stripeDefaultWebhookURL)
+	id, err := stripeFindEndpointByURL(d.Ctx, d.Host.stripeHTTP(), base, apiKey, targetURL)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
@@ -150,13 +160,6 @@ func (s *StripeWebhookEndpointSeed) Verify(d Deps) Result {
 }
 
 // --- Stripe API helpers ---
-
-func stripeAPIKeyLooksReal(k string) bool {
-	if !strings.HasPrefix(k, "rk_") && !strings.HasPrefix(k, "sk_") {
-		return false
-	}
-	return strings.Contains(k, "_test_") || strings.Contains(k, "_live_")
-}
 
 func stripeWhsecCanonical(v string) bool {
 	v = strings.TrimSpace(v)
@@ -169,13 +172,13 @@ func stripeWhsecCanonical(v string) bool {
 	return true
 }
 
-func stripeFindEndpointByURL(ctx context.Context, base, apiKey, targetURL string) (string, error) {
+func stripeFindEndpointByURL(ctx context.Context, client *http.Client, base, apiKey, targetURL string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/webhook_endpoints?limit=100", nil)
 	if err != nil {
 		return "", err
 	}
 	req.SetBasicAuth(apiKey, "")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -195,13 +198,13 @@ func stripeFindEndpointByURL(ctx context.Context, base, apiKey, targetURL string
 	return "", nil
 }
 
-func stripeDeleteEndpoint(ctx context.Context, base, apiKey, id string) error {
+func stripeDeleteEndpoint(ctx context.Context, client *http.Client, base, apiKey, id string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, base+"/v1/webhook_endpoints/"+id, nil)
 	if err != nil {
 		return err
 	}
 	req.SetBasicAuth(apiKey, "")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -212,7 +215,7 @@ func stripeDeleteEndpoint(ctx context.Context, base, apiKey, id string) error {
 	return nil
 }
 
-func stripeCreateEndpoint(ctx context.Context, base, apiKey, targetURL string) (stripeAPIWebhookEndpoint, error) {
+func stripeCreateEndpoint(ctx context.Context, client *http.Client, base, apiKey, targetURL string) (stripeAPIWebhookEndpoint, error) {
 	body := url.Values{}
 	body.Set("url", targetURL)
 	for _, event := range []string{
@@ -231,7 +234,7 @@ func stripeCreateEndpoint(ctx context.Context, base, apiKey, targetURL string) (
 	}
 	req.SetBasicAuth(apiKey, "")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return stripeAPIWebhookEndpoint{}, err
 	}
@@ -255,11 +258,11 @@ func stripeCreateEndpoint(ctx context.Context, base, apiKey, targetURL string) (
 
 // stripeCredsPath resolves the dev-credentials.json path from env or $HOME.
 // Returns "" when neither is available (test env with no HOME).
-func stripeCredsPath() string {
-	if p := osGetenv(stripeCredsPathEnv); p != "" {
+func stripeCredsPath(h Host) string {
+	if p := h.getenv(stripeCredsPathEnv); p != "" {
 		return p
 	}
-	if h := osGetenv("HOME"); h != "" {
+	if h := h.getenv("HOME"); h != "" {
 		return h + "/.loopzero/dev-credentials.json"
 	}
 	return ""

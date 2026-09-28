@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -25,19 +26,17 @@ func TestDeployEventStore_NilTx_FailsFast(t *testing.T) {
 	}
 }
 
-// nonBridgeDBTX is a db.DBTX that is NOT a SqlcBridge — gen() must panic rather
-// than silently drop the outbox write.
+// nonBridgeDBTX is a db.DBTX that is NOT a SqlcBridge — the outbox write must
+// fail loudly rather than be silently dropped.
 type nonBridgeDBTX struct{ db.DBTX }
 
-func TestDeployEventStore_NonSqlcBridgeTx_Panics(t *testing.T) {
+func TestDeployEventStore_NonSqlcBridgeTx_ReturnsErrNotSqlcBridge(t *testing.T) {
 	s := NewDeployEventStoreSqlc()
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("AppendDeployEvent with a non-SqlcBridge tx did not panic; want fail-fast (the INSERT must run on a real pgx tx, never a fake that drops the write)")
-		}
-	}()
-	_ = s.AppendDeployEvent(context.Background(), nonBridgeDBTX{}, DeployEvent{
+	err := s.AppendDeployEvent(context.Background(), nonBridgeDBTX{}, DeployEvent{
 		TransitionID: "tr-2", EventType: "deploy.succeeded", TenantID: "tn-1",
 		ProjectID: "proj", DeployID: "rel-1", Payload: map[string]any{"status": "success"},
 	})
+	if !errors.Is(err, db.ErrNotSqlcBridge) {
+		t.Fatalf("AppendDeployEvent with a non-SqlcBridge tx = %v; want db.ErrNotSqlcBridge (the INSERT must run on a real pgx tx, never a fake that drops the write)", err)
+	}
 }

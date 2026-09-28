@@ -24,21 +24,21 @@ func write(t *testing.T, root, rel, body string) {
 	}
 }
 
-// A tag é declaração do autor e vence o caminho — que é inferência de quem escreveu
-// o classificador.
+// The tag is the author's declaration and beats the path — which is an inference by
+// whoever wrote the classifier.
 func TestBuildTagBeatsPath(t *testing.T) {
-	// Caminho diz unit; a tag diz live.
+	// The path says unit; the tag says live.
 	cat, reason := Classify("api/internal/x/foo_test.go", "//go:build live\n\npackage x\n")
 	if cat != E2E {
-		t.Fatalf("a tag declarada pelo autor precisa vencer o caminho; got %s (%s)", cat, reason)
+		t.Fatalf("the tag declared by the author must beat the path; got %s (%s)", cat, reason)
 	}
 }
 
-// `live` não pode casar dentro de `livetest` — casamento por substring transformaria
-// qualquer tag que contenha a outra num falso positivo silencioso.
+// `live` must not match inside `livetest` — substring matching would turn any tag that
+// contains the other into a silent false positive.
 func TestBuildTagMatchesWholeTokenOnly(t *testing.T) {
 	if cat, _ := Classify("a/b_test.go", "//go:build livetest\n\npackage b\n"); cat == E2E {
-		t.Fatal("`livetest` não é a tag `live`; o casamento tem de ser por token inteiro")
+		t.Fatal("`livetest` is not the `live` tag; matching has to be by whole token")
 	}
 }
 
@@ -58,12 +58,12 @@ func TestPathClassifiesWhenNoTag(t *testing.T) {
 	}
 }
 
-// A razão existe para que um número derivado possa ser conferido. Um inventário
-// derivado sem procedência teria o mesmo defeito do declarado.
+// The reason exists so a derived number can be checked. A derived inventory without
+// provenance would have the same defect as the declared one.
 func TestEveryClassificationCarriesItsReason(t *testing.T) {
 	for _, in := range []string{"//go:build live\npackage x\n", "package x\n"} {
 		if _, reason := Classify("infra/tests/e2e/a_test.go", in); reason == "" {
-			t.Error("toda classificação precisa dizer qual regra a produziu")
+			t.Error("every classification must say which rule produced it")
 		}
 	}
 }
@@ -74,38 +74,38 @@ func TestDeriveCountsAndRatios(t *testing.T) {
 	write(t, root, "pkg/b/b_test.go", "package b\n")
 	write(t, root, "infra/tests/e2e/e_test.go", "package e\n")
 	write(t, root, "api/tests/i_test.go", "package i\n")
-	write(t, root, "pkg/a/a.go", "package a\n") // não é teste
+	write(t, root, "pkg/a/a.go", "package a\n") // not a test
 
 	inv, err := Derive(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if inv.Total() != 4 {
-		t.Fatalf("total=%d; um arquivo não-teste não entra no inventário", inv.Total())
+		t.Fatalf("total=%d; a non-test file does not enter the inventory", inv.Total())
 	}
 	if inv.Unit != 2 || inv.Integr != 1 || inv.E2E != 1 {
 		t.Fatalf("unit=%d integr=%d e2e=%d", inv.Unit, inv.Integr, inv.E2E)
 	}
 	u, i, e := inv.Ratios()
 	if u != 50 || i != 25 || e != 25 {
-		t.Fatalf("razões derivadas erradas: %.1f/%.1f/%.1f", u, i, e)
+		t.Fatalf("wrong derived ratios: %.1f/%.1f/%.1f", u, i, e)
 	}
 }
 
-// Árvore vazia devolve zeros sem dividir por zero — e o consumidor decide o que
-// fazer com isso, em vez de receber NaN.
+// An empty tree returns zeros without dividing by zero — and the consumer decides what
+// to do with that, instead of receiving NaN.
 func TestEmptyTreeIsZeroNotNaN(t *testing.T) {
 	inv, err := Derive(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if u, i, e := inv.Ratios(); u != 0 || i != 0 || e != 0 {
-		t.Fatalf("árvore vazia deve dar 0/0/0; got %.1f/%.1f/%.1f", u, i, e)
+		t.Fatalf("an empty tree must give 0/0/0; got %.1f/%.1f/%.1f", u, i, e)
 	}
 }
 
-// `testdata/` e `node_modules/` guardam código de fixture ou de terceiro. Contá-los
-// faria a pirâmide descrever os testes de outra pessoa.
+// `testdata/` and `node_modules/` hold fixture or third-party code. Counting them would
+// make the pyramid describe someone else's tests.
 func TestForeignAndFixtureTreesAreSkipped(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "pkg/a/a_test.go", "package a\n")
@@ -117,21 +117,34 @@ func TestForeignAndFixtureTreesAreSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 	if inv.Total() != 1 {
-		t.Fatalf("total=%d; fixture e dependência de terceiro não são a suíte deste repo: %+v", inv.Total(), inv.Entries)
+		t.Fatalf("total=%d; fixtures and third-party dependencies are not this repo's suite: %+v", inv.Total(), inv.Entries)
 	}
 }
 
-// A população real (B-109). O número que importa é que a derivação enxerga a árvore
-// INTEIRA — o inventário declarado via 375 de 988, e era essa cegueira o defeito.
+// The real population (B-109). The number that matters is that the derivation sees the
+// WHOLE tree — the declared inventory saw 375 of 988, and that blindness was the defect.
 func TestRealTreeIsFullyEnumerated(t *testing.T) {
 	inv, err := Derive(repoRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if inv.Total() < 900 {
-		t.Fatalf("total=%d — a árvore tem ~988 arquivos `_test.go`; um número muito abaixo significa que a varredura está cega, que é exatamente o defeito que o B-106 removeu", inv.Total())
+		t.Fatalf("total=%d — the tree has ~988 `_test.go` files; a number far below that means the scan is blind, which is exactly the defect B-106 removed", inv.Total())
 	}
 	if inv.E2E == 0 {
-		t.Fatal("zero e2e na árvore real — `infra/tests/e2e/` existe, e o inventário declarado dizia 1 de 710 justamente por não a enxergar")
+		t.Fatal("zero e2e in the real tree — `infra/tests/e2e/` exists, and the declared inventory said 1 of 710 precisely because it could not see it")
+	}
+}
+
+// A test file whose header cannot be read would be classified on its path
+// alone, silently dropping a build tag that decides its category.
+func TestUnreadableTestFileIsAnError(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(root, "x_test.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Derive(root); err == nil {
+		t.Fatal("an unreadable test file must be an error")
 	}
 }

@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package ports provides shared domain types used across layers (routes, db, services).
-// These types live here to avoid DIP violations where infrastructure (db/) would import
-// presentation (routes/).
+// Package ports holds the contracts that cross the persistence ↔ feature seam —
+// the value types db/store builds and the features read, and the interfaces the
+// store asserts it implements — plus the interfaces more than one feature
+// consumes. A port only one feature consumes lives in that feature's ports.go
+// (api/internal organized by feature, 2026-09-25). They live here so the
+// persistence kernel never imports a feature.
 package ports
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -18,6 +22,20 @@ import (
 
 // ErrDomainExists is returned when a domain is already registered (unique constraint violation).
 var ErrDomainExists = errors.New("domain already exists")
+
+// ErrEnvironmentExists is returned by EnvironmentManager.AddEnvironment when
+// the (project, environment) tuple is already present. Callers that only want
+// the environment to exist (the first-deploy ensurer) treat it as success; the
+// create route answers 409.
+var ErrEnvironmentExists = errors.New("environment already exists")
+
+// ErrEnvironmentNotFound is returned by EnvironmentManager.RemoveEnvironment
+// when the (project, environment) tuple is not present (AUDIT-12).
+var ErrEnvironmentNotFound = errors.New("environment not found")
+
+// ErrRepositoryNotLinked is returned by RepositoryStore.UnlinkRepository when
+// no repository is linked to the (tenant, project) pair (AUDIT-21).
+var ErrRepositoryNotLinked = errors.New("no repository linked to project")
 
 // GenerateDomainID generates a domain ID in the format "dom-{8 hex chars}".
 func GenerateDomainID() string {
@@ -66,61 +84,21 @@ type DomainListFilter struct {
 	Offset      int
 }
 
-// CFZoneResult contains the result of creating a CF zone.
-type CFZoneResult struct {
-	ZoneID      string
-	Nameservers []string
-}
-
-// CFDNSRecord mirrors cfzone.DNSRecord for DIP.
-type CFDNSRecord struct {
-	ID       string `json:"id,omitempty"`
-	Type     string `json:"type"`
-	Name     string `json:"name"`
-	Content  string `json:"content"`
-	TTL      int    `json:"ttl,omitempty"`
-	Priority *int   `json:"priority,omitempty"`
-	Proxied  *bool  `json:"proxied,omitempty"`
-}
-
-// DomainStore abstracts custom domain persistence (DIP).
+// DomainStore is the custom-domain persistence the HTTP request path needs:
+// create, read, list, count, and the two writes a user action makes (a
+// compare-and-set status move and marking a domain verified). The
+// background provisioner and health checker declare their own ports in
+// services/domain for the lifecycle writes (TLS, failure, CF zone status,
+// deletion, the NS sweeps); carrying those here forced every request-path
+// consumer and fake to implement methods it never calls.
 type DomainStore interface {
 	Create(ctx context.Context, d *CustomDomain) error
+	CreateWithCFZone(ctx context.Context, d *CustomDomain) error
 	GetByDomainAndTenant(ctx context.Context, domain, tenantID string) (*CustomDomain, error)
 	ListByTenant(ctx context.Context, tenantID string, filter DomainListFilter) ([]CustomDomain, int, error)
 	CountByTenant(ctx context.Context, tenantID string) (int, error)
-	UpdateStatus(ctx context.Context, domain, status string) error
 	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
-	UpdateTLS(ctx context.Context, domain, tlsStatus string, expiresAt *time.Time) error
-	UpdateFailure(ctx context.Context, domain, status, reason string) error
-	Delete(ctx context.Context, domain string) error
-
-	// v2: CF Zone Management
-	CreateWithCFZone(ctx context.Context, d *CustomDomain) error
-	UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error
-	FindPendingNS(ctx context.Context) ([]CustomDomain, error)
-	FindNSActive(ctx context.Context) ([]CustomDomain, error)
-}
-
-// DomainVerifier checks DNS TXT records for domain ownership.
-type DomainVerifier interface {
-	VerifyTXT(ctx context.Context, domain, expectedToken string) (bool, error)
-}
-
-// DomainValidator validates domain names against platform rules.
-type DomainValidator interface {
-	Validate(domain string) error
-}
-
-// CFZoneManager abstracts CF Zone API operations (DIP -- testable without real CF).
-type CFZoneManager interface {
-	CreateZone(ctx context.Context, domain string) (*CFZoneResult, error)
-	ScanDNSRecords(ctx context.Context, zoneID string) error
-	ListDNSRecords(ctx context.Context, zoneID string) ([]CFDNSRecord, error)
-	CreateDNSRecord(ctx context.Context, zoneID string, record CFDNSRecord) (*CFDNSRecord, error)
-	DeleteDNSRecord(ctx context.Context, zoneID, recordID string) error
-	DeleteZone(ctx context.Context, zoneID string) error
 }
 
 // --- Teams ---
@@ -141,21 +119,6 @@ type TeamUserInfo struct {
 	ID          string
 	Email       string
 	DisplayName string
-}
-
-// TeamStore abstracts team member persistence (DIP).
-type TeamStore interface {
-	ListMembers(ctx context.Context, tenantID string) ([]TeamMemberInfo, error)
-	AddMember(ctx context.Context, tenantID, userID, role string) error
-	RemoveMember(ctx context.Context, tenantID, userID string) error
-	UpdateMemberRole(ctx context.Context, tenantID, userID, newRole string) error
-	GetMember(ctx context.Context, tenantID, userID string) (*TeamMemberInfo, error)
-	GetUserByUsername(ctx context.Context, username string) (*TeamUserInfo, error)
-	// GetUsernameByID returns the user's display-friendly username for the given
-	// opaque user_id. AUDIT-10: lets `loopzero whoami` show a meaningful identity
-	// even when the token has no email claim (OAuth2 client_credentials).
-	// Returns empty string if user not found.
-	GetUsernameByID(ctx context.Context, userID string) (string, error)
 }
 
 // --- Audit ---
@@ -180,11 +143,6 @@ type AuditEntryResult struct {
 	CreatedAt     time.Time      `json:"timestamp"`
 }
 
-// AuditStore abstracts audit log persistence.
-type AuditStore interface {
-	ListAuditEntries(ctx context.Context, tenantID string, filter AuditFilter) ([]AuditEntryResult, int, error)
-}
-
 // AuditLogger abstracts audit log writing (DIP).
 // MEET-2026-03-31-024: Application-level audit for sensitive operations.
 type AuditLogger interface {
@@ -200,20 +158,22 @@ type SecretMetadata struct {
 	App         string `json:"app"`
 }
 
-// SecretStore abstracts secret persistence (DIP).
-// Implementations MUST NOT expose secret values in list operations.
-type SecretStore interface {
-	ListNames(ctx context.Context, tenantID, projectID, env string) ([]SecretMetadata, error)
-	Set(ctx context.Context, tenantID, projectID, env, app, name string, value []byte) (created bool, err error)
-	Delete(ctx context.Context, tenantID, projectID, env, app, name string) (deleted bool, err error)
-}
-
-// SecretK8sSync abstracts K8s Secret + ExternalSecret CR creation (DIP).
-// projectID is the canonical M2 namespace segment (per pkg/naming.Namespace);
-// the runtime ExternalSecret CR lives at loopzero-{tenantID}-{projectID}-{env}.
-type SecretK8sSync interface {
-	CreateSecret(ctx context.Context, tenantID, projectID, env, app, name, value string) error
-	DeleteSecret(ctx context.Context, tenantID, projectID, env, app, name string) error
+// SecretRef identifies one secret delivered to a workload: the environment it
+// belongs to (tenant, project, environment), the app it is scoped to (empty for
+// a secret every app of the environment receives) and its name. It is the
+// Parameter Object the secret sync port takes, so the identifiers travel as one
+// value with named fields instead of a positional string tuple that transposes
+// silently.
+//
+// The fields are plain strings, not domain.EnvRef: this package is the shared
+// vocabulary of the api module and imports only the standard library, a
+// property the stdlib-only gate enforces for every one of its importers.
+type SecretRef struct {
+	TenantID    string
+	Project     string
+	Environment string
+	App         string
+	Name        string
 }
 
 // --- Projects ---
@@ -243,7 +203,7 @@ type ProjectResult struct {
 // additive over ProjectResult — legacy consumers ignore the 2 new
 // trailing fields. LastDeployStatus is the 5-value enum from
 // pkg/plan.ProjectStatus (kept as string here to avoid a domain
-// → pkg/enforcement import edge; the wrapper layer is the SoT mapper).
+// → projectstatus import edge; the wrapper layer is the SoT mapper).
 type ProjectSummary struct {
 	ID               string    `json:"id"`
 	Name             string    `json:"name"`
@@ -277,7 +237,7 @@ type ProjectSummary struct {
 	ActiveEnvCount int64 `json:"active_env_count"`
 	// LastDeployStatus is one of: "live", "building", "failed", "idle",
 	// "queued" — derived from the latest build's status via
-	// pkg/enforcement.MapBuildStatusToProjectStatus.
+	// api/internal/projectstatus.MapBuildStatusToProjectStatus.
 	LastDeployStatus string `json:"last_deploy_status"`
 	// LastDeployAt + AppsCount + LatestFramework — T5.3 LIVE-bug fix 2026-06-08.
 	// Plan 2026-06-08-dashboard-screens-review-fixes T2.1 originally dropped
@@ -317,9 +277,9 @@ type ProjectSummary struct {
 	// LastReplicasReadyValue + LastReplicasReadyAt — T3.2 of plan
 	// dashboard-badge-data-plane-poller closing Red Team loopzero-cloud#128
 	// (badge lies "Live" when control-plane ACTIVE + data-plane 502).
-	// The DataPlanePoller Runnable in loopzero-app-operator scrapes
-	// kube_deployment_status_replicas_ready per (tenant,project,env)
-	// tuple and UPDATEs environment_targets on each tick. Surfaced here
+	// The api's readiness poller (environments.ReadinessPoller) reads
+	// ready replicas per (tenant,project,env) from Prometheus and
+	// records them in environment_targets on each tick. Surfaced here
 	// via the ListProjectsWithSummaryByTenant LATERAL join for the
 	// permanent (production-flavor) env. Nil means no snapshot yet —
 	// the dashboard maps NULL to the honest "Unknown" state per EC-7
@@ -347,33 +307,15 @@ type ProjectStore interface {
 // TenantCRSpec holds the spec for creating/updating a Tenant CR.
 type TenantCRSpec struct {
 	Plan string
+	// CellID is the cell the engine placed the tenant on (tenants.cell_id). It is
+	// written when the CR is created and never changes an existing one: moving a
+	// tenant is the admin pin's job (#412).
+	CellID string
 }
 
 // TenantCRManager abstracts Kubernetes Tenant CR operations (DIP).
 type TenantCRManager interface {
 	EnsureTenant(ctx context.Context, tenantID string, spec TenantCRSpec) error
-}
-
-// ProjectDeleteInput is the input for deleting a project.
-type ProjectDeleteInput struct {
-	TenantID      string
-	ProjectID     string
-	ProjectName   string
-	Environment   string // empty = all environments
-	DeletedBy     string
-	CorrelationID string
-}
-
-// ProjectDeleteOutput is the result of project deletion.
-type ProjectDeleteOutput struct {
-	ProjectName         string   `json:"project"`
-	DeletedEnvironments []string `json:"deleted_environments"`
-	CancelledBuilds     int      `json:"cancelled_builds"`
-}
-
-// ProjectDeleter abstracts project deletion orchestration (DIP).
-type ProjectDeleter interface {
-	Delete(ctx context.Context, req ProjectDeleteInput) (*ProjectDeleteOutput, error)
 }
 
 // --- Bootstrap ---
@@ -385,29 +327,31 @@ type BootstrapRequest struct {
 	TenantSlug        string `json:"tenant_slug"`
 	TenantDisplayName string `json:"tenant_display_name"`
 	Plan              string `json:"plan"`
+	// AdminUserID names the user explicitly — the Kratos identity id, which
+	// is users.id for every non-legacy user. When empty the user is the legacy
+	// GitHub identity github-<admin_login>, and admin_github_id is required.
+	AdminUserID string `json:"admin_user_id"`
+	// AdminEmail and AdminDisplayName describe that user; they default to
+	// <admin_login>@users.noreply.github.com and admin_login.
+	AdminEmail       string `json:"admin_email"`
+	AdminDisplayName string `json:"admin_display_name"`
 	// CellID is set by the PlacementEngine before persisting.
 	// Not part of the JSON body -- injected by the handler.
-	// ADR-0008: Phase 0 = "cell-0", Phase 1+ = PlacementEngine assigns.
 	CellID string `json:"-"`
 }
 
+// ErrTenantSlugTaken is returned by BootstrapStore.Bootstrap when the
+// requested tenant slug belongs to a tenant another identity owns.
+var ErrTenantSlugTaken = errors.New("tenant slug is owned by another identity")
+
 // BootstrapStore abstracts the database operations for bootstrap.
-// Implemented by PostgresBootstrapStore (production) and InMemoryBootstrapStore (tests).
+// Implemented by PostgresBootstrapStore (production) and bootstraptest.InMemoryStore (tests).
 type BootstrapStore interface {
 	// Bootstrap creates the admin user, tenant, and membership records.
 	// Returns (userID, tenantID, created, error).
 	// created is true if any record was actually inserted (not already existing).
 	// Must be idempotent -- duplicate calls with the same data must not fail.
 	Bootstrap(ctx context.Context, req BootstrapRequest) (userID, tenantID string, created bool, err error)
-}
-
-// CellPlacementEngine assigns tenants to Cells.
-// ADR-0008: Phase 0 = DefaultEngine (always "cell-0").
-type CellPlacementEngine interface {
-	AssignCell(ctx context.Context) (cellID string, err error)
-	// AssignAndExecute picks a cell AND runs the callback in the same serialized
-	// transaction. MEET-053 D-01: fixes TOCTOU between AssignCell and INSERT.
-	AssignAndExecute(ctx context.Context, fn func(ctx context.Context, cellID string) error) error
 }
 
 // --- Tenant Deletion ---
@@ -480,4 +424,28 @@ type Preview struct {
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at,omitempty"`
 	TTLExpiresAt string `json:"ttl_expires_at,omitempty"`
+}
+
+// SSEEvent represents a single event in the SSE event journal.
+type SSEEvent struct {
+	ID        int64           `json:"id"`
+	BuildID   string          `json:"build_id"`
+	EventType string          `json:"event_type"`
+	Data      json.RawMessage `json:"data"`
+	CreatedAt time.Time       `json:"created_at"`
+}
+
+// EventStore defines the contract for SSE event persistence.
+// Supports append, replay (via Last-Event-ID), and cleanup.
+type EventStore interface {
+	Append(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, error)
+	GetAfter(ctx context.Context, buildID string, afterID int64) ([]SSEEvent, error)
+	// GetAfterForProject returns sse_events for ALL builds owned by
+	// (tenantID, projectName) whose id > afterID. Plan J-17 T2.3 — backs
+	// the project-level stream that powers the realtime deployments list.
+	// Implementations MUST enforce tenant ownership in the SQL itself
+	// (defense-in-depth — handler also checks, but the store closes the
+	// vulnerability window between auth and query).
+	GetAfterForProject(ctx context.Context, tenantID string, projectName string, afterID int64) ([]SSEEvent, error)
+	Prune(ctx context.Context, olderThan time.Duration) (int64, error)
 }

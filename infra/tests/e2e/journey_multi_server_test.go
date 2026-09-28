@@ -38,7 +38,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 		seedE2E()
 
 		apiHost = seed.TenantID + "-" + project + "-api-" + env + "." + e2eBaseDomain()
-		ns = "loopzero-" + seed.TenantID + "-" + env
+		ns = mustE2ENamespace(project, env)
 
 		ensureProjectDeleted(project)
 
@@ -110,6 +110,15 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 	})
 
 	It("worker has no IngressRoute", func() {
+		// Positive control: an absence query with --ignore-not-found against a
+		// namespace that does not exist returns empty and exit 0, so without
+		// this the assertion below passed over nothing.
+		nsOut, nsErr := kubectlForCluster(ClusterWorkload,
+			"get", "namespace", ns, "-o", "name").CombinedOutput()
+		Expect(nsErr).NotTo(HaveOccurred(),
+			"workload namespace %s must exist before its absence of an IngressRoute means anything: %s",
+			ns, strings.TrimSpace(string(nsOut)))
+
 		cmd := kubectlForCluster(ClusterWorkload,
 			"-n", ns, "get", "ingressroute.traefik.io",
 			"-l", "loopzero.io/project="+project+",loopzero.io/app-name=worker",

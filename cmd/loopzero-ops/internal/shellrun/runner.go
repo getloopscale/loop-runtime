@@ -6,11 +6,8 @@ package shellrun
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -72,45 +69,21 @@ func (r *DefaultRunner) Run(ctx context.Context, name string, args []string, opt
 		command = name + " " + strings.Join(args, " ")
 	}
 
-	// Apply timeout if configured; cancel propagates to subprocess.
-	if opt.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, opt.timeout)
-		defer cancel()
-	}
-
 	// nosec G204 — shellrun's purpose IS to run variable subprocesses;
 	// callers are responsible for input validation at the orchestrator
 	// layer (e.g., loopzero-ops bootstrap drill-helmfile validates its
 	// args before invoking shellrun).
 	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // intentional variable subprocess
 
-	if opt.env != nil || opt.envIsolated {
-		cmd.Env = opt.env
-	}
 	if opt.cwd != "" {
 		cmd.Dir = opt.cwd
 	}
-	if opt.stdin != nil {
-		cmd.Stdin = opt.stdin
-	}
 
-	// Set up stdout/stderr capture.
-	// If caller streams, route to their writer; otherwise buffer up to
-	// MaxBufferSize.
+	// Capture stdout/stderr up to MaxBufferSize each.
 	stdoutBuf := &cappedBuffer{cap: MaxBufferSize}
 	stderrBuf := &cappedBuffer{cap: MaxBufferSize}
-
-	if opt.stdoutW != nil {
-		cmd.Stdout = opt.stdoutW
-	} else {
-		cmd.Stdout = stdoutBuf
-	}
-	if opt.stderrW != nil {
-		cmd.Stderr = opt.stderrW
-	} else {
-		cmd.Stderr = stderrBuf
-	}
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
 
 	// Configure process group so cancellation kills grandchildren.
 	// Implementation in runner_unix.go / runner_windows.go (build tags).
@@ -233,8 +206,3 @@ func (c *cappedBuffer) String() string {
 
 // Static check that DefaultRunner satisfies Runner.
 var _ Runner = (*DefaultRunner)(nil)
-
-// Sanity exports to avoid unused-import warnings during stage-by-stage builds.
-var _ = errors.New
-var _ = io.Discard
-var _ = os.Stdout

@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package sse implements the Server-Sent-Events stream that delivers
-// build + deploy + rollout progress to CLI/dashboard clients in
-// real time. Hub multiplexes per-environment subscriptions; pruner
-// reaps stale events from the in-memory ring buffer. SSE events are
-// the only `--json` contract observable mid-flight (`build.event`,
+// Package sse implements the Server-Sent-Events streams that deliver
+// build + deploy + rollout progress to CLI/dashboard clients. Events are
+// rows in the Postgres table sse_events (PostgresEventStore); each open
+// stream polls that table for rows newer than the last one it sent
+// (stream.go holds the shared gate, framing and poll loop), and
+// EventPruner deletes rows past their retention. SSE events are the only
+// `--json` contract observable mid-flight (`build.event`,
 // `release.event`, `rollout.step`, `rollout.aborted` etc.).
 package sse
 

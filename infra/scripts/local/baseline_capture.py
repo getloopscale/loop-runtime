@@ -34,6 +34,26 @@ def code() -> None:
     }, sort_keys=True))
 
 
+def _workload(pod: dict) -> str:
+    """The workload that owns a pod: a Deployment's ReplicaSet loses its template
+    hash, any other owner is named as-is, and an unowned pod is its own workload."""
+    meta = pod.get("metadata", {})
+    labels = meta.get("labels") or {}
+    # k3s names a ServiceLB DaemonSet after a prefix of the Service UID, which a
+    # rebuild changes; the service it serves is the stable identity (#417).
+    svc = labels.get("svccontroller.k3s.cattle.io/svcname")
+    if svc:
+        return f"svclb-{labels.get('svccontroller.k3s.cattle.io/svcnamespace', '')}-{svc}"
+    owners = meta.get("ownerReferences") or []
+    if not owners:
+        return meta.get("name", "")
+    owner = owners[0]
+    name = owner.get("name", "")
+    if owner.get("kind") == "ReplicaSet" and "-" in name:
+        return name.rsplit("-", 1)[0]
+    return name
+
+
 def runtime() -> None:
     tmp = os.environ["TMP_DIR"]
     with open(f"{tmp}/pods.json") as f:
@@ -45,12 +65,18 @@ def runtime() -> None:
     with open(f"{tmp}/tens.json") as f:
         tenants = json.load(f)
 
-    pods_out = [
-        {"namespace": p.get("metadata", {}).get("namespace", ""),
-         "name": p.get("metadata", {}).get("name", ""),
-         "phase": p.get("status", {}).get("phase", "")}
-        for p in pods.get("items", [])
-    ]
+    # A pod is identified by the workload that owns it, not by its name: a rebuild
+    # names every Deployment and DaemonSet pod afresh, and comparing names made the
+    # before/after diff fail on every rebuild (#417).
+    workloads = {}
+    for p in pods.get("items", []):
+        ns = p.get("metadata", {}).get("namespace", "")
+        wl = _workload(p)
+        entry = workloads.setdefault((ns, wl), {"namespace": ns, "name": f"{ns}/{wl}", "pods": 0, "running": 0})
+        entry["pods"] += 1
+        if p.get("status", {}).get("phase", "") == "Running":
+            entry["running"] += 1
+    pods_out = list(workloads.values())
     helm_out = [
         {"name": r.get("name", ""), "namespace": r.get("namespace", ""),
          "chart": r.get("chart", "")}

@@ -21,6 +21,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/qualitycli"
 )
 
 const helpText = `loopzero-ops — LoopZero operator toolbox (Phase 0 minimal skeleton)
@@ -34,10 +36,15 @@ SUBCOMMANDS:
   drill <subcommand> [flags]           Drill/DR pure-logic helpers (see drill --help)
   chaos <subcommand> [flags]           Chaos runner pure-logic helpers (see chaos --help)
   seed <name> [flags]                  Canonical post-Cleanroom seeds (see seed --help)
+  dsn <field>                          Print one part of a Postgres DSN read on stdin
+  sql <script> [flags]                 Render a seed script for psql (see sql --help)
+  kubeconform-schemas [--check]        Derive the loopzero.io kubeconform schemas from the CRDs
+  validate-chart --release R --chart D Render one chart and schema-validate the render
 
-EXIT CODES (PERMANENT — CLAUDE.md Rule 4):
+EXIT CODES (every subcommand):
   0  success
-  1  usage error
+  1  usage error, or it ran and the subject is wrong (a violation, a failed seed)
+  5  it could not reach a verdict (an unreadable input, an unreachable target)
 `
 
 func main() {
@@ -54,7 +61,7 @@ func run(args []string) int {
 		fmt.Print(helpText)
 		return 0
 	case "quality":
-		return runQuality(args[1:])
+		return qualitycli.Main(args[1:], os.Stdout, os.Stderr)
 	case "pulumi":
 		return runPulumi(args[1:])
 	case "drill":
@@ -65,6 +72,14 @@ func run(args []string) int {
 		return runLeak(args[1:])
 	case "seed":
 		return runSeed(args[1:])
+	case "dsn":
+		return runDSNMain(args[1:])
+	case "sql":
+		return runSQLMain(args[1:])
+	case "kubeconform-schemas":
+		return runKubeconformSchemasMain(args[1:])
+	case "validate-chart":
+		return runValidateChartMain(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n\n%s", args[0], helpText)
 		return 1

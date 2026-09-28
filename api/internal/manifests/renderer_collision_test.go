@@ -8,15 +8,15 @@ import (
 	"testing"
 )
 
-// TestRender_NoCollisionBetweenProjectsWithSameAppName guarda contra a
-// regressão do Achado #17 do dogfood real e2e: dois projetos no mesmo
-// tenant env com app de mesmo nome (ex: ambos `api`) — situação comum
-// em PaaS multi-tenant — devem produzir K8s names DIFERENTES, e Service
-// selectors devem matchar APENAS pods do próprio projeto.
+// TestRender_NoCollisionBetweenProjectsWithSameAppName guards against the
+// regression of real e2e dogfood Finding #17: two projects in the same tenant
+// env with an app of the same name (e.g. both `api`) — common in a
+// multi-tenant PaaS — must produce DIFFERENT K8s names, and Service selectors
+// must match ONLY their own project's pods.
 //
 // Discovered live during journey-01 (CHG-2026-04-29-DOGFOOD-REAL-E2E):
-// `solo-server` deploy retornava o body de `dogfood-fb` porque
-// Service `api` era compartilhado entre projetos.
+// the `solo-server` deploy returned `dogfood-fb`'s body because the
+// `api` Service was shared between projects.
 func TestRender_NoCollisionBetweenProjectsWithSameAppName(t *testing.T) {
 	base := func(project string) RenderInput {
 		return RenderInput{

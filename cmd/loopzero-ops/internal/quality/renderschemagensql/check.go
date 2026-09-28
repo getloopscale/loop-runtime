@@ -33,6 +33,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const (
@@ -65,6 +67,16 @@ type Outcome struct {
 	SchemaLines int
 	// Diagnostic is the tool stderr on failure.
 	Diagnostic string
+}
+
+// Verdict is Skip when a required tool is missing and the run is advisory,
+// and Pass otherwise: a check or render that could not complete is an error,
+// not an outcome.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Warn {
+		return verdict.Skip
+	}
+	return verdict.Pass
 }
 
 // ErrRenderFailed is emitted when any stage of the render pipeline fails.
@@ -330,7 +342,7 @@ func postProcess(raw string) string {
 
 // sqlcCompileWithProbe creates a throwaway probe query, runs sqlc compile,
 // removes the probe, and returns any compile error. Mirrors §7 of the bash.
-func sqlcCompileWithProbe(root string) error {
+func sqlcCompileWithProbe(root string) (err error) {
 	probeFile := filepath.Join(root, probeQuerySubdir)
 	if err := os.MkdirAll(filepath.Dir(probeFile), 0o755); err != nil {
 		return fmt.Errorf("mkdir probe: %w", err)
@@ -345,7 +357,7 @@ SELECT 1 AS probe;
 	if err := os.WriteFile(probeFile, []byte(probeBody), 0o644); err != nil {
 		return fmt.Errorf("write probe: %w", err)
 	}
-	defer os.Remove(probeFile)
+	defer func() { err = errors.Join(err, os.Remove(probeFile)) }()
 
 	cfgPath := filepath.Join(root, sqlcConfigSubdir)
 	cmd := exec.Command("sqlc", "compile", "--file", cfgPath)

@@ -31,6 +31,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
@@ -46,6 +47,13 @@ type Pair struct {
 func (p Pair) String() string {
 	return fmt.Sprintf("%s:%d", p.File, p.Line)
 }
+
+// Pairs is the listing of added-or-modified lines a diff produced.
+type Pairs []Pair
+
+// Verdict is Pass: the listing is an operation, and a Pairs exists only when
+// the diff was read. A diff that could not be read is RunGitDiff's error.
+func (Pairs) Verdict() verdict.Verdict { return verdict.Pass }
 
 // Config holds the diff-range inputs.
 type Config struct {
@@ -131,7 +139,7 @@ func Parse(r io.Reader) ([]Pair, error) {
 //
 //	OPS_USAGE          — invalid hunk header parse
 //	OPS_DEPLOY_FAILURE — git invocation failed
-func RunGitDiff(ctx context.Context, runner shellrun.Runner, cfg Config) ([]Pair, error) {
+func RunGitDiff(ctx context.Context, runner shellrun.Runner, cfg Config) (Pairs, error) {
 	baseRef := cfg.BaseRef
 	if baseRef == "" {
 		baseRef = "origin/main"

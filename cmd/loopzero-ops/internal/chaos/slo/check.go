@@ -3,10 +3,10 @@
 
 // Package slo is the pure-logic SLO verdict of the chaos resilience runner.
 //
-// Chamava-se `chaosslo` e vivia em `internal/quality/`, onde nao pertencia: ele
-// serve o subcomando `chaos`, nao um gate, e por isso o oraculo `quality --list`
-// nunca o enumerou (B-066). O prefixo do nome existia para desambiguar dentro
-// daquele diretorio; sob `internal/chaos/` o caminho ja' diz o mesmo.
+// It was called `chaosslo` and lived in internal/quality/, where it did not belong:
+// it serves the `chaos` subcommand, not a gate, so the `quality --list` oracle
+// never enumerated it (B-066). The name prefix disambiguated it inside that
+// directory; under internal/chaos/ the path says the same.
 // (Track C TC3.1 of 2026-05-24-drill-consolidation-migration-plan).
 //
 // It compares baseline / during / post chaos samples and decides whether the
@@ -26,6 +26,8 @@ package slo
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
 )
 
 // Thresholds mirror run-scenario.sh:231-233 + the post-drift 100ms (line 250).
@@ -96,16 +98,16 @@ func (r Result) String() string {
 	}
 }
 
-// ExitCode maps the verdict to a loopzero-ops exit code (run-full.sh:110-112 reads
-// 0=PASS, 2=FAIL, anything-else=INCONCLUSIVE).
+// ExitCode maps the verdict onto loopzero-ops' exit table (internal/exitcode): a
+// breached SLO is a failure, and an inconclusive run is incomplete.
 func (r Result) ExitCode() int {
 	switch r {
 	case Pass:
-		return 0
+		return exitcode.OK
 	case Fail:
-		return 2
+		return exitcode.Failure
 	default:
-		return 5
+		return exitcode.Incomplete
 	}
 }
 

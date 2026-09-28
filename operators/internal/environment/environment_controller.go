@@ -43,17 +43,17 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 
 // EnvironmentReconciler reconciles an Environment object.
 //
-// Multi-cluster design: the Environment CR lives in the mgmt cluster,
-// but namespace/RBAC/NetworkPolicy resources are created on the runtime cluster.
-//   - r.Client          -> mgmt cluster (Environment CR + Tenant CR reads)
-//   - r.RuntimeClient   -> default runtime cluster (legacy single-cell fallback)
-//   - r.RuntimeFactory  -> cell-aware factory: returns the right runtime client
-//     based on tenant.spec.cellID (fix-all-platform-issues-plan T1.1, parity
-//     with operators/internal/controller/environment_controller.go from
-//     cell-1-activation-plan iter 4 BUG-FIX).
+// Multi-cluster design: the Environment CR lives in the mgmt cluster, while the
+// namespace, RBAC, NetworkPolicy and quota live on the runtime cluster of the
+// tenant's cell.
+//   - r.Client         -> mgmt cluster (Environment CR + Tenant CR reads)
+//   - r.RuntimeFactory -> the runtime cluster of a cell, by cellID. Required.
 //
-// All namespace/RBAC/NetworkPolicy/Quota writes MUST go through
-// runtimeClientForEnv() — direct r.RuntimeClient calls bypass cell awareness.
+// There is no fallback cluster. A cell that cannot be resolved fails the
+// reconcile and requeues with backoff: writing a tenant namespace to whichever
+// cluster happened to answer is the silent misplacement this design exists to
+// prevent. The only cell with a default client is cellID "" (a tenant that was
+// never placed), and that mapping belongs to the factory, not to this type.
 //
 // ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers for the LOCAL
 // (mgmt cluster) RBAC. Cross-cluster RBAC for runtime cluster
@@ -63,44 +63,32 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 // +kubebuilder:rbac:groups=loopzero.io,resources=environments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=environments/finalizers,verbs=update
 // +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
 type EnvironmentReconciler struct {
 	client.Client
-	RuntimeClient    client.Client
-	RuntimeFactory   cellrouting.RuntimeClientFactory // nil = single-cell mode (legacy)
+	RuntimeFactory   cellrouting.RuntimeClientFactory
 	Scheme           *runtime.Scheme
-	IngressNamespace string // Namespace where ingress controller (Traefik) runs. Default: loopzero-system.
+	IngressNamespace string // Namespace where ingress controller (Traefik) runs. Default: traefik.
 }
 
-// runtimeClientForEnv resolves the right runtime client for the given
-// Environment by looking up the parent Tenant's spec.cellID. Mirrors the
-// cell-aware lookup pattern from operators/internal/controller/.
-func (r *EnvironmentReconciler) runtimeClientForEnv(ctx context.Context, env *loopzerov1.Environment) (client.Client, error) {
-	if r.RuntimeFactory == nil {
-		if r.RuntimeClient == nil {
-			return nil, fmt.Errorf("environment %s: no RuntimeClient and no RuntimeFactory configured", env.Name)
-		}
-		return r.RuntimeClient, nil
-	}
-
+// tenantCell returns the cell the parent Tenant is placed in. The Tenant is the
+// canonical record of placement (tenants.cell_id mirrors into Spec.CellID), so
+// an unreadable Tenant is an unknown cell, never a default one.
+func (r *EnvironmentReconciler) tenantCell(ctx context.Context, env *loopzerov1.Environment) (string, error) {
 	var tenant loopzerov1.Tenant
-	if err := r.Get(ctx, client.ObjectKey{Name: env.Spec.TenantRef.Name, Namespace: env.Namespace}, &tenant); err != nil {
-		if err2 := r.Get(ctx, client.ObjectKey{Name: env.Spec.TenantRef.Name}, &tenant); err2 != nil {
-			if r.RuntimeClient != nil {
-				return r.RuntimeClient, nil
-			}
-			return nil, fmt.Errorf("environment %s: tenant %s not found and no fallback: %w",
-				env.Name, env.Spec.TenantRef.Name, err2)
-		}
+	key := client.ObjectKey{Name: env.Spec.TenantRef.Name, Namespace: env.Namespace}
+	if err := r.Get(ctx, key, &tenant); err != nil {
+		return "", fmt.Errorf("environment %s: read tenant %s to resolve its cell: %w",
+			env.Name, env.Spec.TenantRef.Name, err)
 	}
+	return tenant.Spec.CellID, nil
+}
 
-	cellID := tenant.Spec.CellID
+// runtimeClientForCell resolves the runtime cluster client of a cell.
+func (r *EnvironmentReconciler) runtimeClientForCell(ctx context.Context, env *loopzerov1.Environment, cellID string) (client.Client, error) {
 	c, err := r.RuntimeFactory.For(ctx, cellID)
 	if err != nil {
-		if r.RuntimeClient != nil {
-			return r.RuntimeClient, nil
-		}
-		return nil, fmt.Errorf("environment %s (cellID=%q): factory error and no fallback: %w",
-			env.Name, cellID, err)
+		return nil, fmt.Errorf("environment %s (cellID=%q): runtime cluster client: %w", env.Name, cellID, err)
 	}
 	return c, nil
 }
@@ -141,16 +129,8 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
-	// correlation-id from CR annotation into reconcile context (no-op se ausente).
+	// correlation-id from CR annotation into reconcile context (no-op when absent).
 	ctx = correlation.WithID(ctx, env.GetAnnotations()["loopzero.io/correlation-id"])
-
-	// kstatus universal per ADR-0025 D3 condition #1.
-	// Per pkg-sota-faang-grade-plan v1.2 T2.2 closure: delegates to
-	// pkg/conditions via adapter (same algorithm, shared core).
-	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
-		func() *loopzerov1.Environment { return &loopzerov1.Environment{} },
-		func(x *loopzerov1.Environment) *[]metav1.Condition { return &x.Status.Conditions },
-		environmentDetailTypes)()
 
 	// Handle deletion with verify-then-remove finalizer pattern
 	if !env.DeletionTimestamp.IsZero() {
@@ -167,14 +147,17 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Tenant controller writes only Environment spec/metadata. Capturing a
 	// DeepCopy here — after EnsureFinalizer's metadata write, before any status
 	// mutation — lets every status write below use
-	// `r.Status().Patch(ctx, &env, client.MergeFrom(base))`. A merge patch
+	// `r.patchStatus(ctx, &env, base)`. A merge patch
 	// carries no resourceVersion (no optimistic-concurrency 409) and sends only
 	// the changed status fields, so a concurrent spec/metadata write by the
 	// Tenant controller can never clobber this status write. This replaces the
 	// former refetch-then-restore `Status().Update` dance, which lost updates on
 	// conflict and silently dropped the condition (the t31 flake). If a SECOND
 	// status writer is ever introduced this invariant must be revisited — see
-	// `.claude/rules/loopzero-design.md` § single-status-writer.
+	// `CLAUDE.md` § Single-status-writer invariant, which is the contract itself and not a
+	// summary of one. The design rule this used to cite was deleted in `9a4a29755`; its
+	// name is left out deliberately, because writing a dead path into the note explaining
+	// that the path is dead is how the citation survives its own correction.
 	base := env.DeepCopy()
 
 	// Transition from empty to Pending via state machine (Rule 8).
@@ -198,8 +181,8 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// condition TypeEnvNamespaceReady=False Reason=NameTooLong with the
 	// length in the message and return ctrl.Result{} (no requeue). User
 	// sees an actionable error in the dashboard instead of an infinite
-	// reconcile-loop with a cryptic error per `rules/loopzero-design.md` §
-	// Error Philosophy.
+	// reconcile-loop with a cryptic error. The rule is one sentence, so it is stated
+	// rather than cited: fail loudly with an actionable message, never drop the error.
 	nsName := env.Spec.Namespace.Name
 	if env.Spec.Project != "" {
 		// T1.3.e of plan 2026-06-11-code-review-remediation v1.2 —
@@ -217,7 +200,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			// MA-4: report the observed generation even on the error branch.
 			env.Status.ObservedGeneration = env.Generation
 			// MA-1/MA-2: merge-patch (no 409); requeue on write failure.
-			if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
+			if statusErr := r.patchStatus(ctx, &env, base); statusErr != nil {
 				logger.Error(statusErr, "failed to persist InvalidEnvRef condition")
 				return ctrl.Result{}, statusErr
 			}
@@ -235,7 +218,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			env.Status.ObservedGeneration = env.Generation
 			// MA-1/MA-2: merge-patch (no 409); requeue on write failure so the
 			// condition converges instead of being silently dropped (t31 flake).
-			if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
+			if statusErr := r.patchStatus(ctx, &env, base); statusErr != nil {
 				logger.Error(statusErr, "failed to update NameTooLong status")
 				return ctrl.Result{}, statusErr
 			}
@@ -255,17 +238,32 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		fn             func() error
 	}
 
+	// Resolve the cell once for every step below. A failure here is surfaced on
+	// the namespace condition and requeued; nothing is written anywhere until
+	// the tenant's cell answers.
+	cellID, err := r.tenantCell(ctx, &env)
+	var runtimeClient client.Client
+	if err == nil {
+		runtimeClient, err = r.runtimeClientForCell(ctx, &env, cellID)
+	}
+	if err != nil {
+		conditions.SetCondition(&env.Status.Conditions, conditions.TypeEnvNamespaceReady,
+			metav1.ConditionFalse, "RuntimeClusterUnresolved", err.Error(), env.Generation)
+		if statusErr := r.patchStatus(ctx, &env, base); statusErr != nil {
+			logger.Error(statusErr, "failed to persist RuntimeClusterUnresolved condition")
+		}
+		return ctrl.Result{}, err
+	}
+
 	steps := []envStep{
 		{conditions.TypeEnvNamespaceReady, "NamespaceReady", "namespace provisioned",
-			func() error { return r.reconcileNamespace(ctx, &env, nsName, tenantName) }},
+			func() error { return r.reconcileNamespace(ctx, runtimeClient, &env, nsName, tenantName) }},
 		{conditions.TypeEnvRBACReady, "RBACConfigured", "RBAC resources provisioned",
-			func() error { return r.reconcileRBAC(ctx, &env, nsName) }},
+			func() error { return r.reconcileRBAC(ctx, runtimeClient, &env, nsName) }},
 		{conditions.TypeEnvNetworkPolicyReady, "NetworkPoliciesConfigured", "network policies provisioned",
-			func() error {
-				return r.reconcileNetworkPolicies(ctx, &env, nsName)
-			}},
+			func() error { return r.reconcileNetworkPolicies(ctx, runtimeClient, nsName) }},
 		{conditions.TypeEnvQuotaReady, "QuotaReady", "resource quota applied",
-			func() error { return r.reconcileQuota(ctx, &env, nsName) }},
+			func() error { return r.reconcileQuota(ctx, runtimeClient, &env, nsName) }},
 	}
 
 	for _, step := range steps {
@@ -274,7 +272,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				metav1.ConditionFalse, "ReconcileFailed", err.Error(), env.Generation)
 			// MA-1: merge-patch (no 409). The step error already drives the
 			// requeue below; a status-write failure is logged, not swallowed.
-			if statusErr := r.Status().Patch(ctx, &env, client.MergeFrom(base)); statusErr != nil {
+			if statusErr := r.patchStatus(ctx, &env, base); statusErr != nil {
 				logger.Error(statusErr, "failed to update environment status")
 			}
 			return ctrl.Result{}, err
@@ -293,12 +291,13 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
 	}
 	env.Status.Namespace = nsName
+	env.Status.CellID = cellID
 	env.Status.ObservedGeneration = env.Generation
 
 	// MA-1: merge-patch the accumulated status (phase + conditions + namespace +
 	// observedGeneration) off the base snapshot. No refetch, no resourceVersion,
 	// no 409 against a concurrent Tenant-controller spec/metadata write.
-	if err := r.Status().Patch(ctx, &env, client.MergeFrom(base)); err != nil {
+	if err := r.patchStatus(ctx, &env, base); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -334,32 +333,25 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 			return ctrl.Result{}, err
 		}
 		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
-		if err := r.Status().Patch(ctx, env, client.MergeFrom(base)); err != nil {
+		if err := r.patchStatus(ctx, env, base); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
 
-	// Delete namespace on cell-aware runtime cluster (T1.1 BUG-FIX).
+	// Delete the namespace in the cell it was provisioned in.
 	nsName := env.Spec.Namespace.Name
-	runtimeClient, rcErr := r.runtimeClientForEnv(ctx, env)
-	if rcErr != nil {
-		return ctrl.Result{}, rcErr
+	gone, err := r.deleteNamespace(ctx, env, nsName)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	ns := &corev1.Namespace{}
-	if err := runtimeClient.Get(ctx, client.ObjectKey{Name: nsName}, ns); err == nil {
-		if ns.Labels != nil && ns.Labels[constants.LabelTenant] == env.Spec.TenantRef.Name {
-			if ns.DeletionTimestamp.IsZero() {
-				if err := runtimeClient.Delete(ctx, ns); err != nil && !errors.IsNotFound(err) {
-					return ctrl.Result{}, err
-				}
-			}
-			logger.Info("namespace still exists, requeuing", "namespace", nsName)
-			return ctrl.Result{RequeueAfter: constants.RequeueNamespaceDeletionWait}, nil
-		}
+	if !gone {
+		logger.Info("namespace still exists, requeuing", "namespace", nsName)
+		return ctrl.Result{RequeueAfter: constants.RequeueNamespaceDeletionWait}, nil
 	}
 
-	// Namespace gone — retire a tupla do Tenant ANTES de soltar o finalizer, senao a
-	// Application fica orfa (B-074). Depois do finalizer nao ha' segunda chance: o CR some.
+	// Namespace gone — remove the tuple from the Tenant BEFORE releasing the finalizer,
+	// or the Application is orphaned (B-074). After the finalizer there is no second
+	// chance: the CR is gone.
 	if err := r.pruneTenantEnvironmentEntry(ctx, env); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -374,21 +366,24 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 	return ctrl.Result{}, nil
 }
 
-// pruneTenantEnvironmentEntry remove a tupla (Project, Environment) deste ambiente de
-// `Tenant.Spec.Environments`.
+// pruneTenantEnvironmentEntry removes this environment's (Project, Environment)
+// tuple from `Tenant.Spec.Environments`.
 //
-// B-074: apagar o Environment CR direto apagava o Namespace e soltava o finalizer, e mais nada.
-// A Application do ArgoCD continuava viva apontando para um Namespace que ja' nao existe, porque
-// o reaper que a alcancaria — `pruneOrphanPreviewApps` — so' apaga Application FORA de
-// `expectedApplicationNames`, conjunto derivado justamente desta lista pela tupla (Project, Name).
-// Enquanto a tupla estivesse la', a Application seguia ESPERADA.
+// B-074: deleting the Environment CR used to delete the Namespace and release
+// the finalizer, and nothing else. The ArgoCD Application stayed alive pointing
+// at a Namespace that no longer existed, because the reaper that would reach
+// it — `pruneOrphanPreviewApps` — only deletes Applications OUTSIDE
+// `expectedApplicationNames`, a set derived from exactly this list by the
+// (Project, Name) tuple. While the tuple stayed, the Application stayed
+// EXPECTED.
 //
-// Removemos a tupla em vez de apagar a Application aqui: o dono do `.spec` dela e' o operator do
-// tenant (ADR 2026-08-12-argocd-application-ownership, B-050). Abrir uma segunda via de delecao
-// num controller que nao e' o dono e' "codigo correto no lugar errado". Reusar o reaper que ja'
-// existe mantem um dono e um mecanismo.
+// The tuple is removed instead of deleting the Application here: the owner of
+// its `.spec` is the tenant operator (ADR
+// 2026-08-12-argocd-application-ownership, B-050). Opening a second deletion
+// path in a controller that is not the owner is "correct code in the wrong
+// place". Reusing the existing reaper keeps one owner and one mechanism.
 //
-// Registro T2:
+// T2 record:
 // knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-environment-delete-orphans-application.md
 func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context, env *loopzerov1.Environment) error {
 	logger := log.FromContext(ctx)
@@ -397,28 +392,28 @@ func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context,
 	key := client.ObjectKey{Name: env.Spec.TenantRef.Name, Namespace: env.Namespace}
 	if err := r.Get(ctx, key, &tenant); err != nil {
 		if errors.IsNotFound(err) {
-			// O Tenant ja' se foi: nao ha' tupla para remover, e segurar o finalizer aqui
-			// travaria a delecao do Environment para sempre.
+			// The Tenant is already gone: there is no tuple to remove, and holding
+			// the finalizer here would block the Environment's deletion forever.
 			return nil
 		}
 		return err
 	}
 
 	base := tenant.DeepCopy()
-	mantidas := make([]loopzerov1.TenantEnvironmentEntry, 0, len(tenant.Spec.Environments))
+	kept := make([]loopzerov1.TenantEnvironmentEntry, 0, len(tenant.Spec.Environments))
 	for _, e := range tenant.Spec.Environments {
 		if e.Project == env.Spec.Project && e.Name == env.Spec.Environment {
 			continue
 		}
-		mantidas = append(mantidas, e)
+		kept = append(kept, e)
 	}
-	if len(mantidas) == len(tenant.Spec.Environments) {
+	if len(kept) == len(tenant.Spec.Environments) {
 		return nil
 	}
-	tenant.Spec.Environments = mantidas
+	tenant.Spec.Environments = kept
 
-	// Merge patch off a base snapshot: nao carrega resourceVersion, entao nao da' 409 contra
-	// uma escrita concorrente da api em outro campo do mesmo spec.
+	// Merge patch off a base snapshot: it carries no resourceVersion, so it does not
+	// 409 against a concurrent api write to another field of the same spec.
 	if err := r.Patch(ctx, &tenant, client.MergeFrom(base)); err != nil {
 		return err
 	}
@@ -427,33 +422,90 @@ func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context,
 	return nil
 }
 
-// SetupEnvironmentController registers the EnvironmentController with the manager.
+// deletionCell returns the cell holding this environment's namespace. The cell
+// recorded at provisioning wins: the Tenant may have been re-pinned since, and
+// the namespace is where it was created, not where the tenant points now.
+// Environments provisioned before the cell was recorded fall back to the
+// Tenant's current cell.
 //
-// Single-cell mode: pass nil as factory; legacy r.RuntimeClient is used for
-// every environment regardless of cellID.
-//
-// Multi-cell mode: pass a CellAwareRuntimeClientFactory built from
-// mgr.GetClient() (mgmt) + runtimeClient (legacy fallback for cell-0).
-//
-// fix-all-platform-issues-plan T1.1 — split-binary parity with the
-// monolithic controller from cell-1-activation-plan iter 4.
-//
-// Quality-Gate Phase 3: SetupEnvironmentController legacy wrapper removed
-// — all callers (cmd/* binaries + operatortest envtest_suite) now invoke
-// SetupEnvironmentControllerWithFactory directly with factory=nil for the
-// legacy single-cell path.
+// ok is false when nothing was ever provisioned (no recorded namespace) and the
+// cell is unknowable — the only case where there is nothing to delete.
+func (r *EnvironmentReconciler) deletionCell(ctx context.Context, env *loopzerov1.Environment) (cellID string, ok bool, err error) {
+	if env.Status.CellID != "" {
+		return env.Status.CellID, true, nil
+	}
+	cellID, err = r.tenantCell(ctx, env)
+	if err == nil {
+		return cellID, true, nil
+	}
+	if errors.IsNotFound(err) && env.Status.Namespace == "" {
+		return "", false, nil
+	}
+	return "", false, fmt.Errorf("environment %s: cannot locate the cell holding namespace %q: %w",
+		env.Name, env.Spec.Namespace.Name, err)
+}
 
-// SetupEnvironmentControllerWithFactory is the cell-aware entrypoint.
-func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, runtimeClient client.Client, factory cellrouting.RuntimeClientFactory) error {
+// deleteNamespace deletes the tenant-owned namespace in the environment's cell
+// and reports whether it is gone. Any lookup failure other than NotFound is
+// returned: "could not see it" is not "it is gone", and releasing the finalizer
+// on that confusion leaks the namespace and its workloads.
+func (r *EnvironmentReconciler) deleteNamespace(ctx context.Context, env *loopzerov1.Environment, nsName string) (bool, error) {
+	cellID, ok, err := r.deletionCell(ctx, env)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return true, nil
+	}
+	runtimeClient, err := r.runtimeClientForCell(ctx, env, cellID)
+	if err != nil {
+		return false, err
+	}
+
+	ns := &corev1.Namespace{}
+	if err := runtimeClient.Get(ctx, client.ObjectKey{Name: nsName}, ns); err != nil {
+		if errors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("environment %s: get namespace %s in cell %q: %w", env.Name, nsName, cellID, err)
+	}
+	if ns.Labels[constants.LabelTenant] != env.Spec.TenantRef.Name {
+		// Not ours: never delete a namespace another tenant (or nobody) owns.
+		return true, nil
+	}
+	if ns.DeletionTimestamp.IsZero() {
+		if err := runtimeClient.Delete(ctx, ns); err != nil && !errors.IsNotFound(err) {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
+// SetupEnvironmentControllerWithFactory registers the EnvironmentController.
+// factory is required: it is the only way this controller reaches a runtime
+// cluster. A single-cell deployment passes a factory whose default client is
+// that cluster.
+func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, factory cellrouting.RuntimeClientFactory) error {
+	if factory == nil {
+		return fmt.Errorf("environment controller: a runtime client factory is required")
+	}
 	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.Environment{}, reconcileloop.ForOption()).
 		Named("environment").
 		Complete(&EnvironmentReconciler{
 			Client:           mgr.GetClient(),
-			RuntimeClient:    runtimeClient,
 			RuntimeFactory:   factory,
 			Scheme:           mgr.GetScheme(),
 			IngressNamespace: ingressNS,
 		})
+}
+
+// patchStatus is the single status writer of this controller. It folds the
+// kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
+// with a merge patch off base, so every write carries a Ready condition that
+// agrees with the conditions written beside it.
+func (r *EnvironmentReconciler) patchStatus(ctx context.Context, env, base *loopzerov1.Environment) error {
+	conditions.SetReadinessSummaryViaPkg(&env.Status.Conditions, env.Generation, environmentDetailTypes)
+	return r.Status().Patch(ctx, env, client.MergeFrom(base))
 }

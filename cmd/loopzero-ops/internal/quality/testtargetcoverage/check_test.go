@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // tree writes a synthetic repo: one go.mod per named module, plus a taskfile.
@@ -39,7 +41,7 @@ func tree(t *testing.T, taskfile string, modules ...string) Config {
 
 func TestCheck_EveryModuleCoveredPasses(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd a && go test ./...\n  - cd b && go test ./...\n", "a", "b")
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if err != nil {
 		t.Fatalf("err = %v; uncovered=%v", err, out.Uncovered)
 	}
@@ -50,7 +52,7 @@ func TestCheck_EveryModuleCoveredPasses(t *testing.T) {
 
 func TestCheck_UncoveredModuleFailsAndIsNamed(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd a && go test ./...\n", "a", "b")
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !errors.Is(err, ErrModuleUncovered) {
 		t.Fatalf("err = %v; want ErrModuleUncovered", err)
 	}
@@ -63,7 +65,7 @@ func TestCheck_UncoveredModuleFailsAndIsNamed(t *testing.T) {
 // `cd cmd/loopzero-ops && go build ./...` and was read as covering the module.
 func TestCheck_BuildIsNotTest(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd a && go build ./...\n", "a")
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !errors.Is(err, ErrModuleUncovered) {
 		t.Fatalf("err = %v; `go build` must NOT count as running tests — that is exactly how "+
 			"cmd/loopzero-ops looked covered while no test of it ever ran", err)
@@ -76,7 +78,7 @@ func TestCheck_BuildIsNotTest(t *testing.T) {
 // A module outside go.work needs GOWORK=off; the prefix must not hide it.
 func TestCheck_GoworkOffPrefixStillCounts(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd tools/x && GOWORK=off go test ./...\n", "tools/x")
-	if _, err := Check(cfg); err != nil {
+	if _, err := violationOf(Check(cfg)); err != nil {
 		t.Fatalf("err = %v; `GOWORK=off go test` is running tests", err)
 	}
 }
@@ -84,7 +86,7 @@ func TestCheck_GoworkOffPrefixStillCounts(t *testing.T) {
 func TestCheck_ExemptionCoversItsModule(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd a && go test ./...\n", "a", "b")
 	cfg.Exemptions = []Exemption{{Module: "b", Reason: "zero *_test.go on disk", Sunset: "2026-11-11"}}
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -98,14 +100,14 @@ func TestCheck_ExemptionCoversItsModule(t *testing.T) {
 func TestCheck_ExemptionWithoutReasonIsAnError(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd a && go test ./...\n", "a", "b")
 	cfg.Exemptions = []Exemption{{Module: "b", Reason: "  ", Sunset: "2026-11-11"}}
-	if _, err := Check(cfg); !errors.Is(err, ErrExemptionWithoutReason) {
+	if _, err := violationOf(Check(cfg)); !errors.Is(err, ErrExemptionWithoutReason) {
 		t.Fatalf("err = %v; want ErrExemptionWithoutReason", err)
 	}
 }
 
 func TestCheck_NoModulesIsAnError(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - echo hi\n")
-	if _, err := Check(cfg); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(cfg)); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("err = %v; a run that found zero modules verified nothing", err)
 	}
 }
@@ -113,27 +115,27 @@ func TestCheck_NoModulesIsAnError(t *testing.T) {
 func TestCheck_MissingTaskfileIsAnError(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd a && go test ./...\n", "a")
 	cfg.Taskfiles = []string{"taskfiles/absent.yml"}
-	if _, err := Check(cfg); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(cfg)); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("err = %v; scanning fewer files than intended shrinks what the gate can see", err)
 	}
 }
 
 // Against the real tree, which this slice is fixing.
 func TestCheck_RealTreeIsFullyCovered(t *testing.T) {
-	root := repoRoot(t)
-	out, err := Check(Config{RepoRoot: root})
+	root := qtestutil.Root(t)
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("err = %v; uncovered=%v", err, out.Uncovered)
 	}
-	// Eram nove; sao OITO desde 2026-08-19. `tools/loopzero-dockerfile-lint` foi removido
-	// (B-157): ele validava Dockerfile fornecido pelo usuario, e esse caminho saiu na T2.2 —
-	// o build gera Dockerfile canonico em processo, entao nenhum caminho o invocava.
+	// There were nine; there have been EIGHT since 2026-08-19. `tools/loopzero-dockerfile-lint` was removed
+	// (B-157): it validated a user-supplied Dockerfile, and that path went away in T2.2 —
+	// the build generates a canonical Dockerfile in-process, so no path invoked it.
 	//
-	// Baixar o piso so' e' legitimo quando a causa e' conhecida e deliberada, e e' por isso
-	// que ela esta' escrita aqui: um piso que cede sem razao registrada deixa de ser piso.
+	// Lowering the floor is only legitimate when the cause is known and deliberate, and that is why
+	// it is written here: a floor that gives way with no recorded reason stops being a floor.
 	if len(out.Modules) < 8 {
-		t.Errorf("modules = %d (%v); a arvore carrega oito desde a remocao do B-157 — uma "+
-			"varredura que achou menos esta' medindo menos que a arvore", len(out.Modules), out.Modules)
+		t.Errorf("modules = %d (%v); the tree has carried eight since the B-157 removal — a "+
+			"scan that found fewer is measuring less than the tree", len(out.Modules), out.Modules)
 	}
 	for _, want := range []string{"cmd/loopzero-ops"} {
 		var found bool
@@ -148,29 +150,13 @@ func TestCheck_RealTreeIsFullyCovered(t *testing.T) {
 	}
 }
 
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatal("go.work not found walking up")
-	return ""
-}
-
 // LOW-1: the prefix boundary is the discipline that keeps `operators` from being
 // marked covered by `operators/api`'s line. An independent review measured that
 // dropping the trailing space survived every other test in this file, so it is
 // pinned here in BOTH directions.
 func TestCheck_PrefixBoundaryIsRespected(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd operators/api && go test ./...\n", "operators", "operators/api")
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !errors.Is(err, ErrModuleUncovered) {
 		t.Fatalf("err = %v; `operators` has no target of its own and must NOT be covered by "+
 			"`operators/api`'s line. covered=%v", err, out.Covered)
@@ -181,7 +167,7 @@ func TestCheck_PrefixBoundaryIsRespected(t *testing.T) {
 
 	// And the reverse: the parent's line must not cover the child.
 	cfg2 := tree(t, "cmds:\n  - cd operators && go test ./...\n", "operators", "operators/api")
-	out2, err2 := Check(cfg2)
+	out2, err2 := violationOf(Check(cfg2))
 	if !errors.Is(err2, ErrModuleUncovered) {
 		t.Fatalf("err = %v; `operators/api` is a separate module and needs its own target. covered=%v",
 			err2, out2.Covered)
@@ -195,7 +181,7 @@ func TestCheck_NonExecutingTextDoesNotCount(t *testing.T) {
 		"echoed":       "cmds:\n  - echo \"cd a && go test ./...\"\n",
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := Check(tree(t, tf, "a")); !errors.Is(err, ErrModuleUncovered) {
+			if _, err := violationOf(Check(tree(t, tf, "a"))); !errors.Is(err, ErrModuleUncovered) {
 				t.Errorf("err = %v; %s does not run anything", err, name)
 			}
 		})
@@ -206,7 +192,7 @@ func TestCheck_NonExecutingTextDoesNotCount(t *testing.T) {
 // DIFFERENT module, later on the same line, marked this one covered.
 func TestCheck_GoTestForAnotherModuleDoesNotCount(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd a && go build ./... && cd ../b && go test ./...\n", "a", "b")
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !errors.Is(err, ErrModuleUncovered) {
 		t.Fatalf("err = %v; `a` is only BUILT here. covered=%v", err, out.Covered)
 	}
@@ -231,7 +217,7 @@ func TestCheck_GoTestForAnotherModuleDoesNotCount(t *testing.T) {
 func TestCheck_PrunedTreesAreNotModules(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd a && go test ./...\n",
 		"a", ".claude/knowledge-base/references/peer", "worktrees/wt/mod", "vendor/x")
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if err != nil {
 		t.Fatalf("err = %v; cloned peers and worktrees are not repo modules. uncovered=%v",
 			err, out.Uncovered)
@@ -250,17 +236,17 @@ func TestCheck_ExemptionSunsetIsEnforced(t *testing.T) {
 	}
 	c := base()
 	c.Exemptions = []Exemption{{Module: "b", Reason: "no tests"}}
-	if _, err := Check(c); !errors.Is(err, ErrExemptionWithoutSunset) {
+	if _, err := violationOf(Check(c)); !errors.Is(err, ErrExemptionWithoutSunset) {
 		t.Errorf("err = %v; want ErrExemptionWithoutSunset", err)
 	}
 	c = base()
 	c.Exemptions = []Exemption{{Module: "b", Reason: "no tests", Sunset: "2026-01-01"}}
-	if _, err := Check(c); !errors.Is(err, ErrExemptionExpired) {
+	if _, err := violationOf(Check(c)); !errors.Is(err, ErrExemptionExpired) {
 		t.Errorf("err = %v; want ErrExemptionExpired", err)
 	}
 	c = base()
 	c.Exemptions = []Exemption{{Module: "b", Reason: "no tests", Sunset: "2026-11-11"}}
-	if _, err := Check(c); err != nil {
+	if _, err := violationOf(Check(c)); err != nil {
 		t.Errorf("err = %v; an unexpired exemption with a reason must pass", err)
 	}
 }

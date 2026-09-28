@@ -3,9 +3,10 @@
 # Idempotent — safe to run multiple times.
 #
 # Creates:
-#   - loopzero-api-tokens Secret          (gitea-token + argocd-token)
+#   - loopzero-api-tokens Secret keys     (gitea-token + argocd-token, via loopzero-ops seed)
 #   - loopzero-build-kubeconfig ConfigMap  (build cluster access for API + operator)
 #   - loopzero-cell-0-kubeconfig ConfigMap (workload cluster access for operator)
+#   - loopzero-cluster-kubeconfigs keys    (build + cell-0 for loopzero-api, via loopzero-ops seed)
 #
 # ArgoCD auth: Uses a dedicated 'loopzero-api' account with apiKey capability.
 # Tokens from apiKey accounts do NOT expire (unlike admin session tokens which expire in 24h).
@@ -18,121 +19,38 @@ WORKLOAD_CTX="k3d-loopzero-cell-0"
 # Local dev uses loopzero-system, production uses loopzero-system.
 NAMESPACE="${LOOPZERO_NAMESPACE:-loopzero-system}"
 
-# REVIEW-2026-03-30: Fixes HIGH-06 — was "loopzero-admin", now "gitea_admin" to match Pulumi Helm config.
-GITEA_USER="${GITEA_USER:-gitea_admin}"
-# T1.3 + EC-01 (plan 2026-05-21-deep-review-remediation): no hardcoded
-# fallback. Read from gitea-admin Secret (generate-secrets.sh creates it
-# earlier in bootstrap:standalone chain) OR fail fast.
-GITEA_PASS="${GITEA_PASS:-$(kubectl --context "${MGMT_CTX:-k3d-loopzero-core}" -n loopzero-system get secret gitea-admin -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
-if [[ -z "$GITEA_PASS" ]]; then
-  echo "ERROR: GITEA_PASS unset AND gitea-admin Secret missing in loopzero-system" >&2
-  echo "       Run generate-secrets.sh first OR set GITEA_PASS env var" >&2
-  echo "       See docs/operations.md" >&2
-  exit 1
-fi
+# loopzero-ops is the Go home of the token provisioning this script used to carry
+# as curl calls (#236). An installed binary wins; otherwise it is built from
+# this checkout.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+loopzero_ops() {
+  if command -v loopzero-ops >/dev/null 2>&1; then
+    loopzero-ops "$@"
+  else
+    (cd "$REPO_ROOT/cmd/loopzero-ops" && go run . "$@")
+  fi
+}
 
 echo "=== Provisioning API tokens ==="
 
 # ---------------------------------------------------------------------------
-# 1. Gitea token
+# 1-4. Gitea token, ArgoCD token, ArgoCD repo credentials
 # ---------------------------------------------------------------------------
-echo "Creating Gitea API token (repo + org scope)..."
-kubectl --context "$MGMT_CTX" port-forward -n "$NAMESPACE" svc/gitea-http 13000:3000 &
-GITEA_PORT_FORWARD_PID=$!
-sleep 2
-
-# Ensure 'loopzero' org exists (idempotent — Gitea returns 422 if already exists)
-curl -s -X POST "http://localhost:13000/api/v1/orgs" \
-  -u "${GITEA_USER}:${GITEA_PASS}" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"loopzero","full_name":"LoopZero Platform","visibility":"private"}' > /dev/null 2>&1
-echo "Gitea org 'loopzero': ensured"
-
-# Scopes: write:repository (clone + push) + write:organization (create repos in org) + read:user
-# Use fixed token name to avoid accumulating stale tokens on repeated runs (E-13).
-TOKEN_NAME="loopzero-api"
-# Delete existing token with this name (idempotent — 404 if not found)
-curl -s -X DELETE "http://localhost:13000/api/v1/users/${GITEA_USER}/tokens/${TOKEN_NAME}" \
-  -u "${GITEA_USER}:${GITEA_PASS}" > /dev/null 2>&1 || true
-GITEA_TOKEN=$(curl -s -X POST "http://localhost:13000/api/v1/users/${GITEA_USER}/tokens" \
-  -u "${GITEA_USER}:${GITEA_PASS}" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"${TOKEN_NAME}\",\"scopes\":[\"write:repository\",\"write:organization\",\"read:user\"]}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sha1',''))")
-
-kill "$GITEA_PORT_FORWARD_PID" 2>/dev/null; wait "$GITEA_PORT_FORWARD_PID" 2>/dev/null || true
-echo "Gitea token: ${#GITEA_TOKEN} chars"
-
-# ---------------------------------------------------------------------------
-# 2. ArgoCD token
-# ---------------------------------------------------------------------------
-ARGOCD_TOKEN=""
+# These are the `loopzero-ops seed` implementations the post-Cleanroom chain runs
+# as well (seed-post-cleanroom-all.sh steps 6, 6b and 13). This script used to
+# carry a second, curl-based copy of each — a different Gitea token name and
+# scope set, a different repo-creds URL, and a Secret write that replaced keys
+# other producers own — so whichever ran last decided what the cluster held.
+# Each seed reads the admin credentials from the cluster (gitea-admin,
+# argocd-initial-admin-secret), writes only its own keys, and fails the run
+# instead of storing an empty token.
+export CORE_CONTEXT="$MGMT_CTX"
+loopzero_ops seed gitea-token
 if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1; then
-  echo "Creating ArgoCD API token (loopzero-api account, non-expiring)..."
-  ARGOCD_PASS=$(kubectl --context "$MGMT_CTX" -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null)
-
-  if [ -n "$ARGOCD_PASS" ]; then
-    kubectl --context "$MGMT_CTX" port-forward -n argocd svc/argocd-server 18080:80 &
-    ARGOCD_PORT_FORWARD_PID=$!
-    sleep 2
-
-    ADMIN_SESSION=$(curl -s -X POST "http://localhost:18080/api/v1/session" \
-      -H "Content-Type: application/json" \
-      -d "{\"username\":\"admin\",\"password\":\"$ARGOCD_PASS\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
-
-    if [ -n "$ADMIN_SESSION" ]; then
-      ARGOCD_TOKEN=$(curl -s -X POST "http://localhost:18080/api/v1/account/loopzero-api/token" \
-        -H "Authorization: Bearer $ADMIN_SESSION" \
-        -H "Content-Type: application/json" \
-        -d "{\"expiresIn\":0,\"id\":\"loopzero-api-$(date +%s)\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
-
-      if [ -n "$ARGOCD_TOKEN" ]; then
-        echo "ArgoCD token: ${#ARGOCD_TOKEN} chars (non-expiring, loopzero-api account)"
-      else
-        echo "WARNING: Failed to generate loopzero-api token."
-      fi
-    else
-      echo "WARNING: Failed to get ArgoCD admin session."
-    fi
-
-    kill "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null; wait "$ARGOCD_PORT_FORWARD_PID" 2>/dev/null || true
-  else
-    echo "WARNING: ArgoCD admin secret not found."
-  fi
+  loopzero_ops seed argocd-token
+  loopzero_ops seed argocd-gitea-creds
 else
-  echo "WARNING: ArgoCD namespace not found. Skipping."
-fi
-
-# ---------------------------------------------------------------------------
-# 3. Create K8s secret with tokens
-# ---------------------------------------------------------------------------
-echo "Creating K8s secret loopzero-api-tokens..."
-kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create secret generic loopzero-api-tokens \
-  --from-literal=gitea-token="$GITEA_TOKEN" \
-  --from-literal=argocd-token="$ARGOCD_TOKEN" \
-  --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f -
-
-# ---------------------------------------------------------------------------
-# 4. ArgoCD repo credentials (so ArgoCD can clone from Gitea)
-# ---------------------------------------------------------------------------
-if kubectl --context "$MGMT_CTX" get namespace argocd >/dev/null 2>&1 && [ -n "$GITEA_TOKEN" ]; then
-  echo "Setting up ArgoCD repo credentials..."
-  # Use repo-creds (credential template) — matches ALL repos under this URL prefix.
-  # This is more robust than per-repo secrets because tenant repos are created dynamically.
-  #
-  # F-09 fix (2026-05-07 cleanroom dogfood): URL MUST end with trailing slash.
-  # Without it, ArgoCD's repo-creds prefix matching becomes non-deterministic —
-  # GenerateManifest intermittently returns "authentication required" even
-  # though git ls-remote with the same creds works. Trailing slash makes the
-  # URL prefix unambiguous (any repo path that follows is clearly a sub-path),
-  # and ArgoCD's internal URL normalizer reliably picks up the creds.
-  kubectl --context "$MGMT_CTX" -n argocd create secret generic argocd-creds-gitea \
-    --from-literal=type=git \
-    --from-literal=url="http://gitea-http.${NAMESPACE}.svc.cluster.local:3000/" \
-    --from-literal=username="${GITEA_USER}" \
-    --from-literal=password="${GITEA_TOKEN}" \
-    --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" -n argocd apply -f -
-  kubectl --context "$MGMT_CTX" -n argocd label secret argocd-creds-gitea argocd.argoproj.io/secret-type=repo-creds --overwrite 2>/dev/null
-  echo "ArgoCD repo credentials: configured (credential template, trailing-slash URL)"
+  echo "WARNING: ArgoCD namespace not found. Skipping the ArgoCD token and repo credentials."
 fi
 
 # ---------------------------------------------------------------------------
@@ -268,7 +186,8 @@ fi
 
 # dogfood-2026-05-08-fixes T2.2 (F-2 root cause):
 # Context name MUST be "in-cluster" to match CELL_0_KUBE_CONTEXT in
-# infra/tilt/api-deployment.yaml + infra/helm/loopzero-api Deployment env.
+# infra/tilt/api-deployment.yaml + the charts/loopzero-api Helmfile install
+# (config.runtimeKubeContext in charts/loopzero-api/values-bootstrap.yaml).
 # B34 fix doc says the kubeconfig "ships with a single context named
 # in-cluster", but F-11 (2026-05-07) regenerated it with name=runtime —
 # silent drift that broke `loopzero secret set` (SecretK8sManager construct
@@ -301,57 +220,35 @@ kubectl --context "$MGMT_CTX" -n "$NAMESPACE" create configmap loopzero-cell-0-k
   --from-file=config=/tmp/runtime-kubeconfig.yaml \
   --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f -
 
-# F-11 fix (2026-05-07 cleanroom dogfood): loopzero-cluster-kubeconfigs Secret
-# is mounted by loopzero-api Deployment at /etc/loopzero/runtime/kubeconfig (per
-# infra/tilt/api-deployment.yaml + helm/loopzero-api). generate-secrets.sh
-# creates this Secret with a synthetic in-cluster kubeconfig that points
-# all 3 cluster keys (mgmt/build/cell-0.kubeconfig) at kubernetes.default.svc
-# (the SAME mgmt cluster). That assumption is wrong for k3d multi-cluster
-# setups where workload is a separate cluster. Symptom: loopzero-api creates
-# ExternalSecret CRs in mgmt instead of workload, hits forbidden RBAC,
-# and silently fails — Journey 03 Secrets pod hits CreateContainerConfigError.
-#
-# Fix: overwrite the cell-0.kubeconfig key in loopzero-cluster-kubeconfigs
-# Secret with the REAL workload kubeconfig (IP-based, admin certs)
-# AFTER generate-secrets.sh has run. Idempotent kubectl apply.
-echo "Patching loopzero-cluster-kubeconfigs cell-0.kubeconfig with real workload kubeconfig..."
-kubectl --context "$MGMT_CTX" -n "$NAMESPACE" get secret loopzero-cluster-kubeconfigs >/dev/null 2>&1 && {
-  RUNTIME_KC_B64=$(base64 -w0 /tmp/runtime-kubeconfig.yaml)
-  kubectl --context "$MGMT_CTX" -n "$NAMESPACE" patch secret loopzero-cluster-kubeconfigs \
-    --type='json' \
-    -p="[{\"op\":\"replace\",\"path\":\"/data/cell-0.kubeconfig\",\"value\":\"${RUNTIME_KC_B64}\"}]" 2>&1 | tail -1
-  echo "loopzero-cluster-kubeconfigs cell-0.kubeconfig: patched with real workload IP"
-} || echo "loopzero-cluster-kubeconfigs Secret not present yet — generate-secrets.sh will create later"
-
 rm -f /tmp/runtime-kubeconfig.yaml
 echo "Runtime cluster kubeconfig: created (admin certs, insecure TLS)"
 
 # ---------------------------------------------------------------------------
-# 8. MinIO buckets (idempotent — mc mb --ignore-existing)
+# 7b. loopzero-api's peer kubeconfigs (loopzero-cluster-kubeconfigs: build + cell-0)
 # ---------------------------------------------------------------------------
-# The lifecycle Job can fail if MinIO isn't ready during Helm install.
-# By this point MinIO has been running for several minutes — guaranteed ready.
-echo "Ensuring MinIO buckets exist..."
-MINIO_POD=$(kubectl --context "$MGMT_CTX" -n "$NAMESPACE" get pod -l app=minio -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-if [ -n "$MINIO_POD" ]; then
-  kubectl --context "$MGMT_CTX" -n "$NAMESPACE" exec "$MINIO_POD" -- sh -c "
-    mc alias set local http://localhost:9000 \$MINIO_ROOT_USER \$MINIO_ROOT_PASSWORD 2>/dev/null
-    mc mb --ignore-existing local/loopzero-builds
-    mc mb --ignore-existing local/loopzero-artifacts
-    mc mb --ignore-existing local/loopzero-static-assets
-  " 2>&1 | grep -E "created|already"
-  echo "MinIO buckets: ensured"
-else
-  echo "WARNING: MinIO pod not found — buckets not created"
-fi
+# F-11 (2026-05-07): generate-secrets.sh installs an in-cluster placeholder
+# that points loopzero-api at the core cluster, so ExternalSecret creation landed
+# in the wrong cluster. This step used to patch the cell-0 key with the admin
+# client certificates above; the heal's H2 then rewrote it with a 24h
+# default-SA token, and a Python regen with a 720h one — three writers, three
+# credential models. The keys have one minter now (#236), which needs the
+# loopzero-workflow-submitter SA created in section 6.
+export CORE_CONTEXT="$MGMT_CTX"
+loopzero_ops seed cluster-kubeconfigs
+
+# ---------------------------------------------------------------------------
+# 8. MinIO buckets — not here
+# ---------------------------------------------------------------------------
+# MinIO buckets are declared once, in infra/helm/minio/values.yaml (`buckets:`), and
+# created by the chart's own job during infra:install. This step used to create them a
+# third time by running `mc` inside the server pod; loopzero-minio carries no client since
+# MinIO withdrew its images (#394), so it failed a cold setup and added nothing.
 
 echo ""
 echo "=== Done ==="
-echo "Secret 'loopzero-api-tokens' created in $NAMESPACE"
+echo "Secret 'loopzero-api-tokens' keys written in loopzero-system (loopzero-api and the tenant operator restarted by the seeds)"
 echo "ConfigMap 'loopzero-build-kubeconfig' created in $NAMESPACE"
 echo "ConfigMap 'loopzero-cell-0-kubeconfig' created in $NAMESPACE"
+echo "loopzero-cluster-kubeconfigs build + cell-0 keys written"
 echo "ArgoCD repo + cluster secrets configured"
 echo "MinIO buckets ensured"
-echo ""
-echo "Restart pods to pick up new tokens:"
-echo "  kubectl --context $MGMT_CTX -n $NAMESPACE rollout restart deployment/loopzero-api deployment/tenant-controller"

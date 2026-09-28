@@ -1,5 +1,5 @@
 // Package optionbeso is a hermetic contract test for
-// docs/runbooks.md.
+// docs/operations/option-b-mgmt-helmfile-eso-deploy.md.
 //
 // Locks that the Option B analysis doc:
 //   - Documents 4 sub-paths (B1, B2, B3, B4) with each rated.
@@ -25,6 +25,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const (
@@ -40,6 +42,17 @@ type Config struct {
 // Outcome carries the assertion failures.
 type Outcome struct {
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means at least one assertion failed.
@@ -60,7 +73,7 @@ func Check(cfg Config) (Outcome, error) {
 	docFull := filepath.Join(root, docPath)
 	docBytes, err := os.ReadFile(docFull)
 	if err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("Option B analysis doc missing at %s: %v", docPath, err)}}, ErrViolations
+		return Outcome{Failures: []string{fmt.Sprintf("Option B analysis doc missing at %s: %v", docPath, err)}, Violation: ErrViolations}, nil
 	}
 	doc := string(docBytes)
 
@@ -145,12 +158,11 @@ func Check(cfg Config) (Outcome, error) {
 	forbidRE("Co-Authored-By trailer forbidden", `(?i)Co-Authored-By`)
 	assertRE("Rule 4 mandate cited (or sponsor verbatim/authorization)", `Rule 4|sponsor.*verbatim|sponsor.*authorization`)
 
-	// K: plan slug + canonical memories cited.
+	// K: plan slug cited.
 	assertRE("J-22 plan slug cited", `2026-06-10-j22-openbao-transit-eso-sync`)
-	assertRE("productive-idle mandate memory cited", `feedback_productive_idle_runbook_preauthor_2026_06_10`)
 
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

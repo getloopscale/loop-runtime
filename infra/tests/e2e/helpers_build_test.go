@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -67,32 +65,8 @@ func waitBuildTerminal(buildID string, timeout time.Duration) string {
 // deployAndWaitSuccess runs loopzero deploy --json in the given directory, waits for
 // the build to reach SUCCEEDED, and returns the build ID and full JSON response.
 func deployAndWaitSuccess(dir, env string, timeout time.Duration) (buildID string, result map[string]interface{}) {
-	args := []string{"deploy", "--env", env, "--no-wait", "--json"}
-	cmd := exec.Command("loopzero", args...)
-	cmd.Dir = dir
-	// T2 amendment 2026-05-13: auth via configStore (XDG_CONFIG_HOME from
-	// BeforeSuite), NOT LOOPZERO_TOKEN env injection. See finding-2026-05-13-e2e-
-	// token-refresh-divergence.md. Hard-strip parent LOOPZERO_TOKEN so configStore
-	// is the only source (Rule 10 — test↔prod auth path parity).
-	cmd.Env = append(os.Environ(),
-		"LOOPZERO_API_URL="+apiURL(),
-		"LOOPZERO_TOKEN=",
-	)
-
-	var stdoutBuf, stderrBuf strings.Builder
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-
-	err := cmd.Run()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		}
-	}
-
-	stdout := stdoutBuf.String()
-	stderr := stderrBuf.String()
+	stdout, stderr, exitCode := execLoopZero(loopzeroInvocation{dir: dir},
+		"deploy", "--env", env, "--no-wait", "--json")
 
 	Expect(exitCode).To(Equal(0),
 		"loopzero deploy failed with exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)

@@ -26,7 +26,6 @@ func TestRateLimiter_BoundaryBurstIsNotDoubleTheLimit(t *testing.T) {
 	const window = time.Second
 
 	rl := NewRateLimiter(rate, window)
-	defer rl.Stop()
 
 	// Spend the whole allowance at the very end of a window.
 	allowedFirst := 0
@@ -67,7 +66,6 @@ func TestRateLimiter_BoundaryBurstIsNotDoubleTheLimit(t *testing.T) {
 func TestRateLimiter_AdmitsFullRateWithinAWindow(t *testing.T) {
 	const rate = 5
 	rl := NewRateLimiter(rate, time.Second)
-	defer rl.Stop()
 
 	for i := 0; i < rate; i++ {
 		if !rl.Allow("tenant-b") {
@@ -86,7 +84,6 @@ func TestRateLimiter_RecoversAfterAFullWindow(t *testing.T) {
 	const window = 200 * time.Millisecond
 
 	rl := NewRateLimiter(rate, window)
-	defer rl.Stop()
 
 	for i := 0; i < rate; i++ {
 		rl.Allow("tenant-c")

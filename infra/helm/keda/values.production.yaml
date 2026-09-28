@@ -1,55 +1,48 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 #
-# KEDA production overrides (DigitalOcean workload cluster).
-# Usage: helm upgrade --install keda loopzero-keda -f values.yaml -f values.production.yaml
+# KEDA production overrides (DigitalOcean workload cluster), layered on top of
+# values.yaml for the dev and prod environments by cell.helmfile.yaml.gotmpl.
+# Upstream kedacore/keda 2.16.1 shape — see values.yaml.
 
-keda:
-  # ---------------------------------------------------------------------------
-  # Operator -- HA (2 replicas with leader election)
-  # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# HA — 2 replicas each (the operator elects a leader; the second replica only
+# shortens failover)
+# ---------------------------------------------------------------------------
+operator:
+  replicaCount: 2
+
+metricsServer:
+  replicaCount: 2
+
+resources:
   operator:
-    replicaCount: 2
-    resources:
-      requests:
-        cpu: "200m"
-        memory: "256Mi"
-      limits:
-        cpu: "1000m"
-        memory: "512Mi"
-
-  # ---------------------------------------------------------------------------
-  # Metrics Server -- HA (2 replicas)
-  # ---------------------------------------------------------------------------
-  metricsServer:
-    replicaCount: 2
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "500m"
-        memory: "256Mi"
-
-  # ---------------------------------------------------------------------------
-  # Webhooks -- production sizing
-  # ---------------------------------------------------------------------------
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "512Mi"
+  metricServer:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
   webhooks:
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "500m"
-        memory: "256Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
 
-  # ---------------------------------------------------------------------------
-  # PodDisruptionBudgets -- ensure availability during node drains
-  # ---------------------------------------------------------------------------
-  podDisruptionBudget:
-    operator:
-      enabled: true
-      minAvailable: 1
-    metricServer:
-      enabled: true
-      minAvailable: 1
+# ---------------------------------------------------------------------------
+# PodDisruptionBudgets — keep one replica available during node drains
+# ---------------------------------------------------------------------------
+podDisruptionBudget:
+  operator:
+    minAvailable: 1
+  metricServer:
+    minAvailable: 1

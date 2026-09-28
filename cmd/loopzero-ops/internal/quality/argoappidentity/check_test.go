@@ -20,10 +20,10 @@ func write(t *testing.T, root, rel, body string) {
 	}
 }
 
-// TestDetectaConstrucaoAdHoc usa as formas reais que existiam antes da correção,
-// incluindo as duas de dentro do prune — que são as perigosas, porque decidem o que
-// deletar com o finalizer de cascade ativo.
-func TestDetectaConstrucaoAdHoc(t *testing.T) {
+// TestDetectsAdHocConstruction uses the real shapes that existed before the fix,
+// including the two inside the prune — which are the dangerous ones, because they decide
+// what to delete with the cascade finalizer active.
+func TestDetectsAdHocConstruction(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "operators/internal/tenant/tenant_gitops.go", `package tenant
 func a() {
@@ -31,7 +31,7 @@ func a() {
 	_ = appName
 }
 `)
-	write(t, root, "api/internal/services/release/container_delivery.go", `package release
+	write(t, root, "api/internal/release/container_delivery.go", `package release
 func b() {
 	argoAppName := fmt.Sprintf("%s-%s", build.TenantID, build.Environment)
 	_ = argoAppName
@@ -43,14 +43,14 @@ func b() {
 		t.Fatal(err)
 	}
 	if len(rep.Findings) != 2 {
-		t.Fatalf("as duas construções ad-hoc devem ser achadas; veio %d: %+v",
+		t.Fatalf("both ad-hoc constructions must be found; got %d: %+v",
 			len(rep.Findings), rep.Findings)
 	}
 }
 
-// TestDetectaIdentidadeDeEnvironmentCR — #273: o Environment CR tinha a mesma forma e uma
-// consequência pior (o projeto perdedor ficava sem namespace nenhum). O gate cobre os dois.
-func TestDetectaIdentidadeDeEnvironmentCR(t *testing.T) {
+// TestDetectsEnvironmentCRIdentity — #273: the Environment CR had the same shape and a
+// worse consequence (the losing project ended up with no namespace at all). The gate covers both.
+func TestDetectsEnvironmentCRIdentity(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "operators/internal/tenant/tenant_controller.go", `package tenant
 func c() {
@@ -60,14 +60,14 @@ func c() {
 `)
 	rep, _ := Check(root)
 	if len(rep.Findings) != 1 {
-		t.Errorf("a identidade do Environment CR também é escopo do gate (#273); findings=%+v",
+		t.Errorf("the Environment CR identity is also in the gate's scope (#273); findings=%+v",
 			rep.Findings)
 	}
 }
 
-// TestDetectaConjuntoDesiredDoGC — o `desired` do GC de Environment CRs decide o que
-// DELETAR, e deletar um Environment CR apaga o namespace do tenant no cluster de runtime.
-func TestDetectaConjuntoDesiredDoGC(t *testing.T) {
+// TestDetectsGCDesiredSet — the `desired` set of the Environment CR GC decides what to
+// DELETE, and deleting an Environment CR erases the tenant's namespace in the runtime cluster.
+func TestDetectsGCDesiredSet(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "operators/internal/tenant/tenant_controller.go", `package tenant
 func d() {
@@ -76,15 +76,15 @@ func d() {
 `)
 	rep, _ := Check(root)
 	if rep.OK() {
-		t.Error("o conjunto que protege da deleção precisa vir da fonte canônica (#273)")
+		t.Error("the set that protects from deletion must come from the canonical source (#273)")
 	}
 }
 
-// TestNaoAcusaNomeDeAppDoRelease — release_convergence_loop.go monta "{project}-{app}"
-// para os apps DENTRO de um release. Não tem termo de tenant, então não casa.
-func TestNaoAcusaNomeDeAppDoRelease(t *testing.T) {
+// TestDoesNotFlagReleaseAppName — release_convergence_loop.go builds "{project}-{app}"
+// for the apps INSIDE a release. It has no tenant term, so it does not match.
+func TestDoesNotFlagReleaseAppName(t *testing.T) {
 	root := t.TempDir()
-	write(t, root, "api/internal/services/release/release_convergence_loop.go", `package release
+	write(t, root, "api/internal/release/release_convergence_loop.go", `package release
 func d() {
 	appRef := fmt.Sprintf("%s-%s", release.ProjectID, app.Name)
 	_ = appRef
@@ -92,25 +92,25 @@ func d() {
 `)
 	rep, _ := Check(root)
 	if !rep.OK() {
-		t.Errorf("nome de app dentro do release não é nome de Application; findings=%+v", rep.Findings)
+		t.Errorf("an app name inside a release is not an Application name; findings=%+v", rep.Findings)
 	}
 }
 
-// TestComentarioNaoEAchado — um comentário citando a forma antiga é história.
-func TestComentarioNaoEAchado(t *testing.T) {
+// TestCommentIsNotAFinding — a comment citing the old shape is history.
+func TestCommentIsNotAFinding(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "operators/internal/tenant/tenant_gitops.go", `package tenant
-// Antes de #271 isto era: appName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
+// Before #271 this was: appName := fmt.Sprintf("%s-%s", tenant.Name, env.Name)
 func e() {}
 `)
 	rep, _ := Check(root)
 	if !rep.OK() {
-		t.Errorf("comentário histórico não é achado; findings=%+v", rep.Findings)
+		t.Errorf("a historical comment is not a finding; findings=%+v", rep.Findings)
 	}
 }
 
-// TestRepositorioRealPassa é a asserção de que a correção de fato aterrissou.
-func TestRepositorioRealPassa(t *testing.T) {
+// TestRealRepositoryPasses is the assertion that the fix actually landed.
+func TestRealRepositoryPasses(t *testing.T) {
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -129,6 +129,6 @@ func TestRepositorioRealPassa(t *testing.T) {
 		t.Errorf("%s", f.Message())
 	}
 	if rep.Scanned == 0 {
-		t.Error("nenhum arquivo varrido — o gate passaria por vacuidade")
+		t.Error("no file scanned — the gate would pass vacuously")
 	}
 }

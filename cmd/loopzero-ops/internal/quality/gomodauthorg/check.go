@@ -13,7 +13,7 @@
 //
 // # WHY A GATE AND NOT A FIX
 //
-// This defect shipped twice in two days from a single root cause. Commit f813b367 (2026-08-06)
+// This defect shipped twice in two days from a single root cause. Commit 696fe5c62 (2026-08-06)
 // rewrote api/go.mod and pkg/go.mod from `getloopscale` to `getloopscale`. The places that
 // authenticate did not follow:
 //
@@ -36,6 +36,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // authFiles are the places that configure module authentication. Each is checked against the
@@ -75,6 +77,9 @@ type Report struct {
 
 // OK reports whether the gate passed.
 func (r Report) OK() bool { return len(r.Findings) == 0 }
+
+// Verdict is Fail when any build file authenticates against another org.
+func (r Report) Verdict() verdict.Verdict { return verdict.Of(r.Findings) }
 
 // Check runs the gate against repoRoot.
 func Check(repoRoot string) (Report, error) {

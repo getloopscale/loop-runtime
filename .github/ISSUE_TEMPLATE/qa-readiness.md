@@ -1,6 +1,6 @@
 ---
 name: QA-readiness milestone closure
-about: Records the post-execution closure of a QA-readiness milestone (M7-class — Cleanroom validation + sponsor JUNTOS walkthrough).
+about: Records the post-execution closure of a QA-readiness milestone (M7-class — Cleanroom validation + joint sponsor walkthrough).
 title: "QA-readiness YYYY-MM-DD complete"
 labels: qa-readiness
 assignees: ''
@@ -9,7 +9,7 @@ assignees: ''
 <!--
 Canonical GH issue template for QA-readiness milestone closure.
 Per ADR 2026-06-23-validation-milestone-sponsor-hard-stop.md § Decision Step 4.
-Operator runs `gh issue create` from this template AFTER sponsor JUNTOS Step 7 PASS.
+Operator runs `gh issue create` from this template AFTER the joint sponsor walkthrough (Step 7) PASSES.
 -->
 
 ## Milestone metadata
@@ -35,7 +35,7 @@ Operator runs `gh issue create` from this template AFTER sponsor JUNTOS Step 7 P
 | 5 | live-proof-dev-public.sh | ~30s | <X/9 PASS> | layer 1-3 probes |
 | 6 | run-chaos.sh × 2 | ~Xmin | <X/2 PASS> | gitea-outage + pod-kill-api-leader |
 | 6.5 | Baseline capture | ~5min | <DONE> | filed where baselines are now kept (`docs/operations/baselines/` was removed 2026-09-11) |
-| 7 | Sponsor JUNTOS browser walkthrough | ~30min | <PASS/FAIL> | sponsor verbatim quote below |
+| 7 | Joint sponsor browser walkthrough | ~30min | <PASS/FAIL> | sponsor verbatim quote below |
 
 ## Sponsor verbatim quote (HARD STOP marker #4)
 

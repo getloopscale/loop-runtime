@@ -32,7 +32,7 @@ import (
 // leaving its doc comments behind over no code at all.
 //
 // The consequence was not cosmetic. `DELETE /api/v1/tenants/{id}`,
-// `POST /api/v1/tenants/{id}/restore` and `POST /api/v1/tenants/bulk-delete` are
+// `POST /api/v1/tenants/{id}/restore` (and a bulk-delete route since removed) were
 // guarded by `if cfg.TenantDeletionStore != nil`, so none of them was ever
 // registered in any deployment — while the dashboard's account-deletion screen
 // called the first one for real, and two rounds of client-side bug fixes were
@@ -63,15 +63,7 @@ func NewTenantDeletionStoreSqlc(pool db.DBTX) *TenantDeletionStoreSqlc {
 var _ ports.TenantDeletionStore = (*TenantDeletionStoreSqlc)(nil)
 
 func (s *TenantDeletionStoreSqlc) gen() generated.DBTX {
-	bridge, ok := s.pool.(db.SqlcBridge)
-	if !ok {
-		panic(fmt.Sprintf(
-			"tenant_deletion_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed "+
-				"stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
-			s.pool,
-		))
-	}
-	return bridge.GeneratedDB()
+	return db.Generated(s.pool)
 }
 
 // RequestDeletion inserts a pending deletion record.

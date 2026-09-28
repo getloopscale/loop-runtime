@@ -4,6 +4,7 @@
 package noshellwrap
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,6 +137,7 @@ func testHelper() {
 }
 `
 	writeFile(t, filepath.Join(root, "fake/foo_test.go"), src)
+	writeFile(t, filepath.Join(root, "fake/clean.go"), "package fake\n")
 
 	outcome, err := Check(Config{Root: root})
 	if err != nil {
@@ -160,6 +162,7 @@ func bad() {
 }
 `
 	writeFile(t, filepath.Join(root, "vendor/somelib/bad.go"), src)
+	writeFile(t, filepath.Join(root, "fake/clean.go"), "package fake\n")
 
 	outcome, err := Check(Config{Root: root})
 	if err != nil {
@@ -253,15 +256,13 @@ func dynamic(cli string) {
 	}
 }
 
-// TestNoShellWrap_EmptyTree — no violations on empty tree.
-func TestNoShellWrap_EmptyTree(t *testing.T) {
-	root := t.TempDir()
-	outcome, err := Check(Config{Root: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if !outcome.Pass {
-		t.Errorf("expected Pass=true on empty tree; got %v", outcome.Violations)
+// TestNoShellWrap_EmptyTreeIsNothingScanned — a tree with no Go file is a scan
+// that read nothing, not a tree without shell-wraps.
+func TestNoShellWrap_EmptyTreeIsNothingScanned(t *testing.T) {
+	_, err := Check(Config{Root: t.TempDir()})
+
+	if !errors.Is(err, ErrNothingScanned) {
+		t.Fatalf("err = %v, want ErrNothingScanned", err)
 	}
 }
 
@@ -278,18 +279,17 @@ func TestForbiddenCLIs_Coverage(t *testing.T) {
 
 // === Additional coverage tests ===
 
-// TestNoShellWrap_UnparseableFile — Go file with syntax errors should be skipped
-// silently (per documented limitation), not crash the gate.
-func TestNoShellWrap_UnparseableFile(t *testing.T) {
-	root := t.TempDir()
-	// Intentionally broken Go (missing closing brace)
-	writeFile(t, filepath.Join(root, "broken.go"), "package fake\nfunc bad() {")
-	outcome, err := Check(Config{Root: root})
-	if err != nil {
-		t.Fatalf("Check should not error on unparseable file; got: %v", err)
-	}
-	if !outcome.Pass {
-		t.Errorf("expected Pass=true (unparseable file silently skipped); got %v", outcome.Violations)
+// TestNoShellWrap_UnparseableFileIsAnError — a Go file with syntax errors is
+// exactly the file whose shell-wraps go unread: it fails the scan, naming it,
+// rather than being skipped.
+func TestNoShellWrap_UnparseableFileIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "broken.go"), "package foo\n\nfunc {{{ broken\n")
+
+	_, err := Check(Config{Root: dir})
+
+	if err == nil || !strings.Contains(err.Error(), "broken.go") {
+		t.Fatalf("err = %v, want a parse error naming broken.go", err)
 	}
 }
 

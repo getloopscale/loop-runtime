@@ -1,13 +1,13 @@
 // Package esooverlay is a hermetic structural test for
 // infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl.
 //
-// Locks the post-T1.2 (issue #111 / Jeito A) K8s-auth workload-identity
+// Locks the post-T1.2 (issue #111 / Approach A) K8s-auth workload-identity
 // contract for the dev-public ESO overlay:
 //   - openbaoTransit.enabled defaults to false (safe — anti-foot-shooting)
 //   - server retains canonical intra-cluster DNS (preserves cert SAN)
 //   - auth.kind=kubernetes (NOT appRole) — workload identity, no static cred
 //   - No roleId/secretRef fields (legacy AppRole shape removed)
-//   - Traceability: issue #111 / Jeito A / EC-1 / EC-2 cited
+//   - Traceability: issue #111 / Approach A / EC-1 / EC-2 cited
 //
 // Migrated from infra/tests/check-dev-public-loopzero-external-secrets-overlay_test.sh
 // (M-Migrate2 continuation 2026-07-07). Hermetic — no kubectl, no helm.
@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const overlayPath = "infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl"
@@ -32,6 +34,17 @@ type Config struct {
 // Outcome is the summary.
 type Outcome struct {
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means at least one assertion failed.
@@ -51,7 +64,7 @@ func Check(cfg Config) (Outcome, error) {
 	full := filepath.Join(root, overlayPath)
 	body, err := os.ReadFile(full)
 	if err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("overlay missing at %s: %v", overlayPath, err)}}, ErrViolations
+		return Outcome{Failures: []string{fmt.Sprintf("overlay missing at %s: %v", overlayPath, err)}, Violation: ErrViolations}, nil
 	}
 	text := string(body)
 
@@ -100,9 +113,14 @@ func Check(cfg Config) (Outcome, error) {
 	assertRE(`E4 caBundle placeholder is empty string`, `(?m)^  caBundle: ""`)
 
 	// F: documentation traceability.
-	assertRE("F1 doc cites issue #111 / Jeito A / dev-public-cross-cluster-secrets",
-		`(issue #111|Jeito A|dev-public-cross-cluster-secrets)`)
-	assertContains("F2 doc cites OpenBao init runbook", "openbao-init-runbook.md")
+	assertRE("F1 doc cites issue #111 / Approach A / dev-public-cross-cluster-secrets",
+		`(issue #111|Approach A|dev-public-cross-cluster-secrets)`)
+	// The needle was `openbao-init-runbook.md`, and `24d05df4e` consolidated that file
+	// into `docs/runbooks.md` — the ceremony lives there under `## OpenBao init ceremony`,
+	// and `docs/README.md:61` even records the `git show` that recovers the original. A
+	// needle that demands a deleted filename asks the overlay to cite what nobody can
+	// open; this one demands the path that resolves.
+	assertContains("F2 doc cites OpenBao init runbook", "docs/runbooks.md")
 	assertContains("F3 doc cites EC-1", "EC-1")
 	assertContains("F4 doc cites EC-2", "EC-2")
 
@@ -119,7 +137,7 @@ func Check(cfg Config) (Outcome, error) {
 	_ = forbidContains
 
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

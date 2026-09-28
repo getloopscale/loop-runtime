@@ -39,7 +39,6 @@ func newPlatformBootstrap(name, namespace, giteaURL, argoCDURL, apiURL string) *
 			ArgoCD: loopzerov1.ArgoCDBootstrapSpec{
 				Namespace:       "argocd",
 				AdminSecretName: "argocd-initial-admin-secret",
-				TokenTTLSeconds: 3600,
 				InternalURL:     argoCDURL,
 			},
 			API: loopzerov1.APIBootstrapSpec{

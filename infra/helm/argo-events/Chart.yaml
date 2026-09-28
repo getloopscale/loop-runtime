@@ -1,6 +1,6 @@
 apiVersion: v2
 name: argo-events
-description: T0.2 Cenário B POC — Argo Events controller + EventBus (JetStream NATS) for webhook-driven Workflow triggers per ADR-2026-05-27-T0.2-RATIFIED D1.
+description: T0.2 Scenario B POC — Argo Events controller + EventBus (JetStream NATS) for webhook-driven Workflow triggers per ADR-2026-05-27-T0.2-RATIFIED D1.
 version: 0.1.0
 appVersion: "2.4.4"
 type: application

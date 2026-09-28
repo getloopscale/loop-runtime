@@ -8,71 +8,77 @@ import (
 	"os"
 )
 
-// Uma capacidade é algo que um ambiente DECLARA oferecer, e a distância entre declarar e
-// ter é o que este arquivo torna visível.
+// A capability is something an environment DECLARES it offers, and the gap
+// between declaring and having is what this file makes visible.
 //
-// MEDIDO em 2026-08-11: o app-dev serviu por 20h um painel com plano, preço e botão de
-// upgrade, enquanto o segredo que verifica pagamentos não existia no cluster. Quatro
-// camadas independentes trataram essa ausência como configuração legítima — o monte do
-// Secret (`optional: true`), o seed (`SKIP-graceful`), o runtime (declara cobrança olhando
-// só a chave de API) e o reporte de uso (percorre zero linhas e devolve nil).
+// MEASURED 2026-08-11: app-dev served, for 20h, a dashboard with a plan, a price
+// and an upgrade button while the secret that verifies payments did not exist in
+// the cluster. Four independent layers treated that absence as legitimate
+// configuration — the Secret mount (`optional: true`), the seed
+// (`SKIP-graceful`), the runtime (declaring billing by looking only at the API
+// key) and usage reporting (walking zero rows and returning nil).
 //
-// Nenhuma delas está errada isolada: num ambiente hermético, rodar sem credencial de
-// cobrança é o comportamento desejado. O que faltava era a pergunta que separa os dois
-// casos — *este ambiente prometeu cobrar?* —, e ela precisa ser respondida num lugar só.
-// Respondida em quatro, ela é respondida de quatro jeitos, e a quinta camada nasce sem ela.
+// None of them is wrong alone: in a hermetic environment, running without
+// billing credentials is the desired behaviour. What was missing is the question
+// that separates the two cases — *did this environment promise to charge?* — and
+// it has to be answered in one place. Answered in four, it is answered four ways,
+// and the fifth layer is born without it.
 
-// Capability nomeia uma capacidade declarável.
+// Capability names a declarable capability.
 //
-// É um tipo próprio, e não uma string solta, para que a tabela abaixo e os chamadores não
-// possam divergir por um erro de digitação que o compilador aceitaria.
+// It is a type of its own, not a bare string, so the table below and its callers
+// cannot diverge through a typo the compiler would accept.
 type Capability string
 
 const (
-	// CapabilityBilling — o ambiente cobra de verdade: emite sessão de portal, recebe
-	// evento de pagamento e reporta consumo.
+	// CapabilityBilling — the environment really charges: it issues portal
+	// sessions, receives payment events and reports usage.
 	CapabilityBilling Capability = "billing"
 )
 
-// RequirementPolicy responde se a ausência do insumo de uma capacidade é tolerável.
+// RequirementPolicy answers whether the absence of a capability's input is
+// tolerable.
 //
-// Um método só, de propósito (ISP): quem consulta quer saber se pode seguir sem o insumo,
-// e nada além disso. Quem decide COMO obter o insumo é o seed; quem decide SE ele é
-// obrigatório é esta política.
+// One method, on purpose (ISP): a caller wants to know whether it may proceed
+// without the input, nothing more. The seed decides HOW to obtain the input;
+// this policy decides WHETHER it is mandatory.
 type RequirementPolicy interface {
 	Requires(Capability) bool
 }
 
-// capabilitiesByEnv é a tabela de declarações — DADO, não `switch`.
+// capabilitiesByEnv is the table of declarations — DATA, not a `switch`.
 //
-// Um ambiente novo é uma linha aqui; uma capacidade nova é uma constante acima mais uma
-// entrada. Nenhum consumidor muda (OCP). A forma anterior — `if env == "dev-public"`
-// espalhado — obrigava a editar cada consumidor, e foi assim que a quinta camada nasceu
-// sem a verificação que as outras quatro tinham.
+// A new environment is a row here; a new capability is a constant above plus an
+// entry. No consumer changes (OCP). The previous shape — `if env == "dev-public"`
+// scattered around — required editing every consumer, which is how the fifth
+// layer was born without the check the other four had.
 //
-// A ausência é deliberadamente NÃO-exigente: um ambiente fora da tabela não promete nada,
-// então não deve ser cobrado por não cumprir. É a polaridade oposta à do registro de
-// portas (`infra/quality/host-ports.txt`), e por um motivo: lá, o silêncio significa uma
-// porta aberta que ninguém revisou; aqui, significa um ambiente que não prometeu cobrar.
+// Absence is deliberately NOT demanding: an environment outside the table
+// promises nothing, so it must not be held to it. That is the opposite polarity
+// of the port registry (`infra/quality/host-ports.txt`), for a reason: there,
+// silence means an open port nobody reviewed; here, it means an environment that
+// did not promise to charge.
 var capabilitiesByEnv = map[string][]Capability{
-	// dev-public serve app-dev.loopzero.example — o painel público, com plano e preço na tela.
+	// dev-public serves app-dev.loopzero.example — the public dashboard, with plan and
+	// price on screen.
 	"dev-public": {CapabilityBilling},
 }
 
-// EnvRequirementPolicy resolve a exigência a partir do ambiente do Helmfile.
+// EnvRequirementPolicy resolves the requirement from the Helmfile environment.
 //
-// Reaproveita o mesmo sinal que `tenant_fixture.go:116` já usava para decidir se roda; a
-// diferença é que ali a decisão estava embutida no seed, e aqui ela é um colaborador que
-// os testes substituem sem variável de ambiente.
+// It reuses the signal tenant-fixture already used to decide whether to run; the
+// difference is that there the decision was embedded in the seed, and here it is
+// a collaborator tests replace without an environment variable.
 type EnvRequirementPolicy struct {
 	declared map[Capability]bool
 }
 
-// NewEnvRequirementPolicy constrói a política para um ambiente nomeado.
+// NewEnvRequirementPolicy builds the policy for a named environment.
 //
-// Recebe o ambiente como parâmetro em vez de ler `os.Getenv` internamente: um colaborador
-// que lê o processo não é substituível num teste, e testar por variável de ambiente torna
-// os testes dependentes de ordem — o que `rules/testing.md § 3` proíbe.
+// It takes the environment as a parameter instead of reading `os.Getenv`: a
+// collaborator that reads the process cannot be replaced in a test, and testing
+// through an environment variable makes tests order-dependent, which
+// `rules/testing.md § 3` forbids.
 func NewEnvRequirementPolicy(env string) *EnvRequirementPolicy {
 	declared := make(map[Capability]bool, 1)
 	for _, c := range capabilitiesByEnv[env] {
@@ -81,14 +87,13 @@ func NewEnvRequirementPolicy(env string) *EnvRequirementPolicy {
 	return &EnvRequirementPolicy{declared: declared}
 }
 
-// PolicyFromEnvironment é a fábrica que a raiz de composição usa.
-//
-// É o ÚNICO ponto do pacote que lê o processo, mantendo `os.Getenv` fora da lógica.
+// PolicyFromEnvironment is the factory the composition root uses, and the one
+// place this policy reads the process environment.
 func PolicyFromEnvironment() *EnvRequirementPolicy {
 	return NewEnvRequirementPolicy(os.Getenv("LOOPZERO_HELMFILE_ENV"))
 }
 
-// Requires responde se a capacidade foi declarada por este ambiente.
+// Requires reports whether this environment declared the capability.
 func (p *EnvRequirementPolicy) Requires(c Capability) bool {
 	if p == nil {
 		return false
@@ -96,34 +101,36 @@ func (p *EnvRequirementPolicy) Requires(c Capability) bool {
 	return p.declared[c]
 }
 
-// MissingInput traduz a ausência de um insumo no veredito que o ambiente merece.
+// MissingInput turns the absence of an input into the verdict the environment
+// deserves.
 //
-// É o único lugar do repositório que sabe a regra "insumo ausente + capacidade declarada
-// = defeito". Os dois seeds de Stripe a consultam; um terceiro consumidor a herda sem
-// reimplementá-la, que é a diferença entre corrigir quatro camadas e corrigir o padrão.
+// It is the one place in the repository that knows the rule "missing input +
+// declared capability = defect". Both Stripe seeds consult it; a third consumer
+// inherits it without reimplementing it, which is the difference between fixing
+// four layers and fixing the pattern.
 //
-// `detail` descreve O QUE falta, na linguagem do chamador — o arquivo de credenciais
-// ausente, um valor-placeholder. A razão final acrescenta a capacidade e onde corrigir,
-// porque uma falha que não diz o que fazer vira uma escavação para quem a encontra.
+// `detail` says WHAT is missing in the caller's words — the credentials file, a
+// placeholder value. The reason adds the capability and where to fix it, because
+// a failure that does not say what to do becomes a dig for whoever meets it.
 func (d *Deps) MissingInput(c Capability, detail string) Result {
 	if d.RequiresCapability(c) {
 		return Result{
 			Verdict: FAIL,
-			Reason: fmt.Sprintf("%s — este ambiente declara a capacidade %q, e sem esse insumo "+
-				"ela não existe. Preencha em ~/.loopzero/dev-credentials.json", detail, c),
+			Reason: fmt.Sprintf("%s — this environment declares the %q capability, and without this input "+
+				"it does not exist. Fill it in ~/.loopzero/dev-credentials.json", detail, c),
 		}
 	}
-	// O ambiente não prometeu nada: pular é o comportamento correto, e é o que a corrente
-	// pós-cleanroom espera num tier hermético.
+	// The environment promised nothing: skipping is correct, and it is what the
+	// post-cleanroom chain expects in a hermetic tier.
 	return Result{Verdict: SKIP, Reason: detail + " (SKIP-graceful)"}
 }
 
-// RequiresCapability é o atalho que os seeds usam.
+// RequiresCapability is the shortcut the seeds use.
 //
-// Nil-safe em duas camadas — `Deps` sem política e política nula — porque `Deps` é
-// construído em muitos lugares que nada têm a ver com cobrança. Se uma `Deps` vazia
-// passasse a exigir, esta mudança quebraria chamadores alheios com um FAIL sem explicação,
-// que é o oposto do que ela existe para produzir.
+// Nil-safe at two levels — Deps without a policy, and a nil policy — because
+// Deps is built in many places that have nothing to do with billing. If an empty
+// Deps started demanding, this would break unrelated callers with an unexplained
+// FAIL, the opposite of what it exists to produce.
 func (d *Deps) RequiresCapability(c Capability) bool {
 	if d == nil || d.Policy == nil {
 		return false

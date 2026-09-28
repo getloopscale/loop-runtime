@@ -13,78 +13,32 @@ type PreviewPhase string
 type PreviewPhaseEvent string
 
 const (
-	PPhCreating      PreviewPhase = "Creating"
-	PPhActive        PreviewPhase = "Active"
-	PPhExpiring      PreviewPhase = "Expiring"
-	PPhDeleted       PreviewPhase = "Deleted"
-	PPhFailed        PreviewPhase = "Failed"
-	PPhDeleting      PreviewPhase = "Deleting"
-	PPhCleanupFailed PreviewPhase = "CleanupFailed"
+	PPhEmpty         = PreviewPhase(PreviewEmpty)
+	PPhCreating      = PreviewPhase(PreviewCreating)
+	PPhActive        = PreviewPhase(PreviewActive)
+	PPhExpiring      = PreviewPhase(PreviewExpiring)
+	PPhDeleted       = PreviewPhase(PreviewDeleted)
+	PPhFailed        = PreviewPhase(PreviewFailed)
+	PPhDeleting      = PreviewPhase(PreviewDeleting)
+	PPhCleanupFailed = PreviewPhase(PreviewCleanupFailed)
 )
 
 const (
-	PPEventCreationCompleted   PreviewPhaseEvent = "CreationCompleted"
-	PPEventCreationFailed      PreviewPhaseEvent = "CreationFailed"
-	PPEventExpirationTriggered PreviewPhaseEvent = "ExpirationTriggered"
-	PPEventDeletionTriggered   PreviewPhaseEvent = "DeletionTriggered"
-	PPEventCleanupCompleted    PreviewPhaseEvent = "CleanupCompleted"
-	PPEventCleanupFailed       PreviewPhaseEvent = "CleanupFailed"
-	PPEventGarbageCollected    PreviewPhaseEvent = "GarbageCollected"
+	PPEventCreate              = PreviewPhaseEvent(PreviewCreate)
+	PPEventCreationCompleted   = PreviewPhaseEvent(PreviewCreationCompleted)
+	PPEventCreationFailed      = PreviewPhaseEvent(PreviewCreationFailed)
+	PPEventExpirationTriggered = PreviewPhaseEvent(PreviewExpirationTriggered)
+	PPEventDeletionTriggered   = PreviewPhaseEvent(PreviewDeletionTriggered)
+	PPEventCleanupCompleted    = PreviewPhaseEvent(PreviewCleanupCompleted)
+	PPEventCleanupFailed       = PreviewPhaseEvent(PreviewCleanupFailed_)
+	PPEventGarbageCollected    = PreviewPhaseEvent(PreviewGarbageCollected)
 )
 
-// PreviewTypedMachine is the typed wrapper around the shared *Machine.
-type PreviewTypedMachine struct {
-	inner *Machine
-}
+// PreviewTypedMachine is the typed PreviewPhase machine.
+type PreviewTypedMachine = Typed[PreviewPhase, PreviewPhaseEvent]
 
+// NewPreviewTypedMachine returns the typed machine over NewPreviewMachine(), which stays the
+// single source of the transition table and the terminal set.
 func NewPreviewTypedMachine() *PreviewTypedMachine {
-	return &PreviewTypedMachine{inner: NewPreviewMachine()}
-}
-
-func (m *PreviewTypedMachine) Transition(current PreviewPhase, event PreviewPhaseEvent) PreviewPhase {
-	return PreviewPhase(m.inner.Transition(State(current), Event(event)))
-}
-
-func (m *PreviewTypedMachine) TryTransition(current PreviewPhase, event PreviewPhaseEvent) (PreviewPhase, error) {
-	next, err := m.inner.TryTransition(State(current), Event(event))
-	if err != nil {
-		return "", err
-	}
-	return PreviewPhase(next), nil
-}
-
-func (m *PreviewTypedMachine) IsTerminal(p PreviewPhase) bool {
-	return m.inner.IsTerminal(State(p))
-}
-
-func (m *PreviewTypedMachine) Name() string {
-	return m.inner.Name()
-}
-
-func (m *PreviewTypedMachine) IsKnownState(p PreviewPhase) bool {
-	return m.inner.IsKnownState(State(p))
-}
-
-func (m *PreviewTypedMachine) IsKnownEvent(e PreviewPhaseEvent) bool {
-	return m.inner.IsKnownEvent(Event(e))
-}
-
-func (m *PreviewTypedMachine) MustParseState(s string) PreviewPhase {
-	return PreviewPhase(m.inner.MustParseState(s))
-}
-
-func (m *PreviewTypedMachine) MustParseEvent(e string) PreviewPhaseEvent {
-	return PreviewPhaseEvent(m.inner.MustParseEvent(e))
-}
-
-func (m *PreviewTypedMachine) ValidEvents(phase PreviewPhase) []PreviewPhaseEvent {
-	untyped := m.inner.ValidEvents(State(phase))
-	if untyped == nil {
-		return nil
-	}
-	out := make([]PreviewPhaseEvent, len(untyped))
-	for i, e := range untyped {
-		out[i] = PreviewPhaseEvent(e)
-	}
-	return out
+	return newTyped[PreviewPhase, PreviewPhaseEvent](NewPreviewMachine())
 }

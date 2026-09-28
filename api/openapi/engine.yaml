@@ -465,6 +465,7 @@ paths:
           content:
             application/json:
               schema: {type: object, additionalProperties: true}
+        "503": {description: the log backend is unreachable (LOGS_UNAVAILABLE)}
 
   /api/v1/secrets/{name}:
     parameters: [$ref: "#/components/parameters/SecretName"]
@@ -475,6 +476,29 @@ paths:
         "200": {description: deleted}
         "404": {$ref: "#/components/responses/NotFound"}
 
+  /api/v1/domains/{domain}/dns-records:
+    parameters:
+    - {name: domain, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [domains]
+      summary: List the DNS records of a Cloudflare-managed domain
+      responses:
+        "200":
+          description: the domain's DNS records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [domain, records, total]
+                properties:
+                  domain: {type: string}
+                  total: {type: integer}
+                  records:
+                    type: array
+                    items: {type: object, additionalProperties: true}
+        "400": {description: the domain's DNS is not managed by the platform (NOT_CF_MANAGED)}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {description: the DNS provider could not be reached}
   /api/v1/domains/{domain}/verify:
     parameters:
     - {name: domain, in: path, required: true, schema: {type: string}}
@@ -789,14 +813,6 @@ paths:
       responses:
         '200':
           description: soft-delete a tenant
-  /api/v1/tenants/bulk-delete:
-    post:
-      tags:
-      - tenants
-      summary: Bulk-delete tenants
-      responses:
-        '200':
-          description: bulk-delete tenants
   /api/v1/tenants/{id}/restore:
     parameters:
     - name: id

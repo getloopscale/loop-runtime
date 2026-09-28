@@ -15,8 +15,9 @@
 //   - api/internal/k8s admitted by TECHNOLOGY — "it uses client-go". Measured on
 //     2026-09-04: 7 non-test files, 1520 non-test lines, three responsibilities
 //     sharing one directory because they share a client library. This gate closes it.
-//   - api/internal/services/platform still admits by nothing this gate can express;
-//     see docs/architecture.md for the measurement.
+//   - api/internal/services/platform admitted by nothing this gate could express.
+//     It was dissolved when api/internal was organized by feature (2026-09-25):
+//     each of its concerns moved to the feature it serves.
 //
 // # The criterion this gate enforces
 //
@@ -54,6 +55,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrForeignDomain means a top-level file of the plumbing package names a responsibility.
@@ -100,6 +103,17 @@ type Outcome struct {
 	Scanned    int // top-level non-test files read
 	Homes      map[string]int
 	Violations []Violation
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // domainWordIn returns the first domain word carried by s, or "".
@@ -242,11 +256,13 @@ func Check(cfg Config) (Outcome, error) {
 	// Violations first: when both halves fail, the reader needs to see WHICH names do
 	// not belong before being told where they should have gone.
 	if len(out.Violations) > 0 {
-		return out, fmt.Errorf("%w: %s admits %d name(s) that belong to a responsibility",
+		out.Violation = fmt.Errorf("%w: %s admits %d name(s) that belong to a responsibility",
 			ErrForeignDomain, governed, len(out.Violations))
+		return out, nil
 	}
 	if len(homeless) > 0 {
-		return out, fmt.Errorf("%w: %s under %s", ErrHomeMissing, strings.Join(homeless, ", "), governed)
+		out.Violation = fmt.Errorf("%w: %s under %s", ErrHomeMissing, strings.Join(homeless, ", "), governed)
+		return out, nil
 	}
 	return out, nil
 }

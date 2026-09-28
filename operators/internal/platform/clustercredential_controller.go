@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -42,7 +43,8 @@ const (
 // +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=argocd,resources=secrets,verbs=get;list;watch;create;update;delete
 type ClusterCredentialReconciler struct {
 	client.Client
 	ArgoCDNamespace string
@@ -56,11 +58,16 @@ type ClusterCredentialReconciler struct {
 }
 
 // clusterCredentialDetailTypes are the per-step conditions that
-// SetReadinessSummary classifies for kstatus. ClusterCredential only
-// surfaces TypeConnected — TypeSecretNotFound has inverted polarity
-// (True = bad) per ADR-0025 condition #3 (k8s-controller-engineer
-// review). Adding TypeSecretNotFound here would flip summary semantics.
-var clusterCredentialDetailTypes = []string{conditions.TypeConnected}
+// SetReadinessSummary classifies for kstatus: TypeConnected, plus
+// TypeArgoCDSecretSynced when the credential feeds ArgoCD — a cell ArgoCD
+// cannot deploy to is not Ready. TypeSecretNotFound has inverted polarity
+// (True = bad) per ADR-0025 condition #3 and is deliberately excluded.
+func clusterCredentialDetailTypes(cr *loopzerov1.ClusterCredential) []string {
+	if cr.Spec.Scope.ArgoCD {
+		return []string{conditions.TypeConnected, conditions.TypeArgoCDSecretSynced}
+	}
+	return []string{conditions.TypeConnected}
+}
 
 // Reconcile handles the reconciliation loop for ClusterCredential resources.
 func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
@@ -87,17 +94,8 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
-	// correlation-id from CR annotation into reconcile context (no-op se ausente).
+	// correlation-id from CR annotation into reconcile context (no-op when absent).
 	ctx = correlation.WithID(ctx, cr.GetAnnotations()["loopzero.io/correlation-id"])
-
-	// kstatus universal: SetReadinessSummary MUST be the LAST status
-	// mutation per ADR-0025. Defer ensures it runs even on early return
-	// or panic from internal helpers (resolveKubeconfig, checkConnectivity)
-	// that have their own Status().Update sites.
-	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
-		func() *loopzerov1.ClusterCredential { return &loopzerov1.ClusterCredential{} },
-		func(x *loopzerov1.ClusterCredential) *[]metav1.Condition { return &x.Status.Conditions },
-		clusterCredentialDetailTypes)()
 
 	if !cr.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &cr)
@@ -133,23 +131,14 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// ALWAYS reconcile ArgoCD cluster secret to mirror the kubeconfig Secret
 	// token, BEFORE connectivity check. Previously the early-return on
 	// connectivity=false (Step 3 below) skipped this sync, leaving the ArgoCD
-	// secret with a stale token even after heal scripts (H14/H15) refreshed
+	// secret with a stale token even after heal scripts (H12/H15) refreshed
 	// the kubeconfig.
 	// Effect: when operator action rotates the token in cell-X-kubeconfig,
 	// the controller propagates it to <cell>-argocd-cluster on the next
 	// reconcile (event-driven via the Secret watcher in
 	// SetupClusterCredentialController), independent of whether the
 	// destination cluster is currently reachable.
-	if cr.Spec.Scope.ArgoCD {
-		if err := r.reconcileArgoCDClusterSecret(ctx, &cr, kubeconfigData); err != nil {
-			// Non-fatal: log and continue to connectivity check. The
-			// ArgoCD secret may be malformed (missing fields), but
-			// connectivity probe is independent — surface its status
-			// in CR.status.conditions for operator triage.
-			log.FromContext(ctx).Error(err, "argocd cluster secret sync failed (non-fatal)",
-				"cluster", cr.Spec.ClusterName)
-		}
-	}
+	syncErr := r.syncArgoCDClusterSecret(ctx, &cr, kubeconfigData)
 
 	// Step 3: Validate cluster connectivity.
 	connected, result, err := r.checkConnectivity(ctx, &cr, base, kubeconfigData)
@@ -160,8 +149,13 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// MEET-053 D-03: Record observed generation for change detection.
 	cr.Status.ObservedGeneration = cr.Generation
 
-	if statusErr := r.Status().Patch(ctx, &cr, client.MergeFrom(base)); statusErr != nil {
+	if statusErr := r.patchStatus(ctx, &cr, base); statusErr != nil {
 		return ctrl.Result{}, statusErr
+	}
+	if syncErr != nil {
+		// Connected, but ArgoCD cannot deploy to this cell: requeue with
+		// backoff until the cluster Secret syncs.
+		return ctrl.Result{}, syncErr
 	}
 
 	logger.Info("reconciled cluster credential", "cluster", cr.Spec.ClusterName, "connected", cr.Status.Connected)
@@ -175,6 +169,27 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// background load; failure paths below still requeue (RequeueSecretNotFound,
 	// RequeuePeriodicCheck) as healing fallback.
 	return ctrl.Result{}, nil
+}
+
+// syncArgoCDClusterSecret mirrors the credential into the ArgoCD cluster
+// Secret when the credential feeds ArgoCD, and records the outcome on the
+// ArgoCDSecretSynced condition. It runs before the connectivity check so a
+// rotated token reaches ArgoCD even while the cell is unreachable
+// (fix-all-platform-issues-plan T1.2). The error is returned so the caller
+// can requeue; the connectivity check still runs, because it is independent.
+func (r *ClusterCredentialReconciler) syncArgoCDClusterSecret(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) error {
+	if !cr.Spec.Scope.ArgoCD {
+		return nil
+	}
+	if err := r.reconcileArgoCDClusterSecret(ctx, cr, kubeconfigData); err != nil {
+		log.FromContext(ctx).Error(err, "argocd cluster secret sync failed", "cluster", cr.Spec.ClusterName)
+		conditions.SetCondition(&cr.Status.Conditions, conditions.TypeArgoCDSecretSynced,
+			metav1.ConditionFalse, "SyncFailed", err.Error(), cr.Generation)
+		return fmt.Errorf("argocd cluster secret for %s: %w", cr.Spec.ClusterName, err)
+	}
+	conditions.SetCondition(&cr.Status.Conditions, conditions.TypeArgoCDSecretSynced,
+		metav1.ConditionTrue, "Synced", "ArgoCD cluster Secret mirrors this credential", cr.Generation)
+	return nil
 }
 
 // resolveKubeconfig reads and parses the kubeconfig from the referenced Secret.
@@ -195,7 +210,7 @@ func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr,
 				metav1.ConditionTrue, "SecretMissing",
 				fmt.Sprintf("Secret %s/%s not found", secretKey.Namespace, secretKey.Name),
 				cr.Generation)
-			if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
+			if statusErr := r.patchStatus(ctx, cr, base); statusErr != nil {
 				return nil, ctrl.Result{}, statusErr
 			}
 			return nil, ctrl.Result{RequeueAfter: constants.RequeueSecretNotFound}, nil
@@ -215,7 +230,7 @@ func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr,
 			metav1.ConditionFalse, "KubeconfigKeyMissing",
 			"Secret does not contain 'kubeconfig' key",
 			cr.Generation)
-		if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
+		if statusErr := r.patchStatus(ctx, cr, base); statusErr != nil {
 			return nil, ctrl.Result{}, statusErr
 		}
 		return nil, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
@@ -260,7 +275,7 @@ func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr,
 			metav1.ConditionFalse, reason, msg, cr.Generation)
 		now := metav1.Now()
 		cr.Status.LastCheckedAt = &now
-		if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
+		if statusErr := r.patchStatus(ctx, cr, base); statusErr != nil {
 			return false, ctrl.Result{}, statusErr
 		}
 		return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
@@ -289,7 +304,7 @@ func (r *ClusterCredentialReconciler) markDisconnected(ctx context.Context, cr, 
 	cr.Status.Connected = false
 	conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
 		metav1.ConditionFalse, reason, msg, cr.Generation)
-	if statusErr := r.Status().Patch(ctx, cr, client.MergeFrom(base)); statusErr != nil {
+	if statusErr := r.patchStatus(ctx, cr, base); statusErr != nil {
 		return false, ctrl.Result{}, statusErr
 	}
 	return false, ctrl.Result{RequeueAfter: constants.RequeuePeriodicCheck}, nil
@@ -354,7 +369,8 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 	// per CHG-002b 2026-04-27 — encoding happens HERE after we have either
 	// the live PEM or the snapshot bytes.
 	caData, caSource := r.resolveCAData(ctx, cr, restConfig)
-	_ = caSource // referenced in observability log below
+	log.FromContext(ctx).V(1).Info("argocd cluster secret CA resolved",
+		"cluster", cr.Spec.ClusterName, "ca_source", caSource)
 
 	argoConfig := argoCDClusterConfig{
 		BearerToken: token,
@@ -384,20 +400,26 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 		},
 	}
 
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, argoSecret, func() error {
-		if argoSecret.Labels == nil {
-			argoSecret.Labels = make(map[string]string)
-		}
-		argoSecret.Labels[constants.ArgoCDSecretTypeLabel] = constants.ArgoCDSecretTypeCluster
-		argoSecret.Labels[constants.LabelManagedBy] = constants.ManagedByClusterCredentialController
-		argoSecret.Labels[constants.LabelClusterCredential] = cr.Name
+	// The Secret has a second writer (ArgoCD itself, or an overlapping
+	// reconcile), so a write can lose the optimistic-concurrency race.
+	// CreateOrUpdate re-reads on each attempt; the CA is not fetched again.
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, argoSecret, func() error {
+			if argoSecret.Labels == nil {
+				argoSecret.Labels = make(map[string]string)
+			}
+			argoSecret.Labels[constants.ArgoCDSecretTypeLabel] = constants.ArgoCDSecretTypeCluster
+			argoSecret.Labels[constants.LabelManagedBy] = constants.ManagedByClusterCredentialController
+			argoSecret.Labels[constants.LabelClusterCredential] = cr.Name
 
-		argoSecret.StringData = map[string]string{
-			"name":   cr.Spec.ClusterName,
-			"server": cr.Spec.APIServer,
-			"config": string(configJSON),
-		}
-		return nil
+			argoSecret.StringData = map[string]string{
+				"name":   cr.Spec.ClusterName,
+				"server": cr.Spec.APIServer,
+				"config": string(configJSON),
+			}
+			return nil
+		})
+		return err
 	})
 	if err != nil {
 		return fmt.Errorf("argocd cluster secret %s/%s: %w", r.ArgoCDNamespace, secretName, err)
@@ -538,6 +560,10 @@ func (r *ClusterCredentialReconciler) findCredentialsForSecret(ctx context.Conte
 	// List all ClusterCredentials and find those referencing this Secret.
 	var credList loopzerov1.ClusterCredentialList
 	if err := r.List(ctx, &credList); err != nil {
+		// A mapper cannot return an error; the lost enqueue is recovered by the
+		// next event or resync, and this log is the only trace of it.
+		log.FromContext(ctx).Error(err, "list ClusterCredentials to map a Secret event; enqueue dropped",
+			"secret", client.ObjectKeyFromObject(secret).String())
 		return nil
 	}
 
@@ -551,4 +577,13 @@ func (r *ClusterCredentialReconciler) findCredentialsForSecret(ctx context.Conte
 		}
 	}
 	return requests
+}
+
+// patchStatus is the single status writer of this controller. It folds the
+// kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
+// with a merge patch off base, so every write carries a Ready condition that
+// agrees with the conditions written beside it.
+func (r *ClusterCredentialReconciler) patchStatus(ctx context.Context, cr, base *loopzerov1.ClusterCredential) error {
+	conditions.SetReadinessSummaryViaPkg(&cr.Status.Conditions, cr.Generation, clusterCredentialDetailTypes(cr))
+	return r.Status().Patch(ctx, cr, client.MergeFrom(base))
 }

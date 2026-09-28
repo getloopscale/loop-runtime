@@ -136,7 +136,7 @@ func TestK3dKubeAPIPorts(t *testing.T) {
 // actually needs.
 //
 //   - loopzero-core   — 2 agents: hosts CRDs + 4 controllers + ArgoCD + Gitea HA
-//   - Kratos + Hydra + Postgres + Harbor + Traefik + cert-manager.
+//   - Kratos + Hydra + Postgres + Traefik + cert-manager.
 //     1 agent OOM's mid-bootstrap (Achado #131, T5.1 run 4).
 //   - loopzero-build  — 1 agent:  only runs Argo Workflows + BuildKit; concurrency
 //     is bounded by the workflow controller, not node count.

@@ -106,3 +106,18 @@ func TestPreviewMachine_IsTerminal(t *testing.T) {
 		}
 	}
 }
+
+// A new PreviewEnvironment enters the lifecycle through the machine, like every
+// other LoopZero CRD, instead of the controller assigning Creating directly.
+func TestPreviewMachine_CreateMovesANewPreviewToCreating(t *testing.T) {
+	m := NewPreviewTypedMachine()
+
+	got, err := m.TryTransition(PPhEmpty, PPEventCreate)
+
+	if err != nil {
+		t.Fatalf("TryTransition(Empty, Create): %v", err)
+	}
+	if got != PPhCreating {
+		t.Fatalf("TryTransition(Empty, Create) = %q, want %q", got, PPhCreating)
+	}
+}

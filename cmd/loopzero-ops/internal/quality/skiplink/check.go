@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultIssueURLPattern matches a GitHub issue URL.
@@ -46,6 +48,9 @@ type Outcome struct {
 	// display strings carry absolute paths and cannot be fed back in.
 	Keys []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 var excludedDirs = map[string]bool{
 	"vendor": true, "node_modules": true, ".git": true, "dist": true, "build": true,

@@ -9,26 +9,26 @@
 # would fragment pre-flight logic without addressing the root cause. Tracked
 # in ROADMAP.md § Post-M23 backlog.
 #
-# Pre-flight cluster validation para o dogfood completo. Idempotente,
-# shellcheck-clean, alvo <30s. Verifica que k3d-standalone-multi está em
-# estado idêntico a produção antes do dogfood iniciar — qualquer divergência
-# detectada agora vira fix em helm/pulumi, não hack durante teste (ADR D5).
+# Pre-flight cluster validation for the complete dogfood.
+# Idempotent and shellcheck-clean, target <30s. Verifies that k3d-standalone-multi is in a
+# state identical to production before the dogfood starts — any divergence
+# detected now becomes a fix in helm/pulumi, not a hack during the test (ADR D5).
 #
-# Checks executados:
-#   T0.1 cluster health probe (3 contextos, ≥95% pods Running)
+# Checks executed:
+#   T0.1 cluster health probe (3 contexts, ≥95% pods Running)
 #   T0.2 token regeneration via seed-local-user.sh
 #   T0.3 VAP allowlist + buildkit-registry-config + loopzero-minio-credentials
 #   T0.4 loopzero-api env (REGISTRY_INSECURE, MINIO_ENDPOINT)
-#   T0.5 Traefik LB exposure + comando curl --resolve documentado
+#   T0.5 Traefik LB exposure + documented curl --resolve command
 #
 # Exit codes:
-#   0 — todos os checks passaram, dogfood pode iniciar
-#   1 — pelo menos 1 check falhou; lista de fixes obrigatórios
-#   2 — erro de pré-condição (kubectl/k3d ausente)
+#   0 — all checks passed, dogfood can start
+#   1 — at least 1 check failed; list of mandatory fixes
+#   2 — pre-condition error (kubectl/k3d missing)
 #
-# Uso:
+# Usage:
 #   bash infra/tests/livetest/dogfood/preflight.sh
-#   bash infra/tests/livetest/dogfood/preflight.sh --json   # JSON em stdout (CI)
+#   bash infra/tests/livetest/dogfood/preflight.sh --json   # JSON on stdout (CI)
 #
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
@@ -188,7 +188,7 @@ check_token() {
 }
 
 # -----------------------------------------------------------------------------
-# T0.3 — VAPs + secrets de build
+# T0.3 — VAPs + build secrets
 # -----------------------------------------------------------------------------
 check_vap_prefix() {
   local id="T0.3.vap-restrict"
@@ -255,13 +255,39 @@ check_minio_credentials() {
 # -----------------------------------------------------------------------------
 # T0.4 — loopzero-api deploy env vars
 # -----------------------------------------------------------------------------
+# loopzero_api_config_value prints the value loopzero-api runs with for a non-secret
+# variable: an explicit container variable wins, then the ConfigMaps mounted
+# through envFrom, last one first (a later envFrom source wins a key both define).
+# Both install paths put these variables in a ConfigMap — Tilt renders it from
+# charts/loopzero-api, and Helmfile installs charts/loopzero-api — so reading only the
+# explicit variables would report every one of them as unset.
+loopzero_api_config_value() {
+  local name="$1" value cms
+  value=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
+    -o jsonpath="{range .spec.template.spec.containers[0].env[?(@.name==\"${name}\")]}{.value}{end}" 2>/dev/null || true)
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return
+  fi
+  cms=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
+    -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].configMapRef.name}' 2>/dev/null || true)
+  local reversed=() cname
+  for cname in $cms; do reversed=("$cname" "${reversed[@]}"); done
+  for cname in "${reversed[@]}"; do
+    value=$(kubectl --context "$MGMT_CTX" -n loopzero-system get cm "$cname" \
+      -o jsonpath="{.data.${name}}" 2>/dev/null || true)
+    if [[ -n "$value" ]]; then
+      printf '%s' "$value"
+      return
+    fi
+  done
+}
+
 check_deploy_env() {
   local id="T0.4"
   local registry_insecure minio_endpoint
-  registry_insecure=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
-    -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="REGISTRY_INSECURE")]}{.value}{end}' 2>/dev/null || true)
-  minio_endpoint=$(kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api \
-    -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="MINIO_ENDPOINT")]}{.value}{end}' 2>/dev/null || true)
+  registry_insecure=$(loopzero_api_config_value REGISTRY_INSECURE)
+  minio_endpoint=$(loopzero_api_config_value MINIO_ENDPOINT)
 
   local issues=()
   [[ "$registry_insecure" != "true" ]] && issues+=("REGISTRY_INSECURE=$registry_insecure (expected true)")
@@ -302,16 +328,16 @@ check_traefik_lb() {
 }
 
 # -----------------------------------------------------------------------------
-# T0.6 — NetworkPolicy `allow-ingress-traefik` aponta para namespace correto
+# T0.6 — NetworkPolicy `allow-ingress-traefik` points at the correct namespace
 # -----------------------------------------------------------------------------
-# Detecta regression do bug CHG-2026-04-29-DOGFOOD-FB-INGRESSNS: operator gerava
-# ingress NetworkPolicy com namespaceSelector matchLabels={kubernetes.io/metadata.name:
-# loopzero-system}, mas Traefik vive em namespace `traefik`. Resultado: HTTP 502 em
-# todo deploy. Fix em código (constants.NamespaceIngress + ingressNS() helper).
-# Este check garante que regression não volta.
+# Detects a regression of bug CHG-2026-04-29-DOGFOOD-FB-INGRESSNS: the operator generated
+# an ingress NetworkPolicy with namespaceSelector matchLabels={kubernetes.io/metadata.name:
+# loopzero-system}, but Traefik lives in namespace `traefik`. Result: HTTP 502 on
+# every deploy. Fixed in code (constants.NamespaceIngress + ingressNS() helper).
+# This check guarantees the regression does not come back.
 check_networkpolicy_traefik_target() {
   local id="T0.6"
-  # Requer Environment ativa em tn-e2etest. Se não, SKIP gracioso.
+  # Requires an active Environment in tn-e2etest. If not, graceful SKIP.
   if ! kubectl --context "$WORKLOAD_CTX" get ns loopzero-tn-e2etest-production >/dev/null 2>&1; then
     record "$id" "SKIP" "namespace loopzero-tn-e2etest-production absent (no active Environment)"
     return
@@ -332,13 +358,13 @@ check_networkpolicy_traefik_target() {
 }
 
 # -----------------------------------------------------------------------------
-# T0.7 — LOOPZERO_SERVICE_AUTH descoberto e salvo
+# T0.7 — LOOPZERO_SERVICE_AUTH discovered and saved
 # -----------------------------------------------------------------------------
-# Plano dogfood-real-e2e D8: admin commands NÃO podem ser SKIP. Sem service auth,
-# §14 admin tenants evict não testa. Esta função:
-#   1. Lê valor do env var LOOPZERO_SERVICE_AUTH_SECRET no deploy loopzero-api
-#   2. Salva em ~/.loopzero/local-service-auth.txt (chmod 600)
-#   3. Não loga valor em stdout (só hash truncado)
+# Plan dogfood-real-e2e D8: admin commands CANNOT be SKIP. Without service auth,
+# §14 admin tenants evict does not get tested. This function:
+#   1. Reads the value of the LOOPZERO_SERVICE_AUTH_SECRET env var in the loopzero-api deploy
+#   2. Saves it to ~/.loopzero/local-service-auth.txt (chmod 600)
+#   3. Does not log the value to stdout (only a truncated hash)
 check_service_auth() {
   local id="T0.7"
   local out_file="${HOME}/.loopzero/local-service-auth.txt"
@@ -363,24 +389,24 @@ check_service_auth() {
     record "$id" "FAIL" "LOOPZERO_SERVICE_AUTH_SECRET not in loopzero-api .env[] nor any envFrom Secret"
     return
   fi
-  # Persist atomicamente (write tmp + mv).
+  # Persist atomically (write tmp + mv).
   mkdir -p "${HOME}/.loopzero"
   local tmp="${out_file}.tmp.$$"
   printf '%s' "$val" > "$tmp"
   chmod 600 "$tmp"
   mv "$tmp" "$out_file"
-  # Hash truncado para evidência (não vaza secret).
+  # Truncated hash as evidence (does not leak the secret).
   local hash
   hash=$(printf '%s' "$val" | sha256sum | cut -c1-12)
   record "$id" "PASS" "service auth written to ~/.loopzero/local-service-auth.txt (sha256:${hash}…)"
 }
 
 # -----------------------------------------------------------------------------
-# T0.8 — LOOPZERO_CLUSTER_ISSUER aponta para um ClusterIssuer existente
+# T0.8 — LOOPZERO_CLUSTER_ISSUER points at an existing ClusterIssuer
 # -----------------------------------------------------------------------------
-# Detecta regression do bug CHG-2026-04-29-DOGFOOD-FB-ISSUER: env var apontava
-# para `letsencrypt-prod` mas issuer real instalado é `loopzero-ca-issuer`.
-# Certs nunca emitidos → Traefik 502.
+# Detects a regression of bug CHG-2026-04-29-DOGFOOD-FB-ISSUER: the env var pointed
+# at `letsencrypt-prod` but the real installed issuer is `loopzero-ca-issuer`.
+# Certs never issued → Traefik 502.
 check_cluster_issuer() {
   local id="T0.8"
   local issuer
@@ -425,10 +451,10 @@ check_cluster_issuer() {
 # T0.9 — ESO ClusterSecretStore `loopzero-core-store` Ready=True
 # -----------------------------------------------------------------------------
 # Discovered live during journey-03 (CHG-2026-04-29-DOGFOOD-REAL-E2E):
-# standalone-multi (helmfile L2) não provisionava o CSS que Pulumi
-# (runtime-bootstrap.ts) cria em prod. Sem CSS, ESO não sync secrets
-# para tenant pods → CreateContainerConfigError em qualquer app com
-# `secrets:` declarado em loopzero.yaml. Fix: bootstrap-eso-cluster-secret-store.sh.
+# standalone-multi (helmfile L2) did not provision the CSS that Pulumi
+# (runtime-bootstrap.ts) creates in prod. Without the CSS, ESO does not sync secrets
+# to tenant pods → CreateContainerConfigError in any app with
+# `secrets:` declared in loopzero.yaml. Fix: bootstrap-eso-cluster-secret-store.sh.
 check_eso_cluster_secret_store() {
   local id="T0.9"
   local status
@@ -462,10 +488,10 @@ check_no_terminating_namespaces() {
 # -----------------------------------------------------------------------------
 # T0.11 — No dangling kubeconfig contexts (WARN level)
 # -----------------------------------------------------------------------------
-# DOKS contexts ficam em ~/.kube/config após pulumi destroy. Operator typos
-# tipo `kubectl --context loopzero-core` (sem prefixo k3d-) podem mirar cluster
-# inexistente e produzir errors confusos. Detecta via 5s probe; reporta WARN
-# (não FAIL — usuário pode legitimamente ter DOKS dormindo).
+# DOKS contexts remain in ~/.kube/config after pulumi destroy. Operator typos
+# like `kubectl --context loopzero-core` (without the k3d- prefix) can target a
+# nonexistent cluster and produce confusing errors. Detected via a 5s probe; reports WARN
+# (not FAIL — the user may legitimately have DOKS sleeping).
 check_dangling_kubecontexts() {
   local id="T0.11"
   local dangling=()

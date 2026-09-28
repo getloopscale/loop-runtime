@@ -122,6 +122,28 @@ func AssertHPATargetBounds(cpuTarget, memoryTarget int) error {
 	return nil
 }
 
+// Scaling defaults. They are product rules — what a plan buys and what a
+// `loopzero scale` without explicit targets means — so they live here with the
+// bounds and the cost formula, not in the HTTP handler that applies them.
+const (
+	// DefaultPodCostPerHour is the conservative per-pod hourly cost used when
+	// no per-cluster rate has been wired. Matches the public pricing page at
+	// https://loopzero.example/pricing as of plan v1.1 sign-off. The dashboard's
+	// cost preview must reconcile to what the server returns (ADR D1, EC-2).
+	DefaultPodCostPerHour float64 = 0.05
+
+	// DefaultHPAMaxReplicas is the autoscaling ceiling when none is given.
+	DefaultHPAMaxReplicas = 3
+	// DefaultHPACPUTarget and DefaultHPAMemoryTarget are the utilisation
+	// targets (percent) when none is given — the Kubernetes HPA convention,
+	// inside the HPA*Target bounds above.
+	DefaultHPACPUTarget    = 80
+	DefaultHPAMemoryTarget = 80
+	// DefaultScaleToZeroCooldownSeconds is the idle period before a
+	// min-0 workload scales to zero.
+	DefaultScaleToZeroCooldownSeconds = 300
+)
+
 // ComputeMonthlyCost returns the authoritative $/month estimate for a given
 // replica count + per-pod hourly cost. Server-side ONLY — client preview is
 // non-authoritative per ADR D1 EC-2 absorption.

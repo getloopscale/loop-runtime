@@ -107,43 +107,44 @@ func (c *CapChecker) Check(ctx context.Context, tenantID string, p Plan, metric 
 	return err
 }
 
-// AllowReason diz POR QUE o portao decidiu como decidiu.
+// AllowReason says WHY the gate decided the way it did.
 //
-// # Por que existe
+// # Why it exists
 //
-// B-033, medido no app-dev em 2026-08-11: o agregador que preenche `cost_counters` estava
-// desligado, a tabela tinha zero linhas, e o contrato abaixo trata linha ausente como
-// consumo zero. Resultado: **todo** teto de custo liberava, e nada distinguia isso de "o
-// tenant realmente nao consumiu". As tres metricas de custo ficavam sem teto no ambiente
-// que serve o painel publico, e o unico sinal era uma linha de log no boot de OUTRO
-// processo.
+// B-033, measured on app-dev 2026-08-11: the aggregator that fills
+// `cost_counters` was off, the table had zero rows, and the contract below
+// treats a missing row as zero usage. Result: EVERY cost cap allowed, and
+// nothing told that apart from "the tenant really used nothing". The three
+// cost metrics had no cap in the environment serving the public dashboard,
+// and the only signal was a log line at the boot of ANOTHER process.
 //
-// Devolver a razao NAO muda veredito nenhum — libera exatamente o mesmo. Muda o que o
-// sistema consegue observar sobre a propria protecao: a degradacao silenciosa vira estado
-// observavel, que e o que o item pedia.
+// Returning the reason changes no verdict — it allows exactly the same. It
+// changes what the system can observe about its own protection: the silent
+// degradation becomes observable state.
 //
-// A razao para aqui, em `pkg/`: este pacote nao conhece Prometheus nem logger. Quem
-// traduz a razao em metrica e a camada de middleware, que ja tem os dois.
+// The reason stops here, in `pkg/`: this package knows neither Prometheus nor
+// a logger. The middleware layer, which has both, turns it into a metric.
 type AllowReason int
 
 const (
-	// AllowedUnderCap — havia contador, e ele esta abaixo do teto. A unica razao em que a
-	// protecao de fato avaliou alguma coisa.
+	// AllowedUnderCap — there was a counter and it is below the cap. The only
+	// reason where the protection actually evaluated something.
 	AllowedUnderCap AllowReason = iota
-	// AllowedUnmeasured — nao havia linha de contador. Pode ser tenant novo sem consumo, ou
-	// agregador que nunca rodou. O portao NAO distingue os dois, e por isso o chamador
-	// precisa saber que caiu aqui.
+	// AllowedUnmeasured — there was no counter row. Either a new tenant with no
+	// usage or an aggregator that never ran; the gate cannot tell them apart,
+	// which is why the caller needs to know it landed here.
 	AllowedUnmeasured
-	// AllowedUnlimited — o plano nao tem teto para esta metrica.
+	// AllowedUnlimited — the plan has no cap for this metric.
 	AllowedUnlimited
-	// AllowedStoreError — a leitura falhou e o portao liberou (fail-open deliberado: um
-	// agregador ruidoso nao deve barrar producao). Segunda porta silenciosa.
+	// AllowedStoreError — the read failed and the gate allowed (deliberate
+	// fail-open: a noisy aggregator must not block production). The second
+	// silent door.
 	AllowedStoreError
-	// Blocked — o contador alcancou o teto.
+	// Blocked — the counter reached the cap.
 	Blocked
 )
 
-// String descreve a razao para log e rotulo de metrica.
+// String describes the reason for logs and metric labels.
 func (r AllowReason) String() string {
 	switch r {
 	case AllowedUnderCap:
@@ -160,7 +161,7 @@ func (r AllowReason) String() string {
 	return "unknown"
 }
 
-// CheckReason e o `Check` que tambem devolve a razao da decisao.
+// CheckReason is `Check` that also returns the reason for the decision.
 func (c *CapChecker) CheckReason(ctx context.Context, tenantID string, p Plan, metric CostMetric) (AllowReason, error) {
 	counter, found, err := c.store.GetCounter(ctx, tenantID, metric)
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,6 +44,17 @@ func newEnvironmentCR(name, tenantName, envName, nsName string, plan loopzerov1.
 	}
 }
 
+// createWithParentTenant creates env together with the Tenant it references.
+// An Environment is always born from a Tenant, and the Environment controller
+// refuses to provision one whose Tenant (and so whose cell) it cannot read.
+func createWithParentTenant(env *loopzerov1.Environment) {
+	parent := newTenant(env.Spec.TenantRef.Name, loopzerov1.PlanStarter, nil)
+	if err := k8sClient.Create(ctx, parent); err != nil && !apierrors.IsAlreadyExists(err) {
+		Expect(err).NotTo(HaveOccurred())
+	}
+	Expect(k8sClient.Create(ctx, env)).To(Succeed())
+}
+
 var _ = Describe("EnvironmentController", Ordered, func() {
 
 	Context("when a new Environment CR is created", func() {
@@ -55,7 +67,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 
 		BeforeAll(func() {
 			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopzerov1.PlanStarter)
-			Expect(k8sClient.Create(ctx, envCR)).To(Succeed())
+			createWithParentTenant(envCR)
 		})
 
 		It("should set Phase to Active", func() {
@@ -230,7 +242,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 
 		BeforeAll(func() {
 			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopzerov1.PlanStarter)
-			Expect(k8sClient.Create(ctx, envCR)).To(Succeed())
+			createWithParentTenant(envCR)
 
 			// Wait for Active
 			Eventually(func(g Gomega) {
@@ -316,7 +328,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 
 		It("should clean up namespace when Environment is deleted", func() {
 			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopzerov1.PlanStarter)
-			Expect(k8sClient.Create(ctx, envCR)).To(Succeed())
+			createWithParentTenant(envCR)
 
 			// Wait for Active
 			Eventually(func(g Gomega) {
@@ -388,7 +400,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 					// No ResourceQuota
 				},
 			}
-			Expect(k8sClient.Create(ctx, envCR)).To(Succeed())
+			createWithParentTenant(envCR)
 		})
 
 		It("should reach Active without creating ResourceQuota", func() {
@@ -442,7 +454,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 					Plan: loopzerov1.PlanStarter,
 				},
 			}
-			Expect(k8sClient.Create(ctx, envCR)).To(Succeed())
+			createWithParentTenant(envCR)
 		})
 
 		It("should still create NetworkPolicies even with Isolate=false", func() {
@@ -479,7 +491,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 
 		BeforeAll(func() {
 			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopzerov1.PlanEnterprise)
-			Expect(k8sClient.Create(ctx, envCR)).To(Succeed())
+			createWithParentTenant(envCR)
 
 			Eventually(func(g Gomega) {
 				var env loopzerov1.Environment

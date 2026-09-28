@@ -18,31 +18,26 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loopzero/api/internal/lock"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
-	"sort"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/logging"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -52,11 +47,11 @@ import (
 // buildOrchestratorAdapter adapts the real build.BuildOrchestrator to the
 // routes.BuildOrchestratorService interface used by the HTTP handler.
 type buildOrchestratorAdapter struct {
-	orch       *build.BuildOrchestrator
+	orch       *builds.BuildOrchestrator
 	buildStore db.BuildStore
 }
 
-func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req builds.SubmitBuildInput) (*builds.SubmitBuildResult, error) {
+func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req buildshttp.SubmitBuildInput) (*buildshttp.SubmitBuildResult, error) {
 	var apps []deploycontracts.AppSpec
 	for _, app := range req.Apps {
 		appType := app.Type
@@ -86,18 +81,18 @@ func (a *buildOrchestratorAdapter) SubmitBuild(ctx context.Context, req builds.S
 		return nil, err
 	}
 
-	return &builds.SubmitBuildResult{
+	return &buildshttp.SubmitBuildResult{
 		BuildID:   resp.BuildID,
 		StreamURL: resp.StreamURL,
 	}, nil
 }
 
-func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID string) (*builds.BuildStatusResponse, error) {
+func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID string) (*buildshttp.BuildStatusResponse, error) {
 	build, err := a.buildStore.GetByID(ctx, buildID)
 	if err != nil {
 		return nil, err
 	}
-	return &builds.BuildStatusResponse{
+	return &buildshttp.BuildStatusResponse{
 		BuildID:     build.ID,
 		ProjectID:   build.ProjectID,
 		Environment: build.Environment,
@@ -107,36 +102,8 @@ func (a *buildOrchestratorAdapter) GetBuildStatus(ctx context.Context, buildID s
 	}, nil
 }
 
-func (a *buildOrchestratorAdapter) OnBuildCompleted(ctx context.Context, buildID string, result builds.BuildCallbackInput) error {
-	var apps []deploycontracts.AppRelease
-	for _, app := range result.Apps {
-		apps = append(apps, deploycontracts.AppRelease{
-			Name:        app.Name,
-			ImageDigest: app.ImageDigest,
-			URL:         app.URL,
-			DurationMs:  app.DurationMs,
-		})
-	}
-	return a.orch.OnBuildCompleted(ctx, buildID, deploycontracts.BuildCallbackRequest{
-		Status: result.Status,
-		Apps:   apps,
-	})
-}
-
 func (a *buildOrchestratorAdapter) CancelBuild(ctx context.Context, buildID string) error {
 	return a.orch.CancelBuild(ctx, buildID)
-}
-
-func (a *buildOrchestratorAdapter) IsBuildTerminal(ctx context.Context, buildID string) (bool, error) {
-	build, err := a.buildStore.GetByID(ctx, buildID)
-	if err != nil {
-		return false, err
-	}
-	switch statemachine.BuildPhase(build.Status) {
-	case statemachine.BPhSucceeded, statemachine.BPhFailed, statemachine.BPhCancelled:
-		return true, nil
-	}
-	return false, nil
 }
 
 func (a *buildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID string) (string, error) {
@@ -149,8 +116,8 @@ func (a *buildOrchestratorAdapter) GetBuildTenantID(ctx context.Context, buildID
 
 // GetRedeploySource — Plan J-17 T6.4. Stub for integration tests; not
 // exercised by concurrent-builds scenarios. The production adapter
-// (api/internal/adapters/build_adapter.go) carries the real impl.
-func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ string) (*builds.RedeploySource, error) {
+// (api/internal/builds/buildsadapter/build_adapter.go) carries the real impl.
+func (a *buildOrchestratorAdapter) GetRedeploySource(_ context.Context, _, _ string) (*buildshttp.RedeploySource, error) {
 	return nil, nil
 }
 
@@ -234,39 +201,43 @@ func (f *fakeMembershipStore) GetMemberships(ctx context.Context, userID string)
 // --- Test setup ---
 
 // testIntegrationSetup holds all the components needed for integration tests.
+//
+// Two pools, because production has two roles. `seed` is the cross-tenant
+// fixture pool (seedDBURL): it writes and inspects fixture rows the way the
+// background loops do. `adapter` is the request pool the server runs on,
+// tenant-scoped like requestPoolConfig — the code under test never touches
+// `seed`, so no fixture's scope can leak into it.
 type testIntegrationSetup struct {
-	pool       *pgxpool.Pool
+	seed       *pgxpool.Pool
 	server     *httptest.Server
 	buildStore db.BuildStore
 	adapter    *db.PgxAdapter
 }
 
-// setupIntegrationTest creates a real PostgreSQL-backed test server.
-// It runs all migrations, seeds required data, and returns a teardown function.
+// setupIntegrationTest creates a real PostgreSQL-backed test server over an
+// already-migrated database (the harness applies the migrations; CI provisions
+// them in the tenant-isolation job), seeds the required data, and serves the
+// build routes on a tenant-scoped request pool.
 func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	t.Helper()
 
-	pool := testPool(t)
+	seed := seedPool(t)
+	seedTestData(t, seed)
 
-	// Run migrations
-	runMigrations(t, pool)
-
-	// Seed test data
-	seedTestData(t, pool)
-
-	// Create real stores backed by the pool
-	adapter := &db.PgxAdapter{Pool: pool}
+	// Enough connections for the concurrent submissions to contend on the
+	// environment lock rather than on the pool.
+	adapter := tenantScopedRequestPool(t, 8)
 	buildStore := store.NewBuildStoreSqlc(adapter)                             // T1.2b
 	releaseStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := store.NewPostgresEnvironmentTargetStore(adapter, adapter)
-	eventStore := sse.NewPostgresEventStore(adapter, adapter)
+	eventStore := store.NewPostgresEventStore(adapter, adapter)
 	idempotencyStore := &store.PostgresIdempotencyStore{DB: adapter}
 
-	// Create real locker backed by the pool (reusing adapters package — no duplication)
-	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
+	// Create real locker backed by the request pool, as setupStores does.
+	locker := &lock.PoolEnvironmentLocker{Pool: adapter.Pool}
 
 	// Create real orchestrator with fake external services
-	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
+	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{
 		BuildStore:     buildStore,
 		ReleaseStore:   releaseStore,
 		EnvTargetStore: envTargetStore,
@@ -286,17 +257,16 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	// Create real server with real middleware
 	logger := logging.NewLogger("test")
 
-	buildHandler := builds.NewBuildHandler(orchAdapter, logger)
+	buildHandler := buildshttp.NewBuildHandler(orchAdapter, logger)
 	router := server.NewRouter(server.Config{
-		Port:               "0",
-		Logger:             logger,
-		DB:                 adapter,
-		TokenValidator:     &fakeTokenValidator{},
-		MemberStore:        &fakeMembershipStore{},
-		IdempotencyStore:   idempotencyStore,
-		BuildHandler:       buildHandler,
-		ArgoCallbackSecret: "test-secret",
-		EventStore:         eventStore,
+		Port:           "0",
+		Logger:         logger,
+		DB:             adapter,
+		TokenValidator: &fakeTokenValidator{},
+		MemberStore:    &fakeMembershipStore{},
+		BuildHandler:   buildHandler,
+		EventStore:     eventStore,
+		Guards:         server.RouteGuards{IdempotencyStore: idempotencyStore},
 	})
 
 	srv := httptest.NewServer(router)
@@ -305,58 +275,20 @@ func setupIntegrationTest(t *testing.T) *testIntegrationSetup {
 	})
 
 	return &testIntegrationSetup{
-		pool:       pool,
+		seed:       seed,
 		server:     srv,
 		buildStore: buildStore,
 		adapter:    adapter,
 	}
 }
 
-// migrationsDir returns the absolute path to the migrations directory.
-// Uses runtime.Caller to locate this test file and derives the path from there.
-func migrationsDir() string {
-	_, thisFile, _, _ := runtime.Caller(0)
-	// thisFile: .../api/tests/integration/concurrent_builds_test.go
-	// we want:  .../api/internal/db/migrations/
-	apiDir := filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))
-	return filepath.Join(apiDir, "internal", "db", "migrations")
-}
-
-// runMigrations applies every `*.up.sql` file in the shared migrations dir to
-// the test database in numeric-prefix order. Discovers files via a glob so the
-// helper stays in-sync as new migrations land (the old hardcoded 000001..000003
-// list drifted stale by 2026-04 — closes #184). Errors from IF NOT EXISTS /
-// duplicate-object statements are logged, not fatal, so the helper is safe
-// against an already-migrated DB (the operator harness runs `migrate up`
-// before invoking the tests).
-func runMigrations(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-
-	ctx := context.Background()
-	dir := migrationsDir()
-
-	paths, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
-	if err != nil {
-		t.Fatalf("failed to glob migrations in %s: %v", dir, err)
-	}
-	if len(paths) == 0 {
-		t.Fatalf("no *.up.sql migrations found in %s", dir)
-	}
-	sort.Strings(paths) // numeric prefix (000001, 000002, …) sorts lexicographically
-
-	for _, path := range paths {
-		sql, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("failed to read migration %s: %v", path, err)
-		}
-		if _, err := pool.Exec(ctx, string(sql)); err != nil {
-			// Ignore errors from IF NOT EXISTS / IF EXISTS statements
-			t.Logf("migration %s: %v (may be expected for idempotent migrations)", path, err)
-		}
-	}
-}
-
 // seedTestData creates the test tenant, user, project, and membership records.
+//
+// Through the cross-tenant fixture pool (seedDBURL), the way the bootstrap path
+// creates them, and the Account through its owner (execAsAccountsOwner): since
+// migration 000062 the tables are fail-closed and 000064 removed the owner's
+// standing bypass, so a fixture that is not written by a role the policies name
+// is refused.
 func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
@@ -364,14 +296,6 @@ func seedTestData(t *testing.T, pool *pgxpool.Pool) {
 
 	// Clean up any existing test data (idempotent)
 	cleanupTestData(t, pool)
-
-	withTenantContext(t, pool, "tenant-test", func(conn *pgxpool.Conn) {
-		seedTestDataOn(t, ctx, conn)
-	})
-}
-
-func seedTestDataOn(t *testing.T, ctx context.Context, pool *pgxpool.Conn) {
-	t.Helper()
 
 	// Create test user (username NOT NULL + UNIQUE per migration 000034 —
 	// user-test is stable so the ON CONFLICT still catches re-seeds).
@@ -389,11 +313,10 @@ func seedTestDataOn(t *testing.T, ctx context.Context, pool *pgxpool.Conn) {
 	// fixture frozen at an older schema. `accounts` carries no tenant column and
 	// is deliberately outside RLS (it is the parent of the tenant, so scoping it
 	// per tenant would be circular).
-	_, err = pool.Exec(ctx,
+	if err := execAsAccountsOwner(ctx,
 		`INSERT INTO accounts (id, display_name, owner_id)
 		 VALUES ('acct-test', 'Test Account', 'user-test')
-		 ON CONFLICT (id) DO NOTHING`)
-	if err != nil {
+		 ON CONFLICT (id) DO NOTHING`); err != nil {
 		t.Fatalf("failed to seed account: %v", err)
 	}
 
@@ -431,9 +354,9 @@ func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 
 	ctx := context.Background()
 
-	// Clean up in reverse dependency order. Mesmo motivo do seed: DELETE também
-	// é filtrado pela RLS, então sem contexto ele apaga zero linhas em silêncio —
-	// e o teste seguinte herda o estado do anterior.
+	// Clean up in reverse dependency order, through the cross-tenant fixture
+	// pool: DELETE is filtered by RLS too, and a role no policy names deletes
+	// zero rows in silence — the next test would inherit this one's state.
 	tables := []string{
 		"DELETE FROM sse_events WHERE build_id IN (SELECT id FROM builds WHERE tenant_id = 'tenant-test')",
 		"DELETE FROM idempotency_keys WHERE tenant_id = 'tenant-test'",
@@ -443,38 +366,11 @@ func cleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 		"DELETE FROM builds WHERE tenant_id = 'tenant-test'",
 	}
 
-	withTenantContext(t, pool, "tenant-test", func(conn *pgxpool.Conn) {
-		for _, q := range tables {
-			if _, err := conn.Exec(ctx, q); err != nil {
-				t.Logf("cleanup query %q: %v", q, err)
-			}
+	for _, q := range tables {
+		if _, err := pool.Exec(ctx, q); err != nil {
+			t.Fatalf("cleanup query %q: %v", q, err)
 		}
-	})
-}
-
-// withTenantContext runs fn on ONE connection whose `app.tenant_id` is set.
-//
-// A fixture writes the way production writes: inside the tenant's context. Since
-// migration 000062 the tables are fail-closed and 000064 removed the owner's
-// standing bypass, so a seed without context is refused — correctly. What makes
-// this a helper instead of one `set_config` line is the pool: `set_config(...,
-// false)` is SESSION-scoped, and `pool.Exec` may hand the next statement a
-// different connection, which would silently have no context. Holding one
-// connection for the whole fixture is what makes the context apply to all of it.
-func withTenantContext(t *testing.T, pool *pgxpool.Pool, tenantID string, fn func(conn *pgxpool.Conn)) {
-	t.Helper()
-
-	ctx := context.Background()
-	conn, err := pool.Acquire(ctx)
-	if err != nil {
-		t.Fatalf("acquire connection for tenant context: %v", err)
 	}
-	defer conn.Release()
-
-	if _, err := conn.Exec(ctx, `SELECT set_config('app.tenant_id', $1, false)`, tenantID); err != nil {
-		t.Fatalf("set tenant context: %v", err)
-	}
-	fn(conn)
 }
 
 // --- Helper functions ---
@@ -514,11 +410,11 @@ func readBody(t *testing.T, resp *http.Response) []byte {
 
 // --- Tests ---
 
-// POST /api/v1/builds passou a EXIGIR `Idempotency-Key` (middleware
-// MISSING_IDEMPOTENCY_KEY). Estas fixtures mandavam `nil` e recebiam 400 antes
-// de exercitar o lock — outra fixture congelada num contrato anterior. Cada
-// submissão leva a SUA chave: uma chave compartilhada transformaria a segunda
-// chamada num replay idempotente, que é o oposto do que estes testes medem.
+// POST /api/v1/builds now REQUIRES `Idempotency-Key` (middleware
+// MISSING_IDEMPOTENCY_KEY). These fixtures sent `nil` and got 400 before
+// exercising the lock — another fixture frozen on an earlier contract. Each
+// submission carries ITS OWN key: a shared key would turn the second call into
+// an idempotent replay, which is the opposite of what these tests measure.
 func TestConcurrentBuildSubmission(t *testing.T) {
 	// Two goroutines both call POST /builds simultaneously for the same
 	// (tenant, project, environment). Exactly one should get 202, the other 409.
@@ -527,7 +423,7 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 	setup := setupIntegrationTest(t)
 
 	// Clean builds before each test
-	cleanupTestData(t, setup.pool)
+	cleanupTestData(t, setup.seed)
 
 	reqBody := map[string]interface{}{
 		"project_id":  "proj-test1234",
@@ -592,10 +488,10 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 	// Assert: 409 response contains DEPLOY_IN_PROGRESS error code
 	for i, r := range results {
 		if r.status == http.StatusConflict {
-			// map[string]any, não map[string]string: o corpo de erro é RFC 7807 e
-			// carrega `status` numérico. Com map[string]string o Unmarshal falha
-			// inteiro e o teste morre ANTES de olhar o código do erro — outra
-			// fixture congelada num formato de resposta anterior.
+			// map[string]any, not map[string]string: the error body is RFC 7807 and
+			// carries a numeric `status`. With map[string]string the Unmarshal fails
+			// entirely and the test dies BEFORE looking at the error code — another
+			// fixture frozen on an earlier response format.
 			var errResp map[string]any
 			if err := json.Unmarshal(r.body, &errResp); err != nil {
 				t.Fatalf("failed to parse 409 response body: %v — body: %s", err, string(r.body))
@@ -609,7 +505,7 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 
 	// Assert: only one Build record exists with status QUEUED or RUNNING
 	var count int
-	err := setup.pool.QueryRow(context.Background(),
+	err := setup.seed.QueryRow(context.Background(),
 		`SELECT COUNT(*) FROM builds
 		 WHERE tenant_id = 'tenant-test' AND project_id = 'proj-test1234'
 		   AND environment = 'production' AND status IN ('QUEUED', 'RUNNING')`,
@@ -622,19 +518,19 @@ func TestConcurrentBuildSubmission(t *testing.T) {
 	}
 }
 
-// O corpo de POST /api/v1/builds declara `apps` como uma lista de OBJETOS
-// (`[]AppInput`, com `name` obrigatório), não de strings. Estas fixtures ficaram
-// na forma antiga e o handler as rejeitava com 400 INVALID_REQUEST antes de
-// tocar em qualquer regra — os testes mediam o parser, não o comportamento.
-// Mesma família de deriva do gatilho cell_id: fixture congelada num contrato
-// anterior.
+// The POST /api/v1/builds body declares `apps` as a list of OBJECTS
+// (`[]AppInput`, with a required `name`), not of strings. These fixtures stayed
+// in the old shape and the handler rejected them with 400 INVALID_REQUEST before
+// touching any rule — the tests measured the parser, not the behaviour.
+// Same family of drift as the cell_id trigger: a fixture frozen on an earlier
+// contract.
 func TestIdempotencyReplay(t *testing.T) {
 	// First call with Idempotency-Key gets 202.
 	// Second call with SAME key + SAME payload gets 202 (replay).
 	// Both responses should be identical.
 
 	setup := setupIntegrationTest(t)
-	cleanupTestData(t, setup.pool)
+	cleanupTestData(t, setup.seed)
 
 	reqBody := map[string]interface{}{
 		"project_id":  "proj-test1234",
@@ -690,7 +586,7 @@ func TestIdempotencyReplay(t *testing.T) {
 
 	// Assert: only one Build record exists (not two)
 	var count int
-	err = setup.pool.QueryRow(context.Background(),
+	err = setup.seed.QueryRow(context.Background(),
 		`SELECT COUNT(*) FROM builds
 		 WHERE tenant_id = 'tenant-test' AND project_id = 'proj-test1234'
 		   AND environment = 'staging'`,
@@ -708,7 +604,7 @@ func TestIdempotencyMismatch(t *testing.T) {
 	// Second call with key K and payload B gets 422.
 
 	setup := setupIntegrationTest(t)
-	cleanupTestData(t, setup.pool)
+	cleanupTestData(t, setup.seed)
 
 	payloadA := map[string]interface{}{
 		"project_id":  "proj-test1234",
@@ -766,7 +662,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	// Submit build 2: gets 202 (not 409, because the first build is no longer active).
 
 	setup := setupIntegrationTest(t)
-	cleanupTestData(t, setup.pool)
+	cleanupTestData(t, setup.seed)
 
 	reqBody := map[string]interface{}{
 		"project_id":  "proj-test1234",
@@ -802,7 +698,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 
 	// QUEUED -> RUNNING is already done by SubmitBuild.
 	// Now RUNNING -> SUCCEEDED.
-	_, err = setup.pool.Exec(ctx,
+	_, err = setup.seed.Exec(ctx,
 		`UPDATE builds SET status = $1, finished_at = NOW()
 		 WHERE id = $2`,
 		string(statemachine.BPhSucceeded), buildID,
@@ -813,7 +709,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 
 	// Verify build is terminal
 	var status string
-	err = setup.pool.QueryRow(ctx,
+	err = setup.seed.QueryRow(ctx,
 		`SELECT status FROM builds WHERE id = $1`, buildID,
 	).Scan(&status)
 	if err != nil {
@@ -837,7 +733,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 
 	// Assert: two builds exist — one SUCCEEDED, one RUNNING
 	var totalBuilds int
-	err = setup.pool.QueryRow(ctx,
+	err = setup.seed.QueryRow(ctx,
 		`SELECT COUNT(*) FROM builds
 		 WHERE tenant_id = 'tenant-test' AND project_id = 'proj-test1234'
 		   AND environment = 'production'`,
@@ -850,7 +746,7 @@ func TestLockReleasedAfterBuildCompletes(t *testing.T) {
 	}
 
 	var activeBuilds int
-	err = setup.pool.QueryRow(ctx,
+	err = setup.seed.QueryRow(ctx,
 		`SELECT COUNT(*) FROM builds
 		 WHERE tenant_id = 'tenant-test' AND project_id = 'proj-test1234'
 		   AND environment = 'production' AND status IN ('QUEUED', 'RUNNING')`,

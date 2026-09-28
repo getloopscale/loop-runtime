@@ -51,54 +51,28 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
+	"github.com/getloopscale/loopzero/api/internal/db/store"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // --- fakes ---
 
-// fakeRow satisfies pgx.Row by deferring Scan to a closure.
-type fakeRow struct{ scan func(dest ...any) error }
-
-func (r *fakeRow) Scan(dest ...any) error { return r.scan(dest...) }
-
-// fakeQuerier is a fake pgxQuerier (narrow surface defined in
-// setup_secret_fetch.go). QueryRow returns the row pinned by the fake;
-// captures the args for assertion of composite-key scope (T2.1 + ADR D2).
-// The mutex protects the capture state so the concurrency test
-// `Test_rawSecretReader_ReadSecret_Concurrent_NoRace` is race-clean
-// (production pgxpool.Pool is documented safe for concurrent use; the
-// race here is a test-only artifact of the diagnostic capture).
-type fakeQuerier struct {
+// fakeSecretValues is a fake secretValueReader: it records the scope it was
+// asked for and answers with the pinned value or error.
+type fakeSecretValues struct {
 	mu       sync.Mutex
-	row      pgx.Row
-	lastSQL  string
-	lastArgs []any
+	value    []byte
+	err      error
+	lastArgs []string
 }
 
-func (q *fakeQuerier) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
-	q.mu.Lock()
-	q.lastSQL = sql
-	q.lastArgs = args
-	q.mu.Unlock()
-	return q.row
-}
-
-// fakeTransitForRead satisfies vault.Transit's Decrypt method (the only
-// one rawSecretReader calls). Distinct from fakeTransit in
-// setup_stores_test.go (which records call counts) — this one lets tests
-// pin the returned plaintext or error.
-type fakeTransitForRead struct {
-	plaintext []byte
-	err       error
-}
-
-func (t *fakeTransitForRead) Encrypt(_ context.Context, _ string, _ []byte) (string, error) {
-	return "", errors.New("fakeTransitForRead: Encrypt not implemented in test")
-}
-func (t *fakeTransitForRead) Decrypt(_ context.Context, _ string, _ string) ([]byte, error) {
-	return t.plaintext, t.err
+func (f *fakeSecretValues) ReadValue(_ context.Context, tenantID, projectID, env, name string) ([]byte, error) {
+	f.mu.Lock()
+	f.lastArgs = []string{tenantID, projectID, env, name}
+	f.mu.Unlock()
+	return f.value, f.err
 }
 
 // fakeCellQuerier is a fake tenantCellQuerier. Returns the pinned cell
@@ -123,7 +97,7 @@ func (c *fakeCellQuerier) GetTenantCellID(_ context.Context, tenantID string) (s
 // T1.1 RED test. It asserts that even when the caller sets X-Cell-ID to
 // a forged value (e.g., "cell-evil") AND presents a valid Bearer token,
 // the synthetic CrossClusterTokenReviewResult injected into the request
-// context carries the SERVER-SIDE constant `placement.DefaultCellID`
+// context carries the SERVER-SIDE constant `domain.DefaultCellID`
 // (currently "cell-0") — NOT the forged header.
 //
 // Why this matters (#13 consensus-CRITICAL): the existing EC-07 cell↔tenant
@@ -132,16 +106,15 @@ func (c *fakeCellQuerier) GetTenantCellID(_ context.Context, tenantID string) (s
 // `identity.CellID`. If the middleware trusted X-Cell-ID, any holder of
 // LOOPZERO_BROKER_TOKEN could spoof any cell and read every tenant's secrets.
 // Server-side derivation makes the spoof structurally impossible for the
-// dev-public single-cluster path. Prod multi-cluster path will use
-// CrossClusterTokenReviewer.Review against the cell's K8s API (separate
-// follow-up plan).
+// dev-public single-cluster path. A multi-cluster path would use a per-cell
+// TokenReview against the cell's K8s API (separate follow-up plan).
 func TestBrokerBearerMiddleware_RejectsClientSuppliedXCellID(t *testing.T) {
 	const expected = "secret"
 	handler := brokerBearerMiddleware(expected, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ident, ok := auth.CrossClusterFromContext(r.Context())
 		require.True(t, ok, "synthetic TokenReviewResult must be injected by middleware")
-		require.Equal(t, placement.DefaultCellID, ident.CellID,
-			"middleware MUST derive cellID server-side from placement.DefaultCellID; the X-Cell-ID header is forgery-prone and must be ignored (T1.1 / ADR D1 / closes #13)")
+		require.Equal(t, domain.DefaultCellID, ident.CellID,
+			"middleware MUST derive cellID server-side from domain.DefaultCellID; the X-Cell-ID header is forgery-prone and must be ignored (T1.1 / ADR D1 / closes #13)")
 	}))
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/secret-fetch/tn-x/Y", nil)
 	req.Header.Set("Authorization", "Bearer "+expected)
@@ -230,98 +203,31 @@ func Test_brokerBearerMiddleware_Concurrent_NoRace(t *testing.T) {
 	require.True(t, true, "concurrent invocations completed race-clean")
 }
 
-// --- rawSecretReader T3.1 tests ---
+// --- brokerSecretReader ---
 
-func Test_rawSecretReader_ReadSecret_HappyPath_CompositeKey(t *testing.T) {
-	// ADR D2 / T2.1 invariant: SQL scopes by (tenant_id, project, environment, name).
-	ct := "vault:v1:ciphertext-bytes"
-	q := &fakeQuerier{
-		row: &fakeRow{scan: func(dest ...any) error {
-			*(dest[0].(*[]byte)) = []byte(ct)
-			return nil
-		}},
-	}
-	tr := &fakeTransitForRead{plaintext: []byte("hunter2")}
-	r := &rawSecretReader{pool: q, transit: tr}
+func Test_brokerSecretReader_ReadsTheCompositeKeyThroughTheStore(t *testing.T) {
+	values := &fakeSecretValues{value: []byte("hunter2")}
+	r := &brokerSecretReader{store: values}
 
 	got, err := r.ReadSecret(context.Background(), "tn-1", "proj-a", "production", "DB_URL")
 	require.NoError(t, err)
 	require.Equal(t, []byte("hunter2"), got)
-	// Composite-key scope: 4 args (tenant, project, env, name) — closes
-	// #15 scope-drop at the contract level.
-	require.Equal(t, []any{"tn-1", "proj-a", "production", "DB_URL"}, q.lastArgs)
+	// ADR D2 / T2.1: scoped by (tenant, project, environment, name).
+	require.Equal(t, []string{"tn-1", "proj-a", "production", "DB_URL"}, values.lastArgs)
 }
 
-func Test_rawSecretReader_ReadSecret_NoRows_ReturnsErrSecretNotFound(t *testing.T) {
-	q := &fakeQuerier{
-		row: &fakeRow{scan: func(_ ...any) error { return pgx.ErrNoRows }},
-	}
-	r := &rawSecretReader{pool: q, transit: &fakeTransitForRead{}}
+func Test_brokerSecretReader_AbsentSecretIsNotFound(t *testing.T) {
+	r := &brokerSecretReader{store: &fakeSecretValues{err: fmt.Errorf("wrapped: %w", store.ErrSecretNotFound)}}
 	_, err := r.ReadSecret(context.Background(), "tn-1", "proj", "prod", "X")
-	require.ErrorIs(t, err, secrets.ErrSecretNotFound)
+	require.ErrorIs(t, err, secretshttp.ErrSecretNotFound)
 }
 
-// EC-8 absorption: ErrNoRows survives intermediate fmt.Errorf wrap.
-func Test_rawSecretReader_ReadSecret_NoRows_DetectedThroughWrappedError(t *testing.T) {
-	q := &fakeQuerier{
-		row: &fakeRow{scan: func(_ ...any) error {
-			return fmt.Errorf("query: %w", pgx.ErrNoRows)
-		}},
-	}
-	r := &rawSecretReader{pool: q, transit: &fakeTransitForRead{}}
+func Test_brokerSecretReader_DecryptFailurePropagates(t *testing.T) {
+	boom := errors.New("transit boom")
+	r := &brokerSecretReader{store: &fakeSecretValues{err: boom}}
 	_, err := r.ReadSecret(context.Background(), "tn-1", "proj", "prod", "X")
-	require.ErrorIs(t, err, secrets.ErrSecretNotFound,
-		"EC-8: errors.Is must resolve ErrNoRows through one level of fmt.Errorf wrapping")
-}
-
-func Test_rawSecretReader_ReadSecret_TransitDecryptError_PropagatesWrapped(t *testing.T) {
-	q := &fakeQuerier{
-		row: &fakeRow{scan: func(dest ...any) error {
-			*(dest[0].(*[]byte)) = []byte("vault:v1:ciphertext")
-			return nil
-		}},
-	}
-	tr := &fakeTransitForRead{err: errors.New("transit boom")}
-	r := &rawSecretReader{pool: q, transit: tr}
-	_, err := r.ReadSecret(context.Background(), "tn-1", "proj", "prod", "X")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "transit decrypt")
-	require.Contains(t, err.Error(), "transit boom")
-}
-
-func Test_rawSecretReader_ReadSecret_PoolNil_ReturnsTypedError(t *testing.T) {
-	r := &rawSecretReader{pool: nil, transit: &fakeTransitForRead{}}
-	_, err := r.ReadSecret(context.Background(), "tn-1", "proj", "prod", "X")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "pool not configured")
-}
-
-func Test_rawSecretReader_ReadSecret_TransitNil_ReturnsTypedError(t *testing.T) {
-	q := &fakeQuerier{row: &fakeRow{scan: func(_ ...any) error { return nil }}}
-	r := &rawSecretReader{pool: q, transit: nil}
-	_, err := r.ReadSecret(context.Background(), "tn-1", "proj", "prod", "X")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "transit client not configured")
-}
-
-func Test_rawSecretReader_ReadSecret_Concurrent_NoRace(t *testing.T) {
-	q := &fakeQuerier{
-		row: &fakeRow{scan: func(dest ...any) error {
-			*(dest[0].(*[]byte)) = []byte("vault:v1:ct")
-			return nil
-		}},
-	}
-	r := &rawSecretReader{pool: q, transit: &fakeTransitForRead{plaintext: []byte("ok")}}
-	var wg sync.WaitGroup
-	for i := 0; i < 32; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, _ = r.ReadSecret(context.Background(), "tn-1", "proj", "prod", "X")
-		}()
-	}
-	wg.Wait()
-	require.True(t, true, "concurrent invocations completed race-clean")
+	require.ErrorIs(t, err, boom)
+	require.NotErrorIs(t, err, secretshttp.ErrSecretNotFound)
 }
 
 // --- inlineTenantBinding T3.1 tests ---
@@ -344,7 +250,7 @@ func Test_inlineTenantBinding_GetTenantCellID_TenantNotFound_TranslatesToErrTena
 		err: fmt.Errorf("cell store: get tenant cell_id: %w", pgx.ErrNoRows),
 	}}
 	_, err := b.GetTenantCellID(context.Background(), "tn-x")
-	require.ErrorIs(t, err, secrets.ErrTenantNotFound)
+	require.ErrorIs(t, err, secretshttp.ErrTenantNotFound)
 }
 
 func Test_inlineTenantBinding_GetTenantCellID_OtherErrorPropagatesWrapped(t *testing.T) {
@@ -356,7 +262,7 @@ func Test_inlineTenantBinding_GetTenantCellID_OtherErrorPropagatesWrapped(t *tes
 	}}
 	_, err := b.GetTenantCellID(context.Background(), "tn-1")
 	require.Error(t, err)
-	require.NotErrorIs(t, err, secrets.ErrTenantNotFound)
+	require.NotErrorIs(t, err, secretshttp.ErrTenantNotFound)
 	require.Contains(t, err.Error(), "tenant binding")
 	require.Contains(t, err.Error(), "pg connection refused")
 }
@@ -368,36 +274,25 @@ func Test_inlineTenantBinding_GetTenantCellID_CellStoreNil_ReturnsTypedError(t *
 	require.Contains(t, err.Error(), "cell store not configured")
 }
 
-// --- setupSecretFetchDeps T3.1 tests ---
-// These verify the composer is nil-safe: when any of the 4 prerequisites
-// is missing at boot, the route registration is skipped cleanly (LIVE 404
-// + ESO retries) rather than panicking on first request.
+// --- setupSecretFetchDeps ---
+// The composer is nil-safe: when a prerequisite is missing at boot, route
+// registration is skipped (LIVE 404 + ESO retries) rather than panicking on
+// the first request.
 
-func Test_setupSecretFetchDeps_AllNil_ReturnsNil(t *testing.T) {
-	require.Nil(t, setupSecretFetchDeps(nil, nil, nil, nil))
+func Test_setupSecretFetchDeps_MissingStoreSkipsTheRoute(t *testing.T) {
+	require.Nil(t, setupSecretFetchDeps(nil, &fakeCellQuerier{}, &store.AuditLogger{}))
 }
 
-func Test_setupSecretFetchDeps_PoolNil_ReturnsNil(t *testing.T) {
-	require.Nil(t, setupSecretFetchDeps(nil, &fakeTransitForRead{}, nil, nil),
-		"pool missing → deps nil so route registration is skipped")
+func Test_setupSecretFetchDeps_MissingCellStoreSkipsTheRoute(t *testing.T) {
+	require.Nil(t, setupSecretFetchDeps(&fakeSecretValues{}, nil, &store.AuditLogger{}))
 }
 
-func Test_setupSecretFetchDeps_TransitNil_ReturnsNil(t *testing.T) {
-	// pgxpool.Pool is concrete — passing a non-nil sentinel via the
-	// production signature is not possible without a real pool, so we
-	// exercise the transit-missing branch with pool=nil + transit=non-nil
-	// covered above. Here transit=nil with the rest non-nil cannot be
-	// expressed without bound types either; the AllNil case above plus
-	// the contract-level nil check in the implementation (line 141) cover
-	// the invariant. This test pins the contract: if any of the 4 is nil,
-	// the result is nil.
-	require.Nil(t, setupSecretFetchDeps(nil, nil, nil, nil))
+func Test_setupSecretFetchDeps_MissingAuditSkipsTheRoute(t *testing.T) {
+	require.Nil(t, setupSecretFetchDeps(&fakeSecretValues{}, &fakeCellQuerier{}, nil))
 }
 
-func Test_setupSecretFetchDeps_CellStoreNil_ReturnsNil(t *testing.T) {
-	require.Nil(t, setupSecretFetchDeps(nil, nil, nil, nil))
-}
-
-func Test_setupSecretFetchDeps_AuditNil_ReturnsNil(t *testing.T) {
-	require.Nil(t, setupSecretFetchDeps(nil, nil, nil, nil))
+func Test_setupSecretFetchDeps_AllPresentWiresTheBroker(t *testing.T) {
+	deps := setupSecretFetchDeps(&fakeSecretValues{}, &fakeCellQuerier{}, &store.AuditLogger{})
+	require.NotNil(t, deps)
+	require.IsType(t, &brokerSecretReader{}, deps.SecretReader)
 }

@@ -4,15 +4,18 @@
 //
 // New routes added without auth + without allowlist entry fail this gate.
 //
-// Algorithm (ports the bash awk brace-counter into a Go line-walker):
-//  1. Locate the middleware.Auth chi.Router group line range (via brace depth).
-//  2. Locate the registerProtectedRoutes function body line range (also protected).
-//  3. Enumerate every r.{Get,Post,Put,Patch,Delete,Method}( call.
-//  4. For each: PASS if line inside Auth range OR ProtectedFunc range OR route
-//     matches allowlist prefix. FAIL otherwise.
+// Algorithm, over the go/parser AST of router.go:
+//  1. Locate the body of the `Group(func(r chi.Router){…})` that references
+//     middleware.Auth, by AST position.
+//  2. Locate the body of registerProtectedRoutes (also protected).
+//  3. Enumerate every chi registration call (Get, Post, …, Handle, Method), on any
+//     receiver chain, so `r.With(mw).Post(…)` counts like `r.Post(…)`.
+//  4. For each: PASS if its line is inside either body OR the route matches an
+//     allowlist prefix. FAIL otherwise.
 //
-// Migrated from infra/tests/check-route-auth-coverage_test.sh
-// (M-Migrate2 continuation 2026-07-07). Hermetic — pure text walk on router.go.
+// It then refuses an enumeration below the declared floor, and scans the rest of
+// the api tree for route registrations outside router.go that are not declared.
+// Hermetic: it parses source and runs nothing.
 package routeauthcoverage
 
 import (
@@ -23,6 +26,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const routerPath = "api/internal/server/router.go"
@@ -33,12 +38,12 @@ var allowlist = []string{
 	"/api/v1/health",
 	"/api/v1/health/deep",
 	"/api/v1/version",
-	// Contrato da frota de status. PUBLICO pelo mesmo motivo que o
-	// /api/v1/version logo acima — serve o MESMO metadado de build, que nao e'
-	// segredo — e por um motivo proprio: o coletor do painel /status sonda o alvo
-	// sem sessao alguma. Atras do Auth, o painel leria 401 como "servico
-	// indisponivel", que e' precisamente a mentira que ele existe para evitar.
-	// Nao expoe nada alem de {version, built_at}.
+	// Status-fleet contract. PUBLIC for the same reason as /api/v1/version just
+	// above — it serves the SAME build metadata, which is not a secret — and for a
+	// reason of its own: the /status panel's collector probes the target with no
+	// session at all. Behind Auth, the panel would read 401 as "service
+	// unavailable", which is precisely the lie it exists to avoid.
+	// It exposes nothing beyond {version, built_at}.
 	"/v1/version",
 	"/internal/bootstrap",
 	"/internal/argocd-callback",
@@ -52,33 +57,33 @@ var allowlist = []string{
 // Config controls the check.
 type Config struct {
 	RepoRoot string
-	// OffRouterMounts declara arquivos de produção que registram rota fora do
-	// router.go, mapeando caminho → RAZÃO. Nil usa DefaultOffRouterMounts.
+	// OffRouterMounts declares production files that register a route outside
+	// router.go, mapping path → REASON. Nil uses DefaultOffRouterMounts.
 	//
-	// O gate não decide se essas rotas estão protegidas — ele recusa não vê-las.
-	// Um mapa vazio (não-nil) significa "nenhuma declaração", que é o que os
-	// testes de recusa exercitam.
+	// The gate does not decide whether those routes are protected — it refuses not
+	// to see them. An empty (non-nil) map means "no declarations", which is what
+	// the refusal tests exercise.
 	OffRouterMounts map[string]string
-	// MinRoutes é a contagem MÍNIMA de rotas enumeradas. Zero usa DefaultMinRoutes.
+	// MinRoutes is the MINIMUM count of enumerated routes. Zero uses DefaultMinRoutes.
 	//
-	// Mínima e não exata de propósito: um número exato viraria manutenção a cada
-	// rota nova, e a primeira pessoa a tropeçar nele o desligaria.
+	// Minimum and not exact on purpose: an exact number would become maintenance on
+	// every new route, and the first person to trip on it would switch it off.
 	MinRoutes int
 }
 
-// DefaultOffRouterMounts é a lista real, e hoje tem exatamente um item.
+// DefaultOffRouterMounts is the real list, and today it has exactly one entry.
 //
-// Medida em 2026-08-17 varrendo `api/**/*.go` de produção: um único arquivo registra
-// rota fora do router.go.
+// Measured on 2026-08-17 by scanning production `api/**/*.go`: a single file registers
+// a route outside router.go.
 var DefaultOffRouterMounts = map[string]string{
-	"api/internal/routes/timeline/deploy_timeline_register.go": "ponto de montagem canônico do timeline, chamado de router.go:550 — de DENTRO da faixa protegida. " +
-		"O helper existe para que a fiação tenha teste (`deploy_timeline_register_test.go`), e a rota tem 401 próprio quando não há tenant. " +
-		"Medido no B-123: o gate reportava 42 rotas sobre um sistema com pelo menos 43, e esta era a que faltava.",
+	"api/internal/timeline/timelinehttp/deploy_timeline_register.go": "canonical mount point of the timeline, called from router.go:550 — from INSIDE the protected range. " +
+		"The helper exists so the wiring has a test (`deploy_timeline_register_test.go`), and the route returns its own 401 when there is no tenant. " +
+		"Measured in B-123: the gate reported 42 routes over a system with at least 43, and this was the missing one.",
 }
 
-// DefaultMinRoutes é o piso. O roteador real enumera ~71; 55 dá folga para remoção
-// legítima de família (o B-080 está movendo rotas) e ainda derruba uma queda pela
-// metade, que é o modo de falha realista.
+// DefaultMinRoutes is the floor. The real router enumerates ~71; 55 leaves room for
+// the legitimate removal of a family (B-080 is moving routes) and still catches a drop
+// by half, which is the realistic failure mode.
 const DefaultMinRoutes = 55
 
 // Outcome is the summary.
@@ -87,8 +92,19 @@ type Outcome struct {
 	ProtStart, ProtEnd int
 	PassCount          int
 	Violations         []string
-	// OffRouterUndeclared lista registros fora do router.go sem declaração.
+	// OffRouterUndeclared lists registrations outside router.go with no declaration.
 	OffRouterUndeclared []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means at least one route is unprotected and un-allowlisted.
@@ -124,19 +140,39 @@ func Check(cfg Config) (Outcome, error) {
 	fset := token.NewFileSet()
 	file, perr := parser.ParseFile(fset, full, nil, parser.SkipObjectResolution)
 	if perr != nil {
-		// Os DOIS erros são embrulhados: `errors.Is` continua reconhecendo o
-		// sentinela, e quem lê o log recebe a posição exata do parse — que é o
-		// diagnóstico inteiro quando um gate diz "não entendi o arquivo".
+		// BOTH errors are wrapped: `errors.Is` still recognizes the sentinel, and
+		// whoever reads the log gets the exact parse position — which is the whole
+		// diagnosis when a gate says "I did not understand the file".
 		return Outcome{}, fmt.Errorf("%w: %w", ErrRouterUnparseable, perr)
 	}
 
-	authStart, authEnd, protStart, protEnd := authRanges(fset, file)
+	authStart, authEnd, protStart, protEnd, authCallsProtected := authRanges(fset, file)
 	if authStart == 0 {
 		return Outcome{}, ErrAuthGroupMissing
 	}
 
 	pass := 0
 	var violations []string
+
+	// registerProtectedRoutes may live outside router.go and reach its routes
+	// through family registrars; follow it. Its routes are protected exactly
+	// when the Auth group is what calls it.
+	protected, protectedSites, perr := protectedFunctions(root)
+	if perr != nil {
+		return Outcome{}, fmt.Errorf("server package: %w", perr)
+	}
+	for _, site := range protectedSites {
+		if site.File == routerPath {
+			continue // enumerated below with router.go's own ranges
+		}
+		if authCallsProtected {
+			pass++
+			continue
+		}
+		violations = append(violations, fmt.Sprintf("%s:%d  %s  (registered by %s, which the Auth group does not call)",
+			site.File, site.Line, site.Pattern, protectedEntry))
+	}
+
 	for _, site := range enumerateFile(fset, file, routerPath) {
 		route := site.Pattern
 		lineNo := site.Line
@@ -168,7 +204,8 @@ func Check(cfg Config) (Outcome, error) {
 		Violations: violations,
 	}
 	if len(violations) > 0 {
-		return outcome, ErrViolations
+		outcome.Violation = ErrViolations
+		return outcome, nil
 	}
 	// The enumeration floor (B-040). Order matters and is load-bearing: this
 	// runs AFTER ErrViolations, and it counts routes ENUMERATED — approved plus
@@ -178,39 +215,40 @@ func Check(cfg Config) (Outcome, error) {
 	// direction. PassCount counts only APPROVED routes, so it is also zero when
 	// EVERY route violates; the gate would then answer "enumerated nothing" — an
 	// instrumentation error — for the most serious finding this repository can
-	// produce, a public surface with no authentication. See EC-1 of
-	// .claude/knowledge-base/reviews/slice-1-tripwires-edge-cases-2026-08-11.md.
+	// produce, a public surface with no authentication. That was edge case EC-1 of
+	// the slice-1 tripwires edge-case review (2026-08-11).
 	enumerated := outcome.PassCount + len(violations)
 	if enumerated == 0 {
 		return outcome, ErrNoRoutesEnumerated
 	}
 
-	// O piso por CONTAGEM MÍNIMA. `== 0` recusava só o colapso total; uma queda de
-	// 71 para 35 passava, e é essa a queda que uma mudança de forma de registro
-	// produz. Roda depois de ErrViolations pela mesma razão que o zero rodava:
-	// enumerar pouco é erro de instrumentação, e um achado de segurança real tem
-	// precedência sobre ele.
+	// The floor as a MINIMUM COUNT. `== 0` refused only the total collapse; a drop
+	// from 71 to 35 passed, and that is the drop a change in registration shape
+	// produces. It runs after ErrViolations for the same reason the zero check did:
+	// enumerating too little is an instrumentation error, and a real security
+	// finding takes precedence over it.
 	floor := cfg.MinRoutes
 	if floor == 0 {
 		floor = DefaultMinRoutes
 	}
 	if enumerated < floor {
-		return outcome, fmt.Errorf("%w: %d enumeradas, piso %d", ErrEnumerationBelowFloor, enumerated, floor)
+		return outcome, fmt.Errorf("%w: %d enumerated, floor %d", ErrEnumerationBelowFloor, enumerated, floor)
 	}
 
-	// A varredura da árvore. Roda por último: uma rota desprotegida no router.go é
-	// um achado maior que um ponto de montagem não declarado.
+	// The tree scan. It runs last: an unprotected route in router.go is a bigger
+	// finding than an undeclared mount point.
 	declared := cfg.OffRouterMounts
 	if declared == nil {
 		declared = DefaultOffRouterMounts
 	}
-	undeclared, serr := scanOffRouter(root, declared)
+	undeclared, serr := scanOffRouter(root, declared, protected)
 	if serr != nil {
-		return outcome, fmt.Errorf("varredura da árvore: %w", serr)
+		return outcome, fmt.Errorf("tree scan: %w", serr)
 	}
 	if len(undeclared) > 0 {
 		outcome.OffRouterUndeclared = undeclared
-		return outcome, ErrUndeclaredOffRouterMount
+		outcome.Violation = ErrUndeclaredOffRouterMount
+		return outcome, nil
 	}
 	return outcome, nil
 }

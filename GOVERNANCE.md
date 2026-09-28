@@ -128,7 +128,7 @@ Engineering conventions live in [`.claude/rules/`](.claude/rules/) — `testing.
 `error-handling.md`, `git-safety.md`, `architecture.md`, `parsimony-ladder.md`, `public-copy.md`.
 
 Five names this line carried until 2026-09-11 — `workflow.md`, `tdd-workflow.md`, `loopzero-design.md`,
-`design-principles.md`, `cli-output.md` — were deleted together in `1c941b91f` and are not coming
+`design-principles.md`, `cli-output.md` — were deleted together in `9a4a29755` and are not coming
 back; `CLAUDE.md` § Locked rules records where each subject moved.
 
 ## Security

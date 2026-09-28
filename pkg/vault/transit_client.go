@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -128,9 +129,11 @@ var (
 // a logical group) while staying inside the single-segment grammar.
 const tenantKeyPrefix = "loopzero-tenants-"
 
-// tenantKeyName returns the canonical OpenBao transit key name for
-// a tenant: tenantKeyPrefix + tenantID, single-segment safe.
-func tenantKeyName(tenantID string) string {
+// TenantKeyName returns the canonical OpenBao transit key name for
+// a tenant: tenantKeyPrefix + tenantID, single-segment safe. It is the one
+// definition of the name: the api encrypts with it and the operator's
+// crypto-shredding path deletes it, so the two can never name different keys.
+func TenantKeyName(tenantID string) string {
 	return tenantKeyPrefix + tenantID
 }
 
@@ -158,16 +161,15 @@ type TransitClient struct {
 	rateLimit    rate.Limit
 	rateBurst    int
 
-	// now fornece o instante que o limitador consulta. Existe para que a capacidade de
-	// rajada seja afirmavel sem depender do relogio de parede.
+	// now supplies the instant the rate limiter consults. It exists so the burst
+	// capacity can be asserted without depending on the wall clock.
 	//
-	// B-014: o teste da rajada contava chamadas HTTP reais e reprovava com
-	// `allowed: got 11 want 10` quando as 15 chamadas levavam mais de 100ms — a 10/s, um
-	// token extra reabastecia no meio da contagem. Reprovava por tempo, nao por
-	// comportamento.
+	// B-014: the burst test counted real HTTP calls and failed with
+	// `allowed: got 11 want 10` whenever the 15 calls took longer than 100ms — at
+	// 10/s one extra token refilled mid-count. It failed on timing, not behaviour.
 	//
-	// Nao ha abstracao de relogio nova aqui: `rate.Limiter` ja expoe `AllowN(t, n)`, que
-	// recebe o instante. O seam e um campo de funcao, nulo em producao.
+	// No new clock abstraction: `rate.Limiter` already exposes `AllowN(t, n)`, which
+	// takes the instant. The seam is a function field, nil in production.
 	now func() time.Time
 }
 
@@ -211,6 +213,10 @@ func NewTransitClient(cfg TransitConfig) (*TransitClient, error) {
 			pin, err := hex.DecodeString(cfg.SPKIPinSHA256)
 			if err != nil {
 				return nil, fmt.Errorf("vault: SPKIPinSHA256 hex decode: %w", err)
+			}
+			if len(pin) != sha256.Size {
+				return nil, fmt.Errorf("vault: SPKIPinSHA256 must be a hex SHA-256 digest (%d bytes), got %d bytes",
+					sha256.Size, len(pin))
 			}
 			tlsCfg.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 				return verifySPKIPin(rawCerts, pin)
@@ -263,8 +269,8 @@ func verifySPKIPin(rawCerts [][]byte, expectedPin []byte) error {
 	return nil
 }
 
-// timeNow devolve o instante que o limitador deve usar. Em producao e o relogio real; um
-// teste substitui `now` para congelar ou avancar o tempo deliberadamente.
+// timeNow returns the instant the rate limiter uses: the real clock in production;
+// a test replaces `now` to freeze or advance time deliberately.
 func (c *TransitClient) timeNow() time.Time {
 	if c.now != nil {
 		return c.now()
@@ -314,8 +320,10 @@ func (c *TransitClient) Encrypt(ctx context.Context, tenantID string, plaintext 
 	if err := c.acquireRateToken(tenantID); err != nil {
 		return "", err
 	}
-	encoded := base64.StdEncoding.EncodeToString(plaintext)
-	reqBody, _ := json.Marshal(map[string]string{"plaintext": encoded})
+	reqBody, err := json.Marshal(map[string]string{"plaintext": base64.StdEncoding.EncodeToString(plaintext)})
+	if err != nil {
+		return "", fmt.Errorf("vault: encode encrypt request: %w", err)
+	}
 
 	ct, status, err := c.tryEncrypt(ctx, tenantID, reqBody)
 	if err != nil {
@@ -358,26 +366,10 @@ func (c *TransitClient) Encrypt(ctx context.Context, tenantID string, plaintext 
 // status, transport-or-auth-err). status is exposed so the caller can
 // distinguish 404 (EC-06 self-heal trigger) from other 4xx surfaces.
 func (c *TransitClient) tryEncrypt(ctx context.Context, tenantID string, reqBody []byte) (string, int, error) {
-	token, err := c.tokenOrLogin(ctx)
+	path := fmt.Sprintf("/v1/transit/encrypt/%s", TenantKeyName(tenantID))
+	status, respBody, err := c.doWithRelogin(ctx, http.MethodPost, path, reqBody)
 	if err != nil {
 		return "", 0, err
-	}
-	path := fmt.Sprintf("/v1/transit/encrypt/%s", tenantKeyName(tenantID))
-	status, respBody, err := c.do(ctx, http.MethodPost, path, reqBody, token)
-	if err != nil {
-		return "", 0, err
-	}
-	// 403 with the current token → token expired or revoked. Re-login
-	// once via singleflight and retry exactly one more time.
-	if status == http.StatusForbidden {
-		newToken, rerr := c.refreshToken(ctx)
-		if rerr != nil {
-			return "", 0, rerr
-		}
-		status, respBody, err = c.do(ctx, http.MethodPost, path, reqBody, newToken)
-		if err != nil {
-			return "", 0, err
-		}
 	}
 	if status >= 500 {
 		return "", status, fmt.Errorf("vault: transit/encrypt %d: %w", status, ErrVaultUnreachable)
@@ -410,29 +402,17 @@ func (c *TransitClient) tryEncrypt(ctx context.Context, tenantID string, reqBody
 // old comment writes the policy for a path that can never be reached, which is
 // the item this correction belongs to (B-072).
 func (c *TransitClient) createTransitKey(ctx context.Context, tenantID string) error {
-	token, err := c.tokenOrLogin(ctx)
-	if err != nil {
-		return err
-	}
-	reqBody, _ := json.Marshal(map[string]string{
+	reqBody, err := json.Marshal(map[string]string{
 		"type":    "aes256-gcm96",
 		"derived": "false",
 	})
-	path := fmt.Sprintf("/v1/transit/keys/%s", tenantKeyName(tenantID))
-	status, respBody, err := c.do(ctx, http.MethodPost, path, reqBody, token)
+	if err != nil {
+		return fmt.Errorf("vault: encode key-create request: %w", err)
+	}
+	path := fmt.Sprintf("/v1/transit/keys/%s", TenantKeyName(tenantID))
+	status, respBody, err := c.doWithRelogin(ctx, http.MethodPost, path, reqBody)
 	if err != nil {
 		return err
-	}
-	if status == http.StatusForbidden {
-		// Re-login + retry on stale token (consistent with tryEncrypt).
-		newToken, rerr := c.refreshToken(ctx)
-		if rerr != nil {
-			return rerr
-		}
-		status, respBody, err = c.do(ctx, http.MethodPost, path, reqBody, newToken)
-		if err != nil {
-			return err
-		}
 	}
 	// 200, 204, or 200-range: success (idempotent create). 4xx: policy
 	// denial; surface as ErrTransitKeyCreateFailed so caller can alert.
@@ -461,9 +441,12 @@ func (c *TransitClient) Decrypt(ctx context.Context, tenantID, ciphertext string
 	if !strings.HasPrefix(ciphertext, "vault:v1:") {
 		return nil, fmt.Errorf("vault: missing vault:v1: prefix: %w", ErrInvalidCiphertext)
 	}
-	reqBody, _ := json.Marshal(map[string]string{"ciphertext": ciphertext})
+	reqBody, err := json.Marshal(map[string]string{"ciphertext": ciphertext})
+	if err != nil {
+		return nil, fmt.Errorf("vault: encode decrypt request: %w", err)
+	}
 
-	path := fmt.Sprintf("/v1/transit/decrypt/%s", tenantKeyName(tenantID))
+	path := fmt.Sprintf("/v1/transit/decrypt/%s", TenantKeyName(tenantID))
 	var resp struct {
 		Data struct {
 			Plaintext string `json:"plaintext"`
@@ -479,29 +462,32 @@ func (c *TransitClient) Decrypt(ctx context.Context, tenantID, ciphertext string
 	return plaintext, nil
 }
 
-// doAuthed performs a request with the current token, automatically
-// re-logging in on 403 (token expired/revoked) via EC-04 singleflight.
-// At most one re-login fires per concurrent expiry burst.
-func (c *TransitClient) doAuthed(ctx context.Context, method, path string, body []byte, out interface{}) error {
+// doWithRelogin performs a request with the current token. A 403 means the
+// token expired or was revoked: it re-logs in once through the EC-04
+// singleflight (at most one login per concurrent expiry burst) and retries
+// exactly once. The status of the final attempt is returned for the caller
+// to interpret.
+func (c *TransitClient) doWithRelogin(ctx context.Context, method, path string, body []byte) (int, []byte, error) {
 	token, err := c.tokenOrLogin(ctx)
 	if err != nil {
-		return err
+		return 0, nil, err
 	}
 	status, respBody, err := c.do(ctx, method, path, body, token)
+	if err != nil || status != http.StatusForbidden {
+		return status, respBody, err
+	}
+	newToken, err := c.refreshToken(ctx)
+	if err != nil {
+		return 0, nil, err
+	}
+	return c.do(ctx, method, path, body, newToken)
+}
+
+// doAuthed performs doWithRelogin and decodes a 2xx JSON response into out.
+func (c *TransitClient) doAuthed(ctx context.Context, method, path string, body []byte, out interface{}) error {
+	status, respBody, err := c.doWithRelogin(ctx, method, path, body)
 	if err != nil {
 		return err
-	}
-	// 403 with the current token → token expired or revoked. Re-login
-	// once via singleflight and retry exactly one more time.
-	if status == http.StatusForbidden {
-		newToken, err := c.refreshToken(ctx)
-		if err != nil {
-			return err
-		}
-		status, respBody, err = c.do(ctx, method, path, body, newToken)
-		if err != nil {
-			return err
-		}
 	}
 	if status >= 500 {
 		return fmt.Errorf("vault: %s %s returned %d: %w", method, path, status, ErrVaultUnreachable)
@@ -518,7 +504,7 @@ func (c *TransitClient) doAuthed(ctx context.Context, method, path string, body 
 }
 
 // do performs a single HTTP request without any auth retry logic.
-func (c *TransitClient) do(ctx context.Context, method, path string, body []byte, token string) (int, []byte, error) {
+func (c *TransitClient) do(ctx context.Context, method, path string, body []byte, token string) (status int, respBody []byte, err error) {
 	url := c.cfg.Addr + path
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	if err != nil {
@@ -533,35 +519,26 @@ func (c *TransitClient) do(ctx context.Context, method, path string, body []byte
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// A pin mismatch during the TLS handshake arrives wrapped in *url.Error;
+		// errors.Is walks the chain, so the typed sentinel is surfaced as-is.
 		if errors.Is(err, ErrTLSPinMismatch) {
 			return 0, nil, ErrTLSPinMismatch
 		}
-		// Unwrap nested url.Error wrappers to surface ErrTLSPinMismatch
-		// when it occurred during the TLS handshake.
-		var urlErr interface{ Unwrap() error }
-		if errors.As(err, &urlErr) {
-			if errors.Is(err, ErrTLSPinMismatch) {
-				return 0, nil, ErrTLSPinMismatch
-			}
-		}
 		return 0, nil, fmt.Errorf("vault: HTTP %s %s: %w", method, path, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("vault: close %s %s response: %w", method, path, cerr)
+		}
+	}()
 
 	const maxBody = 1 << 20 // 1 MiB
-	respBody := make([]byte, 0, 1024)
-	buf := make([]byte, 4096)
-	for {
-		n, err := resp.Body.Read(buf)
-		if n > 0 {
-			respBody = append(respBody, buf[:n]...)
-			if len(respBody) > maxBody {
-				return 0, nil, fmt.Errorf("vault: response body exceeded %d bytes", maxBody)
-			}
-		}
-		if err != nil {
-			break
-		}
+	respBody, err = io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
+	if err != nil {
+		return 0, nil, fmt.Errorf("vault: read %s %s response: %w", method, path, err)
+	}
+	if len(respBody) > maxBody {
+		return 0, nil, fmt.Errorf("vault: %s %s response body exceeded %d bytes", method, path, maxBody)
 	}
 	return resp.StatusCode, respBody, nil
 }
@@ -588,7 +565,10 @@ func (c *TransitClient) refreshToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	token, _ := v.(string)
+	token, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("vault: AppRole login returned %T, want a token string: %w", v, ErrAuthFailed)
+	}
 	c.mu.Lock()
 	c.token = token
 	c.mu.Unlock()
@@ -599,10 +579,13 @@ func (c *TransitClient) refreshToken(ctx context.Context) (string, error) {
 // ONLY through refreshToken (via singleflight) so multiple concurrent
 // callers see at most one HTTP login in flight.
 func (c *TransitClient) doLogin(ctx context.Context) (string, error) {
-	reqBody, _ := json.Marshal(map[string]string{
+	reqBody, err := json.Marshal(map[string]string{
 		"role_id":   c.cfg.RoleID,
 		"secret_id": c.cfg.SecretID,
 	})
+	if err != nil {
+		return "", fmt.Errorf("vault: encode AppRole login request: %w", err)
+	}
 	status, respBody, err := c.do(ctx, http.MethodPost, "/v1/auth/approle/login", reqBody, "")
 	if err != nil {
 		return "", err

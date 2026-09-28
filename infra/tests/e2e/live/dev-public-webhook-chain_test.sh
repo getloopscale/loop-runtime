@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dev-public-webhook-chain_test.sh
 #
-# T2.2 of plan 2026-06-08-pre-release-test-rigor v1.2 (Cenário 1).
+# T2.2 of plan 2026-06-08-pre-release-test-rigor v1.2 (Scenario 1).
 #
 # LIVE end-to-end webhook chain assertion against dev-public:
 #   GitHub push → webhook → loopzero-api → source bundle → Argo workflow →
@@ -32,7 +32,7 @@ set -euo pipefail
 REPO_OWNER="${REPO_OWNER:-getloopscale}"
 REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 TENANT_ID="${TENANT_ID:-tn-08fa2ecedc3c7e77}"
-PROJECT_NAME="${PROJECT_NAME:-teste}"
+PROJECT_NAME="${PROJECT_NAME:-sample}"
 ENV_NAME="${ENV_NAME:-production}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
 PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"

@@ -4,10 +4,14 @@
 package seed
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
 
 // GitHubWebhookFixtureSeed is the Go port of
@@ -48,26 +52,46 @@ const (
 	ghFixtureWebhookURLEnv = "LOOPZERO_WEBHOOK_URL"
 )
 
-// ghAPIFn shells out `gh api` and returns stdout. Package var so tests
-// can stub it without a live GitHub network dependency.
-var ghAPIFn = defaultGhAPI
-
-func defaultGhAPI(args ...string) ([]byte, error) {
+// defaultGhAPI shells out `gh api` and returns stdout. body, when non-nil, is
+// sent on stdin (paired with `--input -`) so request payloads — the webhook
+// secret in particular — never enter argv.
+func defaultGhAPI(body []byte, args ...string) ([]byte, error) {
 	full := append([]string{"api"}, args...)
 	cmd := exec.Command("gh", full...) // #nosec G204 -- args controlled
+	if body != nil {
+		cmd.Stdin = bytes.NewReader(body)
+	}
 	out, err := cmd.Output()
 	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return out, fmt.Errorf("gh %s: %w (stderr: %s)", strings.Join(full, " "), err, string(ee.Stderr))
+		// Name the request by verb and path only: argv may carry request
+		// fields, and this error is surfaced verbatim in the seed's Reason.
+		verb, path := ghRequestLine(args)
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return out, fmt.Errorf("gh api %s %s: %w (stderr: %s)", verb, path, err, strings.TrimSpace(string(ee.Stderr)))
 		}
-		return out, fmt.Errorf("gh %s: %w", strings.Join(full, " "), err)
+		return out, fmt.Errorf("gh api %s %s: %w", verb, path, err)
 	}
 	return out, nil
 }
 
-// ghAuthCheckFn probes gh auth status. Separate var so tests bypass.
-var ghAuthCheckFn = defaultGhAuthCheck
+// ghRequestLine extracts the HTTP verb and path from a `gh api` argument list:
+// `-X VERB path ...` or a bare `path` (GET).
+func ghRequestLine(args []string) (verb, path string) {
+	verb = "GET"
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "-X" && i+1 < len(args):
+			verb = args[i+1]
+			i++
+		case strings.HasPrefix(args[i], "/") && path == "":
+			path = args[i]
+		}
+	}
+	return verb, path
+}
 
+// defaultGhAuthCheck probes gh auth status.
 func defaultGhAuthCheck() error {
 	cmd := exec.Command("gh", "auth", "status")
 	return cmd.Run()
@@ -98,20 +122,20 @@ func (s *GitHubWebhookFixtureSeed) Run(d Deps) Result {
 	if whsec == "" {
 		return Result{Verdict: SKIP, Reason: "github.webhook_secret empty"}
 	}
-	if IsPlaceholder(whsec) {
+	if credshape.IsPlaceholder(whsec) {
 		return Result{Verdict: SKIP, Reason: "github.webhook_secret placeholder"}
 	}
-	if err := ghAuthCheckFn(); err != nil {
+	if err := d.Host.ghAuthCheck(); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("gh not authenticated: %v — run `gh auth login --scopes repo,admin:repo_hook`", err)}
 	}
-	owner := osGetenvOr(ghFixtureRepoOwnerEnv, ghFixtureDefaultOwner)
-	repo := osGetenvOr(ghFixtureRepoNameEnv, ghFixtureDefaultRepo)
-	targetURL := osGetenvOr(ghFixtureWebhookURLEnv, ghFixtureDefaultWebhookURL)
+	owner := d.Host.envOr(ghFixtureRepoOwnerEnv, ghFixtureDefaultOwner)
+	repo := d.Host.envOr(ghFixtureRepoNameEnv, ghFixtureDefaultRepo)
+	targetURL := d.Host.envOr(ghFixtureWebhookURLEnv, ghFixtureDefaultWebhookURL)
 
-	if err := ghAssertAdmin(owner, repo); err != nil {
+	if err := ghAssertAdmin(d.Host, owner, repo); err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
-	existingID, err := ghFindHookByURL(owner, repo, targetURL)
+	existingID, err := ghFindHookByURL(d.Host, owner, repo, targetURL)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("list hooks: %v", err)}
 	}
@@ -122,12 +146,12 @@ func (s *GitHubWebhookFixtureSeed) Run(d Deps) Result {
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would POST new hook targeting %s", targetURL)}
 	}
 	if existingID != 0 {
-		if err := ghPatchHook(owner, repo, existingID, targetURL, whsec); err != nil {
+		if err := ghPatchHook(d.Host, owner, repo, existingID, targetURL, whsec); err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("PATCH hook %d: %v", existingID, err)}
 		}
 		return Result{Verdict: PASS, Reason: fmt.Sprintf("PATCH ok — hook %d refreshed at %s", existingID, targetURL)}
 	}
-	newID, err := ghCreateHook(owner, repo, targetURL, whsec)
+	newID, err := ghCreateHook(d.Host, owner, repo, targetURL, whsec)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("POST hook: %v", err)}
 	}
@@ -139,13 +163,13 @@ func (s *GitHubWebhookFixtureSeed) Verify(d Deps) Result {
 	if d.Creds == nil {
 		return Result{Verdict: SKIP, Reason: "creds absent"}
 	}
-	if err := ghAuthCheckFn(); err != nil {
+	if err := d.Host.ghAuthCheck(); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("gh not authenticated: %v", err)}
 	}
-	owner := osGetenvOr(ghFixtureRepoOwnerEnv, ghFixtureDefaultOwner)
-	repo := osGetenvOr(ghFixtureRepoNameEnv, ghFixtureDefaultRepo)
-	targetURL := osGetenvOr(ghFixtureWebhookURLEnv, ghFixtureDefaultWebhookURL)
-	id, err := ghFindHookByURL(owner, repo, targetURL)
+	owner := d.Host.envOr(ghFixtureRepoOwnerEnv, ghFixtureDefaultOwner)
+	repo := d.Host.envOr(ghFixtureRepoNameEnv, ghFixtureDefaultRepo)
+	targetURL := d.Host.envOr(ghFixtureWebhookURLEnv, ghFixtureDefaultWebhookURL)
+	id, err := ghFindHookByURL(d.Host, owner, repo, targetURL)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
@@ -156,8 +180,8 @@ func (s *GitHubWebhookFixtureSeed) Verify(d Deps) Result {
 }
 
 // ghAssertAdmin gates hook mutation on repo-admin permission (per bash).
-func ghAssertAdmin(owner, repo string) error {
-	out, err := ghAPIFn(fmt.Sprintf("/repos/%s/%s", owner, repo))
+func ghAssertAdmin(h Host, owner, repo string) error {
+	out, err := h.ghAPI(nil, fmt.Sprintf("/repos/%s/%s", owner, repo))
 	if err != nil {
 		return fmt.Errorf("cannot read /repos/%s/%s — check gh auth + repo access: %w", owner, repo, err)
 	}
@@ -173,8 +197,8 @@ func ghAssertAdmin(owner, repo string) error {
 
 // ghFindHookByURL returns the hook ID whose config.url matches targetURL,
 // or 0 when none. Bubble errors up.
-func ghFindHookByURL(owner, repo, targetURL string) (int64, error) {
-	out, err := ghAPIFn(fmt.Sprintf("/repos/%s/%s/hooks", owner, repo))
+func ghFindHookByURL(h Host, owner, repo, targetURL string) (int64, error) {
+	out, err := h.ghAPI(nil, fmt.Sprintf("/repos/%s/%s/hooks", owner, repo))
 	if err != nil {
 		return 0, err
 	}
@@ -190,16 +214,21 @@ func ghFindHookByURL(owner, repo, targetURL string) (int64, error) {
 	return 0, nil
 }
 
-func ghPatchHook(owner, repo string, id int64, targetURL, whsec string) error {
-	args := ghHookMutateArgs(fmt.Sprintf("/repos/%s/%s/hooks/%d", owner, repo, id), "PATCH", targetURL, whsec)
-	_, err := ghAPIFn(args...)
+func ghPatchHook(h Host, owner, repo string, id int64, targetURL, whsec string) error {
+	body, err := ghHookBody(targetURL, whsec, false)
+	if err != nil {
+		return err
+	}
+	_, err = h.ghAPI(body, "-X", "PATCH", fmt.Sprintf("/repos/%s/%s/hooks/%d", owner, repo, id), "--input", "-")
 	return err
 }
 
-func ghCreateHook(owner, repo, targetURL, whsec string) (int64, error) {
-	args := ghHookMutateArgs(fmt.Sprintf("/repos/%s/%s/hooks", owner, repo), "POST", targetURL, whsec)
-	args = append(args, "-f", "name=web")
-	out, err := ghAPIFn(args...)
+func ghCreateHook(h Host, owner, repo, targetURL, whsec string) (int64, error) {
+	body, err := ghHookBody(targetURL, whsec, true)
+	if err != nil {
+		return 0, err
+	}
+	out, err := h.ghAPI(body, "-X", "POST", fmt.Sprintf("/repos/%s/%s/hooks", owner, repo), "--input", "-")
 	if err != nil {
 		return 0, err
 	}
@@ -213,17 +242,36 @@ func ghCreateHook(owner, repo, targetURL, whsec string) (int64, error) {
 	return got.ID, nil
 }
 
-// ghHookMutateArgs builds the `gh api -X <verb> <path> -F active=true -f events...`
-// invocation. Keeping arg construction in one place makes the tests trivial.
-func ghHookMutateArgs(path, verb, targetURL, whsec string) []string {
-	return []string{
-		"-X", verb, path,
-		"-F", "active=true",
-		"-f", "events[]=push",
-		"-f", "events[]=pull_request",
-		"-f", fmt.Sprintf("config[url]=%s", targetURL),
-		"-f", "config[content_type]=json",
-		"-f", fmt.Sprintf("config[secret]=%s", whsec),
-		"-f", "config[insecure_ssl]=0",
+// ghHookRequest is the JSON body of a repo-hook create/update. It travels on
+// stdin because it carries the HMAC secret.
+type ghHookRequest struct {
+	Name   string              `json:"name,omitempty"`
+	Active bool                `json:"active"`
+	Events []string            `json:"events"`
+	Config ghHookRequestConfig `json:"config"`
+}
+
+type ghHookRequestConfig struct {
+	URL         string `json:"url"`
+	ContentType string `json:"content_type"`
+	Secret      string `json:"secret"`
+	InsecureSSL string `json:"insecure_ssl"`
+}
+
+// ghHookBody builds the canonical hook payload. create adds name=web, which
+// GitHub requires on POST and rejects as a change on PATCH.
+func ghHookBody(targetURL, whsec string, create bool) ([]byte, error) {
+	req := ghHookRequest{
+		Active: true,
+		Events: []string{"push", "pull_request"},
+		Config: ghHookRequestConfig{URL: targetURL, ContentType: "json", Secret: whsec, InsecureSSL: "0"},
 	}
+	if create {
+		req.Name = "web"
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("encode hook body: %w", err)
+	}
+	return body, nil
 }

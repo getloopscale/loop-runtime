@@ -21,6 +21,9 @@
 package proxyexposure
 
 import (
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exposure"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,23 +37,6 @@ const DefaultCaddyfile = "infra/local/Caddyfile"
 
 // DefaultRegistry is the declaration file.
 const DefaultRegistry = "infra/quality/proxy-exposure.txt"
-
-// Exposure classes. A declaration carries exactly one.
-const (
-	// ClassFiltered — the edge restricts what reaches the client (a field
-	// allowlist, an explicit sub-path, a rewritten body).
-	ClassFiltered = "filtered"
-	// ClassInternal — the upstream returns no user data at all (static assets,
-	// websockets, health). Nothing to leak.
-	ClassInternal = "internal"
-	// ClassReviewed — full passthrough, looked at, and accepted. The rationale
-	// column is what makes this different from an oversight.
-	ClassReviewed = "reviewed"
-)
-
-var validClasses = map[string]bool{
-	ClassFiltered: true, ClassInternal: true, ClassReviewed: true,
-}
 
 var (
 	blockOpenRe   = regexp.MustCompile(`^(.*?)\{\s*$`)
@@ -75,13 +61,6 @@ func (e Exposure) Key() string {
 	return e.Site + " " + p
 }
 
-// Declaration is one parsed registry row.
-type Declaration struct {
-	Key       string
-	Class     string
-	Rationale string
-}
-
 // Config drives the gate.
 type Config struct {
 	Root      string
@@ -97,6 +76,9 @@ type Outcome struct {
 	Stale      []string // registry rows matching no exposure
 	Malformed  []string // registry rows that do not parse
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check runs the gate.
 func Check(cfg Config) (*Outcome, error) {
@@ -132,7 +114,13 @@ func Check(cfg Config) (*Outcome, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read registry at %s: %w", regPath, err)
 	}
-	decls, malformed := parseRegistry(string(regData))
+	// The row format is owned by internal/exposure, shared with the live leak
+	// probe so the gate and the probe cannot disagree about what is declared.
+	rows, malformed := exposure.Parse(string(regData))
+	decls := make(map[string]exposure.Declaration, len(rows))
+	for _, d := range rows {
+		decls[d.Key()] = d
+	}
 
 	out := &Outcome{Pass: true, Scanned: len(exposures), Malformed: malformed}
 
@@ -216,35 +204,4 @@ func attribute(stack []string) (site, path string) {
 		}
 	}
 	return site, path
-}
-
-// parseRegistry returns key -> declaration, plus the rows that do not parse.
-// Format: <site> <path> | <class> | <rationale>
-func parseRegistry(content string) (map[string]Declaration, []string) {
-	decls := map[string]Declaration{}
-	var malformed []string
-	for i, line := range strings.Split(content, "\n") {
-		t := strings.TrimSpace(line)
-		if t == "" || strings.HasPrefix(t, "#") {
-			continue
-		}
-		parts := strings.Split(t, "|")
-		if len(parts) != 3 {
-			malformed = append(malformed, fmt.Sprintf("line %d: want `<site> <path> | <class> | <rationale>`, got %q", i+1, t))
-			continue
-		}
-		key := strings.Join(strings.Fields(parts[0]), " ")
-		class := strings.TrimSpace(parts[1])
-		rationale := strings.TrimSpace(parts[2])
-		if !validClasses[class] {
-			malformed = append(malformed, fmt.Sprintf("line %d: unknown class %q (want filtered|internal|reviewed)", i+1, class))
-			continue
-		}
-		if rationale == "" {
-			malformed = append(malformed, fmt.Sprintf("line %d: empty rationale — a class without a reason is an oversight with a label", i+1))
-			continue
-		}
-		decls[key] = Declaration{Key: key, Class: class, Rationale: rationale}
-	}
-	return decls, malformed
 }

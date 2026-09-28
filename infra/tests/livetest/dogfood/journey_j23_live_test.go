@@ -37,9 +37,9 @@ var _ = Describe("J-23 Previews per-PR", Label("live", "dogfood", "j23"), func()
 	AfterEach(func() { cancel() })
 
 	Context("Scenario A — REST list", func() {
-		It("GET /engine/api/v1/projects/teste/previews returns 200", func() {
+		It("GET /engine/api/v1/projects/sample/previews returns 200", func() {
 			status, _, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/engine/api/v1/projects/teste/previews", jwt, nil)
+				env.CloudBaseURL+"/engine/api/v1/projects/sample/previews", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
 		})

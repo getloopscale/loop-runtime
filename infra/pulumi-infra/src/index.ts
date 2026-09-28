@@ -25,18 +25,12 @@ const provider = cfg.require("provider") as CloudProvider;
 const region = cfg.require("region");
 const domain = cfg.require("domain");
 const infraVersion = cfg.get("infraVersion") ?? "v3";
-const cfZoneId = cfg.get("cfZoneId") ?? undefined;
 
 // --- Topology (declarative multi-cluster) ---
 const topology = loadTopology(cfg);
 
 // --- Cloud provider factory ---
-const factory = resolveProvider(provider, {
-  project, environment, provider, region, domain,
-  dnsZone: cfg.get("dnsZone") ?? domain,
-  infraVersion,
-  cfZoneId,
-} as any);
+const factory = resolveProvider(provider);
 
 const tags = standardTags(project, environment);
 const baseName = resourceName({ project, env: environment, region });

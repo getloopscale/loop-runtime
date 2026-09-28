@@ -16,11 +16,11 @@ import (
 )
 
 const (
-	chartName       = "loopzero-build-cwts"
-	releaseName     = "tbc"
-	expectedCWTs    = 3
-	expectedQuotas  = 1
-	expectedLimits  = 1
+	chartName      = "loopzero-build-cwts"
+	releaseName    = "tbc"
+	expectedCWTs   = 3
+	expectedQuotas = 1
+	expectedLimits = 1
 )
 
 type cwtDoc struct {

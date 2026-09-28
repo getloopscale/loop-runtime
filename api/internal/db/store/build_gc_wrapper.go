@@ -66,7 +66,7 @@ type PostgresBuildGCStore struct {
 //
 // Builds in terminal state (SUCCEEDED, FAILED, CANCELLED) older
 // than cutoff are removed, EXCEPT for the top N most recent per
-// (project_id, environment) — guaranteeing the audit/history of
+// (tenant_id, project_id, environment) — guaranteeing the audit/history of
 // the latest deploys per environment is preserved even at high
 // build churn.
 func (s *PostgresBuildGCStore) DeleteOldBuilds(ctx context.Context, maxAge time.Duration, retainPerProject int) (int64, error) {
@@ -75,7 +75,11 @@ func (s *PostgresBuildGCStore) DeleteOldBuilds(ctx context.Context, maxAge time.
 	// Delete builds that are:
 	// 1. In terminal state (SUCCEEDED, FAILED, CANCELLED)
 	// 2. Older than cutoff
-	// 3. NOT in the top N most recent per (project, environment)
+	// 3. NOT in the top N most recent per (tenant, project, environment).
+	//    builds.project_id is the project NAME, unique only per tenant, and
+	//    this runs on the cross-tenant worker pool: without tenant_id in the
+	//    partition, two tenants with a project of the same name share one
+	//    retention budget and one deletes the other's retained history.
 	result, err := s.DB.Exec(ctx, `
 		DELETE FROM builds
 		WHERE id IN (
@@ -85,7 +89,7 @@ func (s *PostgresBuildGCStore) DeleteOldBuilds(ctx context.Context, maxAge time.
 			  AND b.id NOT IN (
 				SELECT id FROM (
 					SELECT id, ROW_NUMBER() OVER (
-						PARTITION BY project_id, environment
+						PARTITION BY tenant_id, project_id, environment
 						ORDER BY created_at DESC
 					) as rn
 					FROM builds
@@ -110,12 +114,9 @@ func (s *PostgresBuildGCStore) DeleteOldBuilds(ctx context.Context, maxAge time.
 func (s *PostgresBuildGCStore) DeleteOldWebhookDeliveries(ctx context.Context, maxAge time.Duration) (int64, error) {
 	cutoff := time.Now().UTC().Add(-maxAge)
 
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return 0, fmt.Errorf("build gc: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
-	n, err := q.DeleteOldWebhookDeliveries(ctx, bridge.GeneratedDB(), pgtype.Timestamptz{Time: cutoff, Valid: true})
+	n, err := q.DeleteOldWebhookDeliveries(ctx, gdb, pgtype.Timestamptz{Time: cutoff, Valid: true})
 	if err != nil {
 		return 0, fmt.Errorf("build gc: delete old webhook deliveries: %w", err)
 	}

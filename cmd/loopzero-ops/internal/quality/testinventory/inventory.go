@@ -4,39 +4,39 @@
 // Package testinventory derives the test pyramid FROM THE TREE, instead of reading
 // numbers a file declares about itself.
 //
-// # O defeito que isto remove
+// # The defect this removes
 //
-// `infra/quality/test-inventory.json` era config viva mantida à mão, e o
-// `testpyramid` lia três percentuais **escritos no arquivo**. Medido em 2026-08-17:
+// `infra/quality/test-inventory.json` was live config maintained by hand, and
+// `testpyramid` read three percentages **written in the file**. Measured on 2026-08-17:
 //
-//	arquivos de teste declarados      710
-//	desses, inexistentes no disco     335   (47%)
-//	arquivos `_test.go` no disco      988
-//	no disco e AUSENTES do inventário 649
+//	declared test files               710
+//	of those, missing from disk       335   (47%)
+//	`_test.go` files on disk          988
+//	on disk and ABSENT from inventory 649
 //
-// O inventário descrevia ~375 arquivos reais de 988: **62% cego**. E a pirâmide que
-// ele declarava (99,4% unit) era calculada sobre essa amostra, que exclui a suíte
-// `infra/tests/e2e` inteira.
+// The inventory described ~375 real files out of 988: **62% blind**. And the pyramid
+// it declared (99.4% unit) was computed over that sample, which excludes the whole
+// `infra/tests/e2e` suite.
 //
-// O gate comparava um limiar contra um número que o próprio arquivo afirmava. **Um
-// arquivo podia declarar a pirâmide que quisesse** — e a que declarava já não era a
-// do repositório em nenhuma das quatro linhas.
+// The gate compared a threshold against a number the file itself asserted. **A file
+// could declare whatever pyramid it wanted** — and the one it declared no longer matched
+// the repository on any of the four lines.
 //
-// Consertar os 649 à mão consertaria a aparência e não o mecanismo: a lista voltaria
-// a divergir na primeira fatia que movesse um teste. Derivada da árvore, ela não pode
-// divergir — não há o que atualizar.
+// Fixing the 649 by hand would fix the appearance and not the mechanism: the list would
+// diverge again on the first slice that moved a test. Derived from the tree, it cannot
+// diverge — there is nothing to update.
 //
-// # A classificação é heurística, e isto está escrito de propósito
+// # The classification is heuristic, and this is written down on purpose
 //
-// Se um teste é unitário ou de integração é, no limite, juízo editorial. O que este
-// pacote faz é aplicar UMA regra declarada, na mesma ordem, sempre:
+// Whether a test is unit or integration is, in the limit, an editorial judgement. What
+// this package does is apply ONE declared rule, in the same order, always:
 //
-//  1. **build tag** — o autor declarou. `live` é e2e, `helm_render` é integração.
-//  2. **caminho** — as subárvores cujo propósito é o próprio nome.
-//  3. **unit** — o resto.
+//  1. **build tag** — the author declared it. `live` is e2e, `helm_render` is integration.
+//  2. **path** — the subtrees whose purpose is their own name.
+//  3. **unit** — everything else.
 //
-// Build tag antes de caminho porque a tag é uma declaração explícita de quem escreveu
-// o teste, e o caminho é inferência de quem escreveu este classificador.
+// Build tag before path because the tag is an explicit declaration by whoever wrote the
+// test, and the path is an inference by whoever wrote this classifier.
 package testinventory
 
 import (
@@ -61,8 +61,9 @@ const (
 type Entry struct {
 	Path     string
 	Category Category
-	// Reason names WHICH rule classified it. Sem isto o inventário derivado teria
-	// o mesmo defeito do declarado: um número sem como conferir de onde veio.
+	// Reason names WHICH rule classified it. Without it the derived inventory would
+	// have the same defect as the declared one: a number with no way to check where it
+	// came from.
 	Reason string
 }
 
@@ -126,15 +127,15 @@ func Classify(path, header string) (Category, string) {
 	slash := filepath.ToSlash(path)
 	for _, p := range e2ePrefixes {
 		if strings.HasPrefix(slash, p) {
-			return E2E, "caminho " + p
+			return E2E, "path " + p
 		}
 	}
 	for _, p := range integrationPrefixes {
 		if strings.HasPrefix(slash, p) {
-			return Integration, "caminho " + p
+			return Integration, "path " + p
 		}
 	}
-	return Unit, "padrão"
+	return Unit, "default"
 }
 
 func hasBuildTag(header, tag string) bool {
@@ -143,7 +144,7 @@ func hasBuildTag(header, tag string) bool {
 		if !strings.HasPrefix(line, "//go:build") {
 			continue
 		}
-		// Casa o token inteiro: `live` não pode casar dentro de `livetest`.
+		// Match the whole token: `live` must not match inside `livetest`.
 		for _, tok := range strings.FieldsFunc(line[len("//go:build"):], func(r rune) bool {
 			return r == ' ' || r == '(' || r == ')' || r == '&' || r == '|' || r == '!'
 		}) {
@@ -167,7 +168,8 @@ func Derive(root string) (Inventory, error) {
 	var inv Inventory
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return nil //nolint:nilerr // um diretório ilegível não invalida a árvore
+			// An unreadable directory hides test files the pyramid would count.
+			return walkErr
 		}
 		if d.IsDir() {
 			if skipDirs[d.Name()] {
@@ -180,9 +182,13 @@ func Derive(root string) (Inventory, error) {
 		}
 		rel, relErr := filepath.Rel(root, path)
 		if relErr != nil {
-			return nil //nolint:nilerr
+			return relErr
 		}
-		cat, reason := Classify(filepath.ToSlash(rel), readHeader(path))
+		header, err := readHeader(path)
+		if err != nil {
+			return err
+		}
+		cat, reason := Classify(filepath.ToSlash(rel), header)
 		inv.Entries = append(inv.Entries, Entry{Path: filepath.ToSlash(rel), Category: cat, Reason: reason})
 		switch cat {
 		case E2E:
@@ -201,10 +207,12 @@ func Derive(root string) (Inventory, error) {
 }
 
 // readHeader returns the first lines of a file, where build constraints live.
-func readHeader(path string) string {
+// A file that cannot be read is an error: classifying it by path alone would
+// drop the build tag that decides its category.
+func readHeader(path string) (string, error) {
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
-		return ""
+		return "", err
 	}
 	defer f.Close()
 	var b strings.Builder
@@ -213,10 +221,13 @@ func readHeader(path string) string {
 		line := sc.Text()
 		b.WriteString(line)
 		b.WriteString("\n")
-		// A cláusula `package` encerra a região das build constraints.
+		// The package clause ends the region where build constraints live.
 		if strings.HasPrefix(strings.TrimSpace(line), "package ") {
 			break
 		}
 	}
-	return b.String()
+	if err := sc.Err(); err != nil {
+		return "", fmt.Errorf("reading %s: %w", path, err)
+	}
+	return b.String(), nil
 }

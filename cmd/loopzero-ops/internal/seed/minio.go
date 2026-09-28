@@ -47,10 +47,10 @@ const (
 	minioCanonicalPasswordDefault = "loopzero-dev-password"
 )
 
-func minioCanonicalPassword() string {
+func minioCanonicalPassword(h Host) string {
 	// Env override matches bash `${LOOPZERO_MINIO_ROOT_PASSWORD:-loopzero-dev-password}`.
 	// Prefer env when non-empty to keep operator override cheap.
-	if v := getEnv("LOOPZERO_MINIO_ROOT_PASSWORD"); v != "" {
+	if v := h.getenv("LOOPZERO_MINIO_ROOT_PASSWORD"); v != "" {
 		return v
 	}
 	return minioCanonicalPasswordDefault
@@ -60,7 +60,7 @@ func (s *MinioCanonicalSeed) Run(d Deps) Result {
 	if d.DryRun {
 		return Result{Verdict: PASS, Reason: "dry-run: would sync canonical password + restart minio + loopzero-api"}
 	}
-	pw := []byte(minioCanonicalPassword())
+	pw := []byte(minioCanonicalPassword(d.Host))
 
 	// Layer 1 — patch main mgmt/loopzero-system/minio Secret.
 	if err := d.Kube.PatchSecretData(d.Ctx, minioNamespace, minioMainSecret,
@@ -109,7 +109,7 @@ func (s *MinioCanonicalSeed) Run(d Deps) Result {
 // canonical password. Stronger than the bash's HTTP /health probe: catches
 // drift (Secret out of sync with declared SoT) at the data level.
 func (s *MinioCanonicalSeed) Verify(d Deps) Result {
-	pw := minioCanonicalPassword()
+	pw := minioCanonicalPassword(d.Host)
 	got, err := d.Kube.GetSecret(d.Ctx, minioNamespace, minioMainSecret)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("get %s/%s: %v", minioNamespace, minioMainSecret, err)}
@@ -122,4 +122,3 @@ func (s *MinioCanonicalSeed) Verify(d Deps) Result {
 
 // getEnv is a small stdlib shim so tests can (in the future) inject env values
 // via an interface without touching os. For now it delegates directly.
-func getEnv(key string) string { return osGetenv(key) }

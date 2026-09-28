@@ -25,7 +25,7 @@ func TestCheck_FailsClosedOnWalkError(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(sub, 0o755) })
 
-	if _, err := Check(Config{RepoRoot: root}); err == nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err == nil {
 		t.Fatal("want fail-closed error on unreadable scan dir, got nil")
 	}
 }

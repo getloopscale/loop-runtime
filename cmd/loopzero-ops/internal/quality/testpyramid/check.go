@@ -1,31 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package testpyramid gates the test pyramid — DERIVANDO-A da árvore.
+// Package testpyramid gates the test pyramid — by DERIVING it from the tree.
 //
-// Os alvos do ADR D7 (unit ≥70%, integração ≤25%, e2e ≤5%) continuam aqui como
-// `DefaultThresholds`, mas hoje eles são REPORTADOS, não impostos: ver derived.go
-// para a razão medida.
+// The ADR D7 targets (unit ≥70%, integration ≤25%, e2e ≤5%) still live here as
+// `DefaultThresholds`, but today they are REPORTED, not enforced: see derived.go
+// for the measured reason.
 //
-// # O que foi removido, e por quê
+// # What was removed, and why
 //
-// Este pacote lia três percentuais escritos em `infra/quality/test-inventory.json`.
-// Medido em 2026-08-17 (B-106): o arquivo descrevia 375 de 988 arquivos de teste —
-// **62% cego** — e declarava 99,4% unit sobre essa amostra, que exclui a suíte
-// `infra/tests/e2e` inteira. Um arquivo podia declarar a pirâmide que quisesse.
+// This package used to read three percentages written in `infra/quality/test-inventory.json`.
+// Measured on 2026-08-17 (B-106): the file described 375 of 988 test files —
+// **62% blind** — and declared 99.4% unit over that sample, which excludes the entire
+// `infra/tests/e2e` suite. A file could declare whatever pyramid it wanted.
 //
-// A leitura do arquivo declarado saiu junto com o arquivo. O que sobrou é `Thresholds`
-// (alvo do ADR) e a catraca sobre a medição, em derived.go.
+// Reading the declared file went away together with the file. What remains is `Thresholds`
+// (the ADR target) and the ratchet over the measurement, in derived.go.
 package testpyramid
 
 // Thresholds are the pyramid bounds (percentages).
 type Thresholds struct {
 	UnitMinPct        float64
 	IntegrationMaxPct float64
-	E2EMaxPct         float64
 }
 
 // DefaultThresholds per ADR D7.
 func DefaultThresholds() Thresholds {
-	return Thresholds{UnitMinPct: 70, IntegrationMaxPct: 25, E2EMaxPct: 5}
+	return Thresholds{UnitMinPct: 70, IntegrationMaxPct: 25}
 }

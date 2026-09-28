@@ -4,17 +4,18 @@
 package ratelimit
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
 
 // TestIPRateLimit_120PerMinute_ReturnsLast40As429 — T2.4 DoD test.
 func TestIPRateLimit_120PerMinute_ReturnsLast40As429(t *testing.T) {
-	limiter := NewIPRateLimiter(IPRateLimitConfig{Limit: 120, Window: 1 * time.Minute})
-	limiter.getNow = func() time.Time { return time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC) }
+	limiter := NewIPRateLimiter(IPRateLimitConfig{Limit: 120, Window: 1 * time.Minute, Clock: fixedClock})
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -44,8 +45,7 @@ func TestIPRateLimit_120PerMinute_ReturnsLast40As429(t *testing.T) {
 // Without trusted proxy CIDRs, X-Forwarded-For MUST be ignored. Otherwise
 // an attacker rotates header value to bypass the bucket.
 func TestIPRateLimit_RejectsXForwardedForFromUntrustedSource(t *testing.T) {
-	limiter := NewIPRateLimiter(IPRateLimitConfig{Limit: 5, Window: 1 * time.Minute})
-	limiter.getNow = func() time.Time { return time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC) }
+	limiter := NewIPRateLimiter(IPRateLimitConfig{Limit: 5, Window: 1 * time.Minute, Clock: fixedClock})
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -55,7 +55,7 @@ func TestIPRateLimit_RejectsXForwardedForFromUntrustedSource(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		req := httptest.NewRequest("GET", "/", nil)
 		req.RemoteAddr = "203.0.113.5:54321"
-		req.Header.Set("X-Forwarded-For", "1.2.3."+itoa(i))
+		req.Header.Set("X-Forwarded-For", "1.2.3."+strconv.Itoa(i))
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code == http.StatusOK {
@@ -75,8 +75,8 @@ func TestIPRateLimit_HonorsXForwardedForFromCloudflareEgress(t *testing.T) {
 		Limit:             5,
 		Window:            1 * time.Minute,
 		TrustedProxyCIDRs: []*net.IPNet{cfCIDR},
+		Clock:             fixedClock,
 	})
-	limiter.getNow = func() time.Time { return time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC) }
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -86,7 +86,7 @@ func TestIPRateLimit_HonorsXForwardedForFromCloudflareEgress(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		req := httptest.NewRequest("GET", "/", nil)
 		req.RemoteAddr = "173.245.48.10:54321" // inside the CF CIDR
-		req.Header.Set("X-Forwarded-For", "1.2.3."+itoa(i))
+		req.Header.Set("X-Forwarded-For", "1.2.3."+strconv.Itoa(i))
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code == http.StatusOK {
@@ -100,8 +100,7 @@ func TestIPRateLimit_HonorsXForwardedForFromCloudflareEgress(t *testing.T) {
 
 // TestIPRateLimit_IPv6PrefixGrouping — EC-13: IPv6 /64 prefix bucket.
 func TestIPRateLimit_IPv6PrefixGrouping(t *testing.T) {
-	limiter := NewIPRateLimiter(IPRateLimitConfig{Limit: 5, Window: 1 * time.Minute})
-	limiter.getNow = func() time.Time { return time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC) }
+	limiter := NewIPRateLimiter(IPRateLimitConfig{Limit: 5, Window: 1 * time.Minute, Clock: fixedClock})
 	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -110,7 +109,7 @@ func TestIPRateLimit_IPv6PrefixGrouping(t *testing.T) {
 	successCount := 0
 	for i := 0; i < 10; i++ {
 		req := httptest.NewRequest("GET", "/", nil)
-		req.RemoteAddr = "[2001:db8:abcd:0::" + itoa(i) + "]:54321"
+		req.RemoteAddr = "[2001:db8:abcd:0::" + strconv.Itoa(i) + "]:54321"
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code == http.StatusOK {
@@ -122,87 +121,54 @@ func TestIPRateLimit_IPv6PrefixGrouping(t *testing.T) {
 	}
 }
 
-func TestParseTrustedProxyCIDRs(t *testing.T) {
-	cidrs := ParseTrustedProxyCIDRs("173.245.48.0/20, 103.21.244.0/22, garbage, ")
-	if len(cidrs) != 2 {
-		t.Fatalf("want 2 valid CIDRs, got %d", len(cidrs))
+func fixedClock() time.Time { return time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC) }
+
+// Retry-After is RFC 9110 delay-seconds: an integer. "45.3s" is not one, and a
+// client that cannot parse it retries at once.
+func TestIPRateLimit_RetryAfterIsIntegerSecondsLeftInTheWindow(t *testing.T) {
+	now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+	limiter := NewIPRateLimiter(IPRateLimitConfig{Limit: 1, Window: time.Minute, Clock: func() time.Time { return now }})
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+
+	serve := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = "203.0.113.5:1"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
 	}
-	if cidrs[0].String() != "173.245.48.0/20" {
-		t.Errorf("first CIDR: want 173.245.48.0/20, got %s", cidrs[0])
+	serve()
+	now = now.Add(14700 * time.Millisecond)
+	rec := serve()
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
 	}
-	if !cidrs[0].Contains(net.ParseIP("173.245.48.10")) {
-		t.Error("first CIDR must contain 173.245.48.10")
+	if got := rec.Header().Get("Retry-After"); got != "46" {
+		t.Errorf("Retry-After = %q, want \"46\" (45.3s left, rounded up to whole seconds)", got)
 	}
 }
 
-func TestGroupIPKey_IPv4Verbatim(t *testing.T) {
-	got := groupIPKey(net.ParseIP("203.0.113.5"))
-	if got != "203.0.113.5" {
-		t.Errorf("IPv4 must stay verbatim, got %q", got)
+// The limiter runs before auth, so its keys are whatever addresses send
+// traffic. Keys idle for two windows must be evicted, or rotating /64s grows
+// the map without bound.
+func TestIPRateLimit_EvictsAddressesIdleForTwoWindows(t *testing.T) {
+	now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+	limiter := NewIPRateLimiter(IPRateLimitConfig{Limit: 5, Window: time.Minute, Clock: func() time.Time { return now }})
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	serveFrom := func(addr string) {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = addr
+		handler.ServeHTTP(httptest.NewRecorder(), req)
 	}
-}
 
-func TestGroupIPKey_IPv6Slash64(t *testing.T) {
-	got := groupIPKey(net.ParseIP("2001:db8:abcd:0::dead:beef"))
-	want := "2001:db8:abcd::/64"
-	if got != want {
-		t.Errorf("IPv6 must collapse to /64; want %q, got %q", want, got)
+	for i := 0; i < 500; i++ {
+		serveFrom(fmt.Sprintf("[2001:db8:%x::1]:443", i))
 	}
-}
+	now = now.Add(2*time.Minute + time.Second)
+	serveFrom("203.0.113.5:1")
 
-// TestGroupIPKey_IPv4MappedIPv6_GroupsAsIPv4 locks a rate-limit-bypass
-// invariant at the IP-parsing glue boundary: an IPv4-mapped IPv6 address
-// (::ffff:a.b.c.d) MUST bucket identically to the plain IPv4 (a.b.c.d).
-// If the two encodings of the same address grouped differently, a client
-// could alternate between them to obtain two separate rate-limit buckets and
-// double its allowance. net.IP.To4() normalizes the mapped form; this guards
-// against a regression that drops that normalization from groupIPKey.
-func TestGroupIPKey_IPv4MappedIPv6_GroupsAsIPv4(t *testing.T) {
-	mapped := groupIPKey(net.ParseIP("::ffff:203.0.113.5"))
-	plain := groupIPKey(net.ParseIP("203.0.113.5"))
-	if mapped != plain {
-		t.Errorf("IPv4-mapped IPv6 must group as plain IPv4 (rate-limit bypass guard): mapped=%q plain=%q", mapped, plain)
+	if got := limiter.counter.Len(); got != 1 {
+		t.Errorf("tracked %d addresses after the rotating /64s went idle for two windows, want 1", got)
 	}
-	if mapped != "203.0.113.5" {
-		t.Errorf("want 203.0.113.5, got %q", mapped)
-	}
-}
-
-// TestParsePeerIP covers the RemoteAddr parsing glue boundary directly
-// (previously only exercised transitively through the middleware): host:port,
-// bare IP, bracketed IPv6, and the malformed / empty negative cases that must
-// return nil rather than a bogus net.IP (which would become a shared "" bucket).
-func TestParsePeerIP(t *testing.T) {
-	cases := []struct {
-		name, in, want string
-		wantNil        bool
-	}{
-		{"ipv4 host:port", "203.0.113.5:54321", "203.0.113.5", false},
-		{"ipv4 bare", "203.0.113.5", "203.0.113.5", false},
-		{"ipv6 bracketed", "[2001:db8::1]:443", "2001:db8::1", false},
-		{"empty", "", "", true},
-		{"garbage", "not-an-ip", "", true},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := parsePeerIP(c.in)
-			if c.wantNil {
-				if got != nil {
-					t.Errorf("parsePeerIP(%q) = %v, want nil", c.in, got)
-				}
-				return
-			}
-			if got == nil || got.String() != c.want {
-				t.Errorf("parsePeerIP(%q) = %v, want %s", c.in, got, c.want)
-			}
-		})
-	}
-}
-
-// itoa avoids strconv import noise in tests.
-func itoa(i int) string {
-	if i < 10 {
-		return string(rune('0' + i))
-	}
-	return string(rune('0'+i/10)) + string(rune('0'+i%10))
 }

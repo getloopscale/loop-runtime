@@ -61,9 +61,8 @@ func TestRenderCorednsNodeHosts_SortedDeterministic(t *testing.T) {
 }
 
 func TestNetworkingCorednsSeed_HappyPath(t *testing.T) {
-	orig := dockerInspectFn
-	defer func() { dockerInspectFn = orig }()
-	dockerInspectFn = func(container string) (string, error) {
+	var host Host
+	host.DockerContainerIP = func(container string) (string, error) {
 		switch container {
 		case "k3d-loopzero-build-serverlb":
 			return "172.20.0.10", nil
@@ -79,9 +78,9 @@ func TestNetworkingCorednsSeed_HappyPath(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"},
 		Data:       map[string]string{"NodeHosts": "127.0.0.1 preexisting-alias\n"},
 	}
-	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"}}
+	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"}, Status: settledDeploymentStatus}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm, dep).Build()
-	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
+	deps := Deps{Host: host, RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
 
 	got := NewNetworkingCrossClusterCorednsSeed().Run(deps)
 
@@ -106,9 +105,8 @@ func TestNetworkingCorednsSeed_HappyPath(t *testing.T) {
 }
 
 func TestNetworkingCorednsSeed_NoopWhenCanonical(t *testing.T) {
-	orig := dockerInspectFn
-	defer func() { dockerInspectFn = orig }()
-	dockerInspectFn = func(c string) (string, error) { return "10.0.0.1", nil }
+	var host Host
+	host.DockerContainerIP = func(c string) (string, error) { return "10.0.0.1", nil }
 	// Pre-seed with the exact target block.
 	canonical := renderCorednsNodeHosts(map[string]string{
 		"k3d-loopzero-build-serverlb":   "10.0.0.1",
@@ -122,7 +120,7 @@ func TestNetworkingCorednsSeed_NoopWhenCanonical(t *testing.T) {
 		Data:       map[string]string{"NodeHosts": canonical},
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm).Build()
-	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
+	deps := Deps{Host: host, RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
 
 	got := NewNetworkingCrossClusterCorednsSeed().Run(deps)
 
@@ -135,17 +133,16 @@ func TestNetworkingCorednsSeed_NoopWhenCanonical(t *testing.T) {
 }
 
 func TestNetworkingCorednsSeed_FailWhenNoContainers(t *testing.T) {
-	orig := dockerInspectFn
-	defer func() { dockerInspectFn = orig }()
-	dockerInspectFn = func(container string) (string, error) {
-		return "", context.Canceled // any error → skipped
+	var host Host
+	host.DockerContainerIP = func(container string) (string, error) {
+		return "", errContainerAbsent // every container absent
 	}
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: "coredns"},
 		Data:       map[string]string{"NodeHosts": ""},
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(cm).Build()
-	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
+	deps := Deps{Host: host, RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
 
 	got := NewNetworkingCrossClusterCorednsSeed().Run(deps)
 

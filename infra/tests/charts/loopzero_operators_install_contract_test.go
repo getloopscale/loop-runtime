@@ -18,16 +18,10 @@ import (
 	"testing"
 )
 
+// operatorChartDir resolves a published chart that exists in charts/ only.
 func operatorChartDir(t *testing.T, name string) string {
 	t.Helper()
-	d, err := filepath.Abs(filepath.Join("..", "..", "..", "charts", name))
-	if err != nil {
-		t.Fatalf("resolve chart dir: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(d, "Chart.yaml")); err != nil {
-		t.Fatalf("chart not found at %s: %v", d, err)
-	}
-	return d
+	return publishedChart(t, name)
 }
 
 // configOnlyOperator: CONFIG.md set-equal to rendered ConfigMap, NO Secret rendered,
@@ -35,7 +29,7 @@ func operatorChartDir(t *testing.T, name string) string {
 func configOnlyOperator(t *testing.T, chart string) {
 	t.Helper()
 	c := operatorChartDir(t, chart)
-	out := helmRequired(t, c)
+	out := renderChart(t, c, defaultRelease, nil)
 	rendered := renderedKeys(t, out, "ConfigMap")
 	if len(rendered) == 0 {
 		t.Fatalf("%s: ConfigMap rendered zero keys", chart)
@@ -57,7 +51,7 @@ func configOnlyOperator(t *testing.T, chart string) {
 func twoPlaneOperator(t *testing.T, chart string) {
 	t.Helper()
 	c := operatorChartDir(t, chart)
-	cfgOut := helmRequired(t, c)
+	cfgOut := renderChart(t, c, defaultRelease, nil)
 	cfgKeys := renderedKeys(t, cfgOut, "ConfigMap")
 	if len(cfgKeys) == 0 {
 		t.Fatalf("%s: ConfigMap rendered zero keys — set-equality would pass vacuously", chart)
@@ -68,11 +62,7 @@ func twoPlaneOperator(t *testing.T, chart string) {
 	if len(secretDocs) == 0 {
 		t.Fatalf("%s: SECRETS.md parsed zero keys", chart)
 	}
-	args := []string{}
-	for _, k := range secretDocs {
-		args = append(args, "--set", "secrets."+camelAPI(k)+"=x")
-	}
-	secOut := helmRequired(t, c, args...)
+	secOut := renderChart(t, c, defaultRelease, allSecretsSet(secretDocs))
 	secKeys := renderedKeys(t, secOut, "Secret")
 	setEqual(t, chart+" SECRETS.md vs rendered Secret", secretDocs, secKeys)
 
@@ -103,10 +93,10 @@ func twoPlaneOperator(t *testing.T, chart string) {
 
 func reloaderOptIn(t *testing.T, c, chart string) {
 	t.Helper()
-	if !strings.Contains(helmRequired(t, c, "--set", "reloader.enabled=true"), "reloader.stakater.com/auto") {
+	if !strings.Contains(renderChart(t, c, defaultRelease, map[string]string{"reloader.enabled": "true"}), "reloader.stakater.com/auto") {
 		t.Errorf("%s: reloader annotation absent when reloader.enabled=true", chart)
 	}
-	if strings.Contains(helmRequired(t, c), "reloader.stakater.com") {
+	if strings.Contains(renderChart(t, c, defaultRelease, nil), "reloader.stakater.com") {
 		t.Errorf("%s: reloader annotation leaked into default render (must be opt-in)", chart)
 	}
 }
@@ -117,21 +107,17 @@ func TestLoopZeroPreviewOperator(t *testing.T)  { configOnlyOperator(t, "loopzer
 func TestLoopZeroPlatformOperator(t *testing.T) { configOnlyOperator(t, "loopzero-platform-operator") }
 
 // EC-3 — each operator chart injects EXACTLY what its binary reads (bidirectional ISP):
-//   (1) completeness: chart-delivered ⊇ binary-reads  (no MISSING key — under-injection)
-//   (2) ISP no-bleed:  chart-delivered ⊆ binary-reads  (no EXTRA key — over-injection)
+//
+//	(1) completeness: chart-delivered ⊇ binary-reads  (no MISSING key — under-injection)
+//	(2) ISP no-bleed:  chart-delivered ⊆ binary-reads  (no EXTRA key — over-injection)
+//
 // The binary's env reads are the FULL transitive set: cmd/<op> + every operators/internal/*
 // package reachable via `go list -deps` (NOT cmd-only — a key read inside internal/tenant,
 // internal/httpclient, internal/tracing, etc. is part of the binary's contract). Kubeconfig
 // paths are delivered via a platform volume mount, not the chart ConfigMap/Secret (EC-1), so
 // they are exempt from both directions. Proves "configured" AND "no dead config", beyond doc==render.
 func TestLoopZeroOperatorsEnvCompleteness(t *testing.T) {
-	if _, err := exec.LookPath("helm"); err != nil {
-		t.Fatal("helm not installed — completeness guard cannot run (EC-4)")
-	}
-	opsRoot, err := filepath.Abs(filepath.Join("..", "..", "..", "operators"))
-	if err != nil {
-		t.Fatalf("resolve operators dir: %v", err)
-	}
+	opsRoot := filepath.Join(repoRoot(t), "operators")
 	// kubeconfig env keys are delivered via platform volume mount, not chart ConfigMap/Secret (EC-1).
 	platformDelivered := map[string]bool{"BUILD_KUBECONFIG": true, "CELL_0_KUBECONFIG": true}
 	cmds := map[string]string{
@@ -144,7 +130,7 @@ func TestLoopZeroOperatorsEnvCompleteness(t *testing.T) {
 		c := operatorChartDir(t, chart)
 		// chart-delivered keys: rendered ConfigMap ∪ CONFIG.md ∪ SECRETS.md (when present).
 		delivered := map[string]bool{}
-		for _, k := range renderedKeys(t, helmRequired(t, c), "ConfigMap") {
+		for _, k := range renderedKeys(t, renderChart(t, c, defaultRelease, nil), "ConfigMap") {
 			delivered[k] = true
 		}
 		for _, k := range mdTableKeys(t, filepath.Join(c, "CONFIG.md")) {
@@ -226,12 +212,18 @@ func binaryReadDirs(t *testing.T, opsRoot, cmdPath string) []string {
 	return dirs
 }
 
-// grepEnvReads returns the env-var names read via os.Getenv/LookupEnv/envOr under dir
-// (recursive, production .go only — test files excluded so test-only env names don't widen the set).
+// grepEnvReads returns the env-var names read under dir (recursive, production
+// .go only — test files excluded so test-only env names don't widen the set).
+// The readers are os.Getenv/LookupEnv, the envOr helper, and the tenant
+// operator's loadConfig, which reads through an injected getenv and its
+// required/orDefault closures so the config can be tested without the process
+// environment, and operatorboot.PositiveInt/PositiveDuration, which take the
+// getenv and the key and refuse a malformed value. A reader missing here makes every variable it reads look
+// over-injected.
 func grepEnvReads(t *testing.T, dir string) []string {
 	t.Helper()
 	out, _ := exec.Command("bash", "-c",
-		`grep -rhoE --include='*.go' --exclude='*_test.go' '(Getenv|LookupEnv|envOr)\("[A-Z][A-Z0-9_]*"' `+dir+` 2>/dev/null | grep -oE '"[A-Z][A-Z0-9_]*"' | tr -d '"' | sort -u`).Output()
+		`grep -rhoE --include='*.go' --exclude='*_test.go' '((Getenv|getenv|LookupEnv|envOr|required|orDefault)\(|Positive(Int|Duration)\([A-Za-z.]+, )"[A-Z][A-Z0-9_]*"' `+dir+` 2>/dev/null | grep -oE '"[A-Z][A-Z0-9_]*"' | tr -d '"' | sort -u`).Output()
 	var keys []string
 	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		if l != "" {

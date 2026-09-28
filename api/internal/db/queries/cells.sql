@@ -63,3 +63,12 @@ WHERE cell_id = $1 AND id <> $2;
 -- Step #4 of PinTenantToCell: atomic UPDATE. Wrapper returns the
 -- previous cell_id captured from step #1.
 UPDATE tenants SET cell_id = $1 WHERE id = $2;
+
+-- name: ListDeclaredCellCapacities :many
+-- Every cell that declares a tenant capacity. Feeds the PlacementEngine, so
+-- automatic placement reads the same column PinTenantToCell enforces; for
+-- automatic placement a cell with NULL falls back to the platform-wide
+-- MAX_TENANTS_PER_CELL. `cells` is not tenant-owned.
+SELECT cell_id, capacity_tenants_max::integer AS capacity_tenants_max
+FROM cells
+WHERE capacity_tenants_max IS NOT NULL;

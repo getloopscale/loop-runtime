@@ -8,8 +8,10 @@ metadata:
 rules:
   # --- LoopZero CRDs: tenants + environments + previewenvironments ---
   #
-  # J-23 LIVE catch 2026-06-07 sponsor verbatim "Fechar tudo — fazer chain
-  # inteira funcionar visual": tenant_gitops.go now lists PreviewEnvironment
+  # J-23 LIVE catch 2026-06-07, sponsor mandate (English: "close everything —
+  # make the whole chain work visually"), verbatim:
+  # "Fechar tudo — fazer chain inteira funcionar visual"  # english-only: verbatim sponsor quote, kept as evidence
+  # tenant_gitops.go now lists PreviewEnvironment
   # CRs of the tenant to emit ArgoCD App + AppProject destinations for active
   # previews. Without `list` on previewenvironments, the operator silently
   # falls back to nil and no preview App is created (build runs but never
@@ -59,10 +61,20 @@ rules:
     resources: ["networkpolicies"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]
 
-  # --- Secrets: kubeconfig secrets, NO delete cluster-wide ---
+  # --- Secrets: NOT here ---
+  # The operator reads Secrets on this cluster only in loopzero-system (cell
+  # kubeconfigs, the registry pull Secret), through a Secret cache scoped to
+  # that namespace. The grant is the namespaced Role in role-secret-access.yaml.
+  # Build and cell clusters are reached through kubeconfigs with their own
+  # identity, so no Secret access there is granted by this chart.
+  {{- if .Values.rbac.legacyClusterWideSecrets }}
+  # Cutover escape hatch (values.yaml rbac.legacyClusterWideSecrets): an
+  # operator image that predates the scoped Secret cache lists Secrets in
+  # every namespace. Read only; off by default.
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update"]
+    verbs: ["get", "list", "watch"]
+  {{- end }}
 
   # --- PriorityClasses: cluster-scoped, needed for tenant workload priorities ---
   - apiGroups: ["scheduling.k8s.io"]
@@ -70,8 +82,11 @@ rules:
     verbs: ["get", "list", "watch", "create", "update"]
 
   # --- Workload resources: required for RBAC escalation prevention ---
+  # No configmaps: the operator reads and writes none on this cluster, and the
+  # Roles it creates in build and cell namespaces are created there, under the
+  # identity of those clusters' kubeconfigs.
   - apiGroups: [""]
-    resources: ["configmaps", "services"]
+    resources: ["services"]
     verbs: ["get", "list", "create", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]

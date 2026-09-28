@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-package charts_test
+package charts
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -20,11 +19,7 @@ import (
 
 func renderLoopZeroAPI(t *testing.T) string {
 	t.Helper()
-	out, err := exec.Command("helm", "template", "api", "../../../charts/loopzero-api").CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm template charts/loopzero-api: %v\n%s", err, out)
-	}
-	return string(out)
+	return renderChart(t, publishedChart(t, "loopzero-api"), "api", nil)
 }
 
 // SD-12.2. loopzero-api serves long-lived SSE streams (deploy.*, rollout.step)

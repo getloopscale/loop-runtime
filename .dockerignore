@@ -2,7 +2,6 @@
 .github
 .claude
 cli/node_modules
-# Keep infra/tests/go.mod (needed by harbor-init Dockerfile for replace directive)
 infra/tests/e2e
 infra/tests/chaos
 infra/tests/load
@@ -23,7 +22,6 @@ infra/pulumi-control-plane/node_modules
 !**/README.md
 **/dist/
 **/build/
-!api/internal/services/build/
 **/coverage/
 **/*.log
 **/.DS_Store

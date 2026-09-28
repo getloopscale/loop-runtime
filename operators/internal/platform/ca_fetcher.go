@@ -31,7 +31,6 @@ import (
 	"fmt"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -132,6 +131,3 @@ func fetchClusterCAWithClient(ctx context.Context, cs kubernetes.Interface, name
 	}
 	return []byte(pem), nil
 }
-
-// _ = corev1.ConfigMap{} — silence linter; type used implicitly via Get.
-var _ = corev1.ConfigMap{}

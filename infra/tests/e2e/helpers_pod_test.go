@@ -17,16 +17,31 @@ import (
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
+// e2eNamespace is the workload namespace of the E2E tenant's (project, env),
+// derived by the platform's own naming rule. Specs never spell it by hand: the
+// two-segment "loopzero-<tenant>-<env>" they used to build names a namespace no
+// deploy creates, and an absence check there passes vacuously.
+func e2eNamespace(project, env string) (string, error) {
+	return naming.Namespace(seed.TenantID, project, env)
+}
+
+// mustE2ENamespace is e2eNamespace for spec bodies, failing the spec on error.
+func mustE2ENamespace(project, env string) string {
+	ns, err := e2eNamespace(project, env)
+	Expect(err).NotTo(HaveOccurred(), "workload namespace for %s/%s", project, env)
+	return ns
+}
+
 // proveDead verifies that all resources for a project are cleaned up
 // (namespace gone or zero resources with loopzero.io/project label).
-// This is the "Prova de Morte" assertion from bash journeys.
+// This is the "proof of death" assertion from the bash journeys.
 // 2026-05-20 drill-parity: uses kubectlForCluster(ClusterWorkload, ...).
 func proveDead(tenant, project, env string) {
-	// O namespace é a tripla (tenant, project, env). Enquanto isto computava dois
-	// segmentos, a "prova de morte" checava um namespace que nunca existiu — e passava
-	// sempre, provando nada.
+	// The namespace is the (tenant, project, env) triple. While this computed two
+	// segments, the proof of death checked a namespace that never existed — and
+	// always passed, proving nothing.
 	ns, nsErr := naming.Namespace(tenant, project, env)
-	Expect(nsErr).NotTo(HaveOccurred(), "proveDead: namespace inválido para %s/%s/%s", tenant, project, env)
+	Expect(nsErr).NotTo(HaveOccurred(), "proveDead: invalid namespace for %s/%s/%s", tenant, project, env)
 
 	Eventually(func() bool {
 		// Check if namespace still exists.
@@ -59,7 +74,7 @@ func proveDead(tenant, project, env string) {
 		}
 		return true
 	}, cleanupTimeout, cleanupPollInterval).Should(BeTrue(),
-		"Prova de Morte failed: resources still exist for project %s in %s", project, ns)
+		"proof of death failed: resources still exist for project %s in %s", project, ns)
 }
 
 // waitAppHealthyViaKubectl is the V9 Option-B bypass for local k3d
@@ -72,7 +87,7 @@ func proveDead(tenant, project, env string) {
 //
 // Parameters:
 //   - project, app, env: identify the workload (namespace
-//     "loopzero-<tenant>-<env>", label "app=<project>-<app>")
+//     e2eNamespace(project, env), label "app=<project>-<app>")
 //   - path: HTTP path to GET (e.g., "/health")
 //   - timeout: Eventually() budget
 //
@@ -90,7 +105,7 @@ func proveDead(tenant, project, env string) {
 // container's filesystem.
 func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Duration) {
 	resName := project + "-" + app
-	ns := "loopzero-" + seed.TenantID + "-" + env
+	ns := mustE2ENamespace(project, env)
 
 	Eventually(func() error {
 		// Find a Running+Ready pod for this app.

@@ -8,7 +8,7 @@
 # CF-Connecting-IP header (set by Cloudflare on proxied requests).
 #
 # Applied to IngressRoutes serving UIs with Origin CA certs (argocd, cloud,
-# auth, harbor). Other IngressRoutes (user apps, api) can opt-in.
+# auth). Other IngressRoutes (user apps, api) can opt-in.
 #
 # Cloudflare documentation on trusted headers:
 # https://developers.cloudflare.com/fundamentals/reference/http-headers/

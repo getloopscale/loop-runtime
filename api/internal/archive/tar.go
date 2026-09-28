@@ -60,108 +60,148 @@ func SafeExtractTarGz(archivePath, targetDir string, opts *ExtractOpts) (int, er
 
 // SafeExtractTarGzReader extracts from an io.Reader instead of a file path.
 func SafeExtractTarGzReader(r io.Reader, targetDir string, opts *ExtractOpts) (int, error) {
+	return extractTarGz(r, targetDir, opts, defaultLimits)
+}
+
+// extractTarGz is SafeExtractTarGzReader with the limits injected, so tests
+// can exercise every limit without producing gigabytes.
+func extractTarGz(r io.Reader, targetDir string, opts *ExtractOpts, limits extractionLimits) (int, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return 0, fmt.Errorf("gzip reader: %w", err)
 	}
 	defer func() { _ = gz.Close() }()
 
-	tr := tar.NewReader(gz)
-	var totalBytes int64
-	fileCount := 0
+	absTarget, err := filepath.Abs(targetDir)
+	if err != nil {
+		return 0, fmt.Errorf("resolve target dir: %w", err)
+	}
 	stripN := 0
 	if opts != nil {
 		stripN = opts.StripComponents
 	}
 
-	absTarget, err := filepath.Abs(targetDir)
-	if err != nil {
-		return 0, fmt.Errorf("resolve target dir: %w", err)
-	}
-
+	tr := tar.NewReader(gz)
+	budget := extractionBudget{limits: limits}
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			break
+			return budget.files, nil
 		}
 		if err != nil {
-			return fileCount, fmt.Errorf("read tar header: %w", err)
+			return budget.files, fmt.Errorf("read tar header: %w", err)
 		}
-
-		// Reject symlinks/hardlinks unconditionally.
-		if hdr.Typeflag == tar.TypeSymlink || hdr.Typeflag == tar.TypeLink {
-			return fileCount, fmt.Errorf("%w: %s", ErrSymlinkInArchive, hdr.Name)
-		}
-
-		// Strip leading path components.
-		name := hdr.Name
-		if stripN > 0 {
-			name = stripComponents(name, stripN)
-			if name == "" {
-				continue
-			}
-		}
-
-		// Validate path.
-		cleanName := filepath.Clean(name)
-		if filepath.IsAbs(cleanName) {
-			return fileCount, fmt.Errorf("%w: absolute path %s", ErrPathTraversal, hdr.Name)
-		}
-		if strings.HasPrefix(cleanName, "..") || strings.Contains(cleanName, string(filepath.Separator)+"..") {
-			return fileCount, fmt.Errorf("%w: %s", ErrPathTraversal, hdr.Name)
-		}
-
-		destPath := filepath.Join(absTarget, cleanName)
-		if !strings.HasPrefix(destPath, absTarget+string(filepath.Separator)) && destPath != absTarget {
-			return fileCount, fmt.Errorf("%w: resolved path %s escapes %s", ErrPathTraversal, destPath, absTarget)
-		}
-
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(destPath, 0o750); err != nil {
-				return fileCount, fmt.Errorf("mkdir %s: %w", cleanName, err)
-			}
-		case tar.TypeReg:
-			fileCount++
-			if fileCount > maxFileCount {
-				return fileCount, fmt.Errorf("%w: exceeded %d files", ErrFileCountLimit, maxFileCount)
-			}
-			if hdr.Size > maxSingleFileSize {
-				return fileCount, fmt.Errorf("%w: file %s is %d bytes (max %d)",
-					ErrDecompressionLimit, cleanName, hdr.Size, maxSingleFileSize)
-			}
-			totalBytes += hdr.Size
-			if totalBytes > maxDecompressedSize {
-				return fileCount, fmt.Errorf("%w: total size exceeds %d bytes",
-					ErrDecompressionLimit, maxDecompressedSize)
-			}
-			if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
-				return fileCount, fmt.Errorf("mkdir parent for %s: %w", cleanName, err)
-			}
-			// G304 false positive: destPath exhaustively validated lines 103-116
-			// (Clean + IsAbs + .. prefix + .. middle + absTarget prefix check).
-			outFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o755) //nolint:gosec // G304 false positive: destPath validated against tar path traversal
-			if err != nil {
-				return fileCount, fmt.Errorf("create %s: %w", cleanName, err)
-			}
-			written, err := io.Copy(outFile, io.LimitReader(tr, hdr.Size+1))
-			closeErr := outFile.Close()
-			if err != nil {
-				return fileCount, fmt.Errorf("write %s: %w", cleanName, err)
-			}
-			if closeErr != nil {
-				return fileCount, fmt.Errorf("close %s: %w", cleanName, closeErr)
-			}
-			if written > hdr.Size {
-				return fileCount, fmt.Errorf("%w: file %s actual size exceeds declared size",
-					ErrDecompressionLimit, cleanName)
-			}
-		default:
-			continue
+		if err := extractEntry(tr, hdr, absTarget, stripN, &budget); err != nil {
+			return budget.files, err
 		}
 	}
+}
 
-	return fileCount, nil
+// extractEntry validates one entry and materialises it when it is a
+// directory or a regular file; every other type is skipped.
+func extractEntry(tr io.Reader, hdr *tar.Header, absTarget string, stripN int, budget *extractionBudget) error {
+	// Reject symlinks/hardlinks unconditionally.
+	if hdr.Typeflag == tar.TypeSymlink || hdr.Typeflag == tar.TypeLink {
+		return fmt.Errorf("%w: %s", ErrSymlinkInArchive, hdr.Name)
+	}
+	name := hdr.Name
+	if stripN > 0 {
+		if name = stripComponents(name, stripN); name == "" {
+			return nil
+		}
+	}
+	destPath, rel, err := resolveEntryPath(absTarget, name, hdr.Name)
+	if err != nil {
+		return err
+	}
+	switch hdr.Typeflag {
+	case tar.TypeDir:
+		if err := os.MkdirAll(destPath, 0o750); err != nil {
+			return fmt.Errorf("mkdir %s: %w", rel, err)
+		}
+	case tar.TypeReg:
+		if err := budget.admit(rel, hdr.Size); err != nil {
+			return err
+		}
+		return writeRegularFile(tr, destPath, rel, hdr)
+	}
+	return nil
+}
+
+// resolveEntryPath maps an entry name to a path inside absTarget, rejecting
+// absolute names and any name that resolves outside the target.
+func resolveEntryPath(absTarget, name, original string) (dest, rel string, err error) {
+	rel = filepath.Clean(name)
+	if filepath.IsAbs(rel) {
+		return "", "", fmt.Errorf("%w: absolute path %s", ErrPathTraversal, original)
+	}
+	if strings.HasPrefix(rel, "..") || strings.Contains(rel, string(filepath.Separator)+"..") {
+		return "", "", fmt.Errorf("%w: %s", ErrPathTraversal, original)
+	}
+	dest = filepath.Join(absTarget, rel)
+	if dest != absTarget && !strings.HasPrefix(dest, absTarget+string(filepath.Separator)) {
+		return "", "", fmt.Errorf("%w: resolved path %s escapes %s", ErrPathTraversal, dest, absTarget)
+	}
+	return dest, rel, nil
+}
+
+// writeRegularFile copies exactly hdr.Size bytes of the entry to destPath.
+// tar.Reader never yields more than the declared size, and a short entry
+// (truncated archive) fails the copy.
+func writeRegularFile(tr io.Reader, destPath, rel string, hdr *tar.Header) error {
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
+		return fmt.Errorf("mkdir parent for %s: %w", rel, err)
+	}
+	outFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o755) //nolint:gosec // G304 false positive: destPath validated by resolveEntryPath
+	if err != nil {
+		return fmt.Errorf("create %s: %w", rel, err)
+	}
+	_, copyErr := io.CopyN(outFile, tr, hdr.Size)
+	closeErr := outFile.Close()
+	if copyErr != nil {
+		return fmt.Errorf("write %s: %w", rel, copyErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close %s: %w", rel, closeErr)
+	}
+	return nil
+}
+
+// extractionLimits bounds what one archive may expand to.
+type extractionLimits struct {
+	maxTotalBytes int64
+	maxFiles      int
+	maxFileBytes  int64
+}
+
+var defaultLimits = extractionLimits{
+	maxTotalBytes: maxDecompressedSize,
+	maxFiles:      maxFileCount,
+	maxFileBytes:  maxSingleFileSize,
+}
+
+// extractionBudget tracks what an extraction has consumed against its limits.
+type extractionBudget struct {
+	limits     extractionLimits
+	files      int
+	totalBytes int64
+}
+
+// admit charges one regular file of the declared size to the budget, before
+// any of its bytes are written.
+func (b *extractionBudget) admit(rel string, size int64) error {
+	b.files++
+	if b.files > b.limits.maxFiles {
+		return fmt.Errorf("%w: exceeded %d files", ErrFileCountLimit, b.limits.maxFiles)
+	}
+	if size > b.limits.maxFileBytes {
+		return fmt.Errorf("%w: file %s is %d bytes (max %d)", ErrDecompressionLimit, rel, size, b.limits.maxFileBytes)
+	}
+	b.totalBytes += size
+	if b.totalBytes > b.limits.maxTotalBytes {
+		return fmt.Errorf("%w: total size exceeds %d bytes", ErrDecompressionLimit, b.limits.maxTotalBytes)
+	}
+	return nil
 }
 
 // stripComponents removes n leading path components from a tar entry name.

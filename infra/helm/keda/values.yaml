@@ -1,136 +1,111 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 #
-# KEDA values -- LOCAL DEVELOPMENT (k3d workload cluster) only.
-# Production overrides: values.production.yaml
+# KEDA values — every environment. Dev/prod layer values.production.yaml on top
+# (cell.helmfile.yaml.gotmpl).
+#
+# The `keda` release installs the UPSTREAM chart directly (kedacore/keda), so
+# every key here must be in the shape kedacore/keda 2.16.1 reads. This file used
+# to nest everything under `keda:` (the shape of a wrapper chart nobody
+# installs), and the upstream chart ignored all of it — KEDA ran with chart
+# defaults. Verify a change with:
+#   helm template keda kedacore/keda --version 2.16.1 -f values.yaml
 
-keda:
-  # ---------------------------------------------------------------------------
-  # Operator (core controller)
-  # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Replicas (operator = core controller; metricsServer serves external metrics
+# to HPA)
+# ---------------------------------------------------------------------------
+operator:
+  replicaCount: 1
+
+metricsServer:
+  replicaCount: 1
+
+webhooks:
+  enabled: true
+
+resources:
   operator:
-    replicaCount: 1
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "500m"
-        memory: "256Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+  metricServer:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+  webhooks:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
 
-  # ---------------------------------------------------------------------------
-  # Metrics Server (serves external metrics to HPA)
-  # ---------------------------------------------------------------------------
-  metricsServer:
-    replicaCount: 1
-    resources:
-      requests:
-        cpu: "50m"
-        memory: "64Mi"
-      limits:
-        cpu: "200m"
-        memory: "128Mi"
+# ScaledObjects are only ever created in tenant namespaces. KEDA has no
+# namespace-exclusion setting; the LoopZero API is what refuses a ScaledObject in
+# kube-system, kube-public, argocd, argo, traefik, cert-manager, monitoring or
+# loopzero-platform.
 
-  # ---------------------------------------------------------------------------
-  # Admission Webhooks
-  # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Security context (non-root, read-only filesystem)
+# INF-G08 + plan ADR D7: hardened defaults uniformly across pod-bearing charts.
+# ---------------------------------------------------------------------------
+podSecurityContext:
+  operator:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  metricServer:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  webhooks:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault
+
+securityContext:
+  operator:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+  metricServer:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+  webhooks:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    capabilities:
+      drop:
+        - ALL
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics — exposed on each component. No ServiceMonitor: the cell
+# cluster runs no Prometheus Operator, so the monitoring.coreos.com/v1 CRD does
+# not exist there and a ServiceMonitor would fail the install (B23).
+# ---------------------------------------------------------------------------
+prometheus:
+  operator:
+    enabled: true
+  metricServer:
+    enabled: true
   webhooks:
     enabled: true
-    resources:
-      requests:
-        cpu: "50m"
-        memory: "64Mi"
-      limits:
-        cpu: "200m"
-        memory: "128Mi"
-
-  # ---------------------------------------------------------------------------
-  # Namespace exclusions
-  # Prevent KEDA from acting on system namespaces.
-  # ---------------------------------------------------------------------------
-  namespaceLabels:
-    keda.sh/exclude: "true"
-
-  # Additional arguments for the operator to skip system namespaces.
-  # KEDA does not natively support namespace exclusion via values, so we rely
-  # on ScaledObject placement -- only tenant namespaces will have ScaledObjects.
-  # This list documents namespaces where ScaledObjects MUST NOT be created.
-  # Enforcement is at the API/operator layer, not KEDA itself.
-  #
-  # Excluded namespaces (enforced by LoopZero API, not KEDA config):
-  #   - kube-system
-  #   - kube-public
-  #   - argocd
-  #   - argo
-  #   - traefik
-  #   - cert-manager
-  #   - monitoring
-  #   - loopzero-platform
-
-  # ---------------------------------------------------------------------------
-  # Security context (non-root, read-only filesystem)
-  # INF-G08 + plan ADR D7: hardened defaults uniformly across pod-bearing charts.
-  # ---------------------------------------------------------------------------
-  podSecurityContext:
-    operator:
-      runAsNonRoot: true
-      runAsUser: 1000
-      runAsGroup: 1000
-      seccompProfile:
-        type: RuntimeDefault
-    metricServer:
-      runAsNonRoot: true
-      runAsUser: 1000
-      seccompProfile:
-        type: RuntimeDefault
-    webhooks:
-      runAsNonRoot: true
-      runAsUser: 1000
-      seccompProfile:
-        type: RuntimeDefault
-
-  securityContext:
-    operator:
-      readOnlyRootFilesystem: true
-      allowPrivilegeEscalation: false
-      runAsNonRoot: true
-      capabilities:
-        drop:
-          - ALL
-    metricServer:
-      readOnlyRootFilesystem: true
-      allowPrivilegeEscalation: false
-      runAsNonRoot: true
-      capabilities:
-        drop:
-          - ALL
-    webhooks:
-      readOnlyRootFilesystem: true
-      allowPrivilegeEscalation: false
-      runAsNonRoot: true
-      capabilities:
-        drop:
-          - ALL
-
-  # ---------------------------------------------------------------------------
-  # Prometheus metrics
-  # ---------------------------------------------------------------------------
-  prometheus:
-    operator:
-      enabled: true
-      serviceMonitor:
-        enabled: true
-        additionalLabels:
-          release: monitoring
-    metricServer:
-      enabled: true
-      serviceMonitor:
-        enabled: true
-        additionalLabels:
-          release: monitoring
-    webhooks:
-      enabled: true
-      serviceMonitor:
-        enabled: true
-        additionalLabels:
-          release: monitoring

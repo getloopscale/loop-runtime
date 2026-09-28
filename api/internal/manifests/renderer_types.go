@@ -72,8 +72,8 @@ type k8sLifecycle struct {
 // k8sLifecycleHandler intentionally exposes ONLY the native `sleep` action.
 //
 // `exec` is deliberately absent rather than merely unused: tenant images are
-// arbitrary, and a distroless base has no /bin/sh (this repo already documents
-// that trap for crane — see argo/harbor_mirror.go). A shell-based hook fails on
+// arbitrary, and a distroless base has no /bin/sh (the crane image is one). A
+// shell-based hook fails on
 // exactly the most hardened images, and it fails at teardown, where the symptom
 // is an abrupt connection drop rather than an error anyone reads. Leaving the
 // field out means the mistake cannot be made here at all.

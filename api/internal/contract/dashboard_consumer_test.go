@@ -87,20 +87,22 @@ func isDashboardTestFixture(path string) bool {
 // stripComments removes `//` line comments and `/* … */` block comments from TS/TSX
 // source before the path regex runs.
 //
-// Sem isso, uma linha de PROSA que cita uma rota vira uma "chamada" para este guarda.
-// Medido em 2026-08-10: `dashboard/src/main.tsx:41` documenta uma medição de 2026-08-07
-// listando sete requisições que escapavam do interceptador — entre elas
-// `/engine/api/v1/auth/whoami` — e o guarda passou a exigir essa rota na lista de
-// caminhos consumidos. O dashboard não a chama em lugar nenhum fora de mock e teste,
-// que já eram excluídos por arquivo (isDashboardTestFixture).
+// Without it, a line of PROSE that cites a route becomes a "call" to this guard.
+// Measured 2026-08-10: `dashboard/src/main.tsx:41` documents a 2026-08-07
+// measurement listing seven requests that escaped the interceptor — among them
+// `/engine/api/v1/auth/whoami` — and the guard started demanding that route in the
+// list of consumed paths. The dashboard calls it nowhere outside mocks and tests,
+// which were already excluded per file (isDashboardTestFixture).
 //
-// Declarar a rota na lista para calar o guarda teria sido pior do que o falso positivo:
-// afirmaria um consumo que não existe, e o contrato passaria a mentir na direção que
-// ninguém verifica. O comentário que descreve um bug não é o bug (BACKLOG.md B-008).
+// Declaring the route in the list to silence the guard would have been worse than
+// the false positive: it would assert a consumption that does not exist, and the
+// contract would start lying in the direction nobody checks. A comment describing a
+// bug is not the bug (B-008).
 //
-// A varredura é deliberadamente simples — não trata `//` dentro de string literal, que
-// produziria no máximo um falso NEGATIVO numa URL literal comentada. Um guarda que erra
-// para menos e revisável; um que erra para mais treina o time a silenciá-lo.
+// The sweep is deliberately simple — it does not handle `//` inside a string
+// literal, which could at most produce a false NEGATIVE on a commented-out literal
+// URL. A guard that errs low is reviewable; one that errs high trains the team to
+// silence it.
 func stripComments(src string) string {
 	var out strings.Builder
 	out.Grow(len(src))
@@ -159,7 +161,7 @@ func liveDashboardEnginePaths(t *testing.T) map[string]bool {
 		if rerr != nil {
 			return rerr
 		}
-		// Comentários fora ANTES do regex: prosa que cita uma rota não é chamada dela.
+		// Comments out BEFORE the regex: prose that cites a route is not a call to it.
 		for _, m := range enginePrefixedRE.FindAllString(stripComments(string(src)), -1) {
 			n := normalizePath(strings.TrimPrefix(m, "/engine"))
 			if cleanPath.MatchString(n) {
@@ -215,29 +217,29 @@ func TestDashboardConsumer_ListMatchesSource(t *testing.T) {
 	}
 }
 
-// TestStripComments_ProsaQueCitaRotaNaoEChamada trava o falso positivo do B-008.
+// TestStripComments_ProseCitingARouteIsNotACall pins the B-008 false positive.
 //
-// O caso do meio é o real: `main.tsx` descreve, em português e em comentário, uma
-// medição que lista rotas que escapavam do interceptador. Antes deste corte, o guarda
-// lia essa prosa como consumo e exigia a rota na lista de caminhos declarados.
-func TestStripComments_ProsaQueCitaRotaNaoEChamada(t *testing.T) {
-	casos := []struct {
-		nome string
+// The middle cases are the real one: `main.tsx` describes, in a comment, a
+// measurement listing routes that escaped the interceptor. Before this cut, the
+// guard read that prose as consumption and demanded the route in the declared list.
+func TestStripComments_ProseCitingARouteIsNotACall(t *testing.T) {
+	cases := []struct {
+		name string
 		src  string
-		quer bool // a rota deve sobreviver ao corte?
+		want bool // must the route survive the cut?
 	}{
-		{"chamada de verdade", `fetch("/engine/api/v1/auth/whoami")`, true},
-		{"comentario de linha", `// escapavam ("/engine/api/v1/auth/whoami")`, false},
-		{"comentario de bloco", "/* ver /engine/api/v1/auth/whoami */", false},
-		{"bloco em varias linhas", "/*\n/engine/api/v1/auth/whoami\n*/", false},
-		{"codigo depois do bloco", "/* x */ fetch(\"/engine/api/v1/auth/whoami\")", true},
+		{"a real call", `fetch("/engine/api/v1/auth/whoami")`, true},
+		{"line comment", `// escaped ("/engine/api/v1/auth/whoami")`, false},
+		{"block comment", "/* see /engine/api/v1/auth/whoami */", false},
+		{"multi-line block", "/*\n/engine/api/v1/auth/whoami\n*/", false},
+		{"code after a block", "/* x */ fetch(\"/engine/api/v1/auth/whoami\")", true},
 	}
-	for _, c := range casos {
-		t.Run(c.nome, func(t *testing.T) {
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			got := strings.Contains(stripComments(c.src), "/engine/api/v1/auth/whoami")
-			if got != c.quer {
-				t.Errorf("rota sobreviveu=%v, queria %v\nfonte: %q\nsaida: %q",
-					got, c.quer, c.src, stripComments(c.src))
+			if got != c.want {
+				t.Errorf("route survived=%v, want %v\nsource: %q\noutput: %q",
+					got, c.want, c.src, stripComments(c.src))
 			}
 		})
 	}

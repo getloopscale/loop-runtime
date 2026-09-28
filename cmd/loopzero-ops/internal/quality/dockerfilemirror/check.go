@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check where the per-image Dockerfiles live.
@@ -32,6 +34,9 @@ type Outcome struct {
 	Total      int
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check scans every infra/images/*/Dockerfile FROM directive and fails any that
 // would resolve to Docker Hub (no mirror/DOCR/full-path prefix).

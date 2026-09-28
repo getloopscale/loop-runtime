@@ -17,7 +17,7 @@ import (
 
 var repoRoot = qtestutil.MustRepoRoot()
 
-// stubScanner é a costura que tira rede e binário do caminho do teste (DIP).
+// stubScanner is the seam that takes the network and the binary out of the test's path (DIP).
 type stubScanner struct {
 	out string
 	err error
@@ -36,28 +36,28 @@ func baseWith(t *testing.T, fs []Finding) string {
 
 func run(t *testing.T, sc Scanner, basePath string) (Outcome, error) {
 	t.Helper()
-	return Check(context.Background(), Config{
+	return violationOf(Check(context.Background(), Config{
 		RepoRoot: t.TempDir(), BaselinePath: basePath, Scanner: sc,
-	})
+	}))
 }
 
-// ADR-3. A adjudicação humana cobre "isto não é segredo" — nunca "este segredo pode viver aqui".
-func TestAchadoVivoReprovaMesmoEstandoNaBase(t *testing.T) {
+// ADR-3. Human adjudication covers "this is not a secret" — never "this secret may live here".
+func TestLiveFindingFailsEvenWhenInTheBaseline(t *testing.T) {
 	dead := found(t, line("DigitalOceanToken", "x.ts", fakeSecret(), false))
-	base := baseWith(t, dead) // mesma identidade: Verified não entra no hash
+	base := baseWith(t, dead) // same identity: Verified does not go into the hash
 	live := line("DigitalOceanToken", "x.ts", fakeSecret(), true)
 
 	out, err := run(t, stubScanner{out: live}, base)
 	if !errors.Is(err, ErrLiveSecret) {
-		t.Fatalf("achado vivo reprova mesmo adjudicado; err=%v", err)
+		t.Fatalf("a live finding fails even when adjudicated; err=%v", err)
 	}
 	if out.Live != 1 {
-		t.Fatalf("o vivo precisa ser contado; got %+v", out)
+		t.Fatalf("the live one must be counted; got %+v", out)
 	}
 }
 
-// O caso do B-142 — e teria sido barrado em MARÇO, não em agosto.
-func TestCandidatoNovoReprova(t *testing.T) {
+// The B-142 case — and it would have been blocked in MARCH, not in August.
+func TestNewCandidateFails(t *testing.T) {
 	base := baseWith(t, found(t, line("Postgres", "a.md", pgURI(), false)))
 	out, err := run(t, stubScanner{out: strings.Join([]string{
 		line("Postgres", "a.md", pgURI(), false),
@@ -65,38 +65,38 @@ func TestCandidatoNovoReprova(t *testing.T) {
 	}, "\n")}, base)
 
 	if !errors.Is(err, ErrUnadjudicated) {
-		t.Fatalf("candidato fora da base reprova; err=%v", err)
+		t.Fatalf("a candidate outside the baseline fails; err=%v", err)
 	}
 	if len(out.NewCandidates) != 1 || out.NewCandidates[0].Detector != "DigitalOceanToken" {
-		t.Fatalf("o novo precisa ser NOMEADO para ser adjudicável; got %+v", out.NewCandidates)
+		t.Fatalf("the new one must be NAMED to be adjudicable; got %+v", out.NewCandidates)
 	}
 }
 
-// O caminho 2 medido: o código nomeava a rede como causa e devolvia exit 0.
-func TestErroDeExecucaoReprovaENaoESkip(t *testing.T) {
+// Measured path 2: the code named the network as the cause and returned exit 0.
+func TestExecutionErrorFailsAndIsNotASkip(t *testing.T) {
 	base := baseWith(t, found(t, line("Postgres", "a.md", "x", false)))
 	_, err := run(t, stubScanner{err: errors.New("dial tcp: network is unreachable")}, base)
 	if !errors.Is(err, ErrScanFailed) {
-		t.Fatalf("erro de execução reprova; err=%v", err)
+		t.Fatalf("an execution error fails; err=%v", err)
 	}
 	if errors.Is(err, ErrLiveSecret) {
-		t.Fatal("erro de execução não é o mesmo defeito que segredo vivo")
+		t.Fatal("an execution error is not the same defect as a live secret")
 	}
 }
 
-// O caminho 1: ausência do scanner produz o MESMO exit 0 de um repositório limpo.
-func TestBinarioAusenteReprova(t *testing.T) {
+// Path 1: a missing scanner produces the SAME exit 0 as a clean repository.
+func TestMissingBinaryFails(t *testing.T) {
 	base := baseWith(t, found(t, line("Postgres", "a.md", "x", false)))
-	_, err := Check(context.Background(), Config{
+	_, err := violationOf(Check(context.Background(), Config{
 		RepoRoot: t.TempDir(), BaselinePath: base,
-		Scanner: execScanner{binary: "trufflehog-que-nao-existe-" + t.Name()},
-	})
+		Scanner: execScanner{binary: "trufflehog-that-does-not-exist-" + t.Name()},
+	}))
 	if !errors.Is(err, ErrScannerMissing) {
-		t.Fatalf("binário ausente reprova; err=%v", err)
+		t.Fatalf("a missing binary fails; err=%v", err)
 	}
 }
 
-func TestConjuntoAdjudicadoSemVivosPassa(t *testing.T) {
+func TestAdjudicatedSetWithoutLiveFindingsPasses(t *testing.T) {
 	fs := found(t,
 		line("Postgres", "a.md", pgURI(), false),
 		line("URI", "b.md", credURI(), false))
@@ -107,38 +107,38 @@ func TestConjuntoAdjudicadoSemVivosPassa(t *testing.T) {
 		line("URI", "b.md", credURI(), false),
 	}, "\n")}, base)
 	if err != nil {
-		t.Fatalf("conjunto adjudicado sem vivos passa: %v (%+v)", err, out)
+		t.Fatalf("an adjudicated set with no live findings passes: %v (%+v)", err, out)
 	}
 	if out.Candidates != 2 || out.Live != 0 {
-		t.Fatalf("contagens erradas: %+v", out)
+		t.Fatalf("wrong counts: %+v", out)
 	}
 }
 
-// O verde precisa dizer O QUE FOI ESTABELECIDO. "scan clean" é a frase que sustentou
-// cinco meses de exposição: ela não distingue "não há" de "não verifiquei".
-func TestOVerdeDizOQueFoiEstabelecido(t *testing.T) {
+// The green must say WHAT WAS ESTABLISHED. "scan clean" is the phrase that sustained
+// five months of exposure: it does not distinguish "there is none" from "I did not verify".
+func TestGreenSaysWhatWasEstablished(t *testing.T) {
 	fs := found(t, line("Postgres", "a.md", pgURI(), false))
 	out, err := run(t, stubScanner{out: line("Postgres", "a.md", pgURI(), false)}, baseWith(t, fs))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(out.Reason, "clean") {
-		t.Fatalf("a razão não pode reciclar a frase que escondeu o defeito: %q", out.Reason)
+		t.Fatalf("the reason must not recycle the phrase that hid the defect: %q", out.Reason)
 	}
 	if !strings.Contains(out.Reason, "1") {
-		t.Fatalf("a razão precisa citar o que foi medido: %q", out.Reason)
+		t.Fatalf("the reason must cite what was measured: %q", out.Reason)
 	}
 }
 
-// EC-4. Varredura pendurada trava o gate de entrega para sempre.
-func TestPrazoExpiradoReprova(t *testing.T) {
+// EC-4. A hung scan locks the delivery gate forever.
+func TestExpiredDeadlineFails(t *testing.T) {
 	base := baseWith(t, found(t, line("Postgres", "a.md", "x", false)))
-	_, err := Check(context.Background(), Config{
+	_, err := violationOf(Check(context.Background(), Config{
 		RepoRoot: t.TempDir(), BaselinePath: base, Timeout: time.Nanosecond,
 		Scanner: sleepyScanner{},
-	})
+	}))
 	if !errors.Is(err, ErrScanFailed) {
-		t.Fatalf("prazo expirado reprova, nunca skip; err=%v", err)
+		t.Fatalf("an expired deadline fails, never skips; err=%v", err)
 	}
 }
 
@@ -149,75 +149,75 @@ func (sleepyScanner) Scan(ctx context.Context, _ string) (string, error) {
 	return "", ctx.Err()
 }
 
-// EC-7. Com --fail o trufflehog sai 183; sem, sai 0. O gate não pode depender de qual
-// comportamento a versão instalada tem.
-func TestSaida0E183SaoExecucaoValida(t *testing.T) {
+// EC-7. With --fail trufflehog exits 183; without it, it exits 0. The gate must not depend on which
+// behavior the installed version has.
+func TestExitCodes0And183AreValidRuns(t *testing.T) {
 	for _, code := range []int{0, 183} {
 		if !isScanRan(code) {
-			t.Fatalf("código %d é execução válida", code)
+			t.Fatalf("code %d is a valid run", code)
 		}
 	}
 	for _, code := range []int{1, 2, 127} {
 		if isScanRan(code) {
-			t.Fatalf("código %d é erro de execução", code)
+			t.Fatalf("code %d is an execution error", code)
 		}
 	}
 }
 
-// EC-2 no nível do gate: sem base, não há verde possível.
-func TestSemBaseNaoHaVerde(t *testing.T) {
-	_, err := run(t, stubScanner{out: ""}, filepath.Join(t.TempDir(), "ausente.json"))
+// EC-2 at the gate level: without a baseline, no green is possible.
+func TestNoBaselineMeansNoGreen(t *testing.T) {
+	_, err := run(t, stubScanner{out: ""}, filepath.Join(t.TempDir(), "absent.json"))
 	if !errors.Is(err, ErrBaselineMissing) {
-		t.Fatalf("sem base o gate não pode reportar limpo; err=%v", err)
+		t.Fatalf("without a baseline the gate cannot report clean; err=%v", err)
 	}
 }
 
-// A população real (rules/testing.md § 4.2). O mutante sintético acima prova que a trava
-// ENXERGA cada forma; só isto prova o que ela vê no que existe — e é a asserção que a
-// suíte anterior não tinha (três testes, `_ = got`, zero asserções de comportamento).
-func TestArvoreRealEstaAdjudicada(t *testing.T) {
-	// Sem guarda de -short: nada no cmd/loopzero-ops roda com essa flag, e a varredura da
-	// população é justamente a asserção que não pode ser pulada (rules/testing.md § 4.2).
-	// Custa ~70s, que é o preço de o gate nascer medido contra a árvore que ship.
+// The real population (rules/testing.md § 4.2). The synthetic mutants above prove the lock
+// SEES each shape; only this proves what it sees in what exists — and it is the assertion the
+// previous suite did not have (three tests, `_ = got`, zero behavioral assertions).
+func TestRealTreeIsAdjudicated(t *testing.T) {
+	// No -short guard: nothing in cmd/loopzero-ops runs with that flag, and the scan of the
+	// population is precisely the assertion that cannot be skipped (rules/testing.md § 4.2).
+	// It costs ~70s, which is the price of the gate being born measured against the tree that ships.
 	if _, err := os.Stat(filepath.Join(repoRoot, defaultBaselineRel)); err != nil {
-		t.Fatalf("a linha de base precisa estar versionada: %v", err)
+		t.Fatalf("the baseline must be versioned: %v", err)
 	}
-	out, err := Check(context.Background(), Config{RepoRoot: repoRoot})
+	out, err := violationOf(Check(context.Background(), Config{RepoRoot: repoRoot}))
 	if err != nil {
 		for i, f := range out.NewCandidates {
 			if i == 10 {
-				t.Errorf("... e mais %d", len(out.NewCandidates)-10)
+				t.Errorf("... and %d more", len(out.NewCandidates)-10)
 				break
 			}
-			t.Errorf("novo: %s [%s] %s", f.File, f.Detector, f.ID())
+			t.Errorf("new: %s [%s] %s", f.File, f.Detector, f.ID())
 		}
-		t.Fatalf("árvore real: %v", err)
+		t.Fatalf("real tree: %v", err)
 	}
 	if out.Candidates == 0 {
-		t.Fatal("zero candidatos varridos — não achar nada não é o mesmo que não achar nada errado")
+		t.Fatal("zero candidates scanned — finding nothing is not the same as finding nothing wrong")
 	}
 }
 
-// Achado da fase REVIEW desta própria fatia. Uma base com 39 entradas e uma varredura
-// com ZERO candidatos não é um repositório que ficou limpo — é uma varredura que não
-// alcançou o histórico. Reportar verde aí é a forma exata do defeito que o B-143 mede,
-// reintroduzida pela porta dos fundos.
+// A finding from this very slice's REVIEW phase. A baseline with 39 entries and a scan
+// with ZERO candidates is not a repository that became clean — it is a scan that did not
+// reach the history. Reporting green there is the exact shape of the defect B-143 measures,
+// reintroduced through the back door.
 //
-// A direção do erro é deliberada: se a árvore FOI mesmo limpa, o conserto é regravar a
-// base (que passa a ter zero entradas) — um humano confirmando "sim, tudo saiu". O
-// contrário seria o gate decidir isso sozinho, em silêncio.
-func TestBaseNaoVaziaComVarreduraVaziaReprova(t *testing.T) {
+// The direction of the error is deliberate: if the tree really WAS cleaned, the fix is to rewrite the
+// baseline (which then has zero entries) — a human confirming "yes, everything is gone". The
+// opposite would be the gate deciding that on its own, silently.
+func TestNonEmptyBaselineWithEmptyScanFails(t *testing.T) {
 	base := baseWith(t, found(t, line("Postgres", "a.md", pgURI(), false)))
 	_, err := run(t, stubScanner{out: ""}, base)
 	if !errors.Is(err, ErrNothingScanned) {
-		t.Fatalf("varredura que não alcançou nada não pode reportar limpo; err=%v", err)
+		t.Fatalf("a scan that reached nothing cannot report clean; err=%v", err)
 	}
 }
 
-// A fronteira: base vazia E varredura vazia é um repositório genuinamente limpo.
-func TestBaseVaziaComVarreduraVaziaPassa(t *testing.T) {
+// The boundary: an empty baseline AND an empty scan is a genuinely clean repository.
+func TestEmptyBaselineWithEmptyScanPasses(t *testing.T) {
 	base := baseWith(t, nil)
 	if _, err := run(t, stubScanner{out: ""}, base); err != nil {
-		t.Fatalf("repositório sem candidato nenhum passa: %v", err)
+		t.Fatalf("a repository with no candidate at all passes: %v", err)
 	}
 }

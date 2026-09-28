@@ -18,16 +18,13 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/planentitlements"
 	"github.com/getloopscale/loopzero/operators/internal/tenantpolicy"
 )
 
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist in the namespace.
-// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
-func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
-	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
-	if err != nil {
-		return fmt.Errorf("rbac: cell-aware client: %w", err)
-	}
+// fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
+func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient client.Client, env *loopzerov1.Environment, nsName string) error {
 	// ServiceAccount
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -72,18 +69,18 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	//      (seeded once at platform bootstrap) into this namespace as loopzero-system.
 	//   2. Attach it to loopzero-app SA.
 	// F-09 (CHG-2026-04-29-DOGFOOD T4.1 / drift-baseline.md port #2):
-	// quando source pull secret não existe (standalone-multi, k3d local com
-	// registry público), antes este path logava "pull secret ensure failed
-	// (non-fatal)" a cada reconcile. Agora distinguimos NotFound (esperado
-	// em alguns profiles) de falha real: NotFound vira condição
-	// TypePullSecretReady=False/SourceMissing SEM log (idempotente, sem
-	// ruído); outras falhas continuam logadas.
-	switch err := r.ensurePullSecret(ctx, env, nsName); {
+	// when the source pull secret does not exist (standalone-multi, local k3d
+	// with a public registry), this path used to log "pull secret ensure
+	// failed (non-fatal)" on every reconcile. NotFound (expected in some
+	// profiles) is now told apart from a real failure: NotFound becomes
+	// TypePullSecretReady=False/SourceMissing with NO log (idempotent, no
+	// noise); other failures are still logged.
+	switch err := r.ensurePullSecret(ctx, runtimeClient, nsName); {
 	case err == nil:
 		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
 			metav1.ConditionTrue, conditions.ReasonReady, "Pull secret provisioned", env.Generation)
 	case errors.IsNotFound(err):
-		// Source ausente: profile sem registry privado. Não é falha de runtime.
+		// Source absent: a profile with no private registry. Not a runtime failure.
 		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
 			metav1.ConditionFalse, "SourceMissing",
 			"Source registry pull secret not present in loopzero-system; pods will rely on public images or external auto-mount.",
@@ -95,13 +92,13 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 	}
 
 	// Bug #24 complement: delete stuck ImagePullBackOff pods so ReplicaSet recreates them.
-	if err := r.kickStuckPullBackoffPods(ctx, env, nsName); err != nil {
+	if err := r.kickStuckPullBackoffPods(ctx, runtimeClient, nsName); err != nil {
 		log.FromContext(ctx).Info("kick stuck pull-backoff pods failed (non-fatal)", "error", err.Error(), "namespace", nsName)
 	}
 
 	appSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-app",
+			Name:      constants.SAApp,
 			Namespace: nsName,
 		},
 	}
@@ -113,12 +110,12 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		falseVal := false
 		appSA.AutomountServiceAccountToken = &falseVal
 		appSA.ImagePullSecrets = []corev1.LocalObjectReference{
-			{Name: "loopzero-system"},
+			{Name: constants.SecretRegistryPull},
 		}
 		var defaultSA corev1.ServiceAccount
 		if err := runtimeClient.Get(ctx, client.ObjectKey{Namespace: nsName, Name: "default"}, &defaultSA); err == nil {
 			for _, ref := range defaultSA.ImagePullSecrets {
-				if ref.Name == "loopzero-system" {
+				if ref.Name == constants.SecretRegistryPull {
 					continue
 				}
 				appSA.ImagePullSecrets = append(appSA.ImagePullSecrets, ref)
@@ -126,32 +123,28 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, env *loopzero
 		}
 		return nil
 	}); err != nil {
-		return fmt.Errorf("serviceaccount %s/loopzero-app: %w", nsName, err)
+		return fmt.Errorf("serviceaccount %s/%s: %w", nsName, constants.SAApp, err)
 	}
 
 	return nil
 }
 
 // ensurePullSecret copies the registry pull secret from loopzero-system into the tenant namespace.
-// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
-func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
-	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
-	if err != nil {
-		return fmt.Errorf("pull secret: cell-aware client: %w", err)
-	}
+// fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
+func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, runtimeClient client.Client, nsName string) error {
 	var src corev1.Secret
-	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: "loopzero-system"}
+	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: constants.SecretRegistryPull}
 	if err := r.Get(ctx, srcKey, &src); err != nil {
 		return fmt.Errorf("source pull secret loopzero-system/loopzero-system: %w", err)
 	}
 
 	dst := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-system",
+			Name:      constants.SecretRegistryPull,
 			Namespace: nsName,
 		},
 	}
-	_, err = controllerutil.CreateOrUpdate(ctx, runtimeClient, dst, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, dst, func() error {
 		dst.Type = corev1.SecretTypeDockerConfigJson
 		dst.Data = src.Data
 		if dst.Labels == nil {
@@ -168,12 +161,8 @@ func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, env *loopz
 
 // kickStuckPullBackoffPods deletes pods stuck in ImagePullBackOff or ErrImagePull.
 // Bug #24 complement (scale-50k L2). Idempotent — no-op if no stuck pods.
-// fix-all-platform-issues-plan T1.1 — cell-aware via runtimeClientForEnv.
-func (r *EnvironmentReconciler) kickStuckPullBackoffPods(ctx context.Context, env *loopzerov1.Environment, nsName string) error {
-	runtimeClient, err := r.runtimeClientForEnv(ctx, env)
-	if err != nil {
-		return fmt.Errorf("kick pods: cell-aware client: %w", err)
-	}
+// fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
+func (r *EnvironmentReconciler) kickStuckPullBackoffPods(ctx context.Context, runtimeClient client.Client, nsName string) error {
 	var pods corev1.PodList
 	if err := runtimeClient.List(ctx, &pods, client.InNamespace(nsName)); err != nil {
 		return fmt.Errorf("list pods in %s: %w", nsName, err)
@@ -219,7 +208,8 @@ func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
 		},
 	}
 
-	if plan == loopzerov1.PlanGrowth || plan == loopzerov1.PlanEnterprise {
+	entitled := planentitlements.For(plan)
+	if entitled.ManagesSecrets {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{""},
 			Resources: []string{"secrets"},
@@ -227,7 +217,7 @@ func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
 		})
 	}
 
-	if plan == loopzerov1.PlanEnterprise {
+	if entitled.ManagesNetworking {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{"networking.k8s.io"},
 			Resources: []string{"ingresses", "networkpolicies"},

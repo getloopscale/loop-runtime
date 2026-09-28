@@ -11,7 +11,6 @@ import (
 	"github.com/alicebob/miniredis/v2"
 
 	"github.com/getloopscale/loopzero-contracts/serviceauth"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // TestSetupServiceAuthNonceStore_DefaultsToInMemory — when no Redis
@@ -21,13 +20,16 @@ func TestSetupServiceAuthNonceStore_DefaultsToInMemory(t *testing.T) {
 	t.Setenv("LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR", "")
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	setupServiceAuthNonceStore(logger)
+	store, err := setupServiceAuthNonceStore(logger)
+	if err != nil {
+		t.Fatalf("setupServiceAuthNonceStore: %v", err)
+	}
 
 	// The in-memory store is a *InMemoryNonceStore concrete type.
 	// Type-assert to confirm operator did NOT accidentally end up
 	// with a nil store (which would panic on first Claim).
-	if _, ok := auth.ServiceAuthNonceStore.(*serviceauth.InMemoryNonceStore); !ok {
-		t.Fatalf("expected InMemoryNonceStore default, got %T", auth.ServiceAuthNonceStore)
+	if _, ok := store.(*serviceauth.InMemoryNonceStore); !ok {
+		t.Fatalf("expected InMemoryNonceStore default, got %T", store)
 	}
 }
 
@@ -40,38 +42,26 @@ func TestSetupServiceAuthNonceStore_InstallsRedisWhenAddrSet(t *testing.T) {
 	t.Setenv("LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR", srv.Addr())
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	setupServiceAuthNonceStore(logger)
+	store, err := setupServiceAuthNonceStore(logger)
+	if err != nil {
+		t.Fatalf("setupServiceAuthNonceStore: %v", err)
+	}
 
-	if _, ok := auth.ServiceAuthNonceStore.(*serviceauth.RedisNonceStore); !ok {
-		t.Fatalf("expected RedisNonceStore when env set, got %T", auth.ServiceAuthNonceStore)
+	if _, ok := store.(*serviceauth.RedisNonceStore); !ok {
+		t.Fatalf("expected RedisNonceStore when env set, got %T", store)
 	}
 }
 
-// TestSetupServiceAuthNonceStore_RedisUnreachable_FallsBackInMemory —
-// fail-safe behavior. If the operator sets the env but the Redis is
-// unreachable AT BOOTSTRAP, the API does NOT crash. It logs a loud
-// warning and falls back to in-memory.
-//
-// Rationale: a Redis outage during bootstrap is an infra problem
-// orthogonal to the Ed25519 dual-control feature. Failing API
-// startup on Redis unreachability would couple the auth-feature
-// blast radius to Redis availability — making Redis a startup-time
-// SPOF for the entire API. The replay-protection degradation under
-// Redis outage is recovered at the FIRST signed request: the
-// middleware re-tries via the in-memory store; Phase 2 cutover only
-// happens after a 7-day soak, so a brief outage during Phase 1
-// bootstrap is acceptable.
-//
-// A Redis outage DURING a signed request returns 401 (per
-// TestRedisNonceStore_PropagatesRedisFailure) — that path is
-// fail-closed at request time.
-func TestSetupServiceAuthNonceStore_RedisUnreachable_FallsBackInMemory(t *testing.T) {
+// Falling back to a per-process store when Redis is unreachable at boot would
+// run every replica for its whole lifetime without that protection while the
+// operator believes it is on. Configured-but-unreachable is a boot failure, the
+// same class as ErrDatabaseURLNotSet; the orchestrator restarts the pod until
+// Redis answers. A Redis outage during a request already fails closed.
+func TestSetupServiceAuthNonceStore_RedisUnreachableRefusesToBoot(t *testing.T) {
 	t.Setenv("LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR", "127.0.0.1:1") // closed port
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	setupServiceAuthNonceStore(logger)
-
-	if _, ok := auth.ServiceAuthNonceStore.(*serviceauth.InMemoryNonceStore); !ok {
-		t.Fatalf("expected InMemoryNonceStore fallback on unreachable Redis, got %T", auth.ServiceAuthNonceStore)
+	if store, err := setupServiceAuthNonceStore(logger); err == nil {
+		t.Fatalf("a configured but unreachable Redis must fail the boot, got %T", store)
 	}
 }

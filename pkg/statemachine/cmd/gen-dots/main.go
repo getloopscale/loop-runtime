@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	sm "github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -119,5 +120,6 @@ func checkDrift(outDir string) ([]string, error) {
 			drift = append(drift, name)
 		}
 	}
+	sort.Strings(drift) // machines() is a map: range order is random
 	return drift, nil
 }

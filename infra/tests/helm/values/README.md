@@ -80,12 +80,10 @@ Library charts (`Chart.yaml type: library`, e.g., `loopzero-common`) emit
 zero manifests. No render-time tests applicable; no env stubs needed.
 `helpers.IsLibraryChart()` detects + skips.
 
-## Initial Scope (T1.3)
+## Current Scope
 
-T1.3 creates stubs only for **loopzero-api pilot** (Phase 2):
-- `dev/loopzero-api.yaml`
-- `drill/loopzero-api.yaml`
-- `prod/loopzero-api.yaml`
-
-Other charts get their stubs as part of Phase 3 (T3.1, T3.2) per
-implementation cadence.
+T1.3 created stubs only for the loopzero-api pilot (`dev/`, `drill/`, `prod/loopzero-api.yaml`).
+They were deleted with the bootstrap chart `infra/helm/loopzero-api` they were rendered
+against, when the bootstrap/published pair became one chart
+(`docs/decisions.md`, "One chart per bootstrap/published pair"). No chart has a
+stub today; `envparity` fails the day one is added without per-env assertions.

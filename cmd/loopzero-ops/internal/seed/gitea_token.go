@@ -59,8 +59,10 @@ func (s *GiteaTokenSeed) Run(d Deps) Result {
 	if d.PortForwardCtor == nil {
 		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired"}
 	}
-	tunnel, err := d.PortForwardCtor(d.Ctx, "", giteaAdminNamespace,
-		PodMetaLabels("gitea"), 3000, "/api/v1/version")
+	tunnel, err := d.PortForwardCtor(d.Ctx, TunnelTarget{
+		Namespace: giteaAdminNamespace, PodLabels: PodMetaLabels("gitea"),
+		RemotePort: 3000, ProbePath: "/api/v1/version",
+	})
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("port-forward gitea: %v", err)}
 	}
@@ -89,28 +91,26 @@ func (s *GiteaTokenSeed) Run(d Deps) Result {
 
 	// Layer 3: sync 3 consumer Secrets.
 	tokenBytes := []byte(token)
-	// B-108 — este seed e' invocavel sozinho (`loopzero-ops seed gitea-token`), que e' como um
-	// operador conserta uma peca sem repetir a cadeia inteira. Ali nao ha ordem que
-	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
-	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
-	// o namespace ja existe, que e' o caminho canonico.
-	if err := ensureNamespace(d, d.Kube, giteaAdminNamespace); err != nil {
+	// B-108 — this seed runs on its own (`loopzero-ops seed gitea-token`), which is how an operator
+	// repairs one piece without repeating the whole chain. Nothing then guarantees
+	// the namespace, and the failure is silent on our side: the seed stops, the
+	// chain goes on, and the effect shows up in another system. Idempotent — a
+	// Get when the namespace exists, which is the usual path.
+	if err := d.Kube.EnsureNamespace(d.Ctx, giteaAdminNamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", giteaAdminNamespace, err)}
 	}
 	if err := d.Kube.PatchSecretData(d.Ctx, giteaAdminNamespace, giteaAdminSecretName,
 		map[string][]byte{giteaAdminTokenSecretKey: tokenBytes}); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3a: %v", err)}
 	}
-	// loopzero-api-tokens may not exist yet — create-or-update to gitea-token key.
-	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx,
-		secretOf(giteaAdminNamespace, loopzeroAPITokensSecret,
-			map[string][]byte{loopzeroAPITokensGiteaKey: tokenBytes})); err != nil {
+	// loopzero-api-tokens is shared (argocd-token from the argocd-token seed,
+	// cf-api-token from External Secrets): write only the gitea-token key.
+	if err := d.Kube.MergeSecretData(d.Ctx, giteaAdminNamespace, loopzeroAPITokensSecret,
+		map[string][]byte{loopzeroAPITokensGiteaKey: tokenBytes}); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3b: %v", err)}
 	}
-	// loopzero-tenant-operator Secret similarly create-or-update.
-	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx,
-		secretOf(giteaAdminNamespace, loopzeroTenantOperatorSecret,
-			map[string][]byte{loopzeroTenantOperatorKey: tokenBytes})); err != nil {
+	if err := d.Kube.MergeSecretData(d.Ctx, giteaAdminNamespace, loopzeroTenantOperatorSecret,
+		map[string][]byte{loopzeroTenantOperatorKey: tokenBytes}); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3c: %v", err)}
 	}
 
@@ -155,7 +155,10 @@ func (s *GiteaTokenSeed) Verify(d Deps) Result {
 
 // giteaProbeAuth probes GET /api/v1/user with basic auth. HTTP 200 = OK.
 func giteaProbeAuth(ctx context.Context, base, user, pw string) error {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/user", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/user", nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	req.SetBasicAuth(user, pw)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -171,7 +174,10 @@ func giteaProbeAuth(ctx context.Context, base, user, pw string) error {
 
 // giteaEnsureOrg GETs /orgs/{name}. 200 = exists, 404 = create it (POST /orgs).
 func giteaEnsureOrg(ctx context.Context, base, user, pw, org string) error {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/orgs/"+org, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/orgs/"+org, nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	req.SetBasicAuth(user, pw)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -186,7 +192,10 @@ func giteaEnsureOrg(ctx context.Context, base, user, pw, org string) error {
 		body, _ := json.Marshal(map[string]string{
 			"username": org, "full_name": "LoopZero Platform", "visibility": "private",
 		})
-		req2, _ := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/v1/orgs", bytes.NewReader(body))
+		req2, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/v1/orgs", bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("build request: %w", err)
+		}
 		req2.Header.Set("Content-Type", "application/json")
 		req2.SetBasicAuth(user, pw)
 		resp2, err := (&http.Client{Timeout: 10 * time.Second}).Do(req2)
@@ -207,8 +216,11 @@ func giteaEnsureOrg(ctx context.Context, base, user, pw, org string) error {
 // giteaDeleteLegacyTokens iterates /users/{user}/tokens and deletes any whose
 // name is `loopzero-api` or `loopzero-api-token` (canonical rotation pattern).
 func giteaDeleteLegacyTokens(ctx context.Context, base, user, pw string) error {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		fmt.Sprintf("%s/api/v1/users/%s/tokens", base, user), nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
 	req.SetBasicAuth(user, pw)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -227,13 +239,30 @@ func giteaDeleteLegacyTokens(ctx context.Context, base, user, pw string) error {
 	}
 	for _, t := range tokens {
 		if t.Name == "loopzero-api" || t.Name == giteaTokenName {
-			delReq, _ := http.NewRequestWithContext(ctx, http.MethodDelete,
-				fmt.Sprintf("%s/api/v1/users/%s/tokens/%d", base, user, t.ID), nil)
-			delReq.SetBasicAuth(user, pw)
-			if delResp, err := (&http.Client{Timeout: 10 * time.Second}).Do(delReq); err == nil {
-				_ = delResp.Body.Close()
+			if err := giteaDeleteToken(ctx, base, user, pw, t.ID); err != nil {
+				return fmt.Errorf("delete legacy token %q (id %d): %w", t.Name, t.ID, err)
 			}
 		}
+	}
+	return nil
+}
+
+// giteaDeleteToken deletes one access token. Gitea answers 204 on success; a
+// token that is already gone (404) is the state the caller wanted.
+func giteaDeleteToken(ctx context.Context, base, user, pw string, id int64) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete,
+		fmt.Sprintf("%s/api/v1/users/%s/tokens/%d", base, user, id), nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.SetBasicAuth(user, pw)
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return nil
 }
@@ -242,8 +271,11 @@ func giteaDeleteLegacyTokens(ctx context.Context, base, user, pw string) error {
 // returns the sha1 (that's what Gitea calls the raw token).
 func giteaMintToken(ctx context.Context, base, user, pw, name string, scopes []string) (string, error) {
 	body, _ := json.Marshal(map[string]any{"name": name, "scopes": scopes})
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		fmt.Sprintf("%s/api/v1/users/%s/tokens", base, user), bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth(user, pw)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)

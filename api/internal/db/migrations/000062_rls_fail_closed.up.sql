@@ -10,7 +10,8 @@
 --   1. the request pool runs as `loopzero`, which has rolbypassrls=true
 --      (api/internal/db/store/project_wrapper.go:132)
 --   2. `loopzero` also OWNS the tables, and FORCE ROW LEVEL SECURITY was removed
---      by migrations-archive/000012_fix_rls_empty_string.up.sql:57-61 — an
+--      by the archived 000012_fix_rls_empty_string.up.sql:57-61 (git show
+--      f9d4c4bff:api/internal/db/migrations-archive/000012_fix_rls_empty_string.up.sql) — an
 --      owner bypasses its own policies unless FORCE is on
 --   3. the policies themselves were fail-open: the `IS NULL` / `= ''`
 --      disjuncts return EVERY row whenever the session variable is unset
@@ -177,7 +178,8 @@ END $$;
 -- through an instance-wide privilege that would also cover tables nobody
 -- reviewed.
 -- ALTER ROLE needs CREATEROLE, which the migration runner does not have in
--- local dev (same constraint migrations-archive/000009 handles). A failure
+-- local dev (the same constraint archived migration 000009 handled, in git
+-- history at f9d4c4bff:api/internal/db/migrations-archive/). A failure
 -- here must not abort the policy work above, so it degrades to a NOTICE —
 -- and db.AssertRequestPoolIsolated refuses to boot if the attribute really
 -- is still wrong, which is the check that actually protects production.

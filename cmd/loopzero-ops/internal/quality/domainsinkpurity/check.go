@@ -6,7 +6,7 @@
 //
 // # The finding
 //
-// `api/internal/services/deploycontracts` documents itself as the pure sink of
+// `api/internal/deploycontracts` documents itself as the pure sink of
 // the services acyclic DAG: every context may import it, it imports no sibling.
 // Measured 2026-08-12, it exposed four `api/internal/db` symbols in its PUBLIC
 // surface — `db.DBTX` (a transaction handle), `db.Build`, `db.Release` and
@@ -59,6 +59,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrSinkLeakGrew means a persistence symbol crossed the sink's boundary that
@@ -70,7 +72,7 @@ var ErrSinkLeakGrew = errors.New("the domain sink references a persistence symbo
 var ErrSinkNotFound = errors.New("the domain sink package was not found or holds no Go file — the gate examined nothing, so it cannot vouch for anything")
 
 // sinkDir is the package under ratchet, relative to the repo root.
-const sinkDir = "api/internal/services/deploycontracts"
+const sinkDir = "api/internal/deploycontracts"
 
 // persistenceImportPath is the package under ratchet, matched by PATH.
 //
@@ -102,9 +104,9 @@ var watchedImportPaths = map[string]string{
 	// Application-layer packages. ADR D2 of slice-4 promised the manifests import
 	// was frozen and the first implementation did not watch them at all — three
 	// public references crossed with the gate green.
-	"github.com/getloopscale/loopzero/api/internal/manifests":       "manifests",
-	"github.com/getloopscale/loopzero/api/internal/buildplane/argo": "argo",
-	"github.com/getloopscale/loopzero/api/internal/gitops":          "gitops",
+	"github.com/getloopscale/loopzero/api/internal/manifests":   "manifests",
+	"github.com/getloopscale/loopzero/api/internal/builds/argo": "argo",
+	"github.com/getloopscale/loopzero/api/internal/gitops":      "gitops",
 }
 
 // ErrUnqualifiedImport means a watched package is dot-imported, which makes every
@@ -119,30 +121,30 @@ var ErrUnqualifiedImport = errors.New("a watched package is dot-imported into th
 // FrozenDefault is the set measured on 2026-08-12 (slice-4). Each entry is a
 // leak that EXISTS and is tracked for removal — never an endorsement.
 var FrozenDefault = []string{
-	// Cada um destes fica por uma razao MEDIDA, e nao por omissao (B-079, DoD:
-	// "os 4 saem da superficie, OU cada um que fica tem razao escrita").
-	// Contagem refeita em 2026-08-19, linhas de producao em `api/`, regra unica.
+	// Each of these stays for a MEASURED reason, and not by omission (B-079, DoD:
+	// "the 4 leave the surface, OR each one that stays has a written reason").
+	// Count redone on 2026-08-19, production lines in `api/`, a single rule.
 
-	// 34 call sites — o MAIOR custo dos quatro, e o unico que e' tambem risco.
-	// `WithLock` e' o primitivo do environment-lock que a Regra Inquebravel 6 poe
-	// em TODA mutacao de (tenant, project, environment). Trocar sua assinatura
-	// mexe no ponto por onde passa toda escrita do produto, e
-	// `cleanroom-up-live-test-mandate.md` torna a validacao LIVE obrigatoria para
-	// isso. Nao e' trabalho de refactor: e' trabalho de release.
+	// 34 call sites — the LARGEST cost of the four, and the only one that is also a
+	// risk. `WithLock` is the environment-lock primitive that Unbreakable Rule 6 puts
+	// on EVERY mutation of (tenant, project, environment). Changing its signature
+	// touches the point every write in the product passes through, and
+	// `cleanroom-up-live-test-mandate.md` makes LIVE validation mandatory for that.
+	// It is not refactoring work: it is release work.
 	"db.DBTX", // shared_contracts.go:207 — WithLock(..., fn func(tx db.DBTX) error)
 
-	// 18 call sites. Sai junto com o renderizador de manifestos, nao antes: o tipo
-	// atravessa a fronteira porque o sink descreve as apps que o manifesto vai
-	// renderizar, e trocar so' este lado obrigaria a converter nos 18 pontos para
-	// o mesmo formato de volta.
+	// 18 call sites. It leaves together with the manifest renderer, not before: the
+	// type crosses the boundary because the sink describes the apps the manifest
+	// will render, and changing only this side would force converting at the 18
+	// sites back to the same format.
 	"db.BuildAppSpec", // manifest_builder.go:23 — Apps []db.BuildAppSpec
 
-	// REMOVIDOS em 2026-09-04 (B-079): `db.Release` (6 call sites) e `db.Build`
-	// (5) eram o par mais barato e sairam juntos, como esta lista mandava. Hoje
-	// `delivery.go` expoe `RollbackTarget` e `ActivationBuild` — tipos do proprio
-	// sink — e nao importa persistencia nenhuma. O conjunto congelado encolheu de
-	// 7 para 5 no mesmo commit em que a superficie encolheu: um ratchet que fica
-	// maior que a realidade para de ser um ratchet e vira folclore.
+	// REMOVED on 2026-09-04 (B-079): `db.Release` (6 call sites) and `db.Build`
+	// (5) were the cheapest pair and left together, as this list prescribed. Today
+	// `delivery.go` exposes `RollbackTarget` and `ActivationBuild` — the sink's own
+	// types — and imports no persistence at all. The frozen set shrank from 7 to 5
+	// in the same commit in which the surface shrank: a ratchet that stays larger
+	// than reality stops being a ratchet and becomes folklore.
 
 	// Application-layer types crossing the same boundary. ADR D2 promised these
 	// were frozen and the first implementation did not watch them at all — three
@@ -172,6 +174,17 @@ type Outcome struct {
 	Gone        []string
 	// FilesParsed lets the caller tell "nothing leaked" from "nothing was read".
 	FilesParsed int
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check parses the sink and compares its persistence surface to the frozen set.
@@ -235,7 +248,8 @@ func Check(cfg Config) (Outcome, error) {
 	sort.Strings(out.Gone)
 
 	if len(out.New) > 0 {
-		return out, ErrSinkLeakGrew
+		out.Violation = ErrSinkLeakGrew
+		return out, nil
 	}
 	return out, nil
 }
@@ -254,7 +268,7 @@ func Check(cfg Config) (Outcome, error) {
 //     `dbx.AppSecret` cross with the gate green.
 //  3. An identifier that resolves to a LOCAL declaration is not the package.
 //     `db := logger{}` inside an unexported function was reported as
-//     "NOVO VAZAMENTO db.Close" — a finding about something that crosses no
+//     "NEW LEAK db.Close" — a finding about something that crosses no
 //     boundary at all. A ratchet that fires on non-leaks is one somebody
 //     switches off, which is the same argument this file makes for AST over grep.
 func collectRefs(f *ast.File, into map[string]bool) error {

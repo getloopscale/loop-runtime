@@ -48,6 +48,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loopzero/pkg/domain"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/id"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
@@ -144,22 +145,14 @@ func NewReleaseStoreSqlc(pool db.DBTX, eventStore sseEventStore) *ReleaseStoreSq
 	}
 }
 
-// gen bridges db.DBTX → generated.DBTX. tx wins over pool. Panics if the
-// concrete type does not implement SqlcBridge — by design (test fakes
-// that don't hold a real pgx handle should use pgxmock for sqlc paths).
+// gen resolves the sqlc handle (db.Generated): tx wins over pool. A handle
+// that is not a SqlcBridge makes the query fail with db.ErrNotSqlcBridge.
 func (s *ReleaseStoreSqlc) gen(tx db.DBTX) generated.DBTX {
 	target := tx
 	if target == nil {
 		target = s.pool
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		panic(fmt.Sprintf(
-			"release_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
-			target,
-		))
-	}
-	return bridge.GeneratedDB()
+	return db.Generated(target)
 }
 
 // Create inserts a Release row. Caller MUST provide a tx when this is
@@ -246,7 +239,7 @@ func (s *ReleaseStoreSqlc) GetByID(ctx context.Context, releaseID string) (*db.R
 }
 
 // GetByIDTx retrieves a release by ID within a transaction. Used by
-// ActivateReleaseKernel idempotency guard (MEET-2026-03-31-023 T0-1).
+// ActivationKernel.Activate idempotency guard (MEET-2026-03-31-023 T0-1).
 // Cross-tenant by ID, like GetByID.
 func (s *ReleaseStoreSqlc) GetByIDTx(ctx context.Context, tx db.DBTX, releaseID string) (*db.Release, error) {
 	row, err := s.q.GetReleaseByID(ctx, s.gen(tx), releaseID)
@@ -326,9 +319,7 @@ func (s *ReleaseStoreSqlc) UpdateStatus(ctx context.Context, tx db.DBTX, release
 		// violations (e.g., a future PK collision) fall through to the
 		// generic wrapped error.
 		if isReleasesActiveUniqueViolation(err) {
-			return nil, loopzeroerrors.NewConcurrentActivation(
-				current.TenantID, current.ProjectID, current.Environment,
-			)
+			return nil, loopzeroerrors.NewConcurrentActivation(current.ProjectID, current.Environment)
 		}
 		return nil, fmt.Errorf("sqlc: update release status: %w", err)
 	}
@@ -353,7 +344,7 @@ func (s *ReleaseStoreSqlc) GetActiveByEnv(ctx context.Context, tenantID, project
 }
 
 // GetActiveByEnvTx returns the currently-ACTIVE release for an env tuple
-// within a transaction. Used by ActivateReleaseKernel.
+// within a transaction. Used by ActivationKernel.Activate.
 func (s *ReleaseStoreSqlc) GetActiveByEnvTx(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (*db.Release, error) {
 	row, err := s.q.GetActiveByEnv(ctx, s.gen(tx), generated.GetActiveByEnvParams{
 		TenantID:    tenantID,
@@ -479,15 +470,32 @@ func (s *ReleaseStoreSqlc) AppendSideEffect(ctx context.Context, tx db.DBTX, id 
 	return nil
 }
 
-// CancelAllByEnv transitions every non-terminal release for the given
-// (tenant, project, env) to CANCELLED. Returns the COUNT of releases
-// cancelled. Matches legacy PostgresReleaseStore.CancelAllByEnv contract
-// per ProjectDeleter consumer (project_deleter.go: cancelledReleases > 0).
+// CancelAllByEnv cancels the releases of a (tenant, project, env) tuple as the
+// project-delete cascade: a release moves to CANCELLED only when the release
+// machine has a ProjectDeleted edge from its status (so ARCHIVED and
+// CANCELLED, both terminal, are left alone). It reads the statuses present,
+// lets the machine choose, and updates only those — the transition table
+// never leaks into SQL. Returns the COUNT of releases cancelled (the
+// ProjectDeleter consumer checks cancelledReleases > 0). Runs on the caller's
+// tx, under the environment lock.
 func (s *ReleaseStoreSqlc) CancelAllByEnv(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) (int, error) {
-	ids, err := s.q.CancelReleasesByEnv(ctx, s.gen(tx), generated.CancelReleasesByEnvParams{
+	present, err := s.q.ListReleaseStatusesByEnv(ctx, s.gen(tx), generated.ListReleaseStatusesByEnvParams{
 		TenantID:    tenantID,
 		ProjectID:   projectID,
 		Environment: env,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("sqlc: list release statuses by env: %w", err)
+	}
+	from := statusesCancelledOnProjectDelete(present)
+	if len(from) == 0 {
+		return 0, nil
+	}
+	ids, err := s.q.CancelReleasesByEnv(ctx, s.gen(tx), generated.CancelReleasesByEnvParams{
+		TenantID:     tenantID,
+		ProjectID:    projectID,
+		Environment:  env,
+		FromStatuses: from,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("sqlc: cancel releases by env: %w", err)
@@ -495,12 +503,26 @@ func (s *ReleaseStoreSqlc) CancelAllByEnv(ctx context.Context, tx db.DBTX, tenan
 	return len(ids), nil
 }
 
+// statusesCancelledOnProjectDelete keeps, in order, the statuses from which
+// the release machine moves to CANCELLED on ProjectDeleted. A status the
+// machine does not know is never cancelled.
+func statusesCancelledOnProjectDelete(statuses []string) []string {
+	out := make([]string, 0, len(statuses))
+	for _, st := range statuses {
+		next, err := releaseMachine.TryTransition(statemachine.ReleasePhase(st), statemachine.RPEventProjectDeleted)
+		if err == nil && next == statemachine.RPhCancelled {
+			out = append(out, st)
+		}
+	}
+	return out
+}
+
 // FindPendingReleases returns up to 100 PENDING releases scoped to the
 // given cell. Reaper path: intentionally cross-tenant within the cell.
 // Empty cellID defaults to CellDefault per multi-cell backward compat.
 func (s *ReleaseStoreSqlc) FindPendingReleases(ctx context.Context, cellID string) ([]db.Release, error) {
 	if cellID == "" {
-		cellID = db.CellDefault
+		cellID = domain.DefaultCellID
 	}
 	rows, err := s.q.FindPendingReleasesByCell(ctx, s.gen(nil), cellID)
 	if err != nil {
@@ -518,7 +540,7 @@ func (s *ReleaseStoreSqlc) FindPendingReleases(ctx context.Context, cellID strin
 // by the convergence-loop health ticker (MEET-2026-03-31-023 T1-4).
 func (s *ReleaseStoreSqlc) FindActiveReleases(ctx context.Context, cellID string) ([]db.Release, error) {
 	if cellID == "" {
-		cellID = db.CellDefault
+		cellID = domain.DefaultCellID
 	}
 	rows, err := s.q.FindActiveReleasesByCell(ctx, s.gen(nil), cellID)
 	if err != nil {

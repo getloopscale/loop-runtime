@@ -7,7 +7,7 @@
 // ClusterSecretStore overlay (loopzero-external-secrets chart) onto the
 // canonical SPLIT-CONTEXT contract: workload identity (Kubernetes-auth)
 // against the OpenBao instance running in the SEPARATE k3d-loopzero-secrets
-// cluster (Jeito A sponsor mandate INQUEBRÁVEL 2026-06-19). The legacy
+// cluster (Approach A sponsor mandate UNBREAKABLE 2026-06-19). The legacy
 // AppRole shape (static secret_id mounted as K8s Secret in mgmt) is
 // replaced with auth.kubernetes pointing at the ESO controller's
 // ServiceAccount + a bounded TokenRequest audience that matches the
@@ -24,9 +24,9 @@
 //   - Plan: knowledge-base/plans/dev-public-cross-cluster-secrets-plan.md T1.2
 //   - Blueprint D1: workload identity replaces static credential
 //   - EC-1: OpenBao kubernetes-auth MUST review tokens against mgmt
-//           (JWKS-static OR kubernetes_host=mgmt + disable_local_ca_jwt)
+//     (JWKS-static OR kubernetes_host=mgmt + disable_local_ca_jwt)
 //   - EC-2: CoreDNS host-alias preserves the SAME hostname
-//           (`openbao.secrets-system.svc.cluster.local`) → cert SAN survives
+//     (`openbao.secrets-system.svc.cluster.local`) → cert SAN survives
 //   - EC-5: TokenRequest audience == OpenBao role `bound_audiences`
 //   - Issue #111 (Cleanroom canonical chain run 2026-06-18 Finding F-001)
 package charts
@@ -42,10 +42,7 @@ import (
 // resolved from this package's path (infra/tests/charts/).
 func readOverlay(t *testing.T, rel string) string {
 	t.Helper()
-	p, err := filepath.Abs(filepath.Join("..", "..", "..", "infra", rel))
-	if err != nil {
-		t.Fatalf("resolve %s: %v", rel, err)
-	}
+	p := filepath.Join(repoRoot(t), "infra", rel)
 	if _, err := os.Stat(p); err != nil {
 		t.Fatalf("%s not found at %s: %v", rel, p, err)
 	}
@@ -104,14 +101,14 @@ func TestCrossClusterSecretStoreContract(t *testing.T) {
 		t.Error("dev-public ESO overlay `server` does not contain canonical hostname `openbao.secrets-system.svc.cluster.local` — EC-2 contract requires the SAN-preserving DNS name; CoreDNS host-alias rewrites this to the secrets-cluster IP, NOT the overlay")
 	}
 
-	// T6. Traceability — issue #111 / Jeito A / T1.2 cited somewhere in
+	// T6. Traceability — issue #111 / Approach A / T1.2 cited somewhere in
 	// the overlay so a future operator understands why the workload-
 	// identity shape exists and how to debug it.
 	traceability := strings.Contains(overlay, "issue #111") ||
 		strings.Contains(overlay, "dev-public-cross-cluster-secrets") ||
-		strings.Contains(overlay, "Jeito A")
+		strings.Contains(overlay, "Approach A")
 	if !traceability {
-		t.Error("dev-public ESO overlay missing traceability — add a comment citing `issue #111` OR `dev-public-cross-cluster-secrets` OR `Jeito A` so future operator understands the K8s-auth choice")
+		t.Error("dev-public ESO overlay missing traceability — add a comment citing `issue #111` OR `dev-public-cross-cluster-secrets` OR `Approach A` so future operator understands the K8s-auth choice")
 	}
 
 	// T7. loopzero-api dev-public overlay parameterizes OPENBAO_VAULT_ADDR

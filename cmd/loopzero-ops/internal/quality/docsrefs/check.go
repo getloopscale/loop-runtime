@@ -24,7 +24,7 @@
 // The gate does NOT try to restore the missing documents — part of their content
 // migrated elsewhere, and recreating them by guesswork would produce invented
 // documentation, which is strictly worse than absence. Known gaps go in a DATED
-// allowlist instead, the same shape .claude/rules/shell-scripts-allowlist.md and
+// allowlist instead, the same shape infra/quality/shell-scripts-allowlist.md and
 // code-quality-allowlist.txt already use.
 package docsrefs
 
@@ -39,11 +39,10 @@ import (
 	"regexp"
 	"strings"
 	"time"
-)
 
-// ErrUnresolvedReferences means at least one reference points at something that
-// does not exist and is not allowlisted.
-var ErrUnresolvedReferences = errors.New("at least one normative reference does not resolve")
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/calendarday"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+)
 
 // ErrNoReferencesEnumerated means the scan found no normative reference at all.
 //
@@ -95,7 +94,34 @@ type Outcome struct {
 	Checked     int
 	Allowlisted int
 	Unresolved  []Reference
+	// NotVerified holds rule references whose target lives in the ecosystem
+	// kit, which is a gitignored install: on a checkout without the kit they
+	// cannot be checked either way. They make the verdict partial, not red.
+	NotVerified []Reference
+	// MalformedAllowlist is the parse failure of the allowlist (wrapping
+	// ErrMalformedAllowlist). A line that reads as an exemption and exempts
+	// nothing is the defect this gate exists to remove, so it fails the gate.
+	MalformedAllowlist error
 }
+
+// Verdict is Fail when the allowlist is malformed or any reference does not
+// resolve, and Pass otherwise. References into a kit that is not installed make
+// the pass partial, not red.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.MalformedAllowlist != nil || len(o.Unresolved) > 0 {
+		return verdict.Fail
+	}
+	return verdict.Pass
+}
+
+// resolution is a resolver's answer for one reference.
+type resolution int
+
+const (
+	resolved resolution = iota
+	unresolved
+	unverifiable // the place the reference points into is not present here
+)
 
 // resolver decides whether a reference points at something real. One
 // implementation per Kind keeps the resolution rules from growing into a switch
@@ -107,8 +133,9 @@ type resolver interface {
 	// resolves, and a method nobody calls is a method every implementer is
 	// forced to carry (ISP).
 	collect(repoRoot string) ([]Reference, error)
-	// resolves reports whether the reference points at something that exists.
-	resolves(repoRoot string, ref Reference) bool
+	// resolve reports whether the reference points at something that exists,
+	// or that the place it points into is not present on this checkout.
+	resolve(repoRoot string, ref Reference) resolution
 }
 
 // --- rule references ------------------------------------------------------
@@ -169,7 +196,7 @@ func (ruleResolver) collect(repoRoot string) ([]Reference, error) {
 	return refs, nil
 }
 
-func (ruleResolver) resolves(repoRoot string, ref Reference) bool {
+func (ruleResolver) resolve(repoRoot string, ref Reference) resolution {
 	// A `../`-prefixed reference points at the umbrella, so it must be resolved
 	// against the parent. Resolving it against the repo root would report a
 	// false miss for a file that is exactly where it says it is.
@@ -179,8 +206,17 @@ func (ruleResolver) resolves(repoRoot string, ref Reference) bool {
 		base = filepath.Dir(repoRoot)
 		rel = strings.TrimPrefix(rel, "../")
 	}
-	_, err := os.Stat(filepath.Join(base, rel))
-	return err == nil
+	// The rules directory is the installed kit, which is gitignored. Without
+	// it the reference can be neither confirmed nor refuted on this checkout,
+	// and reporting it as dangling would make the verdict depend on whether
+	// one machine happens to have the kit installed.
+	if fi, err := os.Stat(filepath.Join(base, ".claude", "rules")); err != nil || !fi.IsDir() {
+		return unverifiable
+	}
+	if _, err := os.Stat(filepath.Join(base, rel)); err != nil {
+		return unresolved
+	}
+	return resolved
 }
 
 // --- ADR references -------------------------------------------------------
@@ -245,45 +281,15 @@ func (adrResolver) collect(repoRoot string) ([]Reference, error) {
 	return refs, nil
 }
 
-// cycleArtifactDirs are knowledge-base subtrees that record work ABOUT the
-// repository rather than decisions OF it. They are excluded from ADR resolution.
-//
-// Without this exclusion the gate is defeated by its own output: the plan that
-// introduced it mentions ADR-0024 while explaining that ADR-0024 does not exist,
-// and that mention alone made the gate report the ADR as documented. Measured in
-// review — the allowlist carried 14 entries and only 13 were ever consumed; the
-// dead one was ADR-0024, the flagship finding of B-052. Writing the document that
-// records an absence must not manufacture a presence.
-var cycleArtifactDirs = []string{
-	filepath.Join(".claude", "knowledge-base", "plans"),
-	filepath.Join(".claude", "knowledge-base", "reviews"),
-	filepath.Join(".claude", "knowledge-base", "audits"),
-	filepath.Join(".claude", "knowledge-base", "meetings"),
-	filepath.Join(".claude", "knowledge-base", "backlog"),
-	filepath.Join(".claude", "knowledge-base", "implementations"),
-}
-
-func isCycleArtifact(repoRoot, path string) bool {
-	rel, err := filepath.Rel(repoRoot, path)
-	if err != nil {
-		return false
-	}
-	for _, d := range cycleArtifactDirs {
-		if strings.HasPrefix(rel, d+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
-}
-
-// resolves asks whether the ADR is documented ANYWHERE in the knowledge base or
-// the docs tree, EXCLUDING the cycle artifacts above. The bar is deliberately
-// the weaker one: ADRs here are filed by date, not by number (`2026-04-26-...`),
-// so requiring a filename match would reject identifiers that are genuinely
-// documented — ADR-0008 is described across docs/architecture and docs/operations
-// without a file bearing its number.
-func (adrResolver) resolves(repoRoot string, ref Reference) bool {
-	for _, dir := range []string{".claude", "docs"} {
+// resolve asks whether the ADR is documented ANYWHERE in the versioned docs
+// tree. The gitignored .claude/ tree is not consulted: a decision recorded only
+// there reaches nobody who clones, so it cannot document an ADR the code cites.
+// The bar is deliberately the weaker one: ADRs here are filed by date, not by
+// number (`2026-04-26-...`), so requiring a filename match would reject
+// identifiers that are genuinely documented — ADR-0008 is described across
+// docs/architecture and docs/operations without a file bearing its number.
+func (adrResolver) resolve(repoRoot string, ref Reference) resolution {
+	for _, dir := range []string{"docs"} {
 		base := filepath.Join(repoRoot, dir)
 		if _, err := os.Stat(base); err != nil {
 			continue
@@ -299,7 +305,7 @@ func (adrResolver) resolves(repoRoot string, ref Reference) bool {
 				}
 				return nil
 			}
-			if !strings.HasSuffix(p, ".md") || isCycleArtifact(repoRoot, p) {
+			if !strings.HasSuffix(p, ".md") {
 				return nil
 			}
 			b, rerr := os.ReadFile(p)
@@ -309,27 +315,27 @@ func (adrResolver) resolves(repoRoot string, ref Reference) bool {
 			if !strings.Contains(string(b), ref.Raw) {
 				return nil
 			}
-			// Um DOCUMENTO DE DECISAO resolve apenas o ADR que ele DECLARA ser, e
-			// nao todo id que menciona. Sem isto, o documento que registra a
-			// AUSENCIA de um ADR fabricava a presenca dele — foi o que aconteceu
-			// com `ADR-0024`, citado cinco vezes por um ADR justamente para dizer
-			// que nao existe (B-086). E' textualmente o que o comentario de
-			// `cycleArtifactDirs` acima proibe, uma pasta ao lado.
+			// A DECISION DOCUMENT resolves only the ADR it DECLARES itself to be, not
+			// every id it mentions. Without this, the document that records the
+			// ABSENCE of an ADR fabricated its presence — which is what happened
+			// with `ADR-0024`, cited five times by an ADR precisely to say that it
+			// does not exist (B-086): a record of an absence must never fabricate a
+			// presence.
 			//
-			// O criterio e' ESTRUTURAL e nao vem do diretorio: qualquer outra
-			// documentacao — runbook, doc de arquitetura — segue resolvendo por
-			// mencao, e um documento de decisao que declare o id no proprio
-			// cabecalho resolve normalmente. Medido em 2026-08-19: nenhum
-			// documento de decisao declara id de ADR hoje (eles se identificam por
-			// data + slug), e so' DOIS ids resolviam exclusivamente por eles — um e'
-			// fixture de teste deste pacote, o outro nao e' citado por codigo de
-			// producao. Estouro zero sobre as 35 referencias que resolvem.
+			// The criterion is STRUCTURAL and does not come from the directory: any
+			// other documentation — runbook, architecture doc — keeps resolving by
+			// mention, and a decision document that declares the id in its own
+			// header resolves normally. Measured 2026-08-19: no decision document
+			// declares an ADR id today (they identify themselves by date + slug),
+			// and only TWO ids resolved exclusively through them — one is a test
+			// fixture of this package, the other is not cited by production code.
+			// Zero overshoot across the 35 references that resolve.
 			//
-			// Os dois ids nao aparecem escritos aqui de proposito: este gate le'
-			// comentarios Go, entao nomea-los transformaria ESTA explicacao em duas
-			// citacoes normativas que nao resolvem. Foi o que aconteceu na primeira
-			// versao deste comentario — a mesma armadilha do B-086, um nivel acima:
-			// escrever sobre um ADR ausente fabricou uma citacao a ele.
+			// The two ids are deliberately not written here: this gate reads Go
+			// comments, so naming them would turn THIS explanation into two
+			// normative citations that do not resolve. That is what happened in the
+			// first version of this comment — the same trap as B-086, one level up:
+			// writing about an absent ADR fabricated a citation to it.
 			if isDecisionDoc(repoRoot, p) && !declaresADR(string(b), ref.Raw) {
 				return nil
 			}
@@ -337,10 +343,10 @@ func (adrResolver) resolves(repoRoot string, ref Reference) bool {
 			return nil
 		})
 		if found {
-			return true
+			return resolved
 		}
 	}
-	return false
+	return unresolved
 }
 
 // --- allowlist ------------------------------------------------------------
@@ -375,7 +381,7 @@ func loadAllowlist(path string) (map[string]allowEntry, error) {
 		if kind != KindRule && kind != KindADR {
 			return nil, fmt.Errorf("%w: line %d has unknown kind %q (want %q or %q)", ErrMalformedAllowlist, i+1, kind, KindRule, KindADR)
 		}
-		sunset, perr := time.Parse("2006-01-02", strings.TrimSpace(parts[2]))
+		sunset, perr := calendarday.Parse(strings.TrimSpace(parts[2]))
 		if perr != nil {
 			return nil, fmt.Errorf("%w: line %d sunset %q is not YYYY-MM-DD", ErrMalformedAllowlist, i+1, strings.TrimSpace(parts[2]))
 		}
@@ -387,19 +393,13 @@ func loadAllowlist(path string) (map[string]allowEntry, error) {
 	return out, nil
 }
 
-// nowDate reduces an instant to the calendar day it falls on, in the same
-// reference frame the allowlist dates are written in (local wall clock).
-func nowDate(t time.Time) time.Time {
-	d, _ := time.Parse("2006-01-02", t.Format("2006-01-02"))
-	return d
-}
-
 // --- the gate -------------------------------------------------------------
 
 // DefaultAllowlistRelPath is where the committed allowlist lives.
 const DefaultAllowlistRelPath = "cmd/loopzero-ops/internal/quality/docsrefs/allowlist.txt"
 
 // Check runs every resolver and reports the references that do not resolve.
+// A violation is on the outcome; the error means the check could not measure.
 func Check(cfg Config) (Outcome, error) {
 	if cfg.RepoRoot == "" {
 		cfg.RepoRoot = "."
@@ -413,6 +413,9 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	allow, err := loadAllowlist(cfg.AllowlistPath)
+	if errors.Is(err, ErrMalformedAllowlist) {
+		return Outcome{MalformedAllowlist: err}, nil
+	}
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -424,8 +427,13 @@ func Check(cfg Config) (Outcome, error) {
 			return out, cerr
 		}
 		for _, ref := range refs {
+			answer := r.resolve(cfg.RepoRoot, ref)
+			if answer == unverifiable {
+				out.NotVerified = append(out.NotVerified, ref)
+				continue
+			}
 			out.Checked++
-			if r.resolves(cfg.RepoRoot, ref) {
+			if answer == resolved {
 				continue
 			}
 			// The sunset date is INCLUSIVE: an entry dated today still exempts,
@@ -434,31 +442,25 @@ func Check(cfg Config) (Outcome, error) {
 			// Compare CALENDAR DAYS, not instants. Truncating a timestamp to
 			// 24h works in UTC and silently shifts the boundary by a day for
 			// anyone west of Greenwich — the sunset would expire early in BRT.
-			if e, ok := allow[string(ref.Kind)+"|"+ref.Raw]; ok && !nowDate(now).After(e.sunset) {
+			if e, ok := allow[string(ref.Kind)+"|"+ref.Raw]; ok && !calendarday.Of(now).After(e.sunset) {
 				out.Allowlisted++
 				continue
 			}
 			out.Unresolved = append(out.Unresolved, ref)
 		}
 	}
-	if len(out.Unresolved) > 0 {
-		return out, ErrUnresolvedReferences
-	}
-	// Evaluated AFTER ErrUnresolvedReferences, for the same reason the floor in
-	// routeauthcoverage is: a tree full of broken references must be reported as
-	// broken references, never as an empty scan.
+	// An unresolved reference was counted in Checked, so a tree full of broken
+	// references is reported as broken references, never as an empty scan.
 	if out.Checked == 0 {
 		return out, ErrNoReferencesEnumerated
 	}
 	return out, nil
 }
 
-// decisionDocDirs sao as arvores onde vivem documentos que DECIDEM sobre ADRs.
-// Um documento aqui e' um ator no assunto, nao uma descricao neutra dele.
+// decisionDocDirs are the trees holding documents that DECIDE about ADRs.
+// A document here is an actor in the matter, not a neutral description of it.
 var decisionDocDirs = []string{
 	filepath.Join("docs", "decisions"),
-	filepath.Join("docs", "wiki", "decisions"),
-	filepath.Join(".claude", "knowledge-base", "decisions"),
 }
 
 func isDecisionDoc(repoRoot, path string) bool {
@@ -474,28 +476,20 @@ func isDecisionDoc(repoRoot, path string) bool {
 	return false
 }
 
-// declaresADR diz se o documento se IDENTIFICA como aquele ADR, e nao apenas o
-// menciona.
+// declaresADR reports whether the document IDENTIFIES itself as that ADR, rather
+// than merely mentioning it.
 //
-// O criterio e' o TITULO: a primeira linha nao vazia, mais os campos de metadado
-// do cabecalho. Um documento cujo titulo carrega o id E' aquele ADR; um que so' o
-// cita no corpo esta' falando SOBRE ele.
-//
-// Medido em 2026-08-19 nos dois casos que existem:
-//   - `.claude/knowledge-base/decisions/2026-01-01-thing.md` abre com
-//     "This is ADR-0024." — titulo, logo declara. E' o caso que
-//     `TestCheck_DecisionRecordIsADRDocumentation` protege desde antes deste item.
-//   - `docs/decisions.md` abre com um
-//     titulo sobre contrato de status e so' menciona `ADR-0024` a partir da
-//     linha 17, no corpo, cinco vezes, todas para dizer que ele NAO EXISTE.
-//     Nao declara, e por isso deixa de fabricar a presenca (B-086).
-func declaresADR(conteudo, raw string) bool {
-	for _, l := range strings.Split(conteudo, "\n") {
+// The criterion is the TITLE: the first non-empty line, and nothing else. A
+// document whose title carries the id IS that ADR; one that only cites it in
+// the body is talking ABOUT it — which is how a record stating that an ADR
+// does not exist stopped fabricating its presence (B-086).
+func declaresADR(content, raw string) bool {
+	for _, l := range strings.Split(content, "\n") {
 		t := strings.TrimSpace(l)
 		if t == "" {
 			continue
 		}
-		// primeira linha nao vazia — o titulo
+		// first non-empty line — the title
 		return strings.Contains(t, raw)
 	}
 	return false

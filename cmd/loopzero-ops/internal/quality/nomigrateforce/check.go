@@ -15,13 +15,14 @@
 package nomigrateforce
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultExcludeDirs are directory names pruned anywhere in the tree. Docs
@@ -57,6 +58,9 @@ type Outcome struct {
 	Blocked    []string // "path:lineno: content" for un-allowlisted matches
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 var (
 	// migrate force, allowing flags between: `migrate -path X force`.
 	matchRe = regexp.MustCompile(`(?i)(^|[^a-zA-Z0-9])migrate(\s+-\S+)*\s+force`)
@@ -74,32 +78,26 @@ func Check(cfg Config) (*Outcome, error) {
 	if excl == nil {
 		excl = DefaultExcludeDirs
 	}
-	exclSet := make(map[string]struct{}, len(excl))
+	prune := make(map[string]bool, len(excl))
 	for _, d := range excl {
-		exclSet[d] = struct{}{}
+		prune[d] = true
 	}
 	skip := cfg.SkipSuffixes
 	if skip == nil {
 		skip = DefaultSkipSuffixes
 	}
+	keep := func(rel string) bool {
+		for _, s := range skip {
+			if strings.HasSuffix(rel, s) {
+				return false
+			}
+		}
+		return true
+	}
 
 	out := &Outcome{Pass: true}
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			if _, ok := exclSet[d.Name()]; ok {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		for _, s := range skip {
-			if strings.HasSuffix(filepath.ToSlash(path), s) {
-				return nil
-			}
-		}
-		return scanFile(path, out)
+	_, err := linescan.WalkPruned(root, []string{"."}, prune, keep, func(rel string, data []byte) error {
+		return scanFile(filepath.Join(root, rel), data, out)
 	})
 	if err != nil {
 		return nil, err
@@ -110,17 +108,18 @@ func Check(cfg Config) (*Outcome, error) {
 	return out, nil
 }
 
-func scanFile(path string, out *Outcome) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil // unreadable file is skipped (parity with grep best-effort)
-	}
+// scanFile records every "migrate force" line of data. A file it cannot split
+// into lines is an error: the lines behind the failure would go unread.
+func scanFile(path string, data []byte, out *Outcome) error {
 	// Binary heuristic (grep -I): skip files containing a NUL byte.
 	if bytes.IndexByte(data, 0) >= 0 {
 		return nil
 	}
 
-	lines := splitLines(data)
+	lines, err := linescan.Lines(data)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
 	for i, line := range lines {
 		if !matchRe.MatchString(line) {
 			continue
@@ -144,16 +143,4 @@ func scanFile(path string, out *Outcome) error {
 		out.Blocked = append(out.Blocked, fmt.Sprintf("%s:%d: %s", path, i+1, line))
 	}
 	return nil
-}
-
-// splitLines splits on \n without a trailing empty element, matching how
-// line-oriented tools number lines.
-func splitLines(data []byte) []string {
-	var lines []string
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	sc.Buffer(make([]byte, 1024*1024), 1024*1024)
-	for sc.Scan() {
-		lines = append(lines, sc.Text())
-	}
-	return lines
 }

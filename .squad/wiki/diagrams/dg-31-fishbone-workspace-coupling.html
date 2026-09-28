@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Why the Go workspace only compiles next to a sibling repository</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-ink: #2d3142; --color-muted: #4f5d75; --color-accent: #eb6c36;
+      --font-sans: 'Geist', system-ui, sans-serif; --font-serif: 'Instrument Serif', serif; --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1280px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500;
+      letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+      letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .caption { margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px solid rgba(45,49,66,0.12);
+      font-family: var(--font-mono); font-size: 0.62rem; line-height: 1.9; color: var(--color-muted); }
+    .caption span { display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Fishbone - DG-31</p>
+    <h1>Why the Go workspace only compiles next to a sibling repository</h1>
+    <svg viewBox="0 0 1480 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="fishbone-title fishbone-desc">
+      <title id="fishbone-title">Why the Go workspace only compiles next to a sibling repository</title>
+      <desc id="fishbone-desc">One observed effect and the six contributing causes found in the code. The confirmed root cause is the dependency-resolution one: the cross-repository module edge is the only one with no replace directive, so nothing pins it to a path on disk.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker>
+        <marker id="arrow-soft" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7a8399"/></marker>
+        <marker id="arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="#4f5d75" stroke-width="1.2"/></marker>
+        <marker id="tri-hollow" markerWidth="12" markerHeight="10" refX="11" refY="5" orient="auto"><polygon points="0 0, 12 5, 0 10" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker>
+        <marker id="dia-filled" markerWidth="14" markerHeight="8" refX="13" refY="4" orient="auto"><polygon points="0 4, 7 0, 14 4, 7 8" fill="#2d3142"/></marker>
+        <marker id="dia-hollow" markerWidth="14" markerHeight="8" refX="13" refY="4" orient="auto"><polygon points="0 4, 7 0, 14 4, 7 8" fill="#f5f5f5" stroke="#2d3142" stroke-width="1"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+      
+      <line x1="120" y1="320" x2="1192" y2="320" stroke="#2d3142" stroke-width="1.2" marker-end="url(#arrow)"/><line x1="880" y1="320" x2="784" y2="152" stroke="#2d3142" stroke-width="1"/><line x1="832" y1="236" x2="800" y2="236" stroke="#7a8399" stroke-width="1"/><line x1="720" y1="320" x2="624" y2="488" stroke="#eb6c36" stroke-width="1.4"/><line x1="672" y1="404" x2="640" y2="404" stroke="#7a8399" stroke-width="1"/><line x1="560" y1="320" x2="464" y2="152" stroke="#2d3142" stroke-width="1"/><line x1="512" y1="236" x2="480" y2="236" stroke="#7a8399" stroke-width="1"/><line x1="400" y1="320" x2="304" y2="488" stroke="#2d3142" stroke-width="1"/><line x1="352" y1="404" x2="320" y2="404" stroke="#7a8399" stroke-width="1"/><line x1="240" y1="320" x2="144" y2="152" stroke="#2d3142" stroke-width="1"/><line x1="192" y1="236" x2="160" y2="236" stroke="#7a8399" stroke-width="1"/>
+      <rect x="692" y="124" width="184" height="28" rx="4" fill="#ffffff" stroke="#2d3142" stroke-width="1"/><text x="784" y="142" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">workspace configuration</text><text x="796" y="232" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">go.work unions the sibling by</text><text x="796" y="244" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">RELATIVE FILESYSTEM PATH, not by…</text><rect x="540" y="488" width="168" height="28" rx="4" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/><text x="624" y="506" fill="#eb6c36" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">dependency resolution</text><text x="636" y="416" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">The cross-REPO edge is the only</text><text x="636" y="428" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">module edge with no `replace`.…</text><rect x="352" y="124" width="224" height="28" rx="4" fill="#ffffff" stroke="#2d3142" stroke-width="1"/><text x="464" y="142" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">access control / supply ch</text><text x="476" y="232" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">The sibling module is PRIVATE.</text><text x="476" y="244" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">Cloning this repository and…</text><rect x="212" y="488" width="184" height="28" rx="4" fill="#ffffff" stroke="#2d3142" stroke-width="1"/><text x="304" y="506" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">local tooling preflight</text><text x="316" y="416" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">Nothing in the task layer or the</text><text x="316" y="428" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">Tiltfile checks for the sibling…</text><rect x="-2" y="124" width="292" height="28" rx="4" fill="#ffffff" stroke="#2d3142" stroke-width="1"/><text x="144" y="142" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">asymmetry between CI and t</text><text x="156" y="232" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">The preflight EXISTS - in CI only.</text><text x="156" y="244" fill="#4f5d75" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="end">ci.yml derives the required…</text><rect x="1200" y="264" width="240" height="112" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.6"/><text x="1320" y="288" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">The Go workspace compiles</text><text x="1320" y="304" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">only because a sibling</text><text x="1320" y="320" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">repository is checked out</text><text x="1320" y="336" fill="#2d3142" font-size="11" font-weight="600" font-family="'Geist', system-ui, sans-serif" text-anchor="middle">next to this one</text>
+      <line x1="40" y1="656" x2="1440" y2="656" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/><text x="40" y="672" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text><rect x="116" y="664" width="16" height="10" rx="2" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/><text x="140" y="673" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">confirmed root cause + the observed effect</text><rect x="372" y="664" width="16" height="10" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/><text x="396" y="673" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">investigated category</text><line x1="528" y1="669" x2="544" y2="669" stroke="#7a8399" stroke-width="1.2"/><text x="552" y="673" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">sub-cause found in the code</text>
+    </svg>
+    <p class="caption"><span>Source: 1 finding and 6 `causes` rows; 5 bones drawn - the 6th clips the canvas at HEAD=1200 per the type&#x27;s own geometry, so it is registered and not drawn.</span><span>The effect box states what was observed, not the remedy. The 60-degree bones and the sub-cause ticks are the type&#x27;s documented exemption from the orthogonal-connector rule.</span></p>
+  </div>
+</body>
+</html>

@@ -10,7 +10,7 @@
 # at-<ISO>`, parses the expiration, and destroys any stack whose
 # expires-at < now via:
 #   1. pulumi destroy --stack drill (best effort)
-#   2. drill-teardown-validator.sh (doctl fallback per T4.1.bis)
+#   2. teardown-validator.sh (doctl fallback per T4.1.bis)
 #
 # Safety net for the case where operator/Ralph forgets `pulumi destroy`
 # OR CI workflow fails before reaching its teardown step. Drill stack
@@ -22,7 +22,13 @@
 # in Pulumi stack code.
 #
 # Idempotent: if no expired stacks, exits 0 with audit trail.
-# Concurrent-safe: drill-teardown-validator.sh uses flock.
+# Concurrent-safe: teardown-validator.sh uses flock.
+#
+# Exit codes:
+#   0 — nothing expired, or the expired stack was destroyed and validated clean
+#   1 — DIGITALOCEAN_TOKEN, doctl or the validator is missing
+#   3 — the validator could not clean up (manual cleanup required)
+#   4 — a DigitalOcean list failed: the drill cost state is unknown
 #
 # Environment:
 #   DIGITALOCEAN_TOKEN — required (drill-scoped per D7)
@@ -57,7 +63,7 @@ if ! command -v doctl >/dev/null 2>&1; then
 fi
 
 PULUMI_DIR="${DRILL_PULUMI_DIR:-infra/pulumi-drill}"
-VALIDATOR="$(cd "$(dirname "$0")" && pwd)/drill-teardown-validator.sh"
+VALIDATOR="$(cd "$(dirname "$0")" && pwd)/teardown-validator.sh"
 
 log() { printf '[drill-watchdog] %s\n' "$*" >&2; }
 
@@ -66,7 +72,12 @@ log "Scanning DO for drill resources with expires-at tag..."
 # Find any DOKS cluster tagged loopzero-drill (drill-mgmt, drill-build,
 # drill-runtime, drill-runtime-2 all have loopzero-drill base tag).
 # Then extract expires-at tag (loopzero-drill-expires-at-<ISO>).
-DOKS_LIST=$(doctl kubernetes cluster list --format ID,Name,Tag --no-header 2>/dev/null || true)
+# A failing list is not an empty one: reporting "no drill clusters" after a
+# failed call would switch off the cost net exactly when it cannot see.
+if ! DOKS_LIST=$(doctl kubernetes cluster list --format ID,Name,Tag --no-header 2>&1); then
+  log "ERROR: could not list Kubernetes clusters — drill cost state unknown: $DOKS_LIST"
+  exit 4
+fi
 DRILL_DOKS=$(echo "$DOKS_LIST" | grep -E "loopzero-drill" || true)
 
 if [[ -z "$DRILL_DOKS" ]]; then
@@ -87,7 +98,10 @@ log "Inspecting tags for expires-at..."
 while IFS= read -r line; do
   ID=$(echo "$line" | awk '{print $1}')
   NAME=$(echo "$line" | awk '{print $2}')
-  TAGS=$(doctl kubernetes cluster get "$ID" --format Tag --no-header 2>/dev/null || true)
+  if ! TAGS=$(doctl kubernetes cluster get "$ID" --format Tag --no-header 2>&1); then
+    log "ERROR: could not read the tags of $NAME ($ID): $TAGS"
+    exit 4
+  fi
   EXPIRES_TAG=$(echo "$TAGS" | grep -oE "loopzero-drill-expires-at-[0-9-]+" | head -1 || true)
   if [[ -z "$EXPIRES_TAG" ]]; then
     log "  $NAME: no expires-at tag found — skipping (untracked)"
@@ -135,16 +149,16 @@ else
   log "  PULUMI_ACCESS_TOKEN not set OR pulumi-drill dir absent; skipping pulumi step, using validator only"
 fi
 
-log "Invoking drill-teardown-validator.sh (doctl fallback)..."
+log "Invoking teardown-validator.sh (doctl fallback)..."
 if [[ -x "$VALIDATOR" ]]; then
   if bash "$VALIDATOR"; then
     log "✓ Watchdog: drill stack destroyed + validated clean"
     exit 0
   else
-    log "ERROR: drill-teardown-validator.sh failed — manual cleanup required"
+    log "ERROR: teardown-validator.sh failed — manual cleanup required"
     exit 3
   fi
 else
-  log "ERROR: drill-teardown-validator.sh not found at $VALIDATOR"
+  log "ERROR: teardown-validator.sh not found at $VALIDATOR"
   exit 1
 fi

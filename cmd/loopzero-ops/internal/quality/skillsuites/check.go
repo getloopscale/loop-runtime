@@ -42,16 +42,24 @@ package skillsuites
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrSuitesFailed means at least one skill suite is red.
 var ErrSuitesFailed = errors.New("a skill test suite is red — these suites guard the gates that guard everything else, and nothing else runs them")
+
+// ErrSkillsRootMissing means the skills tree is absent. It is the installed kit,
+// which .gitignore excludes, so this is the state of every fresh clone: nothing
+// was verified, and that is named apart from a tree that holds no suite.
+var ErrSkillsRootMissing = errors.New("the skills tree is absent — it is the installed, gitignored kit, so nothing was verified on this machine")
 
 // ErrNoSuitesFound means discovery found no suite to run.
 var ErrNoSuitesFound = errors.New("no skill suite found — discovery is broken or the skills tree moved, and a green verdict over a scan that found nothing is worth less than no verdict")
@@ -67,6 +75,34 @@ type Result struct {
 type Outcome struct {
 	Advisory bool // pytest absent; nothing was concluded
 	Results  []Result
+	// Violation is what the run found wrong (ErrSuitesFailed, ErrNoSuitesFound),
+	// or nil. A violation is the check's verdict, never its error.
+	Violation error
+	// Unverified is why nothing could be verified on this machine
+	// (ErrSkillsRootMissing: the gitignored kit is not installed), or nil.
+	Unverified error
+}
+
+// Verdict is Fail on a red suite or on a discovery that found none, Skip when
+// the kit is not installed or pytest is absent, NotVerified for any other
+// reason nothing could be verified, and Pass otherwise.
+//
+// A missing kit is Skip, not NotVerified (owner decision, 2026-09-26): the kit
+// is a gitignored dependency, so its absence is the normal state of every fresh
+// clone, and a gate that fails there fails for something the repository does
+// not contain. The skip still names the reason, so it never reads as green.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Violation != nil:
+		return verdict.Fail
+	case errors.Is(o.Unverified, ErrSkillsRootMissing):
+		return verdict.Skip
+	case o.Unverified != nil:
+		return verdict.NotVerified
+	case o.Advisory:
+		return verdict.Skip
+	}
+	return verdict.Pass
 }
 
 // Failed lists the red suites.
@@ -114,8 +150,11 @@ func Discover(cfg Config) ([]SuiteDir, error) {
 	root := filepath.Join(cfg.RepoRoot, cfg.SkillsRel)
 
 	entries, err := os.ReadDir(root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("%w: %s", ErrSkillsRootMissing, root)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrNoSuitesFound, root)
+		return nil, fmt.Errorf("reading %s: %w", root, err)
 	}
 
 	var found []SuiteDir
@@ -124,7 +163,14 @@ func Discover(cfg Config) ([]SuiteDir, error) {
 			continue
 		}
 		dir := filepath.Join(root, e.Name())
-		if fi, statErr := os.Stat(filepath.Join(dir, "tests")); statErr != nil || !fi.IsDir() {
+		fi, statErr := os.Stat(filepath.Join(dir, "tests"))
+		if errors.Is(statErr, fs.ErrNotExist) {
+			continue // a skill without tests/ carries no suite
+		}
+		if statErr != nil {
+			return nil, fmt.Errorf("reading %s: %w", filepath.Join(dir, "tests"), statErr)
+		}
+		if !fi.IsDir() {
 			continue
 		}
 		found = append(found, SuiteDir{Skill: e.Name(), Dir: dir})
@@ -147,15 +193,20 @@ func Check(cfg Config) (Outcome, error) {
 		cfg.PerSuiteTimeout = defaultPerSuiteTimeout
 	}
 
-	if _, err := exec.LookPath("pytest"); err != nil {
-		if _, err := exec.LookPath("python3"); err != nil {
-			return Outcome{Advisory: true}, nil
-		}
+	// Discovery first: it needs no interpreter, and a tree holding no suite is a
+	// failure whether or not pytest is installed (see the package doc).
+	suites, err := Discover(cfg)
+	switch {
+	case errors.Is(err, ErrSkillsRootMissing):
+		return Outcome{Unverified: err}, nil
+	case errors.Is(err, ErrNoSuitesFound):
+		return Outcome{Violation: err}, nil
+	case err != nil:
+		return Outcome{}, err
 	}
 
-	suites, err := Discover(cfg)
-	if err != nil {
-		return Outcome{}, err
+	if !pytestRunnable() {
+		return Outcome{Advisory: true}, nil
 	}
 
 	var out Outcome
@@ -166,9 +217,25 @@ func Check(cfg Config) (Outcome, error) {
 	sort.Slice(out.Results, func(i, j int) bool { return out.Results[i].Skill < out.Results[j].Skill })
 
 	if len(out.Failed()) > 0 {
-		return out, ErrSuitesFailed
+		out.Violation = ErrSuitesFailed
 	}
 	return out, nil
+}
+
+// pytestRunnable reports whether the exact invocation runSuite makes can start.
+//
+// It asks the interpreter, not PATH. The earlier probe looked for a `pytest` binary
+// and, failing that, settled for `python3` existing — so on a host with python3 and no
+// pytest module (a stock CI runner is one) every suite ran, died on "No module named
+// pytest", and the gate reported fifteen red suites that nobody had executed. A
+// verdict about the suites must not be a verdict about the host's packages.
+func pytestRunnable() bool {
+	if _, err := exec.LookPath("python3"); err != nil {
+		return false
+	}
+	probe := exec.Command("python3", "-c", "import pytest")
+	probe.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
+	return probe.Run() == nil
 }
 
 func runSuite(dir, skill string, timeout time.Duration) Result {

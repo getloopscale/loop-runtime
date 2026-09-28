@@ -1,11 +1,10 @@
-// Package lokivaultretention enforces T8.2 + T8.5 of plan
-// 2026-06-02-openbao-adoption v1.4.
+// Package lokivaultretention enforces T8.5 of plan
+// 2026-06-02-openbao-adoption v1.4 — the Loki vault-audit archive CronJob.
 //
-// T8.2 — Loki per-namespace retention:
-//
-//	infra/helm/loki/values.yaml has retention_stream with
-//	selector='{namespace="secrets-system"}' period=2160h (90 days)
-//	AND default retention_period remains 168h (7 days for other NS).
+// T8.2 (the per-namespace retention rule: 168h default, 2160h for
+// secrets-system) is owned by lokiretentionschema alone, which decodes the
+// values structurally; this gate used to re-assert the same four facts by
+// regex, so changing the policy meant editing two gates in lockstep.
 //
 // T8.5 — Archive CronJob:
 //
@@ -14,8 +13,8 @@
 //	concurrencyPolicy: Forbid, security hardening, DO Spaces env vars,
 //	logcli + mc invocation pattern targeting secrets-system NS.
 //
-// Total 14 assertions (4 T8.2 + 10 T8.5). Pure file-content regex — no
-// helm-template shell-out; both files already committed in the repo tree.
+// Pure file-content regex — no helm-template shell-out; the manifest is
+// committed in the repo tree.
 //
 // Migrated from infra/tests/check-loki-vault-retention_test.sh
 // (M-Migrate2 2026-07-10 M16 T3.1 Wave 2). Shape 2 (text-content assertion)
@@ -25,29 +24,20 @@ package lokivaultretention
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-const (
-	lokiValuesRel  = "infra/helm/loki/values.yaml"
-	archiveCronRel = "infra/helm/monitoring/manifests/cronjob-loki-vault-audit-archive.yaml"
-)
+const archiveCronRel = "infra/helm/monitoring/manifests/cronjob-loki-vault-audit-archive.yaml"
 
 // assertion is one regex expectation against a file's content.
 type assertion struct {
 	label string
 	re    *regexp.Regexp
-}
-
-// t82Assertions: Loki values.yaml expectations.
-var t82Assertions = []assertion{
-	{`default retention_period: 168h preserved`, regexp.MustCompile(`retention_period: 168h`)},
-	{`retention_stream array declared`, regexp.MustCompile(`retention_stream:`)},
-	{`selector matches secrets-system NS`, regexp.MustCompile(`namespace=\\?"secrets-system\\?"`)},
-	{`period: 2160h (90 days) configured`, regexp.MustCompile(`period: 2160h`)},
 }
 
 // t85Assertions: Archive CronJob YAML expectations.
@@ -73,12 +63,23 @@ type Config struct {
 // Outcome is the aggregated result (canonical M-Migrate2 shape per blueprint ADR D1).
 type Outcome struct {
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations signals ≥ 1 assertion failed.
 var ErrViolations = errors.New("loki-vault-retention hermetic contract violated")
 
-// Check runs the 14 assertions and returns (Outcome, error).
+// Check runs the T8.5 assertions and returns (Outcome, error).
 func Check(cfg Config) (Outcome, error) {
 	root := cfg.RepoRoot
 	if root == "" {
@@ -90,22 +91,9 @@ func Check(cfg Config) (Outcome, error) {
 
 	var failures []string
 
-	// T8.2: read Loki values.yaml
-	lokiPath := filepath.Join(root, lokiValuesRel)
-	lokiBytes, lokiErr := readFile(lokiPath)
-	if lokiErr != nil {
-		failures = append(failures, fmt.Sprintf("loki values.yaml MISSING: %s", lokiValuesRel))
-	} else {
-		for _, a := range t82Assertions {
-			if !a.re.Match(lokiBytes) {
-				failures = append(failures, fmt.Sprintf("T8.2: %s", a.label))
-			}
-		}
-	}
-
 	// T8.5: read archive CronJob YAML
 	cronPath := filepath.Join(root, archiveCronRel)
-	cronBytes, cronErr := readFile(cronPath)
+	cronBytes, cronErr := qgshell.StatAndRead(cronPath)
 	if cronErr != nil {
 		failures = append(failures, fmt.Sprintf("cronjob-loki-vault-audit-archive.yaml MISSING: %s", archiveCronRel))
 	} else {
@@ -124,17 +112,7 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
-}
-
-// readFile returns the file bytes or an error (including fs.ErrNotExist for missing).
-func readFile(path string) ([]byte, error) {
-	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
-		return nil, err
-	} else if err != nil {
-		return nil, fmt.Errorf("stat %s: %w", path, err)
-	}
-	return os.ReadFile(path)
 }

@@ -1,181 +1,151 @@
-// Package allowlistsunsets is a hermetic contract test for
-// .claude/scripts/check-allowlist-sunsets.py (T5.2.a of plan
-// 2026-06-11-code-review-remediation-147-findings v1.2).
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+// Package allowlistsunsets enforces the sunset contract on the code-review allowlist:
+// every exemption carries a date, and on that date it stops exempting anything.
 //
-// Seeds fixture allowlists (future / today / past / malformed / bad-date)
-// and asserts the Python gate's exit codes:
+// `code-quality-golden-rule.md` § 4 states the rule — a sunset window of at most 90 days,
+// and an expired entry ignored so the finding re-fires at full severity. This is what
+// makes an allowlist a deferral rather than a deletion, and it only works if something
+// reads the dates.
 //
-//	0 — all sunsets future OR today (today is WARN, not block)
-//	1 — at least one sunset is past
-//	2 — parse error (malformed entry OR bad date format)
+// WHAT THIS USED TO BE, and why it changed. It was a hermetic contract test for
+// `.claude/scripts/check-allowlist-sunsets.py`: it seeded fixture allowlists and asserted
+// that script's exit codes (0 future, 1 past, 2 parse error). Measured 2026-09-16, the
+// script exists in no clone, in no installed kit, and nowhere reachable — `.claude/` is
+// gitignored, and its `scripts/` was renamed to `mechanisms/` on 2026-09-01, so the path
+// could not have survived either way.
 //
-// Also runs a LIVE check against the real rules/code-review-allowlist.txt.
+// The gate therefore reported a missing program, forever, and the contract it guarded had
+// no enforcer at all. The live allowlist was carrying two entries seven days past their
+// own deadline when this was written; nobody had been told, because the thing that would
+// have told them was the thing that was gone.
 //
-// Migrated from infra/tests/check-allowlist-sunsets_test.sh
-// (M-Migrate2 continuation 2026-07-07). Requires python3 on PATH.
+// Rung 1 of the parsimony ladder removed the fixture half — a contract test for a program
+// that does not exist does not need to exist — and the live check is implemented here,
+// where the rest of the gates live and where no interpreter has to be present.
 package allowlistsunsets
 
 import (
-	"bytes"
+	"bufio"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/calendarday"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const (
-	gatePath          = ".claude/scripts/check-allowlist-sunsets.py"
 	liveAllowlistPath = "rules/code-review-allowlist.txt"
+	// sunsetColumn is the 0-indexed pipe-separated column holding the date, per the
+	// format the allowlist declares in its own header:
+	//   finding_id | category | sunset_date | rationale
+	sunsetColumn = 2
+	minColumns   = 4
 )
 
 // Config controls the check.
 type Config struct {
 	RepoRoot string
-	// Today allows tests to inject a fixed reference date; when zero, time.Now() is used.
+	// AllowlistPath overrides liveAllowlistPath.
+	AllowlistPath string
+	// Today allows a test to inject a fixed reference date; zero means today.
 	Today time.Time
 }
 
-// Outcome is the summary.
+// Outcome separates what blocks from what is merely worth saying. An entry expiring TODAY
+// is still valid for the whole of its last day, and refusing it would refuse work on the
+// one day somebody could still act on it.
 type Outcome struct {
 	Failures []string
+	Warnings []string
+	Checked  int
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
 }
 
-// ErrViolations means at least one fixture assertion failed.
-var ErrViolations = errors.New("check-allowlist-sunsets fixture contract violated")
-
-// Check runs the seven assertions from the bash guard.
-// referenceDate returns the day the fixtures are dated against. It is the
-// LOCAL date, not UTC, because the Python gate that grades those fixtures uses
-// date.today() — which is local. Reading two different clocks made the suite
-// fail for the last hours of every day in any negative UTC offset: measured
-// 2026-08-06 21:15 -03, Go dated fixtures 2026-08-07 while Python graded
-// against 2026-08-06, so "today" read as future and "past" read as today.
-func referenceDate(injected time.Time) time.Time {
-	if !injected.IsZero() {
-		return injected
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
 	}
-	return time.Now()
+	return verdict.Pass
 }
 
+// ErrViolations means at least one entry has expired or cannot be read.
+var ErrViolations = errors.New("allowlist sunset contract violated")
+
+// Check reads the allowlist and grades every entry's sunset.
 func Check(cfg Config) (Outcome, error) {
-	root := cfg.RepoRoot
-	if root == "" {
-		var err error
-		if root, err = os.Getwd(); err != nil {
-			return Outcome{}, fmt.Errorf("resolve repo root: %w", err)
-		}
+	var out Outcome
+	rel := cfg.AllowlistPath
+	if rel == "" {
+		rel = liveAllowlistPath
 	}
-	gate := filepath.Join(root, gatePath)
+	full := filepath.Join(cfg.RepoRoot, rel)
 
-	if _, err := os.Stat(gate); err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("gate script missing at %s: %v", gatePath, err)}}, ErrViolations
-	}
-	if _, err := exec.LookPath("python3"); err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("python3 not on PATH: %v (this gate is a driver for the Python script and requires python3)", err)}}, ErrViolations
-	}
-
-	today := referenceDate(cfg.Today)
-	futureDate := today.Add(30 * 24 * time.Hour).Format("2006-01-02")
-	todayStr := today.Format("2006-01-02")
-	pastDate := today.Add(-24 * time.Hour).Format("2006-01-02")
-
-	tmpdir, err := os.MkdirTemp("", "allowlist-sunsets-")
+	f, err := os.Open(full) // #nosec G304 -- path is the configured allowlist under the repo root
 	if err != nil {
-		return Outcome{}, fmt.Errorf("mkdirtemp: %w", err)
+		if os.IsNotExist(err) {
+			// No allowlist is no exemptions, which is the strongest possible state of this
+			// contract. Reporting it as a violation would make having nothing to forgive
+			// look like a failure.
+			return out, nil
+		}
+		return out, fmt.Errorf("allowlist-sunsets: read %s: %w", rel, err)
 	}
-	defer os.RemoveAll(tmpdir)
+	defer func() { _ = f.Close() }()
 
-	var failures []string
-	runFixture := func(name, body string, wantRC int, mustContain string) {
-		p := filepath.Join(tmpdir, name+".txt")
-		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-			failures = append(failures, fmt.Sprintf("%s: write fixture failed: %v", name, err))
-			return
+	today := calendarday.Today(cfg.Today)
+	sc := bufio.NewScanner(f)
+	for line := 1; sc.Scan(); line++ {
+		raw := strings.TrimSpace(sc.Text())
+		if raw == "" || strings.HasPrefix(raw, "#") {
+			continue
 		}
-		cmd := exec.Command("python3", gate, p)
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		runErr := cmd.Run()
-		gotRC := 0
-		if runErr != nil {
-			if ee, ok := runErr.(*exec.ExitError); ok {
-				gotRC = ee.ExitCode()
-			} else {
-				failures = append(failures, fmt.Sprintf("%s: unexpected run error: %v", name, runErr))
-				return
-			}
-		}
-		if gotRC != wantRC {
-			failures = append(failures, fmt.Sprintf("%s: expected exit %d, got %d (stdout=%q stderr=%q)", name, wantRC, gotRC, stdout.String(), stderr.String()))
-			return
-		}
-		merged := stdout.String() + stderr.String()
-		if mustContain != "" && !strings.Contains(merged, mustContain) {
-			failures = append(failures, fmt.Sprintf("%s: output missing %q marker (got %q)", name, mustContain, merged))
-		}
-	}
+		out.Checked++
 
-	// Fixture 1: all future entries → exit 0 + PASS marker
-	runFixture("future", fmt.Sprintf("# header comment\nfid-1 | refactor | %s | test rationale\nfid-2 | maturity | %s | another rationale\n", futureDate, futureDate),
-		0, "PASS")
-	// Fixture 2: today-only → exit 0 + WARN
-	runFixture("today", fmt.Sprintf("fid-today | refactor | %s | test today entry\n", todayStr),
-		0, "WARN")
-	// Fixture 3: past → exit 1 + 'past sunset'
-	runFixture("past", fmt.Sprintf("fid-past | refactor | %s | test past entry\n", pastDate),
-		1, "past sunset")
-	// Fixture 4: malformed (only 2 columns) → exit 2 + 'malformed'
-	runFixture("malformed", "fid-bad | only_two_columns\n",
-		2, "malformed")
-	// Fixture 5: bad date format → exit 2 + 'bad sunset_date'
-	runFixture("baddate", "fid-baddate | refactor | not-a-date | wrong format\n",
-		2, "bad sunset_date")
-	// Fixture 6: missing file → exit 0 (no deferrals declared)
-	{
-		missing := filepath.Join(tmpdir, "does-not-exist.txt")
-		cmd := exec.Command("python3", gate, missing)
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		runErr := cmd.Run()
-		gotRC := 0
-		if runErr != nil {
-			if ee, ok := runErr.(*exec.ExitError); ok {
-				gotRC = ee.ExitCode()
-			} else {
-				failures = append(failures, fmt.Sprintf("missing: unexpected run error: %v", runErr))
-			}
+		cols := strings.Split(raw, "|")
+		if len(cols) < minColumns {
+			out.Failures = append(out.Failures, fmt.Sprintf(
+				"%s:%d: entry has %d column(s), the declared format has %d (finding_id | category | sunset_date | rationale)",
+				rel, line, len(cols), minColumns))
+			continue
 		}
-		if gotRC != 0 {
-			failures = append(failures, fmt.Sprintf("missing: expected exit 0, got %d (stdout=%q stderr=%q)", gotRC, stdout.String(), stderr.String()))
-		}
-	}
-	// LIVE: real rules/code-review-allowlist.txt → exit 0
-	livePath := filepath.Join(root, liveAllowlistPath)
-	if _, err := os.Stat(livePath); err == nil {
-		cmd := exec.Command("python3", gate, livePath)
-		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		runErr := cmd.Run()
-		gotRC := 0
-		if runErr != nil {
-			if ee, ok := runErr.(*exec.ExitError); ok {
-				gotRC = ee.ExitCode()
-			}
-		}
-		if gotRC != 0 {
-			failures = append(failures, fmt.Sprintf("live: real %s has past-sunset entries (exit=%d output=%q)", liveAllowlistPath, gotRC, stdout.String()+stderr.String()))
-		}
-	}
-	// If the file does not exist, treat as no deferrals declared (parity with fixture 6).
 
-	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		field := strings.TrimSpace(cols[sunsetColumn])
+		sunset, perr := calendarday.Parse(field)
+		if perr != nil {
+			// Not a date in the future — a date nobody can read. Treating it as future
+			// would turn a typo into a permanent exemption, which is what the sunset is
+			// for.
+			out.Failures = append(out.Failures, fmt.Sprintf(
+				"%s:%d: sunset %q is not YYYY-MM-DD", rel, line, field))
+			continue
+		}
+
+		id := strings.TrimSpace(cols[0])
+		switch {
+		case sunset.Before(today):
+			out.Failures = append(out.Failures, fmt.Sprintf(
+				"%s:%d: %s expired on %s (%d day(s) ago) — the exemption has ended; remove the entry so the finding re-fires, or do the work",
+				rel, line, id, field, int(today.Sub(sunset).Hours()/24)))
+		case sunset.Equal(today):
+			out.Warnings = append(out.Warnings, fmt.Sprintf(
+				"%s:%d: %s expires TODAY (%s) — last day it exempts anything", rel, line, id, field))
+		}
 	}
-	return Outcome{}, nil
+	if serr := sc.Err(); serr != nil {
+		return out, fmt.Errorf("allowlist-sunsets: scan %s: %w", rel, serr)
+	}
+	if len(out.Failures) > 0 {
+		out.Violation = ErrViolations
+		return out, nil
+	}
+	return out, nil
 }

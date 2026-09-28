@@ -11,8 +11,6 @@ prometheusRules:
     enabled: true
   domains:
     enabled: true
-  registry:
-    enabled: true
   otelPipeline:
     enabled: true
   probes:

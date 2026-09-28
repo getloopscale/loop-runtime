@@ -18,6 +18,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // importPrefix is prepended to a pattern to form the literal Go import string
@@ -56,6 +58,9 @@ type Outcome struct {
 	Pass       bool
 	Violations []string // "<rel> imports <pattern>"
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check scans the configured boundaries for unallowlisted AGPL imports.
 func Check(cfg Config) *Outcome {

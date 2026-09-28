@@ -5,6 +5,7 @@ package operatortest
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -58,9 +59,9 @@ type EnvtestHandle struct {
 	BuildClient client.Client
 	RuntimeCli  client.Client
 
-	// CellAwareFactory is non-nil when EnableCellAwareFactory was set in
-	// the EnvtestConfig. Tests assert against this to verify cell-aware
-	// code paths actually executed (T1.2 of deep-review-remediation-plan).
+	// CellAwareFactory is the factory every cell-aware controller in the
+	// suite resolves runtime clients through. Specs assert against Calls()
+	// to verify which cell a write was routed to.
 	CellAwareFactory *FakeRuntimeClientFactory
 }
 
@@ -122,35 +123,24 @@ type EnvtestConfig struct {
 	// CRD bases directory. Typically "../../config/crd/bases".
 	CRDPath string
 
-	// EnableTenant wires SetupTenantController + SetupEnvironmentControllerWithFactory
-	// (the cell-aware variant with factory=nil). Tenant suite uses this.
+	// EnableTenant wires SetupTenantController + SetupEnvironmentControllerWithFactory,
+	// both routed through the tracking CellAwareFactory. Tenant suite uses this.
 	EnableTenant bool
 
-	// EnableApp wires SetupApplicationController + SetupExposureController.
+	// EnableApp wires SetupApplicationController + SetupExposureController,
+	// both routed through CellAwareFactory.
 	EnableApp bool
 
-	// EnablePreview wires SetupPreviewController.
+	// EnablePreview wires SetupPreviewController, routed through CellAwareFactory.
 	EnablePreview bool
 
 	// EnablePlatform wires SetupClusterCredentialController +
 	// SetupGitRepositoryBindingController + SetupPlatformBootstrapController.
 	EnablePlatform bool
 
-	// BaseDomain is used by Application and Preview controllers for hostname
+	// BaseDomain is used by the Application controller for hostname
 	// assignment. Defaults to "dev.loopzero.example" if empty.
 	BaseDomain string
-
-	// EnableCellAwareFactory wires a tracking fakeRuntimeClientFactory
-	// instead of nil for controller setups that accept a factory. T1.2 of
-	// deep-review-remediation-plan (closes find_arch_003 HIGH): pre-T1.2
-	// envtest suites passed factory=nil to every controller, so the
-	// CellAwareRuntimeClientFactory code paths had ZERO automated test
-	// coverage.
-	//
-	// When true, the factory routes For(cellID) calls to the existing
-	// runtimeClient and records each call in h.CellAwareFactoryCalls so
-	// tests can assert "factory was actually exercised".
-	EnableCellAwareFactory bool
 }
 
 // StartEnvtest brings up envtest, starts the manager with the configured
@@ -167,168 +157,210 @@ func StartEnvtest(t TestT, cfg EnvtestConfig) *EnvtestHandle {
 
 	logf.SetLogger(zap.New(zap.WriteTo(os.Stderr), zap.UseDevMode(true)))
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	binaryDir := os.Getenv("KUBEBUILDER_ASSETS")
-	if binaryDir == "" {
-		home, _ := os.UserHomeDir()
-		envtestBase := filepath.Join(home, ".local", "share", "kubebuilder-envtest", "k8s")
-		if entries, err := os.ReadDir(envtestBase); err == nil {
-			for i := len(entries) - 1; i >= 0; i-- {
-				candidate := filepath.Join(envtestBase, entries[i].Name())
-				if _, statErr := os.Stat(filepath.Join(candidate, "etcd")); statErr == nil {
-					binaryDir = candidate
-					break
-				}
-			}
-		}
-	}
-
-	crdPath := cfg.CRDPath
-	if crdPath == "" {
-		crdPath = filepath.Join("..", "..", "config", "crd", "bases")
-	}
-
 	testEnv := &envtest.Environment{
-		CRDDirectoryPaths:     []string{crdPath},
+		CRDDirectoryPaths:     []string{crdPathOrDefault(cfg.CRDPath)},
 		ErrorIfCRDPathMissing: true,
-		BinaryAssetsDirectory: binaryDir,
+		BinaryAssetsDirectory: BinaryAssetsDirectory(),
 	}
-
 	restCfg, err := testEnv.Start()
 	if err != nil {
-		cancel()
 		t.Fatalf("envtest start: %v", err)
 	}
 
-	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		cancel()
-		_ = testEnv.Stop()
-		t.Fatalf("client-go scheme: %v", err)
-	}
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
-		cancel()
-		_ = testEnv.Stop()
-		t.Fatalf("loopzerov1 scheme: %v", err)
-	}
-
-	k8sClient, err := client.New(restCfg, client.Options{Scheme: scheme})
+	ctx, cancel := context.WithCancel(context.Background())
+	h, err := newEnvtestHandle(ctx, cancel, testEnv, restCfg)
 	if err != nil {
 		cancel()
 		_ = testEnv.Stop()
-		t.Fatalf("client New: %v", err)
+		t.Fatalf("envtest handle: %v", err)
 	}
 
-	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
-		Scheme: scheme,
-		Metrics: metricsserver.Options{
-			BindAddress: "0",
-		},
-	})
-	if err != nil {
-		cancel()
-		_ = testEnv.Stop()
-		t.Fatalf("manager New: %v", err)
-	}
-
-	buildClient, err := client.New(restCfg, client.Options{Scheme: scheme})
-	if err != nil {
-		cancel()
-		_ = testEnv.Stop()
-		t.Fatalf("build client New: %v", err)
-	}
-	runtimeClient, err := client.New(restCfg, client.Options{Scheme: scheme})
-	if err != nil {
-		cancel()
-		_ = testEnv.Stop()
-		t.Fatalf("runtime client New: %v", err)
-	}
-
-	h := &EnvtestHandle{
-		Cfg:         restCfg,
-		K8sClient:   k8sClient,
-		TestEnv:     testEnv,
-		Scheme:      scheme,
-		Manager:     mgr,
-		Ctx:         ctx,
-		Cancel:      cancel,
-		FakeGit:     NewFakeGitProvisioner(),
-		FakeArgoCD:  NewFakeArgoCDProvisioner(),
-		FakeMinIO:   NewFakeMinIOProvisioner(),
-		BuildClient: buildClient,
-		RuntimeCli:  runtimeClient,
-	}
-
-	// T1.2 of deep-review-remediation-plan (closes find_arch_003 HIGH):
-	// when EnableCellAwareFactory is true, build a tracking factory
-	// routing all cellIDs to runtimeClient. Tests assert via
-	// h.CellAwareFactory.Calls() that cell-aware code paths actually
-	// executed.
-	if cfg.EnableCellAwareFactory {
-		h.CellAwareFactory = NewFakeRuntimeClientFactory(runtimeClient)
-	}
-
-	baseDomain := cfg.BaseDomain
-	if baseDomain == "" {
-		baseDomain = "dev.loopzero.example"
-	}
-
-	if cfg.EnableTenant {
-		if err := SetupTenantController(mgr, h.FakeGit, h.FakeArgoCD, buildClient, runtimeClient); err != nil {
-			h.Stop()
-			t.Fatalf("SetupTenantController: %v", err)
-		}
-		if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeClient, nil); err != nil {
-			h.Stop()
-			t.Fatalf("SetupEnvironmentControllerWithFactory: %v", err)
-		}
-	}
-	if cfg.EnableApp {
-		if err := SetupApplicationController(mgr, baseDomain); err != nil {
-			h.Stop()
-			t.Fatalf("SetupApplicationController: %v", err)
-		}
-		if err := SetupExposureController(mgr); err != nil {
-			h.Stop()
-			t.Fatalf("SetupExposureController: %v", err)
-		}
-	}
-	if cfg.EnablePreview {
-		if err := SetupPreviewController(mgr, runtimeClient, baseDomain); err != nil {
-			h.Stop()
-			t.Fatalf("SetupPreviewController: %v", err)
-		}
-	}
-	if cfg.EnablePlatform {
-		if err := SetupClusterCredentialController(mgr); err != nil {
-			h.Stop()
-			t.Fatalf("SetupClusterCredentialController: %v", err)
-		}
-		if err := SetupGitRepositoryBindingController(mgr, nil); err != nil {
-			h.Stop()
-			t.Fatalf("SetupGitRepositoryBindingController: %v", err)
-		}
-		if err := SetupPlatformBootstrapController(mgr, nil); err != nil {
-			h.Stop()
-			t.Fatalf("SetupPlatformBootstrapController: %v", err)
-		}
+	if err := setupControllers(h, cfg); err != nil {
+		h.Stop()
+		t.Fatalf("%v", err)
 	}
 
 	go func() {
-		if startErr := mgr.Start(ctx); startErr != nil {
+		if startErr := h.Manager.Start(ctx); startErr != nil {
 			// Test will fail later via Eventually timeouts; logging here
 			// would be lost in test output anyway.
 			_ = startErr
 		}
 	}()
 
-	if !mgr.GetCache().WaitForCacheSync(ctx) {
+	if !h.Manager.GetCache().WaitForCacheSync(ctx) {
 		h.Stop()
 		t.Fatalf("cache sync failed")
 	}
 
 	return h
+}
+
+// BinaryAssetsDirectory is where the envtest binaries (kube-apiserver, etcd)
+// live on this machine, for a test that builds its own envtest.Environment
+// instead of going through StartEnvtest.
+func BinaryAssetsDirectory() string {
+	return envtestBinaryDir(os.Getenv("KUBEBUILDER_ASSETS"), userHomeDir())
+}
+
+// userHomeDir returns the user's home directory, or "" when it is unknown
+// (envtestBinaryDir then finds nothing and envtest reports the missing
+// binaries itself).
+func userHomeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
+}
+
+// envtestBinaryDir resolves the envtest binaries: KUBEBUILDER_ASSETS when
+// set, otherwise the newest setup-envtest install under home that carries an
+// etcd binary. "" leaves the choice to envtest.
+func envtestBinaryDir(kubebuilderAssets, home string) string {
+	if kubebuilderAssets != "" {
+		return kubebuilderAssets
+	}
+	if home == "" {
+		return ""
+	}
+	base := filepath.Join(home, ".local", "share", "kubebuilder-envtest", "k8s")
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return ""
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		candidate := filepath.Join(base, entries[i].Name())
+		if _, statErr := os.Stat(filepath.Join(candidate, "etcd")); statErr == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
+// crdPathOrDefault is the CRD directory relative to a split package's tests.
+func crdPathOrDefault(crdPath string) string {
+	if crdPath != "" {
+		return crdPath
+	}
+	return filepath.Join("..", "..", "config", "crd", "bases")
+}
+
+// baseDomainOrDefault is the hostname base domain for the Application controller.
+func baseDomainOrDefault(baseDomain string) string {
+	if baseDomain != "" {
+		return baseDomain
+	}
+	return "dev.loopzero.example"
+}
+
+// newEnvtestHandle builds the scheme, clients, manager and fakes a suite
+// shares. Every cell-aware controller reaches the runtime cluster through the
+// tracking factory, so a spec can assert via h.CellAwareFactory.Calls() which
+// cell each write was routed to. envtest has one API server, so every cell
+// resolves to it; the routing decision is what is observed.
+func newEnvtestHandle(ctx context.Context, cancel context.CancelFunc, testEnv *envtest.Environment, restCfg *rest.Config) (*EnvtestHandle, error) {
+	scheme := runtime.NewScheme()
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("client-go scheme: %w", err)
+	}
+	if err := loopzerov1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("loopzerov1 scheme: %w", err)
+	}
+
+	newClient := func(role string) (client.Client, error) {
+		c, err := client.New(restCfg, client.Options{Scheme: scheme})
+		if err != nil {
+			return nil, fmt.Errorf("%s client: %w", role, err)
+		}
+		return c, nil
+	}
+	k8sClient, err := newClient("test")
+	if err != nil {
+		return nil, err
+	}
+	buildClient, err := newClient("build")
+	if err != nil {
+		return nil, err
+	}
+	runtimeClient, err := newClient("runtime")
+	if err != nil {
+		return nil, err
+	}
+
+	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
+		Scheme:  scheme,
+		Metrics: metricsserver.Options{BindAddress: "0"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("manager: %w", err)
+	}
+
+	return &EnvtestHandle{
+		Cfg:              restCfg,
+		K8sClient:        k8sClient,
+		TestEnv:          testEnv,
+		Scheme:           scheme,
+		Manager:          mgr,
+		Ctx:              ctx,
+		Cancel:           cancel,
+		FakeGit:          NewFakeGitProvisioner(),
+		FakeArgoCD:       NewFakeArgoCDProvisioner(),
+		FakeMinIO:        NewFakeMinIOProvisioner(),
+		BuildClient:      buildClient,
+		RuntimeCli:       runtimeClient,
+		CellAwareFactory: NewFakeRuntimeClientFactory(runtimeClient),
+	}, nil
+}
+
+// controllerGroup is one EnvtestConfig switch and the controllers it wires.
+type controllerGroup struct {
+	enabled bool
+	setups  []namedSetup
+}
+
+type namedSetup struct {
+	name  string
+	setup func() error
+}
+
+// setupControllers registers the controller groups cfg enables.
+func setupControllers(h *EnvtestHandle, cfg EnvtestConfig) error {
+	mgr := h.Manager
+	baseDomain := baseDomainOrDefault(cfg.BaseDomain)
+	groups := []controllerGroup{
+		{cfg.EnableTenant, []namedSetup{
+			{"SetupTenantController", func() error {
+				return SetupTenantController(mgr, h.FakeGit, h.FakeArgoCD, h.BuildClient, h.CellAwareFactory)
+			}},
+			{"SetupEnvironmentControllerWithFactory", func() error {
+				return environment.SetupEnvironmentControllerWithFactory(mgr, h.CellAwareFactory)
+			}},
+		}},
+		{cfg.EnableApp, []namedSetup{
+			{"SetupApplicationController", func() error { return SetupApplicationController(mgr, baseDomain, h.CellAwareFactory) }},
+			{"SetupExposureController", func() error { return SetupExposureController(mgr, h.CellAwareFactory) }},
+		}},
+		{cfg.EnablePreview, []namedSetup{
+			{"SetupPreviewController", func() error { return SetupPreviewController(mgr, h.CellAwareFactory) }},
+		}},
+		{cfg.EnablePlatform, []namedSetup{
+			{"SetupClusterCredentialController", func() error { return SetupClusterCredentialController(mgr) }},
+			{"SetupGitRepositoryBindingController", func() error { return SetupGitRepositoryBindingController(mgr, nil) }},
+			{"SetupPlatformBootstrapController", func() error { return SetupPlatformBootstrapController(mgr, nil) }},
+		}},
+	}
+	for _, g := range groups {
+		if !g.enabled {
+			continue
+		}
+		for _, s := range g.setups {
+			if err := s.setup(); err != nil {
+				return fmt.Errorf("%s: %w", s.name, err)
+			}
+		}
+	}
+	return nil
 }
 
 // Stop cancels the manager context and stops envtest. Idempotent.
@@ -348,11 +380,10 @@ func (h *EnvtestHandle) Stop() {
 // specs. Increased from 15s to 30s in fire 30 of deep-review-remediation
 // after observing intermittent flakes in TestPlatformControllers (the
 // CredentialsResolved condition reconcile occasionally exceeded the 15s
-// envelope under load — Princípio 7: flaky tests are bugs).
+// envelope under load — Principle 7: flaky tests are bugs).
 //
-// Per CLAUDE.md global Princípio 7: "Testes devem ser determinísticos.
-// Se um teste falha intermitentemente (flaky), ele é um bug e deve ser
-// corrigido ou removido imediatamente."
+// Per the global CLAUDE.md, Principle 7: tests must be deterministic, and a
+// test that fails intermittently is a bug to fix or remove immediately.
 //
 // Increasing timeout is the conservative fix — doesn't mask logic bugs
 // (a missing reconcile would still timeout) but absorbs CI/host

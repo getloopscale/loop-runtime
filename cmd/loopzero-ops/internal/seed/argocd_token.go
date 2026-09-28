@@ -55,8 +55,10 @@ func (s *ArgoCDTokenSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired (composition root gap)"}
 	}
 	// Port-forward argocd-server (svc port 80 → target 8080 plaintext, canonical).
-	tunnel, err := d.PortForwardCtor(d.Ctx, "", argocdNamespace,
-		PodMetaLabels("argocd-server"), 8080, "/healthz")
+	tunnel, err := d.PortForwardCtor(d.Ctx, TunnelTarget{
+		Namespace: argocdNamespace, PodLabels: PodMetaLabels("argocd-server"),
+		RemotePort: 8080, ProbePath: "/healthz",
+	})
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("port-forward argocd-server: %v", err)}
 	}
@@ -75,22 +77,28 @@ func (s *ArgoCDTokenSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("mint account token: %v", err)}
 	}
 	// Step 3: sync to loopzero-api-tokens
-	// B-108 — este seed e' invocavel sozinho (`loopzero-ops seed argocd-token`), que e' como um
-	// operador conserta uma peca sem repetir a cadeia inteira. Ali nao ha ordem que
-	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
-	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
-	// o namespace ja existe, que e' o caminho canonico.
-	if err := ensureNamespace(d, d.Kube, minioNamespace); err != nil {
+	// B-108 — this seed runs on its own (`loopzero-ops seed argocd-token`), which is how an operator
+	// repairs one piece without repeating the whole chain. Nothing then guarantees
+	// the namespace, and the failure is silent on our side: the seed stops, the
+	// chain goes on, and the effect shows up in another system. Idempotent — a
+	// Get when the namespace exists, which is the usual path.
+	if err := d.Kube.EnsureNamespace(d.Ctx, minioNamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", minioNamespace, err)}
 	}
-	sec := secretOf(minioNamespace, loopzeroAPITokensSecret,
-		map[string][]byte{loopzeroAPITokensKey: []byte(token)})
-	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx, sec); err != nil {
+	// loopzero-api-tokens is shared (gitea-token from the gitea-token seed,
+	// cf-api-token from External Secrets): write only the argocd-token key.
+	if err := d.Kube.MergeSecretData(d.Ctx, minioNamespace, loopzeroAPITokensSecret,
+		map[string][]byte{loopzeroAPITokensKey: []byte(token)}); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("apply %s/%s: %v", minioNamespace, loopzeroAPITokensSecret, err)}
 	}
-	// Step 4: rollout restart loopzero-api
+	// Step 4: rollout restart loopzero-api. A loopzero-api not deployed yet reads the
+	// token when it starts, so there is nothing to restart — the same rule the
+	// gitea-token seed applies. Any other error is a real failure.
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, minioNamespace, minioLoopZeroAPIDeployment); err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout %s/%s: %v", minioNamespace, minioLoopZeroAPIDeployment, err)}
+		if !isNotFoundErr(err) {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout %s/%s: %v", minioNamespace, minioLoopZeroAPIDeployment, err)}
+		}
+		return Result{Verdict: PASS, Reason: fmt.Sprintf("minted argocd token → %s/%s (%s not deployed yet — nothing to restart)", minioNamespace, loopzeroAPITokensSecret, minioLoopZeroAPIDeployment)}
 	}
 	return Result{Verdict: PASS, Reason: fmt.Sprintf("minted argocd token → %s/%s + rollout %s", minioNamespace, loopzeroAPITokensSecret, minioLoopZeroAPIDeployment)}
 }
@@ -114,7 +122,10 @@ func (s *ArgoCDTokenSeed) Verify(d Deps) Result {
 // the session bearer token from the response body.
 func argocdSessionLogin(ctx context.Context, base, user, pw string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"username": user, "password": pw})
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/v1/session", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/v1/session", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
@@ -142,7 +153,10 @@ func argocdSessionLogin(ctx context.Context, base, user, pw string) (string, err
 func argocdMintAccountToken(ctx context.Context, base, session, account, name string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"name": name})
 	url := fmt.Sprintf("%s/api/v1/account/%s/token", base, account)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+session)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)

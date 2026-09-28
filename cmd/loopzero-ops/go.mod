@@ -3,8 +3,10 @@ module github.com/getloopscale/loopzero/cmd/loopzero-ops
 go 1.26.1
 
 require (
+	github.com/blang/semver/v4 v4.0.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/stretchr/testify v1.11.1
+	github.com/getloopscale/loopzero/infra/scripts v0.0.0
 	github.com/getloopscale/loopzero/pkg v0.0.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.2
@@ -16,7 +18,6 @@ require (
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
-	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
@@ -80,4 +81,7 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/getloopscale/loopzero/pkg => ../../pkg
+replace (
+	github.com/getloopscale/loopzero/infra/scripts => ../../infra/scripts
+	github.com/getloopscale/loopzero/pkg => ../../pkg
+)

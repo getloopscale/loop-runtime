@@ -12,7 +12,7 @@ import (
 
 // GitHubAppDevSeed is the Go port of infra/scripts/local/seed-github-app-dev.sh.
 // It materializes two K8s Secrets in loopzero-system that loopzero-api consumes via
-// envFrom (see infra/helm/loopzero-api/templates/deployment.yaml):
+// secrets.additionalSources and secrets.keyRefs (see charts/loopzero-api/values-bootstrap.yaml):
 //
 //	loopzero-api-github     key=GITHUB_APP_PRIVATE_KEY   (PKCS1 RSA PEM)
 //	loopzero-github-webhook key=value                    (HMAC-SHA256 shared secret)
@@ -65,7 +65,7 @@ func (s *GitHubAppDevSeed) Run(d Deps) Result {
 	// Idempotent, and a no-op against the fake client the unit tests use, which is
 	// why the guard for this is the structural assertion in
 	// namespace_precondition_test.go rather than a behavioural one here.
-	if err := ensureNamespace(d, d.Kube, githubAppNamespace); err != nil {
+	if err := d.Kube.EnsureNamespace(d.Ctx, githubAppNamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", githubAppNamespace, err)}
 	}
 

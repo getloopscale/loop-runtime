@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check which repo to scan.
@@ -42,6 +43,15 @@ type Outcome struct {
 	Pass       bool
 	Skipped    bool // Caddyfile absent
 	Violations []string
+}
+
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 // requiredPaths are the minimum path prefixes the @dev_server_only matcher
@@ -144,26 +154,11 @@ func extractAppDevBlock(content string) (string, bool) {
 // extractMatcherBody returns the body between `@dev_server_only {` and its
 // matching closing brace within the app-dev block.
 func extractMatcherBody(block string) (string, bool) {
-	re := regexp.MustCompile(`@dev_server_only\s*\{`)
-	loc := re.FindStringIndex(block)
-	if loc == nil {
-		return "", false
-	}
-	start := loc[1]
-	depth := 1
-	for i := start; i < len(block); i++ {
-		switch block[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return block[start:i], true
-			}
-		}
-	}
-	return "", false
+	return qgshell.ExtractBraceBlock(block, devServerMatcherOpenRe)
 }
+
+// devServerMatcherOpenRe opens the @dev_server_only matcher block.
+var devServerMatcherOpenRe = regexp.MustCompile(`@dev_server_only\s*\{`)
 
 // sanitize turns a path like /src/* into a lowercase identifier-safe token
 // for the violation ID (assert_dev_server_only_covers_src_).

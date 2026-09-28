@@ -59,16 +59,15 @@
 package noaesremaining
 
 import (
-	"bufio"
 	"fmt"
 	"go/scanner"
 	"go/token"
-	"io"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // CutoverDay is the openbao-adoption v1.3 T+0 reference (UTC).
@@ -98,6 +97,9 @@ type Outcome struct {
 	FilesFound      int       // candidate non-test .go files under scanRoots
 	FilesScanned    int       // of those, the ones not allowlisted away
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Hit is a single violation location.
 type Hit struct {
@@ -193,39 +195,23 @@ func Check(cfg Config) (Outcome, error) {
 
 	for _, rootRel := range scanRoots {
 		foundBefore := out.FilesFound
-		absRoot := filepath.Join(cfg.RepoRoot, rootRel)
-		walkErr := filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				// An absent tree is not an error here: the zero-found floor
-				// below is what turns "nothing was read" into a violation,
-				// and it does so with a message that says which root was empty.
-				if os.IsNotExist(err) {
-					return nil
-				}
-				return err
-			}
-			if d.IsDir() {
-				return nil
-			}
-			name := d.Name()
-			if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-				return nil
-			}
-			rel, relErr := filepath.Rel(cfg.RepoRoot, p)
-			if relErr != nil {
-				return relErr
-			}
-			rel = filepath.ToSlash(rel)
+		keep := func(rel string) bool {
+			return strings.HasSuffix(rel, ".go") && !strings.HasSuffix(rel, "_test.go")
+		}
+		// An absent root is not an error here: the zero-found floor below is
+		// what turns "nothing was read" into a violation, and it does so with a
+		// message that says which root was empty.
+		_, walkErr := linescan.Walk(cfg.RepoRoot, []string{rootRel}, keep, func(rel string, data []byte) error {
 			out.FilesFound++
 			if allowSet[filepath.Clean(rel)] {
 				return nil
 			}
 			out.FilesScanned++
-			hits, scanErr := scanFile(p, rel)
+			hits, scanErr := scanFile(data, rel)
 			if scanErr != nil {
-				out.Warnings = append(out.Warnings,
-					fmt.Sprintf("%s: scan error: %v", rel, scanErr))
-				return nil
+				// A file counted as found and then not read would let the one
+				// file holding the AES path vouch for itself; fail closed.
+				return fmt.Errorf("%s: %w", rel, scanErr)
 			}
 			out.Hits = append(out.Hits, hits...)
 			return nil
@@ -314,19 +300,8 @@ func maskGoComments(src []byte) []byte {
 	return out
 }
 
-func scanFile(absPath, relPath string) ([]Hit, error) {
-	// #nosec G304 -- absPath comes from filepath.WalkDir of cfg.RepoRoot/api.
-	f, err := os.Open(absPath)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
+func scanFile(src []byte, relPath string) ([]Hit, error) {
 	var hits []Hit
-	src, rerr := io.ReadAll(f)
-	if rerr != nil {
-		return nil, fmt.Errorf("read %s: %w", relPath, rerr)
-	}
 
 	// COMMENTS ARE MASKED WITH GO'S OWN SCANNER, not tracked line by line.
 	//
@@ -345,13 +320,12 @@ func scanFile(absPath, relPath string) ([]Hit, error) {
 	// The technique is already in this repository -- skip-link masks comments and
 	// literals with go/scanner for the same reason. It was not carried across
 	// when this gate was written.
-	masked := maskGoComments(src)
-	lineNum := 0
-	scanner := bufio.NewScanner(strings.NewReader(string(masked)))
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
+	lines, err := linescan.Lines(maskGoComments(src))
+	if err != nil {
+		return nil, err
+	}
+	for i, line := range lines {
+		lineNum := i + 1
 
 		for _, m := range aesMarkers {
 			if strings.Contains(line, m) {
@@ -364,9 +338,6 @@ func scanFile(absPath, relPath string) ([]Hit, error) {
 				break
 			}
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 	return hits, nil
 }

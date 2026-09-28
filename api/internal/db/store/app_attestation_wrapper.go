@@ -70,23 +70,14 @@ func NewAppAttestationStoreSqlc(pool db.DBTX) *AppAttestationStoreSqlc {
 	}
 }
 
-// gen bridges db.DBTX → generated.DBTX via SqlcBridge. Panics if
-// concrete type does not implement SqlcBridge — by design (fail-fast
-// when test fixtures don't hold a real pgx connection; see T0.6 reshape
-// matrix).
+// gen resolves the sqlc handle (db.Generated): tx wins over pool. A handle
+// that is not a SqlcBridge makes the query fail with db.ErrNotSqlcBridge.
 func (s *AppAttestationStoreSqlc) gen(tx db.DBTX) generated.DBTX {
 	target := tx
 	if target == nil {
 		target = s.pool
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		panic(fmt.Sprintf(
-			"app_attestation_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
-			target,
-		))
-	}
-	return bridge.GeneratedDB()
+	return db.Generated(target)
 }
 
 // SaveAppAttestations upserts attestation rows via the connection pool

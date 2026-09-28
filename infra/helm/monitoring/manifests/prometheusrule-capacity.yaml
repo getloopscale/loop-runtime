@@ -145,6 +145,5 @@ spec:
               failed workflow's failing step to identify root cause.
               Common failure modes:
               - cosign sign-image (bug #39): TUF permission
-              - mirror-harbor 401: registry auth
               - restore-cache timeout: MinIO saturation
               - CELL_AT_CAPACITY: admission backpressure (not a bug)

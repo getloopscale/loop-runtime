@@ -7,8 +7,15 @@
 // 1. Rollback supersedes the current ACTIVE release and reactivates the previous one
 // 2. Concurrent rollbacks are serialized — exactly one succeeds
 //
-// These tests require a real PostgreSQL instance. They skip gracefully if
-// DATABASE_URL is not set and the default connection fails.
+// They run under the role split production uses: fixtures are written through
+// the cross-tenant fixture pool (seedDBURL), and the orchestrator runs on the
+// tenant-scoped request pool (tenantScopedRequestPool) with the tenant in its
+// context, the way the rollback handler reaches it. Under fail-closed Row Level Security a
+// store read on an unscoped connection sees no release at all, which is how
+// these tests used to report NO_PREVIOUS_RELEASE (issue #387).
+//
+// These tests require a real, already-migrated PostgreSQL instance. They skip
+// gracefully if DATABASE_URL is not set and the default connection fails.
 package integration
 
 import (
@@ -19,41 +26,33 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/lock"
+	"github.com/getloopscale/loopzero/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/services/deploycontracts"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
+// rollbackTenant is the tenant every rollback fixture belongs to.
+const rollbackTenant = "tenant-test"
+
 // --- Fake external services for rollback tests ---
 
-type fakeRollbackGitReader struct{}
+// fakeRollbackDelivery stands in for the container delivery activator: these
+// tests prove the orchestrator's locking and state transitions against real
+// PostgreSQL, not the GitOps push or the sync, which have their own tests.
+type fakeRollbackDelivery struct{}
 
-func (f *fakeRollbackGitReader) GetManifestsAtCommit(ctx context.Context, tenantID, projectID, env, commitSHA string) ([]byte, error) {
-	return []byte("fake-manifests"), nil
-}
-
-type fakeRollbackGitPusher struct{}
-
-func (f *fakeRollbackGitPusher) Push(ctx context.Context, opts deploycontracts.GitOpsPushOpts) (string, error) {
-	return "fake-rollback-commit", nil
-}
-
-type fakeRollbackSyncClient struct{}
-
-func (f *fakeRollbackSyncClient) TriggerSync(ctx context.Context, appName string) error {
+func (fakeRollbackDelivery) Activate(context.Context, deploycontracts.ActivationBuild, deploycontracts.BuildCallbackRequest) error {
 	return nil
 }
 
-// WaitForSync satisfies the RollbackSyncClient interface (added when the
-// interface was extended). These integration tests never invoke the wait
-// path; kept as a no-op so the test file compiles.
-func (f *fakeRollbackSyncClient) WaitForSync(_ context.Context, _ string, _ time.Duration, _ []string) error {
+func (fakeRollbackDelivery) Rollback(context.Context, deploycontracts.RollbackDeliveryRequest) error {
 	return nil
 }
 
@@ -140,14 +139,8 @@ func cleanupRollbackData(t *testing.T, pool db.DBTX, testID string) {
 		{"DELETE FROM releases WHERE id IN ($1, $2, $3)", []interface{}{r1ID, r2ID, r3ID}},
 		{"DELETE FROM builds WHERE id = $1", []interface{}{buildID}},
 	} {
-		if q.args != nil {
-			if _, err := pool.Exec(ctx, q.sql, q.args...); err != nil {
-				t.Logf("cleanup: %v", err)
-			}
-		} else {
-			if _, err := pool.Exec(ctx, q.sql); err != nil {
-				t.Logf("cleanup: %v", err)
-			}
+		if _, err := pool.Exec(ctx, q.sql, q.args...); err != nil {
+			t.Errorf("cleanup %q: %v", q.sql, err)
 		}
 	}
 }
@@ -157,38 +150,33 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 	// Act: rollback (no explicit target — uses most recent SUPERSEDED).
 	// Assert: R1 → ROLLED_BACK, R2 → ACTIVE, environment_target → R2.
 
-	pool := testPool(t)
-
-	// Run migrations + seed base data (user, tenant, project)
-	runMigrations(t, pool)
-	seedTestData(t, pool)
+	seed := seedPool(t)
+	seedTestData(t, seed)
+	fixtures := &db.PgxAdapter{Pool: seed}
 
 	testID := fmt.Sprintf("supersede-%d", time.Now().UnixNano())
-	adapter := &db.PgxAdapter{Pool: pool}
+	cleanupRollbackData(t, fixtures, testID)
+	t.Cleanup(func() { cleanupRollbackData(t, fixtures, testID) })
 
-	cleanupRollbackData(t, adapter, testID)
-	t.Cleanup(func() { cleanupRollbackData(t, adapter, testID) })
+	r1ID, r2ID, _ := seedRollbackData(t, fixtures, testID)
 
-	r1ID, r2ID, _ := seedRollbackData(t, adapter, testID)
-
-	// Create real stores
+	// Create real stores on the request pool, as the server wires them.
+	adapter := tenantScopedRequestPool(t, 4)
 	releaseStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := store.NewPostgresEnvironmentTargetStore(adapter, adapter)
-	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
+	locker := &lock.PoolEnvironmentLocker{Pool: adapter.Pool}
 
 	// Create rollback orchestrator with fake external services
 	orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 		Releases:   releaseStore,
 		EnvTargets: envTargetStore,
-		GitReader:  &fakeRollbackGitReader{},
-		GitPusher:  &fakeRollbackGitPusher{},
-		Sync:       &fakeRollbackSyncClient{},
 		Locker:     locker,
+		Delivery:   fakeRollbackDelivery{},
 		Logger:     slog.Default(),
 	})
 
-	// Act
-	ctx := context.Background()
+	// Act — scoped to the caller's tenant, as scopeDatabaseToCaller scopes a request.
+	ctx := dbtx.WithTenantScope(context.Background(), rollbackTenant)
 	result, err := orch.Rollback(ctx, release.RollbackRequest{
 		TenantID:      "tenant-test",
 		ProjectID:     "proj-test1234",
@@ -256,24 +244,19 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 	// Act: launch 2 goroutines both attempting rollback simultaneously.
 	// Assert: exactly one succeeds, final state is consistent (exactly 1 ACTIVE release).
 
-	pool := testPool(t)
-
-	// Run migrations + seed base data
-	runMigrations(t, pool)
-	seedTestData(t, pool)
+	seed := seedPool(t)
+	seedTestData(t, seed)
+	fixtures := &db.PgxAdapter{Pool: seed}
 
 	testID := fmt.Sprintf("concurrent-%d", time.Now().UnixNano())
-	adapter := &db.PgxAdapter{Pool: pool}
+	cleanupRollbackData(t, fixtures, testID)
+	t.Cleanup(func() { cleanupRollbackData(t, fixtures, testID) })
 
-	cleanupRollbackData(t, adapter, testID)
-	t.Cleanup(func() { cleanupRollbackData(t, adapter, testID) })
-
-	r1ID, r2ID, buildID := seedRollbackData(t, adapter, testID)
+	r1ID, r2ID, buildID := seedRollbackData(t, fixtures, testID)
 
 	// Insert a third release (R3, also SUPERSEDED, older than R2)
 	r3ID := fmt.Sprintf("rel-superseded2-%s", testID)
-	ctx := context.Background()
-	_, err := pool.Exec(ctx,
+	_, err := seed.Exec(context.Background(),
 		`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW() - INTERVAL '20 minutes')
 		 ON CONFLICT (id) DO NOTHING`,
@@ -284,10 +267,13 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 		t.Fatalf("failed to seed release R3: %v", err)
 	}
 
-	// Create shared stores
+	// Create shared stores on the request pool, as the server wires them. Two
+	// connections at least, so both rollbacks reach the environment lock.
+	adapter := tenantScopedRequestPool(t, 4)
 	releaseStore := store.NewReleaseStoreSqlc(adapter, store.NoopEventStore{}) // T1.1c2c (plan 2026-05-29-sqlc-migration v1.3)
 	envTargetStore := store.NewPostgresEnvironmentTargetStore(adapter, adapter)
-	locker := &adapters.PoolEnvironmentLocker{Pool: pool}
+	locker := &lock.PoolEnvironmentLocker{Pool: adapter.Pool}
+	ctx := dbtx.WithTenantScope(context.Background(), rollbackTenant)
 
 	// Launch concurrent rollbacks
 	type rollbackResult struct {
@@ -308,10 +294,8 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 			orch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
 				Releases:   releaseStore,
 				EnvTargets: envTargetStore,
-				GitReader:  &fakeRollbackGitReader{},
-				GitPusher:  &fakeRollbackGitPusher{},
-				Sync:       &fakeRollbackSyncClient{},
 				Locker:     locker,
+				Delivery:   fakeRollbackDelivery{},
 				Logger:     slog.Default(),
 			})
 
@@ -357,7 +341,7 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 
 	// Assert: final state is consistent — exactly 1 ACTIVE release
 	var activeCount int
-	err = pool.QueryRow(ctx,
+	err = seed.QueryRow(context.Background(),
 		`SELECT COUNT(*) FROM releases
 		 WHERE tenant_id = 'tenant-test' AND project_id = 'proj-test1234'
 		   AND environment = 'production' AND status = 'ACTIVE'

@@ -49,8 +49,8 @@ func seedColumnCascadeRow(t *testing.T, pool *pgxpool.Pool) (*db.Release, string
 	correlationID := "corr-cascade-" + suffix
 	url := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=" + suffix
 
-	// Mesma dívida do gatilho 000061 descrita em release_attestation_url_test.go:
-	// o build só entra se o tenant existir e tiver cell.
+	// Same 000061 trigger debt described in release_attestation_url_test.go:
+	// the build only goes in if the tenant exists and has a cell.
 	seedTenantForBuild(t, pool, tenantID)
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
@@ -183,8 +183,8 @@ func TestReleaseStore_ColumnCascade_NullURL_NoFalseString(t *testing.T) {
 	releaseID := "rel-cascade-null-" + suffix
 	correlationID := "corr-cascade-null-" + suffix
 
-	// Mesma dívida do gatilho 000061 descrita em release_attestation_url_test.go:
-	// o build só entra se o tenant existir e tiver cell.
+	// Same 000061 trigger debt described in release_attestation_url_test.go:
+	// the build only goes in if the tenant exists and has a cell.
 	seedTenantForBuild(t, pool, tenantID)
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)

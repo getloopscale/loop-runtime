@@ -9,52 +9,46 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
 )
 
-// Um 502 na borda nao diz QUEM caiu, e hoje o motor e o painel aparecem iguais.
-//
-// B-022, medido 2026-08-10: o caminho do motor atravessa o painel — `/engine/*` e proxiado
-// por `loopzero-cloud` — entao quando o painel fica sem upstream, `/engine/*` devolve 502 pelo
-// MESMO motivo que uma rota do painel devolveria. Quem le o relatorio nao consegue separar
-// "o motor esta fora" de "o painel esta fora", e as duas exigem acoes diferentes.
-//
-// A separacao existe porque as rotas de produto do painel NAO atravessam o motor (medido em
-// B-002): se uma delas responde e `/engine/*` nao, o painel esta de pe e o motor nao.
+// A 502 at the edge does not say WHO is down: the engine path crosses the
+// dashboard, so both show the same code. Dashboard product routes do not cross
+// the engine, so one of them answering while `/engine/*` does not means the
+// dashboard is up and the engine is not.
 func TestClassifyUpstream(t *testing.T) {
-	casos := []struct {
-		nome     string
-		engine   int
-		painel   int
-		esperado leak.UpstreamState
+	cases := []struct {
+		name      string
+		engine    int
+		dashboard int
+		want      leak.UpstreamState
 	}{
-		{"os dois respondem", 401, 401, leak.UpstreamBothUp},
-		{"motor fora, painel de pe", 502, 401, leak.UpstreamEngineDown},
-		{"painel fora leva o motor junto", 502, 502, leak.UpstreamDashboardDown},
-		{"painel fora com 503", 503, 503, leak.UpstreamDashboardDown},
-		{"motor com 504 e painel servindo", 504, 302, leak.UpstreamEngineDown},
+		{"both answer", 401, 401, leak.UpstreamBothUp},
+		{"engine down, dashboard up", 502, 401, leak.UpstreamEngineDown},
+		{"dashboard down takes the engine with it", 502, 502, leak.UpstreamDashboardDown},
+		{"dashboard down with 503", 503, 503, leak.UpstreamDashboardDown},
+		{"engine 504 with the dashboard serving", 504, 302, leak.UpstreamEngineDown},
 	}
-	for _, c := range casos {
-		if got := leak.ClassifyUpstream(c.engine, c.painel); got != c.esperado {
-			t.Errorf("%s: engine=%d painel=%d -> %v, esperava %v", c.nome, c.engine, c.painel, got, c.esperado)
+	for _, c := range cases {
+		if got := leak.ClassifyUpstream(c.engine, c.dashboard); got != c.want {
+			t.Errorf("%s: engine=%d dashboard=%d -> %v, want %v", c.name, c.engine, c.dashboard, got, c.want)
 		}
 	}
 }
 
-// O caso que nao se deve resolver por adivinhacao: o painel falha e o motor responde. Isso
-// contradiz a topologia medida — `/engine/*` atravessa o painel —, entao inventar um
-// veredito aqui seria afirmar o que a sonda nao sabe.
+// The dashboard failing while the engine answers contradicts the measured
+// topology; inventing a verdict would claim what the probe does not know.
 func TestClassifyUpstream_ContradictoryIsNotGuessed(t *testing.T) {
 	if got := leak.ClassifyUpstream(401, 502); got != leak.UpstreamInconclusive {
-		t.Errorf("motor responde e painel nao contradiz a topologia; esperava inconclusivo, veio %v", got)
+		t.Errorf("want inconclusive, got %v", got)
 	}
 }
 
-// Cada estado precisa dizer ao operador o que fazer, senao a distincao nao serve para nada.
+// Every state tells the operator what to do; otherwise the distinction is useless.
 func TestUpstreamStateExplainsTheAction(t *testing.T) {
 	for _, st := range []leak.UpstreamState{
 		leak.UpstreamBothUp, leak.UpstreamEngineDown,
 		leak.UpstreamDashboardDown, leak.UpstreamInconclusive,
 	} {
-		if st.Explicacao() == "" {
-			t.Errorf("%v nao explica nada ao operador", st)
+		if st.Explanation() == "" {
+			t.Errorf("%v explains nothing to the operator", st)
 		}
 	}
 }

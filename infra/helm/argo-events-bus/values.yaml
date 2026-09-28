@@ -1,4 +1,4 @@
-# T0.2 Cenário B POC — argo-events-bus chart values.
+# T0.2 Scenario B POC — argo-events-bus chart values.
 #
 # This chart holds the EventBus CR ONLY. Splits the CR from the upstream
 # argo-events controller chart so Helmfile `needs:` enforces CRD-first

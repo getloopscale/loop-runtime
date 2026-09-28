@@ -12,233 +12,169 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
 )
 
-// O inventario declara o que a borda expoe; a sonda tem de alcancar TUDO que ele declara.
-//
-// B-025, medido 2026-08-18: `app.loopzero.example`, `cloud.loopzero.example` e `auth.loopzero.example` —
-// sem o sufixo `-dev` — tem bloco no Caddyfile e cinco linhas no inventario, e **nenhum
-// deles jamais foi sondado**. `Targets` filtra por um unico host (`campos[0] != host`), e
-// `leak live` passa `app-dev`/`auth-dev` por padrao, entao os tres eram inalcancaveis por
-// construcao.
-//
-// E nao apontam para o vazio, como o item supunha: medido ao vivo, `cloud.loopzero.example`
-// devolve 401 em `/v1/billing` (loopzero-cloud vivo negando credencial) e
-// `auth.loopzero.example` devolve 200 em `/health/ready` (Kratos vivo). Sao hostnames de
-// producao servindo instancias de desenvolvimento, sem medicao nenhuma.
+var realInventory = filepath.Join("..", "..", "..", "..", "infra", "quality", "proxy-exposure.txt")
+
+// The inventory declares what the edge exposes; the probe must reach EVERY
+// host it declares, in declaration order, without repeats.
 func TestHosts_ListsEveryDeclaredHost(t *testing.T) {
-	inv := escreverInventario(t, `# comentario ignorado
-app-dev.loopzero.example /v1/x | reviewed | nota
-cloud.loopzero.example - | reviewed | outro
-app-dev.loopzero.example /v1/y | reviewed | repetido
-auth.loopzero.example - | reviewed | terceiro
+	inv := writeInventory(t, `# comment ignored
+app-dev.loopzero.example /v1/x | reviewed | note
+cloud.loopzero.example - | reviewed | other
+app-dev.loopzero.example /v1/y | reviewed | repeated
+auth.loopzero.example - | reviewed | third
 `)
 	got, err := leak.Hosts(inv)
 	if err != nil {
 		t.Fatalf("Hosts: %v", err)
 	}
-	esperado := []string{"app-dev.loopzero.example", "cloud.loopzero.example", "auth.loopzero.example"}
-	if len(got) != len(esperado) {
-		t.Fatalf("hosts: %v, esperava %v", got, esperado)
-	}
-	for i := range esperado {
-		if got[i] != esperado[i] {
-			t.Errorf("posicao %d: %q, esperava %q (ordem de declaracao)", i, got[i], esperado[i])
-		}
+	want := []string{"app-dev.loopzero.example", "cloud.loopzero.example", "auth.loopzero.example"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("hosts = %v, want %v (declaration order)", got, want)
 	}
 }
 
-// Inventario ausente e erro, nao lista vazia: sondar zero host e indistinguivel de nao
-// haver o que sondar, e essa e a forma de verde que este pacote existe para recusar.
+// A missing inventory is an error, not an empty list: probing zero hosts is
+// indistinguishable from having nothing to probe.
 func TestHosts_MissingInventoryIsAnError(t *testing.T) {
-	if _, err := leak.Hosts(filepath.Join(t.TempDir(), "nao-existe")); err == nil {
-		t.Error("inventario ausente deveria ser erro")
+	if _, err := leak.Hosts(filepath.Join(t.TempDir(), "absent")); err == nil {
+		t.Error("a missing inventory should be an error")
 	}
 }
 
-// A populacao real (rules/testing.md § 4.2): o inventario deste repositorio precisa
-// declarar os tres hosts que ninguem sondava. Um caso sintetico prova que a funcao le;
-// so isto diz o que ela encontra no que existe.
-func TestHosts_RealInventoryCoversTodosOsDeclarados(t *testing.T) {
-	// Era `...CoversTheUnprobedThree`, e cravava `app|cloud|auth.loopzero.example` — os tres hosts
-	// sem sufixo que a sonda nao alcancava. Eles foram REMOVIDOS em 2026-08-19 (B-025): serviam
-	// processos de desenvolvimento sob nome de producao, e o de identidade estava entre eles.
-	//
-	// Manter os nomes aqui faria o teste exigir de volta o que uma decisao tirou. O que ele
-	// existe para proteger nao eram aqueles tres: e' que `leak.Hosts` derive a lista do
-	// INVENTARIO em vez de nomes fixos — porque fixar nomes deixa o proximo host invisivel pelo
-	// mesmo motivo que deixou aqueles.
-	hosts, err := leak.Hosts(filepath.Join("..", "..", "..", "..", "infra", "quality", "proxy-exposure.txt"))
+// The real population: this repository's inventory must be read in full, and
+// the unsuffixed production names removed on 2026-08-19 (they served
+// development instances under production names) must not come back.
+func TestHosts_RealInventoryListsEveryDeclaredHost(t *testing.T) {
+	hosts, err := leak.Hosts(realInventory)
 	if err != nil {
-		t.Fatalf("inventario real: %v", err)
+		t.Fatalf("real inventory: %v", err)
 	}
-	if len(hosts) == 0 {
-		t.Fatal("zero hosts declarados — verde sobre nada")
-	}
-	// Piso MEDIDO em 2026-08-19, depois da remocao do B-025: 4 hosts. Menos que isso significa
-	// que a extracao encolheu, e o verde passou a valer menos sem que nada avisasse.
+	// Floor measured 2026-08-19: 4 hosts. Fewer means the extraction shrank and
+	// the green is worth less without anything saying so.
 	if len(hosts) < 4 {
-		t.Errorf("so' %d host(s) alcancado(s) (%v); o inventario declarava 4 em 2026-08-19",
-			len(hosts), hosts)
+		t.Errorf("only %d host(s) reached (%v); the inventory declared 4 on 2026-08-19", len(hosts), hosts)
 	}
-	// E o que a remocao do B-025 garantiu: nenhum nome de producao sem sufixo sobreviveu.
 	for _, h := range hosts {
-		for _, proibido := range []string{"app.loopzero.example", "cloud.loopzero.example", "auth.loopzero.example"} {
-			if h == proibido {
-				t.Errorf("%s voltou ao inventario; ele foi removido no B-025 por servir uma "+
-					"instancia de desenvolvimento sob nome de producao", h)
+		for _, forbidden := range []string{"app.loopzero.example", "cloud.loopzero.example", "auth.loopzero.example"} {
+			if h == forbidden {
+				t.Errorf("%s is back in the inventory; it was removed for serving a development "+
+					"instance under a production name", h)
 			}
 		}
 	}
-	t.Logf("populacao real: %d hosts declarados: %v", len(hosts), hosts)
 }
 
-func escreverInventario(t *testing.T, corpo string) string {
+func writeInventory(t *testing.T, body string) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "proxy-exposure.txt")
-	if err := os.WriteFile(p, []byte(corpo), 0o600); err != nil {
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return p
 }
 
-// Um host declarado como site inteiro (`-`) nao pode sair da sonda em SILENCIO.
-//
-// B-025, o fundo do defeito: `isentas` isentava o caminho `-`, que e a forma como um host
-// INTEIRO se declara — a exposicao mais ampla que existe. O efeito medido em 2026-08-18:
-// `cloud.loopzero.example` e `auth.loopzero.example` produziam **zero alvos e zero reclamacoes**.
-// Nao apareciam como cobertos nem como buraco; simplesmente nao existiam para a sonda.
-//
-// E os dois estavam VIVOS: 401 em `/v1/billing` e 200 em `/health/ready`.
-//
-// O pacote ja separa "buraco de cobertura" de "silencio" — o campo `semRepresentante`
-// existe para isso. Um site inteiro sem sonda e buraco, e passa a ser reportado como tal.
+// A host declared as a whole site (`-`) must not leave the probe in SILENCE:
+// it is the widest exposure there is, and exempting it once made live hosts
+// produce zero targets and zero complaints.
 func TestTargets_WholeSiteIsReportedNotSilentlyExempt(t *testing.T) {
-	inv := escreverInventario(t, `cloud.loopzero.example - | reviewed | BFF autenticado
-`)
-	alvos, semRep, err := leak.Targets(inv, "cloud.loopzero.example")
+	inv := writeInventory(t, "cloud.loopzero.example - | reviewed | authenticated BFF\n")
+	targets, uncovered, err := leak.Targets(inv, "cloud.loopzero.example")
 	if err != nil {
 		t.Fatalf("Targets: %v", err)
 	}
-	if len(alvos) == 0 && len(semRep) == 0 {
-		t.Fatal("host declarado produziu zero alvos E zero reclamacoes — silencio, " +
-			"que e indistinguivel de cobertura")
+	if len(targets) == 0 && len(uncovered) == 0 {
+		t.Fatal("a declared host produced zero targets AND zero complaints — silence, indistinguishable from coverage")
 	}
 }
 
-// A varredura da populacao real: nenhum host declarado no inventario deste repositorio
-// pode desaparecer da sonda sem deixar rastro.
+// Over the real population: no declared host may vanish from the probe
+// without a trace.
 func TestTargets_NoDeclaredHostVanishesSilently(t *testing.T) {
-	inv := filepath.Join("..", "..", "..", "..", "infra", "quality", "proxy-exposure.txt")
-	hosts, err := leak.Hosts(inv)
+	hosts, err := leak.Hosts(realInventory)
 	if err != nil {
-		t.Fatalf("inventario real: %v", err)
+		t.Fatalf("real inventory: %v", err)
 	}
-	if len(hosts) == 0 {
-		t.Fatal("zero hosts declarados — a varredura nao alcancou nada, e verde sobre nada")
-	}
-	var mudos []string
+	var silent []string
 	for _, h := range hosts {
 		if strings.HasPrefix(h, "*.") {
-			continue // curinga nao tem hostname concreto; tratado no subcomando
+			continue // a wildcard has no concrete hostname; the subcommand reports it
 		}
-		alvos, semRep, err := leak.Targets(inv, h)
+		targets, uncovered, err := leak.Targets(realInventory, h)
 		if err != nil {
 			t.Fatalf("%s: %v", h, err)
 		}
-		if len(alvos) == 0 && len(semRep) == 0 {
-			mudos = append(mudos, h)
+		if len(targets) == 0 && len(uncovered) == 0 {
+			silent = append(silent, h)
 		}
 	}
-	if len(mudos) > 0 {
-		t.Errorf("hosts declarados que somem da sonda sem rastro: %v", mudos)
+	if len(silent) > 0 {
+		t.Errorf("declared hosts that vanish from the probe without a trace: %v", silent)
 	}
-	t.Logf("populacao real: %d hosts declarados, %d mudos", len(hosts), len(mudos))
 }
 
-// O buraco de cobertura precisa dizer DE QUEM ele e.
-//
-// Ao remover a isencao do `-`, os buracos passaram a aparecer — e apareceram como quatro
-// linhas identicas dizendo apenas "-", sem nomear o host. Trocar silencio por ruido que nao
-// identifica o sujeito nao e conserto: quem le o relatorio continua sem saber qual host
-// esta descoberto.
+// A coverage hole must say WHOSE it is: several identical "-" lines tell the
+// reader nothing about which host is uncovered.
 func TestTargets_CoverageHoleNamesItsHost(t *testing.T) {
-	inv := escreverInventario(t, `cloud.loopzero.example - | reviewed | BFF autenticado
-`)
-	_, semRep, err := leak.Targets(inv, "cloud.loopzero.example")
+	inv := writeInventory(t, "cloud.loopzero.example - | reviewed | authenticated BFF\n")
+	_, uncovered, err := leak.Targets(inv, "cloud.loopzero.example")
 	if err != nil {
 		t.Fatalf("Targets: %v", err)
 	}
-	if len(semRep) == 0 {
-		t.Fatal("esperava um buraco reportado")
-	}
-	if !strings.Contains(semRep[0], "cloud.loopzero.example") {
-		t.Errorf("o buraco nao diz de quem e: %q", semRep[0])
+	if len(uncovered) == 0 || !strings.Contains(uncovered[0], "cloud.loopzero.example") {
+		t.Errorf("the hole does not name its host: %v", uncovered)
 	}
 }
 
-// Isencao declarada com glob tem de valer para o que o glob cobre.
-//
-// Achado M-4 da revisao: `isentas` declara `/self-service/*`, mas o lookup era exato, entao
-// `/self-service/registration` e `/self-service/registration/methods/password` reprovavam
-// pela razao que a isencao ja cobria. Duas das dez falhas eram ruido.
+// An exemption declared with a glob covers what the glob declares.
 func TestTargets_GlobExemptionCoversWhatItDeclares(t *testing.T) {
-	inv := escreverInventario(t, `h.exemplo.dev /self-service/registration | reviewed | nota
-h.exemplo.dev /self-service/registration/methods/password | reviewed | nota
+	inv := writeInventory(t, `h.example.dev /self-service/registration | reviewed | note
+h.example.dev /self-service/registration/methods/password | reviewed | note
 `)
-	_, semRep, err := leak.Targets(inv, "h.exemplo.dev")
+	_, uncovered, err := leak.Targets(inv, "h.example.dev")
 	if err != nil {
 		t.Fatalf("Targets: %v", err)
 	}
-	if len(semRep) != 0 {
-		t.Errorf("caminhos cobertos por isencao com glob nao sao buraco: %v", semRep)
+	if len(uncovered) != 0 {
+		t.Errorf("paths covered by a glob exemption are not holes: %v", uncovered)
 	}
 }
 
-// Uma rota de classe `internal` nao tem credencial a negar; exigir 401 dela e erro de
-// categoria.
-//
-// Achado M-3 da revisao: a coluna `class` do inventario era ignorada, e `app.loopzero.example -`
-// e declarada `internal` — "static assets, no user data". Pior, `isentas` e a coluna `class`
-// codificavam a mesma decisao em dois lugares, que e exatamente a "segunda lista que
-// envelheceria sozinha" que este pacote escreve como razao de ler o inventario.
+// An `internal` route has no credential to deny; demanding a 401 from it is a
+// category error, so it is neither a target nor a hole.
 func TestTargets_InternalClassIsNotACoverageHole(t *testing.T) {
-	inv := escreverInventario(t, `h.exemplo.dev /assets/* | internal | bundle estatico, sem dado de usuario
-`)
-	alvos, semRep, err := leak.Targets(inv, "h.exemplo.dev")
+	inv := writeInventory(t, "h.example.dev /assets/* | internal | static bundle, no user data\n")
+	targets, uncovered, err := leak.Targets(inv, "h.example.dev")
 	if err != nil {
 		t.Fatalf("Targets: %v", err)
 	}
-	if len(semRep) != 0 || len(alvos) != 0 {
-		t.Errorf("classe internal nao e buraco nem alvo: alvos=%v buracos=%v", alvos, semRep)
+	if len(uncovered) != 0 || len(targets) != 0 {
+		t.Errorf("an internal class is neither a hole nor a target: targets=%v holes=%v", targets, uncovered)
 	}
 }
 
-// Uma familia que a sonda de identidade JA cobre nao pode ser contada como buraco.
-//
-// Achado HIGH-3 da revisao: o relatorio se contradizia na mesma execucao —
-// `auth-dev.loopzero.example/userinfo` aparecia `ok 401` e, linhas abaixo,
-// `auth-dev.loopzero.example /userinfo  sem representante`. Duas das dez falhas eram o relatorio
-// discordando de si mesmo, e isso corroi a confianca mais rapido que volume.
-func TestCoveredByIdentity_RemovesTheContradiction(t *testing.T) {
-	buracos := []string{
+// A family the identity probe already covers cannot be counted as a hole: the
+// report used to show `/userinfo` as "ok 401" and, lines below, as uncovered.
+func TestUncoveredAfterIdentity_RemovesTheContradiction(t *testing.T) {
+	holes := []string{
 		"auth-dev.loopzero.example /userinfo",
 		"auth-dev.loopzero.example /.well-known/*",
 		"auth-dev.loopzero.example /oauth2/*",
 	}
-	alvos := leak.IdentityTargets("auth-dev.loopzero.example")
+	rest := leak.UncoveredAfterIdentity(holes, leak.IdentityTargets("auth-dev.loopzero.example"))
+	if len(rest) != 1 || !strings.Contains(rest[0], "/oauth2/") {
+		t.Errorf("only /oauth2/* is not probed by identity and must remain a hole; got %v", rest)
+	}
+}
 
-	restou := leak.SemCoberturaDeIdentidade(buracos, alvos)
-	for _, b := range restou {
-		if strings.Contains(b, "/userinfo") || strings.Contains(b, "/.well-known/") {
-			t.Errorf("familia sondada pela identidade continua contada como buraco: %q", b)
-		}
+// A row the probe cannot read is a declaration it would silently not probe.
+// The inventory format is shared with the proxy-exposure gate, which rejects
+// the same row; the probe must not treat it as absent.
+func TestHostsAndTargets_RefuseAMalformedInventory(t *testing.T) {
+	inv := writeInventory(t, "app-dev.loopzero.example /v1/* | reviewed | ok\napp-dev.loopzero.example /v2/* | nonsense\n")
+	if _, err := leak.Hosts(inv); err == nil {
+		t.Error("Hosts: want an error for a malformed row")
 	}
-	achouOauth := false
-	for _, b := range restou {
-		if strings.Contains(b, "/oauth2/") {
-			achouOauth = true
-		}
-	}
-	if !achouOauth {
-		t.Error("/oauth2/* NAO e sondado pela identidade e deve continuar sendo buraco")
+	if _, _, err := leak.Targets(inv, "app-dev.loopzero.example"); err == nil {
+		t.Error("Targets: want an error for a malformed row")
 	}
 }

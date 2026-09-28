@@ -9,7 +9,7 @@
 --
 -- Multi-tenant SELECT / UPDATE / DELETE carries `tenant_id` predicate per
 -- platform-security-engineer condition 1 + M-1 + M-2 (enforced by
--- pkg/quality/tenantpredicate gate). Cross-tenant queries are marked
+-- cmd/loopzero-ops/internal/quality/tenantpredicate gate). Cross-tenant queries are marked
 -- `-- tenantpredicate:exempt` IMMEDIATELY ABOVE `-- name:`.
 --
 -- Concurrent-build invariant (Rule 6 — pg_advisory_xact_lock):
@@ -160,6 +160,12 @@ SELECT * FROM builds
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
 ORDER BY created_at DESC
 LIMIT $4 OFFSET $5;
+
+-- name: CountTenantBuildsSince :one
+-- Plan enforcement: builds a tenant started since the given instant (the
+-- start of the billing month), gated against plan_limits.builds_per_month.
+SELECT COUNT(*)::int FROM builds
+WHERE tenant_id = $1 AND created_at >= $2;
 
 -- name: CountBuildsByProject :one
 -- Total count for the project (used for pagination total in the wrapper).

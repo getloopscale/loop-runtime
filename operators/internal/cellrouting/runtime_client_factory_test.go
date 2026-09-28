@@ -8,6 +8,7 @@ package cellrouting
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -31,15 +32,16 @@ func newSchemeForTest(t *testing.T) *runtime.Scheme {
 	return scheme
 }
 
-// TestCellAwareFactory_DefaultClientOnlyForEmptyCellID trava a fronteira entre
-// "sem cell" e "cell nomeada".
+// TestCellAwareFactory_DefaultClientOnlyForEmptyCellID locks the boundary
+// between "no cell" and "a named cell".
 //
-// Este teste já aceitou DOIS valores no caminho legado: a string vazia e o nome da
-// primeira cell, que na época era `cell-default`. Isso funcionava porque aquele nome
-// era sentinela e cell ao mesmo tempo. Com a unificação 1:1 (ADR 2026-08-09) ela
-// virou `cell-0`, uma cell real com tenants, e aceitar o nome dela aqui devolveria o
-// cliente legado em vez do cluster dela — furando o isolamento por cell que esta
-// factory existe para garantir. A string vazia é a única sentinela.
+// This test once accepted TWO values on the legacy path: the empty string and
+// the name of the first cell, then `cell-default`. That worked because the name
+// was a sentinel and a cell at once. With the 1:1 unification (ADR 2026-08-09)
+// it became `cell-0`, a real cell with tenants, and accepting its name here
+// would return the legacy client instead of its cluster — breaking the per-cell
+// isolation this factory exists to guarantee. The empty string is the only
+// sentinel.
 func TestCellAwareFactory_DefaultClientOnlyForEmptyCellID(t *testing.T) {
 	scheme := newSchemeForTest(t)
 	mgmt := fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -55,11 +57,11 @@ func TestCellAwareFactory_DefaultClientOnlyForEmptyCellID(t *testing.T) {
 		t.Error(`For(""): expected default client, got different`)
 	}
 
-	// Uma cell nomeada NUNCA cai no atalho, mesmo sendo a primeira.
+	// A named cell NEVER takes the shortcut, even the first one.
 	if _, err := f.For(context.Background(), "cell-0"); err == nil {
-		t.Error(`For("cell-0"): devolveu o cliente legado; cell nomeada tem de resolver ` +
-			`o ClusterCredential dela, senão todo tenant da cell-0 seria reconciliado no ` +
-			`cluster errado`)
+		t.Error(`For("cell-0"): returned the legacy client; a named cell must resolve ` +
+			`its own ClusterCredential, or every cell-0 tenant would be reconciled on the ` +
+			`wrong cluster`)
 	}
 }
 
@@ -202,4 +204,53 @@ func contains(haystack, needle string) bool {
 		}
 	}
 	return false
+}
+
+// A deployment that has no runtime cluster access (app-operator without
+// CELL_0_KUBECONFIG) is a configuration, not a nil: every lookup returns a
+// typed error the caller can recognise, instead of each controller carrying
+// its own nil branch with its own degraded-mode semantics.
+func TestUnavailableFactory_ReturnsTheTypedErrorForEveryCell(t *testing.T) {
+	f := NewUnavailableRuntimeClientFactory("CELL_0_KUBECONFIG not set")
+
+	for _, cellID := range []string{"", "cell-0", "cell-1"} {
+		c, err := f.For(context.Background(), cellID)
+		if !errors.Is(err, ErrRuntimeClusterUnavailable) {
+			t.Fatalf("For(%q) error = %v, want ErrRuntimeClusterUnavailable", cellID, err)
+		}
+		if c != nil {
+			t.Fatalf("For(%q) returned a client alongside the error", cellID)
+		}
+	}
+}
+
+// TestCellAwareFactory_RefusesAKubeconfigSecretOutsideThePlatformNamespace —
+// the operators hold Secret read only in the platform namespace, and a
+// ClusterCredential is an instruction to read a Secret on the operator's
+// behalf. A SecretRef naming another namespace is refused by name, before any
+// read, instead of surfacing later as an opaque cache or RBAC error — and
+// instead of turning the credential into a way to read Secrets the operator
+// was never meant to reach.
+func TestCellAwareFactory_RefusesAKubeconfigSecretOutsideThePlatformNamespace(t *testing.T) {
+	scheme := newSchemeForTest(t)
+	cc := &loopzerov1.ClusterCredential{
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopzero-system"},
+		Spec: loopzerov1.ClusterCredentialSpec{
+			ClusterName: "loopzero-cell-1",
+			APIServer:   "https://172.18.0.10:6443",
+			CellID:      "cell-1",
+			SecretRef:   loopzerov1.SecretReference{Name: "cell-1-kubeconfig", Namespace: "kube-system"},
+		},
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "kube-system"},
+		Data:       map[string][]byte{"kubeconfig": kubeconfigFor("https://172.18.0.10:6443", "t")},
+	}
+	mgmt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cc, secret).Build()
+	f := NewCellAwareRuntimeClientFactory(mgmt, nil, "loopzero-system")
+
+	_, err := f.For(context.Background(), "cell-1")
+	if !errors.Is(err, ErrKubeconfigSecretOutsidePlatformNamespace) {
+		t.Fatalf("For(cell-1) error = %v, want ErrKubeconfigSecretOutsidePlatformNamespace", err)
+	}
 }

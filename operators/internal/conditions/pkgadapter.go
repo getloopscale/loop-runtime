@@ -61,16 +61,9 @@ func toMetav1(conds []pkgconditions.Condition) []metav1.Condition {
 }
 
 // SetReadinessSummaryViaPkg delegates to pkg/conditions.SetReadinessSummary
-// after a transparent metav1 ↔ pkg/conditions conversion. Behavior is
-// identical to the operator-local SetReadinessSummary (same algorithm,
-// shared via pkg/conditions); the indirection exists so the cross-cutting
-// algorithmic core lives in a single place per ADR-0032.
-//
-// Use this in NEW reconcile epilogues to demonstrate pkg/conditions
-// adoption. Existing callers of the operator-local SetReadinessSummary
-// remain functional — both call paths produce identical output.
-//
-// Per pkg-sota-faang-grade-plan v1.2 T2.2 closure (Adoption Follow-up #1).
+// after a transparent metav1 <-> pkg/conditions conversion. It is the only
+// readiness-summary entry point in the operators: the algorithm lives once,
+// in pkg/conditions (ADR-0032), and this adapter only changes the shape.
 func SetReadinessSummaryViaPkg(conds *[]metav1.Condition, generation int64, detailTypes []string) {
 	if conds == nil {
 		return

@@ -6,7 +6,7 @@
 # the sentence above had a hole exactly its own size: a workflow cannot report
 # its own deletion. Delete this file and no run is queued, no check appears, and
 # an absent check reads on a pull request like a repository that never had one.
-# `.github/scripts/assert-gate-observers-intact.py` is what reports that now —
+# `.github/scripts/assert_gate_observers_intact.py` is what reports that now —
 # it asserts this file exists, keeps the triggers below, carries no paths filter
 # and still runs its script. It is invoked from `workflow-hygiene.yml` (on
 # GitHub, at the push and on the promotion PR) and from `task quality:hermetic`
@@ -27,10 +27,15 @@
 #
 #   1. `on:` FILTERS ARE PER-WORKFLOW, NOT PER-JOB. ci.yml ignores `.claude/**`,
 #      and `.claude/**` is the only place the gate can be disarmed from. Of the
-#      three commits that falsified the premises, 9a6e6e903 (the deletion) and
-#      53c1dc1ea (the restore that missed the wiring) touched NOTHING outside
-#      `.claude/**`; 63cc51c48 (the wiring removal) touched `.gitignore` and
-#      `.claude/**` and nothing else. Two of the three would not have started
+#      three commits that falsified the premises, the deletion ("chore: reinstall
+#      the Squad kit — mechanisms/, Python hooks, and the squad library",
+#      2026-09-02) and the restore that missed the wiring ("fix(.claude): restore
+#      three files the repo gates still require", 2026-08-29) touched NOTHING
+#      outside `.claude/**`; the wiring removal ("chore(.claude): adopt the
+#      reconfigured kit", 2026-08-29) touched `.gitignore` and `.claude/**` and
+#      nothing else. The published history holds only the `.gitignore` half of
+#      the third (39267fba1) and nothing of the first two: `.claude/**` is the
+#      gitignored kit and never reaches GitHub. Two of the three would not have started
 #      ci.yml at all, merged. A job inside ci.yml inherits that blindness in the
 #      exact case it exists for. This file therefore carries no paths filter, and
 #      that is not an oversight to tidy up later.
@@ -38,7 +43,7 @@
 #   2. ci.yml IS RED AND HAS BEEN. Its last 15 runs all failed (32084704925
 #      through 32197072865, measured 2026-09-06), the failing step is `Test the
 #      hermetic modules`, and `go test ./... -count=1` in cmd/loopzero-ops is red on
-#      `trufflehogscan.TestArvoreRealEstaAdjudicada` in a clean worktree today.
+#      `trufflehogscan.TestRealTreeIsAdjudicated` in a clean worktree today.
 #      A new signal added to an already-red job is not a signal. This one stands
 #      or falls on its own subject.
 #
@@ -65,7 +70,7 @@ on:
   #
   # Measure this before trusting it, because the obvious measurement misleads:
   # `gh run list --branch workspace` returns 50 rows. All 50 are `pull_request`
-  # events dated 2026-08-10..2026-08-12, from before 464b9d7e3 ("validacao
+  # events dated 2026-08-10..2026-08-12, from before d1130c137 ("validacao
   # pos-merge em develop e main; PR sem acao") removed the trigger that produced
   # them. Nothing has run on this branch since. At seconds per run a push trigger
   # is affordable, and the push is the earliest event there is.
@@ -101,11 +106,13 @@ jobs:
     # prove works here; naming a smaller, cheaper-looking fleet size that has
     # never been exercised in this repository would risk a job that queues
     # forever, which is the one outcome a check like this cannot afford.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
+        with:
+          persist-credentials: false   # zizmor artipacked: no later step pushes
 
       # If the script is missing, python3 exits non-zero and this step fails.
       # Fail-closed by construction: deleting the checker cannot produce a pass.
-      - run: python3 .github/scripts/assert-delivery-gate-armed.py
+      - run: python3 .github/scripts/assert_delivery_gate_armed.py

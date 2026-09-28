@@ -7,22 +7,22 @@
 // dev-public Cleanroom flow uses the AUTOMATED Shamir init path
 // (vault-bootstrap-dev.sh against the SEPARATE k3d-loopzero-secrets cluster)
 // as its canonical default, AND that the bootstrap-in-core shortcut
-// remains PROHIBITED (Jeito A INQUEBRÁVEL).
+// remains PROHIBITED (Approach A UNBREAKABLE).
 //
 // 4 assertions, all source-grep on canonical files (no kubectl, no
 // docker, no helmfile):
 //
-//   (a) seed-post-cleanroom-all.sh invokes vault-bootstrap-dev.sh
-//   (b) seed-post-cleanroom-all.sh, when LOOPZERO_HELMFILE_ENV=dev-public,
-//       auto-provisions loopzero-secrets via `task k3d:secrets:create` +
-//       `task k3d:secrets:bootstrap` BEFORE vault-bootstrap-dev.sh runs
-//       (so the dev-public chain is solo/CI provisionable per the ADR)
-//   (c) seed-post-cleanroom-all.sh NEVER invokes the forbidden
-//       `task k3d:secrets:bootstrap-in-core` shortcut (Jeito A is
-//       INQUEBRÁVEL regardless of witness scope)
-//   (d) cleanroom-up-live-test-mandate.md cites the ADR
-//       2026-06-20-dev-public-vault-automated-init in § Sub-step 2.5
-//       so the witness re-scoping is auditable from the rule
+//	(a) seed-post-cleanroom-all.sh invokes vault-bootstrap-dev.sh
+//	(b) seed-post-cleanroom-all.sh, when LOOPZERO_HELMFILE_ENV=dev-public,
+//	    auto-provisions loopzero-secrets via `task k3d:secrets:create` +
+//	    `task k3d:secrets:bootstrap` BEFORE vault-bootstrap-dev.sh runs
+//	    (so the dev-public chain is solo/CI provisionable per the ADR)
+//	(c) seed-post-cleanroom-all.sh NEVER invokes the forbidden
+//	    `task k3d:secrets:bootstrap-in-core` shortcut (Approach A is
+//	    UNBREAKABLE regardless of witness scope)
+//	(d) cleanroom-up-live-test-mandate.md cites the ADR
+//	    2026-06-20-dev-public-vault-automated-init in § Sub-step 2.5
+//	    so the witness re-scoping is auditable from the rule
 //
 // Cross-references:
 //   - ADR: .claude/knowledge-base/decisions/2026-06-20-dev-public-vault-automated-init.md
@@ -34,6 +34,7 @@ package charts
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -42,10 +43,7 @@ import (
 
 // TestDevPublicVaultBootstrapDefault — locks the 4-assertion contract.
 func TestDevPublicVaultBootstrapDefault(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	seedPath := filepath.Join(root, "infra/scripts/local/seed-post-cleanroom-all.sh")
 	seedBytes, err := os.ReadFile(seedPath)
 	if err != nil {
@@ -72,8 +70,8 @@ func TestDevPublicVaultBootstrapDefault(t *testing.T) {
 		t.Errorf("(b) seed-post-cleanroom-all.sh does NOT auto-provision loopzero-secrets on dev-public (need `task k3d:secrets:create` + `task k3d:secrets:bootstrap` BEFORE vault-bootstrap-dev.sh, gated on LOOPZERO_HELMFILE_ENV=dev-public). Current state: hasCreate=%v hasBootstrap=%v hasDevPublicGate=%v", hasCreate, hasBootstrap, hasDevPublicGate)
 	}
 
-	// (c) NEVER actually INVOKE `task k3d:secrets:bootstrap-in-core` — Jeito A
-	//     INQUEBRÁVEL forbids co-locating OpenBao in the mgmt cluster
+	// (c) NEVER actually INVOKE `task k3d:secrets:bootstrap-in-core` — Approach A
+	//     UNBREAKABLE forbids co-locating OpenBao in the mgmt cluster
 	//     regardless of the witness/tier scope. The token MAY appear in a
 	//     comment line explaining the prohibition; what we forbid is an
 	//     executable invocation (non-comment line containing the token).
@@ -83,7 +81,7 @@ func TestDevPublicVaultBootstrapDefault(t *testing.T) {
 			continue
 		}
 		if regexp.MustCompile(`task\s+k3d:secrets:bootstrap-in-core\b`).MatchString(line) {
-			t.Errorf("(c) seed-post-cleanroom-all.sh executes `task k3d:secrets:bootstrap-in-core` at line %d — Jeito A INQUEBRÁVEL forbids this shortcut. Use `task k3d:secrets:create` + `task k3d:secrets:bootstrap` against the SEPARATE loopzero-secrets cluster.\n  offending line: %s", i+1, line)
+			t.Errorf("(c) seed-post-cleanroom-all.sh executes `task k3d:secrets:bootstrap-in-core` at line %d — Approach A UNBREAKABLE forbids this shortcut. Use `task k3d:secrets:create` + `task k3d:secrets:bootstrap` against the SEPARATE loopzero-secrets cluster.\n  offending line: %s", i+1, line)
 			break
 		}
 	}
@@ -91,10 +89,21 @@ func TestDevPublicVaultBootstrapDefault(t *testing.T) {
 	// (d) cleanroom-up-live-test-mandate.md cites ADR
 	//     2026-06-20-dev-public-vault-automated-init in § Sub-step 2.5
 	//     so the re-scoping is auditable from the rule itself.
-	mandatePath := filepath.Join(root, ".claude/rules/cleanroom-up-live-test-mandate.md")
-	mandateBytes, err := os.ReadFile(mandatePath)
+	// The rule file was deleted by `3d4075ca3` and `CLAUDE.md` records it as gone and not
+	// replaced, so the worktree copy this used to read does not exist in any clone. The
+	// assertion is still answerable: a deleted document stays in history forever, and what
+	// is being checked — that the re-scoping is auditable from the rule itself — is a
+	// property of what the rule SAID, which history holds exactly.
+	const mandateRel = ".claude/rules/cleanroom-up-live-test-mandate.md"
+	mandateBytes, err := os.ReadFile(filepath.Join(root, mandateRel))
 	if err != nil {
-		t.Fatalf("read %s: %v", mandatePath, err)
+		// #nosec G204 -- both operands are constants in this file
+		cmd := exec.Command("git", "show", "3d4075ca3~1:"+mandateRel)
+		cmd.Dir = root
+		mandateBytes, err = cmd.Output()
+		if err != nil {
+			t.Fatalf("read %s: absent from the worktree and unreadable from git: %v", mandateRel, err)
+		}
 	}
 	mandate := string(mandateBytes)
 	if !strings.Contains(mandate, "2026-06-20-dev-public-vault-automated-init") {

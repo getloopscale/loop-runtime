@@ -11,11 +11,11 @@ set -euo pipefail
 #        `k3d-loopzero` docker network. Reattach all server/agent/serverlb
 #        containers via `docker network connect`.
 #
-#   H2 — `loopzero-cluster-kubeconfigs` Secret stores in-cluster kubeconfigs
-#        with a fixed CA cert + apiServer IP. After restart, k3s rotates
-#        the CA AND the IP changes — Secret references stale data.
-#        Regenerate kubeconfigs with current IPs + insecure-skip-tls-verify
-#        (local-only — production keeps strict TLS via cert-manager).
+#   H2 — `loopzero-cluster-kubeconfigs` Secret stores the peer kubeconfigs
+#        loopzero-api uses (build, cell-0) with a CA cert + apiServer IP. After
+#        restart, k3s rotates the CA AND the IP changes — Secret references
+#        stale data. `loopzero-ops seed cluster-kubeconfigs` re-mints them with
+#        the current IPs and each peer's live CA.
 #
 #   H3 — ArgoCD `runtime-argocd-cluster` and `build-argocd-cluster` cluster
 #        secrets carry the same stale apiServer URL. Recreate from scratch
@@ -32,23 +32,13 @@ set -euo pipefail
 #        local dev, bind that SA to cluster-admin. Production uses
 #        scoped per-cluster SAs (loopzero-ctrl-build, loopzero-ctrl-runtime).
 #
-#   H6 — `buildkit-registry-config` Secret in build cluster: when no DOCR
-#        creds are available, the merge logic chokes on missing fields.
-#        Set an empty `{"auths":{}}` so cosign --allow-insecure-registry
-#        can short-circuit auth.
+#   H6 — removed: the build install renders buildkit-registry-config.
 #
 #   H7 — `loopzero-minio-credentials` MINIO_ENDPOINT must point to the mgmt
 #        cluster NodePort 32000 reachable on the shared k3d-loopzero network.
 #
-#   H8 — loopzero-api Deployment env: LOOPZERO_PACKS_IMAGE, LOOPZERO_CLONE_IMAGE,
-#        LOOPZERO_SYFT_IMAGE, LOOPZERO_COSIGN_IMAGE need to override the
-#        registry.digitalocean.com defaults to point at k3d-loopzero-registry
-#        (the local Docker registry). Permanent fix is helmfile values
-#        in `infra/helm/loopzero-api/values-standalone-multi.yaml`; this
-#        script applies as runtime patch in case helmfile sync is stale.
-#
-#   H9 — loopzero-build-cwts release: chart values default `images.cloneRunner`
-#        to DOCR. Override at helm-upgrade time when env != "prod".
+#   H8, H9 — removed: the install renders loopzero-api's attestation images
+#        and loopzero-build-cwts' local clone runner.
 #
 #   H10 — tenant-controller Deployment env WORKLOAD_CLUSTER_URL drifts every
 #         k3d restart (current values overlay hardcodes a stale IP). Patch
@@ -60,22 +50,10 @@ set -euo pipefail
 #         post-deploy / post-delete sync → resources orphaned in workload.
 #         Detect via JWT exp claim, regenerate via provision-api-tokens.sh.
 #
-#   H13 — cell-0 ClusterCredential SA token rotated/invalidated.
-#         Discovered LIVE 2026-05-01 17:40Z (regression matrix entry 154):
-#         loopzero-system:default SA recreation during certain rollouts → SA UID
-#         change → cached 24h token in cell-0-kubeconfig Secret returns
-#         401 "the server has asked for the client to provide credentials".
-#         Detection: connected=false. Fix: mint fresh `kubectl create token`,
-#         patch Secret data.kubeconfig (refreshes CA from kube-root-ca.crt + server URL).
-#
-#   H12 — ClusterCredential cell-0 missing despite cells SQL row status=active.
-#         Discovered LIVE 2026-05-01 (regression matrix entry 153): cells
-#         table seed creates 3 rows (cell-0, cell-0, cell-1) but
-#         wire-clusters.sh non-fatal "WARN: continuing" path silently failed
-#         on cell-0 → DynamicRouter.Resolve("cell-0") = unknown cell. Pin
-#         para cell-0 atualizaria DB + CR, mas operator deploy falharia.
-#         Fix: invoke clustercredential-create.sh directly using the workload
-#         cluster scoped kubeconfig. Idempotent (kubectl apply).
+#   H12 — a cell (cell-0, cell-1) whose ClusterCredential is missing or
+#         disconnected is re-bootstrapped through bootstrap-cell-cc.sh, the one
+#         writer of a cell's scoped kubeconfig (regression matrix 153-155).
+#         H13 and H14 used to rewrite the kubeconfig by hand; see H12 below.
 #
 #   H15 — ArgoCD `cell-1-argocd-cluster` Secret bearer token rotation.
 #         Discovered LIVE 2026-05-02 (cell-1-activation-plan iter 2): the
@@ -85,29 +63,13 @@ set -euo pipefail
 #         logs "configured to ignore cluster", refuses to sync apps targeting
 #         destination.name=cell-1 — net effect: tenants pinned to cell-1 don't
 #         get their workload synced to runtime-2. Fix: extract fresh token
-#         from cell-1-kubeconfig (refreshed by H14), patch
+#         from cell-1-kubeconfig (refreshed by H12), patch
 #         cell-1-argocd-cluster `data.config` JSON with new bearerToken, then
 #         restart argocd-application-controller to invalidate cluster cache.
-#         Symmetric to H14 mode A but for the ArgoCD secret. Idempotent:
+#         Idempotent:
 #         skip if ArgoCD bearerToken not yet expired (>300s buffer).
 #         Future fix in tenant-controller's clustercredential reconciler:
 #         propagate token to dependent ArgoCD secret on every reconcile.
-#
-#   H14 — ClusterCredential cell-1 SA token refresh OR bootstrap for loopzero-cell-1.
-#         The cell-1 CR may already exist (named `cell-1`, spec.clusterName=
-#         loopzero-cell-1) but its kubeconfig Secret carries a stale SA token
-#         after a runtime-2 rollout — same H13 pattern, different cluster.
-#         If CR is connected: skip. If disconnected (typically because of an
-#         SA UID rotation in runtime-2): mint fresh token in runtime-2,
-#         rebuild kubeconfig YAML preserving CA + server URL, patch the
-#         cell-1-kubeconfig Secret. If CR doesn't exist at all: bootstrap
-#         via clustercredential-create.sh cell-1 runtime-2 <scoped> (cluster_name
-#         passed to scoped-kubeconfig is `runtime-2` so docker container
-#         k3d-loopzero-cell-1-server-0 resolves correctly per B82). Without
-#         H14, `loopzero_cell_discovery_count` stays at 2 locally (cell-0
-#         + cell-0 only) and Stage 1 canary preflight fails. K8sCellStore
-#         reads spec.cellID (NOT CR name) per MEET-053 B9. Idempotent: skip
-#         if connected. Regression matrix entry 155.
 #
 # Idempotent — safe to re-run after every `k3d cluster start`.
 #
@@ -125,13 +87,17 @@ MGMT_CTX="${MGMT_CTX:-k3d-loopzero-core}"
 BUILD_CTX="${BUILD_CTX:-k3d-loopzero-build}"
 RT_CTX="${RT_CTX:-k3d-loopzero-cell-0}"
 # cell-1-activation-plan T0.2 — second runtime cluster context (cell-1).
-# Provisioned by infra/k3d/cell-1-cluster.yaml. Used by H14 below.
+# Provisioned by infra/k3d/cell-1-cluster.yaml.
 # Cluster name `loopzero-cell-1` matches Pulumi/wire-clusters.sh convention.
 RT2_CTX="${RT2_CTX:-k3d-loopzero-cell-1}"
 REGISTRY_HOST="${REGISTRY_HOST:-k3d-loopzero-registry}"
 
 log() { printf '[k3d-heal] %s\n' "$*" >&2; }
 warn() { printf '[k3d-heal] WARN: %s\n' "$*" >&2; }
+
+# Steps whose failure leaves the platform broken. The heal keeps going so the
+# other steps still run, then exits non-zero naming them.
+HEAL_FAILED=()
 
 # ---------------------------------------------------------------------------
 # Pre-flight
@@ -243,51 +209,31 @@ ensure_admin "$BUILD_CTX" loopzero-api-build-admin
 ensure_admin "$RT_CTX" loopzero-api-runtime-admin
 
 # ---------------------------------------------------------------------------
-# H2 — Refresh loopzero-cluster-kubeconfigs Secret with current IPs.
-# Uses insecure-skip-tls-verify in local k3d (cert SAN drift is expected).
+# H2 — Refresh the peer-cluster kubeconfigs in loopzero-cluster-kubeconfigs with
+# current IPs, a fresh token and the peer's live CA.
+#
+# The minting lives in `loopzero-ops seed cluster-kubeconfigs` (#236), the one
+# writer of those keys. This block used to mint kube-system/default tokens for
+# 24h with TLS verification off, which on every heal reverted two fixes: the
+# scoped build identity (argo/loopzero-workflow-submitter, Sprint 7 #36) and the
+# 720h lifetime (#242). It also overwrote the core key with an expiring token,
+# where loopzero-api reaches its own cluster in-cluster anyway. The live CA is read
+# on every run, so a k3s CA rotation no longer needs TLS turned off.
 # ---------------------------------------------------------------------------
-log "H2: refreshing loopzero-cluster-kubeconfigs with current IPs"
-mk_kcfg() {
-  local server="$1" tok="$2"
-  cat <<EOF
-apiVersion: v1
-kind: Config
-clusters:
-- name: in-cluster
-  cluster:
-    server: $server
-    insecure-skip-tls-verify: true
-contexts:
-- name: in-cluster
-  context: {cluster: in-cluster, user: in-cluster}
-current-context: in-cluster
-users:
-- name: in-cluster
-  user: {token: $tok}
-EOF
+log "H2: refreshing the peer kubeconfigs in loopzero-cluster-kubeconfigs (loopzero-ops seed cluster-kubeconfigs)"
+HEAL_REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+loopzero_ops() {
+  if command -v loopzero-ops >/dev/null 2>&1; then
+    loopzero-ops "$@"
+  else
+    (cd "$HEAL_REPO_ROOT/cmd/loopzero-ops" && go run . "$@")
+  fi
 }
-
-mint_token() {
-  local ctx="$1" ns="$2" sa="$3"
-  kubectl --context "$ctx" -n "$ns" create token "$sa" --duration=24h 2>/dev/null
-}
-
-MGMT_TOK=$(mint_token "$MGMT_CTX" loopzero-system default)
-BUILD_TOK=$(mint_token "$BUILD_CTX" kube-system default)
-RT_TOK=$(mint_token "$RT_CTX" kube-system default)
-
-if [[ -n "$MGMT_TOK" && -n "$BUILD_TOK" && -n "$RT_TOK" ]]; then
-  MK=$(mk_kcfg "https://${MGMT_IP}:6443" "$MGMT_TOK")
-  BK=$(mk_kcfg "https://${BUILD_IP}:6443" "$BUILD_TOK")
-  RK=$(mk_kcfg "https://${RT_IP}:6443" "$RT_TOK")
-  kubectl --context "$MGMT_CTX" -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
-    --from-literal=core.kubeconfig="$MK" \
-    --from-literal=build.kubeconfig="$BK" \
-    --from-literal=cell-0.kubeconfig="$RK" \
-    --dry-run=client -o yaml | kubectl --context "$MGMT_CTX" apply -f - >/dev/null
-  log "  loopzero-cluster-kubeconfigs Secret refreshed"
+if CORE_CONTEXT="$MGMT_CTX" loopzero_ops seed cluster-kubeconfigs; then
+  log "  loopzero-cluster-kubeconfigs peer keys refreshed"
 else
-  warn "could not mint SA tokens — skipping H2"
+  warn "H2 failed — loopzero-api cannot reach the build or cell-0 cluster until it succeeds"
+  HEAL_FAILED+=("H2")
 fi
 
 # ---------------------------------------------------------------------------
@@ -318,19 +264,11 @@ for stale in runtime-argocd-cluster build-argocd-cluster cluster-workload cluste
 done
 
 # ---------------------------------------------------------------------------
-# H6 — empty buildkit-registry-config when DOCR creds absent.
+# H6 — REMOVED (principle_violations#243). The build install
+# (taskfiles/infra.yml infra:install:build) creates buildkit-registry-config
+# with config.json AND the local registry's buildkitd.toml; H6 recreated it
+# with config.json alone, dropping the insecure-registry setting.
 # ---------------------------------------------------------------------------
-log "H6: ensuring buildkit-registry-config valid in build cluster"
-existing=$(kubectl --context "$BUILD_CTX" -n argo get secret buildkit-registry-config \
-  -o jsonpath='{.data.config\.json}' 2>/dev/null | base64 -d 2>/dev/null || echo '')
-if [[ -z "$existing" || ! "$existing" =~ \"auths\" ]]; then
-  kubectl --context "$BUILD_CTX" -n argo create secret generic buildkit-registry-config \
-    --from-literal='config.json={"auths":{}}' \
-    --dry-run=client -o yaml | kubectl --context "$BUILD_CTX" apply -f - >/dev/null
-  log "  buildkit-registry-config → empty {\"auths\":{}}"
-else
-  log "  buildkit-registry-config already valid"
-fi
 
 # ---------------------------------------------------------------------------
 # H7 — loopzero-minio-credentials with mgmt NodePort URL reachable from build.
@@ -357,49 +295,13 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# H8 — loopzero-api Deployment env: LOOPZERO_*_IMAGE local registry overrides.
+# H8, H9 — REMOVED (principle_violations#243). The install renders both:
+# dev-public's loopzero-api overlay pins LOOPZERO_COSIGN_IMAGE/LOOPZERO_SYFT_IMAGE to the
+# local registry (standalone's loopzero-api is Tilt's; LOOPZERO_CLONE_IMAGE has no
+# reader), and build.helmfile gives loopzero-build-cwts the local clone runner
+# wherever profile.localRegistry is set. H8 overwrote the pinned tags with
+# :latest and H9 upgraded the release outside Helmfile.
 # ---------------------------------------------------------------------------
-log "H8: ensuring LOOPZERO_*_IMAGE env on loopzero-api"
-# loopzero-api is tilt-owned in standalone (helmfile app-tier installed:false), so
-# the Deployment does not exist during `task setup` (before `tilt up`). Skip the
-# env-patch when absent — tilt's api-deployment.yaml already wires LOOPZERO_*_IMAGE.
-if ! kubectl --context "$MGMT_CTX" -n loopzero-system get deploy loopzero-api >/dev/null 2>&1; then
-  log "  loopzero-api deployment absent — skipping LOOPZERO_*_IMAGE env-patch (tilt-owned in standalone)"
-else
-  declare -A IMG_OVERRIDES=(
-    [LOOPZERO_CLONE_IMAGE]="${REGISTRY_HOST}:5000/loopzero-clone-runner:latest"
-    # T4.1: LOOPZERO_PACKS_IMAGE removed — loopzero-api no longer uses loopzero-packs.
-    [LOOPZERO_SYFT_IMAGE]="${REGISTRY_HOST}:5000/loopzero-syft-scanner:latest"
-    [LOOPZERO_COSIGN_IMAGE]="${REGISTRY_HOST}:5000/loopzero-cosign-signer:latest"
-  )
-  ENV_ARGS=()
-  for k in "${!IMG_OVERRIDES[@]}"; do
-    ENV_ARGS+=("${k}=${IMG_OVERRIDES[$k]}")
-  done
-  kubectl --context "$MGMT_CTX" -n loopzero-system set env deploy/loopzero-api "${ENV_ARGS[@]}" >/dev/null 2>&1
-  log "  set ${#ENV_ARGS[@]} image override env vars"
-fi
-
-# ---------------------------------------------------------------------------
-# H9 — loopzero-build-cwts release with images.cloneRunner local registry.
-# ---------------------------------------------------------------------------
-log "H9: ensuring loopzero-build-cwts uses local registry"
-if command -v helm >/dev/null 2>&1; then
-  REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-  if [[ -d "$REPO_ROOT/charts/loopzero-build-cwts" ]]; then
-    helm upgrade --kube-context "$BUILD_CTX" -n argo loopzero-build-cwts \
-      "$REPO_ROOT/charts/loopzero-build-cwts" \
-      --install \
-      --create-namespace \
-      --set workflow.serviceAccount.create=false \
-      --set "images.cloneRunner=${REGISTRY_HOST}:5000/loopzero-clone-runner:latest" \
-      >/dev/null 2>&1 && log "  loopzero-build-cwts re-templated with local registry"
-  else
-    warn "charts/loopzero-build-cwts dir not found — H9 skipped"
-  fi
-else
-  warn "helm not on PATH — H9 skipped"
-fi
 
 # ---------------------------------------------------------------------------
 # H10 — tenant-operator Deployment env: WORKLOAD_CLUSTER_URL must point at
@@ -523,7 +425,7 @@ fi
 # Discovered LIVE 2026-04-30 — NEW-15: project delete failed to trigger
 # ArgoCD prune sync because [DEPLOY_SERVICE_AUTH_FAILED] — token had
 # expired 13.8h before. Cleanup of solo-server resources never happened,
-# Prova de Morte timed out 300s.
+# Proof of Death timed out 300s.
 # ---------------------------------------------------------------------------
 log "H11: ensuring ArgoCD token in loopzero-api-tokens Secret is valid"
 TOKEN_RAW=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret loopzero-api-tokens \
@@ -559,272 +461,44 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# H12 — ClusterCredential cell-0 bootstrap (regression matrix entry 153).
-# wire-clusters.sh has cell-0 logic but `|| log WARN: continuing` masks
-# silent failures. Codify the recovery here so every `task k3d:heal`
-# converges to {cell-0, cell-0, cell-1} ClusterCredentials.
+# H12 — a cell whose ClusterCredential is missing or disconnected is
+# re-bootstrapped through bootstrap-cell-cc.sh, which mints the scoped
+# loopzero-ctrl-runtime identity, the live address and TLS posture, and labels the
+# CR (regression matrix entries 153-155).
+#
+# H13 and H14 mode A used to rewrite the kubeconfig by hand instead: H13 with
+# the core cluster's in-cluster address (its skip guard looked for the label
+# `bootstrap-cell-0-cc`, which nothing writes), H14 with a kube-system/default
+# token holding none of the scoped role. Both left a cell connected to /healthz
+# and unable to deploy (principle_violations#243).
+#
+# K8sCellStore reads spec.cellID, not the CR name (MEET-053 B9).
 # ---------------------------------------------------------------------------
-log "H12: ensuring ClusterCredential cell-0 exists for loopzero-cell-0"
-# Note: K8sCellStore uses spec.cellID (not CR name) per
-# api/internal/placement/k8s_cell_store.go MEET-053 fix B9. The CR is
-# named after the k3d cluster id ("workload") so scoped-kubeconfig.sh
-# can resolve k3d-loopzero-cell-0-server-0 docker container IP. Using
-# cluster-name="runtime" would fail B82 docker-resolution (container
-# k3d-loopzero-cell-0-server-0 doesn't exist locally).
-CELL1_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
-  get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-0")].status.connected}' \
-  2>/dev/null || echo "")
-# cell-1-activation-plan T1.3 / ADR C7: ensure ingress-domain label exists
-# on cell-0 CR even when already connected. Idempotent label patch.
-CELL1_CR_NAME=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
-  get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-0")].metadata.name}' \
-  2>/dev/null || echo "")
-if [[ -n "$CELL1_CR_NAME" ]]; then
-  CELL1_DOMAIN=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential "$CELL1_CR_NAME" \
-    -o jsonpath='{.metadata.labels.loopzero\.io/ingress-domain}' 2>/dev/null || echo "")
-  if [[ "$CELL1_DOMAIN" != "loopzero.local" ]]; then
-    kubectl --context "$MGMT_CTX" -n loopzero-system label clustercredential "$CELL1_CR_NAME" \
-      loopzero.io/ingress-domain=loopzero.local --overwrite >/dev/null 2>&1 \
-      && log "  cell-0 CR=$CELL1_CR_NAME labeled with ingress-domain=loopzero.local (C7)"
+REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
+BOOTSTRAP="$REPO_ROOT/infra/helmfile/scripts/bootstrap-cell-cc.sh"
+for cell in 0 1; do
+  cell_id="cell-${cell}"
+  log "H12: ensuring ClusterCredential ${cell_id} is connected"
+  connected=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredentials \
+    -o jsonpath="{.items[?(@.spec.cellID==\"${cell_id}\")].status.connected}" 2>/dev/null || echo "")
+  if [[ "$connected" == "true" ]]; then
+    log "  ${cell_id} already connected — skip"
+    continue
   fi
-fi
-if [[ "$CELL1_CONNECTED" == "true" ]]; then
-  log "  ClusterCredential with spec.cellID=cell-0 already connected — skip"
-else
-  # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: invoke the ADR-0008 canonical
-  # bootstrap-cell-cc.sh (CR name = cell-1) instead of the legacy
-  # clustercredential-create.sh that named the CR after CLUSTER_NAME=workload.
-  # Legacy path produced duplicate ArgoCD cluster Secrets pointing at the
-  # same apiServer URL, triggering controller informer thrash and L22-class
-  # "Ignoring cluster" loops.
-  REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-  BOOTSTRAP="$REPO_ROOT/infra/helmfile/scripts/bootstrap-cell-cc.sh"
-  if [[ -x "$BOOTSTRAP" ]]; then
-    if KUBECONFIG="$(k3d kubeconfig write loopzero-core 2>/dev/null)" \
-      INGRESS_DOMAIN="loopzero.local" \
-      bash "$BOOTSTRAP" --cell 1 --env standalone-multi >/dev/null 2>&1; then
-      log "  ClusterCredential cell-0 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh"
-    else
-      warn "bootstrap-cell-cc.sh --cell 1 failed — see matrix entry 153 fix path (b)"
-    fi
+  if KUBECONFIG="$(k3d kubeconfig write loopzero-core 2>/dev/null)" INGRESS_DOMAIN="loopzero.local" \
+      bash "$BOOTSTRAP" --cell "$cell" --env standalone-multi >/dev/null 2>&1; then
+    log "  ${cell_id} re-bootstrapped via bootstrap-cell-cc.sh"
   else
-    warn "bootstrap-cell-cc.sh missing — cannot heal H12"
+    warn "bootstrap-cell-cc.sh --cell ${cell} failed — ${cell_id} stays disconnected"
+    HEAL_FAILED+=("H12:${cell_id}")
   fi
-fi
-
-# ---------------------------------------------------------------------------
-# H13 — cell-0 ClusterCredential SA token expired/rotated.
-# Discovered LIVE 2026-05-01 17:40Z (regression matrix entry 154):
-# loopzero-system:default SA gets recreated during certain rollouts/operations
-# → SA UID changes → 24h-duration token in cell-0-kubeconfig Secret
-# becomes invalid (server returns 401 "the server has asked for the client
-# to provide credentials") even before its exp claim. ClusterCredential
-# probe fails → connected=false → DynamicRouter loses cell-0 →
-# pin to cell-0 would fail at deploy time.
-#
-# Fix: detect connected=false on cell-0, mint fresh 24h SA token via
-# `kubectl create token`, patch the Secret data.kubeconfig with new token
-# (refreshes CA from live kube-root-ca.crt + server). Controller probes ~30-60s later.
-# Idempotent (skips if already connected).
-# ---------------------------------------------------------------------------
-log "H13: ensuring ClusterCredential cell-0 has valid SA token"
-CELL_DEFAULT_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
-  get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-0")].status.connected}' \
-  2>/dev/null || echo "")
-# B29 fix (real-paas-cleanroom-dogfood-loop iter 27, 2026-05-05):
-# bootstrap-cell-0-cc.sh produces a kubeconfig that points at
-# loopzero-cell-0 (cluster name `workload`) with a `loopzero-ctrl-runtime`
-# SA token in the workload cluster — correct for standalone-multi
-# where cell-0 is colocated with workload. H13's design assumes
-# cell-0 points at mgmt cluster; if H13 patches the kubeconfig
-# with a mgmt SA token + `https://kubernetes.default.svc:443` URL, it
-# breaks the standalone-multi setup. Skip H13 when the CR carries the
-# bootstrap-cell-0-cc managed-by label.
-H13_MANAGED_BY=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
-  get clustercredential cell-0 \
-  -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}' \
-  2>/dev/null || echo "")
-if [[ "$H13_MANAGED_BY" == "bootstrap-cell-0-cc" ]]; then
-  log "  cell-0 managed by bootstrap-cell-0-cc — skip H13 (workload-targeted)"
-elif [[ "$CELL_DEFAULT_CONNECTED" == "true" ]]; then
-  log "  cell-0 already connected — skip"
-else
-  log "  cell-0 disconnected — refreshing SA token"
-  H13_NEW_TOKEN=$(kubectl --context "$MGMT_CTX" -n loopzero-system create token default --duration=24h 2>/dev/null || echo "")
-  if [[ -z "$H13_NEW_TOKEN" ]]; then
-    warn "kubectl create token loopzero-system/default failed — manual SA recovery required"
-  else
-    # Source the CA from the LIVE in-cluster kube-root-ca.crt ConfigMap — this is
-    # the authoritative CA that signs the kubernetes.default.svc serving cert.
-    # k3s rotates its server CA across cluster restarts, so the CA cached in the
-    # Secret goes stale (different `k3s-server-ca@<ts>` generation) and the
-    # controller's TLS probe fails with "x509: certificate signed by unknown
-    # authority" even with a fresh SA token. Refresh the CA from the ConfigMap;
-    # fall back to the Secret's CA only if the ConfigMap is unreadable.
-    H13_CA=$(kubectl --context "$MGMT_CTX" -n loopzero-system get configmap kube-root-ca.crt \
-      -o jsonpath='{.data.ca\.crt}' 2>/dev/null | base64 -w0 2>/dev/null || echo "")
-    if [[ -z "$H13_CA" ]]; then
-      H13_CA=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret cell-0-kubeconfig \
-        -o jsonpath='{.data.kubeconfig}' 2>/dev/null | base64 -d 2>/dev/null \
-        | grep "certificate-authority-data:" | awk '{print $2}' || echo "")
-    fi
-    if [[ -z "$H13_CA" ]]; then
-      warn "cell-0 CA unavailable (kube-root-ca.crt ConfigMap + Secret both missing)"
-    else
-      H13_KUBECONFIG_B64=$(cat <<EOF | base64 -w0
-apiVersion: v1
-kind: Config
-clusters:
-- name: in-cluster
-  cluster:
-    server: https://kubernetes.default.svc:443
-    certificate-authority-data: $H13_CA
-contexts:
-- name: in-cluster
-  context:
-    cluster: in-cluster
-    user: in-cluster
-current-context: in-cluster
-users:
-- name: in-cluster
-  user:
-    token: $H13_NEW_TOKEN
-EOF
-      )
-      if kubectl --context "$MGMT_CTX" -n loopzero-system patch secret cell-0-kubeconfig \
-        --type=merge -p "{\"data\":{\"kubeconfig\":\"$H13_KUBECONFIG_B64\"}}" >/dev/null 2>&1; then
-        log "  cell-0-kubeconfig Secret patched with fresh 24h SA token"
-      else
-        warn "Secret patch failed — see matrix entry 154"
-      fi
-    fi
-  fi
-fi
-
-# ---------------------------------------------------------------------------
-# H14 — ClusterCredential cell-1 SA token refresh OR bootstrap (regression
-# matrix entry 155). Two modes:
-#
-#   Mode A (refresh) — CR `cell-1` exists with spec.clusterName=loopzero-cell-1
-#     but status.connected=false because SA UID in loopzero-cell-1 rotated
-#     (same trap as H13 for cell-0). Mint fresh 24h SA token via
-#     `kubectl --context k3d-loopzero-cell-1 create token default` and patch
-#     cell-1-kubeconfig Secret data.kubeconfig preserving CA + apiServer.
-#
-#   Mode B (bootstrap) — CR doesn't exist at all (e.g., fresh workstation
-#     without runtime-2 wire-up). Generate scoped kubeconfig with cluster_name
-#     ID `runtime-2` so docker container k3d-loopzero-cell-1-server-0 resolves
-#     correctly per B82, then invoke clustercredential-create.sh cell-1
-#     runtime-2 <scoped>. INGRESS_DOMAIN=loopzero.local for ADR C7.
-#
-# Idempotent: skip if connected. Non-fatal: WARN on failure so heal exits 0.
-# ---------------------------------------------------------------------------
-log "H14: ensuring ClusterCredential cell-1 connected (loopzero-cell-1)"
-CELL2_CONNECTED=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
-  get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-1")].status.connected}' \
-  2>/dev/null || echo "")
-
-if [[ "$CELL2_CONNECTED" == "true" ]]; then
-  log "  ClusterCredential with spec.cellID=cell-1 already connected — skip"
-else
-  CELL2_CR_EXISTS=$(kubectl --context "$MGMT_CTX" -n loopzero-system \
-    get clustercredentials -o jsonpath='{.items[?(@.spec.cellID=="cell-1")].metadata.name}' \
-    2>/dev/null || echo "")
-
-  if [[ -n "$CELL2_CR_EXISTS" ]]; then
-    # Mode A — refresh SA token (H13 pattern applied to cell-1).
-    log "  cell-1 CR=$CELL2_CR_EXISTS exists but disconnected — refreshing SA token in $RT2_CTX"
-    if ! kubectl --context "$RT2_CTX" --request-timeout=5s cluster-info >/dev/null 2>&1; then
-      warn "  $RT2_CTX unreachable — H14 mode A cannot mint token (start runtime-2 cluster first)"
-    else
-      H14_NEW_TOKEN=$(kubectl --context "$RT2_CTX" -n kube-system create token default --duration=24h 2>/dev/null || echo "")
-      if [[ -z "$H14_NEW_TOKEN" ]]; then
-        warn "  kubectl create token kube-system/default in $RT2_CTX failed — manual SA recovery required"
-      else
-        # Extract apiServer URL (docker bridge IP, NOT 0.0.0.0 host port).
-        H14_APISERVER=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential cell-1 \
-          -o jsonpath='{.spec.apiServer}' 2>/dev/null || echo "")
-        # Detect TLS mode from existing Secret. Two valid forms:
-        #   (a) certificate-authority-data: <base64-PEM>  (production strict TLS)
-        #   (b) insecure-skip-tls-verify: true            (local k3d, ADR-0015 dev path)
-        H14_KC_DECODED=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret cell-1-kubeconfig \
-          -o jsonpath='{.data.kubeconfig}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
-        H14_CA=$(echo "$H14_KC_DECODED" | grep "certificate-authority-data:" | head -1 | awk '{print $2}' || echo "")
-        H14_INSECURE=$(echo "$H14_KC_DECODED" | grep -q "insecure-skip-tls-verify:" && echo "true" || echo "")
-
-        if [[ -z "$H14_APISERVER" ]]; then
-          warn "  cell-1 spec.apiServer empty — cannot rebuild kubeconfig"
-        else
-          # Build TLS line based on detected mode.
-          if [[ -n "$H14_CA" ]]; then
-            H14_TLS_LINE="    certificate-authority-data: $H14_CA"
-          elif [[ -n "$H14_INSECURE" ]]; then
-            H14_TLS_LINE="    insecure-skip-tls-verify: true"
-          else
-            warn "  cell-1-kubeconfig Secret has neither CA data nor insecure-skip-tls-verify"
-            H14_TLS_LINE=""
-          fi
-
-          if [[ -n "$H14_TLS_LINE" ]]; then
-            H14_KUBECONFIG_B64=$(cat <<EOF | base64 -w0
-apiVersion: v1
-kind: Config
-clusters:
-- name: loopzero-cell-1
-  cluster:
-    server: $H14_APISERVER
-$H14_TLS_LINE
-contexts:
-- name: loopzero-cell-1
-  context:
-    cluster: loopzero-cell-1
-    user: loopzero-cell-1
-current-context: loopzero-cell-1
-users:
-- name: loopzero-cell-1
-  user:
-    token: $H14_NEW_TOKEN
-EOF
-            )
-            if kubectl --context "$MGMT_CTX" -n loopzero-system patch secret cell-1-kubeconfig \
-              --type=merge -p "{\"data\":{\"kubeconfig\":\"$H14_KUBECONFIG_B64\"}}" >/dev/null 2>&1; then
-              log "  cell-1-kubeconfig Secret patched with fresh 24h SA token (TLS: ${H14_CA:+strict}${H14_INSECURE:+insecure})"
-            else
-              warn "  Secret patch failed — see matrix entry 155 fix path (a) refresh"
-            fi
-          fi
-        fi
-      fi
-    fi
-  else
-    # Mode B — bootstrap fresh CR via ADR-0008 canonical script.
-    # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: invoke bootstrap-cell-cc.sh
-    # so CR name = cell-1 (not runtime-2). Legacy `clustercredential-create.sh
-    # cell-1 runtime-2` produced a duplicate cluster Secret pointing at the
-    # same apiServer URL as the canonical `cell-1` CC, triggering
-    # application-controller informer thrash (see H3 + wire-clusters.sh).
-    log "  cell-1 CR absent — bootstrapping via bootstrap-cell-cc.sh"
-    REPO_ROOT_H14=$(cd "$(dirname "$0")/../../.." && pwd)
-    BOOTSTRAP_H14="$REPO_ROOT_H14/infra/helmfile/scripts/bootstrap-cell-cc.sh"
-    if [[ -x "$BOOTSTRAP_H14" ]]; then
-      if KUBECONFIG="$(k3d kubeconfig write loopzero-core 2>/dev/null)" \
-        INGRESS_DOMAIN="loopzero.local" \
-        bash "$BOOTSTRAP_H14" --cell 2 --env standalone-multi >/dev/null 2>&1; then
-        log "  ClusterCredential cell-1 (CR name = cellID) created/refreshed via bootstrap-cell-cc.sh"
-      else
-        warn "  bootstrap-cell-cc.sh --cell 2 failed — see matrix entry 155 fix path (b)"
-      fi
-    else
-      warn "  bootstrap-cell-cc.sh missing — cannot heal H14 mode B (runtime-2 cluster running?)"
-    fi
-  fi
-fi
+done
 
 # ---------------------------------------------------------------------------
 # H15 — ArgoCD cell-1-argocd-cluster bearer token sync (regression matrix
 # entry 158 / NEW-X). Workaround for tenant-controller not propagating
 # token rotation to dependent ArgoCD secrets. Reads the fresh token from
-# cell-1-kubeconfig (post-H14), patches cell-1-argocd-cluster.data.config
+# cell-1-kubeconfig (post-H12), patches cell-1-argocd-cluster.data.config
 # JSON with new bearerToken if expired/expiring soon. Idempotent: skip
 # if current ArgoCD token has > 300s remaining.
 # ---------------------------------------------------------------------------
@@ -853,7 +527,7 @@ else
       -o jsonpath='{.data.kubeconfig}' 2>/dev/null | base64 -d 2>/dev/null \
       | grep "token:" | awk '{print $2}' || echo "")
     if [[ -z "$H15_FRESH_TOKEN" ]]; then
-      warn "  cell-1-kubeconfig missing token — H14 must run first"
+      warn "  cell-1-kubeconfig missing token — H12 must run first"
     else
       H15_NEW_CONFIG=$(printf '{"bearerToken":"%s","tlsClientConfig":{"insecure":true}}' "$H15_FRESH_TOKEN")
       H15_NEW_CONFIG_B64=$(echo -n "$H15_NEW_CONFIG" | base64 -w0)
@@ -1031,4 +705,8 @@ if [[ "$H18_REMOVED" == "true" ]]; then
   log "  argocd-repo-server: restarted to invalidate cred cache"
 fi
 
+if (( ${#HEAL_FAILED[@]} > 0 )); then
+  warn "FAILED steps: ${HEAL_FAILED[*]} — cross-cluster connectivity is NOT healed"
+  exit 1
+fi
 log "DONE — cross-cluster connectivity healed (H1-H18 codified)"

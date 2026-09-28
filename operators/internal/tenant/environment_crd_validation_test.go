@@ -89,7 +89,7 @@ func TestProjectFieldHasRFC1123PatternAndRequired(t *testing.T) {
 // passes `project` to drive the test scenario:
 //   - "" (empty) exercises the required-field gate.
 //   - any non-RFC-1123 string exercises the Pattern gate.
-//   - a valid slug ("teste") proves the happy path Create succeeds.
+//   - a valid slug ("sample") proves the happy path Create succeeds.
 func makeTenantSpec(project string) loopzerov1.TenantSpec {
 	return loopzerov1.TenantSpec{
 		DisplayName: "T1.1 CRD validation tenant",
@@ -111,7 +111,7 @@ func makeTenantSpec(project string) loopzerov1.TenantSpec {
 	}
 }
 
-var _ = Describe("T1.1 — TenantEnvironmentEntry.Project CRD validation", func() {
+var _ = Describe("TenantEnvironmentEntry.Project CRD validation", func() {
 	Context("required-field gate (RED 1)", func() {
 		It("rejects Tenant CR whose Environments entry has empty Project", func() {
 			tenant := &loopzerov1.Tenant{
@@ -149,10 +149,10 @@ var _ = Describe("T1.1 — TenantEnvironmentEntry.Project CRD validation", func(
 					Name:      "t11-happy",
 					Namespace: "default",
 				},
-				Spec: makeTenantSpec("teste"),
+				Spec: makeTenantSpec("sample"),
 			}
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed(),
-				"valid slug 'teste' must be accepted as proof the gate is not over-restrictive")
+				"valid slug 'sample' must be accepted as proof the gate is not over-restrictive")
 		})
 	})
 })

@@ -15,33 +15,21 @@ import (
 // --- Service auth validation tests ---
 
 func TestValidateServiceAuth_DualKeyRotation(t *testing.T) {
-	oldSecret := ServiceAuthSecret
-	oldPrev := ServiceAuthSecretPrevious
-	defer func() {
-		ServiceAuthSecret = oldSecret
-		ServiceAuthSecretPrevious = oldPrev
-	}()
-
-	ServiceAuthSecret = "new-secret"
-	ServiceAuthSecretPrevious = "old-secret"
-
-	if !validateServiceAuth("new-secret") {
+	authn := NewAuthenticator(Config{ServiceSecret: "new-secret", ServiceSecretPrevious: "old-secret"})
+	if !authn.validateServiceAuth("new-secret") {
 		t.Error("current secret should be accepted")
 	}
-	if !validateServiceAuth("old-secret") {
+	if !authn.validateServiceAuth("old-secret") {
 		t.Error("previous secret should be accepted during rotation")
 	}
-	if validateServiceAuth("wrong-secret") {
+	if authn.validateServiceAuth("wrong-secret") {
 		t.Error("invalid secret should be rejected")
 	}
 }
 
 func TestValidateServiceAuth_EmptyConfig(t *testing.T) {
-	oldSecret := ServiceAuthSecret
-	defer func() { ServiceAuthSecret = oldSecret }()
-
-	ServiceAuthSecret = ""
-	if validateServiceAuth("any-secret") {
+	authn := NewAuthenticator(Config{ServiceSecret: ""})
+	if authn.validateServiceAuth("any-secret") {
 		t.Error("should reject when service auth is not configured")
 	}
 }

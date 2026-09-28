@@ -54,7 +54,7 @@ func resourceName(projectID, appName string) string {
 // `app` carries the namespace-unique resource name (project-app) so Service
 // selectors don't cross project boundaries. `loopzero.io/app-name` keeps the
 // raw user-declared app name for CLI queries (logs, status, scale, etc.).
-func commonLabels(ri RenderInput, app AppManifestInput) map[string]string {
+func commonLabels(ri renderScope, app AppManifestInput) map[string]string {
 	return map[string]string{
 		"app":                          resourceName(ri.ProjectID, app.Name),
 		"app.kubernetes.io/managed-by": "loopzero",
@@ -73,52 +73,77 @@ func int64Ptr(v int64) *int64 { return &v }
 // unset — e.g. Rollout scaleDownDelaySeconds (#61).
 func intPtr(v int) *int { return &v }
 
-// namespace returns the canonical Kubernetes namespace for a render
-// target. ONE formula for ALL environments (production, staging,
-// preview-pr-N, ...) — `loopzero-<tenant>-<project>-<env>`. The isolation
-// boundary in LoopZero is the (tenant, project, env) triple; the namespace
-// reflects that uniformly so no env type needs special-case branching.
-//
-// J-23 sponsor-directed canonical refactor 2026-06-07 (verbatim
-// "TUDO DEVERIA esta separado por projeto"): single uniform formula,
-// no if/else for previews. Thin wrapper over pkg/naming.Namespace so
-// the renderer is the only place that emits the namespace string;
-// downstream consumers (tenant_gitops, preview controller, ArgoCD
-// destination) call the same helper.
-func namespace(tenantID, projectID, environment string) string {
-	return fmt.Sprintf("loopzero-%s-%s-%s", tenantID, projectID, environment)
+// renderScope is one render's input plus the namespace it renders into,
+// resolved once through naming.Namespace so every resource agrees on it and an
+// invalid one fails the render instead of reaching the cluster.
+type renderScope struct {
+	RenderInput
+	ns string
 }
 
-// marshalResource serializes a struct to YAML using sigs.k8s.io/yaml.
-// This library marshals to JSON first (sorted keys) then converts to YAML,
-// guaranteeing deterministic output regardless of map iteration order.
-func marshalResource(v interface{}) string {
+func newRenderScope(ri RenderInput) (renderScope, error) {
+	ns, err := naming.Namespace(ri.TenantID, ri.ProjectID, ri.Environment)
+	if err != nil {
+		return renderScope{}, fmt.Errorf("manifests: namespace: %w", err)
+	}
+	return renderScope{RenderInput: ri, ns: ns}, nil
+}
+
+// docSet collects rendered YAML documents and keeps the first marshal error,
+// so a builder adds resources in a straight line and reports one failure.
+type docSet struct {
+	docs []string
+	err  error
+}
+
+// add serializes v with sigs.k8s.io/yaml, which marshals to JSON first (sorted
+// keys) and so produces the same output regardless of map iteration order.
+func (d *docSet) add(v interface{}) {
+	if d.err != nil {
+		return
+	}
 	data, err := sigsyaml.Marshal(v)
 	if err != nil {
-		// This should never happen with our controlled struct types.
-		// If it does, it is a programming error — panic is appropriate.
-		panic(fmt.Sprintf("manifests: failed to marshal resource: %v", err))
+		d.err = fmt.Errorf("manifests: marshal %T: %w", v, err)
+		return
 	}
-	return strings.TrimSpace(string(data))
+	d.docs = append(d.docs, strings.TrimSpace(string(data)))
+}
+
+func (d *docSet) addAll(docs []string, err error) {
+	if d.err != nil {
+		return
+	}
+	if err != nil {
+		d.err = err
+		return
+	}
+	d.docs = append(d.docs, docs...)
+}
+
+func (d *docSet) result() ([]string, error) {
+	if d.err != nil {
+		return nil, d.err
+	}
+	return d.docs, nil
 }
 
 // maybeAutoscaler appends HPA or KEDA ScaledObject depending on min replicas.
 // Scale-to-zero (KEDA) is only triggered when MinReplicas == 0 AND MaxReplicas > 0,
 // because the caller must explicitly configure both to opt into scale-to-zero.
 // A zero-value AutoscalingConfig (all fields 0) uses native HPA with defaults.
-func maybeAutoscaler(docs []string, ri RenderInput, app AppManifestInput) []string {
+func maybeAutoscaler(docs *docSet, ri renderScope, app AppManifestInput) {
 	if app.Autoscaling == nil {
-		return docs
+		return
 	}
 	if isScaleToZero(app.Autoscaling) {
-		docs = append(docs, marshalResource(buildScaledObject(ri, app)))
-		if app.Type == "server" || app.Type == "" {
-			docs = append(docs, marshalResource(buildHTTPScaledObject(ri, app)))
+		docs.add(buildScaledObject(ri, app))
+		if app.Type == ServiceTypeServer || app.Type == "" {
+			docs.add(buildHTTPScaledObject(ri, app))
 		}
-		return docs
+		return
 	}
-	docs = append(docs, marshalResource(buildHPA(ri, app)))
-	return docs
+	docs.add(buildHPA(ri, app))
 }
 
 // isScaleToZero returns true when autoscaling is explicitly configured for
@@ -135,63 +160,48 @@ func isScaleToZero(as *AutoscalingConfig) bool {
 // emits Rollout + 2 Services (stable+canary) + TraefikService + AnalysisTemplate
 // (when PrometheusAddress configured). IngressRoute points to the TraefikService
 // for weighted routing. Legacy path (Deployment + Service) preserved when flag false.
-func renderServerApp(ri RenderInput, app AppManifestInput) []string {
+func renderServerApp(ri renderScope, app AppManifestInput) ([]string, error) {
 	port := app.Port
 	if port == 0 {
 		port = 3000 // sensible default
 	}
 
-	pdb := buildPDB(ri, app)
-	ingressResources := buildIngressResources(ri, app, port)
-
-	var docs []string
+	var docs docSet
 	if ri.ProgressiveDelivery {
 		// Rollout + 2 Services (stable/canary) + TraefikService.
-		rollout := buildRollout(ri, app, port)
-		stableSvc := buildStableService(ri, app, port)
-		canarySvc := buildCanaryService(ri, app, port)
-		traefikSvc := buildTraefikService(ri, app, port)
-		docs = []string{
-			marshalResource(rollout),
-			marshalResource(pdb),
-			marshalResource(stableSvc),
-			marshalResource(canarySvc),
-			marshalResource(traefikSvc),
-		}
+		docs.add(buildRollout(ri, app, port))
+		docs.add(buildPDB(ri, app))
+		docs.add(buildStableService(ri, app, port))
+		docs.add(buildCanaryService(ri, app, port))
+		docs.add(buildTraefikService(ri, app, port))
 		// AnalysisTemplate is only emitted when Prometheus is configured.
 		if ri.PrometheusAddress != "" {
-			docs = append(docs, marshalResource(buildAnalysisTemplate(ri, app)))
+			docs.add(buildAnalysisTemplate(ri, app))
 		}
 	} else {
 		// Legacy path (D8 fallback).
-		deployment := buildDeployment(ri, app, port)
-		service := buildService(ri, app, port)
-		docs = []string{
-			marshalResource(deployment),
-			marshalResource(pdb),
-			marshalResource(service),
-		}
+		docs.add(buildDeployment(ri, app, port))
+		docs.add(buildPDB(ri, app))
+		docs.add(buildService(ri, app, port))
 	}
-	docs = append(docs, ingressResources...)
-	docs = maybeAutoscaler(docs, ri, app)
-	return docs
+	docs.addAll(buildIngressResources(ri, app, port))
+	maybeAutoscaler(&docs, ri, app)
+	return docs.result()
 }
 
 // renderWorkerApp generates Deployment+PDB (legacy) or Rollout+PDB (progressive).
 // Workers receive no traffic — no Service/IngressRoute/TraefikService.
 // In progressive mode, Rollout uses pause-only steps (workerCanarySteps).
-func renderWorkerApp(ri RenderInput, app AppManifestInput) []string {
-	pdb := buildPDB(ri, app)
+func renderWorkerApp(ri renderScope, app AppManifestInput) ([]string, error) {
+	var docs docSet
 	if ri.ProgressiveDelivery {
-		rollout := buildRollout(ri, app, 0)
-		docs := []string{marshalResource(rollout), marshalResource(pdb)}
-		docs = maybeAutoscaler(docs, ri, app)
-		return docs
+		docs.add(buildRollout(ri, app, 0))
+	} else {
+		docs.add(buildDeployment(ri, app, 0))
 	}
-	deployment := buildDeployment(ri, app, 0)
-	docs := []string{marshalResource(deployment), marshalResource(pdb)}
-	docs = maybeAutoscaler(docs, ri, app)
-	return docs
+	docs.add(buildPDB(ri, app))
+	maybeAutoscaler(&docs, ri, app)
+	return docs.result()
 }
 
 // T3.3 (plan simplify-deploy-loopzerokit-only v2.0): renderFrontendApp removed —

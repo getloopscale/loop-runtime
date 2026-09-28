@@ -34,17 +34,6 @@ import (
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
-// TestAttestationStore_EmptyBuildID_ReturnsErrBuildNotFound —
-// hermetic guard test (empty-input check runs BEFORE SqlcBridge
-// dispatch). Reshaped for sqlc-backed wrapper.
-func TestAttestationStore_EmptyBuildID_ReturnsErrBuildNotFound(t *testing.T) {
-	store := &PostgresAttestationStore{}
-	_, err := store.GetBuildAttestation(context.Background(), "")
-	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
-		t.Errorf("expected ErrBuildNotFound for empty buildID, got: %v", err)
-	}
-}
-
 // TestAttestationStore_GetBuildAttestationForTenant_EmptyTenant —
 // hermetic guard test. Empty tenant → ErrBuildNotFound (no DB call,
 // no SqlcBridge invocation).

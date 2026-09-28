@@ -1,8 +1,8 @@
 # Dogfood 2026-04-29 Repro Suite
 
 Scripts and tests that reproduce the 13 dogfood findings
-``dogfood-2026-04-29-remediation-plan`` *(removido do versionamento)*
-contra k3d standalone-multi.
+``dogfood-2026-04-29-remediation-plan`` *(removed from version control)*
+against k3d standalone-multi.
 
 ## Usage
 
@@ -42,13 +42,13 @@ bash infra/tests/livetest/dogfood/repro-findings.sh --json   # JSON only (CI)
 
 ## Status `INDETERMINATE`
 
-Alguns checks dependem de outros (cascata). Por exemplo, F-07 (`/api/v1/version` retorna 404)
+Some checks depend on others (cascade). For example, F-07 (`/api/v1/version` returns 404)
 cannot be validated while F-01 (API unreachable) still reproduces, because the connection refusal
 masks the 404. Once F-01 is fixed, F-07 becomes deterministic.
 
-## Mapeamento Achado → Check Function
+## Finding → Check Function Mapping
 
-| Finding | Check | Severity | Categoria |
+| Finding | Check | Severity | Category |
 |---------|-------|----------|-----------|
 | F-01 | `check_F01` | S0 | Infra (NodePort/IngressRoute) |
 | F-02 | `check_F02` | S1 | CLI (exit code drift) |

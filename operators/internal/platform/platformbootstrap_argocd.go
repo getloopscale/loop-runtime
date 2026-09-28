@@ -102,7 +102,7 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 	}
 
 	r.setCondition(pb, conditions.TypeArgoCDReady, metav1.ConditionTrue, conditions.ReasonReady, "ArgoCD configured")
-	return r.transitionToNextPhase(ctx, pb, base, statemachine.PBPEventArgoCDReady, "ArgoCD configuration complete")
+	return r.transitionToNextPhase(ctx, pb, base, statemachine.PBPEventArgoCDReady)
 }
 
 // argoCDHTTPClient is the default ArgoCDBootstrapClient implementation using HTTP.

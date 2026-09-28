@@ -7,12 +7,12 @@ ENV GOPRIVATE=github.com/getloopscale/*,github.com/getloopscale/*
 # loopzero-contracts is a PINNED published module (M5 version-pin cutover — api/go.mod
 # requires github.com/getloopscale/loopzero-contracts v0.4.0, NO replace). The private module
 #
-# CORRIGIDO 2026-08-08: este arquivo autenticava para `getloopscale/` enquanto api/go.mod
-# passou a pedir `getloopscale/` no commit f813b367 (2026-08-06). A reescrita de URL nao casava
-# com o modulo pedido, entao o git buscava loopzero-contracts SEM autenticacao — e o GitHub
-# responde a repo privado sem auth com "not found", a mesma mensagem de repo inexistente.
-# O build da imagem loopzero-api quebrou no primeiro push para develop apos a migracao. As duas
-# orgs ficam cobertas enquanto o redirect existir.
+# FIXED 2026-08-08: this file authenticated for `getloopscale/` while api/go.mod
+# started requesting `getloopscale/` in commit f813b367 (2026-08-06). The URL rewrite did not
+# match the requested module, so git fetched loopzero-contracts WITHOUT authentication — and
+# GitHub answers an unauthenticated request for a private repo with "not found", the same
+# message as for a repo that does not exist. The loopzero-api image build broke on the first
+# push to develop after the migration. Both orgs stay covered while the redirect exists.
 # is fetched via a short-lived token mounted as a buildx secret (id=gomod_token); the
 # token is NEVER written to an image layer. git is required for the module VCS fetch.
 RUN apk add --no-cache git openssh-client
@@ -22,13 +22,13 @@ COPY operators/api/go.mod operators/api/go.sum ./operators/api/
 COPY operators/api/v1 ./operators/api/v1
 COPY api/go.mod api/go.sum ./api/
 
-# `awk 1` e nao `cp` ao gravar a chave: OpenSSH exige newline FINAL no PEM, e o
-# transporte por `secret-envs` (variavel de ambiente) o remove. Sem esse unico
-# byte a chave chega sintaticamente invalida e o erro e
-# `Load key: error in libcrypto` — que soa como chave corrompida, nao como um
-# terminador faltando. Reproduzido localmente: `printf %s "$(cat chave)"` produz
-# exatamente esse erro. `awk 1` reemite cada linha com terminador, normalizando
-# para um unico newline final seja qual for a forma de chegada.
+# `awk 1` and not `cp` when writing the key: OpenSSH requires a TRAILING newline in
+# the PEM, and transport via `secret-envs` (an environment variable) strips it. Without
+# that single byte the key arrives syntactically invalid and the error is
+# `Load key: error in libcrypto` — which reads like a corrupted key, not like a
+# missing terminator. Reproduced locally: `printf %s "$(cat key)"` produces exactly
+# that error. `awk 1` re-emits every line with a terminator, normalizing to a single
+# trailing newline whatever shape the key arrived in.
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=secret,id=gomod_token \
     --mount=type=secret,id=gomod_ssh_key \
@@ -45,18 +45,18 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     fi' \
     && cd api && { go mod download || { \
       echo "" >&2; \
-      echo "FATAL: go mod download falhou." >&2; \
+      echo "FATAL: go mod download failed." >&2; \
       if [ ! -s /run/secrets/gomod_token ]; then \
-        echo "  CAUSA PROVAVEL: o secret gomod_token chegou VAZIO, entao a reescrita de URL acima foi" >&2; \
-        echo "  PULADA (o if e silencioso por desenho) e o git buscou loopzero-contracts SEM autenticacao." >&2; \
-        echo "  O GitHub responde a repo PRIVADO sem auth com Repository-not-found — a MESMA mensagem" >&2; \
-        echo "  de repo inexistente. Por isso o erro manda procurar um repositorio que EXISTE, e este" >&2; \
-        echo "  build falhou 10 vezes seguidas sem a causa aparecer." >&2; \
-        echo "  ACAO: GOMOD_TOKEN precisa de um PAT com Contents:read em getloopscale/loopzero-contracts" >&2; \
-        echo "  (o modulo NAO migrou junto com este repositorio)." >&2; \
+        echo "  PROBABLE CAUSE: the gomod_token secret arrived EMPTY, so the URL rewrite above was" >&2; \
+        echo "  SKIPPED (the if is silent by design) and git fetched loopzero-contracts WITHOUT authentication." >&2; \
+        echo "  GitHub answers an unauthenticated request for a PRIVATE repo with Repository-not-found —" >&2; \
+        echo "  the SAME message as for a repo that does not exist. That is why the error sends you looking" >&2; \
+        echo "  for a repository that EXISTS, and why this build failed 10 times in a row without the cause showing." >&2; \
+        echo "  ACTION: GOMOD_TOKEN needs a PAT with Contents:read on getloopscale/loopzero-contracts" >&2; \
+        echo "  (the module did NOT migrate together with this repository)." >&2; \
       else \
-        echo "  O token esta presente e nao-vazio, entao NAO e ausencia de credencial." >&2; \
-        echo "  Verifique Contents:read em getloopscale/loopzero-contracts e se o PAT nao expirou." >&2; \
+        echo "  The token is present and non-empty, so this is NOT a missing credential." >&2; \
+        echo "  Check Contents:read on getloopscale/loopzero-contracts and whether the PAT has expired." >&2; \
       fi; \
       exit 1; \
     }; }
@@ -64,37 +64,37 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
 COPY pkg/ ./pkg/
 COPY api/ ./api/
 
-# Proveniencia do binario. Sem estas tres o endpoint de versao reporta os
-# defaults declarados no codigo (`dev` / `unknown`) — honesto, mas inutil: o
-# painel /status mostrava "dev" como versao de producao, que nao demonstra versao
-# alguma. O CI as passa via `build_args` do reusable build-publish.
+# Binary provenance. Without these three the version endpoint reports the defaults
+# declared in the code (`dev` / `unknown`) — honest, but useless: the /status panel
+# showed "dev" as the production version, which demonstrates no version at all. CI
+# passes them via the `build_args` of the build-publish reusable workflow.
 #
-# Defaults preservados de proposito: um build local sem args continua compilando,
-# e o endpoint reporta `unknown` em vez de um sha plausivel-porem-falso, que um
-# verificador externo leria como "em dia".
+# Defaults kept on purpose: a local build without args still compiles, and the
+# endpoint reports `unknown` instead of a plausible-but-false sha, which an external
+# verifier would read as "up to date".
 ARG LOOPZERO_VERSION=dev
 ARG LOOPZERO_COMMIT=unknown
 ARG LOOPZERO_BUILD_DATE=unknown
 
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    # B-053 — o caminho e copiado de `api/internal/routes/version/version.go`, que
-    # e a referencia unica e se MOVE JUNTO com o codigo. Estas tres linhas tinham
-    # dois erros compostos: a org era `getloopscale` (o modulo e `getloopscale`) e o
-    # pacote era o `internal/routes` plano, que a decomposicao esvaziou.
+    # B-053 — the path is copied from `api/internal/version/versionhttp/version.go`,
+    # which is the single reference and MOVES TOGETHER with the code. These three lines
+    # had two compounded errors: the org was `getloopscale` (the module is `getloopscale`)
+    # and the package was the flat `internal/routes`, which the decomposition emptied.
     #
-    # `-X` sobre simbolo inexistente e um NO-OP que sai 0 — o linker nao avisa —
-    # entao o build passava e o binario ficava com o default. Medido ao vivo em
-    # 2026-08-16: o motor respondia `{"version":"dev","built_at":"unknown"}`, e o
-    # contrato de status da frota do loopzero-cloud le exatamente esses dois valores
-    # como sentinela de "a camada de deploy nao injetou a proveniencia".
+    # `-X` on a nonexistent symbol is a NO-OP that exits 0 — the linker does not warn —
+    # so the build passed and the binary kept the default. Measured live on
+    # 2026-08-16: the engine answered `{"version":"dev","built_at":"unknown"}`, and the
+    # loopzero-cloud fleet status contract reads exactly those two values as the sentinel
+    # for "the deploy layer did not inject the provenance".
     #
-    # O gate `ldflag-symbols` resolve estes caminhos contra os go.mod e o AST, entao
-    # a proxima mudanca de pacote reprova em vez de quebrar em silencio.
+    # The `ldflag-symbols` gate resolves these paths against the go.mod files and the
+    # AST, so the next package move fails the gate instead of breaking silently.
     LDFLAGS="-s -w \
-      -X github.com/getloopscale/loopzero/api/internal/routes/version.versionTag=${LOOPZERO_VERSION} \
-      -X github.com/getloopscale/loopzero/api/internal/routes/version.versionCommit=${LOOPZERO_COMMIT} \
-      -X github.com/getloopscale/loopzero/api/internal/routes/version.versionBuildDate=${LOOPZERO_BUILD_DATE}" \
+      -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionTag=${LOOPZERO_VERSION} \
+      -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionCommit=${LOOPZERO_COMMIT} \
+      -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionBuildDate=${LOOPZERO_BUILD_DATE}" \
     && cd api && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-api ./cmd/ \
     && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-controller ./cmd/controller/
 

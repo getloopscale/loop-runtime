@@ -2,52 +2,35 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package enforcement checks plan limits before allowing mutations.
-// Shared between cloud and engine — zero external dependencies at the
-// API surface (database/sql is used only for the default SQL adapter).
 //
-// Per ADR-0033, PlanLimiter accepts a LimitsStore interface so callers
-// that want to test with an in-memory fake, route through OPA, or
-// otherwise decouple from the SQL backend can do so without rewriting
-// pkg/enforcement.
-//
-// Backward compatibility: NewPlanLimiter(*sql.DB, logger) continues to
-// work exactly as before — internally it wraps the *sql.DB in
-// NewSQLLimitsStore. New consumers should prefer
-// NewPlanLimiterWithStore for cleaner DIP.
+// PlanLimiter depends only on the LimitsStore port (ADR-0033); the plan-tier
+// rule it applies is domain.ResolvePlanTier, so a tenant's plan means the same
+// thing here as everywhere else in the engine.
 package enforcement
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
+
+	"github.com/getloopscale/loopzero/pkg/domain"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // PlanLimiter checks if a tenant's operation is within their plan limits.
+//
+// Every check fails CLOSED: when the plan or the limits cannot be read, the
+// check returns a PLATFORM_DEGRADED error instead of a decision. A store
+// outage is an infrastructure fault; treating it as "starter plan" or as
+// "no limit configured" would turn it into an allow or a misleading 402.
 type PlanLimiter struct {
-	store             LimitsStore
-	db                *sql.DB // retained for the legacy API surface and tests
-	logger            *slog.Logger
-	OnFallbackStarter func() // Called when subscription row is missing (for metrics)
+	store  LimitsStore
+	logger *slog.Logger
 }
 
-// NewPlanLimiter creates a limiter backed by a *sql.DB. This is the
-// legacy entry point used by api/cmd/main.go; under the hood it wraps
-// the DB in a SQL LimitsStore adapter so all internal lookups go
-// through the interface.
-func NewPlanLimiter(db *sql.DB, logger *slog.Logger) *PlanLimiter {
-	var store LimitsStore
-	if db != nil {
-		store = NewSQLLimitsStore(db)
-	}
-	return &PlanLimiter{store: store, db: db, logger: logger}
-}
-
-// NewPlanLimiterWithStore creates a limiter backed by an arbitrary
-// LimitsStore. Use this in tests with an in-memory fake or in
-// alternate backends (OPA, file-based config) per ADR-0033.
-func NewPlanLimiterWithStore(store LimitsStore, logger *slog.Logger) *PlanLimiter {
+// NewPlanLimiter creates a limiter backed by the given LimitsStore. A nil
+// store is the dev fall-through: every check allows (plan "dev").
+func NewPlanLimiter(store LimitsStore, logger *slog.Logger) *PlanLimiter {
 	return &PlanLimiter{store: store, logger: logger}
 }
 
@@ -67,42 +50,46 @@ func (l *PlanLimiter) hasStore() bool {
 	return l != nil && l.store != nil
 }
 
+// errLimitsUnavailable is the typed error every check returns when the plan
+// or the limits cannot be read. The cause stays reachable through Unwrap, so
+// callers can still tell a store outage from an unknown plan value
+// (domain.ErrUnknownPlanTier).
+func errLimitsUnavailable(tenantID, what string, cause error) error {
+	return &loopzeroerrors.LoopZeroError{
+		Code:    loopzeroerrors.ErrPlatformDegraded.Code,
+		Message: "plan limits cannot be verified right now; retry shortly",
+		Cause:   fmt.Errorf("%s for tenant %s: %w", what, tenantID, cause),
+	}
+}
+
 // CheckLimit verifies if a tenant can perform an operation for the given metric.
-func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) LimitResult {
+func (l *PlanLimiter) CheckLimit(ctx context.Context, tenantID, metric string, currentCount int) (LimitResult, error) {
 	if !l.hasStore() {
-		return LimitResult{Allowed: true, Plan: "dev", Metric: metric}
+		return LimitResult{Allowed: true, Plan: "dev", Metric: metric}, nil
 	}
 
-	plan := l.getTenantPlan(tenantID)
-	if plan == "enterprise" {
-		return LimitResult{Allowed: true, Plan: plan, Metric: metric}
+	plan, err := l.tenantPlan(ctx, tenantID)
+	if err != nil {
+		return LimitResult{}, err
+	}
+	if plan == domain.PlanTierEnterprise {
+		return LimitResult{Allowed: true, Plan: plan.String(), Metric: metric}, nil
 	}
 
-	hardLimit, softLimit := l.getLimits(plan, metric)
+	hardLimit, softLimit, err := l.limits(ctx, tenantID, plan, metric)
+	if err != nil {
+		return LimitResult{}, err
+	}
+	result := LimitResult{Plan: plan.String(), Metric: metric, Current: currentCount, Limit: hardLimit}
 	if hardLimit < 0 {
-		return LimitResult{Allowed: true, Plan: plan, Metric: metric}
+		return LimitResult{Allowed: true, Plan: plan.String(), Metric: metric}, nil
 	}
 	if hardLimit == 0 {
-		// hardLimit==0 means no limit row found — fail closed for safety.
-		// Enterprise plans are already handled above. A missing row for
-		// a non-enterprise plan should deny, not silently allow.
+		// No limit row for a non-enterprise plan: deny rather than allow.
 		l.logger.Warn("no limit configured (denying by default)",
 			"tenant", tenantID, "plan", plan, "metric", metric,
 		)
-		return LimitResult{
-			Allowed: false,
-			Plan:    plan,
-			Metric:  metric,
-			Current: currentCount,
-			Limit:   0,
-		}
-	}
-
-	result := LimitResult{
-		Plan:    plan,
-		Metric:  metric,
-		Current: currentCount,
-		Limit:   hardLimit,
+		return result, nil
 	}
 
 	if softLimit > 0 && currentCount >= softLimit {
@@ -112,20 +99,19 @@ func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) Limi
 			"tenant", tenantID, "plan", plan, "metric", metric,
 			"current", currentCount, "soft_limit", softLimit,
 		)
-		return result
+		return result, nil
 	}
 
 	if currentCount >= hardLimit {
-		result.Allowed = false
 		l.logger.Info("hard limit exceeded",
 			"tenant", tenantID, "plan", plan, "metric", metric,
 			"current", currentCount, "hard_limit", hardLimit,
 		)
-		return result
+		return result, nil
 	}
 
 	result.Allowed = true
-	return result
+	return result, nil
 }
 
 // CheckValue verifies if a REQUESTED value (not accumulated usage) is within
@@ -135,224 +121,150 @@ func (l *PlanLimiter) CheckLimit(tenantID, metric string, currentCount int) Limi
 //
 // B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
 //
-// Semantics (matches MEET-059 Stage 2 test contract):
-//   - nil limiter / nil DB            → Allowed (dev fall-through, same as CheckLimit)
+// Semantics:
+//   - nil limiter / nil store         → Allowed (dev fall-through, same as CheckLimit)
 //   - enterprise plan                 → Allowed (unlimited)
 //   - hard_limit NULL (< 0)           → Allowed (unlimited for this plan)
 //   - hard_limit == 0 (missing row)   → Denied (fail closed, logged)
 //   - requested <= hard_limit         → Allowed
 //   - requested > hard_limit          → Denied, LimitResult.Current == requested
+//   - plan or limits unreadable       → PLATFORM_DEGRADED error
 //
 // Reports LimitResult.Current as the REQUESTED value (not current usage),
 // so `FormatLimitError` surfaces it to the user.
-func (l *PlanLimiter) CheckValue(tenantID, metric string, requested int) LimitResult {
+func (l *PlanLimiter) CheckValue(ctx context.Context, tenantID, metric string, requested int) (LimitResult, error) {
 	if !l.hasStore() {
-		return LimitResult{Allowed: true, Plan: "dev", Metric: metric, Current: requested}
+		return LimitResult{Allowed: true, Plan: "dev", Metric: metric, Current: requested}, nil
 	}
 
-	plan := l.getTenantPlan(tenantID)
-	if plan == "enterprise" {
-		return LimitResult{Allowed: true, Plan: plan, Metric: metric, Current: requested}
+	plan, err := l.tenantPlan(ctx, tenantID)
+	if err != nil {
+		return LimitResult{}, err
+	}
+	if plan == domain.PlanTierEnterprise {
+		return LimitResult{Allowed: true, Plan: plan.String(), Metric: metric, Current: requested}, nil
 	}
 
-	hardLimit, _ := l.getLimits(plan, metric)
-	if hardLimit < 0 {
-		return LimitResult{Allowed: true, Plan: plan, Metric: metric, Current: requested}
+	hardLimit, _, err := l.limits(ctx, tenantID, plan, metric)
+	if err != nil {
+		return LimitResult{}, err
 	}
-	if hardLimit == 0 {
+	result := LimitResult{Plan: plan.String(), Metric: metric, Current: requested, Limit: hardLimit}
+	switch {
+	case hardLimit < 0:
+		result.Allowed = true
+		result.Limit = 0
+	case hardLimit == 0:
 		l.logger.Warn("no value limit configured (denying by default)",
 			"tenant", tenantID, "plan", plan, "metric", metric, "requested", requested,
 		)
-		return LimitResult{
-			Allowed: false,
-			Plan:    plan,
-			Metric:  metric,
-			Current: requested,
-			Limit:   0,
-		}
-	}
-
-	result := LimitResult{
-		Plan:    plan,
-		Metric:  metric,
-		Current: requested,
-		Limit:   hardLimit,
-	}
-	if requested > hardLimit {
-		result.Allowed = false
+	case requested > hardLimit:
 		l.logger.Info("requested value exceeds plan cap",
 			"tenant", tenantID, "plan", plan, "metric", metric,
 			"requested", requested, "hard_limit", hardLimit,
 		)
-		return result
+	default:
+		result.Allowed = true
 	}
-	result.Allowed = true
-	return result
+	return result, nil
 }
 
 // CheckProjectsValue answers "may this Account create one more project?" given
 // its CURRENT project count. M4 (account-level tenancy, Phase 2): unlike
 // CheckValue (tenant-scoped), it resolves the ACCOUNT plan + the per-Account
 // `projects` cap. Allowed iff creating one more stays within the cap
-// (current < hard); enterprise / unlimited (hard < 0) always allowed; a missing
-// limit row fails closed. The COUNT is supplied by the caller (the atomic
-// in-transaction count in the create path — T2.1).
-func (l *PlanLimiter) CheckProjectsValue(tenantID string, current int) LimitResult {
+// (current < hard); enterprise / unlimited (hard < 0) always allowed with
+// Limit -1; a missing limit row fails closed. The COUNT is supplied by the
+// caller (the atomic in-transaction count in the create path — T2.1).
+func (l *PlanLimiter) CheckProjectsValue(ctx context.Context, tenantID string, current int) (LimitResult, error) {
+	const metric = "projects"
 	if !l.hasStore() {
-		return LimitResult{Allowed: true, Plan: "dev", Metric: "projects", Current: current}
+		return LimitResult{Allowed: true, Plan: "dev", Metric: metric, Current: current}, nil
 	}
 
-	plan := l.getAccountPlan(tenantID)
-	if plan == "enterprise" {
+	plan, err := l.accountPlan(ctx, tenantID)
+	if err != nil {
+		return LimitResult{}, err
+	}
+	unlimited := LimitResult{Allowed: true, Plan: plan.String(), Metric: metric, Current: current, Limit: -1}
+	if plan == domain.PlanTierEnterprise {
 		// Limit:-1 is the unambiguous "unlimited" sentinel the create path uses
 		// to SKIP the advisory lock + count (EC-6).
-		return LimitResult{Allowed: true, Plan: plan, Metric: "projects", Current: current, Limit: -1}
+		return unlimited, nil
 	}
 
-	hardLimit, _ := l.getLimits(plan, "projects")
-	if hardLimit < 0 {
-		return LimitResult{Allowed: true, Plan: plan, Metric: "projects", Current: current, Limit: -1}
+	hardLimit, _, err := l.limits(ctx, tenantID, plan, metric)
+	if err != nil {
+		return LimitResult{}, err
 	}
+	if hardLimit < 0 {
+		return unlimited, nil
+	}
+	result := LimitResult{Plan: plan.String(), Metric: metric, Current: current, Limit: hardLimit}
 	if hardLimit == 0 {
 		l.logger.Warn("no projects limit configured (denying by default)",
 			"tenant", tenantID, "plan", plan, "current", current)
-		return LimitResult{Allowed: false, Plan: plan, Metric: "projects", Current: current, Limit: 0}
+		return result, nil
 	}
-
-	result := LimitResult{Plan: plan, Metric: "projects", Current: current, Limit: hardLimit}
 	result.Allowed = current < hardLimit // creating one more makes count current+1 ≤ hard
 	if !result.Allowed {
 		l.logger.Info("account at project cap",
 			"tenant", tenantID, "plan", plan, "current", current, "hard_limit", hardLimit)
 	}
-	return result
+	return result, nil
 }
 
-// GetBuildTimeout returns the build timeout for a tenant's plan (in seconds).
-func (l *PlanLimiter) GetBuildTimeout(tenantID string) int {
-	if !l.hasStore() {
-		return 1800
+// tenantPlan resolves the tenant's plan through domain.ResolvePlanTier — the
+// single implementation of the plan-tier rule (ADR D4): a missing
+// subscription is Starter, legacy "growth" is Pro, an unrecognised value and a
+// store failure are errors.
+func (l *PlanLimiter) tenantPlan(ctx context.Context, tenantID string) (domain.PlanTier, error) {
+	plan, err := domain.ResolvePlanTier(ctx, l.store, tenantID)
+	if err != nil {
+		return domain.PlanTierUnknown, errLimitsUnavailable(tenantID, "resolve plan", err)
 	}
-	plan := l.getTenantPlan(tenantID)
-	hardLimit, _ := l.getLimits(plan, "build_timeout_seconds")
-	if hardLimit <= 0 {
-		return 1800
-	}
-	return hardLimit
-}
-
-// GetRateLimit returns the API rate limit for a tenant's plan (requests per minute).
-func (l *PlanLimiter) GetRateLimit(tenantID string) int {
-	if !l.hasStore() {
-		return 300
-	}
-	plan := l.getTenantPlan(tenantID)
-	hardLimit, _ := l.getLimits(plan, "api_requests_per_min")
-	if hardLimit <= 0 {
-		return 60
-	}
-	return hardLimit
-}
-
-func (l *PlanLimiter) getTenantPlan(tenantID string) string {
-	plan, err := l.store.GetTenantPlan(context.Background(), tenantID)
-	if err != nil || plan == "" {
-		l.logger.Warn("subscription row missing — falling back to starter plan",
-			"tenant", tenantID, "error", err)
-		if l.OnFallbackStarter != nil {
-			l.OnFallbackStarter()
-		}
-		return "starter"
-	}
-	return plan
+	return plan, nil
 }
 
 // accountPlanResolver is the OPTIONAL capability (ISP) a LimitsStore may
 // implement to resolve a tenant's ACCOUNT plan. Kept off the core LimitsStore
-// interface so narrow test fakes are not forced to implement it; only the
-// production sqlLimitsStore (and the enforcement fake) provide it.
+// interface so narrow test fakes are not forced to implement it.
 type accountPlanResolver interface {
 	GetAccountPlanByTenant(ctx context.Context, tenantID string) (string, error)
 }
 
-// getAccountPlan resolves the plan of the tenant's Account (M4). EC-2: a missing
-// account subscription (or a NULL account_id, impossible post-M3 but defensive)
-// falls back to "starter" — fail-CLOSED to the tightest cap, never silently
-// unlimited. A store that does not implement accountPlanResolver degrades to the
-// tenant-scoped plan (pre-M4 behavior) rather than failing.
-func (l *PlanLimiter) getAccountPlan(tenantID string) string {
+// accountPlanStore presents an accountPlanResolver as a domain.PlanTierStore,
+// so the account plan goes through the same ResolvePlanTier rule as the
+// tenant plan.
+type accountPlanStore struct{ resolver accountPlanResolver }
+
+func (s accountPlanStore) GetTenantPlan(ctx context.Context, tenantID string) (string, error) {
+	return s.resolver.GetAccountPlanByTenant(ctx, tenantID)
+}
+
+// accountPlan resolves the plan of the tenant's Account (M4). A missing
+// account subscription is Starter — the tightest cap, never unlimited. A
+// store that does not implement accountPlanResolver degrades to the
+// tenant-scoped plan (pre-M4 behavior).
+func (l *PlanLimiter) accountPlan(ctx context.Context, tenantID string) (domain.PlanTier, error) {
 	resolver, ok := l.store.(accountPlanResolver)
 	if !ok {
-		return l.getTenantPlan(tenantID) // store has no account resolution — degrade
+		return l.tenantPlan(ctx, tenantID)
 	}
-	plan, err := resolver.GetAccountPlanByTenant(context.Background(), tenantID)
-	if err != nil || plan == "" {
-		l.logger.Warn("account subscription missing — falling back to starter plan",
-			"tenant", tenantID, "error", err)
-		if l.OnFallbackStarter != nil {
-			l.OnFallbackStarter()
-		}
-		return "starter"
-	}
-	return plan
-}
-
-func (l *PlanLimiter) getLimits(plan, metric string) (hardLimit, softLimit int) {
-	hard, soft, err := l.store.GetLimits(context.Background(), plan, metric)
+	plan, err := domain.ResolvePlanTier(ctx, accountPlanStore{resolver}, tenantID)
 	if err != nil {
-		// sql.ErrNoRows OR comparable not-found → 0/0 sentinel preserved
-		// for fail-closed semantics. Other errors are also treated as
-		// missing row (defensive — limiter still surfaces denial via the
-		// limiter's "no limit configured" path).
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, 0
-		}
-		return 0, 0
+		return domain.PlanTierUnknown, errLimitsUnavailable(tenantID, "resolve account plan", err)
 	}
-	return hard, soft
+	return plan, nil
 }
 
-// FormatLimitError creates a user-facing error message for a plan limit violation.
-func FormatLimitError(result LimitResult, upgradeURL string) map[string]interface{} {
-	return map[string]interface{}{
-		"code":        "PLAN_LIMIT_EXCEEDED",
-		"message":     fmt.Sprintf("Plan limit reached: %s allows %d %s (current: %d). Upgrade your plan to continue.", displayPlan(result.Plan), result.Limit, displayMetric(result.Metric), result.Current),
-		"plan":        result.Plan,
-		"limit":       result.Metric,
-		"current":     result.Current,
-		"max":         result.Limit,
-		"upgrade_url": upgradeURL,
+// limits reads the (hard, soft) pair for a plan and metric. A missing row is
+// the (0, 0) sentinel the store returns and the checks deny on; any store
+// error is returned as PLATFORM_DEGRADED.
+func (l *PlanLimiter) limits(ctx context.Context, tenantID string, plan domain.PlanTier, metric string) (hardLimit, softLimit int, err error) {
+	hard, soft, err := l.store.GetLimits(ctx, plan.String(), metric)
+	if err != nil {
+		return 0, 0, errLimitsUnavailable(tenantID, "read "+metric+" limit", err)
 	}
-}
-
-func displayPlan(plan string) string {
-	switch plan {
-	case "starter":
-		return "Starter"
-	case "pro":
-		return "Pro"
-	case "team":
-		return "Team"
-	default:
-		return plan
-	}
-}
-
-func displayMetric(metric string) string {
-	switch metric {
-	case "projects":
-		return "projects"
-	case "services_per_project":
-		return "services per project"
-	case "environments":
-		return "environments"
-	case "builds_per_month":
-		return "builds per month"
-	case "seats":
-		return "team members"
-	case "secrets_per_env":
-		return "secrets per environment"
-	default:
-		return metric
-	}
+	return hard, soft, nil
 }

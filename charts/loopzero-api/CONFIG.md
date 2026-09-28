@@ -32,7 +32,7 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `ARGO_NAMESPACE` | `argo` | N | - | Argo Workflows namespace |
 | `ARGOCD_NAMESPACE` | `argocd` | N | - | ArgoCD namespace |
 | `API_CROSS_CLUSTER_URL` | `http://loopzero-api.loopzero-system.svc.cluster.local:3001` | N | internal-url | cross-cluster API URL |
-| `GITEA_URL` | `http://gitea-http.gitea.svc.cluster.local:3000` | N | internal-url | Gitea URL |
+| `GITEA_URL` | `http://gitea-http.loopzero-system.svc.cluster.local:3000` | N | internal-url | Gitea URL |
 | `GITEA_CROSS_CLUSTER_URL` | (empty) | N | internal-url | Gitea URL reachable from build cluster |
 | `GITEA_ORG` | `loopzero` | N | - | Gitea org for tenant gitops repos |
 | `CORE_KUBE_CONTEXT` | `k3d-loopzero-core` | N | - | mgmt cluster context name |
@@ -43,12 +43,14 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `SOURCE_BUCKET` | `loopzero-builds` | N | - | S3 bucket for source bundles |
 | `REGISTRY_URL` | (empty) | N | - | container registry URL |
 | `REGISTRY_INSECURE` | `false` | N | - | skip registry TLS verify (prod must be false) |
-| `HARBOR_REGISTRY_URL` | (empty) | N | - | secondary Harbor registry (empty=disabled) |
 | `WORKLOAD_INGRESS_URL` | (empty) | N | - | workload ingress URL |
 | `LOOPZERO_PREVIEW_PUBLIC_DOMAIN` | (empty) | N | public-url | preview wildcard public domain |
 | `LOOPZERO_PUBLIC_DOMAIN` | (empty) | N | public-url | app wildcard public domain |
 | `LOOPZERO_CLUSTER_ISSUER` | `letsencrypt-prod` | Y | - | cert-manager ClusterIssuer (required prod) |
 | `LOOPZERO_PROMETHEUS_ADDRESS` | (empty) | N | internal-url | Prometheus URL for canary analysis |
+| `LOOPZERO_DATA_PLANE_POLLER_ENABLED` | `false` | N | - | record per-environment ready replicas for the dashboard badge (#128) |
+| `LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL` | (empty) | N | internal-url | Prometheus the readiness poller queries (absolute http(s) URL) |
+| `LOOPZERO_DATA_PLANE_POLLER_INTERVAL` | `30s` | N | - | readiness poller cadence |
 | `LOKI_URL` | `http://loki.monitoring:3100` | N | internal-url | Loki push URL |
 | `LOOPZERO_GRAFANA_BASE_URL` | (empty) | N | public-url | Grafana deep-link root |
 | `GITHUB_APP_ID` | (empty) | N | - | GitHub App ID |
@@ -87,7 +89,6 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `RELEASE_PENDING_TIMEOUT` | `6m` | N | - | release pending timeout |
 | `RELEASE_REAPER_INTERVAL` | `30s` | N | - | release reaper interval |
 | `BUILD_RECONCILE_INTERVAL` | `5s` | N | - | build reconcile interval |
-| `MAX_BUILDS_PER_TENANT` | `3` | N | - | max builds per tenant |
 | `SSE_HEARTBEAT_INTERVAL` | `15s` | N | - | SSE heartbeat interval |
 | `SSE_POLL_INTERVAL` | `1s` | N | - | SSE poll interval |
 | `SSE_SAFETY_TIMEOUT` | `5m` | N | - | SSE safety timeout |
@@ -99,7 +100,7 @@ This table is **set-equal** to the rendered ConfigMap keys (hermetic Go guard `T
 | `LOOPZERO_ADMISSION_CONTROL` | `false` | N | - | backpressure admission control |
 | `MAX_CONCURRENT_BUILDS_PER_CELL` | `20` | N | - | cell concurrent build limit |
 | `MAX_TENANTS_PER_CELL` | `5000` | N | - | max tenants per cell |
-| `MAX_CONCURRENT_BUILDS_PER_TENANT` | `3` | N | - | per-tenant concurrent build limit |
+| `MAX_CONCURRENT_BUILDS_PER_TENANT` | `3` | N | - | the per-tenant concurrent build limit: reconcile backpressure, admission cap and the Tenant CR limit |
 | `PG_CIRCUIT_BREAKER_THRESHOLD_PCT` | `90` | N | - | PG pool CB threshold % |
 | `LOOPZERO_USE_PG_CLAIMS` | `false` | N | - | PG-backed processing claims |
 | `LOOPZERO_KEDA_ENABLED` | `false` | N | - | KEDA scale-to-zero gate |

@@ -108,8 +108,25 @@ Manual operator actions: force a refresh, or force-revoke **all** sessions for a
 
 ## Build cluster SA token rotation (manual)
 
-**Symptom:** a cached SA token in a `ClusterCredential` Secret stops working *before* its
-`exp` claim — the SA UID changed because it was recreated during a rollout.
+**Symptom:** loopzero-api logs `argo step watcher: build cluster auth failed — rotate
+loopzero-workflow-submitter token` — a 401/403 from the build cluster.
+
+loopzero-api reaches the build cluster through `loopzero-cluster-kubeconfigs` (key
+`build.kubeconfig`), with a token for `loopzero-workflow-submitter` in `argo`. Re-mint it, with
+the cell-0 key, through the one minter those keys have:
+
+```bash
+CORE_CONTEXT=k3d-loopzero-core loopzero-ops seed cluster-kubeconfigs   # task k3d:heal runs the same
+```
+
+That is `kubectl -n argo create token loopzero-workflow-submitter --duration=720h`, rendered with
+the build cluster's live CA. Do **NOT** mint `loopzero-build-sa` here: it is the workflow
+executor, bound only to `workflowtaskresults`, so its token authenticates and is then
+Forbidden to list workflows — a readable 401 traded for a silent 403. loopzero-api re-reads the
+token on its next rejected call; no restart is needed.
+
+**A `ClusterCredential` Secret** is a separate path. Symptom: a cached SA token stops working
+*before* its `exp` claim — the SA UID changed because it was recreated during a rollout.
 
 ```bash
 kubectl create token loopzero-system/default --duration=24h
@@ -191,9 +208,14 @@ made under pressure.
 
 ## Local public dashboard (manual, dev only)
 
-The edge serves `~/loopzero-cloud/loopzero-cloud/dashboard/dist` — that path is the `root *` of the
-`app-dev` blocks in `infra/local/Caddyfile`, and the `dashboard-root-parity` gate fails this runbook
-if the two diverge. The canonical checkout is `~/loopzero-cloud/loopzero-cloud`.
+The edge serves `{$LOOPZERO_DASHBOARD_DIST:../loopzero-cloud/dashboard/dist}` — that expression is the
+`root *` of the `app-dev` blocks in `infra/local/Caddyfile`, and the `dashboard-root-parity` gate
+fails this runbook if the two diverge.
+
+It was an absolute path under one person's home until 2026-09-16, which made the file work on
+exactly one machine and published that machine's directory layout to anyone who cloned. The
+default is now relative to this repository, and `LOOPZERO_DASHBOARD_DIST` overrides it for a checkout
+laid out differently.
 
 **The obvious path misleads:** the dashboard source moved to the sibling repo `../loopzero-cloud` at M4,
 so a `dashboard/` under this repository is stale if it exists at all. Build in the sibling, serve the
@@ -229,6 +251,17 @@ and the database disagree about where a customer lives.
 | `BuildFailureRateHigh` (5m) | >10% of builds FAILED over 5m | recent Argo Workflow failures; check whether one step (clone, sign, push) dominates |
 | `LoopZeroBuildQueueSlow` (5m) | `loopzero_build_queue_depth > 5` | `maxConcurrentBuildsPerCell` is 20 — a depth of 5 is early, not saturated |
 
+## Sigstore storage
+
+`LoopZeroSigstorePVUsageHigh` (>80% for 30m) · `LoopZeroSigstorePVUsageCritical` (>95% for 5m).
+
+Rekor and its Trillian backend only ever grow: the transparency log is append-only and
+nothing in this repository archives or prunes it. The one remedy is more volume —
+`kubectl -n sigstore-system get pvc`, then raise `spec.resources.requests.storage` on the
+claim the alert names. That works only when its StorageClass has
+`allowVolumeExpansion: true`; otherwise the data has to move to a larger volume (§ PV
+rebind). At 100% Rekor stops accepting entries and every signed build stalls.
+
 ## Velero backup alerts
 
 `LoopZeroVeleroServerDown` (`up{job="velero"} == 0` for 2m) · `LoopZeroVeleroBackupStale` (no
@@ -243,9 +276,12 @@ trusting the success metric.
 Protects platform resources on the core cluster from deletion.
 
 **The failure mode to watch for:** a `DELETE` policy that stops exempting the cluster
-garbage collector **deadlocks namespaces in `Terminating`**. The exempt identities are
-`system:serviceaccount:kube-system:namespace-controller`, `system:kube-controller-manager`
-and the `system:masters` group.
+garbage collector **deadlocks namespaces in `Terminating`**. The exempt identities are every
+`system:serviceaccount:kube-system:*` account (the namespace controller and the garbage
+collector among them), `system:kube-controller-manager`, the `system:masters` group, and the
+platform ServiceAccounts listed in `systemActorExemptions.platformServiceAccounts` of the
+admission-policies values. All of it is rendered by one helper,
+`loopzero-admission.systemActorExemptions`, used by every policy that matches UPDATE or DELETE.
 
 Two more traps, both of which make a test pass for the wrong reason:
 
@@ -265,6 +301,21 @@ nothing about the policy. The RBAC message reads `cannot delete resource ... at 
 scope`; the policy's message names the policy.
 
 Rollback is a values toggle — no rebuild.
+
+## Image-digest admission warnings
+
+`LoopZeroImageDigestWarnRatePresent` fires when the `loopzero-require-image-digest` policy, still in
+warn mode, saw a pod admitted with an image `:tag` instead of `@sha256:<digest>`.
+
+1. Find the workload: `kubectl get events -A --field-selector reason=FailedAdmission` or the
+   API-server audit log for `loopzero-require-image-digest`.
+2. A platform chart, sidecar or operator-rendered manifest using a tag is a defect in that
+   source — pin it by digest there.
+3. Only when the rate has stayed at zero for the 7-day soak may
+   `vaps.requireImageDigestEnforce` be set to `true`; with violations still present the flip
+   denies those pods.
+
+Rollback is the same values toggle.
 
 ## Security and vault audit alerts
 

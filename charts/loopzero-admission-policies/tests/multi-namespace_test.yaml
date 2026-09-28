@@ -26,7 +26,6 @@ tests:
     set:
       vaps.restrictRegistries: true
       registries.docrPrefix: "registry.digitalocean.com/loopzero-system/"
-      registries.harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
     documentIndex: 1
     asserts:
       - isKind:

@@ -152,3 +152,43 @@ func TestPlanTier_StringMatchesUnderlying(t *testing.T) {
 			PlanTierUnknown.String())
 	}
 }
+
+func TestPlanTierDisplayName_NamesEveryTierAndKeepsUnknownValuesVisible(t *testing.T) {
+	cases := map[PlanTier]string{
+		PlanTierStarter:    "Starter",
+		PlanTierPro:        "Pro",
+		PlanTierTeam:       "Team",
+		PlanTierEnterprise: "Enterprise",
+		PlanTier("growth"): "growth",
+	}
+	for tier, want := range cases {
+		if got := tier.DisplayName(); got != want {
+			t.Errorf("PlanTier(%q).DisplayName() = %q, want %q", tier, got, want)
+		}
+	}
+}
+
+func TestParsePlanTier_AcceptsCanonicalValues(t *testing.T) {
+	for _, raw := range []string{"starter", "pro", "team", "enterprise"} {
+		got, err := ParsePlanTier(raw)
+		if err != nil || got.String() != raw {
+			t.Errorf("ParsePlanTier(%q) = (%q, %v), want (%q, nil)", raw, got, err, raw)
+		}
+	}
+}
+
+func TestParsePlanTier_MapsLegacyGrowthToPro(t *testing.T) {
+	got, err := ParsePlanTier("growth")
+	if err != nil || got != PlanTierPro {
+		t.Errorf("ParsePlanTier(growth) = (%q, %v), want (pro, nil)", got, err)
+	}
+}
+
+func TestParsePlanTier_RejectsUnknownWithoutDefaultingToStarter(t *testing.T) {
+	for _, raw := range []string{"", "gold", "TEAM"} {
+		got, err := ParsePlanTier(raw)
+		if !errors.Is(err, ErrUnknownPlanTier) || got != PlanTierUnknown {
+			t.Errorf("ParsePlanTier(%q) = (%q, %v), want (unknown, ErrUnknownPlanTier)", raw, got, err)
+		}
+	}
+}

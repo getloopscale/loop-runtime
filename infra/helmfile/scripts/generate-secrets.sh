@@ -8,6 +8,9 @@
 # (B1 cosign placeholder, B4 token drift, generic password rotation churn).
 #
 # Usage: generate-secrets.sh <env> <cluster>
+#        generate-secrets.sh --backup-only <file-prefix> <namespace/name>...
+#          Only writes a restorable backup of the named Secrets (the context comes
+#          from KUBECTL_CONTEXT). The build and runtime generators use this.
 #   env:     dev | prod | standalone
 #   cluster: core | runtime
 #
@@ -16,15 +19,21 @@
 #   LOOPZERO_REGISTRY_ENDPOINT, LOOPZERO_BUCKET_NAME, LOOPZERO_BUCKET_ENDPOINT
 #   LOOPZERO_SPACES_KEY, LOOPZERO_SPACES_SECRET
 #   LOOPZERO_GITEA_ADMIN_PASSWORD, LOOPZERO_GITEA_TOKEN
-#   LOOPZERO_HARBOR_ADMIN_PASSWORD, LOOPZERO_HARBOR_REDIS_PASSWORD
 #
 # Backup: every successful run dumps loopzero-platform-secrets to
 #   ~/.loopzero/backups/secrets-mgmt-{env}-{timestamp}.yaml (chmod 600)
 # Restore: kubectl apply -f <backup-file>
 set -euo pipefail
 
-ENV="${1:?usage: $0 <env> <cluster>}"
-CLUSTER="${2:?usage: $0 <env> <cluster>}"
+BACKUP_ONLY=false
+if [[ "${1:-}" == "--backup-only" ]]; then
+  BACKUP_ONLY=true
+  shift
+  [[ $# -ge 2 ]] || { echo "usage: $0 --backup-only <file-prefix> <namespace/name>..." >&2; exit 1; }
+else
+  ENV="${1:?usage: $0 <env> <cluster>}"
+  CLUSTER="${2:?usage: $0 <env> <cluster>}"
+fi
 
 # Canonical 2026-06-20 (issue #115): pin kubectl context to the mgmt cluster.
 # This script applies Secrets to mgmt — without the pin, an active shell
@@ -79,62 +88,78 @@ apply_secret() {
   log "secret $ns/$name applied (idempotent)"
 }
 
+# backup_secrets <file-prefix> <namespace/name>...
+#
+# The one restorable Secret backup of the bootstrap scripts. generate-build-secrets.sh
+# and generate-runtime-secrets.sh call it through `--backup-only` instead of keeping
+# their own copies — theirs dumped raw `kubectl get -o yaml`, which carries
+# resourceVersion/uid/managedFields and fails to re-apply ("object has been modified").
+#
+# Writes ~/.loopzero/backups/<file-prefix>-<timestamp>.yaml (chmod 600) and keeps the ten
+# most recent per prefix.
 backup_secrets() {
+  local prefix="$1"
+  shift
   local backup_dir="${HOME}/.loopzero/backups"
   mkdir -p "$backup_dir"
   chmod 700 "$backup_dir"
   local ts
   ts=$(date +%Y%m%d-%H%M%S)
-  local out="${backup_dir}/secrets-${CLUSTER}-${ENV}-${ts}.yaml"
-  # Dump every LoopZero-managed Secret in loopzero-system into a single file.
+  local out="${backup_dir}/${prefix}-${ts}.yaml"
+  local raw item
+  raw=$(mktemp)
+  for item in "$@"; do
+    # A Secret not created yet (first install) is simply absent from the backup.
+    kubectl get secret -n "${item%%/*}" "${item#*/}" -o yaml 2>/dev/null >>"$raw" && echo '---' >>"$raw" || true
+  done
   # CRITICAL (iter 17 fix): strip server-managed fields (resourceVersion, uid,
   # creationTimestamp, managedFields, ownerReferences) so `kubectl apply -f <file>`
   # works on a different cluster OR after the original Secret was modified.
   # Without stripping, restore fails with: "Conflict: object has been modified".
-  kubectl get secret -n loopzero-system \
-    loopzero-db-credentials gitea-admin minio-credentials \
-    harbor-admin harbor-redis-credentials loopzero-registry-pull \
-    -o yaml 2>/dev/null | python3 -c "
+  python3 -c "
 import sys, yaml
-docs = list(yaml.safe_load_all(sys.stdin))
 out = []
-for d in docs:
-    if not d:
+for d in yaml.safe_load_all(sys.stdin):
+    # Only a mapping can be a Secret; anything else kubectl printed is not one.
+    if not isinstance(d, dict):
         continue
-    # If list of items (kubectl get -o yaml returns a List)
     items = d.get('items', [d]) if d.get('kind') == 'List' else [d]
     for item in items:
-        if not item:
+        if not isinstance(item, dict):
             continue
         meta = item.get('metadata', {})
-        # Remove server-generated fields that block apply on a different state
         for f in ('resourceVersion', 'uid', 'creationTimestamp',
                   'managedFields', 'ownerReferences', 'selfLink', 'generation'):
             meta.pop(f, None)
-        # Drop status (server-side only)
         item.pop('status', None)
         out.append(item)
 if out:
     print(yaml.safe_dump_all(out, default_flow_style=False))
-" > "$out" 2>/dev/null || true
+" <"$raw" >"$out"
+  rm -f "$raw"
   if [[ -s "$out" ]]; then
     chmod 600 "$out"
     log "backup written: $out (cleaned of server-managed fields — restorable)"
-    # Keep only the 10 most recent backups per cluster/env to avoid disk bloat
-    # while preserving recent rotation history.
-    ls -t "${backup_dir}/secrets-${CLUSTER}-${ENV}-"*.yaml 2>/dev/null | tail -n +11 | xargs -r rm -f
+    ls -t "${backup_dir}/${prefix}-"*.yaml 2>/dev/null | tail -n +11 | xargs -r rm -f
   else
     rm -f "$out"
-    log "backup skipped (no LoopZero Secrets present yet — first install)"
+    log "backup skipped (no Secrets present yet — first install)"
   fi
 }
 
-# O cluster central chama-se `core` desde o rename de 2026-08-09 (ADR
-# docs/decisions.md). Chamador e guarda mudaram
-# juntos: enquanto os dois diziam `mgmt` nada quebrava, mas o vocabulario ficava preso.
-if [[ "$CLUSTER" != "core" ]]; then
-  log "noop: cluster=$CLUSTER (only core handled by this script)"
+if [[ "$BACKUP_ONLY" == "true" ]]; then
+  backup_secrets "$@"
   exit 0
+fi
+
+# The central cluster has been called `core` since the 2026-08-09 rename (ADR
+# docs/decisions.md). This used to log "noop" and exit 0 for any other name, and
+# two Taskfile callers still passing `mgmt` then installed the platform with no
+# database Secret — which only a cold install noticed (#397). A name this script
+# does not handle is the caller's mistake, so it is refused.
+if [[ "$CLUSTER" != "core" ]]; then
+  log "ERROR: cluster=$CLUSTER is not handled — this script provisions the core cluster only; pass 'core' (the pre-rename name was 'mgmt')"
+  exit 1
 fi
 
 log "generating mgmt secrets for env=$ENV (idempotent mode)"
@@ -171,7 +196,8 @@ if [[ -z "${LOOPZERO_DB_HOST:-}" ]]; then
   # fallback keeps the chicken-and-egg working. Long-term (T10.3, post T+60d) the
   # fallback is removed and Vault becomes the only path. Restored 2026-06-17 after
   # #69 (a cloud-CI commit) accidentally dropped it — caught by the
-  # check-generate-secrets-vault-fallback hermetic gate. The Vault branch runs
+  # cold-bootstrap fallback test (infra/tests/secrets/generate_secrets_vault_fallback_test.go).
+  # The Vault branch runs
   # BEFORE the legacy fallback so `${LOOPZERO_DB_PASSWORD:-loopzero-dev-password}` only
   # applies when Vault did NOT set it.
   if [[ -n "${BAO_ADDR:-}" ]] && [[ -n "${BAO_TOKEN:-}" ]] && command -v bao >/dev/null 2>&1; then
@@ -203,6 +229,33 @@ DB_URI="${LOOPZERO_DB_URI:-postgresql://${LOOPZERO_DB_USER:-loopzero}:${DB_PASSW
 # finding-2026-05-22-pg-password-divergence. Cloud (--provider) uses managed PG and
 # does NOT install the in-cluster chart, so this key is inert there.
 DB_ADMIN_PASSWORD="${LOOPZERO_DB_ADMIN_PASSWORD:-$(get_or_generate loopzero-db-credentials loopzero-system postgres-password)}"
+# #396 — loopzero-api refuses to serve requests over a pool that can bypass RLS
+# (db.AssertRequestPoolIsolated), so it connects as the non-owner `loopzero_api` role
+# and runs its cross-tenant loops as `loopzero_worker`. `uri` stays the OWNER's URL:
+# migrations run as the owner, and loopzero-cloud still reads it.
+#   in-cluster Postgres: both roles are created by `task db:roles` with these
+#     passwords — the same deterministic dev default as the owner's, for the same
+#     reason (the local toolchain and the Tilt values read it), overridable per role.
+#   managed Postgres: the provider creates loopzero_api and hands its credentials in
+#     LOOPZERO_DB_USER, so the request URL is DB_URI itself; the worker URL comes from
+#     LOOPZERO_WORKER_DB_URI when the environment provides one.
+if [[ "$LOOPZERO_DB_HOST" == "postgresql.loopzero-system.svc.cluster.local" ]]; then
+  DB_API_PASSWORD="${LOOPZERO_DB_API_PASSWORD:-loopzero-dev-password}"
+  DB_WORKER_PASSWORD="${LOOPZERO_DB_WORKER_PASSWORD:-loopzero-dev-password}"
+  DB_API_URI="postgresql://loopzero_api:${DB_API_PASSWORD}@${LOOPZERO_DB_HOST}:${LOOPZERO_DB_PORT:-5432}/${LOOPZERO_DB_NAME:-loopzero}?sslmode=${DB_SSLMODE}"
+  DB_WORKER_URI="postgresql://loopzero_worker:${DB_WORKER_PASSWORD}@${LOOPZERO_DB_HOST}:${LOOPZERO_DB_PORT:-5432}/${LOOPZERO_DB_NAME:-loopzero}?sslmode=${DB_SSLMODE}"
+  DB_ROLE_LITERALS=(
+    --from-literal=api-password="${DB_API_PASSWORD}"
+    --from-literal=worker-password="${DB_WORKER_PASSWORD}"
+    --from-literal=api-uri="${DB_API_URI}"
+    --from-literal=worker-uri="${DB_WORKER_URI}"
+  )
+else
+  DB_ROLE_LITERALS=(--from-literal=api-uri="${DB_URI}")
+  if [[ -n "${LOOPZERO_WORKER_DB_URI:-}" ]]; then
+    DB_ROLE_LITERALS+=(--from-literal=worker-uri="${LOOPZERO_WORKER_DB_URI}")
+  fi
+fi
 apply_secret loopzero-db-credentials loopzero-system \
   --from-literal=host="${LOOPZERO_DB_HOST}" \
   --from-literal=port="${LOOPZERO_DB_PORT:-5432}" \
@@ -210,7 +263,8 @@ apply_secret loopzero-db-credentials loopzero-system \
   --from-literal=user="${LOOPZERO_DB_USER:-loopzero}" \
   --from-literal=password="${DB_PASSWORD}" \
   --from-literal=postgres-password="${DB_ADMIN_PASSWORD}" \
-  --from-literal=uri="${DB_URI}"
+  --from-literal=uri="${DB_URI}" \
+  "${DB_ROLE_LITERALS[@]}"
 
 # 1.b) Service-auth shared secret (loopzero-api ↔ loopzero-cloud X-Service-Auth header).
 # T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
@@ -300,27 +354,27 @@ stringData:
 EOF
 
 # F-12 (CHG-2026-04-29-DOGFOOD T5.4) — loopzero-api `/api/v1/health/deep` probe
-# de ArgoCD requer um JWT válido. Pré-fix: ARGOCD_TOKEN nunca era setado em
-# standalone-multi → API responde `{"argocd":"auth_failed","status":"degraded"}`
-# HTTP 503 mesmo com ArgoCD saudável. Fix idempotente: login admin via REST,
-# capturar JWT, persistir em Secret `loopzero-api-tokens` (loopzero-system) com chave
-# `argocd-token` — exatamente o key esperado pelo Tilt manifest e pelo
+# of ArgoCD requires a valid JWT. Pre-fix: ARGOCD_TOKEN was never set in
+# standalone-multi → the API answers `{"argocd":"auth_failed","status":"degraded"}`
+# HTTP 503 even with a healthy ArgoCD. Idempotent fix: admin login via REST,
+# capture the JWT, persist it in Secret `loopzero-api-tokens` (loopzero-system) under the key
+# `argocd-token` — exactly the key expected by the Tilt manifest and by the
 # helmfile loopzero-api Deployment template.
 #
-# Login pattern: argocd-server expõe HTTP plain em port 80 (server.insecure:
-# true via Helm overlay). Token JWT default validade ~24h — refresh é
-# responsabilidade de iter 2 (fora do escopo deste fix). Falha silenciosa
-# se ArgoCD não estiver Ready (ex: bootstrap mid-flight): loopzero-api volta a
-# reportar degraded até o próximo sync, comportamento aceitável (não bloqueia
-# install).
+# Login pattern: argocd-server exposes plain HTTP on port 80 (server.insecure:
+# true via Helm overlay). Default JWT token validity ~24h — refresh is
+# the responsibility of iter 2 (out of scope for this fix). Fails silently
+# if ArgoCD is not Ready (e.g. bootstrap mid-flight): loopzero-api goes back to
+# reporting degraded until the next sync, acceptable behaviour (does not block
+# the install).
 if kubectl get namespace argocd >/dev/null 2>&1 && \
    kubectl get secret -n argocd argocd-initial-admin-secret >/dev/null 2>&1; then
   ADMIN_PW=$(kubectl get secret -n argocd argocd-initial-admin-secret -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
   ARGOCD_HOST="argocd-server.argocd.svc.cluster.local"
   if [[ -n "$ADMIN_PW" ]]; then
-    # Run login via short-lived debug Pod (kubectl run + curl). Idempotente:
-    # mesmo password produz tokens novos a cada call — preserva existing
-    # Secret se login falhar (mantém valor anterior em vez de zerar).
+    # Run login via short-lived debug Pod (kubectl run + curl). Idempotent:
+    # the same password produces new tokens on every call — preserves the existing
+    # Secret if login fails (keeps the previous value instead of zeroing it).
     ARGOCD_TOKEN=$(kubectl run argocd-token-bootstrap-$$ \
       --rm -i --restart=Never --image=curlimages/curl:8.5.0 \
       --command -- curl -s --max-time 5 \
@@ -414,20 +468,7 @@ VELERO_CLOUD_INI="$(printf '[default]\naws_access_key_id=%s\naws_secret_access_k
 apply_secret velero-s3-credentials velero-system \
   --from-literal=cloud="$VELERO_CLOUD_INI"
 
-# 4) Harbor admin password — IDEMPOTENT.
-HARBOR_PWD="${LOOPZERO_HARBOR_ADMIN_PASSWORD:-$(get_or_generate harbor-admin loopzero-system password)}"
-apply_secret harbor-admin loopzero-system \
-  --from-literal=password="$HARBOR_PWD"
-
-# 5) Harbor Redis credentials — IDEMPOTENT.
-# Host comes from Pulumi (L1 DO Managed Valkey), password is the Valkey password.
-HARBOR_REDIS_PWD="${LOOPZERO_HARBOR_REDIS_PASSWORD:-$(get_or_generate harbor-redis-credentials loopzero-system password)}"
-apply_secret harbor-redis-credentials loopzero-system \
-  --from-literal=password="$HARBOR_REDIS_PWD" \
-  --from-literal=host="${LOOPZERO_HARBOR_REDIS_HOST:-harbor-redis-master.loopzero-system.svc.cluster.local}" \
-  --from-literal=port="${LOOPZERO_HARBOR_REDIS_PORT:-6379}"
-
-# 6) Registry pull secret (LoopZero's DOCR/Harbor) — passthrough from Pulumi outputs.
+# 4) Registry pull secret (LoopZero's DOCR) — passthrough from Pulumi outputs.
 if [[ -n "${LOOPZERO_REGISTRY_ENDPOINT:-}" ]]; then
   REG_AUTH=$(printf '%s' "${LOOPZERO_SPACES_KEY:-}:${LOOPZERO_SPACES_SECRET:-}" | base64 -w0)
   cat <<EOF | kubectl apply -f - >/dev/null
@@ -443,7 +484,7 @@ EOF
   log "secret loopzero-system/loopzero-registry-pull applied"
 fi
 
-# 7) Cluster kubeconfigs for loopzero-api / controllers (B36 fix).
+# 5) Cluster kubeconfigs for loopzero-api / controllers (B36 fix).
 #
 # B36 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — loopzero-api requires kubeconfigs
 # for mgmt/build/runtime clusters to submit Argo Workflows and reconcile
@@ -531,7 +572,9 @@ KUBECONFIG_EOF
     --from-literal=cell-0.kubeconfig="$RUNTIME_KC"
 fi
 
-# 8) Backup all LoopZero-managed Secrets for disaster recovery.
-backup_secrets
+# 6) Backup all LoopZero-managed Secrets for disaster recovery.
+backup_secrets "secrets-${CLUSTER}-${ENV}" \
+  loopzero-system/loopzero-db-credentials loopzero-system/gitea-admin loopzero-system/minio-credentials \
+  loopzero-system/loopzero-registry-pull
 
 log "mgmt secrets generated for env=$ENV (idempotent — re-runs preserve values)"

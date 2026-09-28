@@ -17,13 +17,13 @@
 package baselineupdate
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baseline"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coverageparse"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -64,6 +64,10 @@ type Result struct {
 	// JSON is populated only when DryRun=true (the would-be content).
 	JSON []byte
 }
+
+// Verdict is Pass: the update is an operation, and a Result exists only when
+// it completed. A failed update is Run's error.
+func (r Result) Verdict() verdict.Verdict { return verdict.Pass }
 
 // Run executes the pipeline.
 //
@@ -141,7 +145,7 @@ func Run(cfg Config) (*Result, error) {
 	}
 
 	if cfg.DryRun {
-		body, err := marshalJSON(merged)
+		body, err := baseline.Marshal(merged)
 		if err != nil {
 			return nil, err
 		}
@@ -190,19 +194,4 @@ func readLCOV(path string) ([]coverageparse.PackageCoverage, error) {
 	}
 	defer func() { _ = f.Close() }()
 	return coverageparse.ParseLCOV(f)
-}
-
-// marshalJSON renders the baseline as indented JSON with trailing
-// newline. Mirrors baseline.Save's serialization so DryRun output
-// matches what would land on disk byte-for-byte.
-func marshalJSON(b *baseline.Baseline) ([]byte, error) {
-	out, err := json.MarshalIndent(b, "", "  ")
-	if err != nil {
-		return nil, &loopzeroerrors.LoopZeroError{
-			Code:    "OPS_DEPLOY_FAILURE",
-			Message: fmt.Sprintf("baselineupdate: json.MarshalIndent failed: %v", err),
-			Cause:   err,
-		}
-	}
-	return append(out, '\n'), nil
 }

@@ -7,7 +7,8 @@
 #   1. Writes new value to Vault at D6 path
 #   2. Annotates ExternalSecret to force ESO immediate refresh
 #   3. Polls K8s Secret until rotated value visible
-#   4. Looks up rotation table (embedded) for binaries consuming this path
+#   4. Resolves the ExternalSecrets reading this path from the chart inventory,
+#      and the Deployments consuming them
 #   5. Sequentially restarts each binary deployment (rolling restart)
 #   6. Waits for rollout convergence
 #
@@ -37,42 +38,40 @@
 set -uo pipefail
 
 # ----------------------------------------------------------------------------
-# Rotation table (canonical — must match runbook P2 table exactly)
-# Format: <D6-path>|<comma-separated-deployments>|<comma-separated-externalsecret-CRs>
+# What a rotation touches
+#
+# Which ExternalSecrets read a D6 path is NOT listed here: it is read from the
+# chart inventory (infra/helm/loopzero-external-secrets/values.yaml), the same file
+# seed-loopzero-secrets.sh and vault-sync-check.sh read, so a secret added to the
+# chart is rotatable without editing this script. A hand-kept copy of that list
+# drifted: it refreshed the operator's ExternalSecret for the api's gitea token,
+# which the operator does not read.
+#
+# What the chart does not say is which Deployments consume each target Secret,
+# so that is the one table kept here, keyed by ExternalSecret. A rotation that
+# reaches an ExternalSecret missing from it is refused, rather than skipping a
+# restart.
+# Format: <targetSecret>|<comma-separated-deployments>
 # ----------------------------------------------------------------------------
-ROTATION_TABLE=$(cat <<'EOF'
-api/secrets/gitea/token|loopzero-api,loopzero-tenant-operator|gitea-admin,loopzero-tenant-operator
-api/secrets/minio/access_key|loopzero-api,loopzero-tenant-operator|loopzero-api-minio,loopzero-tenant-operator
-api/secrets/minio/secret_key|loopzero-api,loopzero-tenant-operator|loopzero-api-minio,loopzero-tenant-operator
-api/secrets/service_auth/secret|loopzero-api|loopzero-service-auth
-api/secrets/service_auth/secret_previous|loopzero-api|loopzero-service-auth
-api/secrets/service_auth/ed25519_public_current|loopzero-api|loopzero-service-auth-ed25519-pub
-api/secrets/service_auth/ed25519_public_previous|loopzero-api|loopzero-service-auth-ed25519-pub
-api/secrets/admin/api_key|loopzero-api|loopzero-api-admin
-api/secrets/admin/api_key_previous|loopzero-api|loopzero-api-admin
-api/secrets/admin/service_auth_secret|loopzero-api|loopzero-api-admin
-api/secrets/admin/service_auth_secret_previous|loopzero-api|loopzero-api-admin
-api/secrets/argo/callback_secret|loopzero-api|loopzero-api-internal
-api/secrets/bootstrap_secret|loopzero-api|loopzero-api-internal
-api/secrets/secret_encryption_key|loopzero-api|loopzero-api-internal
-api/secrets/github/app_id|loopzero-api|loopzero-api-github
-api/secrets/github/app_private_key|loopzero-api|loopzero-api-github
-api/secrets/github/webhook_secret|loopzero-api|loopzero-api-github
-api/secrets/cf/api_token|loopzero-api|loopzero-api-tokens
-api/secrets/argocd/token|loopzero-api|loopzero-api-tokens
-api/secrets/stripe/secret_key|loopzero-api|loopzero-api-stripe
-api/secrets/nonce_redis/password|loopzero-api|loopzero-service-auth-redis
-cloud/secrets/service_auth/ed25519_private_key|loopzero-cloud|loopzero-service-auth-ed25519
-cloud/secrets/stripe/api_key|loopzero-cloud|loopzero-cloud-stripe
-cloud/secrets/stripe/webhook_secret|loopzero-cloud|loopzero-cloud-stripe
-operators/secrets/digitalocean/token|loopzero-tenant-operator|loopzero-tenant-operator
-operators/secrets/spaces/access_key_id|loopzero-tenant-operator|loopzero-tenant-operator
-operators/secrets/spaces/secret_access_key|loopzero-tenant-operator|loopzero-tenant-operator
-operators/secrets/harbor/admin_password|loopzero-tenant-operator|loopzero-tenant-operator
-build/secrets/cosign/passphrase|argo-workflows-controller|cosign-passphrase
-platform/secrets/vault-spki-pin/spki_hash|loopzero-api|vault-spki-pin
+RESTARTS_BY_EXTERNALSECRET=$(cat <<'EOF'
+gitea-admin|loopzero-api
+loopzero-api-tokens|loopzero-api
+loopzero-api-minio|loopzero-api
+loopzero-api-admin|loopzero-api
+loopzero-api-internal|loopzero-api
+loopzero-api-github|loopzero-api
+loopzero-api-stripe|loopzero-api
+loopzero-service-auth|loopzero-api
+loopzero-service-auth-ed25519-pub|loopzero-api
+loopzero-service-auth-redis|loopzero-api
+vault-spki-pin|loopzero-api
+loopzero-service-auth-ed25519|loopzero-cloud
+loopzero-cloud-stripe|loopzero-cloud
+loopzero-tenant-operator|loopzero-tenant-operator
+cosign-passphrase|argo-workflows-controller
 EOF
 )
+INVENTORY="${ROTATE_INVENTORY:-$(cd "$(dirname "$0")/../../.." && pwd)/infra/helm/loopzero-external-secrets/values.yaml}"
 
 # ----------------------------------------------------------------------------
 # CLI args
@@ -98,7 +97,7 @@ USAGE
 REQUIRED
   --env             LoopZero env (vault-local|standalone-multi|dev|drill|staging|prod)
   --path            D6 path relative (e.g., api/secrets/gitea/token)
-                    See runbook P2 rotation table for canonical paths.
+                    Any path an ExternalSecret in infra/helm/loopzero-external-secrets/values.yaml reads.
   --value           New secret value (REQUIRED — never write empty)
 
 OPTIONAL
@@ -159,7 +158,7 @@ if [ -z "$VALUE" ] && [ "$DRY_RUN" -eq 0 ]; then
   exit 1
 fi
 
-for tool in bao kubectl jq; do
+for tool in bao kubectl jq yq; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "ERROR: $tool not in PATH (required)" >&2
     exit 1
@@ -172,22 +171,48 @@ if [ "$DRY_RUN" -eq 0 ]; then
 fi
 
 # ----------------------------------------------------------------------------
-# Lookup rotation table — fail-fast if path unknown (EC-22: typo protection)
+# Resolve the ExternalSecrets and Deployments — fail fast on an unknown path
+# (EC-22: typo protection)
 # ----------------------------------------------------------------------------
-TABLE_LINE=$(echo "$ROTATION_TABLE" | grep "^${PATH_REL}|" || true)
-
-if [ -z "$TABLE_LINE" ]; then
-  echo "ERROR: path '$PATH_REL' not in rotation table" >&2
-  echo "Known paths:" >&2
-  echo "$ROTATION_TABLE" | cut -d'|' -f1 | sed 's/^/  /' >&2
-  echo "" >&2
-  echo "If this is a new path, add to ROTATION_TABLE in this script AND" >&2
-  echo "to runbook P2 rotation table BEFORE rotating." >&2
+if [ ! -f "$INVENTORY" ]; then
+  echo "ERROR: inventory not found: $INVENTORY" >&2
+  exit 1
+fi
+# A D6 path is <vaultBinary>/<vaultCategory>/<vaultKey>, where the binary is a
+# data entry's vaultBinaryOverride when it has one: the tenant operator's
+# ExternalSecret reads the api's gitea and minio keys that way, so a rotation
+# of those paths must refresh it and restart the operator too.
+PATH_BINARY="${PATH_REL%%/*}"
+PATH_REST="${PATH_REL#*/}"
+PATH_CATEGORY="${PATH_REST%%/*}"
+PATH_KEY="${PATH_REST#*/}"
+if ! EXTERNALSECRETS=$(B="$PATH_BINARY" C="$PATH_CATEGORY" K="$PATH_KEY" yq -r \
+    '.externalSecrets[] | . as $es | select($es.vaultCategory == strenv(C)) | select($es.data | any_c((.vaultBinaryOverride // $es.vaultBinary) == strenv(B) and .vaultKey == strenv(K))) | .targetSecret' \
+    "$INVENTORY" | sort -u | paste -sd, -); then
+  echo "ERROR: could not read $INVENTORY" >&2
   exit 1
 fi
 
-BINARIES=$(echo "$TABLE_LINE" | cut -d'|' -f2)
-EXTERNALSECRETS=$(echo "$TABLE_LINE" | cut -d'|' -f3)
+if [ -z "$EXTERNALSECRETS" ]; then
+  echo "ERROR: no ExternalSecret in $INVENTORY reads '$PATH_REL'" >&2
+  echo "Known paths:" >&2
+  yq -r '.externalSecrets[] | . as $es | .data[] | (.vaultBinaryOverride // $es.vaultBinary) + "/" + $es.vaultCategory + "/" + .vaultKey' "$INVENTORY" \
+    | sort -u | sed 's/^/  /' >&2
+  exit 1
+fi
+
+BINARIES=""
+IFS=',' read -ra _ES_FOR_RESTART <<< "$EXTERNALSECRETS"
+for es in "${_ES_FOR_RESTART[@]}"; do
+  deployments=$(echo "$RESTARTS_BY_EXTERNALSECRET" | grep "^${es}|" | cut -d'|' -f2 || true)
+  if [ -z "$deployments" ]; then
+    echo "ERROR: no Deployment is declared for ExternalSecret '$es'" >&2
+    echo "Add it to RESTARTS_BY_EXTERNALSECRET before rotating, or the new value would never be loaded." >&2
+    exit 1
+  fi
+  BINARIES="${BINARIES:+$BINARIES,}$deployments"
+done
+BINARIES=$(echo "$BINARIES" | tr ',' '\n' | sort -u | paste -sd, -)
 FULL_PATH="secret/loopzero/$ENV/$PATH_REL"
 
 echo "[INFO] env=$ENV path=$PATH_REL" >&2

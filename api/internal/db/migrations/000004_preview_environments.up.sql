@@ -2,8 +2,8 @@
 -- 000004_preview_environments
 --
 -- Sprint 5 / T2.1 — Preview Environments dual-write store (ADR D7).
--- Note: 000003 is reserved by tests/unit/migration_003_test.go for a future
--- "deploy_support" migration; we skip the slot to avoid number collision.
+-- Note: 000003 was reserved for a "deploy_support" migration that never
+-- landed; the slot stays skipped to avoid a number collision.
 --
 -- Stores preview environment metadata for API queries (list/get/audit).
 -- Operational state lives in the PreviewEnvironment CR; this table is the

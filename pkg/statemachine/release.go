@@ -70,12 +70,17 @@ const (
 // by T4.5 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap (migration 000008
 // formalized into state machine). Consistent with NewReleaseMachine().Terminal.
 func IsReleaseTerminal(state State) bool {
-	return state == ReleaseCancelled || state == ReleaseArchived
+	return releaseLifecycle.IsTerminal(state)
 }
 
-// IsReleaseReapable returns true if the state is one the ReleaseReaper should skip
-// because the release has already left the reapable states (READY or PENDING).
-// This includes terminal states AND failure/active states that represent forward progress.
+// releaseLifecycle answers the package-level Release helpers from the one
+// transition table. A Machine is immutable, so sharing it is safe.
+var releaseLifecycle = NewReleaseMachine()
+
+// IsReleaseReapable reports whether the ReleaseReaper may reap a release in
+// this state: only READY and PENDING, the states a release can be stuck in
+// before it lands. Every other state (active, failed, terminal) is forward
+// progress the reaper must leave alone.
 func IsReleaseReapable(state State) bool {
 	switch state {
 	case ReleaseReady, ReleasePending:
@@ -87,7 +92,8 @@ func IsReleaseReapable(state State) bool {
 // NewReleaseMachine returns the release state machine per spec section 5.2.
 //
 // States: READY -> PENDING -> ACTIVE -> SUPERSEDED|ROLLING_BACK
-// Terminal: SUPERSEDED, ROLLED_BACK, CANCELLED
+// Terminal: CANCELLED, ARCHIVED (SUPERSEDED and ROLLED_BACK can be
+// reactivated by a rollback)
 // Manual intervention: DRIFT_ALERT, ROLLBACK_FAILED, GIT_MIRROR_FAILED
 func NewReleaseMachine() *Machine {
 	return NewMachine(MachineConfig{

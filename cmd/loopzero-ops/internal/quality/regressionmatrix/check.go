@@ -35,6 +35,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // EntryResult is the resolution category of a single matrix row.
@@ -51,8 +53,10 @@ const (
 )
 
 // CanRecurNo is the matrix value (with the diacritic) marking an entry whose
-// regression CANNOT recur safely — a MISS here is critical.
-const CanRecurNo = "NÃO"
+// regression CANNOT recur safely — a MISS here is critical. The matrix is written
+// in Portuguese and the value below means "NO"; this literal is DATA matched
+// against the matrix cells, so it must stay exactly as the matrix spells it.
+const CanRecurNo = "NÃO" // english-only: data matched verbatim against the matrix cells
 
 // Row is one parsed data row of the matrix.
 type Row struct {
@@ -71,7 +75,8 @@ var dataRowRe = regexp.MustCompile(`^\s*\|\s*[0-9]+\s*\|`)
 
 // ParseMatrix extracts the data rows from the matrix markdown. It reads the
 // pipe-delimited table, taking column 1 as ID, column 7 as Verification, and
-// column 8 as "Pode Recorrer?" (1-indexed among the cells BETWEEN the outer
+// column 8 as "Pode Recorrer?" — the matrix's own header, meaning "can it recur?"
+// (1-indexed among the cells BETWEEN the outer
 // pipes — identical to the bash `IFS='|' read` positional parse).
 func ParseMatrix(content string) []Row {
 	var rows []Row
@@ -175,8 +180,8 @@ func ResolveArtifact(verification string, resolver TokenResolver) EntryResult {
 	return Miss
 }
 
-// Verdict aggregates the audit.
-type Verdict struct {
+// Audit aggregates the rows of the matrix.
+type Audit struct {
 	Total        int
 	OK           int
 	Miss         int
@@ -187,7 +192,7 @@ type Verdict struct {
 }
 
 // Failed reports whether the gate should fail (non-zero exit).
-func (v Verdict) Failed() bool {
+func (v Audit) Failed() bool {
 	if v.MissCritical > 0 {
 		return true
 	}
@@ -197,9 +202,12 @@ func (v Verdict) Failed() bool {
 	return false
 }
 
-// Evaluate runs every row through the resolver and aggregates a Verdict.
-func Evaluate(rows []Row, resolver TokenResolver, strict bool) Verdict {
-	v := Verdict{Strict: strict}
+// Verdict is Fail when the audit fails the gate and Pass otherwise.
+func (v Audit) Verdict() verdict.Verdict { return verdict.FromPass(!v.Failed()) }
+
+// Evaluate runs every row through the resolver and aggregates an Audit.
+func Evaluate(rows []Row, resolver TokenResolver, strict bool) Audit {
+	v := Audit{Strict: strict}
 	for _, r := range rows {
 		v.Total++
 		switch ResolveArtifact(r.Verification, resolver) {
@@ -221,15 +229,15 @@ func Evaluate(rows []Row, resolver TokenResolver, strict bool) Verdict {
 // Check parses the matrix at matrixPath, builds a repo-backed resolver rooted at
 // root, and evaluates. This is the production entry point used by the
 // loopzero-ops subcommand.
-func Check(matrixPath, root string, strict bool) (Verdict, error) {
+func Check(matrixPath, root string, strict bool) (Audit, error) {
 	data, err := os.ReadFile(matrixPath) // #nosec G304 -- repo-internal matrix path
 	if err != nil {
-		return Verdict{}, err
+		return Audit{}, err
 	}
 	rows := ParseMatrix(string(data))
 	corpus, err := BuildCorpus(root)
 	if err != nil {
-		return Verdict{}, err
+		return Audit{}, err
 	}
 	return Evaluate(rows, corpus, strict), nil
 }

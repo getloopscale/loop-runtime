@@ -34,9 +34,12 @@ package scriptcount
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // excludedPathSegments — any tracked path containing one of these directory
@@ -100,24 +103,55 @@ func CountCanonical(root string) (int, []string, error) {
 	return len(matched), matched, nil
 }
 
-// Verdict is the gate result.
-type Verdict struct {
+// Tally is the count compared with the ceiling.
+type Tally struct {
 	Count    int
 	Baseline int
 	OK       bool // count <= baseline
 	Improved bool // count < baseline (ratchet hint)
 }
 
+// Verdict is Pass while the count stays at or under the ceiling, Fail above it.
+func (t Tally) Verdict() verdict.Verdict { return verdict.FromPass(t.OK) }
+
 // Check counts canonical .sh under root and compares to the baseline ceiling.
-func Check(root string, baseline Baseline) (Verdict, error) {
+func Check(root string, baseline Baseline) (Tally, error) {
 	n, _, err := CountCanonical(root)
 	if err != nil {
-		return Verdict{}, err
+		return Tally{}, err
 	}
-	return Verdict{
+	return Tally{
 		Count:    n,
 		Baseline: baseline.CanonicalSH,
 		OK:       n <= baseline.CanonicalSH,
 		Improved: n < baseline.CanonicalSH,
 	}, nil
+}
+
+// Ratcheted reports a request to lower the ceiling to the current count.
+type Ratcheted struct {
+	Count    int
+	Baseline int
+	// Refused is set when the count is above the ceiling: a ratchet only moves
+	// down, and the baseline was left untouched.
+	Refused bool
+}
+
+// Verdict is Fail when the ratchet was refused and Pass when the ceiling was
+// lowered to the count.
+func (r Ratcheted) Verdict() verdict.Verdict { return verdict.FromPass(!r.Refused) }
+
+// Ratchet writes the current count as the new ceiling at path. It refuses to
+// raise the ceiling: a count above it is left for the gate to fail.
+func Ratchet(path string, t Tally) (Ratcheted, error) {
+	r := Ratcheted{Count: t.Count, Baseline: t.Baseline}
+	if t.Count > t.Baseline {
+		r.Refused = true
+		return r, nil
+	}
+	body := fmt.Sprintf("{\n  \"canonical_sh\": %d\n}\n", t.Count)
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil { // #nosec G306 -- repo-internal baseline
+		return r, err
+	}
+	return r, nil
 }

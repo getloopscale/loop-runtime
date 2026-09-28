@@ -48,24 +48,16 @@ func newTestAppClient(t *testing.T, server *httptest.Server) *AppClient {
 	}
 }
 
-// TestResolveGitHubAPIBase_DefaultsWhenEnvUnset — T2.4 of plan
-// 2026-06-11-code-review-remediation v1.2. Fallback path is DOcumented
-// in the public DefaultGitHubAPIBase constant.
-func TestResolveGitHubAPIBase_DefaultsWhenEnvUnset(t *testing.T) {
-	t.Setenv("GITHUB_API_BASE_URL", "")
-	if got := resolveGitHubAPIBase(); got != DefaultGitHubAPIBase {
-		t.Errorf("expected default %q, got %q", DefaultGitHubAPIBase, got)
-	}
-}
+func TestNewAppClientUsesTheGivenAPIBase(t *testing.T) {
+	pemStr, _ := generateTestRSAKey(t)
 
-// TestResolveGitHubAPIBase_HonorsEnvOverride — T2.4 closure invariant:
-// GHES operators MUST be able to point LoopZero at their appliance via the
-// canonical env var without forking. Per sponsor mandate 2026-06-11
-// "PROIBINDO CONFIGURAÇÃO HARDCODED".
-func TestResolveGitHubAPIBase_HonorsEnvOverride(t *testing.T) {
-	t.Setenv("GITHUB_API_BASE_URL", "https://github.acme.corp/api/v3")
-	if got := resolveGitHubAPIBase(); got != "https://github.acme.corp/api/v3" {
-		t.Errorf("env override ignored: got %q", got)
+	c, err := NewAppClient(42, pemStr, "https://github.acme.corp/api/v3")
+
+	if err != nil {
+		t.Fatalf("NewAppClient: %v", err)
+	}
+	if got := c.apiBase(); got != "https://github.acme.corp/api/v3" {
+		t.Errorf("apiBase() = %q, want the configured GitHub Enterprise root", got)
 	}
 }
 
@@ -84,7 +76,7 @@ func TestNewAppClient_ValidCredentials(t *testing.T) {
 	pemStr, _ := generateTestRSAKey(t)
 
 	// Act
-	client, err := NewAppClient(42, pemStr)
+	client, err := NewAppClient(42, pemStr, "")
 
 	// Assert
 	if err != nil {
@@ -103,7 +95,7 @@ func TestNewAppClient_ZeroAppID_ReturnsNil(t *testing.T) {
 	pemStr, _ := generateTestRSAKey(t)
 
 	// Act
-	client, err := NewAppClient(0, pemStr)
+	client, err := NewAppClient(0, pemStr, "")
 
 	// Assert
 	if err != nil {
@@ -116,7 +108,7 @@ func TestNewAppClient_ZeroAppID_ReturnsNil(t *testing.T) {
 
 func TestNewAppClient_EmptyPEM_ReturnsNil(t *testing.T) {
 	// Act
-	client, err := NewAppClient(42, "")
+	client, err := NewAppClient(42, "", "")
 
 	// Assert
 	if err != nil {
@@ -129,7 +121,7 @@ func TestNewAppClient_EmptyPEM_ReturnsNil(t *testing.T) {
 
 func TestNewAppClient_InvalidPEM_ReturnsError(t *testing.T) {
 	// Act
-	client, err := NewAppClient(42, "not-a-valid-pem")
+	client, err := NewAppClient(42, "not-a-valid-pem", "")
 
 	// Assert
 	if err == nil {
@@ -151,7 +143,7 @@ func TestNewAppClient_InvalidRSAKey_ReturnsError(t *testing.T) {
 	})
 
 	// Act
-	client, err := NewAppClient(42, string(badPEM))
+	client, err := NewAppClient(42, string(badPEM), "")
 
 	// Assert
 	if err == nil {
@@ -436,36 +428,47 @@ func TestSetCommitStatus_APIError(t *testing.T) {
 	}
 }
 
-func TestCommentOnPR_Success(t *testing.T) {
-	// Arrange
-	var receivedBody string
+func TestSetCommitStatusSendsTheDescriptionAsValidJSON(t *testing.T) {
+	// Arrange: a description with a control byte, which Go quoting (%q)
+	// renders as \a — an escape JSON does not have, so GitHub answers 422.
+	const description = "build \a failed"
+	var got CommitStatus
+	var decodeErr error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/comments") {
-			body, _ := io.ReadAll(r.Body)
-			receivedBody = string(body)
+		if strings.Contains(r.URL.Path, "/statuses/") {
+			raw, _ := io.ReadAll(r.Body)
+			var body struct {
+				State, Description, Context string
+				TargetURL                   string `json:"target_url"`
+			}
+			decodeErr = json.Unmarshal(raw, &body)
+			got = CommitStatus{State: body.State, TargetURL: body.TargetURL, Description: body.Description, Context: body.Context}
 			w.WriteHeader(http.StatusCreated)
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"token":      "ghs_pr_token",
+			"token":      "ghs_status_token",
 			"expires_at": time.Now().Add(1 * time.Hour).Format(time.RFC3339),
 		})
 	}))
 	defer server.Close()
-
 	client := newTestAppClient(t, server)
 	client.httpClient = redirectingClient(server.URL)
+	want := CommitStatus{State: "failure", TargetURL: "https://x.example", Description: description, Context: "loopzero/deploy"}
 
 	// Act
-	err := client.CommentOnPR(context.Background(), 1, "owner", "repo", 42, "Deploy started!")
+	err := client.SetCommitStatus(context.Background(), 1, "owner", "repo", "sha123", want)
 
 	// Assert
 	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+		t.Fatalf("SetCommitStatus: %v", err)
 	}
-	if !strings.Contains(receivedBody, "Deploy started!") {
-		t.Errorf("expected comment body in request, got: %s", receivedBody)
+	if decodeErr != nil {
+		t.Fatalf("status body is not valid JSON: %v", decodeErr)
+	}
+	if got != want {
+		t.Errorf("status did not round-trip: got %+v, want %+v", got, want)
 	}
 }
 

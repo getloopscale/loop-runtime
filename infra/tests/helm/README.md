@@ -19,7 +19,6 @@ task helm:test
 
 # Single chart (~1-30s) — fastest iteration loop
 task helm:test:chart -- loopzero-api
-task helm:test:chart -- harbor
 ```
 
 ## Why a separate test tier?
@@ -88,7 +87,9 @@ func renderDefaultDeployment(t *testing.T) appsV1.Deployment {
 
 ### Pattern 2 — Multi-replica operator (loopzero-tenant/app/platform/preview-operator)
 
-Same as Pattern 1 plus:
+One table-driven suite, `operatorcharts/`, covers all four: they share one
+Deployment shape, so a new invariant is one check and a new operator is one row
+(`task helm:test:chart -- operatorcharts`). Same as Pattern 1 plus:
 - `--leader-elect=true` arg present
 - Health (8081) + metrics (8443) ports
 - ServiceAccount + ClusterRole + ClusterRoleBinding present
@@ -103,7 +104,7 @@ all CRDs as a slice. Assert:
 - All have scope + exactly one storage version
 - Names follow `<plural>.<group>` convention
 
-### Pattern 4 — Policy collection (loopzero-admission-policies, admission-policies)
+### Pattern 4 — Policy collection (loopzero-admission-policies)
 
 For N-VAP + N-Binding charts:
 - VAP count == Binding count (1:1 pairing)
@@ -163,8 +164,8 @@ For per-env tests (only when helmfile env values differ meaningfully):
   values file containing `{{` directives; redirects operator to plain-YAML stub
 - **D11 — dependency resolution:** auto-invoked + cached per chart path
 - **D12 — library exemption:** documented in helper + per-chart tests
-- **B33 — VAP namespace deletion deadlock:** asserted across both
-  admission-policies variants
+- **B33 — VAP namespace deletion deadlock:** asserted on the one
+  admission-policies chart (charts/loopzero-admission-policies)
 
 ## Helper API
 

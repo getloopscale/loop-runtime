@@ -175,9 +175,8 @@ func TestMinioCanonical_VerifyPassesAfterRun(t *testing.T) {
 }
 
 func TestMinioCanonical_HonoursEnvOverride(t *testing.T) {
-	origGetenv := osGetenv
-	defer func() { osGetenv = origGetenv }()
-	osGetenv = func(k string) string {
+	var host Host
+	host.Getenv = func(k string) string {
 		if k == "LOOPZERO_MINIO_ROOT_PASSWORD" {
 			return "operator-override-pw"
 		}
@@ -187,7 +186,7 @@ func TestMinioCanonical_HonoursEnvOverride(t *testing.T) {
 	mgmt := fake.NewClientBuilder().WithScheme(newScheme(t)).
 		WithObjects(minioMainSecretObj("r"), makeMinioDeployment(), makeLoopZeroAPIDeployment()).Build()
 	buildCli := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
-	deps := Deps{
+	deps := Deps{Host: host,
 		Ctx:     context.Background(),
 		Kube:    NewKubeClient(mgmt),
 		Clients: map[string]KubeClient{"k3d-loopzero-build": NewKubeClient(buildCli)},

@@ -29,6 +29,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Script captures one shell script with audit metadata.
@@ -38,6 +41,10 @@ type Script struct {
 	LastMod     time.Time // last modification time (UTC)
 	Callers     []string  // file paths that reference this script
 	Disposition string    // proposal: KEEP-OPERATOR / DELEGATE-* / MIGRATE-* / etc.
+	// Body is the script's content, read once against the scan root. The
+	// content rules of ProposeDisposition read it instead of re-opening Path,
+	// which is relative to the root and not to the process working directory.
+	Body string
 }
 
 // excludedDirs — directory basenames that ScanRepo skips entirely.
@@ -72,6 +79,13 @@ var callerSearchFilenames = map[string]bool{
 	"Tiltfile":     true,
 }
 
+// Scripts is the inventory a scan produced.
+type Scripts []Script
+
+// Verdict is Pass: the inventory is an operation, and Scripts exists only when
+// the scan completed. A scan that could not complete is ScanRepo's error.
+func (Scripts) Verdict() verdict.Verdict { return verdict.Pass }
+
 // ScanRepo walks the repo root and returns a sorted []Script with
 // {Path, LOC, LastMod, Callers, Disposition} populated for every .sh
 // found outside excludedDirs.
@@ -79,7 +93,7 @@ var callerSearchFilenames = map[string]bool{
 // Symlinks are dereferenced via filepath.EvalSymlinks; if multiple paths
 // point to the same canonical file, only the first encountered is kept
 // (EC-07: no double-counting).
-func ScanRepo(root string) ([]Script, error) {
+func ScanRepo(root string) (Scripts, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("abs root: %w", err)
@@ -122,7 +136,7 @@ func ScanRepo(root string) ([]Script, error) {
 		return nil, fmt.Errorf("walk %s: %w", root, walkErr)
 	}
 
-	// Pass 2: build Script entries with LOC + LastMod
+	// Pass 2: build Script entries with body, LOC and LastMod
 	scripts := make([]Script, 0, len(displayOrder))
 	for _, displayPath := range displayOrder {
 		fullPath := filepath.Join(root, displayPath)
@@ -130,14 +144,15 @@ func ScanRepo(root string) ([]Script, error) {
 		if err != nil {
 			return nil, fmt.Errorf("stat %s: %w", fullPath, err)
 		}
-		loc, err := countLines(fullPath)
+		body, err := os.ReadFile(fullPath) // #nosec G304 -- audit tool intentionally reads scanned script paths
 		if err != nil {
-			return nil, fmt.Errorf("count lines %s: %w", fullPath, err)
+			return nil, fmt.Errorf("read %s: %w", fullPath, err)
 		}
 		scripts = append(scripts, Script{
 			Path:    displayPath,
-			LOC:     loc,
+			LOC:     countLines(body),
 			LastMod: info.ModTime().UTC(),
+			Body:    string(body),
 		})
 	}
 
@@ -146,9 +161,10 @@ func ScanRepo(root string) ([]Script, error) {
 		return nil, fmt.Errorf("populate callers: %w", err)
 	}
 
-	// Pass 4: propose disposition per script
+	// Pass 4: propose disposition per script, against one instant for the run
+	now := time.Now()
 	for i := range scripts {
-		scripts[i].Disposition = ProposeDisposition(scripts[i])
+		scripts[i].Disposition = ProposeDisposition(scripts[i], now)
 	}
 
 	// Deterministic order
@@ -158,15 +174,11 @@ func ScanRepo(root string) ([]Script, error) {
 	return scripts, nil
 }
 
-// countLines reads a file and counts newline-terminated lines. Empty file
-// returns 0; file without trailing newline still counts its last line.
-func countLines(path string) (int, error) {
-	data, err := os.ReadFile(path) // #nosec G304 -- audit tool intentionally reads scanned script paths
-	if err != nil {
-		return 0, err
-	}
+// countLines counts newline-terminated lines. Empty content is 0 lines; content
+// without a trailing newline still counts its last line.
+func countLines(data []byte) int {
 	if len(data) == 0 {
-		return 0, nil
+		return 0
 	}
 	count := 0
 	for _, b := range data {
@@ -174,11 +186,10 @@ func countLines(path string) (int, error) {
 			count++
 		}
 	}
-	// If file doesn't end with \n, the last line is still real
 	if data[len(data)-1] != '\n' {
 		count++
 	}
-	return count, nil
+	return count
 }
 
 // populateCallers searches all candidate files under root for references
@@ -393,105 +404,82 @@ func isolatedStemPresent(text, stem string) bool {
 	}
 }
 
-// ProposeDisposition heuristically classifies a script based on its
-// {Path, LOC, LastMod, Callers}. Returns one of the canonical disposition codes:
-//
-//	KEEP-OPERATOR | DELEGATE-HELMFILE | DELEGATE-TILT | DELEGATE-ARGOCD |
-//	MIGRATE-GO-PUREFN | MIGRATE-GO-SDK | MIGRATE-GINKGO | MIGRATE-GENERATOR |
-//	AUTO-DIE | DELETE-DEAD | REVIEW-NEEDED
-//
-// Order of evaluation matters: more specific patterns win.
-func ProposeDisposition(s Script) string {
-	base := filepath.Base(s.Path)
-	stem := strings.TrimSuffix(base, ".sh")
-
-	// 0. Harness hooks/scripts: registered with the Claude Code harness (settings
-	//    + hook events), not invoked by literal basename. KEEP regardless of
-	//    caller_count to prevent false DELETE-DEAD (EC false-positive class #4).
-	if strings.Contains(s.Path, ".claude/hooks/") || strings.Contains(s.Path, ".claude/scripts/") {
-		return "KEEP-OPERATOR"
-	}
-
-	// 1. Hermetic test pattern: X_test.sh — AUTO-DIE (D6: morre com pai)
-	if strings.HasSuffix(stem, "_test") {
-		return "AUTO-DIE"
-	}
-
-	// 2. Dead code candidates: zero callers + last-mod > 90d (very conservative)
-	if len(s.Callers) == 0 && time.Since(s.LastMod) > 90*24*time.Hour {
-		return "DELETE-DEAD"
-	}
-
-	// 3. Bare helm wrapper: a REAL `helm upgrade/install` command (line-start,
-	//    not inside a comment / echo string / die() message — a frequent
-	//    false-positive class for chaos/heal orchestrators that merely print
-	//    install instructions).
-	if scriptHasRealHelmInvocation(s.Path) {
-		return "DELEGATE-HELMFILE"
-	}
-
-	// 4. Bare kubectl apply chains for tenant-day-2 → DELEGATE-ARGOCD
-	if scriptContains(s.Path, "kubectl apply -f infra/argocd", "argocd app sync") {
-		return "DELEGATE-ARGOCD"
-	}
-
-	// 5. Ginkgo migration candidates: test orchestrators in parity/dogfood
-	//    (must come BEFORE generic check-/validate-/audit- heuristic, because
-	//    validate-matrix.sh em parity/ should go to Ginkgo, not pure-fn migration)
-	if strings.Contains(s.Path, "infra/tests/parity/") || strings.Contains(s.Path, "infra/tests/dogfood/") || strings.Contains(s.Path, "infra/tests/livetest/dogfood/") {
-		return "MIGRATE-GINKGO"
-	}
-
-	// 6. Pure-logic gate naming: check-*.sh, validate-*.sh, audit-*.sh — BUT
-	//    only if genuinely pure-logic. A gate that shells out to kubectl/helm/
-	//    cosign/etc. is NOT pure-logic; porting it to Go would be a forbidden
-	//    shell-wrap (parent D5). Those stay bash → KEEP-OPERATOR.
-	if strings.HasPrefix(stem, "check-") || strings.HasPrefix(stem, "validate-") || strings.HasPrefix(stem, "audit-") {
-		if scriptInvokesExternalCLI(s.Path) {
-			return "KEEP-OPERATOR"
-		}
-		return "MIGRATE-GO-PUREFN"
-	}
-
-	// 7. SDK-native candidates: pulumi-*.sh (D5 says use Automation API)
-	if strings.HasPrefix(stem, "pulumi-") {
-		return "MIGRATE-GO-SDK"
-	}
-
-	// 8. Generator pattern: gen-*.sh or generate-*.sh — but only if it's a PURE
-	//    file generator. A generate-* that shells out (e.g. injects secrets via
-	//    kubectl) is a bootstrap injector → helmfile-delegation slice, not a
-	//    hermetic go:generate migration.
-	if strings.HasPrefix(stem, "gen-") || strings.HasPrefix(stem, "generate-") {
-		if scriptInvokesExternalCLI(s.Path) {
-			return "DELEGATE-HELMFILE"
-		}
-		return "MIGRATE-GENERATOR"
-	}
-
-	// 9. Drill / break-glass / operator-time small scripts (< 100 LOC) — KEEP candidate
-	if s.LOC < 100 && (strings.Contains(s.Path, "break-glass") || strings.Contains(s.Path, "drill-")) {
-		return "KEEP-OPERATOR"
-	}
-
-	// Default: needs human review
-	return "REVIEW-NEEDED"
+// dispositionRule is one step of the classification: the first rule whose match
+// holds decides the disposition, so more specific rules come first.
+type dispositionRule struct {
+	disposition shellscript.Disposition
+	match       func(s Script, now time.Time) bool
 }
 
-// externalCLITokens — tools whose invocation makes a script LIVE/effectful,
-// disqualifying a pure-logic Go migration (parent D5 shell-wrap prohibition).
-var externalCLITokens = regexp.MustCompile(`\b(kubectl|helm|helmfile|cosign|argocd|doctl|pulumi|terraform)\b`)
-
-// scriptInvokesExternalCLI returns true if the script body invokes any of the
-// effectful external CLIs. Best-effort: an unreadable file returns false (the
-// caller's prefix heuristic still applies).
-func scriptInvokesExternalCLI(path string) bool {
-	data, err := os.ReadFile(path) // #nosec G304 -- audit tool intentionally reads scanned script paths
-	if err != nil {
-		return false
-	}
-	return externalCLITokens.Match(data)
+// dispositionRules is the ordered classification. Each entry states the pattern
+// it recognises; the order is the precedence.
+var dispositionRules = []dispositionRule{
+	// Harness hooks and scripts are registered with the Claude Code harness,
+	// not invoked by literal basename: keep them whatever their caller count.
+	{shellscript.KeepOperator, func(s Script, _ time.Time) bool {
+		return strings.Contains(s.Path, ".claude/hooks/") || strings.Contains(s.Path, ".claude/scripts/")
+	}},
+	// X_test.sh dies with its parent.
+	{shellscript.AutoDie, func(s Script, _ time.Time) bool { return strings.HasSuffix(stem(s), "_test") }},
+	// No caller and untouched for 90 days: a dead-code candidate.
+	{shellscript.DeleteDead, func(s Script, now time.Time) bool {
+		return len(s.Callers) == 0 && now.Sub(s.LastMod) > 90*24*time.Hour
+	}},
+	// A real `helm upgrade/install` command belongs to helmfile.
+	{shellscript.DelegateHelmfile, func(s Script, _ time.Time) bool { return hasRealHelmInvocation(s.Body) }},
+	// kubectl apply chains for tenant day-2 belong to ArgoCD.
+	{shellscript.DelegateArgoCD, func(s Script, _ time.Time) bool {
+		return strings.Contains(s.Body, "kubectl apply -f infra/argocd") || strings.Contains(s.Body, "argocd app sync")
+	}},
+	// Test orchestrators go to Ginkgo — before the check-/validate- rule, so a
+	// validate-*.sh under parity/ is not proposed as a pure function.
+	{shellscript.MigrateGinkgo, func(s Script, _ time.Time) bool {
+		return strings.Contains(s.Path, "infra/tests/parity/") ||
+			strings.Contains(s.Path, "infra/tests/dogfood/") ||
+			strings.Contains(s.Path, "infra/tests/livetest/dogfood/")
+	}},
+	// A check-/validate-/audit- gate that shells out to an effectful CLI is not
+	// pure logic; porting it would be a forbidden shell-wrap.
+	{shellscript.KeepOperator, func(s Script, _ time.Time) bool { return isGateScript(s) && invokesExternalCLI(s.Body) }},
+	{shellscript.MigrateGoPureFn, func(s Script, _ time.Time) bool { return isGateScript(s) }},
+	// pulumi-*.sh moves to the Automation API.
+	{shellscript.MigrateGoSDK, func(s Script, _ time.Time) bool { return strings.HasPrefix(stem(s), "pulumi-") }},
+	// A generator that shells out is a bootstrap injector, not a file generator.
+	{shellscript.DelegateHelmfile, func(s Script, _ time.Time) bool { return isGeneratorScript(s) && invokesExternalCLI(s.Body) }},
+	{shellscript.MigrateGenerator, func(s Script, _ time.Time) bool { return isGeneratorScript(s) }},
+	// Small drill / break-glass operator scripts stay.
+	{shellscript.KeepOperator, func(s Script, _ time.Time) bool {
+		return s.LOC < 100 && (strings.Contains(s.Path, "break-glass") || strings.Contains(s.Path, "drill-"))
+	}},
 }
+
+// ProposeDisposition classifies a script from its path, body, size, callers and
+// age relative to now. Returns one of KEEP-OPERATOR, DELEGATE-HELMFILE,
+// DELEGATE-ARGOCD, MIGRATE-GO-PUREFN, MIGRATE-GO-SDK, MIGRATE-GINKGO,
+// MIGRATE-GENERATOR, AUTO-DIE, DELETE-DEAD, or REVIEW-NEEDED when no rule
+// matches.
+func ProposeDisposition(s Script, now time.Time) string {
+	for _, r := range dispositionRules {
+		if r.match(s, now) {
+			return string(r.disposition)
+		}
+	}
+	return string(shellscript.ReviewNeeded)
+}
+
+func stem(s Script) string { return strings.TrimSuffix(filepath.Base(s.Path), ".sh") }
+
+func isGateScript(s Script) bool {
+	st := stem(s)
+	return strings.HasPrefix(st, "check-") || strings.HasPrefix(st, "validate-") || strings.HasPrefix(st, "audit-")
+}
+
+func isGeneratorScript(s Script) bool {
+	st := stem(s)
+	return strings.HasPrefix(st, "gen-") || strings.HasPrefix(st, "generate-")
+}
+
+func invokesExternalCLI(body string) bool { return shellscript.EffectfulCLI.MatchString(body) }
 
 // helmInvocationLine matches a REAL helm upgrade/install command at the start
 // of a line (ignoring leading whitespace). It deliberately does NOT match
@@ -499,35 +487,14 @@ func scriptInvokesExternalCLI(path string) bool {
 // instructions, not invocations.
 var helmInvocationLine = regexp.MustCompile(`^\s*helm\s+(upgrade|install)\b`)
 
-// scriptHasRealHelmInvocation returns true if the script body contains a real
-// `helm upgrade/install` command — a non-comment line whose first token is
-// `helm`. Comment lines (`#…`) and string-embedded mentions are skipped.
-func scriptHasRealHelmInvocation(path string) bool {
-	data, err := os.ReadFile(path) // #nosec G304 -- audit tool intentionally reads scanned script paths
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(data), "\n") {
+// hasRealHelmInvocation reports whether body holds a real `helm upgrade/install`
+// command — a non-comment line whose first token is `helm`.
+func hasRealHelmInvocation(body string) bool {
+	for _, line := range strings.Split(body, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {
 			continue
 		}
 		if helmInvocationLine.MatchString(line) {
-			return true
-		}
-	}
-	return false
-}
-
-// scriptContains reads the script file and returns true if it contains
-// ANY of the given substrings.
-func scriptContains(path string, needles ...string) bool {
-	data, err := os.ReadFile(path) // #nosec G304 -- audit tool intentionally reads scanned script paths
-	if err != nil {
-		return false
-	}
-	text := string(data)
-	for _, n := range needles {
-		if strings.Contains(text, n) {
 			return true
 		}
 	}

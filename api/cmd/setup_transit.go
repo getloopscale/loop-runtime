@@ -23,27 +23,8 @@ import (
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/pkg/vault"
 )
-
-// B-058 bullet 4. The port the production transit client satisfies, asserted by
-// the compiler instead of by prose.
-//
-// api/internal/adapters/vault_transit_adapter.go used to sit between these two.
-// Its own doc said "Signatures match byte-for-byte; only the method names
-// differ" — a bridge from internal code to internal code, which is why B-058
-// asked for it to be DELETED rather than moved. It was; but the comment on
-// secrets.SecretTransit went on naming *adapters.VaultTransitAdapter as the
-// production implementor for 19 days after the type stopped existing (deleted
-// 2026-08-16 in 2f8910db3, corrected 2026-09-04), and nothing failed, because
-// nothing checks a comment.
-//
-// This line is checked. If vault.Transit ever stops satisfying the port the
-// secrets Bulk path declares, api/cmd stops compiling, here, with both names in
-// the message — the same "declare the port, do not describe it" discipline the
-// adapter-ports gate enforces one directory over.
-var _ secrets.SecretTransit = (vault.Transit)(nil)
 
 // setupTransitClient builds the OpenBao Transit client when the resolved
 // crypto mode is "transit". Returns (nil, nil) when the mode is anything

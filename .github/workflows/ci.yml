@@ -1,40 +1,40 @@
-# Gate rapido de compilacao + testes hermeticos dos modulos Go.
+# Fast compile gate plus the hermetic tests of the Go modules.
 #
-# O DEFEITO QUE ISTO PREVINE: ate aqui este repositorio NAO tinha gate algum no
-# GitHub. As Actions foram removidas como pipeline em 2026-05-23 e substituidas
-# por `task quality:gates` no hook de pre-push — que roda na maquina de quem
-# empurra, e so' nela. Consequencias medidas nesta mesma semana:
+# THE DEFECT THIS PREVENTS: until this file, the repository had NO gate on GitHub at all.
+# Actions were removed as the pipeline on 2026-05-23 and replaced by `task quality:gates`
+# in a pre-push hook — which runs on the pusher's machine, and only there. Measured
+# consequences, in the same week this was written:
 #
-#   - um push que morre em SIGPIPE (#256) nao distingue "gate reprovou" de
-#     "conexao caiu", e quem estiver com o hook desinstalado nao roda nada;
-#   - `LOOPZERO_SKIP_PREPUSH` existe e nada registra o seu uso;
-#   - a maquina do operador tem Go 1.26, helmfile, kubeconform, trivy e
-#     golangci-lint instalados. Um contribuidor novo nao tem, e descobre isso
-#     depois do merge.
+#   - a push dying in SIGPIPE (#256) cannot tell "the gate refused" from "the connection
+#     dropped", and anyone with the hook uninstalled runs nothing at all;
+#   - `LOOPZERO_SKIP_PREPUSH` exists and nothing records that it was used;
+#   - the operator's machine happens to have Go 1.26, helmfile, kubeconform, trivy and
+#     golangci-lint installed. A new contributor does not, and finds out after the merge.
 #
-# ESCOPO — honestamente limitado, e a limitacao e' deliberada.
+# SCOPE — honestly limited, and the limit is deliberate.
 #
-# Roda build + vet + os testes que NAO precisam de cluster. NAO roda
-# `task quality:gates` (os 111 gates) nem a suite dos operators. Motivos
-# concretos, nao falta de vontade:
+# It runs build, vet and the tests that do NOT need a cluster. It does NOT run
+# `task quality:gates` (the full gate set) or the operators suite. Concrete reasons, not
+# a lack of will:
 #
-#   quality:gates  exige helmfile, kubeconform, actionlint, trivy e
-#                  golangci-lint no PATH, e FALHA ALTO se faltarem — por
-#                  desenho, para nao passar em silencio. Provisionar isso e'
-#                  trabalho proprio; ate' la' o conjunto continua no pre-push.
-#   operators/     usa envtest (Ginkgo + binarios do kube-apiserver via
-#                  setup-envtest). Baixa ~100MB e leva minutos; entra quando o
-#                  gate tiver orcamento de tempo para isso.
+#   quality:gates  needs helmfile, kubeconform, actionlint, trivy and golangci-lint on
+#                  PATH, and FAILS LOUDLY when they are missing — by design, so it never
+#                  passes in silence. Provisioning that is work of its own; until then the
+#                  set stays in the pre-push hook.
+#   operators/     uses envtest (Ginkgo plus kube-apiserver binaries via setup-envtest).
+#                  It downloads ~100MB and takes minutes; it lands when the gate has the
+#                  time budget for it.
 #
-# Um gate que cobre menos e diz o que nao cobre e' util. Um gate que promete
-# cobertura total e roda metade e' pior que nenhum — foi o que motivou o #255.
+# A gate that covers less and SAYS what it does not cover is useful. A gate that promises
+# full coverage and runs half is worse than none — which is what motivated #255.
 name: CI
 
 # TRIGGERS: post-merge push to `develop` and `main`, plus `workflow_call`.
 #
 # This header used to describe a `pull_request` trigger and call it one of "the
 # TWO triggers, not one". The `on:` block below has not had a `pull_request` key
-# since 464b9d7e3, "ci: validacao pos-merge em develop e main; PR sem acao" — the
+# since d1130c137, "ci: validacao pos-merge em develop e main; PR sem acao"  # english-only: verbatim quote of a commit subject
+# (in English: "post-merge validation on develop and main; no action on PRs") — the
 # commit that made the decision this file records, which changed the trigger and
 # left the paragraph describing the old one. So the header outlived what it
 # described by every run since. Corrected 2026-09-06 rather than deleted, because
@@ -53,9 +53,12 @@ on:
   # on red, with no bypass — so duplicating it on the PR would pay runner minutes
   # to re-run what already ran on the pusher's machine. Three premises, and all
   # three were false at the same time between 2026-08-29 and 2026-09-02: the
-  # hook file was deleted (9a6e6e903, third deletion), its wiring in
-  # `.claude/settings.json` had been gone four days longer (63cc51c48, and the
-  # restore four hours later put the FILE back and not the wiring), and "no
+  # hook file was deleted ("chore: reinstall the Squad kit — mechanisms/, Python
+  # hooks, and the squad library", 2026-09-02, the third deletion), its wiring in
+  # `.claude/settings.json` had been gone four days longer ("chore(.claude): adopt
+  # the reconfigured kit", 2026-08-29 — published as 39267fba1, which carries only
+  # its `.gitignore` half; and the restore four hours later put the FILE back and
+  # not the wiring), and "no
   # bypass" was false in four spellings, each one a real push that reached the
   # remote with the gate deciding nothing. 21 commits landed on `workspace` in
   # that window — an upper bound, since the repository records when a commit was
@@ -63,7 +66,7 @@ on:
   #
   # WHAT THE REASON IS NOW. The same trade, with the premises CHECKED instead of
   # asserted: `.github/workflows/delivery-gate-armed.yml` runs
-  # `.github/scripts/assert-delivery-gate-armed.py` on every push to `workspace`,
+  # `.github/scripts/assert_delivery_gate_armed.py` on every push to `workspace`,
   # `develop` and `main`, and on every pull request into `develop` and `main`. It
   # verifies the file, the wiring and the four bypass spellings, in seconds, on a
   # runner that needs neither Go nor a deploy key. It is a SEPARATE workflow
@@ -80,7 +83,7 @@ on:
   # and give it a `paths:` filter, and it survives every listing while never
   # firing for the `.claude/**`-only commit that is the shape of all three
   # historical disarms. So since 2026-09-06 a THIRD file reports on the second:
-  # `.github/scripts/assert-gate-observers-intact.py` asserts that
+  # `.github/scripts/assert_gate_observers_intact.py` asserts that
   # `delivery-gate-armed.yml` is present, carries no paths filter, still triggers
   # on `workspace`/`develop`/`main` and on PRs into `develop`/`main`, and still
   # invokes its script. It runs from two substrates that fail independently —
@@ -96,7 +99,7 @@ on:
   #   - it is RED, and has been. Runs 32084704925 through 32197072865 — the last
   #     fifteen — all failed, the failing step being `Test the hermetic modules`,
   #     and `go test ./... -count=1` in cmd/loopzero-ops is red in a clean worktree
-  #     today on `trufflehogscan.TestArvoreRealEstaAdjudicada` (re-measured
+  #     today on `trufflehogscan.TestRealTreeIsAdjudicated` (re-measured
   #     2026-09-06). Promoting a permanently-red job to a gate on the PR would
   #     block every promotion for a cause unrelated to the change under review,
   #     which is how gates get switched off.
@@ -140,6 +143,30 @@ on:
       - '**/*.md'
       - 'docs/**'
 
+  # THE MISSING TRIGGER, and why it was missing matters more than the line.
+  #
+  # `d1130c137` (2026-08-12) removed `pull_request` and moved the gates into a pre-push
+  # hook. While the repository was private with one author the difference was loopzeroretical:
+  # whoever pushes has the hook. Open, it stops being loopzeroretical — a stranger's PR would
+  # reach `develop` without the suite having run once, because the `push:` above only
+  # fires AFTER the merge.
+  #
+  # Measured 2026-09-16: of the 8 modules in go.work, only `api` and `pkg` need the
+  # PRIVATE sibling `loopzero-contracts`. The other six — including `cmd/loopzero-ops`, which
+  # carries the gates — build with `GOWORK=off` and need no secret at all. That is what
+  # makes a real gate for a fork possible: see `public-checks`.
+  pull_request:
+    branches: [develop, main]
+    paths-ignore:
+      - '.claude/**'
+      - '**/*.md'
+      - 'docs/**'
+
+  # Without this, a repository using a merge queue waits forever for a check that never
+  # reports on the queue's temporary branch, and there is no failure anywhere to read. It
+  # costs one line and is only ever noticed when it is missing.
+  merge_group:
+
 permissions:
   contents: read
 
@@ -149,126 +176,136 @@ concurrency:
 
 jobs:
   build-and-test:
-    # RUNNER: frota Blacksmith, habilitada em 2026-07-30 com a transferencia
-    # deste repositorio para a org `getloopscale`.
+    # Skipped on a FORK PR, and the reason is mechanical rather than political: the steps
+    # below use a deploy key to fetch the PRIVATE sibling `loopzero-contracts`, and GitHub does
+    # not hand a secret to a workflow triggered by a fork's PR. Without this condition the
+    # job RUNS and fails at the deploy-key step — a red that says nothing about the
+    # contribution. `ci-gate` accepts the skip by name, for a fork only.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    # RUNNER: the Blacksmith fleet, enabled 2026-07-30 with the transfer of this
+    # repository to the `getloopscale` org.
     #
-    # A label e' LITERAL de proposito. O runbook do umbrella mediu que
-    # `vars.CI_RUNNER` NAO resolve no repo (`LABELS=[self-hosted,linux,x64]`,
-    # mesmo com `visibility=all`) e o fallback `||` devolve a frota antiga EM
-    # SILENCIO — o CI fica verde na frota errada. Verificar `runner_name`, nunca
-    # `conclusion`.
+    # The label is LITERAL on purpose. The umbrella runbook measured that
+    # `vars.CI_RUNNER` does NOT resolve in this repo (`LABELS=[self-hosted,linux,x64]`,
+    # even with `visibility=all`) and the `||` fallback returns the old fleet IN SILENCE —
+    # CI goes green on the wrong fleet. Check `runner_name`, never `conclusion`.
     #
-    # Duas pre-condicoes encadeadas, ambas satisfeitas antes desta linha existir:
-    #   1. o repo pertence a uma ORGANIZACAO (`owner.type=Organization`)
-    #   2. o GitHub App `blacksmith-sh` esta instalado NA ORG que dona o repo
-    # A segunda so' fica visivel depois de resolver a primeira, e foi o que
-    # custou tres tentativas na migracao do loopzero-memory.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # Two chained pre-conditions, both satisfied before this line existed:
+    #   1. the repo belongs to an ORGANISATION (`owner.type=Organization`)
+    #   2. the `blacksmith-sh` GitHub App is installed IN THE ORG that owns the repo
+    # The second only becomes visible after solving the first, which is what cost three
+    # attempts during the loopzero-memory migration.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     env:
       GOPRIVATE: github.com/getloopscale/*,github.com/getloopscale/*
 
     steps:
-      # DOIS checkouts, e o segundo nao e' opcional.
+      # TWO checkouts, and the second is not optional.
       #
-      # Tentei primeiro `GOWORK=off` com um checkout so' — e' o que api/Dockerfile
-      # faz. NAO funciona para o repositorio inteiro, e a medicao foi esta:
+      # `GOWORK=off` with a single checkout was tried first — it is what api/Dockerfile
+      # does. It does NOT work for the whole repository, and the measurement was this:
       #
-      #   cmd/loopzero-ops  `go.mod` nao declara `jackc/pgx/v5` de forma alguma;
-      #                 a dependencia so' resolve pelo workspace.
-      #   api           `go.sum` tem o hash do modulo pgx mas NAO a linha
-      #                 `/go.mod` dele — a forma exata que o go.work supre.
-      #   infra/scripts mesma lacuna.
+      #   cmd/loopzero-ops  `go.mod` does not declare `jackc/pgx/v5` at all; the dependency
+      #                 resolves only through the workspace.
+      #   api           `go.sum` carries the hash of the pgx module but NOT its `/go.mod`
+      #                 line — exactly the form go.work supplies.
+      #   infra/scripts the same gap.
       #
-      # O Dockerfile escapa disso porque compila SO' `api/./cmd/`, um
-      # subconjunto cujas dependencias estao completas. Um gate que compila tudo
-      # nao tem essa sorte.
+      # The Dockerfile escapes this because it builds ONLY `api/./cmd/`, a subset whose
+      # dependencies are complete. A gate that builds everything has no such luck.
       #
-      # A alternativa seria `go mod tidy` nos 6 modulos. Rejeitada aqui: mexer na
-      # resolucao de dependencia de todo o repo para acomodar um gate novo e'
-      # deixar o gate ditar a arquitetura — e arrisca quebrar builds de imagem
-      # que hoje funcionam. Preservar o workspace faz o CI exercitar a MESMA
-      # resolucao que o desenvolvedor exercita localmente, que e' a propriedade
-      # que se quer de um gate.
+      # The alternative would be `go mod tidy` across the 6 modules. Rejected here:
+      # changing the whole repository's dependency resolution to accommodate a new gate is
+      # letting the gate dictate the architecture — and it risks breaking image builds
+      # that work today. Preserving the workspace makes CI exercise the SAME resolution a
+      # developer exercises locally, which is the property a gate is wanted for.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; issue #233)
         with:
+          # Full history: the cmd/loopzero-ops suite resolves commit SHAs cited in workflow
+          # comments and scans history for secrets, and a shallow clone makes both refuse
+          # to measure (they fail under CI rather than report a clean they did not see).
+          fetch-depth: 0
+          persist-credentials: false   # zizmor artipacked: no later step pushes
           path: loopzero
 
-      # `loopzero-contracts` e' PRIVADO e foi transferido para `getloopscale` junto com
-      # este repo. O acesso vem de uma DEPLOY KEY read-only registrada nele
-      # (id 158891596), com a chave privada em GOMOD_SSH_KEY.
+      # `loopzero-contracts` is PRIVATE and was transferred to `getloopscale` together with this
+      # repo. Access comes from a read-only DEPLOY KEY registered on it (id 158891596),
+      # with the private half in GOMOD_SSH_KEY.
       #
-      # ATUALIZADO 2026-08-07: o import path NAO continua mais em `getloopscale`.
-      # O commit f813b367 (2026-08-06) reescreveu api/go.mod e pkg/go.mod para
-      # `github.com/getloopscale/loopzero-contracts v0.4.0`, revertendo a premissa acima —
-      # mas este workflow ficou em `getloopscale` e passou a nao encontrar a versao,
-      # falhando com "pkg/go.mod nao declara loopzero-contracts". O ultimo run verde foi
-      # 2026-07-31; toda a esteira ficou bloqueada desde a migracao.
+      # UPDATED 2026-08-07: the import path does NOT stay on `getloopscale` any more. Commit
+      # 696fe5c62 (2026-08-06) rewrote api/go.mod and pkg/go.mod to
+      # `github.com/getloopscale/loopzero-contracts v0.4.0`, reversing the premise above — but
+      # this workflow stayed on `getloopscale` and stopped finding the version, failing with
+      # "pkg/go.mod does not declare loopzero-contracts". The last green run was 2026-07-31;
+      # the whole pipeline was blocked from the migration onwards.
       #
-      # Por que deploy key e nao PAT: a necessidade e' `Contents: read` em UM
-      # repositorio. Um PAT de conta alcanca tudo que a conta alcanca; a deploy
-      # key alcanca exatamente este repo, so' leitura, e e' revogavel sozinha sem
-      # afetar mais nada. O `GOMOD_TOKEN` anterior morreu (`Bad credentials`,
-      # medido no run 30621505439) e derrubou 10 builds sem nomear a causa.
-      - name: Deploy key para o modulo privado
+      # Why a deploy key and not a PAT: the need is `Contents: read` on ONE repository. An
+      # account PAT reaches everything the account reaches; the deploy key reaches exactly
+      # this repo, read-only, and is revocable on its own without affecting anything else.
+      # The previous `GOMOD_TOKEN` died (`Bad credentials`, measured in run 30621505439)
+      # and took down 10 builds without naming the cause.
+      - name: Deploy key for the private module
         env:
           GOMOD_SSH_KEY: ${{ secrets.GOMOD_SSH_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${GOMOD_SSH_KEY:-}" ]; then
-            echo "::error::GOMOD_SSH_KEY vazio — api/go.mod requer github.com/getloopscale/loopzero-contracts (privado). Registre a chave privada da deploy key read-only."
+            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/loopzero-contracts (privado). Registre a chave privada da deploy key read-only."
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printenv GOMOD_SSH_KEY > ~/.ssh/gomod_key
           chmod 600 ~/.ssh/gomod_key
           ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
-          # IdentitiesOnly + IdentityAgent=none: sem isso o agente do runner pode
-          # oferecer outra chave primeiro e o GitHub responde `Repository not
-          # found` — a mesma mensagem de repo inexistente. Custou uma rodada de
-          # diagnostico local ate' o `-v` mostrar a chave errada sendo oferecida.
+          # IdentitiesOnly + IdentityAgent=none: without these the runner's agent can
+          # offer another key first and GitHub answers `Repository not found` — the same
+          # message a genuinely absent repository gives. It cost one round of
+          # local diagnosis before `-v` showed the wrong key being offered.
           cat >> ~/.ssh/config <<'SSHCFG'
           Host github.com
             IdentityFile ~/.ssh/gomod_key
             IdentitiesOnly yes
             IdentityAgent none
           SSHCFG
-          # go/git buscam o modulo por HTTPS; reescrever para SSH e' o que faz a
-          # deploy key ser usada.
+          # go/git fetch the module over HTTPS; rewriting to SSH is what makes the deploy
+          # key get used.
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git ls-remote git@github.com:getloopscale/loopzero-contracts.git >/dev/null
-          echo "deploy key OK — loopzero-contracts acessivel."
+          echo "deploy key OK — loopzero-contracts reachable."
 
-      # QUAL versao de loopzero-contracts fazer checkout — derivada do `go.mod`, nunca
-      # fixada aqui.
+      # WHICH version of loopzero-contracts to check out — derived from `go.mod`, never fixed
+      # here.
       #
-      # O DEFEITO QUE ISTO CORRIGE (medido no run 30627506396): o checkout sem
-      # `ref:` traz o branch DEFAULT do repositorio, que e' `main` — 12 commits
-      # atras de `develop` e sem `plan.MetricCPUCoreSeconds`. O build morria em
-      # `undefined: plan.MetricCPUCoreSeconds`, e a mensagem sugeria codigo
-      # quebrado quando o quebrado era a VERSAO que o gate escolhia sozinho.
+      # THE DEFECT THIS CORRECTS (measured in run 30627506396): a checkout with no `ref:`
+      # brings the repository's DEFAULT branch, which is `main` — 12 commits behind
+      # `develop` and without `plan.MetricCPUCoreSeconds`. The build died on
+      # `undefined: plan.MetricCPUCoreSeconds`, and the message suggested broken code when
+      # what was broken was the VERSION the gate had chosen on its own.
       #
-      # A tag `v0.3.0` que os go.mod exigem TEM os simbolos — a dependencia
-      # declarada estava correta o tempo todo. Fixar a versao no workflow
-      # resolveria hoje e mentiria no proximo bump; derivar do go.mod faz o gate
-      # exercitar exatamente a versao que o repositorio declara.
-      - name: Resolver a versao de loopzero-contracts exigida pelo go.mod
+      # The `v0.3.0` tag the go.mod files require DOES have the symbols — the declared
+      # dependency was correct the whole time. Pinning the version in the workflow would fix
+      # today and lie at the next bump; deriving it from go.mod makes the gate exercise
+      # exactly the version the repository declares.
+      - name: Resolve the loopzero-contracts version go.mod requires
         id: contracts
         run: |
           set -euo pipefail
           pkg_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/pkg/go.mod | head -1)
           api_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/api/go.mod | head -1)
           if [ -z "$pkg_v" ]; then
-            echo "::error::loopzero/pkg/go.mod nao declara loopzero-contracts — o gate nao tem versao para exercitar."
+            echo "::error::loopzero/pkg/go.mod does not declare loopzero-contracts — the gate has no version toa exercitar."
             exit 1
           fi
-          # Divergencia entre modulos e' drift real: o go.work esconde qual das
-          # duas vence, e o consumidor externo de cada modulo veria versoes
-          # diferentes. Falha alto em vez de escolher uma em silencio.
+          # A divergence between modules is real drift: go.work hides which of the two
+          # wins, and an external consumer of each module would see different versions.
+          # Fail loudly rather than pick one in silence.
           if [ "$pkg_v" != "$api_v" ]; then
-            echo "::error::pkg/go.mod pede $pkg_v e api/go.mod pede $api_v — alinhe os dois antes de seguir."
+            echo "::error::pkg/go.mod asks for $pkg_v and api/go.mod asks for $api_v — align them before de seguir."
             exit 1
           fi
           echo "loopzero-contracts: $pkg_v"
@@ -276,6 +313,7 @@ jobs:
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
+          persist-credentials: false   # zizmor artipacked: no later step pushes
           repository: getloopscale/loopzero-contracts
           ref: ${{ steps.contracts.outputs.ref }}
           path: loopzero-contracts
@@ -288,11 +326,12 @@ jobs:
             loopzero/api/go.sum
             loopzero/operators/go.sum
 
-      # Este repositorio e' MULTI-MODULO e nao tem `go.mod` na raiz: um
-      # `go build ./...` na raiz nao cobre NADA. Cada modulo e' compilado
-      # explicitamente. A lista e' a do `go.work` menos `../loopzero-contracts`, que
-      # tem CI proprio no repositorio dele — este gate valida o consumo, nao a
-      # producao.
+      - uses: ./loopzero/.github/actions/test-prerequisites
+
+      # This repository is MULTI-MODULE and has no `go.mod` at the root: a `go build ./...`
+      # there covers NOTHING. Each module is built explicitly. The list is `go.work`'s minus
+      # `../loopzero-contracts`, which has CI of its own in its repository — this gate validates
+      # the consumption, not the production.
       - name: Build every module
         run: |
           set -euo pipefail
@@ -313,9 +352,9 @@ jobs:
             echo "::endgroup::"
           done
 
-      # `operators` fica de fora: a suite dele e' Ginkgo + envtest e precisa dos
-      # binarios do kube-apiserver. Excluido EXPLICITAMENTE em vez de
-      # silenciosamente omitido — quem le' o gate ve' o que ele nao cobre.
+      # `operators` is left out: its suite is Ginkgo plus envtest and needs the
+      # kube-apiserver binaries. Excluded EXPLICITLY rather than silently omitted —
+      # whoever reads the gate sees what it does not cover.
       - name: Test the hermetic modules
         run: |
           set -euo pipefail
@@ -338,7 +377,7 @@ jobs:
   # tenant read another tenant's rows.
   #
   # This job exists so that cannot recur silently. It provisions a real
-  # PostgreSQL, applies the schema and migration 000062, and runs the isolation
+  # PostgreSQL, applies the whole migration chain, and runs the isolation
   # suite with LOOPZERO_RLS_AUDIT_REQUIRE=1 — which turns "cannot connect" from a
   # skip into a failure.
   #
@@ -357,7 +396,15 @@ jobs:
   # with it the possibility of forgetting to add a name to it.
   # ---------------------------------------------------------------------------
   tenant-isolation:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # Skipped on a FORK's PR, and the reason is mechanical, not political: the steps below
+    # use a deploy key to fetch the PRIVATE sibling `loopzero-contracts`, and
+    # GitHub does not hand a secret to a workflow triggered by a fork's PR. Without this
+    # condition the job RUNS and fails at the deploy-key step — a red that says nothing
+    # about the contribution. `ci-gate` accepts the skip by name, for a fork only.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     env:
@@ -380,15 +427,16 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
+          persist-credentials: false   # zizmor artipacked: no later step pushes
           path: loopzero
 
-      - name: Deploy key para o modulo privado
+      - name: Deploy key for the private module
         env:
           GOMOD_SSH_KEY: ${{ secrets.GOMOD_SSH_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${GOMOD_SSH_KEY:-}" ]; then
-            echo "::error::GOMOD_SSH_KEY vazio — api/go.mod requer github.com/getloopscale/loopzero-contracts (privado)."
+            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/loopzero-contracts (privado)."
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -404,19 +452,20 @@ jobs:
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
 
-      - name: Resolver a versao de loopzero-contracts exigida pelo go.mod
+      - name: Resolve the loopzero-contracts version go.mod requires
         id: contracts
         run: |
           set -euo pipefail
           api_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/api/go.mod | head -1)
           if [ -z "$api_v" ]; then
-            echo "::error::loopzero/api/go.mod nao declara loopzero-contracts."
+            echo "::error::loopzero/api/go.mod does not declare loopzero-contracts."
             exit 1
           fi
           echo "ref=$api_v" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
+          persist-credentials: false   # zizmor artipacked: no later step pushes
           repository: getloopscale/loopzero-contracts
           ref: ${{ steps.contracts.outputs.ref }}
           path: loopzero-contracts
@@ -430,7 +479,7 @@ jobs:
       # The role split is the point. Applying the schema as `loopzero` makes that
       # role the table owner, exactly as in production, so the tests measure the
       # real posture instead of a convenient one.
-      - name: Provisionar o banco com a separacao de papeis de producao
+      - name: Provision the database with production's separation of roles
         env:
           PGHOST: localhost
           PGPORT: "5432"
@@ -438,42 +487,37 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
 
-          echo "::group::papeis"
+          echo "::group::roles"
           PGPASSWORD=postgres psql -U postgres -d loopzero_test -v ON_ERROR_STOP=1 \
             -f loopzero/api/internal/db/testdata/test-roles.sql
+          # The owner owns its database, as in production: the chain creates the
+          # pgcrypto extension (000037), which needs CREATE on the database.
+          PGPASSWORD=postgres psql -U postgres -d loopzero_test -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE loopzero_test OWNER TO loopzero"
           echo "::endgroup::"
 
-          # The dump replays a few metering helpers out of dependency order.
-          # Those errors are tolerated here and the outcome is asserted below —
-          # a count is a stronger check than a clean-looking log.
-          echo "::group::schema (como owner loopzero)"
-          PGPASSWORD=loopzero psql -U loopzero -d loopzero_test \
-            -f loopzero/api/internal/db/schema.gen.sql 2>&1 | tail -5
-          echo "::endgroup::"
-
-          echo "::group::migrations de isolamento"
-          # Applied by name rather than by a glob over the whole directory: the
-          # rest of the migration chain is not replayable against a schema dump
-          # (the dump already carries its result), and a glob would silently
-          # start including the next migration somebody adds.
+          # THE WHOLE MIGRATION CHAIN, with the tool and version production runs
+          # (api/Dockerfile builds golang-migrate v4.19.1 with the same flags).
           #
-          # The flip side is that adding a migration and forgetting this line is
-          # invisible — the job stays green measuring the schema WITHOUT it. The
-          # step below counts what the migrations must have produced, which is
-          # what catches the omission for 62/63/64; 065 and 066 are pinned by
-          # their own integration tests (FK ON DELETE, idempotency per tenant).
-          for m in 000062_rls_fail_closed 000063_cloud_named_role 000064_drop_owner_maintenance \
-                   000065_explicit_fk_on_delete 000066_idempotency_key_per_tenant; do
-            echo "-- $m"
-            PGPASSWORD=loopzero psql -U loopzero -d loopzero_test -v ON_ERROR_STOP=1 \
-              -f "loopzero/api/internal/db/migrations/$m.up.sql"
-          done
+          # This used to load schema.gen.sql and then five isolation migrations
+          # named by hand. That database was not the one production has: the
+          # dump carries no reference data (plan_limits is filled by 000002), and
+          # 000067/000068 were never on the list. Tests passed only because two
+          # of them re-ran every migration file as the owner at test time and
+          # ignored the errors — which also loaded the plan limits the project-cap
+          # tests depend on. The chain removes both the list and the dependency:
+          # a new migration is applied here the day it lands (issue #387).
+          echo "::group::migrations (as owner loopzero)"
+          GOBIN="${RUNNER_TEMP}/migrate" GOWORK=off go install -tags postgres \
+            github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
+          "${RUNNER_TEMP}/migrate/migrate" -path loopzero/api/internal/db/migrations \
+            -database "postgres://loopzero:loopzero@localhost:5432/loopzero_test?sslmode=disable" up
           echo "::endgroup::"
 
       # Asserted before the tests run: if the migration silently did less than
       # it claims, fail here with a number rather than let a downstream test
       # produce a confusing error.
-      - name: Verificar a postura no catalogo
+      - name: Check the posture in the catalogue
         run: |
           set -euo pipefail
           read -r rls forced open <<< "$(PGPASSWORD=postgres psql -U postgres -h localhost -d loopzero_test -tAF' ' -c "
@@ -487,7 +531,7 @@ jobs:
                    OR pg_get_expr(p.polqual, p.polrelid) LIKE '%''''::text%');")"
           echo "rls_enabled=$rls forced=$forced fail_open_policies=$open"
           if [ "$open" -ne 0 ]; then
-            echo "::error::$open policy(ies) ainda aceitam contexto vazio — o disjunto fail-open voltou."
+            echo "::error::$open policy(ies) still accept an empty context — the fail-open disjunct is back."
             exit 1
           fi
           if [ "$rls" -lt 30 ] || [ "$forced" -lt 30 ]; then
@@ -495,7 +539,7 @@ jobs:
             exit 1
           fi
 
-      - name: Integração contra banco real (falha se o banco sumir, nunca pula)
+      - name: Integration against a real database (fails if the database vanishes, never skips)
         env:
           DATABASE_URL: postgres://loopzero:loopzero@localhost:5432/loopzero_test?sslmode=disable
           LOOPZERO_API_DATABASE_URL: postgres://loopzero_api:loopzero-api@localhost:5432/loopzero_test?sslmode=disable
@@ -506,3 +550,148 @@ jobs:
           set -euo pipefail
           cd loopzero/api
           go test ./tests/integration/ -count=1 -v
+
+  # ---------------------------------------------------------------------------
+  # THE GATE AN OUTSIDE CONTRIBUTOR ACTUALLY MEETS.
+  #
+  # `build-and-test` and `tenant-isolation` above use a deploy key to fetch the PRIVATE
+  # sibling `loopzero-contracts`. A PR from a FORK receives NO secret at all — that is how
+  # GitHub works, not a configuration choice — so those two jobs cannot run for anyone
+  # outside the organisation.
+  #
+  # This job uses no secret, by construction. Measured 2026-09-16: of the 8 modules in
+  # go.work, only `api` and `pkg` need the private one. `cmd/loopzero-ops` (the quality
+  # gates), `operators`, `operators/api`, `infra/scripts`, `infra/tests` and `tools/...`
+  # build with `GOWORK=off` — verified by running `go build ./...` with the workspace
+  # switched off, which is what simulates the private repo being absent.
+  # ---------------------------------------------------------------------------
+  public-checks:
+    name: Public checks (no secrets — runs on a fork)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; issue #233)
+        with:
+          # `quality:diff` compares against a base; with no history there is no diff.
+          fetch-depth: 0
+          persist-credentials: false   # no step below pushes
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0 (SHA-pin; issue #233)
+        with:
+          go-version-file: cmd/loopzero-ops/go.mod
+          cache-dependency-path: |
+            cmd/loopzero-ops/go.sum
+            operators/go.sum
+
+      - uses: ./.github/actions/test-prerequisites
+
+      # `GOWORK=off` is the entire point of this job: with the workspace active Go tries to
+      # resolve `../loopzero-contracts` and fails without the deploy key. Switched off, each
+      # independent module resolves through its own go.mod.
+      - name: Build and vet the independent modules
+        env:
+          GOWORK: off
+        run: |
+          set -euo pipefail
+          for m in cmd/loopzero-ops operators operators/api tools/gen-service-auth-ed25519; do
+            echo "::group::$m"
+            (cd "$m" && go build ./... && go vet ./...)
+            echo "::endgroup::"
+          done
+
+      # LOOPZERO_NO_PRIVATE_MODULE_CREDENTIAL declares what this job is: it runs on forks and
+      # receives no credential for the private loopzero-contracts module, so the modules that
+      # require it (api, pkg) cannot be built here. module-selfcontained reports them NOT
+      # VERIFIED instead of failing them; build-and-test, which holds the deploy key,
+      # verifies them.
+      - name: Test the independent modules
+        env:
+          GOWORK: off
+          LOOPZERO_NO_PRIVATE_MODULE_CREDENTIAL: "1"
+        run: |
+          set -euo pipefail
+          for m in cmd/loopzero-ops operators/api; do
+            echo "::group::test $m"
+            (cd "$m" && go test ./... -count=1)
+            echo "::endgroup::"
+          done
+
+      # The quality gates. Until today they lived in a pre-push hook that runs "on the
+      # pusher's machine, and only there" — which means that, for anyone outside, they did
+      # not exist. Here they run scoped to the diff, which is what the PR proposes.
+      - name: Quality gates (diff-scoped)
+        # BOTH values go through `env:`. The `git fetch` below interpolated `github.base_ref`
+        # straight into the shell, and a branch name is chosen by whoever opens the PR — in a
+        # fork, by a stranger. zizmor flagged template-injection (High). The three gate lines
+        # already used "$BASE_REF" correctly: the same step got it right three times and
+        # wrong once, which is exactly the case the manual describes.
+        env:
+          GOWORK: off
+          BASE_BRANCH: ${{ github.base_ref || 'develop' }}
+          BASE_REF: origin/${{ github.base_ref || 'develop' }}
+        run: |
+          set -euo pipefail
+          # The checkout above took full history (fetch-depth: 0), so the base branch
+          # is already here. A second `git fetch` needs credentials this job
+          # deliberately does not keep (persist-credentials: false), and on a private
+          # repository it died with "could not read Username" before any gate ran.
+          if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
+            echo "::error::base ${BASE_REF} (branch ${BASE_BRANCH}) is not in the checkout — the diff-scoped gates need it"
+            exit 1
+          fi
+          (cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)
+          # `no-new-bash` is NOT here, and the absence is measured rather than forgotten.
+          # Measured 2026-09-16: it exits 5 — "read allowlist
+          # .claude/rules/shell-scripts-allowlist.md: no such file or directory". That
+          # file lives under `.claude/`, which `.gitignore:311` excludes, so it exists in
+          # no clone. The gate runs on the machine of whoever has the kit installed and
+          # nowhere else; putting it here would be a guaranteed red on the first PR,
+          # saying nothing about the contribution. Tracked in the backlog.
+          /tmp/loopzero-ops quality dangling-script-refs --base-ref "$BASE_REF" --head-ref HEAD
+          /tmp/loopzero-ops quality dangling-data-refs --base-ref "$BASE_REF" --head-ref HEAD
+
+  # ---------------------------------------------------------------------------
+  # ONE required check, not five. Two subtleties decide this block:
+  #
+  # 1. A required check that is SKIPPED reports as passing to branch protection. Hence
+  #    `if: always()` and the explicit assertion of each result below.
+  # 2. `build-and-test` and `tenant-isolation` are legitimately skipped on a fork PR
+  #    (there is no secret for the private module). That is accepted BY NAME here, not by
+  #    omission — the difference between "we decided this may skip" and "we forgot to
+  #    look" is exactly this line.
+  # ---------------------------------------------------------------------------
+  ci-gate:
+    name: CI gate
+    needs: [public-checks, build-and-test, tenant-isolation]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the jobs to be green
+        env:
+          PUBLIC: ${{ needs.public-checks.result }}
+          PRIVATE_BUILD: ${{ needs.build-and-test.result }}
+          PRIVATE_TENANT: ${{ needs.tenant-isolation.result }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          set -euo pipefail
+          fail=0
+
+          # `public-checks` may never skip: it depends on no secret at all.
+          [ "$PUBLIC" = success ] || { echo "::error::public-checks is $PUBLIC"; fail=1; }
+
+          for name in PRIVATE_BUILD PRIVATE_TENANT; do
+            result="${!name}"
+            if [ "$result" = success ]; then
+              continue
+            fi
+            if [ "$result" = skipped ] && [ "$IS_FORK" = true ]; then
+              echo "::notice::$name skipped: a fork PR receives no secret for the private module"
+              continue
+            fi
+            echo "::error::$name is $result"
+            fail=1
+          done
+
+          exit "$fail"

@@ -82,3 +82,16 @@ func TestPreviewURL_WithoutEntryApp(t *testing.T) {
 		t.Errorf("PreviewURL without app: got %q; want %q", got, want)
 	}
 }
+
+// A label cut at the cap on a hyphen boundary must not end with a hyphen.
+func TestPreviewSubdomain_TruncationNeverEndsWithAHyphen(t *testing.T) {
+	tenant := strings.Repeat("t", 40)
+	project := strings.Repeat("p", 21) // cut lands right after "{tenant}-{project}-"
+	got := PreviewSubdomain(tenant, project, "", 1)
+	if len(got) > MaxKubernetesNameLength || strings.HasSuffix(got, "-") {
+		t.Fatalf("got %q (%d chars)", got, len(got))
+	}
+	if want := tenant + "-" + project; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}

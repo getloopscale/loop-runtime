@@ -3,6 +3,8 @@
 
 package constants
 
+import "github.com/getloopscale/loopzero/pkg/gitearepo"
+
 // --- Secret Names ---
 // These are the well-known names of Kubernetes Secrets created by controllers.
 // CWTs and other components reference these by name — changing them is a breaking change.
@@ -17,6 +19,10 @@ const (
 
 	// SecretPlatformTokens is the platform-wide Secret storing Gitea/ArgoCD tokens.
 	SecretPlatformTokens = "loopzero-platform-tokens"
+
+	// SecretRegistryPull is the registry pull secret kept in
+	// NamespacePlatformSystem and copied into every environment namespace.
+	SecretRegistryPull = "loopzero-system"
 
 	// SecretArgoCDInitialAdmin is the default ArgoCD admin password Secret.
 	SecretArgoCDInitialAdmin = "argocd-initial-admin-secret" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
@@ -37,18 +43,6 @@ const (
 	KeyMinIOEndpoint      = "MINIO_ENDPOINT"
 )
 
-// --- Harbor Secret Names ---
-
-const (
-	// SecretHarborRegistryConfig is the Docker config.json for Harbor registry auth
-	// in build namespaces. Same name as the existing buildkit-registry-config to
-	// maintain compatibility with the build pipeline (CWTs reference this name).
-	SecretHarborRegistryConfig = "buildkit-registry-config" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
-
-	// SecretHarborPullCredentials is the imagePullSecret for Harbor in workload namespaces.
-	SecretHarborPullCredentials = "harbor-pull-credentials"
-)
-
 // --- ServiceAccount Names ---
 
 const (
@@ -57,6 +51,10 @@ const (
 
 	// SADeployer is the ServiceAccount for ArgoCD-managed deployments in environment namespaces.
 	SADeployer = "loopzero-deployer"
+
+	// SAApp is the ServiceAccount tenant workloads run as in environment and
+	// preview namespaces; it carries the registry pull secret.
+	SAApp = "loopzero-app"
 )
 
 // --- ResourceQuota and Role Names ---
@@ -144,8 +142,10 @@ const (
 // In-cluster service URLs used as defaults when environment variables are not set.
 
 const (
-	// DefaultGiteaURL is the default in-cluster Gitea HTTP URL.
-	DefaultGiteaURL = "http://gitea-http.gitea.svc.cluster.local:3000"
+	// DefaultGiteaURL is the default in-cluster Gitea HTTP URL. It is the
+	// platform-wide gitearepo.DefaultInternalURL, so the operators and the api
+	// fall back to the same Gitea (issue #354).
+	DefaultGiteaURL = gitearepo.DefaultInternalURL
 
 	// DefaultGiteaOrg is the Gitea organisation that owns the tenant gitops
 	// repositories when the GITEA_ORG environment variable is unset. It must agree

@@ -80,12 +80,11 @@ func (e *CostEnforcer) Middleware(metric planpkg.CostMetric) func(http.Handler) 
 			// nil receiver = pass-through. Lets cmd/setup_server.go wire
 			// CostEnforcement before the cloud control plane is fully up.
 			//
-			// B-033: passar direto continua certo — bloquear aqui quebraria o boot
-			// tolerante que este desvio existe para permitir. O que estava errado era
-			// passar em SILENCIO: a decisao e' emitida com `reason="disabled"`, para
-			// que "a protecao nao existe" deixe de ser indistinguivel de "nao houve
-			// requisicao". O item pede exatamente isso — estado do sistema, e nao uma
-			// linha de log no boot de outro processo.
+			// B-033: passing through is still right — blocking here would break the
+			// tolerant boot this bypass exists to allow. What was wrong was passing
+			// SILENTLY: the decision is emitted with `reason="disabled"`, so that "the
+			// protection does not exist" stops being indistinguishable from "there
+			// was no request" — system state, not a log line at another process's boot.
 			if e == nil || e.checker == nil {
 				metrics.CostCapDecisionsTotal.WithLabelValues(string(metric), "disabled").Inc()
 				next.ServeHTTP(w, r)
@@ -109,13 +108,13 @@ func (e *CostEnforcer) Middleware(metric planpkg.CostMetric) func(http.Handler) 
 				return
 			}
 
-			razão, err := e.checker.CheckReason(r.Context(), uc.TenantID, plan, metric)
+			reason, err := e.checker.CheckReason(r.Context(), uc.TenantID, plan, metric)
 
-			// B-033: a decisao vira estado observavel. `unmeasured` alto significa que a
-			// protecao nao esta avaliando nada — e o estado medido no app-dev, onde o
-			// agregador esta desligado e `cost_counters` tem zero linhas. Antes disso, o
-			// unico sinal era uma linha de log no boot de OUTRO processo.
-			metrics.CostCapDecisionsTotal.WithLabelValues(string(metric), razão.String()).Inc()
+			// B-033: the decision becomes observable state. A high `unmeasured` count
+			// means the protection is evaluating nothing — the state measured on
+			// app-dev, where the aggregator is off and `cost_counters` has zero rows.
+			// Before this, the only signal was a log line at ANOTHER process's boot.
+			metrics.CostCapDecisionsTotal.WithLabelValues(string(metric), reason.String()).Inc()
 
 			if err != nil {
 				var ex *planpkg.ExceededError

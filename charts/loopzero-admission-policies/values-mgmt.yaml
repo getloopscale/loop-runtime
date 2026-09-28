@@ -1,0 +1,114 @@
+# Overlay for the core-cluster install of this chart (Helmfile release
+# admission-policies-mgmt, infra/helmfile/core.helmfile.yaml.gotmpl).
+#
+# Plan: d4-vap-delete-guardrail (T1.2).
+#
+# WHY A SECOND INSTALL OF THE SAME CHART
+#
+# The chart was only ever installed on the runtime cluster
+# (infra/helmfile/cell.helmfile.yaml.gotmpl, namespace cosign-system), because every
+# policy in it guards workloads: image digests, signatures, registries, resource limits.
+# The D4 guardrail is the first policy that must run on **core**, where Application,
+# AppProject, Tenant, Environment and ClusterCredential actually live.
+#
+# Rather than fork a second chart, this overlay reuses the same one and enables exactly
+# the policies that guard core resources. Every runtime-only policy is switched OFF
+# explicitly — leaving them on would emit cosign/sigstore objects into a cluster that has
+# no policy-controller, producing orphaned resources.
+
+vaps:
+  # The only policy this install exists for.
+  protectPlatformDeletes: true
+  # ADR D3 — Warn until T2.3 flips it, gated on the observation window.
+  protectPlatformDeletesAction: Warn
+
+  # loopzero-tenant-cr-shape: ON here, and ONLY here. It matches `loopzero.io/v1 tenants`,
+  # which exist in loopzero-system on THIS cluster and nowhere else. It was OFF until
+  # 2026-08-13, grouped with the runtime-only list below by name association with
+  # `tenantNamespace` — but neither reason for that list applies to it: it guards
+  # a PLATFORM CR, not a workload, and it is a native ValidatingAdmissionPolicy,
+  # so it emits no sigstore object into a cluster with no policy-controller.
+  #
+  # failurePolicy: Fail is safe here by measurement, not optimism — the only two
+  # writers of Tenant CRs (EnsureTenant, patchTenantCR) run in the api process,
+  # whose SA the CEL exempts, and no operator writes them. See ADR
+  # docs/decisions.md (B-077).
+  tenantCrShape: true
+
+  # Runtime-only policies: OFF on core. Every one of these guards a workload concern
+  # (image provenance, resource limits, tenant namespaces) that has no meaning on the
+  # management cluster, and requireImageDigest additionally emits a policy binding that
+  # would evaluate every core pod for no reason.
+  disallowLatestTag: false
+  restrictRegistries: false
+  requireResourceLimits: false
+  requireImageSignature: false
+  requireImageDigest: false
+  requireImageDigestEnforce: false
+  noRuntimeImageMutations: false
+  protectPlatformNetworkpolicies: false
+  argocdManagedBy: false
+
+  # loopzero-tenant-namespace: OFF here, and the reason is NOT the one of the list above —
+  # which is why it is written here and not only in values.yaml (B-095).
+  #
+  # The policy demands one thing: `object.metadata.namespace == "loopzero-system"` for
+  # `loopzero.io` tenants and environments. Measured on 2026-08-19 in the two — and only —
+  # creation paths:
+  #
+  #   api/internal/k8s/tenancy/tenant_cr_manager.go     const tenantNamespace = "loopzero-system"
+  #   operators/internal/tenant/tenant_controller.go    creates the Environment in tenant.Namespace
+  #
+  # So **the invariant it would guard is already true in the code**, and the state the
+  # T3.3 migration would produce is already in place. The values.yaml comment says that
+  # enabling it before clearing misplaced CRs causes a self-inflicted DoS; that condition
+  # no longer holds by the measurement above.
+  #
+  # THE WRITER MEASUREMENT WAS DONE (2026-08-19, B-095) and the policy gained the
+  # `exclude-system-actors` condition mirrored from its sibling. The versioned seeds were
+  # measured too, and one was outside: the production bootstrap-platform script applied
+  # the Tenant in `default` — fixed the same day, and the script was later deleted as dead
+  # (no caller, #240). The `platform-cr-namespace` gate watches every seed that remains.
+  #
+  # WHAT IS STILL MISSING, and it is the only thing: confirming that no Tenant/Environment
+  # lives outside `loopzero-system` in a LIVE cluster. Fixing the script does not remove a CR
+  # an earlier run of it already applied, and that is a runtime fact — it cannot be
+  # established from the repository.
+  #
+  # Why that blocks: the policy matches CREATE **and UPDATE**. Removing a finalizer is an
+  # UPDATE. A surviving Tenant in `default` would become UNDELETABLE the instant the
+  # toggle went up — the same deadlock class the sibling's header describes.
+  #
+  # To enable: `kubectl get tenants,environments -A` on every core cluster; if they all
+  # live in `loopzero-system`, the toggle goes up.
+  tenantNamespace: false
+
+# ClusterImagePolicy is a sigstore/policy-controller CRD. The core cluster runs no
+# policy-controller (that release lives in cell.helmfile), so emitting one here would
+# create an object whose CRD does not exist — the sync fails, or worse, it lands orphaned.
+clusterImagePolicy:
+  enabled: false
+
+# KNOWN RESIDUE, accepted deliberately: the chart also emits a `loopzero-cosign-version-config`
+# ConfigMap unconditionally — its template has no enable/disable toggle (the only `if` in
+# it guards an inner field, not the object). Two options existed:
+#
+#   a) add a toggle to the shared template — touches the runtime install, which is the one
+#      place this ConfigMap actually matters, to remove an object that is inert here;
+#   b) accept it — a ConfigMap holding a version string, with no controller on core to read
+#      it, changes no behaviour.
+#
+# (b) is the KISS choice: the risk of (a) lands on the runtime signing chain, and the cost
+# of (b) is one inert object. Revisit only if the ConfigMap ever gains a consumer on core.
+# The `vap-delete-guardrail` gate therefore asserts "no cosign POLICY objects" (which would
+# be functional) rather than "no cosign-related object at all".
+
+# The chart's PrometheusRules cover cosign/sigstore, none of which run on core.
+# The D4 alert ships separately in task T2.1. `alerts.enabled: false` also leaves
+# `alerts.sigstoreEnabled` at its default (false), so no sigstore rule or CronJob renders.
+#
+# This overlay used to carry a top-level `sigstoreEnabled: false` as well. No template
+# reads that key — they read `alerts.sigstoreEnabled` — so it switched nothing off; the
+# chart schema now refuses an unknown top-level key, and the line was removed.
+alerts:
+  enabled: false

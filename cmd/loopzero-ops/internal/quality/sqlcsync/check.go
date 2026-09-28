@@ -26,11 +26,14 @@ package sqlcsync
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate behavior.
@@ -60,6 +63,10 @@ type Outcome struct {
 	SqlcVersion string
 }
 
+// Verdict is Pass when the committed generated/ matches a fresh sqlc
+// generate, and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // Default paths relative to RepoRoot.
 const (
 	defaultSqlcYAML      = "api/internal/db/sqlc.yaml"
@@ -73,7 +80,7 @@ const (
 // Check is the gate entry point. Returns Outcome + nil error on successful
 // evaluation (regardless of Pass/Fail); returns non-nil error only when the
 // gate itself cannot run (sqlc absent, sqlc.yaml missing, etc.).
-func Check(cfg Config) (Outcome, error) {
+func Check(cfg Config) (_ Outcome, err error) {
 	if cfg.RepoRoot == "" {
 		cfg.RepoRoot = "."
 	}
@@ -116,45 +123,37 @@ func Check(cfg Config) (Outcome, error) {
 	if err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: mkdtemp: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { err = errors.Join(err, os.RemoveAll(tmpDir)) }()
 
 	// Mirror the canonical layout into tmpDir so sqlc.yaml's relative paths resolve.
-	tmpDb := filepath.Join(tmpDir, "db")
-	if err := os.MkdirAll(tmpDb, 0o755); err != nil {
-		return Outcome{}, fmt.Errorf("sqlc-sync: mkdir tmpDb: %w", err)
+	tmpDB := filepath.Join(tmpDir, "db")
+	if err := os.MkdirAll(tmpDB, 0o755); err != nil {
+		return Outcome{}, fmt.Errorf("sqlc-sync: mkdir tmpDB: %w", err)
 	}
-	if err := copyFile(sqlcYAML, filepath.Join(tmpDb, "sqlc.yaml")); err != nil {
+	if err := copyFile(sqlcYAML, filepath.Join(tmpDB, "sqlc.yaml")); err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: copy sqlc.yaml: %w", err)
 	}
-	if err := copyFile(schemaFile, filepath.Join(tmpDb, "schema.gen.sql")); err != nil {
+	if err := copyFile(schemaFile, filepath.Join(tmpDB, "schema.gen.sql")); err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: copy schema.gen.sql: %w", err)
 	}
-	if err := copyDir(queriesDir, filepath.Join(tmpDb, "queries")); err != nil {
+	if err := copyDir(queriesDir, filepath.Join(tmpDB, "queries")); err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: copy queries/: %w", err)
 	}
 
-	// Phase 0 baseline edge case: if queries/ is effectively empty (only
-	// .gitkeep), sqlc errors with "no queries contained in paths". Treat as
-	// PASS — gate is registered but trivially passes until Phase 1+ lands
-	// the first queries.sql. Acceptance criterion: "Gate exit 0 on Phase 0
-	// baseline (no generated code yet)".
-	if isQueriesDirEmpty(queriesDir) {
-		return Outcome{
-			Pass:        true,
-			Violations:  nil,
-			SqlcVersion: gotVersion,
-		}, nil
+	// Queries exist, so a queries dir with no .sql is a comparison of nothing.
+	if err := requireQueries(queriesDir); err != nil {
+		return Outcome{}, err
 	}
 
-	// Run sqlc generate inside tmpDb.
+	// Run sqlc generate inside tmpDB.
 	genCmd := exec.Command(cfg.SqlcBinary, "generate")
-	genCmd.Dir = tmpDb
+	genCmd.Dir = tmpDB
 	if out, err := genCmd.CombinedOutput(); err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: sqlc generate failed in tempdir: %w\nstdout/stderr:\n%s", err, string(out))
 	}
 
 	// Compare freshly-generated output against committed.
-	freshDir := filepath.Join(tmpDb, "generated")
+	freshDir := filepath.Join(tmpDB, "generated")
 	violations, err := diffDirs(committedDir, freshDir)
 	if err != nil {
 		return Outcome{}, fmt.Errorf("sqlc-sync: diff failed: %w", err)
@@ -294,19 +293,22 @@ func truncate(s string, n int) string {
 	return s[:n] + "..."
 }
 
-// isQueriesDirEmpty returns true if the queries/ dir has no .sql files (only
-// .gitkeep or empty). Used for the Phase 0 baseline edge case.
-func isQueriesDirEmpty(dir string) bool {
+// ErrNoQueries means the queries dir holds no .sql file: sqlc would generate
+// nothing, and the gate would report the committed code in sync with nothing.
+var ErrNoQueries = errors.New("sqlc-sync: no .sql file under api/internal/db/queries — there is nothing to compare the committed generated/ against")
+
+// requireQueries fails when the queries dir cannot be read or holds no .sql.
+func requireQueries(dir string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return true
+		return fmt.Errorf("sqlc-sync: reading queries dir %s: %w", dir, err)
 	}
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
-			return false
+			return nil
 		}
 	}
-	return true
+	return ErrNoQueries
 }
 
 // copyFile is a simple file copy helper.

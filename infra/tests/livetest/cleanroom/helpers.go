@@ -7,13 +7,12 @@
 // Wraps the 6 canonical fases that previously lived in the v1 bash script
 // `archive/canonical-tests-v1/scripts/local/cleanroom-canonical-chain-runner.sh`:
 //
-//   Phase 0 — Baseline pre-rebuild capture
-//   Phase 1 — task clean:all (destroy 4 k3d clusters)
-//   Phase 2 — task setup (recreate infra)
-//   Phase 3 — tilt up (dev loop in background)
-//   Phase 4 — task doctor (gate PASS=38+ FAIL=0)
-//   Phase 4.5 — check-sprint.sh (T4.1 of cleanroom-canonical-5-defense-layers)
-//   Phase 5 — Baseline post-rebuild diff
+//	Phase 0 — Baseline pre-rebuild capture
+//	Phase 1 — task clean:all (destroy 4 k3d clusters)
+//	Phase 2 — task setup (recreate infra)
+//	Phase 3 — tilt up (dev loop in background)
+//	Phase 4 — task doctor (gate PASS=38+ FAIL=0)
+//	Phase 5 — Baseline post-rebuild diff
 //
 // Each phase is a function in this package that exec's the underlying tooling.
 // Tests live in cleanroom_test.go with Ginkgo BDD layout.
@@ -39,20 +38,32 @@ import (
 // Options configures the cleanroom orchestrator's behavior. Mirrors the v1
 // script's flags: --skip-cleanroom, --skip-sponsor, --skip-baseline.
 type Options struct {
-	RepoRoot       string        // absolute path to loopzero repo root
-	SkipBaseline   bool          // skip Phase 0 + Phase 5 (back-compat escape hatch)
-	SkipCleanroom  bool          // skip Phases 1-3 (when env is already up; debug iteration)
-	SkipDoctor     bool          // skip Phase 4 doctor gate (NOT recommended)
-	TaskCmd        string        // path to task binary (default: "task" via PATH)
-	TiltCmd        string        // path to tilt binary (default: "tilt" via PATH)
-	BaselineCmd    string        // path to baseline-capture.sh (default: infra/scripts/local/baseline-capture.sh)
-	BaselineDiff   string        // path to baseline-diff.sh (default: infra/scripts/local/baseline-diff.sh)
-	DoctorTimeout  time.Duration // max time to wait for task doctor PASS=38+ FAIL=0 (default 10min)
-	TiltBootWait   time.Duration // time to wait after tilt up before Phase 4 (default 240s — per T6.2 fix)
+	RepoRoot      string        // absolute path to loopzero repo root
+	SkipBaseline  bool          // skip Phase 0 + Phase 5 (back-compat escape hatch)
+	SkipCleanroom bool          // skip Phases 1-3 (when env is already up; debug iteration)
+	SkipDoctor    bool          // skip Phase 4 doctor gate (NOT recommended)
+	TaskCmd       string        // path to task binary (default: "task" via PATH)
+	TiltCmd       string        // path to tilt binary (default: "tilt" via PATH)
+	BaselineCmd   string        // path to baseline-capture.sh (default: infra/scripts/local/baseline-capture.sh)
+	BaselineDiff  string        // path to baseline-diff.sh (default: infra/scripts/local/baseline-diff.sh)
+	DoctorTimeout time.Duration // max time to wait for task doctor PASS=38+ FAIL=0 (default 10min)
+	TiltBootWait  time.Duration // time to wait after tilt up before Phase 4 (default 240s — per T6.2 fix)
 
 	// Streams for human-readable progress. If nil, fall back to os.Stdout / os.Stderr.
 	Out io.Writer
 	Err io.Writer
+}
+
+// DestroyConsentEnv names the explicit consent a spec needs before it deletes and
+// recreates the k3d clusters. A spec that destroys infrastructure must not run by
+// accident, and it must not refuse unconditionally either: that was #393, where
+// every spec skipped and `task cleanroom:v2` reported SUCCESS having run nothing.
+const DestroyConsentEnv = "LOOPZERO_CLEANROOM_DESTROY"
+
+// DestroyConsented reports whether the caller granted DestroyConsentEnv. Only the
+// exact value "1" counts, so a stray "false" or "0" can never read as consent.
+func DestroyConsented() bool {
+	return os.Getenv(DestroyConsentEnv) == "1"
 }
 
 // DefaultOptions returns canonical defaults — matching the v1 chain runner.
@@ -208,6 +219,17 @@ func TaskRun(ctx context.Context, opts Options, args ...string) error {
 	return nil
 }
 
+// TiltContext is the kube context the dev loop runs against. Tilt deploys into the
+// CURRENT context unless told otherwise, and a cleanroom leaves whichever context
+// was current before it — on the droplet that was the secrets cluster, so the
+// platform went there (#402).
+const TiltContext = "k3d-loopzero-core"
+
+// tiltUpArgs pins the context rather than inheriting it.
+func tiltUpArgs() []string {
+	return []string{"up", "--context", TiltContext}
+}
+
 // TiltUpBackground spawns `tilt up` detached, then sleeps TiltBootWait.
 // Returns nil if tilt PID stays alive through the wait window.
 func TiltUpBackground(ctx context.Context, opts Options) error {
@@ -221,7 +243,7 @@ func TiltUpBackground(ctx context.Context, opts Options) error {
 	}
 	defer tiltLog.Close()
 
-	cmd := exec.CommandContext(ctx, opts.TiltCmd, "up")
+	cmd := exec.CommandContext(ctx, opts.TiltCmd, tiltUpArgs()...)
 	cmd.Dir = opts.RepoRoot
 	cmd.Stdout = tiltLog
 	cmd.Stderr = tiltLog

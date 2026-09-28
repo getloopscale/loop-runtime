@@ -11,7 +11,6 @@ package e2e
 
 import (
 	"os"
-	"os/exec"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,31 +24,16 @@ var _ = Describe("Journey 10: Failure Modes", Label("journey"), func() {
 		It("returns exit code 4 for invalid token", func() {
 			skipIfNotE2E()
 
-			cmd := exec.Command("loopzero", "whoami", "--json")
-			cmd.Env = append(os.Environ(),
-				"LOOPZERO_API_URL="+apiURL(),
-				"LOOPZERO_TOKEN=garbage-not-a-real-jwt",
-			)
-
-			var stdoutBuf, stderrBuf strings.Builder
-			cmd.Stdout = &stdoutBuf
-			cmd.Stderr = &stderrBuf
-
-			err := cmd.Run()
-			exitCode := 0
-			if err != nil {
-				if exitErr, ok := err.(*exec.ExitError); ok {
-					exitCode = exitErr.ExitCode()
-				}
-			}
+			stdout, stderr, exitCode := execLoopZero(
+				loopzeroInvocation{env: []string{"LOOPZERO_TOKEN=garbage-not-a-real-jwt"}},
+				"whoami", "--json")
 
 			Expect(exitCode).To(Equal(4),
-				"invalid token should produce exit code 4\nstdout: %s\nstderr: %s",
-				stdoutBuf.String(), stderrBuf.String())
+				"invalid token should produce exit code 4\nstdout: %s\nstderr: %s", stdout, stderr)
 
 			assertNoForbiddenTermsInAll(map[string]string{
-				"invalid token stdout": stdoutBuf.String(),
-				"invalid token stderr": stderrBuf.String(),
+				"invalid token stdout": stdout,
+				"invalid token stderr": stderr,
 			})
 		})
 	})

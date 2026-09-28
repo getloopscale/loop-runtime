@@ -4,6 +4,8 @@
 package seed
 
 import (
+	"github.com/getloopscale/loopzero/pkg/domain"
+
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -76,72 +78,91 @@ func (c *stubPgConn) Exec(ctx context.Context, sql string, args ...any) error {
 }
 func (c *stubPgConn) Close(ctx context.Context) error { c.closed = true; return nil }
 
-func stubPG(t *testing.T, conn *stubPgConn) func() {
-	t.Helper()
-	orig := pgConnectFn
-	pgConnectFn = func(ctx context.Context, cs string) (pgConn, error) { return conn, nil }
-	return func() { pgConnectFn = orig }
+// pgOf is a Host.PGConnect that hands back conn.
+func pgOf(conn pgConn) func(context.Context, string) (pgConn, error) {
+	return func(context.Context, string) (pgConn, error) { return conn, nil }
 }
 
-func stubHTTPClient(t *testing.T, server *httptest.Server) func() {
-	t.Helper()
-	orig := tenantFixtureHTTPClient
-	tenantFixtureHTTPClient = server.Client()
-	return func() { tenantFixtureHTTPClient = orig }
+// envOf is a Host.Getenv that answers from kv and nothing else.
+func envOf(kv map[string]string) func(string) string {
+	return func(k string) string { return kv[k] }
 }
 
-// stubEnv installs a lookup that returns the given map and delegates the
-// rest to the previous osGetenv.
-func stubEnv(t *testing.T, kv map[string]string) func() {
-	t.Helper()
-	orig := osGetenv
-	osGetenv = func(k string) string {
-		if v, ok := kv[k]; ok {
-			return v
-		}
-		return ""
+func TestTenantCRDPlan_MapsEveryCanonicalTier(t *testing.T) {
+	cases := map[domain.PlanTier]string{
+		domain.PlanTierStarter:    "starter",
+		domain.PlanTierPro:        "growth",
+		domain.PlanTierTeam:       "enterprise",
+		domain.PlanTierEnterprise: "enterprise",
 	}
-	return func() { osGetenv = orig }
+	for tier, want := range cases {
+		got, err := tenantCRDPlan(tier)
+		if err != nil || got != want {
+			t.Errorf("tenantCRDPlan(%q) = (%q, %v), want (%q, nil)", tier, got, err, want)
+		}
+	}
 }
 
-func TestPlanTierToCRDEnum(t *testing.T) {
-	cases := map[string]string{
-		"team":    "enterprise",
-		"pro":     "growth",
-		"starter": "starter",
-		"":        "starter",
-		"other":   "starter",
-		"TEAM":    "enterprise",
+func TestTenantCRDPlan_RejectsUnknownTier(t *testing.T) {
+	if got, err := tenantCRDPlan(domain.PlanTierUnknown); err == nil {
+		t.Fatalf("tenantCRDPlan(unknown) = %q, want an error", got)
 	}
-	for in, want := range cases {
-		if got := planTierToCRDEnum(in); got != want {
-			t.Errorf("planTierToCRDEnum(%q) = %q, want %q", in, got, want)
-		}
+}
+
+// An unrecognised LOOPZERO_PLAN_TIER used to become "starter" silently — the
+// downgrade ADR D4 forbids. It must fail before anything is written.
+func TestTenantFixture_FailsOnUnknownPlanTier(t *testing.T) {
+	var host Host
+	host.Getenv = envOf(map[string]string{
+		tenantFixtureTenantIDEnv: "tn-x",
+		tenantFixturePlanTierEnv: "gold",
+	})
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), DryRun: true})
+	if got.Verdict != FAIL {
+		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
+	}
+	if !strings.Contains(got.Reason, "gold") {
+		t.Errorf("Reason should name the rejected value: %q", got.Reason)
+	}
+}
+
+func TestTenantFixture_AcceptsUppercasePlanTier(t *testing.T) {
+	var host Host
+	host.Getenv = envOf(map[string]string{
+		tenantFixtureTenantIDEnv: "tn-x",
+		tenantFixturePlanTierEnv: "PRO",
+	})
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), DryRun: true})
+	if got.Verdict != PASS || !strings.Contains(got.Reason, "plan=pro") {
+		t.Fatalf("Verdict = %s (%s), want PASS with plan=pro", got.Verdict, got.Reason)
 	}
 }
 
 func TestTenantFixture_SkipWhenWrongHelmfileEnv(t *testing.T) {
-	defer stubEnv(t, map[string]string{tenantFixtureHelmfileEnvKey: "standalone-multi"})()
-	got := NewTenantFixtureSeed().Run(Deps{Ctx: context.Background()})
+	var host Host
+	host.Getenv = envOf(map[string]string{tenantFixtureHelmfileEnvKey: "standalone-multi"})
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background()})
 	if got.Verdict != SKIP {
 		t.Fatalf("Verdict = %s (%s), want SKIP", got.Verdict, got.Reason)
 	}
 }
 
 func TestTenantFixture_SkipWhenTenantIDMissing(t *testing.T) {
-	defer stubEnv(t, map[string]string{tenantFixtureHelmfileEnvKey: "dev-public"})()
-	got := NewTenantFixtureSeed().Run(Deps{Ctx: context.Background()})
+	var host Host
+	host.Getenv = envOf(map[string]string{tenantFixtureHelmfileEnvKey: "dev-public"})
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background()})
 	if got.Verdict != SKIP {
 		t.Fatalf("Verdict = %s (%s), want SKIP", got.Verdict, got.Reason)
 	}
 }
 
 func TestTenantFixture_DryRunReports(t *testing.T) {
-	defer stubEnv(t, map[string]string{
+	var host Host
+	host.Getenv = envOf(map[string]string{
 		tenantFixtureHelmfileEnvKey: "dev-public",
 		tenantFixtureTenantIDEnv:    "tn-123",
-	})()
-	got := NewTenantFixtureSeed().Run(Deps{Ctx: context.Background(), DryRun: true})
+	})
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), DryRun: true})
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
 	}
@@ -151,20 +172,21 @@ func TestTenantFixture_DryRunReports(t *testing.T) {
 }
 
 func TestTenantFixture_UpsertsSubscription(t *testing.T) {
-	defer stubEnv(t, map[string]string{
+	var host Host
+	host.Getenv = envOf(map[string]string{
 		tenantFixtureHelmfileEnvKey: "dev-public",
 		tenantFixtureTenantIDEnv:    "tn-abc",
 		tenantFixturePGConnEnv:      "postgres://x",
-	})()
+	})
 	conn := &stubPgConn{
 		rowScan: map[string]*stubPgRow{
-			"SELECT account_id": {values: []any{"acct-123"}},
+			"SELECT account_id, cell_id": {values: []any{"acct-123", "cell-0"}},
 		},
 	}
-	defer stubPG(t, conn)()
+	host.PGConnect = pgOf(conn)
 
 	// Skip HTTP + CR path — no creds + no ctrl client.
-	got := NewTenantFixtureSeed().Run(Deps{Ctx: context.Background()})
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background()})
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
 	}
@@ -180,6 +202,7 @@ func TestTenantFixture_UpsertsSubscription(t *testing.T) {
 }
 
 func TestTenantFixture_ReplaysWebhookWithSHA256HMAC(t *testing.T) {
+	var host Host
 	var receivedSig string
 	var receivedPayload []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -192,18 +215,18 @@ func TestTenantFixture_ReplaysWebhookWithSHA256HMAC(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	defer stubHTTPClient(t, server)()
+	host.DevHTTP = server.Client()
 
-	defer stubEnv(t, map[string]string{
+	host.Getenv = envOf(map[string]string{
 		tenantFixtureHelmfileEnvKey: "dev-public",
 		tenantFixtureTenantIDEnv:    "tn-abc",
 		tenantFixtureCloudBaseEnv:   server.URL,
-	})()
+	})
 
 	creds := &Creds{}
 	creds.GitHub.WebhookSecret = "whsec_test_abc"
 
-	got := NewTenantFixtureSeed().Run(Deps{Ctx: context.Background(), Creds: creds})
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), Creds: creds})
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
 	}
@@ -224,21 +247,22 @@ func TestTenantFixture_ReplaysWebhookWithSHA256HMAC(t *testing.T) {
 // replay is non-fatal (still PASS) but MUST surface in the reason, not be silently
 // swallowed (was `_ = err`). error-handling.md: no silent swallowing.
 func TestTenantFixture_SurfacesWebhookWarningOnFailure(t *testing.T) {
+	var host Host
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	defer server.Close()
-	defer stubHTTPClient(t, server)()
-	defer stubEnv(t, map[string]string{
+	host.DevHTTP = server.Client()
+	host.Getenv = envOf(map[string]string{
 		tenantFixtureHelmfileEnvKey: "dev-public",
 		tenantFixtureTenantIDEnv:    "tn-abc",
 		tenantFixtureCloudBaseEnv:   server.URL,
-	})()
+	})
 
 	creds := &Creds{}
 	creds.GitHub.WebhookSecret = "whsec_test_abc"
 
-	got := NewTenantFixtureSeed().Run(Deps{Ctx: context.Background(), Creds: creds})
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), Creds: creds})
 
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS (webhook failure is non-fatal)", got.Verdict, got.Reason)
@@ -249,12 +273,17 @@ func TestTenantFixture_SurfacesWebhookWarningOnFailure(t *testing.T) {
 }
 
 func TestTenantFixture_CreatesTenantCRAndAppProject(t *testing.T) {
-	defer stubEnv(t, map[string]string{
+	var host Host
+	host.Getenv = envOf(map[string]string{
 		tenantFixtureHelmfileEnvKey: "dev-public",
 		tenantFixtureTenantIDEnv:    "tn-abc",
-	})()
+		tenantFixturePGConnEnv:      "postgres://x",
+	})
+	host.PGConnect = pgOf(&stubPgConn{rowScan: map[string]*stubPgRow{
+		"SELECT account_id, cell_id": {values: []any{"acct-123", "cell-sfo3-02"}},
+	}})
 	c := fake.NewClientBuilder().Build()
-	got := NewTenantFixtureSeed().Run(Deps{Ctx: context.Background(), CtrlClient: c})
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), CtrlClient: c})
 	if got.Verdict != PASS {
 		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
 	}
@@ -262,6 +291,11 @@ func TestTenantFixture_CreatesTenantCRAndAppProject(t *testing.T) {
 	tenant.SetGroupVersionKind(schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "Tenant"})
 	if err := c.Get(context.Background(), ctrlclient.ObjectKey{Namespace: "loopzero-system", Name: "tn-abc"}, &tenant); err != nil {
 		t.Fatalf("Tenant CR missing: %v", err)
+	}
+	// The CR carries the cell the engine placed the tenant in, never a
+	// fixture's own guess.
+	if got := tenant.Object["spec"].(map[string]any)["cellID"]; got != "cell-sfo3-02" {
+		t.Errorf("cellID = %v, want the placed cell cell-sfo3-02", got)
 	}
 	if tenant.Object["spec"].(map[string]any)["plan"] != "enterprise" {
 		t.Errorf("plan = %v, want 'enterprise' (team → enterprise map)", tenant.Object["spec"].(map[string]any)["plan"])
@@ -303,5 +337,25 @@ func TestTenantFixture_ApplyUnstructured_UpdatesWhenExists(t *testing.T) {
 func TestTenantFixture_Name(t *testing.T) {
 	if got := NewTenantFixtureSeed().Name(); got != "tenant-fixture" {
 		t.Errorf("Name = %q", got)
+	}
+}
+
+// Without the database the tenant's placed cell is unknown, so the Tenant CR is
+// not written with a guessed one; the AppProject, which names no cell, is.
+func TestTenantFixture_SkipsTheTenantCRWithoutThePlacedCell(t *testing.T) {
+	var host Host
+	host.Getenv = envOf(map[string]string{
+		tenantFixtureHelmfileEnvKey: "dev-public",
+		tenantFixtureTenantIDEnv:    "tn-abc",
+	})
+	c := fake.NewClientBuilder().Build()
+
+	got := NewTenantFixtureSeed().Run(Deps{Host: host, Ctx: context.Background(), CtrlClient: c})
+
+	var tenant unstructured.Unstructured
+	tenant.SetGroupVersionKind(schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "Tenant"})
+	err := c.Get(context.Background(), ctrlclient.ObjectKey{Namespace: "loopzero-system", Name: "tn-abc"}, &tenant)
+	if got.Verdict != PASS || err == nil || !strings.Contains(got.Reason, tenantFixturePGConnEnv) {
+		t.Fatalf("Run = %s (%s), Tenant CR lookup err=%v; want PASS, no CR, and the reason naming %s", got.Verdict, got.Reason, err, tenantFixturePGConnEnv)
 	}
 }

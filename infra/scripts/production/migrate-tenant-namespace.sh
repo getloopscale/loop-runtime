@@ -1,34 +1,34 @@
 #!/usr/bin/env bash
 # CHG-2026-04-29-DOGFOOD T3.3 — F-04 partial fix (T1 scope)
 #
-# Migration script: reconcilia Tenant + Environment CRs duplicados entre
-# namespaces para o canônico `loopzero-system`. Pure data-cleanup — NÃO altera
-# contratos do produto, NÃO toca o código do operator/API. T3.1 (hard-coding
-# do namespace no código) + T3.2 (ValidatingAdmissionPolicy) ficam T2 e
-# aguardam governance meeting (per CLAUDE.md Pre-release rule).
+# Migration script: reconciles duplicated Tenant + Environment CRs across
+# namespaces into the canonical `loopzero-system`. Pure data-cleanup — does NOT
+# change product contracts, does NOT touch operator/API code. T3.1 (hard-coding
+# the namespace in code) + T3.2 (ValidatingAdmissionPolicy) stay T2 and
+# await a governance meeting (per the CLAUDE.md Pre-release rule).
 #
-# Estratégia (idempotent, dry-run por default):
-#  1. Listar TODAS as Tenant CRs em namespaces ≠ loopzero-system.
-#  2. Para cada uma:
-#     a. Backup do YAML em ~/.loopzero/backups/tenant-migration-<ts>/
-#     b. Se já existe Tenant homônimo em loopzero-system, comparar
+# Strategy (idempotent, dry-run by default):
+#  1. List ALL Tenant CRs in namespaces != loopzero-system.
+#  2. For each one:
+#     a. Back up the YAML to ~/.loopzero/backups/tenant-migration-<ts>/
+#     b. If a same-named Tenant already exists in loopzero-system, compare
 #        creationTimestamp:
-#          - mais NOVO (loopzero-system) → manter loopzero-system, deletar duplicate
-#          - mais NOVO (other ns) → erro (manual decision required)
-#     c. Se NÃO existe em loopzero-system, copiar para lá preservando spec
+#          - NEWER one (loopzero-system) → keep loopzero-system, delete the duplicate
+#          - NEWER one (other ns) → error (manual decision required)
+#     c. If it does NOT exist in loopzero-system, copy it there preserving spec
 #        (strip resourceVersion/uid/managedFields/status; preserve
 #        labels/annotations/finalizers).
-#     d. Remover finalizer da CR original em other ns + delete --wait.
-#  3. Mesmo fluxo para Environment CRs.
+#     d. Remove the finalizer from the original CR in the other ns + delete --wait.
+#  3. Same flow for Environment CRs.
 #
-# Uso:
+# Usage:
 #   bash infra/scripts/production/migrate-tenant-namespace.sh                # dry-run
 #   bash infra/scripts/production/migrate-tenant-namespace.sh --apply        # commit
 #   bash infra/scripts/production/migrate-tenant-namespace.sh --apply --force-prefer=loopzero-system
 #
 # Exit codes:
-#   0 — sucesso (ou nada para fazer)
-#   1 — pre-condition error (kubectl falha, permission denied)
+#   0 — success (or nothing to do)
+#   1 — pre-condition error (kubectl fails, permission denied)
 #   2 — manual decision required (duplicates with newer in non-canonical ns)
 set -euo pipefail
 
@@ -115,7 +115,7 @@ decide_winner() {
     fi
     return
   fi
-  # ISO8601 timestamps comparam lexicograficamente.
+  # ISO8601 timestamps compare lexicographically.
   if [[ "$canon_ts" > "$other_ts" || "$canon_ts" == "$other_ts" ]]; then
     printf 'canonical'
   else
@@ -138,29 +138,29 @@ migrate_cr() {
       if [[ "$DRY_RUN" -eq 0 ]]; then
         kubectl get "$kind" -n "$other_ns" "$name" -o yaml > "$BACKUP_DIR/${kind}_${other_ns}_${name}.yaml"
         # CRITICAL safety guard (incident 2026-04-29 iter 3):
-        # Tenant + Environment CRs em ANY ns são reconciliados pelo
-        # controller — não são inertes. Removendo finalizer + delete
-        # cascateia cleanup REAL dos resources compartilhados (ArgoCD App,
-        # workload namespace, etc.) que TAMBÉM são gerenciados pela CR
-        # canônica em loopzero-system. Resultado: HTTP 200 vira HTTP 404,
-        # ns workload entra em Terminating, ArgoCD App é deletada.
-        # MITIGAÇÃO: marcar a CR stale com `argocd.argoproj.io/skip-reconcile:
-        # true` annotation ANTES de remover finalizer. Isso pausa o
-        # tenant-controller reconciliation loop sobre a CR stale enquanto
-        # o cleanup é executado. A CR canônica em loopzero-system continua
-        # ativa e re-cria/preserva os resources compartilhados.
+        # Tenant + Environment CRs in ANY ns are reconciled by the
+        # controller — they are not inert. Removing the finalizer + delete
+        # cascades REAL cleanup of the shared resources (ArgoCD App,
+        # workload namespace, etc.) that are ALSO managed by the canonical
+        # CR in loopzero-system. Result: HTTP 200 turns into HTTP 404, the
+        # workload ns goes into Terminating, the ArgoCD App is deleted.
+        # MITIGATION: mark the stale CR with the `argocd.argoproj.io/skip-reconcile:
+        # true` annotation BEFORE removing the finalizer. That pauses the
+        # tenant-controller reconciliation loop over the stale CR while
+        # the cleanup runs. The canonical CR in loopzero-system stays
+        # active and re-creates/preserves the shared resources.
         log "  → marking $other_ns/$name with skip-reconcile to pause controller"
         kubectl annotate "$kind" -n "$other_ns" "$name" \
           argocd.argoproj.io/skip-reconcile=true \
           loopzero.io/migration-pending=true \
           --overwrite >/dev/null 2>&1 || true
-        # Pequena pausa para o controller ver a annotation.
+        # Short pause so the controller sees the annotation.
         sleep 2
         # Strip finalizers to enable delete.
         kubectl patch "$kind" -n "$other_ns" "$name" \
           --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
         kubectl delete "$kind" -n "$other_ns" "$name" --wait=false 2>&1 | head -1
-        # Wait com timeout curto — não bloqueia se ns está em terminating.
+        # Wait with a short timeout — does not block if the ns is terminating.
         for _ in 1 2 3 4 5 6 7 8 9 10; do
           if ! kubectl get "$kind" -n "$other_ns" "$name" >/dev/null 2>&1; then
             break
@@ -168,8 +168,8 @@ migrate_cr() {
           sleep 2
         done
         log "  → deleted $other_ns/$name"
-        # Force-reconcile o canônico para garantir que recursos compartilhados
-        # (ArgoCD App, namespaces) sejam re-validados após o delete.
+        # Force-reconcile the canonical one so shared resources
+        # (ArgoCD App, namespaces) get re-validated after the delete.
         kubectl annotate "$kind" -n "$CANONICAL_NS" "$name" \
           force-reconcile="$(date +%s)" --overwrite >/dev/null 2>&1 || true
         log "  → triggered reconcile of $CANONICAL_NS/$name"

@@ -156,9 +156,9 @@ func TestClusterKubectlArgs_PerClusterRole(t *testing.T) {
 	})
 
 	cases := []struct {
-		role    ClusterRole
-		suffix  string
-		label   string
+		role   ClusterRole
+		suffix string
+		label  string
 	}{
 		{ClusterMgmt, "mgmt.yaml", "mgmt"},
 		{ClusterBuild, "build.yaml", "build"},

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"testing"
 )
 
 // RepoRoot returns the absolute monorepo root by walking up from the current
@@ -46,6 +47,32 @@ func MustRepoRoot() string {
 	root, err := RepoRoot()
 	if err != nil {
 		panic(err)
+	}
+	return root
+}
+
+// Root is RepoRoot for a test: a root that cannot be located fails the test.
+//
+// It never skips. A real-tree assertion that skips when it cannot find the tree
+// reports `ok` while asserting nothing — four gate tests did exactly that for as
+// long as they anchored on a ROADMAP.md the repository does not have.
+func Root(t testing.TB) string {
+	t.Helper()
+	root, err := RepoRoot()
+	if err != nil {
+		t.Fatalf("%v — the real-tree assertion cannot run, and skipping it would report green while measuring nothing", err)
+	}
+	return root
+}
+
+// RootFile is Root joined with rel, and it fails the test when that path does
+// not exist: a real-tree assertion whose subject moved must say so rather than
+// pass over a tree that no longer contains it.
+func RootFile(t testing.TB, rel string) string {
+	t.Helper()
+	root := Root(t)
+	if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+		t.Fatalf("real-tree subject %s is missing under %s: %v", rel, root, err)
 	}
 	return root
 }

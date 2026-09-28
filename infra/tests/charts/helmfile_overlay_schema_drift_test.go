@@ -42,10 +42,7 @@ import (
 // file (which lives at infra/tests/charts/).
 func helmfileEnvsRoot(t *testing.T) string {
 	t.Helper()
-	p, err := filepath.Abs(filepath.Join("..", "..", "helmfile", "values"))
-	if err != nil {
-		t.Fatalf("resolve helmfile values dir: %v", err)
-	}
+	p := filepath.Join(repoRoot(t), "infra", "helmfile", "values")
 	if _, err := os.Stat(p); err != nil {
 		t.Fatalf("helmfile values dir not found at %s: %v", p, err)
 	}
@@ -125,11 +122,7 @@ func extractGoTmplConfigKeys(t *testing.T, path string) []string {
 // the set of properties declared under /properties/config/properties.
 func schemaConfigProps(t *testing.T, chartName string) (map[string]bool, bool) {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", "charts"))
-	if err != nil {
-		t.Fatalf("resolve charts dir: %v", err)
-	}
-	schemaPath := filepath.Join(root, chartName, "values.schema.json")
+	schemaPath := filepath.Join(repoRoot(t), "charts", chartName, "values.schema.json")
 	b, err := os.ReadFile(schemaPath)
 	if err != nil {
 		// Not all overlays correspond to a published chart with a schema

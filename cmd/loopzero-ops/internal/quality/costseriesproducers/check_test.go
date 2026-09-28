@@ -435,7 +435,7 @@ func TestRealTree_ProducerContractHolds(t *testing.T) {
 			len(out.TrackedAbsences), out.TrackedAbsences)
 	}
 	if len(out.VerifiedProducers) != 1 {
-		t.Errorf("one of the three has a producer here (api/internal/metrics/metrics.go:42); verified %d: %v",
+		t.Errorf("one of the three has a producer here (api/internal/metrics/build_metrics.go); verified %d: %v",
 			len(out.VerifiedProducers), out.VerifiedProducers)
 	}
 }
@@ -452,8 +452,8 @@ func TestRealTree_EmitterScanSeesThisRepo(t *testing.T) {
 		t.Fatalf("the emitter scan found %d loopzero_* metric declarations; the tree had 128 unique ones "+
 			"measured 2026-09-05, so a number this low means the walk is not reaching the sources", len(emitters))
 	}
-	if got := emitters["loopzero_build_duration_seconds"]; got != "api/internal/metrics/metrics.go" {
-		t.Errorf("loopzero_build_duration_seconds must be found in api/internal/metrics/metrics.go, got %q", got)
+	if got := emitters["loopzero_build_duration_seconds"]; got != "api/internal/metrics/build_metrics.go" {
+		t.Errorf("loopzero_build_duration_seconds must be found in api/internal/metrics/build_metrics.go, got %q", got)
 	}
 	if got, ok := emitters["loopzero_egress_bytes_total"]; ok {
 		t.Errorf("loopzero_egress_bytes_total must have NO producer in this tree (B-181), found %q", got)

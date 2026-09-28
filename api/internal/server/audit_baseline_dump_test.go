@@ -15,23 +15,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
+	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
+	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
 	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
 	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
-	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
-	"github.com/getloopscale/loopzero/api/internal/routes/audit"
-	"github.com/getloopscale/loopzero/api/internal/routes/billing"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
-	"github.com/getloopscale/loopzero/api/internal/routes/environments"
-	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
-	"github.com/getloopscale/loopzero/api/internal/routes/logs"
-	"github.com/getloopscale/loopzero/api/internal/routes/promote"
-	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
-	"github.com/getloopscale/loopzero/api/internal/routes/scale"
-	"github.com/getloopscale/loopzero/api/internal/routes/status"
-	"github.com/getloopscale/loopzero/api/internal/routes/teams"
+	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
+	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
+	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
+	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
@@ -88,55 +88,51 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 	})
 
 	cfg := Config{
-		TokenValidator:            validadorFixo{},
-		MemberStore:               membroFixo{},
+		TokenValidator:            fixedTokenValidator{},
+		MemberStore:               fixedMembership{},
 		AuditWriter:               writer,
-		BuildHandler:              &builds.BuildHandler{},
-		BuildAttestationHandler:   &builds.BuildAttestationHandler{},
-		BuildSBOMHandler:          &builds.BuildSBOMHandler{},
-		ArgoCallbackHandler:       &argocd.ArgoCallbackHandler{},
-		RateLimiter:               &ratelimit.RateLimiter{},
-		IPRateLimit:               &ratelimit.IPRateLimiter{},
-		VerifyRateLimiter:         &ratelimit.VerifyRateLimiter{},
-		LogsHandler:               &logs.LogsHandler{},
-		LogStreamHandler:          &logs.LogStreamHandler{},
-		RollbackHandler:           &rollback.RollbackHandler{},
-		PromoteHandler:            &promote.PromoteHandler{},
-		StatusHandler:             &status.StatusHandler{},
-		ScaleHandler:              &scale.ScaleHandler{},
-		BuildListHandler:          &builds.BuildListHandler{},
-		BuildStatsHandler:         &builds.BuildStatsHandler{},
-		EnvironmentHandler:        &environments.EnvironmentHandler{},
-		TeamHandler:               &teams.TeamHandler{},
-		DomainHandler:             &domains.DomainHandler{},
-		RepositoryHandler:         &repositories.RepositoryHandler{},
-		IntegrationsGitHubHandler: &integrations.IntegrationsGitHubHandler{},
-		AuditHandler:              &audit.AuditHandler{},
-		BillingHandler:            &billing.BillingHandler{},
-		PlanLimiter:               &enforcement.PlanLimiter{},
-		CostEnforcer:              &policy.CostEnforcer{},
+		BuildHandler:              &buildshttp.BuildHandler{},
+		BuildAttestationHandler:   &buildshttp.BuildAttestationHandler{},
+		BuildSBOMHandler:          &buildshttp.BuildSBOMHandler{},
+		ArgoCallbackHandler:       &argocdhttp.ArgoCallbackHandler{},
+		LogsHandler:               &logshttp.LogsHandler{},
+		LogStreamHandler:          &logshttp.LogStreamHandler{},
+		RollbackHandler:           &rollbackhttp.RollbackHandler{},
+		PromoteHandler:            &promotehttp.PromoteHandler{},
+		StatusHandler:             &statushttp.StatusHandler{},
+		ScaleHandler:              &scalinghttp.ScaleHandler{},
+		BuildListHandler:          &buildshttp.BuildListHandler{},
+		BuildStatsHandler:         &buildshttp.BuildStatsHandler{},
+		EnvironmentHandler:        &environmentshttp.EnvironmentHandler{},
+		TeamHandler:               &teamshttp.TeamHandler{},
+		DomainHandler:             &domainshttp.DomainHandler{},
+		RepositoryHandler:         &repositorieshttp.RepositoryHandler{},
+		IntegrationsGitHubHandler: &integrationshttp.IntegrationsGitHubHandler{},
+		AuditHandler:              &audithttp.AuditHandler{},
+		BillingHandler:            &billinghttp.BillingHandler{},
+		Guards:                    RouteGuards{RateLimiter: &ratelimit.RateLimiter{}, IPRateLimit: &ratelimit.IPRateLimiter{}, VerifyRateLimiter: &ratelimit.VerifyRateLimiter{}, PlanLimiter: &enforcement.PlanLimiter{}, CostEnforcer: &policy.CostEnforcer{}},
 	}
 	r := NewRouter(cfg)
 
-	rotas := rotasMutantes(t, r)
-	if len(rotas) < 17 {
+	routes := mutatingRoutes(t, r)
+	if len(routes) < 17 {
 		t.Fatalf("baseline dumper walked %d mutating route(s); fixture must reach the audited group "+
-			"(the same ≥17 floor that TestEveryMutatingRouteRecordsItsDeclaredAction enforces).", len(rotas))
+			"(the same ≥17 floor that TestEveryMutatingRouteRecordsItsDeclaredAction enforces).", len(routes))
 	}
 
-	auditar := mwaudit.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), writer)(http.HandlerFunc(
+	auditMiddleware := mwaudit.AuditLog(slog.New(slog.NewTextHandler(io.Discard, nil)), writer)(http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 
-	for _, rt := range rotas {
+	for _, rt := range routes {
 		lastResourceID = ""
-		req := httptest.NewRequest(rt.metodo, concretizar(rt.padrao), nil)
-		auditar.ServeHTTP(httptest.NewRecorder(), comUsuario(req))
+		req := httptest.NewRequest(rt.method, concretePath(rt.pattern), nil)
+		auditMiddleware.ServeHTTP(httptest.NewRecorder(), withFixedUser(req))
 		src := "none"
 		if lastResourceID != "" {
 			src = "url"
 		}
 		rows = append(rows, row{
-			method: rt.metodo, path: rt.padrao,
+			method: rt.method, path: rt.pattern,
 			source: src, value: lastResourceID,
 		})
 	}
@@ -147,17 +143,11 @@ func TestAuditBaselineDumpIsReproducible(t *testing.T) {
 		return rows[i].path < rows[j].path
 	})
 
-	// Locate the records dir. Test's cwd is the package dir (api/internal/server/),
-	// so records/ is up four levels (api/ → repo root → .claude/records/).
-	repoRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	baselineDir := filepath.Join(repoRoot, ".claude", "records", "alignment")
-	if err := os.MkdirAll(baselineDir, 0o755); err != nil {
-		t.Fatalf("create baseline dir: %v", err)
-	}
-	baselinePath := filepath.Join(baselineDir, "b059-baseline-resource-id-coverage.txt")
+	// The dump goes to a temporary directory. It used to be written into the
+	// repository, under .claude/records/alignment/, on every `go test ./...`: a
+	// test with a side effect on the working tree, in a path outside the
+	// project's records root, that nothing ever read back.
+	baselinePath := filepath.Join(t.TempDir(), "b059-baseline-resource-id-coverage.txt")
 
 	var sb strings.Builder
 	sb.WriteString("# B-059 Phase 1 T1.1 baseline — resource_id coverage per mutating route\n")

@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -16,38 +15,34 @@ import (
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loopzero/operators/internal/planentitlements"
 )
-
-// priorityClassForPlan returns the PriorityClass name, value, and preemption policy for a given plan.
-func priorityClassForPlan(plan loopzerov1.PlanTier) (name string, value int32, preemptionPolicy corev1.PreemptionPolicy) {
-	switch plan {
-	case loopzerov1.PlanGrowth:
-		return constants.PriorityClassGrowth, constants.PriorityValueGrowth, corev1.PreemptLowerPriority
-	case loopzerov1.PlanEnterprise:
-		return constants.PriorityClassEnterprise, constants.PriorityValueEnterprise, corev1.PreemptLowerPriority
-	default:
-		return constants.PriorityClassStarter, constants.PriorityValueStarter, corev1.PreemptNever
-	}
-}
 
 // reconcilePriorityClass ensures the PriorityClass for the tenant's plan exists.
 // PriorityClasses are cluster-scoped and shared across tenants of the same plan,
 // so they must NOT be deleted when a tenant is deleted.
 //
-// ARCH-010: PriorityClasses are created on the RUNTIME cluster only, not the build cluster.
+// ARCH-010: PriorityClasses are created on the runtime cluster of the tenant's cell
+// only, not the build cluster.
 // Build cluster priority is intentionally flat — all builds are equal regardless of plan tier.
 // Rationale: build pods are short-lived and managed by Argo Workflows with its own queue
 // and parallelism controls. Plan-based priority would create starvation for starter tenants
 // during peak build times, which is worse than FIFO ordering.
 func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *loopzerov1.Tenant) error {
-	pcName, pcValue, preemptionPolicy := priorityClassForPlan(tenant.Spec.Plan)
+	entitled := planentitlements.For(tenant.Spec.Plan)
+	pcName, pcValue, preemptionPolicy := entitled.PriorityClassName, entitled.PriorityValue, entitled.Preemption
+
+	runtimeClient, err := r.runtimeClient(ctx, tenant)
+	if err != nil {
+		return err
+	}
 
 	pc := &schedulingv1.PriorityClass{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: pcName,
 		},
 	}
-	result, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, pc, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, runtimeClient, pc, func() error {
 		pc.Value = pcValue
 		pc.PreemptionPolicy = &preemptionPolicy
 		pc.GlobalDefault = false

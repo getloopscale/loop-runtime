@@ -35,11 +35,18 @@ func Sanitize(s string) string {
 	s = strings.ToLower(s)
 	s = nonAlphanumRegexp.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
-	if len(s) > MaxKubernetesNameLength {
-		s = s[:MaxKubernetesNameLength]
-		s = strings.TrimRight(s, "-")
+	return truncateLabel(s, MaxKubernetesNameLength)
+}
+
+// truncateLabel cuts s to at most max bytes and removes trailing hyphens, so
+// the result is still a valid RFC 1123 label end. The trim applies even when
+// no cut was needed: a composed label with an empty last part ends in a
+// hyphen too.
+func truncateLabel(s string, max int) string {
+	if len(s) > max {
+		s = s[:max]
 	}
-	return s
+	return strings.TrimRight(s, "-")
 }
 
 // ValidateKubernetesName checks whether a name conforms to RFC 1123 DNS label
@@ -60,24 +67,29 @@ func ValidateKubernetesName(name string) error {
 	return nil
 }
 
-// composeName builds a Kubernetes resource name using the given format
-// + args, then validates it as RFC 1123. resourceKind is the human-readable
-// kind used in error messages (e.g., "tenant namespace"). All variadic
-// string args must be non-empty — emits a single canonical "argument must
-// not be empty" error if any are. Phase 3 helper: eliminated ~10 inline
-// copies of the "validate inputs → sprintf → validate name → wrap error"
-// scaffold from the 8 *Namespace/*Name composers below.
-func composeName(resourceKind, format string, args ...string) (string, error) {
-	for _, a := range args {
-		if a == "" {
-			return "", fmt.Errorf("%s: argument must not be empty", resourceKind)
+// namePart is one labelled input to composeName. The label is what an error
+// names when the value is empty, so a caller holding several slugs is told
+// which one was missing instead of having to guess.
+type namePart struct {
+	label string
+	value string
+}
+
+// composeName builds a Kubernetes resource name from format and parts, then
+// validates it as RFC 1123. resourceKind is the human-readable kind used in
+// error messages (e.g., "tenant namespace"). Every part must be non-empty; the
+// error for an empty one reads "<kind>: <label> must not be empty". It is the
+// one copy of the "validate inputs, format, validate name, wrap error"
+// scaffold the composers below share.
+func composeName(resourceKind, format string, parts ...namePart) (string, error) {
+	values := make([]interface{}, len(parts))
+	for i, p := range parts {
+		if p.value == "" {
+			return "", fmt.Errorf("%s: %s must not be empty", resourceKind, p.label)
 		}
+		values[i] = p.value
 	}
-	ifaceArgs := make([]interface{}, len(args))
-	for i, a := range args {
-		ifaceArgs[i] = a
-	}
-	name := fmt.Sprintf(format, ifaceArgs...)
+	name := fmt.Sprintf(format, values...)
 	if err := ValidateKubernetesName(name); err != nil {
 		return "", fmt.Errorf("%s %q: %w", resourceKind, name, err)
 	}
@@ -88,7 +100,7 @@ func composeName(resourceKind, format string, args ...string) (string, error) {
 // tenantName is the K8s CRD resource name (e.g., "tn-loopzero").
 // Format: "loopzero-{tenantName}" — maintains compatibility with deployed resources.
 func TenantNamespace(tenantName string) (string, error) {
-	return composeName("tenant namespace", "loopzero-%s", tenantName)
+	return composeName("tenant namespace", "loopzero-%s", namePart{"tenant name", tenantName})
 }
 
 // Namespace is the CANONICAL helper for ALL LoopZero workload namespaces.
@@ -100,20 +112,7 @@ func TenantNamespace(tenantName string) (string, error) {
 // canonical refactor 2026-06-07 (verbatim "TUDO DEVERIA esta separado
 // por projeto"): no special-case branches for previews vs envs.
 func Namespace(tenantSlug, projectSlug, envName string) (string, error) {
-	if tenantSlug == "" {
-		return "", fmt.Errorf("tenant slug must not be empty")
-	}
-	if projectSlug == "" {
-		return "", fmt.Errorf("project slug must not be empty")
-	}
-	if envName == "" {
-		return "", fmt.Errorf("env name must not be empty")
-	}
-	name := fmt.Sprintf("loopzero-%s-%s-%s", tenantSlug, projectSlug, envName)
-	if err := ValidateKubernetesName(name); err != nil {
-		return "", fmt.Errorf("namespace %q: %w", name, err)
-	}
-	return name, nil
+	return composeName("namespace", "loopzero-%s-%s-%s", namePart{"tenant slug", tenantSlug}, namePart{"project slug", projectSlug}, namePart{"env name", envName})
 }
 
 // IsPreviewEnv reports whether an env name is a preview-flavor environment.
@@ -147,37 +146,25 @@ func IsPreviewEnv(envName string) bool {
 // BuildNamespace returns the build namespace name for a tenant.
 // Format: "build-{tenantSlug}"
 func BuildNamespace(tenantSlug string) (string, error) {
-	return composeName("build namespace", "build-%s", tenantSlug)
+	return composeName("build namespace", "build-%s", namePart{"tenant slug", tenantSlug})
 }
 
 // RepoName returns the source code repository name.
 // Format: "{teamSlug}-{projectSlug}"
 func RepoName(teamSlug, projectSlug string) (string, error) {
-	return composeName("repo name", "%s-%s", teamSlug, projectSlug)
+	return composeName("repo name", "%s-%s", namePart{"team slug", teamSlug}, namePart{"project slug", projectSlug})
 }
 
 // GitOpsRepoName returns the GitOps repository name for a specific environment.
 // Format: "{teamSlug}-{projectSlug}-{envName}"
 func GitOpsRepoName(teamSlug, projectSlug, envName string) (string, error) {
-	return composeName("gitops repo name", "%s-%s-%s", teamSlug, projectSlug, envName)
-}
-
-// Hostname returns the hostname for a service in an environment.
-// Format: "{projectSlug}-{envName}.{baseDomain}"
-// The subdomain part is sanitized to ensure RFC 1123 compliance.
-// Returns an error if the sanitized subdomain is empty (all-special-char inputs).
-func Hostname(projectSlug, envName, baseDomain string) (string, error) {
-	subdomain := Sanitize(fmt.Sprintf("%s-%s", projectSlug, envName))
-	if subdomain == "" {
-		return "", fmt.Errorf("hostname subdomain is empty after sanitizing project %q and env %q", projectSlug, envName)
-	}
-	return fmt.Sprintf("%s.%s", subdomain, baseDomain), nil
+	return composeName("gitops repo name", "%s-%s-%s", namePart{"team slug", teamSlug}, namePart{"project slug", projectSlug}, namePart{"env name", envName})
 }
 
 // ArgoAppName returns the ArgoCD Application resource name.
 // Format: "{teamSlug}-{projectSlug}-{envName}"
 func ArgoAppName(teamSlug, projectSlug, envName string) (string, error) {
-	return composeName("argo app name", "%s-%s-%s", teamSlug, projectSlug, envName)
+	return composeName("argo app name", "%s-%s-%s", namePart{"team slug", teamSlug}, namePart{"project slug", projectSlug}, namePart{"env name", envName})
 }
 
 // EnvironmentCRName returns the Environment CR resource name.
@@ -188,7 +175,7 @@ func ArgoAppName(teamSlug, projectSlug, envName string) (string, error) {
 // it, two projects of one tenant sharing an env name collapsed onto a single CR, and the
 // loser silently received no namespace, RBAC or NetworkPolicy at all (issue #273).
 func EnvironmentCRName(tenantName, projectSlug, envName string) (string, error) {
-	return composeName("environment CR name", "%s-%s-%s", tenantName, projectSlug, envName)
+	return composeName("environment CR name", "%s-%s-%s", namePart{"tenant name", tenantName}, namePart{"project slug", projectSlug}, namePart{"env name", envName})
 }
 
 // AppCertSecretName returns the TLS certificate secret name for one app of one project.
@@ -206,7 +193,7 @@ func EnvironmentCRName(tenantName, projectSlug, envName string) (string, error) 
 // it — 27 days in app-dev before anyone noticed (issue #277). Deriving the same name in
 // two places is what produced that; there is now one place.
 func AppCertSecretName(projectSlug, appName string) (string, error) {
-	return composeName("app cert secret name", "tls-%s-%s", projectSlug, appName)
+	return composeName("app cert secret name", "tls-%s-%s", namePart{"project slug", projectSlug}, namePart{"app name", appName})
 }
 
 // CertSecretName returns the TLS certificate secret name for a hostname.
@@ -221,23 +208,19 @@ func CertSecretName(hostname string) (string, error) {
 	if sanitized == "" {
 		return "", fmt.Errorf("cert secret name is empty after sanitizing hostname %q", hostname)
 	}
-	if len(sanitized) > maxBase {
-		sanitized = sanitized[:maxBase]
-		sanitized = strings.TrimRight(sanitized, "-")
-	}
-	return sanitized + suffix, nil
+	return truncateLabel(sanitized, maxBase) + suffix, nil
 }
 
 // GitRepoBindingName returns the GitRepositoryBinding CR name for a tenant's environment.
 // Format: "{tenantName}-{envName}"
 func GitRepoBindingName(tenantName, envName string) (string, error) {
-	return composeName("git repo binding name", "%s-%s", tenantName, envName)
+	return composeName("git repo binding name", "%s-%s", namePart{"tenant name", tenantName}, namePart{"env name", envName})
 }
 
 // ArgoRepoSecretName returns the ArgoCD repository Secret name for a tenant.
 // Format: "repo-{tenantName}-gitops"
 func ArgoRepoSecretName(tenantName string) (string, error) {
-	return composeName("argo repo secret name", "repo-%s-gitops", tenantName)
+	return composeName("argo repo secret name", "repo-%s-gitops", namePart{"tenant name", tenantName})
 }
 
 // Standard label keys for LoopZero Kubernetes resources. All use the
@@ -250,6 +233,12 @@ const (
 	LabelProject     = "loopzero.io/project"
 	LabelEnvironment = "loopzero.io/environment"
 	LabelManagedBy   = "loopzero.io/managed-by"
+
+	// LabelApp names the application a resource belongs to (the service
+	// name in loopzero.yaml). The api sets it on every LoopZeroApplication CR it
+	// writes, and the app-operator reads it back for CRs that predate
+	// LoopZeroApplication.spec.appName.
+	LabelApp = "loopzero.io/app"
 
 	// ManagedByValue is the canonical value for the LabelManagedBy key,
 	// stable across all LoopZero-owned resources.

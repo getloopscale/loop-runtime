@@ -4,38 +4,38 @@
 // Package caddyhostparity refuses a hostname that the edge verifier demands a certificate
 // for and the Caddyfile never declares a site block for.
 //
-// # O defeito, medido
+// # The defect, measured
 //
-// Em 2026-08-18, o log de entregas do App do GitHub (id 3319955) mostrava **toda** entrega
-// falhando do mesmo jeito, incluindo o `push` de um commit real:
+// On 2026-08-18, the GitHub App delivery log (id 3319955) showed **every** delivery
+// failing the same way, including the `push` of a real commit:
 //
 //	POST https://cloud-dev.loopzero.example/api/v1/webhooks/github
 //	giving up after 1 attempt(s): remote error: tls: internal error   code=500
 //
-// A primeira leitura culpou o `Caddyfile` por não declarar bloco para esse hostname. Estava
-// invertida, e a revisão pegou: o `Caddyfile` **removeu** `cloud-dev` deliberadamente em
-// 2026-08-10, com a razão escrita seis linhas abaixo do último bloco — era host público
-// servindo redirecionamento, com superfície de auth concedida a ninguém, e a carga do webhook
-// já vivia em `app-dev`, que tem o `handle /api/v1/webhooks/github`.
+// The first reading blamed the `Caddyfile` for not declaring a block for that hostname. It
+// was backwards, and the review caught it: the `Caddyfile` **removed** `cloud-dev`
+// deliberately on 2026-08-10, with the reason written six lines below the last block — it
+// was a public host serving a redirect, with an auth surface granted to nobody, and the
+// webhook payload already lived on `app-dev`, which has the `handle /api/v1/webhooks/github`.
 //
-// O lado obsoleto era `infra/scripts/local/caddy-up-dev-public.sh`, que continuou exigindo
-// certificado de um hostname que ninguém mais serve. Com isso, `--verify` reprovava 100% das
-// vezes sobre a configuração correta — e um verificador que não pode passar é um verificador
-// que ninguém roda. Foi assim que semanas de entregas falhas nunca viraram sinal, e é a
-// divergência, não a ausência, que este gate mede.
+// The stale side was `infra/scripts/local/caddy-up-dev-public.sh`, which kept demanding a
+// certificate for a hostname nobody serves any more. As a result, `--verify` failed 100% of
+// the time against the correct configuration — and a verifier that cannot pass is a
+// verifier nobody runs. That is how weeks of failed deliveries never became a signal, and
+// it is the divergence, not the absence, that this gate measures.
 //
-// # O que este gate verifica
+// # What this gate verifies
 //
-// Que todo hostname cobrado pelo verificador de borda tenha, no `Caddyfile`, um endereço de
-// site que o atenda. É hermético — compara duas declarações do repositório, sem rede — então
-// roda em toda entrega sem depender de certificado emitido.
+// That every hostname demanded by the edge verifier has, in the `Caddyfile`, a site address
+// that serves it. It is hermetic — it compares two declarations in the repository, with no
+// network — so it runs on every delivery without depending on an issued certificate.
 //
-// # O limite, dito em voz alta
+// # The limit, stated out loud
 //
-// Ele compara declarações. Não prova que o certificado foi emitido, que o DNS resolve, nem
-// que o destino atrás do endereço responde. Um bloco apontando para a porta errada passa aqui
-// e falha ao vivo. Quando o `Caddyfile` usa `import`, a visão fica parcial e o gate recusa em
-// vez de relatar paridade sobre metade do arquivo.
+// It compares declarations. It does not prove the certificate was issued, that DNS
+// resolves, or that the destination behind the address answers. A block pointing at the
+// wrong port passes here and fails live. When the `Caddyfile` uses `import`, the view is
+// partial and the gate refuses instead of reporting parity over half the file.
 package caddyhostparity
 
 import (
@@ -45,30 +45,33 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrUnserved means a demanded hostname has no site block to terminate its TLS.
-var ErrUnserved = errors.New("hostname exigido pela verificação e sem bloco de site")
+var ErrUnserved = errors.New("hostname demanded by the verifier with no site block")
 
 // ErrVerifierMissing means the script that prescribes the host list is absent.
 //
-// Sem prescrição não há paridade a verificar, e reportar "sem divergência" seria verde
-// sobre nada.
-var ErrVerifierMissing = errors.New("verificador de borda ausente — sem lista exigida não há paridade")
+// With no prescription there is no parity to verify, and reporting "no divergence" would be
+// green over nothing.
+var ErrVerifierMissing = errors.New("edge verifier missing — with no demanded list there is no parity")
 
 // ErrCaddyfileMissing means the served-hosts side of the comparison is absent.
-var ErrCaddyfileMissing = errors.New("arquivo Caddyfile ausente — sem blocos de site não há o que comparar")
+var ErrCaddyfileMissing = errors.New("Caddyfile missing — with no site blocks there is nothing to compare")
 
 // ErrPartialView means the Caddyfile pulls site blocks this gate cannot see.
 //
-// Relatar paridade sobre metade do arquivo seria verde sobre o que não foi lido.
-var ErrPartialView = errors.New("o Caddyfile importa outro arquivo — paridade não verificável sobre visão parcial")
+// Reporting parity over half the file would be green over what was not read.
+var ErrPartialView = errors.New("the Caddyfile imports another file — parity is unverifiable over a partial view")
 
 // ErrNothingScanned means the host list parsed empty.
 //
-// Zero exigidos é indistinguível de um parse quebrado, e é exatamente a forma
-// `PASS — 0 hostnames` que este ecossistema já pagou para aprender.
-var ErrNothingScanned = errors.New("nenhum hostname exigido varrido — não achar nada não é o mesmo que não achar nada errado")
+// Zero demanded is indistinguishable from a broken parse, and it is exactly the
+// `PASS — 0 hostnames` shape this ecosystem has already paid to learn.
+var ErrNothingScanned = fmt.Errorf("%w: no demanded hostname", scanresult.ErrNothingScanned)
 
 const (
 	verifierRel  = "infra/scripts/local/caddy-up-dev-public.sh"
@@ -76,18 +79,18 @@ const (
 )
 
 var (
-	// hostsArrayRE isola o corpo do array `hosts=( ... )` do verificador. Ancorado em
-	// início de linha para não capturar outro array antes dele, e fechando só num `)`
-	// que abre linha — um `)` no corpo (de `$(...)`, de comentário) truncava a lista em
-	// silêncio, e "1 de 6 exigidos" reportava-se igual a "6 exigidos".
+	// hostsArrayRE isolates the body of the verifier's `hosts=( ... )` array. Anchored at
+	// line start so it does not capture another array before it, and closing only on a `)`
+	// that opens a line — a `)` in the body (from `$(...)`, from a comment) silently
+	// truncated the list, and "1 of 6 demanded" reported the same as "6 demanded".
 	hostsArrayRE = regexp.MustCompile(`(?m)^\s*(?:local\s+)?hosts=\(\s*$([\s\S]*?)^\s*\)`)
-	// hostRE aceita um hostname, com ou sem rótulo curinga à esquerda.
+	// hostRE accepts a hostname, with or without a leading wildcard label.
 	hostRE = regexp.MustCompile(`^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$`)
-	// siteAddrLineRE captura a linha de endereço inteira de um bloco de site: coluna
-	// zero até a chave que abre, na MESMA linha. A âncora de coluna é o que separa um
-	// site servido de uma citação dentro de uma diretiva.
+	// siteAddrLineRE captures the whole address line of a site block: column zero up to
+	// the opening brace, on the SAME line. The column anchor is what separates a served
+	// site from a mention inside a directive.
 	siteAddrLineRE = regexp.MustCompile(`(?m)^([^\s{][^{\n]*?)[ \t]*\{[ \t]*$`)
-	// importRE detecta blocos que este gate não enxerga.
+	// importRE detects blocks this gate cannot see.
 	importRE = regexp.MustCompile(`(?m)^\s*import\s+\S`)
 )
 
@@ -107,14 +110,25 @@ type Outcome struct {
 	Scanned  int
 	Served   int
 	Findings []Finding
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // serves reports whether a declared site address covers the hostname, honouring the
 // wildcard form: `*.preview-dev.loopzero.example` serves every single label beneath it, and
 // neither a deeper host nor the apex.
 func serves(block, host string) bool {
-	// O Caddy serve tudo por trás de um catch-all; tratá-lo como não-servido seria
-	// reprovar configuração que funciona.
+	// Caddy serves everything behind a catch-all; treating it as unserved would fail a
+	// configuration that works.
 	if block == "*" || strings.HasPrefix(block, ":") {
 		return true
 	}
@@ -126,7 +140,7 @@ func serves(block, host string) bool {
 		return false
 	}
 	rest, ok := strings.CutSuffix(host, "."+suffix)
-	// Um rótulo só: o curinga do Caddy não atravessa ponto.
+	// One label only: the Caddy wildcard does not cross a dot.
 	return ok && rest != "" && !strings.Contains(rest, ".")
 }
 
@@ -138,7 +152,7 @@ func demandedHosts(root string) ([]string, error) {
 	}
 	m := hostsArrayRE.FindStringSubmatch(string(body))
 	if m == nil {
-		return nil, fmt.Errorf("%w: %s não declara `hosts=(...)` em forma reconhecível", ErrVerifierMissing, verifierRel)
+		return nil, fmt.Errorf("%w: %s does not declare `hosts=(...)` in a recognisable form", ErrVerifierMissing, verifierRel)
 	}
 	var hosts []string
 	seen := map[string]bool{}
@@ -163,7 +177,7 @@ func servedBlocks(root string) ([]string, error) {
 	}
 	var blocks []string
 	for _, m := range siteAddrLineRE.FindAllStringSubmatch(string(body), -1) {
-		// A vírgula é a forma canônica de multi-host no Caddy; cada token é um endereço.
+		// The comma is Caddy's canonical multi-host form; each token is an address.
 		for _, tok := range strings.Split(m[1], ",") {
 			if a := normalizeAddr(tok); a != "" {
 				blocks = append(blocks, a)
@@ -181,7 +195,7 @@ func normalizeAddr(tok string) string {
 	if i := strings.Index(a, "://"); i >= 0 {
 		a = a[i+3:]
 	}
-	// Porta sem host (`:443`) é catch-all e sobrevive inteira; com host, cai fora.
+	// A port with no host (`:443`) is a catch-all and survives whole; with a host, it is dropped.
 	if i := strings.LastIndex(a, ":"); i > 0 {
 		a = a[:i]
 	}
@@ -229,8 +243,9 @@ func Check(cfg Config) (Outcome, error) {
 		for _, f := range out.Findings {
 			names = append(names, f.Host)
 		}
-		return out, fmt.Errorf("%w: %s — exigido por %s, ausente de %s",
+		out.Violation = fmt.Errorf("%w: %s — demanded by %s, absent from %s",
 			ErrUnserved, strings.Join(names, ", "), verifierRel, caddyfileRel)
+		return out, nil
 	}
 	return out, nil
 }

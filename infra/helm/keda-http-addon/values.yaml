@@ -1,10 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 #
-# KEDA HTTP Add-on values -- LOCAL DEVELOPMENT (k3d workload cluster) only.
-# Production overrides: values.production.yaml
+# KEDA HTTP Add-on values — every environment. Dev/prod layer
+# values.production.yaml on top (cell.helmfile.yaml.gotmpl).
 #
-# Requires: KEDA core (infra/helm/keda/) must be installed first.
+# The `keda-http-addon` release installs the UPSTREAM chart directly
+# (kedacore/keda-add-ons-http 0.8.0), so every key here is in that chart's
+# top-level shape. Everything below `images:` used to be nested under
+# `http-add-on:` and was ignored by the chart. Verify a change with:
+#   helm template keda-http-addon kedacore/keda-add-ons-http --version 0.8.0 -f values.yaml
+#
+# Requires: KEDA core (the `keda` release) must be installed first.
 
 # B63 (end-to-end-deploy-validation-plan T2.3) — gcr.io/kubebuilder/kube-rbac-proxy
 # was DEPRECATED by Google Cloud (October 2023). The image moved to
@@ -15,61 +21,60 @@ images:
     name: quay.io/brancz/kube-rbac-proxy
     tag: v0.18.0
 
-http-add-on:
-  # ---------------------------------------------------------------------------
-  # Interceptor -- reverse proxy that counts in-flight requests
-  # ---------------------------------------------------------------------------
-  interceptor:
-    replicas:
-      min: 1
-      max: 1
-    resources:
-      requests:
-        cpu: "50m"
-        memory: "64Mi"
-      limits:
-        cpu: "200m"
-        memory: "128Mi"
+# ---------------------------------------------------------------------------
+# Interceptor -- reverse proxy that counts in-flight requests
+# ---------------------------------------------------------------------------
+interceptor:
+  replicas:
+    min: 1
+    max: 1
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
 
-  # ---------------------------------------------------------------------------
-  # Operator -- watches HTTPScaledObject CRDs
-  # ---------------------------------------------------------------------------
-  operator:
-    resources:
-      requests:
-        cpu: "50m"
-        memory: "64Mi"
-      limits:
-        cpu: "200m"
-        memory: "128Mi"
+# ---------------------------------------------------------------------------
+# Operator -- watches HTTPScaledObject CRDs
+# ---------------------------------------------------------------------------
+operator:
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
 
-  # ---------------------------------------------------------------------------
-  # Scaler -- serves external metrics to KEDA
-  # ---------------------------------------------------------------------------
-  scaler:
-    resources:
-      requests:
-        cpu: "50m"
-        memory: "64Mi"
-      limits:
-        cpu: "200m"
-        memory: "128Mi"
+# ---------------------------------------------------------------------------
+# Scaler -- serves external metrics to KEDA
+# ---------------------------------------------------------------------------
+scaler:
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
 
-  # ---------------------------------------------------------------------------
-  # Security context (non-root, hardened)
-  # INF-G08 + plan ADR D7.
-  # ---------------------------------------------------------------------------
-  podSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
-    seccompProfile:
-      type: RuntimeDefault
+# ---------------------------------------------------------------------------
+# Security context (non-root, hardened)
+# INF-G08 + plan ADR D7.
+# ---------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
-  securityContext:
-    readOnlyRootFilesystem: true
-    allowPrivilegeEscalation: false
-    runAsNonRoot: true
-    capabilities:
-      drop:
-        - ALL
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL

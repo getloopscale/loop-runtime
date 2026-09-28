@@ -15,4 +15,5 @@ import "github.com/getloopscale/loopzero/pkg/statemachine"
 var (
 	buildMachine   = statemachine.NewBuildTypedMachine()
 	releaseMachine = statemachine.NewReleaseTypedMachine()
+	domainMachine  = statemachine.NewDomainMachine()
 )

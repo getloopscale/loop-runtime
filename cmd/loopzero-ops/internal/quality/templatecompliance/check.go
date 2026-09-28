@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"strings"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Default bot/label allowlists (matches bash arrays).
@@ -83,6 +83,9 @@ type Outcome struct {
 	// Messages — diagnostic stream.
 	Messages []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // IsBotAuthor returns true when author matches any allowlist entry.
 func IsBotAuthor(author string, allowlist []string) bool {
@@ -279,14 +282,4 @@ func Run(cfg Config) (*Outcome, error) {
 		"[template-compliance] check the boxes OR add explanations under 'N/A justifications'",
 	)
 	return out, nil
-}
-
-// ErrUsage builds a LoopZeroError with code OPS_USAGE for caller-supplied
-// invalid inputs not catchable in the pure-data Run path (e.g., CLI
-// argument validation).
-func ErrUsage(msg string) error {
-	return &loopzeroerrors.LoopZeroError{
-		Code:    "OPS_USAGE",
-		Message: "templatecompliance: " + msg,
-	}
 }

@@ -4,13 +4,11 @@
 package templatecompliance
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // =============================================================================
@@ -280,17 +278,4 @@ func TestRun_UncheckedWithOnlyCommentNA_Fail(t *testing.T) {
 	assert.False(t, out.Pass, "only comment in N/A → does NOT qualify")
 	assert.Equal(t, 1, out.UncheckedBoxes)
 	assert.False(t, out.HasNAJustifications)
-}
-
-// =============================================================================
-// ErrUsage
-// =============================================================================
-
-func TestErrUsage_BuildsLoopZeroError(t *testing.T) {
-	err := ErrUsage("missing PR_BODY env")
-	require.Error(t, err)
-	var te *loopzeroerrors.LoopZeroError
-	require.True(t, errors.As(err, &te))
-	assert.Equal(t, "OPS_USAGE", te.Code)
-	assert.Contains(t, te.Message, "missing PR_BODY env")
 }

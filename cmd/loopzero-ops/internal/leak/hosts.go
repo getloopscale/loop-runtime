@@ -5,63 +5,49 @@ package leak
 
 import (
 	"fmt"
-	"os"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exposure"
 )
 
-// Hosts devolve, em ordem de declaracao e sem repetir, todo host que o inventario de
-// exposicao declara.
+// Hosts returns, in declaration order and without repeats, every host the
+// exposure inventory declares.
 //
-// # O defeito, medido
+// Measured 2026-08-18: app.loopzero.example, cloud.loopzero.example and auth.loopzero.example
+// — the names WITHOUT the `-dev` suffix — had their own Caddyfile blocks and
+// inventory rows, and none of them had ever been probed: Targets filters by one
+// host and the probe defaulted to app-dev/auth-dev. Measured live, they were
+// production hostnames serving development instances (401 on
+// cloud.loopzero.example/v1/billing, 200 on auth.loopzero.example/health/ready).
 //
-// B-025, 2026-08-18: `app.loopzero.example`, `cloud.loopzero.example` e `auth.loopzero.example` — os
-// nomes SEM o sufixo `-dev` — tem bloco proprio no Caddyfile e cinco linhas no inventario,
-// e nenhum deles jamais foi sondado. `Targets` filtra por um unico host, e `leak live`
-// passa `app-dev`/`auth-dev` por padrao: os tres eram inalcancaveis por construcao.
-//
-// E eles nao apontam para o vazio, como o item que os registrou supunha. Medido ao vivo:
-//
-//	cloud.loopzero.example/v1/billing      -> 401   (loopzero-cloud vivo, negando credencial)
-//	auth.loopzero.example/health/ready     -> 200   (Kratos vivo)
-//	app.loopzero.example/                  -> 502   (Vite morto — mas o bloco continua la)
-//
-// Sao hostnames de producao servindo instancias de desenvolvimento, e a unica coisa que os
-// media era ninguem.
-//
-// # Por que listar do inventario, e nao os tres nomes
-//
-// Porque o inventario JA e a declaracao do que a borda expoe — `proxy-exposure.txt` existe
-// exatamente para isso, e o gate hermetico de mesmo nome obriga que toda rota da borda
-// esteja declarada nele. Fixar tres nomes aqui deixaria o quarto host futuro invisivel pelo
-// mesmo motivo que estes tres ficaram. Lendo a declaracao, o que for declarado e medido.
-func Hosts(inventário string) ([]string, error) {
-	// #nosec G304 -- o caminho vem da flag `--inventory` do operador, cujo padrao e o
-	// inventario versionado do proprio repositorio. E o mesmo modelo de confianca do
-	// `Targets` ao lado; nao ha entrada de usuario final neste caminho.
-	b, err := os.ReadFile(inventário)
+// Listing from the inventory rather than naming those three keeps the fourth
+// future host from going invisible for the same reason.
+func Hosts(inventory string) ([]string, error) {
+	decls, err := loadInventory(inventory)
 	if err != nil {
-		return nil, fmt.Errorf("ler inventário de exposição %s: %w", inventário, err)
+		return nil, err
 	}
 	var hosts []string
-	visto := map[string]bool{}
-	for _, linha := range strings.Split(string(b), "\n") {
-		linha = strings.TrimSpace(linha)
-		if linha == "" || strings.HasPrefix(linha, "#") {
-			continue
-		}
-		campos := strings.Fields(linha)
-		if len(campos) == 0 {
-			continue
-		}
-		h := campos[0]
-		// A primeira coluna e o site; uma linha de tabela markdown ou um separador nao e.
-		if !strings.Contains(h, ".") || strings.HasPrefix(h, "|") {
-			continue
-		}
-		if !visto[h] {
-			visto[h] = true
-			hosts = append(hosts, h)
+	seen := map[string]bool{}
+	for _, d := range decls {
+		if !seen[d.Site] {
+			seen[d.Site] = true
+			hosts = append(hosts, d.Site)
 		}
 	}
 	return hosts, nil
+}
+
+// loadInventory reads the exposure inventory through the parser the
+// proxy-exposure gate uses, and refuses a malformed row: a row the probe cannot
+// read is a declared route it would silently not probe.
+func loadInventory(path string) ([]exposure.Declaration, error) {
+	decls, malformed, err := exposure.Load(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(malformed) > 0 {
+		return nil, fmt.Errorf("exposure inventory %s has malformed rows: %s", path, strings.Join(malformed, "; "))
+	}
+	return decls, nil
 }

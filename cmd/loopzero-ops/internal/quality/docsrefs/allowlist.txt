@@ -1,31 +1,32 @@
-# Allowlist do gate `docs-contract-refs`.
+# Allowlist for the `docs-contract-refs` gate.
 #
-# Formato:  kind | referencia | sunset (YYYY-MM-DD) | justificativa
+# Format:  kind | reference | sunset (YYYY-MM-DD) | rationale
 #   kind ∈ {rule, adr}
-#   sunset e INCLUSIVO — a entrada expira no dia SEGUINTE
+#   sunset is INCLUSIVE — the entry expires on the FOLLOWING day
 #
-# Uma entrada aqui NAO conserta a referencia: ela registra que a ausencia e
-# conhecida e tem prazo. Restaurar os documentos exigiria escrever o que eles
-# diziam, e parte do conteudo migrou (o gate de 95% vive hoje em
-# plan-confidence-golden-rule.md) — recria-los por adivinhacao produziria
-# documentacao inventada, que e pior que a ausencia. A decisao entre RESTAURAR e
-# REAPONTAR e do dono do repositorio (B-052 DoD), nao do implementador.
+# An entry here does NOT fix the reference: it records that the absence is
+# known and has a deadline. Restoring the documents would require writing what
+# they said, and part of the content migrated (the 95% gate lives today in
+# plan-confidence-golden-rule.md) — recreating them by guesswork would produce
+# invented documentation, which is worse than the absence. The choice between
+# RESTORING and REPOINTING belongs to the repository owner (B-052 DoD), not to
+# the implementer.
 #
-# Mesmo padrao de .claude/rules/shell-scripts-allowlist.md e de
-# rules/code-quality-allowlist.txt: excecao nomeada, com prazo, nunca um bypass.
+# Same pattern as .claude/rules/shell-scripts-allowlist.md and
+# rules/code-quality-allowlist.txt: a named exception, with a deadline, never a bypass.
 
-# --- os 5 contratos que CLAUDE.md:206 declara e que nao existem -------------
+# --- the 5 contracts that CLAUDE.md:206 declares and that do not exist -------
 
-# --- outras referencias de regra que nao resolvem ---------------------------
+# --- other rule references that do not resolve ------------------------------
 
-# --- ADRs citados por codigo de producao e nao documentados -----------------
-adr | ADR-0014 | 2026-11-09 | citado em comentario Go e sem nenhuma mencao em .md no repositorio (B-052)
+# --- ADRs cited by production code and not documented -----------------------
+adr | ADR-0014 | 2026-11-09 | cited in a Go comment with no mention in any .md in the repository (B-052)
 
-# --- ADRs achados pelo proprio gate, alem da medicao manual ------------------
-# A varredura por AST cobre api/ pkg/ operators/ cmd/ tools/ infra/, inclusive
-# arquivos de teste — a medicao manual que originou o B-052 olhou menos.
-adr | ADR-0047 | 2026-11-09 | citado em api/cmd/setup_background.go:319 (B-052)
-adr | ADR-0035 | 2026-11-09 | citado em pkg/naming/properties_test.go:18 (B-052)
-adr | ADR-0026 | 2026-11-09 | citado em operators/hack/validate-rbac/main.go:4 (B-052)
-adr | ADR-0027 | 2026-11-09 | citado em operators/internal/app/application_reaper.go:174 (B-052)
-adr | ADR-0042 | 2026-11-09 | citado em infra/tests/performance/load/k3d_integration_test.go:74 (B-052)
+# --- ADRs found by the gate itself, beyond the manual measurement -----------
+# The AST scan covers api/ pkg/ operators/ cmd/ tools/ infra/, test files
+# included — the manual measurement that originated B-052 looked at less.
+adr | ADR-0047 | 2026-11-09 | cited in api/cmd/setup_background.go:319 (B-052)
+adr | ADR-0035 | 2026-11-09 | cited in pkg/naming/properties_test.go:18 (B-052)
+adr | ADR-0026 | 2026-11-09 | cited in operators/hack/validate-rbac/main.go:4 (B-052)
+adr | ADR-0027 | 2026-11-09 | cited in operators/internal/app/application_reaper.go:174 (B-052)
+adr | ADR-0042 | 2026-11-09 | cited in infra/tests/performance/load/k3d_integration_test.go:74 (B-052)

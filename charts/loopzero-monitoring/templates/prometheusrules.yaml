@@ -1,0 +1,44 @@
+{{- /*
+The alerting rules this chart publishes are NOT written here. They are the rule
+files of infra/helm/monitoring/manifests — the set Helmfile L2 applies and the
+one the orphan-alert and runbook gates curate — reached through the `rules`
+symlink, which `helm package` resolves into the published archive.
+
+This chart used to carry its own copies of ten of those files. They drifted in
+both directions: sixteen alerts on metrics nothing emits survived here after the
+L2 copy removed them (a889fd091), a rule read `loopzero_reconciler_errors_total`
+while the operators export `loopzero_operator_reconcile_errors_total`, and none of
+the runbook annotations reached this side. One set of files, two install paths.
+
+Each file holds exactly one PrometheusRule; its namespace is replaced by the
+release namespace, everything else is published as written.
+*/ -}}
+{{- if .Values.prometheusRules.enabled }}
+{{- $files := dict
+  "capacity" "prometheusrule-capacity.yaml"
+  "critical" "prometheusrule-critical.yaml"
+  "warning" "prometheusrule-warning.yaml"
+  "database" "prometheusrule-database.yaml"
+  "domains" "prometheusrule-domains.yaml"
+  "otelPipeline" "prometheusrule-otel-pipeline.yaml"
+  "probes" "prometheusrule-probes.yaml"
+  "tracing" "prometheusrule-tracing.yaml"
+  "sigstore" "prometheusrule-sigstore.yaml" }}
+{{- range $key := keys $files | sortAlpha }}
+{{- $toggle := index $.Values.prometheusRules $key }}
+{{- if $toggle.enabled }}
+{{- $path := printf "rules/%s" (get $files $key) }}
+{{- $raw := $.Files.Get $path }}
+{{- if not $raw }}
+{{- fail (printf "%s is missing or empty — the rules symlink must resolve to infra/helm/monitoring/manifests" $path) }}
+{{- end }}
+{{- $rule := fromYaml $raw }}
+{{- if or (hasKey $rule "Error") (ne ($rule.kind | default "") "PrometheusRule") }}
+{{- fail (printf "%s is not a single PrometheusRule document: %v" $path ($rule.Error | default $rule.kind)) }}
+{{- end }}
+{{- $_ := set $rule.metadata "namespace" $.Release.Namespace }}
+---
+{{ toYaml $rule }}
+{{- end }}
+{{- end }}
+{{- end }}

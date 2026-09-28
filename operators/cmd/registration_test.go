@@ -40,7 +40,7 @@ var binaryWiringMatrix = []binaryWiringEntry{
 		pkgImport: "tenant",
 		pkgDir:    "../internal/tenant",
 		mainPath:  "tenant-operator/main.go",
-		setupFunc: "main",
+		setupFunc: "setupControllers",
 	},
 	{
 		name:      "app-operator",
@@ -127,16 +127,7 @@ func TestSetupControllersHasNoOrphanCalls(t *testing.T) {
 //
 // T1.3: keys may be qualified per binary (e.g., "tenant:SetupCacheReader") to
 // allow legitimate exceptions per binary. Bare keys apply to all binaries.
-// Quality-Gate Phase 3: SetupEnvironmentController wrapper removed from
-// internal/tenant/environment_controller.go and operatortest/setup.go.
-// SetupApplicationController + SetupPreviewControllerWithFactory remain
-// exported but unwired for future cell-aware migration parity (app + preview
-// operators still call the simpler signature). Documented exception until
-// those binaries are converted to WithFactory direct call.
-var SetupAllowlist = map[string]string{
-	"SetupApplicationController":        "legacy wrapper retained for future cell-aware migration of app-operator; app-operator/main.go calls SetupApplicationControllerWithFactory directly",
-	"SetupPreviewControllerWithFactory": "cell-aware variant retained; preview-operator/main.go calls SetupPreviewController (non-factory) — will flip when preview goes cell-aware",
-}
+var SetupAllowlist = map[string]string{}
 
 func exportedSetupControllerFuncs(t *testing.T, dir string) []string {
 	t.Helper()

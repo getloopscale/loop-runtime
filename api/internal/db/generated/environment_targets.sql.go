@@ -7,18 +7,20 @@ package generated
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countPermanentEnvironments = `-- name: CountPermanentEnvironments :one
-SELECT COUNT(DISTINCT environment)::int FROM environment_targets
+SELECT COUNT(*)::int FROM environment_targets
 WHERE tenant_id = $1 AND kind = 'permanent'
 `
 
-// D5 (Bug A fix): enforcement-facing count. Returns the number of DISTINCT
-// permanent environments a tenant has across all projects. Used by
-// pkg/enforcement/limiter.go to gate POST /api/v1/environments against the
-// plan_limits.environments cap. Preview environments are NOT counted —
-// they are managed under the single-slot model (preview_slot table).
+// Plan enforcement: counts a tenant's permanent (project, environment) tuples,
+// gated against plan_limits.environments. M2 v1.2 interprets that cap per
+// tuple, and the primary key makes each tuple one row, so COUNT(*) is the
+// per-tuple count (DISTINCT environment would collapse web/prod and api/prod
+// into one). Preview environments live in preview_slot and are NOT counted.
 func (q *Queries) CountPermanentEnvironments(ctx context.Context, db DBTX, tenantID string) (int32, error) {
 	row := db.QueryRow(ctx, countPermanentEnvironments, tenantID)
 	var column_1 int32
@@ -180,6 +182,40 @@ func (q *Queries) ListPermanentEnvironments(ctx context.Context, db DBTX, tenant
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordEnvironmentTargetReplicasReady = `-- name: RecordEnvironmentTargetReplicasReady :execrows
+UPDATE environment_targets
+SET last_replicas_ready_value = $1, last_replicas_ready_at = $2
+WHERE tenant_id = $3 AND project_id = $4 AND environment = $5
+`
+
+type RecordEnvironmentTargetReplicasReadyParams struct {
+	LastReplicasReadyValue *int32             `json:"last_replicas_ready_value"`
+	LastReplicasReadyAt    pgtype.Timestamptz `json:"last_replicas_ready_at"`
+	TenantID               string             `json:"tenant_id"`
+	ProjectID              string             `json:"project_id"`
+	Environment            string             `json:"environment"`
+}
+
+// Data-plane readiness snapshot written by the api's readiness poller
+// (environments.ReadinessPoller) from Prometheus. Touches ONLY the two
+// observation columns the dashboard badge reads, so it never contends with
+// the release pointers the env lock guards. Zero rows affected means the
+// (tenant, project, environment) has no target row — the caller reports it.
+// Cross-tenant by design: runs on the background (loopzero_worker) pool.
+func (q *Queries) RecordEnvironmentTargetReplicasReady(ctx context.Context, db DBTX, arg RecordEnvironmentTargetReplicasReadyParams) (int64, error) {
+	result, err := db.Exec(ctx, recordEnvironmentTargetReplicasReady,
+		arg.LastReplicasReadyValue,
+		arg.LastReplicasReadyAt,
+		arg.TenantID,
+		arg.ProjectID,
+		arg.Environment,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateEnvironmentTargetActive = `-- name: UpdateEnvironmentTargetActive :exec

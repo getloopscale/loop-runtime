@@ -4,28 +4,11 @@
 package vapdeleteguardrail
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-)
 
-// findRepoRoot walks up until it finds go.work (the multi-module workspace root).
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for i := 0; i < 10; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatal("go.work not found walking up from cwd")
-	return ""
-}
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+)
 
 // stubRender returns a canned render so the hermetic tests never need the helm binary
 // (crdsemanticdiff HelmRenderOverride precedent).
@@ -114,6 +97,43 @@ func TestGuardrail_FailsWhenGCExemptionMissing(t *testing.T) {
 	}
 }
 
+// kubeSystemPrefixRender is the shape the admission-policies helper
+// (loopzero-admission.systemActorExemptions) renders: every kube-system service account
+// is exempt by prefix, which covers the namespace-controller without naming it.
+const kubeSystemPrefixRender = `
+  matchConditions:
+    - name: exclude-system-actors
+      expression: >-
+        !(request.userInfo.username.startsWith('system:serviceaccount:kube-system:'))
+        && request.userInfo.username != 'system:kube-controller-manager'
+        && !(request.userInfo.username in [
+          'system:serviceaccount:loopzero-system:loopzero-api',
+          'system:serviceaccount:loopzero-system:loopzero-tenant-operator'
+        ])
+        && !('system:masters' in request.userInfo.groups)
+`
+
+func TestGuardrail_AcceptsKubeSystemPrefixAsNamespaceControllerExemption(t *testing.T) {
+	rep := Report{}
+	rep.checkExemptions(kubeSystemPrefixRender)
+	if !rep.OK() {
+		t.Fatalf("a kube-system prefix exemption covers the namespace-controller (B33), got %+v", rep.Findings)
+	}
+}
+
+func TestGuardrail_FailsWhenKubeSystemPrefixIsNotAnExemption(t *testing.T) {
+	// The prefix appearing somewhere else (a message, an unrelated rule) is not an
+	// exemption: only the negated startsWith form keeps the GC out of the policy.
+	notExempt := strings.Replace(kubeSystemPrefixRender,
+		"!(request.userInfo.username.startsWith('system:serviceaccount:kube-system:'))",
+		"request.userInfo.username.startsWith('system:serviceaccount:kube-system:')", 1)
+	rep := Report{}
+	rep.checkExemptions(notExempt)
+	if rep.OK() {
+		t.Fatal("expected failure: a positive startsWith does not exempt the namespace-controller (B33)")
+	}
+}
+
 // --- EC-7: on DELETE the CEL must read oldObject, not object -----------------------
 
 func TestGuardrail_FailsWhenExpressionUsesObjectOnDelete(t *testing.T) {
@@ -140,7 +160,7 @@ func TestGuardrail_AllowsOldObjectOnDelete(t *testing.T) {
 // YAML parse fails on both. This asserts the gate goes through a Renderer.
 
 func TestGuardrail_RendersViaHelmNotRawYAML(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	called := false
 	render := func(dir string, vals []string) (string, error) {
 		called = true
@@ -155,8 +175,8 @@ func TestGuardrail_RendersViaHelmNotRawYAML(t *testing.T) {
 
 // --- Repo-state checks: these are the RED tests for T1.1/T1.2/T1.4 -----------------
 
-func TestGuardrail_TemplateExistsInBootstrapChart(t *testing.T) {
-	root := findRepoRoot(t)
+func TestGuardrail_TemplateExistsInChart(t *testing.T) {
+	root := qtestutil.Root(t)
 	rep := Report{}
 	rep.checkTemplatePresent(root)
 	if !rep.OK() {
@@ -164,26 +184,17 @@ func TestGuardrail_TemplateExistsInBootstrapChart(t *testing.T) {
 	}
 }
 
-func TestGuardrail_DualChartParity(t *testing.T) {
-	root := findRepoRoot(t)
-	rep := Report{}
-	rep.checkParity(root)
-	if !rep.OK() {
-		t.Fatalf("T1.4 not implemented: %+v", rep.Findings)
-	}
-}
-
 func TestGuardrail_ToggleDefaultsOff(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	rep := Report{}
 	rep.checkToggleDefaultOff(root)
 	if !rep.OK() {
-		t.Fatalf("toggle must exist and default to false in both charts: %+v", rep.Findings)
+		t.Fatalf("toggle must exist and default to false in the chart: %+v", rep.Findings)
 	}
 }
 
 func TestGuardrail_InstalledOnMgmt(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	rep := Report{}
 	rep.checkInstalledOnMgmt(root)
 	if !rep.OK() {
@@ -193,7 +204,7 @@ func TestGuardrail_InstalledOnMgmt(t *testing.T) {
 
 // End-to-end against the real repo with a stubbed renderer.
 func TestGuardrail_FullCheckAgainstRepo(t *testing.T) {
-	root := findRepoRoot(t)
+	root := qtestutil.Root(t)
 	rep := Check(root, stubRender(goodRender))
 	if !rep.OK() {
 		t.Fatalf("gate failing against repo state: %+v", rep.Findings)

@@ -43,8 +43,8 @@ func dsnOrSkip(t *testing.T, env string) string {
 			t.Fatalf("%s is unset and LOOPZERO_RLS_AUDIT_REQUIRE=1 forbids skipping — "+
 				"a green run here would assert nothing about background reach", env)
 		}
-		// Pular numa máquina sem banco é a decisão certa; no CI, LOOPZERO_RLS_AUDIT_REQUIRE=1
-		// transforma isto em falha. Mesma tensão rastreada em:
+		// Skipping on a machine without a database is the right decision; in CI,
+		// LOOPZERO_RLS_AUDIT_REQUIRE=1 turns this into a failure. Same tension tracked in:
 		// https://github.com/getloopscale/loopzero/issues/289
 		t.Skipf("%s is unset (set LOOPZERO_RLS_AUDIT_REQUIRE=1 to make this a failure)", env)
 	}
@@ -110,9 +110,9 @@ func TestBackgroundPoolReach_OwnerRefused(t *testing.T) {
 		t.Fatalf("measure: %v", err)
 	}
 	if !posture.IsOwner && !posture.BypassRLS {
-		// Nada a afirmar: o alvo deste teste é a recusa do DONO, e este DSN não é
-		// o dono. Não é a mesma tensão do #289 (auditoria que pula por padrão) —
-		// aqui a condição do teste simplesmente não existe neste banco.
+		// Nothing to assert: this test targets the OWNER's refusal, and this DSN is not
+		// the owner. This is not the same tension as #289 (an audit that skips by
+		// default) — here the test's condition simply does not exist in this database.
 		// https://github.com/getloopscale/loopzero/issues/289
 		t.Skipf("DATABASE_URL is not the owner (%s) — nothing to assert here", posture)
 	}

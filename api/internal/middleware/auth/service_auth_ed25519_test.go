@@ -38,13 +38,11 @@ func signedHeaders(t *testing.T, priv ed25519.PrivateKey, userID, tenantID, meth
 // every replica yet); requests WITH valid signatures get extra defense.
 //
 // Phase 2 + 3 flip the policy to require signed; that flag is gated by
-// ServiceAuthRequireSignature. Phase 1 is the default in this test.
+// Config.RequireSignature. Phase 1 is the default in this test.
 func TestServiceAuthEd25519_Phase1_AcceptsUnsigned(t *testing.T) {
-	resetServiceAuthState(t)
-	ServiceAuthSecret = "shared-secret"
-
 	store := &stubMembershipStore{memberships: []TenantMembership{{TenantID: "tn-svc", Role: "admin"}}}
-	handler := AuthWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "shared-secret"})
+	handler := authn.MiddlewareWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -63,13 +61,11 @@ func TestServiceAuthEd25519_Phase1_AcceptsUnsigned(t *testing.T) {
 }
 
 func TestServiceAuthEd25519_Phase1_AcceptsValidSignature(t *testing.T) {
-	resetServiceAuthState(t)
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	ServiceAuthSecret = "shared-secret"
-	ServiceAuthEd25519PublicKeys = []ed25519.PublicKey{pub}
 
 	store := &stubMembershipStore{memberships: []TenantMembership{{TenantID: "tn-svc", Role: "admin"}}}
-	handler := AuthWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "shared-secret", Ed25519PublicKeys: []ed25519.PublicKey{pub}})
+	handler := authn.MiddlewareWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -97,13 +93,11 @@ func TestServiceAuthEd25519_Phase1_AcceptsValidSignature(t *testing.T) {
 // "accept missing signature for now". A garbled signature is a strong
 // attack signal.
 func TestServiceAuthEd25519_RejectsTamperedSignature(t *testing.T) {
-	resetServiceAuthState(t)
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	ServiceAuthSecret = "shared-secret"
-	ServiceAuthEd25519PublicKeys = []ed25519.PublicKey{pub}
 
 	store := &stubMembershipStore{memberships: []TenantMembership{{TenantID: "tn-svc", Role: "admin"}}}
-	handler := AuthWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "shared-secret", Ed25519PublicKeys: []ed25519.PublicKey{pub}})
+	handler := authn.MiddlewareWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -130,13 +124,11 @@ func TestServiceAuthEd25519_RejectsTamperedSignature(t *testing.T) {
 // the request is rejected even with a correct signature. Tests the
 // timestamp anti-replay path independently of the nonce path.
 func TestServiceAuthEd25519_RejectsStaleTimestamp(t *testing.T) {
-	resetServiceAuthState(t)
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	ServiceAuthSecret = "shared-secret"
-	ServiceAuthEd25519PublicKeys = []ed25519.PublicKey{pub}
 
 	store := &stubMembershipStore{memberships: []TenantMembership{{TenantID: "tn-svc", Role: "admin"}}}
-	handler := AuthWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "shared-secret", Ed25519PublicKeys: []ed25519.PublicKey{pub}})
+	handler := authn.MiddlewareWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -164,13 +156,11 @@ func TestServiceAuthEd25519_RejectsStaleTimestamp(t *testing.T) {
 // same (user_id, nonce) within the TTL is rejected. Tests the nonce
 // store integration end-to-end through the middleware.
 func TestServiceAuthEd25519_RejectsReplayedNonce(t *testing.T) {
-	resetServiceAuthState(t)
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	ServiceAuthSecret = "shared-secret"
-	ServiceAuthEd25519PublicKeys = []ed25519.PublicKey{pub}
 
 	store := &stubMembershipStore{memberships: []TenantMembership{{TenantID: "tn-svc", Role: "admin"}}}
-	handler := AuthWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "shared-secret", Ed25519PublicKeys: []ed25519.PublicKey{pub}})
+	handler := authn.MiddlewareWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -209,15 +199,12 @@ func TestServiceAuthEd25519_RejectsReplayedNonce(t *testing.T) {
 
 // TestServiceAuthEd25519_Phase2_RejectsUnsignedWhenFlagSet — RFC §
 // Phase 2 (require-signed). After the operator sets
-// ServiceAuthRequireSignature=true, any request WITHOUT signature
+// Config.RequireSignature=true, any request WITHOUT signature
 // headers is rejected with 401 even if the legacy shared secret matches.
 func TestServiceAuthEd25519_Phase2_RejectsUnsignedWhenFlagSet(t *testing.T) {
-	resetServiceAuthState(t)
-	ServiceAuthSecret = "shared-secret"
-	ServiceAuthRequireSignature = true
-
 	store := &stubMembershipStore{memberships: []TenantMembership{{TenantID: "tn-svc", Role: "admin"}}}
-	handler := AuthWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authn := NewAuthenticator(Config{ServiceSecret: "shared-secret", RequireSignature: true})
+	handler := authn.MiddlewareWithTTL(&stubValidator{}, store, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -233,30 +220,4 @@ func TestServiceAuthEd25519_Phase2_RejectsUnsignedWhenFlagSet(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("Phase 2 require-signed: unsigned request must be rejected, got %d", rec.Code)
 	}
-}
-
-// resetServiceAuthState clears the package-level service-auth singletons
-// so tests do not pollute each other. The defer restores any value the
-// caller set before the test, mirroring the existing oldSecret pattern.
-func resetServiceAuthState(t *testing.T) {
-	t.Helper()
-	oldSecret := ServiceAuthSecret
-	oldPrev := ServiceAuthSecretPrevious
-	oldKeys := ServiceAuthEd25519PublicKeys
-	oldFlag := ServiceAuthRequireSignature
-	oldStore := ServiceAuthNonceStore
-
-	ServiceAuthSecret = ""
-	ServiceAuthSecretPrevious = ""
-	ServiceAuthEd25519PublicKeys = nil
-	ServiceAuthRequireSignature = false
-	ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
-
-	t.Cleanup(func() {
-		ServiceAuthSecret = oldSecret
-		ServiceAuthSecretPrevious = oldPrev
-		ServiceAuthEd25519PublicKeys = oldKeys
-		ServiceAuthRequireSignature = oldFlag
-		ServiceAuthNonceStore = oldStore
-	})
 }

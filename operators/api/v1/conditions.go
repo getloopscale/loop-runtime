@@ -30,7 +30,6 @@ const (
 	TypeBuildNamespaceReady = "BuildNamespaceReady"
 	TypePriorityClassReady  = "PriorityClassReady"
 	TypeArgoCDAppReady      = "ArgoCDAppReady"
-	TypeHarborProjectReady  = "HarborProjectReady"
 	TypeTransitKeyAvailable = "TransitKeyAvailable"
 )
 
@@ -72,6 +71,9 @@ const (
 const (
 	TypeSecretNotFound = "SecretNotFound"
 	TypeConnected      = "Connected"
+	// TypeArgoCDSecretSynced reports whether the ArgoCD cluster Secret mirrors
+	// the credential. Only set when Spec.Scope.ArgoCD is true.
+	TypeArgoCDSecretSynced = "ArgoCDSecretSynced"
 )
 
 // --- Preview conditions ---

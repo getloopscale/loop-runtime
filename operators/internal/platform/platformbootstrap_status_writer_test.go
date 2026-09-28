@@ -227,24 +227,14 @@ func TestPlatformBootstrap_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testin
 		},
 	})
 
-	// Two contracts, opposite on purpose. The deferred readiness summary is by
-	// Go's defer semantics the LAST status write, and it uses
-	// MergeFromWithOptimisticLock — it CARRIES resourceVersion deliberately
-	// (slice-10): it re-fetches, and conditions is an array, which RFC 7386
-	// treats as a scalar, so without the lock it would clobber a concurrent write
-	// of the whole array. Everything before it is the controller body.
-	//
-	// The preview slice learned this the same way: an assertion over ALL patches
-	// reports the summary's deliberate lock as a defect.
-	if len(bodies) < 2 {
-		t.Fatalf("expected at least one body patch and the deferred readiness summary; got %d — "+
-			"an incomplete observation is not a clean one", len(bodies))
+	// The controller is the single status writer: every write folds the
+	// readiness summary in, so the Ready condition travels in the same patch as
+	// the conditions it summarises, and no second, re-fetching writer exists.
+	if len(bodies) == 0 {
+		t.Fatal("no status patch observed — an incomplete observation is not a clean one")
 	}
-	if last := bodies[len(bodies)-1]; !strings.Contains(last, "resourceVersion") {
-		t.Errorf("the deferred readiness summary lost its optimistic lock — without it a conditions "+
-			"patch overwrites the whole array and erases a concurrent write (slice-10).\npatch: %s", last)
-	}
-	for i, body := range bodies[:len(bodies)-1] {
+	assertEveryPatchCarriesTheReadySummary(t, bodies)
+	for i, body := range bodies {
 		// (1) No resourceVersion: a snapshot taken before the finalizer write
 		// inherits the stale one and turns the patch into an optimistic lock
 		// frozen at snapshot time — a WIDER conflict window than the refetch this
@@ -483,18 +473,31 @@ func TestGitRepositoryBinding_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *tes
 		NamespacedName: types.NamespacedName{Name: seed.Name, Namespace: seed.Namespace},
 	})
 
-	if len(bodies) < 2 {
-		t.Fatalf("expected at least one body patch and the deferred readiness summary; got %d — "+
-			"an incomplete observation is not a clean one", len(bodies))
+	if len(bodies) == 0 {
+		t.Fatal("no status patch observed — an incomplete observation is not a clean one")
 	}
 	if len(lost) > 0 {
 		t.Errorf("%d status write(s) did not persist what the controller held:\n  %s",
 			len(lost), strings.Join(lost, "\n  "))
 	}
-	for i, body := range bodies[:len(bodies)-1] {
+	assertEveryPatchCarriesTheReadySummary(t, bodies)
+	for i, body := range bodies {
 		if strings.Contains(body, "resourceVersion") {
 			t.Errorf("body patch #%d carries resourceVersion — capture `base` AFTER EnsureFinalizer "+
 				"(B-085).\npatch: %s", i+1, body)
+		}
+	}
+}
+
+// assertEveryPatchCarriesTheReadySummary checks the single-status-writer
+// contract: each status write carries the kstatus Ready condition it computed,
+// so no pass leaves Ready at what a previous pass decided.
+func assertEveryPatchCarriesTheReadySummary(t *testing.T, bodies []string) {
+	t.Helper()
+	for i, body := range bodies {
+		if !strings.Contains(body, `"type":"Ready"`) {
+			t.Errorf("status patch #%d does not carry the Ready summary; the controller must fold it "+
+				"into every write (ADR-0025 D3).\npatch: %s", i+1, body)
 		}
 	}
 }

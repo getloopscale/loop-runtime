@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // scriptedDBTX is a DBTX fake that lets each test script the next
@@ -127,12 +128,12 @@ func TestAcquire_EmptyCellIDDefaultsToCellDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if lease.CellID != db.CellDefault {
-		t.Errorf("expected cellID=%q, got %q", db.CellDefault, lease.CellID)
+	if lease.CellID != domain.DefaultCellID {
+		t.Errorf("expected cellID=%q, got %q", domain.DefaultCellID, lease.CellID)
 	}
 	// The second positional parameter is cell_id.
-	if len(s.lastQueryArgs) < 2 || s.lastQueryArgs[1] != db.CellDefault {
-		t.Errorf("expected cell_id arg to be %q, got %v", db.CellDefault, s.lastQueryArgs)
+	if len(s.lastQueryArgs) < 2 || s.lastQueryArgs[1] != domain.DefaultCellID {
+		t.Errorf("expected cell_id arg to be %q, got %v", domain.DefaultCellID, s.lastQueryArgs)
 	}
 }
 

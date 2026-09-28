@@ -12,33 +12,34 @@ import (
 	"strings"
 )
 
-// A superfície de rede do host é declarada, e fechada por padrão.
+// The host's network surface is declared, and closed by default.
 //
-// MEDIDO em 2026-08-10, da internet e não do droplet: 39 portas escutavam em 0.0.0.0, o
-// firewall bloqueava 20, e das 19 restantes apenas 2 tinham justificativa. As outras 17
-// não estavam em lista nenhuma — entre elas o ArgoCD, o serverlb do cluster de segredos e
-// a identidade servida SEM TLS na porta crua, enquanto a borda já a publica em HTTPS.
+// MEASURED 2026-08-10, from the internet and not from the droplet: 39 ports
+// listened on 0.0.0.0, the firewall blocked 20, and of the remaining 19 only 2
+// had a justification. The other 17 were on no list — among them ArgoCD, the
+// secrets cluster serverlb and identity served WITHOUT TLS on the raw port while
+// the edge already published it over HTTPS.
 //
-// A causa não foi descuido. A lista de bloqueio do firewall foi escrita quando os
-// clusters se chamavam mgmt/workload/runtime-2/vault — os comentários dela ainda citam
-// esses nomes — e tudo que subiu depois nasceu fora dela. Uma lista de NEGAÇÃO envelhece
-// para o lado inseguro: o que ninguém lembrou de bloquear fica aberto. Uma lista de
-// PERMISSÃO envelhece para o lado seguro, e é a única polaridade aceitável aqui.
+// The cause was not carelessness. The firewall's block list was written when
+// the clusters had other names, and everything that came up afterwards was born
+// outside it. A DENY list ages towards the unsafe side: what nobody remembered
+// to block stays open. An ALLOW list ages towards the safe side, and it is the
+// only acceptable polarity here.
 
-// PortClass é o que decide se a porta pode ser alcançada da internet.
+// PortClass decides whether a port may be reached from the internet.
 type PortClass string
 
 const (
-	// ClassExternal é a ÚNICA classe que permanece alcançável de fora, e exige o
-	// consumidor nomeado com evidência de medição.
+	// ClassExternal is the ONLY class that stays reachable from outside, and
+	// it requires the consumer to be named with measured evidence.
 	ClassExternal PortClass = "external"
-	ClassEdge     PortClass = "edge"     // a borda publica em HTTPS; a porta crua fecha
-	ClassHost     PortClass = "host"     // consumido pelo próprio host
-	ClassAdmin    PortClass = "admin"    // painel ou API de infraestrutura
-	ClassPendente PortClass = "pendente" // registrada, consumidor ainda não medido
+	ClassEdge     PortClass = "edge"    // the edge publishes it over HTTPS; the raw port closes
+	ClassHost     PortClass = "host"    // consumed by the host itself
+	ClassAdmin    PortClass = "admin"   // infrastructure panel or API
+	ClassPending  PortClass = "pending" // declared, consumer not yet measured
 )
 
-// PortDecl é uma linha do registro.
+// PortDecl is one registry row.
 type PortDecl struct {
 	Port   int
 	Class  PortClass
@@ -46,20 +47,20 @@ type PortDecl struct {
 	Line   int
 }
 
-// PortFinding é uma porta em desacordo com o registro.
+// PortFinding is a port that disagrees with the registry.
 type PortFinding struct {
 	Port int
 	Why  string
 }
 
-// ParsePorts lê o registro declarado.
+// ParsePorts reads the declared registry.
 //
-// Uma linha malformada é ERRO e não é ignorada: num registro de segurança, a linha que o
-// parser pula em silêncio é exatamente a porta que ninguém revisou.
-func ParsePorts(caminho string) (map[int]PortDecl, error) {
-	f, err := os.Open(caminho) // #nosec G304 -- caminho vem do operador, não de rede
+// A malformed line is an ERROR, not skipped: in a security registry, the line
+// the parser skips in silence is exactly the port nobody reviewed.
+func ParsePorts(path string) (map[int]PortDecl, error) {
+	f, err := os.Open(path) // #nosec G304 -- operator-supplied path, not network input
 	if err != nil {
-		return nil, fmt.Errorf("ler registro de portas %s: %w", caminho, err)
+		return nil, fmt.Errorf("read port registry %s: %w", path, err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -68,92 +69,94 @@ func ParsePorts(caminho string) (map[int]PortDecl, error) {
 	n := 0
 	for sc.Scan() {
 		n++
-		linha := strings.TrimSpace(sc.Text())
-		if linha == "" || strings.HasPrefix(linha, "#") {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		campos := strings.SplitN(linha, "|", 3)
-		if len(campos) != 3 {
-			return nil, fmt.Errorf("%s:%d: linha malformada, esperado `porta | classe | razão`: %q",
-				caminho, n, linha)
+		fields := strings.SplitN(line, "|", 3)
+		if len(fields) != 3 {
+			return nil, fmt.Errorf("%s:%d: malformed line, want `port | class | reason`: %q",
+				path, n, line)
 		}
-		porta, err := strconv.Atoi(strings.TrimSpace(campos[0]))
+		port, err := strconv.Atoi(strings.TrimSpace(fields[0]))
 		if err != nil {
-			return nil, fmt.Errorf("%s:%d: porta inválida %q", caminho, n, strings.TrimSpace(campos[0]))
+			return nil, fmt.Errorf("%s:%d: invalid port %q", path, n, strings.TrimSpace(fields[0]))
 		}
-		classe := PortClass(strings.TrimSpace(campos[1]))
-		switch classe {
-		case ClassExternal, ClassEdge, ClassHost, ClassAdmin, ClassPendente:
+		class := PortClass(strings.TrimSpace(fields[1]))
+		switch class {
+		case ClassExternal, ClassEdge, ClassHost, ClassAdmin, ClassPending:
 		default:
-			return nil, fmt.Errorf("%s:%d: classe desconhecida %q (use external|edge|host|admin|pendente)",
-				caminho, n, classe)
+			return nil, fmt.Errorf("%s:%d: unknown class %q (use external|edge|host|admin|pending)",
+				path, n, class)
 		}
-		razao := strings.TrimSpace(campos[2])
-		if razao == "" {
-			return nil, fmt.Errorf("%s:%d: porta %d sem razão declarada — quem consome, e como foi medido",
-				caminho, n, porta)
+		reason := strings.TrimSpace(fields[2])
+		if reason == "" {
+			return nil, fmt.Errorf("%s:%d: port %d has no declared reason — who consumes it, and how it was measured",
+				path, n, port)
 		}
-		if anterior, dup := decls[porta]; dup {
-			return nil, fmt.Errorf("%s:%d: porta %d declarada duas vezes (antes na linha %d)",
-				caminho, n, porta, anterior.Line)
+		if previous, dup := decls[port]; dup {
+			return nil, fmt.Errorf("%s:%d: port %d declared twice (first on line %d)",
+				path, n, port, previous.Line)
 		}
-		decls[porta] = PortDecl{Port: porta, Class: classe, Reason: razao, Line: n}
+		decls[port] = PortDecl{Port: port, Class: class, Reason: reason, Line: n}
 	}
 	if err := sc.Err(); err != nil {
-		return nil, fmt.Errorf("ler %s: %w", caminho, err)
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	return decls, nil
 }
 
-// AuditPorts compara o que escuta com o que foi declarado.
+// AuditPorts compares what listens with what was declared.
 //
-// Devolve duas listas, e a distinção importa para quem lê o relatório:
-//   - naoDeclaradas: escutam e não estão no registro. É o modo de falha que este
-//     verificador existe para impedir — uma porta nova alcançável sem ninguém decidir.
-//   - obsoletas: declaradas e não escutam mais. Não é risco, mas um registro que acumula
-//     entradas mortas deixa de ser revisável, e foi assim que a lista anterior degradou.
-func AuditPorts(escutando []int, decls map[int]PortDecl) (naoDeclaradas, obsoletas []PortFinding) {
-	viva := map[int]bool{}
-	for _, p := range escutando {
-		viva[p] = true
+// It returns two lists, and the distinction matters to the reader:
+//   - undeclared: listening and not in the registry. The failure this check
+//     exists to prevent — a new reachable port nobody decided on.
+//   - stale: declared and no longer listening. Not a risk, but a registry that
+//     accumulates dead entries stops being reviewable.
+func AuditPorts(listening []int, decls map[int]PortDecl) (undeclared, stale []PortFinding) {
+	live := map[int]bool{}
+	for _, p := range listening {
+		live[p] = true
 		if _, ok := decls[p]; !ok {
-			naoDeclaradas = append(naoDeclaradas, PortFinding{
+			undeclared = append(undeclared, PortFinding{
 				Port: p,
-				Why: "escuta em 0.0.0.0 e não está declarada — o registro é fechado por padrão, " +
-					"então uma porta fora dele é decisão que ninguém tomou",
+				Why: "listens on 0.0.0.0 and is not declared — the registry is closed by default, " +
+					"so a port outside it is a decision nobody made",
 			})
 		}
 	}
 	for p, d := range decls {
-		if !viva[p] {
-			obsoletas = append(obsoletas, PortFinding{
+		if !live[p] {
+			stale = append(stale, PortFinding{
 				Port: p,
-				Why:  fmt.Sprintf("declarada como %s e não escuta mais — entrada morta torna o registro menos revisável", d.Class),
+				Why:  fmt.Sprintf("declared as %s and no longer listens — a dead entry makes the registry less reviewable", d.Class),
 			})
 		}
 	}
-	sort.Slice(naoDeclaradas, func(i, j int) bool { return naoDeclaradas[i].Port < naoDeclaradas[j].Port })
-	sort.Slice(obsoletas, func(i, j int) bool { return obsoletas[i].Port < obsoletas[j].Port })
-	return naoDeclaradas, obsoletas
+	sort.Slice(undeclared, func(i, j int) bool { return undeclared[i].Port < undeclared[j].Port })
+	sort.Slice(stale, func(i, j int) bool { return stale[i].Port < stale[j].Port })
+	return undeclared, stale
 }
 
-// PortsToClose devolve as portas que escutam e cuja classe NÃO admite alcance externo.
+// PortsToClose returns the listening ports whose class does NOT admit external
+// reach.
 //
-// `pendente` fica de fora de propósito: fechar sem medir o consumidor é como as duas
-// portas de CI foram derrubadas em 2026-07-30, quebrando os gates que detectam deploy.
-// Uma pendência explícita é honesta; um fechamento cego troca exposição por cegueira.
-func PortsToClose(escutando []int, decls map[int]PortDecl) []PortDecl {
-	var fechar []PortDecl
-	for _, p := range escutando {
+// `pending` is left out on purpose: closing without measuring the consumer is
+// how two CI ports were taken down on 2026-07-30, breaking the gates that
+// detect deploys. An explicit pending entry is honest; a blind close trades
+// exposure for blindness.
+func PortsToClose(listening []int, decls map[int]PortDecl) []PortDecl {
+	var toClose []PortDecl
+	for _, p := range listening {
 		d, ok := decls[p]
 		if !ok {
-			continue // não declarada — reportada por AuditPorts, não fechada às cegas
+			continue // undeclared — reported by AuditPorts, not closed blindly
 		}
-		if d.Class == ClassExternal || d.Class == ClassPendente {
+		if d.Class == ClassExternal || d.Class == ClassPending {
 			continue
 		}
-		fechar = append(fechar, d)
+		toClose = append(toClose, d)
 	}
-	sort.Slice(fechar, func(i, j int) bool { return fechar[i].Port < fechar[j].Port })
-	return fechar
+	sort.Slice(toClose, func(i, j int) bool { return toClose[i].Port < toClose[j].Port })
+	return toClose
 }

@@ -1,41 +1,44 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package leak prova que a borda pública FECHA sem credencial.
+// Package leak proves that the public edge CLOSES without a credential.
 //
-// POR QUE ISTO EXISTE. Em 2026-08-10, sondando as superfícies públicas do app-dev sem
-// credencial nenhuma, todas as dez responderam 401 (ou 302 para o fluxo de login). Era o
-// resultado certo — e não havia nada que o garantisse. Nenhum teste afirmava o fecho, e
-// nenhum gate o verificava: era verdade por sorte, não por contrato. A primeira rota
-// montada fora do grupo autenticado passaria despercebida até um Red Team achá-la.
+// WHY IT EXISTS. On 2026-08-10, probing every public surface of app-dev with no
+// credential at all, all ten answered 401 (or 302 into the login flow). That was
+// the right answer — and nothing guaranteed it. No test asserted the closure and
+// no gate checked it: it was true by luck, not by contract. The first route
+// mounted outside the authenticated group would have gone unnoticed until a red
+// team found it.
 //
-// O gate hermético `proxy-exposure` prova que toda rota da borda foi DECLARADA por um
-// humano; ele mesmo diz, no próprio cabeçalho, que provar a resposta exige uma sonda viva
-// e que essa sonda é `task leak:live`. Este pacote é essa sonda — ela era citada e não
-// existia.
+// The hermetic `proxy-exposure` gate proves every edge route was DECLARED by a
+// person; it says in its own header that proving the response needs a live
+// probe, `task leak:live`. This package is that probe.
 //
-// ONDE ELA MORA, E POR QUÊ. Aqui, e não num `.sh`: a regra D3 proíbe novo shell por
-// padrão, e uma sonda HTTP é justamente o caso em que o Go não precisa de ajuda — é
-// `net/http` com timeout, sem processo externo. Também não é um `quality` gate: todos os
-// gates são herméticos por contrato, e este depende de rede contra um alvo vivo. Fica
-// como subcomando próprio, ao lado de `chaos` e `drill`, que são os que tocam ambiente.
+// WHERE IT LIVES. Here and not in a `.sh`: new shell is forbidden by default, and
+// an HTTP probe is exactly the case Go needs no help with. Nor is it a `quality`
+// gate: every gate is hermetic by contract, and this one needs network access to
+// a live target. It is its own subcommand, next to `chaos` and `drill`, which
+// are the groups that touch an environment.
 //
-// O QUE ESTA SONDA NÃO PROVA: que uma resposta autenticada expõe só o que devia. Isso
-// depende do corpo, varia por rota e não cabe numa sonda genérica — o `proxy-exposure`
-// registra a forma de cada uma na coluna de descrição, revisada por humano.
+// WHAT IT DOES NOT PROVE: that an authenticated response exposes only what it
+// should. That depends on the body, varies per route and does not fit a generic
+// probe — `proxy-exposure` records the shape of each one in the rationale
+// column, reviewed by a person.
 package leak
 
 import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exposure"
 )
 
-// Verdict é o resultado de uma sonda contra um caminho.
+// Verdict is the outcome of probing one path.
 type Verdict struct {
 	Host    string
 	Path    string
@@ -45,27 +48,27 @@ type Verdict struct {
 	Skipped bool
 }
 
-// Target é um caminho concreto a sondar.
+// Target is one concrete path to probe.
 //
-// `PublicBySpec` inverte a asserção: a maioria das rotas tem de NEGAR sem credencial, mas
-// a descoberta OIDC e o health têm de RESPONDER — clientes as leem antes de possuir
-// qualquer token, e um 401 ali quebra o login em vez de protegê-lo.
+// PublicBySpec inverts the assertion: most routes must DENY without a
+// credential, but OIDC discovery and health must ANSWER — clients read them
+// before holding any token, and a 401 there breaks login instead of guarding it.
 type Target struct {
 	Host         string
 	Path         string
 	PublicBySpec bool
-	// PorQue explica QUEM depende desta rota responder. A razão muda o conserto: a
-	// descoberta OIDC é lida por um programa antes de existir token; a raiz é alcançada
-	// por uma pessoa que digitou o endereço. Uma mensagem única para os dois casos
-	// mandaria quem lê o relatório para o lugar errado.
-	PorQue string
+	// Why says WHO depends on this route answering. The reason changes the fix:
+	// OIDC discovery is read by a program before any token exists; the root is
+	// reached by a person who typed the address.
+	Why string
 }
 
-// closed reporta se o código nega acesso ao dado.
+// closed reports whether the status denies access to the data.
 //
-// 401 e 403 negam; 302/303 levam o navegador à identidade. 404 NÃO conta: esconder não é
-// negar, e aceitar 404 mascara rota quebrada como se fosse proteção — foi assim que
-// `/credentials` passou meses devolvendo 404 enquanto o inventário o declarava vivo.
+// 401 and 403 deny; 302/303 send the browser to identity. 404 does NOT count:
+// hiding is not denying, and accepting 404 disguises a broken route as
+// protection — that is how a declared identity route answered 404 for months
+// while the inventory declared it live.
 func closed(status int) bool {
 	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden,
@@ -75,39 +78,38 @@ func closed(status int) bool {
 	return false
 }
 
-// Probe sonda um alvo SEM credencial alguma e devolve o veredito.
+// Probe requests one target with NO credential and returns the verdict.
 func Probe(ctx context.Context, client *http.Client, t Target) Verdict {
 	v := Verdict{Host: t.Host, Path: t.Path}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+t.Host+t.Path, nil)
 	if err != nil {
-		v.Reason = fmt.Sprintf("requisição inválida: %v", err)
+		v.Reason = fmt.Sprintf("invalid request: %v", err)
 		return v
 	}
 	resp, err := client.Do(req)
 	if err != nil {
 		v.Skipped = true
-		v.Reason = fmt.Sprintf("inalcançável: %v", err)
+		v.Reason = fmt.Sprintf("unreachable: %v", err)
 		return v
 	}
 	defer func() { _ = resp.Body.Close() }()
 	v.Status = resp.StatusCode
 
 	if t.PublicBySpec {
-		// 200 serve o conteúdo; 302/303 leva a ele. Os dois cumprem o contrato de "esta
-		// rota leva a algum lugar" — o que reprova é 404 ou 5xx, que é não ter destino.
-		// Exigir 200 aqui reprovaria o próprio conserto da raiz, que é um redirecionamento
-		// deliberado para o login.
+		// 200 serves the content; 302/303 leads to it. Both meet "this route
+		// leads somewhere"; what fails is 404 or 5xx. Demanding 200 would fail
+		// the root, which deliberately redirects to the login.
 		if resp.StatusCode == http.StatusOK ||
 			resp.StatusCode == http.StatusFound || resp.StatusCode == http.StatusSeeOther {
 			v.Passed = true
-			v.Reason = fmt.Sprintf("respondeu %d", resp.StatusCode)
+			v.Reason = fmt.Sprintf("answered %d", resp.StatusCode)
 		} else {
-			porque := t.PorQue
-			if porque == "" {
-				porque = "é pública por especificação OIDC e clientes a leem antes de ter qualquer token"
+			why := t.Why
+			if why == "" {
+				why = "it is public by the OIDC specification and clients read it before holding any token"
 			}
-			v.Reason = fmt.Sprintf("devolveu %d e precisa responder — %s", resp.StatusCode, porque)
+			v.Reason = fmt.Sprintf("returned %d and must answer — %s", resp.StatusCode, why)
 		}
 		return v
 	}
@@ -116,18 +118,18 @@ func Probe(ctx context.Context, client *http.Client, t Target) Verdict {
 		v.Passed = true
 		return v
 	}
-	v.Reason = fmt.Sprintf("devolveu %d SEM credencial; a borda tem de negar (401/403) ou levar ao login (302)",
+	v.Reason = fmt.Sprintf("returned %d WITHOUT a credential; the edge must deny (401/403) or send to login (302)",
 		resp.StatusCode)
 	return v
 }
 
-// representantes mapeia uma família declarada no inventário para UM caminho concreto.
+// representatives maps an inventory family to ONE concrete path.
 //
-// Um padrão como `/v1/*` não é requisitável; a sonda precisa de um caminho real por trás
-// dele. As famílias sem representante NÃO são silenciadas — `Targets` as devolve à parte
-// para que a chamadora reporte buraco de cobertura em vez de somar um PASS que não mediu
-// nada.
-var representantes = map[string]string{
+// A pattern like `/v1/*` is not requestable; the probe needs a real path behind
+// it. Families without a representative are NOT silenced — Targets returns them
+// separately so the caller reports a coverage hole instead of counting a PASS
+// that measured nothing.
+var representatives = map[string]string{
 	"/engine/*":                 "/engine/api/v1/projects",
 	"/v1/*":                     "/v1/dashboard/status/versions",
 	"/v1/integrations/github/*": "/v1/integrations/github/install",
@@ -137,175 +139,132 @@ var representantes = map[string]string{
 	"/sessions/whoami":          "/sessions/whoami",
 }
 
-// isentas são famílias que esta sonda não mede, cada uma por uma razão nomeada.
+// exemptions are families this probe does not measure, each with its reason.
 //
-// Isentar é uma decisão, não um esquecimento: sem esta lista, uma família nova sem
-// representante seria confundida com uma isenta e sumiria da cobertura.
-var isentas = map[string]string{
-	"/self-service/*":         "fluxo de navegador; 200 é a resposta correta, e o corpo é o que o Kratos precisa entregar",
-	"@auth_bff":               "matcher nomeado do Caddy, sem caminho fixo a requisitar",
-	"/api/v1/webhooks/github": "autenticado por HMAC e não por credencial de usuário; coberto pelo B-021",
+// Exempting is a decision, not an omission: without this table a new family
+// without a representative would be confused with an exempt one and drop out of
+// coverage.
+//
+// The site-level path `-` is deliberately NOT exempt. It declares the WIDEST
+// possible exposure, and exempting it made whole hosts vanish from the probe —
+// measured 2026-08-18: cloud.loopzero.example and auth.loopzero.example produced zero
+// targets and zero complaints while serving live services. It falls into the
+// uncovered list instead; no `/` representative is invented, because the
+// responses measured at the root (404, 200) prove no closure.
+var exemptions = map[string]string{
+	"/self-service/*":         "browser flow; 200 is the correct answer and the body is what Kratos must deliver",
+	"@auth_bff":               "named Caddy matcher, no fixed path to request",
+	"/api/v1/webhooks/github": "authenticated by HMAC, not by a user credential",
 }
 
-// O caminho `-` NAO e isento.
-//
-// B-025: ele estava nesta tabela, com a justificativa "host inteiro (raiz), sem rota
-// declarada" — e e exatamente por ser o host inteiro que ele nao pode sair daqui em
-// silencio. Um `-` declara a exposicao mais AMPLA possivel, e isenta-lo fazia o host
-// desaparecer da sonda sem aparecer como coberto nem como buraco.
-//
-// Medido em 2026-08-18: `cloud.loopzero.example` e `auth.loopzero.example` produziam zero alvos e
-// zero reclamacoes, enquanto serviam servico vivo — 401 em `/v1/billing` e 200 em
-// `/health/ready`, em hostnames de producao. A sonda dizia nada sobre eles, e nada se
-// parecia com tudo bem.
-//
-// Ele passa a cair em `semRepresentante`, que e como este pacote ja nomeia buraco de
-// cobertura. Nao inventamos um representante `/`: as respostas medidas na raiz sao 404 e
-// 200, e nenhuma das duas prova fecho — afirmar que provam seria trocar um silencio por
-// uma mentira. O buraco fica dito ate alguem declarar um representante que preste.
-
-// isenta reporta se a familia esta isenta, honrando o glob que a declaracao usa.
-//
-// O lookup era exato, entao `/self-service/*` na tabela nao cobria
-// `/self-service/registration` — e duas das dez falhas eram ruido pela razao que a propria
-// isencao ja dava (achado M-4 da revisao de B-025).
-func isenta(família string) bool {
-	if _, ok := isentas[família]; ok {
+// isExempt reports whether a family is exempt, honouring the glob the
+// declaration uses (`/self-service/*` covers `/self-service/registration`).
+func isExempt(family string) bool {
+	if _, ok := exemptions[family]; ok {
 		return true
 	}
-	for padrão := range isentas {
-		if pre, ok := strings.CutSuffix(padrão, "*"); ok && strings.HasPrefix(família, pre) {
+	for pattern := range exemptions {
+		if prefix, ok := strings.CutSuffix(pattern, "*"); ok && strings.HasPrefix(family, prefix) {
 			return true
 		}
 	}
 	return false
 }
 
-// classeDaLinha devolve a coluna `class` do inventario, vazia quando ausente.
-func classeDaLinha(linha string) string {
-	partes := strings.Split(linha, "|")
-	if len(partes) < 2 {
-		return ""
-	}
-	return strings.TrimSpace(partes[1])
-}
-
-// SemCoberturaDeIdentidade remove dos buracos as familias que a sonda de identidade JA
-// cobre.
-//
-// Achado HIGH-3 da revisao de B-025: o relatorio se contradizia na mesma execucao —
-// `/userinfo` aparecia `ok 401` e, linhas abaixo, `sem representante`. Contabilizar como
-// descoberto o que acabou de ser sondado corroi a confianca no relatorio mais rapido que
-// volume de falhas.
-func SemCoberturaDeIdentidade(buracos []string, alvos []Target) []string {
-	coberto := map[string]bool{}
-	for _, a := range alvos {
-		coberto[a.Path] = true
-		// `/x/y` sondado cobre a familia `/x/*` declarada.
-		if i := strings.LastIndex(a.Path, "/"); i > 0 {
-			coberto[a.Path[:i]+"/*"] = true
+// UncoveredAfterIdentity removes from the coverage holes the families the
+// identity targets already probe, so a run never reports `/userinfo` as both
+// "ok 401" and "not measured".
+func UncoveredAfterIdentity(holes []string, targets []Target) []string {
+	covered := map[string]bool{}
+	for _, t := range targets {
+		covered[t.Path] = true
+		// A probed `/x/y` covers the declared family `/x/*`.
+		if i := strings.LastIndex(t.Path, "/"); i > 0 {
+			covered[t.Path[:i]+"/*"] = true
 		}
 	}
-	var restou []string
-	for _, b := range buracos {
-		campos := strings.Fields(b)
-		fam := campos[len(campos)-1]
-		if coberto[fam] {
+	var rest []string
+	for _, h := range holes {
+		fields := strings.Fields(h)
+		if covered[fields[len(fields)-1]] {
 			continue
 		}
-		restou = append(restou, b)
+		rest = append(rest, h)
 	}
-	return restou
+	return rest
 }
 
-// Targets deriva os alvos do inventário declarado.
+// Targets derives the probe targets for one host from the declared inventory.
 //
-// Os alvos vêm de `infra/quality/proxy-exposure.txt`, e NÃO de uma lista própria. Uma
-// segunda lista envelheceria sozinha: alguém adicionaria uma rota ao Caddyfile, a
-// declararia no inventário (porque o gate obriga) e esqueceria daqui — e a rota nova
-// seria justamente a não testada. Ler o inventário faz a cobertura acompanhar a
-// superfície por construção.
+// The targets come from infra/quality/proxy-exposure.txt and NOT from a list of
+// their own: a second list would age alone, and the route somebody added to the
+// Caddyfile and declared (because the gate forces it) would be exactly the one
+// not probed.
 //
-// Devolve os alvos e as famílias declaradas SEM representante, que são buraco de
-// cobertura e não silêncio.
-func Targets(inventário string, host string) (alvos []Target, semRepresentante []string, err error) {
-	b, err := os.ReadFile(inventário)
+// It returns the targets and the declared families WITHOUT a representative,
+// which are coverage holes, not silence.
+func Targets(inventory string, host string) (targets []Target, uncovered []string, err error) {
+	decls, err := loadInventory(inventory)
 	if err != nil {
-		return nil, nil, fmt.Errorf("ler inventário de exposição %s: %w", inventário, err)
+		return nil, nil, err
 	}
 
-	vistos := map[string]bool{}
-	for _, linha := range strings.Split(string(b), "\n") {
-		linha = strings.TrimSpace(linha)
-		if linha == "" || strings.HasPrefix(linha, "#") {
+	seen := map[string]bool{}
+	for _, d := range decls {
+		if d.Site != host {
 			continue
 		}
-		decl := linha
-		if i := strings.Index(linha, "|"); i >= 0 {
-			decl = strings.TrimSpace(linha[:i])
-		}
-		campos := strings.Fields(decl)
-		if len(campos) < 2 || campos[0] != host {
+		// An `internal` route returns no user data, so there is no credential
+		// for it to deny: demanding a 401 from it would be a category error.
+		if d.Class == exposure.ClassInternal {
 			continue
 		}
-		// A coluna `class` do inventario ja declara o que a rota expoe. Uma rota `internal`
-		// nao tem credencial a negar — exigir 401 dela e erro de categoria, e era ruido
-		// (achado M-3 da revisao de B-025). Ler a classe daqui tambem apaga a duplicacao:
-		// `isentas` e a coluna codificavam a mesma decisao em dois lugares, que e a
-		// "segunda lista que envelheceria sozinha" citada acima como razao de ler o
-		// inventario.
-		if classeDaLinha(linha) == "internal" {
+		family := d.Path
+		if seen[family] {
 			continue
 		}
-		família := campos[1]
-		if vistos[família] {
-			continue
-		}
-		vistos[família] = true
+		seen[family] = true
 
-		if isenta(família) {
+		if isExempt(family) {
 			continue
 		}
-		if p, ok := representantes[família]; ok {
-			alvos = append(alvos, Target{Host: host, Path: p})
+		if p, ok := representatives[family]; ok {
+			targets = append(targets, Target{Host: host, Path: p})
 			continue
 		}
-		// O buraco carrega o host: sem isso o relatorio mostra varias linhas identicas
-		// dizendo apenas "-", e quem le continua sem saber qual host esta descoberto.
-		// Trocar silencio por ruido anonimo nao e conserto (B-025).
-		semRepresentante = append(semRepresentante, host+" "+família)
+		// The hole carries its host, so a report with several holes says which
+		// host is uncovered.
+		uncovered = append(uncovered, host+" "+family)
 	}
 
-	sort.Slice(alvos, func(i, j int) bool { return alvos[i].Path < alvos[j].Path })
-	sort.Strings(semRepresentante)
-	return alvos, semRepresentante, nil
+	sort.Slice(targets, func(i, j int) bool { return targets[i].Path < targets[j].Path })
+	sort.Strings(uncovered)
+	return targets, uncovered, nil
 }
 
-// IdentityTargets são as rotas do host de identidade, com a asserção invertida nas duas
-// que a especificação OIDC obriga a serem públicas.
+// IdentityTargets are the identity host's routes, with the assertion inverted
+// on the ones the OIDC specification requires to be public.
 //
-// A raiz entra com `PublicBySpec` porque quem a alcança é uma PESSOA que digitou o
-// endereço — e ela precisa de um caminho para o login, não de um beco sem saída. Medido
-// em 2026-08-10: `https://auth-dev.loopzero.example/` devolvia `404 page not found` em texto
-// puro. O 404 vinha do próprio Kratos, que é uma API de identidade e não serve página na
-// raiz; a borda encaminhava certo e recebia o 404 de volta. Nenhum fluxo do produto leva
-// ali (os usos do host são todos programáticos: base de API, emissor de token, origem
-// CORS), mas um endereço público que não leva a lugar nenhum é defeito de produto mesmo
-// quando nada aponta para ele.
+// The root is PublicBySpec because whoever reaches it is a PERSON who typed the
+// address and needs a way to the login, not a dead end. Measured 2026-08-10:
+// `https://auth-dev.loopzero.example/` returned a plain-text `404 page not found`
+// from Kratos itself. No product flow leads there, but a public address that
+// leads nowhere is a product defect even when nothing links to it.
 func IdentityTargets(host string) []Target {
 	return []Target{
 		{Host: host, Path: "/.well-known/openid-configuration", PublicBySpec: true,
-			PorQue: "é a descoberta OIDC, lida por todo cliente antes de existir token"},
+			Why: "it is OIDC discovery, read by every client before any token exists"},
 		{Host: host, Path: "/health/alive", PublicBySpec: true,
-			PorQue: "é o health do serviço de identidade"},
+			Why: "it is the identity service health endpoint"},
 		{Host: host, Path: "/", PublicBySpec: true,
-			PorQue: "quem digita o endereço é uma pessoa, e precisa de um caminho para o login em vez de um beco sem saída"},
+			Why: "whoever types the address is a person and needs a way to the login instead of a dead end"},
 		{Host: host, Path: "/userinfo"},
 	}
 }
 
-// DefaultClient é o cliente da sonda: timeout curto e SEM seguir redirecionamento, porque
-// o 302 do fluxo de login É a evidência — segui-lo trocaria a prova pelo destino dela.
+// DefaultClient is the probe client: a short timeout and NO redirect following,
+// because the 302 of the login flow IS the evidence — following it would
+// replace the proof with its destination.
 func DefaultClient() *http.Client {
 	return &http.Client{
 		Timeout: 12 * time.Second,
@@ -315,80 +274,66 @@ func DefaultClient() *http.Client {
 	}
 }
 
-// DiscoveryLeak reporta os campos do documento de descoberta OIDC que anunciam um host
-// inalcançável de fora do cluster, ou texto claro.
+// DiscoveryLeak reports the OIDC discovery fields that advertise a host
+// unreachable from outside the cluster, or plain text.
 //
-// POR QUE ISTO É UMA SONDA E NÃO UM GATE. O chart do Hydra JÁ resolve isto: ele usa
-// `publicAuthUrl` quando presente, e um comentário nele registra que alguém já pagou esse
-// preço antes ("otherwise Hydra emits verification_uri with the cluster-internal host").
-// A configuração está certa; o que roda é que não estava. Medido em 2026-08-10 no
-// app-dev: NOVE campos — incluindo `issuer` e `jwks_uri` — anunciavam
-// `http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444`, porque o sync rodou sem a
-// variável. Nenhum gate hermético pega isso, porque o defeito não está no repositório.
-//
-// O impacto é concreto: um cliente OIDC que siga a descoberta — o mecanismo padrão —
-// tenta resolver um nome que só existe dentro do cluster, em texto claro. E o `issuer` é
-// o valor que entra no token e que todo verificador compara; anunciá-lo errado quebra a
-// validação em quem consumir o token depois.
+// WHY A PROBE AND NOT A GATE. The Hydra chart already handles this (it uses
+// `publicAuthUrl` when present); the configuration is right, and what ran was
+// not. Measured 2026-08-10 on app-dev: NINE fields — `issuer` and `jwks_uri`
+// among them — advertised
+// `http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444`, because the sync
+// ran without the variable. No hermetic gate sees that: the defect is not in the
+// repository. And `issuer` is the value that goes into the token and that every
+// verifier compares, so advertising it wrong breaks validation downstream.
 func DiscoveryLeak(doc map[string]any) []string {
-	var vazamentos []string
-	for campo, valor := range doc {
-		s, ok := valor.(string)
+	var leaks []string
+	for field, value := range doc {
+		s, ok := value.(string)
 		if !ok {
 			continue
 		}
 		switch {
 		case strings.Contains(s, ".svc.cluster.local"):
-			vazamentos = append(vazamentos, fmt.Sprintf(
-				"%s anuncia o host interno %q — inalcançável fora do cluster", campo, s))
+			leaks = append(leaks, fmt.Sprintf(
+				"%s advertises the internal host %q — unreachable outside the cluster", field, s))
 		case strings.HasPrefix(s, "http://"):
-			vazamentos = append(vazamentos, fmt.Sprintf(
-				"%s anuncia texto claro %q — a borda serve HTTPS", campo, s))
+			leaks = append(leaks, fmt.Sprintf(
+				"%s advertises plain text %q — the edge serves HTTPS", field, s))
 		}
 	}
-	sort.Strings(vazamentos)
-	return vazamentos
+	sort.Strings(leaks)
+	return leaks
 }
 
-// PlaceholderLeak reporta valores de configuração que ficaram como marcador de
-// substituição em vez de credencial real.
+// PlaceholderLeak reports configuration values left as a substitution marker
+// instead of a real credential.
 //
-// POR QUE ISTO EXISTE. Em 2026-08-10 o login com Google parou com `Erro 401:
-// invalid_client` — o Google dizia, corretamente, que o cliente não existia. A causa: o
-// chart do Kratos lê `LOOPZERO_GOOGLE_CLIENT_ID` do ambiente e tem
-// `| default "REPLACE_VIA_PULUMI"`; um `helmfile sync` sem a variável exportada gravou o
-// MARCADOR por cima da credencial boa, e o sync terminou com sucesso.
-//
-// É a mesma classe do bug do Resend que o CLAUDE.md documenta — configuração que aceita
-// um valor de placeholder como se fosse válido. O `default` existe para o chart renderizar
-// em ambiente sem credencial; o defeito é ninguém verificar depois se o que ficou no
-// cluster é credencial ou marcador.
-//
-// A verificação é barata e o modo de falha é caro: um marcador quebra o login inteiro e
-// só aparece quando alguém tenta entrar.
+// WHY IT EXISTS. On 2026-08-10 Google login stopped with `Error 401:
+// invalid_client`. The Kratos chart reads LOOPZERO_GOOGLE_CLIENT_ID from the
+// environment with `| default "REPLACE_VIA_PULUMI"`; a `helmfile sync` without
+// the variable exported wrote the MARKER over the good credential, and the sync
+// succeeded. The check is cheap and the failure is expensive: a marker breaks
+// login entirely and only shows when someone tries to sign in.
 func PlaceholderLeak(config string) []string {
-	marcadores := []string{"REPLACE_VIA_PULUMI", "REPLACE_VIA_", "CHANGEME", "TODO_SET_ME"}
-	vistos := map[string]bool{}
-	var achados []string
-	for _, linha := range strings.Split(config, "\n") {
-		for _, m := range marcadores {
-			if !strings.Contains(linha, m) {
-				continue
-			}
-			campo := strings.TrimSpace(linha)
-			if i := strings.Index(campo, ":"); i > 0 {
-				campo = strings.TrimSpace(strings.TrimPrefix(campo[:i], "- "))
-			}
-			if vistos[campo] {
-				continue
-			}
-			vistos[campo] = true
-			achados = append(achados, fmt.Sprintf(
-				"%s ficou com o marcador %q em vez de uma credencial — o sync rodou sem a variável exportada",
-				campo, m))
-			break
+	seen := map[string]bool{}
+	var findings []string
+	for _, line := range strings.Split(config, "\n") {
+		marker, ok := credshape.PlaceholderMarker(line)
+		if !ok {
+			continue
 		}
+		field := strings.TrimSpace(line)
+		if i := strings.Index(field, ":"); i > 0 {
+			field = strings.TrimSpace(strings.TrimPrefix(field[:i], "- "))
+		}
+		if seen[field] {
+			continue
+		}
+		seen[field] = true
+		findings = append(findings, fmt.Sprintf(
+			"%s still holds the marker %q instead of a credential — the sync ran without the variable exported",
+			field, marker))
 	}
-	sort.Strings(achados)
-	return achados
+	sort.Strings(findings)
+	return findings
 }

@@ -43,5 +43,4 @@ config:
   # loopzero-infra:openbaoEnabled: "false"  # default
   # loopzero-infra:openbaoAwsRegion: "us-east-1"
   loopzero-infra:lokiPushUrl: http://10.20.0.26:30100
-  loopzero-infra:harborExternalUrl: harbor.dev.loopzero.example
   loopzero-infra:vpcCidr: 10.20.0.0/16

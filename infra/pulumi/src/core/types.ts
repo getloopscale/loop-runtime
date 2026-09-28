@@ -6,7 +6,7 @@
  * These types are provider-independent and used across all layers.
  */
 
-export type CloudProvider = "digitalocean" | "aws";
+export type CloudProvider = "digitalocean";
 
 export type Environment = "dev" | "staging" | "prod";
 

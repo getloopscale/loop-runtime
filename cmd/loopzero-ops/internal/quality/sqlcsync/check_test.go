@@ -4,6 +4,7 @@
 package sqlcsync
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -147,5 +148,47 @@ func writeTempGo(t *testing.T, dir, name, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 		t.Fatalf("writeTempGo %s/%s: %v", dir, name, err)
+	}
+}
+
+// fakeSqlc writes an executable that answers `version` like the pinned sqlc,
+// so the pre-flight passes without the real binary.
+func fakeSqlc(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "sqlc")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho "+expectedSqlcVersion+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
+func sqlcRepo(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for rel, body := range map[string]string{
+		defaultSqlcYAML:                    "version: \"2\"\n",
+		defaultSchemaFile:                  "CREATE TABLE t (id int);\n",
+		defaultGeneratedDir + "/models.go": "package generated\n",
+		defaultQueriesDir + "/.gitkeep":    "",
+	} {
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+// The Phase-0 branch passed whenever queries/ held no .sql file — and on any
+// error reading it. Queries exist now, so an empty or unreadable queries dir is
+// a comparison of nothing, not a tree in sync.
+func TestCheck_EmptyQueriesDirIsAnError(t *testing.T) {
+	_, err := Check(Config{RepoRoot: sqlcRepo(t), SqlcBinary: fakeSqlc(t)})
+
+	if !errors.Is(err, ErrNoQueries) {
+		t.Fatalf("err = %v, want ErrNoQueries", err)
 	}
 }

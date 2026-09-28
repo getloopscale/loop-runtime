@@ -1,0 +1,7 @@
+# dev overlay for charts/loopzero-cloud, layered on charts/loopzero-cloud/values-bootstrap.yaml.
+#
+# The dev environment installs loopzero-cloud (profile.loopzeroCloud: true) and the release
+# in core.helmfile.yaml.gotmpl layers values/<environment>/loopzero-cloud.yaml.gotmpl.
+# Until this file existed, `helmfile -e dev` could not resolve that layer, so every
+# dev render or sync of the core helmfile failed on it (found with #391). dev has
+# no override of its own: the bootstrap values stand, as they do for its loopzero-api.

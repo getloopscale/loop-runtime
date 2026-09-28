@@ -2,7 +2,7 @@
 # Canonical POST-CLEANROOM master seed — orchestrates the 7-step chain
 # required between `task setup` completion and dogfood-all --live-only.
 #
-# Per `.claude/rules/cleanroom-up-live-test-mandate.md` INQUEBRÁVEL +
+# Per `.claude/rules/cleanroom-up-live-test-mandate.md` UNBREAKABLE +
 # memory `feedback_post_cleanroom_seed_admin_canonical` /
 # `feedback_post_cleanroom_kratos_patch_dev_public` /
 # `feedback_post_cleanroom_seed_github_app_canonical`: a fresh Cleanroom
@@ -17,16 +17,21 @@
 #                                    transit chain + SPKI pin
 # 2. loopzero-ops seed minio (M15 W1)        — MinIO password reset (mgmt + build)
 # 3. seed-admin-loopzero-dev.sh     — Kratos identity + tenant + session JWT
-# 4. patch-kratos-dev-public.sh    — Kratos ConfigMap URLs + cookies
 # 5. loopzero-ops seed github-app-dev (M15 W1)         — GitHub App PEM + webhook secret
 # 5b. seed-github-webhook-fixture-canonical.sh — repo-level webhook config
 # 6. loopzero-ops seed gitea-token (M15 W2)  — Gitea API token mint + 3-way sync
-# 7. loopzero-ops seed broker (M15 W3)       — loopzero-broker token + CSS + envFrom
-# 8. seed-loki-cross-cluster.sh    — Loki NodePort + Promtail URL +
-#                                    loopzero-api LOKI_URL
+# 7. loopzero-ops seed broker (M15 W3)       — loopzero-broker token (the store is the
+#                                    cell helmfile's release loopzero-broker)
 # 9. seed-tenant-fixture-canonical.sh — subscription plan + GH installation
 #
-# Per cleanroom-up-live-test-mandate.md INQUEBRÁVEL: this script CANNOT
+# A step seeds secret material or data no helmfile can declare. The four that
+# patched objects helmfile renders — patch-kratos, hydra-urls, loki-cross-cluster
+# and vault-cross-cluster-addr — were removed (principle_violations#67): the Kratos
+# and Hydra URLs, LOKI_URL and its NodePort bridge, OPENBAO_VAULT_ADDR and the
+# Promtail push URL are environment values that `helmfile sync` renders
+# (infra/tests/charts/seeded_wiring_is_rendered_test.go).
+#
+# Per cleanroom-up-live-test-mandate.md UNBREAKABLE: this script CANNOT
 # be skipped — it's the canonical bridge between `task setup` and the
 # operational state where dogfood-all --live-only expects to find
 # functional fixtures.
@@ -40,18 +45,18 @@
 
 set -euo pipefail
 
-# B-024: FIXA o cluster que os seeds operam, em vez de deixá-los herdar o contexto ativo.
+# B-024: PINS the cluster the seeds operate on, instead of letting them inherit the active context.
 #
-# O passo 0a deste script roda `task k3d:secrets:create`, e o `k3d cluster create` trocava
-# o `current-context` como efeito colateral — então todo seed abaixo dele operava o cluster
-# de secrets achando que era o central, e reportava "recurso não encontrado" sobre recursos
-# que existiam. O taskfile deixou de trocar o contexto, mas isso sozinho apenas mudaria QUAL
-# cluster errado seria atingido: sem fixar, os seeds cairiam onde quer que o `task setup`
-# tenha deixado o kubectl.
+# Step 0a of this script runs `task k3d:secrets:create`, and `k3d cluster create` used to switch
+# the `current-context` as a side effect — so every seed below it operated on the secrets
+# cluster believing it was the core one, and reported "resource not found" about resources
+# that existed. The taskfile stopped switching the context, but that alone would only change WHICH
+# wrong cluster got hit: without pinning, the seeds would land wherever `task setup`
+# happened to leave kubectl.
 #
-# A variável já era a convenção deste script (ver o `kubectl --context "${CORE_CONTEXT:-...}"`
-# mais abaixo); aqui ela passa a valer para os seeds também. `export` porque `run_step` usa
-# `eval`, e o binário a lê em `resolveContextName`.
+# The variable was already this script's convention (see the `kubectl --context "${CORE_CONTEXT:-...}"`
+# further down); here it starts applying to the seeds too. `export` because `run_step` uses
+# `eval`, and the binary reads it in `resolveContextName`.
 export CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -136,7 +141,7 @@ VERIFY_FLAG=""
 # dev-public TEST tier uses an AUTOMATED Shamir init; the witness +
 # distributed-shard ceremony is scoped to prod/persistent vaults only).
 #
-# Jeito A INQUEBRÁVEL: this uses `task k3d:secrets:create` +
+# Approach A UNBREAKABLE: this uses `task k3d:secrets:create` +
 # `task k3d:secrets:bootstrap` against the SEPARATE k3d-loopzero-secrets cluster.
 # `task k3d:secrets:bootstrap-in-core` remains PROHIBITED (independent of
 # witness scope — separate-cluster topology violation).
@@ -171,7 +176,7 @@ fi
 # per the canonical runbook (VK.5) — codified here closes the seed chain
 # FAIL=11 for the cross-cluster ESO read path. Reuses the existing
 # canonical vault-bootstrap-eso.sh (NOT a new .sh — Rule 9 + un-homed-logic).
-# Only meaningful under Jeito A (separate loopzero-secrets cluster); single-
+# Only meaningful under Approach A (separate loopzero-secrets cluster); single-
 # cluster runs no-op via the script's own preflight.
 if [[ "$SKIP_VAULT" == "1" ]]; then
   skip_step "1b-vault-bootstrap-eso" "skipped together with step 1 (operator already ran vault chain)"
@@ -188,42 +193,9 @@ fi
 # Step 2
 run_step "2-seed-minio" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed minio ${VERIFY_FLAG:+--verify})"
 
-# CANONICAL ORDER FIX 2026-06-18 (Finding #4 of issue #91 — Cleanroom
-# mandate canonical chain run): Step 4 (patch-kratos-dev-public) MUST
-# precede Step 3 (seed-admin-loopzero-dev) because Step 3 HTTP-POSTs a
-# login submit against the canonical Kratos URL (auth-dev.loopzero.example)
-# and Kratos rejects the request with HTTP 000 when the ConfigMap is
-# still helm-default (localhost:4455 + missing cors / cookies.domain).
-# Same family: Step 4b (hydra URLs canonical) must also precede admin
-# so the OIDC callback chain is consistent. Memory
-# feedback_post_cleanroom_kratos_patch_dev_public already documents
-# the dependency — this re-ordering codifies it in the master script.
-
-# ENV-GATE 2026-06-19 (issue #99 of cleanroom-mandate-run-2026-06-19):
-# Steps 4 + 4b configure dev-public URLs (auth-dev.loopzero.example,
-# app-dev.loopzero.example) which are INAPPLICABLE in standalone-multi /
-# drill / prod envs. patch-kratos-dev-public.sh also requires
-# LOOPZERO_GITHUB_CLIENT_ID + LOOPZERO_GOOGLE_CLIENT_ID OAuth credentials
-# which operators typically only provision for dev-public. Running
-# these steps unconditionally produced VERDICT=FAIL when
-# `LOOPZERO_HELMFILE_ENV=standalone-multi task setup` operators ran
-# the master seed afterwards (and CASCADE-failed Steps 3, 9, 11
-# which depend on the dev-public Kratos config). Canonical fix:
-# gate both steps on `LOOPZERO_HELMFILE_ENV == dev-public` with a clear
-# SKIP message in other envs. Defaults to SKIP when env var unset.
-if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  # Step 4
-  run_step "4-patch-kratos-dev-public" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed patch-kratos ${VERIFY_FLAG:+--verify})"
-
-  # Step 4b (NEW 2026-06-16) — Hydra URLs canonical (sibling of patch-kratos)
-  run_step "4b-seed-hydra-urls" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed hydra-urls ${VERIFY_FLAG:+--verify})"
-else
-  skip_step "4-patch-kratos-dev-public" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-  skip_step "4b-seed-hydra-urls" "skipped — only applicable in LOOPZERO_HELMFILE_ENV=dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-fi
-
-# Step 3 (re-ordered 2026-06-18 per Finding #4 — admin login submit
-# requires Kratos ConfigMap canonical URLs from Steps 4 + 4b first)
+# Step 3 — the admin login submit needs the dev-public Kratos URLs, which
+# `helmfile sync` renders (it used to wait on the patch-kratos and hydra-urls
+# seeds, Finding #4 of issue #91; those patches are environment values now).
 run_step "3-seed-admin-loopzero-dev" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed admin-loopzero-dev ${VERIFY_FLAG:+--verify})"
 
 # Step 3b (NEW 2026-06-29 per Red Team #117 closure) — QA Red Team
@@ -265,11 +237,8 @@ run_step "6b-seed-argocd-gitea-creds" "(cd $REPO_ROOT/cmd/loopzero-ops && go run
 # Step 7
 run_step "7-seed-broker" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed broker ${VERIFY_FLAG:+--verify})"
 
-# Step 7b (NEW 2026-06-16) — Vault role_id sync into loopzero-api (MUST run AFTER vault-bootstrap-dev)
+# Step 7b (NEW 2026-06-16) — Vault role_id into Secret loopzero-openbao-approle (MUST run AFTER vault-bootstrap-dev)
 run_step "7b-seed-vault-role-id-sync" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed vault-role-id-sync ${VERIFY_FLAG:+--verify})"
-
-# Step 8
-run_step "8-seed-loki-cross-cluster" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed loki-cross-cluster ${VERIFY_FLAG:+--verify})"
 
 # Step 9
 # #123 (qa-dogfood-cleanup-2026-06-21 T2.2 / ADR-Q7): pass `--team`
@@ -288,8 +257,8 @@ run_step "9-seed-tenant-fixture" "(cd $REPO_ROOT/cmd/loopzero-ops && LOOPZERO_PL
 # Step 10 (M15 W2: migrated to loopzero-ops seed; bash script deleted)
 run_step "10-seed-admin-hydra-client" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed admin-hydra-client ${VERIFY_FLAG:+--verify})"
 
-# Step 11 (NEW 2026-06-16) — connect canonical fixture (project "teste" +
-# repo link). Required by LIVE wrappers that probe /projects/teste/* paths.
+# Step 11 (NEW 2026-06-16) — connect canonical fixture (project "sample" +
+# repo link). Required by LIVE wrappers that probe /projects/sample/* paths.
 # Depends on step 10 (admin Hydra client) only indirectly via session JWT.
 if [[ -x "$SCRIPT_DIR/connect-canonical-fixture.sh" ]]; then
   run_step "11-connect-canonical-fixture" "bash $SCRIPT_DIR/connect-canonical-fixture.sh"
@@ -301,18 +270,11 @@ fi
 run_step "12-seed-chaos-mesh-canonical" "bash $SCRIPT_DIR/seed-chaos-mesh-canonical.sh $VERIFY_FLAG"
 
 # Step 13 (NEW M2 2026-06-23) — ArgoCD admin token
-# EC-3 absorption (v1.1): env-gate dev-public OR standalone-multi — ArgoCD não existe em outros envs
+# EC-3 absorption (v1.1): env-gate dev-public OR standalone-multi — ArgoCD does not exist in other envs
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" || "${LOOPZERO_HELMFILE_ENV:-}" == "standalone-multi" ]]; then
   run_step "13-seed-argocd-token" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed argocd-token ${VERIFY_FLAG:+--verify})"
 else
   skip_step "13-seed-argocd-token" "skipped — only applicable in dev-public/standalone-multi (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-fi
-
-# Step 14 (NEW M2 2026-06-23) — OPENBAO_VAULT_ADDR cross-cluster (dev-public only — Jeito A)
-if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  run_step "14-seed-vault-cross-cluster-addr" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed vault-cross-cluster-addr ${VERIFY_FLAG:+--verify})"
-else
-  skip_step "14-seed-vault-cross-cluster-addr" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
 # Step 15 (M15 W1: migrated to loopzero-ops seed; bash script deleted) (NEW M2 2026-06-23) — loopzero-stripe-webhook Secret materialization (universal; SKIP-graceful on placeholder)
@@ -347,13 +309,13 @@ run_step "15c-seed-stripe-webhook-endpoint" "(cd $REPO_ROOT/cmd/loopzero-ops && 
 # (dev-public: enabled=true; standalone-multi: not declared → treated
 # as disabled). Legacy shell-env override kept for local dev workflows.
 POLLER_ENABLED_CFG="$(kubectl --context "${CORE_CONTEXT:-k3d-loopzero-core}" \
-  -n loopzero-system get configmap loopzero-app-operator \
+  -n loopzero-system get configmap loopzero-api \
   -o jsonpath='{.data.LOOPZERO_DATA_PLANE_POLLER_ENABLED}' 2>/dev/null || true)"
 if [[ "${LOOPZERO_DATA_PLANE_POLLER_ENABLED:-$POLLER_ENABLED_CFG}" == "true" ]]; then
   POLLER_WARMUP_S="${LOOPZERO_DATA_PLANE_POLLER_WARMUP_S:-45}"
   run_step "16-data-plane-poller-first-tick" "sleep $POLLER_WARMUP_S && log '   data-plane poller warmed up (${POLLER_WARMUP_S}s wait)' && true"
 else
-  skip_step "16-data-plane-poller-first-tick" "skipped — loopzero-app-operator ConfigMap has LOOPZERO_DATA_PLANE_POLLER_ENABLED='${POLLER_ENABLED_CFG:-<absent>}' (poller not wired for this env)"
+  skip_step "16-data-plane-poller-first-tick" "skipped — loopzero-api ConfigMap has LOOPZERO_DATA_PLANE_POLLER_ENABLED='${POLLER_ENABLED_CFG:-<absent>}' (poller not wired for this env)"
 fi
 
 # Step 17 (NEW 2026-07-14) — data-plane host + edge fail-closed probes.

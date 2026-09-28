@@ -57,7 +57,7 @@ export interface AwsKmsOpenbaoArgs {
 
   /**
    * AWS region for the KMS key. Defaults to us-east-1 per Q2-F1
-   * (proximidade NYC3 DO Spaces backup destination; latência irrelevante
+   * (proximity to the NYC3 DO Spaces backup destination; latency irrelevant
    * for boot-only KMS calls).
    */
   readonly region?: string;

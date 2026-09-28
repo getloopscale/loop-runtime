@@ -2,7 +2,7 @@
 # ClusterIssuer for bootstrapping the local dev CA.
 # This is local-dev-only; production uses DO Container Registry (managed TLS)
 # and does not need a self-signed CA.
-# LOCAL ONLY (LP-001): cert-manager letsencrypt-prod não emite *.loopzero.local; este self-signed CA preenche o gap localmente. Production usa CF-managed TLS.
+# LOCAL ONLY (LP-001): cert-manager letsencrypt-prod does not issue *.loopzero.local; this self-signed CA fills the gap locally. Production uses CF-managed TLS.
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:

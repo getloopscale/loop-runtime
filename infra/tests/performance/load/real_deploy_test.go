@@ -17,19 +17,20 @@ import (
 // TestRealDeploy_L1_10Tenants is the Phase 0.0 DoD test from
 // docs/plans/scale-50k-plan.md:
 //
-//   "Running TestL1_10Tenants creates 10 real tenants, deploys real
-//   apps, verifies all 10 URLs return HTTP 200, then cleans up.
-//   No fake bundles. No SQL seeds."
+//	"Running TestL1_10Tenants creates 10 real tenants, deploys real
+//	apps, verifies all 10 URLs return HTTP 200, then cleans up.
+//	No fake bundles. No SQL seeds."
 //
 // It replaces the previous TestL1_10Tenants which used fake bundles
 // and never verified that the app was actually live.
 //
 // Environment variables:
-//   LOOPZERO_REAL_DEPLOY=1         — gate (skip if unset)
-//   LOOPZERO_API_URL               — required (e.g., https://api.dev.loopzero.example)
-//   LOOPZERO_APP_DOMAIN            — required (e.g., dev.loopzero.example)
-//   LOOPZERO_SERVICE_AUTH          — required (service auth bypass token)
-//   LOOPZERO_FIXTURE_PATH          — optional (default: ../../e2e/fixtures/hello-server)
+//
+//	LOOPZERO_REAL_DEPLOY=1         — gate (skip if unset)
+//	LOOPZERO_API_URL               — required (e.g., https://api.dev.loopzero.example)
+//	LOOPZERO_APP_DOMAIN            — required (e.g., dev.loopzero.example)
+//	LOOPZERO_SERVICE_AUTH          — required (service auth bypass token)
+//	LOOPZERO_FIXTURE_PATH          — optional (default: ../../e2e/fixtures/hello-server)
 func TestRealDeploy_L1_10Tenants(t *testing.T) {
 	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
 		t.Skip("skipping real deploy test: set LOOPZERO_REAL_DEPLOY=1")
@@ -93,39 +94,15 @@ func TestRealDeploy_L1_10Tenants(t *testing.T) {
 
 	// Phase 3: Deploy all tenants concurrently
 	t.Log("--- Deploying (real pipeline) ---")
-	var (
-		results    = make([]FullDeployResult, tenantCount)
-		wg         sync.WaitGroup
-		successCnt int64
-		failCnt    int64
-		liveCnt    int64
-	)
-
 	// Limit concurrency to 3 to avoid overwhelming port-forward / CF Tunnel.
 	// When running in-cluster (k6 Job), this can be increased to 10+.
-	sem := make(chan struct{}, 3)
-	for i, id := range identities {
-		wg.Add(1)
-		go func(idx int, tenant TenantIdentity) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			r := harness.RealDeploy(ctx, tenant)
-			results[idx] = r
-			if r.Success {
-				atomic.AddInt64(&successCnt, 1)
-			} else {
-				atomic.AddInt64(&failCnt, 1)
-			}
-			if r.AppLive {
-				atomic.AddInt64(&liveCnt, 1)
-			}
+	results, tally := harness.RunScenario(ctx, identities, fanOutOptions{concurrency: 3},
+		func(idx int, r FullDeployResult) {
 			t.Logf("  tn-%d: build=%s success=%v live=%v time=%s err=%s",
 				idx, r.BuildID, r.Success, r.AppLive,
 				r.TotalTime.Round(time.Second), r.Error)
-		}(i, id)
-	}
-	wg.Wait()
+		})
+	successCnt, failCnt, liveCnt := tally.Succeeded, tally.Failed, tally.Live
 
 	// Phase 4: Report
 	t.Log("")
@@ -257,40 +234,13 @@ func TestRealDeploy_L2_50Tenants(t *testing.T) {
 
 	// Phase 2: Deploy with sustained concurrency
 	t.Log("--- Deploying (sustained arrival rate) ---")
-	results := make([]FullDeployResult, tenantCount)
-	var (
-		wg         sync.WaitGroup
-		successCnt int64
-		failCnt    int64
-		liveCnt    int64
-	)
-
-	sem := make(chan struct{}, concurrency)
-	for i, id := range identities {
-		wg.Add(1)
-		go func(idx int, tenant TenantIdentity) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			r := harness.RealDeploy(ctx, tenant)
-			results[idx] = r
-			if r.Success {
-				atomic.AddInt64(&successCnt, 1)
-			} else {
-				atomic.AddInt64(&failCnt, 1)
-			}
-			if r.AppLive {
-				atomic.AddInt64(&liveCnt, 1)
-			}
+	// Stagger starts by 30s to simulate sustained arrival (not burst).
+	_, tally := harness.RunScenario(ctx, identities,
+		fanOutOptions{concurrency: concurrency, arrivalGap: 30 * time.Second},
+		func(idx int, r FullDeployResult) {
 			t.Logf("  tn-%d: success=%v live=%v time=%s", idx, r.Success, r.AppLive, r.TotalTime.Round(time.Second))
-		}(i, id)
-		// Stagger starts by 30s to simulate sustained arrival (not burst)
-		if i < tenantCount-1 {
-			// intentional-sleep: load-tier pacing (interleaved deploy submission)
-			time.Sleep(30 * time.Second)
-		}
-	}
-	wg.Wait()
+		})
+	successCnt, failCnt, liveCnt := tally.Succeeded, tally.Failed, tally.Live
 
 	// Phase 3: Report
 	t.Log("")
@@ -556,33 +506,13 @@ func TestRealDeploy_L3Realistic_100Tenants(t *testing.T) {
 	// because each deploy submits 4 build images concurrently.
 	t.Log("--- Deploying full-stack tenants ---")
 
-	var (
-		successCnt int64
-		liveCnt    int64
-	)
-
-	sem := make(chan struct{}, concurrency)
-	var wg sync.WaitGroup
-
-	for i, id := range identities {
-		wg.Add(1)
-		go func(idx int, tenant TenantIdentity) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			r := harness.RealDeploy(ctx, tenant)
-			if r.Success {
-				atomic.AddInt64(&successCnt, 1)
-			}
-			if r.AppLive {
-				atomic.AddInt64(&liveCnt, 1)
-			}
+	_, tally := harness.RunScenario(ctx, identities, fanOutOptions{concurrency: concurrency},
+		func(idx int, r FullDeployResult) {
 			if !r.Success {
 				t.Logf("  tn-%d: FAILED %s", idx, r.Error)
 			}
-		}(i, id)
-	}
-	wg.Wait()
+		})
+	successCnt, liveCnt := tally.Succeeded, tally.Live
 
 	// Phase 3: Report
 	t.Log("")
@@ -593,8 +523,10 @@ func TestRealDeploy_L3Realistic_100Tenants(t *testing.T) {
 	t.Logf("  Apps Live:     %d / %d (HTTP 200 verified on %s)", liveCnt, tenantCount, os.Getenv("LOOPZERO_VERIFY_APP_NAME"))
 	t.Log("═══════════════════════════════════════════════════════")
 
-	// L3-realistic accepts >= 95% (Sprint 8 / ADR-0010 Gate #1 progress
-	// metric). hello-server L3 demands 99.5% because its DAG is trivial;
+	// L3-realistic accepts >= 95% (Sprint 8 multi-cell Gate #1 progress
+	// metric; the cell-architecture decision was recorded in meeting
+	// MEET-2026-04-17-051 — `git show 57e8a5968:docs/meetings/records/MEET-2026-04-17-051.md`
+	// — and its ADR document never entered this tree). hello-server L3 demands 99.5% because its DAG is trivial;
 	// realistic 4-app builds add legitimate failure surface (npm registry
 	// flakes, transient OOMs on Next.js build). 95% is the documented
 	// gate threshold — tighten as we drive root causes out.
@@ -681,35 +613,14 @@ func TestRealDeploy_L4_500Tenants(t *testing.T) {
 
 	// Phase 2: Deploy with sustained concurrency
 	t.Log("--- Deploying (sustained) ---")
-	results := make([]FullDeployResult, tenantCount)
-	var (
-		wg         sync.WaitGroup
-		successCnt int64
-		liveCnt    int64
-	)
-
-	sem := make(chan struct{}, concurrency)
-	for i, id := range identities {
-		wg.Add(1)
-		go func(idx int, tenant TenantIdentity) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			r := harness.RealDeploy(ctx, tenant)
-			results[idx] = r
-			if r.Success {
-				atomic.AddInt64(&successCnt, 1)
-			}
-			if r.AppLive {
-				atomic.AddInt64(&liveCnt, 1)
-			}
+	_, tally := harness.RunScenario(ctx, identities, fanOutOptions{concurrency: concurrency},
+		func(idx int, r FullDeployResult) {
 			// Log failures and every 50th success for progress
 			if !r.Success || idx%50 == 0 {
 				t.Logf("  tn-%d: success=%v live=%v time=%s", idx, r.Success, r.AppLive, r.TotalTime.Round(time.Second))
 			}
-		}(i, id)
-	}
-	wg.Wait()
+		})
+	successCnt, liveCnt := tally.Succeeded, tally.Live
 
 	// Phase 3: Report
 	t.Log("")

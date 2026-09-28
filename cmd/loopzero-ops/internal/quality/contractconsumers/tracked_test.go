@@ -8,12 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // A TRACKED PATH that does not exist has to show up, for the same reason an absent
 // consumer root already does — and this file protected the two halves asymmetrically.
 //
-// consumerRoots got raizesAusentes on 2026-08-19 (B-100/B-040) because `git grep -- a b c`
+// consumerRoots got its missing-roots guard on 2026-08-19 (B-100/B-040) because `git grep -- a b c`
 // silently ignores a pathspec that matches nothing. trackedFiles is handed over in exactly
 // the same way — `git diff --unified=0 base..head -- <list>` in collectDroppedJSONTags and
 // `git grep -cE ... -- <list>` in structsDeclaringTagAt — and had no guard at all. Measured
@@ -31,11 +33,11 @@ import (
 // walkthrough that made the gate exist*, cited in the package's own doc. The gate would
 // go on saying PASS.
 func TestMissingTrackedPathSurfacesInsteadOfVanishing(t *testing.T) {
-	root := t.TempDir()
+	root := filepath.Join(t.TempDir(), "loopzero") // sibling roots resolve inside the temp dir
 	// A tree where the consumer roots exist but NO tracked path does: isolates the half
 	// under test from the signal the other half already emits.
 	for _, r := range consumerRoots {
-		if err := os.MkdirAll(filepath.Join(root, r), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, r.Repo, r.Path), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -52,9 +54,11 @@ func TestMissingTrackedPathSurfacesInsteadOfVanishing(t *testing.T) {
 			"%d declared (%v) — the gate carried on as though it had swept the whole "+
 			"contract surface", len(trackedFiles), trackedFiles)
 	}
-	if len(out.MissingTracked) != len(trackedFiles) {
+	// Every declared path, plus the handler surface, which an empty tree does not
+	// hold either: discovered paths that discover nothing are reported, not dropped.
+	if want := len(trackedFiles) + 1; len(out.MissingTracked) != want {
 		t.Errorf("an empty tree should report all %d tracked paths missing, reported %d: %v",
-			len(trackedFiles), len(out.MissingTracked), out.MissingTracked)
+			want, len(out.MissingTracked), out.MissingTracked)
 	}
 }
 
@@ -62,7 +66,7 @@ func TestMissingTrackedPathSurfacesInsteadOfVanishing(t *testing.T) {
 // Without this, MissingTracked could be a list that always returns everything — green in
 // the test above and useless in life.
 func TestTrackedPathsExistInTheRealTree(t *testing.T) {
-	root := repoRootParaTeste(t)
+	root := qtestutil.MustRepoRoot()
 
 	out, err := Check(Config{RepoRoot: root})
 	if err != nil {
@@ -89,7 +93,7 @@ func TestTrackedPathsExistInTheRealTree(t *testing.T) {
 // updating it leaves it red. Which is exactly the difference between the property
 // travelling with the rename and dying in it.
 func TestDeclaredContractSurfaceCoversThePortSink(t *testing.T) {
-	root := repoRootParaTeste(t)
+	root := qtestutil.MustRepoRoot()
 
 	var portFile string
 	for _, f := range trackedFiles {

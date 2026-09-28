@@ -24,7 +24,6 @@ service:
 
 # Operator configuration (environment variables via ConfigMap)
 config:
-  baseDomain: ""
   ingressNamespace: "traefik"
   loopzeroPprofAddr: ""
   loopzeroPprofEnabled: "false"
@@ -55,11 +54,33 @@ resources:
 
 serviceAccount:
   create: true
-  name: ""
+  # FIXED on purpose, against the Helm convention of deriving the name from the release
+  # (B-096, B-047). Two literal allowlists name this identity as a string, and neither
+  # moves when the release name does:
+  #   - the admission policies' system-actor exemption, at
+  #     charts/loopzero-admission-policies/values.yaml (systemActorExemptions.platformServiceAccounts)
+  #   - OpenBao's boundServiceAccountNames, on mount k8s-core, in
+  #     infra/helm/openbao-init/values.yaml
+  # With name: "" this chart rendered <release>-loopzero-preview-operator, so an install under any release
+  # name other than the chart name put the operator outside both lists — and that failure
+  # appears as Forbidden during reconciliation, never as a failed install, which is why
+  # B-096 survived review.
+  # Widening the allowlist to a pattern was considered and rejected; the reason is
+  # recorded once, at charts/loopzero-api/values.yaml:202 — it turns a release name into a
+  # credential.
+  name: "loopzero-preview-operator"
   automountServiceAccountToken: true
 
 rbac:
   create: true
+  # Cutover escape hatch, OFF by default. The operator reads Secrets only in
+  # loopzero-system, granted by a namespaced Role (templates/role-secret-access.yaml),
+  # and its manager caches Secrets in that namespace alone. An operator image
+  # built before that scoping lists Secrets in every namespace and fails
+  # without a cluster-wide grant; set this to true only while such an image
+  # runs against this chart, and back to false once it is replaced. It adds
+  # cluster-wide Secret READ to the ClusterRole — never write, never ConfigMaps.
+  legacyClusterWideSecrets: false
 
 startupProbe:
   enabled: true

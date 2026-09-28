@@ -24,7 +24,7 @@ import (
 func TestSigstoreMetrics_SignTotal_IncrementsSuccess(t *testing.T) {
 	CosignSignTotal.Reset()
 	before := testutil.ToFloat64(CosignSignTotal.WithLabelValues("success"))
-	ObserveCosignSign(true, 2.5, true, "")
+	ObserveCosignSign(true, "")
 	after := testutil.ToFloat64(CosignSignTotal.WithLabelValues("success"))
 	if got := after - before; got != 1 {
 		t.Errorf("sign_total{success} delta = %v, want 1", got)
@@ -37,7 +37,7 @@ func TestSigstoreMetrics_SignTotal_IncrementsSuccess(t *testing.T) {
 func TestSigstoreMetrics_SignTotal_IncrementsFailure(t *testing.T) {
 	CosignSignTotal.Reset()
 	CosignSignErrors.Reset()
-	ObserveCosignSign(true, 1.0, false, "fulcio")
+	ObserveCosignSign(false, "fulcio")
 	if got := testutil.ToFloat64(CosignSignTotal.WithLabelValues("failure")); got != 1 {
 		t.Errorf("sign_total{failure} = %v, want 1", got)
 	}
@@ -51,7 +51,7 @@ func TestSigstoreMetrics_SignTotal_IncrementsFailure(t *testing.T) {
 
 func TestSigstoreMetrics_SignErrors_OnlyOnFailure(t *testing.T) {
 	CosignSignErrors.Reset()
-	ObserveCosignSign(true, 1.0, true, "fulcio") // component arg ignored on success
+	ObserveCosignSign(true, "fulcio") // component arg ignored on success
 	if got := testutil.ToFloat64(CosignSignErrors.WithLabelValues("fulcio")); got != 0 {
 		t.Errorf("sign_errors{fulcio} = %v on success path, want 0", got)
 	}
@@ -63,7 +63,7 @@ func TestSigstoreMetrics_SignErrors_NoEmptyComponentBucket(t *testing.T) {
 	// because dropping into an empty-label bucket would muddy alert
 	// queries that group by component.
 	CosignSignErrors.Reset()
-	ObserveCosignSign(true, 1.0, false, "")
+	ObserveCosignSign(false, "")
 	if got := testutil.ToFloat64(CosignSignErrors.WithLabelValues("")); got != 0 {
 		t.Errorf("sign_errors{component=\"\"} = %v, want 0 (no empty bucket on failure w/o component)", got)
 	}
@@ -71,8 +71,8 @@ func TestSigstoreMetrics_SignErrors_NoEmptyComponentBucket(t *testing.T) {
 
 func TestSigstoreMetrics_AttestTotal_IncrementsBoth(t *testing.T) {
 	CosignAttestTotal.Reset()
-	ObserveCosignAttest(true, 3.0, true, "")
-	ObserveCosignAttest(true, 2.0, false, "rekor")
+	ObserveCosignAttest(true, "")
+	ObserveCosignAttest(false, "rekor")
 	if got := testutil.ToFloat64(CosignAttestTotal.WithLabelValues("success")); got != 1 {
 		t.Errorf("attest_total{success} = %v, want 1", got)
 	}
@@ -113,7 +113,7 @@ func TestSigstoreMetrics_PopulatedCounter_IncrementsOnNonEmpty(t *testing.T) {
 
 func TestSigstoreMetrics_SignDurationHistogram_Observed(t *testing.T) {
 	CosignSignDuration.Reset()
-	ObserveCosignSign(true, 7.5, true, "")
+	ObserveCosignSignDuration(true, 7.5)
 	// CollectAndCount returns the number of unique metric child labelsets
 	// that have at least one observation — exactly 1 after one Observe call.
 	if got := testutil.CollectAndCount(CosignSignDuration); got != 1 {
@@ -123,7 +123,7 @@ func TestSigstoreMetrics_SignDurationHistogram_Observed(t *testing.T) {
 
 func TestSigstoreMetrics_AttestDurationHistogram_Observed(t *testing.T) {
 	CosignAttestDuration.Reset()
-	ObserveCosignAttest(false, 4.2, false, "rekor")
+	ObserveCosignAttestDuration(false, 4.2)
 	if got := testutil.CollectAndCount(CosignAttestDuration); got != 1 {
 		t.Errorf("attest_duration histogram series count = %d, want 1 after one Observe", got)
 	}
@@ -133,8 +133,8 @@ func TestSigstoreMetrics_KeylessLabel_Distinguishes(t *testing.T) {
 	// keyless=true and keyless=false should land in distinct histogram
 	// series so operators can compare keyed and keyless latencies.
 	CosignSignDuration.Reset()
-	ObserveCosignSign(true, 5.0, true, "")
-	ObserveCosignSign(false, 5.0, true, "")
+	ObserveCosignSignDuration(true, 5.0)
+	ObserveCosignSignDuration(false, 5.0)
 	if got := testutil.CollectAndCount(CosignSignDuration); got != 2 {
 		t.Errorf("expected 2 distinct keyless label series, got %d", got)
 	}
@@ -146,16 +146,25 @@ func TestSigstoreMetrics_KeylessLabel_Distinguishes(t *testing.T) {
 // documents the contract — the wrapper itself observes whatever it's
 // given. The empty-duration guard belongs to enrichAppReleasesWithAttestation
 // (T4.1 task #5).
-func TestSigstoreMetrics_EmptyDurationOutput_CallerResponsibility(t *testing.T) {
-	// Direct call with a 0 duration shouldn't panic — pinning the
-	// no-panic contract so the call site is free to use Observe(0) if
-	// it wants. But callers should ALSO increment failure (which they
-	// will via the success=false path).
+func TestSigstoreMetrics_SignResultDoesNotObserveADuration(t *testing.T) {
+	// A caller that knows the outcome but never timed the step must not
+	// put a fabricated 0s sample into the latency histogram.
 	CosignSignDuration.Reset()
 	CosignSignTotal.Reset()
-	ObserveCosignSign(true, 0, false, "fulcio") // duration=0, failure
+	ObserveCosignSign(false, "fulcio")
+	if got := testutil.CollectAndCount(CosignSignDuration); got != 0 {
+		t.Errorf("recording a sign result observed %d duration series, want 0", got)
+	}
 	if got := testutil.ToFloat64(CosignSignTotal.WithLabelValues("failure")); got != 1 {
-		t.Errorf("failure counter must increment even when duration=0 was observed: %v", got)
+		t.Errorf("failure counter = %v, want 1", got)
+	}
+}
+
+func TestSigstoreMetrics_AttestResultDoesNotObserveADuration(t *testing.T) {
+	CosignAttestDuration.Reset()
+	ObserveCosignAttest(true, "")
+	if got := testutil.CollectAndCount(CosignAttestDuration); got != 0 {
+		t.Errorf("recording an attest result observed %d duration series, want 0", got)
 	}
 }
 
@@ -164,12 +173,14 @@ func TestSigstoreMetrics_EmptyDurationOutput_CallerResponsibility(t *testing.T) 
 // did its job).
 func TestSigstoreMetrics_AllRegistered(t *testing.T) {
 	// Touch every metric once so it appears in CollectAndFormat.
-	ObserveCosignSign(true, 1.0, true, "")
-	ObserveCosignAttest(true, 1.0, true, "")
-	ObserveCosignSign(true, 1.0, false, "fulcio")
-	ObserveCosignAttest(true, 1.0, false, "rekor")
+	ObserveCosignSign(true, "")
+	ObserveCosignAttest(true, "")
+	ObserveCosignSign(false, "fulcio")
+	ObserveCosignAttest(false, "rekor")
 	ObserveRekorURLPersist("https://rekor.loopzero.test/x")
 	ObserveRekorURLPersist("")
+	ObserveCosignSignDuration(true, 1.0)
+	ObserveCosignAttestDuration(true, 1.0)
 	FulcioCertIssuanceDuration.Observe(0.7)
 
 	wantSubstrings := []string{

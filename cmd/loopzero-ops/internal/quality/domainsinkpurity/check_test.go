@@ -8,12 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func sink(t *testing.T, files map[string]string) Config {
 	t.Helper()
 	root := t.TempDir()
-	dir := filepath.Join(root, "api", "internal", "services", "deploycontracts")
+	dir := filepath.Join(root, sinkDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +41,7 @@ type Port interface {
 `
 
 func TestCheck_FrozenSetPasses(t *testing.T) {
-	if _, err := Check(sink(t, map[string]string{"a.go": twoFrozen})); err != nil {
+	if _, err := violationOf(Check(sink(t, map[string]string{"a.go": twoFrozen}))); err != nil {
 		t.Errorf("the measured set is the passing case; got %v", err)
 	}
 }
@@ -48,7 +50,7 @@ func TestCheck_FrozenSetPasses(t *testing.T) {
 // every package that depends on the sink — measured at 35.
 func TestCheck_ANewSymbolFails(t *testing.T) {
 	extra := twoFrozen + "\ntype More struct{ R *db.Release }\n"
-	out, err := Check(sink(t, map[string]string{"a.go": extra}))
+	out, err := violationOf(Check(sink(t, map[string]string{"a.go": extra})))
 	if !errors.Is(err, ErrSinkLeakGrew) {
 		t.Fatalf("a symbol beyond the frozen set must FAIL; got %v", err)
 	}
@@ -69,7 +71,7 @@ type Port interface {
 	Activate(b *db.Release) error
 }
 `
-	out, err := Check(sink(t, map[string]string{"a.go": swapped}))
+	out, err := violationOf(Check(sink(t, map[string]string{"a.go": swapped})))
 	if !errors.Is(err, ErrSinkLeakGrew) {
 		t.Fatalf("same count, different set, must FAIL — a ratchet on a number is not a ratchet; got %v", err)
 	}
@@ -89,7 +91,7 @@ type Port interface {
 	WithLock(fn func(tx db.DBTX) error) error
 }
 `
-	out, err := Check(sink(t, map[string]string{"a.go": fewer}))
+	out, err := violationOf(Check(sink(t, map[string]string{"a.go": fewer})))
 	if err != nil {
 		t.Fatalf("removing a leak must never fail the gate; got %v", err)
 	}
@@ -102,7 +104,7 @@ type Port interface {
 // PASS there is the failure mode B-040 measured.
 func TestCheck_AbsentPackageIsAnError(t *testing.T) {
 	cfg := Config{RepoRoot: t.TempDir(), Frozen: []string{"db.Build"}}
-	if _, err := Check(cfg); !errors.Is(err, ErrSinkNotFound) {
+	if _, err := violationOf(Check(cfg)); !errors.Is(err, ErrSinkNotFound) {
 		t.Errorf("an absent sink must FAIL, never pass vacuously; got %v", err)
 	}
 }
@@ -110,7 +112,7 @@ func TestCheck_AbsentPackageIsAnError(t *testing.T) {
 // A package present but holding no readable Go file is the same condition.
 func TestCheck_NoGoFilesIsAnError(t *testing.T) {
 	cfg := sink(t, map[string]string{"README.md": "nada"})
-	if _, err := Check(cfg); !errors.Is(err, ErrSinkNotFound) {
+	if _, err := violationOf(Check(cfg)); !errors.Is(err, ErrSinkNotFound) {
 		t.Errorf("zero Go files parsed means nothing was examined; got %v", err)
 	}
 }
@@ -127,7 +129,7 @@ import "github.com/getloopscale/loopzero/api/internal/db"
 var _ = db.Release{}
 `,
 	}
-	if _, err := Check(sink(t, files)); err != nil {
+	if _, err := violationOf(Check(sink(t, files))); err != nil {
 		t.Errorf("a test fixture is not the package surface; got %v", err)
 	}
 }
@@ -135,30 +137,13 @@ var _ = db.Release{}
 // Against the real tree. The frozen set is the one measured in the slice-4 plan;
 // a failure here is a real growth of the leak, not a fixture artefact.
 func TestCheck_RealTree(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot(t)})
+	out, err := violationOf(Check(Config{RepoRoot: qtestutil.Root(t)}))
 	if err != nil {
 		t.Fatalf("the sink's db surface grew beyond what slice-4 measured: new=%v gone=%v", out.New, out.Gone)
 	}
 	if len(out.Found) == 0 {
 		t.Fatal("the real sink references db types; finding none means the extractor is broken, not that the leak is closed")
 	}
-}
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	start := dir
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatalf("go.work not found within 8 levels above %s — the real-tree assertion cannot run, and skipping it would report green while measuring nothing", start)
-	return ""
 }
 
 // MEASURED bypass, found by probing rather than reading: with the local name
@@ -176,7 +161,7 @@ import persistence "github.com/getloopscale/loopzero/api/internal/db"
 
 type Sneaky struct{ R *persistence.Release }
 `
-	out, err := Check(sink(t, map[string]string{"a.go": body}))
+	out, err := violationOf(Check(sink(t, map[string]string{"a.go": body})))
 	if !errors.Is(err, ErrSinkLeakGrew) {
 		t.Fatalf("an aliased import must not hide a leak; got %v found=%v", err, out.Found)
 	}
@@ -197,7 +182,7 @@ import "example.com/somethingelse/db"
 
 type Fine struct{ X db.Release }
 `
-	out, err := Check(sink(t, map[string]string{"a.go": body, "b.go": twoFrozen}))
+	out, err := violationOf(Check(sink(t, map[string]string{"a.go": body, "b.go": twoFrozen})))
 	if err != nil {
 		t.Fatalf("a different package that happens to be named db is not OUR persistence package; got %v found=%v", err, out.Found)
 	}
@@ -216,7 +201,7 @@ import . "github.com/getloopscale/loopzero/api/internal/db"
 
 type Sneaky struct{ R *Release }
 `
-	if _, err := Check(sink(t, map[string]string{"a.go": body})); !errors.Is(err, ErrUnqualifiedImport) {
+	if _, err := violationOf(Check(sink(t, map[string]string{"a.go": body}))); !errors.Is(err, ErrUnqualifiedImport) {
 		t.Fatalf("a dot-import puts the boundary beyond static reach and must FAIL, never pass silently; got %v", err)
 	}
 }
@@ -236,7 +221,7 @@ type Port interface {
 	Secret() *dbx.AppSecret
 }
 `
-	out, err := Check(sink(t, map[string]string{"a.go": body}))
+	out, err := violationOf(Check(sink(t, map[string]string{"a.go": body})))
 	if !errors.Is(err, ErrSinkLeakGrew) {
 		t.Fatalf("a second alias for the same path must not hide a leak; got %v found=%v", err, out.Found)
 	}
@@ -266,7 +251,7 @@ type Port interface {
 	WithLock(fn func(tx db.DBTX) error) error
 }
 `
-	out, err := Check(sink(t, map[string]string{"a.go": body}))
+	out, err := violationOf(Check(sink(t, map[string]string{"a.go": body})))
 	if err != nil {
 		t.Fatalf("a shadowing local is not the package; got %v new=%v", err, out.New)
 	}
@@ -286,7 +271,7 @@ import "github.com/getloopscale/loopzero/api/internal/db/store"
 
 type Port interface{ Repo() *store.ReleaseStore }
 `
-	out, err := Check(sink(t, map[string]string{"a.go": body}))
+	out, err := violationOf(Check(sink(t, map[string]string{"a.go": body})))
 	if !errors.Is(err, ErrSinkLeakGrew) {
 		t.Fatalf("db/store crossing the sink must FAIL; got %v found=%v", err, out.Found)
 	}
@@ -308,7 +293,7 @@ type Port interface {
 	WithLock(fn func(tx db.DBTX) error) error
 }
 `
-	if _, err := Check(sink(t, map[string]string{"a.go": body})); err != nil {
+	if _, err := violationOf(Check(sink(t, map[string]string{"a.go": body}))); err != nil {
 		t.Errorf("a blank import exposes no symbol; got %v", err)
 	}
 }
@@ -331,7 +316,7 @@ import "github.com/getloopscale/loopzero/api/internal/db/dbtx"
 
 type Port interface{ WithLock(fn func(tx dbtx.DBTX) error) error }
 `
-	out, err := Check(sink(t, map[string]string{"a.go": body}))
+	out, err := violationOf(Check(sink(t, map[string]string{"a.go": body})))
 	if err != nil {
 		t.Fatalf("the frozen set carries db.DBTX and this IS db.DBTX; got %v new=%v", err, out.New)
 	}

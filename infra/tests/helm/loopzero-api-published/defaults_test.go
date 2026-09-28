@@ -3,27 +3,21 @@
 // Package loopzeroapipublished_test — render-time tests for the PUBLISHED
 // variant of loopzero-api (Plan 2026-05-20 v1.1, Task #128 follow-up).
 //
-// Why a separate package: charts/loopzero-api is structurally different from
-// infra/helm/loopzero-api (the bootstrap variant tested by helm/loopzero-api/).
-// Per CLAUDE.md "3 overlapping charts" pattern: when patching one, the
-// same fix must propagate to the other; render-time tests on BOTH
-// variants are the drift detector.
+// There is one loopzero-api chart: ArgoCD consumes it with these defaults, and the
+// Helmfile bootstrap installs it with charts/loopzero-api/values-bootstrap.yaml
+// (bootstrap_install_test.go). The bootstrap copy under infra/helm/loopzero-api and
+// its render suite were deleted when the pair became one chart.
 //
-// Key structural differences between bootstrap and published:
-//   Bootstrap (infra/helm/loopzero-api):
-//     - Minimal labels (app, loopzero.io/component, managed-by)
-//     - templates/deployment.yaml emits Service + Deployment together
-//     - Container has pod-level securityContext only (cascade)
-//   Published (charts/loopzero-api, this package):
-//     - Full app.kubernetes.io/* labels via loopzero-common library
-//     - Separate Service, ConfigMap, Secret, NetworkPolicy, PDB,
-//       ServiceAccount, ServiceMonitor templates
-//     - Container-level securityContext FULLY hardened
-//     - priorityClassName: system-cluster-critical
-//     - podAntiAffinity (HA scheduling)
-//     - checksum/config + checksum/secret annotations (config drift
-//       triggers automatic pod restart)
-//     - HA default (replicas >= 2)
+// Published shape (charts/loopzero-api, uses loopzero-common library):
+//   - Full app.kubernetes.io/* labels via loopzero-common library
+//   - Separate Service, ConfigMap, Secret, NetworkPolicy, PDB,
+//     ServiceAccount, ServiceMonitor templates
+//   - Container-level securityContext FULLY hardened
+//   - priorityClassName: system-cluster-critical
+//   - podAntiAffinity (HA scheduling)
+//   - checksum/config + checksum/secret annotations (config drift
+//     triggers automatic pod restart)
+//   - HA default (replicas >= 2)
 package loopzeroapipublished_test
 
 import (

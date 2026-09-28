@@ -24,7 +24,6 @@ package manifests
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -120,6 +119,13 @@ type AutoscalingConfig struct {
 	CooldownPeriod int // Seconds before scale-to-zero (default: 300, only when MinReplicas = 0)
 }
 
+// Service type values mirror services.schema.json (server | worker). An empty
+// or unknown type renders as a server.
+const (
+	ServiceTypeServer = "server"
+	ServiceTypeWorker = "worker"
+)
+
 // AppManifestInput contains everything needed to generate manifests for a single app.
 type AppManifestInput struct {
 	Name      string            // e.g., "api", "worker", "dashboard"
@@ -155,8 +161,8 @@ type RenderInput struct {
 
 	// Configurable defaults (arch-cp-006). Zero values fall back to built-in defaults.
 	// B14 (MEET-2026-04-23-058): ClusterIssuerName is REQUIRED — no fallback.
-	// Set from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER). Empty = panic.
-	ClusterIssuerName    string // Required — no default; panics if empty at render time
+	// Set from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER). Empty = RenderDocs error.
+	ClusterIssuerName    string // Required — no default; RenderDocs returns an error when empty
 	GatewayNamespace     string // Default: "loopzero-system"
 	DefaultCPURequest    string // Default: "100m"
 	DefaultMemoryRequest string // Default: "128Mi"
@@ -178,23 +184,17 @@ type RenderInput struct {
 	PrometheusAddress string
 
 	// ProgressiveDelivery controls whether to emit Rollout (canary) or
-	// legacy Deployment manifests (D8). Default: true. Set false via env
-	// flag LOOPZERO_PROGRESSIVE_DELIVERY=false to revert to legacy Deployment
-	// during incident rollback. Callers must populate from
-	// ProgressiveDeliveryEnabled() helper.
+	// legacy Deployment manifests (D8). Callers fill it from
+	// config.Config.ProgressiveDelivery (env LOOPZERO_PROGRESSIVE_DELIVERY,
+	// default on), so an operator can revert to legacy Deployment during an
+	// incident rollback.
 	ProgressiveDelivery bool
-}
 
-// ProgressiveDeliveryEnabled reports whether Rollout manifests should be
-// emitted. Reads env LOOPZERO_PROGRESSIVE_DELIVERY (D8). Default: true.
-// Returns false only when the env var is explicitly "false" or "0"
-// (case-insensitive).
-func ProgressiveDeliveryEnabled() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("LOOPZERO_PROGRESSIVE_DELIVERY")))
-	if v == "false" || v == "0" {
-		return false
-	}
-	return true
+	// LeanResources halves the fallback resource defaults (the Default*
+	// fields above still win when set) to fit 100 apps in the current DO dev
+	// runtime cluster while a droplet quota increase is in flight. Callers
+	// fill it from config.Config.LeanResources (env LOOPZERO_LEAN_RESOURCES).
+	LeanResources bool
 }
 
 // RenderDocs generates Kubernetes manifests (Deployment, Service,
@@ -208,17 +208,24 @@ func RenderDocs(input RenderInput) ([]K8sDoc, error) {
 	if input.ClusterIssuerName == "" {
 		return nil, fmt.Errorf("manifests.Render: ClusterIssuerName is required (B14 — wire from Config.ClusterIssuer)")
 	}
+	scope, err := newRenderScope(input)
+	if err != nil {
+		return nil, err
+	}
 	var raw []string
 	for _, app := range input.Apps {
 		// T3.3 (plan simplify-deploy-loopzerokit-only v2.0): frontend/static delivery
 		// removed — the fixed stack is server|worker only (D5). Unknown/empty
 		// types default to server.
-		switch app.Type {
-		case "worker":
-			raw = append(raw, renderWorkerApp(input, app)...)
-		default:
-			raw = append(raw, renderServerApp(input, app)...)
+		render := renderServerApp
+		if app.Type == ServiceTypeWorker {
+			render = renderWorkerApp
 		}
+		docs, err := render(scope, app)
+		if err != nil {
+			return nil, fmt.Errorf("manifests: app %q: %w", app.Name, err)
+		}
+		raw = append(raw, docs...)
 	}
 	docs := make([]K8sDoc, 0, len(raw))
 	for _, body := range raw {
@@ -247,24 +254,15 @@ func Render(input RenderInput) (string, error) {
 // --- Default resolution helpers (arch-cp-006) ---
 
 func (ri RenderInput) clusterIssuerName() string {
-	// B14 (MEET-2026-04-23-058): no fallback. Render() already panicked if empty.
+	// B14 (MEET-2026-04-23-058): no fallback. RenderDocs already refused an empty value.
 	return ri.ClusterIssuerName
-}
-
-// leanResourcesEnabled reports whether the LOOPZERO_LEAN_RESOURCES env var
-// is set (case-insensitive "true" or "1"). When lean mode is on, the
-// fallback defaults are halved to fit 100 apps in the current DO dev
-// runtime cluster while a droplet quota increase is in flight.
-func leanResourcesEnabled() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("LOOPZERO_LEAN_RESOURCES")))
-	return v == "true" || v == "1"
 }
 
 func (ri RenderInput) cpuRequest() string {
 	if ri.DefaultCPURequest != "" {
 		return ri.DefaultCPURequest
 	}
-	if leanResourcesEnabled() {
+	if ri.LeanResources {
 		return "50m"
 	}
 	return "100m"
@@ -274,7 +272,7 @@ func (ri RenderInput) memoryRequest() string {
 	if ri.DefaultMemoryRequest != "" {
 		return ri.DefaultMemoryRequest
 	}
-	if leanResourcesEnabled() {
+	if ri.LeanResources {
 		return "64Mi"
 	}
 	return "128Mi"
@@ -284,7 +282,7 @@ func (ri RenderInput) cpuLimit() string {
 	if ri.DefaultCPULimit != "" {
 		return ri.DefaultCPULimit
 	}
-	if leanResourcesEnabled() {
+	if ri.LeanResources {
 		return "250m"
 	}
 	return "500m"
@@ -294,7 +292,7 @@ func (ri RenderInput) memoryLimit() string {
 	if ri.DefaultMemoryLimit != "" {
 		return ri.DefaultMemoryLimit
 	}
-	if leanResourcesEnabled() {
+	if ri.LeanResources {
 		return "256Mi"
 	}
 	return "512Mi"

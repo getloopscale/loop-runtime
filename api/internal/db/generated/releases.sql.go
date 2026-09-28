@@ -63,21 +63,27 @@ SET status = 'CANCELLED'
 WHERE tenant_id = $1
   AND project_id = $2
   AND environment = $3
-  AND status <> 'CANCELLED'
-  AND status <> 'ROLLED_BACK'
+  AND status = ANY($4::text[])
 RETURNING id
 `
 
 type CancelReleasesByEnvParams struct {
-	TenantID    string `json:"tenant_id"`
-	ProjectID   string `json:"project_id"`
-	Environment string `json:"environment"`
+	TenantID     string   `json:"tenant_id"`
+	ProjectID    string   `json:"project_id"`
+	Environment  string   `json:"environment"`
+	FromStatuses []string `json:"from_statuses"`
 }
 
-// Cancels all non-CANCELLED releases for a (tenant, project, env) tuple.
-// Used by `loopzero cancel` (env-scoped) + tenant deletion cascade.
+// Cancels the releases of a (tenant, project, env) tuple whose status is in
+// from_statuses. The caller computes from_statuses from the release state
+// machine (ProjectDeleted edges), so the transition table never leaks here.
 func (q *Queries) CancelReleasesByEnv(ctx context.Context, db DBTX, arg CancelReleasesByEnvParams) ([]string, error) {
-	rows, err := db.Query(ctx, cancelReleasesByEnv, arg.TenantID, arg.ProjectID, arg.Environment)
+	rows, err := db.Query(ctx, cancelReleasesByEnv,
+		arg.TenantID,
+		arg.ProjectID,
+		arg.Environment,
+		arg.FromStatuses,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +540,7 @@ type InsertReleaseParams struct {
 //
 // Every multi-tenant SELECT / UPDATE / DELETE carries `tenant_id` predicate
 // per platform-security-engineer condition 1 + M-1 + M-2 (enforced by
-// pkg/quality/tenantpredicate gate).
+// cmd/loopzero-ops/internal/quality/tenantpredicate gate).
 //
 // Initial query set (5/13 total — remaining 8 queries added incrementally as
 // callers migrate per T1.1 sub-step):
@@ -594,6 +600,77 @@ func (q *Queries) InsertRelease(ctx context.Context, db DBTX, arg InsertReleaseP
 		&i.ImageAttestationRekorUrl,
 	)
 	return i, err
+}
+
+const listLatestActiveReleasePerEnv = `-- name: ListLatestActiveReleasePerEnv :many
+SELECT DISTINCT ON (environment) environment, git_commit, created_at
+FROM releases
+WHERE tenant_id = $1 AND status = 'ACTIVE'
+ORDER BY environment, created_at DESC
+`
+
+type ListLatestActiveReleasePerEnvRow struct {
+	Environment string             `json:"environment"`
+	GitCommit   *string            `json:"git_commit"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+// The most recent ACTIVE release per environment across all of a tenant's
+// projects: the dashboard's per-environment last-deploy KPI.
+func (q *Queries) ListLatestActiveReleasePerEnv(ctx context.Context, db DBTX, tenantID string) ([]ListLatestActiveReleasePerEnvRow, error) {
+	rows, err := db.Query(ctx, listLatestActiveReleasePerEnv, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLatestActiveReleasePerEnvRow
+	for rows.Next() {
+		var i ListLatestActiveReleasePerEnvRow
+		if err := rows.Scan(&i.Environment, &i.GitCommit, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReleaseStatusesByEnv = `-- name: ListReleaseStatusesByEnv :many
+SELECT DISTINCT status FROM releases
+WHERE tenant_id = $1
+  AND project_id = $2
+  AND environment = $3
+`
+
+type ListReleaseStatusesByEnvParams struct {
+	TenantID    string `json:"tenant_id"`
+	ProjectID   string `json:"project_id"`
+	Environment string `json:"environment"`
+}
+
+// The distinct statuses present for a (tenant, project, env) tuple. The
+// project-delete cascade reads them so the release state machine, not SQL,
+// decides which of them move to CANCELLED.
+func (q *Queries) ListReleaseStatusesByEnv(ctx context.Context, db DBTX, arg ListReleaseStatusesByEnvParams) ([]string, error) {
+	rows, err := db.Query(ctx, listReleaseStatusesByEnv, arg.TenantID, arg.ProjectID, arg.Environment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			return nil, err
+		}
+		items = append(items, status)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listReleasesByEnv = `-- name: ListReleasesByEnv :many

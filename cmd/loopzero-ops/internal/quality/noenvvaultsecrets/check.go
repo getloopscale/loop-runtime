@@ -37,6 +37,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check which repo to scan + allows operator override of allowlist.
@@ -56,6 +58,9 @@ type Outcome struct {
 	PatternHits []Hit // regex matches (FAIL or WARN per WarnOnly)
 	Warnings    []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Hit is a single violation location.
 type Hit struct {
@@ -84,8 +89,8 @@ var (
 	secretSuffixRegex = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*?(_PRIVATE_KEY|_TOKEN|_SECRET|_PASSWORD)$`)
 )
 
-// DefaultAllowlist: legitimate env vars matching heuristic but NOT secrets,
-// OR secrets sourced via valueFrom.secretKeyRef (ESO-managed K8s Secret).
+// DefaultAllowlist lists legitimate env vars matching the heuristic but NOT
+// secrets, OR secrets sourced via valueFrom.secretKeyRef (ESO-managed K8s Secret).
 // Operator can extend via Config.Allowlist (merged at Check time).
 var DefaultAllowlist = []string{
 	"GITEA_TOKEN",                             // legitimate via ESO secretKeyRef (vault-INT gitea-admin)

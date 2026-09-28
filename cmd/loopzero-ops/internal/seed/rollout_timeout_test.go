@@ -8,7 +8,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -61,51 +60,58 @@ func TestDeps_SettleTimeout_InjectedWins(t *testing.T) {
 //     is the same defect wearing the fix as a costume.
 func TestWaitForRolloutSettled_EveryCallSiteResolvesThroughDeps(t *testing.T) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, 0)
+	names, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatal(err)
+	}
+	files := map[string]*ast.File{}
+	for _, name := range names {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[name] = file
 	}
 
 	var offenders []string
 	calls := 0
-	for _, pkg := range pkgs {
-		for name, file := range pkg.Files {
-			ast.Inspect(file, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
-				id, ok := call.Fun.(*ast.Ident)
-				if !ok || id.Name != "waitForRolloutSettled" || len(call.Args) == 0 {
-					return true
-				}
-				calls++
-				where := fmt.Sprintf("%s:%d", filepath.Base(name), fset.Position(call.Pos()).Line)
-
-				last := call.Args[len(call.Args)-1]
-				inner, ok := last.(*ast.CallExpr)
-				if !ok {
-					offenders = append(offenders, where+" — the budget is decided at the call site; pass d.settleTimeout(<const>)")
-					return true
-				}
-				sel, ok := inner.Fun.(*ast.SelectorExpr)
-				if !ok || sel.Sel.Name != "settleTimeout" {
-					offenders = append(offenders, where+" — the last argument is not settleTimeout, so Deps cannot override it")
-					return true
-				}
-				// (2) — the default itself must be named, not spelled out here.
-				if len(inner.Args) != 1 {
-					offenders = append(offenders, where+" — settleTimeout takes exactly the seed default")
-					return true
-				}
-				if _, named := inner.Args[0].(*ast.Ident); !named {
-					offenders = append(offenders, where+" — settleTimeout's default must be a NAMED constant; a literal here is the same defect in a costume")
-				}
+	for name, file := range files {
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
 				return true
-			})
-		}
+			}
+			id, ok := call.Fun.(*ast.Ident)
+			if !ok || id.Name != "waitForRolloutSettled" || len(call.Args) == 0 {
+				return true
+			}
+			calls++
+			where := fmt.Sprintf("%s:%d", filepath.Base(name), fset.Position(call.Pos()).Line)
+
+			last := call.Args[len(call.Args)-1]
+			inner, ok := last.(*ast.CallExpr)
+			if !ok {
+				offenders = append(offenders, where+" — the budget is decided at the call site; pass d.settleTimeout(<const>)")
+				return true
+			}
+			sel, ok := inner.Fun.(*ast.SelectorExpr)
+			if !ok || sel.Sel.Name != "settleTimeout" {
+				offenders = append(offenders, where+" — the last argument is not settleTimeout, so Deps cannot override it")
+				return true
+			}
+			// (2) — the default itself must be named, not spelled out here.
+			if len(inner.Args) != 1 {
+				offenders = append(offenders, where+" — settleTimeout takes exactly the seed default")
+				return true
+			}
+			if _, named := inner.Args[0].(*ast.Ident); !named {
+				offenders = append(offenders, where+" — settleTimeout's default must be a NAMED constant; a literal here is the same defect in a costume")
+			}
+			return true
+		})
 	}
 
 	// A guard that inspected nothing cannot vouch for anything — and this one

@@ -27,9 +27,9 @@ issuerKind: selfsigned
 openbaoEnabled: true
 
 # Phase 8 D12 — snapshot-agent opt-in. Default false in vault-local
-# (k3d Raft in-memory standalone — snapshot ephemeral). Set true em
-# prod env values onde DOKS loopzero-secrets-prod tem Raft persistent + DO
-# Spaces bucket configurado.
+# (k3d Raft in-memory standalone — snapshot ephemeral). Set true in
+# prod env values, where DOKS loopzero-secrets-prod has persistent Raft + a DO
+# Spaces bucket configured.
 snapshotAgentEnabled: false
 
 # Resource sizing — k3d single-node, conservative

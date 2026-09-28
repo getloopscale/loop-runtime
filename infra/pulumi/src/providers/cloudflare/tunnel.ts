@@ -16,7 +16,7 @@
 // (pulumi-kubernetes Issue #2517). Moving them to L2 makes destroy safe.
 //
 // Custom domains: tenants can attach their own domains via the v2 Custom
-// Domains flow (CF Zone Mgmt + NS change by user, see api/internal/cfzone/).
+// Domains flow (CF Zone Mgmt + NS change by user, see api/internal/domains/cfzone/).
 // The wildcard CNAME `*.{baseDomain} → {tunnelId}.cfargotunnel.com` covers
 // the platform's own subdomains; per-tenant custom domains create their own
 // CF Zone, separate from this tunnel resource. See MEET-2026-04-05-033 for

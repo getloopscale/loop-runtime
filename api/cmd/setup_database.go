@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log/slog"
 	"os"
@@ -21,21 +20,28 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/routes/health"
 )
 
 // DatabaseDeps holds everything produced by setupDatabase.
 type DatabaseDeps struct {
-	DBAdapter    *db.PgxAdapter
+	DBAdapter *db.PgxAdapter
+	// MemberStore is set by wireCrossTenantLookups once the cross-tenant pool
+	// exists: resolving a user's teams spans tenants.
 	MemberStore  auth.MembershipStore
 	ProjectStore ports.ProjectStore
-	DBHealth     health.DBHealthChecker
-	PlanLimiter  *enforcement.PlanLimiter
-
-	// StdDB is the stdlib sql.DB used for plan enforcement (caller must defer Close).
-	StdDB *sql.DB
+	// PostgresProjects is the same instance as ProjectStore, typed concretely
+	// so the per-Account project cap can be wired onto it without a type
+	// assertion in main.
+	PostgresProjects *store.PostgresProjectStore
+	DBHealth         healthhttp.DBHealthChecker
+	// PlanLimits and PlanLimiter are set by wirePlanEnforcement once the
+	// cross-tenant background pool exists — not by setupDatabase: the plan
+	// lookups cannot run on the request pool (see store.PlanLimitsStore).
+	PlanLimits  *store.PlanLimitsStore
+	PlanLimiter *enforcement.PlanLimiter
 	// PoolCollector exports PG pool metrics (caller must defer Stop).
 	PoolCollector *metrics.PoolStatsCollector
 }
@@ -53,7 +59,7 @@ type DatabaseDeps struct {
 //     warning and died three functions later on a nil dereference (B-104,
 //     reproduced by `setup_server_nil_deps_test.go` before any change).
 //   - Its blast radius is not one surface: 27 of the router's 36 register "sem
-//     banco" as their disable reason. A missing secret does not degrade the
+//     banco" (no database) as their disable reason. A missing secret does not degrade the
 //     product, it erases three quarters of it — while `/api/v1/health` keeps
 //     answering 200, because that probe is the shallow one.
 //   - It has happened, and this repository records the damage: B35, 2026-04-28
@@ -68,7 +74,7 @@ type DatabaseDeps struct {
 //
 // Returning `nil, nil` for "it did not work, but carry on" is the magic value
 // `rules/error-handling.md` exists to forbid.
-var ErrDatabaseURLNotSet = errors.New("DATABASE_URL não está definida — a API não pode servir sem banco (27 das 36 superfícies dependem dele)")
+var ErrDatabaseURLNotSet = errors.New("DATABASE_URL is not set — the API cannot serve without a database (27 of the 36 surfaces depend on it)")
 
 // setupDatabase creates the pgx connection pool, pool metrics collector,
 // stdlib DB for plan enforcement, and Sprint 1 stores.
@@ -79,15 +85,7 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 		return nil, ErrDatabaseURLNotSet
 	}
 
-	poolCfg, err := db.NewPool(context.Background(), dbURL, db.PoolConfig{
-		MaxConns:          cfg.DBMaxConns,
-		MinConns:          cfg.DBMinConns,
-		MaxConnIdleTime:   cfg.DBMaxConnIdleTime,
-		MaxConnLifetime:   cfg.DBMaxConnLifetime,
-		HealthCheckPeriod: cfg.DBHealthCheckTime,
-		ConnectTimeout:    cfg.DBConnectTimeout,
-		StatementTimeout:  cfg.DBStatementTimeout,
-	})
+	poolCfg, err := db.NewPool(context.Background(), dbURL, requestPoolConfig(cfg))
 	if err != nil {
 		return nil, err
 	}
@@ -114,33 +112,60 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 	// project-cap checker onto it once the PlanLimiter is built below.
 	projectStore := &store.PostgresProjectStore{DB: poolCfg}
 	deps := &DatabaseDeps{
-		DBAdapter:     poolCfg,
-		MemberStore:   &store.PostgresMembershipStore{DB: poolCfg},
-		ProjectStore:  projectStore,
-		DBHealth:      poolCfg,
-		PoolCollector: poolCollector,
+		DBAdapter:        poolCfg,
+		ProjectStore:     projectStore,
+		PostgresProjects: projectStore,
+		DBHealth:         poolCfg,
+		PoolCollector:    poolCollector,
 	}
 
-	// Plan enforcement limiter (uses stdlib sql.DB for simple queries)
-	stdDB, err := sql.Open("pgx", dbURL)
-	if err != nil {
-		logger.Warn("failed to open stdlib DB for plan enforcement — limits disabled", "error", err)
-	} else {
-		stdDB.SetMaxOpenConns(2)
-		if pingErr := stdDB.Ping(); pingErr != nil {
-			logger.Warn("plan enforcement DB ping failed — limits disabled", "error", pingErr)
-			_ = stdDB.Close()
-		} else {
-			deps.StdDB = stdDB
-			deps.PlanLimiter = enforcement.NewPlanLimiter(stdDB, logger)
-			// M4 (account-level tenancy, Phase 2): enforce the per-Account project
-			// cap at the API project-creation path. M5 (#106) routes this through the
-			// shared wireProjectCap helper so the API store and the build-orchestrator
-			// store are wired through ONE path and can never diverge again.
-			wireProjectCap(projectStore, &planLimiterCapAdapter{limiter: deps.PlanLimiter})
-			logger.Info("plan enforcement enabled")
-		}
-	}
-
+	// Plan enforcement and the per-Account project cap are wired in main, once
+	// the cross-tenant (loopzero_worker) connection they read through exists — see
+	// wirePlanEnforcement and projectCapEnforcement.
 	return deps, nil
+}
+
+// requestPoolConfig is the pool that serves HTTP requests. It scopes every
+// connection to the tenant the request was authenticated for
+// (dbtx.WithTenantScope): the request role is RLS-bound, and a connection with
+// no scope reads no tenant's rows.
+func requestPoolConfig(cfg config.Config) db.PoolConfig {
+	pc := backgroundPoolConfig(cfg)
+	pc.TenantScoped = true
+	return pc
+}
+
+// backgroundPoolConfig is the sizing both pools share. The background pool
+// uses it as is: its role crosses tenants through named policies.
+func backgroundPoolConfig(cfg config.Config) db.PoolConfig {
+	return db.PoolConfig{
+		MaxConns:          cfg.DBMaxConns,
+		MinConns:          cfg.DBMinConns,
+		MaxConnIdleTime:   cfg.DBMaxConnIdleTime,
+		MaxConnLifetime:   cfg.DBMaxConnLifetime,
+		HealthCheckPeriod: cfg.DBHealthCheckTime,
+		ConnectTimeout:    cfg.DBConnectTimeout,
+		StatementTimeout:  cfg.DBStatementTimeout,
+	}
+}
+
+// wireCrossTenantLookups builds the lookups authentication makes before a team
+// is selected. Resolving which teams a user belongs to spans tenants — a user
+// may belong to several — so it reads through the cross-tenant pool; over the
+// request pool tenant_members is hidden by fail-closed RLS and every
+// authenticated call would be refused with NO_TENANT.
+func wireCrossTenantLookups(deps *DatabaseDeps, crossTenant db.DBTX) {
+	deps.MemberStore = &store.PostgresMembershipStore{DB: crossTenant}
+}
+
+// wirePlanEnforcement builds the plan-limits store and the limiter every plan
+// gate uses on the cross-tenant background pool. Over the request pool the
+// plan lookups see no subscription under fail-closed RLS and every tenant
+// would be capped as Starter (store.PlanLimitsStore records the measurement).
+// Quotas are not optional: main reaches this only with the background pool up,
+// and exits when that pool cannot be opened.
+func wirePlanEnforcement(deps *DatabaseDeps, crossTenant db.DBTX, logger *slog.Logger) {
+	deps.PlanLimits = store.NewPlanLimitsStore(crossTenant)
+	deps.PlanLimiter = enforcement.NewPlanLimiter(deps.PlanLimits, logger)
+	logger.Info("plan enforcement enabled")
 }

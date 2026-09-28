@@ -97,85 +97,29 @@ bootstrap_cell_cc() {
 
   sed -i "s|server: https://[^[:space:]]*|server: https://${TARGET_IP}:6443|g" "$SCOPED_KC"
 
-  # 4. Apply / render Secret + CR.
-  local SECRET_NAME="${CELL_ID}-kubeconfig"
+  # 4. Apply / render Secret + CR — through the one ClusterCredential
+  #    constructor, so a local cell carries exactly the labels and fields a
+  #    drill or wire-clusters cell does.
+  #
+  #    TLS_INSECURE=true — issue #67: k3d-local k3s servers use self-signed CAs
+  #    that rotate across container restarts. Without insecure:true the ArgoCD
+  #    cluster Secret keeps caData from the initial kubeconfig and rejects later
+  #    connections with x509 "certificate signed by unknown authority",
+  #    silently breaking deploy/promote/rollback.
+  local CC_CREATE
+  CC_CREATE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../helmfile/scripts/lib/clustercredential-create.sh"
+  local DRY="false"
   if [[ "$DRY_RUN" == "--dry-run" ]]; then
     log_cell "DRY RUN — manifests below, no apply:"
-    kubectl --context "$CTX" create secret generic "$SECRET_NAME" \
-      -n "$NS" \
-      --from-file=kubeconfig="$SCOPED_KC" \
-      --dry-run=client -o yaml
-    cat <<YAML
-apiVersion: loopzero.io/v1
-kind: ClusterCredential
-metadata:
-  name: ${CELL_ID}
-  namespace: ${NS}
-  labels:
-    loopzero.io/cell: ${CELL_ID}
-    loopzero.io/ingress-domain: loopzero.local
-    app.kubernetes.io/managed-by: bootstrap-cell-cc
-spec:
-  cellID: ${CELL_ID}
-  clusterName: ${CELL_ID}
-  apiServer: https://${TARGET_IP}:6443
-  scope:
-    argocd: true
-    operators: true
-  secretRef:
-    name: ${SECRET_NAME}
-    namespace: ${NS}
-  # Issue #67: this script bootstraps k3d-local cells whose k3s servers use
-  # self-signed CAs that rotate across container restarts. Without
-  # insecure:true, the ArgoCD cluster Secret stores caData from the initial
-  # kubeconfig and rejects subsequent connections with x509 "certificate
-  # signed by unknown authority" — silently breaking deploy/promote/rollback.
-  # Declarative source-of-truth on the CR eliminates the previous reactive
-  # workaround (heal H19 patching the rendered Secret and being overwritten
-  # by the next reconcile).
-  tls:
-    insecure: true
-YAML
-    return 0
+    DRY="true"
   fi
+  KUBECTL_CONTEXT="$CTX" LOOPZERO_NS="$NS" INGRESS_DOMAIN="loopzero.local" \
+    MANAGED_BY="bootstrap-cell-cc" TLS_INSECURE="true" DRY_RUN="$DRY" \
+    bash "$CC_CREATE" "$CELL_ID" "$CELL_ID" "$SCOPED_KC" || return 2
+  [[ "$DRY" == "true" ]] && return 0
 
-  kubectl --context "$CTX" create secret generic "$SECRET_NAME" \
-    -n "$NS" \
-    --from-file=kubeconfig="$SCOPED_KC" \
-    --dry-run=client -o yaml \
-    | kubectl --context "$CTX" apply -f - >/dev/null
-
-  cat <<YAML | kubectl --context "$CTX" apply -f - >/dev/null
-apiVersion: loopzero.io/v1
-kind: ClusterCredential
-metadata:
-  name: ${CELL_ID}
-  namespace: ${NS}
-  labels:
-    loopzero.io/cell: ${CELL_ID}
-    loopzero.io/ingress-domain: loopzero.local
-    app.kubernetes.io/managed-by: bootstrap-cell-cc
-spec:
-  cellID: ${CELL_ID}
-  clusterName: ${CELL_ID}
-  apiServer: https://${TARGET_IP}:6443
-  scope:
-    argocd: true
-    operators: true
-  secretRef:
-    name: ${SECRET_NAME}
-    namespace: ${NS}
-  # Issue #67: this script bootstraps k3d-local cells whose k3s servers use
-  # self-signed CAs that rotate across container restarts. Without
-  # insecure:true, the ArgoCD cluster Secret stores caData from the initial
-  # kubeconfig and rejects subsequent connections with x509 "certificate
-  # signed by unknown authority" — silently breaking deploy/promote/rollback.
-  # Declarative source-of-truth on the CR eliminates the previous reactive
-  # workaround (heal H19 patching the rendered Secret and being overwritten
-  # by the next reconcile).
-  tls:
-    insecure: true
-YAML
-
-  log_cell "applied: CC ${CELL_ID} -> ${SECRET_NAME} -> https://${TARGET_IP}:6443 (k3d cluster: loopzero-${K3D_CLUSTER})"
+  # The Secret's name is the constructor's to choose, and it logs it; naming it
+  # here again read ${SECRET_NAME}, which nothing set, and aborted under set -u
+  # after the apply had succeeded (#400).
+  log_cell "applied: CC ${CELL_ID} -> https://${TARGET_IP}:6443 (k3d cluster: loopzero-${K3D_CLUSTER})"
 }

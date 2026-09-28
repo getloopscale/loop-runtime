@@ -61,19 +61,3 @@ func TestLoadCreds_ValidRoundTrips(t *testing.T) {
 		t.Errorf("Stripe.PricePro = %q, want price_abc", c.Stripe.PricePro)
 	}
 }
-
-func TestIsPlaceholder(t *testing.T) {
-	cases := map[string]bool{
-		"":                     true,
-		"   ":                  true,
-		"whsec_dev_abc":        true, // placeholder sentinel
-		"REPLACE_VIA_SPONSOR":  true,
-		"whsec_test_realvalue": false,
-		"rk_test_realkey":      false,
-	}
-	for in, want := range cases {
-		if got := IsPlaceholder(in); got != want {
-			t.Errorf("IsPlaceholder(%q) = %v, want %v", in, got, want)
-		}
-	}
-}

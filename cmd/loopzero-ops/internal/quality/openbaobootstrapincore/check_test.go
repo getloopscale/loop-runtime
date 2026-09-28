@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // withTaskfile writes a synthetic taskfile and returns a Config for it.
@@ -39,7 +41,7 @@ tasks:
 
 // The canonical path must pass, or the gate is an exemption in its own birth.
 func TestCheck_CanonicalTaskfilePasses(t *testing.T) {
-	out, err := Check(withTaskfile(t, cleanTaskfile))
+	out, err := violationOf(Check(withTaskfile(t, cleanTaskfile)))
 	if err != nil {
 		t.Fatalf("err = %v; the canonical secrets-cluster path must pass. violations=%v", err, out.Violations)
 	}
@@ -55,7 +57,7 @@ func TestCheck_NamedTargetIsForbidden(t *testing.T) {
     cmds:
       - echo hi
 `
-	out, err := Check(withTaskfile(t, body))
+	out, err := violationOf(Check(withTaskfile(t, body)))
 	if !errors.Is(err, ErrForbiddenShortcut) {
 		t.Fatalf("err = %v; want ErrForbiddenShortcut", err)
 	}
@@ -75,14 +77,14 @@ func TestCheck_RenamedTargetWithTheSameEffectIsForbidden(t *testing.T) {
     cmds:
       - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopzero-core --selector name=openbao sync
 `
-	out, err := Check(withTaskfile(t, body))
+	out, err := violationOf(Check(withTaskfile(t, body)))
 	if !errors.Is(err, ErrForbiddenShortcut) {
 		t.Fatalf("err = %v; a renamed target with the SAME effect must still fail. violations=%v", err, out.Violations)
 	}
-	// "core context", não "mgmt": a mensagem passou a nomear o cluster pelo nome que ele
-	// tem desde o rename do B-001. O identificador Go segue com `mgmt` porque
-	// `MGMT_CONTEXT` continua sendo um nome de variável aceito — a mensagem é o que o
-	// operador lê, e ela apontava para um cluster que não existe mais.
+	// "core context", not "mgmt": the message now names the cluster by the name it has
+	// had since the B-001 rename. The Go identifier keeps `mgmt` because `MGMT_CONTEXT`
+	// is still an accepted variable name — the message is what the operator reads, and
+	// it pointed at a cluster that no longer exists.
 	if len(out.Violations) != 1 || !strings.Contains(out.Violations[0], "core context") {
 		t.Errorf("violations = %v; want the effect-based finding", out.Violations)
 	}
@@ -95,7 +97,7 @@ func TestCheck_MgmtContextOnANonSecretsHelmfileIsFine(t *testing.T) {
     cmds:
       - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl --kube-context k3d-loopzero-core sync
 `
-	if _, err := Check(withTaskfile(t, body)); err != nil {
+	if _, err := violationOf(Check(withTaskfile(t, body))); err != nil {
 		t.Fatalf("err = %v; only the SECRETS plane is forbidden in mgmt", err)
 	}
 }
@@ -103,10 +105,10 @@ func TestCheck_MgmtContextOnANonSecretsHelmfileIsFine(t *testing.T) {
 // A missing or empty taskfile must be loud. Reporting success for a file it
 // could not read is how a gate silently stops guarding.
 func TestCheck_UnreadableTaskfileIsAnError(t *testing.T) {
-	if _, err := Check(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(Config{RepoRoot: t.TempDir()})); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("err = %v; want ErrNothingScanned for a missing taskfile", err)
 	}
-	if _, err := Check(withTaskfile(t, "")); !errors.Is(err, ErrNothingScanned) {
+	if _, err := violationOf(Check(withTaskfile(t, ""))); !errors.Is(err, ErrNothingScanned) {
 		t.Fatalf("err = %v; want ErrNothingScanned for an empty taskfile", err)
 	}
 }
@@ -114,8 +116,8 @@ func TestCheck_UnreadableTaskfileIsAnError(t *testing.T) {
 // Against the real tree: the task was removed by this slice, so it must pass —
 // and must have actually read the file, not passed by reading nothing.
 func TestCheck_RealTreeHasNoShortcut(t *testing.T) {
-	root := repoRoot(t)
-	out, err := Check(Config{RepoRoot: root})
+	root := qtestutil.Root(t)
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("err = %v; violations=%v", err, out.Violations)
 	}
@@ -123,22 +125,6 @@ func TestCheck_RealTreeHasNoShortcut(t *testing.T) {
 		t.Errorf("LinesScanned = %d; taskfiles/k3d.yml is far longer — the gate did not read it",
 			out.LinesScanned)
 	}
-}
-
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatal("go.work not found walking up")
-	return ""
 }
 
 // --- the six evasions an independent review measured on 2026-08-12 ----------
@@ -155,11 +141,11 @@ func TestCheck_EvasionsAreClosed(t *testing.T) {
 		{"template var", cleanTaskfile + "\n  k3d:x:\n    cmds:\n      - " + secretsSync + " --kube-context {{.CORE_CONTEXT}} sync\n"},
 		{"line continuation", cleanTaskfile + "\n  k3d:x:\n    cmds:\n      - " + secretsSync + " \\\n          --kube-context k3d-loopzero-core sync\n"},
 		{"four-space target", cleanTaskfile + "\n    k3d:secrets:bootstrap-in-core:\n      cmds:\n        - echo hi\n"},
-		{"trailing comment on target", cleanTaskfile + "\n  k3d:secrets:bootstrap-in-core: # atalho\n    cmds:\n      - echo hi\n"},
+		{"trailing comment on target", cleanTaskfile + "\n  k3d:secrets:bootstrap-in-core: # shortcut\n    cmds:\n      - echo hi\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := Check(withTaskfile(t, tc.body))
+			out, err := violationOf(Check(withTaskfile(t, tc.body)))
 			if !errors.Is(err, ErrForbiddenShortcut) {
 				t.Errorf("err = %v; this evasion must be caught. violations=%v", err, out.Violations)
 			}
@@ -182,7 +168,7 @@ func TestCheck_ScansEveryTaskfileNotJustK3d(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	out, err := Check(Config{RepoRoot: dir})
+	out, err := violationOf(Check(Config{RepoRoot: dir}))
 	if !errors.Is(err, ErrForbiddenShortcut) {
 		t.Fatalf("err = %v; a target in infra.yml is as invocable as one in k3d.yml", err)
 	}

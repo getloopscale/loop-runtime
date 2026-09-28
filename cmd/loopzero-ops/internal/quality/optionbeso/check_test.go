@@ -7,7 +7,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFixture(t *testing.T, doc, runtime string) string {
@@ -70,7 +73,7 @@ const canonicalRuntime = `releases:
 
 func TestCheck_CanonicalPasses(t *testing.T) {
 	root := writeFixture(t, canonicalDoc, canonicalRuntime)
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS, got err=%v failures=%v", err, outcome.Failures)
 	}
@@ -78,7 +81,7 @@ func TestCheck_CanonicalPasses(t *testing.T) {
 
 func TestCheck_DocMissingFails(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for missing doc, got %v", err)
 	}
@@ -89,7 +92,7 @@ func TestCheck_MissingSubPathFails(t *testing.T) {
 	// Strip the B3 sub-path header.
 	body = removeLine(body, "### B3 NOT recommended for iter 1")
 	root := writeFixture(t, body, canonicalRuntime)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when B3 sub-path missing, got %v", err)
 	}
@@ -99,7 +102,7 @@ func TestCheck_ESOVersionDriftFails(t *testing.T) {
 	// Doc pins 0.14.3 but runtime bumped to 0.15.0.
 	drifted := "releases:\n  - name: external-secrets\n    version: 0.15.0\n"
 	root := writeFixture(t, canonicalDoc, drifted)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for ESO version drift, got %v", err)
 	}
@@ -108,7 +111,7 @@ func TestCheck_ESOVersionDriftFails(t *testing.T) {
 func TestCheck_CoAuthoredByForbidden(t *testing.T) {
 	polluted := canonicalDoc + "\n\nCo-Authored-By: Someone <someone@example.com>\n"
 	root := writeFixture(t, polluted, canonicalRuntime)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for Co-Authored-By trailer, got %v", err)
 	}
@@ -118,7 +121,7 @@ func TestCheck_MissingRollbackFails(t *testing.T) {
 	// Strip the whole Rollback section.
 	body := removeSection(canonicalDoc, "## Rollback")
 	root := writeFixture(t, body, canonicalRuntime)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when Rollback section missing, got %v", err)
 	}
@@ -129,28 +132,18 @@ func TestCheck_MissingCrossRefsCanonicalFails(t *testing.T) {
 	body := canonicalDoc
 	body = replaceLine(body, "See cell.helmfile.yaml.gotmpl for canonical pattern.", "See somewhere else.")
 	root := writeFixture(t, body, canonicalRuntime)
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when Cross-references does not cite runtime helmfile, got %v", err)
 	}
 }
 
 func TestCheck_RealRepoDocPasses(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	abs := qtestutil.RootFile(t, docPath)
+	outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
+	if checkErr != nil {
+		t.Fatalf("real doc must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, docPath)); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
-			if checkErr != nil {
-				t.Fatalf("real doc must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
-			}
-			return
-		}
-		abs = filepath.Dir(abs)
-	}
-	t.Skip("could not locate the Option B doc within 8 parent dirs; skipping real-repo assertion")
 }
 
 // tiny helpers
@@ -224,4 +217,15 @@ func joinLines(ls []string) string {
 		buf = append(buf, l...)
 	}
 	return string(buf)
+}
+
+// The doc is read by people who clone the repository. A citation of an
+// assistant's private memory resolves for nobody, so the gate must not demand one.
+func TestCheck_DocWithoutAnAssistantMemoryCitationPasses(t *testing.T) {
+	doc := strings.Replace(canonicalDoc, "Memory: feedback_productive_idle_runbook_preauthor_2026_06_10.\n", "", 1)
+	root := writeFixture(t, doc, canonicalRuntime)
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
+	if err != nil {
+		t.Fatalf("a doc with no private-memory citation was refused: err=%v failures=%v", err, outcome.Failures)
+	}
 }

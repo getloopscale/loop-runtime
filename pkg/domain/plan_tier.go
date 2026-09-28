@@ -101,6 +101,18 @@ func ResolvePlanTier(ctx context.Context, store PlanTierStore, tenantID string) 
 		// path that defaults to Starter without an error.
 		return PlanTierStarter, nil
 	}
+	return ParsePlanTier(raw)
+}
+
+// ParsePlanTier converts a stored or configured plan value into the canonical
+// PlanTier. It is the one place that knows the recognised vocabulary,
+// including the legacy "growth" alias (mapped to PlanTierPro per ADR D4).
+//
+// An unrecognised value — including the empty string — returns
+// (PlanTierUnknown, ErrUnknownPlanTier). It NEVER defaults to Starter: the
+// only Starter fallback is ResolvePlanTier's "no row yet" onboarding path,
+// which it decides before calling this.
+func ParsePlanTier(raw string) (PlanTier, error) {
 	switch raw {
 	case string(PlanTierStarter),
 		string(PlanTierPro),
@@ -125,6 +137,24 @@ func (p PlanTier) IsValid() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// DisplayName returns the product name of the tier as shown to users
+// ("Starter", "Pro", "Team", "Enterprise"). An unrecognised value is returned
+// as-is rather than invented, so an unexpected tier stays visible.
+func (p PlanTier) DisplayName() string {
+	switch p {
+	case PlanTierStarter:
+		return "Starter"
+	case PlanTierPro:
+		return "Pro"
+	case PlanTierTeam:
+		return "Team"
+	case PlanTierEnterprise:
+		return "Enterprise"
+	default:
+		return string(p)
 	}
 }
 

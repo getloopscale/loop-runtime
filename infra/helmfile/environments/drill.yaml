@@ -17,7 +17,7 @@
 #   2. Export drill kubeconfigs from pulumi stack outputs to per-cluster files
 #   3. helmfile -e drill sync                            (~25min platform bootstrap)
 #   4. drill-mint-jwt.sh → JWT for L-series tests       (T2.2)
-#   5. bootstrap-cell-{default,1,2}-cc-drill.sh         (T2.3 D3 cell wiring)
+#   5. bootstrap-cell-cc.sh --cell <0|1> --env drill (T2.3 D3 cell wiring)
 #   6. Run drill scenarios (L0-L4 + Stage 1/2 + chaos)
 #   7. infra/pulumi-drill && pulumi destroy             (~10min mandatory teardown)
 #   8. drill-teardown-validator.sh                      (T4.1.bis doctl fallback)
@@ -35,9 +35,9 @@ dnsZone: loopzero-drill.example
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
 # Opt-in flag: when true, core.helmfile installs ESO operator +
 # loopzero-external-secrets CRs (pulls secrets from loopzero-secrets cluster).
-# Default false → drill uses ephemeral env-var secrets (consistent com
-# drill ephemeral lifecycle); flip to true APENAS quando drill scenario
-# explicitly testar Vault integration prod-identical (T9.2 Dogfood QA).
+# Default false → drill uses ephemeral env-var secrets (consistent with the
+# drill ephemeral lifecycle); flip to true ONLY when a drill scenario
+# explicitly tests Vault integration prod-identical (T9.2 Dogfood QA).
 # Requires: loopzero-secrets drill cluster up (separate ephemeral DOKS) +
 # ClusterSecretStore + seed-loopzero-secrets.sh ran for env=drill.
 vaultEnabled: false
@@ -56,7 +56,6 @@ replicas:
   controller: 1   # operator split-binary topology
   argocd: 1
   gitea: 1
-  harbor: 1
 
 # Per D2 — prod tier specs (NOT minimal). Drill mgmt nodes are medium per
 # Pulumi.drill.yaml mgmtNodeSize=s-4vcpu-8gb-amd × 3 nodes. Runtime/build
@@ -76,7 +75,6 @@ certIssuer:
 
 registries:
   docrPrefix: "registry.digitalocean.com/loopzero-drill/"
-  harborPrefix: "harbor.loopzero-drill.example/loopzero-platform/"
 
 loki:
   maxGlobalStreamsPerUser: 50000
@@ -105,24 +103,28 @@ inClusterPostgres: false
 #   pgDatabase: <pulumi stack output pg.database>
 # These keys are consumed by loopzero-api + migrations helm values.
 
+# The DO Spaces bucket source bundles are staged in and cloned from
+# (infra/pulumi-drill `buckets.builds`). core.helmfile gives it to loopzero-api,
+# build.helmfile to the loopzero-clone ClusterWorkflowTemplate.
+sourceBucket: loopzero-drill-builds-sfo3
+
 # DOKS default storage class.
 underlyingStorageClass: do-block-storage
 
 # Per D3 cell mapping — drill mirrors prod cell-to-cluster topology:
-#   cell-0 + cell-0 → runtimeCluster (pulumi-drill output key)
-#   cell-1              → runtimeCluster2 (pulumi-drill output key)
+#   cell-0 → runtimeCluster  (pulumi-drill output key)
+#   cell-1 → runtimeCluster2 (pulumi-drill output key)
+# One cell per cluster since the 2026-08-09 1:1 unification.
 # Single-cell `cell0Id: cell-drill` removed per CTO directive
-# 2026-05-16 ("sistema NUNCA vai trabalhar com single cell").
+# 2026-05-16 ("the system will NEVER work with a single cell").
 cells:
-  - id: cell-0
-    pulumiOutputKey: runtimeCluster
   - id: cell-0
     pulumiOutputKey: runtimeCluster
   - id: cell-1
     pulumiOutputKey: runtimeCluster2
 
 # DynamicRouter enabled — drill exercises full cell discovery + routing
-# semantics. With 3 cells discovered + 2 runtime clusters, routing rules
+# semantics. With 2 cells discovered on 2 runtime clusters, routing rules
 # are real (not synthetic).
 dynamicRouter: true
 
@@ -143,7 +145,6 @@ velero:
 # populates from Pulumi stack outputs during helmfile sync.
 #   crossCluster.argoApi: <buildCluster argo workflows endpoint>
 #   crossCluster.giteaApi: <mgmtCluster gitea endpoint>
-#   crossCluster.lokiGateway: <buildCluster loki endpoint>
 #   crossCluster.prometheusApi: <mgmtCluster prometheus endpoint>
 
 # Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder (drill DOKS)
@@ -169,3 +170,17 @@ dashboardRoute:
   verification: /verification
   settings: /settings
   error: /login
+
+# Environment profile — the behaviour that differs between environments, as named
+# values the helmfiles read (infra/helmfile/environments.yaml). A helmfile must not
+# switch on the environment NAME.
+profile:
+  highAvailability: false       # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
+  managedRedis: true            # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
+  kedaHttpAddon: false          # install the KEDA HTTP add-on on the cells
+  staticAssets: false           # install the static-assets server on the cells
+  loopzeroCloud: false              # install the control plane (loopzero-cloud), unless clusterRole is standalone
+  smokeTest: false              # run the post-install smoke-test release
+  localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
+  localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
+  secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public

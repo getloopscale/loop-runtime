@@ -18,7 +18,7 @@ import (
 //   - loopzero-cloud CI (AM6 workflow `loopzero/.github/workflows/build-publish.yml:12`)
 //     publishes EXCLUSIVELY to GHCR (`ghcr.io/getloopscale/loopzero-cloud:develop`
 //     for branch pushes; `:vX.Y.Z` + `:latest` for tags).
-//   - Engine chart default `infra/helm/loopzero-cloud/values.yaml` expects
+//   - Engine chart default `infra/helm/loopzero-cloud/values.yaml` (since deleted) expected
 //     DOCR (`registry.digitalocean.com/loopzero-system/loopzero-cloud:latest`) —
 //     image never published there.
 //   - Engine dev-public overlay points at local k3d-registry with stale
@@ -87,13 +87,15 @@ func TestLoopZeroCloudImageOverlayUsesGHCRCanonical(t *testing.T) {
 
 	// --- Chart default assertions ---
 
-	chartDefaultPath := repoFile(t, "infra", "helm", "loopzero-cloud", "values.yaml")
-	chartDefault := readFileText(t, chartDefaultPath)
-
-	// T6. Chart default MUST point at GHCR (where the image actually
-	// lives). The legacy DOCR default is stale per AM6 workflow.
-	if !strings.Contains(chartDefault, "ghcr.io/getloopscale/loopzero-cloud") {
-		t.Error("infra/helm/loopzero-cloud/values.yaml chart default does NOT reference canonical GHCR — image never published to legacy DOCR default (issue #104 Architecture A)")
+	// T6. The bootstrap default MUST point at GHCR (where the image actually
+	// lives). The legacy DOCR default is stale per AM6 workflow. Every Helmfile
+	// install layers charts/loopzero-cloud/values-bootstrap.yaml under its overlay,
+	// so that file is the default an environment without an image override gets.
+	bootstrapDefault := readFileText(t, repoFile(t, "charts", "loopzero-cloud", "values-bootstrap.yaml"))
+	if got, err := renderedImageRepository(bootstrapDefault); err != nil {
+		t.Errorf("could not read the image from charts/loopzero-cloud/values-bootstrap.yaml: %v", err)
+	} else if got != "ghcr.io/getloopscale/loopzero-cloud" {
+		t.Errorf("charts/loopzero-cloud/values-bootstrap.yaml pulls %q, not the canonical GHCR repository — the image was never published to the legacy DOCR default (issue #104 Architecture A)", got)
 	}
 
 	// --- Provisioning task assertions ---

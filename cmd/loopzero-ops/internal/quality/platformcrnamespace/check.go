@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package platformcrnamespace recusa manifesto versionado que aplique um CR de plataforma
-// (`loopzero.io` Tenant ou Environment) fora de `loopzero-system`.
+// Package platformcrnamespace refuses a versioned manifest that applies a platform CR
+// (`loopzero.io` Tenant or Environment) outside `loopzero-system`.
 //
-// B-095. Dois fatos tornam a colocacao load-bearing, e nenhum dos dois e' obvio lendo o manifesto:
+// B-095. Two facts make the placement load-bearing, and neither is obvious from reading the manifest:
 //
-//  1. O cache do tenant-operator e' restrito a `loopzero-system`
-//     (`operators/cmd/tenant-operator/main.go`). Um CR aplicado noutro namespace fica INVISIVEL
-//     ao controller — nao da erro, nao aparece em log, simplesmente nunca reconcilia.
-//  2. A politica de admissao `loopzero-tenant-namespace-policy` casa CREATE e UPDATE e valida
-//     `namespace == "loopzero-system"`. Remover finalizer e' um UPDATE: um CR fora do lugar, com a
-//     politica ligada, fica IMPOSSIVEL DE APAGAR.
+//  1. The tenant-operator's cache is restricted to `loopzero-system`
+//     (`operators/cmd/tenant-operator/main.go`). A CR applied in another namespace is INVISIBLE
+//     to the controller — no error, nothing in the log, it simply never reconciles.
+//  2. The admission policy `loopzero-tenant-namespace-policy` matches CREATE and UPDATE and validates
+//     `namespace == "loopzero-system"`. Removing a finalizer is an UPDATE: a misplaced CR, with the
+//     policy on, becomes IMPOSSIBLE TO DELETE.
 //
-// O primeiro faz o desvio passar despercebido; o segundo faz ele custar caro depois. Por isso a
-// verificacao e' de gate e nao de revisao.
+// The first makes the drift go unnoticed; the second makes it expensive later. That is why the
+// check is a gate and not a review item.
 package platformcrnamespace
 
 import (
@@ -26,40 +26,53 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-// ErrForaDoNamespace indica manifesto aplicando CR de plataforma fora de `loopzero-system`.
-var ErrForaDoNamespace = errors.New("CR de plataforma aplicado fora de loopzero-system")
+// ErrOutsideNamespace means a manifest applies a platform CR outside `loopzero-system`.
+var ErrOutsideNamespace = errors.New("platform CR applied outside loopzero-system")
 
-// ErrNadaVarrido indica que a varredura nao alcancou nenhum manifesto — verde sobre nada.
-var ErrNadaVarrido = errors.New("nenhum manifesto de CR de plataforma alcancado")
+// ErrNothingScanned means the scan reached no manifest at all — green over nothing.
+var ErrNothingScanned = errors.New("no platform CR manifest reached")
 
-// NamespaceCanonico e' o unico namespace onde Tenant e Environment podem viver.
-const NamespaceCanonico = "loopzero-system"
+// CanonicalNamespace is the only namespace where Tenant and Environment may live.
+const CanonicalNamespace = "loopzero-system"
 
-// DirsPadrao sao as arvores varridas quando Config.Dirs vem vazia.
-var DirsPadrao = []string{"infra", "charts", "cmd"}
+// DefaultDirs are the trees scanned when Config.Dirs is empty.
+var DefaultDirs = []string{"infra", "charts", "cmd"}
 
-// Config parametriza a varredura.
+// Config parameterises the scan.
 type Config struct {
 	RepoRoot string
 	Dirs     []string
 }
 
-// Ocorrencia e' um bloco de manifesto que declara um CR de plataforma.
-type Ocorrencia struct {
-	Arquivo   string
-	Linha     int
+// Occurrence is a manifest block that declares a platform CR.
+type Occurrence struct {
+	File      string
+	Line      int
 	Kind      string
 	Namespace string
 }
 
-// Output relata o que a varredura viu. `Conferidas` existe para distinguir "nada errado" de
-// "nao alcancou nada" — sem ele, zero violacoes e zero cobertura sao o mesmo verde.
+// Output reports what the scan saw. `Checked` exists to tell "nothing wrong" apart from
+// "reached nothing" — without it, zero violations and zero coverage are the same green.
 type Output struct {
-	Conferidas []Ocorrencia
-	Violacoes  []Ocorrencia
-	Arquivos   int
+	Checked    []Occurrence
+	Violations []Occurrence
+	Files      int
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Output) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 var (
@@ -68,104 +81,105 @@ var (
 	reAPILoopZero   = regexp.MustCompile(`^\s*apiVersion:\s*loopzero\.io/`)
 )
 
-// Check varre as arvores e devolve as violacoes.
+// Check scans the trees and returns the violations.
 func Check(cfg Config) (Output, error) {
 	var out Output
 	dirs := cfg.Dirs
 	if len(dirs) == 0 {
-		dirs = DirsPadrao
+		dirs = DefaultDirs
 	}
 
 	for _, d := range dirs {
-		raiz := filepath.Join(cfg.RepoRoot, filepath.FromSlash(d))
-		if _, err := os.Stat(raiz); err != nil {
+		root := filepath.Join(cfg.RepoRoot, filepath.FromSlash(d))
+		if _, err := os.Stat(root); err != nil {
 			continue
 		}
-		err := filepath.WalkDir(raiz, func(p string, e fs.DirEntry, err error) error {
+		err := filepath.WalkDir(root, func(p string, e fs.DirEntry, err error) error {
 			if err != nil || e.IsDir() {
-				return err //nolint:wrapcheck // erro de travessia sobe cru de proposito
+				return err //nolint:wrapcheck // traversal error propagates raw on purpose
 			}
 			switch strings.ToLower(filepath.Ext(p)) {
 			case ".yaml", ".yml", ".sh":
 			default:
 				return nil
 			}
-			// #nosec G304,G122 -- `p` vem do WalkDir sobre as arvores declaradas em Config.Dirs,
-			// sob o proprio repositorio; nao ha entrada externa neste caminho.
+			// #nosec G304,G122 -- `p` comes from WalkDir over the trees declared in Config.Dirs,
+			// under the repository itself; there is no external input on this path.
 			b, rerr := os.ReadFile(filepath.Clean(p))
 			if rerr != nil {
 				return nil
 			}
 			rel, _ := filepath.Rel(cfg.RepoRoot, p)
-			out.Arquivos++
-			out.Conferidas = append(out.Conferidas, ocorrenciasEm(string(b), filepath.ToSlash(rel))...)
+			out.Files++
+			out.Checked = append(out.Checked, occurrencesIn(string(b), filepath.ToSlash(rel))...)
 			return nil
 		})
 		if err != nil {
-			return out, fmt.Errorf("varrendo %s: %w", d, err)
+			return out, fmt.Errorf("scanning %s: %w", d, err)
 		}
 	}
 
-	if len(out.Conferidas) == 0 {
-		return out, fmt.Errorf("%w: %d arquivo(s) lido(s)", ErrNadaVarrido, out.Arquivos)
+	if len(out.Checked) == 0 {
+		return out, fmt.Errorf("%w: %d file(s) read", ErrNothingScanned, out.Files)
 	}
 
-	for _, o := range out.Conferidas {
-		if !namespaceAceito(o.Namespace) {
-			out.Violacoes = append(out.Violacoes, o)
+	for _, o := range out.Checked {
+		if !namespaceAccepted(o.Namespace) {
+			out.Violations = append(out.Violations, o)
 		}
 	}
-	sort.Slice(out.Violacoes, func(i, j int) bool {
-		if out.Violacoes[i].Arquivo != out.Violacoes[j].Arquivo {
-			return out.Violacoes[i].Arquivo < out.Violacoes[j].Arquivo
+	sort.Slice(out.Violations, func(i, j int) bool {
+		if out.Violations[i].File != out.Violations[j].File {
+			return out.Violations[i].File < out.Violations[j].File
 		}
-		return out.Violacoes[i].Linha < out.Violacoes[j].Linha
+		return out.Violations[i].Line < out.Violations[j].Line
 	})
 
-	if len(out.Violacoes) > 0 {
+	if len(out.Violations) > 0 {
 		var b strings.Builder
-		for _, v := range out.Violacoes {
-			fmt.Fprintf(&b, "\n  %s:%d — %s em %q", v.Arquivo, v.Linha, v.Kind, v.Namespace)
+		for _, v := range out.Violations {
+			fmt.Fprintf(&b, "\n  %s:%d — %s in %q", v.File, v.Line, v.Kind, v.Namespace)
 		}
-		return out, fmt.Errorf("%w (esperado %q):%s", ErrForaDoNamespace, NamespaceCanonico, b.String())
+		out.Violation = fmt.Errorf("%w (expected %q):%s", ErrOutsideNamespace, CanonicalNamespace, b.String())
+		return out, nil
 	}
 	return out, nil
 }
 
-// namespaceAceito aceita o canonico e tambem uma variavel de shell — o valor dela e' decidido em
-// tempo de execucao, e cravar aqui um julgamento sobre o que ela vale seria adivinhar. Os seeds
-// que a usam declaram `loopzero-system` como default, e isso e' verificavel no proprio script.
-func namespaceAceito(ns string) bool {
-	if ns == NamespaceCanonico {
+// namespaceAccepted accepts the canonical namespace and also a shell variable — its value is
+// decided at runtime, and hard-coding a judgement here about what it holds would be guessing. The
+// seeds that use one declare `loopzero-system` as the default, and that is verifiable in the script itself.
+func namespaceAccepted(ns string) bool {
+	if ns == CanonicalNamespace {
 		return true
 	}
 	return strings.HasPrefix(ns, "$")
 }
 
-// ocorrenciasEm acha blocos `kind: Tenant|Environment` sob `apiVersion: loopzero.io/` e o namespace
-// que os acompanha. Deliberadamente textual: os alvos incluem heredoc dentro de script de shell,
-// que nenhum parser de YAML le sem antes executar o shell.
-func ocorrenciasEm(conteudo, arquivo string) []Ocorrencia {
-	linhas := strings.Split(conteudo, "\n")
-	var out []Ocorrencia
-	for i, l := range linhas {
+// occurrencesIn finds `kind: Tenant|Environment` blocks under `apiVersion: loopzero.io/` and the
+// namespace that goes with them. Deliberately textual: the targets include heredocs inside shell
+// scripts, which no YAML parser reads without running the shell first.
+func occurrencesIn(content, file string) []Occurrence {
+	lines := strings.Split(content, "\n")
+	var out []Occurrence
+	for i, l := range lines {
 		m := reKind.FindStringSubmatch(l)
 		if m == nil {
 			continue
 		}
-		// A ancora e' o `apiVersion: loopzero.io/` imediatamente acima — sem ela, `kind: Environment`
-		// casaria com qualquer CRD homonimo de outro grupo.
-		if i == 0 || !reAPILoopZero.MatchString(linhas[i-1]) {
+		// The anchor is the `apiVersion: loopzero.io/` immediately above — without it, `kind: Environment`
+		// would match any same-named CRD from another group.
+		if i == 0 || !reAPILoopZero.MatchString(lines[i-1]) {
 			continue
 		}
 		ns := ""
-		for j := i + 1; j < len(linhas) && j <= i+8; j++ {
-			if nm := reNamespace.FindStringSubmatch(linhas[j]); nm != nil {
+		for j := i + 1; j < len(lines) && j <= i+8; j++ {
+			if nm := reNamespace.FindStringSubmatch(lines[j]); nm != nil {
 				ns = nm[1]
 				break
 			}
 		}
-		out = append(out, Ocorrencia{Arquivo: arquivo, Linha: i + 1, Kind: m[1], Namespace: ns})
+		out = append(out, Occurrence{File: file, Line: i + 1, Kind: m[1], Namespace: ns})
 	}
 	return out
 }

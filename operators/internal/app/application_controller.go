@@ -49,6 +49,8 @@ const workloadReadyTimeout = 5 * time.Second
 // +kubebuilder:rbac:groups=loopzero.io,resources=loopzeroapplications/finalizers,verbs=update
 // +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch
+// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
 type ApplicationReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
@@ -161,6 +163,11 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// EndpointsReady=true unblocks phase=Serving.
 	r.reconcileWorkloadStatus(ctx, &app)
 	r.reconcileRouteStatus(ctx, &app)
+	phase, err := advancePhase(&app)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	app.Status.Phase = phase
 	r.reconcileHealthCondition(&app)
 
 	if err := r.patchStatus(ctx, &app, base); err != nil {
@@ -190,11 +197,10 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // remembered: a new early-return path cannot reintroduce the defect, because
 // there is no way to persist status without summarizing it first.
 //
-// Deliberately NOT reconcileloop.DeferReadinessSummary, which the other
-// controllers use: that helper re-fetches and takes an optimistic lock because
-// it is a SECOND writer by design. This controller had a second writer removed
-// (T5.1, see the note in Reconcile) for flapping conditions and 409s; trading an
-// ordering defect for a concurrency one is not a fix.
+// Every operator controller now persists status this way. The deferred
+// re-fetching summary the others used to carry was a SECOND writer by design;
+// this controller removed its own (T5.1, see the note in Reconcile) for
+// flapping conditions and 409s, and the rest followed.
 //
 // Decision: MEET-ASYNC-AMENDMENT-2026-08-14-application-status-persist-encapsulation
 func (r *ApplicationReconciler) patchStatus(ctx context.Context, app, base *loopzerov1.LoopZeroApplication) error {
@@ -213,14 +219,15 @@ func (r *ApplicationReconciler) patchStatus(ctx context.Context, app, base *loop
 	return r.Status().Patch(ctx, app, client.MergeFrom(base))
 }
 
-// reconcileHostname computes and persists the hostname if not yet assigned.
+// reconcileHostname persists the routed hostname when spec.hostname is unset or
+// still holds the controller's old default (see hostnameToAssign).
 func (r *ApplicationReconciler) reconcileHostname(ctx context.Context, req ctrl.Request, app *loopzerov1.LoopZeroApplication) error {
-	if app.Spec.Hostname != "" {
-		return nil
-	}
-	hostname, err := naming.Hostname(app.Spec.Project, app.Spec.Environment, r.BaseDomain)
+	hostname, assign, err := hostnameToAssign(app, r.BaseDomain)
 	if err != nil {
 		return fmt.Errorf("computing hostname: %w", err)
+	}
+	if !assign {
+		return nil
 	}
 	app.Spec.Hostname = hostname
 	if err := r.Update(ctx, app); err != nil {
@@ -262,9 +269,9 @@ func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app, 
 		if route.Labels == nil {
 			route.Labels = map[string]string{}
 		}
-		route.Labels["loopzero.io/tenant"] = app.Spec.TenantRef
-		route.Labels["loopzero.io/project"] = app.Spec.Project
-		route.Labels["loopzero.io/environment"] = app.Spec.Environment
+		route.Labels[constants.LabelTenant] = app.Spec.TenantRef
+		route.Labels[constants.LabelProject] = app.Spec.Project
+		route.Labels[constants.LabelEnvironment] = app.Spec.Environment
 		return controllerutil.SetControllerReference(app, route, r.Scheme)
 	})
 	if err != nil {
@@ -315,8 +322,6 @@ func (r *ApplicationReconciler) reconcileRouteStatus(ctx context.Context, app *l
 	setReadyOrWaitingCondition(&app.Status.Conditions, conditions.TypeRouteReachable,
 		app.Status.Reachable, app.Generation,
 		"route is reachable", "waiting for route to become reachable")
-
-	app.Status.Phase = r.computePhase(app)
 }
 
 // setReadyOrWaitingCondition is the canonical if-bool-then-True-else-False
@@ -382,35 +387,6 @@ func (r *ApplicationReconciler) reconcileDelete(ctx context.Context, app *loopze
 	return ctrl.Result{}, nil
 }
 
-// computePhase determines the ApplicationPhase based on current state.
-// Uses all defined phases: Progressing → Serving → Reachable, Degraded, Down.
-func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication) loopzerov1.ApplicationPhase {
-	if app.Status.Reachable {
-		return loopzerov1.ApplicationPhaseReachable
-	}
-	if app.Status.EndpointsReady {
-		return loopzerov1.ApplicationPhaseServing
-	}
-	// Check conditions for degraded/down states.
-	// "Waiting" is normal progression (not yet reachable), "Failed" is degraded.
-	// AP-2 fix: use typed constants from internal/conditions instead of
-	// hardcoded string literals. See ADR-0023 hoist condition + roadmap §AP-2.
-	for _, c := range app.Status.Conditions {
-		if c.Type == conditions.TypeRouteReachable && c.Status == metav1.ConditionFalse {
-			switch c.Reason {
-			case conditions.ReasonFailed:
-				return loopzerov1.ApplicationPhaseDown
-			case conditions.ReasonDegraded:
-				return loopzerov1.ApplicationPhaseDegraded
-			default:
-				// "Waiting" or any other reason — still progressing
-				return loopzerov1.ApplicationPhaseProgressing
-			}
-		}
-	}
-	return loopzerov1.ApplicationPhaseProgressing
-}
-
 // reconcileWorkloadStatus sets app.Status.EndpointsReady=true if the workload
 // Pod is Ready in the tenant's cell. Cell resolution: read Tenant CR by
 // app.Spec.TenantRef → tenant.Spec.CellID → RuntimeFactory.For(cellID).
@@ -419,7 +395,8 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 // EC-9 graceful degrade on cell-0-cluster unreachable).
 //
 // Behavior:
-//   - RuntimeFactory == nil: single-cell legacy mode → no-op (current path).
+//   - Factory without runtime access (app-operator started without
+//     CELL_0_KUBECONFIG): For returns ErrRuntimeClusterUnavailable → log + return.
 //   - Tenant CR not found: log + return (route-status path will set
 //     EndpointsReady eventually).
 //   - Workload client error (timeout, RBAC, cluster down): log + return.
@@ -427,9 +404,6 @@ func (r *ApplicationReconciler) computePhase(app *loopzerov1.LoopZeroApplication
 //   - Pod list returns 0 matches: leave EndpointsReady at current value.
 //   - Pod list returns ≥1 with PodReady=True: set EndpointsReady=true.
 func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app *loopzerov1.LoopZeroApplication) {
-	if r.RuntimeFactory == nil {
-		return
-	}
 	logger := log.FromContext(ctx)
 
 	// Resolve tenant cellID via Tenant CR (mgmt cluster).
@@ -479,9 +453,9 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 	if err := workloadClient.List(cellCtx, &pods,
 		client.InNamespace(ns),
 		client.MatchingLabels{
-			"loopzero.io/project":     app.Spec.Project,
-			"loopzero.io/app-name":    app.Spec.ServiceName,
-			"loopzero.io/environment": app.Spec.Environment,
+			constants.LabelProject:     app.Spec.Project,
+			"loopzero.io/app-name":         app.Spec.ServiceName,
+			constants.LabelEnvironment: app.Spec.Environment,
 		},
 	); err != nil {
 		logger.V(1).Info("workload-status: pod list failed (graceful degrade)",
@@ -499,11 +473,15 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 	}
 }
 
-// SetupApplicationControllerWithFactory is the cell-aware entrypoint
-// (dogfood-2026-05-08-fixes T4.2). Passing a CellAwareRuntimeClientFactory
-// enables the workload-Pod-Ready fast-path so app.Status.Phase converges
-// to Serving as soon as the Pod is Ready, regardless of ExposedRoute state.
+// SetupApplicationControllerWithFactory registers the ApplicationController
+// (dogfood-2026-05-08-fixes T4.2). factory is required: with runtime access it
+// enables the workload-Pod-Ready fast-path so app.Status.Phase converges to
+// Serving as soon as the Pod is Ready; a deployment without runtime access
+// passes cellrouting.NewUnavailableRuntimeClientFactory.
 func SetupApplicationControllerWithFactory(mgr ctrl.Manager, baseDomain string, factory cellrouting.RuntimeClientFactory) error {
+	if factory == nil {
+		return fmt.Errorf("application controller: a runtime client factory is required")
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&loopzerov1.LoopZeroApplication{}, reconcileloop.ForOption()).
 		Owns(&loopzerov1.ExposedRoute{}).

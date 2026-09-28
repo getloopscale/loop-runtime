@@ -9,8 +9,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -60,29 +62,19 @@ func (s *AdminHydraClientSeed) Run(d Deps) Result {
 		return Result{Verdict: PASS, Reason: "dry-run: would resolve admin user_id + register/PUT Hydra client + persist secret"}
 	}
 	// Step 1 — PG lookup.
-	pgURL := envOrDefault(pgDatabaseURLEnv, pgDatabaseURLDefault)
-	userID, err := adminHydraLookupUserID(d.Ctx, pgURL, adminEmailCanonical)
+	pgURL := d.Host.envOr(pgDatabaseURLEnv, pgDatabaseURLDefault)
+	userID, err := adminHydraLookupUserID(d.Ctx, d.Host, pgURL, adminEmailCanonical)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("PG lookup: %v (run seed admin-loopzero-dev first)", err)}
 	}
 	if userID == "" {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("admin@loopzero.example not in users table (run seed admin-loopzero-dev first)")}
+		return Result{Verdict: FAIL, Reason: "admin@loopzero.example not in users table (run seed admin-loopzero-dev first)"}
 	}
 
 	// Step 2 — port-forward Hydra admin API.
-	if d.PortForwardCtor == nil {
-		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired"}
-	}
-	tunnel, err := d.PortForwardCtor(d.Ctx, "", hydraAdminNamespaceCanon,
-		PodMetaLabels(hydraAdminServiceName), hydraAdminRemotePort, "/health/ready")
+	tunnel, err := openHydraAdminTunnel(d)
 	if err != nil {
-		// Some Hydra deployments name the pod ory-hydra + selector app.k8s.io/name=hydra.
-		// Fall back to plain "hydra" pod label.
-		tunnel, err = d.PortForwardCtor(d.Ctx, "", hydraAdminNamespaceCanon,
-			PodMetaLabels("hydra"), hydraAdminRemotePort, "/health/ready")
-		if err != nil {
-			return Result{Verdict: FAIL, Reason: fmt.Sprintf("port-forward %s: %v", hydraAdminServiceName, err)}
-		}
+		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
 	defer tunnel.Close()
 
@@ -104,25 +96,17 @@ func (s *AdminHydraClientSeed) Run(d Deps) Result {
 // Verify probes: (a) PG has admin user, (b) Hydra has ≥ 3 clients live.
 // Skips the token-mint probe (bash also flagged it informational).
 func (s *AdminHydraClientSeed) Verify(d Deps) Result {
-	pgURL := envOrDefault(pgDatabaseURLEnv, pgDatabaseURLDefault)
-	userID, err := adminHydraLookupUserID(d.Ctx, pgURL, adminEmailCanonical)
+	pgURL := d.Host.envOr(pgDatabaseURLEnv, pgDatabaseURLDefault)
+	userID, err := adminHydraLookupUserID(d.Ctx, d.Host, pgURL, adminEmailCanonical)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("PG lookup: %v", err)}
 	}
 	if userID == "" {
 		return Result{Verdict: FAIL, Reason: "admin@loopzero.example not in users"}
 	}
-	if d.PortForwardCtor == nil {
-		return Result{Verdict: FAIL, Reason: "PortForwardCtor not wired"}
-	}
-	tunnel, err := d.PortForwardCtor(d.Ctx, "", hydraAdminNamespaceCanon,
-		PodMetaLabels(hydraAdminServiceName), hydraAdminRemotePort, "/health/ready")
+	tunnel, err := openHydraAdminTunnel(d)
 	if err != nil {
-		tunnel, err = d.PortForwardCtor(d.Ctx, "", hydraAdminNamespaceCanon,
-			PodMetaLabels("hydra"), hydraAdminRemotePort, "/health/ready")
-		if err != nil {
-			return Result{Verdict: FAIL, Reason: fmt.Sprintf("port-forward %s: %v", hydraAdminServiceName, err)}
-		}
+		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
 	defer tunnel.Close()
 
@@ -139,10 +123,10 @@ func (s *AdminHydraClientSeed) Verify(d Deps) Result {
 
 // adminHydraLookupUserID connects to PG and looks up the admin user id.
 // Small connection: single query, no pool needed.
-// Uses pgConnectFn seam (shared with tenant_fixture + admin_loopzero_dev) so
+// Uses Host.PGConnect (shared with tenant_fixture + admin_loopzero_dev) so
 // tests can substitute a stubPgConn without a live PG.
-func adminHydraLookupUserID(ctx context.Context, url, email string) (string, error) {
-	c, err := pgConnectFn(ctx, url)
+func adminHydraLookupUserID(ctx context.Context, h Host, url, email string) (string, error) {
+	c, err := h.pgConnect(ctx, url)
 	if err != nil {
 		return "", err
 	}
@@ -152,7 +136,7 @@ func adminHydraLookupUserID(ctx context.Context, url, email string) (string, err
 	defer cancel()
 	var id string
 	err = c.QueryRow(qctx, "SELECT id FROM users WHERE email = $1", email).Scan(&id)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}
 	return id, err
@@ -163,7 +147,10 @@ func adminHydraLookupUserID(ctx context.Context, url, email string) (string, err
 func adminHydraRegisterOrRefresh(ctx context.Context, base, clientID, secretPath string) (string, error) {
 	// Probe first — 200 means already registered.
 	getURL := fmt.Sprintf("%s/admin/clients/%s", base, clientID)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return "", fmt.Errorf("GET client: %w", err)
@@ -173,10 +160,16 @@ func adminHydraRegisterOrRefresh(ctx context.Context, base, clientID, secretPath
 
 	var secret string
 	if existing {
-		if b, ferr := os.ReadFile(secretPath); ferr == nil && len(b) > 0 {
+		// Only an absent or empty file justifies minting a new secret; any
+		// other read failure would silently rotate a registered client.
+		b, ferr := os.ReadFile(secretPath)
+		switch {
+		case ferr == nil && len(b) > 0:
 			secret = string(b)
-		} else {
+		case ferr == nil || errors.Is(ferr, fs.ErrNotExist):
 			secret = mustHexSecret(adminCLIClientSecretBytes)
+		default:
+			return "", fmt.Errorf("read client secret %s: %w", secretPath, ferr)
 		}
 	} else {
 		secret = mustHexSecret(adminCLIClientSecretBytes)
@@ -204,7 +197,10 @@ func adminHydraRegisterOrRefresh(ctx context.Context, base, clientID, secretPath
 		target = getURL
 		wantCode = http.StatusOK
 	}
-	req2, _ := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
+	req2, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
 	req2.Header.Set("Content-Type", "application/json")
 	resp2, err := (&http.Client{Timeout: 10 * time.Second}).Do(req2)
 	if err != nil {
@@ -220,8 +216,11 @@ func adminHydraRegisterOrRefresh(ctx context.Context, base, clientID, secretPath
 
 // adminHydraGetClient probes GET /admin/clients/{id} and returns true when 200.
 func adminHydraGetClient(ctx context.Context, base, clientID string) (bool, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		fmt.Sprintf("%s/admin/clients/%s", base, clientID), nil)
+	if err != nil {
+		return false, fmt.Errorf("build request: %w", err)
+	}
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return false, err
@@ -256,4 +255,29 @@ func mustHexSecret(nBytes int) string {
 		panic(err)
 	}
 	return hex.EncodeToString(b)
+}
+
+// openHydraAdminTunnel opens a tunnel to the Hydra admin API. The pod is
+// labelled by its service name on some installs and by plain "hydra" on
+// others, so both are tried in that order.
+func openHydraAdminTunnel(d Deps) (*Tunnel, error) {
+	if d.PortForwardCtor == nil {
+		return nil, fmt.Errorf("PortForwardCtor not wired")
+	}
+	target := TunnelTarget{
+		Namespace:  hydraAdminNamespaceCanon,
+		PodLabels:  PodMetaLabels(hydraAdminServiceName),
+		RemotePort: hydraAdminRemotePort,
+		ProbePath:  "/health/ready",
+	}
+	tunnel, err := d.PortForwardCtor(d.Ctx, target)
+	if err == nil {
+		return tunnel, nil
+	}
+	target.PodLabels = PodMetaLabels("hydra")
+	tunnel, fallbackErr := d.PortForwardCtor(d.Ctx, target)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("port-forward %s: %w (fallback label hydra: %w)", hydraAdminServiceName, err, fallbackErr)
+	}
+	return tunnel, nil
 }

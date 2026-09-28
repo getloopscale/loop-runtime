@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Journey 01: Solo Deploy + Prova de Vida + Prova de Morte
+// Journey 01: Solo Deploy + Proof of Life + Proof of Death
 //
 // Migrated from: infra/tests/dogfood/journeys/journey-01-solo-deploy.sh
 //

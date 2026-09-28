@@ -15,6 +15,8 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Limits are the SLO thresholds in seconds.
@@ -39,6 +41,15 @@ type Outcome struct {
 	Violations []string
 }
 
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
+}
+
 var (
 	// `--- PASS: TestX (60.01s)` (also FAIL/SKIP).
 	testLineRe = regexp.MustCompile(`---\s+(?:PASS|FAIL|SKIP):\s+([A-Za-z0-9_/-]+)\s+\(([0-9.]+)s\)`)
@@ -51,7 +62,8 @@ func Check(cfg Config) (*Outcome, error) {
 	f, err := os.Open(cfg.LogFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &Outcome{Pass: true, Skipped: true}, nil
+			// No log is no verdict: Skipped, and not a pass.
+			return &Outcome{Skipped: true}, nil
 		}
 		return nil, fmt.Errorf("open log %s: %w", cfg.LogFile, err)
 	}

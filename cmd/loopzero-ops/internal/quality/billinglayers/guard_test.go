@@ -10,103 +10,92 @@ import (
 	"testing"
 )
 
-func repoCom(t *testing.T, arquivos map[string]string) string {
+func repoWith(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
-	for rel, corpo := range arquivos {
+	for rel, body := range files {
 		p := filepath.Join(root, rel)
 		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte(corpo), 0o600); err != nil {
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return root
 }
 
-func resolvedorCom(t *testing.T, arquivos map[string]string) *GuardResolver {
+func resolverWith(t *testing.T, files map[string]string) *GuardResolver {
 	t.Helper()
-	root := repoCom(t, arquivos)
-	return NewGuardResolver(root, root, filepath.Join(root, "BACKLOG.md"))
+	root := repoWith(t, files)
+	return NewGuardResolver(root, root, nil)
 }
 
-// Um gate que ninguém roda não guarda nada — a razão de resolver por `quality.yml`
-// e não pela existência do pacote.
-func TestGateResolveQuandoRodado(t *testing.T) {
-	r := resolvedorCom(t, map[string]string{
+// A gate nobody runs guards nothing — the reason to resolve through `quality.yml`
+// and not through the package existing.
+func TestGateResolvesWhenRun(t *testing.T) {
+	r := resolverWith(t, map[string]string{
 		"taskfiles/quality.yml": "cmds:\n  - /tmp/loopzero-ops quality billing-secrets\n",
 	})
 	if err := r.Resolve(Guard{Kind: GuardGate, Target: "billing-secrets"}, "loopzero"); err != nil {
-		t.Fatalf("gate rodado resolve: %v", err)
+		t.Fatalf("a gate that is run resolves: %v", err)
 	}
 }
 
-func TestGateNaoRodadoReprova(t *testing.T) {
-	r := resolvedorCom(t, map[string]string{
-		"taskfiles/quality.yml": "cmds:\n  - /tmp/loopzero-ops quality outra-coisa\n",
+func TestGateNotRunFails(t *testing.T) {
+	r := resolverWith(t, map[string]string{
+		"taskfiles/quality.yml": "cmds:\n  - /tmp/loopzero-ops quality something-else\n",
 	})
 	err := r.Resolve(Guard{Kind: GuardGate, Target: "billing-secrets"}, "loopzero")
 	if !errors.Is(err, ErrGuardUnresolved) {
-		t.Fatalf("gate registrado mas não rodado não guarda nada; err=%v", err)
+		t.Fatalf("a gate registered but not run guards nothing; err=%v", err)
 	}
 }
 
-func TestTesteResolveQuandoOArquivoExiste(t *testing.T) {
-	r := resolvedorCom(t, map[string]string{"a/b_test.go": "package a\n"})
+func TestTestResolvesWhenTheFileExists(t *testing.T) {
+	r := resolverWith(t, map[string]string{"a/b_test.go": "package a\n"})
 	if err := r.Resolve(Guard{Kind: GuardTest, Target: "a/b_test.go"}, "loopzero"); err != nil {
-		t.Fatalf("teste presente resolve: %v", err)
+		t.Fatalf("a present test resolves: %v", err)
 	}
 }
 
-func TestTesteApagadoReprova(t *testing.T) {
-	r := resolvedorCom(t, map[string]string{"outro.go": "package a\n"})
+func TestDeletedTestFails(t *testing.T) {
+	r := resolverWith(t, map[string]string{"other.go": "package a\n"})
 	if err := r.Resolve(Guard{Kind: GuardTest, Target: "a/b_test.go"}, "loopzero"); !errors.Is(err, ErrGuardUnresolved) {
-		t.Fatalf("teste apagado reprova; err=%v", err)
+		t.Fatalf("a deleted test fails; err=%v", err)
 	}
 }
 
-func backlogCom(status string) string {
-	return "## B-033 — teto de custo   [ ]\n\ndomain: control-plane\nstatus: " + status + "\n"
+func resolverWithDebt(t *testing.T, status string) *GuardResolver {
+	t.Helper()
+	root := repoWith(t, map[string]string{"x.md": "x"})
+	return NewGuardResolver(root, root, map[string]Debt{"B-033": {ID: "B-033", Status: status, Closes: "cost ceiling"}})
 }
 
-// `planned` conta como aberto: a catraca existe para pegar FECHAMENTO sem cobertura, e um
-// item planejado não está fechado. Excluí-lo faria o gate travar TODO push do repositório
-// justamente na janela em que alguém implementa o conserto — custo desproporcional ao
-// risco, e o jeito conhecido de uma trava ser desligada.
-func TestDividaResolveEnquantoOItemEstaAberto(t *testing.T) {
-	for _, st := range []string{"raw", "triaged", "planned"} {
-		r := resolvedorCom(t, map[string]string{"BACKLOG.md": backlogCom(st)})
-		if err := r.Resolve(Guard{Kind: GuardOpen, Target: "B-033"}, "loopzero"); err != nil {
-			t.Fatalf("dívida com item %s resolve: %v", st, err)
+// `planned` and `approved` count as open: the ratchet exists to catch CLOSING
+// without coverage, and a planned or approved item is not closed.
+func TestDebtResolvesWhileTheItemIsOpen(t *testing.T) {
+	for _, st := range []string{"raw", "triaged", "approved", "planned"} {
+		if err := resolverWithDebt(t, st).Resolve(Guard{Kind: GuardOpen, Target: "B-033"}, "loopzero"); err != nil {
+			t.Fatalf("debt with item %s resolves: %v", st, err)
 		}
 	}
 }
 
-// A CATRACA (ADR-2). Sem ela, fechar o B-033 deixaria a camada descoberta e silenciosa,
-// com o registro ainda afirmando que alguém cuida dela.
-func TestDividaComItemFechadoReprova(t *testing.T) {
+// THE RATCHET: closing the debt without swapping the guard leaves the layer
+// uncovered while the registry still claims somebody owns it.
+func TestDebtWithAClosedItemFails(t *testing.T) {
 	for _, st := range []string{"shipped", "killed"} {
-		r := resolvedorCom(t, map[string]string{"BACKLOG.md": backlogCom(st)})
-		err := r.Resolve(Guard{Kind: GuardOpen, Target: "B-033"}, "loopzero")
+		err := resolverWithDebt(t, st).Resolve(Guard{Kind: GuardOpen, Target: "B-033"}, "loopzero")
 		if !errors.Is(err, ErrGuardUnresolved) {
-			t.Fatalf("item %s não é dívida aberta — a guarda tem que virar gate: ou test:; err=%v", st, err)
+			t.Fatalf("item %s is not open debt — the guard must become gate: or test:; err=%v", st, err)
 		}
 	}
 }
 
-func TestDividaComItemInexistenteReprova(t *testing.T) {
-	r := resolvedorCom(t, map[string]string{"BACKLOG.md": backlogCom("triaged")})
-	if err := r.Resolve(Guard{Kind: GuardOpen, Target: "B-999"}, "loopzero"); !errors.Is(err, ErrGuardUnresolved) {
-		t.Fatalf("item inexistente não é dono de nada; err=%v", err)
-	}
-}
-
-// EC-5: sem BACKLOG.md a catraca é inavaliável, e presumir a favor da dívida é o
-// comportamento que esta família de itens inteira existe para eliminar.
-func TestBacklogAusenteReprova(t *testing.T) {
-	r := resolvedorCom(t, map[string]string{"outro.md": "x"})
-	if err := r.Resolve(Guard{Kind: GuardOpen, Target: "B-033"}, "loopzero"); !errors.Is(err, ErrGuardUnresolved) {
-		t.Fatalf("sem backlog a dívida não pode ser presumida aberta; err=%v", err)
+func TestDebtNotDeclaredInTheRegistryFails(t *testing.T) {
+	err := resolverWithDebt(t, "triaged").Resolve(Guard{Kind: GuardOpen, Target: "B-999"}, "loopzero")
+	if !errors.Is(err, ErrGuardUnresolved) {
+		t.Fatalf("an undeclared debt owns nothing; err=%v", err)
 	}
 }

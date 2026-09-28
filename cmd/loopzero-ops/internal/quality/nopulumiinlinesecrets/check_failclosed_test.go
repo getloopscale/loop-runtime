@@ -6,6 +6,7 @@ package nopulumiinlinesecrets
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -28,5 +29,28 @@ func TestCheck_FailsClosedOnWalkError(t *testing.T) {
 
 	if _, err := Check(Config{RepoRoot: root}); err == nil {
 		t.Fatal("want fail-closed error on unreadable scan dir, got nil (fail-open regression)")
+	}
+}
+
+// TestCheck_FailsClosedOnUnreadableFile: a stack file the walk reaches but
+// cannot open must fail the gate, not become a warning beside a PASS. A dangling
+// symlink is unreadable for every user, root included.
+func TestCheck_FailsClosedOnUnreadableFile(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "infra/pulumi")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(dir, "Pulumi.prod.yaml")); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := Check(Config{RepoRoot: root})
+
+	if err == nil {
+		t.Fatalf("want fail-closed error on an unreadable stack file, got nil and Pass=%v", out.Pass)
+	}
+	if !strings.Contains(err.Error(), "Pulumi.prod.yaml") {
+		t.Errorf("error %q does not name the file it could not read", err)
 	}
 }

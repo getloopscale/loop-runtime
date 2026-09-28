@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
@@ -15,12 +16,12 @@ import (
 
 var repoRoot = qtestutil.MustRepoRoot()
 
-// realHome monta um caminho de home NÃO-sintética em tempo de execução.
+// realHome builds a NON-synthetic home path at runtime.
 //
-// Composto em vez de escrito literal porque este arquivo é varrido pela própria trava
-// que ele testa: uma fixture com `/home/<nome>/` literal seria — corretamente — um
-// achado. Isentar o arquivo resolveria por fora e deixaria a trava com um ponto cego
-// no lugar onde ela é auditada. Compor mantém a asserção inteira e a varredura honesta.
+// Composed instead of written literally because this file is scanned by the very lock
+// it tests: a fixture with a literal `/home/<name>/` would — correctly — be a finding.
+// Exempting the file would solve it from the outside and leave the lock with a blind
+// spot exactly where it is audited. Composing keeps the assertion whole and the scan honest.
 func realHome(sub string) string { return "/" + "home" + "/alice/" + sub }
 
 // gitTree makes a real git repo — the gate reads `git ls-files`, which is what will be
@@ -48,18 +49,18 @@ func gitTree(t *testing.T, files map[string]string) string {
 }
 
 func TestRealHomePathIsALeak(t *testing.T) {
-	root := gitTree(t, map[string]string{"a.md": "veja " + realHome("projeto/x") + "\n"})
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+	root := gitTree(t, map[string]string{"a.md": "see " + realHome("project/x") + "\n"})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 	if !errors.Is(err, ErrLeak) {
-		t.Fatalf("home de usuário real é vazamento; err=%v", err)
+		t.Fatalf("a real user home is a leak; err=%v", err)
 	}
 	if len(out.Findings) != 1 || out.Findings[0].Kind != "home" {
-		t.Fatalf("achado precisa ser classificado; got %+v", out.Findings)
+		t.Fatalf("the finding must be classified; got %+v", out.Findings)
 	}
 }
 
-// A fronteira que impede a trava de virar ruído — e é ela que faz a diferença entre
-// esta trava e uma que reprova o próprio teste de segurança.
+// The boundary that keeps the lock from becoming noise — it is what makes the difference
+// between this lock and one that fails the security test itself.
 func TestSyntheticHomesAndNonRoutableIPsAreNotLeaks(t *testing.T) {
 	root := gitTree(t, map[string]string{
 		"ci.yml":   "workdir: /home/runner/work/x\n",
@@ -68,93 +69,134 @@ func TestSyntheticHomesAndNonRoutableIPsAreNotLeaks(t *testing.T) {
 		"local.go": "const dev = \"127.0.0.1\"\nconst lan = \"192.168.1.10\"\n",
 		"fix.go":   "const home = \"/home/dev/loopzero\"\n",
 	})
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 	if err != nil {
-		t.Fatalf("constantes de teste e homes de CI não são vazamento: %v (%+v)", err, out.Findings)
+		t.Fatalf("test constants and CI homes are not leaks: %v (%+v)", err, out.Findings)
 	}
 }
 
-// A metade de IP do loopzero-rag NÃO foi transportada, e isto é asserção do escopo — não
-// um esquecimento. Contra esta árvore ela deu 104 achados quase todos falsos: strings
-// de versão, o placeholder `1.2.3.4`, as faixas CIDR da Cloudflare que o código carrega
-// de propósito, e o alvo vivo declarado em `rules/live-target.txt`, que é contrato.
+// loopzero-rag's IP half was NOT carried over, and this is an assertion of scope — not
+// an oversight. Against this tree it gave 104 findings, almost all false: version
+// strings, the `1.2.3.4` placeholder, the Cloudflare CIDR ranges the code carries on
+// purpose, and the live target declared in `rules/live-target.txt`, which is a contract.
 func TestIPHalfIsDeliberatelyOutOfScope(t *testing.T) {
 	root := gitTree(t, map[string]string{
-		"runbook.md":  "ssh operador@165.227.121.20\n",
-		"versions.md": "Tags aceitas: `13.3.2.1-1`, `15.5-10`\n",
+		"runbook.md":  "ssh operator@165.227.121.20\n",
+		"versions.md": "Accepted tags: `13.3.2.1-1`, `15.5-10`\n",
 		"cf.go":       `const cf = "173.245.48.0/20"` + "\n",
 	})
-	if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}}); err != nil {
-		t.Fatalf("esta trava mede CAMINHO DE HOME; endereço é escopo do loopzero-rag: %v", err)
+	if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}})); err != nil {
+		t.Fatalf("this lock measures HOME PATH; addresses are loopzero-rag's scope: %v", err)
 	}
 }
 
-// A trilha datada é isenta por DECLARAÇÃO, e a razão é outra regra do repositório:
-// `docs/README.md` proíbe reescrever registro datado para corresponder ao presente.
+// The dated trail is exempt by DECLARATION, and the reason is another repository rule:
+// `docs/README.md` forbids rewriting a dated record to match the present.
 func TestAuditTrailIsNotScanned(t *testing.T) {
 	root := gitTree(t, map[string]string{
-		"docs/wiki/reviews/old.md":              "rodou em " + realHome("loopzero") + "\n",
-		"docs/operations/baselines/b.md":        "medido em " + realHome("loopzero") + "\n",
-		"CHANGELOG.md":                          "corrigido em " + realHome("loopzero") + "\n",
-		".claude/knowledge-base/decisions/x.md": "medido em " + realHome("m") + "\n",
-		"vivo.md":                               "sem vazamento\n",
+		"docs/wiki/reviews/old.md":              "ran in " + realHome("loopzero") + "\n",
+		"docs/operations/baselines/b.md":        "measured in " + realHome("loopzero") + "\n",
+		"CHANGELOG.md":                          "fixed in " + realHome("loopzero") + "\n",
+		".claude/knowledge-base/decisions/x.md": "measured in " + realHome("m") + "\n",
+		"live.md":                               "no leak\n",
 	})
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 	if err != nil {
-		t.Fatalf("registro datado não é varrido: %v (%+v)", err, out.Findings)
+		t.Fatalf("a dated record is not scanned: %v (%+v)", err, out.Findings)
 	}
 	if out.Scanned != 1 {
-		t.Fatalf("só o arquivo vivo devia ser varrido; scanned=%d", out.Scanned)
+		t.Fatalf("only the live file should be scanned; scanned=%d", out.Scanned)
 	}
 }
 
-// Uma isenção precisa de razão E sunset. Sem os dois ela não declara nada — só silencia.
+// An exemption needs a reason AND a sunset. Without both it declares nothing — it only silences.
 func TestExemptionNeedsReasonAndSunset(t *testing.T) {
 	root := gitTree(t, map[string]string{
 		"deploy.conf": "root " + realHome("dist") + "\n",
-		"limpo.md":    "sem vazamento\n", // sem um arquivo varrido, o veredito seria ErrNothingScanned
+		"clean.md":    "no leak\n", // without a scanned file, the verdict would be ErrNothingScanned
 	})
 	for _, e := range []Exemption{
 		{Path: "deploy.conf", Sunset: "2026-11-17"},
-		{Path: "deploy.conf", Reason: "caminho de implantação"},
+		{Path: "deploy.conf", Reason: "deployment path"},
 	} {
-		if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{e}}); err == nil {
-			t.Fatalf("isenção incompleta não pode passar: %+v", e)
+		if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{e}})); err == nil {
+			t.Fatalf("an incomplete exemption must not pass: %+v", e)
 		}
 	}
-	ok := Exemption{Path: "deploy.conf", Reason: "caminho de implantação vivo", Sunset: "2026-11-17"}
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{ok}})
+	ok := Exemption{Path: "deploy.conf", Reason: "live deployment path", Sunset: "2026-11-17"}
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{ok}}))
 	if err != nil {
-		t.Fatalf("isenção completa deve passar: %v", err)
+		t.Fatalf("a complete exemption must pass: %v", err)
 	}
 	if out.Exempt != 1 {
-		t.Fatalf("a isenção precisa ser CONTADA para que sua existência apareça; got %d", out.Exempt)
+		t.Fatalf("the exemption must be COUNTED so its existence shows; got %d", out.Exempt)
 	}
 }
 
-// Ausência é FALHA, nunca skip.
+// Absence is a FAILURE, never a skip.
 func TestEmptyTreeIsAFailure(t *testing.T) {
 	root := gitTree(t, map[string]string{})
-	if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}}); !errors.Is(err, ErrNothingScanned) {
-		t.Fatalf("varrer zero arquivos precisa reprovar; err=%v", err)
+	if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}})); !errors.Is(err, ErrNothingScanned) {
+		t.Fatalf("scanning zero files must fail; err=%v", err)
 	}
 }
 
-// A população real (B-109). É esta asserção que dá sentido ao gate: ele nasce medido
-// contra a árvore que ship, não contra fixtures.
+// The real population (B-109). This assertion is what gives the gate its meaning: it is
+// born measured against the tree that ships, not against fixtures.
 func TestRealTreeIsClean(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot})
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot}))
 	if err != nil {
 		for i, f := range out.Findings {
 			if i == 12 {
-				t.Errorf("... e mais %d", len(out.Findings)-12)
+				t.Errorf("... and %d more", len(out.Findings)-12)
 				break
 			}
 			t.Errorf("%s:%d [%s] %s", f.File, f.Line, f.Kind, f.Text)
 		}
-		t.Fatalf("%d vazamento(s) na árvore real: %v", len(out.Findings), err)
+		t.Fatalf("%d leak(s) in the real tree: %v", len(out.Findings), err)
 	}
 	if out.Scanned < 500 {
-		t.Fatalf("scanned=%d — a varredura está alcançando pouco da árvore", out.Scanned)
+		t.Fatalf("scanned=%d — the scan is reaching little of the tree", out.Scanned)
+	}
+}
+
+// A line longer than any scanner buffer must not cost the findings before it:
+// a workstation path next to a minified or base64 line is still a leak.
+func TestLeakBeforeAVeryLongLineIsKept(t *testing.T) {
+	long := strings.Repeat("x", 2*1024*1024)
+	root := gitTree(t, map[string]string{"a.md": "see " + realHome("x") + "\n" + long + "\n"})
+
+	out, err := violationOf(Check(Config{RepoRoot: root}))
+
+	if !errors.Is(err, ErrLeak) || len(out.Findings) != 1 {
+		t.Fatalf("the leak before the long line must be reported; findings=%v err=%v", out.Findings, err)
+	}
+}
+
+// A versioned file the gate cannot read is not a clean file.
+func TestUnreadableVersionedFileIsUnverified(t *testing.T) {
+	root := gitTree(t, map[string]string{"a.md": "clean\n", "b.md": "clean\n"})
+	if err := os.Remove(filepath.Join(root, "b.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(root, "b.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := violationOf(Check(Config{RepoRoot: root}))
+
+	if !errors.Is(err, ErrUnverified) || len(out.Unverified) != 1 {
+		t.Fatalf("an unreadable versioned file must be unverified; out=%+v err=%v", out, err)
+	}
+}
+
+// A binary file is not a text leak and is counted apart, not as scanned text.
+func TestBinaryFileIsSkippedAndCounted(t *testing.T) {
+	root := gitTree(t, map[string]string{"a.md": "clean\n", "logo.png": "\x89PNG\x00" + realHome("x")})
+
+	out, err := violationOf(Check(Config{RepoRoot: root}))
+
+	if err != nil || out.Binary != 1 {
+		t.Fatalf("binary file must be skipped and counted; out=%+v err=%v", out, err)
 	}
 }

@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://loopzerocloud.dev/schemas/services.json",
+  "title": "LoopZeroKit services.json (v1 + v2)",
+  "description": "Platform-neutral services manifest emitted by `loopzerokit build`. Mirror of loopzerokit/packages/loopzero/src/services/adapters-bridge/manifest.ts ServicesManifest interface. Plan B v3.1 T-B.3 + ADR-0015 (platform-neutral). Plan v1.2 T2.1: v2 carries top-level `project` field (DNS-1123); v1 retained for backward compat with deprecation warning, falls back to `services-bundle` per ADR D10 (preserves Gitea repo lineage).",
+  "type": "object",
+  "oneOf": [
+    {
+      "title": "services.json v1 (deprecated, sunset loopzerokit 0.6.0)",
+      "required": ["version", "services"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 1 },
+        "services": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Service" }
+        }
+      }
+    },
+    {
+      "title": "services.json v2 — project field required",
+      "required": ["version", "project", "services"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "const": 2 },
+        "project": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+          "description": "DNS-1123 subdomain compatible project name. Required from v2. Drives Gitea repo (loopzero-source-{tenant}-{project}) and ArgoCD App naming."
+        },
+        "services": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Service" }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "version": { "type": "integer", "enum": [1, 2] },
+    "project": { "type": "string" },
+    "services": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/Service" }
+    }
+  },
+  "definitions": {
+    "Service": {
+      "type": "object",
+      "required": ["name", "runtime", "port", "proxy", "dev", "start", "healthcheck", "cors", "passSetCookie"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+          "description": "DNS-1123 subdomain compatible service name."
+        },
+        "runtime": {
+          "type": "string",
+          "enum": ["python", "node"],
+          "description": "Runtime that owns the service process. Resolved to the build's LanguageStrategy by buildplane/argo ResolveStrategy."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["server", "worker"],
+          "description": "Service shape. server | worker. Defaults to `server` when omitted (Go-side fallback — JSON Schema 7 doesn't apply default automatically). `frontend` removed in plan simplify-deploy-loopzerokit-only v2.0 (D5) — LoopZeroKit serves no static frontends."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "description": "TCP port the service binds to inside its container. Range 1024-65535 — ports below 1024 are reserved (require CAP_NET_BIND_SERVICE which the runtime does NOT grant, and ARE collision-prone with kubelet / kube-proxy on host networking)."
+        },
+        "proxy": {
+          "type": "string",
+          "pattern": "^/[^\\s/][^\\s]*$",
+          "description": "Non-empty path segment after `/`; cannot be `/` (would catch-all and conflict with LoopZeroKit routing)."
+        },
+        "dev": { "type": "string", "minLength": 1 },
+        "build": { "type": "string" },
+        "start": { "type": "string", "minLength": 1 },
+        "openapi": { "type": "string" },
+        "healthcheck": { "type": "string", "pattern": "^/" },
+        "cors": { "type": "boolean" },
+        "env": {
+          "type": "object",
+          "description": "Process environment variables passed to the running service. Keys MUST be POSIX-compliant (^[A-Z_][A-Z0-9_]*$); values are bounded to 4096 chars. Total entries capped at 64 to prevent manifest-bomb DoS. Plan v1.2 T1.3 — additional Go-side blocklist rejects reserved keys (PATH, HOME, LD_PRELOAD, LD_LIBRARY_PATH, KUBERNETES_*, LOOPZERO_*).",
+          "maxProperties": 64,
+          "patternProperties": {
+            "^[A-Z_][A-Z0-9_]*$": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          "additionalProperties": false
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "passSetCookie": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -31,7 +31,6 @@ log() { printf '[wiring-configmap] %s\n' "$*" >&2; }
 GITEA_INTERNAL_URL="${LOOPZERO_GITEA_INTERNAL_URL:-http://gitea-http.loopzero-system.svc.cluster.local:3000}"
 GRAFANA_INTERNAL_URL="${LOOPZERO_GRAFANA_INTERNAL_URL:-http://grafana.monitoring.svc.cluster.local:3000}"
 PROMETHEUS_INTERNAL_URL="${LOOPZERO_PROMETHEUS_INTERNAL_URL:-http://prometheus-server.monitoring.svc.cluster.local:80}"
-HARBOR_INTERNAL_URL="${LOOPZERO_HARBOR_INTERNAL_URL:-http://harbor.loopzero-system.svc.cluster.local:80}"
 
 # Resolve ingress IPs from kubectl if not provided.
 if [[ -z "${LOOPZERO_MGMT_INGRESS_IP:-}" ]]; then
@@ -58,7 +57,6 @@ data:
   GITEA_INTERNAL_URL: "${GITEA_INTERNAL_URL}"
   GRAFANA_INTERNAL_URL: "${GRAFANA_INTERNAL_URL}"
   PROMETHEUS_INTERNAL_URL: "${PROMETHEUS_INTERNAL_URL}"
-  HARBOR_INTERNAL_URL: "${HARBOR_INTERNAL_URL}"
 
   # Public URLs (derived from domain).
   GITEA_PUBLIC_URL: "https://git.${DOMAIN}"

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFixture(t *testing.T, body string) string {
@@ -63,7 +65,7 @@ func registerProtectedRoutes(r chi.Router) {
 
 func TestCheck_CanonicalPasses(t *testing.T) {
 	root := writeFixture(t, canonicalRouter)
-	outcome, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	outcome, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if err != nil {
 		t.Fatalf("expected PASS, got err=%v violations=%v", err, outcome.Violations)
 	}
@@ -80,7 +82,7 @@ func TestCheck_CanonicalPasses(t *testing.T) {
 
 func TestCheck_MissingRouterFails(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	_, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrRouterNotFound) {
 		t.Fatalf("expected ErrRouterNotFound, got %v", err)
 	}
@@ -102,7 +104,7 @@ func NewRouter() *chi.Mux {
 }
 `
 	root := writeFixture(t, body)
-	_, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	_, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrAuthGroupMissing) {
 		t.Fatalf("expected ErrAuthGroupMissing, got %v", err)
 	}
@@ -117,7 +119,7 @@ func extra() {
 }
 `
 	root := writeFixture(t, body)
-	outcome, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	outcome, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for unprotected route, got %v (violations=%v)", err, outcome.Violations)
 	}
@@ -137,28 +139,18 @@ func adminExtra() {
 }
 `
 	root := writeFixture(t, body)
-	outcome, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	outcome, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if err != nil {
 		t.Fatalf("expected PASS with allowlist prefix match, got err=%v violations=%v", err, outcome.Violations)
 	}
 }
 
 func TestCheck_RealRepoRouterPasses(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
+	abs := qtestutil.RootFile(t, routerPath)
+	outcome, checkErr := violationOf(Check(Config{RepoRoot: abs}))
+	if checkErr != nil {
+		t.Fatalf("real router.go must satisfy invariant. err=%v violations=%v", checkErr, outcome.Violations)
 	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, routerPath)); statErr == nil {
-			outcome, checkErr := Check(Config{RepoRoot: abs})
-			if checkErr != nil {
-				t.Fatalf("real router.go must satisfy invariant. err=%v violations=%v", checkErr, outcome.Violations)
-			}
-			return
-		}
-		abs = filepath.Dir(abs)
-	}
-	t.Skip("could not locate api/internal/server/router.go within 8 parent dirs")
 }
 
 // --- B-040: the enumeration floor -----------------------------------------
@@ -197,7 +189,7 @@ func TestCheck_ZeroRoutesEnumerated_IsAFailure(t *testing.T) {
 		"\t\tprojects.Register(r, cfg)\n",
 		"\tbuilds.Register(r, cfg)\n", "")
 
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if !errors.Is(err, ErrNoRoutesEnumerated) {
 		t.Fatalf("a router with the markers and zero registrations must FAIL, not pass vacuously; got err=%v outcome=%+v", err, out)
 	}
@@ -214,7 +206,7 @@ func TestCheck_AllRoutesViolating_ReportsViolationsNotEmptyEnumeration(t *testin
 		"\t// nothing protected either\n",
 		"\tr.Get(\"/api/v1/alpha\", h)\n\tr.Post(\"/api/v1/beta\", h)\n\tr.Delete(\"/api/v1/gamma\", h)\n")
 
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if errors.Is(err, ErrNoRoutesEnumerated) {
 		t.Fatalf("BUG: %d unprotected routes reported as an empty enumeration — the diagnosis points at the gate instead of at the unprotected surface", len(out.Violations))
 	}
@@ -230,7 +222,7 @@ func TestCheck_AllRoutesViolating_ReportsViolationsNotEmptyEnumeration(t *testin
 func TestCheck_SingleRouteEnumerated_Passes(t *testing.T) {
 	root := synthRouter(t, "\t\tr.Get(\"/api/v1/only\", h)\n", "", "")
 
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if err != nil {
 		t.Fatalf("a single approved route must pass; got %v", err)
 	}
@@ -244,44 +236,24 @@ func TestCheck_SingleRouteEnumerated_Passes(t *testing.T) {
 // criterion that would have caught the omission — `go test -run '...|RealTree'`
 // — passed vacuously, because no test name matched.
 func TestCheck_RealTreeStillPasses(t *testing.T) {
-	root := repoRootOrFail(t)
-	out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+	root := qtestutil.Root(t)
+	out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 	if err != nil {
 		t.Fatalf("the shipping tree must still pass; got %v", err)
 	}
-	// 70, não os 42 medidos em 2026-08-11 — e a mudança é DELIBERADA, do B-123.
+	// 70, not the 42 measured on 2026-08-11 — and the change is DELIBERATE, from B-123.
 	//
-	// O enumerador era um regex que exigia `r.` seguido imediatamente do verbo, então
-	// `r.With(rateLimitMiddlewares...).Post(…)` não casava. São **28** rotas nessa
-	// forma. O gate reportava 42 sobre um sistema com ~71 e vendia "toda rota pública
-	// está atrás de Auth" verificando 59% delas.
+	// The enumerator was a regex that required `r.` immediately followed by the verb, so
+	// `r.With(rateLimitMiddlewares...).Post(…)` did not match. There are **28** routes in
+	// that shape. The gate reported 42 over a system with ~71 and sold "every public
+	// route is behind Auth" while checking 59% of them.
 	//
-	// A contagem tinha de SUBIR, e este número é a prova de que subiu: 42 + 28 = 70.
-	// A 71ª é a montada por helper noutro arquivo, contada pela varredura da árvore e
-	// não por esta enumeração.
+	// The count had to RISE, and this number is the proof that it did: 42 + 28 = 70.
+	// The 71st is the one mounted by a helper in another file, counted by the tree scan
+	// and not by this enumeration.
 	//
-	// Se este número cair para perto de 42 outra vez, a forma encadeada voltou a ser
-	// invisível.
+	// If this number falls back near 42, the chained shape became invisible again.
 	if out.PassCount != 70 {
-		t.Errorf("expected the 70 routes the AST enumerator sees (42 diretas + 28 na forma `r.With(...)`, medidas 2026-08-17); got %d — if this changed on purpose, update the number and say why", out.PassCount)
+		t.Errorf("expected the 70 routes the AST enumerator sees (42 direct + 28 in the `r.With(...)` shape, measured 2026-08-17); got %d — if this changed on purpose, update the number and say why", out.PassCount)
 	}
-}
-
-// Not finding go.work is a FAILURE, never a skip — same reasoning as
-// TestOracle_MatchesFrozenBaseline and as the floor this file just added.
-func repoRootOrFail(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	start := dir
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
-			return dir
-		}
-		dir = filepath.Dir(dir)
-	}
-	t.Fatalf("go.work not found within 8 levels above %s — the real-tree assertion cannot run, and skipping it would report green while measuring nothing", start)
-	return ""
 }

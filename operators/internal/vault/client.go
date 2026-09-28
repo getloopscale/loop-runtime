@@ -11,8 +11,6 @@ package vault
 
 import (
 	"context"
-	"errors"
-	"fmt"
 )
 
 // TenantTransitClient is what the operator side still owns of the per-tenant Vault
@@ -32,25 +30,16 @@ import (
 //
 // **This interface still has no production implementer**, and that is now a smaller
 // claim than it was: what is missing is the shredder, whose ownership depends on the
-// tenant-deletion lifecycle nobody has looked at yet (B-075). Deleting the primitive
+// tenant-deletion lifecycle nobody has decided yet (B-075). Deleting the primitive
 // because half of it died would remove the right-to-erasure surface to tidy up an
-// interface.
+// interface; it is kept as that surface, with nothing else beside it.
+//
+// The key path helper and the typed quota/unreachable errors that used to live here
+// were removed: nothing read them, the errors' doc claimed a tenant_controller branch
+// that never existed, and the path helper formatted `transit/keys/tenant-<id>` while
+// the api creates `loopzero-tenants-<id>`, so it named a key nobody creates. Whoever
+// implements the shredder takes the key name from pkg/vault.TenantKeyName, the one
+// the api encrypts with, not from a second formula.
 type TenantTransitClient interface {
 	DeleteTenantKey(ctx context.Context, tenantID string) error
-}
-
-// Typed errors returned by TenantTransitClient implementations.
-// tenant_controller uses errors.Is(err, ErrVaultQuotaExceeded) to set
-// Condition.Reason = ReasonVaultQuotaExceeded (EC-15 alarm trigger).
-var (
-	ErrVaultQuotaExceeded = errors.New("vault: quota exceeded (transit key create rate limit)")
-	ErrVaultUnreachable   = errors.New("vault: unreachable (network/timeout/5xx)")
-)
-
-// TenantKeyPath returns the canonical Vault path for a tenant's transit key.
-// Format: transit/keys/tenant-<tenantID>.
-// Per T3.2 + T3.3 plan + tenant-controller-transit policy in openbao-init values.yaml
-// (capabilities=[create, read, update, delete] on path "transit/keys/tenant-+").
-func TenantKeyPath(tenantID string) string {
-	return fmt.Sprintf("transit/keys/tenant-%s", tenantID)
 }

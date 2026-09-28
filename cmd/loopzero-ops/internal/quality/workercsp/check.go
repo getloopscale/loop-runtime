@@ -33,6 +33,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultWorkerPath is the Cloudflare static-delivery worker source.
@@ -59,6 +61,15 @@ type Outcome struct {
 	Findings []Finding
 }
 
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
+}
+
 // cspLineRe finds the CSP header assignment regardless of quoting style.
 var cspLineRe = regexp.MustCompile(`(?i)content-security-policy`)
 
@@ -75,6 +86,10 @@ var cspLineRe = regexp.MustCompile(`(?i)content-security-policy`)
 // literal cannot be mistaken for it, and stopping at `;` so a later
 // directive's value is never attributed here.
 var scriptSrcRe = regexp.MustCompile(`(?i)script-src([^;"]*)`)
+
+// defaultSrcRe captures default-src, which governs script when script-src is
+// absent. Anchored so `script-src-elem` style names cannot match it.
+var defaultSrcRe = regexp.MustCompile(`(?i)default-src([^;"]*)`)
 
 // Check asserts the worker CSP does not permit arbitrary inline or eval'd script.
 func Check(cfg Config) (*Outcome, error) {
@@ -98,29 +113,48 @@ func Check(cfg Config) (*Outcome, error) {
 	}
 
 	out := &Outcome{Pass: true}
+	policies := 0
 	for i, line := range strings.Split(string(body), "\n") {
 		if !cspLineRe.MatchString(line) {
 			continue
 		}
-		m := scriptSrcRe.FindStringSubmatch(line)
+		policies++
+		// The effective script policy is script-src, or default-src when
+		// script-src is absent — the CSP fallback rule.
+		directive, m := "script-src", scriptSrcRe.FindStringSubmatch(line)
 		if m == nil {
+			directive, m = "default-src", defaultSrcRe.FindStringSubmatch(line)
+		}
+		if m == nil {
+			out.Pass = false
+			out.Findings = append(out.Findings, Finding{
+				Line:      i + 1,
+				Directive: "script-src",
+				Detail:    "the Content-Security-Policy sets neither script-src nor default-src — script is unrestricted",
+			})
 			continue
 		}
-		directiveBody := m[1]
 		for _, bad := range []string{"'unsafe-inline'", "'unsafe-eval'"} {
-			if strings.Contains(directiveBody, bad) {
+			if strings.Contains(m[1], bad) {
 				out.Pass = false
 				out.Findings = append(out.Findings, Finding{
 					Line:      i + 1,
-					Directive: "script-src",
-					Detail: fmt.Sprintf("script-src permits %s — any injected inline script in served tenant HTML executes, "+
-						"which negates most of the XSS protection this CSP exists to provide", bad),
+					Directive: directive,
+					Detail: fmt.Sprintf("%s permits %s — any injected inline script in served tenant HTML executes, "+
+						"which negates most of the XSS protection this CSP exists to provide", directive, bad),
 				})
 			}
 		}
 	}
+	if policies == 0 {
+		out.Pass = false
+		out.Findings = append(out.Findings, Finding{
+			Directive: "Content-Security-Policy",
+			Detail:    "the worker sets no Content-Security-Policy header at all — no script restriction is served",
+		})
+	}
 	if out.Pass {
-		out.Reason = fmt.Sprintf("%s: script-src permits neither 'unsafe-inline' nor 'unsafe-eval'", rel)
+		out.Reason = fmt.Sprintf("%s: %d CSP header(s); the effective script policy permits neither 'unsafe-inline' nor 'unsafe-eval'", rel, policies)
 	}
 	return out, nil
 }

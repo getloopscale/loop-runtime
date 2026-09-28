@@ -13,25 +13,10 @@ package charts
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-// openbaoInitDir resolves the openbao-init chart dir relative to this
-// test file (`infra/tests/charts/`).
-func openbaoInitDir(t *testing.T) string {
-	t.Helper()
-	d, err := filepath.Abs(filepath.Join("..", "..", "helm", "openbao-init"))
-	if err != nil {
-		t.Fatalf("resolve chart dir: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(d, "Chart.yaml")); err != nil {
-		t.Fatalf("chart not found at %s: %v", d, err)
-	}
-	return d
-}
 
 // TestOpenbaoInitAuthRoleSupportsBoundAudiences locks R2 of the plan.
 //
@@ -41,38 +26,29 @@ func openbaoInitDir(t *testing.T) string {
 // auth/<mount>/role/<name>` block, AND a control role with NO
 // boundAudiences MUST NOT emit the line (back-compat).
 func TestOpenbaoInitAuthRoleSupportsBoundAudiences(t *testing.T) {
-	if _, err := exec.LookPath("helm"); err != nil {
-		t.Fatal("helm not installed — set-equality guard cannot run")
-	}
-	chart := openbaoInitDir(t)
+	chart := uniqueChart(t, "openbao-init")
 
 	// Render the chart with a fixture authRole that carries
 	// boundAudiences + a sibling control authRole that omits it.
-	args := []string{
-		"template", "t", chart,
-		"--set", "authMethods[0].path=k8s-core",
-		"--set", "authMethods[0].type=kubernetes",
-		"--set", "policies[0].name=test-policy",
-		"--set", "policies[0].ruleHcl=path \"x\" { capabilities = [\"read\"] }",
-		"--set", "authRoles[0].name=role-with-audiences",
-		"--set", "authRoles[0].mount=k8s-core",
-		"--set", "authRoles[0].boundServiceAccountNames={sa-x}",
-		"--set", "authRoles[0].boundServiceAccountNamespaces={ns-x}",
-		"--set", "authRoles[0].boundAudiences={aud-a,aud-b}",
-		"--set", "authRoles[0].policies={test-policy}",
-		"--set", "authRoles[0].ttl=1h",
-		"--set", "authRoles[1].name=role-without-audiences",
-		"--set", "authRoles[1].mount=k8s-core",
-		"--set", "authRoles[1].boundServiceAccountNames={sa-y}",
-		"--set", "authRoles[1].boundServiceAccountNamespaces={ns-y}",
-		"--set", "authRoles[1].policies={test-policy}",
-		"--set", "authRoles[1].ttl=1h",
-	}
-	out, err := exec.Command("helm", args...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm template failed: %v\n%s", err, out)
-	}
-	rendered := string(out)
+	rendered := renderChart(t, chart, "t", map[string]string{
+		"authMethods[0].path":                        "k8s-core",
+		"authMethods[0].type":                        "kubernetes",
+		"policies[0].name":                           "test-policy",
+		"policies[0].ruleHcl":                        "path \"x\" { capabilities = [\"read\"] }",
+		"authRoles[0].name":                          "role-with-audiences",
+		"authRoles[0].mount":                         "k8s-core",
+		"authRoles[0].boundServiceAccountNames":      "{sa-x}",
+		"authRoles[0].boundServiceAccountNamespaces": "{ns-x}",
+		"authRoles[0].boundAudiences":                "{aud-a,aud-b}",
+		"authRoles[0].policies":                      "{test-policy}",
+		"authRoles[0].ttl":                           "1h",
+		"authRoles[1].name":                          "role-without-audiences",
+		"authRoles[1].mount":                         "k8s-core",
+		"authRoles[1].boundServiceAccountNames":      "{sa-y}",
+		"authRoles[1].boundServiceAccountNamespaces": "{ns-y}",
+		"authRoles[1].policies":                      "{test-policy}",
+		"authRoles[1].ttl":                           "1h",
+	})
 
 	// T1. The role declaring boundAudiences MUST emit its CSV value
 	// as a positional arg to write_auth_role. The helper consumes

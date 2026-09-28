@@ -2,7 +2,8 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Group C: Preview controller.
-// Self-contained — only needs RuntimeClient and BaseDomain.
+// Needs the CELL_0_KUBECONFIG cluster (the default for unplaced tenants), the
+// ClusterCredentials of every other cell.
 // Different scaling profile: TTL checks every 5 minutes.
 package main
 
@@ -12,15 +13,19 @@ import (
 	"fmt"
 	"os"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
+	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
 	"github.com/getloopscale/loopzero/operators/internal/preview"
 	"github.com/getloopscale/loopzero/operators/internal/tracing"
@@ -75,6 +80,11 @@ func main() {
 		operatorboot.StartPprofServer()
 	}
 
+	cacheOpts, err := managerCacheOptions()
+	if err != nil {
+		setupLog.Error(err, "invalid manager cache scoping")
+		os.Exit(1)
+	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
@@ -83,6 +93,7 @@ func main() {
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "loopzero-preview-operator.loopzero.io",
+		Cache:                  cacheOpts,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create manager")
@@ -100,13 +111,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	baseDomain := os.Getenv("BASE_DOMAIN")
-	if baseDomain == "" {
-		setupLog.Error(nil, "BASE_DOMAIN is required")
-		os.Exit(1)
-	}
-
-	if err := preview.SetupPreviewController(mgr, runtimeClient, baseDomain); err != nil {
+	// Previews are created in the runtime cluster of their tenant's cell, the
+	// same cell the tenant-operator points the preview's ArgoCD Application at.
+	runtimeFactory := cellrouting.NewCellAwareRuntimeClientFactory(
+		mgr.GetClient(), runtimeClient, constants.NamespacePlatformSystem)
+	if err := preview.SetupPreviewController(mgr, runtimeFactory); err != nil {
 		setupLog.Error(err, "unable to setup PreviewController")
 		os.Exit(1)
 	}
@@ -125,4 +134,23 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// managerCacheOptions scopes the manager's informers.
+//
+// The only Secret this operator reads on this cluster is a cell's kubeconfig,
+// in loopzero-system (CellAwareRuntimeClientFactory). The chart grants exactly
+// that through a namespaced Role, so the Secret informer watches that
+// namespace and nothing else. PreviewEnvironment stays cluster-wide
+// (ADR-0018 C9).
+func managerCacheOptions() (cache.Options, error) {
+	secretScope, err := operatorboot.SecretCache(constants.NamespacePlatformSystem)
+	if err != nil {
+		return cache.Options{}, err
+	}
+	return cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.Secret{}: secretScope,
+		},
+	}, nil
 }

@@ -11,15 +11,16 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtest"
 )
 
-// A ausência de `DATABASE_URL` é erro de CONFIGURAÇÃO, não degradação — decidido
-// em MEET-ASYNC-AMENDMENT-2026-08-17-no-database-is-a-config-error.
+// A missing `DATABASE_URL` is a CONFIGURATION error, not degradation — decided
+// in MEET-ASYNC-AMENDMENT-2026-08-17-no-database-is-a-config-error.
 //
-// Três medições sustentam a decisão: a degradação nunca executou (ela entrava em
-// pânico três funções adiante, `B-104`); o alcance é 27 das 36 superfícies do
-// roteador; e o único caso registrado dela em quatro meses foi um bootstrap
-// quebrado em silêncio (B35, 2026-04-28, comentado no próprio deployment).
+// Three measurements back the decision: the degradation never ran (it panicked
+// three functions further on, `B-104`); its reach is 27 of the router's 36
+// surfaces; and its only recorded occurrence in four months was a bootstrap
+// broken in silence (B35, 2026-04-28, commented in the deployment itself).
 
 func quietLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -31,40 +32,58 @@ func TestSetupDatabase_MissingURLIsATypedBootError(t *testing.T) {
 	deps, err := setupDatabase(config.Config{}, quietLogger())
 
 	if err == nil {
-		t.Fatal("DATABASE_URL ausente deve falhar o arranque: nenhuma espera futura produz o valor, e 27 das 36 superfícies dependem dele")
+		t.Fatal("a missing DATABASE_URL must fail the boot: no amount of waiting produces the value, and 27 of the 36 surfaces depend on it")
 	}
 	if !errors.Is(err, ErrDatabaseURLNotSet) {
-		t.Fatalf("o erro precisa ser reconhecível por quem trata o arranque, não uma string; got %T: %v", err, err)
+		t.Fatalf("the error must be recognisable by whoever handles the boot, not a string; got %T: %v", err, err)
 	}
 	if deps != nil {
-		t.Fatalf("nada foi construído; devolver deps não-nil junto de erro convida o chamador a usá-los: %+v", deps)
+		t.Fatalf("nothing was built; returning non-nil deps alongside an error invites the caller to use them: %+v", deps)
 	}
 }
 
-// A mensagem é o único diagnóstico que o operador recebe no primeiro
-// `kubectl logs`, e o contraditor do MEET aceitou o `CrashLoopBackOff`
-// justamente porque ela nomeia a variável.
+// The message is the only diagnosis the operator gets from the first
+// `kubectl logs`, and the MEET's devil's advocate accepted the `CrashLoopBackOff`
+// precisely because it names the variable.
 func TestSetupDatabase_MissingURLErrorNamesTheVariable(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 
 	_, err := setupDatabase(config.Config{}, quietLogger())
 	if err == nil {
-		t.Fatal("esperava erro")
+		t.Fatal("expected an error")
 	}
 	if !strings.Contains(err.Error(), "DATABASE_URL") {
-		t.Errorf("a mensagem precisa nomear a variável que falta; got %q", err.Error())
+		t.Errorf("the message must name the missing variable; got %q", err.Error())
 	}
 }
 
-// A fronteira oposta: com a variável presente, `setupDatabase` NÃO pode recusar
-// por esta razão. Sem esta asserção, endurecer o arranque viraria uma regra que
-// nenhum ambiente satisfaz — e o valor aqui é deliberadamente inválido, para que
-// o teste não precise de um Postgres para provar o que precisa provar.
+// The opposite boundary: with the variable present, `setupDatabase` must NOT
+// refuse for this reason. Without this assertion, hardening the boot could turn
+// into a rule no environment satisfies — and the value here is deliberately
+// invalid, so the test needs no Postgres to prove what it has to prove.
 func TestSetupDatabase_PresentURLIsNotRejectedAsMissing(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://nobody@127.0.0.1:1/none?sslmode=disable&connect_timeout=1")
 
 	_, err := setupDatabase(config.Config{}, quietLogger())
 	if errors.Is(err, ErrDatabaseURLNotSet) {
-		t.Fatalf("uma URL presente nunca é 'ausente'; got %v", err)
+		t.Fatalf("a present URL is never 'missing'; got %v", err)
+	}
+}
+
+// Plan enforcement (project cap, replica cap, plan limits) reads the plan
+// through the cross-tenant connection main hands it — never through the request
+// pool, where fail-closed RLS hides every subscription and each tenant would be
+// capped as Starter. The store must sit on exactly the handle it was given.
+func TestWirePlanEnforcementReadsThroughTheCrossTenantConnection(t *testing.T) {
+	crossTenant := &dbtest.FakeDBTX{}
+	deps := &DatabaseDeps{}
+
+	wirePlanEnforcement(deps, crossTenant, quietLogger())
+
+	if deps.PlanLimiter == nil || deps.PlanLimits == nil {
+		t.Fatalf("plan enforcement not wired: limiter=%v store=%v", deps.PlanLimiter, deps.PlanLimits)
+	}
+	if deps.PlanLimits.DB != crossTenant {
+		t.Fatalf("plan-limits store reads through %T, want the cross-tenant connection", deps.PlanLimits.DB)
 	}
 }

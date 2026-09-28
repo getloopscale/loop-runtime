@@ -13,6 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/k8s"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // newAppMgr builds an ApplicationCRManager backed by the controller-runtime
@@ -322,5 +323,50 @@ func TestEnsureLoopZeroApplication_IdempotentCreate(t *testing.T) {
 	}
 	if len(list.Items) != 1 {
 		t.Errorf("expected exactly 1 CR, found %d", len(list.Items))
+	}
+}
+
+// The operator composes the routed hostname (pkg/naming.AppHostname) from
+// spec.appName, so the api must write the app name into the spec — not only
+// into the label.
+func TestBuildLoopZeroApplicationCR_WritesTheAppNameIntoTheSpec(t *testing.T) {
+	cr := buildLoopZeroApplicationCR("loopzero-system", LoopZeroApplicationInput{
+		TenantID:    "tn-loopzero",
+		Project:     "my-project",
+		Environment: "production",
+		AppName:     "web",
+		ServiceName: "web-svc",
+	})
+	if cr.Spec.AppName != "web" {
+		t.Errorf("spec.appName = %q, want web", cr.Spec.AppName)
+	}
+	if cr.Labels[naming.LabelApp] != "web" {
+		t.Errorf("label %s = %q, want web", naming.LabelApp, cr.Labels[naming.LabelApp])
+	}
+}
+
+// A CR created before spec.appName existed gains it on the next deploy.
+func TestEnsureLoopZeroApplication_BackfillsTheAppNameOnAnExistingCR(t *testing.T) {
+	mgr := newAppMgr(t)
+	input := LoopZeroApplicationInput{
+		TenantID:    "tn-loopzero",
+		Project:     "my-project",
+		Environment: "production",
+		AppName:     "web",
+		ServiceName: "web",
+	}
+	legacy := buildLoopZeroApplicationCR("loopzero-system", input)
+	legacy.Spec.AppName = ""
+	if err := mgr.Client.Create(context.Background(), legacy); err != nil {
+		t.Fatalf("seed create: %v", err)
+	}
+
+	if err := mgr.EnsureLoopZeroApplication(context.Background(), input); err != nil {
+		t.Fatalf("EnsureLoopZeroApplication() unexpected error: %v", err)
+	}
+
+	got := getApp(t, mgr, loopzeroApplicationCRName("tn-loopzero", "my-project", "web", "production"))
+	if got.Spec.AppName != "web" {
+		t.Errorf("spec.appName after re-deploy = %q, want web", got.Spec.AppName)
 	}
 }

@@ -1,86 +1,107 @@
 package orykratospublicurls
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-func TestCheck_HelmfileAbsent_SKIP(t *testing.T) {
-	// Simulate helmfile absence by ensuring PATH doesn't include it.
-	// Note: in practice go test inherits system PATH; use a fake root
-	// where helmfile config doesn't exist to force the fallthrough path.
-	// This test only validates the fallthrough shape.
-	tmp := t.TempDir()
-	out, err := Check(Config{RepoRoot: tmp})
-	if err != nil {
-		t.Fatalf("expected nil err on skip path, got %v", err)
-	}
-	if !out.Pass {
-		t.Errorf("expected Pass=true on skip, got %v", out)
-	}
-	// Either "helmfile binary not on PATH" OR "helmfile config not present"
-	// path is acceptable (both are advisory-fallthrough).
-	if !out.Skipped {
-		t.Errorf("expected Skipped=true, got %v", out)
+func TestCheck_HelmfileAbsentIsSkipped(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	out, err := Check(Config{RepoRoot: writeHelmfileConfig(t)})
+
+	if err != nil || !out.Skipped || out.SkipReason == "" {
+		t.Fatalf("without helmfile the gate skips and says why; out=%+v err=%v", out, err)
 	}
 }
 
-func TestCheck_AllowlistMissing_FAIL(t *testing.T) {
-	// Simulate helmfile config present but allowlist absent.
-	// Only exercises this path if helmfile binary is available on PATH.
-	if _, err := os.Stat("/usr/bin/helmfile"); os.IsNotExist(err) {
-		// Try which
-		if _, err := os.Stat("/usr/local/bin/helmfile"); os.IsNotExist(err) {
-			t.Skip("helmfile not available — cannot exercise allowlist path")
+func writeHelmfileConfig(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	dir := filepath.Join(root, "infra", "helmfile")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "core.helmfile.yaml.gotmpl"), []byte("# stub\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// A render failure must not be read as "nothing to check": a broken chart,
+// missing values or an unset required variable used to make every env skip,
+// and the gate then reported SKIP with exit 0 — indistinguishable from
+// helmfile not being installed.
+func TestCheck_RenderFailureFails(t *testing.T) {
+	root := writeHelmfileConfig(t)
+	failing := func(_, env string) ([]byte, error) {
+		return nil, errors.New("required env var `LOOPZERO_DB_PASSWORD` is not set")
+	}
+
+	out, err := Check(Config{RepoRoot: root, Render: failing})
+
+	if err != nil || out.Verdict() != verdict.Fail || out.Pass || out.Skipped {
+		t.Fatalf("render failure must fail the gate; out=%+v err=%v", out, err)
+	}
+	if !strings.Contains(strings.Join(out.Failures, "\n"), "LOOPZERO_DB_PASSWORD") {
+		t.Errorf("the failure must carry the render error; got %v", out.Failures)
+	}
+}
+
+func TestCheck_EmptyRenderFails(t *testing.T) {
+	root := writeHelmfileConfig(t)
+	empty := func(_, _ string) ([]byte, error) { return nil, nil }
+
+	if out, err := Check(Config{RepoRoot: root, Render: empty}); err != nil || out.Verdict() != verdict.Fail {
+		t.Fatalf("an empty render must fail the gate; err=%v", err)
+	}
+}
+
+func TestCheck_GoldenRenderPasses(t *testing.T) {
+	root := writeHelmfileConfig(t)
+	render := func(_, env string) ([]byte, error) {
+		if env == "dev" {
+			return []byte("ui_url: http://localhost:4455/login\n"), nil
 		}
+		return []byte(strings.Join([]string{
+			`base_url: "https://auth.loopzero.example/"`,
+			"enabled: true",
+			"allow_credentials: true",
+			"domain: loopzero.example",
+			"allowed_return_urls:",
+			"ui_url: https://app.loopzero.example/register",
+			"ui_url: https://app.loopzero.example/login",
+		}, "\n")), nil
 	}
-	tmp := t.TempDir()
-	helmfileDir := filepath.Join(tmp, "infra", "helmfile")
-	if err := os.MkdirAll(helmfileDir, 0o755); err != nil {
-		t.Fatal(err)
+
+	out, err := Check(Config{RepoRoot: root, Render: render})
+
+	if err != nil || !out.Pass {
+		t.Fatalf("golden render must pass; out=%+v err=%v", out, err)
 	}
-	// Create a stub helmfile config so gate proceeds past config-missing check.
-	if err := os.WriteFile(filepath.Join(helmfileDir, "core.helmfile.yaml.gotmpl"), []byte("# stub\n"), 0o644); err != nil {
-		t.Fatal(err)
+}
+
+func TestCheck_MissingHelmfileConfigIsAnError(t *testing.T) {
+	render := func(_, _ string) ([]byte, error) { return nil, nil }
+
+	if _, err := Check(Config{RepoRoot: t.TempDir(), Render: render}); err == nil {
+		t.Fatalf("a missing helmfile config is a broken setup, not a pass; err=%v", err)
 	}
-	// No allowlist created.
-	out, err := Check(Config{RepoRoot: tmp})
-	if err == nil {
-		t.Skip("no allowlist means test can't distinguish paths without helmfile — accepting either")
-	}
-	_ = out
 }
 
 func TestCheck_RealRepoPasses(t *testing.T) {
-	root := findRepoRoot(t)
-	out, err := Check(Config{RepoRoot: root})
-	// Accept: (a) PASS with real helmfile, (b) SKIP if helmfile/config absent.
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if out.Skipped {
+		// Only one skip is left: helmfile not installed on this machine.
 		return
 	}
 	if err != nil {
-		t.Logf("real-repo check result: %v; failures: %v", err, out.Failures)
-		// Not fatal: envs might be WIP; the bash test itself has SKIP semantics.
+		t.Fatalf("real repo: %v; failures: %v", err, out.Failures)
 	}
-}
-
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 10; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "ROADMAP.md")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("ROADMAP.md not found")
-		}
-		dir = parent
-	}
-	t.Fatal("ROADMAP.md not found")
-	return ""
 }

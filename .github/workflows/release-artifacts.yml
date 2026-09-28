@@ -1,6 +1,6 @@
 # AM6 — loopzero artifact pipeline, dual-channel + low-cost.
 #   develop push  → DEV channel: build only CHANGED services (paths-filter), tags :develop/:develop-<sha>, NO sign (cheap/fast)
-#   tag v*        → RELEASE channel: build ALL 5 services + ALL 13 charts, SBOM + provenance + keyless cosign
+#   tag v*        → RELEASE channel: build ALL 9 images + ALL 13 charts, SBOM + provenance + keyless cosign
 #   workflow_dispatch → build ALL (unsigned), manual
 # Low-cost levers: change-detection (dev), GHA layer cache (build-publish.yml), amd64-only, cancel-in-progress (dev only).
 name: artifacts
@@ -9,16 +9,22 @@ on:
     branches: [develop]
     tags: ["v*"]
   workflow_dispatch: {}
+# THE FLOOR, and only the floor. `packages: write` and `id-token: write` lived here and
+# applied to all three jobs, including `plan`, which only checks out and runs paths-filter.
+# zizmor flagged both as excessive-permissions (High) and was right: a token with package
+# write scope exposed to a job that never publishes anything is surface that buys nothing.
+# Each job declares what it uses, below.
 permissions:
   contents: read
-  packages: write
-  id-token: write
 concurrency:
   group: artifacts-${{ github.ref }}
   cancel-in-progress: ${{ github.ref == 'refs/heads/develop' }}   # cancel superseded DEV runs only; never release
 jobs:
   plan:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # GitHub's default is 6 HOURS: a hung job burns that in billed minutes and holds a
+    # concurrency slot the whole time.
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
     outputs:
       images: ${{ steps.set.outputs.images }}
       charts: ${{ steps.set.outputs.charts }}
@@ -27,30 +33,32 @@ jobs:
       version: ${{ steps.provenance.outputs.version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; matches build-publish.yml; issue #233)
-        with: { fetch-depth: 0 }   # full history for accurate paths-filter diff on push
-      # Data do COMMIT, nao a hora do build. Duas razoes, e a segunda e' a que
-      # decide: um timestamp de build muda a cada run e o valor entra na chave de
-      # cache da camada (a ARG e' usada no RUN), entao TODO build recompilaria do
-      # zero; e a data do commit e' a proveniencia que interessa a quem le' o
-      # painel — "o codigo e' deste momento", nao "a esteira rodou agora".
+        with:
+          fetch-depth: 0                 # full history for accurate paths-filter diff on push
+          persist-credentials: false     # zizmor artipacked: no later step pushes
+      # The COMMIT date, not the build time. Two reasons, and the second decides: a build
+      # timestamp changes on every run and the value enters the layer's cache key (the ARG is
+      # used in the RUN), so EVERY build would recompile from scratch; and the commit date is
+      # the provenance that matters to whoever reads the dashboard — "the code is from this
+      # moment", not "the pipeline ran just now".
       #
-      # `%cI` e' ISO-8601 estrito, que e' o que o formatInstant do dashboard
-      # espera; `repository.pushed_at` do evento push vem como epoch inteiro e a
-      # coluna "Built" exibiria o numero cru.
+      # `%cI` is strict ISO-8601, which is what the dashboard's formatInstant expects;
+      # `repository.pushed_at` from the push event arrives as an integer epoch and the "Built"
+      # column would show the raw number.
       - id: provenance
-        # REF_NAME vem do evento por `env`, e nao de `git rev-parse
-        # --abbrev-ref HEAD`: o checkout do Actions fica DETACHED no sha, entao
-        # o git devolveria "HEAD" e a versao sairia `HEAD-abc1234`. Nada
-        # falharia — apenas ficaria errado na tela, para sempre.
+        # REF_NAME comes from the event via `env`, not from `git rev-parse --abbrev-ref HEAD`:
+        # the Actions checkout is DETACHED at the sha, so git would return "HEAD" and the
+        # version would come out as `HEAD-abc1234`. Nothing would fail — it would only be
+        # wrong on screen, forever.
         env:
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # `develop-<sha7>`, nao apenas `develop`: e' a convencao que os cinco
-          # servicos vizinhos ja' exibem no painel e o que torna a coluna
-          # "Version" util. So' o canal nao distingue dois builds — a tela
-          # mostraria `develop` inclusive depois de um deploy novo. Espelha a tag
-          # que o metadata-action produz para a imagem.
+          # `develop-<sha7>`, not just `develop`: it is the convention the five neighbouring
+          # services already show on the dashboard, and what makes the "Version" column
+          # useful. The channel alone does not distinguish two builds — the screen would show
+          # `develop` even after a fresh deploy. It mirrors the tag the metadata-action
+          # produces for the image.
           {
             echo "built_at=$(git log -1 --format=%cI)"
             echo "version=${REF_NAME}-$(git rev-parse --short=7 HEAD)"
@@ -65,6 +73,10 @@ jobs:
             loopzero-platform-operator: ['operators/**', 'pkg/**']
             loopzero-tenant-operator: ['operators/**', 'pkg/**']
             loopzero-preview-operator: ['operators/**', 'pkg/**']
+            loopzero-minio: ['infra/images/minio/**']
+            loopzero-clone-runner: ['infra/images/clone-runner/**']
+            loopzero-syft-scanner: ['infra/images/syft-scanner/**']
+            loopzero-cosign-signer: ['infra/images/cosign-signer/**']
             charts: ['charts/**']
       - id: set
         env:
@@ -73,11 +85,11 @@ jobs:
           CHANGES: ${{ steps.filter.outputs.changes }}
         run: |
           set -euo pipefail
-          ALL='[{"image":"loopzero-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loopzero-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loopzero-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loopzero-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loopzero-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."}]'
-          # Bloco agrupado em vez de tres `>>` (SC2129): um unico redirect abre o
-          # arquivo uma vez so'. Alem do estilo, evita a classe de bug em que um
-          # dos redirects e' escrito `>` por engano e trunca o que os anteriores
-          # gravaram — em `$GITHUB_OUTPUT` isso apaga saidas silenciosamente.
+          ALL='[{"image":"loopzero-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loopzero-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loopzero-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loopzero-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loopzero-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."},{"image":"loopzero-minio","dockerfile":"infra/images/minio/Dockerfile","context":"infra/images/minio"},{"image":"loopzero-clone-runner","dockerfile":"infra/images/clone-runner/Dockerfile","context":"infra/images/clone-runner"},{"image":"loopzero-syft-scanner","dockerfile":"infra/images/syft-scanner/Dockerfile","context":"infra/images/syft-scanner"},{"image":"loopzero-cosign-signer","dockerfile":"infra/images/cosign-signer/Dockerfile","context":"infra/images/cosign-signer"}]'
+          # A grouped block instead of three `>>` (SC2129): one redirect opens the file
+          # once. Beyond style, it avoids the class of bug where one of the redirects is
+          # written `>` by mistake and truncates what the earlier ones wrote — in
+          # `$GITHUB_OUTPUT` that erases outputs silently.
           if [ "$IS_TAG" = "true" ] || [ "$IS_DISPATCH" = "true" ]; then
             {
               echo "images=$ALL"
@@ -100,63 +112,83 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.images) }}
+    # The called workflow signs with cosign (`id-token`) and publishes to GHCR
+    # (`packages`). They are its, and nobody else's in this file.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     uses: ./.github/workflows/build-publish.yml
     with:
       image: ${{ matrix.image }}
       dockerfile: ${{ matrix.dockerfile }}
       context: ${{ matrix.context }}
       sign: ${{ needs.plan.outputs.sign == 'true' }}
-      # Proveniencia injetada no binario. Sem isto o endpoint de versao serve os
-      # defaults do codigo e o painel /status exibia `dev` como versao de
-      # producao — pior que celula vazia, porque parece um dado.
+      # Amazon ECR, the registry production pulls from. Both are repository variables:
+      # unset, the reusable skips ECR entirely instead of failing the GHCR channel.
+      ecr_registry: ${{ vars.ECR_REGISTRY }}
+      aws_role_arn: ${{ vars.AWS_IMAGE_PUBLISH_ROLE_ARN }}
+      # Provenance injected into the binary. Without it the version endpoint serves the
+      # code's defaults and the /status dashboard showed `dev` as the production version —
+      # worse than an empty cell, because it looks like data.
       #
-      # Passado a TODAS as imagens da matriz: so' o Dockerfile do engine declara
-      # as ARGs hoje, e um Dockerfile que nao as declara ignora a arg (aviso de
-      # "unused build arg", nao erro). Condicionar por imagem exigiria um ramo na
-      # matriz que quebraria no dia em que os operators ganhassem o mesmo
-      # endpoint.
+      # Passed to EVERY image in the matrix: only the engine's Dockerfile declares the ARGs
+      # today, and a Dockerfile that does not declare them ignores the arg (an "unused build
+      # arg" warning, not an error). Conditioning per image would need a branch in the matrix
+      # that would break on the day the operators gained the same endpoint.
       #
-      # `ref_name` e' o CANAL (develop / vX.Y.Z) — o que o leitor do painel
-      # reconhece; o sha exato vai em LOOPZERO_COMMIT, ao lado.
+      # `ref_name` is the CHANNEL (develop / vX.Y.Z) — what the dashboard's reader
+      # recognises; the exact sha goes in LOOPZERO_COMMIT, beside it.
       build_args: |
         LOOPZERO_VERSION=${{ needs.plan.outputs.version }}
         LOOPZERO_COMMIT=${{ github.sha }}
         LOOPZERO_BUILD_DATE=${{ needs.plan.outputs.built_at }}
-    secrets: inherit
+    # NAMED, not `inherit`. `inherit` hands EVERY repository secret to the called workflow,
+    # including the ones it does not declare and the ones created later. These four are the
+    # ones `build-publish.yml` declares in `workflow_call.secrets`; a fifth created tomorrow
+    # does not leak by omission.
+    secrets:
+      GOMOD_SSH_KEY: ${{ secrets.GOMOD_SSH_KEY }}
+      GOMOD_TOKEN: ${{ secrets.GOMOD_TOKEN }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
   charts:
+    # GitHub's default is 6 HOURS: a hung job burns that in billed minutes and holds a
+    # concurrency slot the whole time.
+    timeout-minutes: 20
     needs: plan
     if: ${{ needs.plan.outputs.charts == 'true' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
+        with:
+          persist-credentials: false   # zizmor artipacked: no later step pushes
       - name: Login GHCR (helm)
-        # Mesma classe do #250: nada de `${{ }}` dentro de `run:`. Aqui o segredo tambem deixa de
-        # transitar pela LINHA DE COMANDO — `printenv` nao aparece em `ps`, ao contrario de um `echo`
-        # com o valor ja substituido no texto do script.
+        # Same class as #250: no `${{ }}` inside `run:`. Here the secret also stops travelling
+        # through the COMMAND LINE — `printenv` does not show up in `ps`, unlike an `echo` with
+        # the value already substituted into the script text.
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
         run: printenv GHCR_TOKEN | helm registry login ghcr.io -u "${GHCR_USER}" --password-stdin
       - name: Package + push the 13 charts (OCI)
-        # O namespace vem do DONO DO REPOSITORIO, nao de texto fixo.
+        # The namespace comes from the REPOSITORY OWNER, not from fixed text.
         #
-        # Estava `oci://ghcr.io/getloopscale/charts`. Com o repo transferido para a
-        # org `getloopscale`, o run passou a nao ter permissao de push naquele
-        # namespace e os 13 charts morreram com
-        # `403: Forbidden` no primeiro `HEAD` — medido no run 30583134483.
+        # It read `oci://ghcr.io/getloopscale/charts`. With the repo transferred to the
+        # `getloopscale` org, the run stopped having push permission in that namespace and the
+        # charts died with `403: Forbidden` on the first `HEAD` — measured in run 30583134483.
         #
-        # E' o mesmo defeito que o `registry` das imagens ja' tinha, e o runbook do
-        # umbrella lista essa cascata entre os pontos que se esquece numa
-        # transferencia. Derivar em vez de fixar faz o proximo movimento de dono
-        # ser inerte aqui.
+        # It is the same defect the images' `registry` already had, and the umbrella runbook
+        # lists that cascade among the things forgotten in a transfer. Deriving it instead of
+        # fixing it makes the next change of owner inert here.
         env:
           OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
-          # minusculas: nomes de conta preservam maiusculas, referencias OCI nao.
+          # lowercase: account names preserve case, OCI references do not.
           NS="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           mkdir -p /tmp/charts
           # loopzero-common is a library chart that image-backed charts depend on; resolve

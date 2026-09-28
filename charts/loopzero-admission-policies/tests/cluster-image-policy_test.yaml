@@ -29,6 +29,16 @@ tests:
           content:
             glob: "registry.digitalocean.com/loopzero-system/**"
 
+  - it: imageGlobs name no Harbor registry
+    asserts:
+      - notContains:
+          path: spec.images
+          content:
+            glob: "harbor.dev.loopzero.example/loopzero-platform/**"
+      - lengthEqual:
+          path: spec.images
+          count: 1
+
   - it: keyless variant renders when enabled
     template: cluster-image-policy.yaml
     set:

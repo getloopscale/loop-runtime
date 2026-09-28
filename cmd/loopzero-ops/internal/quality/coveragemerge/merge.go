@@ -36,9 +36,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coverageparse"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -70,6 +71,10 @@ type Outcome struct {
 	// Messages — diagnostic stream.
 	Messages []string
 }
+
+// Verdict is Pass: merging is an operation, and an Outcome exists only when
+// it completed. A merge that failed is Merge's error.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.Pass }
 
 // fileLines accumulates per-line counts for a single source file.
 type fileLines struct {
@@ -118,10 +123,11 @@ func ConvertGoProfile(r io.Reader, w io.Writer) (int, int, error) {
 			headerSkipped = true
 			continue
 		}
-		file, sLine, eLine, count, ok := parseProfileLine(raw)
+		b, ok := coverageparse.ParseProfileLine(raw)
 		if !ok {
 			continue
 		}
+		file, sLine, eLine, count := b.File, b.StartLine, b.EndLine, b.Count
 		fl, exists := files[file]
 		if !exists {
 			fl = newFileLines()
@@ -171,57 +177,6 @@ func ConvertGoProfile(r io.Reader, w io.Writer) (int, int, error) {
 		emittedFiles++
 	}
 	return emittedFiles, emittedLines, nil
-}
-
-// parseProfileLine extracts (file, startLine, endLine, count) from a
-// Go cover profile line.
-//
-//	<file>:<sLine>.<sCol>,<eLine>.<eCol> <stmts> <count>
-func parseProfileLine(line string) (file string, sLine, eLine, count int, ok bool) {
-	// Find LAST colon separating file from range (Windows paths have colons).
-	colonIdx := strings.LastIndexByte(line, ':')
-	if colonIdx < 0 {
-		return "", 0, 0, 0, false
-	}
-	file = line[:colonIdx]
-	rest := line[colonIdx+1:]
-	// rest = "<sLine>.<sCol>,<eLine>.<eCol> <stmts> <count>"
-	fields := strings.Fields(rest)
-	if len(fields) < 3 {
-		return "", 0, 0, 0, false
-	}
-	rangePart := fields[0]
-	// rangePart = "<sLine>.<sCol>,<eLine>.<eCol>"
-	commaIdx := strings.IndexByte(rangePart, ',')
-	if commaIdx < 0 {
-		return "", 0, 0, 0, false
-	}
-	startPart := rangePart[:commaIdx]
-	endPart := rangePart[commaIdx+1:]
-	dotIdx := strings.IndexByte(startPart, '.')
-	if dotIdx < 0 {
-		return "", 0, 0, 0, false
-	}
-	sLine, err := strconv.Atoi(startPart[:dotIdx])
-	if err != nil {
-		return "", 0, 0, 0, false
-	}
-	dotIdx = strings.IndexByte(endPart, '.')
-	if dotIdx < 0 {
-		return "", 0, 0, 0, false
-	}
-	eLine, err = strconv.Atoi(endPart[:dotIdx])
-	if err != nil {
-		return "", 0, 0, 0, false
-	}
-	count, err = strconv.Atoi(fields[2])
-	if err != nil {
-		return "", 0, 0, 0, false
-	}
-	if sLine < 1 || eLine < sLine {
-		return "", 0, 0, 0, false
-	}
-	return file, sLine, eLine, count, true
 }
 
 // fileNonEmpty returns true when path exists AND has non-zero size.

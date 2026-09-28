@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package stackcoverage implements the T10.1 gate: enforce a 1:1 mapping
-// between LanguageStrategy types registered in api/internal/buildplane/argo/languages.go
+// between LanguageStrategy types registered in api/internal/builds/argo/languages.go
 // and E2E fixture coverage under infra/tests/e2e/fixtures/.
 //
 // Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
@@ -19,6 +19,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // runtimeRegistryRe isolates the `var runtimeRegistry = map[...]{ ... }` block
@@ -73,7 +75,7 @@ var frameworkLineRe = regexp.MustCompile(`(?m)^\s*framework:\s*(.+)$`)
 // Config drives the gate.
 type Config struct {
 	Root          string // repo root
-	LanguagesFile string // default: api/internal/buildplane/argo/languages.go
+	LanguagesFile string // default: api/internal/builds/argo/languages.go
 	FixturesDir   string // default: infra/tests/e2e/fixtures
 }
 
@@ -85,6 +87,9 @@ type Outcome struct {
 	Missing       []string // language keys with no fixture coverage
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // Check runs the gate.
 func Check(cfg Config) (*Outcome, error) {
 	root := cfg.Root
@@ -93,7 +98,7 @@ func Check(cfg Config) (*Outcome, error) {
 	}
 	langFile := cfg.LanguagesFile
 	if langFile == "" {
-		langFile = filepath.Join(root, "api", "internal", "buildplane", "argo", "languages.go")
+		langFile = filepath.Join(root, "api", "internal", "builds", "argo", "languages.go")
 	}
 	fixturesDir := cfg.FixturesDir
 	if fixturesDir == "" {

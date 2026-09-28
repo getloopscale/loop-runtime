@@ -1,28 +1,28 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2025-2026 The LoopZero Authors
 
--- Unifica cell e cluster em 1:1. ADR docs/decisions.md,
+-- Unifies cell and cluster 1:1. ADR docs/decisions.md,
 -- BACKLOG.md B-005.
 --
--- O catalogo tinha TRES cells para DUAS maquinas. Tres fontes independentes mediram que
--- `cell-default` e `cell-1` sao o mesmo cluster sob dois nomes:
+-- The catalogue had THREE cells for TWO machines. Three independent sources measured that
+-- `cell-default` and `cell-1` are the same cluster under two names:
 --   * infra/helmfile/environments/dev.yaml       — "runtime cluster maps to cell-1"
 --   * infra/helmfile/environments/drill.yaml     — "cell-default + cell-1 -> runtimeCluster"
---   * 000006_cells.up.sql:120                    — cell-1 e "Canonical first cell. Maps to runtime-1"
--- e a auditoria LIVE de 2026-05-01 encontrou tres cells `active` para DOIS ClusterCredential.
--- A terceira identidade nunca teve maquina.
+--   * 000006_cells.up.sql:120                    — cell-1 is "Canonical first cell. Maps to runtime-1"
+-- and the LIVE audit of 2026-05-01 found three `active` cells for TWO ClusterCredentials.
+-- The third identity never had a machine.
 --
--- Por isso esta migracao FUNDE identidades, e nao apenas renomeia. A ordem das duas fases e
--- OBRIGATORIA: `cell-2` so pode virar `cell-1` DEPOIS que o `cell-1` antigo deixou de existir.
--- Fazer as duas ao mesmo tempo colapsaria identidades distintas sem deixar rastro.
+-- That is why this migration MERGES identities rather than just renaming them. The order of the
+-- two phases is MANDATORY: `cell-2` may only become `cell-1` AFTER the old `cell-1` has ceased to
+-- exist. Doing both at once would collapse distinct identities without leaving a trace.
 --
--- Nao ha chave estrangeira para `cells(cell_id)` em nenhuma das seis colunas (`git grep
--- "REFERENCES cells"` nao devolve nada), entao a fusao e um conjunto de UPDATEs e nao exige
--- janela de indisponibilidade. Isso tambem significa que nada no banco impede um `cell_id`
--- orfao — o motivo pelo qual a fase 4 troca a sentinela por uma falha explicita.
+-- There is no foreign key to `cells(cell_id)` on any of the six columns (`git grep
+-- "REFERENCES cells"` returns nothing), so the merge is a set of UPDATEs and needs no
+-- downtime window. It also means nothing in the database prevents an orphan `cell_id` —
+-- the reason phase 4 replaces the sentinel with an explicit failure.
 
 -- ---------------------------------------------------------------------------------------------
--- Fase 1 — funde `cell-default` + `cell-1` na cell que a maquina realmente e: `cell-0`.
+-- Phase 1 — merges `cell-default` + `cell-1` into the cell the machine really is: `cell-0`.
 -- ---------------------------------------------------------------------------------------------
 UPDATE tenants                  SET cell_id = 'cell-0' WHERE cell_id IN ('cell-default', 'cell-1');
 UPDATE builds                   SET cell_id = 'cell-0' WHERE cell_id IN ('cell-default', 'cell-1');
@@ -31,32 +31,32 @@ UPDATE leader_generations       SET cell_id = 'cell-0' WHERE cell_id IN ('cell-d
 UPDATE preview_environments     SET cell_id = 'cell-0' WHERE cell_id IN ('cell-default', 'cell-1');
 UPDATE release_app_attestations SET cell_id = 'cell-0' WHERE cell_id IN ('cell-default', 'cell-1');
 
--- As linhas de dados ja sairam das duas identidades acima, entao apagar as duplicatas e
--- seguro. `cell-1` so pode cair AQUI enquanto ainda significa a identidade antiga — depois
--- da fase 2 ela passa a ser a renumeracao de `cell-2`, e apaga-la seria destruir a segunda
--- cell. E por isso que a guarda abaixo existe: este migrador REAPLICA todos os arquivos a
--- cada execucao (infra/scripts/production/run-migrations.sh), entao a 000006 volta a
--- inserir `cell-default`/`cell-1`/`cell-2` e esta migracao roda de novo por cima. Medido no
--- droplet app-dev em 2026-08-10: sem a guarda, a segunda passagem tentava renomear
--- `cell-default` para um `cell-0` que ja existia. Toda esta fase e escrita para ser
--- re-executavel sem mudar o resultado.
+-- The data rows have already left the two identities above, so deleting the duplicates is
+-- safe. `cell-1` may only be dropped HERE while it still means the old identity — after
+-- phase 2 it becomes the renumbering of `cell-2`, and deleting it would destroy the second
+-- cell. That is why the guard below exists: this migrator REAPPLIES every file on each
+-- run (infra/scripts/production/run-migrations.sh), so 000006 inserts
+-- `cell-default`/`cell-1`/`cell-2` again and this migration runs on top once more. Measured on
+-- the app-dev droplet on 2026-08-10: without the guard, the second pass tried to rename
+-- `cell-default` to a `cell-0` that already existed. This whole phase is written to be
+-- re-runnable without changing the result.
 DELETE FROM cells WHERE cell_id = 'cell-1'
    AND EXISTS (SELECT 1 FROM cells c WHERE c.cell_id = 'cell-2');
 
 UPDATE cells
    SET cell_id      = 'cell-0',
        display_name = 'Cell 0',
-       notes        = 'Primeira cell. 1:1 com o cluster loopzero-cell-0. Absorveu cell-default '
-                   || '(que era sentinela de "ainda nao resolvido", nao uma cell) e cell-1 '
-                   || '(que nomeava esta mesma maquina). ADR 2026-08-09.'
+       notes        = 'Primeira cell. 1:1 com o cluster loopzero-cell-0. Absorveu cell-default ' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
+                   || '(que era sentinela de "ainda nao resolvido", nao uma cell) e cell-1 ' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
+                   || '(que nomeava esta mesma maquina). ADR 2026-08-09.' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
  WHERE cell_id = 'cell-default'
    AND NOT EXISTS (SELECT 1 FROM cells c WHERE c.cell_id = 'cell-0');
 
--- Se `cell-0` ja existia (re-execucao), a linha antiga apenas desaparece.
+-- If `cell-0` already existed (re-run), the old row simply disappears.
 DELETE FROM cells WHERE cell_id = 'cell-default';
 
 -- ---------------------------------------------------------------------------------------------
--- Fase 2 — so agora `cell-1` esta livre. Renumera `cell-2`, preservando o `status` dela.
+-- Phase 2 — only now is `cell-1` free. Renumbers `cell-2`, preserving its `status`.
 -- ---------------------------------------------------------------------------------------------
 UPDATE tenants                  SET cell_id = 'cell-1' WHERE cell_id = 'cell-2';
 UPDATE builds                   SET cell_id = 'cell-1' WHERE cell_id = 'cell-2';
@@ -68,23 +68,23 @@ UPDATE release_app_attestations SET cell_id = 'cell-1' WHERE cell_id = 'cell-2';
 UPDATE cells
    SET cell_id      = 'cell-1',
        display_name = 'Cell 1',
-       notes        = 'Segunda cell. 1:1 com o cluster loopzero-cell-1. Era cell-2; renumerada '
-                   || 'quando a fusao liberou o numero. O status nao muda aqui — quem admite '
-                   || 'trafego continua sendo decidido pelo canary. ADR 2026-08-09.'
+       notes        = 'Segunda cell. 1:1 com o cluster loopzero-cell-1. Era cell-2; renumerada ' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
+                   || 'quando a fusao liberou o numero. O status nao muda aqui — quem admite ' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
+                   || 'trafego continua sendo decidido pelo canary. ADR 2026-08-09.' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
  WHERE cell_id = 'cell-2'
    AND NOT EXISTS (SELECT 1 FROM cells c WHERE c.cell_id = 'cell-1');
 
--- Idem: numa re-execucao `cell-1` ja e a renumerada, e a `cell-2` reinserida pela 000006
--- so precisa sumir.
+-- Likewise: on a re-run `cell-1` is already the renumbered one, and the `cell-2` reinserted by
+-- 000006 only needs to disappear.
 DELETE FROM cells WHERE cell_id = 'cell-2';
 
 -- ---------------------------------------------------------------------------------------------
--- Fase 3 — os defaults deixam de gravar uma sentinela.
+-- Phase 3 — the defaults stop writing a sentinel.
 --
--- `tenants` e `leader_generations` NAO tem o gatilho (tenants e a fonte de onde ele le), entao
--- precisam de um default real: `cell-0`, que agora e uma cell de verdade e nao um marcador.
--- As quatro tabelas COM gatilho perdem o default de proposito — omitir a coluna passa a produzir
--- NULL, que e o unico sinal de "ainda nao resolvido" a partir daqui.
+-- `tenants` and `leader_generations` do NOT have the trigger (tenants is the source it reads
+-- from), so they need a real default: `cell-0`, which is now a real cell and not a marker.
+-- The four tables WITH the trigger lose their default on purpose — omitting the column now
+-- produces NULL, which from here on is the only signal of "not yet resolved".
 -- ---------------------------------------------------------------------------------------------
 ALTER TABLE tenants                  ALTER COLUMN cell_id SET DEFAULT 'cell-0';
 ALTER TABLE leader_generations       ALTER COLUMN cell_id SET DEFAULT 'cell-0';
@@ -95,23 +95,23 @@ ALTER TABLE preview_environments     ALTER COLUMN cell_id DROP DEFAULT;
 ALTER TABLE release_app_attestations ALTER COLUMN cell_id DROP DEFAULT;
 
 -- ---------------------------------------------------------------------------------------------
--- Fase 4 — o gatilho para de usar valor magico, e passa a falhar alto.
+-- Phase 4 — the trigger stops using a magic value and starts failing loudly.
 --
--- Antes, `cell-default` significava DUAS coisas ao mesmo tempo: "heranca pendente" e "ultimo
--- recurso quando o tenant nao tem cell". A fusao torna isso insustentavel — `cell-0` agora e uma
--- cell real com tenants, e mante-la como sentinela faria o gatilho SOBRESCREVER toda linha
--- legitimamente colocada em cell-0.
+-- Before, `cell-default` meant TWO things at once: "inheritance pending" and "last resort
+-- when the tenant has no cell". The merge makes that untenable — `cell-0` is now a real cell
+-- with tenants, and keeping it as a sentinel would make the trigger OVERWRITE every row
+-- legitimately placed in cell-0.
 --
--- `NULL` passa a ser o unico sinal de "nao resolvido". O gatilho e BEFORE INSERT e roda antes da
--- checagem de NOT NULL, entao um INSERT que omita a coluna e resolvido antes de a restricao
--- olhar para a linha — comportamento documentado do Postgres, e provado por
--- api/tests/integration/cell_identity_unification_test.go, que existe porque afirmar sem provar e o que
--- este trabalho evita.
+-- `NULL` becomes the only signal of "not resolved". The trigger is BEFORE INSERT and runs before
+-- the NOT NULL check, so an INSERT that omits the column is resolved before the constraint looks
+-- at the row — documented Postgres behaviour, and proven by
+-- api/tests/integration/cell_identity_unification_test.go, which exists because asserting without
+-- proving is what this work avoids.
 --
--- E quando o tenant tambem nao tem cell, a linha deixa de ser gravada. Um build cuja cell nao
--- resolve e um build que nao deveria existir; grava-lo com uma sentinela empurra o defeito para
--- o deploy, onde ele aparece como roteamento errado em vez de erro de dados
--- (.claude/rules/error-handling.md § 2 — falhar rapido, alto e claro).
+-- And when the tenant has no cell either, the row is no longer written. A build whose cell does
+-- not resolve is a build that should not exist; writing it with a sentinel pushes the defect to
+-- the deploy, where it shows up as wrong routing instead of a data error
+-- (.claude/rules/error-handling.md § 2 — fail fast, loud and clear).
 CREATE OR REPLACE FUNCTION populate_cell_id_from_tenant() RETURNS trigger
     LANGUAGE plpgsql AS $$
 BEGIN
@@ -119,7 +119,7 @@ BEGIN
         SELECT cell_id INTO NEW.cell_id FROM tenants WHERE id = NEW.tenant_id;
         IF NEW.cell_id IS NULL THEN
             RAISE EXCEPTION
-                'cell_id nao resolvido para tenant % na tabela %: o tenant nao existe ou nao tem cell',
+                'cell_id nao resolvido para tenant % na tabela %: o tenant nao existe ou nao tem cell', -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
                 NEW.tenant_id, TG_TABLE_NAME;
         END IF;
     END IF;

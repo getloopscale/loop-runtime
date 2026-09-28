@@ -150,7 +150,7 @@ tasks:
         0. Pre-flight gate (preconditions — drill:preflight automatic)
         1. Provision drill stack (4 clusters, ~25min)
         2. Mint JWT (drill-mint-jwt.sh)
-        3. Bootstrap cell wiring (3 cells per D3)
+        3. Bootstrap cell wiring (cells 0 and 1, one per runtime cluster)
         4. Run TestL2_1_FiftyConcurrentDeploys against drill API
         5. Mandatory teardown + validator
 
@@ -230,10 +230,10 @@ tasks:
 
         echo ""
         echo "=== Phase 5: Bootstrap cell wiring (T2.3 D3 mapping) ==="
-        # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
-        bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell default --env drill
+        # One call per cell: the 2026-08-09 1:1 unification left exactly cells 0
+        # and 1, and the script rejects any other value (exit 1 under set -e).
+        bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 0 --env drill
         bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env drill
-        bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 2 --env drill
 
         echo ""
         echo "=== Phase 6: Run L2 scale (50 concurrent) ==="

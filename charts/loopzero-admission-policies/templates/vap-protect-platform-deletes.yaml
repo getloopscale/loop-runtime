@@ -60,33 +60,15 @@ spec:
         operations: ["DELETE"]
         resources: ["customresourcedefinitions"]
   matchConditions:
-    # B33 — never block the cluster's own garbage collection machinery. Tenants still
-    # cannot delete these resources with their own credentials; only the GC is exempted.
-    - name: skip-cluster-internal-gc
-      expression: >-
-        request.userInfo.username != 'system:serviceaccount:kube-system:namespace-controller'
-        && request.userInfo.username != 'system:kube-controller-manager'
-        && !('system:masters' in request.userInfo.groups)
-    # The platform identities that legitimately tear resources down. Confirmed by
+    # B33 — never block the cluster's own garbage collection machinery, nor the
+    # platform identities that legitimately tear resources down. Confirmed by
     # deterministic chart render on 2026-08-07 (plan T0.1), not by memory:
-    #   helm template <release> charts/<chart> --namespace loopzero-system
     # tenant-operator deletes Applications/AppProjects (real_provisioner.go:381,414,426)
     # and Environment CRs (tenant_deletion.go:86); loopzero-api evicts tenants
-    # (api/internal/k8s/tenant_evictor.go:248). The other three operators are listed so a
+    # (api/internal/k8s/tenant_evictor.go:248). The other operators are listed so a
     # future teardown path does not deadlock on a policy nobody remembered to update.
-    #
-    # EC-2: this list must never be empty. The shape is `!(username in [...])`, and with an
-    # empty list that is `!(x in [])` — always true — so the policy would run for EVERY
-    # identity and deny EVERY delete, including the operators'. The gate enforces a floor.
-    - name: skip-platform-identities
-      expression: >-
-        !(request.userInfo.username in [
-          'system:serviceaccount:loopzero-system:loopzero-tenant-operator',
-          'system:serviceaccount:loopzero-system:loopzero-app-operator',
-          'system:serviceaccount:loopzero-system:loopzero-platform-operator',
-          'system:serviceaccount:loopzero-system:loopzero-preview-operator',
-          'system:serviceaccount:loopzero-system:loopzero-api'
-        ])
+    # Tenants still cannot delete these resources with their own credentials.
+    {{- include "loopzero-admission.systemActorExemptions" . | nindent 4 }}
     # Scope the CRD rule to LoopZero's own definitions. Without this the policy would also
     # guard unrelated CRDs (cert-manager, Traefik, KEDA…), which is not its job and would
     # block legitimate platform upgrades. A non-matching CRD makes this condition false,

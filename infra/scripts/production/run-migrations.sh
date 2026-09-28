@@ -91,6 +91,74 @@ kctl() {
 
 log() { echo "[run-migrations] $*"; }
 
+# pg_psql <pod> <psql args...> — psql inside the postgresql pod with
+# ON_ERROR_STOP=1, so a failed statement is a non-zero exit instead of a
+# warning psql would otherwise swallow. stdin is forwarded.
+pg_psql() {
+  local pod="$1"
+  shift
+  kctl -n "$NAMESPACE" exec -i "$pod" -c postgresql -- \
+    env PGPASSWORD="$PG_PASS" psql -v ON_ERROR_STOP=1 -U "$PG_USER" -d "$PG_DB" "$@"
+}
+
+# stamp_schema_version <pod> <version> <dirty> — write golang-migrate's
+# single-row schema_migrations record. Same contract as the migrate binary:
+# dirty=true is written BEFORE a file runs and cleared only after it
+# succeeds, so a failure leaves the database marked dirty and every later
+# `migrate up` refuses it until an operator resolves the half-applied file.
+stamp_schema_version() {
+  local pod="$1" version="$2" dirty="$3"
+  pg_psql "$pod" -q -c "BEGIN; TRUNCATE schema_migrations; INSERT INTO schema_migrations (version, dirty) VALUES (${version}, ${dirty}); COMMIT;" >/dev/null
+}
+
+# apply_migrations_with_psql <pod> <dir> — the pre-API bootstrap path.
+#
+# The migrate binary ships only in the loopzero-api image, so before that pod is
+# Ready the SQL files are applied with psql directly. This path keeps the
+# guarantees golang-migrate gives: it resumes from the recorded version,
+# refuses a dirty database, stops at the first failed file and never records
+# a failed schema as clean. A failure exits non-zero naming the file.
+apply_migrations_with_psql() {
+  local pod="$1" dir="$2"
+  pg_psql "$pod" -q -c "CREATE TABLE IF NOT EXISTS schema_migrations (version BIGINT NOT NULL PRIMARY KEY, dirty BOOLEAN NOT NULL);" >/dev/null
+
+  local recorded current dirty
+  recorded="$(pg_psql "$pod" -tA -c "SELECT MAX(version), bool_or(dirty) FROM schema_migrations;")"
+  current="${recorded%%|*}"
+  dirty="${recorded##*|}"
+  [[ -z "$current" ]] && current=0
+  if [[ "$dirty" == "t" ]]; then
+    log "ERROR: schema_migrations is dirty at version $current — a previous migration failed half-way."
+    # allowlist: migrate force (printed advice only — the operator runs it after repairing the half-applied file by hand; this script never forces)
+    log "       Inspect the database, repair it, then clear the flag with"
+    log "       'migrate force $current' before running migrations again."
+    exit 1
+  fi
+  log "  schema_migrations at version $current"
+
+  local f name v out applied=0
+  for f in "$dir"/*.up.sql; do
+    [[ -f "$f" ]] || continue
+    name="$(basename "$f")"
+    v="$(grep -oE '^[0-9]+' <<<"$name" | sed 's/^0*//')"
+    if [[ -z "$v" ]]; then
+      log "ERROR: migration file without a numeric version prefix: $name"
+      exit 1
+    fi
+    (( v <= current )) && continue
+    log "  applying $name..."
+    stamp_schema_version "$pod" "$v" true
+    if ! out="$(pg_psql "$pod" -q < "$f" 2>&1)"; then
+      log "ERROR: migration $name failed; schema_migrations left at version $v dirty=true."
+      printf '%s\n' "$out" | sed 's/^/    [psql] /'
+      exit 1
+    fi
+    stamp_schema_version "$pod" "$v" false
+    applied=$((applied + 1))
+  done
+  log "  applied $applied migration(s); schema_migrations clean."
+}
+
 # Resolve pod label that includes both core-cluster loopzero-api and any future
 # replicas (Recreate strategy means single pod at a time).
 LOOPZERO_API_POD="$(kctl -n "$NAMESPACE" get pod -l app=loopzero-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
@@ -140,39 +208,16 @@ if [[ -z "${LOOPZERO_API_POD}" || "$LOOPZERO_API_READY" != "true" ]]; then
     else
       log "INFO: loopzero-api pod ${LOOPZERO_API_POD} not Ready (CrashLoopBackOff suspected) — running psql-loop fallback (issue #106 Design E)."
     fi
-    log "      schema_migrations table will be seeded with the highest version"
-    log "      so a later golang-migrate up call (via task k3d:heal H17 or"
-    log "      task db:migrate post-tilt) is a no-op."
-    MIGRATIONS_DIR="$(cd "$(dirname "$0")/../.." && pwd)/../api/internal/db/migrations"
-    if [[ ! -d "$MIGRATIONS_DIR" ]]; then
-      MIGRATIONS_DIR="$(pwd)/api/internal/db/migrations"
+    log "      Applies only the migrations newer than schema_migrations, stamps"
+    log "      each one the way golang-migrate does, and stops at the first failure."
+    if [[ -z "${MIGRATIONS_DIR:-}" ]]; then
+      MIGRATIONS_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)/api/internal/db/migrations"
     fi
     if [[ ! -d "$MIGRATIONS_DIR" ]]; then
       log "ERROR: migrations directory not found at $MIGRATIONS_DIR"
       exit 1
     fi
-    HIGHEST_FILE_VERSION=0
-    for f in "$MIGRATIONS_DIR"/*.up.sql; do
-      [[ -f "$f" ]] || continue
-      log "  applying $(basename "$f")..."
-      kctl -n "$NAMESPACE" exec -i "$PG_POD_BOOT" -c postgresql -- \
-        env PGPASSWORD="$PG_PASS" psql -U "$PG_USER" -d "$PG_DB" < "$f" >/dev/null 2>&1 || \
-        log "    (psql exit non-zero — IF NOT EXISTS guards usually mean ok; continuing)"
-      v=$(basename "$f" | grep -oE '^[0-9]+' | sed 's/^0*//')
-      [[ -z "$v" ]] && v=0
-      (( v > HIGHEST_FILE_VERSION )) && HIGHEST_FILE_VERSION=$v
-    done
-    log "  highest version applied: $HIGHEST_FILE_VERSION"
-    # Seed schema_migrations so a later golang-migrate run sees DB current.
-    kctl -n "$NAMESPACE" exec "$PG_POD_BOOT" -c postgresql -- \
-      env PGPASSWORD="$PG_PASS" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 -c "
-        CREATE TABLE IF NOT EXISTS schema_migrations (
-            version BIGINT NOT NULL PRIMARY KEY,
-            dirty BOOLEAN NOT NULL
-        );
-        INSERT INTO schema_migrations (version, dirty) VALUES ($HIGHEST_FILE_VERSION, false)
-        ON CONFLICT (version) DO UPDATE SET dirty = false;
-      " >/dev/null 2>&1 && log "  schema_migrations seeded version=$HIGHEST_FILE_VERSION"
+    apply_migrations_with_psql "$PG_POD_BOOT" "$MIGRATIONS_DIR"
     exit 0
   fi
   log "ERROR: loopzero-api pod not found in $CORE_CONTEXT/$NAMESPACE"

@@ -35,9 +35,9 @@ var _ = Describe("J-06 Overview — project overview tab", Label("live", "dogfoo
 	AfterEach(func() { cancel() })
 
 	Context("Scenario A — project status payload", func() {
-		It("GET /engine/api/v1/projects/teste/status returns 200 with active_release", func() {
+		It("GET /engine/api/v1/projects/sample/status returns 200 with active_release", func() {
 			status, body, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/engine/api/v1/projects/teste/status?env=production", jwt, nil)
+				env.CloudBaseURL+"/engine/api/v1/projects/sample/status?env=production", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
 			Expect(body).To(Or(HaveKey("active_release"), HaveKey("status")))
@@ -45,7 +45,7 @@ var _ = Describe("J-06 Overview — project overview tab", Label("live", "dogfoo
 	})
 
 	Context("Scenario B — recent deployments visible", func() {
-		It("GET /engine/api/v1/projects/teste/builds?limit=5 returns up to 5", func() {
+		It("GET /engine/api/v1/projects/sample/builds?limit=5 returns up to 5", func() {
 			Skip("implementation in T4.6 follow-up — requires seeded builds")
 		})
 	})

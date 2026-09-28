@@ -43,6 +43,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config parameterises one run.
@@ -73,26 +75,29 @@ type Outcome struct {
 	Violations      []Violation
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // Summary renders the one-line result the gate runner prints.
 func (o Outcome) Summary() string {
 	if o.Pass {
-		return fmt.Sprintf("PASS — %d injeção(ões) `-X` resolvem para um símbolo real "+
-			"(%d Dockerfile(s) lido(s))", o.Injections, o.DockerfilesRead)
+		return fmt.Sprintf("PASS — %d `-X` injection(s) resolve to a real symbol "+
+			"(%d Dockerfile(s) read)", o.Injections, o.DockerfilesRead)
 	}
-	return fmt.Sprintf("FAIL — %d de %d injeção(ões) `-X` apontam para algo que não existe. "+
-		"O linker aceita isso em silêncio e o binário fica com o valor padrão",
+	return fmt.Sprintf("FAIL — %d of %d `-X` injection(s) point at something that does not exist. "+
+		"The linker accepts that silently and the binary keeps its default value",
 		len(o.Violations), o.Injections)
 }
 
 // ActionableFix is printed under a failure.
-const ActionableFix = `Uma injeção ` + "`-X`" + ` só funciona quando as três coisas existem:
+const ActionableFix = `A ` + "`-X`" + ` injection only works when all three of these exist:
 
-  1. o import path pertence a um módulo declarado num go.mod deste repositório
-  2. o diretório correspondente existe
-  3. o símbolo é uma VARIÁVEL de topo naquele pacote (const e func não recebem -X)
+  1. the import path belongs to a module declared in a go.mod of this repository
+  2. the corresponding directory exists
+  3. the symbol is a top-level VARIABLE in that package (const and func do not take -X)
 
-Copie o caminho do doc-comment do próprio pacote quando ele existir — é a
-referência que se move junto com o código. Contrato: B-053.`
+Copy the path from the package's own doc comment when it has one — that is the
+reference that moves together with the code. Contract: B-053.`
 
 // ldflagXRe captures `-X <importpath>.<symbol>=`. The path may carry dots (the
 // domain does), so the split between path and symbol is taken at the LAST dot
@@ -155,8 +160,22 @@ func resolve(mods []module, root, importPath string) (string, string) {
 			return filepath.Join(root, m.dir, filepath.FromSlash(sub)), ""
 		}
 	}
-	return "", fmt.Sprintf("nenhum módulo deste repositório declara esse caminho — " +
-		"confira a org e o nome do módulo em go.mod")
+	return "", fmt.Sprintf("no module in this repository declares that path — " +
+		"check the org and the module name in go.mod")
+}
+
+// isStringSpec reports whether the i-th name of vs is a string variable:
+// declared `string`, or untyped and initialized with a string literal.
+func isStringSpec(vs *ast.ValueSpec, i int) bool {
+	if vs.Type != nil {
+		id, ok := vs.Type.(*ast.Ident)
+		return ok && id.Name == "string"
+	}
+	if i >= len(vs.Values) {
+		return false
+	}
+	lit, ok := vs.Values[i].(*ast.BasicLit)
+	return ok && lit.Kind == token.STRING
 }
 
 // packageHasStringVar reports whether dir declares symbol as a top-level var,
@@ -196,8 +215,8 @@ func packageHasStringVar(dir, symbol string) (hasSymbol, isPackage bool, err err
 				if !ok {
 					continue
 				}
-				for _, name := range vs.Names {
-					if name.Name == symbol {
+				for i, name := range vs.Names {
+					if name.Name == symbol && isStringSpec(vs, i) {
 						return true, true, nil
 					}
 				}
@@ -255,26 +274,27 @@ func Check(cfg Config) (Outcome, error) {
 				ok, isPkg, herr := packageHasStringVar(dir, symbol)
 				if herr != nil {
 					if os.IsNotExist(herr) {
-						v.Reason = "o diretório não existe — o pacote pode ter sido movido por uma " +
-							"refatoração, e o Dockerfile ficou apontando para o lugar antigo"
+						v.Reason = "the directory does not exist — the package may have been moved by a " +
+							"refactor, and the Dockerfile was left pointing at the old location"
 						out.Violations = append(out.Violations, v)
 						continue
 					}
 					return herr
 				}
 				if !isPkg {
-					// O diretório existe e não guarda pacote Go nenhum: é o que sobra
-					// quando o pacote MOVEU e o caminho antigo permaneceu apenas como
-					// pai do novo. Dizer "o pacote existe, falta o símbolo" mandaria o
-					// leitor procurar uma variável num pacote que não está lá.
-					v.Reason = "o diretório existe mas não contém pacote Go — o pacote provavelmente " +
-						"MOVEU (o caminho antigo sobrevive como pai do novo) e o Dockerfile não acompanhou"
+					// The directory exists and holds no Go package at all: that is what is
+					// left when the package MOVED and the old path survived only as the
+					// parent of the new one. Saying "the package exists, the symbol is
+					// missing" would send the reader looking for a variable in a package
+					// that is not there.
+					v.Reason = "the directory exists but contains no Go package — the package probably " +
+						"MOVED (the old path survives as the parent of the new one) and the Dockerfile did not follow"
 					out.Violations = append(out.Violations, v)
 					continue
 				}
 				if !ok {
-					v.Reason = fmt.Sprintf("o pacote existe, mas não declara `%s` como variável de topo "+
-						"(`-X` não escreve em const nem em func)", symbol)
+					v.Reason = fmt.Sprintf("the package exists, but does not declare `%s` as a top-level variable "+
+						"(`-X` does not write into a const or a func)", symbol)
 					out.Violations = append(out.Violations, v)
 				}
 			}
@@ -290,8 +310,8 @@ func Check(cfg Config) (Outcome, error) {
 	// different facts, and reporting the second for the first is how a gate goes
 	// quiet without anyone noticing.
 	if out.DockerfilesRead == 0 {
-		return out, fmt.Errorf("nenhum Dockerfile encontrado sob %s — um gate que não lê nada "+
-			"não verifica nada", cfg.Root)
+		return out, fmt.Errorf("no Dockerfile found under %s — a gate that reads nothing "+
+			"verifies nothing", cfg.Root)
 	}
 
 	out.Pass = len(out.Violations) == 0

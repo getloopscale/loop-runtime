@@ -113,7 +113,7 @@ spec:
                         Project is the project segment of the canonical namespace formula
                         `loopzero-<tenant>-<project>-<env>`. J-23 LIVE catch 2026-06-07
                         (#69, sponsor verbatim "Atacar #69 fix tenant_gitops + CRD"): the
-                        renderer canonical refactor (commit cd6235fc) emits manifests with
+                        renderer canonical refactor (commit a567cdbb5) emits manifests with
                         namespace `loopzero-<tenant>-<project>-<env>` for ALL envs. The API
                         populates it when creating / updating the Tenant CR
                         (api/internal/k8s/tenant_cr_manager.go), the operator reads it in
@@ -194,11 +194,15 @@ spec:
                 - maxStorage
                 type: object
               plan:
-                description: 'Plan is the subscription tier: starter, growth, or enterprise.'
+                description: |-
+                  Plan is the subscription tier: starter, pro, team or enterprise
+                  (growth is accepted as the legacy name for pro).
                 enum:
                 - starter
-                - growth
+                - pro
+                - team
                 - enterprise
+                - growth
                 type: string
               preview:
                 description: Preview configures preview environment limits.

@@ -104,10 +104,10 @@ soft_cleanroom() {
   return 0
 }
 
-# Soft chaos: probe os 3 hostnames -dev + TLS validity (eram 6 ate o B-025)
+# Soft chaos: probe the 3 -dev hostnames + TLS validity (there were 6 until B-025)
 soft_chaos() {
-  # B-025 (2026-08-19): os tres sem sufixo sairam do Caddyfile. `cloud-dev` fica: ele tem
-  # bloco proprio e e' o par de desenvolvimento que continua servindo.
+  # B-025 (2026-08-19): the three without a suffix left the Caddyfile. `cloud-dev` stays: it has
+  # its own block and is the development pair that keeps serving.
   local hosts=(
     "auth-dev.loopzero.example" "app-dev.loopzero.example" "cloud-dev.loopzero.example"
   )

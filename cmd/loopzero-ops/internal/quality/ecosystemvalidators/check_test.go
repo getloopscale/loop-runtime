@@ -18,9 +18,9 @@ var repoRoot = qtestutil.MustRepoRoot()
 
 // pythonAvailable reports whether the interpreter this gate shells out to exists.
 //
-// Nada aqui faz SKIP na ausência dele: `Check` documenta que devolve `Advisory` sem
-// interpretador, e essa é a contrapartida — um teste que some naquele ambiente deixa
-// o único caminho que roda ali sem prova.
+// Nothing here SKIPs in its absence: `Check` documents that it returns `Advisory`
+// without an interpreter, and this is the counterpart — a test that vanishes in that
+// environment leaves the only path that runs there without proof.
 func pythonAvailable() bool {
 	_, err := exec.LookPath("python3")
 	return err == nil
@@ -54,18 +54,18 @@ func TestGreenValidatorsPass(t *testing.T) {
 		{Name: "a", Rel: "mechanisms/gates/a.py"}, {Name: "b", Rel: "mechanisms/gates/b.py"},
 	}, Timeout: 30 * time.Second}
 
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !pythonAvailable() {
 		if err != nil || !out.Advisory {
-			t.Fatalf("sem python3 o gate é advisory e não erro; err=%v out=%+v", err, out)
+			t.Fatalf("without python3 the gate is advisory, not an error; err=%v out=%+v", err, out)
 		}
 		return
 	}
 	if err != nil {
-		t.Fatalf("validadores verdes devem passar: %v", err)
+		t.Fatalf("green validators must pass: %v", err)
 	}
 	if len(out.Results) != 2 {
-		t.Fatalf("os dois precisam ter rodado; got %+v", out.Results)
+		t.Fatalf("both must have run; got %+v", out.Results)
 	}
 }
 
@@ -78,50 +78,66 @@ func TestRedValidatorFails(t *testing.T) {
 		{Name: "ok", Rel: "mechanisms/gates/ok.py"}, {Name: "bad", Rel: "mechanisms/gates/bad.py"},
 	}, Timeout: 30 * time.Second}
 
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !pythonAvailable() {
 		return
 	}
 	if !errors.Is(err, ErrValidatorFailed) {
-		t.Fatalf("um validador vermelho reprova o gate: %v", err)
+		t.Fatalf("a red validator fails the gate: %v", err)
 	}
 	if f := out.Failed(); len(f) != 1 || f[0].Name != "bad" {
-		t.Fatalf("o validador que reprovou precisa ser nomeado; got %+v", f)
+		t.Fatalf("the validator that failed must be named; got %+v", f)
 	}
 }
 
-// A bala 3 do DoD: WARN não pode virar ruído que apaga o FAIL. Um validador que sai 0
-// com avisos PASSA, e os avisos são contados separadamente.
+// DoD bullet 3: WARN must not become noise that erases FAIL. A validator that exits 0
+// with warnings PASSES, and the warnings are counted separately.
 func TestWarningsAreCountedButDoNotFail(t *testing.T) {
 	root := fakeEco(t, map[string]string{
 		"warn.py": "print('  [WARN] a')\nprint('  [WARN] b')\nprint('Overall: PASS')\n",
 	})
 	cfg := Config{RepoRoot: root, Validators: []Validator{{Name: "warn", Rel: "mechanisms/gates/warn.py"}}, Timeout: 30 * time.Second}
 
-	out, err := Check(cfg)
+	out, err := violationOf(Check(cfg))
 	if !pythonAvailable() {
 		return
 	}
 	if err != nil {
-		t.Fatalf("aviso não é reprovação: %v", err)
+		t.Fatalf("a warning is not a failure: %v", err)
 	}
 	if out.Warnings() != 2 {
-		t.Fatalf("os avisos precisam ser contados para que sua evolução seja visível; got %d", out.Warnings())
+		t.Fatalf("warnings must be counted so their evolution is visible; got %d", out.Warnings())
 	}
 }
 
-// Ausência é FALHA, nunca skip — é o defeito que este gate existe para remover.
-func TestMissingValidatorsIsAFailure(t *testing.T) {
-	if _, err := Check(Config{RepoRoot: t.TempDir()}); !errors.Is(err, ErrValidatorsMissing) {
-		if pythonAvailable() {
-			t.Fatalf("validador ausente precisa reprovar alto; err=%v", err)
-		}
+// A kit that is installed but lacks a declared validator is a FAILURE, never a
+// skip — that is the defect this gate exists to remove.
+func TestMissingValidatorInAnInstalledKitIsAFailure(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".claude", "mechanisms"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrValidatorsMissing) && pythonAvailable() {
+		t.Fatalf("a missing validator in an installed kit must fail loudly; err=%v", err)
 	}
 }
 
-// Os dois layouts. Fixar um faria o gate reportar ausência no outro — o defeito do
-// B-120, noutro lugar. A sonda mudou de `scripts/` para `mechanisms/` porque o kit
-// relocou tudo em `mechanisms/<família>/`; o teste segue esse contrato.
+// The kit is gitignored in this repository, so a clone without it has no
+// validators to run. That is ADVISORY with the reason named, not a FAIL: a
+// versioned gate must not fail on every clone over an unversioned install.
+func TestKitNotInstalledIsAdvisory(t *testing.T) {
+	out, err := violationOf(Check(Config{RepoRoot: t.TempDir()}))
+	if err != nil {
+		t.Fatalf("no kit is advisory, not an error: %v", err)
+	}
+	if !out.Advisory || out.AdvisoryReason == "" || len(out.Results) != 0 {
+		t.Fatalf("want an advisory outcome naming why nothing ran, got %+v", out)
+	}
+}
+
+// Both layouts. Pinning one would make the gate report absence in the other — the
+// B-120 defect, elsewhere. The probe moved from `scripts/` to `mechanisms/` because the
+// kit relocated everything into `mechanisms/<family>/`; the test follows that contract.
 func TestBothLayoutsResolve(t *testing.T) {
 	plugin := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(plugin, ".claude", "mechanisms"), 0o755); err != nil {
@@ -139,31 +155,24 @@ func TestBothLayoutsResolve(t *testing.T) {
 	}
 }
 
-// A população real (B-109): os dois validadores de verdade, na árvore de verdade. É
-// esta asserção que impede o gate de ficar verde sobre scripts sintéticos enquanto os
-// reais estão vermelhos — que é literalmente o estado que o B-129 mediu.
-func TestRealValidatorsAreGreen(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot, Timeout: 3 * time.Minute})
-
-	// Sem interpretador o caminho que roda é o ADVISORY, e ele também é contrato:
-	// pular aqui deixaria sem prova justamente o único caminho que executa naquele
-	// ambiente. Ramificar custa três linhas e não cria dívida invisível.
+// The real tree: the gate either runs every declared validator (kit installed)
+// or reports ADVISORY with its reason (kit or interpreter absent). It never
+// fails over the kit's absence. Whether the kit's own validators are green is
+// the gate's verdict, reported by `loopzero-ops quality ecosystem-validators`;
+// asserting it here would make this module's suite depend on an unversioned
+// install.
+func TestRealTreeRunsTheDeclaredValidatorsOrIsAdvisory(t *testing.T) {
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot, Timeout: 3 * time.Minute}))
 	if out.Advisory {
-		if err != nil {
-			t.Fatalf("sem python3 o gate é advisory, não erro: %v", err)
-		}
-		if len(out.Results) != 0 {
-			t.Fatalf("sem python3 nenhum validador pode ter rodado; got %+v", out.Results)
+		if err != nil || out.AdvisoryReason == "" || len(out.Results) != 0 {
+			t.Fatalf("advisory must carry a reason and no results; err=%v out=%+v", err, out)
 		}
 		return
 	}
-	if err != nil {
-		for _, r := range out.Failed() {
-			t.Errorf("%s: %s", r.Name, r.Tail)
-		}
-		t.Fatalf("os validadores reais precisam estar verdes: %v", err)
+	if errors.Is(err, ErrValidatorsMissing) {
+		t.Fatalf("an installed kit must carry the declared validators: %v", err)
 	}
 	if len(out.Results) != len(DefaultValidators) {
-		t.Fatalf("os %d validadores declarados precisam ter rodado; got %+v", len(DefaultValidators), out.Results)
+		t.Fatalf("all %d declared validators must have run; got %+v", len(DefaultValidators), out.Results)
 	}
 }

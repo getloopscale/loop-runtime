@@ -10,29 +10,30 @@ import (
 	"flag"
 	"log/slog"
 	"net/http"
-	"net/http/pprof"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/promote"
+	"github.com/getloopscale/loopzero/api/internal/secrets"
 
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/pkg/enforcement"
 	"github.com/getloopscale/loopzero/pkg/logging"
 
-	"github.com/getloopscale/loopzero/api/internal/buildplane/admission"
+	"github.com/getloopscale/loopzero/api/internal/builds/admission"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
+	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
 	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/routes/domains"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
 	"github.com/getloopscale/loopzero/api/internal/server"
 	"github.com/getloopscale/loopzero/api/internal/tracing"
 
@@ -51,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tracingShutdown, err := tracing.Init(context.Background(), "loopzero-api")
+	tracingShutdown, err := tracing.Init(context.Background(), "loopzero-api", tracing.Options{Enabled: cfg.TracingEnabled, Endpoint: cfg.OTelEndpoint, Environment: cfg.Env})
 	if err != nil {
 		logger.Warn("tracing disabled", "error", err)
 	} else {
@@ -62,50 +63,13 @@ func main() {
 		}()
 	}
 
-	// pprof profiling — accessible via kubectl port-forward, never via public ingress.
-	// Controlled by LOOPZERO_PPROF_ENABLED (default: false). Uses dedicated ServeMux
-	// to avoid exposing other handlers registered on DefaultServeMux.
-	if pprofEnabled() {
-		go func() {
-			pprofAddr := os.Getenv("LOOPZERO_PPROF_ADDR")
-			if pprofAddr == "" {
-				pprofAddr = ":6060"
-			}
-			mux := http.NewServeMux()
-			mux.HandleFunc("/debug/pprof/", pprof.Index)
-			mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-			mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-			slog.Info("pprof server starting", "addr", pprofAddr)
-			// G114 mitigation: explicit Server with ReadHeaderTimeout
-			// to block slowloris. WriteTimeout deliberately ZERO —
-			// `/debug/pprof/profile` runs 30-60s CPU profiles by
-			// design; finite WriteTimeout would truncate them.
-			// Same pattern as operators/internal/operatorboot/pprof.go iter 11.
-			srv := &http.Server{
-				Addr:              pprofAddr,
-				Handler:           mux,
-				ReadHeaderTimeout: 10 * time.Second,
-			}
-			if err := srv.ListenAndServe(); err != nil {
-				slog.Error("pprof server failed", "error", err)
-			}
-		}()
-	}
+	startPprofServer(cfg, logger)
 
 	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
+	defer shutdownCancel()
 
-	if cfg.IsProduction() {
-		required := map[string]string{
-			"DATABASE_URL":              os.Getenv("DATABASE_URL"),
-			"LOOPZERO_ARGO_CALLBACK_SECRET": os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET"),
-			"GITEA_TOKEN":               cfg.GiteaToken,
-			"ARGOCD_TOKEN":              cfg.ArgocdToken,
-		}
-		if err := server.ValidateProductionEnv(logger, required); err != nil {
-			os.Exit(1)
-		}
+	if err := validateProductionEnv(cfg, logger); err != nil {
+		os.Exit(1)
 	}
 
 	httpTransport := &http.Transport{
@@ -119,17 +83,11 @@ func main() {
 		logger.Error("failed to create K8s managers", "error", err)
 		os.Exit(1)
 	}
+	envEnsurer := newEnvironmentEnsurer(cfg, k8sDeps, logger)
 
 	dbDeps, err := setupDatabase(cfg, logger)
 	if err != nil {
-		// Two different failures reach here, and naming them apart is the whole
-		// diagnostic the operator gets on the first `kubectl logs`. "failed to
-		// connect" sent whoever forgot the variable to look at the network.
-		if errors.Is(err, ErrDatabaseURLNotSet) {
-			logger.Error("database not configured", "error", err)
-		} else {
-			logger.Error("failed to connect to database", "error", err)
-		}
+		logDatabaseSetupFailure(err, logger)
 		os.Exit(1)
 	}
 	var dbAdapter *db.PgxAdapter
@@ -137,9 +95,6 @@ func main() {
 		dbAdapter = dbDeps.DBAdapter
 		defer dbAdapter.Close()
 		defer dbDeps.PoolCollector.Stop()
-		if dbDeps.StdDB != nil {
-			defer func() { _ = dbDeps.StdDB.Close() }()
-		}
 	}
 
 	// WS.1: Track service auth secret age for rotation alerting.
@@ -147,10 +102,19 @@ func main() {
 	secretAgeCollector.Start(context.Background())
 	defer secretAgeCollector.Stop()
 
-	// T1.3 (Wave 1 Phase A.4): wire auth failure auditor to persist
-	// auth rejections to audit_log. Must run AFTER setupDatabase so the
-	// writer has a real DB; nil-safe when dbAdapter is unavailable.
-	WireAuthFailureAuditor(dbAdapter, logger)
+	// Trusted-proxy CIDRs from env (Cloudflare egress in production; empty
+	// in dev so X-Forwarded-For is never honored). One policy for every
+	// consumer of the client IP: the edge rate limit and the auth audit
+	// throttle key on the same address.
+	trustedProxyCIDRs := clientip.ParseTrustedProxyCIDRs(cfg.TrustedProxyCIDRs)
+	logger.Info("trusted proxy CIDRs loaded", "count", len(trustedProxyCIDRs))
+
+	// T1.3 (Wave 1 Phase A.4): the auth failure auditor persists auth
+	// rejections to audit_log, so it is built AFTER setupDatabase; nil when
+	// dbAdapter is unavailable. It completes the authentication config read
+	// in setupAuth, and the Authenticator is built once from both.
+	authDeps.Config.Auditor = buildAuthFailureAuditor(dbAdapter, logger, clientip.NewResolver(trustedProxyCIDRs))
+	authenticator := auth.NewAuthenticator(authDeps.Config)
 
 	var stores *StoreDeps
 
@@ -179,11 +143,12 @@ func main() {
 			logger.Error("failed to setup stores", "error", err)
 			os.Exit(1)
 		}
-		// Os loops de background NÃO usam o pool das requisições. Ele é
-		// deliberadamente incapaz de ver outro tenant (AssertRequestPoolIsolated
-		// recusa subir se conseguir), e varredura entre tenants é exatamente o
-		// trabalho deles — sobre aquele pool, cada varredura leria e apagaria
-		// NADA, sem erro e sem log. Ver setup_background_database.go.
+		k8sDeps.SecretK8sSync = setupSecretK8sSync(cfg, stores.CellStore, logger)
+		// The background loops do NOT use the request pool. That pool is
+		// deliberately unable to see another tenant (AssertRequestPoolIsolated
+		// refuses to boot if it can), and sweeping across tenants is exactly
+		// their job — over that pool, every sweep would read and delete
+		// NOTHING, with no error and no log. See setup_background_database.go.
 		bgAdapter, err = setupBackgroundDatabase(cfg, logger)
 		if err != nil {
 			logger.Error("failed to connect the background database pool", "error", err)
@@ -195,27 +160,23 @@ func main() {
 			logger.Error("failed to setup background stores", "error", err)
 			os.Exit(1)
 		}
-		// O cap de projetos é POR CONTA e conta através dos tenants dela. O pool
-		// das requisições enxerga um tenant só desde a migration 000062, então
-		// sem isto o cap por conta vira cap por tenant — silenciosamente. Medido:
-		// conta com 2 tenants e 1 projeto cada devolvia 1 pelo pool de request e
-		// 2 pelo loopzero_worker. Ver internal/db/store/project_wrapper.go.
-		if dbDeps.ProjectStore != nil {
-			if ps, ok := dbDeps.ProjectStore.(*store.PostgresProjectStore); ok {
-				ps.SetCrossTenantCounter(bgAdapter)
-			}
-		}
+		// The project cap is PER ACCOUNT and counts across the Account's tenants.
+		// The request pool sees one tenant since migration 000062, so both
+		// project-creating stores (this API store and the orchestrator's deploy
+		// store) count through the background pool. Measured: an account with 2
+		// tenants and 1 project each read 1 through the request pool and 2
+		// through loopzero_worker. See internal/db/store/project_wrapper.go.
+		wireCrossTenantLookups(dbDeps, bgAdapter)
+		wirePlanEnforcement(dbDeps, bgAdapter, logger)
+		projectCap := newProjectCapEnforcement(dbDeps.PlanLimiter, bgAdapter)
+		wireProjectCap(dbDeps.PostgresProjects, projectCap)
 		workflows, err = setupWorkflows(cfg, httpTransport, logger)
 		if err != nil {
 			logger.Error("failed to setup workflows", "error", err)
 			os.Exit(1)
 		}
-		var planLimiter *enforcement.PlanLimiter
-		if dbDeps != nil {
-			planLimiter = dbDeps.PlanLimiter
-		}
-		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, planLimiter)
-		ghDeps = setupGitHub(dbAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, shutdownCtx, logger)
+		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, projectCap, envEnsurer)
+		ghDeps = setupGitHub(dbAdapter, bgAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, shutdownCtx, logger)
 	}
 
 	// Plan J-17 T1.3 — start the Argo step watcher in a background
@@ -235,159 +196,41 @@ func main() {
 	var bgWg sync.WaitGroup
 	var cellRouter placement.Router
 	var cellStore *store.PostgresCellStore
-	var domainHandler *domains.DomainHandler
+	var domainHandler *domainshttp.DomainHandler
 
 	if dbAdapter != nil && stores != nil && workflows != nil {
 		cellRouter = setupCellRouter(cfg, shutdownCtx, &bgWg, logger)
 		cellStore = &store.PostgresCellStore{DB: dbAdapter}
 
-		dh, domainProvisioner, domainHealthChecker, cfZoneClient := setupDomains(stores, workflows, cfg, logger)
+		dh, cfZoneClient := setupDomains(stores, cfg, logger)
 		domainHandler = dh
+		readinessSource := setupReadinessSource(cfg, logger)
 
-		// MEET-ASYNC-AMENDMENT-2026-05-12-003 Option A (RATIFIED 2026-05-12):
-		// run leader election in a goroutine so HTTP server starts immediately.
-		// Passive standby pods serve /healthz (probes pass) while waiting for
-		// the lock; only the leader runs background reconcile loops.
-		// Pre-fix: synchronous setupLeaderElection blocked main() up to 60s,
-		// causing 2nd replica liveness/startup probe failure -> crashloop.
-		//
-		// Iter 19 fix: do NOT defer LeaderConn.Release() inside this goroutine.
-		// startLeaderLoops spawns runLeaderHeartbeat (setup_background.go:422)
-		// which OWNS the conn for its lifetime. When the wrapping goroutine
-		// returns, the deferred Release() yanks the conn out from under the
-		// heartbeat -> panic in pgxpool.Conn.QueryRow. The conn is cleaned
-		// up at process exit via pgxpool.Close (line 116 main.go).
-		bgWg.Add(1)
-		go func() {
-			defer bgWg.Done()
-			leaderResult := setupLeaderElection(dbAdapter.Pool, shutdownCtx, logger)
-
-			if leaderResult.IsLeader {
-				startLeaderLoops(shutdownCtx, &bgWg, leaderResult.LeaderConn,
-					bgAdapter, bgStores, workflows, orchDeps, k8sDeps, cellRouter,
-					domainProvisioner, domainHealthChecker, cfZoneClient, cfg, logger)
-			}
-			// Non-leader: setupLeaderElection already started the
-			// startNonLeaderReelection goroutine which polls every 60s
-			// and os.Exit(0) when lock acquired. LeaderConn lives for
-			// the lifetime of that re-election goroutine.
-		}()
+		startLoopsElection(shutdownCtx, &bgWg, cfg, bgAdapter, logger, func(loopsCtx context.Context) {
+			startLeaderLoops(loopsCtx, &bgWg,
+				bgAdapter, bgStores, workflows, orchDeps, k8sDeps, cellRouter,
+				cfZoneClient, readinessSource, cfg, logger)
+		})
 	}
 	defer waitForBackgroundGoroutines(&bgWg, logger)
 
-	buildHandler := setupBuildHandler(dbAdapter, orchDeps, cellStore, cfg, shutdownCtx, logger)
+	buildHandler := setupBuildHandler(bgAdapter, orchDeps, cellStore, cfg, shutdownCtx, logger)
 
-	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4 (ADR D4):
-	// hoisted outside the EnvironmentEnsurer-wiring block below so the
-	// same instance is also assigned to srvCfg.ProjectEnvEnsurer at line
-	// ~325. POST /api/v1/projects then auto-creates a `production` env
-	// without a second wire-up. nil when k8sDeps is unavailable (test or
-	// degraded boot) → server.Router falls back to pre-T4.1 behavior.
-	var projectEnvEnsurer promote.EnvironmentEnsurer
-
-	// Plan T2.2 D5 — wire EnvironmentEnsurer so loopzero deploy --env <novo>
-	// auto-creates the Environment CR + namespace + ArgoCD App on first
-	// use. Closes F-S1-02 (dogfood 2026-05-15). Wiring requires the
-	// TenantCRManager from k8sDeps; both ensurer + BuildHandler are
-	// composed here in main so we keep the dependency tree explicit.
-	if buildHandler != nil && k8sDeps != nil && k8sDeps.TenantCRMgr != nil {
-		// m37 plan canonical fix (2026-06-25): the closure is now per-(project,
-		// env) tuple. The pre-m37 closure matched by env name alone, which
-		// silently returned exists=true when a DIFFERENT project on the same
-		// tenant already used the env name → AddEnvironment was skipped →
-		// Tenant CR spec.environments[] never gained the new tuple →
-		// AppProject destinations never extended → ArgoCD sync failed:
-		// "namespace not permitted in project". Closes #37 cenário 4.
-		//
-		// History (preserved for traceability):
-		//   - M2 v1.2 T3.3 (2026-06-07): AddEnvironment gained the project arg.
-		//   - 2026-06-08: the previous attempt used GetEnvironmentDetail
-		//     (which is project-aware) but the project="" production-legacy
-		//     pathway broke deploy-hang. The 2026-06-08 fix walked
-		//     ListEnvironments and matched on name only — solving the hang
-		//     but reintroducing the m37 silent no-op gap.
-		//   - 2026-06-25 (this plan): tuple-aware match closes both gaps:
-		//     legacy (project="") matches ONLY entries with empty Project;
-		//     post-M2 tuples match by exact (Name, Project) pair.
-		lister, adder := platform.NewEnvManagerAdapter(
-			k8sDeps.TenantCRMgr.AddEnvironment,
-			func(ctx context.Context, tenantID, project, envName string) (any, error) {
-				envs, err := k8sDeps.TenantCRMgr.ListEnvironments(ctx, tenantID)
-				if err != nil {
-					return nil, err
-				}
-				for i := range envs {
-					if envs[i].Name == envName && envs[i].Project == project {
-						return &envs[i], nil
-					}
-				}
-				return nil, nil
-			},
-		)
-		// Sprint A trio-fix 2026-06-01: ReadinessChecker queries Environment
-		// CR.status.phase=="Active" before EnsureEnvironment returns.
-		//
-		// 2026-06-02 H1 validation: TEMPORARILY DISABLED via LOOPZERO_ENV_READINESS_CHECKER
-		// gate (default false). Hypothesis: the readiness poll adds 2-30s per
-		// deploy × 11 journeys = +5min total, esgotando o budget 1h30m do
-		// suite timeout. Pre-Sprint-A baseline (commit 098b6846, 2026-05-31)
-		// passou 112/0/20 em 1h11m SEM esse gate. Re-enable após confirmar
-		// hypothesis OR re-tune PollInterval/WaitTimeout para minimizar custo.
-		ensurer := &platform.EnvironmentEnsurer{
-			Lister: lister,
-			Adder:  adder,
-			Logger: logger,
-		}
-		if os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true" {
-			if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
-				ensurer.ReadinessChecker = platform.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
-				logger.Info("env readiness checker wired — EnsureEnvironment will poll Environment CR.status.phase before returning (Sprint A trio-fix 2026-06-01)")
-			}
-		} else {
-			logger.Info("env readiness checker SKIPPED — LOOPZERO_ENV_READINESS_CHECKER=false (H1 validation 2026-06-02)")
-		}
-		buildHandler = buildHandler.WithEnvironmentEnsurer(ensurer)
-		// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: capture
-		// the same instance so the project Create handler can also use it
-		// for ADR D4 production env auto-create (see srvCfg assignment below).
-		projectEnvEnsurer = ensurer
-		// Red Team loopzero-cloud#158: promote path was missing the m37/#37
-		// EnsureEnvironment retrofit that builds/projects already had.
-		// Without it, `loopzero promote --from preview --to production` for a
-		// project whose production env had NEVER been created reported
-		// success but Tenant CR spec.environments[] stayed short of the
-		// (project, "production") tuple → AppProject destinations never
-		// extended → ArgoCD sync failed → release SYNC_FAILED → the printed
-		// URL 404s. Wire the SAME ensurer instance so all three code paths
-		// (builds / project-create / promote) share one canonical ensurer.
-		if orchDeps != nil && orchDeps.PromoteHandler != nil {
-			orchDeps.PromoteHandler = orchDeps.PromoteHandler.WithEnvironmentEnsurer(ensurer)
-			logger.Info("env ensurer wired to promote handler — promote --to <novo> will auto-create target env (#158)")
-		}
-		logger.Info("env ensurer wired — deploy --env <novo> will auto-create environments (T2.2 D5); also wired to project Create handler for ADR D4 production env auto-create (T4.1)")
+	// The same ensurer serves deploy and project creation (and promote,
+	// wired in setupOrchestrator). The build handler exists only with the
+	// orchestrator, i.e. with a database.
+	var projectEnvEnsurer promotehttp.EnvironmentEnsurer
+	if buildHandler != nil && envEnsurer != nil {
+		buildHandler = buildHandler.WithEnvironmentEnsurer(envEnsurer)
+		projectEnvEnsurer = envEnsurer
+		logger.Info("env ensurer wired: deploy --env, project create and promote --to create missing environments")
 	}
 
-	// V9 L20: SecretResyncer wired post-envEnsurer in builds.go. Closes
-	// the set-secret-BEFORE-first-deploy race (audit
-	// 2026-05-30-V9-L19-99percent). Requires both a value-returning
-	// secret store (PostgresSecretStore.ListForResync) and a workload
-	// K8s creator (the same SecretK8sSync used by POST /api/v1/secrets).
-	if buildHandler != nil && stores != nil && k8sDeps != nil && k8sDeps.SecretK8sSync != nil {
-		if pgStore, ok := stores.SecretStore.(*store.PostgresSecretStore); ok {
-			resyncer := &platform.SecretResyncer{
-				Store:  pgStore,
-				K8s:    k8sDeps.SecretK8sSync,
-				Logger: logger,
-			}
-			buildHandler = buildHandler.WithSecretResyncer(resyncer)
-			logger.Info("secret resyncer wired — deploy will repopulate ExternalSecrets post envEnsurer (V9 L20)")
-		}
-	}
+	buildHandler = withSecretResyncer(buildHandler, stores, k8sDeps, logger)
 
 	healthServices := setupHealthServices(cfg)
 
 	rateLimiter := ratelimit.NewRateLimiter(60, 1*time.Minute)
-	defer rateLimiter.Stop()
 
 	// T2.4 of deep-review-remediation-plan + ADR D4 — pre-auth IP rate limit.
 	// Trusted-proxy CIDRs from env (Cloudflare egress in production; empty
@@ -397,14 +240,22 @@ func main() {
 	ipRateLimiter := ratelimit.NewIPRateLimiter(ratelimit.IPRateLimitConfig{
 		Limit:             120,
 		Window:            1 * time.Minute,
-		TrustedProxyCIDRs: ratelimit.ParseTrustedProxyCIDRs(os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS")),
+		TrustedProxyCIDRs: trustedProxyCIDRs,
 	})
 
-	srvCfg := buildServerConfig(cfg, dbAdapter, dbDeps, stores, orchDeps, ghDeps,
-		k8sDeps, cellRouter, cellStore, domainHandler, buildHandler,
-		healthServices, authDeps.TokenValidator, rateLimiter,
-		shutdownCtx, shutdownCancel, logger)
-	srvCfg.IPRateLimit = ipRateLimiter
+	srvCfg := buildServerConfig(serverWiring{
+		cfg: cfg, dbAdapter: dbAdapter, crossTenant: bgAdapter, dbDeps: dbDeps, stores: stores,
+		orchDeps: orchDeps, ghDeps: ghDeps, k8sDeps: k8sDeps,
+		cellRouter: cellRouter, cellStore: cellStore,
+		domainHandler: domainHandler, buildHandler: buildHandler,
+		healthServices: healthServices, tokenValidator: authDeps.TokenValidator,
+		rateLimiter: rateLimiter, shutdownCtx: shutdownCtx, shutdownCancel: shutdownCancel,
+		logger: logger,
+	})
+	srvCfg.Guards.IPRateLimit = ipRateLimiter
+	srvCfg.Auth = authenticator
+	srvCfg.Admin.APIEnabled = os.Getenv("LOOPZERO_ADMIN_API") == "true"
+	srvCfg.Maintenance = policy.ParseMaintenanceSetting(os.Getenv("LOOPZERO_MAINTENANCE_MODE"))
 
 	// M3 of qa-readiness-roadmap-2026-06-23 — J11D7 LOCKED ADR:
 	// per-(tenant, domain) rate-limit for POST /api/v1/domains/{domain}/verify
@@ -412,45 +263,9 @@ func main() {
 	// wraps RateLimiter internally — see plan m3-verify-rate-limit-middleware
 	// ADR D1.
 	verifyRateLimiter := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
-	defer verifyRateLimiter.Stop()
-	srvCfg.VerifyRateLimiter = verifyRateLimiter
+	srvCfg.Guards.VerifyRateLimiter = verifyRateLimiter
 
-	// T2.3+T2.5 (plan 2026-06-10-j22-openbao-transit-eso-sync v1.2): thread
-	// the OpenBao transit client into router so SecretHandler.Bulk encrypts
-	// every entry.Value via Encrypt BEFORE store.Set. The store ALSO
-	// dispatches through the SAME vault (handler-encrypted bytes carry the
-	// vault:v1: prefix → encryptForStore passes-through, no double-encrypt;
-	// reads via decryptFromStore detect the prefix → vault decrypt). nil
-	// when CryptoMode != "transit"; router's nil guard keeps the legacy
-	// path active in that case.
-	if transit != nil {
-		srvCfg.SecretTransit = transit
-	}
-	// Layer 2 ESO sync chain (plan 2026-06-10-j22-openbao-transit-eso-sync
-	// v1.2 D3): wire SecretFetchHandler for the broker endpoint
-	// /internal/v1/secret-fetch/{tenant_id}/{secret_name}. ESO running in
-	// mgmt cluster (Wave -1 of core.helmfile) calls this endpoint via the
-	// webhook ClusterSecretStore to resolve user secrets — loopzero-api loads
-	// the vault:v1: ciphertext from PG + decrypts via OpenBao transit +
-	// returns plaintext_b64. Wires nil-safely: if any dep is missing the
-	// handler stays nil and router skips route registration. LIVE-caught
-	// gap closure 2026-06-10 J-22 walkthrough.
-	if transit != nil && dbAdapter != nil && cellStore != nil {
-		// Construct a fresh AuditLogger pointing at the same pool — the
-		// orchestrator uses the same shape inline (setup_orchestrator.go:101)
-		// rather than exposing it as a field. AuditLogger is a thin DB
-		// wrapper, so this is single-source-of-truth even when constructed
-		// twice (both writes go to the same audit_log table via WriteAuditLog).
-		auditLogger := &store.AuditLogger{DB: dbAdapter}
-		fetchDeps := setupSecretFetchDeps(dbAdapter.Pool, transit, cellStore, auditLogger)
-		brokerToken := os.Getenv("LOOPZERO_BROKER_TOKEN")
-		if fetchDeps != nil && brokerToken != "" {
-			rawHandler := secrets.NewSecretFetchHandler(*fetchDeps)
-			srvCfg.SecretFetchHandler = brokerBearerMiddleware(brokerToken, rawHandler)
-		} else if fetchDeps != nil {
-			logger.Warn("secret-fetch broker disabled: LOOPZERO_BROKER_TOKEN not set", "component", "broker")
-		}
-	}
+	srvCfg.Secrets.FetchHandler = newSecretFetchBroker(cfg, transit, dbAdapter, bgAdapter, stores, logger)
 	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: ADR D4 —
 	// every project gets a `production` env auto-created on POST
 	// /api/v1/projects. Same EnvironmentEnsurer that powers loopzero deploy
@@ -465,13 +280,6 @@ func main() {
 	}
 }
 
-// pprofEnabled checks LOOPZERO_PPROF_ENABLED. Default: false (safe for production).
-// Set LOOPZERO_PPROF_ENABLED=true explicitly to enable (dev/debug only).
-func pprofEnabled() bool {
-	v := os.Getenv("LOOPZERO_PPROF_ENABLED")
-	return v == "true" || v == "1"
-}
-
 func silenceKlog() {
 	klogFlags := flag.NewFlagSet("klog", flag.ContinueOnError)
 	klog.InitFlags(klogFlags)
@@ -479,20 +287,20 @@ func silenceKlog() {
 	_ = klogFlags.Set("stderrthreshold", "FATAL")
 }
 
+// setupBuildHandler builds the build route handler. crossTenant is the
+// background pool: the admission gate counts every tenant's builds on a cell.
 func setupBuildHandler(
-	dbAdapter *db.PgxAdapter, orchDeps *OrchestratorDeps, cellStore *store.PostgresCellStore,
+	crossTenant *db.PgxAdapter, orchDeps *OrchestratorDeps, cellStore *store.PostgresCellStore,
 	cfg config.Config, shutdownCtx context.Context, logger *slog.Logger,
-) *builds.BuildHandler {
+) *buildshttp.BuildHandler {
 	if orchDeps == nil {
 		return nil
 	}
-	buildHandler := builds.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
-	if dbAdapter == nil {
+	buildHandler := buildshttp.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
+	if crossTenant == nil {
 		return buildHandler
 	}
-	// T1.2b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper
-	// satisfies db.BuildStore 1:1 — admission querier seam unchanged.
-	querier := &buildStoreAdmissionQuerier{store: store.NewBuildStoreSqlc(dbAdapter)}
+	querier := newAdmissionQuerier(crossTenant)
 	admissionCfg := admission.DefaultConfig()
 	if cfg.MaxConcurrentBuildsPerCell > 0 {
 		admissionCfg.MaxConcurrentPerCell = cfg.MaxConcurrentBuildsPerCell
@@ -507,9 +315,69 @@ func setupBuildHandler(
 			"max_per_cell", admissionCfg.MaxConcurrentPerCell,
 			"max_per_tenant", admissionCfg.MaxConcurrentPerTenant)
 	}
-	// B-054: o breaker do pool Postgres era construido AQUI e nunca consultado — ele protege a
-	// API inteira, nao o handler de builds, e construi-lo neste ponto o deixava preso numa
-	// funcao que devolve so' o handler. Passou para `setup_server.go`, onde a config do servidor
-	// e' montada e onde ele pode ser entregue ao middleware que decide.
+	// B-054: the Postgres pool breaker used to be built HERE and never consulted — it protects
+	// the whole API, not the builds handler, and building it at this point left it trapped in a
+	// function that returns only the handler. It moved to `setup_server.go`, where the server
+	// config is assembled and where it can be handed to the middleware that decides.
 	return buildHandler
+}
+
+// newAdmissionQuerier reads the active builds the admission gate counts. The
+// per-cell cap spans every tenant placed on the cell, so it reads through the
+// cross-tenant pool: over the request pool, scoped to the caller, it would count
+// the caller's builds alone and the cap would never engage.
+func newAdmissionQuerier(crossTenant db.DBTX) *buildsadapter.BuildStoreAdmissionQuerier {
+	return &buildsadapter.BuildStoreAdmissionQuerier{Store: store.NewBuildStoreSqlc(crossTenant)}
+}
+
+// leaseHolder names this process in the leader lease: the pod name Kubernetes
+// puts in HOSTNAME, or the OS hostname outside it.
+func leaseHolder() string {
+	if n := os.Getenv("HOSTNAME"); n != "" {
+		return n
+	}
+	if n, err := os.Hostname(); err == nil {
+		return n
+	}
+	return "loopzero-api"
+}
+
+// validateProductionEnv refuses to boot a production API without the secrets
+// the deploy path cannot work without.
+func validateProductionEnv(cfg config.Config, logger *slog.Logger) error {
+	if !cfg.IsProduction() {
+		return nil
+	}
+	return server.ValidateProductionEnv(logger, map[string]string{
+		"DATABASE_URL":              os.Getenv("DATABASE_URL"),
+		"LOOPZERO_ARGO_CALLBACK_SECRET": os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET"),
+		"GITEA_TOKEN":               cfg.GiteaToken,
+		"ARGOCD_TOKEN":              cfg.ArgocdToken,
+	})
+}
+
+// logDatabaseSetupFailure names the two failures apart: "failed to connect"
+// sent whoever forgot DATABASE_URL to look at the network.
+func logDatabaseSetupFailure(err error, logger *slog.Logger) {
+	if errors.Is(err, ErrDatabaseURLNotSet) {
+		logger.Error("database not configured", "error", err)
+		return
+	}
+	logger.Error("failed to connect to database", "error", err)
+}
+
+// withSecretResyncer makes a deploy repopulate the tenant's ExternalSecrets
+// after the env ensurer, closing the set-secret-before-first-deploy race. It
+// needs a value-returning secret store and the workload secret syncer used by
+// POST /api/v1/secrets.
+func withSecretResyncer(h *buildshttp.BuildHandler, stores *StoreDeps, k8sDeps *K8sDeps, logger *slog.Logger) *buildshttp.BuildHandler {
+	if h == nil || stores == nil || k8sDeps == nil || k8sDeps.SecretK8sSync == nil {
+		return h
+	}
+	logger.Info("secret resyncer wired: deploy repopulates ExternalSecrets after the env ensurer")
+	return h.WithSecretResyncer(&secrets.SecretResyncer{
+		Store:  stores.PgSecretStore,
+		K8s:    k8sDeps.SecretK8sSync,
+		Logger: logger,
+	})
 }

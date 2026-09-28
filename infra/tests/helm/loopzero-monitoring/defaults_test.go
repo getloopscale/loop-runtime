@@ -3,11 +3,12 @@
 // Package loopzeromonitoring_test — render-time tests for loopzero-monitoring
 // (Plan 2026-05-20 v1.1 T3.1 chart 8/10).
 //
-// loopzero-monitoring is a bundle of Prometheus operator artifacts:
+// loopzero-monitoring is a bundle of Prometheus operator artifacts, read from
+// infra/helm/monitoring through the chart's `rules` and `dashboards` symlinks:
 //   - 9 PrometheusRule manifests (capacity, critical, database, domains,
-//     otel-pipeline, probes, registry, tracing, warning)
-//   - 21 ConfigMap dashboards consumed by Grafana sidecar (label
-//     grafana_dashboard=1)
+//     otel-pipeline, probes, sigstore, tracing, warning)
+//   - 26 ConfigMap dashboards consumed by Grafana sidecar (label
+//     grafana_dashboard=1) — every dashboard in infra/helm/monitoring/dashboards
 package loopzeromonitoring_test
 
 import (
@@ -23,8 +24,8 @@ import (
 const (
 	chartName        = "loopzero-monitoring"
 	releaseName      = "loopzero-monitoring-test"
-	expectedRules    = 9  // count locked: 9 PrometheusRule files in templates/
-	expectedDashCMs  = 21 // count locked: 21 dashboard ConfigMaps in dashboards.yaml
+	expectedRules    = 9  // count locked: the 9 rule files prometheusrules.yaml publishes
+	expectedDashCMs  = 26 // count locked: the 26 dashboards in infra/helm/monitoring/dashboards
 	grafanaDiscovery = "grafana_dashboard"
 )
 

@@ -4,57 +4,58 @@
 // Package publishhygiene refuses a versioned file that carries a real host address
 // or a workstation path.
 //
-// # Por que aqui, e não só no loopzero-rag
+// # Why here, and not only in loopzero-rag
 //
-// Dos **20** repositórios irmãos medidos em 2026-08-17, **um** tinha esta trava —
-// `loopzero-rag/scripts/check-publish-hygiene.sh` — e foi por isso que o vazamento
-// apareceu lá: ele reprovou `develop` por uma linha vinda do kit. Nos outros 19 o
-// mesmo vazamento envelhecia em silêncio.
+// Of the **20** sibling repositories measured on 2026-08-17, **one** had this lock —
+// `loopzero-rag/scripts/check-publish-hygiene.sh` — and that is why the leak surfaced
+// there: it failed `develop` over a line that came from the kit. In the other 19 the
+// same leak aged in silence.
 //
-// Este repositório publica charts OCI e imagens, então é um dos lugares onde a
-// publicação é real. E **história publicada é pública RETROATIVAMENTE** — diferente de
-// quase toda dívida técnica, esta não se desfaz.
+// This repository publishes OCI charts and images, so it is one of the places where
+// publication is real. And **published history is public RETROACTIVELY** — unlike
+// almost every other technical debt, this one does not undo.
 //
-// # O critério é CAMINHO DE HOME, e a metade de IP do loopzero-rag NÃO foi transportada
+// # The criterion is HOME PATH, and loopzero-rag's IP half was NOT carried over
 //
-// **Caminho**: apenas home de usuário REAL. `/home/{runner,node,dev,…}` são CI ou
-// sintéticos e passam — é essa fronteira que separa esta trava de uma que reprova o
-// próprio teste de segurança.
+// **Path**: only a REAL user home. `/home/{runner,node,dev,…}` are CI or synthetic and
+// pass — that boundary is what separates this lock from one that fails the security
+// test itself.
 //
-// A metade de IP ficou de fora, e a razão é medição, não preguiça. Rodada contra esta
-// árvore ela produziu **104 achados, quase todos falsos**:
+// The IP half was left out, and the reason is measurement, not laziness. Run against
+// this tree it produced **104 findings, almost all false**:
 //
-//	`13.3.2.1-1`, `15.5-10`   strings de VERSÃO casando com o formato de quatro octetos
-//	`1.2.3.4`                 o placeholder canônico dos testes de DNS/CF
-//	`173.245.48.0/20`         faixas CIDR da Cloudflare, que o código carrega de
-//	                          propósito para reconhecer proxy confiável
-//	`paulo@165.227.121.20`    o alvo vivo DECLARADO em `rules/live-target.txt`, que
-//	                          `cycle-discover.md` exige para o modo live-test
+//	`13.3.2.1-1`, `15.5-10`   VERSION strings matching the four-octet format
+//	`1.2.3.4`                 the canonical placeholder of the DNS/CF tests
+//	`173.245.48.0/20`         Cloudflare CIDR ranges, which the code carries on
+//	                          purpose to recognise a trusted proxy
+//	`paulo@165.227.121.20`    the live target DECLARED in `rules/live-target.txt`,
+//	                          which `cycle-discover.md` requires for live-test mode
 //
-// Fechá-los um a um seria uma corrida armamentista em que cada exceção enfraquece o
-// sinal, e a última linha nem é um vazamento: é um contrato. A metade de IP fica onde
-// foi calibrada — no `loopzero-rag`, cujo perfil é outro. Prometer cobertura de IP aqui
-// seria a mesma superestimação que este ecossistema mede em três itens desta sessão.
+// Closing them one by one would be an arms race in which every exception weakens the
+// signal, and the last line is not even a leak: it is a contract. The IP half stays
+// where it was calibrated — in `loopzero-rag`, whose profile is different. Promising IP
+// coverage here would be the same overstatement this ecosystem measured in three items
+// this session.
 //
-// # E o que ele NÃO varre, que o loopzero-rag varre
+// # And what it does NOT scan, which loopzero-rag does
 //
-// A trilha de auditoria. `docs/README.md` declara que `docs/wiki/`, `plans/completed/`,
-// `operations/baselines/`, `meetings/records/`, `operations/findings/` e `reviews/`
-// **nunca devem ser editados para corresponder ao presente** — reescrever um registro
-// datado destrói a única evidência do que era verdade então.
+// The audit trail. `docs/README.md` declares that `docs/wiki/`, `plans/completed/`,
+// `operations/baselines/`, `meetings/records/`, `operations/findings/` and `reviews/`
+// **must never be edited to match the present** — rewriting a dated record destroys
+// the only evidence of what was true then.
 //
-// Isso não é conveniência: medido neste repositório, **738 das 796** ocorrências de
-// caminho de home estão lá, e **495 num par de artefatos JUnit**. Varrer tudo produziria
-// uma trava que só pode ficar verde violando outra regra do repositório — e uma trava
-// que não pode ficar verde é desligada.
+// That is not convenience: measured in this repository, **738 of the 796** home-path
+// occurrences are there, and **495 in one pair of JUnit artifacts**. Scanning everything
+// would produce a lock that can only go green by breaking another repository rule — and a
+// lock that cannot go green gets switched off.
 //
-// A consequência honesta é que este gate protege o que se **escreve daqui para a
-// frente**, não o que já foi registrado. Dizê-lo é a alternativa a um verde que se
-// superestima.
+// The honest consequence is that this gate protects what is **written from now on**,
+// not what was already recorded. Saying so is the alternative to a green that
+// overstates itself.
 package publishhygiene
 
 import (
-	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -62,27 +63,29 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrLeak means a versioned live file carries a host address or workstation path.
-var ErrLeak = errors.New("um arquivo versionado carrega caminho de workstation — história publicada é pública retroativamente")
+var ErrLeak = errors.New("a versioned file carries a workstation path — published history is public retroactively")
 
 // ErrNothingScanned means the scan reached no file.
 //
-// Ausência é FALHA, nunca skip: uma varredura que não alcançou nada reportando verde é
-// a forma `PASS — 0 routes` que este repositório já pagou três vezes.
-var ErrNothingScanned = errors.New("nenhum arquivo varrido — não achar nada não é o mesmo que não achar nada errado")
+// Absence is a FAILURE, never a skip: a scan that reached nothing reporting green is
+// the `PASS — 0 routes` shape this repository has already paid for three times.
+var ErrNothingScanned = errors.New("no file scanned — finding nothing is not the same as finding nothing wrong")
 
 var (
 	// homeRE finds a user home path; syntheticHomeRE removes CI, container and
 	// fixture users.
 	homeRE = regexp.MustCompile(`/(home|Users)/[a-z][a-z0-9_-]*/`)
-	// `k6` entrou por medição: é o usuário DENTRO da imagem do k6
-	// (`mountPath: /home/k6/scripts`), não a estação de ninguém.
+	// `k6` was added by measurement: it is the user INSIDE the k6 image
+	// (`mountPath: /home/k6/scripts`), not anybody's workstation.
 	syntheticHomeRE = regexp.MustCompile(`/(home|Users)/(runner|node|dev|user|ubuntu|app|vscode|test|x|k6)/`)
-	// urlHomeRE descarta `/home/` que é SEGMENTO DE URL, não caminho de disco —
-	// `https://exemplo.com/home/produto` casava com a regra e não é vazamento de
-	// nada. Medido em `landscape.yml`, que cataloga centenas de projetos externos.
+	// urlHomeRE discards a `/home/` that is a URL SEGMENT, not a disk path —
+	// `https://example.com/home/product` matched the rule and leaks nothing.
+	// Measured in `landscape.yml`, which catalogues hundreds of external projects.
 	urlHomeRE = regexp.MustCompile(`https?://[^\s"'` + "`" + `]*/home/`)
 )
 
@@ -127,12 +130,12 @@ var DefaultExemptions = []Exemption{
 	{
 		Path:   "infra/local/Caddyfile",
 		Sunset: "2026-11-17",
-		Reason: "Os três `root *` são caminhos de IMPLANTAÇÃO que resolvem no droplet e servem o " +
-			"app-dev hoje. Parametrizar com `{$VAR:default}` mantém o literal no arquivo e não " +
-			"fecha nada; parametrizar sem default quebra a borda se a variável não estiver posta " +
-			"onde o Caddy sobe. O conserto durável é tirar o dashboard da casa de uma pessoa — " +
-			"migração de ambiente, com risco próprio, e não uma edição de higiene. Medido " +
-			"2026-08-17 no B-130; registrado como item próprio.",
+		Reason: "The three `root *` are DEPLOYMENT paths that resolve on the droplet and serve " +
+			"app-dev today. Parameterising with `{$VAR:default}` keeps the literal in the file and " +
+			"closes nothing; parameterising without a default breaks the edge if the variable is not " +
+			"set where Caddy starts. The durable fix is moving the dashboard out of one person's home — " +
+			"an environment migration, with its own risk, not a hygiene edit. Measured " +
+			"2026-08-17 in B-130; registered as its own item.",
 	},
 }
 
@@ -147,14 +150,33 @@ type Finding struct {
 	File string
 	Line int
 	Text string
-	Kind string // "home" — a metade de IP não foi transportada; ver o doc do pacote
+	Kind string // "home" — the IP half was not carried over; see the package doc
 }
+
+// ErrUnverified means a versioned file could not be read, so nothing can be said
+// about what it would publish.
+var ErrUnverified = errors.New("a versioned file could not be read — its content is unverified, not clean")
 
 // Outcome reports the scan.
 type Outcome struct {
 	Scanned  int
 	Findings []Finding
 	Exempt   int
+	// Binary counts versioned files skipped as binary (they hold a NUL byte).
+	Binary int
+	// Unverified lists versioned files that could not be read, with the reason.
+	Unverified []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check scans every versioned live file.
@@ -167,7 +189,8 @@ func Check(cfg Config) (Outcome, error) {
 	exempt := map[string]bool{}
 	for _, e := range cfg.exemptions() {
 		if strings.TrimSpace(e.Reason) == "" || strings.TrimSpace(e.Sunset) == "" {
-			return out, fmt.Errorf("%w: isenção de %q sem razão ou sem sunset", ErrLeak, e.Path)
+			out.Violation = fmt.Errorf("%w: exemption for %q has no reason or no sunset", ErrLeak, e.Path)
+			return out, nil
 		}
 		exempt[e.Path] = true
 	}
@@ -176,7 +199,8 @@ func Check(cfg Config) (Outcome, error) {
 	if err != nil {
 		return out, err
 	}
-	for _, rel := range files {
+	for _, f := range files {
+		rel := f.path
 		if isAuditTrail(rel) {
 			continue
 		}
@@ -184,18 +208,27 @@ func Check(cfg Config) (Outcome, error) {
 			out.Exempt++
 			continue
 		}
-		out.Scanned++
-		fs, ferr := scanFile(filepath.Join(root, rel), rel)
+		data, ferr := f.publishedContent(root)
 		if ferr != nil {
-			continue // binário ou ilegível: não é achado deste gate
+			out.Unverified = append(out.Unverified, fmt.Sprintf("%s: %v", rel, ferr))
+			continue
 		}
-		out.Findings = append(out.Findings, fs...)
+		if bytes.IndexByte(data, 0) >= 0 {
+			out.Binary++
+			continue
+		}
+		out.Scanned++
+		out.Findings = append(out.Findings, scanText(string(data), rel)...)
+	}
+	if len(out.Findings) > 0 {
+		out.Violation = ErrLeak
+		return out, nil
+	}
+	if len(out.Unverified) > 0 {
+		return out, fmt.Errorf("%w: %s", ErrUnverified, strings.Join(out.Unverified, "; "))
 	}
 	if out.Scanned == 0 {
 		return out, ErrNothingScanned
-	}
-	if len(out.Findings) > 0 {
-		return out, ErrLeak
 	}
 	return out, nil
 }
@@ -217,40 +250,64 @@ func isAuditTrail(rel string) bool {
 	return false
 }
 
-// versionedFiles lists what git tracks — what will be published, not the working dir.
-func versionedFiles(root string) ([]string, error) {
-	cmd := exec.Command("git", "ls-files")
+// symlinkMode is the git index mode of a versioned symbolic link.
+const symlinkMode = "120000"
+
+// versionedFile is one entry of the git index.
+type versionedFile struct {
+	path    string
+	symlink bool
+}
+
+// publishedContent is what git publishes for the entry. For a symlink that is
+// the target text, never the target's content: a link to a directory is a
+// readable one-line blob, and the directory's own files are versioned — and
+// scanned — under their own paths.
+func (f versionedFile) publishedContent(root string) ([]byte, error) {
+	full := filepath.Clean(filepath.Join(root, f.path))
+	if f.symlink {
+		target, err := os.Readlink(full)
+		if err != nil {
+			return nil, err
+		}
+		return []byte(target), nil
+	}
+	return os.ReadFile(full)
+}
+
+// versionedFiles lists what git tracks — what will be published, not the
+// working dir — with the index mode that says how each entry is published.
+func versionedFiles(root string) ([]versionedFile, error) {
+	cmd := exec.Command("git", "ls-files", "-s", "-z")
 	cmd.Dir = root
 	body, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("git ls-files em %s: %w", root, err)
+		return nil, fmt.Errorf("git ls-files in %s: %w", root, err)
 	}
-	var out []string
-	for _, l := range strings.Split(string(body), "\n") {
-		if l = strings.TrimSpace(l); l != "" {
-			out = append(out, l)
+	var out []versionedFile
+	for _, entry := range strings.Split(string(body), "\x00") {
+		if entry == "" {
+			continue
 		}
+		// "<mode> <object> <stage>\t<path>"
+		meta, path, ok := strings.Cut(entry, "\t")
+		if !ok {
+			return nil, fmt.Errorf("git ls-files -s in %s: unexpected entry %q", root, entry)
+		}
+		mode, _, _ := strings.Cut(meta, " ")
+		out = append(out, versionedFile{path: path, symlink: mode == symlinkMode})
 	}
 	return out, nil
 }
 
-func scanFile(abs, rel string) ([]Finding, error) {
-	f, err := os.Open(filepath.Clean(abs))
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
+// scanText reports every workstation home path in content, line by line. The
+// whole file is read first, so no line is too long to be scanned.
+func scanText(content, rel string) []Finding {
 	var out []Finding
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 1024*1024), 1024*1024)
-	n := 0
-	for sc.Scan() {
-		n++
-		line := sc.Text()
+	for i, line := range strings.Split(content, "\n") {
 		if homeRE.MatchString(line) && !syntheticHomeRE.MatchString(line) && !urlHomeRE.MatchString(line) {
-			out = append(out, Finding{File: rel, Line: n, Text: strings.TrimSpace(line), Kind: "home"})
+			out = append(out, Finding{File: rel, Line: i + 1, Text: strings.TrimSpace(line), Kind: "home"})
 		}
 	}
-	return out, sc.Err()
+	return out
 }

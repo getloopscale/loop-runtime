@@ -197,17 +197,17 @@ configs:
       end
       return hs
 
-    # F-11 (CHG-2026-04-29-DOGFOOD T5.1) — Lua health checks para CRDs
-    # Traefik. Sem isso, ArgoCD reporta `health: ""` para IngressRoute /
-    # Middleware (não conhece o spec), e o App agregado fica em
-    # `Progressing` infinito mesmo após sync completo. Manifests gerados
-    # por api/internal/manifests/renderer.go SEMPRE incluem essas CRDs em
-    # static-frontend deploys, então este check é load-bearing para UI
-    # consolidation pós-deploy.
+    # F-11 (CHG-2026-04-29-DOGFOOD T5.1) — Lua health checks for the Traefik
+    # CRDs. Without them, ArgoCD reports `health: ""` for IngressRoute /
+    # Middleware (it does not know the spec), and the aggregated App stays in
+    # `Progressing` forever even after a complete sync. Manifests generated
+    # by api/internal/manifests/renderer.go ALWAYS include these CRDs in
+    # static-frontend deploys, so this check is load-bearing for post-deploy
+    # UI consolidation.
     resource.customizations.health.traefik.io_IngressRoute: |
       hs = {}
-      -- IngressRoute não tem .status field no spec (recurso "applied-only").
-      -- Se o objeto existe e tem spec.routes, considera Healthy.
+      -- IngressRoute has no .status field in its spec ("applied-only" resource).
+      -- If the object exists and has spec.routes, consider it Healthy.
       if obj.spec ~= nil and obj.spec.routes ~= nil and #obj.spec.routes > 0 then
         hs.status = "Healthy"
         hs.message = "IngressRoute applied with " .. tostring(#obj.spec.routes) .. " route(s)"
@@ -219,7 +219,7 @@ configs:
 
     resource.customizations.health.traefik.io_Middleware: |
       hs = {}
-      -- Middleware é stateless (sem .status). Existência = Healthy.
+      -- Middleware is stateless (no .status). Existence = Healthy.
       hs.status = "Healthy"
       hs.message = "Middleware applied"
       return hs
@@ -231,9 +231,9 @@ configs:
       return hs
 
     # F-11 — cert-manager Certificate health (parse .status.conditions).
-    # Em standalone-multi sem real LE, Certificate fica "Progressing/Issuing"
-    # — comportamento esperado, não é falha. Em dev/prod com LE ACME, vira
-    # "Healthy/Ready=True" após challenge.
+    # In standalone-multi without a real LE, the Certificate stays "Progressing/Issuing"
+    # — expected behaviour, not a failure. In dev/prod with LE ACME, it becomes
+    # "Healthy/Ready=True" after the challenge.
     resource.customizations.health.cert-manager.io_Certificate: |
       hs = {}
       hs.status = "Progressing"
@@ -245,8 +245,8 @@ configs:
               hs.status = "Healthy"
               hs.message = c.message or "Certificate ready"
             elseif c.status == "False" then
-              -- Distingue "ainda issuing" (Progressing) de "permanent fail"
-              -- (Degraded). reason "Failed" ou "InvalidConfig" → Degraded.
+              -- Distinguishes "still issuing" (Progressing) from "permanent fail"
+              -- (Degraded). reason "Failed" or "InvalidConfig" → Degraded.
               if c.reason == "Failed" or c.reason == "InvalidConfig" then
                 hs.status = "Degraded"
                 hs.message = c.reason .. ": " .. (c.message or "")

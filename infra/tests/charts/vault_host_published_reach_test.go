@@ -45,16 +45,6 @@ import (
 	"testing"
 )
 
-// repoRoot resolves to the loopzero repo root from the test package path.
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	p, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	return p
-}
-
 // mustRead is a thin wrapper that fails the test on any read error.
 func mustRead(t *testing.T, p string) string {
 	t.Helper()
@@ -80,8 +70,8 @@ func renderVaultHelmfileOpenbao(t *testing.T) string {
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		_, comoLer := ClassificarFalhaDeRender(string(out))
-		t.Fatalf("helmfile template failed: %v\n%s\n\n%s", err, truncate(string(out), 1200), comoLer)
+		_, howToRead := ClassifyRenderFailure(string(out))
+		t.Fatalf("helmfile template failed: %v\n%s\n\n%s", err, truncate(string(out), 1200), howToRead)
 	}
 	return string(out)
 }

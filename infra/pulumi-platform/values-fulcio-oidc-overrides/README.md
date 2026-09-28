@@ -10,21 +10,21 @@ These files were created iteratively across 9 loop iterations (2026-05-28) while
 Fulcio's HTTP 400 "error processing identity token" on LIVE builds.
 
 Iterations 1-9 tried the following, none of which resolved it:
-- `cenario-c-issuer-mismatch.yaml` — added 2nd OIDCIssuer entry (iss already matched)
-- `cenario-a-k3s-config.yaml` — K3s `anonymous-auth=true` + `jwks_uri=DNS`
-- `cenario-a-anonymous-discovery.yaml` — ClusterRoleBinding `system:unauthenticated`
-- `cenario-d-tls-ca-investigation.md` — investigation note (Fulcio extraEnv blocker)
+- `scenario-c-issuer-mismatch.yaml` — added 2nd OIDCIssuer entry (iss already matched)
+- `scenario-a-k3s-config.yaml` — K3s `anonymous-auth=true` + `jwks_uri=DNS`
+- `scenario-a-anonymous-discovery.yaml` — ClusterRoleBinding `system:unauthenticated`
+- `scenario-d-tls-ca-investigation.md` — investigation note (Fulcio extraEnv blocker)
 
 Research on 2026-05-28 found the official fix:
-- **`cenario-a-cacert-trust.yaml`** — Fulcio config schema `OIDCIssuer.CACert`
+- **`scenario-a-cacert-trust.yaml`** — Fulcio config schema `OIDCIssuer.CACert`
   PEM field, documented at pkg.go.dev/github.com/sigstore/fulcio/pkg/config.
 
 ## Apply flow (after a cleanroom)
 
 **Prerequisites** (Phase -1 of the plan):
 
-1. **K3s anonymous-auth=true**: `docker cp cenario-a-k3s-config.yaml k3d-loopzero-build-server-0:/etc/rancher/k3s/config.yaml && docker restart k3d-loopzero-build-server-0`
-2. **CRB system:unauthenticated**: `kubectl apply -f cenario-a-anonymous-discovery.yaml`
+1. **K3s anonymous-auth=true**: `docker cp scenario-a-k3s-config.yaml k3d-loopzero-build-server-0:/etc/rancher/k3s/config.yaml && docker restart k3d-loopzero-build-server-0`
+2. **CRB system:unauthenticated**: `kubectl apply -f scenario-a-anonymous-discovery.yaml`
 3. **Sigstore stack**: `helm install scaffold sigstore/scaffold --version 0.6.108 --wait`
 
 **CACert fix** (Phases 0-2 of the plan):
@@ -40,7 +40,7 @@ import re
 with open('/tmp/k3s-server-ca.pem') as f:
     ca = f.read().rstrip()
 ca_indented = '\n'.join('          ' + line for line in ca.splitlines())
-with open('infra/pulumi-platform/values-fulcio-oidc-overrides/cenario-a-cacert-trust.yaml') as f:
+with open('infra/pulumi-platform/values-fulcio-oidc-overrides/scenario-a-cacert-trust.yaml') as f:
     template = f.read()
 rendered = re.sub(
     r'^<K3S_SERVER_CA_PEM_PLACEHOLDER>$',
@@ -48,14 +48,14 @@ rendered = re.sub(
     template,
     flags=re.MULTILINE,
 )
-with open('/tmp/cenario-a-cacert-trust-rendered.yaml', 'w') as f:
+with open('/tmp/scenario-a-cacert-trust-rendered.yaml', 'w') as f:
     f.write(rendered)
 PY
 
 # Apply (upsert idempotent)
 helm --kubeconfig=$(k3d kubeconfig write loopzero-build) \
   upgrade --install fulcio sigstore/fulcio --version 2.9.1 \
-  -n fulcio-system -f /tmp/cenario-a-cacert-trust-rendered.yaml
+  -n fulcio-system -f /tmp/scenario-a-cacert-trust-rendered.yaml
 ```
 
 ## Verify

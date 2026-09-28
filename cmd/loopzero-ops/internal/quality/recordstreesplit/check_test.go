@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // fixture builds a two-tree layout under a temp root and returns the root.
@@ -156,19 +158,45 @@ func TestCheck_NonMarkdownIgnored(t *testing.T) {
 	}
 }
 
-// The measurement that closed B-166, run against the repository itself: the
-// committed manifest must describe the archive as it actually is on disk.
-func TestCheck_ThisRepository_ArchiveIsFrozen(t *testing.T) {
-	root := filepath.Join("..", "..", "..", "..", "..")
-	// Absence is a FAILURE, not a skip. A gate about a records tree that cannot
-	// find the records tree must say so — skipping would report green for the
-	// exact shape this item exists to catch (same lesson as B-006).
-	if _, err := os.Stat(filepath.Join(root, DefaultLiveDir)); err != nil {
-		t.Fatalf("%s not reachable from the test binary (%v) — the live records tree must exist", DefaultLiveDir, err)
-	}
+// The live tree lives under .squad/, which .gitignore excludes, so a fresh
+// clone has none. Reporting "one live tree, 0 records" there is a pass over a
+// tree nobody found; the gate must say it verified nothing.
+func TestCheck_LiveTreeAbsent_IsNotAPass(t *testing.T) {
+	root := fixture(t, nil, nil, "")
 
 	out := Check(Config{RepoRoot: root})
 
+	if out.Pass || !out.LiveMissing {
+		t.Fatalf("an absent live tree must be reported as unverified, got %+v", out)
+	}
+}
+
+// With the retired archive and its manifest both gone there is nothing frozen,
+// and the outcome must say so rather than report a freeze of size zero.
+func TestCheck_NoArchive_IsReportedAsAbsent(t *testing.T) {
+	root := fixture(t, []string{"plans/b200-plan.md"}, nil, "")
+
+	out := Check(Config{RepoRoot: root})
+
+	if !out.Pass || !out.ArchiveAbsent {
+		t.Fatalf("a single live tree with no archive must pass and name the absence, got %+v", out)
+	}
+}
+
+// Both trees sit in gitignored directories, so which state this repository is
+// in depends on the machine. The assertion follows the state instead of skipping:
+// with no live tree the gate must refuse to pass; with one it must pass.
+func TestCheck_ThisRepository(t *testing.T) {
+	root := qtestutil.Root(t)
+
+	out := Check(Config{RepoRoot: root})
+
+	if _, err := os.Stat(filepath.Join(root, DefaultLiveDir)); err != nil {
+		if out.Pass || !out.LiveMissing {
+			t.Fatalf("with %s absent the gate must report it unverified, got %+v", DefaultLiveDir, out)
+		}
+		return
+	}
 	if !out.Pass {
 		t.Fatalf("this repository's archive drifted from its freeze manifest:\n"+
 			"  added:      %v\n  removed:    %v\n  violations: %v",

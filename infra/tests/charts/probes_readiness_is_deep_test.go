@@ -4,83 +4,79 @@
 package charts
 
 import (
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// Prontidao e vivacidade NAO podem apontar para o mesmo handler incondicional (B-135).
+// Readiness and liveness MUST NOT point at the same unconditional handler (B-135).
 //
-// `/api/v1/health` responde 200 sempre — e' o certo para VIVACIDADE ("o processo esta'
-// vivo"). Usa-lo tambem na prontidao deixa o pod `Ready` com o banco fora, recebendo
-// trafego e devolvendo erro em 27 das 36 superficies. Nao existe estado observavel em que
-// a instancia esteja viva e FORA do Service, que e' a unica coisa que prontidao serve
-// para fazer.
+// `/api/v1/health` always answers 200 — right for LIVENESS ("the process is
+// alive"). Using it for readiness too leaves the pod `Ready` with the database
+// down, taking traffic and returning errors on 27 of the 36 surfaces. There is
+// no observable state in which the instance is alive and OUT of the Service,
+// which is the one thing readiness exists to do.
 //
-// O teste afirma a FORMA, nao o caminho exato: exige que os dois difiram e que a prontidao
-// aponte para um caminho de verificacao profunda. Fixar o literal faria qualquer renomeacao
-// de rota reprovar sem que nada tivesse piorado.
-func TestProntidaoEVivacidadeNaoCompartilhamOMesmoHandler(t *testing.T) {
-	if _, err := exec.LookPath("helm"); err != nil {
-		// FALHA, nao skip: `helm` e' pre-requisito declarado do repositorio, e um skip
-		// apagaria esta guarda em silencio na maquina onde ela mais importa.
-		t.Fatal("helm nao esta' no PATH, e e' pre-requisito declarado do repositorio")
-	}
-	raiz := repoRoot(t)
-
-	for _, chart := range []string{
-		filepath.Join("charts", "loopzero-api"),
-		filepath.Join("infra", "helm", "loopzero-api"),
+// The test asserts the SHAPE, not the exact path: the two must differ and
+// readiness must point at a deep-check path. Pinning the literal would fail any
+// route rename while nothing got worse.
+func TestReadinessAndLivenessDoNotShareTheSameHandler(t *testing.T) {
+	api := publishedChart(t, "loopzero-api")
+	// The chart is installed two ways: by ArgoCD with its defaults, and by the
+	// Helmfile bootstrap with values-bootstrap.yaml. Both renders are checked,
+	// because a values file can override a probe as easily as a template can.
+	for _, install := range []struct {
+		name   string
+		values []string
+	}{
+		{"charts/loopzero-api", nil},
+		{"charts/loopzero-api with values-bootstrap.yaml", []string{filepath.Join(api, "values-bootstrap.yaml")}},
 	} {
-		t.Run(chart, func(t *testing.T) {
-			out, err := exec.Command("helm", "template", "t", filepath.Join(raiz, chart)).CombinedOutput()
-			if err != nil {
-				t.Fatalf("helm template falhou: %v\n%s", err, truncate(string(out), 800))
-			}
-			vivo := caminhoDaSonda(string(out), "livenessProbe:")
-			pronto := caminhoDaSonda(string(out), "readinessProbe:")
-			// Era um Skip, e o gate `skip-link` estava certo em recusa-lo. Um chart que nao
-			// declara as duas sondas nao e' um caso fora de escopo deste teste: e' o caso PIOR
-			// que ele existe para pegar. Sem prontidao, o Kubernetes usa a vivacidade para
-			// decidir trafego, que e' exatamente o defeito do B-135 na sua forma extrema.
+		t.Run(install.name, func(t *testing.T) {
+			out := renderChart(t, api, "t", nil, install.values...)
+			liveness := probePath(out, "livenessProbe:")
+			readiness := probePath(out, "readinessProbe:")
+			// This was a Skip, and the `skip-link` gate was right to refuse it. A chart
+			// that declares neither probe is not out of scope here: it is the WORST case
+			// this test exists to catch. With no readiness, Kubernetes uses liveness to
+			// route traffic — exactly B-135 in its extreme form.
 			//
-			// Um Skip aqui tornava a ausencia de sonda indistinguivel de um chart aprovado.
-			if vivo == "" || pronto == "" {
-				t.Fatalf("o chart nao declara as duas sondas (liveness=%q readiness=%q). Sem "+
-					"prontidao propria, uma instancia que nao consegue servir continua no Service "+
-					"(B-135).", vivo, pronto)
+			// A Skip here made a missing probe indistinguishable from an approved chart.
+			if liveness == "" || readiness == "" {
+				t.Fatalf("the chart does not declare both probes (liveness=%q readiness=%q). With "+
+					"no readiness of its own, an instance that cannot serve stays in the Service "+
+					"(B-135).", liveness, readiness)
 			}
-			if vivo == pronto {
-				t.Errorf("vivacidade e prontidao apontam para o MESMO caminho (%q). O handler de "+
-					"vivacidade responde 200 incondicionalmente, entao a prontidao nunca tira do "+
-					"Service uma instancia que nao consegue servir (B-135).", vivo)
+			if liveness == readiness {
+				t.Errorf("liveness and readiness point at the SAME path (%q). The liveness "+
+					"handler answers 200 unconditionally, so readiness never takes an instance "+
+					"that cannot serve out of the Service (B-135).", liveness)
 			}
-			if !strings.Contains(pronto, "ready") && !strings.Contains(pronto, "deep") {
-				t.Errorf("a prontidao aponta para %q, que nao parece verificacao profunda. O que "+
-					"ela precisa refletir e' a capacidade DESTA instancia de servir.", pronto)
+			if !strings.Contains(readiness, "ready") && !strings.Contains(readiness, "deep") {
+				t.Errorf("readiness points at %q, which does not look like a deep check. It must "+
+					"reflect whether THIS instance can serve.", readiness)
 			}
 		})
 	}
 }
 
-// caminhoDaSonda devolve o `path:` que aparece logo apos o marcador da sonda.
-func caminhoDaSonda(rendered, marcador string) string {
-	i := strings.Index(rendered, marcador)
+// probePath returns the `path:` that follows the probe marker.
+func probePath(rendered, marker string) string {
+	i := strings.Index(rendered, marker)
 	if i < 0 {
 		return ""
 	}
-	janela := rendered[i:]
-	if len(janela) > 400 {
-		janela = janela[:400]
+	window := rendered[i:]
+	if len(window) > 400 {
+		window = window[:400]
 	}
-	j := strings.Index(janela, "path:")
+	j := strings.Index(window, "path:")
 	if j < 0 {
 		return ""
 	}
-	resto := janela[j+len("path:"):]
-	if fim := strings.IndexByte(resto, '\n'); fim >= 0 {
-		resto = resto[:fim]
+	rest := window[j+len("path:"):]
+	if end := strings.IndexByte(rest, '\n'); end >= 0 {
+		rest = rest[:end]
 	}
-	return strings.TrimSpace(resto)
+	return strings.TrimSpace(rest)
 }

@@ -28,22 +28,16 @@ replicaCount: 2
 # internal URLs are cluster-DNS (http). Keep the public/internal split correct.
 config:
   kratosPublicUrl: "https://!!changeme-auth-host!!"
-  kratosInternalUrl: "http://ory-kratos-public.loopzero-system:80"
   kratosAdminUrl: "http://ory-kratos-admin.loopzero-system:80"
   hydraPublicUrl: "https://!!changeme-auth-host!!"
   hydraAdminUrl: "http://ory-hydra-admin.loopzero-system:4445"
   engineApiUrl: "http://loopzero-api.loopzero-system:8080"
   appPublicUrl: "https://!!changeme-app-host!!"
-  billingReturnUrl: "https://!!changeme-app-host!!"
-  themoryBaseUrl: ""        # set + add THEMORY_API_KEY to the Secret to enable memory proxy
   loopzeroEnv: "prod"           # prod = fail-fast on missing required secrets/URLs
 
 # --- Exposure ------------------------------------------------------------------
-ingress:
-  enabled: true
-  className: "!!changeme-ingressclass!!"
-  hosts:
-    - host: "!!changeme-cloud-host!!"
+# The chart ships a ClusterIP Service (port `service.port`) and no Ingress: route
+# to it with the ingress controller or gateway your cluster already runs.
 
 # --- Sizing (optional; defaults are sane) --------------------------------------
 resources:

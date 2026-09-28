@@ -25,6 +25,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -153,22 +154,34 @@ func TestCheckConstraintsOnStatus(t *testing.T) {
 	})
 }
 
-// TestRolesExist verifies that the three database roles were created.
+// TestRolesExist verifies that the roles the platform connects as exist, and
+// that none of them can escape Row Level Security.
+//
+// The inventory is the one the code and the migrations use: loopzero_api (the
+// request path), loopzero_worker (the background loops, migration 000023) and
+// loopzero_cloud (the control plane, migration 000063). It used to name
+// loopzero_migrate and loopzero_readonly, which no migration, chart or connection in
+// this repository creates or uses — the test-roles fixture created them only so
+// this test would pass, and a database built by the migrations failed it
+// (issue #387).
 func TestRolesExist(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	ctx := context.Background()
 
-	roles := []string{"loopzero_api", "loopzero_migrate", "loopzero_readonly"}
+	roles := []string{"loopzero_api", "loopzero_worker", "loopzero_cloud"}
 	for _, role := range roles {
-		t.Run(fmt.Sprintf("role %s exists", role), func(t *testing.T) {
-			var exists bool
+		t.Run(fmt.Sprintf("role %s exists and is bound by RLS", role), func(t *testing.T) {
+			var super, bypass bool
 			err := pool.QueryRow(ctx,
-				"SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1)", role).Scan(&exists)
+				"SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1", role).Scan(&super, &bypass)
+			if errors.Is(err, pgx.ErrNoRows) {
+				t.Fatalf("role %s does not exist", role)
+			}
 			if err != nil {
 				t.Fatalf("query: %v", err)
 			}
-			if !exists {
-				t.Errorf("role %s does not exist", role)
+			if super || bypass {
+				t.Errorf("role %s escapes Row Level Security (rolsuper=%v rolbypassrls=%v)", role, super, bypass)
 			}
 		})
 	}
@@ -231,13 +244,13 @@ func TestAuditLogAppendOnly(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	ctx := context.Background()
 
-	// A fixture escreve como produção escreve: DENTRO do contexto do tenant.
+	// The fixture writes the way production writes: INSIDE the tenant context.
 	//
-	// Antes de 000064 esta linha entrava porque o dono carregava a policy
-	// audit_log_owner_maintenance (USING true) — o bypass que aquela migration
-	// removeu. Sem contexto, a RLS fail-closed recusa o INSERT, e é isso que
-	// deve acontecer: o teste é sobre o gatilho append-only, e semear a fixture
-	// por fora da barreira testava o gatilho num caminho que produção não tem.
+	// Before 000064 this row got in because the owner carried the
+	// audit_log_owner_maintenance policy (USING true) — the bypass that migration
+	// removed. Without a context, fail-closed RLS rejects the INSERT, and that is
+	// what must happen: the test is about the append-only trigger, and seeding the
+	// fixture outside the barrier tested the trigger on a path production does not have.
 	if _, err := pool.Exec(ctx, `SELECT set_config('app.tenant_id', 'test-audit', false)`); err != nil {
 		t.Fatalf("set tenant context: %v", err)
 	}

@@ -4,259 +4,145 @@
 package sqlctxprop
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
-// TestActionableFix verifies the operator-facing message contains the
-// critical fix shape `WithTx(tx)`.
-func TestActionableFix(t *testing.T) {
-	msg := ActionableFix()
-	if !strings.Contains(msg, "WithTx(tx)") {
-		t.Fatalf("ActionableFix() must mention WithTx(tx); got: %q", msg)
-	}
-	if !strings.Contains(msg, "withEnvironmentLock") {
-		t.Fatalf("ActionableFix() must mention withEnvironmentLock; got: %q", msg)
-	}
-}
-
-// TestCheckEmptyDirs ensures that when api/internal/routes and
-// api/internal/services don't exist (or are empty), the gate trivially
-// passes. Phase 0 baseline.
-func TestCheckEmptyDirs(t *testing.T) {
+func store(t *testing.T, files map[string]string) string {
+	t.Helper()
 	root := t.TempDir()
-	outcome, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check returned error: %v", err)
+	for name, body := range files {
+		p := filepath.Join(root, defaultStoreDir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if !outcome.Pass {
-		t.Fatalf("expected PASS on empty repo; got %d violations", len(outcome.Violations))
-	}
+	return root
 }
 
-// TestCheckPhase0Baseline simulates the Phase 0 baseline state: services/
-// files exist but none import the sqlc-generated package. Result: PASS.
-func TestCheckPhase0Baseline(t *testing.T) {
-	root := t.TempDir()
-	servicesDir := filepath.Join(root, defaultServicesDir)
-	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// Write a service file that does NOT import sqlc-generated.
-	if err := os.WriteFile(filepath.Join(servicesDir, "foo.go"), []byte(`package services
-
-func doWork(tx interface{}) error {
-	return nil
-}
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	outcome, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if !outcome.Pass {
-		t.Fatalf("expected Phase 0 baseline PASS; got %d violations: %+v", len(outcome.Violations), outcome.Violations)
-	}
-	if outcome.Scanned != 1 {
-		t.Fatalf("expected 1 file scanned, got %d", outcome.Scanned)
-	}
-}
-
-// TestCheckDetectsPoolBoundInsideLock simulates a service file that imports
-// the sqlc-generated package AND calls a sqlc method inside a
-// withEnvironmentLock closure WITHOUT WithTx threading. Result: FAIL.
-func TestCheckDetectsPoolBoundInsideLock(t *testing.T) {
-	root := t.TempDir()
-	servicesDir := filepath.Join(root, defaultServicesDir)
-	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	src := `package services
+const header = `package store
 
 import (
 	"context"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 )
-
-type Locker struct{}
-
-func (l *Locker) withEnvironmentLock(ctx context.Context, tx interface{}, fn func(tx interface{}) error) error {
-	return fn(tx)
-}
-
-type Service struct {
-	locker  *Locker
-	queries *generated.Queries
-}
-
-func (s *Service) Submit(ctx context.Context) error {
-	return s.locker.withEnvironmentLock(ctx, nil, func(tx interface{}) error {
-		// VIOLATION: pool-bound call inside lock closure
-		_, _ = s.queries.GetReleaseByID(ctx, "id-1")
-		return nil
-	})
-}
 `
-	if err := os.WriteFile(filepath.Join(servicesDir, "service.go"), []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
 
-	outcome, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if outcome.Pass {
-		t.Fatalf("expected FAIL; got PASS with %d scanned", outcome.Scanned)
-	}
-	if len(outcome.Violations) != 1 {
-		t.Fatalf("expected 1 violation, got %d: %+v", len(outcome.Violations), outcome.Violations)
-	}
-	v := outcome.Violations[0]
-	if !strings.Contains(v.Function, "GetReleaseByID") {
-		t.Fatalf("expected violation on GetReleaseByID; got Function=%q", v.Function)
-	}
-	if !strings.Contains(v.Detail, "withEnvironmentLock") {
-		t.Fatalf("expected Detail to mention withEnvironmentLock; got %q", v.Detail)
-	}
-}
-
-// TestCheckAllowsWithTxThreading simulates the correct pattern: sqlc call
-// INSIDE the lock closure uses .WithTx(tx).Method(...). Result: PASS.
-func TestCheckAllowsWithTxThreading(t *testing.T) {
-	root := t.TempDir()
-	servicesDir := filepath.Join(root, defaultServicesDir)
-	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	src := `package services
-
-import (
-	"context"
-
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-)
-
-type Locker struct{}
-
-func (l *Locker) withEnvironmentLock(ctx context.Context, tx interface{}, fn func(tx interface{}) error) error {
-	return fn(tx)
-}
-
-type Service struct {
-	locker  *Locker
-	queries *generated.Queries
-}
-
-func (s *Service) Submit(ctx context.Context) error {
-	return s.locker.withEnvironmentLock(ctx, nil, func(tx interface{}) error {
-		// CORRECT: tx-bound via WithTx
-		_, _ = s.queries.WithTx(tx).GetReleaseByID(ctx, "id-1")
-		return nil
-	})
-}
-`
-	if err := os.WriteFile(filepath.Join(servicesDir, "service.go"), []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	outcome, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
-	}
-	if !outcome.Pass {
-		t.Fatalf("expected PASS with WithTx threading; got %d violations: %+v", len(outcome.Violations), outcome.Violations)
-	}
-}
-
-// TestCheckIgnoresPoolBoundOutsideLock ensures that calls OUTSIDE a
-// withEnvironmentLock closure are NOT flagged (gate only enforces the
-// tx-threading invariant inside lock blocks).
-func TestCheckIgnoresPoolBoundOutsideLock(t *testing.T) {
-	root := t.TempDir()
-	servicesDir := filepath.Join(root, defaultServicesDir)
-	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	src := `package services
-
-import (
-	"context"
-
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-)
-
-type Service struct {
-	queries *generated.Queries
-}
-
-// ReadOnly call — outside any lock; pool-bound is fine here.
-func (s *Service) GetRelease(ctx context.Context, id string) error {
-	_, err := s.queries.GetReleaseByID(ctx, id)
+func TestTxThreadedThroughEveryCallPasses(t *testing.T) {
+	root := store(t, map[string]string{"s.go": header + `
+func (s *S) Insert(ctx context.Context, tx db.DBTX) error {
+	_, err := s.q.InsertBuild(ctx, s.gen(tx), generated.InsertBuildParams{})
 	return err
 }
-`
-	if err := os.WriteFile(filepath.Join(servicesDir, "service.go"), []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
 
-	outcome, err := Check(Config{RepoRoot: root})
+func (s *S) Get(ctx context.Context, id string) error {
+	_, err := s.q.GetBuild(ctx, s.gen(nil), id)
+	return err
+}
+`})
+
+	out, err := Check(Config{RepoRoot: root})
+
+	if err != nil || !out.Pass {
+		t.Fatalf("threading tx, and using the pool outside a transaction, both pass; out=%+v err=%v", out, err)
+	}
+	if out.TxFunctions != 1 {
+		t.Errorf("TxFunctions = %d, want 1", out.TxFunctions)
+	}
+}
+
+// The R-DS-1 defect: a function that received the caller's transaction runs one
+// query on the pool instead — a different connection from the lock holder.
+func TestPoolCallInsideATransactionalFunctionFails(t *testing.T) {
+	root := store(t, map[string]string{"s.go": header + `
+func (s *S) Activate(ctx context.Context, tx db.DBTX, id string) error {
+	if _, err := s.q.GetBuild(ctx, s.gen(nil), id); err != nil {
+		return err
+	}
+	_, err := s.q.InsertBuild(ctx, s.gen(tx), generated.InsertBuildParams{})
+	return err
+}
+`})
+
+	out, err := Check(Config{RepoRoot: root})
+
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	if !outcome.Pass {
-		t.Fatalf("expected PASS for pool-bound OUTSIDE lock; got %d violations: %+v", len(outcome.Violations), outcome.Violations)
+	if out.Pass || len(out.Violations) != 1 || out.Violations[0].Function != "Activate" {
+		t.Fatalf("gen(nil) inside a tx function must be one violation in Activate; got %+v", out.Violations)
 	}
 }
 
-// TestCheckIgnoresTestFiles ensures *_test.go files are not scanned (tests
-// often use stubs and shouldn't trigger the gate).
-func TestCheckIgnoresTestFiles(t *testing.T) {
-	root := t.TempDir()
-	servicesDir := filepath.Join(root, defaultServicesDir)
-	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
-		t.Fatal(err)
+func TestPoolFieldPassedInsideATransactionalFunctionFails(t *testing.T) {
+	root := store(t, map[string]string{"s.go": header + `
+func (s *S) Activate(ctx context.Context, tx db.DBTX, id string) error {
+	_, err := s.q.GetBuild(ctx, s.pool, id)
+	return err
+}
+`})
+
+	out, err := Check(Config{RepoRoot: root})
+
+	if err != nil || out.Pass {
+		t.Fatalf("passing the pool inside a tx function must fail; out=%+v err=%v", out, err)
 	}
-	src := `package services
-
-import (
-	"context"
-
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-)
-
-type Locker struct{}
-
-func (l *Locker) withEnvironmentLock(ctx context.Context, tx interface{}, fn func(tx interface{}) error) error {
-	return fn(tx)
+	if !strings.Contains(out.Violations[0].Detail, "pool") {
+		t.Errorf("the violation must say the pool was used: %+v", out.Violations[0])
+	}
 }
 
-type Service struct {
-	locker  *Locker
-	queries *generated.Queries
-}
-
-func (s *Service) Submit(ctx context.Context) error {
-	return s.locker.withEnvironmentLock(ctx, nil, func(tx interface{}) error {
-		// Would be a violation in non-test code; but this is _test.go
-		_, _ = s.queries.GetReleaseByID(ctx, "id-1")
-		return nil
+func TestFileNotImportingGeneratedIsNotScanned(t *testing.T) {
+	root := store(t, map[string]string{
+		"s.go":     header + "\nfunc (s *S) X(ctx context.Context, tx db.DBTX) error { _, err := s.q.Y(ctx, s.gen(tx)); return err }\n",
+		"plain.go": "package store\n\nimport \"github.com/getloopscale/loopzero/api/internal/db\"\n\nfunc (s *S) Z(tx db.DBTX) { s.gen(nil) }\n",
 	})
-}
-`
-	if err := os.WriteFile(filepath.Join(servicesDir, "service_test.go"), []byte(src), 0o644); err != nil {
-		t.Fatal(err)
-	}
 
-	outcome, err := Check(Config{RepoRoot: root})
-	if err != nil {
-		t.Fatalf("Check: %v", err)
+	out, err := Check(Config{RepoRoot: root})
+
+	if err != nil || !out.Pass || out.Scanned != 1 {
+		t.Fatalf("only files importing generated are in scope; out=%+v err=%v", out, err)
 	}
-	if !outcome.Pass {
-		t.Fatalf("expected PASS (test file ignored); got %d violations", len(outcome.Violations))
+}
+
+func TestNoTransactionalFunctionIsNothingScanned(t *testing.T) {
+	root := store(t, map[string]string{"s.go": header + "\nfunc (s *S) Get(ctx context.Context) { _, _ = s.q.X(ctx, s.gen(nil)) }\n"})
+
+	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrNothingScanned) {
+		t.Fatalf("a scan that met no transactional function checked nothing; err=%v", err)
+	}
+}
+
+func TestMissingStoreDirIsAnError(t *testing.T) {
+	if _, err := Check(Config{RepoRoot: t.TempDir()}); err == nil {
+		t.Fatal("a missing store dir is an error, not a pass")
+	}
+}
+
+func TestUnparseableFileIsAnError(t *testing.T) {
+	root := store(t, map[string]string{"s.go": "package store\nfunc {"})
+
+	if _, err := Check(Config{RepoRoot: root}); err == nil {
+		t.Fatal("an unparseable file must be an error")
+	}
+}
+
+func TestRealTreePasses(t *testing.T) {
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
+	if err != nil {
+		t.Fatalf("real tree: %v", err)
+	}
+	if !out.Pass {
+		t.Fatalf("real tree violations: %+v", out.Violations)
 	}
 }

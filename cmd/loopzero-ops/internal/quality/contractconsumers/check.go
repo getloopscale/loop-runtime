@@ -18,15 +18,19 @@
 //
 // What this gate detects:
 //   - Removed `<Field> <Type> `json:"<tag>"“ lines in tracked Go files under:
-//     api/internal/domain/types.go
-//     api/internal/routes/*.go
+//     api/internal/ports/*.go
+//     api/internal/<feature>/<name>http/*.go and <feature>/ports.go (the
+//     handlers and the ports a feature owns)
 //     api/internal/db/generated/*.go
 //   - For each removed field, greps consumers in:
-//     cloud/dashboard/src/  (TS/TSX)
-//     cli/src/              (TS)
-//     api/internal/         (Go)
+//     ../loopzero-cloud/dashboard/src/  (TS/TSX, sibling checkout)
+//     ../loopzero-cli/src/              (TS, sibling checkout)
+//     api/internal/                 (Go)
 //     for `.<tag>` references (e.g., `p.apps_count`, `b.apps`,
-//     `project.last_deploy`).
+//     `project.last_deploy`). A sibling checkout that is absent is reported
+//     in MissingRoots and makes the outcome Partial — the TypeScript readers
+//     are the ones the Go compiler cannot see, so a verdict without them
+//     must say it covered less.
 //   - Findings reported with file:line + the dropped field's JSON tag.
 //
 // What this gate does NOT detect (out-of-scope, by design):
@@ -52,6 +56,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate behavior.
@@ -63,6 +70,10 @@ type Config struct {
 	BaseRef string
 	// HeadRef is the git ref of the PR HEAD. When empty, defaults to "HEAD".
 	HeadRef string
+	// AcknowledgementsFile lists drops decided on purpose (tag | file | reason).
+	// Relative paths resolve against RepoRoot. Empty uses
+	// DefaultAcknowledgementsFile; an absent file acknowledges nothing.
+	AcknowledgementsFile string
 }
 
 // Finding represents one consumer that still reads a dropped field.
@@ -86,17 +97,39 @@ type Outcome struct {
 	// TrackedFiles is the declared contract surface, mirroring ScanRoots: without it a
 	// caller can say HOW MANY tracked paths went missing but not out of how many.
 	TrackedFiles []string
-	// MissingRoots sao as raizes declaradas que NAO existem na arvore. `git grep`
-	// ignora pathspec que nao casa nada e devolve os matches dos que casam, entao
-	// uma raiz que sumiu vira cobertura perdida em silencio (B-100, B-040).
+	// MissingRoots are the declared consumer roots that do not exist on disk
+	// (typically a sibling checkout that is not cloned). They were not scanned.
 	MissingRoots []string
+	// Partial is true when at least one consumer root was not scanned: the
+	// verdict then covers less than the declared consumer surface.
+	Partial bool
 	// MissingTracked holds the declared TRACKED paths that do not exist in the tree.
 	// Same cause as MissingRoots, and the graver half: trackedFiles decides WHICH tags
 	// the gate ever looks at, so a path missing here does not merely shrink the search
 	// for the reader — it makes the field drop never visible at all, and the verdict
 	// becomes PASS over an empty population.
 	MissingTracked []string
-	CommandError   string // populated if git or grep failed
+	// Acknowledged are dropped tags whose every removed declaration is recorded
+	// in the acknowledgements file. They do not fail the gate and are always
+	// reported, so an acknowledged drop is never a silent one.
+	Acknowledged []string
+	// StaleAcknowledgements are acknowledgements that match no current drop.
+	// They fail the gate: left in place, one would pre-approve the next
+	// removal of that tag from that file.
+	StaleAcknowledgements []string
+	CommandError          string // populated if git or grep failed
+}
+
+// Verdict is Fail when a tracked path is missing (the gate would read nothing),
+// when an acknowledgement outlived its drop, or when a consumer still reads a
+// dropped tag; Pass otherwise. A missing consumer root makes the pass partial,
+// not a failure. CommandError is not a verdict: a check whose git or grep
+// failed could not measure.
+func (o Outcome) Verdict() verdict.Verdict {
+	if len(o.MissingTracked) > 0 || len(o.StaleAcknowledgements) > 0 || !o.Pass {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // trackedFiles enumerates source files whose struct field drops trigger the gate.
@@ -115,14 +148,83 @@ var trackedFiles = []string{
 	"api/internal/ports/types.go", // the sink file the 2026-06-08 regression struct lives in
 	"api/internal/ports/",
 	"api/internal/db/generated/", // any *.go under this dir
-	"api/internal/routes/",       // any *.go under this dir
 }
 
-// consumerRoots enumerates directories grepped for dropped-field references.
-var consumerRoots = []string{
-	"cloud/dashboard/src/",
-	"cli/src/",
-	"api/internal/",
+// featureSurface names the feature half of the contract surface in reports.
+// The handlers used to live under one directory, api/internal/routes/, and every
+// port type under api/internal/ports/. Since api/internal was organized by
+// feature (2026-09-25) the handlers are the `<feature>/<name>http` packages and a
+// port only one feature consumes lives in that feature's `ports.go`. Both are
+// discovered rather than declared, and a discovery that finds neither is
+// reported under this name.
+//
+// What is tracked is exactly the code that was tracked before the move, at its
+// new address: the handlers and the port types. A feature's service code came
+// from api/internal/services/, which was never tracked, and tracking it now
+// would count at head declarations the base never counted — masking a real drop.
+const featureSurface = "api/internal/<feature>/{<name>http/,ports.go}"
+
+// legacyRoutesDir is the handler tree before the feature layout. It stays in the
+// pathspec handed to git even where it no longer exists in the checkout: the
+// comparison base may predate the move, and without it a declaration removed
+// from a file under routes/ would vanish from the diff instead of showing up as
+// a drop — or as the rename it is. It is never reported missing; git ignores a
+// pathspec that matches nothing, which is exactly the behaviour wanted here.
+const legacyRoutesDir = "api/internal/routes/"
+
+// featurePaths returns every HTTP package directory (with a trailing slash, so
+// git reads it as a directory pathspec) and every feature `ports.go`.
+func featurePaths(root string) []string {
+	var out []string
+	if dirs, err := featurefence.HTTPPackageDirs(root); err == nil {
+		for _, d := range dirs {
+			out = append(out, filepath.ToSlash(d)+"/")
+		}
+	}
+	ports, err := filepath.Glob(filepath.Join(root, "api", "internal", "*", "ports.go"))
+	if err == nil {
+		for _, p := range ports {
+			if rel, rerr := filepath.Rel(root, p); rerr == nil {
+				out = append(out, filepath.ToSlash(rel))
+			}
+		}
+	}
+	return out
+}
+
+// trackedPaths is every pathspec handed to git: the declared files, the feature
+// handlers and ports, and the legacy routes tree.
+func trackedPaths(root string) []string {
+	paths := append(append([]string{}, trackedFiles...), featurePaths(root)...)
+	return append(paths, legacyRoutesDir)
+}
+
+// consumerRoot is one directory grepped for dropped-field references. Repo is
+// the git checkout that holds it, relative to Config.RepoRoot ("." for this
+// repository); the dashboard and the CLI left this repository at the
+// decomposition (M4, M2) and are read from their sibling checkouts.
+type consumerRoot struct {
+	Repo string
+	Path string
+}
+
+// String is the root as a path relative to Config.RepoRoot.
+func (c consumerRoot) String() string { return filepath.ToSlash(filepath.Join(c.Repo, c.Path)) + "/" }
+
+// consumerRoots enumerates the directories grepped for dropped-field references.
+var consumerRoots = []consumerRoot{
+	{Repo: "../loopzero-cloud", Path: "dashboard/src/"},
+	{Repo: "../loopzero-cli", Path: "src/"},
+	{Repo: ".", Path: "api/internal/"},
+}
+
+// scanRootNames renders consumerRoots for the Outcome.
+func scanRootNames() []string {
+	names := make([]string, 0, len(consumerRoots))
+	for _, c := range consumerRoots {
+		names = append(names, c.String())
+	}
+	return names
 }
 
 // jsonFieldRegex matches `Name Type `json:"tag[,opts]"“ style declarations.
@@ -147,40 +249,56 @@ func Check(cfg Config) (*Outcome, error) {
 		head = "HEAD"
 	}
 
-	// Calculado ANTES do primeiro retorno: no caminho de erro do git a cobertura
-	// tambem some, e e' o caminho em que ninguem olha.
-	ausentes := raizesAusentes(root)
-	rastreadosAusentes := missingTrackedPaths(root)
+	// Computed BEFORE the first return: on the git-error path coverage is lost
+	// too, and that is the path nobody looks at.
+	missingRoots := missingConsumerRoots(root)
+	missingTracked := missingTrackedPaths(root)
 
-	droppedTags, err := collectDroppedJSONTags(root, base, head)
+	diff, err := diffTracked(root, base, head)
+	var droppedTags []string
+	if err == nil {
+		droppedTags, err = droppedTagsIn(root, base, head, diff)
+	}
 	if err != nil {
 		return &Outcome{
 			CommandError:   err.Error(),
-			ScanRoots:      consumerRoots,
-			TrackedFiles:   trackedFiles,
-			MissingRoots:   ausentes,
-			MissingTracked: rastreadosAusentes,
+			ScanRoots:      scanRootNames(),
+			TrackedFiles:   trackedPaths(root),
+			MissingRoots:   missingRoots,
+			Partial:        len(missingRoots) > 0,
+			MissingTracked: missingTracked,
 		}, nil
 	}
 
-	out := &Outcome{
-		DroppedTags:    droppedTags,
-		ScanRoots:      consumerRoots,
-		TrackedFiles:   trackedFiles,
-		MissingRoots:   ausentes,
-		MissingTracked: rastreadosAusentes,
-		Pass:           true,
+	acks, err := loadAcknowledgements(root, cfg.AcknowledgementsFile)
+	if err != nil {
+		return nil, err
 	}
-	// Uma raiz declarada que nao existe e' cobertura perdida, e precisa aparecer
-	// mesmo quando nenhuma tag caiu: e' justamente no PASS que ela some sem deixar
-	// rastro. Nao derruba o gate sozinha — a decisao de para onde apontar esta' no
-	// B-100 — mas deixa de ser invisivel.
+	droppedTags, acknowledged, stale, err := applyAcknowledgements(root, base, head, droppedTags, acks, renamesIn(diff))
+	if err != nil {
+		return nil, err
+	}
+
+	out := &Outcome{
+		DroppedTags:           droppedTags,
+		Acknowledged:          acknowledged,
+		StaleAcknowledgements: stale,
+		ScanRoots:             scanRootNames(),
+		TrackedFiles:          trackedPaths(root),
+		MissingRoots:          missingRoots,
+		Partial:               len(missingRoots) > 0,
+		MissingTracked:        missingTracked,
+		Pass:                  len(stale) == 0,
+	}
+	// A missing consumer root is lost coverage and must surface even when no
+	// tag dropped — that PASS is exactly where it would vanish. It does not fail
+	// the gate on its own; it makes the verdict Partial.
 	if len(droppedTags) == 0 {
 		return out, nil
 	}
 
 	for _, tag := range droppedTags {
-		findings, err := grepConsumersForTag(root, tag)
+		findings, err := grepConsumersForTag(root, tag, consumerRoots)
 		if err != nil {
 			out.CommandError = err.Error()
 			out.Pass = false
@@ -199,18 +317,51 @@ func Check(cfg Config) (*Outcome, error) {
 // files and extracts JSON tags from REMOVED lines (lines starting with "-"
 // in unified diff) that match `json:"<tag>"`. Returns the unique sorted list.
 func collectDroppedJSONTags(root, base, head string) ([]string, error) {
+	diff, err := diffTracked(root, base, head)
+	if err != nil {
+		return nil, err
+	}
+	return droppedTagsIn(root, base, head, diff)
+}
+
+// diffTracked runs `git diff <base>..<head>` over the tracked paths once; the
+// dropped tags and the renames are both read from its output.
+func diffTracked(root, base, head string) (string, error) {
 	args := []string{"-C", root, "diff", "--unified=0", base + ".." + head, "--"}
-	args = append(args, trackedFiles...)
+	args = append(args, trackedPaths(root)...)
 	cmd := exec.Command("git", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("git diff failed: %v (stderr: %s)", err, stderr.String())
+		return "", fmt.Errorf("git diff failed: %w (stderr: %s)", err, stderr.String())
 	}
+	return stdout.String(), nil
+}
 
+// renamesIn maps each file the diff reports as renamed to its new path, from
+// the `rename from` / `rename to` header pairs git writes with rename detection
+// on (its default).
+func renamesIn(diff string) map[string]string {
+	renamed := map[string]string{}
+	from := ""
+	for _, line := range strings.Split(diff, "\n") {
+		switch {
+		case strings.HasPrefix(line, "rename from "):
+			from = strings.TrimPrefix(line, "rename from ")
+		case strings.HasPrefix(line, "rename to ") && from != "":
+			renamed[from] = strings.TrimPrefix(line, "rename to ")
+			from = ""
+		}
+	}
+	return renamed
+}
+
+// droppedTagsIn extracts the JSON tags from the REMOVED lines of diff and keeps
+// those declared fewer times at head than at base.
+func droppedTagsIn(root, base, head, diff string) ([]string, error) {
 	seen := map[string]struct{}{}
-	for _, line := range strings.Split(stdout.String(), "\n") {
+	for _, line := range strings.Split(diff, "\n") {
 		// Removed line in unified diff starts with "-" (but skip "---" header).
 		if !strings.HasPrefix(line, "-") || strings.HasPrefix(line, "---") {
 			continue
@@ -240,18 +391,18 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 	// a wire break is a gate people learn to push past.
 	tags := make([]string, 0, len(seen))
 	for t := range seen {
-		antes, err := structsDeclaringTagAt(root, base, t)
+		before, err := structsDeclaringTagAt(root, base, t)
 		if err != nil {
 			return nil, err
 		}
-		depois, err := structsDeclaringTagAt(root, head, t)
+		after, err := structsDeclaringTagAt(root, head, t)
 		if err != nil {
 			return nil, err
 		}
-		// Uma declaracao a MENOS e' a queda. Igual ou mais significa que a tag
-		// mudou de nome de struct, de arquivo ou de pacote — nada disso mexe no
-		// contrato de fio.
-		if depois >= antes {
+		// One declaration FEWER is the drop. Equal or more means the tag changed
+		// struct name, file or package — none of which touches the wire
+		// contract.
+		if after >= before {
 			continue
 		}
 		tags = append(tags, t)
@@ -260,82 +411,89 @@ func collectDroppedJSONTags(root, base, head string) ([]string, error) {
 	return tags, nil
 }
 
-// structsDeclaringTagAt conta QUANTAS structs declaram `json:"<tag>"` nos
-// arquivos rastreados, na revisao dada.
+// structsDeclaringTagAt counts HOW MANY structs declare `json:"<tag>"` in the
+// tracked files, at the given revision.
 //
-// A versao anterior perguntava apenas se a tag existia em ALGUMA struct, e isso
-// tinha um furo medido: `repositories.go` declarava `json:"repo"` DUAS vezes, e
-// tirar de uma ficava invisivel porque a outra respondia "ainda existe" (B-100).
+// The previous version only asked whether the tag existed in ANY struct, and that
+// had a measured hole: `repositories.go` declared `json:"repo"` TWICE, and
+// removing it from one was invisible because the other answered "still exists" (B-100).
 //
-// Contar, e nao identificar a struct pelo NOME, e' deliberado. Escopar por nome
-// pegaria o furo, mas criaria um falso positivo novo: renomear a struct — ou
-// move-la de pacote, que o desenho original protege explicitamente — nao muda o
-// contrato de fio e passaria a ser reportado como quebra. Um gate que acusa
-// renomeacao e' um gate que as pessoas aprendem a contornar, que e' o custo que
-// este proprio item registra. A contagem cai quando uma declaracao some e nao se
-// mexe quando uma declaracao muda de nome ou de lugar.
+// Counting, rather than identifying the struct by NAME, is deliberate. Scoping by
+// name would catch the hole but create a new false positive: renaming the struct —
+// or moving it to another package, which the original design explicitly protects —
+// does not change the wire contract and would start being reported as a break. A
+// gate that blames a rename is a gate people learn to work around, which is the
+// cost this very item records. The count drops when a declaration disappears and
+// does not move when a declaration changes name or place.
 //
-// LIMITE QUE FICA, declarado: se um mesmo commit TIRA a tag de uma struct e a
-// ACRESCENTA noutra, a contagem nao se move e a troca passa. E' mais estreito que
-// o furo anterior e nao tem cura sem informacao de tipo nos dois lados.
+// REMAINING LIMIT, declared: if a single commit REMOVES the tag from one struct and
+// ADDS it to another, the count does not move and the swap passes. That is narrower
+// than the previous hole and has no cure without type information on both sides.
 func structsDeclaringTagAt(root, rev, tag string) (int, error) {
+	perFile, err := declarationsPerFileAt(root, rev, tag)
+	total := 0
+	for _, n := range perFile {
+		total += n
+	}
+	return total, err
+}
+
+// declarationsPerFileAt is structsDeclaringTagAt broken down by file, which is
+// what an acknowledgement is scoped to.
+func declarationsPerFileAt(root, rev, tag string) (map[string]int, error) {
 	pattern := `json:"` + regexp.QuoteMeta(tag) + `[",]`
 
 	args := []string{"-C", root, "grep", "-cE", pattern, rev, "--"}
-	args = append(args, trackedFiles...)
+	args = append(args, trackedPaths(root)...)
 	cmd := exec.Command("git", args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 
-	// `git grep -c` exits 1 sem nenhuma ocorrencia, que e' a resposta e nao falha.
+	// `git grep -c` exits 1 with no match at all, which is the answer and not a failure.
 	var exitErr *exec.ExitError
 	if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 1) {
-		return 0, fmt.Errorf("git grep for %q at %s failed: %v (stderr: %s)", tag, rev, err, stderr.String())
+		return nil, fmt.Errorf("git grep for %q at %s failed: %w (stderr: %s)", tag, rev, err, stderr.String())
 	}
 
-	total := 0
-	for _, linha := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
-		if linha == "" {
+	perFile := map[string]int{}
+	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+		if line == "" {
 			continue
 		}
-		// formato: `<rev>:<arquivo>:<n>`
-		idx := strings.LastIndex(linha, ":")
+		// format: `<rev>:<file>:<n>`
+		idx := strings.LastIndex(line, ":")
 		if idx < 0 {
 			continue
 		}
-		n, cerr := strconv.Atoi(strings.TrimSpace(linha[idx+1:]))
+		n, cerr := strconv.Atoi(strings.TrimSpace(line[idx+1:]))
 		if cerr != nil {
 			continue
 		}
-		total += n
+		perFile[strings.TrimPrefix(line[:idx], rev+":")] += n
 	}
-	return total, nil
+	return perFile, nil
 }
 
-// raizesAusentes devolve as raizes declaradas que nao existem sob root.
+// missingConsumerRoots returns the declared consumer roots absent under root.
 //
-// Existe porque `git grep -- a b c` ignora em silencio o pathspec que nao casa
-// nada. Duas das tres raizes declaradas sairam deste repositorio na decomposicao
-// (`cloud/dashboard/src/` -> ../loopzero-cloud, `cli/src/` -> ../loopzero-cli), e sao
-// justamente as de TypeScript — as que carregam o consumidor de FIO, que le' o
-// campo pelo nome do JSON e que o compilador nao ve'. O que sobrou e' Go, onde um
-// campo removido quebra a compilacao. Medido 2026-08-19.
-func raizesAusentes(root string) []string {
-	var ausentes []string
-	for _, r := range consumerRoots {
-		if _, err := os.Stat(filepath.Join(root, r)); err != nil {
-			ausentes = append(ausentes, r)
+// It exists because `git grep -- a b c` silently ignores a pathspec matching
+// nothing: a root that moved would become less coverage under the same verdict.
+func missingConsumerRoots(root string) []string {
+	var missing []string
+	for _, c := range consumerRoots {
+		if _, err := os.Stat(filepath.Join(root, c.Repo, c.Path)); err != nil {
+			missing = append(missing, c.String())
 		}
 	}
-	return ausentes
+	return missing
 }
 
 // missingTrackedPaths returns the paths declared in trackedFiles that do not exist
 // under root.
 //
-// Twin of raizesAusentes, and it exists because the asymmetry between the two WAS the
+// Twin of missingConsumerRoots, and it exists because the asymmetry between the two WAS the
 // hole: the CONSUMER list got an absence guard on 2026-08-19 (B-100/B-040) while the
 // TRACKED list, handed to the very same `git diff --` and `git grep --`, got none.
 //
@@ -343,80 +501,87 @@ func raizesAusentes(root string) []string {
 // the gate see a tag drop; an absent tracked path means the tag never shows up as
 // dropped at all, and the gate answers PASS over a contract surface it never read.
 func missingTrackedPaths(root string) []string {
-	var ausentes []string
+	var missing []string
 	for _, f := range trackedFiles {
 		if _, err := os.Stat(filepath.Join(root, f)); err != nil {
-			ausentes = append(ausentes, f)
+			missing = append(missing, f)
 		}
 	}
-	return ausentes
+	if len(featurePaths(root)) == 0 {
+		missing = append(missing, featureSurface)
+	}
+	return missing
 }
 
-// grepConsumersForTag runs `git grep` for the dropped tag across consumer
-// roots, looking for `.tag\b` access patterns (struct field references or
-// JS object property access).
-func grepConsumersForTag(root, tag string) ([]Finding, error) {
+// grepConsumersForTag runs `git grep` for the dropped tag in every present
+// consumer root, looking for `.tag\b` access patterns (struct field references
+// or JS object property access). Absent roots are skipped — Check reports them
+// as MissingRoots. `git grep` exit 1 means "no match"; any other failure is an
+// error, never zero findings.
+func grepConsumersForTag(root, tag string, roots []consumerRoot) ([]Finding, error) {
 	pattern := `\.` + regexp.QuoteMeta(tag) + `\b`
-
-	args := []string{"-C", root, "grep", "-nE", pattern, "--"}
-	args = append(args, consumerRoots...)
-	cmd := exec.Command("git", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	// `git grep` exits 1 when no matches — that's not an error for us.
-	_ = cmd.Run()
-	if stderr.Len() > 0 {
-		stderrStr := strings.TrimSpace(stderr.String())
-		// "exit status 1" is implicit no-match. Anything else is a real error.
-		if !strings.Contains(stderrStr, "fatal: ambiguous argument") &&
-			!strings.Contains(stderrStr, "did not match any") &&
-			stderrStr != "" {
-			// Pass-through stderr only when it's a true error.
-			// (No-match cases produce empty stderr + exit 1.)
-			// We keep noise low by NOT failing on benign stderr.
-			_ = stderrStr // intentionally tolerant
-		}
-	}
-
 	var findings []Finding
-	for _, line := range strings.Split(stdout.String(), "\n") {
-		if line == "" {
+	for _, c := range roots {
+		repo := filepath.Join(root, c.Repo)
+		if _, err := os.Stat(filepath.Join(repo, c.Path)); err != nil {
 			continue
 		}
-		// git grep format: file:lineno:content
+		cmd := exec.Command("git", "-C", repo, "grep", "-nE", pattern, "--", c.Path)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+				return nil, fmt.Errorf("git grep for %q in %s failed: %w (stderr: %s)",
+					tag, c.String(), err, strings.TrimSpace(stderr.String()))
+			}
+		}
+		findings = append(findings, parseGrepFindings(stdout.String(), tag, c.Repo)...)
+	}
+	return findings, nil
+}
+
+// parseGrepFindings turns `file:line:content` grep output into findings,
+// skipping the declaration site itself and test files.
+func parseGrepFindings(output, tag, repo string) []Finding {
+	var findings []Finding
+	for _, line := range strings.Split(output, "\n") {
 		parts := strings.SplitN(line, ":", 3)
 		if len(parts) < 3 {
 			continue
 		}
-		fileRel := parts[0]
-		var lineno int
-		fmt.Sscanf(parts[1], "%d", &lineno)
+		lineno, err := strconv.Atoi(parts[1])
+		if err != nil {
+			continue
+		}
 		snippet := strings.TrimSpace(parts[2])
-		// Skip the struct field declaration site itself — `json:"<tag>"`
-		// literal IS a match of `.<tag>` after the `:"`. Filter on the
-		// json: declaration pattern.
+		// The struct field declaration `json:"<tag>"` itself matches `.<tag>`.
 		if strings.Contains(snippet, fmt.Sprintf(`json:"%s"`, tag)) ||
 			strings.Contains(snippet, fmt.Sprintf(`json:"%s,`, tag)) {
 			continue
 		}
-		// Skip test files — they reference fields for assertion fixtures, not
-		// real consumer reads that would surface as UX bugs.
-		if strings.HasSuffix(fileRel, "_test.go") ||
-			strings.HasSuffix(fileRel, ".test.ts") ||
-			strings.HasSuffix(fileRel, ".test.tsx") ||
-			strings.HasSuffix(fileRel, ".spec.ts") ||
-			strings.HasSuffix(fileRel, ".spec.tsx") {
+		// Test files reference fields for assertion fixtures, not real reads.
+		if isTestFile(parts[0]) {
 			continue
 		}
 		findings = append(findings, Finding{
 			DroppedTag:      tag,
-			ConsumerFile:    fileRel,
+			ConsumerFile:    filepath.ToSlash(filepath.Join(repo, parts[0])),
 			ConsumerLine:    lineno,
 			ConsumerSnippet: snippet,
 		})
 	}
-	return findings, nil
+	return findings
+}
+
+func isTestFile(path string) bool {
+	for _, suf := range []string{"_test.go", ".test.ts", ".test.tsx", ".spec.ts", ".spec.tsx"} {
+		if strings.HasSuffix(path, suf) {
+			return true
+		}
+	}
+	return false
 }
 
 // ActionableFix returns the recommended remediation surface for FAIL output.

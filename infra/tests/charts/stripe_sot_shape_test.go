@@ -22,14 +22,14 @@
 // of the 4-step Tier N/A data-only milestone closure pattern.
 //
 // Closes M5 of qa-readiness-roadmap-2026-06-23 from DATA_INGESTED →
-// ENGINEERING_COMPLETED. LIVE chain (4 pós-sponsor steps) still
+// ENGINEERING_COMPLETED. LIVE chain (4 post-sponsor steps) still
 // deferred to M7 Cleanroom per cleanroom-up-live-test-mandate
-// INQUEBRÁVEL.
+// UNBREAKABLE.
 //
 // Pivot rationale: original implementation was a bash test
 // (infra/tests/check-stripe-sot-shape_test.sh) but that triggered
 // the unhomed-baseline gate (domain "test" un-homed +1). Per
-// goal "SEMPRE FAANG LEVEL, e sem re-trabalho, SEM WORKAROUNDS",
+// goal "ALWAYS FAANG LEVEL, and without rework, NO WORKAROUNDS",
 // re-implemented as Go test in the canonical hermetic test umbrella
 // (infra/tests/charts/) which runs via `go test ./charts/` already
 // wired in task quality:gates pre-push hook.
@@ -39,6 +39,8 @@ package charts_test
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -173,19 +175,36 @@ func TestStripeSoTShape_FixtureMode0644(t *testing.T) {
 	}
 }
 
-// TestStripeSoTShape_PlanAndADRReferencesResolve cross-validates that
-// the M5 plan + ADR cited in this test header actually exist on disk.
-// Anti-fabrication-citation guard per plan-confidence-golden-rule.
+// TestStripeSoTShape_PlanAndADRReferencesResolve cross-validates that every document
+// cited in this test's header can still be read.
+//
+// It checked the WORKING TREE until 2026-09-16, and all three citations had rotted:
+// `19b8c6eaa` folded 1,523 files into six living documents and took the plan and the ADR
+// with it, and `3d4075ca3` removed the rule file — which `CLAUDE.md` records as gone and
+// not replaced. So the anti-fabricated-citation guard was itself citing three things that
+// do not exist, which is the defect it was written to catch.
+//
+// It reads GIT now. A consolidated document leaves the worktree and stays in history
+// forever, so a history citation is the one form that cannot rot the same way — and it is
+// what `CLAUDE.md` does for its own dead references (`git show 4f728eb7a:docs/<path>`).
 func TestStripeSoTShape_PlanAndADRReferencesResolve(t *testing.T) {
 	t.Parallel()
-	refs := []string{
-		"../../../docs/wiki/plans/m5-stripe-sot-canonical-closure-plan.md",
-		"../../../docs/wiki/decisions/2026-06-23-tier-na-data-only-milestone-closure.md",
-		"../../../.claude/rules/cleanroom-up-live-test-mandate.md",
+	// Each entry is the revision that still carries the file, and the path inside it.
+	refs := []struct{ rev, path string }{
+		{"19b8c6eaa~1", "docs/wiki/plans/m5-stripe-sot-canonical-closure-plan.md"},
+		{"19b8c6eaa~1", "docs/wiki/decisions/2026-06-23-tier-na-data-only-milestone-closure.md"},
+		{"3d4075ca3~1", ".claude/rules/cleanroom-up-live-test-mandate.md"},
 	}
 	for _, r := range refs {
-		if _, err := os.Stat(r); err != nil {
-			t.Errorf("plan/ADR/rule reference does NOT resolve: %s (err=%v)", r, err)
+		// On disk first: a document that came back is better than one only in history.
+		if _, err := os.Stat(filepath.Join("../../..", r.path)); err == nil {
+			continue
+		}
+		spec := r.rev + ":" + r.path
+		cmd := exec.Command("git", "cat-file", "-e", spec)
+		cmd.Dir = "../../.."
+		if err := cmd.Run(); err != nil {
+			t.Errorf("cited document resolves neither on disk nor in git: %s (%v)", spec, err)
 		}
 	}
 }

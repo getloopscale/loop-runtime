@@ -10,77 +10,73 @@ import (
 	"time"
 )
 
-// O portao precisa dizer POR QUE liberou.
+// The gate has to say WHY it allowed.
 //
-// B-033, medido no app-dev em 2026-08-11: o agregador que preenche `cost_counters` esta
-// desligado (`LOOPZERO_PROMETHEUS_URL` ausente do Deployment), a tabela tem **0 linhas**, e o
-// contrato de `Check` trata linha ausente como consumo zero — entao **todo** teto de custo
-// libera, e nada distingue isso de "o tenant realmente nao consumiu".
+// B-033, measured on app-dev 2026-08-11: the aggregator that fills `cost_counters` is off
+// (`LOOPZERO_PROMETHEUS_URL` missing from the Deployment), the table has **0 rows**, and the
+// `Check` contract treats a missing row as zero usage — so **every** cost cap allows, and
+// nothing tells that apart from "the tenant really used nothing".
 //
-// As tres metricas de custo — minutos de build, egresso, puxadas de registro — ficam sem
-// teto no ambiente que serve o painel publico, e o unico sinal disso e uma linha de log no
-// boot de outro processo.
-//
-// Devolver a razao nao muda o veredito: libera igual. Muda o que o sistema consegue
-// observar sobre a propria protecao.
+// Returning the reason does not change the verdict: it allows the same. It changes what
+// the system can observe about its own protection.
 func TestCheckReason_DistinguishesUnmeasuredFromUnderCap(t *testing.T) {
 	ctx := context.Background()
 
-	semLinha := newFakeCostStore()
-	razão, err := NewCapChecker(semLinha).CheckReason(ctx, "tn-x", PlanStarter, MetricBuildMinutes)
+	noRow := newFakeCostStore()
+	reason, err := NewCapChecker(noRow).CheckReason(ctx, "tn-x", PlanStarter, MetricBuildMinutes)
 	if err != nil {
-		t.Fatalf("linha ausente deve liberar: %v", err)
+		t.Fatalf("a missing row must allow: %v", err)
 	}
-	if razão != AllowedUnmeasured {
-		t.Errorf("linha ausente: razao %v, esperava AllowedUnmeasured", razão)
+	if reason != AllowedUnmeasured {
+		t.Errorf("missing row: reason %v, want AllowedUnmeasured", reason)
 	}
 
-	comLinha := newFakeCostStore()
-	comLinha.put(CostCounter{TenantID: "tn-x", Metric: MetricBuildMinutes, Value: 1, PeriodStart: time.Now().Unix()})
-	razão, err = NewCapChecker(comLinha).CheckReason(ctx, "tn-x", PlanStarter, MetricBuildMinutes)
+	withRow := newFakeCostStore()
+	withRow.put(CostCounter{TenantID: "tn-x", Metric: MetricBuildMinutes, Value: 1, PeriodStart: time.Now().Unix()})
+	reason, err = NewCapChecker(withRow).CheckReason(ctx, "tn-x", PlanStarter, MetricBuildMinutes)
 	if err != nil {
-		t.Fatalf("abaixo do teto deve liberar: %v", err)
+		t.Fatalf("under the cap must allow: %v", err)
 	}
-	if razão != AllowedUnderCap {
-		t.Errorf("medido e abaixo do teto: razao %v, esperava AllowedUnderCap", razão)
+	if reason != AllowedUnderCap {
+		t.Errorf("measured and under the cap: reason %v, want AllowedUnderCap", reason)
 	}
 }
 
-// Erro de store tambem libera — e tambem precisa ser distinguivel, porque e a segunda porta
-// silenciosa: um agregador ruidoso nao deve barrar producao, mas o operador tem de saber
-// que a protecao nao avaliou nada.
+// A store error also allows — and must also be distinguishable, because it is the second
+// silent door: a noisy aggregator must not block production, but the operator has to know
+// the protection evaluated nothing.
 func TestCheckReason_StoreErrorIsItsOwnReason(t *testing.T) {
-	quebrado := newFakeCostStore()
-	quebrado.err = errors.New("pool esgotado")
+	broken := newFakeCostStore()
+	broken.err = errors.New("pool exhausted")
 
-	razão, err := NewCapChecker(quebrado).CheckReason(context.Background(), "tn-x", PlanStarter, MetricBuildMinutes)
+	reason, err := NewCapChecker(broken).CheckReason(context.Background(), "tn-x", PlanStarter, MetricBuildMinutes)
 	if err != nil {
-		t.Fatalf("erro de store libera (fail-open): %v", err)
+		t.Fatalf("a store error allows (fail-open): %v", err)
 	}
-	if razão != AllowedStoreError {
-		t.Errorf("erro de store: razao %v, esperava AllowedStoreError", razão)
+	if reason != AllowedStoreError {
+		t.Errorf("store error: reason %v, want AllowedStoreError", reason)
 	}
 }
 
-// Estourar o teto continua bloqueando, e a razao nao mascara isso.
+// Exceeding the cap still blocks, and the reason does not mask it.
 func TestCheckReason_ExceededStillBlocks(t *testing.T) {
-	cheio := newFakeCostStore()
-	cheio.put(CostCounter{TenantID: "tn-x", Metric: MetricBuildMinutes, Value: 1 << 30, PeriodStart: time.Now().Unix()})
+	full := newFakeCostStore()
+	full.put(CostCounter{TenantID: "tn-x", Metric: MetricBuildMinutes, Value: 1 << 30, PeriodStart: time.Now().Unix()})
 
-	razão, err := NewCapChecker(cheio).CheckReason(context.Background(), "tn-x", PlanStarter, MetricBuildMinutes)
+	reason, err := NewCapChecker(full).CheckReason(context.Background(), "tn-x", PlanStarter, MetricBuildMinutes)
 	var ex *ExceededError
 	if !errors.As(err, &ex) {
-		t.Fatalf("acima do teto deve bloquear, veio %v (razao %v)", err, razão)
+		t.Fatalf("over the cap must block, got %v (reason %v)", err, reason)
 	}
-	if razão != Blocked {
-		t.Errorf("bloqueado: razao %v, esperava Blocked", razão)
+	if reason != Blocked {
+		t.Errorf("blocked: reason %v, want Blocked", reason)
 	}
 }
 
-// `Check` continua valendo com o mesmo contrato: quem so quer saber se pode nao precisa
-// aprender a razao.
+// `Check` keeps the same contract: a caller that only wants to know whether it may proceed
+// does not need to learn the reason.
 func TestCheck_KeepsItsContract(t *testing.T) {
 	if err := NewCapChecker(newFakeCostStore()).Check(context.Background(), "tn-x", PlanStarter, MetricBuildMinutes); err != nil {
-		t.Errorf("Check deveria liberar com linha ausente, veio %v", err)
+		t.Errorf("Check should allow on a missing row, got %v", err)
 	}
 }

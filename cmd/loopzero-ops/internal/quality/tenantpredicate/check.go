@@ -25,6 +25,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate.
@@ -48,6 +50,9 @@ type Outcome struct {
 	Violations []Violation
 	Scanned    int // count of .sql files scanned
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 const (
 	defaultQueriesDir = "api/internal/db/queries"

@@ -142,7 +142,7 @@ func TestFormatFindings_StableOrder(t *testing.T) {
 	a1 := strings.Index(out, "a.tsx:1 ")
 	a5 := strings.Index(out, "a.tsx:5 ")
 	b10 := strings.Index(out, "b.tsx:10 ")
-	if !(a1 < a5 && a5 < b10) {
+	if a1 >= a5 || a5 >= b10 {
 		t.Errorf("expected within-group order a.tsx:1 < a.tsx:5 < b.tsx:10, got:\n%s", out)
 	}
 }
@@ -390,20 +390,20 @@ func TestCollectDroppedJSONTags_RenamingTheGoFieldKeepsTheTag(t *testing.T) {
 	}
 }
 
-// Uma tag declarada por DUAS structs, saindo de uma delas, E' uma queda — e era
-// invisivel enquanto a verificacao perguntava apenas se a tag existia em alguma
-// struct: a sobrevivente respondia "ainda existe". Medido em `repositories.go`,
-// que declarava `json:"repo"` duas vezes (B-100).
+// A tag declared by TWO structs, leaving one of them, IS a drop — and it was
+// invisible while the check only asked whether the tag existed in some struct:
+// the survivor answered "still exists". Measured in `repositories.go`, which
+// declared `json:"repo"` twice (B-100).
 //
-// Este teste exigia o CONTRARIO ate' 2026-08-19 — documentava o furo, com a
-// instrucao de reescreve-lo, e nao apaga-lo, quando o furo fechasse. E' o que
-// esta acontecendo aqui.
+// This test demanded the OPPOSITE until 2026-08-19 — it documented the hole, with
+// the instruction to rewrite it, not delete it, once the hole closed. That is
+// what is happening here.
 //
-// O discriminador e' a CONTAGEM de declaracoes, nao o nome da struct. Escopar por
-// nome fecharia o furo criando um falso positivo novo — renomear a struct, ou
-// move-la de pacote, nao muda o contrato de fio e passaria a ser acusado de
-// quebra. Ver `structsDeclaringTagAt`.
-func TestCollectDroppedJSONTags_UmaDeDuasDeclaracoesSaindoEQueda(t *testing.T) {
+// The discriminator is the COUNT of declarations, not the struct name. Scoping by
+// name would close the hole by creating a new false positive — renaming the
+// struct, or moving it to another package, does not change the wire contract and
+// would start being blamed as a break. See `structsDeclaringTagAt`.
+func TestCollectDroppedJSONTags_OneOfTwoDeclarationsLeavingIsADrop(t *testing.T) {
 	root := gitTree(t)
 	dir := filepath.Join(root, "api", "internal", "routes")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -428,8 +428,8 @@ func TestCollectDroppedJSONTags_UmaDeDuasDeclaracoesSaindoEQueda(t *testing.T) {
 		t.Fatalf("collect: %v", err)
 	}
 	if len(tags) != 1 || tags[0] != "repo" {
-		t.Fatalf("uma das duas declaracoes de `repo` saiu e a queda nao foi reportada: %v.\n\n"+
-			"Era o furo do B-100 — a struct sobrevivente respondia \"ainda existe\" pela que saiu.", tags)
+		t.Fatalf("one of the two `repo` declarations left and the drop was not reported: %v.\n\n"+
+			"This was the B-100 hole — the surviving struct answered \"still exists\" for the one that left.", tags)
 	}
 }
 

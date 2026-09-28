@@ -78,31 +78,38 @@ type DeploySimulator struct {
 	tenantID    string // For service auth identity
 	email       string // For service auth identity
 	client      *http.Client
+	builds      BuildAPI // the shared build contract client
 }
 
+// simulatorPollInterval is how often a simulated deploy asks for its build.
+const simulatorPollInterval = 5 * time.Second
+
 func NewDeploySimulator(apiURL, authToken string) *DeploySimulator {
-	return &DeploySimulator{
-		apiURL:    apiURL,
-		authToken: authToken,
-		client: &http.Client{
-			Timeout: 180 * time.Second,
-		},
-	}
+	return newDeploySimulator(&DeploySimulator{apiURL: apiURL, authToken: authToken})
 }
 
 // NewServiceAuthSimulator creates a simulator using X-Service-Auth bypass.
 // This is the recommended approach for load testing — no GitHub OAuth needed.
 func NewServiceAuthSimulator(apiURL, serviceAuth, userID, tenantID, email string) *DeploySimulator {
-	return &DeploySimulator{
+	return newDeploySimulator(&DeploySimulator{
 		apiURL:      apiURL,
 		serviceAuth: serviceAuth,
 		userID:      userID,
 		tenantID:    tenantID,
 		email:       email,
-		client: &http.Client{
-			Timeout: 180 * time.Second,
-		},
+	})
+}
+
+func newDeploySimulator(s *DeploySimulator) *DeploySimulator {
+	s.client = &http.Client{Timeout: 180 * time.Second}
+	s.builds = BuildAPI{
+		APIURL:       s.apiURL,
+		Client:       s.client,
+		Auth:         s.setAuth,
+		PollInterval: simulatorPollInterval,
+		RetryBackoff: DefaultSubmitBackoff,
 	}
+	return s
 }
 
 // setAuth applies auth headers to the request.
@@ -215,81 +222,20 @@ apps:
 	return uploadResp.CommitSHA, uploadLatency, nil
 }
 
-// CreateBuild triggers a build via POST /api/v1/builds.
-// Returns the build ID.
+// CreateBuild triggers a build via POST /api/v1/builds and returns its id.
 func (s *DeploySimulator) CreateBuild(ctx context.Context, projectName, env, commitSHA string) (string, error) {
-	reqBody := fmt.Sprintf(`{"project_id":%q,"environment":%q,"commit_sha":%q}`,
-		projectName, env, commitSHA)
-
-	req, err := http.NewRequestWithContext(ctx, "POST",
-		s.apiURL+"/api/v1/builds",
-		bytes.NewBufferString(reqBody))
+	payload := map[string]string{"project_id": projectName, "environment": env, "commit_sha": commitSHA}
+	key := fmt.Sprintf("load-test-%s-%s-%d", projectName, env, time.Now().UnixNano())
+	id, err := s.builds.SubmitBuild(ctx, payload, key)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create build %s: %w", projectName, err)
 	}
-	s.setAuth(req)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Idempotency-Key", fmt.Sprintf("load-test-%s-%s-%d", projectName, env, time.Now().UnixNano()))
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("create build: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != 201 && resp.StatusCode != 202 {
-		return "", fmt.Errorf("create build %s: HTTP %d: %s", projectName, resp.StatusCode, string(respBody))
-	}
-
-	var buildResp struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(respBody, &buildResp); err != nil {
-		return "", nil
-	}
-
-	return buildResp.ID, nil
+	return id, nil
 }
 
 // WaitForBuild polls GET /api/v1/builds/:id until terminal state.
 func (s *DeploySimulator) WaitForBuild(ctx context.Context, buildID string) (string, time.Duration, error) {
-	start := time.Now()
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return "TIMEOUT", time.Since(start), ctx.Err()
-		case <-ticker.C:
-			req, err := http.NewRequestWithContext(ctx, "GET",
-				s.apiURL+"/api/v1/builds/"+buildID, nil)
-			if err != nil {
-				continue
-			}
-			s.setAuth(req)
-
-			resp, err := s.client.Do(req)
-			if err != nil {
-				continue
-			}
-			var build struct {
-				State string `json:"state"`
-			}
-			json.NewDecoder(resp.Body).Decode(&build)
-			resp.Body.Close()
-
-			switch build.State {
-			case "SUCCEEDED":
-				return "SUCCEEDED", time.Since(start), nil
-			case "FAILED", "CANCELLED":
-				return build.State, time.Since(start), fmt.Errorf("build %s: %s", buildID, build.State)
-			}
-			// QUEUED, RUNNING, RELEASING — keep waiting
-		}
-	}
+	return s.builds.WaitForBuild(ctx, buildID)
 }
 
 // SimulateDeploy runs the full deploy flow: upload → build → wait.
@@ -421,3 +367,43 @@ func requireLoadTestEnv(t *testing.T) (string, *DeploySimulator) {
 
 // TestL0_Baseline measures a single deploy against an existing project.
 // No synthetic tenants created — uses whatever exists.
+
+// summarizeSimulatedDeploys turns a finished set of simulated deploys into the
+// report every cell-scale scenario prints and asserts on.
+func summarizeSimulatedDeploys(results []DeployResult, elapsed time.Duration) *LoadTestResult {
+	report := &LoadTestResult{TotalDeploys: len(results), Duration: elapsed, Results: results}
+	totals := make([]time.Duration, 0, len(results))
+	uploads := make([]time.Duration, 0, len(results))
+	for _, r := range results {
+		if r.Success {
+			report.SuccessCount++
+		} else {
+			report.FailureCount++
+		}
+		totals = append(totals, r.Latency.Total)
+		uploads = append(uploads, r.Latency.Upload)
+	}
+	report.DeployLatencyP50 = percentile(totals, 50)
+	report.DeployLatencyP95 = percentile(totals, 95)
+	report.DeployLatencyP99 = percentile(totals, 99)
+	report.UploadLatencyP50 = percentile(uploads, 50)
+	return report
+}
+
+// RunScenario deploys the projects loadtest-0..loadtest-(n-1) through the full
+// simulated flow with fanOut's bounds and pacing, waits for every deploy, and
+// summarizes them. onResult, when set, logs progress as each one finishes.
+func (s *DeploySimulator) RunScenario(ctx context.Context, n int, opts fanOutOptions,
+	onResult func(idx int, name string, r DeployResult)) *LoadTestResult {
+	start := time.Now()
+	results := fanOut(n, opts, func(idx int) DeployResult {
+		name := fmt.Sprintf("loadtest-%d", idx)
+		r := s.SimulateDeploy(ctx, name, "production")
+		r.TenantIdx = idx
+		if onResult != nil {
+			onResult(idx, name, r)
+		}
+		return r
+	})
+	return summarizeSimulatedDeploys(results, time.Since(start))
+}

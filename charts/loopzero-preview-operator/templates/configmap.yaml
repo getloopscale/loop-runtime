@@ -5,7 +5,6 @@ metadata:
   labels:
     {{- include "loopzero-common.labels" . | nindent 4 }}
 data:
-  BASE_DOMAIN: {{ .Values.config.baseDomain | quote }}
   INGRESS_NAMESPACE: {{ .Values.config.ingressNamespace | quote }}
   LOOPZERO_PPROF_ADDR: {{ .Values.config.loopzeroPprofAddr | quote }}
   LOOPZERO_PPROF_ENABLED: {{ .Values.config.loopzeroPprofEnabled | quote }}

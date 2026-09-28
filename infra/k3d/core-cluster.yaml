@@ -30,11 +30,11 @@ ports:
   - port: 30093:30093
     nodeFilters:
       - loadbalancer
-  # Borda -> identidade. Kratos e Hydra sao ClusterIP no chart, e a borda os alcancava por
-  # `kubectl port-forward` nao supervisionado: destruir os clusters em 2026-08-10 matou os
-  # processos e derrubou o login, com os dois servicos saudaveis (B-018, mesmo defeito do
-  # B-010). Pareado com infra/helm/ory-{kratos,hydra}/nodeport-service.yaml e com o
-  # `localhost:14433`/`localhost:14444` do Caddyfile.
+  # Edge -> identity. Kratos and Hydra are ClusterIP in the chart, and the edge reached them
+  # through an unsupervised `kubectl port-forward`: destroying the clusters on 2026-08-10 killed
+  # the processes and took login down, with both services healthy (B-018, the same defect as
+  # B-010). Paired with infra/helm/ory-{kratos,hydra}/nodeport-service.yaml and with the
+  # Caddyfile's `localhost:14433`/`localhost:14444`.
   - port: 14433:30005
     nodeFilters:
       - loadbalancer

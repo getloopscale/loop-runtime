@@ -24,51 +24,6 @@ func writeFile(t *testing.T, dir, rel, body string) string {
 }
 
 // =============================================================================
-// parseProfileLine
-// =============================================================================
-
-func TestParseProfileLine_HappyPath(t *testing.T) {
-	file, s, e, c, ok := parseProfileLine("api/foo.go:10.2,12.10 3 5")
-	assert.True(t, ok)
-	assert.Equal(t, "api/foo.go", file)
-	assert.Equal(t, 10, s)
-	assert.Equal(t, 12, e)
-	assert.Equal(t, 5, c)
-}
-
-func TestParseProfileLine_ZeroCount(t *testing.T) {
-	_, _, _, c, ok := parseProfileLine("x.go:1.0,2.0 1 0")
-	assert.True(t, ok)
-	assert.Equal(t, 0, c)
-}
-
-func TestParseProfileLine_Malformed(t *testing.T) {
-	for _, line := range []string{
-		"",                   // empty
-		"no-colon-here 1 1",  // no colon
-		"x.go:no-range 1 1",  // no comma in range
-		"x.go:1.0,2.0",       // missing stmts/count
-		"x.go:1.0,2.0 N C",   // non-numeric
-		"x.go:bad.0,2.0 1 1", // non-numeric start line
-		"x.go:1.0,bad.0 1 1", // non-numeric end line
-		"x.go:1,2 1 1",       // no dot in range
-		"x.go:0.0,2.0 1 1",   // start line 0 (invalid)
-		"x.go:5.0,3.0 1 1",   // end < start
-	} {
-		_, _, _, _, ok := parseProfileLine(line)
-		assert.False(t, ok, "should reject: %q", line)
-	}
-}
-
-func TestParseProfileLine_WindowsPath_LastColonWins(t *testing.T) {
-	// C:\repo\foo.go:10.2,12.10 3 5 — LastIndexByte handles the trailing colon
-	file, s, _, _, ok := parseProfileLine(`C:\repo\foo.go:10.2,12.10 3 5`)
-	assert.True(t, ok)
-	assert.Equal(t, `C:\repo\foo.go`, file)
-	assert.Equal(t, 10, s)
-}
-
-// =============================================================================
 // ConvertGoProfile
 // =============================================================================
 

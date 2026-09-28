@@ -8,7 +8,7 @@
 -- (schema=schema.gen.sql) + EC-3 (snake_case JSON tags via sqlc.yaml).
 --
 -- Multi-tenant — every query carries `tenant_id = $1` (enforced by
--- pkg/quality/tenantpredicate gate). audit_log is in TenantOwnedTables.
+-- cmd/loopzero-ops/internal/quality/tenantpredicate gate). audit_log is in TenantOwnedTables.
 --
 -- Dynamic-filter pattern for ListAuditLog uses sqlc nullable arg form:
 -- (cast::type IS NULL OR column = cast::type). When the filter slot is
@@ -33,7 +33,7 @@ INSERT INTO audit_log (
 -- is empty — same SQL shape regardless of filter combination. The
 -- COALESCE on correlation_id matches legacy behavior (NULL → '' so
 -- domain.AuditEntryResult.CorrelationID plain-string scans cleanly,
--- preserving achado #26 fix).
+-- preserving the finding #26 fix).
 SELECT action,
        resource_type,
        resource_id,

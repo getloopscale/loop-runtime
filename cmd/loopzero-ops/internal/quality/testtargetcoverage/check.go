@@ -32,6 +32,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // prunedDirs are skipped anywhere in the tree.
@@ -71,9 +73,9 @@ var ErrExemptionExpired = errors.New("an exemption is past its sunset; re-measur
 // ErrPackageUncovered means a module has a target, but some test-bearing package of
 // it is run by none.
 //
-// Distinto de ErrModuleUncovered de propósito: "este módulo não tem alvo nenhum" e
-// "tem alvo, e ele não alcança estas subárvores" são achados diferentes, e o segundo
-// é o que ficava invisível.
+// Distinct from ErrModuleUncovered on purpose: "this module has no target at all" and
+// "it has a target, and it does not reach these subtrees" are different findings, and the
+// second is the one that stayed invisible.
 var ErrPackageUncovered = errors.New("a module has a test target, but some test-bearing package is run by none")
 
 // ErrExemptionWithoutSunset means an exemption carries no date.
@@ -89,12 +91,12 @@ type Exemption struct {
 	Module string
 	Reason string
 	Sunset string // YYYY-MM-DD, INCLUSIVE — expires the day after
-	// Packages isenta subárvores ESPECÍFICAS do módulo, relativas à raiz dele.
-	// Vazio isenta o módulo inteiro.
+	// Packages exempts SPECIFIC subtrees of the module, relative to its root.
+	// Empty exempts the whole module.
 	//
-	// Existe por causa da bala 2 do DoD do B-114: subárvore que exige cluster entra
-	// por isenção NOMEADA com a razão — não por o padrão do módulo acidentalmente
-	// cobri-la, que é como as 41 ficaram invisíveis.
+	// It exists because of bullet 2 of B-114's DoD: a subtree that requires a cluster gets in
+	// through a NAMED exemption with its reason — not by the module's pattern accidentally
+	// covering it, which is how the 41 became invisible.
 	Packages []string
 }
 
@@ -116,10 +118,21 @@ type Outcome struct {
 	Covered   []string
 	Exempt    []string
 	Uncovered []string
-	// UncoveredPackages nomeia `<módulo>/<pacote>` que nenhum alvo roda. É a
-	// granularidade que o B-114 acrescentou: um módulo pode ter alvo e ainda deixar
-	// subárvores fora dele.
+	// UncoveredPackages names `<module>/<package>` that no target runs. It is the
+	// granularity B-114 added: a module can have a target and still leave
+	// subtrees outside it.
 	UncoveredPackages []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Config controls the check.
@@ -199,9 +212,9 @@ func Check(cfg Config) (Outcome, error) {
 		}
 		out.Covered = append(out.Covered, m)
 
-		// O módulo tem alvo. A pergunta que faltava: o alvo ALCANÇA cada pacote
-		// que tem teste? Medido no B-092, `infra/tests` passava por causa de um
-		// `./unit/...` enquanto 41 arquivos em três subárvores não rodavam.
+		// The module has a target. The missing question: does the target REACH every package
+		// that has a test? Measured in B-092, `infra/tests` passed because of a
+		// `./unit/...` while 41 files in three subtrees did not run.
 		uncov, uerr := uncoveredPackages(root, m, targets)
 		if uerr != nil {
 			return out, uerr
@@ -215,19 +228,21 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 	if len(out.Uncovered) > 0 {
-		return out, ErrModuleUncovered
+		out.Violation = ErrModuleUncovered
+		return out, nil
 	}
 	if len(out.UncoveredPackages) > 0 {
-		return out, ErrPackageUncovered
+		out.Violation = ErrPackageUncovered
+		return out, nil
 	}
 	return out, nil
 }
 
 // pkgExempt reports whether pkg is covered by a declared package exemption.
 //
-// Uma isenção de `e2e` cobre `e2e/sub`: quem isenta uma subárvore por exigir cluster
-// está isentando a subárvore, e obrigar a listar cada pacote dela produziria uma lista
-// que envelhece a cada diretório novo.
+// An exemption of `e2e` covers `e2e/sub`: whoever exempts a subtree for requiring a cluster
+// is exempting the subtree, and forcing every package in it to be listed would produce a list
+// that goes stale with every new directory.
 func pkgExempt(exempt []string, pkg string) bool {
 	for _, e := range exempt {
 		if pkg == e || strings.HasPrefix(pkg, e+"/") {
@@ -277,7 +292,7 @@ func readTargets(root string, files []string) (string, error) {
 	for _, f := range files {
 		body, err := os.ReadFile(filepath.Join(root, f))
 		if err != nil {
-			return "", fmt.Errorf("%w: %v", ErrNothingScanned, err)
+			return "", fmt.Errorf("%w: %w", ErrNothingScanned, err)
 		}
 		b.Write(body)
 		b.WriteString("\n")

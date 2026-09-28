@@ -15,12 +15,12 @@
 //
 // SCOPE DISCIPLINE — read this before extending the guard:
 //
-//   `host.k3d.internal` is STILL correct for the vault REACH (the
-//   ClusterSecretStore `server: https://host.k3d.internal:8200` → OpenBao's
-//   own cert, whose SAN includes `host.k3d.internal`). This guard ONLY
-//   asserts the `auth/k8s-core/config` `kubernetes_host` value — it does
-//   NOT forbid `host.k3d.internal` globally in the script. Extending the
-//   guard to a global forbid would re-break the canonical CSS reach.
+//	`host.k3d.internal` is STILL correct for the vault REACH (the
+//	ClusterSecretStore `server: https://host.k3d.internal:8200` → OpenBao's
+//	own cert, whose SAN includes `host.k3d.internal`). This guard ONLY
+//	asserts the `auth/k8s-core/config` `kubernetes_host` value — it does
+//	NOT forbid `host.k3d.internal` globally in the script. Extending the
+//	guard to a global forbid would re-break the canonical CSS reach.
 //
 // The audit is encoded in a pure function so the negative-control test can
 // mutate the in-memory body and PROVE the guard would catch a revert. A
@@ -30,7 +30,7 @@
 //   - F1 root cause + fix commit: loopzero commit 7c255524
 //   - Reach plan (host.k3d.internal canonical for vault reach): cb7cc254 (T1.2)
 //   - R3 bao_auth ordering canonical: 96ab943e
-//   - Mandate: .claude/rules/cleanroom-up-live-test-mandate.md INQUEBRÁVEL
+//   - Mandate: .claude/rules/cleanroom-up-live-test-mandate.md UNBREAKABLE
 //   - Prompt: docs/f1-san-aligned-guard-prompt.md (umbrella)
 //   - Sister gate (script-level, vault reach): host_k3d_internal_canonical_test.go
 package charts
@@ -46,9 +46,9 @@ import (
 // Regex inventory — all use raw strings so the in-file escape sequences map
 // cleanly to the on-disk bytes. The script line that ships F1 (7c255524) is:
 //
-//   CORE_CLUSTER="${TARGET_CONTEXT#k3d-}"
-//   SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"
-//   MGMT_HOST=$(echo "$MGMT_HOST" | sed -E "s|//(0\\.0\\.0\\.0\|127\\.0\\.0\\.1\|localhost\|host\\.k3d\\.internal)(:[0-9]+)?|//${SERVERLB_HOST}\\2|")
+//	CORE_CLUSTER="${TARGET_CONTEXT#k3d-}"
+//	SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"
+//	MGMT_HOST=$(echo "$MGMT_HOST" | sed -E "s|//(0\\.0\\.0\\.0\|127\\.0\\.0\\.1\|localhost\|host\\.k3d\\.internal)(:[0-9]+)?|//${SERVERLB_HOST}\\2|")
 var (
 	reServerlbHostVar  = regexp.MustCompile(`SERVERLB_HOST="k3d-\$\{CORE_CLUSTER\}-serverlb"`)
 	reMgmtClusterDeriv = regexp.MustCompile(`CORE_CLUSTER="\$\{TARGET_CONTEXT#k3d-\}"`)
@@ -60,10 +60,7 @@ var (
 
 func loadVaultBootstrapDev(t *testing.T) string {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	p := filepath.Join(root, "infra/scripts/local/vault-bootstrap-dev.sh")
 	b, err := os.ReadFile(p)
 	if err != nil {

@@ -5,48 +5,41 @@ package leak
 
 import "net/http"
 
-// UpstreamState separa "o motor esta fora" de "o painel esta fora".
+// UpstreamState separates "the engine is down" from "the dashboard is down".
 //
-// # O defeito, medido
+// Measured 2026-08-10: syncing the Caddyfile over the server left loopzero-cloud
+// with no reachable upstream, and `/engine/*` went down with it, because the
+// engine path crosses the dashboard. Both showed as 502 and the probe could not
+// say which one had failed. The two call for different actions — engine down is
+// a deploy reconciliation in the core cluster, dashboard down is the edge proxy
+// — and a report that confuses them sends the operator to the wrong place
+// exactly when time matters.
 //
-// B-022, 2026-08-10: sincronizando o Caddyfile por cima do servidor, o `loopzero-cloud` ficou
-// sem upstream alcancavel — e `/engine/*` caiu junto, porque o caminho do motor atravessa
-// o painel. Os dois apareceram como 502, e a sonda nao tinha como dizer qual havia caido.
+// The separation is possible because the dashboard's PRODUCT routes do not
+// cross the engine: loopzero-cloud proxies `/engine/*` to loopzero-api while `/v1/*`
+// uses its own handlers. A product route answering while `/engine/*` does not is
+// evidence the dashboard is up.
 //
-// As duas situacoes pedem acoes diferentes: motor fora e reconciliacao de deploy no cluster
-// central; painel fora e o proxy da borda. Um relatorio que as confunde manda o operador
-// para o lugar errado exatamente quando o tempo importa.
-//
-// # Como a separacao e possivel
-//
-// Porque as rotas de PRODUTO do painel nao atravessam o motor. Medido em B-002:
-// `loopzero-cloud` proxia `/engine/*` para o `loopzero-api`, enquanto `/v1/auth`, `/v1/billing`,
-// `/v1/memory` e as demais usam handlers e upstreams proprios. Entao uma rota de produto
-// respondendo enquanto `/engine/*` nao responde e evidencia de que o painel esta de pe.
-//
-// # O limite
-//
-// Isto classifica DOIS codigos de status, nao a causa. Um 502 pode ser upstream fora,
-// upstream lento ou rota mal configurada, e a sonda nao distingue esses tres. O que ela
-// passa a distinguir e QUAL das duas superficies falhou — que era o que faltava.
+// The limit: this classifies TWO status codes, not the cause. A 502 may be an
+// upstream that is down, slow or misrouted; the probe does not tell those
+// apart. It tells WHICH of the two surfaces failed.
 type UpstreamState int
 
 const (
-	// UpstreamBothUp — nenhuma das duas superficies esta com falha de gateway.
+	// UpstreamBothUp — neither surface has a gateway failure.
 	UpstreamBothUp UpstreamState = iota
-	// UpstreamEngineDown — o painel responde e o caminho do motor nao.
+	// UpstreamEngineDown — the dashboard answers and the engine path does not.
 	UpstreamEngineDown
-	// UpstreamDashboardDown — as duas falham, e como o motor atravessa o painel, a causa
-	// comum e o painel.
+	// UpstreamDashboardDown — both fail; since the engine crosses the
+	// dashboard, the common cause is the dashboard.
 	UpstreamDashboardDown
-	// UpstreamInconclusive — a leitura contradiz a topologia conhecida, ou falta dado.
+	// UpstreamInconclusive — the reading contradicts the known topology.
 	UpstreamInconclusive
 )
 
-// gatewayFailure reporta se o codigo indica upstream inalcancavel pela borda.
-//
-// 502/503/504 sao os tres que o proxy emite quando nao consegue falar com quem esta atras.
-// Um 500 NAO entra: ele vem do proprio servico, que portanto esta de pe.
+// gatewayFailure reports whether the edge could not reach what sits behind it.
+// 502/503/504 are what the proxy emits then; a 500 comes from the service
+// itself, which is therefore up.
 func gatewayFailure(status int) bool {
 	switch status {
 	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
@@ -55,8 +48,8 @@ func gatewayFailure(status int) bool {
 	return false
 }
 
-// ClassifyUpstream separa as duas falhas a partir de uma sonda no caminho do motor e outra
-// numa rota de produto do painel.
+// ClassifyUpstream separates the two failures from one probe on the engine
+// path and one on a dashboard product route.
 func ClassifyUpstream(engineStatus, dashboardStatus int) UpstreamState {
 	engineBad := gatewayFailure(engineStatus)
 	dashBad := gatewayFailure(dashboardStatus)
@@ -69,24 +62,24 @@ func ClassifyUpstream(engineStatus, dashboardStatus int) UpstreamState {
 	case engineBad && !dashBad:
 		return UpstreamEngineDown
 	default:
-		// Painel falhando com o motor respondendo contradiz a topologia: `/engine/*`
-		// atravessa o painel, entao esta combinacao nao deveria existir. Inventar um
-		// veredito aqui seria afirmar o que a sonda nao sabe.
+		// The dashboard failing while the engine answers contradicts the
+		// topology (`/engine/*` crosses the dashboard). Inventing a verdict
+		// here would claim what the probe does not know.
 		return UpstreamInconclusive
 	}
 }
 
-// Explicacao diz ao operador o que a leitura significa e para onde olhar.
-func (s UpstreamState) Explicacao() string {
+// Explanation tells the operator what the reading means and where to look.
+func (s UpstreamState) Explanation() string {
 	switch s {
 	case UpstreamBothUp:
-		return "motor e painel alcancaveis pela borda"
+		return "engine and dashboard reachable through the edge"
 	case UpstreamEngineDown:
-		return "o painel responde e o caminho do motor nao — olhe o loopzero-api no cluster central, nao o proxy da borda"
+		return "the dashboard answers and the engine path does not — look at loopzero-api in the core cluster, not the edge proxy"
 	case UpstreamDashboardDown:
-		return "as duas superficies falham; como /engine/* atravessa o painel, comece pelo loopzero-cloud e pelo proxy da borda"
+		return "both surfaces fail; since /engine/* crosses the dashboard, start with loopzero-cloud and the edge proxy"
 	case UpstreamInconclusive:
-		return "a leitura contradiz a topologia conhecida (/engine/* atravessa o painel) — sonde de novo antes de agir"
+		return "the reading contradicts the known topology (/engine/* crosses the dashboard) — probe again before acting"
 	}
-	return "estado desconhecido"
+	return "unknown state"
 }

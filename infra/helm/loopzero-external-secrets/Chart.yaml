@@ -13,7 +13,7 @@ apiVersion: v2
 name: loopzero-external-secrets
 description: |
   ExternalSecret CRs rendering ALL LoopZero secrets from Vault via ESO.
-  Inventory canonical em values.yaml. Per-env overrides allowed (refresh
+  Canonical inventory in values.yaml. Per-env overrides allowed (refresh
   interval, target Secret name).
 type: application
 version: 0.1.0

@@ -44,10 +44,21 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultLiveDir is the canonical records tree, per rules/records-location.md.
-const DefaultLiveDir = ".claude/records"
+//
+// It was `.claude/records` until 2026-09-09, when that rule moved the write root to
+// `<project>/.squad/`: a project must not share a directory with an installed
+// dependency, because `.claude/` is gitignored and replaced whole by the next
+// install.
+//
+// `.squad/records/` is gitignored too (`.squad/*`), so a fresh clone has no live
+// tree. The gate reports that as LiveMissing — unverified — never as a pass over
+// a tree it did not find.
+const DefaultLiveDir = ".squad/records"
 
 // DefaultArchiveDir is the tree retired on 2026-09-03 and frozen by this gate.
 const DefaultArchiveDir = ".claude/knowledge-base"
@@ -95,12 +106,28 @@ func (c Config) resolve() (root, live, archive, manifest string) {
 // Violations carries the configuration-level failures that are not about one
 // specific record.
 type Outcome struct {
-	Pass       bool
-	LiveCount  int      // `.md` files in the live tree — reported, never bounded
-	FrozenSize int      // records the manifest declares
-	Added      []string // in the archive, absent from the manifest
-	Removed    []string // in the manifest, absent from the archive
-	Violations []string
+	Pass bool
+	// LiveMissing means the live tree does not exist on this machine, so nothing
+	// was verified. Pass is false; it is not a violation either.
+	LiveMissing bool
+	// ArchiveAbsent means neither the retired archive nor its manifest exists:
+	// nothing is frozen, and FrozenSize is zero because there is no freeze.
+	ArchiveAbsent bool
+	LiveCount     int      // `.md` files in the live tree — reported, never bounded
+	FrozenSize    int      // records the manifest declares
+	Added         []string // in the archive, absent from the manifest
+	Removed       []string // in the manifest, absent from the archive
+	Violations    []string
+}
+
+// Verdict is Skip when the live tree is absent on this machine — the records
+// root is gitignored, so every fresh clone lacks it (owner decision,
+// 2026-09-26) — and otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.LiveMissing {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 // Check runs the gate.
@@ -108,6 +135,11 @@ func Check(cfg Config) *Outcome {
 	root, liveRel, archiveRel, manifestRel := cfg.resolve()
 	out := &Outcome{Pass: true}
 
+	if !dirExists(filepath.Join(root, liveRel)) {
+		out.Pass = false
+		out.LiveMissing = true
+		return out
+	}
 	live, err := markdownSet(filepath.Join(root, liveRel))
 	if err != nil {
 		out.Pass = false
@@ -125,6 +157,7 @@ func Check(cfg Config) *Outcome {
 	// The losing tree removed outright is the DoD's other allowed disposition:
 	// one tree, nothing to freeze, nothing to guard.
 	if !archiveExists && !manifestExists {
+		out.ArchiveAbsent = true
 		return out
 	}
 

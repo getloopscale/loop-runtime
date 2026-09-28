@@ -11,110 +11,116 @@
 // code do not import this — they use pkg/errors directly with code
 // strings and messages.
 //
-// Stage A of CONDITION-2 (api-engineer staged rollout): pkg/errors
-// retains the HTTPStatus field for now. Status(err) prefers explicit
-// lookup via the registry and falls back to the legacy field for
-// backward compatibility. Stage B migrates writers to WriteJSON.
-// Stage C removes the field — separate change record.
+// The registry below holds the status of every code pkg/errors defines (a
+// test reads errors.go and fails on an unregistered one). A code owned by
+// another module is registered by its owner with Register, beside the code,
+// so adding one never requires editing this shared package. LoopZeroError itself
+// carries no HTTP status (ADR-0030, T2.3 Stage C).
 package http
 
 import (
 	stderrors "errors"
+	"fmt"
 	"net/http"
+	"sync"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
-// statusByCode maps machine-readable error codes to HTTP status codes.
-// Authoritative registry — adding a new LoopZeroError code SHOULD register
-// it here so transport semantics are explicit and reviewable.
-//
-// Codes ABSENT from this registry default to 500 via the fallback in
-// Status(). That keeps the lookup robust during migration but new
-// codes should be registered to avoid silent 500s.
-var statusByCode = map[string]int{
-	"LOCK_TIMEOUT":               http.StatusConflict, // 409
-	"INVALID_TRANSITION":         http.StatusConflict, // 409
-	"DEPLOY_IN_PROGRESS":         http.StatusConflict, // 409
-	"BUILD_ALREADY_COMPLETED":    http.StatusConflict, // 409
-	"BUILD_NOT_TERMINAL":         http.StatusConflict, // 409 — Plan J-17 T6.4 redeploy guard
-	"PROJECT_EXISTS":             http.StatusConflict, // 409
-	"SYNC_OPERATION_IN_PROGRESS": http.StatusConflict, // 409
-	"CONCURRENT_ACTIVATION":      http.StatusConflict, // 409 — partial unique index idx_releases_active_unique (migration 000022)
-	"ENV_ALREADY_EXISTS":         http.StatusConflict, // 409 — M2 v1.2 T4.1 EC-5 duplicate (project, env) tuple
+// registry is the code → status table: the pkg/errors codes below plus the
+// codes other modules Register. Reads happen per request; writes happen at
+// program start.
+var (
+	registryMu   sync.RWMutex
+	statusByCode = defaultStatusByCode()
+)
 
-	"TENANT_NOT_FOUND":      http.StatusNotFound, // 404
-	"PROJECT_NOT_FOUND":     http.StatusNotFound, // 404
-	"BUILD_NOT_FOUND":       http.StatusNotFound, // 404
-	"RELEASE_NOT_FOUND":     http.StatusNotFound, // 404
-	"PREVIEW_NOT_FOUND":     http.StatusNotFound, // 404
-	"NO_ACTIVE_RELEASE":     http.StatusNotFound, // 404
-	"NO_PREVIOUS_RELEASE":   http.StatusNotFound, // 404
-	"DOMAIN_NOT_FOUND":      http.StatusNotFound, // 404
-	"REPOSITORY_NOT_LINKED": http.StatusNotFound, // 404
-	"ENVIRONMENT_NOT_FOUND": http.StatusNotFound, // 404
-	"USER_NOT_FOUND":        http.StatusNotFound, // 404 (teams.go)
-	"MEMBER_NOT_FOUND":      http.StatusNotFound, // 404 (teams.go)
-	"TEAM_MEMBER_NOT_FOUND": http.StatusNotFound, // 404 (teams.go remove)
+// Register maps an error code owned outside pkg/errors to its HTTP status.
+// Registering the same status again is a no-op; re-mapping a registered code
+// to a different status is refused, because two owners would then disagree on
+// what the client sees. status must be a 4xx or 5xx.
+func Register(code string, status int) error {
+	if code == "" {
+		return stderrors.New("errors/http: Register needs a code")
+	}
+	if status < http.StatusBadRequest || status > 599 {
+		return fmt.Errorf("errors/http: code %s: status %d is not a 4xx or 5xx", code, status)
+	}
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	if existing, ok := statusByCode[code]; ok && existing != status {
+		return fmt.Errorf("errors/http: code %s is already registered as %d, refusing %d", code, existing, status)
+	}
+	statusByCode[code] = status
+	return nil
+}
 
-	"INVALID_NAME":              http.StatusBadRequest,            // 400
-	"INVALID_REQUEST":           http.StatusBadRequest,            // 400
-	"INVALID_ENVIRONMENT":       http.StatusBadRequest,            // 400 (builds.go DA-10)
-	"INVALID_CALLBACK":          http.StatusBadRequest,            // 400 (build_orchestrator_complete.go DA-15)
-	"VALIDATION_ERROR":          http.StatusBadRequest,            // 400 (db/scaling_store.go)
-	"MISSING_FIELD":             http.StatusBadRequest,            // 400
-	"SAME_ENVIRONMENT":          http.StatusBadRequest,            // 400
-	"INVALID_TENANT_OR_PROJECT": http.StatusBadRequest,            // 400 (Plan v1.2 T1.2 — DNS-1123 validation)
-	"MULTIPART_FIELD_ORDER":     http.StatusBadRequest,            // 400 (Plan v1.2 T6.1 — services_json must precede bundle)
-	"SERVICES_JSON_TOO_LARGE":   http.StatusRequestEntityTooLarge, // 413 (Plan v1.2 T6.1 — 256 KB cap)
-	"HPA_TARGET_OUT_OF_BOUNDS":  http.StatusBadRequest,            // 400 (J-20 Scale plan v1.1 T1.3 + EC-4)
-	// Red Team loopzero-cloud#103 closure (2026-06-27) — validation errors at
-	// the input boundary MUST return 4xx with client-classified codes,
-	// NOT 5xx with INTERNAL_ERROR (server-failure connotation). The 3
-	// codes below close 3 specific Red Team observations:
-	//   - INVALID_ARGUMENT — scale path (db/scaling_types.go:26 already
-	//     used this code; the missing registry entry caused 500). Comment
-	//     there says "Status 400 inferred" — the inference happens HERE.
-	//   - INVALID_DOMAIN — replaces INTERNAL_ERROR for domain format
-	//     validation in domains_create.go.
-	//   - INVALID_REPLICAS — replaces 500 INVALID_ARGUMENT for `replicas:-5`
-	//     specifically; covers the Red Team's secondary observation
-	//     (status×code mismatch on the scale negative path).
-	"INVALID_ARGUMENT": http.StatusBadRequest, // 400 (Red Team #103 — input boundary 4xx contract)
-	"INVALID_DOMAIN":   http.StatusBadRequest, // 400 (Red Team #103 — domain format validation)
-	"INVALID_REPLICAS": http.StatusBadRequest, // 400 (Red Team #103 — scale replicas <= 0)
+// MustRegister is Register for package initialisation: a conflicting or
+// invalid registration is a programming error and panics.
+func MustRegister(code string, status int) {
+	if err := Register(code, status); err != nil {
+		panic(err)
+	}
+}
 
-	"PLAN_UPGRADE_REQUIRED": http.StatusPaymentRequired, // 402 (J-20 Scale plan v1.1 T1.2 + EC-3 — KEDA scale-to-zero requires Pro+)
+// defaultStatusByCode is the status of every code pkg/errors defines.
+func defaultStatusByCode() map[string]int {
+	return map[string]int{
+		"LOCK_TIMEOUT":               http.StatusConflict, // 409
+		"INVALID_TRANSITION":         http.StatusConflict, // 409
+		"DEPLOY_IN_PROGRESS":         http.StatusConflict, // 409
+		"BUILD_ALREADY_COMPLETED":    http.StatusConflict, // 409
+		"PROJECT_EXISTS":             http.StatusConflict, // 409
+		"SYNC_OPERATION_IN_PROGRESS": http.StatusConflict, // 409
+		"CONCURRENT_ACTIVATION":      http.StatusConflict, // 409 — partial unique index idx_releases_active_unique (migration 000022)
 
-	"UNAUTHORIZED":  http.StatusUnauthorized,   // 401
-	"FORBIDDEN":     http.StatusForbidden,      // 403
-	"NOT_MEMBER":    http.StatusForbidden,      // 403 (plan T2.5 D8 — team switch)
-	"NOT_AVAILABLE": http.StatusNotImplemented, // 501 (plan T2.5 D8 — feature not configured)
+		"TENANT_NOT_FOUND":      http.StatusNotFound, // 404
+		"PROJECT_NOT_FOUND":     http.StatusNotFound, // 404
+		"BUILD_NOT_FOUND":       http.StatusNotFound, // 404
+		"RELEASE_NOT_FOUND":     http.StatusNotFound, // 404
+		"PREVIEW_NOT_FOUND":     http.StatusNotFound, // 404
+		"NO_ACTIVE_RELEASE":     http.StatusNotFound, // 404
+		"NO_PREVIOUS_RELEASE":   http.StatusNotFound, // 404
+		"DOMAIN_NOT_FOUND":      http.StatusNotFound, // 404
+		"REPOSITORY_NOT_LINKED": http.StatusNotFound, // 404
+		"ENVIRONMENT_NOT_FOUND": http.StatusNotFound, // 404
 
-	"PAYLOAD_TOO_LARGE": http.StatusRequestEntityTooLarge, // 413
+		"INVALID_NAME":              http.StatusBadRequest,      // 400
+		"INVALID_REQUEST":           http.StatusBadRequest,      // 400
+		"MISSING_FIELD":             http.StatusBadRequest,      // 400
+		"SAME_ENVIRONMENT":          http.StatusBadRequest,      // 400
+		"INVALID_TENANT_OR_PROJECT": http.StatusBadRequest,      // 400 (Plan v1.2 T1.2 — DNS-1123 validation)
+		"HPA_TARGET_OUT_OF_BOUNDS":  http.StatusBadRequest,      // 400 (J-20 Scale plan v1.1 T1.3 + EC-4)
+		"PLAN_UPGRADE_REQUIRED":     http.StatusPaymentRequired, // 402 (J-20 Scale plan v1.1 T1.2 + EC-3 — KEDA scale-to-zero requires Pro+)
 
-	"VALIDATION_FAILED":       422,
-	"IDEMPOTENCY_CONFLICT":    422,
-	"FRONTEND_MUST_BE_STATIC": 422,
-	"POD_LIMIT_EXCEEDED":      422,
-	"REPLICAS_EXCEED_PLAN":    422,
-	"PROJECTS_EXCEED_PLAN":    422,
-	"SCALING_AMBIGUOUS":       422,
-	"UNSUPPORTED_FRAMEWORK":   422, // (builds.go framework validation)
+		"UNAUTHORIZED": http.StatusUnauthorized, // 401
+		"FORBIDDEN":    http.StatusForbidden,    // 403
 
-	"CELL_AT_CAPACITY":   http.StatusTooManyRequests, // 429
-	"TENANT_BUILD_QUOTA": http.StatusTooManyRequests, // 429
+		"PAYLOAD_TOO_LARGE": http.StatusRequestEntityTooLarge, // 413
 
-	"PLATFORM_DEGRADED":          http.StatusServiceUnavailable, // 503
-	"DEPLOY_SERVICE_AUTH_FAILED": http.StatusServiceUnavailable, // 503
-	// #138 — the encryption backend a secret write depends on is unreachable.
-	// 503, not 500: the request was VALID and a dependency was down; a 500 would
-	// blame the caller's input for an infrastructure fault, and clients that
-	// retry on 5xx cannot tell the two apart.
-	"SECRETS_BACKEND_UNAVAILABLE": http.StatusServiceUnavailable, // 503
+		"VALIDATION_FAILED":       422,
+		"IDEMPOTENCY_CONFLICT":    422,
+		"FRONTEND_MUST_BE_STATIC": 422,
+		"POD_LIMIT_EXCEEDED":      422,
+		"REPLICAS_EXCEED_PLAN":    422,
+		"PROJECTS_EXCEED_PLAN":    422,
+		"SCALING_AMBIGUOUS":       422,
 
-	"SOURCE_UPLOAD_FAILED": http.StatusInternalServerError, // 500
-	"INTERNAL_ERROR":       http.StatusInternalServerError, // 500
+		"CELL_AT_CAPACITY":   http.StatusTooManyRequests, // 429
+		"TENANT_BUILD_QUOTA": http.StatusTooManyRequests, // 429
+
+		"PLATFORM_DEGRADED":          http.StatusServiceUnavailable, // 503
+		"DEPLOY_SERVICE_AUTH_FAILED": http.StatusServiceUnavailable, // 503
+		// #138 — the encryption backend a secret write depends on is unreachable.
+		// 503, not 500: the request was VALID and a dependency was down; a 500 would
+		// blame the caller's input for an infrastructure fault, and clients that
+		// retry on 5xx cannot tell the two apart.
+		"SECRETS_BACKEND_UNAVAILABLE": http.StatusServiceUnavailable, // 503
+
+		"SOURCE_UPLOAD_FAILED": http.StatusInternalServerError, // 500
+		"BUILD_SUBMIT_FAILED":  http.StatusInternalServerError, // 500 — the build could not be handed to the build plane
+		"INTERNAL_ERROR":       http.StatusInternalServerError, // 500
+	}
 }
 
 // Status returns the HTTP status code for the given error.
@@ -125,10 +131,9 @@ var statusByCode = map[string]int{
 //  2. http.StatusInternalServerError (500) for non-LoopZeroError or
 //     unregistered codes.
 //
-// Adding a new LoopZeroError code without registering its status here
-// produces a silent 500 — pair every new sentinel with a registry
-// entry. The IsRegistered() helper is suitable for CI lint to enforce
-// this invariant.
+// A code nobody registered answers 500. pkg/errors codes are held
+// registered by TestEveryPkgErrorsCodeIsRegistered; a code owned elsewhere
+// is registered by its owner (see Register).
 func Status(err error) int {
 	if err == nil {
 		return http.StatusOK
@@ -137,7 +142,10 @@ func Status(err error) int {
 	if !stderrors.As(err, &loopzeroErr) {
 		return http.StatusInternalServerError
 	}
-	if s, ok := statusByCode[loopzeroErr.Code]; ok {
+	registryMu.RLock()
+	s, ok := statusByCode[loopzeroErr.Code]
+	registryMu.RUnlock()
+	if ok {
 		return s
 	}
 	return http.StatusInternalServerError
@@ -147,6 +155,8 @@ func Status(err error) int {
 // status mapping. Useful for CI lint that asserts every LoopZeroError
 // code has a registered transport status.
 func IsRegistered(code string) bool {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
 	_, ok := statusByCode[code]
 	return ok
 }

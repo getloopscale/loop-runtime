@@ -10,16 +10,14 @@ import (
 	"testing"
 )
 
-func newMaintenanceHandler() http.Handler {
-	return MaintenanceMode(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func newMaintenanceHandler(raw string) http.Handler {
+	return MaintenanceMode(ParseMaintenanceSetting(raw))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 }
 
 func TestMaintenanceMode_PassthroughWhenUnset(t *testing.T) {
-	t.Setenv("LOOPZERO_MAINTENANCE_MODE", "")
-
-	handler := newMaintenanceHandler()
+	handler := newMaintenanceHandler("")
 
 	methods := []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch}
 	for _, method := range methods {
@@ -34,9 +32,7 @@ func TestMaintenanceMode_PassthroughWhenUnset(t *testing.T) {
 }
 
 func TestMaintenanceMode_BlocksMutationsWhenSet(t *testing.T) {
-	t.Setenv("LOOPZERO_MAINTENANCE_MODE", "1")
-
-	handler := newMaintenanceHandler()
+	handler := newMaintenanceHandler("1")
 
 	mutatingMethods := []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
 	for _, method := range mutatingMethods {
@@ -62,9 +58,7 @@ func TestMaintenanceMode_BlocksMutationsWhenSet(t *testing.T) {
 }
 
 func TestMaintenanceMode_AllowsReadsWhenSet(t *testing.T) {
-	t.Setenv("LOOPZERO_MAINTENANCE_MODE", "true")
-
-	handler := newMaintenanceHandler()
+	handler := newMaintenanceHandler("true")
 
 	readMethods := []string{http.MethodGet, http.MethodHead, http.MethodOptions}
 	for _, method := range readMethods {
@@ -79,9 +73,7 @@ func TestMaintenanceMode_AllowsReadsWhenSet(t *testing.T) {
 }
 
 func TestMaintenanceMode_AllowsHealthEndpoint(t *testing.T) {
-	t.Setenv("LOOPZERO_MAINTENANCE_MODE", "1")
-
-	handler := newMaintenanceHandler()
+	handler := newMaintenanceHandler("1")
 
 	// POST to health endpoint should pass through even in maintenance mode.
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/health", nil)
@@ -94,9 +86,7 @@ func TestMaintenanceMode_AllowsHealthEndpoint(t *testing.T) {
 }
 
 func TestMaintenanceMode_AllowsInternalRoutes(t *testing.T) {
-	t.Setenv("LOOPZERO_MAINTENANCE_MODE", "1")
-
-	handler := newMaintenanceHandler()
+	handler := newMaintenanceHandler("1")
 
 	// Internal routes are called by platform components (ArgoCD, controllers),
 	// not by users. They must pass through during maintenance to prevent
@@ -118,9 +108,8 @@ func TestMaintenanceMode_AllowsInternalRoutes(t *testing.T) {
 
 func TestMaintenanceMode_CustomMessage(t *testing.T) {
 	customMsg := "PG resize in progress, back in 5 minutes"
-	t.Setenv("LOOPZERO_MAINTENANCE_MODE", customMsg)
 
-	handler := newMaintenanceHandler()
+	handler := newMaintenanceHandler(customMsg)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/deploy", nil)
 	rec := httptest.NewRecorder()
@@ -140,9 +129,7 @@ func TestMaintenanceMode_CustomMessage(t *testing.T) {
 }
 
 func TestMaintenanceMode_RetryAfterHeader(t *testing.T) {
-	t.Setenv("LOOPZERO_MAINTENANCE_MODE", "1")
-
-	handler := newMaintenanceHandler()
+	handler := newMaintenanceHandler("1")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/deploy", nil)
 	rec := httptest.NewRecorder()
@@ -151,5 +138,21 @@ func TestMaintenanceMode_RetryAfterHeader(t *testing.T) {
 	retryAfter := rec.Header().Get("Retry-After")
 	if retryAfter != "300" {
 		t.Errorf("expected Retry-After=300, got %q", retryAfter)
+	}
+}
+
+// The published chart renders LOOPZERO_MAINTENANCE_MODE="false" by default
+// (charts/loopzero-api values.yaml). "false" and "0" mean off: read as an operator
+// message they put every mutation of a default install behind a 503 whose
+// message is the word "false".
+func TestMaintenanceMode_FalseAndZeroMeanOff(t *testing.T) {
+	for _, raw := range []string{"false", "FALSE", "0", " false "} {
+		t.Run(raw, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			newMaintenanceHandler(raw).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/deploy", nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("LOOPZERO_MAINTENANCE_MODE=%q blocked a mutation (%d): it means off", raw, rec.Code)
+			}
+		})
 	}
 }

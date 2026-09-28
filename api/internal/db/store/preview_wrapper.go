@@ -70,10 +70,7 @@ func (s *PostgresPreviewStore) Create(ctx context.Context, tx db.DBTX, rec *Prev
 		rec.ExpiresAt = time.Now().UTC().Add(72 * time.Hour)
 	}
 
-	bridge, err := s.txBridge(tx)
-	if err != nil {
-		return err
-	}
+	bridge := s.txBridge(tx)
 	q := generated.New()
 	out, err := q.InsertPreview(ctx, bridge, generated.InsertPreviewParams{
 		ID:             rec.ID,
@@ -111,10 +108,7 @@ func (s *PostgresPreviewStore) Create(ctx context.Context, tx db.DBTX, rec *Prev
 // validity (this is a thin DB-level setter). 0 rows-affected →
 // ErrPreviewNotFound.
 func (s *PostgresPreviewStore) UpdateStatus(ctx context.Context, tx db.DBTX, previewID, status string) error {
-	bridge, err := s.txBridge(tx)
-	if err != nil {
-		return err
-	}
+	bridge := s.txBridge(tx)
 	q := generated.New()
 	n, err := q.UpdatePreviewStatus(ctx, bridge, generated.UpdatePreviewStatusParams{
 		Status: status,
@@ -133,10 +127,7 @@ func (s *PostgresPreviewStore) UpdateStatus(ctx context.Context, tx db.DBTX, pre
 // Empty commitSHA preserves the existing value via COALESCE(NULLIF($2,
 // ”), commit_sha) in the SQL query.
 func (s *PostgresPreviewStore) UpdateBuild(ctx context.Context, tx db.DBTX, previewID, buildID, commitSHA string) error {
-	bridge, err := s.txBridge(tx)
-	if err != nil {
-		return err
-	}
+	bridge := s.txBridge(tx)
 	q := generated.New()
 	// BuildID/CommitSha are *string in the generated params. Use
 	// nullable wrappers — buildID is always provided (caller invariant);
@@ -163,10 +154,7 @@ func (s *PostgresPreviewStore) UpdateBuild(ctx context.Context, tx db.DBTX, prev
 
 // UpdateURL sets the public URL exposed to the user.
 func (s *PostgresPreviewStore) UpdateURL(ctx context.Context, tx db.DBTX, previewID, url string) error {
-	bridge, err := s.txBridge(tx)
-	if err != nil {
-		return err
-	}
+	bridge := s.txBridge(tx)
 	q := generated.New()
 	u := url
 	n, err := q.UpdatePreviewURL(ctx, bridge, generated.UpdatePreviewURLParams{
@@ -190,10 +178,7 @@ func (s *PostgresPreviewStore) UpdateURL(ctx context.Context, tx db.DBTX, previe
 // tenantID scopes the operation to prevent cross-tenant deletions
 // when callers bypass RLS.
 func (s *PostgresPreviewStore) RequestDeletion(ctx context.Context, tenantID, previewID string) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	n, err := q.RequestPreviewDeletion(ctx, bridge, generated.RequestPreviewDeletionParams{
 		ID:       previewID,
@@ -214,10 +199,7 @@ func (s *PostgresPreviewStore) RequestDeletion(ctx context.Context, tenantID, pr
 
 // ListByTenant returns all live previews for a tenant.
 func (s *PostgresPreviewStore) ListByTenant(ctx context.Context, tenantID string) ([]ports.Preview, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.ListPreviewsByTenant(ctx, bridge, tenantID)
 	if err != nil {
@@ -234,10 +216,7 @@ func (s *PostgresPreviewStore) ListByTenant(ctx context.Context, tenantID string
 // ListByProject returns all live previews for a (tenant, project)
 // pair.
 func (s *PostgresPreviewStore) ListByProject(ctx context.Context, tenantID, projectID string) ([]ports.Preview, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.ListPreviewsByProject(ctx, bridge, generated.ListPreviewsByProjectParams{
 		TenantID:  tenantID,
@@ -257,10 +236,7 @@ func (s *PostgresPreviewStore) ListByProject(ctx context.Context, tenantID, proj
 // GetByID returns a live preview by its ID, scoped to a tenant.
 // pgx.ErrNoRows → ErrPreviewNotFound.
 func (s *PostgresPreviewStore) GetByID(ctx context.Context, tenantID, previewID string) (*ports.Preview, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	row, err := q.GetPreviewByIDForTenant(ctx, bridge, generated.GetPreviewByIDForTenantParams{
 		ID:       previewID,
@@ -279,10 +255,7 @@ func (s *PostgresPreviewStore) GetByID(ctx context.Context, tenantID, previewID 
 // GetByPR returns the live preview for a (tenant, project,
 // pr_number) tuple. pgx.ErrNoRows → ErrPreviewNotFound.
 func (s *PostgresPreviewStore) GetByPR(ctx context.Context, tenantID, projectID string, prNumber int) (*ports.Preview, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	row, err := q.GetPreviewByPR(ctx, bridge, generated.GetPreviewByPRParams{
 		TenantID:  tenantID,
@@ -304,26 +277,15 @@ func (s *PostgresPreviewStore) GetByPR(ctx context.Context, tenantID, projectID 
 // =========================================================================
 
 // bridge returns the sqlc-compatible DBTX from s.DB (pool path).
-func (s *PostgresPreviewStore) bridge() (generated.DBTX, error) {
-	if s.DB == nil {
-		return nil, fmt.Errorf("preview store: nil DB")
-	}
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("preview store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
-	return bridge.GeneratedDB(), nil
+func (s *PostgresPreviewStore) bridge() generated.DBTX {
+	return db.Generated(s.DB)
 }
 
 // txBridge prefers the explicit transaction when provided, otherwise
 // falls back to s.DB.
-func (s *PostgresPreviewStore) txBridge(tx db.DBTX) (generated.DBTX, error) {
+func (s *PostgresPreviewStore) txBridge(tx db.DBTX) generated.DBTX {
 	if tx != nil {
-		bridge, ok := tx.(db.SqlcBridge)
-		if !ok {
-			return nil, fmt.Errorf("preview store: tx DBTX %T does not implement SqlcBridge", tx)
-		}
-		return bridge.GeneratedDB(), nil
+		return db.Generated(tx)
 	}
 	return s.bridge()
 }

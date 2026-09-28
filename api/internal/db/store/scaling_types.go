@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/getloopscale/loopzero/pkg/naming"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -25,7 +27,7 @@ import (
 // validation produces actionable client feedback. Status 400 inferred
 // from INVALID_ARGUMENT code by the HTTP error mapper.
 func newInvalidArgument(msg string) *loopzeroerrors.LoopZeroError {
-	return loopzeroerrors.NewLoopZeroError("INVALID_ARGUMENT", msg, 400)
+	return loopzeroerrors.NewLoopZeroError("INVALID_ARGUMENT", msg)
 }
 
 // ScalingConfig represents per-app scaling configuration persisted
@@ -87,27 +89,12 @@ func (c *ScalingConfig) Validate() error {
 		return newInvalidArgument(
 			"scale_to_zero=true requires min_replicas=0")
 	}
-	// Environment naming validation: must be non-empty, kebab-case, ≤63 chars
-	// (DNS label limit; namespaces are derived from environment name).
-	// LoopZero supports arbitrary tenant-created environments — the hardcoded
-	// whitelist [production, staging, preview] was incorrect (V9 L13 catch).
-	// Environment existence is enforced by withEnvironmentLock at the route
-	// level; this validator only enforces syntactic constraints.
-	if c.Environment == "" {
-		return newInvalidArgument("environment must not be empty")
-	}
-	if len(c.Environment) > 63 {
-		return newInvalidArgument(
-			fmt.Sprintf("environment %q exceeds 63-char DNS label limit", c.Environment))
-	}
-	for _, r := range c.Environment {
-		isLower := r >= 'a' && r <= 'z'
-		isDigit := r >= '0' && r <= '9'
-		isDash := r == '-'
-		if !isLower && !isDigit && !isDash {
-			return newInvalidArgument(
-				fmt.Sprintf("environment %q must be lowercase alphanumeric + dash (DNS label rules)", c.Environment))
-		}
+	// The environment is a segment of the workload namespace, so it must be
+	// the RFC 1123 label pkg/naming (the namespace builder's own validator)
+	// accepts. LoopZero supports arbitrary tenant-created environments; existence
+	// is enforced by withEnvironmentLock at the route, this is syntax only.
+	if err := naming.ValidateKubernetesName(c.Environment); err != nil {
+		return newInvalidArgument(fmt.Sprintf("environment %q: %v", c.Environment, err))
 	}
 	return nil
 }

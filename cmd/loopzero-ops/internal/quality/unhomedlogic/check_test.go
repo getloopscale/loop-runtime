@@ -3,12 +3,16 @@
 
 package unhomedlogic
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
+)
 
 // fixtureAllowlist mimics the shell-scripts-allowlist.md table structure.
 const fixtureAllowlist = `# Shell Scripts Allowlist
 
-| Script | LOC | Justificativa |
+| Script | LOC | Justification |
 |---|---:|---|
 | .claude/hooks/task-completed.sh | 102 | grandfathered — harness hook |
 | infra/scripts/break-glass.sh | 145 | KEEP-OPERATOR — live emergency, D4 operator-time |
@@ -86,7 +90,7 @@ func TestCount_UnhomedPerDomain(t *testing.T) {
 // Anti-bias content verification: a KEEP-tagged script that embeds a Python
 // heredoc is a program masquerading as break-glass → counted un-homed.
 func TestCount_SuspectKeep_PythonHeredocIsUnhomed(t *testing.T) {
-	al := "| Script | LOC | Justificativa |\n|---|---:|---|\n" +
+	al := "| Script | LOC | Justification |\n|---|---:|---|\n" +
 		"| infra/scripts/governance/scan-decay.sh | 168 | KEEP-OPERATOR — audit tool |\n" +
 		"| infra/scripts/break-glass.sh | 145 | KEEP-OPERATOR — emergency steps |\n"
 	bodies := map[string]string{
@@ -104,7 +108,7 @@ func TestCount_SuspectKeep_PythonHeredocIsUnhomed(t *testing.T) {
 }
 
 func TestCount_LegitKeepNoContent_StaysHomed(t *testing.T) {
-	al := "| Script | LOC | Justificativa |\n|---|---:|---|\n" +
+	al := "| Script | LOC | Justification |\n|---|---:|---|\n" +
 		"| infra/scripts/break-glass.sh | 145 | KEEP-OPERATOR — emergency |\n"
 	read := func(p string) (string, bool) { return "#!/usr/bin/env bash\nkubectl get pods\n", true }
 	if c := Count(al, read); c.Total != 0 || len(c.SuspectKeeps) != 0 {
@@ -113,7 +117,7 @@ func TestCount_LegitKeepNoContent_StaysHomed(t *testing.T) {
 }
 
 func TestLedger_EvidenceAndDisposition(t *testing.T) {
-	al := "| Script | LOC | Justificativa |\n|---|---:|---|\n" +
+	al := "| Script | LOC | Justification |\n|---|---:|---|\n" +
 		"| infra/scripts/governance/scan-decay.sh | 168 | REVIEW-NEEDED |\n" +
 		"| infra/scripts/dr/preflight.sh | 175 | REVIEW-NEEDED |\n" +
 		"| infra/scripts/break-glass.sh | 145 | REVIEW-NEEDED |\n" +
@@ -129,16 +133,16 @@ func TestLedger_EvidenceAndDisposition(t *testing.T) {
 	for _, e := range led {
 		byPath[e.Path] = e
 	}
-	if d := byPath["infra/scripts/governance/scan-decay.sh"]; !d.HasPython || d.Disposition != "MIGRATE-go (python-wrapper — focused TDD)" {
+	if d := byPath["infra/scripts/governance/scan-decay.sh"]; !d.HasPython || d.Disposition != shellscript.MigrateGoPureFn {
 		t.Errorf("python-wrapper mis-dispositioned: %+v", d)
 	}
-	if d := byPath["infra/scripts/dr/preflight.sh"]; !d.ShellsLive || d.Disposition != "MIGRATE-loopzero-ops-drill (LIVE-gate before delete)" {
+	if d := byPath["infra/scripts/dr/preflight.sh"]; !d.ShellsLive || d.Disposition != shellscript.MigrateLoopZeroOpsDrill {
 		t.Errorf("drill mis-dispositioned: %+v", d)
 	}
-	if d := byPath["infra/scripts/break-glass.sh"]; !d.ShellsLive || d.Disposition != "KEEP-OPERATOR? (live-cluster tool — operator ratify)" {
+	if d := byPath["infra/scripts/break-glass.sh"]; !d.ShellsLive || d.Disposition != shellscript.KeepOperator {
 		t.Errorf("live-tool mis-dispositioned: %+v", d)
 	}
-	if d := byPath["infra/tests/scripts/foo_test.sh"]; d.Disposition != "COUPLED (dies when its target homes)" {
+	if d := byPath["infra/tests/scripts/foo_test.sh"]; d.Disposition != shellscript.AutoDie {
 		t.Errorf("_test.sh mis-dispositioned: %+v", d)
 	}
 }

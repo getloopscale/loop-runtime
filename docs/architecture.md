@@ -58,7 +58,7 @@ the repo — run per module, or use the Taskfile.
 
 | Path | What |
 |---|---|
-| `api/internal/` | 39 subpackages: `routes`, `services`, `lock`, `placement`, `cellmgr`, `gitops`, `argo`, `manifests`, `metering`, `sse`, `source` |
+| `api/internal/` | Organized by feature (`docs/decisions.md`, 2026-09-25): 25 features, each a root package with `<name>http` handlers and a `<feature>adapter` package, over a shared kernel (`db`, `ports`, `deploycontracts`, `middleware`, `sse`, `lock`, `k8s`, …) and two composition roots (`server`, `backgroundloops`); `loopzero-ops quality feature-fence` enforces the registry |
 | `operators/` | 4 split binaries (`cmd/{tenant,app,preview,platform}-operator`), kubebuilder + controller-runtime |
 | `operators/api/` | CRD Go types (own module) |
 | `pkg/` | Shared libs: `statemachine`, `errors`, `naming`, `conditions`, `enforcement`, `circuitbreaker`, `healthcheck`, `id`, `logging`, `domain`, `events`, `vault`, `shellrun`, `pulumi`, `correlation`. The only module with no in-repo dependencies; a change here reaches four modules. |
@@ -144,12 +144,67 @@ guard instead of the config once inflated a capacity simulation tenfold and inve
 ## Helm chart dual system
 
 `infra/helm/` (bootstrap, Helmfile L2) and `charts/` (published OCI, ArgoCD L3) coexist by
-design. **2 charts exist in BOTH trees under the same name** — `loopzero-api` and `loopzero-cloud`:
-patch one, apply the same fix to the other. Refer to each by its **path**, never the bare
-name. The pair list is `infra/quality/chart-pairs.txt`, enforced by the `chart-pairs` gate,
-which fails both ways — an undeclared pair, or a declaration that outlived its pair.
+design, and **no chart exists in both trees**. `loopzero-api`, `loopzero-cloud` and the admission
+policies are one chart each under `charts/`; Helmfile installs them with
+`charts/<name>/values-bootstrap.yaml` (`values-mgmt.yaml` for the admission policies on
+core), and ArgoCD consumes the same chart with its defaults (`decisions.md`, "One chart
+per bootstrap/published pair"). The `chart-pairs` gate refuses a chart present in both
+trees, by name or as a template-identical copy under another name.
 
 `monitoring` / `loopzero-monitoring` are complementary (infra vs config), not overlapping.
+
+<!-- BEGIN GENERATED TABLE -->
+| Chart | Cluster(s) | Nature | Version | Conditional |
+|---|---|---|---|---|
+| `argo-ci-namespace` | build | ours | — | `always` |
+| `argo-events` | build | ours | — | `always` |
+| `argo-events-bus` | build | ours | — | `always` |
+| `argo-rollouts` | cell | ours | — | `always` |
+| `argo-workflows` | build | upstream | 1.0.5 | `always` |
+| `argocd` | core | upstream | 7.3.11 | `always` |
+| `blackbox-exporter` | core | upstream | 9.2.0 | `always` |
+| `cert-manager` | cell, core | upstream | — | `always` |
+| `chaos-mesh` | core | ours | — | `{{ .Values \| get "installChaosMesh" false }}` |
+| `cloudflared` | cell | ours | — | `always` |
+| `cluster-issuer` | cell, secrets | ours | — | `always` |
+| `external-secrets` | cell, core | upstream | 0.14.3 | `always` |
+| `gitea` | core | upstream | 10.6.0 | `always` |
+| `k6-operator` | — | undeclared | — | `always` |
+| `keda` | cell | upstream | 2.16.1 | `always` |
+| `keda-http-addon` | cell | upstream | 0.8.0 | `{{ .Values.profile.kedaHttpAddon }}` |
+| `loki` | build | upstream | 6.24.0 | `always` |
+| `minio` | core | upstream | 5.4.0 | `always` |
+| `monitoring` | cell, core | upstream | 3.12.1 | `{{ .Values \| get "installMetricsServer" false }}` |
+| `network-policies` | cell | ours | — | `always` |
+| `nfs-server-provisioner` | core | upstream | 1.8.0 | `always` |
+| `openbao-cert` | secrets | ours | — | `{{ .Values \| get "openbaoEnabled" false }}` |
+| `openbao-init` | secrets | ours | — | `{{ .Values \| get "openbaoEnabled" false }}` |
+| `openbao-snapshot-agent` | secrets | ours | — | `{{ .Values \| get "snapshotAgentEnabled" false }}` |
+| `opencost` | core | ours | — | `always` |
+| `ory-hydra` | core | upstream | 0.61.0 | `always` |
+| `ory-kratos` | core | upstream | 0.61.0 | `always` |
+| `otel` | core | upstream | 0.96.0 | `always` |
+| `policy-controller` | cell | upstream | 0.8.1 | `always` |
+| `postgresql` | core | upstream | 18.6.2 | `{{ .Values.inClusterPostgres \| default false }}` |
+| `promtail` | build, cell | upstream | 6.16.6 | `always` |
+| `redis` | core | upstream | 19.6.4 | `{{ not .Values.profile.managedRedis }}` |
+| `sigstore-extras` | — | undeclared | — | `always` |
+| `smoke-test` | core | ours | — | `{{ and .Values.profile.smokeTest (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
+| `static-assets` | cell | ours | — | `{{ .Values.profile.staticAssets }}` |
+| `tempo` | core | upstream | 1.14.0 | `always` |
+| `loopzero-admission-policies` | cell, core | ours | — | `always` |
+| `loopzero-api` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
+| `loopzero-app-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
+| `loopzero-build-cwts` | build | ours | — | `always` |
+| `loopzero-cloud` | core | ours | — | `{{ and .Values.profile.loopzeroCloud (ne (.Values \| get "clusterRole" "dev") "standalone") }}` |
+| `loopzero-crds` | core | ours | — | `always` |
+| `loopzero-external-secrets` | cell | ours | — | `{{ .Values.profile.secretFetchBroker }}` |
+| `loopzero-platform-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
+| `loopzero-preview-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
+| `loopzero-tenant-operator` | core | ours | — | `{{ ne (.Values \| get "clusterRole" "dev") "standalone" }}` |
+| `traefik` | cell, core | upstream | 28.3.0 | `always` |
+| `velero` | core | ours | — | `always` |
+<!-- END GENERATED TABLE -->
 
 ## Infrastructure — AWS re-platform in progress
 
@@ -158,9 +213,11 @@ DigitalOcean/Pulumi -> AWS/Terraform, into two sibling repos: `../loopzero-infra
 (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units). Tooling is
 **Terraform**, not OpenTofu, not Pulumi.
 
-`infra/pulumi*` is **AS-IS legacy, live until the AM8 cutover**. Do not cite Pulumi as the
-forward path, and do not add new Pulumi for target infra. The in-cluster platform layer is
-unchanged: Helmfile L2 + ArgoCD L3 + charts + k3d dev all stay.
+`infra/pulumi*` is **AS-IS legacy — live until the AM9 cutover, and retired at AM10**, per
+`../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`. Do not cite
+Pulumi as the forward path, and do not add new Pulumi for target infra. This rule is
+unconditional and carries no date. The in-cluster platform layer is unchanged:
+Helmfile L2 + ArgoCD L3 + charts + k3d dev all stay.
 
 Layering today: **L1** cloud primitives (Pulumi/DO legacy -> Terraform/AWS target) ·
 **L2** Helmfile (SoT for the platform releases) · **L3** ArgoCD (tenant Day-2 GitOps,
@@ -183,6 +240,32 @@ task quality:contract:cross-repo
 
 Absent siblings are SKIPPED with an explicit message, never a false PASS. The
 `acyclic-graph` gate enforces dependency DIRECTION; this matrix enforces seam CONTRACTS.
+
+<!-- USAGE-MATRIX-START -->
+
+## Real Usage Matrix
+
+Table generated by grepping for `import "github.com/getloopscale/loopzero/pkg/X"`.
+Regenerate with `task pkg:usage-matrix:write` (`loopzero-ops quality pkg-usage-matrix --write`).
+The `task pkg:usage-matrix:check` gate fails when the table is out of date (gate PKG-G14).
+
+| Package | Total imports | api/internal | operators/internal | cloud | cli | Other |
+|---|---:|---:|---:|---:|---:|---:|
+| `pkg/circuitbreaker` | 10 | 2 | 6 | 0 | 0 | 2 |
+| `pkg/conditions` | 3 | 0 | 2 | 0 | 0 | 1 |
+| `pkg/correlation` | 13 | 3 | 8 | 0 | 0 | 2 |
+| `pkg/domain` | 44 | 28 | 3 | 0 | 0 | 13 |
+| `pkg/enforcement` | 24 | 19 | 0 | 0 | 0 | 5 |
+| `pkg/errors` | 144 | 116 | 0 | 0 | 0 | 28 |
+| `pkg/gitearepo` | 14 | 8 | 3 | 0 | 0 | 3 |
+| `pkg/healthcheck` | 5 | 0 | 0 | 0 | 0 | 5 |
+| `pkg/id` | 7 | 6 | 0 | 0 | 0 | 1 |
+| `pkg/logging` | 12 | 7 | 0 | 0 | 0 | 5 |
+| `pkg/naming` | 58 | 40 | 13 | 0 | 0 | 5 |
+| `pkg/statemachine` | 88 | 72 | 11 | 0 | 0 | 5 |
+| `pkg/vault` | 7 | 2 | 0 | 0 | 0 | 5 |
+
+<!-- USAGE-MATRIX-END -->
 
 ## Related
 

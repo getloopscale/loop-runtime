@@ -128,3 +128,27 @@ func TestCommittedDotsAreCurrent(t *testing.T) {
 		t.Errorf("committed DOT files out-of-date: %v — run `cd pkg && go generate ./statemachine/...`", drift)
 	}
 }
+
+// TestCheckDrift_ReportsDriftInLexicographicOrder — the drift list is sorted,
+// so CI output is stable run to run.
+func TestCheckDrift_ReportsDriftInLexicographicOrder(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeAll(dir); err != nil {
+		t.Fatalf("writeAll: %v", err)
+	}
+	for _, name := range []string{"tenant", "build", "release", "domain"} {
+		if err := os.Remove(filepath.Join(dir, name+".dot")); err != nil {
+			t.Fatalf("remove: %v", err)
+		}
+	}
+
+	drift, err := checkDrift(dir)
+
+	if err != nil {
+		t.Fatalf("checkDrift: %v", err)
+	}
+	want := []string{"build", "domain", "release", "tenant"}
+	if strings.Join(drift, ",") != strings.Join(want, ",") {
+		t.Fatalf("drift = %v, want %v", drift, want)
+	}
+}

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // writeTree lays out a synthetic repo. Keys are repo-relative paths.
@@ -41,7 +43,7 @@ func TestCheck_DanglingRuleRefFails(t *testing.T) {
 		"docsrefs-allowlist.txt":   "",
 	})
 	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
-	if !errors.Is(err, ErrUnresolvedReferences) {
+	if err != nil || out.Verdict() != verdict.Fail {
 		t.Fatalf("a dangling rule reference must fail; got err=%v", err)
 	}
 	if len(out.Unresolved) != 1 || !strings.Contains(out.Unresolved[0].Raw, "ghost.md") {
@@ -59,7 +61,7 @@ func TestCheck_BareFilenameOnADirectoryLineIsAReference(t *testing.T) {
 		"docsrefs-allowlist.txt": "",
 	})
 	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
-	if !errors.Is(err, ErrUnresolvedReferences) {
+	if err != nil || out.Verdict() != verdict.Fail {
 		t.Fatalf("a bare filename on a .claude/rules/ line must be treated as a reference; got err=%v", err)
 	}
 	if len(out.Unresolved) != 1 || !strings.Contains(out.Unresolved[0].Raw, "ghost.md") {
@@ -102,7 +104,7 @@ func TestCheck_DanglingADRRefFails(t *testing.T) {
 		"docsrefs-allowlist.txt": "",
 	})
 	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
-	if !errors.Is(err, ErrUnresolvedReferences) {
+	if err != nil || out.Verdict() != verdict.Fail {
 		t.Fatalf("an ADR cited by Go code and documented nowhere must fail; got %v", err)
 	}
 	if len(out.Unresolved) != 1 || out.Unresolved[0].Raw != "ADR-9999" {
@@ -144,8 +146,9 @@ func TestCheck_ADRDocumentedAnywhereResolves(t *testing.T) {
 
 func TestCheck_AllowlistedRefPasses(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"CLAUDE.md":              "Read `.claude/rules/ghost.md`.\n",
-		"docsrefs-allowlist.txt": "rule | .claude/rules/ghost.md | " + future() + " | decisao pendente do dono\n",
+		".claude/rules/present.md": "x\n", // the kit is installed
+		"CLAUDE.md":                "Read `.claude/rules/ghost.md`.\n",
+		"docsrefs-allowlist.txt":   "rule | .claude/rules/ghost.md | " + future() + " | owner decision pending\n",
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
 		t.Errorf("an allowlisted reference within its sunset must pass; got %v", err)
@@ -154,10 +157,11 @@ func TestCheck_AllowlistedRefPasses(t *testing.T) {
 
 func TestCheck_ExpiredAllowlistEntryFails(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"CLAUDE.md":              "Read `.claude/rules/ghost.md`.\n",
-		"docsrefs-allowlist.txt": "rule | .claude/rules/ghost.md | " + past() + " | prazo vencido\n",
+		".claude/rules/present.md": "x\n", // the kit is installed
+		"CLAUDE.md":                "Read `.claude/rules/ghost.md`.\n",
+		"docsrefs-allowlist.txt":   "rule | .claude/rules/ghost.md | " + past() + " | deadline passed\n",
 	})
-	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); !errors.Is(err, ErrUnresolvedReferences) {
+	if out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil || out.Verdict() != verdict.Fail || len(out.Unresolved) == 0 {
 		t.Errorf("an expired entry must stop exempting; got %v", err)
 	}
 }
@@ -165,8 +169,9 @@ func TestCheck_ExpiredAllowlistEntryFails(t *testing.T) {
 // EC-9: the sunset date is inclusive — it expires the day AFTER.
 func TestCheck_SunsetTodayStillPasses(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"CLAUDE.md":              "Read `.claude/rules/ghost.md`.\n",
-		"docsrefs-allowlist.txt": "rule | .claude/rules/ghost.md | " + today() + " | ultimo dia\n",
+		".claude/rules/present.md": "x\n", // the kit is installed
+		"CLAUDE.md":                "Read `.claude/rules/ghost.md`.\n",
+		"docsrefs-allowlist.txt":   "rule | .claude/rules/ghost.md | " + today() + " | last day\n",
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
 		t.Errorf("the sunset date is inclusive; got %v", err)
@@ -179,10 +184,10 @@ func TestCheck_SunsetTodayStillPasses(t *testing.T) {
 func TestCheck_MalformedAllowlistIsAnError(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"CLAUDE.md":              "x\n",
-		"docsrefs-allowlist.txt": "rule | .claude/rules/ghost.md | sem-data\n",
+		"docsrefs-allowlist.txt": "rule | .claude/rules/ghost.md | no-date\n",
 	})
-	_, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
-	if !errors.Is(err, ErrMalformedAllowlist) {
+	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
+	if err != nil || !errors.Is(out.MalformedAllowlist, ErrMalformedAllowlist) || out.Verdict() != verdict.Fail {
 		t.Errorf("a malformed allowlist line must be a typed error, never ignored; got %v", err)
 	}
 }
@@ -191,7 +196,7 @@ func TestCheck_AllowlistCommentsAndBlanksAreSkipped(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"CLAUDE.md":                "Read `.claude/rules/present.md`.\n",
 		".claude/rules/present.md": "x\n",
-		"docsrefs-allowlist.txt":   "# comentario\n\n   \n",
+		"docsrefs-allowlist.txt":   "# comment\n\n   \n",
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
 		t.Errorf("comments and blank lines are not entries; got %v", err)
@@ -206,7 +211,7 @@ func TestCheck_CleanTreePasses(t *testing.T) {
 		".claude/rules/present.md": "x\n",
 		"pkg/a/a.go":               "package a\n\n// per ADR-0042.\nconst A = 1\n",
 		"docs/d.md":                "ADR-0042 says so\n",
-		"docsrefs-allowlist.txt":   "# nada isento\n",
+		"docsrefs-allowlist.txt":   "# nothing exempt\n",
 	})
 	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
 	if err != nil {
@@ -247,41 +252,55 @@ func TestCheck_EmptyTreeIsAFailure(t *testing.T) {
 // broken must report the broken references, never an empty scan.
 func TestCheck_BrokenRefsBeatTheEmptyScanFloor(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"CLAUDE.md":              "Read `.claude/rules/ghost.md`.\n",
-		"docsrefs-allowlist.txt": "",
+		".claude/rules/present.md": "x\n", // the kit is installed
+		"CLAUDE.md":                "Read `.claude/rules/ghost.md`.\n",
+		"docsrefs-allowlist.txt":   "",
 	})
-	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); !errors.Is(err, ErrUnresolvedReferences) {
+	if out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil || out.Verdict() != verdict.Fail || len(out.Unresolved) == 0 {
 		t.Errorf("broken references must be reported as such, not as an empty scan; got %v", err)
 	}
 }
 
-// #2: the gate must not accept its OWN cycle artifacts as evidence that an ADR
-// exists. Measured in review: the plan that introduced this gate mentions
-// ADR-0024 while explaining that ADR-0024 does not exist, and that mention alone
-// made the gate report it as documented.
-func TestCheck_CycleArtifactsAreNotADRDocumentation(t *testing.T) {
+// The .claude/ tree is gitignored: a mention there reaches nobody who clones,
+// so it must not document an ADR the code cites.
+func TestCheck_MentionUnderGitignoredKitIsNotADRDocumentation(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"CLAUDE.md":                "Read `.claude/rules/present.md`.\n",
-		".claude/rules/present.md": "x\n",
-		"pkg/a/a.go":               "package a\n\n// per ADR-0024.\nconst A = 1\n",
-		// The only mention lives in a plan — a document ABOUT the work, not a
-		// decision record OF the repository.
-		".claude/knowledge-base/plans/some-plan.md": "ADR-0024 does not exist anywhere\n",
-		"docsrefs-allowlist.txt":                    "",
+		"CLAUDE.md":  "x\n",
+		"pkg/a/a.go": "package a\n\n// per ADR-0024.\nconst A = 1\n",
+		".claude/knowledge-base/decisions/2026-01-01-thing.md": "This is ADR-0024.\n",
+		"docsrefs-allowlist.txt":                               "",
 	})
-	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); !errors.Is(err, ErrUnresolvedReferences) {
-		t.Errorf("a mention inside a plan/review/audit must not count as documentation; got %v", err)
+	if out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil || out.Verdict() != verdict.Fail || len(out.Unresolved) == 0 {
+		t.Errorf("a record under .claude/ must not resolve the ADR; got %v", err)
+	}
+}
+
+// Without the installed kit a rules reference is neither confirmed nor
+// refuted: it is reported as not verified and the verdict stays green.
+func TestCheck_RuleRefWithoutInstalledKitIsNotVerified(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"CLAUDE.md":              "Read `.claude/rules/anything.md`.\n",
+		"pkg/a/a.go":             "package a\n\n// per ADR-0042.\nconst A = 1\n",
+		"docs/d.md":              "ADR-0042 says so\n",
+		"docsrefs-allowlist.txt": "",
+	})
+	out, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")})
+	if err != nil {
+		t.Fatalf("an unverifiable rule reference must not fail the gate; got %v", err)
+	}
+	if len(out.NotVerified) != 1 || out.NotVerified[0].Raw != ".claude/rules/anything.md" || out.Checked != 1 {
+		t.Fatalf("want one not-verified rule reference and one checked ADR, got %+v", out)
 	}
 }
 
 // ...but a genuine decision record still counts.
 func TestCheck_DecisionRecordIsADRDocumentation(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"CLAUDE.md":                "Read `.claude/rules/present.md`.\n",
-		".claude/rules/present.md": "x\n",
-		"pkg/a/a.go":               "package a\n\n// per ADR-0024.\nconst A = 1\n",
-		".claude/knowledge-base/decisions/2026-01-01-thing.md": "This is ADR-0024.\n",
-		"docsrefs-allowlist.txt":                               "",
+		"CLAUDE.md":                          "Read `.claude/rules/present.md`.\n",
+		".claude/rules/present.md":           "x\n",
+		"pkg/a/a.go":                         "package a\n\n// per ADR-0024.\nconst A = 1\n",
+		"docs/decisions/2026-01-01-thing.md": "This is ADR-0024.\n",
+		"docsrefs-allowlist.txt":             "",
 	})
 	if _, err := Check(Config{RepoRoot: root, AllowlistPath: filepath.Join(root, "docsrefs-allowlist.txt")}); err != nil {
 		t.Errorf("a real decision record must resolve the ADR; got %v", err)

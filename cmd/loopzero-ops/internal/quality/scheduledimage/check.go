@@ -1,57 +1,38 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package scheduledimage refuses a scheduled manifest whose image has no way to exist.
+// Package scheduledimage refuses an autonomously executed manifest whose image has
+// no way to exist.
 //
-// # O defeito, medido
+// # The defect it closes
 //
-// Quatro CronWorkflows executavam `registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0`, e
-// o registro inteiro devolve `404 registry does not exist`. O item `B-019` registrou isso
-// como "o registro foi deletado" — e a medição de 2026-08-18 encontrou **quatro camadas de
-// ausência**, não uma:
+// Four CronWorkflows ran `registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0`
+// while the registry answered 404, no Dockerfile built loopzero-ops, the build task the
+// values file cited did not exist, and the publication matrix did not list it. No
+// imagePullSecret resolves an image nobody builds, so every run produced a red pod —
+// worse than no automation, because it trains whoever watches the cluster to ignore
+// red.
 //
-//	o registro          `doctl registry get` → 404
-//	o Dockerfile        não existe nenhum para loopzero-ops na árvore
-//	a task de build     não existe — a ÚNICA menção a `task images:build:loopzero-ops` no
-//	                    repositório é o comentário do values.yaml AFIRMANDO que ela existe
-//	a matriz            release-artifacts.yml publica 5 imagens; loopzero-ops não está lá
+// # The criterion
 //
-// Nenhum `imagePullSecret` resolve um registro que não existe, e nenhuma credencial resolve
-// uma imagem que ninguém constrói. O agendamento produzia pod vermelho a cada disparo —
-// e isso é pior que automação ausente, porque treina quem olha o cluster a ignorar vermelho.
+// The gate judges OUR image used by an autonomously executed resource: CronWorkflow,
+// CronJob and WorkflowTemplate (event-triggered). What they share is that the
+// failure surfaces far from whoever caused it. A third-party image is not ours to
+// publish and is not judged.
 //
-// # O critério, e por que ele é este
+// The check is hermetic: our images are compared against this tree's publication
+// matrix, never against the registry — probing a registry needs network and
+// credentials at push time, and a 401 does not tell absent from unauthorised.
 //
-// O gate julga **imagem nossa usada por recurso agendado**. Terceiro não é responsabilidade
-// nossa publicar: medido nesta árvore, dos **7** manifestos agendados, **6** usam imagem de
-// terceiro (`curlimages/curl`, `bitnami/kubectl`, `quay.io/openbao/openbao`,
-// `ghcr.io/openbao/openbao-snapshot-agent`) e **1** usa a nossa — justamente a quebrada.
+// # Limits
 //
-// A verificação é **hermética**: compara contra a matriz de publicação desta árvore, nunca
-// contra o registro. Sondar o registro exigiria rede e credencial num portão de push, e um
-// `401` não distingue ausente de não-autorizado — lição medida no `B-016`, cujo token devolve
-// exatamente isso. Um gate que reprova por acidente de rede é desligado.
-//
-// # O que ele NÃO faz
-//
-// Não renderiza o chart. A resolução de `{{ .Values.x.y }}` é textual e cobre a forma que
-// esta árvore usa; uma expressão com condicional, `include` ou `tpl` não é resolvida, e nesse
-// caso o gate reporta a imagem como **não resolvida** em vez de fingir que está tudo certo.
-//
-// E ele mede **o que o chart declara**, não o que um ambiente liga: a sobreposição por
-// `ciCronsEnabled` mora no helmfile. Um chart que embarca `enabled: true` está declarando uma
-// execução, e é isso que é julgado aqui.
-//
-// # Por que `WorkflowTemplate` entra, apesar do nome do gate
-//
-// A primeira versão varria só `CronWorkflow` e `CronJob`. Medido em 2026-08-18: o mesmo
-// `loopzero-ci-workflows` usa a imagem impossível em **duas** superfícies — os quatro crons e o
-// `workflowtemplate-quality-gate.yaml`, disparado por PR via o sensor do Gitea. Um gate que
-// cobrisse metade reportaria verde com o defeito idêntico um arquivo ao lado.
-//
-// O que agendamento e disparo por evento compartilham, e é o que decide o critério: a execução
-// é **autônoma**. A falha aparece longe de quem a causou, então ninguém está olhando no momento
-// em que ela acontece — que é exatamente a condição para apodrecer em silêncio.
+// The chart is not rendered. `{{ .Values.x.y }}` (optionally `| default "lit"`),
+// `$var := .Values.x` and
+// `$var := printf "..." .Values.a .Values.b` are resolved textually, which covers
+// the forms this tree uses. Any other expression (a conditional, `include`, `tpl`)
+// stays unresolved, and an image still holding a template expression is reported as
+// UNRESOLVED — never assumed to be a third-party image. The gate measures what the
+// chart declares, not what an environment enables.
 package scheduledimage
 
 import (
@@ -63,28 +44,27 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"gopkg.in/yaml.v3"
 )
 
-// ErrNoPublicationPath means a scheduled manifest uses one of our images that nothing builds.
-var ErrNoPublicationPath = errors.New("recurso agendado usa imagem nossa sem caminho de publicação")
+// ErrNoPublicationPath means an autonomous manifest uses one of our images that
+// nothing in this tree builds, or an image the gate could not resolve.
+var ErrNoPublicationPath = errors.New("an autonomously executed resource uses an image of ours with no publication path")
 
-// ErrNothingScanned means the scan reached no scheduled manifest.
-var ErrNothingScanned = errors.New("nenhuma declaração de execução autônoma varrida — não achar nada não é o mesmo que não achar nada errado")
+// ErrNothingScanned means the scan reached no autonomously executed manifest.
+var ErrNothingScanned = errors.New("no autonomously executed manifest was scanned — finding nothing is not finding nothing wrong")
 
-// ErrMatrixUnreadable means the publication matrix could not be read.
-//
-// Ausência é FALHA: sem a matriz não há como saber o que é publicado, e tratar isso como
-// "nenhuma violação" é exatamente o verde-sobre-nada que este repositório já pagou.
-var ErrMatrixUnreadable = errors.New("matriz de publicação ilegível")
+// ErrMatrixUnreadable means the publication matrix could not be read. Absence is a
+// failure: without the matrix there is no way to know what is published.
+var ErrMatrixUnreadable = errors.New("publication matrix unreadable")
 
 // matrixRelPath is where the published image list lives.
 const matrixRelPath = ".github/workflows/release-artifacts.yml"
 
-// ourRegistries marks an image as ours to publish.
-//
-// Lista fechada de propósito: um prefixo novo entra aqui conscientemente. Uma heurística
-// ("qualquer coisa com loopzero") classificaria `loopzero-` de terceiro como nossa.
+// ourRegistries marks an image as ours to publish. A closed list on purpose: a new
+// prefix is added consciously, where a heuristic ("anything named loopzero") would
+// claim a third party's `loopzero-` image.
 var ourRegistries = []string{
 	"registry.digitalocean.com/loopzero-system/",
 	"ghcr.io/getloopscale/",
@@ -94,10 +74,10 @@ var ourRegistries = []string{
 var (
 	scheduledKindRE = regexp.MustCompile(`(?m)^kind:\s*(CronWorkflow|CronJob|WorkflowTemplate)\s*$`)
 	imageLineRE     = regexp.MustCompile(`(?m)^\s*-?\s*image:\s*(.+)$`)
-	valuesRefRE     = regexp.MustCompile(`\{\{-?\s*\.Values\.([A-Za-z0-9_.]+)\s*-?\}\}`)
-	// A forma que a árvore real usa: a imagem é montada numa VARIÁVEL e só depois usada.
-	// A primeira versão deste gate era cega a ela, e a varredura da população passou pelo
-	// motivo errado — mesma armadilha do B-090.
+	// `{{ .Values.a.b }}`, optionally piped through `default "literal"`.
+	valuesRefRE = regexp.MustCompile(`\{\{-?\s*\.Values\.([A-Za-z0-9_.]+)\s*(?:\|\s*default\s+"([^"]*)"\s*)?-?\}\}`)
+	// The form the real tree uses: the image is assembled in a template variable
+	// and used afterwards.
 	varAssignRE   = regexp.MustCompile(`\{\{-?\s*(\$[A-Za-z0-9_]+)\s*:=\s*(.+?)\s*-?\}\}`)
 	varUseRE      = regexp.MustCompile(`\{\{-?\s*(\$[A-Za-z0-9_]+)(?:\s*\|[^}]*)?\s*-?\}\}`)
 	printfRE      = regexp.MustCompile(`^printf\s+"([^"]*)"\s+(.+)$`)
@@ -105,24 +85,15 @@ var (
 	matrixImageRE = regexp.MustCompile(`"image"\s*:\s*"([^"]+)"`)
 )
 
-// Exemption is an image knowingly without a publication path, with a reason and a sunset.
-//
-// Mesma forma do `publishhygiene` (B-130): sem razão E sem prazo a entrada não declara nada,
-// só cala. O prazo é a função forçante — a dívida não pode envelhecer em silêncio.
+// Exemption is an image knowingly without a publication path. Without a reason AND
+// a sunset an entry declares nothing, it only silences.
 type Exemption struct {
 	Image  string
 	Reason string
 	Sunset string // YYYY-MM-DD
 }
 
-// DefaultExemptions está VAZIA de propósito, e isso é o resultado do B-019.
-//
-// Ela carregou uma entrada por algumas horas em 2026-08-18: `loopzero-ops`, com razão e prazo. A
-// entrada morreu junto com o chart `loopzero-ci-workflows`, aposentado no mesmo dia — o subsistema
-// inteiro executava uma imagem que nada nesta árvore constrói, e mantê-lo exigiria erguer um
-// runner de CI para duplicar o que `hooks/delivery-gate.sh` já roda em todo push.
-//
-// Uma isenção que sobrevive ao defeito que a justificava vira carimbo. Esta saiu com ele.
+// DefaultExemptions is empty on purpose.
 var DefaultExemptions = []Exemption{}
 
 // Config drives the check.
@@ -139,7 +110,7 @@ func (c Config) exemptions() []Exemption {
 	return c.Exemptions
 }
 
-// Finding is one scheduled manifest whose image cannot exist.
+// Finding is one image with no publication path, or one that could not be resolved.
 type Finding struct {
 	Chart string
 	File  string
@@ -147,15 +118,26 @@ type Finding struct {
 	Why   string
 }
 
-// Outcome reports what was established.
+// Outcome reports the scan.
 type Outcome struct {
 	Scanned  int
 	Exempt   int
 	Findings []Finding
 	Reason   string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
 }
 
-// Check scans every chart that ships a scheduled resource.
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
+}
+
+// Check scans every autonomously executed manifest under infra/helm and charts.
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
 	root := cfg.RepoRoot
@@ -168,13 +150,14 @@ func Check(cfg Config) (Outcome, error) {
 		return out, err
 	}
 
-	isento := map[string]bool{}
+	exempt := map[string]bool{}
 	for _, e := range cfg.exemptions() {
 		if strings.TrimSpace(e.Reason) == "" || strings.TrimSpace(e.Sunset) == "" {
-			return out, fmt.Errorf("%w: isenção de %q sem razão ou sem prazo — sem os dois ela não declara nada, só cala",
+			out.Violation = fmt.Errorf("%w: the exemption for %q has no reason or no sunset — without both it declares nothing, it only silences",
 				ErrNoPublicationPath, e.Image)
+			return out, nil
 		}
-		isento[e.Image] = true
+		exempt[e.Image] = true
 	}
 
 	manifests, err := scheduledManifests(root)
@@ -187,40 +170,62 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	for _, m := range manifests {
-		vals := loadValues(filepath.Join(filepath.Dir(filepath.Dir(m)), "values.yaml"))
-		chart := filepath.Base(filepath.Dir(filepath.Dir(m)))
+		chartDir := filepath.Dir(filepath.Dir(m))
+		vals, err := loadValues(filepath.Join(chartDir, "values.yaml"))
+		if err != nil {
+			return out, err
+		}
+		images, err := imagesIn(m, vals)
+		if err != nil {
+			return out, err
+		}
 		rel, _ := filepath.Rel(root, m)
-
-		for _, img := range imagesIn(m, vals) {
-			if !isOurs(img) {
-				continue // terceiro: não é nosso para publicar
+		for _, img := range images {
+			if f, ok := judge(img, published, exempt, &out); ok {
+				f.Chart, f.File = filepath.Base(chartDir), rel
+				out.Findings = append(out.Findings, f)
 			}
-			name := imageName(img)
-			if published[name] {
-				continue
-			}
-			if isento[name] {
-				out.Exempt++
-				continue
-			}
-			out.Findings = append(out.Findings, Finding{
-				Chart: chart, File: rel, Image: img,
-				Why: fmt.Sprintf("%q está sob registro nosso e não aparece em %s — nada nesta árvore a constrói, "+
-					"então nenhum imagePullSecret a resolve. Publique-a, ou aponte o agendamento para uma imagem que exista",
-					name, matrixRelPath),
-			})
 		}
 	}
 
 	sort.Slice(out.Findings, func(i, j int) bool { return out.Findings[i].File < out.Findings[j].File })
 	if len(out.Findings) > 0 {
-		return out, fmt.Errorf("%w (%d): %s", ErrNoPublicationPath, len(out.Findings), out.Findings[0].Why)
+		out.Violation = fmt.Errorf("%w (%d): %s", ErrNoPublicationPath, len(out.Findings), out.Findings[0].Why)
+		return out, nil
 	}
-	out.Reason = fmt.Sprintf("%d declaração(ões) de execução autônoma varrida(s); %d imagem(ns) isenta(s) com razão e prazo", out.Scanned, out.Exempt)
+	out.Reason = fmt.Sprintf("%d autonomously executed manifest(s) scanned; %d image(s) exempt with reason and sunset", out.Scanned, out.Exempt)
 	return out, nil
 }
 
-// publishedImages reads the image names the publication matrix declares.
+// judge decides one image. It returns a finding for an unresolved image or for one
+// of ours that the matrix does not publish, and counts an exempt one.
+func judge(img string, published, exempt map[string]bool, out *Outcome) (Finding, bool) {
+	if strings.Contains(img, "{{") {
+		if exempt[img] {
+			out.Exempt++
+			return Finding{}, false
+		}
+		return Finding{Image: img, Why: fmt.Sprintf("%q still holds a template expression this gate cannot resolve, "+
+			"so it cannot tell whose image it is. Resolve it through .Values (directly or via a $var / printf), "+
+			"or exempt it with a reason and a sunset", img)}, true
+	}
+	if !isOurs(img) {
+		return Finding{}, false // a third-party image is not ours to publish
+	}
+	name := imageName(img)
+	if published[name] {
+		return Finding{}, false
+	}
+	if exempt[name] {
+		out.Exempt++
+		return Finding{}, false
+	}
+	return Finding{Image: img, Why: fmt.Sprintf("%q is under one of our registries and is not in %s — nothing in this "+
+		"tree builds it, so no imagePullSecret resolves it. Publish it, or point the manifest at an image that exists",
+		name, matrixRelPath)}, true
+}
+
+// publishedImages reads the image names the release matrix publishes.
 func publishedImages(path string) (map[string]bool, error) {
 	body, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
@@ -231,19 +236,27 @@ func publishedImages(path string) (map[string]bool, error) {
 		out[m[1]] = true
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("%w: %s não declara imagem nenhuma", ErrMatrixUnreadable, path)
+		return nil, fmt.Errorf("%w: %s declares no image", ErrMatrixUnreadable, path)
 	}
 	return out, nil
 }
 
-// scheduledManifests finds every chart template declaring a scheduled resource.
+// scheduledManifests finds every chart template declaring an autonomously executed
+// resource. A missing subtree (infra/helm or charts) holds nothing; any other walk
+// or read error is returned.
 func scheduledManifests(root string) ([]string, error) {
 	var out []string
 	for _, base := range []string{"infra/helm", "charts"} {
 		dir := filepath.Join(root, base)
 		err := filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() {
-				return nil //nolint:nilerr // subárvore ausente não é violação
+			if err != nil {
+				if p == dir && os.IsNotExist(err) {
+					return filepath.SkipDir
+				}
+				return err
+			}
+			if info.IsDir() {
+				return nil
 			}
 			if !strings.HasSuffix(p, ".yaml") && !strings.HasSuffix(p, ".yml") {
 				return nil
@@ -251,13 +264,11 @@ func scheduledManifests(root string) ([]string, error) {
 			if !strings.Contains(p, string(os.PathSeparator)+"templates"+string(os.PathSeparator)) {
 				return nil
 			}
-			// #nosec G122 -- `p` vem do próprio Walk sobre uma raiz derivada de constante
-			// (`infra/helm`, `charts`) e é apenas LIDO; não há escrita nem execução, e o
-			// pior caso de um symlink é ler um YAML que não é chart — o gate reporta a
-			// imagem, não a segue.
-			body, rerr := os.ReadFile(filepath.Clean(p))
-			if rerr != nil {
-				return nil
+			// #nosec G122 -- p comes from the Walk over a constant-derived root and is
+			// only read; the worst case of a symlink is reading a YAML that is not a chart.
+			body, err := os.ReadFile(filepath.Clean(p))
+			if err != nil {
+				return err
 			}
 			if scheduledKindRE.Match(body) {
 				out = append(out, p)
@@ -265,18 +276,18 @@ func scheduledManifests(root string) ([]string, error) {
 			return nil
 		})
 		if err != nil {
-			return nil, fmt.Errorf("varrendo %s: %w", base, err)
+			return nil, fmt.Errorf("scanning %s: %w", base, err)
 		}
 	}
 	sort.Strings(out)
 	return out, nil
 }
 
-// imagesIn extracts every image the manifest references, resolving `.Values` textually.
-func imagesIn(path string, vals map[string]any) []string {
+// imagesIn extracts every image from a manifest, resolved against the values.
+func imagesIn(path string, vals map[string]any) ([]string, error) {
 	body, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 	vars := templateVars(string(body), vals)
 	var out []string
@@ -285,21 +296,19 @@ func imagesIn(path string, vals map[string]any) []string {
 		raw = resolveVars(raw, vars)
 		out = append(out, resolve(raw, vals))
 	}
-	return out
+	return out, nil
 }
 
-// templateVars resolves `{{- $name := ... }}` assignments in the same file.
-//
-// Cobre as duas formas medidas nesta árvore: atribuição direta de `.Values.x` e
-// `printf "fmt" .Values.a .Values.b`. Qualquer outra fica sem resolver — e sem resolver
-// significa que a imagem aparece como o texto original, visível, em vez de virar uma
-// imagem plausível-porém-falsa que o gate aprovaria.
+// templateVars resolves `{{- $name := ... }}` assignments in the same file: a
+// direct `.Values.x`, and `printf "fmt" .Values.a .Values.b`. Any other form stays
+// unresolved, which keeps the original text visible instead of producing a
+// plausible but false image the gate would approve.
 func templateVars(body string, vals map[string]any) map[string]string {
 	out := map[string]string{}
 	for _, m := range varAssignRE.FindAllStringSubmatch(body, -1) {
-		nome, expr := m[1], strings.TrimSpace(m[2])
+		name, expr := m[1], strings.TrimSpace(m[2])
 		if p := printfRE.FindStringSubmatch(expr); p != nil {
-			formato := p[1]
+			format := p[1]
 			var args []any
 			for _, a := range bareValueRE.FindAllStringSubmatch(p[2], -1) {
 				v, ok := lookup(vals, strings.Split(a[1], "."))
@@ -309,21 +318,22 @@ func templateVars(body string, vals map[string]any) map[string]string {
 				}
 				args = append(args, v)
 			}
-			if args != nil && strings.Count(formato, "%") == len(args) {
-				out[nome] = fmt.Sprintf(formato, args...)
+			if args != nil && strings.Count(format, "%") == len(args) {
+				out[name] = fmt.Sprintf(format, args...)
 			}
 			continue
 		}
 		if a := bareValueRE.FindStringSubmatch(expr); a != nil && expr == "."+"Values."+a[1] {
 			if v, ok := lookup(vals, strings.Split(a[1], ".")); ok {
-				out[nome] = fmt.Sprintf("%v", v)
+				out[name] = fmt.Sprintf("%v", v)
 			}
 		}
 	}
 	return out
 }
 
-// resolveVars replaces `{{ $name | quote }}` with the resolved assignment.
+// resolveVars replaces `{{ $name }}` and `{{ $name | quote }}` with the value, or
+// leaves the reference when the variable is unknown.
 func resolveVars(raw string, vars map[string]string) string {
 	return varUseRE.ReplaceAllStringFunc(raw, func(ref string) string {
 		m := varUseRE.FindStringSubmatch(ref)
@@ -337,18 +347,20 @@ func resolveVars(raw string, vars map[string]string) string {
 	})
 }
 
-// resolve replaces `{{ .Values.a.b }}` with the value, leaving unresolved forms visible.
-//
-// Deixar o texto original quando não resolve é deliberado: uma expressão com condicional ou
-// `include` não vira imagem plausível-porém-falsa, e o operador vê o que o gate viu.
+// resolve replaces `{{ .Values.a.b }}` with the value — or with the literal of a
+// `| default "..."` when the value is unset — leaving unresolved forms visible so
+// the operator sees what the gate saw.
 func resolve(raw string, vals map[string]any) string {
 	return valuesRefRE.ReplaceAllStringFunc(raw, func(ref string) string {
 		m := valuesRefRE.FindStringSubmatch(ref)
 		if m == nil {
 			return ref
 		}
-		if v, ok := lookup(vals, strings.Split(m[1], ".")); ok {
+		if v, ok := lookup(vals, strings.Split(m[1], ".")); ok && fmt.Sprintf("%v", v) != "" {
 			return fmt.Sprintf("%v", v)
+		}
+		if m[2] != "" {
+			return m[2]
 		}
 		return ref
 	})
@@ -369,16 +381,22 @@ func lookup(vals map[string]any, path []string) (any, bool) {
 	return cur, true
 }
 
-func loadValues(path string) map[string]any {
+// loadValues reads the chart's values.yaml. A chart without one has no values; a
+// values file that cannot be read or parsed is an error — resolving images against
+// it silently as empty would leave them unresolved for the wrong reason.
+func loadValues(path string) (map[string]any, error) {
 	body, err := os.ReadFile(filepath.Clean(path))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 	var out map[string]any
-	if yaml.Unmarshal(body, &out) != nil {
-		return nil
+	if err := yaml.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
-	return out
+	return out, nil
 }
 
 // isOurs reports whether we are the ones who must publish this image.

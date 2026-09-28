@@ -20,8 +20,9 @@ import "fmt"
 //   - 7 charts whose `values.yaml` declares no `image.digest`. The template is
 //     already correct — it defers to `loopzero-common.image`, which prefers a digest
 //     and falls back to the tag. What is missing is the VALUE, and the gate's own
-//     message says who owns it: *"o publicador de imagens é quem o produz — um
-//     digest fixado à mão vira mentira na próxima publicação"*.
+//     message says who owns it (translated from the original Portuguese): *"the
+//     image publisher is who produces it — a digest pinned by hand becomes a lie
+//     at the next publication"*.
 //
 // One flag over both meant the only two settings were "fail on seven things
 // nobody can fix today" and "warn on everything" — and the second is what shipped,

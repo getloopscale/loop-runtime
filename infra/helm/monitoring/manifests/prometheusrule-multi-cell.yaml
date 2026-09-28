@@ -5,7 +5,7 @@
 # canary stages 1-2 (T5.6/T5.7) so on-call has signal from minute zero.
 #
 # Alerts here pair 1:1 with metrics emitted from
-# api/internal/metrics/metrics.go (CellRoutingDecisions, CellHealth,
+# api/internal/metrics/cell_metrics.go (CellRoutingDecisions, CellHealth,
 # CellCapacityPods, ClusterCredentialStatus) and from the existing
 # Cell metrics (CellTenantCount, CellDiscoveryCount, OrphanedTenants —
 # from MEET-053 / ADR-0008).

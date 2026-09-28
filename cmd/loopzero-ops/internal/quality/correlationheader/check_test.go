@@ -4,10 +4,13 @@
 package correlationheader
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 func writeFile(t *testing.T, root, rel, content string) {
@@ -22,11 +25,11 @@ func writeFile(t *testing.T, root, rel, content string) {
 }
 
 // TestCheck_FlagsLegacyHeader: file using r.Header.Get("X-Correlation-ID")
-// in routes/ → gate fails, error names the file + line + literal.
+// in an HTTP package → gate fails, error names the file + line + literal.
 func TestCheck_FlagsLegacyHeader(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/promote.go",
-		`package routes
+	writeFile(t, root, "api/internal/release/releasehttp/promote.go",
+		`package releasehttp
 
 import "net/http"
 
@@ -39,13 +42,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if out.Pass {
-		t.Fatal("X-Correlation-ID in routes/ MUST fail the gate")
+	if out.Pass() {
+		t.Fatal("X-Correlation-ID in an HTTP package MUST fail the gate")
 	}
-	if len(out.Violations) != 1 {
-		t.Fatalf("expected exactly 1 violation, got %d: %v", len(out.Violations), out.Violations)
+	if len(out.Findings) != 1 {
+		t.Fatalf("expected exactly 1 violation, got %d: %v", len(out.Findings), out.Findings)
 	}
-	v := out.Violations[0]
+	v := out.Findings[0]
 	if !strings.Contains(v, "promote.go") || !strings.Contains(v, `"X-Correlation-ID"`) {
 		t.Errorf("violation must name file + literal; got %q", v)
 	}
@@ -59,8 +62,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 // header. This is the discipline that prevents future drift.
 func TestCheck_FlagsCanonicalHeader(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/builds.go",
-		`package routes
+	writeFile(t, root, "api/internal/release/releasehttp/builds.go",
+		`package releasehttp
 
 import "net/http"
 
@@ -73,11 +76,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if out.Pass {
-		t.Fatal(`r.Header.Get("Correlation-ID") in routes/ MUST fail (use helper)`)
+	if out.Pass() {
+		t.Fatal(`r.Header.Get("Correlation-ID") in an HTTP package MUST fail (use helper)`)
 	}
-	if !strings.Contains(out.Violations[0], `"Correlation-ID"`) {
-		t.Errorf("violation must name the literal; got %v", out.Violations)
+	if !strings.Contains(out.Findings[0], `"Correlation-ID"`) {
+		t.Errorf("violation must name the literal; got %v", out.Findings)
 	}
 }
 
@@ -85,8 +88,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 // correlation.Read(r) instead of r.Header.Get(...) passes cleanly.
 func TestCheck_AllowsHelperReceiver(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/promote.go",
-		`package routes
+	writeFile(t, root, "api/internal/release/releasehttp/promote.go",
+		`package releasehttp
 
 import (
 	"net/http"
@@ -102,8 +105,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if !out.Pass {
-		t.Fatalf("correlation.Read(r) MUST pass; got %v", out.Violations)
+	if !out.Pass() {
+		t.Fatalf("correlation.Read(r) MUST pass; got %v", out.Findings)
 	}
 }
 
@@ -111,8 +114,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 // literals (e.g., httptest request fixtures); not gate-flagged.
 func TestCheck_IgnoresTestFiles(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/promote_test.go",
-		`package routes
+	writeFile(t, root, "api/internal/release/releasehttp/promote.go", "package releasehttp\n")
+	writeFile(t, root, "api/internal/release/releasehttp/promote_test.go",
+		`package releasehttp
 
 import (
 	"net/http"
@@ -133,8 +137,8 @@ func TestPromote_Header(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if !out.Pass {
-		t.Errorf("_test.go reference MUST NOT trip gate; got %v", out.Violations)
+	if !out.Pass() {
+		t.Errorf("_test.go reference MUST NOT trip gate; got %v", out.Findings)
 	}
 }
 
@@ -142,8 +146,8 @@ func TestPromote_Header(t *testing.T) {
 // (or any non-correlation header) is OUT OF gate scope.
 func TestCheck_IgnoresOtherHeaders(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/proxy.go",
-		`package routes
+	writeFile(t, root, "api/internal/release/releasehttp/proxy.go",
+		`package releasehttp
 
 import "net/http"
 
@@ -156,8 +160,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if !out.Pass {
-		t.Errorf("X-Forwarded-For MUST be ignored; got %v", out.Violations)
+	if !out.Pass() {
+		t.Errorf("X-Forwarded-For MUST be ignored; got %v", out.Findings)
 	}
 }
 
@@ -167,8 +171,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 // callers MUST use the helper anyway.
 func TestCheck_IgnoresVariableArg(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "api/internal/routes/dynamic.go",
-		`package routes
+	writeFile(t, root, "api/internal/release/releasehttp/dynamic.go",
+		`package releasehttp
 
 import "net/http"
 
@@ -182,8 +186,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if !out.Pass {
-		t.Errorf("variable arg MUST NOT trip gate; got %v", out.Violations)
+	if !out.Pass() {
+		t.Errorf("variable arg MUST NOT trip gate; got %v", out.Findings)
 	}
 }
 
@@ -193,6 +197,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 // READ from context after middleware ran.
 func TestCheck_IgnoresOutsideRoutes(t *testing.T) {
 	root := t.TempDir()
+	writeFile(t, root, "api/internal/release/releasehttp/handler.go", "package releasehttp\n")
 	writeFile(t, root, "api/internal/middleware/correlation.go",
 		`package middleware
 
@@ -210,7 +215,25 @@ func Middleware(next http.Handler) http.Handler {
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
 	}
-	if !out.Pass {
-		t.Errorf("middleware/ MUST be out of scope; got %v", out.Violations)
+	if !out.Pass() {
+		t.Errorf("middleware/ MUST be out of scope; got %v", out.Findings)
+	}
+}
+
+// A root with no HTTP package is a misconfigured run, not a clean one.
+func TestCheck_MissingHandlerTreeIsAnError(t *testing.T) {
+	_, err := Check(Config{RepoRoot: t.TempDir()})
+	if !errors.Is(err, scanresult.ErrNothingScanned) {
+		t.Fatalf("want ErrNothingScanned, got %v", err)
+	}
+}
+
+// A handler tree holding only tests scanned no production file.
+func TestCheck_HandlerTreeWithOnlyTestsIsAnError(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "api/internal/release/releasehttp/a_test.go", "package releasehttp\n")
+	_, err := Check(Config{RepoRoot: root})
+	if !errors.Is(err, scanresult.ErrNothingScanned) {
+		t.Fatalf("want ErrNothingScanned, got %v", err)
 	}
 }

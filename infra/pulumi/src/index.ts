@@ -15,12 +15,11 @@
 
 import * as pulumi from "@pulumi/pulumi";
 import { loadStackConfig } from "./config/stack";
-import { createInfra, resolveProvider } from "./components/infra";
+import { createInfra } from "./components/infra";
 import { createStaticDelivery, StaticDeliveryOutput } from "./providers/cloudflare/static-delivery";
 import { createTunnel, TunnelOutput } from "./providers/cloudflare/tunnel";
 import { resolveOrphans, OrphanLookupResult } from "./core/adopt-or-create";
 import { resourceName } from "./core/naming";
-import { installMgmtRedisHa } from "./components/mgmt-redis-ha";
 import {
   createServiceAuthEd25519,
   ServiceAuthEd25519Outputs,
@@ -36,7 +35,6 @@ import {
 
 // --- Configuration ---
 const config = loadStackConfig();
-resolveProvider(config.provider, config); // factory side-effects only (provider registration)
 
 // --- Pre-flight: Adopt-or-create lookups (idempotency) ---
 const baseName = resourceName({
@@ -63,11 +61,6 @@ if (config.cfAccountId && config.cfZoneId) {
 
 // --- Phase 1: Base Infrastructure ---
 const infra = createInfra(config, orphans);
-
-// --- Phase 1.6: DO Managed Valkey for Harbor HA (CHG-002a / T2.2) ---
-// L1-only resource: DatabaseCluster + DatabaseFirewall. K8s Secret with the
-// credentials is created at L2 by the Helmfile generate-secrets.sh script.
-const harborRedis = installMgmtRedisHa(infra, config);
 
 // --- Phase 1.5: Cloudflare API Resources (no K8s objects) ---
 let staticDelivery: StaticDeliveryOutput | undefined;
@@ -172,12 +165,6 @@ export const cfTunnelId = tunnelOutput?.tunnelId;
 export const cfTunnelToken = tunnelOutput ? pulumi.secret(tunnelOutput.tunnelToken) : undefined;
 export const cfKvNamespaceId = staticDelivery?.kvNamespaceId;
 export const cfWorkerName = staticDelivery?.workerName;
-
-// Harbor managed Redis (DO Valkey) — consumed by L2 Helmfile generate-secrets.sh
-export const harborRedisHost = harborRedis.host;
-export const harborRedisPort = harborRedis.port;
-export const harborRedisPassword = pulumi.secret(harborRedis.password);
-export const harborRedisClusterId = harborRedis.clusterId;
 
 // Service-auth Ed25519 dual-control (ADR 2026-05-13). Component is
 // opt-in via `pulumi config set serviceAuthEd25519Enabled true` AFTER

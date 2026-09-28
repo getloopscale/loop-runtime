@@ -42,7 +42,7 @@ A compromise of the NFS provisioner pod gives an attacker root inside the pod's 
 3. **Host-level controls.** Runtime cluster nodes are managed by DigitalOcean (DOKS); SSH access locked to platform team; node-level audit logs forwarded to Loki.
 4. **NFS export restriction.** Provisioner only exports to in-cluster IPs (no external access). NetworkPolicy restricts ingress to NFS ports (2049/tcp, 111/tcp) from tenant-namespace CIDR only.
 5. **Resource limits.** CPU/memory limits prevent resource exhaustion attacks via NFS.
-6. **Image source.** Image pulled from Harbor, signed by cosign (key-based today; keyless post-INF-G16 cutover).
+6. **Image source.** The upstream chart's default image, pulled from its vendor registry. This item used to say "pulled from Harbor, signed by cosign"; neither held — no values override pointed the image at Harbor, and Harbor was retired on 2026-09-25 (docs/decisions.md, "Retire Harbor").
 
 ### Review trigger
 

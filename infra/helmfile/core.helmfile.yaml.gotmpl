@@ -15,60 +15,22 @@
 #   LOOPZERO_BUCKET_NAME, LOOPZERO_BUCKET_ENDPOINT, LOOPZERO_SPACES_KEY, LOOPZERO_SPACES_SECRET
 #   LOOPZERO_CF_KV_NAMESPACE, LOOPZERO_CF_TUNNEL_TOKEN
 
-environments:
-  dev:
-    values:
-      - environments/dev.yaml
-  prod:
-    values:
-      - environments/prod.yaml
-  standalone:
-    # Self-hosting profile — same charts, single cluster. ADR D6.
-    values:
-      - environments/standalone.yaml
-  standalone-multi:
-    # end-to-end-deploy-validation-plan T0.3 — 3 separate k3d clusters in
-    # 1 host (mgmt + build + workload). Used for local E2E validation.
-    values:
-      - environments/standalone-multi.yaml
-  standalone-public:
-    # T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
-    # Same topology as standalone-multi, but configured for the local-Caddy
-    # public-DNS demo flow (app/cloud/auth.loopzero.example via Let's Encrypt).
-    # Retired as the default of `task infra:install:core-dashboard-only` by
-    # B-165 (B-025 removed its hostnames from infra/local/Caddyfile, leaving
-    # no edge). Kept and still reachable with an explicit ENV=standalone-public.
-    values:
-      - environments/standalone-public.yaml
-  dev-public:
-    # T2.1 of plan 2026-06-04-dev-public-domain-canonicalization.
-    # Variant of standalone-public using *-dev.loopzero.example hostnames so
-    # dev infra can coexist with future prod *.loopzero.example cutover.
-    # Used by `task dev-public:bootstrap` + `LOOPZERO_HELMFILE_ENV=dev-public task setup`.
-    values:
-      - environments/dev-public.yaml
-  drill:
-    # MEET-ASYNC-AMENDMENT-2026-05-12-003 + active-execution-plan §2.2 —
-    # pre-prod chaos + maturity validation on DOKS cluster provisioned by
-    # infra/pulumi-drill/ stack. Bootstrap order:
-    #   1. cd infra/pulumi-drill && pulumi up
-    #   2. Configure kubeconfig from stack output
-    #   3. helmfile -f core.helmfile.yaml.gotmpl -e drill sync
-    values:
-      - environments/drill.yaml
+# The environments are declared once, in environments.yaml.
+bases:
+  - environments.yaml
 
 ---
 helmDefaults:
-  # O cluster deste plano, declarado onde o plano vive.
+  # This plane's cluster, declared where the plane lives.
   #
-  # Sem esta linha, um `helmfile sync` SEM --kube-context nao herda nada do
-  # arquivo: ele usa o contexto ATIVO do kubectl. Medido contra helmfile 1.1.6.
-  # Foi esse o defeito que o B-024 pagou noutro lugar — um seed operou o cluster
-  # errado e a mensagem de erro culpou o recurso ausente, nao o cluster.
+  # Without this line, a `helmfile sync` WITHOUT --kube-context inherits nothing
+  # from the file: it uses the ACTIVE kubectl context. Measured against helmfile
+  # 1.1.6. That was the defect B-024 paid for elsewhere — a seed operated on the
+  # wrong cluster and the error message blamed the missing resource, not the cluster.
   #
-  # A flag CONTINUA vencendo quando passada (medido: sobrescreve em silencio,
-  # sem erro). Quem transforma uma divergencia em reprovacao e o gate
-  # `helmfile-context-parity`, nao o helmfile. Ver ADR D1 da fatia slice-3.
+  # The flag STILL wins when passed (measured: it overrides silently, with no
+  # error). What turns a divergence into a failure is the
+  # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
   kubeContext: k3d-loopzero-core
   wait: true
   waitForJobs: true
@@ -98,8 +60,6 @@ repositories:
     url: https://open-telemetry.github.io/opentelemetry-helm-charts
   - name: ory
     url: https://k8s.ory.sh/helm/charts
-  - name: harbor
-    url: https://helm.goharbor.io
   - name: nfs-ganesha
     url: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner/
   - name: metrics-server
@@ -133,13 +93,19 @@ repositories:
 # lint, diff) and required cluster connectivity even in offline validation.
 # Required Secrets:
 #   loopzero-system/{loopzero-db-credentials,gitea-admin,minio-credentials,
-#                harbor-admin,harbor-redis-credentials,loopzero-registry-pull}
+#                loopzero-registry-pull}
 # Apply once: bash infra/helmfile/scripts/generate-secrets.sh <env> mgmt
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # Releases — ordered by sync wave via `needs:`
 # ---------------------------------------------------------------------------
+{{- /* Where this file installs Gitea, in every environment. Every release that
+       talks to Gitea (loopzero-api, the tenant and platform operators) is told from
+       here, instead of each environment overlay restating the address and each
+       drill or heal patching it into the running objects. */}}
+{{- $giteaNamespace := "loopzero-system" }}
+{{- $giteaURL := printf "http://gitea-http.%s.svc.cluster.local:3000" $giteaNamespace }}
 releases:
   # Wave -3: CRDs and observability foundations (no dependencies)
   - name: cert-manager
@@ -252,24 +218,24 @@ releases:
     # parity, CTO Golden Rule #0). In-cluster bitnami redis remains for
     # standalone/local k3d (no DO managed access). Drill bootstrap exports
     # GITEA_REDIS_HOST/PORT/PASSWORD from Pulumi outputs.
-    installed: {{ ne .Environment.Name "drill" }}
+    installed: {{ not .Values.profile.managedRedis }}
     values:
       - ../helm/redis/values.yaml
 
   - name: gitea
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
+    namespace: {{ $giteaNamespace }}
     chart: gitea-charts/gitea
     version: 10.6.0
     needs:
-{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
+{{- if .Values.profile.highAvailability }}
       # B28: NFS RWX storage only required for HA gitea (Cloud profiles with
       # multi-replica). Standalone runs single-replica with local PVC (RWO),
       # which works on any K8s including k3d (no NFS kernel module dep).
       - nfs-system/nfs-server-provisioner
 {{- end }}
-{{- if ne .Environment.Name "drill" }}
+{{- if not .Values.profile.managedRedis }}
       # Drill uses DO Managed Valkey (Bug #15 fix) — no in-cluster gitea-redis.
       - loopzero-system/gitea-redis
 {{- end }}
@@ -292,7 +258,7 @@ releases:
       # works on any K8s). HA on a single-cluster deploy adds operational
       # complexity without real availability gain (cluster failure = both
       # replicas die anyway).
-{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
+{{- if .Values.profile.highAvailability }}
       - ../helm/gitea/values-ha.yaml
 {{- end }}
 
@@ -310,17 +276,46 @@ releases:
       # forcing 16 minio pods + 200Gi raw storage is anti-Rule-10 and causes
       # post-install hook timeouts on k3d (4 pods × 60s init > 60s helm wait).
       # Distributed only applies to LoopZero Cloud profiles.
-{{- if or (eq .Environment.Name "dev") (eq .Environment.Name "prod") }}
+{{- if .Values.profile.highAvailability }}
       - ../helm/minio/values-distributed.yaml
 {{- end }}
-{{- if or (eq .Environment.Name "standalone") (eq .Environment.Name "standalone-multi") }}
+    # MinIO withdrew every binary channel of its community edition (#394): the
+    # chart's quay.io/minio defaults can no longer be pulled. Both images are built
+    # here from pinned source (infra/images/minio, infra/images/clone-runner). A
+    # local registry profile gets the ones `task images:build` pushes; any other
+    # environment takes them from its declared registry prefix — the same place its
+    # clone runner already comes from — and never from the chart's dead default.
+    set:
+{{- if .Values.profile.localRegistry }}
+      - name: image.repository
+        value: "k3d-loopzero-registry:5000/loopzero-minio"
+      - name: image.tag
+        value: "RELEASE.2024-12-18T13-15-44Z"
+      - name: mcImage.repository
+        value: "k3d-loopzero-registry:5000/loopzero-clone-runner"
+      - name: mcImage.tag
+        value: "v0.1.0"
+{{- else }}
+{{- /* The same rule the platform charts follow: an environment that declares a
+       registry prefix pulls from it; one that declares none (standalone self-host)
+       gets the bare image name, as loopzero-api's `repository: loopzero-api` does there. */}}
+{{- $registry := .Values | get "registries.docrPrefix" "" }}
+      - name: image.repository
+        value: "{{ $registry }}loopzero-minio"
+      - name: image.tag
+        value: "RELEASE.2024-12-18T13-15-44Z"
+      - name: mcImage.repository
+        value: "{{ $registry }}loopzero-clone-runner"
+      - name: mcImage.tag
+        value: "v0.1.0"
+{{- end }}
+{{- if .Values.profile.localObjectStore }}
     # Standalone: pin MinIO root password deterministically. The chart leaves
     # rootPassword empty (fail-fast for prod), which makes the official chart
     # auto-generate a RANDOM password — but loopzero-api (infra/tilt/api-deployment.yaml)
     # and static-assets consume the deterministic loopzero-dev-password. Random vs
     # hardcoded => SOURCE_UPLOAD_FAILED (access denied). Same deterministic-creds
     # pattern as PG (T1.3). rootUser=loopzero-admin comes from values.yaml.
-    set:
       - name: rootPassword
         value: "loopzero-dev-password"
 {{- end }}
@@ -334,11 +329,8 @@ releases:
     chart: ../helm/velero
     needs:
       - cert-manager/cert-manager
-{{- if eq .Environment.Name "standalone" }}
-      # Standalone: BSL targets in-cluster MinIO. Wait for MinIO up first.
-      - loopzero-system/minio
-{{- end }}
-{{- if eq .Environment.Name "standalone-multi" }}
+{{- if .Values.profile.localObjectStore }}
+      # BSL targets in-cluster MinIO. Wait for MinIO up first.
       - loopzero-system/minio
 {{- end }}
     values:
@@ -424,38 +416,6 @@ releases:
     values:
       - ../helm/blackbox-exporter/values.yaml
 
-  - name: harbor-redis
-    namespace: loopzero-system
-    chart: bitnami/redis
-    version: 19.6.4
-    # Bug #15 LIVE FIX: drill uses DO Managed Valkey (prod parity).
-    # Harbor in drill connects via LOOPZERO_HARBOR_REDIS_HOST/PASSWORD env vars
-    # set by drill-helmfile-bootstrap.sh from Pulumi outputs.
-    installed: {{ ne .Environment.Name "drill" }}
-    values:
-      - ../helm/redis/values.yaml
-
-  - name: harbor
-    namespace: loopzero-system
-    chart: harbor/harbor
-    version: 1.16.2
-    # Plan 2026-05-19-drill-skills-rigor-restoration Bug #1 (Phase 4 LIVE):
-    # Harbor has RWO PVCs (jobservice + registry) that block helm upgrade
-    # rolling restarts — new pod can't attach until old pod releases PVC.
-    # Drill uses DOCR directly (not Harbor as registry proxy) per Bug #16.
-    # Disable Harbor in drill — saves provision time + eliminates PVC conflict.
-    # Production keeps Harbor for image scanning + offline cache.
-    installed: {{ ne .Environment.Name "drill" }}
-    needs:
-      - cert-manager/cert-manager
-      - traefik/traefik
-      - loopzero-system/minio
-{{- if ne .Environment.Name "drill" }}
-      - loopzero-system/harbor-redis
-{{- end }}
-    values:
-      - ../helm/harbor/values.yaml
-
   # Wave 1: Identity (depends on database via env vars)
   # B22 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — When inClusterPostgres=true
   # (standalone profile), ory-kratos must wait for postgresql release to
@@ -495,7 +455,9 @@ releases:
     labels:
       profile: dashboard-only
     namespace: loopzero-system
-    chart: ../helm/loopzero-api
+    # The published chart, installed with charts/loopzero-api/values-bootstrap.yaml: there is
+    # one loopzero-api chart (docs/decisions.md, "One chart per bootstrap/published pair").
+    chart: ../../charts/loopzero-api
     # STANDALONE (local k3d): loopzero-api is owned by `tilt up` (self-contained
     # infra/tilt/api-deployment.yaml + docker_build hash-tagged image). The
     # helmfile chart uses image :latest which is NEVER built locally (only the
@@ -524,16 +486,14 @@ releases:
       - loopzero-system/minio
       - loopzero-auth/ory-kratos
     values:
-      - ../helm/loopzero-api/values.yaml
-      # B77 (end-to-end-deploy-validation-plan iter 11) — overlay only in
-      # standalone-multi to use locally-built image with GITEA_ORG support.
-{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../helm/loopzero-api/values-standalone-multi.yaml
-{{- end }}
-      # Bug #16 LIVE fix (caught 2026-05-17 iter 7-8): drill env override
-      # for loopzero-api image tag (DOCR :latest doesn't exist — pinned to
-      # REDACTED_SECRET_061). MUST be LAST in values list to win merge precedence.
-      # Layered values per env (T2.2). Drill env JWT_ISSUER + cross-namespace JWKS URL.
+      - ../../charts/loopzero-api/values-bootstrap.yaml
+      - config:
+          giteaUrl: {{ $giteaURL | quote }}
+          # One bucket name for the whole install: loopzero-build-cwts (build.helmfile)
+          # clones from the same environment value.
+          sourceBucket: {{ .Values | get "sourceBucket" "loopzero-builds" | quote }}
+      # Layered values per env (T2.2): image channel, pull secret, per-environment
+      # config. MUST be LAST in the values list to win merge precedence.
       - values/{{ .Environment.Name }}/loopzero-api.yaml.gotmpl
     set:
       # Finding 2026-05-12 — wire env-file `replicas.api` to chart
@@ -576,6 +536,10 @@ releases:
       - loopzero-system/loopzero-crds
     values:
       - ../../charts/loopzero-tenant-operator/values.yaml
+      - config:
+          giteaUrl: {{ $giteaURL | quote }}
+        networkPolicy:
+          giteaNamespace: {{ $giteaNamespace | quote }}
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-tenant-operator/values-standalone-multi.yaml
 {{- end }}
@@ -636,6 +600,8 @@ releases:
       - loopzero-system/loopzero-crds
     values:
       - ../../charts/loopzero-platform-operator/values.yaml
+      - networkPolicy:
+          giteaNamespace: {{ $giteaNamespace | quote }}
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
       - ../../charts/loopzero-platform-operator/values-standalone-multi.yaml
 {{- end }}
@@ -646,12 +612,15 @@ releases:
     labels:
       profile: dashboard-only
     namespace: loopzero-system
-    chart: ../helm/loopzero-cloud
+    # The published chart, installed with charts/loopzero-cloud/values-bootstrap.yaml:
+    # there is one loopzero-cloud chart (docs/decisions.md, "One chart per
+    # bootstrap/published pair").
+    chart: ../../charts/loopzero-cloud
     # Bug #29 LIVE fix (2026-05-17 iter 20): loopzero-cloud image not in DOCR
     # for drill. Skip — drill L2 harness goes through loopzero-api directly,
     # not loopzero-cloud dashboard. Production keeps loopzero-cloud installed.
     # STANDALONE: tilt owns loopzero-cloud (dual-ownership, same as loopzero-api).
-    installed: {{ and (ne .Environment.Name "drill") (ne (.Values | get "clusterRole" "dev") "standalone") }}
+    installed: {{ and .Values.profile.loopzeroCloud (ne (.Values | get "clusterRole" "dev") "standalone") }}
     # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopzero-api at line 482):
     # depends on loopzero-api Ready + loopzero-service-auth Secret; same self-recovery
     # pattern. helmfile sync applies manifests; pod cycles in CrashLoopBackOff
@@ -661,28 +630,22 @@ releases:
       - loopzero-auth/ory-hydra
       - loopzero-system/loopzero-api
     values:
-      - ../helm/loopzero-cloud/values.yaml
-      # CHG-2026-04-30-INFRA-PARITY / T1.3 — local registry override.
-{{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../helm/loopzero-cloud/values-standalone-multi.yaml
-{{- end }}
+      - ../../charts/loopzero-cloud/values-bootstrap.yaml
       # Plan 2026-06-04-dev-public-docr-fix-forward T2.1 — env-specific
-      # overlay (DOCR :dev + do-registry pullSecret for cloud-local envs).
+      # overlay (image channel, pull secret, per-environment URLs).
       - values/{{ .Environment.Name }}/loopzero-cloud.yaml.gotmpl
       # T3.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
-      # Inline values overlay: when env yaml provides publicAuthUrl (the
-      # browser-facing Kratos host), override loopzero-cloud's KRATOS_PUBLIC_URL
-      # so cloud's /v1/auth/session/token uses the public URL when redirecting
-      # the browser back to Kratos. Similarly, BILLING_RETURN_URL drives Stripe
-      # checkout success_url back to the dashboard.
+      # When the environment provides publicAuthUrl (the browser-facing Kratos
+      # host), the cloud API redirects the browser back to Kratos through it
+      # (/v1/auth/session/token); uiBaseUrl is where Stripe checkout returns.
       # v1.1 EC-07: if-hasKey pattern (not | default) because empty string is
       # NOT treated as zero-value in Go templates.
-      - env:
+      - config:
 {{- if hasKey .Values "publicAuthUrl" }}
-          KRATOS_PUBLIC_URL: {{ .Values.publicAuthUrl | trimSuffix "/" | quote }}
+          kratosPublicUrl: {{ .Values.publicAuthUrl | trimSuffix "/" | quote }}
 {{- end }}
 {{- if hasKey .Values "uiBaseUrl" }}
-          BILLING_RETURN_URL: {{ .Values.uiBaseUrl | trimSuffix "/" | quote }}
+          billingReturnUrl: {{ .Values.uiBaseUrl | trimSuffix "/" | quote }}
 {{- end }}
 
   # Wave 90: Chaos engineering (active-execution-plan §3.A.4, iter 2)
@@ -738,10 +701,10 @@ releases:
     # same gate dogfood and chaos use). Matches the standalone reasoning.
     # PROD keeps smoke-test installed (no bootstrap chain race: prod Secrets
     # exist at sync time via External Secrets Operator + manual seeded SOPS).
-    installed: {{ and (ne .Environment.Name "drill") (ne .Environment.Name "dev-public") (ne (.Values | get "clusterRole" "dev") "standalone") }}
+    installed: {{ and .Values.profile.smokeTest (ne (.Values | get "clusterRole" "dev") "standalone") }}
     needs:
       - loopzero-system/loopzero-api
-{{- if ne .Environment.Name "drill" }}
+{{- if .Values.profile.loopzeroCloud }}
       - loopzero-system/loopzero-cloud
 {{- end }}
       - loopzero-system/loopzero-tenant-operator
@@ -765,7 +728,7 @@ releases:
   # this cluster and would block the sync.
   - name: admission-policies-mgmt
     namespace: loopzero-system
-    chart: ../helm/admission-policies
+    chart: ../../charts/loopzero-admission-policies
     values:
-      - ../helm/admission-policies/values.yaml
-      - ../helm/admission-policies/values-mgmt.yaml
+      - ../../charts/loopzero-admission-policies/values.yaml
+      - ../../charts/loopzero-admission-policies/values-mgmt.yaml

@@ -1,8 +1,8 @@
 # The LoopZeroKit ↔ LoopZeroCloud seam
 
 **Mandatory pre-read.** Consult this before editing anything that touches
-`api/internal/routes/source/source.go`, `api/internal/buildplane/source/services.schema.json`,
-`api/internal/buildplane/source/validator_*.go`, `api/internal/manifests/renderer.go`, or
+`api/internal/source/sourcehttp/source.go`, `api/internal/source/services.schema.json`,
+`api/internal/source/validator_*.go`, `api/internal/manifests/renderer.go`, or
 the `services_json` / multipart upload contract.
 
 This document used to be mirrored on the LoopZeroKit side. **That mirror no longer exists
@@ -36,11 +36,14 @@ someone adopt LoopZeroKit without adopting the platform.
        part 1: services_json      <- order is part of the contract
        part 2: bundle
 
-3. api/internal/routes/source/source.go — SourceHandler.Upload
-     a. peekFirstMultipartFieldName(r)      != "services_json" -> 400 MULTIPART_FIELD_ORDER
-     b. r.ParseMultipartForm(maxInMemoryMultipart = 32 MB)
-     c. services_json > 256 KB              -> 413 SERVICES_JSON_TOO_LARGE
-     d. source.ValidateServicesJSON(...)    -> 422 VALIDATION_FAILED
+3. api/internal/source/sourcehttp/source.go — SourceHandler.Upload
+     readUploadForm(r) streams the body with r.MultipartReader():
+     a. first part is not services_json     -> 400 MULTIPART_FIELD_ORDER
+                                               (a loopzero_yaml first part -> 422 E-009)
+     b. services_json > 256 KB              -> 413 SERVICES_JSON_TOO_LARGE
+     c. source.ValidateServicesJSONNative   -> 422 VALIDATION_FAILED
+        (all three happen BEFORE a single bundle byte is read)
+     d. bundle part spooled to a temp file  -> 413 PAYLOAD_TOO_LARGE past 500 MB
      e. tenant/project not DNS-1123         -> 400 INVALID_TENANT_OR_PROJECT
      f. push to Gitea + object store        -> 500 SOURCE_UPLOAD_FAILED on failure
 ```
@@ -69,21 +72,22 @@ Any future change that breaks one of these is a regression.
 
 - **`tenantID` and `projectID` MUST match DNS-1123** before flowing into `fmt.Sprintf` repo
   names. Single canonical regex `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`; sentinel
-  `source.ErrInvalidTenantOrProject` (`api/internal/buildplane/source/gitea_store.go`).
+  `source.ErrInvalidTenantOrProject` (`api/internal/source/gitea_store.go`).
 - **`env` keys MUST match POSIX shape AND reject reserved keys.** Schema:
   `patternProperties ^[A-Z_][A-Z0-9_]*$` + `maxLength 4096` + `maxProperties 64`. Blocklist:
   `PATH`, `HOME`, `USER`, `SHELL`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, plus prefixes `DYLD_*`,
-  `KUBERNETES_*`, `LOOPZERO_*` (`api/internal/buildplane/source/validator_env.go`).
+  `KUBERNETES_*`, `LOOPZERO_*` (`api/internal/source/validator_env.go`).
 
 ### Wire
 
 - **Multipart field order is part of the contract** — `services_json` first, `bundle`
-  second. Enforced by `peekFirstMultipartFieldName`, which clones `r.GetBody` and caps the
-  peek at 16 KB so a client cannot drag the process into reading the whole body twice.
-  **The check is best-effort by construction:** when `r.GetBody` is nil the body is not
-  repeatable, the function returns `("", nil)`, and the handler treats the order as
-  conformant. Order is a contract the client must honour, not one the server can always
-  prove.
+  second. Enforced by `readUploadForm` (`api/internal/source/sourcehttp/upload_form.go`),
+  which streams the body part by part and refuses a first part that is not
+  `services_json` before reading anything else. It replaced a `GetBody`-based peek that
+  was unreachable for real traffic: `net/http` never sets `GetBody` on a server request,
+  so the order went unenforced while a test that set `GetBody` by hand stayed green. The
+  order test now goes through a real `httptest.Server`
+  (`api/tests/unit/source_upload_field_limits_test.go`).
 - **`services_json` is capped at 256 KB; `bundle` at 500 MB.** Constants
   `maxServicesJSONSize`, `maxBundleSize`.
 
@@ -91,10 +95,6 @@ Any future change that breaks one of these is a regression.
 
 - **`manifests.Render()` MUST return `(string, error)` — never panic.** All production
   callers treat the error as a recoverable build failure.
-- **`RenderOpts.ImageRefFor()` returns an error when there is no ref and no default**,
-  unless `AllowMissingImage=true` (fixture-only escape hatch).
-- **`runtimeToStrategyTable` is an immutable array** (`[...]runtimeToStrategyEntry{...}`),
-  never a `map` — Go maps are not safe for concurrent write+read.
 
 ### CLI (in `../loopzero-cli`)
 

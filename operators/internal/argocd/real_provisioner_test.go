@@ -255,16 +255,17 @@ func TestMergeExistingMetadata_StripsSkipReconcile(t *testing.T) {
 	}
 }
 
-// --- #271: preservação do .status no full-replace -------------------------------
+// --- #271: preserving .status across the full replace -------------------------------
 //
-// O CRD applications.argoproj.io NÃO habilita o subresource `status` (verificado em
-// app-dev 2026-08-08: `kubectl get crd applications.argoproj.io -o
-// jsonpath='{.spec.versions[*].subresources}'` → `{}`). Logo `.status` é campo comum
-// do objeto, e um Update de objeto inteiro montado do zero o APAGA. Medido: sync/health
-// oscilando para vazio a cada poucos segundos. Plano:
+// The applications.argoproj.io CRD does NOT enable the `status` subresource
+// (checked on app-dev 2026-08-08: `kubectl get crd applications.argoproj.io -o
+// jsonpath='{.spec.versions[*].subresources}'` → `{}`). So `.status` is an
+// ordinary field of the object, and an Update of a whole object built from
+// scratch ERASES it. Measured: sync/health flapping to empty every few seconds.
+// Plan:
 // knowledge-base/plans/argocd-application-status-preservation-plan.md
 
-// seedUnstructured monta um objeto do ArgoCD com um .status opcional.
+// seedUnstructured builds an ArgoCD object with an optional .status.
 func seedUnstructured(kind, name string, status map[string]interface{}) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{
@@ -292,9 +293,9 @@ func syncStatusOf(t *testing.T, obj *unstructured.Unstructured) string {
 	return s
 }
 
-// TestEnsureApplication_PreservaStatusExistente reproduz a issue #271: o status que o
-// ArgoCD calculou tem de sobreviver a um reconcile do tenant-operator.
-func TestEnsureApplication_PreservaStatusExistente(t *testing.T) {
+// Reproduces issue #271: the status ArgoCD computed must survive a
+// tenant-operator reconcile.
+func TestEnsureApplication_PreservesTheExistingStatus(t *testing.T) {
 	app := seedUnstructured("Application", "acme-production", map[string]interface{}{
 		"sync":   map[string]interface{}{"status": "Synced"},
 		"health": map[string]interface{}{"status": "Healthy"},
@@ -318,27 +319,27 @@ func TestEnsureApplication_PreservaStatusExistente(t *testing.T) {
 	}
 
 	if s := syncStatusOf(t, got); s != "Synced" {
-		t.Errorf("o .status.sync.status do ArgoCD foi apagado pelo Update: quero %q, veio %q "+
-			"(issue #271 — o CRD não tem subresource status, então o full-replace substitui o campo)",
+		t.Errorf("ArgoCD's .status.sync.status was erased by the Update: want %q, got %q "+
+			"(issue #271 — the CRD has no status subresource, so the full replace overwrites the field)",
 			"Synced", s)
 	}
 	st, _ := got.Object["status"].(map[string]interface{})
 	health, _ := st["health"].(map[string]interface{})
 	if h, _ := health["status"].(string); h != "Healthy" {
-		t.Errorf("o .status.health.status foi apagado: quero %q, veio %q", "Healthy", h)
+		t.Errorf(".status.health.status was erased: want %q, got %q", "Healthy", h)
 	}
 
-	// O Update precisa ter de fato acontecido — senão o teste passaria por omissão.
+	// The Update must actually have happened — otherwise the test would pass by omission.
 	spec, _ := got.Object["spec"].(map[string]interface{})
 	source, _ := spec["source"].(map[string]interface{})
 	if pth, _ := source["path"].(string); pth != "production" {
-		t.Errorf("o spec não foi escrito: source.path = %q, quero %q", pth, "production")
+		t.Errorf("the spec was not written: source.path = %q, want %q", pth, "production")
 	}
 }
 
-// TestEnsureAppProject_PreservaStatusExistente cobre EC-5: o AppProject passa pela mesma
-// função de merge mas NÃO tem retry — a cópia é feita fora de qualquer closure.
-func TestEnsureAppProject_PreservaStatusExistente(t *testing.T) {
+// Covers EC-5: the AppProject goes through the same merge function but has NO
+// retry — the copy happens outside any closure.
+func TestEnsureAppProject_PreservesTheExistingStatus(t *testing.T) {
 	proj := seedUnstructured("AppProject", "acme", map[string]interface{}{
 		"sync": map[string]interface{}{"status": "Synced"},
 	})
@@ -361,14 +362,13 @@ func TestEnsureAppProject_PreservaStatusExistente(t *testing.T) {
 		t.Fatalf("get after update: %v", err)
 	}
 	if s := syncStatusOf(t, got); s != "Synced" {
-		t.Errorf("o .status do AppProject foi apagado pelo Update: quero %q, veio %q", "Synced", s)
+		t.Errorf("the AppProject's .status was erased by the Update: want %q, got %q", "Synced", s)
 	}
 }
 
-// TestEnsureApplication_StatusVazioEPreservadoComoVazio cobre EC-4: `status` presente e
-// vazio NÃO é o mesmo que ausente. Uma checagem por len() introduziria exatamente o bug
-// que este teste proíbe.
-func TestEnsureApplication_StatusVazioEPreservadoComoVazio(t *testing.T) {
+// Covers EC-4: a `status` that is present and empty is NOT the same as absent.
+// A len() check would introduce exactly the bug this test forbids.
+func TestEnsureApplication_KeepsAnEmptyStatusEmpty(t *testing.T) {
 	app := seedUnstructured("Application", "acme-staging", map[string]interface{}{})
 	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), app)
 	p := NewRealProvisioner("argocd", client)
@@ -388,17 +388,17 @@ func TestEnsureApplication_StatusVazioEPreservadoComoVazio(t *testing.T) {
 	}
 	st, present := got.Object["status"]
 	if !present {
-		t.Fatalf("a chave status existia (vazia) e sumiu — preservar não é o mesmo que descartar quando parece vazio")
+		t.Fatalf("the status key existed (empty) and vanished — preserving is not discarding what looks empty")
 	}
 	if m, ok := st.(map[string]interface{}); !ok || len(m) != 0 {
-		t.Errorf("status vazio deve continuar vazio; veio %#v", st)
+		t.Errorf("an empty status must stay empty; got %#v", st)
 	}
 }
 
-// TestEnsureApplication_RetryUsaStatusDaReleitura cobre EC-3: `desired` é montado UMA vez
-// fora do closure do retry (real_provisioner.go:284) e reusado entre tentativas. Sob
-// conflito, o status escrito tem de ser o do objeto RELEITO, não o da primeira leitura.
-func TestEnsureApplication_RetryUsaStatusDaReleitura(t *testing.T) {
+// Covers EC-3: `desired` is built ONCE outside the retry closure
+// (real_provisioner.go:284) and reused across attempts. Under a conflict, the
+// status written must be the RE-READ object's, not the first read's.
+func TestEnsureApplication_RetryUsesTheStatusOfTheReread(t *testing.T) {
 	app := seedUnstructured("Application", "acme-production", map[string]interface{}{
 		"sync": map[string]interface{}{"status": "Synced"},
 	})
@@ -408,9 +408,9 @@ func TestEnsureApplication_RetryUsaStatusDaReleitura(t *testing.T) {
 	client.PrependReactor("update", "applications", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		updates++
 		if updates > 1 {
-			return false, nil, nil // segunda tentativa segue o caminho normal
+			return false, nil, nil // the second attempt takes the normal path
 		}
-		// Simula o ArgoCD recalculando o status entre a nossa leitura e a nossa escrita.
+		// Simulates ArgoCD recomputing the status between our read and our write.
 		moved := seedUnstructured("Application", "acme-production", map[string]interface{}{
 			"sync": map[string]interface{}{"status": "OutOfSync"},
 		})
@@ -432,7 +432,7 @@ func TestEnsureApplication_RetryUsaStatusDaReleitura(t *testing.T) {
 		t.Fatalf("EnsureApplication sob conflito: %v", err)
 	}
 	if updates < 2 {
-		t.Fatalf("o reactor de conflito não foi exercitado (updates=%d) — o teste não prova nada", updates)
+		t.Fatalf("the conflict reactor was not exercised (updates=%d) — the test proves nothing", updates)
 	}
 
 	got, err := client.Resource(applicationGVR).Namespace("argocd").
@@ -441,14 +441,14 @@ func TestEnsureApplication_RetryUsaStatusDaReleitura(t *testing.T) {
 		t.Fatalf("get after retry: %v", err)
 	}
 	if s := syncStatusOf(t, got); s != "OutOfSync" {
-		t.Errorf("sob conflito vale o status da RELEITURA: quero %q, veio %q "+
-			"(se a cópia sair de dentro do closure do retry, este teste pega)", "OutOfSync", s)
+		t.Errorf("under a conflict the RE-READ status wins: want %q, got %q "+
+			"(if the copy moves out of the retry closure, this test catches it)", "OutOfSync", s)
 	}
 }
 
-// TestEnsureApplication_CreateNaoInventaStatus é guarda, não regressão: a correção não
-// pode fabricar um `status: null` num recurso que ainda não tem status.
-func TestEnsureApplication_CreateNaoInventaStatus(t *testing.T) {
+// A guard, not a regression: the fix must not fabricate a `status: null` on a
+// resource that has no status yet.
+func TestEnsureApplication_CreateDoesNotInventAStatus(t *testing.T) {
 	client := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 	p := NewRealProvisioner("argocd", client)
 
@@ -466,6 +466,6 @@ func TestEnsureApplication_CreateNaoInventaStatus(t *testing.T) {
 		t.Fatalf("get after create: %v", err)
 	}
 	if _, present := got.Object["status"]; present {
-		t.Errorf("um Application recém-criado não pode ganhar chave status; veio %#v", got.Object["status"])
+		t.Errorf("a newly created Application must not gain a status key; got %#v", got.Object["status"])
 	}
 }

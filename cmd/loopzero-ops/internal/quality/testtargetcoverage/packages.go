@@ -11,31 +11,31 @@ import (
 	"strings"
 )
 
-// # Por que a granularidade passou de módulo para PACOTE
+// # Why the granularity moved from module to PACKAGE
 //
-// `runsTests` respondia *"existe ALGUM `go test` neste módulo?"* — e nunca olhava o
-// padrão. Um alvo `cd infra/tests && go test ./unit/...` marcava o módulo inteiro
-// como coberto.
+// `runsTests` answered *"is there ANY `go test` in this module?"* — and never looked at the
+// pattern. A target `cd infra/tests && go test ./unit/...` marked the whole module
+// as covered.
 //
-// Medido em 2026-08-15 ao executar o `B-092`: `infra/tests` **passava** por causa do
-// `./unit/...`, enquanto `scripts/` (12 arquivos), `config/` (6) e `performance/` (23)
-// não rodavam em alvo nenhum. **41 arquivos de teste invisíveis num módulo que o gate
-// reportava coberto.**
+// Measured on 2026-08-15 while executing `B-092`: `infra/tests` **passed** because of the
+// `./unit/...`, while `scripts/` (12 files), `config/` (6) and `performance/` (23)
+// ran in no target at all. **41 test files invisible in a module the gate
+// reported as covered.**
 //
-// O gate não estava errado no que afirmava; estava errado na granularidade em que
-// afirmava — e é a granularidade que decide o que ele consegue ver.
+// The gate was not wrong in what it claimed; it was wrong in the granularity at which it
+// claimed it — and granularity is what decides what it can see.
 //
-// O custo da mudança foi medido antes de decidir: **todo módulo tem um `go test ./...`
-// exceto `infra/tests`**, e os padrões restritos dos outros são alvos focados
-// ADICIONAIS sobre módulos já cobertos por `./...`. Então a mudança morde num módulo
-// só.
+// The cost of the change was measured before deciding: **every module has a `go test ./...`
+// except `infra/tests`**, and the narrower patterns of the others are ADDITIONAL focused
+// targets over modules already covered by `./...`. So the change bites in one module
+// only.
 
 // testBearingPackages returns every package directory under module that holds a
 // `_test.go`, relative to the module root ("." for the module's own directory).
 //
-// Pacote SEM teste não entra: exigir alvo para ele transformaria o gate num pedido de
-// escrever teste para tudo, que é outra conversa. O que este gate afirma é mais
-// estreito e verificável — *o que existe está sendo rodado*.
+// A package WITHOUT tests is left out: demanding a target for it would turn the gate into a
+// request to write tests for everything, which is a different conversation. What this gate
+// claims is narrower and verifiable — *what exists is being run*.
 func testBearingPackages(root, module string) ([]string, error) {
 	base := filepath.Join(root, module)
 	seen := map[string]bool{}
@@ -47,8 +47,8 @@ func testBearingPackages(root, module string) ([]string, error) {
 			if prunedDirs[d.Name()] {
 				return filepath.SkipDir
 			}
-			// Um submódulo tem go.mod próprio e é auditado como módulo dele.
-			// Contá-lo aqui faria dois módulos disputarem o mesmo pacote.
+			// A submodule has its own go.mod and is audited as a module of its own.
+			// Counting it here would make two modules compete for the same package.
 			if path != base {
 				if _, statErr := os.Stat(filepath.Join(path, "go.mod")); statErr == nil {
 					return filepath.SkipDir
@@ -80,9 +80,9 @@ func testBearingPackages(root, module string) ([]string, error) {
 // normalizeTargets makes a multi-line command block readable by the same
 // "cd X ... go test" logic that a single line already satisfies.
 //
-// # O achado que obrigou isto
+// # The finding that forced this
 //
-// `taskfiles/quality.yml:388` roda `./chaos/...` e `./livetest/...` — mas em BLOCO:
+// `taskfiles/quality.yml:388` runs `./chaos/...` and `./livetest/...` — but in a BLOCK:
 //
 //	cmds:
 //	  - |
@@ -90,26 +90,26 @@ func testBearingPackages(root, module string) ([]string, error) {
 //	    go test -race ... \
 //	      ./charts/... ./chaos/... ./capacity/... ./livetest/...
 //
-// O `cd` está numa linha e o `go test` noutra, e o casamento por linha não via
-// nenhum dos dois juntos. Sem esta normalização, as cinco subárvores apareceriam
-// como descobertas e eu as teria ISENTADO — declarando por escrito que não são
-// rodadas, quando são. **Uma isenção falsa é pior que a lacuna**: ela documenta uma
-// mentira e some com o problema de vez.
+// The `cd` is on one line and the `go test` on another, and line-by-line matching never saw
+// the two together. Without this normalization, the five subtrees would show up
+// as uncovered and I would have EXEMPTED them — declaring in writing that they are not
+// run, when they are. **A false exemption is worse than the gap**: it documents a
+// lie and makes the problem disappear for good.
 //
-// Duas transformações, ambas conservadoras:
+// Two transformations, both conservative:
 //
-//  1. continuação por `\` é junção literal — não há ambiguidade;
-//  2. um `cd X` sozinho na linha passa a prefixar as linhas seguintes, até o próximo
-//     `cd` ou o começo de outro item de lista (`- `), que é onde o bloco termina.
+//  1. `\` continuation is a literal join — there is no ambiguity;
+//  2. a `cd X` alone on its line starts prefixing the following lines, until the next
+//     `cd` or the start of another list item (`- `), which is where the block ends.
 func normalizeTargets(text string) string {
-	// (1) junta continuações de linha.
+	// (1) join line continuations.
 	text = strings.ReplaceAll(text, "\\\n", " ")
 
 	var out []string
 	cur := ""
 	for _, raw := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(stripComment(raw))
-		// Um novo item de lista encerra o bloco anterior.
+		// A new list item closes the previous block.
 		if strings.HasPrefix(trimmed, "- ") {
 			cur = ""
 			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
@@ -151,14 +151,14 @@ func patternsFor(targets, module string) []string {
 		if j < 0 {
 			continue
 		}
-		// Todo token `./…` até o fim do comando é um padrão.
+		// Every `./…` token up to the end of the command is a pattern.
 		//
-		// A primeira versão parava na primeira flag, e estava errada: as flags vêm
-		// ANTES dos padrões na forma real — `go test -race -count=1 -coverprofile=X
-		// ./charts/... ./chaos/...`. Aquela regra devolvia zero padrões justamente
-		// para o alvo que cobre cinco subárvores, e eu quase as isentei por isso.
+		// The first version stopped at the first flag, and it was wrong: flags come
+		// BEFORE patterns in the real form — `go test -race -count=1 -coverprofile=X
+		// ./charts/... ./chaos/...`. That rule returned zero patterns precisely
+		// for the target that covers five subtrees, and I nearly exempted them because of it.
 		//
-		// O que encerra o comando é um operador de shell, não uma flag.
+		// What ends the command is a shell operator, not a flag.
 		for _, tok := range strings.Fields(scope[j+len("go test"):]) {
 			if tok == "|" || tok == "&&" || tok == ";" || strings.HasPrefix(tok, "2>") {
 				break
@@ -173,9 +173,9 @@ func patternsFor(targets, module string) []string {
 
 // patternCovers reports whether a `go test` pattern matches a package path.
 //
-// `./...`      → tudo
-// `./sub/...`  → `sub` e sua subárvore
-// `./sub`      → exatamente `sub`
+// `./...`      → everything
+// `./sub/...`  → `sub` and its subtree
+// `./sub`      → exactly `sub`
 func patternCovers(pattern, pkg string) bool {
 	p := strings.TrimSuffix(strings.TrimPrefix(pattern, "./"), "/")
 	switch {

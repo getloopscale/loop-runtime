@@ -33,7 +33,7 @@ package store
 //     queries/audit.sql)
 //   - Multi-tenant: tenant_id always present (tenantpredicate gate
 //     enforces; audit_log is in TenantOwnedTables)
-//   - achado #26 fix: COALESCE(correlation_id, '') preserved in
+//   - finding #26 fix: COALESCE(correlation_id, '') preserved in
 //     ListAuditLogForTenant so NULL correlation_id scans as empty
 //     string into ports.AuditEntryResult.CorrelationID
 //   - fail-loud row-scan: legacy `return err` instead of silent
@@ -69,11 +69,8 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 		return nil, 0, nil
 	}
 
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, 0, fmt.Errorf("audit: ListAuditEntries: DBTX %T does not implement SqlcBridge — caller must pass *PgxAdapter / *PgxTxAdapter (per T0.6 reshape matrix)", s.DB)
-	}
-	dbtx := bridge.GeneratedDB()
+	gdb := db.Generated(s.DB)
+	dbtx := gdb
 	q := generated.New()
 
 	// Nullable args via sqlc.narg form: nil/Valid=false → predicate
@@ -117,9 +114,12 @@ func (s *PostgresAuditStore) ListAuditEntries(ctx context.Context, tenantID stri
 			e.CreatedAt = r.CreatedAt.Time
 		}
 		if len(r.Metadata) > 0 {
-			// Match legacy: ignore unmarshal errors silently —
-			// metadata is best-effort enrichment, not load-bearing.
-			_ = json.Unmarshal(r.Metadata, &e.Metadata)
+			// Metadata is written as a JSON object. One that is not is a
+			// corrupt audit record, reported with the row it belongs to.
+			if err := json.Unmarshal(r.Metadata, &e.Metadata); err != nil {
+				return nil, 0, fmt.Errorf("audit: %s on %s/%s: metadata is not a JSON object: %w",
+					r.Action, r.ResourceType, r.ResourceID, err)
+			}
 		}
 		entries = append(entries, e)
 	}
@@ -151,13 +151,10 @@ func WriteAuditLog(ctx context.Context, dbtx db.DBTX, entry AuditEntry) error {
 		}
 	}
 
-	bridge, ok := dbtx.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("audit: WriteAuditLog: DBTX %T does not implement SqlcBridge — caller must pass *PgxAdapter / *PgxTxAdapter (per T0.6 reshape matrix)", dbtx)
-	}
+	gdb := db.Generated(dbtx)
 
 	q := generated.New()
-	if err := q.InsertAuditLog(ctx, bridge.GeneratedDB(), generated.InsertAuditLogParams{
+	if err := q.InsertAuditLog(ctx, gdb, generated.InsertAuditLogParams{
 		TenantID:      entry.TenantID,
 		Action:        entry.Action,
 		Actor:         entry.Actor,

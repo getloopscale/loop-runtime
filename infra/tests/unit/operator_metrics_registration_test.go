@@ -39,7 +39,9 @@ func TestOperatorMetricsRegistration_AllSplitBinariesBlankImportMetrics(t *testi
 		"tenant-operator",
 	}
 
-	expected := `_ "github.com/getloopscale/loopzero/operators/internal/metrics"`
+	// Any import registers the collectors (package init); a binary that also
+	// USES the package imports it by name instead of blank.
+	expected := `"github.com/getloopscale/loopzero/operators/internal/metrics"`
 
 	for _, b := range binaries {
 		path := filepath.Join(cmdDir, b, "main.go")
@@ -48,7 +50,7 @@ func TestOperatorMetricsRegistration_AllSplitBinariesBlankImportMetrics(t *testi
 			t.Fatalf("read %s: %v", path, err)
 		}
 		if !strings.Contains(string(data), expected) {
-			t.Errorf("%s missing blank-import for metrics package: %s", b, expected)
+			t.Errorf("%s does not import the metrics package: %s", b, expected)
 		}
 	}
 }

@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 # CHG-2026-04-29-DOGFOOD F-NEW iter 8 — Batch seed local user (Rule 10)
 #
-# Popula a base local com user + tenant + membership necessários para
-# o JWT machine-to-machine emitido por `loopzero-bootstrap` ser aceito pelo
-# loopzero-engine. Sem este seed o flow para em HTTP 403 NO_TENANT.
+# Seeds the local database with the user, account, tenant and membership the
+# machine-to-machine JWT issued to `loopzero-bootstrap` needs before the engine
+# accepts it. Without this seed the flow stops at HTTP 403 NO_TENANT.
 #
-# **Why batch seed em vez de browser**: Rule 10 (Local equals production)
-# exige que o ambiente local funcione fim-a-fim. Em produção, sign-up via
-# dashboard cria user via Kratos + injeta membership via TenantProvisioner.
-# Em standalone-multi não há dashboard humano-acessível — esse script
-# replica o efeito final no banco SEM tocar no código de produto.
+# Why a batch seed rather than the browser: Rule 10 (local equals production)
+# requires the local environment to work end to end. In production a dashboard
+# sign-up creates the user through Kratos and the membership through the
+# TenantProvisioner; standalone-multi has no dashboard a person can reach, so
+# this script reproduces the end state in the database without touching
+# product code.
 #
-# Idempotente:
-#   - users INSERT ... ON CONFLICT DO NOTHING
-#   - tenants INSERT ... ON CONFLICT DO NOTHING
-#   - tenant_members INSERT ... ON CONFLICT DO NOTHING
+# Idempotent: rows are upserted or left alone, and the only deletion is of the
+# user's memberships outside the canonical tenant (`loopzero-ops sql
+# bootstrap-user`).
 #
 # Outputs:
-#   ~/.loopzero/local-dogfood-token.txt — JWT pronto para uso pelo CLI:
+#   ~/.loopzero/local-dogfood-token.txt — a JWT ready for the CLI:
 #     loopzero login --token "$(cat ~/.loopzero/local-dogfood-token.txt)"
 #
 # Usage:
@@ -46,6 +46,17 @@ done
 
 log() { printf '[seed-local-user] %s\n' "$*" >&2; }
 
+# loopzero-ops holds the seed statements this script used to spell out (#236). An
+# installed binary wins; otherwise it is built from this checkout.
+SEED_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+loopzero_ops() {
+  if command -v loopzero-ops >/dev/null 2>&1; then
+    loopzero-ops "$@"
+  else
+    (cd "$SEED_REPO_ROOT/cmd/loopzero-ops" && go run . "$@")
+  fi
+}
+
 # 2026-04-30 LIVE finding: this script invoked `kubectl` without an
 # explicit --context, so it followed whatever the operator left in
 # `kubectl config current-context`. When run after a context switch
@@ -68,94 +79,44 @@ if [[ -z "$PG_POD" ]]; then
   exit 1
 fi
 
-# 2) DB password from Secret.
-PGPASS=$(kubectl --context "$SEED_CTX" -n "$NS_LOOPZERO" get secret loopzero-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
+# 2) Connect as loopzero_worker. The seed writes users, accounts, tenants and
+#    tenant_members and deletes the user's memberships in every OTHER tenant —
+#    cross-tenant work, which since 000064 only loopzero_worker may do (its named
+#    *_worker_cross_tenant policies, 000062); the table owner is refused by FORCE
+#    ROW LEVEL SECURITY. `task db:roles` sets this password (#396).
+PGPASS=$(kubectl --context "$SEED_CTX" -n "$NS_LOOPZERO" get secret loopzero-db-credentials -o 'jsonpath={.data.worker-password}' 2>/dev/null | base64 -d)
 if [[ -z "$PGPASS" ]]; then
   # T1.3 (plan 2026-05-21-deep-review-remediation): fail-fast instead of
-  # hardcoded fallback. loopzero-db-credentials must exist BEFORE seed runs —
-  # generate-secrets.sh in bootstrap:standalone creates it.
-  log "error: loopzero-db-credentials.password missing in $NS_LOOPZERO — run generate-secrets.sh first OR set LOOPZERO_DB_PASSWORD env var before task setup"
+  # hardcoded fallback. generate-secrets.sh writes worker-password and
+  # `task db:roles` gives loopzero_worker that password.
+  log "error: loopzero-db-credentials.worker-password missing in $NS_LOOPZERO — run generate-secrets.sh <env> core and task db:roles first"
   exit 1
 fi
 
 run_psql() {
   kubectl --context "$SEED_CTX" -n "$NS_LOOPZERO" exec "$PG_POD" -c postgresql -- \
-    env PGPASSWORD="$PGPASS" psql -U loopzero -d loopzero -v ON_ERROR_STOP=1 "$@"
+    env PGPASSWORD="$PGPASS" psql -U loopzero_worker -d loopzero -v ON_ERROR_STOP=1 "$@"
 }
 
 log "seeding tenant=$TENANT_ID user=$USER_ID role=$ROLE"
 
-# 3) Insert user FIRST (tenants.owner_id FK references users.id).
-run_psql -c "
-INSERT INTO users (id, email, display_name, username)
-VALUES ('$USER_ID', '$EMAIL', '$DISPLAY_NAME', '$USERNAME')
-ON CONFLICT (id) DO UPDATE SET
-  email = EXCLUDED.email,
-  display_name = EXCLUDED.display_name,
-  username = EXCLUDED.username,
-  updated_at = now();
-" >/dev/null
-log "user ensured"
-
-# 3.5) Insert bootstrap account FIRST. Migration 000044 made tenants.account_id
-# NOT NULL after the 000037 backfill. Production code calls EnsureAccount on
-# first login; this batch seed mirrors that path for standalone-multi.
-# Canonical 1:1 user->account per migration 000034 UNIQUE(owner_id) — same
-# constraint that enables ON CONFLICT idempotency in EnsureAccount itself.
-# Re-runs after Cleanroom are a no-op (owner_id already has an account row).
-# Pattern matches api/tests/integration/project_cap_m4_test.go canonical seed.
+# 3) The bootstrap-user rule: the JWT subject exists, owns an account, and is a
+#    member of exactly ONE tenant. The JWT carries only `sub`, and the API
+#    answers TENANT_REQUIRED when that user belongs to more than one tenant —
+#    journey/dogfood runs accumulate memberships, so every other one is
+#    removed. The statements live once, in `loopzero-ops sql bootstrap-user`
+#    (infra/scripts/bootstrapuser), shared with the drill and E2E seeds; this
+#    script only carries them to the in-cluster Postgres. Rendered first, so a
+#    refused field stops here instead of reaching psql.
 ACCOUNT_ID="${SEED_ACCOUNT_ID:-acct-bootstrap}"
-run_psql -c "
-INSERT INTO accounts (id, display_name, plan, owner_id)
-VALUES ('$ACCOUNT_ID', '$DISPLAY_NAME', 'starter', '$USER_ID')
-ON CONFLICT (owner_id) DO NOTHING;
-" >/dev/null
-log "account ensured (owner=$USER_ID)"
+SEED_SQL="$(loopzero_ops sql bootstrap-user \
+  --user-id "$USER_ID" --email "$EMAIL" --display-name "$DISPLAY_NAME" \
+  --username "$USERNAME" --account-id "$ACCOUNT_ID" \
+  --tenant-id "$TENANT_ID" --role "$ROLE")"
+run_psql -c "$SEED_SQL" >/dev/null
+log "user, account, tenant and single membership ensured (owner=$USER_ID tenant=$TENANT_ID)"
 
-# 4) Insert tenant. Schema requires slug (UNIQUE) + owner_id (FK to users) +
-# account_id (NOT NULL since migration 000044). Resolve account_id by
-# owner_id lookup (UNIQUE) so the seed works whether the account was just
-# created above OR was minted by EnsureAccount on a prior first login.
-# slug derived from id (replace anything non-alphanumeric with '-').
-SLUG=$(printf '%s' "$TENANT_ID" | tr -c 'a-zA-Z0-9' '-' | tr '[:upper:]' '[:lower:]')
-run_psql -c "
-INSERT INTO tenants (id, slug, owner_id, display_name, account_id)
-SELECT '$TENANT_ID', '$SLUG', '$USER_ID', '$TENANT_ID', a.id
-FROM accounts a
-WHERE a.owner_id = '$USER_ID'
-ON CONFLICT (id) DO NOTHING;
-" >/dev/null
-log "tenant ensured (slug=$SLUG owner=$USER_ID account=$ACCOUNT_ID)"
-
-# 5) Strip pre-existing memberships of this user OUTSIDE the canonical
-#    tenant before inserting/updating the canonical row.
-#
-# F-03 from /dogfood full report (2026-05-06): journey/dogfood runs
-# accumulate memberships in tenants like e2e-tenant. The Hydra-issued
-# JWT carries only `sub=$USER_ID` and the auth middleware returns
-# TENANT_REQUIRED when the user belongs to >1 tenant. This step keeps
-# the bootstrap user single-tenant locally so loopzero whoami / loopzero deploy
-# resolve cleanly without manual DB intervention between sessions.
-#
-# Pattern parallels infra/tests/seed/seed.go SeedDatabase, which already
-# strips bootstrap memberships ahead of its INSERTs.
-run_psql -c "
-DELETE FROM tenant_members
-WHERE user_id = '$USER_ID' AND tenant_id <> '$TENANT_ID';
-" >/dev/null
-log "stripped non-canonical memberships of $USER_ID"
-
-# 6) Insert membership.
-run_psql -c "
-INSERT INTO tenant_members (tenant_id, user_id, role)
-VALUES ('$TENANT_ID', '$USER_ID', '$ROLE')
-ON CONFLICT (tenant_id, user_id) DO UPDATE SET
-  role = EXCLUDED.role,
-  updated_at = now();
-" >/dev/null
-log "membership ensured"
-
-# 6) Mint a fresh JWT via Hydra client_credentials (shared lib per T4.4).
+# 4) Mint a fresh JWT via Hydra client_credentials (shared lib per T4.4).
 CSEC=$(kubectl --context "$SEED_CTX" -n "$NS_LOOPZERO" get secret loopzero-bootstrap-credentials -o jsonpath='{.data.client_secret}' 2>/dev/null | base64 -d)
 if [[ -z "$CSEC" ]]; then
   log "ERROR: loopzero-bootstrap-credentials Secret not found — run bootstrap-oauth-clients.sh first (context=$SEED_CTX)"
@@ -176,7 +137,10 @@ source "$LIB_HYDRA_MINT"
 
 # shellcheck disable=SC2034  # All exported for mint_jwt
 HYDRA_NAMESPACE="$NS_HYDRA"
-HYDRA_PORT_LOCAL=14444
+# A free local port, picked now: the fixed 14444 this used is a host port the core
+# k3d load balancer binds for the Hydra NodePort, so the port-forward never
+# started (#401).
+HYDRA_PORT_LOCAL="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
 KUBECTL_CMD="kubectl --context $SEED_CTX"
 CLIENT_ID="loopzero-bootstrap"
 CLIENT_SECRET="$CSEC"
@@ -193,7 +157,7 @@ if [[ -z "$TOKEN" ]]; then
   exit 1
 fi
 
-# 7) Persist for CLI consumption.
+# 5) Persist for CLI consumption.
 mkdir -p "${HOME}/.loopzero"
 chmod 700 "${HOME}/.loopzero"
 TOKEN_FILE="${HOME}/.loopzero/local-dogfood-token.txt"

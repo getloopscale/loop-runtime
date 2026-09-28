@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package webhookcanonicalpath enforces that no test/seed script references the
 // wrong webhook path `/engine/api/v1/webhooks/github` — Caddy 301-redirects it
 // to app-dev where there is no handler (404). The canonical is
@@ -10,18 +13,20 @@ package webhookcanonicalpath
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // forbiddenPattern is the wrong URL that Caddy 301-redirects to app-dev where
 // the /engine handler does not exist → 404 trap.
 const forbiddenPattern = "/engine/api/v1/webhooks/github"
 
-// scanDirs are the directory roots the original bash script walked. Missing dirs
-// are tolerated (e.g. archive/canonical-tests-v1 was DELETED in M10 wave).
+// scanDirs are the directory roots the original bash script walked. One missing
+// dir is tolerated (archive/canonical-tests-v1 was DELETED in the M10 wave); all
+// of them missing is ErrNothingScanned.
 var scanDirs = []string{
 	"infra/tests/e2e",
 	"infra/scripts/local",
@@ -35,12 +40,27 @@ type Config struct {
 // Outcome is the summary the CLI prints.
 type Outcome struct {
 	Violations []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
 }
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
+}
+
+// ErrNothingScanned means no scan dir exists, so nothing was read.
+var ErrNothingScanned = errors.New("no scan dir exists — the gate read nothing")
 
 // ErrViolations means the forbidden pattern was found on at least one file.
 var ErrViolations = errors.New("forbidden /engine/api/v1/webhooks/github pattern detected")
 
-// Check walks scanDirs under repoRoot and returns ErrViolations if any tracked
+// Check walks scanDirs under repoRoot and reports ErrViolations, as the
+// outcome's Violation, if any tracked
 // file contains the forbiddenPattern. Comments-in-code are allowed via the
 // `guard` / `legacy` marker on the same line (mirrors the sibling allowlist
 // heuristic in T1.4).
@@ -54,43 +74,29 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	var violations []string
-	for _, d := range scanDirs {
-		full := filepath.Join(root, d)
-		if _, err := os.Stat(full); errors.Is(err, fs.ErrNotExist) {
-			continue // tolerate missing dirs (deleted in strangler waves)
+	walked, err := linescan.Walk(root, scanDirs, func(string) bool { return true }, func(rel string, data []byte) error {
+		lines, err := linescan.Lines(data)
+		if err != nil {
+			return fmt.Errorf("%s: %w", rel, err)
 		}
-		if err := filepath.WalkDir(full, func(path string, e fs.DirEntry, walkErr error) error {
-			// FIX-2 (M24, ADR-M24-3): fail-CLOSED — propagate the per-entry walk
-			// error + read error instead of swallowing them (`return nil`). Outer
-			// WalkDir error was already propagated below.
-			if walkErr != nil {
-				return walkErr
-			}
-			if e.IsDir() {
-				return nil
-			}
-			body, err := os.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("%s: %w", path, err)
-			}
-			for i, line := range strings.Split(string(body), "\n") {
-				if !strings.Contains(line, forbiddenPattern) {
-					continue
-				}
-				if isAllowlistedComment(line) {
-					continue
-				}
-				rel, _ := filepath.Rel(root, path)
+		for i, line := range lines {
+			if strings.Contains(line, forbiddenPattern) && !isAllowlistedComment(line) {
 				violations = append(violations, fmt.Sprintf("%s:%d: %s", rel, i+1, strings.TrimSpace(line)))
 			}
-			return nil
-		}); err != nil {
-			return Outcome{}, fmt.Errorf("walk %s: %w", full, err)
 		}
+		return nil
+	})
+	if err != nil {
+		return Outcome{}, err
+	}
+	// One dir may be gone (strangler waves deleted some); all of them gone means
+	// nothing was read, which is not a clean result.
+	if walked.Dirs == 0 {
+		return Outcome{}, fmt.Errorf("%w: none of %s exists under %s", ErrNothingScanned, strings.Join(scanDirs, ", "), root)
 	}
 
 	if len(violations) > 0 {
-		return Outcome{Violations: violations}, ErrViolations
+		return Outcome{Violations: violations, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

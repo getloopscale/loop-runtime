@@ -15,12 +15,10 @@ image:
   repository: loopzero-preview-operator
   pullPolicy: IfNotPresent   # FB-#1 (MEET-070): k3d image import populates node crictl cache; pullPolicy=Always cycles ImagePullBackOff because registry HTTP returns 404
 
-# FB-#3 partial fix (MEET-070): preview-operator needs BASE_DOMAIN +
-# CELL_0_KUBECONFIG. Kubeconfig path comes from a mounted ConfigMap
-# (loopzero-cell-0-kubeconfig populated by bootstrap scripts).
-config:
-  baseDomain: loopzero.local
-
+# FB-#3 partial fix (MEET-070): preview-operator needs CELL_0_KUBECONFIG.
+# Kubeconfig path comes from a mounted ConfigMap (loopzero-cell-0-kubeconfig
+# populated by bootstrap scripts). It no longer needs BASE_DOMAIN: the preview
+# URL is the one the API computes and writes to spec.publicURL.
 kubeconfig:
   cell0:
     existingConfigMap: loopzero-cell-0-kubeconfig

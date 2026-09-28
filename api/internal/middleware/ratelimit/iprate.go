@@ -7,12 +7,13 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
-	"strings"
-	"sync"
 	"time"
+
+	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
+	"github.com/getloopscale/loopzero/api/internal/middleware/slidingwindow"
 )
 
-// IPRateLimiter is a fixed-window rate limiter keyed by client IP. Mounted
+// IPRateLimiter is a sliding-window rate limiter keyed by client IP. Mounted
 // BEFORE the auth middleware so unauthenticated brute-force attempts on
 // /api/v1/auth/* endpoints (or any other route) are dropped at the edge
 // without ever consuming downstream resources.
@@ -36,15 +37,17 @@ import (
 //
 // Implementation
 // --------------
-// In-memory SLIDING-window bucket, weighted by the overlap of the previous
-// window (SD-04.3, audit 2026-09-07 — it was a fixed window, and a fixed window
-// admits twice the limit across a boundary).
+// In-memory SLIDING-window counter (package slidingwindow), weighted by the
+// overlap of the previous window (SD-04.3, audit 2026-09-07 — it was a fixed
+// window, and a fixed window admits twice the limit across a boundary). Keys
+// idle for two windows are evicted: this limiter runs before auth, so its key
+// space is chosen by whoever sends traffic.
 //
 // The state is still PER PROCESS, so with replicaCount 2 the effective limit is
 // twice what is configured (SD-04.7). Two things bound that, and neither makes
 // it disappear:
 //   - the Traefik `rate-limit` Middleware is now attached to the public route
-//     (infra/helm/loopzero-api/templates/ingressroute.yaml), and the edge is the one
+//     (ingressRoute.middlewares in charts/loopzero-api/values-bootstrap.yaml), and the edge is the one
 //     place where a single instance of the limit exists;
 //   - auth and per-tenant limits upstream carry the real guard.
 //
@@ -53,22 +56,10 @@ import (
 // here: it would put a network round-trip on every request to fix a factor of
 // two that the edge already covers on the exposed path.
 
-// IPRateLimiter holds the per-IP counter map.
+// IPRateLimiter holds the per-IP counters.
 type IPRateLimiter struct {
-	mu     sync.Mutex
-	counts map[string]*ipCounter
-	limit  int           // requests per window
-	window time.Duration // window size (e.g., 1 minute)
-	cidrs  []*net.IPNet  // trusted proxy CIDRs (X-Forwarded-For honored ONLY from these)
-	getNow func() time.Time
-}
-
-type ipCounter struct {
-	count       int
-	windowStart time.Time
-	// prevCount weights the overlapping tail of the previous window — see the
-	// sliding-window note above allow(). SD-04.3, audit 2026-09-07.
-	prevCount int
+	counter  *slidingwindow.Counter
+	resolver clientip.Resolver
 }
 
 // IPRateLimitConfig configures the limiter.
@@ -81,6 +72,8 @@ type IPRateLimitConfig struct {
 	// the limiter trusts. Typically Cloudflare egress ranges in production.
 	// Empty list = never trust X-Forwarded-For (treat r.RemoteAddr as truth).
 	TrustedProxyCIDRs []*net.IPNet
+	// Clock is the time source; nil means time.Now.
+	Clock func() time.Time
 }
 
 // NewIPRateLimiter builds a limiter with the given config.
@@ -94,18 +87,15 @@ func NewIPRateLimiter(cfg IPRateLimitConfig) *IPRateLimiter {
 		window = 1 * time.Minute
 	}
 	return &IPRateLimiter{
-		counts: make(map[string]*ipCounter),
-		limit:  limit,
-		window: window,
-		cidrs:  cfg.TrustedProxyCIDRs,
-		getNow: time.Now,
+		counter:  slidingwindow.New(limit, window, cfg.Clock),
+		resolver: clientip.NewResolver(cfg.TrustedProxyCIDRs),
 	}
 }
 
 // Middleware returns the chi-compatible HTTP middleware.
 func (l *IPRateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := l.keyFor(r)
+		key := clientip.BucketKey(l.resolver.IP(r))
 		if key == "" {
 			// Cannot determine peer — fail open (do not block legitimate
 			// traffic on parsing failure; metrics + alerts catch this case).
@@ -113,10 +103,10 @@ func (l *IPRateLimiter) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		allowed, retryAfter := l.allow(key)
+		allowed, retryAfter := l.counter.Allow(key)
 		if !allowed {
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Retry-After", retryAfter.String())
+			slidingwindow.SetRetryAfter(w, retryAfter)
 			w.WriteHeader(http.StatusTooManyRequests)
 			_ = json.NewEncoder(w).Encode(map[string]string{
 				"code":    "RATE_LIMITED",
@@ -127,133 +117,4 @@ func (l *IPRateLimiter) Middleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
-}
-
-// keyFor extracts the rate-limit key from the request. Returns the IPv4
-// address verbatim or the IPv6 /64 prefix as `aaaa:bbbb:cccc:dddd::/64`.
-// Honors X-Forwarded-For only when r.RemoteAddr's IP is inside cidrs.
-func (l *IPRateLimiter) keyFor(r *http.Request) string {
-	peerIP := parsePeerIP(r.RemoteAddr)
-	if peerIP == nil {
-		return ""
-	}
-
-	chosenIP := peerIP
-	if l.isTrustedProxy(peerIP) {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			// First entry in the comma-separated list is the original client.
-			first := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0])
-			if parsed := net.ParseIP(first); parsed != nil {
-				chosenIP = parsed
-			}
-		}
-	}
-
-	return groupIPKey(chosenIP)
-}
-
-// isTrustedProxy reports whether the peer IP falls inside any configured
-// trusted-proxy CIDR.
-func (l *IPRateLimiter) isTrustedProxy(ip net.IP) bool {
-	for _, cidr := range l.cidrs {
-		if cidr.Contains(ip) {
-			return true
-		}
-	}
-	return false
-}
-
-// allow registers one request against the bucket and returns (allowed,
-// retryAfter). Uses a fixed window — the simplest correct implementation;
-// can be upgraded to sliding-window with Redis later.
-func (l *IPRateLimiter) allow(key string) (bool, time.Duration) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	now := l.getNow()
-	c, ok := l.counts[key]
-	if !ok {
-		l.counts[key] = &ipCounter{count: 1, windowStart: now}
-		return true, 0
-	}
-
-	// Sliding window (SD-04.3). This was a fixed window, and this limiter is the
-	// exposed one — mounted ahead of authentication, so it is the gate an
-	// unauthenticated flood meets first. A fixed window lets that flood spend the
-	// whole allowance either side of a boundary, which is twice the limit in less
-	// than one window, and the boundary is trivially findable by a caller that
-	// watches Retry-After.
-	switch elapsed := now.Sub(c.windowStart); {
-	case elapsed >= 2*l.window:
-		c.prevCount = 0
-		c.count = 0
-		c.windowStart = now
-	case elapsed >= l.window:
-		c.prevCount = c.count
-		c.count = 0
-		c.windowStart = c.windowStart.Add(l.window)
-	}
-
-	overlap := 1 - (now.Sub(c.windowStart).Seconds() / l.window.Seconds())
-	if overlap < 0 {
-		overlap = 0
-	}
-	weighted := float64(c.prevCount)*overlap + float64(c.count)
-
-	if weighted >= float64(l.limit) {
-		return false, l.window - now.Sub(c.windowStart)
-	}
-	c.count++
-	return true, 0
-}
-
-// parsePeerIP extracts net.IP from r.RemoteAddr (typically "ip:port",
-// possibly "[ipv6]:port", possibly bare "ip" in tests).
-func parsePeerIP(remoteAddr string) net.IP {
-	if remoteAddr == "" {
-		return nil
-	}
-	host := remoteAddr
-	if h, _, err := net.SplitHostPort(remoteAddr); err == nil {
-		host = h
-	}
-	return net.ParseIP(host)
-}
-
-// groupIPKey returns the canonical bucket key for `ip`. IPv4 stays as-is
-// ("203.0.113.5"). IPv6 collapses to /64 prefix ("2001:db8:abcd:0::/64")
-// per EC-13 of the edge-case review.
-func groupIPKey(ip net.IP) string {
-	if ip == nil {
-		return ""
-	}
-	if ip4 := ip.To4(); ip4 != nil {
-		return ip4.String()
-	}
-	// IPv6: mask to /64.
-	mask := net.CIDRMask(64, 128)
-	prefix := ip.Mask(mask)
-	return prefix.String() + "/64"
-}
-
-// ParseTrustedProxyCIDRs parses a comma-separated CIDR list (e.g., from
-// LOOPZERO_TRUSTED_PROXY_CIDRS env). Invalid entries are silently skipped —
-// the caller logs the result count so misconfiguration is observable.
-func ParseTrustedProxyCIDRs(s string) []*net.IPNet {
-	if strings.TrimSpace(s) == "" {
-		return nil
-	}
-	var out []*net.IPNet
-	for _, raw := range strings.Split(s, ",") {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			continue
-		}
-		_, cidr, err := net.ParseCIDR(raw)
-		if err != nil {
-			continue
-		}
-		out = append(out, cidr)
-	}
-	return out
 }

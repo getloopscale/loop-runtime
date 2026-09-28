@@ -8,7 +8,7 @@
 //
 // Per D4 ADR sizing:
 //   PostgreSQL: db-amd-2vcpu-4gb mgmt-tier (Bug #26: AMD variant, sfo3 capacity)
-//   Valkey:     db-amd-1vcpu-2gb non-prod tier (mirrors mgmt-redis-ha.ts:45)
+//   Valkey:     db-amd-1vcpu-2gb non-prod tier
 //
 // Per-app databases + users are created as separate resources downstream of
 // this component (LoopZeroManagedDb exposes .id for clusterId reference).

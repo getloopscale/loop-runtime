@@ -17,8 +17,8 @@ import (
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/leader"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // ---------------------------------------------------------------------------
@@ -38,8 +38,8 @@ func TestSilenceKlog_DoesNotPanic(t *testing.T) {
 func TestCellID_EmptyEnvVar_ReturnsCellDefault(t *testing.T) {
 	t.Setenv("LOOPZERO_CELL_ID", "")
 	got := cellID(config.Config{})
-	if got != db.CellDefault {
-		t.Errorf("cellID() = %q, want %q for empty env var", got, db.CellDefault)
+	if got != domain.DefaultCellID {
+		t.Errorf("cellID() = %q, want %q for empty env var", got, domain.DefaultCellID)
 	}
 }
 
@@ -61,43 +61,6 @@ func TestPodName_EmptyHostname_ReturnsFallback(t *testing.T) {
 	got := podName()
 	if got != "loopzero-controller" {
 		t.Errorf("podName() = %q, want loopzero-controller for empty HOSTNAME", got)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// appCRAdapter
-// ---------------------------------------------------------------------------
-
-func TestAppCRAdapter_IsNotNilStruct(t *testing.T) {
-	// Verify the adapter type exists and can be instantiated
-	// (the mgr field would be nil but the struct itself is valid)
-	a := &appCRAdapter{mgr: nil}
-	_ = a // struct is non-nil by construction
-}
-
-// ---------------------------------------------------------------------------
-// controllerDeps — struct is valid with zero values
-// ---------------------------------------------------------------------------
-
-func TestControllerDeps_ZeroValue(t *testing.T) {
-	d := controllerDeps{}
-	if d.reconcileLoop != nil {
-		t.Error("zero-value reconcileLoop should be nil")
-	}
-	if d.buildReaper != nil {
-		t.Error("zero-value buildReaper should be nil")
-	}
-	if d.releaseReaper != nil {
-		t.Error("zero-value releaseReaper should be nil")
-	}
-	if d.releaseConvergenceLoop != nil {
-		t.Error("zero-value releaseConvergenceLoop should be nil")
-	}
-	if d.idempotencyCleaner != nil {
-		t.Error("zero-value idempotencyCleaner should be nil")
-	}
-	if d.eventPruner != nil {
-		t.Error("zero-value eventPruner should be nil")
 	}
 }
 
@@ -186,7 +149,7 @@ func TestReadyz_Fenced_IncludesErrorField(t *testing.T) {
 	acq := leader.NewAcquirer(fake, leader.DefaultConfig())
 	lease := &leader.Lease{
 		Name:         leaderLoopName,
-		CellID:       db.CellDefault,
+		CellID:       domain.DefaultCellID,
 		Holder:       "my-pod",
 		GenerationID: 1,
 	}
@@ -271,7 +234,7 @@ func TestRunHeartbeat_StopsOnContextCancel(t *testing.T) {
 	acq := leader.NewAcquirer(fake, leader.DefaultConfig())
 	lease := &leader.Lease{
 		Name:         leaderLoopName,
-		CellID:       db.CellDefault,
+		CellID:       domain.DefaultCellID,
 		Holder:       "test-pod",
 		GenerationID: 1,
 	}
@@ -309,7 +272,7 @@ func TestRunHeartbeat_InvokesCancelRoot_WhenFenced(t *testing.T) {
 	acq := leader.NewAcquirer(fake, leader.DefaultConfig())
 	lease := &leader.Lease{
 		Name:         leaderLoopName,
-		CellID:       db.CellDefault,
+		CellID:       domain.DefaultCellID,
 		Holder:       "my-pod",
 		GenerationID: 1,
 	}
@@ -388,18 +351,6 @@ func TestStubConfig_ReturnsZeroValue(t *testing.T) {
 		t.Errorf("stubConfig().BaseDomain = %q, want empty", cfg.BaseDomain)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// startBackgroundLoops — verify it does not panic with nil deps
-// (When loops are nil, calling .Start() would panic — but with a cancelled
-// context, goroutines may not reach the Start call. This tests that the
-// function wires WaitGroup correctly.)
-// ---------------------------------------------------------------------------
-
-// We cannot easily test startBackgroundLoops without real service instances,
-// but we can verify the function signature matches the expected pattern by
-// calling it indirectly. The main_test.go already exercises the health
-// server which is the other half of the main() function.
 
 // ---------------------------------------------------------------------------
 // Env var isolation — verify t.Setenv cleanup works

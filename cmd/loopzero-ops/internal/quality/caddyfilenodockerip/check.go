@@ -22,6 +22,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // caddyfilePath is the canonical dev-public edge config, relative to repo root.
@@ -35,8 +38,8 @@ var dockerNetIPPattern = regexp.MustCompile(`172\.18\.[0-9]+\.[0-9]+`)
 // the fix pattern MUST honor. The `{` at end must be present so a stray
 // comment reference to the hostname elsewhere is not mistaken for the block.
 var (
-	prodDevHeader    = regexp.MustCompile(`^\*\.prod-dev\.loopzero\.dev\s*\{`)
-	previewDevHeader = regexp.MustCompile(`^\*\.preview-dev\.loopzero\.dev\s*\{`)
+	prodDevHeader    = regexp.MustCompile(`(?m)^\*\.prod-dev\.loopzero\.dev\s*\{`)
+	previewDevHeader = regexp.MustCompile(`(?m)^\*\.preview-dev\.loopzero\.dev\s*\{`)
 )
 
 // canonicalUpstream is the stable host-port form the two wildcard blocks
@@ -51,6 +54,17 @@ type Config struct {
 // Outcome is the summary the CLI prints.
 type Outcome struct {
 	Violations []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means at least one invariant failed.
@@ -89,41 +103,22 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	// Invariants 2+3: each wildcard block reverse_proxies to the canonical stable upstream.
-	if !hasCanonicalUpstream(lines, prodDevHeader) {
+	if !hasCanonicalUpstream(string(body), prodDevHeader) {
 		violations = append(violations, fmt.Sprintf("%s: *.prod-dev.loopzero.example block missing canonical `%s`", caddyfilePath, canonicalUpstream))
 	}
-	if !hasCanonicalUpstream(lines, previewDevHeader) {
+	if !hasCanonicalUpstream(string(body), previewDevHeader) {
 		violations = append(violations, fmt.Sprintf("%s: *.preview-dev.loopzero.example block missing canonical `%s`", caddyfilePath, canonicalUpstream))
 	}
 
 	if len(violations) > 0 {
-		return Outcome{Violations: violations}, ErrViolations
+		return Outcome{Violations: violations, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }
 
-// hasCanonicalUpstream walks lines from the first match of header until the
-// matching `}` and returns true if any line in that block contains
-// canonicalUpstream. Balances nested `{`/`}` so inner sub-directives with their
-// own braces do not close the outer block early.
-func hasCanonicalUpstream(lines []string, header *regexp.Regexp) bool {
-	inBlock := false
-	depth := 0
-	for _, line := range lines {
-		if !inBlock {
-			if header.MatchString(line) {
-				inBlock = true
-				depth = strings.Count(line, "{") - strings.Count(line, "}")
-			}
-			continue
-		}
-		if strings.Contains(line, canonicalUpstream) {
-			return true
-		}
-		depth += strings.Count(line, "{") - strings.Count(line, "}")
-		if depth <= 0 {
-			return false
-		}
-	}
-	return false
+// hasCanonicalUpstream reports whether the brace-balanced block opened by
+// header contains canonicalUpstream.
+func hasCanonicalUpstream(content string, header *regexp.Regexp) bool {
+	body, ok := qgshell.ExtractBraceBlock(content, header)
+	return ok && strings.Contains(body, canonicalUpstream)
 }

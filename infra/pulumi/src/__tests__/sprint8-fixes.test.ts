@@ -99,9 +99,9 @@ describe("Sprint 8 v3.2 — fixes preserved across L1/L2 split", () => {
   });
 
   describe("Fix #5: ClusterImagePolicy as Helm chart (B16) — admission-policies", () => {
-    const chartFile = path.resolve(__dirname, "..", "..", "..", "helm", "admission-policies", "Chart.yaml");
-    const valuesFile = path.resolve(__dirname, "..", "..", "..", "helm", "admission-policies", "values.yaml");
-    const cipTemplate = path.resolve(__dirname, "..", "..", "..", "helm", "admission-policies", "templates", "cluster-image-policy.yaml");
+    const chartFile = path.resolve(__dirname, "..", "..", "..", "..", "charts", "loopzero-admission-policies", "Chart.yaml");
+    const valuesFile = path.resolve(__dirname, "..", "..", "..", "..", "charts", "loopzero-admission-policies", "values.yaml");
+    const cipTemplate = path.resolve(__dirname, "..", "..", "..", "..", "charts", "loopzero-admission-policies", "templates", "cluster-image-policy.yaml");
 
     it("Chart.yaml exists for admission-policies", () => {
       expect(fs.existsSync(chartFile)).toBe(true);

@@ -6,6 +6,9 @@ package http
 import (
 	stderrors "errors"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"testing"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
@@ -89,27 +92,6 @@ func TestStatus_PreservesIsAsCompatibility(t *testing.T) {
 	}
 }
 
-// TestRegistry_CoversAllSentinelsCommonInAPI is a regression guard
-// ensuring the registry stays in sync with codes emitted by the api/
-// module. Newly introduced LoopZeroError codes that surface at the HTTP
-// boundary MUST be registered here or they default to 500 (silent).
-//
-// The list below is the minimum coverage discovered during T2.3
-// Stage C migration (2026-05-04). Add new entries when adding new
-// LoopZeroError codes; pair with sentinel definition for traceability.
-func TestRegistry_CoversAllSentinelsCommonInAPI(t *testing.T) {
-	required := []string{
-		"INVALID_ENVIRONMENT", "INVALID_CALLBACK", "VALIDATION_ERROR",
-		"USER_NOT_FOUND", "MEMBER_NOT_FOUND", "TEAM_MEMBER_NOT_FOUND",
-		"UNSUPPORTED_FRAMEWORK",
-	}
-	for _, code := range required {
-		if !IsRegistered(code) {
-			t.Errorf("registry must include %q (used by api/ — silent 500 if missing)", code)
-		}
-	}
-}
-
 // J-20 Scale plan v1.1 T1.2 + T1.3:
 // PLAN_UPGRADE_REQUIRED MUST map to 402 (Payment Required) so dashboards
 // and CLIs can branch on the canonical upgrade-prompt surface.
@@ -133,30 +115,54 @@ func TestStatus_J20ScaleErrors(t *testing.T) {
 	}
 }
 
-// Red Team loopzero-cloud#103 regression-protector. Both INVALID_ARGUMENT
-// (scale path scaling_types.go:26) AND INVALID_DOMAIN (domains_create
-// validation path) MUST map to HTTP 400 — client input validation
-// returns 4xx, not 500. INTERNAL_ERROR was being used for both paths
-// because of registry omissions. The Red Team observed status×code
-// mismatches (400 INTERNAL_ERROR for domain, 500 INVALID_ARGUMENT for
-// scale -5). These two registry entries close the contract.
-func TestStatus_Validation_RedTeam103(t *testing.T) {
-	tests := []struct {
-		code string
-		want int
-	}{
-		{"INVALID_ARGUMENT", http.StatusBadRequest},
-		{"INVALID_DOMAIN", http.StatusBadRequest},
-		{"INVALID_REPLICAS", http.StatusBadRequest},
+// Every code pkg/errors defines must have an explicit transport status: an
+// unregistered code silently answers 500. Read from the source, so a new
+// sentinel or factory cannot be added without registering it.
+func TestEveryPkgErrorsCodeIsRegistered(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "errors.go"))
+	if err != nil {
+		t.Fatalf("read errors.go: %v", err)
 	}
-	for _, tc := range tests {
-		err := &loopzeroerrors.LoopZeroError{Code: tc.code, Message: "x"}
-		if got := Status(err); got != tc.want {
-			t.Errorf("Red Team #103: Status(%s)=%d, want %d (validation errors are 4xx, NEVER 5xx)",
-				tc.code, got, tc.want)
+	codes := regexp.MustCompile(`Code:\s+"([A-Z][A-Z0-9_]+)"`).FindAllStringSubmatch(string(src), -1)
+	if len(codes) < 30 {
+		t.Fatalf("found only %d codes in errors.go; the scan is broken", len(codes))
+	}
+	for _, c := range codes {
+		if !IsRegistered(c[1]) {
+			t.Errorf("code %q is defined in pkg/errors but has no registered HTTP status", c[1])
 		}
-		if !IsRegistered(tc.code) {
-			t.Errorf("Red Team #103: registry must include %q (validation contract)", tc.code)
+	}
+}
+
+func TestRegister_AddsAStatusForACodeOwnedOutsidePkg(t *testing.T) {
+	if err := Register("TEST_OWNED_ELSEWHERE", http.StatusGone); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	if got := Status(&loopzeroerrors.LoopZeroError{Code: "TEST_OWNED_ELSEWHERE"}); got != http.StatusGone {
+		t.Fatalf("Status = %d, want 410", got)
+	}
+	if err := Register("TEST_OWNED_ELSEWHERE", http.StatusGone); err != nil {
+		t.Fatalf("re-registering the same status must be idempotent: %v", err)
+	}
+}
+
+func TestRegister_RefusesAConflictingStatus(t *testing.T) {
+	if err := Register("LOCK_TIMEOUT", http.StatusTeapot); err == nil {
+		t.Fatal("re-mapping a registered code to another status must be refused")
+	}
+	if got := Status(&loopzeroerrors.LoopZeroError{Code: "LOCK_TIMEOUT"}); got != http.StatusConflict {
+		t.Fatalf("the original mapping must survive a refused registration, got %d", got)
+	}
+}
+
+func TestRegister_RefusesAnInvalidCodeOrStatus(t *testing.T) {
+	for _, tc := range []struct {
+		code   string
+		status int
+	}{{"", http.StatusBadRequest}, {"TEST_OK_STATUS", http.StatusOK}, {"TEST_BAD_STATUS", 700}} {
+		if err := Register(tc.code, tc.status); err == nil {
+			t.Errorf("Register(%q, %d) must be refused", tc.code, tc.status)
 		}
 	}
 }

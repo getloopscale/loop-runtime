@@ -109,7 +109,7 @@ log "  ✓ Cluster up: 1 server + 1 agent"
 log "  Pre-importing Docker Hub base images (rate-limit guard)..."
 HUB_IMAGES=(
   "node:20.11.1-alpine"
-  "minio/mc:RELEASE.2025-08-13T08-35-41Z"
+  # mc is no longer a Hub image: it ships in loopzero-clone-runner, built from source (#394).
 )
 for img in "${HUB_IMAGES[@]}"; do
   if ! docker image inspect "$img" >/dev/null 2>&1; then

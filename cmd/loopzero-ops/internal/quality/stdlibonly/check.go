@@ -3,29 +3,28 @@
 
 // Package stdlibonly refuses a dependency-free package that stopped being dependency-free.
 //
-// # O defeito que ele previne, medido
+// # The defect it prevents, measured
 //
-// B-057: `api/internal/domain` é importado por **87 arquivos** (47 de produção, 40 de teste)
-// — re-medido em 2026-09-05; eram 90 quando esta guarda foi escrita em 2026-08-18, e o número
-// se move sozinho conforme a árvore anda. A razão de poder ser importado por tantos é
-// justamente não arrastar dependência nenhuma — medido com `go list`, são 9 imports, todos da
-// biblioteca padrão.
+// B-057: the shared vocabulary package, api/internal/ports (renamed from
+// api/internal/domain in c2db12817), is imported by 90 files of the api module, 49 of
+// them production code (measured 2026-09-25 with `git grep`; the number moves with the
+// tree). It can be imported that widely precisely because it drags no dependency along:
+// `go list` reports 9 imports, all from the standard library.
 //
-// Um único import externo ali se propaga para os 87, e nada impedia. A propriedade existia
-// por disciplina, não por contrato; o `CLAUDE.md` a descreve como razão do pacote existir, e
-// descrever não é verificar.
+// A single non-standard import there propagates to every importer, and nothing
+// prevented it. The property held by discipline, not by contract.
 //
-// # Por que a árvore ausente reprova
+// # Why an absent package fails
 //
-// O item que motivou esta guarda pede, entre outras coisas, RENOMEAR este pacote. Um rename
-// que mova o diretório deixaria a guarda verde para sempre sobre nada — a forma `PASS — 0`
-// que este ecossistema já pagou para aprender. Ausência reprova, e quem renomear atualiza o
-// caminho conscientemente.
+// A rename that moves the directory would leave the guard green forever over nothing —
+// the `PASS — 0` shape this repository has already paid to learn. Absence fails, and
+// whoever renames the package updates the path deliberately.
 //
-// # O limite
+// # The limit
 //
-// Ele lê os imports declarados do pacote nomeado, não a árvore transitiva. Um import stdlib
-// que passe a fazer I/O de rede continua stdlib e passa aqui.
+// It reads the declared imports of the named package, not the transitive tree. A
+// standard-library import that starts doing network I/O is still standard library and
+// passes here.
 package stdlibonly
 
 import (
@@ -33,23 +32,26 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrExternalImport means the package imports something outside the standard library.
-var ErrExternalImport = errors.New("pacote sem dependência importou algo fora da biblioteca padrão")
+var ErrExternalImport = errors.New("the dependency-free package imported something outside the standard library")
 
 // ErrNothingScanned means the guarded package is absent — silence, not cleanliness.
-var ErrNothingScanned = errors.New("pacote guardado ausente — não achar nada não é o mesmo que não achar nada errado")
+var ErrNothingScanned = errors.New("the guarded package is absent — finding nothing is not the same as finding nothing wrong")
 
-// guardado é o pacote cuja propriedade esta guarda protege.
+// guardedPackage is the package whose property this guard protects.
 //
-// É um caminho só de propósito: a propriedade foi MEDIDA aqui, e estender a guarda a
-// pacotes cuja propriedade ninguém mediu afirmaria o que não se sabe.
-const guardado = "api/internal/ports"
+// It is one path on purpose: the property was MEASURED here, and extending the guard to
+// packages whose property nobody measured would assert what is not known.
+const guardedPackage = "api/internal/ports"
 
 // Config drives the check.
 type Config struct {
@@ -60,6 +62,17 @@ type Config struct {
 type Outcome struct {
 	Scanned  int
 	External []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check verifies that the guarded package imports only the standard library.
@@ -69,45 +82,52 @@ func Check(cfg Config) (Outcome, error) {
 	if root == "" {
 		root = "."
 	}
-	dir := filepath.Join(root, filepath.FromSlash(guardado))
+	dir := filepath.Join(root, filepath.FromSlash(guardedPackage))
 
-	entradas, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return out, fmt.Errorf("%w: %s", ErrNothingScanned, guardedPackage)
+	}
 	if err != nil {
-		return out, fmt.Errorf("%w: %s", ErrNothingScanned, guardado)
+		return out, fmt.Errorf("reading %s: %w", guardedPackage, err)
 	}
 
 	fset := token.NewFileSet()
-	visto := map[string]bool{}
-	for _, e := range entradas {
-		nome := e.Name()
-		if e.IsDir() || !strings.HasSuffix(nome, ".go") || strings.HasSuffix(nome, "_test.go") {
+	seen := map[string]bool{}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		arq, err := parser.ParseFile(fset, filepath.Join(dir, nome), nil, parser.ImportsOnly)
+		file, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ImportsOnly)
 		if err != nil {
-			return out, fmt.Errorf("analisar %s: %w", nome, err)
+			return out, fmt.Errorf("parsing %s: %w", name, err)
 		}
-		for _, imp := range arq.Imports {
-			caminho, err := strconv.Unquote(imp.Path.Value)
-			if err != nil || visto[caminho] {
+		for _, imp := range file.Imports {
+			path, err := strconv.Unquote(imp.Path.Value)
+			if err != nil {
+				return out, fmt.Errorf("reading an import path in %s: %w", name, err)
+			}
+			if seen[path] {
 				continue
 			}
-			visto[caminho] = true
+			seen[path] = true
 			out.Scanned++
-			// Um import da biblioteca padrão nunca tem ponto no primeiro segmento: o ponto
-			// é o que marca um host (`github.com/...`, `golang.org/x/...`).
-			if strings.Contains(strings.SplitN(caminho, "/", 2)[0], ".") {
-				out.External = append(out.External, caminho)
+			// A standard-library import never has a dot in its first segment: the dot is
+			// what marks a host (`github.com/...`, `golang.org/x/...`).
+			if strings.Contains(strings.SplitN(path, "/", 2)[0], ".") {
+				out.External = append(out.External, path)
 			}
 		}
 	}
 
 	if out.Scanned == 0 {
-		return out, fmt.Errorf("%w: %s não declara import nenhum", ErrNothingScanned, guardado)
+		return out, fmt.Errorf("%w: %s declares no import at all", ErrNothingScanned, guardedPackage)
 	}
 	if len(out.External) > 0 {
-		return out, fmt.Errorf("%w: %s importa %s — e isso atravessa para todos os seus importadores",
-			ErrExternalImport, guardado, strings.Join(out.External, ", "))
+		out.Violation = fmt.Errorf("%w: %s imports %s — and that reaches every one of its importers",
+			ErrExternalImport, guardedPackage, strings.Join(out.External, ", "))
+		return out, nil
 	}
 	return out, nil
 }

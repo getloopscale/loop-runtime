@@ -20,10 +20,6 @@ import (
 // TDD-first tests for VerifyRateLimiter + Middleware() factory keyed by
 // (tenant, domain) per the LOCKED j11-domains rate-limit ADR.
 //
-// EC-5 absorption (v1.1): EVERY test function calls `defer vrl.Stop()` as
-// FIRST deferred statement. Without it, the cleanup goroutine leaks
-// (visible under -race / goleak).
-//
 // EC-1 absorption (v1.1): tests use chi.NewRouter() + mounted route, NOT
 // httptest.NewRequest wired directly to  chi sets URL params
 // only when the route is mounted on chi router.
@@ -50,7 +46,6 @@ func mountRouter(t *testing.T, vrl *VerifyRateLimiter, downstreamStatus int) htt
 // Test 1: First request within window allowed.
 func TestVerifyRateLimit_AllowsFirstRequestPer30sWindow(t *testing.T) {
 	vrl := NewVerifyRateLimiter(1, 30*time.Second)
-	defer vrl.Stop()
 
 	h := mountRouter(t, vrl, http.StatusAccepted)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
@@ -66,7 +61,6 @@ func TestVerifyRateLimit_AllowsFirstRequestPer30sWindow(t *testing.T) {
 // Test 2: Second request within window rejected with Retry-After.
 func TestVerifyRateLimit_Rejects2ndRequestWithRetryAfter(t *testing.T) {
 	vrl := NewVerifyRateLimiter(1, 30*time.Second)
-	defer vrl.Stop()
 
 	h := mountRouter(t, vrl, http.StatusAccepted)
 	ctx := injectUserContext(context.Background(), "tenant-A", "user-X")
@@ -104,7 +98,6 @@ func TestVerifyRateLimit_Rejects2ndRequestWithRetryAfter(t *testing.T) {
 // Test 3: Different domain on same tenant allowed (per-(tenant,domain) isolation).
 func TestVerifyRateLimit_AllowsDifferentDomainSameTenant(t *testing.T) {
 	vrl := NewVerifyRateLimiter(1, 30*time.Second)
-	defer vrl.Stop()
 
 	h := mountRouter(t, vrl, http.StatusAccepted)
 	ctx := injectUserContext(context.Background(), "tenant-A", "user-X")
@@ -129,7 +122,6 @@ func TestVerifyRateLimit_AllowsDifferentDomainSameTenant(t *testing.T) {
 // Test 4: Missing auth.UserContext → fail-open (ADR D3).
 func TestVerifyRateLimit_FailsOpenOnMissingUserContext(t *testing.T) {
 	vrl := NewVerifyRateLimiter(1, 30*time.Second)
-	defer vrl.Stop()
 
 	h := mountRouter(t, vrl, http.StatusAccepted)
 	// NO injectUserContext — request comes without auth.UserContext
@@ -145,7 +137,6 @@ func TestVerifyRateLimit_FailsOpenOnMissingUserContext(t *testing.T) {
 // Test 5 (EC-4 absorption v1.1): empty TenantID → fail-open (cross-tenant collision defense).
 func TestVerifyRateLimit_FailOpen_EmptyTenantID(t *testing.T) {
 	vrl := NewVerifyRateLimiter(1, 30*time.Second)
-	defer vrl.Stop()
 
 	h := mountRouter(t, vrl, http.StatusAccepted)
 	ctx := injectUserContext(context.Background(), "", "user-X") // TenantID=""

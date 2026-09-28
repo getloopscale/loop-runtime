@@ -11,9 +11,12 @@
 // The gate walks every `templates/clusterrole.yaml` under `charts/` and
 // `infra/helm/` and asserts: no ClusterRole template emits an
 // UNCONDITIONAL `secrets` or `configmaps` rule with `apiGroups: [""]`
-// for the loopzero-api SA. Conditional rules (wrapped in
-// `{{- if .Values.rbac.legacyClusterWideSecrets }}` or equivalent
-// helm-template guard) are accepted — operator controls cutover.
+// for the loopzero-api SA. A rule is accepted as conditional ONLY when it sits
+// inside `{{- if .Values.rbac.legacyClusterWideSecrets }}` — the declared
+// cutover guard (cutoverGuardRe). Any other enclosing block, notably the
+// chart-wide `{{- if .Values.rbac.create }}` wrapper every operator chart
+// uses, decides whether the ClusterRole exists at all and says nothing about
+// the grant, so it does not count.
 //
 // Defense in depth: even if a values.yaml later flips legacyClusterWideSecrets
 // to true in production, the gate catches new charts that introduce the
@@ -27,6 +30,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check which repo to scan + allows operator override of allowlist.
@@ -38,10 +43,12 @@ type Config struct {
 
 // Outcome is the gate result.
 type Outcome struct {
-	Pass     bool
-	Hits     []Hit
-	Warnings []string
+	Pass bool
+	Hits []Hit
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Hit is a single violation location.
 type Hit struct {
@@ -57,8 +64,20 @@ var scanDirs = []string{"charts", "infra/helm"}
 // secretsRuleRe matches `resources: ["secrets", "configmaps"]` and variants.
 var secretsRuleRe = regexp.MustCompile(`resources:\s*\[[^\]]*(secrets|configmaps)[^\]]*\]`)
 
-// guardOpenRe matches a helm if-guard opening.
-var guardOpenRe = regexp.MustCompile(`\{\{-?\s*if\s+`)
+// blockOpenRe matches every template action that opens a block closed by
+// `end`. All of them must be tracked, or an `end` closing a range would be
+// read as closing the guard around it.
+var blockOpenRe = regexp.MustCompile(`\{\{-?\s*(if|with|range|define|block)\s`)
+
+// blockElseRe matches an `else` / `else if` of the innermost block.
+var blockElseRe = regexp.MustCompile(`\{\{-?\s*else\b`)
+
+// blockEndRe matches the action that closes the innermost block.
+var blockEndRe = regexp.MustCompile(`\{\{-?\s*end\s*-?\}\}`)
+
+// cutoverGuardRe is the ONLY guard that makes a cluster-wide secrets or
+// configmaps grant operator-controlled (openbao-adoption v1.3 T5.13).
+var cutoverGuardRe = regexp.MustCompile(`\{\{-?\s*if\s+\.Values\.rbac\.legacyClusterWideSecrets\s*-?\}\}`)
 
 // Check scans the configured RepoRoot and returns an Outcome.
 func Check(cfg Config) (Outcome, error) {
@@ -93,9 +112,9 @@ func Check(cfg Config) (Outcome, error) {
 			}
 			hits, err := scanFile(path, rel)
 			if err != nil {
-				out.Warnings = append(out.Warnings,
-					fmt.Sprintf("%s: scan error: %v", rel, err))
-				return nil
+				// Fail closed: a template the gate could not read is a
+				// template nobody audited, never a clean one.
+				return fmt.Errorf("scan %s: %w", rel, err)
 			}
 			out.Hits = append(out.Hits, hits...)
 			return nil
@@ -108,9 +127,10 @@ func Check(cfg Config) (Outcome, error) {
 	return out, nil
 }
 
-// scanFile walks a single clusterrole.yaml looking for unconditional
-// secrets/configmaps grants. Tracks helm if-guard depth via simple
-// counter so secrets rule inside ANY active guard is considered conditional.
+// scanFile walks a single clusterrole.yaml looking for cluster-wide
+// secrets/configmaps grants that are not inside the cutover guard. It keeps a
+// stack of open template blocks; each frame records whether it is the
+// cutover guard's true branch.
 func scanFile(absPath, relPath string) ([]Hit, error) {
 	f, err := os.Open(absPath)
 	if err != nil {
@@ -122,50 +142,59 @@ func scanFile(absPath, relPath string) ([]Hit, error) {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
+	var frames []bool // true = inside the cutover guard's true branch
 	lineNum := 0
-	openGuards := 0
-
 	for scanner.Scan() {
 		lineNum++
 		line := scanner.Text()
+		frames = trackBlocks(frames, line)
+
 		trimmed := strings.TrimSpace(line)
-
-		// Guard depth tracking. `{{- if ... }}` opens; `{{- end }}` closes.
-		// We do NOT need to track {{- else }} since it doesn't change depth.
-		if guardOpenRe.MatchString(line) {
-			openGuards++
-		}
-		if strings.Contains(line, "{{- end }}") || strings.Contains(line, "{{ end }}") {
-			if openGuards > 0 {
-				openGuards--
-			}
-		}
-
-		// Skip comments + empty lines.
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-
-		if m := secretsRuleRe.FindStringSubmatch(line); m != nil {
-			if openGuards > 0 {
-				continue // guarded — operator-controlled cutover OK
-			}
-			hits = append(hits, Hit{
-				File:      relPath,
-				Line:      lineNum,
-				Resources: m[1],
-				Reason: fmt.Sprintf(
-					"ClusterRole grants unconditional cluster-wide %s access — deep review finding #1 (catastrophic blast radius)",
-					m[1]),
-				Suggestion: "wrap the rule in {{- if .Values.rbac.legacyClusterWideSecrets }} ... {{- end }} (or equivalent guard) and provide per-namespace Role via operator reconcile; see openbao-adoption v1.3 T5.13",
-			})
+		m := secretsRuleRe.FindStringSubmatch(line)
+		if m == nil || insideCutover(frames) {
+			continue
 		}
+		hits = append(hits, Hit{
+			File:      relPath,
+			Line:      lineNum,
+			Resources: m[1],
+			Reason: fmt.Sprintf(
+				"ClusterRole grants cluster-wide %s access outside the rbac.legacyClusterWideSecrets cutover guard — deep review finding #1 (catastrophic blast radius)",
+				m[1]),
+			Suggestion: "wrap the rule in {{- if .Values.rbac.legacyClusterWideSecrets }} ... {{- end }} and provide per-namespace Role via operator reconcile; see openbao-adoption v1.3 T5.13",
+		})
 	}
-
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
 	return hits, nil
+}
+
+// trackBlocks applies the block actions on one line to the frame stack.
+func trackBlocks(frames []bool, line string) []bool {
+	if blockOpenRe.MatchString(line) {
+		frames = append(frames, cutoverGuardRe.MatchString(line))
+	}
+	if blockElseRe.MatchString(line) && len(frames) > 0 {
+		frames[len(frames)-1] = false
+	}
+	if blockEndRe.MatchString(line) && len(frames) > 0 {
+		frames = frames[:len(frames)-1]
+	}
+	return frames
+}
+
+// insideCutover reports whether any open frame is the cutover guard.
+func insideCutover(frames []bool) bool {
+	for _, f := range frames {
+		if f {
+			return true
+		}
+	}
+	return false
 }
 
 // FormatOutcome renders the outcome for CLI output.
@@ -173,7 +202,7 @@ func FormatOutcome(out Outcome) string {
 	var sb strings.Builder
 	if out.Pass {
 		sb.WriteString("cluster-role-no-secrets-star: PASS\n")
-		sb.WriteString("  All ClusterRole templates with secrets/configmaps grants are properly guarded.\n")
+		sb.WriteString("  Every cluster-wide secrets/configmaps grant sits inside the rbac.legacyClusterWideSecrets cutover guard.\n")
 		return sb.String()
 	}
 	sb.WriteString("cluster-role-no-secrets-star: FAIL\n")
@@ -181,9 +210,6 @@ func FormatOutcome(out Outcome) string {
 		fmt.Fprintf(&sb, "  %s:%d — %s\n", h.File, h.Line, h.Reason)
 		fmt.Fprintf(&sb, "    Resource grant: %s\n", h.Resources)
 		fmt.Fprintf(&sb, "    Suggestion: %s\n", h.Suggestion)
-	}
-	for _, w := range out.Warnings {
-		fmt.Fprintf(&sb, "  WARN: %s\n", w)
 	}
 	return sb.String()
 }

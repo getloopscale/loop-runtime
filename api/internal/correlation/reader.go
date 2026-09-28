@@ -15,7 +15,8 @@
 // canonical header.
 //
 // Why a helper instead of inlining: the gate
-// `pkg/quality/correlationheader` SCANS `api/internal/routes/*.go` for
+// `cmd/loopzero-ops/internal/quality/correlationheader` SCANS every HTTP package
+// (`api/internal/<feature>/<name>http`) for
 // any `r.Header.Get("X-?Correlation-ID")` literal. The reader lives
 // here (`api/internal/correlation/`), OUTSIDE the gate's scan scope,
 // so the backward-compat fallback is allowed exactly once at the
@@ -51,7 +52,7 @@ const legacyHeader = "X-Correlation-ID"
 // should treat empty as "no propagated ID" (the surrounding context
 // MAY already have one injected by middleware/correlation.go).
 //
-// Per gate `pkg/quality/correlationheader`: routes/*.go MUST NOT call
+// Per gate `cmd/loopzero-ops/internal/quality/correlationheader`: routes/*.go MUST NOT call
 // `r.Header.Get("Correlation-ID"|"X-Correlation-ID")` directly —
 // they MUST call this function. The gate's AST scan exempts this
 // package (`api/internal/correlation/`) so the fallback lives in

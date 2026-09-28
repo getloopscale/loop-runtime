@@ -26,9 +26,10 @@ import (
 //	exec.Command("dot", "-Tsvg", "docs/state-machines/build.dot",
 //	             "-o", "docs/state-machines/build.svg").Run()
 //
-// CI invokes infra/scripts/gen-state-machine-svgs.sh which iterates
-// every machine and writes the SVG files. A diff against committed
-// SVGs catches transition drift in PR review.
+// cmd/gen-dots writes one DOT file per machine (`go generate`, or
+// `task pkg:state-machine-dots:write`); `task pkg:state-machine-dots:check`
+// fails when a committed DOT no longer matches Visualize(), which catches
+// transition drift in PR review.
 func (m *Machine) Visualize() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "digraph %s {\n", dotIdent(m.name))

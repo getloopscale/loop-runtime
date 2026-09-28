@@ -49,8 +49,8 @@ else
   set --
 fi
 
-# Deriva do próprio checkout em vez de fixar a casa de uma pessoa: o script roda
-# em qualquer clone, e o override por env continua valendo.
+# Derived from the checkout itself instead of pinning one person's home dir: the script
+# runs in any clone, and the env override still applies.
 REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 DRILL_DIR="$REPO_ROOT/infra/pulumi-drill"
 EVIDENCE_DIR="$REPO_ROOT/.claude/knowledge-base/reviews/dr-drill-$(date +%Y-%m-%d)"

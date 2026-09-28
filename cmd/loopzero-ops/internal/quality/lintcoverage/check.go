@@ -3,49 +3,49 @@
 
 // Package lintcoverage measures every Go module, and refuses regression per module.
 //
-// # O defeito, medido
+// # The defect, measured
 //
-// `task lint` (`taskfiles/test.yml:512-531`) rodava TRÊS módulos de OITO, em três entradas
-// `cmds` separadas — e o Task aborta na primeira que sai != 0, então um achado em `pkg`
-// impedia `api` de ser medido. Foi por isso que o `B-009` reportou *"11 achados, todos em
-// operators"*: `api` nunca tinha sido olhado.
+// `task lint` (`taskfiles/test.yml:512-531`) ran THREE modules out of EIGHT, in three separate
+// `cmds` entries — and Task aborts at the first one that exits != 0, so a finding in `pkg`
+// kept `api` from being measured. That is why `B-009` reported *"11 findings, all in
+// operators"*: `api` had never been looked at.
 //
-// Medido em 2026-08-18, módulo a módulo:
+// Measured on 2026-08-18, module by module:
 //
-//	pkg  operators  api  operators/api  tools/*(2)        0 cada   <- os cobertos
+//	pkg  operators  api  operators/api  tools/*(2)        0 each   <- the covered ones
 //	infra/scripts                                          4
 //	infra/tests                                           93
-//	cmd/loopzero-ops                                         221       <- o binario dos 130 gates
+//	cmd/loopzero-ops                                         221       <- the binary of the 130 gates
 //
-// **318 achados em módulos que ninguém lint**, e o maior é a ferramenta que executa todos os
-// outros gates deste repositório. O `B-121` descreve o sintoma menor — abortar no primeiro — e
-// perde o maior: mesmo sem abortar, a task olharia 3 de 8.
+// **318 findings in modules nobody lints**, and the largest is the tool that runs every other
+// gate in this repository. `B-121` describes the smaller symptom — aborting at the first — and
+// misses the bigger one: even without aborting, the task would look at 3 of 8.
 //
-// # Por que catraca, e não "conserte os 318"
+// # Why a ratchet, and not "fix the 318"
 //
-// `task lint` é linha do `CLAUDE.md § Pre-completion checklist`. Cobrir tudo sem catraca a leva
-// de verde para 318 achados, e uma linha de checklist que ninguém consegue marcar deixa de ser
-// checklist — a queixa literal do `B-083`. A trava seria desligada, levando junto a cobertura
-// que acabou de ganhar.
+// `task lint` is a line of `CLAUDE.md § Pre-completion checklist`. Covering everything without a
+// ratchet takes it from green to 318 findings, and a checklist line nobody can tick stops being
+// a checklist — the literal complaint of `B-083`. The lock would be switched off, taking with it
+// the coverage it had just gained.
 //
-// A catraca torna os 318 visíveis e impede o 319: um módulo em 0 que ganhe um achado reprova,
-// mesmo com 221 congelados ao lado.
+// The ratchet makes the 318 visible and prevents the 319th: a module at 0 that gains a finding
+// fails, even with 221 frozen beside it.
 //
-// # O `gofmt` é dimensão própria
+// # `gofmt` is a dimension of its own
 //
-// 155 arquivos fora do formato, e `pkg` tem 30 deles com **0** achados de `golangci-lint` —
-// nenhum linter de formatação está habilitado no `.golangci.yml`. Uma dimensão não cobre a
-// outra, e elas se corrigem de formas diferentes: formatação é mecânica, `gosec` não é.
+// 155 files out of format, and `pkg` has 30 of them with **0** `golangci-lint` findings —
+// no formatting linter is enabled in `.golangci.yml`. One dimension does not cover the
+// other, and they are fixed in different ways: formatting is mechanical, `gosec` is not.
 //
-// # A execução entra por costura injetável
+// # Execution enters through an injectable seam
 //
-// O DoD do `B-121` exige *"teste que prova que um achado em `pkg` não impede `api` de ser
-// linted"* — e um teste desses não pode depender de rodar `golangci-lint` de verdade: seria
-// lento, dependeria da árvore, e não conseguiria FABRICAR a falha que precisa provar.
+// The DoD of `B-121` requires *"a test that proves a finding in `pkg` does not keep `api` from
+// being linted"* — and such a test cannot depend on actually running `golangci-lint`: it would
+// be slow, would depend on the tree, and could not FABRICATE the failure it needs to prove.
 //
-// Decisão registrada em
-// `.claude/knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-18-lint-covers-every-module.md`
-// (T2, pendente de ratificação).
+// The decision (T2, pending ratification, 2026-08-18: lint covers every module) was
+// recorded in a meeting note under the gitignored `.claude/` tree, which no clone
+// carries and which no longer exists; this package comment is its surviving record.
 package lintcoverage
 
 import (
@@ -59,22 +59,24 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrRegression means a module got worse than its frozen count.
-var ErrRegression = errors.New("regressão contra a linha de base")
+var ErrRegression = errors.New("regression against the baseline")
 
 // ErrUndeclaredModule means a module has no frozen entry.
-var ErrUndeclaredModule = errors.New("módulo sem entrada na linha de base")
+var ErrUndeclaredModule = errors.New("module with no entry in the baseline")
 
 // ErrRunnerFailed means a module could not be measured.
 //
-// NÃO é "zero achados": um módulo que não pôde ser medido reportado como limpo é o
-// verde-sobre-nada que este gate existe para impedir.
-var ErrRunnerFailed = errors.New("módulo não pôde ser medido")
+// It is NOT "zero findings": a module that could not be measured, reported as clean, is the
+// green-over-nothing this gate exists to prevent.
+var ErrRunnerFailed = errors.New("module could not be measured")
 
-// Runner measures one module. É a costura (DIP) que torna a política testável sem processo
-// externo — ver o doc do pacote.
+// Runner measures one module. It is the seam (DIP) that makes the policy testable without an
+// external process — see the package doc.
 type Runner interface {
 	Lint(root, module string) (int, error)
 	Gofmt(root, module string) (int, error)
@@ -104,14 +106,25 @@ type Outcome struct {
 	Undeclared   []string
 	Failed       []Failure
 	Reason       string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Measure runs every module and returns the counts, WITHOUT judging them.
 //
-// Separado de Check de propósito (SRP), e a razão é concreta: `--write` precisa medir para
-// poder congelar pela primeira vez, e `Check` reprova em linha de base ausente antes de medir
-// qualquer coisa. A primeira versão desta fatia confundiu as duas responsabilidades e tornou o
-// primeiro congelamento impossível.
+// Separate from Check on purpose (SRP), and the reason is concrete: `--write` needs to measure to
+// be able to freeze for the first time, and `Check` fails on a missing baseline before measuring
+// anything. The first version of this slice conflated the two responsibilities and made the
+// first freeze impossible.
 func Measure(cfg Config) (Outcome, error) {
 	var out Outcome
 	root := cfg.RepoRoot
@@ -129,8 +142,8 @@ func Measure(cfg Config) (Outcome, error) {
 	}
 	out.Modules = mods
 
-	// TODOS os módulos são medidos, mesmo quando um falha. É a bala do B-121: abortar no
-	// primeiro é o que mantinha 5 módulos e 318 achados invisíveis.
+	// ALL modules are measured, even when one fails. This is the B-121 bullet: aborting at the
+	// first is what kept 5 modules and 318 findings invisible.
 	out.Lint = map[string]int{}
 	out.Gofmt = map[string]int{}
 	for _, m := range mods {
@@ -149,6 +162,43 @@ func Measure(cfg Config) (Outcome, error) {
 	}
 	out.Reason = summarize(mods, out.Lint, out.Gofmt)
 	return out, nil
+}
+
+// Refrozen reports a baseline rewritten from what was measured.
+type Refrozen struct {
+	// Reason is the per-module summary of the counts that were frozen.
+	Reason string
+}
+
+// Verdict is Pass: refreezing is an operation, and a Refrozen exists only when
+// the baseline was written. A refreeze that could not complete is an error.
+func (Refrozen) Verdict() verdict.Verdict { return verdict.Pass }
+
+// Refreeze measures every module and rewrites the baseline with the counts.
+//
+// It uses what was MEASURED, even after a regression — refreezing is a
+// deliberate act, and the baseline file's diff is where it becomes visible. A
+// run that measured nothing has nothing to freeze and is refused.
+func Refreeze(cfg Config) (Refrozen, error) {
+	out, err := Measure(cfg)
+	if err != nil {
+		return Refrozen{}, err
+	}
+	if len(out.Lint) == 0 && len(out.Gofmt) == 0 {
+		return Refrozen{}, errors.New("nothing measured, so nothing to freeze")
+	}
+	root := cfg.RepoRoot
+	if root == "" {
+		root = "."
+	}
+	path := cfg.BaselinePath
+	if path == "" {
+		path = filepath.Join(root, BaselineRelPath)
+	}
+	if err := WriteBaseline(path, out.Lint, out.Gofmt); err != nil {
+		return Refrozen{}, err
+	}
+	return Refrozen{Reason: out.Reason}, nil
 }
 
 // Check measures every module and applies the ratchet.
@@ -181,17 +231,19 @@ func Check(cfg Config) (Outcome, error) {
 	}
 	if len(out.Regressions) > 0 {
 		r := out.Regressions[0]
-		return out, fmt.Errorf("%w: %s [%s] %d → %d — a linha de base recusa regressão; conserte, ou recongele com `--write` explicando por quê",
+		out.Violation = fmt.Errorf("%w: %s [%s] %d → %d — the baseline refuses regression; fix it, or refreeze with `--write` explaining why",
 			ErrRegression, r.Module, r.Dimension, r.Was, r.Now)
+		return out, nil
 	}
 	if len(out.Undeclared) > 0 {
-		return out, fmt.Errorf("%w (%d): %s — um módulo novo entra DECLARADO, nunca em silêncio; rode `--write`",
+		out.Violation = fmt.Errorf("%w (%d): %s — a new module enters DECLARED, never silently; run `--write`",
 			ErrUndeclaredModule, len(out.Undeclared), strings.Join(out.Undeclared, ", "))
+		return out, nil
 	}
 	return out, nil
 }
 
-// summarize renders the per-module counts — a segunda bala do B-121.
+// summarize renders the per-module counts — the second bullet of B-121.
 func summarize(mods []string, lint, gofmtCounts map[string]int) string {
 	parts := make([]string, 0, len(mods))
 	tl, tg := 0, 0
@@ -200,7 +252,7 @@ func summarize(mods []string, lint, gofmtCounts map[string]int) string {
 		tl += lint[m]
 		tg += gofmtCounts[m]
 	}
-	return fmt.Sprintf("%d módulo(s) medido(s) [lint/gofmt]: %s — total %d achados, %d arquivos fora de formato",
+	return fmt.Sprintf("%d module(s) measured [lint/gofmt]: %s — total %d findings, %d files out of format",
 		len(mods), strings.Join(parts, " "), tl, tg)
 }
 
@@ -247,8 +299,8 @@ func lintCacheDir(dir string) string {
 // lintCommand builds the invocation, separated from running it so the environment
 // it carries can be asserted without golangci-lint on the box.
 func lintCommand(dir string) *exec.Cmd {
-	// #nosec G204 -- `dir` deriva da varredura de go.mod sob a raiz; nenhum argumento vem de
-	// entrada de usuário.
+	// #nosec G204 -- `dir` derives from the go.mod sweep under the root; no argument comes from
+	// user input.
 	cmd := exec.Command("golangci-lint", "run", "--timeout", "5m", "./...")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOLANGCI_LINT_CACHE="+lintCacheDir(dir))
@@ -259,25 +311,55 @@ func (execRunner) Lint(root, mod string) (int, error) {
 	dir := ModuleDir(root, mod)
 	cmd := lintCommand(dir)
 	out, err := cmd.CombinedOutput()
+	code := 0
 	if err != nil {
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) {
-			// Binário ausente ou impossível de executar: NÃO é "zero achados".
-			return 0, fmt.Errorf("golangci-lint em %s: %w", mod, err)
+			// A missing or unrunnable binary is NOT "zero findings".
+			return 0, fmt.Errorf("golangci-lint in %s: %w", mod, err)
 		}
-		// Saída != 0 com achados é o caminho normal — a contagem vem do texto.
+		code = exitErr.ExitCode()
 	}
-	return len(findingRE.FindAllString(string(out), -1)), nil
+	n, lerr := lintFindings(code, out)
+	if lerr != nil {
+		return 0, fmt.Errorf("golangci-lint in %s: %w", mod, lerr)
+	}
+	return n, nil
+}
+
+// lintIssuesExitCode is golangci-lint's exit code for "issues were found".
+// Every other non-zero code is a run that did not complete.
+const lintIssuesExitCode = 1
+
+// lintFindings turns a golangci-lint exit code and output into a count. A
+// crashed run (config error, type-check failure, timeout) prints no finding
+// lines; counting it as zero would report an unmeasured module as clean.
+func lintFindings(exitCode int, out []byte) (int, error) {
+	n := len(findingRE.FindAll(out, -1))
+	switch {
+	case exitCode == 0:
+		return n, nil
+	case exitCode == lintIssuesExitCode && n > 0:
+		return n, nil
+	default:
+		return 0, fmt.Errorf("exit %d with %d parseable finding(s) — the run did not complete: %s",
+			exitCode, n, lastLine(out))
+	}
+}
+
+func lastLine(out []byte) string {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	return lines[len(lines)-1]
 }
 
 func (execRunner) Gofmt(root, mod string) (int, error) {
 	dir := ModuleDir(root, mod)
-	// #nosec G204 -- mesma justificativa do Lint acima.
+	// #nosec G204 -- same justification as Lint above.
 	cmd := exec.Command("gofmt", "-l", ".")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
-		return 0, fmt.Errorf("gofmt em %s: %w", mod, err)
+		return 0, fmt.Errorf("gofmt in %s: %w", mod, err)
 	}
 	n := 0
 	for _, l := range strings.Split(string(out), "\n") {

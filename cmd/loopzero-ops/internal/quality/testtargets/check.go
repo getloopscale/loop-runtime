@@ -18,11 +18,14 @@ package testtargets
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // excludedDirs are pruned anywhere in the tree.
@@ -43,6 +46,9 @@ type Outcome struct {
 	Violations []string // "test:line: VAR=... → MISSING <target>"
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // assignRe matches a SCRIPT*/LIB assignment line, capturing the RHS value.
 var assignRe = regexp.MustCompile(`^\s*(SCRIPT|SCRIPT_UNDER_TEST|SCRIPT_PATH|LIB)=(.+)$`)
 
@@ -53,13 +59,19 @@ var repoPathRe = regexp.MustCompile(`(infra|tools|cli|api|pkg|operators)/[A-Za-z
 // fixtureVarRe marks an RHS as a TEST-CREATED stub path (not a repo target).
 var fixtureVarRe = regexp.MustCompile(`(?i)(\$\{?tmpdir|\$\{?work\b|/tmp/|mktemp|\$\{?tmp\b)`)
 
-// Check walks cfg.Root and verifies every resolvable *_test.sh SCRIPT target exists.
+// ErrNothingScanned means the walk found no *_test.sh at all.
+var ErrNothingScanned = errors.New("no *_test.sh found under the root — the gate read nothing")
+
+// Check walks cfg.Root and verifies every resolvable *_test.sh SCRIPT target
+// exists. A test script it cannot read, and a tree with no test script, are
+// errors rather than a clean result.
 func Check(cfg Config) (*Outcome, error) {
 	root := cfg.Root
 	if root == "" {
 		root = "."
 	}
 	out := &Outcome{Pass: true}
+	scanned := 0
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -73,10 +85,14 @@ func Check(cfg Config) (*Outcome, error) {
 		if !strings.HasSuffix(d.Name(), "_test.sh") {
 			return nil
 		}
+		scanned++
 		return scanTest(root, path, out)
 	})
 	if err != nil {
 		return nil, err
+	}
+	if scanned == 0 {
+		return nil, fmt.Errorf("%s: %w", root, ErrNothingScanned)
 	}
 	if len(out.Violations) > 0 {
 		out.Pass = false
@@ -87,7 +103,7 @@ func Check(cfg Config) (*Outcome, error) {
 func scanTest(root, path string, out *Outcome) error {
 	data, err := os.ReadFile(path) // #nosec G304 -- gate intentionally reads scanned test scripts
 	if err != nil {
-		return nil
+		return fmt.Errorf("reading test script: %w", err)
 	}
 	rel, _ := filepath.Rel(root, path)
 	sc := bufio.NewScanner(bytes.NewReader(data))
@@ -112,6 +128,9 @@ func scanTest(root, path string, out *Outcome) error {
 			out.Violations = append(out.Violations,
 				fmt.Sprintf("%s:%d: %s= → MISSING %s", rel, lineNo, m[1], target))
 		}
+	}
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("reading %s: %w", rel, err)
 	}
 	return nil
 }

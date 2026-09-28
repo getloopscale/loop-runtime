@@ -1047,6 +1047,24 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 	})
 
+	// The api writes the canonical tier names; the CRD must accept them.
+	Context("pro plan", func() {
+		const tenantName = "pc-pro"
+
+		BeforeAll(func() {
+			createTenantAndWaitActive(tenantName, loopzerov1.PlanPro, []string{"production"})
+		})
+
+		It("should create the paid mid-tier PriorityClass", func() {
+			expectPriorityClass("loopzero-tenant-growth", 500, corev1.PreemptLowerPriority)
+		})
+
+		AfterAll(func() {
+			deleteTenantWithFinalizer(tenantName)
+			deleteTenantNamespaces(tenantName)
+		})
+	})
+
 	Context("enterprise plan", func() {
 		const tenantName = "pc-enterprise"
 
@@ -1581,9 +1599,10 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 				app := fakeArgoCDProvider.Applications[appName]
 				fakeArgoCDProvider.Mu.Unlock()
 
-				// #271: o path é {env}/{project}, casando com onde o pusher escreve os
-				// manifests (api/internal/gitops/gitea_pusher.go:136). Apontar para {env}
-				// sozinho fazia o App ler os manifests de todo projeto daquele ambiente.
+				// #271: the path is {env}/{project}, matching where the pusher writes
+				// the manifests (api/internal/gitops/gitea_pusher.go:136). Pointing at
+				// {env} alone made the App read every project's manifests in that
+				// environment.
 				Expect(app.Path).To(Equal(env+"/default-project"),
 					"ArgoCD Application %s should be scoped to its own project subtree", appName)
 			}
@@ -1908,15 +1927,15 @@ var _ = Describe("TenantController — Environment CR Garbage Collection", Order
 				}, &envCR)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 
-			// Act: remove "staging" from the FIRST tenant
-			var t loopzerov1.Tenant
-			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name: tenantName, Namespace: "default",
-			}, &t)).To(Succeed())
-			t.Spec.Environments = []loopzerov1.TenantEnvironmentEntry{
-				{Name: "production", Cluster: "workload", Project: "default-project"},
-			}
-			Expect(k8sClient.Update(ctx, &t)).To(Succeed())
+			// Act: remove "staging" from the FIRST tenant. The controllers write
+			// this Tenant concurrently (status patches, the Environment delete
+			// pruning its tuple), so the update retries on conflict.
+			t := loopzerov1.Tenant{ObjectMeta: metav1.ObjectMeta{Name: tenantName, Namespace: "default"}}
+			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &t, func() {
+				t.Spec.Environments = []loopzerov1.TenantEnvironmentEntry{
+					{Name: "production", Cluster: "workload", Project: "default-project"},
+				}
+			})).To(Succeed())
 
 			// Wait for TenantController to mark the staging CR for deletion
 			Eventually(func(g Gomega) {

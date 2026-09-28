@@ -37,9 +37,9 @@ var _ = Describe("J-20 Scale", Label("live", "dogfood", "j20"), func() {
 	AfterEach(func() { cancel() })
 
 	Context("Scenario A — status reflects scale config", func() {
-		It("GET /engine/api/v1/projects/teste/status returns 200", func() {
+		It("GET /engine/api/v1/projects/sample/status returns 200", func() {
 			status, _, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/engine/api/v1/projects/teste/status", jwt, nil)
+				env.CloudBaseURL+"/engine/api/v1/projects/sample/status", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
 		})

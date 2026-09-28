@@ -56,9 +56,9 @@ func TestAlertMissingRunbookFails(t *testing.T) {
 	if o.Pass || len(o.Violations) != 1 {
 		t.Errorf("expected 1 violation, got %v", o.Violations)
 	}
-	// O formato passou a carregar o diretorio em 2026-09-06 (B-067). Este teste fixava o
-	// basename sozinho, e era exatamente essa forma que tornava dois sites espelhados
-	// indistinguiveis no relatorio — ver TestViolacaoDistingueDiretoriosEspelhados.
+	// The format started carrying the directory on 2026-09-06 (B-067). This test pinned
+	// the basename alone, and that was exactly the shape that made two mirrored sites
+	// indistinguishable in the report — see TestViolationDistinguishesMirroredDirectories.
 	if o.Violations[0] != DefaultRulesDirs[0]+"/prometheusrule-x.yaml:NoRunbook" {
 		t.Errorf("violation format wrong: %q", o.Violations[0])
 	}
@@ -116,38 +116,38 @@ func TestRunbookBeyondLookaheadStillFails(t *testing.T) {
 	}
 }
 
-// NENHUM diretorio de regras encontrado e' FALHA, e este teste afirmava o contrario ate'
-// 2026-08-19 — chamava-se `TestMissingRulesDirTolerated` e exigia `Pass`.
+// Finding NO rules directory is a FAILURE, and this test asserted the opposite until
+// 2026-08-19 — it was called `TestMissingRulesDirTolerated` and required `Pass`.
 //
-// Tolerar era o "verde sobre nada": um gate que nao acha diretorio nenhum reporta
-// exatamente o mesmo veredito de um que varreu tudo e nao achou defeito. E' a forma que o
-// B-040 e o B-127 nomeiam, e ela estava aqui.
+// Tolerating it was "green over nothing": a gate that finds no directory at all reports
+// exactly the same verdict as one that scanned everything and found no defect. That is
+// the shape B-040 and B-127 name, and it was here.
 //
-// A tolerancia por diretorio INDIVIDUAL continua — as arvores de teste tem um dos quatro —
-// mas zero encontrados nao passa mais.
-func TestNenhumDiretorioDeRegrasEFalhaEmVezDeVerde(t *testing.T) {
+// Tolerance for an INDIVIDUAL directory remains — the test trees hold one of the four —
+// but zero found no longer passes.
+func TestNoRulesDirectoryFailsInsteadOfGreen(t *testing.T) {
 	root := t.TempDir()
 	out := Check(cfg(root))
 	if out.Pass {
-		t.Error("varredura sem NENHUM diretorio de regras passou — verde sobre nada nao e' verde")
+		t.Error("a scan with NO rules directory passed — green over nothing is not green")
 	}
-	if out.DirsVarridos != 0 {
-		t.Errorf("DirsVarridos=%d numa arvore vazia", out.DirsVarridos)
+	if out.DirsScanned != 0 {
+		t.Errorf("DirsScanned=%d in an empty tree", out.DirsScanned)
 	}
 }
 
-// A contrapartida: UM diretorio presente entre os quatro basta, senao toda arvore de teste
-// (que so' cria um) reprovaria por motivo errado.
-func TestUmDiretorioPresenteEntreOsQuatroBasta(t *testing.T) {
+// The counterpart: ONE directory present among the four is enough, otherwise every test
+// tree (which creates only one) would fail for the wrong reason.
+func TestOneDirectoryPresentAmongTheFourIsEnough(t *testing.T) {
 	root := rulesRepo(t, map[string]string{
 		"prometheusrule-x.yaml": "spec:\n  - alert: LoopZeroLockContention\n    expr: up == 0\n",
 	})
 	out := Check(Config{Root: root})
-	if out.DirsVarridos != 1 {
-		t.Errorf("queria 1 diretorio varrido, veio %d", out.DirsVarridos)
+	if out.DirsScanned != 1 {
+		t.Errorf("wanted 1 directory scanned, got %d", out.DirsScanned)
 	}
 	if !out.Pass {
-		t.Errorf("um diretorio valido devia bastar: %+v", out.Violations)
+		t.Errorf("one valid directory should be enough: %+v", out.Violations)
 	}
 }
 
@@ -161,55 +161,55 @@ func TestDefaultExceptionListApplied(t *testing.T) {
 	}
 }
 
-// Dois diretorios varridos contem o MESMO nome de arquivo — `infra/helm/...` e o
-// `charts/...` que o ArgoCD entrega sao copias espelhadas, e 9 pares assim existem na
-// arvore real (medido 2026-09-06). Enquanto a violacao carregar so' o BASENAME, os dois
-// sites produzem strings IDENTICAS: quem le' o relatorio nao sabe qual dos dois arquivos
-// abrir, e consertar um deixa o outro reprovando com uma linha indistinguivel da que
-// acabou de ser corrigida.
-func TestViolacaoDistingueDiretoriosEspelhados(t *testing.T) {
+// Two scanned directories contain the SAME file name — `infra/helm/...` and the
+// `charts/...` that ArgoCD delivers are mirrored copies, and 9 such pairs exist in the real
+// tree (measured 2026-09-06). As long as the violation carries only the BASENAME, the two
+// sites produce IDENTICAL strings: whoever reads the report does not know which of the two
+// files to open, and fixing one leaves the other failing with a line indistinguishable
+// from the one just fixed.
+func TestViolationDistinguishesMirroredDirectories(t *testing.T) {
 	root := t.TempDir()
-	corpo := "spec:\n  - alert: LoopZeroEspelhado\n    expr: up == 0\n"
+	body := "spec:\n  - alert: LoopZeroMirrored\n    expr: up == 0\n"
 	for _, d := range []string{DefaultRulesDirs[0], DefaultRulesDirs[1]} {
 		dir := filepath.Join(root, d)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", d, err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "prometheusrule-x.yaml"), []byte(corpo), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "prometheusrule-x.yaml"), []byte(body), 0o644); err != nil {
 			t.Fatalf("write %s: %v", d, err)
 		}
 	}
 	out := Check(cfg(root))
 	if len(out.Violations) != 2 {
-		t.Fatalf("queria 2 sites em violacao, veio %d: %v", len(out.Violations), out.Violations)
+		t.Fatalf("wanted 2 sites in violation, got %d: %v", len(out.Violations), out.Violations)
 	}
 	if out.Violations[0] == out.Violations[1] {
-		t.Errorf("os dois sites sao indistinguiveis: ambos %q", out.Violations[0])
+		t.Errorf("the two sites are indistinguishable: both %q", out.Violations[0])
 	}
 	for _, v := range out.Violations {
 		if !strings.Contains(v, "/") {
-			t.Errorf("violacao %q nao nomeia o diretorio", v)
+			t.Errorf("violation %q does not name the directory", v)
 		}
 	}
 }
 
-// O relatorio conta SITES, e alertas distintos sao menos que sites sempre que um alerta
-// vive nas duas copias. Dizer "N alertas sem runbook" quando N conta o mesmo alerta duas
-// vezes e' o erro que o gate existe para nao cometer: numero inflado lido como divida.
-func TestAlertasDistintosNaoContamOEspelhoDuasVezes(t *testing.T) {
+// The report counts SITES, and distinct alerts are fewer than sites whenever an alert
+// lives in both copies. Saying "N alerts without a runbook" when N counts the same alert
+// twice is the mistake the gate exists not to make: an inflated number read as debt.
+func TestDistinctAlertsDoNotCountTheMirrorTwice(t *testing.T) {
 	root := t.TempDir()
-	corpo := "spec:\n  - alert: LoopZeroEspelhado\n    expr: up == 0\n"
+	body := "spec:\n  - alert: LoopZeroMirrored\n    expr: up == 0\n"
 	for _, d := range []string{DefaultRulesDirs[0], DefaultRulesDirs[1]} {
 		dir := filepath.Join(root, d)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", d, err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "prometheusrule-x.yaml"), []byte(corpo), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "prometheusrule-x.yaml"), []byte(body), 0o644); err != nil {
 			t.Fatalf("write %s: %v", d, err)
 		}
 	}
 	out := Check(cfg(root))
-	if got := out.AlertasDistintos(); got != 1 {
-		t.Errorf("queria 1 alerta distinto entre 2 sites, veio %d", got)
+	if got := out.DistinctAlerts(); got != 1 {
+		t.Errorf("wanted 1 distinct alert across 2 sites, got %d", got)
 	}
 }

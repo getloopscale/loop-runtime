@@ -49,7 +49,7 @@ func osReadFile(relPath string) ([]byte, error) {
 // static-content assertions against queries/builds.sql SoT — same
 // pattern as releases (T1.1c2c). The wrapper passes cellID verbatim to
 // the sqlc query (build_wrapper.go FindActiveBuilds), and the empty-
-// cellID → CellDefault fallback is in the wrapper layer; both are
+// cellID → domain.DefaultCellID fallback is in the wrapper layer; both are
 // structurally preserved.
 
 const queryFileBuilds = "queries/builds.sql"
@@ -74,9 +74,9 @@ func TestFindActiveBuildsByCell_QuerySoT_ContainsCellAndStatusPredicates(t *test
 }
 
 func TestBuildStoreSqlc_FindActiveBuilds_EmptyCellIDFallsBackToDefault(t *testing.T) {
-	// The empty-cellID → CellDefault fallback is structurally preserved
+	// The empty-cellID → domain.DefaultCellID fallback is structurally preserved
 	// by BuildStoreSqlc.FindActiveBuilds: `if cellID == "" { cellID =
-	// CellDefault }`. We assert it via static-grep of the wrapper source
+	// domain.DefaultCellID }`. We assert it via static-grep of the wrapper source
 	// to avoid the SqlcBridge panic that fake DBTX paths trigger.
 	src, err := osReadFile("store/build_wrapper.go")
 	if err != nil {
@@ -86,8 +86,8 @@ func TestBuildStoreSqlc_FindActiveBuilds_EmptyCellIDFallsBackToDefault(t *testin
 	// The fallback block must be present in the FindActiveBuilds method.
 	// We anchor on the variable name + assignment, not the surrounding
 	// boilerplate, so the test survives cosmetic refactors.
-	if !strings.Contains(contents, `cellID = db.CellDefault`) {
-		t.Error("BuildStoreSqlc.FindActiveBuilds must contain `cellID = db.CellDefault` fallback for empty input")
+	if !strings.Contains(contents, `cellID = domain.DefaultCellID`) {
+		t.Error("BuildStoreSqlc.FindActiveBuilds must contain `cellID = domain.DefaultCellID` fallback for empty input")
 	}
 	// And the method must call the sqlc query — without this, the
 	// fallback above is in the wrong scope.
@@ -228,12 +228,14 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 // catches drift in the SQL SoT regardless of which wrapper consumes it.
 
 // TestCellDefault_BackwardCompatible — DELETED in T1.2b. Same rationale:
-// the empty-cellID → CellDefault fallback is verified by
+// the empty-cellID → domain.DefaultCellID fallback is verified by
 // TestBuildStoreSqlc_FindActiveBuilds_EmptyCellIDFallsBackToDefault
 // above (static-content guard on the wrapper source). The PG-level
 // backward-compat for rows with cell_id='cell-0' (migration
 // 000029 default) is verified by the integration suite.
 
-// NOTE: Stale checkers (PostgresStaleBuildChecker, PostgresStaleReleaseChecker)
-// live in the services package — their SQL-shape tests are in
-// api/tests/unit/stale_checker_cell_scope_test.go (same dbtest.RecordingDBTX pattern).
+// NOTE: The stale-row queries (store.PostgresStaleScanner) are exercised
+// through the build and release stale checkers; their SQL-shape tests are in
+// services/build/stale_build_checker_cell_scope_test.go and
+// services/release/stale_release_checker_cell_scope_test.go (same fake-DBTX
+// pattern).

@@ -113,7 +113,7 @@ func TestViolationRendersFileLineAndText(t *testing.T) {
 		}
 	}
 
-	fileLevel := Violation{Kind: KindMissingDigest, File: "charts/x/values.yaml", Text: "image.digest ausente"}
+	fileLevel := Violation{Kind: KindMissingDigest, File: "charts/x/values.yaml", Text: "image.digest missing"}
 	if got := fileLevel.String(); strings.Contains(got, ":0:") {
 		t.Errorf("a file-level violation has no line number and must not print one; got %q", got)
 	}

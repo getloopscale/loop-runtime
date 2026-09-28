@@ -1,8 +1,0 @@
-apiVersion: v2
-name: loopzero-api
-description: |
-  LoopZero platform API server — chi + pgx HTTP API exposing /api/v1/*.
-  CHG-2026-04-28-LAYERED-BOOTSTRAP / T2.1 — migrated from Pulumi mgmt-api.ts.
-type: application
-version: 0.1.0
-appVersion: "1.0.0"

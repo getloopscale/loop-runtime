@@ -37,8 +37,8 @@ export LOOPZERO_SPACES_SECRET="SECRET_KEY"
 export LOOPZERO_REGISTRY_ENDPOINT="registry.digitalocean.com/loopzero"
 
 # Execute
-log "Running generate-secrets.sh dev mgmt..."
-bash "$SECRETS_SCRIPT" dev mgmt 2>/dev/null || {
+log "Running generate-secrets.sh dev core..."
+bash "$SECRETS_SCRIPT" dev core 2>/dev/null || {
   fail "script execution" "exit non-zero"
 }
 
@@ -58,10 +58,12 @@ else
   fail "DB_HOST" "host literal not seen in kubectl args"
 fi
 
-if grep -q "harbor-redis-credentials" "$MOCK_LOG"; then
-  ok "harbor-redis-credentials Secret created"
+# Harbor was retired (docs/decisions.md, "Retire Harbor"): no Secret for it may
+# come back through this script.
+if grep -qi "harbor" "$MOCK_LOG"; then
+  fail "harbor-retired" "generate-secrets.sh still writes a Harbor Secret"
 else
-  fail "harbor-redis" "harbor-redis-credentials not in args"
+  ok "no Harbor Secret written"
 fi
 
 # B4 — Verify gitea token is passed via --from-file (which preserves no-newline encoding)

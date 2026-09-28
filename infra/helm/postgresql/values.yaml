@@ -34,14 +34,13 @@ auth:
 #   - gitea  : Gitea metadata (E-06 — avoid SQLite limitations)
 #   - kratos : Ory Kratos identities + sessions
 #   - hydra  : Ory Hydra OAuth2 clients + tokens
-#   - harbor : Harbor registry metadata
-# Without these, kratos/hydra/harbor crash with "database does not exist"
+# Without these, kratos/hydra crash with "database does not exist"
 # on first start.
 #
 # Achado #29 (CHG-2026-04-30-INFRA-PARITY) — bitnami postgresql 18.6.2 expects
 # `primary.initdb.scripts`, NOT top-level `initdb.scripts` (older chart schema).
 # The old schema was silently ignored: postgres came up clean but kratos/
-# hydra/harbor init containers crashed with "database does not exist".
+# hydra init containers crashed with "database does not exist".
 # Discovered live during T5.1 virgin install on 2026-04-30.
 
 primary:
@@ -62,7 +61,6 @@ primary:
         CREATE DATABASE gitea OWNER loopzero;
         CREATE DATABASE kratos OWNER loopzero;
         CREATE DATABASE hydra OWNER loopzero;
-        CREATE DATABASE harbor OWNER loopzero;
   # B2 (real-paas-cleanroom-dogfood-loop-plan iter 2, 2026-05-05) — disable
   # Bitnami's chart-owned PDB. The Tiltfile applies a PDB at
   # infra/helm/postgresql/templates/pdb.yaml with `minAvailable: 1`. Bitnami

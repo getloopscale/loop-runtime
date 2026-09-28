@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 func setup(t *testing.T, files map[string]string) string {
@@ -289,15 +291,27 @@ spec:
 	assert.Equal(t, 1, out.Scanned, "only the filtered CRD is scanned")
 }
 
-func TestCheck_MissingSourceDirPasses(t *testing.T) {
-	root := t.TempDir()
-	out, err := Check(Config{
-		Root:               root,
-		HelmRenderOverride: "",
+// A root without the operator CRD sources is a misconfigured run: the gate
+// compared nothing and must not print PASS.
+func TestCheck_MissingSourceDirIsAnError(t *testing.T) {
+	_, err := Check(Config{Root: t.TempDir(), HelmRenderOverride: "---\n"})
+	require.ErrorIs(t, err, scanresult.ErrNothingScanned)
+}
+
+// A --crd filter that matches no source CRD compared nothing; reporting "All 0
+// CRDs are in semantic sync" would read as a pass for a typo.
+func TestCheck_FilterMatchingNothingIsAnError(t *testing.T) {
+	root := setup(t, map[string]string{
+		"operators/config/crd/bases/loopzero.io_tenants.yaml": "apiVersion: x\nkind: CustomResourceDefinition\nmetadata:\n  name: tenants.loopzero.io\nspec:\n  group: loopzero.io\n",
 	})
-	require.NoError(t, err)
-	assert.True(t, out.Pass)
-	assert.Contains(t, strings.Join(out.Messages, "\n"), "source dir")
+	_, err := Check(Config{Root: root, HelmRenderOverride: "---\n", CRDFilter: "tenant"})
+	require.ErrorIs(t, err, scanresult.ErrNothingScanned)
+}
+
+// A stream cut mid-document is a decode error, not the end of the stream.
+func TestParseHelmRender_TruncatedDocumentIsAnError(t *testing.T) {
+	_, err := parseHelmRender("kind: CustomResourceDefinition\nmetadata:\n  name: \"tenants.loopzero.io")
+	require.Error(t, err)
 }
 
 func TestCheck_VerboseAppendsDiff(t *testing.T) {

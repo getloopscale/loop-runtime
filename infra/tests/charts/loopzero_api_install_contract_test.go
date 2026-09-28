@@ -10,7 +10,6 @@ package charts
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -20,33 +19,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// apiChartDir resolves charts/loopzero-api relative to this package.
+// apiChartDir resolves the PUBLISHED loopzero-api chart. The name exists in both
+// chart trees, so it is reached by tree, never by bare name.
 func apiChartDir(t *testing.T) string {
 	t.Helper()
-	d, err := filepath.Abs(filepath.Join("..", "..", "..", "charts", "loopzero-api"))
-	if err != nil {
-		t.Fatalf("resolve chart dir: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(d, "Chart.yaml")); err != nil {
-		t.Fatalf("chart not found at %s: %v", d, err)
-	}
-	return d
+	return publishedChart(t, "loopzero-api")
 }
 
-// helmRequired runs `helm template`; FAILS CLOSED (t.Fatal) when helm is absent
-// for the set-equality guards (EC-4) — a completeness guard that silently skips
-// is worse than none.
-func helmRequired(t *testing.T, chart string, extra ...string) string {
-	t.Helper()
-	if _, err := exec.LookPath("helm"); err != nil {
-		t.Fatal("helm not installed — set-equality guard cannot run (EC-4 fail-closed; CI must provide helm)")
+// allSecretsSet returns a --set map giving every documented secret a value, so
+// the conditional secret templates emit each key.
+func allSecretsSet(documented []string) map[string]string {
+	set := make(map[string]string, len(documented))
+	for _, k := range documented {
+		set["secrets."+camelAPI(k)] = "x"
 	}
-	args := append([]string{"template", chart}, extra...)
-	out, err := exec.Command("helm", args...).CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm template %v failed: %v\n%s", extra, err, out)
-	}
-	return string(out)
+	return set
 }
 
 // camelAPI mirrors the generator's ENV->camelCase value-name mapping.
@@ -133,7 +120,7 @@ func setEqual(t *testing.T, label string, want, got []string) {
 // T1.1 — CONFIG.md set-equals the rendered ConfigMap keys (EC-1: rendered, not template source).
 func TestLoopZeroApiConfigManifest(t *testing.T) {
 	c := apiChartDir(t)
-	out := helmRequired(t, c)
+	out := renderChart(t, c, defaultRelease, nil)
 	rendered := renderedKeys(t, out, "ConfigMap")
 	documented := mdTableKeys(t, filepath.Join(c, "CONFIG.md"))
 	if len(rendered) == 0 {
@@ -162,11 +149,7 @@ func TestLoopZeroApiSecretManifest(t *testing.T) {
 		t.Fatal("SECRETS.md documents zero keys")
 	}
 	// Render with every documented secret value set so the conditional secret.yaml emits each.
-	args := []string{}
-	for _, k := range documented {
-		args = append(args, "--set", "secrets."+camelAPI(k)+"=x")
-	}
-	out := helmRequired(t, c, args...)
+	out := renderChart(t, c, defaultRelease, allSecretsSet(documented))
 	rendered := renderedKeys(t, out, "Secret")
 	setEqual(t, "SECRETS.md vs rendered Secret", documented, rendered)
 	if !strings.Contains(readFile(t, filepath.Join(c, "SECRETS.md")), "openssl rand") {
@@ -185,7 +168,7 @@ func TestLoopZeroApiConfigSecretSeparation(t *testing.T) {
 	if len(secretSet) == 0 {
 		t.Fatal("SECRETS.md parsed zero keys — separation guard would pass vacuously (review F2)")
 	}
-	out := helmRequired(t, c)
+	out := renderChart(t, c, defaultRelease, nil)
 	for _, k := range renderedKeys(t, out, "ConfigMap") {
 		if secretSet[k] {
 			t.Errorf("secret key %q rendered into the ConfigMap (two planes crossed)", k)
@@ -246,17 +229,16 @@ func TestLoopZeroApiESOExamples(t *testing.T) {
 // F3 (review) — fail-closed: secrets.create=false without existingSecret must NOT render
 // a dangling secretRef; the template must fail loudly instead of producing an un-startable pod.
 func TestLoopZeroApiSecretSourceFailClosed(t *testing.T) {
-	if _, err := exec.LookPath("helm"); err != nil {
-		t.Fatal("helm not installed — fail-closed guard cannot run (EC-4)")
-	}
 	c := apiChartDir(t)
 	// Invalid combo → helm template MUST fail.
-	out, err := exec.Command("helm", "template", c, "--set", "secrets.create=false").CombinedOutput()
+	out, err := renderChartE(t, c, defaultRelease, map[string]string{"secrets.create": "false"})
 	if err == nil {
 		t.Errorf("helm template with secrets.create=false + no existingSecret should FAIL (dangling secretRef), but succeeded:\n%s", out)
 	}
 	// Valid combo (existingSecret) → must succeed even with create=false.
-	if _, err := exec.Command("helm", "template", c, "--set", "secrets.create=false", "--set", "secrets.existingSecret=loopzero-api-secrets").CombinedOutput(); err != nil {
+	if _, err := renderChartE(t, c, defaultRelease, map[string]string{
+		"secrets.create": "false", "secrets.existingSecret": "loopzero-api-secrets",
+	}); err != nil {
 		t.Errorf("helm template with create=false + existingSecret should succeed: %v", err)
 	}
 }
@@ -264,10 +246,10 @@ func TestLoopZeroApiSecretSourceFailClosed(t *testing.T) {
 // T3.1 — Reloader annotation present iff enabled (opt-in, back-compat).
 func TestLoopZeroApiReloaderOptIn(t *testing.T) {
 	c := apiChartDir(t)
-	if !strings.Contains(helmRequired(t, c, "--set", "reloader.enabled=true"), "reloader.stakater.com/auto") {
+	if !strings.Contains(renderChart(t, c, defaultRelease, map[string]string{"reloader.enabled": "true"}), "reloader.stakater.com/auto") {
 		t.Error("reloader annotation absent when reloader.enabled=true")
 	}
-	if strings.Contains(helmRequired(t, c), "reloader.stakater.com") {
+	if strings.Contains(renderChart(t, c, defaultRelease, nil), "reloader.stakater.com") {
 		t.Error("reloader annotation leaked into default render (must be opt-in)")
 	}
 }
@@ -282,7 +264,7 @@ func TestLoopZeroApiValuesExample(t *testing.T) {
 	if !strings.Contains(ex, "existingSecret") {
 		t.Error("values.example.yaml missing existingSecret")
 	}
-	if helmRequired(t, c, "-f", filepath.Join(c, "values.example.yaml")) == "" {
+	if renderChart(t, c, defaultRelease, nil, filepath.Join(c, "values.example.yaml")) == "" {
 		t.Error("values.example.yaml rendered empty")
 	}
 }

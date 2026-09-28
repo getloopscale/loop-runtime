@@ -54,19 +54,12 @@ func NewDeployEventStoreSqlc() *DeployEventStoreSqlc {
 	return &DeployEventStoreSqlc{q: generated.New()}
 }
 
-// gen bridges db.DBTX → generated.DBTX via SqlcBridge. Panics if the concrete
-// DBTX is not a real pgx-backed connection — by design: the outbox INSERT MUST
-// run on the activation tx (PgxTxAdapter / pgxmock), never on a fake that would
+// gen resolves the sqlc handle (db.Generated). A DBTX that is not a real
+// pgx-backed connection makes the INSERT fail with db.ErrNotSqlcBridge: the
+// outbox row MUST run on the activation tx, never on a fake that would
 // silently drop the write.
 func (s *DeployEventStoreSqlc) gen(tx db.DBTX) generated.DBTX {
-	bridge, ok := tx.(db.SqlcBridge)
-	if !ok {
-		panic(fmt.Sprintf(
-			"deploy_event_store: DBTX %T does not implement SqlcBridge — the outbox INSERT requires the activation tx (PgxTxAdapter) or pgxmock",
-			tx,
-		))
-	}
-	return bridge.GeneratedDB()
+	return db.Generated(tx)
 }
 
 // AppendDeployEvent inserts one outbox row on the caller's transaction. A nil tx

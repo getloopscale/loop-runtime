@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -24,8 +26,10 @@ func writeFile(t *testing.T, path, content string) {
 func fixtureRepo(t *testing.T, matrix string, codeFiles map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
-	matrixPath := filepath.Join(root, ".claude/knowledge-base/concepts/operations/local-prod-divergence-matrix.md")
-	writeFile(t, matrixPath, matrix)
+	writeFile(t, filepath.Join(root, MatrixRelPath),
+		"# Operations\n\n## Dev loop\n\nNot the matrix: LP-777 mentioned in prose.\n\n"+
+			MatrixHeading+"\n\n| LP-NNN | Status | Code site(s) | What diverges |\n|---|---|---|---|\n"+
+			matrix+"\n## Related\n\n| LP-555 | OPEN | a table in another section |\n")
 	for rel, content := range codeFiles {
 		writeFile(t, filepath.Join(root, rel), content)
 	}
@@ -36,8 +40,8 @@ func fixtureRepo(t *testing.T, matrix string, codeFiles map[string]string) strin
 // a matrix entry and every OPEN matrix entry has a code marker.
 func TestCheck_AllMatched(t *testing.T) {
 	root := fixtureRepo(t,
-		`| LP-001 | foo | OPEN |
-| LP-002 | bar | RESOLVED |
+		`| LP-001 | OPEN | foo | x |
+| LP-002 | RESOLVED | bar | x |
 `,
 		map[string]string{
 			"api/main.go": "// LOCAL ONLY (LP-001) — dev shortcut\n",
@@ -54,7 +58,7 @@ func TestCheck_AllMatched(t *testing.T) {
 // TestCheck_UnknownID — code marker references LP-NNN not in matrix → violation.
 func TestCheck_UnknownID(t *testing.T) {
 	root := fixtureRepo(t,
-		`| LP-001 | foo | OPEN |
+		`| LP-001 | OPEN | foo | x |
 `,
 		map[string]string{
 			"api/main.go": "// LOCAL ONLY (LP-999) — typo\n",
@@ -80,8 +84,8 @@ func TestCheck_UnknownID(t *testing.T) {
 // TestCheck_OrphanMatrixEntry — matrix OPEN entry with no code marker → violation.
 func TestCheck_OrphanMatrixEntry(t *testing.T) {
 	root := fixtureRepo(t,
-		`| LP-001 | foo | OPEN |
-| LP-042 | orphan | OPEN |
+		`| LP-001 | OPEN | foo | x |
+| LP-042 | OPEN | orphan | x |
 `,
 		map[string]string{
 			"api/main.go": "// LOCAL ONLY (LP-001)\n",
@@ -108,8 +112,8 @@ func TestCheck_OrphanMatrixEntry(t *testing.T) {
 // is NOT a violation (only OPEN entries require a live marker).
 func TestCheck_ResolvedOrphanIgnored(t *testing.T) {
 	root := fixtureRepo(t,
-		`| LP-001 | foo | OPEN |
-| LP-050 | done | RESOLVED |
+		`| LP-001 | OPEN | foo | x |
+| LP-050 | RESOLVED | done | x |
 `,
 		map[string]string{
 			"api/main.go": "// LOCAL ONLY (LP-001)\n",
@@ -123,19 +127,87 @@ func TestCheck_ResolvedOrphanIgnored(t *testing.T) {
 	}
 }
 
-// TestCheck_MissingMatrix_Errors — no matrix file → error (exit 2 in bash).
-func TestCheck_MissingMatrix_Errors(t *testing.T) {
+// A missing matrix is a failed gate, not a gate error: the markers in the
+// code have nothing to be checked against.
+func TestCheck_MissingMatrixDocument_IsAViolation(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root})
-	if err == nil {
-		t.Error("expected error when matrix file missing")
+	writeFile(t, filepath.Join(root, "api/main.go"), "// LOCAL ONLY (LP-001)\n")
+	outcome, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if outcome.Pass || !strings.Contains(strings.Join(outcome.Violations, "\n"), "MATRIX_MISSING") {
+		t.Fatalf("want a MATRIX_MISSING violation, got %+v", outcome)
+	}
+}
+
+func TestCheck_MissingMatrixSection_IsAViolation(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, MatrixRelPath), "# Operations\n\n## Dev loop\n")
+	outcome, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if outcome.Pass || !strings.Contains(strings.Join(outcome.Violations, "\n"), "MATRIX_MISSING") {
+		t.Fatalf("want a MATRIX_MISSING violation, got %+v", outcome)
+	}
+}
+
+// Only rows of the matrix section count: an LP id mentioned elsewhere in the
+// operations document is not a matrix entry.
+func TestCheck_IDsOutsideTheSectionAreNotMatrixEntries(t *testing.T) {
+	root := fixtureRepo(t, "| LP-001 | OPEN | a | b |\n", map[string]string{
+		"api/main.go":  "// LOCAL ONLY (LP-001)\n",
+		"api/other.go": "// LOCAL ONLY (LP-777)\n",
+	})
+	outcome, err := Check(Config{RepoRoot: root})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if outcome.Pass {
+		t.Fatal("LP-777 appears only in prose outside the matrix section; it must be UNKNOWN_ID")
+	}
+	for _, v := range outcome.Violations {
+		if strings.Contains(v, "LP-555") {
+			t.Fatalf("an OPEN row in another section is not a matrix entry: %v", outcome.Violations)
+		}
+	}
+}
+
+// An unreadable source file is an unaudited file, never a file without markers.
+func TestCheck_UnreadableSourceFile_FailsAsGateError(t *testing.T) {
+	root := fixtureRepo(t, "| LP-001 | OPEN | a | b |\n", map[string]string{
+		"api/main.go": "// LOCAL ONLY (LP-001)\n",
+		"api/x.go":    "package x\n",
+	})
+	p := filepath.Join(root, "api/x.go")
+	// A dangling symlink is unreadable for every uid, root included.
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(filepath.Dir(p), "does-not-exist"), p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Check(Config{RepoRoot: root}); err == nil {
+		t.Fatal("want an error for an unreadable source file, got nil")
+	}
+}
+
+// LIVE: the real matrix and the real markers agree.
+func TestCheck_LIVE_RepositoryMatrixIsConsistent(t *testing.T) {
+	outcome, err := Check(Config{RepoRoot: qtestutil.MustRepoRoot()})
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !outcome.Pass {
+		t.Fatalf("matrix and markers disagree: %v", outcome.Violations)
 	}
 }
 
 // TestCheck_ExcludesVendorNodeModules — markers in node_modules/dist/vendor ignored.
 func TestCheck_ExcludesVendorNodeModules(t *testing.T) {
 	root := fixtureRepo(t,
-		`| LP-001 | foo | OPEN |
+		`| LP-001 | OPEN | foo | x |
 `,
 		map[string]string{
 			"api/main.go":                   "// LOCAL ONLY (LP-001)\n",
@@ -150,10 +222,9 @@ func TestCheck_ExcludesVendorNodeModules(t *testing.T) {
 	}
 }
 
-// TestExtractMatrixIDs — parses LP-NNN ids from matrix content.
-func TestExtractMatrixIDs(t *testing.T) {
-	ids := extractMatrixIDs("| LP-001 | x | OPEN |\n| LP-002 | y | RESOLVED |\nrandom LP-003 inline\n")
-	if !ids["LP-001"] || !ids["LP-002"] || !ids["LP-003"] {
-		t.Errorf("expected LP-001/002/003, got %v", ids)
+func TestParseMatrixRows(t *testing.T) {
+	rows := parseMatrixRows("| LP-001 | OPEN | x |\n| LP-002 | RESOLVED | y |\nrandom LP-003 inline\n")
+	if rows["LP-001"] != "OPEN" || rows["LP-002"] != "RESOLVED" || len(rows) != 2 {
+		t.Errorf("want LP-001 OPEN and LP-002 RESOLVED only, got %v", rows)
 	}
 }

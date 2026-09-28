@@ -116,15 +116,14 @@ func TestOpenBaoKVPut_ForbiddenIsError(t *testing.T) {
 }
 
 func TestSecretsSeedDev_WritesAllPopulatedPaths(t *testing.T) {
+	var host Host
 	server, state := newOpenBaoStubServer(t, "s.stub-root")
 	defer server.Close()
 
 	dir := t.TempDir()
 	credsPath, unsealPath := writeSecretsSeedCreds(t, dir)
 
-	origGetenv := osGetenv
-	defer func() { osGetenv = origGetenv }()
-	osGetenv = func(k string) string {
+	host.Getenv = func(k string) string {
 		if k == vaultUnsealFileEnv {
 			return unsealPath
 		}
@@ -136,7 +135,7 @@ func TestSecretsSeedDev_WritesAllPopulatedPaths(t *testing.T) {
 		t.Fatalf("LoadCreds: %v", err)
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
-	deps := Deps{
+	deps := Deps{Host: host,
 		Ctx:             context.Background(),
 		Kube:            NewKubeClient(c),
 		Creds:           creds,
@@ -172,6 +171,7 @@ func TestSecretsSeedDev_SkipWhenCredsAbsent(t *testing.T) {
 }
 
 func TestSecretsSeedDev_SkipsMissingFields(t *testing.T) {
+	var host Host
 	server, state := newOpenBaoStubServer(t, "s.root")
 	defer server.Close()
 	dir := t.TempDir()
@@ -181,9 +181,7 @@ func TestSecretsSeedDev_SkipsMissingFields(t *testing.T) {
 	unsealPath := filepath.Join(dir, "u.json")
 	_ = os.WriteFile(unsealPath, []byte(`{"root_token":"s.root"}`), 0o600)
 
-	origGetenv := osGetenv
-	defer func() { osGetenv = origGetenv }()
-	osGetenv = func(k string) string {
+	host.Getenv = func(k string) string {
 		if k == vaultUnsealFileEnv {
 			return unsealPath
 		}
@@ -192,7 +190,7 @@ func TestSecretsSeedDev_SkipsMissingFields(t *testing.T) {
 
 	creds, _ := LoadCreds(credsPath)
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
-	deps := Deps{
+	deps := Deps{Host: host,
 		Ctx:             context.Background(),
 		Kube:            NewKubeClient(c),
 		Creds:           creds,
@@ -222,6 +220,7 @@ func TestSecretsSeedDev_Name(t *testing.T) {
 // joined error — never PASS (partial-success masking would hide missing security
 // secrets). Blueprint ADR-M24-1 + error-handling.md fail-loud.
 func TestSecretsSeedDev_FailsLoudOnPartialWrite(t *testing.T) {
+	var host Host
 	// stub that 500s any path containing "stripe", 200 for the rest.
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Vault-Token") != "s.stub-root" {
@@ -238,9 +237,7 @@ func TestSecretsSeedDev_FailsLoudOnPartialWrite(t *testing.T) {
 
 	dir := t.TempDir()
 	credsPath, unsealPath := writeSecretsSeedCreds(t, dir)
-	origGetenv := osGetenv
-	defer func() { osGetenv = origGetenv }()
-	osGetenv = func(k string) string {
+	host.Getenv = func(k string) string {
 		if k == vaultUnsealFileEnv {
 			return unsealPath
 		}
@@ -251,7 +248,7 @@ func TestSecretsSeedDev_FailsLoudOnPartialWrite(t *testing.T) {
 		t.Fatalf("LoadCreds: %v", err)
 	}
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
-	deps := Deps{
+	deps := Deps{Host: host,
 		Ctx:             context.Background(),
 		Kube:            NewKubeClient(c),
 		Creds:           creds,

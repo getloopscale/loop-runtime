@@ -3,9 +3,10 @@
 # Chart defaults canonical (DOCR + dev tag + IfNotPresent + HA).
 
 global:
-# Sobrescrevivel por LOOPZERO_PLATFORM_IMAGE_PREFIX (mesma razao registrada em
-# loopzero-api.yaml.gotmpl: o ambiente dependia sem alternativa de imagem publicada, e com o
-# token de pull expirado nao havia como reconstruir do zero). O padrao segue o GHCR.
+# Overridable via LOOPZERO_PLATFORM_IMAGE_PREFIX (same reason recorded in
+# loopzero-api.yaml.gotmpl: the environment depended on a published image with no
+# alternative, and with the pull token expired there was no way to rebuild from
+# scratch). The default follows GHCR.
   registry: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" | trimSuffix "/" }}
   imagePullSecrets:
     - name: ghcr-pull
@@ -17,16 +18,6 @@ image:
 config:
   # Chart requires explicit baseDomain (no env-helmfile auto-injection).
   baseDomain: "{{ .Values.domain }}"
-
-# T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
-# dev-public wires the poller at the cluster-internal Prometheus service.
-# The chart auto-adds the Prometheus egress rule when enabled=true —
-# no need to duplicate here (see loopzero-common.networkpolicy helper).
-dataPlanePoller:
-  enabled: true
-  pgUrl: "postgresql://loopzero:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
-  prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local:80"
-  interval: "30s"
 
 # dev-public NetworkPolicy override: gitea is in loopzero-system ns (not the
 # chart-default `gitea` ns). Same fix as loopzero-tenant-operator. Without

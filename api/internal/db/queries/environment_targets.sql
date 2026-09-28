@@ -79,12 +79,12 @@ DO UPDATE SET
   updated_at         = NOW();
 
 -- name: CountPermanentEnvironments :one
--- D5 (Bug A fix): enforcement-facing count. Returns the number of DISTINCT
--- permanent environments a tenant has across all projects. Used by
--- pkg/enforcement/limiter.go to gate POST /api/v1/environments against the
--- plan_limits.environments cap. Preview environments are NOT counted —
--- they are managed under the single-slot model (preview_slot table).
-SELECT COUNT(DISTINCT environment)::int FROM environment_targets
+-- Plan enforcement: counts a tenant's permanent (project, environment) tuples,
+-- gated against plan_limits.environments. M2 v1.2 interprets that cap per
+-- tuple, and the primary key makes each tuple one row, so COUNT(*) is the
+-- per-tuple count (DISTINCT environment would collapse web/prod and api/prod
+-- into one). Preview environments live in preview_slot and are NOT counted.
+SELECT COUNT(*)::int FROM environment_targets
 WHERE tenant_id = $1 AND kind = 'permanent';
 
 -- name: ListPermanentEnvironments :many
@@ -100,3 +100,14 @@ ORDER BY environment;
 -- preview rows on PR close. Idempotent (DELETE matches 0 or 1 row).
 DELETE FROM environment_targets
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND kind = $4;
+
+-- name: RecordEnvironmentTargetReplicasReady :execrows
+-- Data-plane readiness snapshot written by the api's readiness poller
+-- (environments.ReadinessPoller) from Prometheus. Touches ONLY the two
+-- observation columns the dashboard badge reads, so it never contends with
+-- the release pointers the env lock guards. Zero rows affected means the
+-- (tenant, project, environment) has no target row — the caller reports it.
+-- Cross-tenant by design: runs on the background (loopzero_worker) pool.
+UPDATE environment_targets
+SET last_replicas_ready_value = $1, last_replicas_ready_at = $2
+WHERE tenant_id = $3 AND project_id = $4 AND environment = $5;

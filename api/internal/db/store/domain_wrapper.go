@@ -40,6 +40,8 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
@@ -55,10 +57,7 @@ import (
 // =========================================================================
 
 func (s *PostgresDomainStore) Create(ctx context.Context, d *ports.CustomDomain) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	if err := q.InsertCustomDomain(ctx, bridge, generated.InsertCustomDomainParams{
 		ID:                d.ID,
@@ -80,10 +79,7 @@ func (s *PostgresDomainStore) Create(ctx context.Context, d *ports.CustomDomain)
 }
 
 func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *ports.CustomDomain) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	if err := q.InsertCustomDomainWithCFZone(ctx, bridge, generated.InsertCustomDomainWithCFZoneParams{
 		ID:                 d.ID,
@@ -109,10 +105,7 @@ func (s *PostgresDomainStore) CreateWithCFZone(ctx context.Context, d *ports.Cus
 }
 
 func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, dom, tenantID string) (*ports.CustomDomain, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	row, err := q.GetCustomDomainByDomainAndTenant(ctx, bridge, generated.GetCustomDomainByDomainAndTenantParams{
 		Domain:   dom,
@@ -128,10 +121,7 @@ func (s *PostgresDomainStore) GetByDomainAndTenant(ctx context.Context, dom, ten
 }
 
 func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string, filter ports.DomainListFilter) ([]ports.CustomDomain, int, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, 0, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 
 	limit := filter.Limit
@@ -171,10 +161,7 @@ func (s *PostgresDomainStore) ListByTenant(ctx context.Context, tenantID string,
 }
 
 func (s *PostgresDomainStore) UpdateStatus(ctx context.Context, dom, status string) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.UpdateCustomDomainStatus(ctx, bridge, generated.UpdateCustomDomainStatusParams{
 		Status: status,
@@ -190,10 +177,7 @@ func (s *PostgresDomainStore) UpdateStatus(ctx context.Context, dom, status stri
 }
 
 func (s *PostgresDomainStore) TransitionStatus(ctx context.Context, dom, expectedStatus, newStatus string) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.TransitionCustomDomainStatus(ctx, bridge, generated.TransitionCustomDomainStatusParams{
 		Status:   newStatus,
@@ -210,10 +194,7 @@ func (s *PostgresDomainStore) TransitionStatus(ctx context.Context, dom, expecte
 }
 
 func (s *PostgresDomainStore) UpdateVerified(ctx context.Context, dom string, verifiedAt time.Time) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.UpdateCustomDomainVerified(ctx, bridge, generated.UpdateCustomDomainVerifiedParams{
 		VerifiedAt: pgtype.Timestamptz{Time: verifiedAt, Valid: true},
@@ -229,10 +210,7 @@ func (s *PostgresDomainStore) UpdateVerified(ctx context.Context, dom string, ve
 }
 
 func (s *PostgresDomainStore) UpdateTLS(ctx context.Context, dom, tlsStatus string, expiresAt *time.Time) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.UpdateCustomDomainTLS(ctx, bridge, generated.UpdateCustomDomainTLSParams{
 		TlsStatus:    dbconv.StringEmptyToNilPtr(tlsStatus),
@@ -249,10 +227,7 @@ func (s *PostgresDomainStore) UpdateTLS(ctx context.Context, dom, tlsStatus stri
 }
 
 func (s *PostgresDomainStore) UpdateFailure(ctx context.Context, dom, status, reason string) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.UpdateCustomDomainFailure(ctx, bridge, generated.UpdateCustomDomainFailureParams{
 		Status:        status,
@@ -269,10 +244,7 @@ func (s *PostgresDomainStore) UpdateFailure(ctx context.Context, dom, status, re
 }
 
 func (s *PostgresDomainStore) Delete(ctx context.Context, dom string) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.DeleteCustomDomain(ctx, bridge, dom)
 	if err != nil {
@@ -285,10 +257,7 @@ func (s *PostgresDomainStore) Delete(ctx context.Context, dom string) error {
 }
 
 func (s *PostgresDomainStore) CountByTenant(ctx context.Context, tenantID string) (int, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return 0, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	n, err := q.CountActiveCustomDomainsByTenant(ctx, bridge, tenantID)
 	if err != nil {
@@ -301,19 +270,30 @@ func (s *PostgresDomainStore) CountByTenant(ctx context.Context, tenantID string
 // Background reaper methods
 // =========================================================================
 
+// FindAndClaimVerified claims the verified domains for provisioning. The
+// target status is derived from the Domain machine's DomainProvision edge,
+// never spelled here.
 func (s *PostgresDomainStore) FindAndClaimVerified(ctx context.Context) ([]ports.CustomDomain, error) {
-	return s.ClaimByStatus(ctx, "verified", "provisioning")
+	return s.claimByStatus(ctx, string(statemachine.DomainVerified), string(verifiedClaimTarget()))
 }
 
+// FindRemoving claims (FOR UPDATE SKIP LOCKED) the domains being removed
+// without moving them: removing -> removing is a claim, not a transition.
 func (s *PostgresDomainStore) FindRemoving(ctx context.Context) ([]ports.CustomDomain, error) {
-	return s.ClaimByStatus(ctx, "removing", "removing")
+	removing := string(statemachine.DomainRemoving)
+	return s.claimByStatus(ctx, removing, removing)
 }
 
-func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toStatus string) ([]ports.CustomDomain, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+// verifiedClaimTarget is where the Domain machine sends a verified domain the
+// provisioner claims.
+func verifiedClaimTarget() statemachine.State {
+	return domainMachine.Transition(statemachine.DomainVerified, statemachine.DomainProvision)
+}
+
+// claimByStatus is unexported on purpose: it writes any status string, so the
+// only callers are the two claims above, whose statuses come from the machine.
+func (s *PostgresDomainStore) claimByStatus(ctx context.Context, fromStatus, toStatus string) ([]ports.CustomDomain, error) {
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.ClaimCustomDomainsByStatus(ctx, bridge, generated.ClaimCustomDomainsByStatusParams{
 		Status:   toStatus,
@@ -331,12 +311,9 @@ func (s *PostgresDomainStore) ClaimByStatus(ctx context.Context, fromStatus, toS
 
 func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cellID string) ([]ports.CustomDomain, error) {
 	if cellID == "" {
-		cellID = db.CellDefault
+		cellID = domain.DefaultCellID
 	}
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.FindPendingCustomDomainsForAutoVerify(ctx, bridge, cellID)
 	if err != nil {
@@ -350,10 +327,7 @@ func (s *PostgresDomainStore) FindPendingForAutoVerify(ctx context.Context, cell
 }
 
 func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]ports.CustomDomain, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.FindActiveCustomDomainsForCNAMECheck(ctx, bridge, pgtype.Timestamptz{Time: staleAfter, Valid: true})
 	if err != nil {
@@ -368,10 +342,7 @@ func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, stale
 
 func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error) {
 	cutoff := time.Now().UTC().Add(-maxAge)
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.FindStalePendingCustomDomains(ctx, bridge, pgtype.Timestamptz{Time: cutoff, Valid: true})
 	if err != nil {
@@ -386,10 +357,7 @@ func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.
 
 func (s *PostgresDomainStore) FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error) {
 	cutoff := time.Now().UTC().Add(-maxAge)
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.FindStaleProvisioningCustomDomains(ctx, bridge, pgtype.Timestamptz{Time: cutoff, Valid: true})
 	if err != nil {
@@ -403,10 +371,7 @@ func (s *PostgresDomainStore) FindStaleProvisioning(ctx context.Context, maxAge 
 }
 
 func (s *PostgresDomainStore) FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]ports.CustomDomain, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.FindActiveCustomDomainsWithTLSExpiry(ctx, bridge, int32(withinDays))
 	if err != nil {
@@ -420,10 +385,7 @@ func (s *PostgresDomainStore) FindActiveWithTLSExpiry(ctx context.Context, withi
 }
 
 func (s *PostgresDomainStore) UpdateCNAMECheck(ctx context.Context, dom string, checkTime time.Time, consecutiveFailures int) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.UpdateCustomDomainCNAMECheck(ctx, bridge, generated.UpdateCustomDomainCNAMECheckParams{
 		LastCnameCheck:           pgtype.Timestamptz{Time: checkTime, Valid: true},
@@ -440,10 +402,7 @@ func (s *PostgresDomainStore) UpdateCNAMECheck(ctx context.Context, dom string, 
 }
 
 func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]ports.CustomDomain, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.ListActiveCustomDomainsByApp(ctx, bridge, generated.ListActiveCustomDomainsByAppParams{
 		TenantID:    tenantID,
@@ -462,10 +421,7 @@ func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, pro
 }
 
 func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) ([]ports.CustomDomain, error) {
-	bridge, err := s.bridge()
-	if err != nil {
-		return nil, err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.FindCustomDomainsByStatus(ctx, bridge, status)
 	if err != nil {
@@ -483,10 +439,7 @@ func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) (
 // =========================================================================
 
 func (s *PostgresDomainStore) UpdateCFZoneStatus(ctx context.Context, dom, cfZoneStatus string) error {
-	bridge, err := s.bridge()
-	if err != nil {
-		return err
-	}
+	bridge := s.bridge()
 	q := generated.New()
 	rows, err := q.UpdateCustomDomainCFZoneStatus(ctx, bridge, generated.UpdateCustomDomainCFZoneStatusParams{
 		CfZoneStatus: dbconv.StringEmptyToNilPtr(cfZoneStatus),
@@ -513,12 +466,8 @@ func (s *PostgresDomainStore) FindNSActive(ctx context.Context) ([]ports.CustomD
 // Helpers
 // =========================================================================
 
-func (s *PostgresDomainStore) bridge() (generated.DBTX, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("domain store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
-	return bridge.GeneratedDB(), nil
+func (s *PostgresDomainStore) bridge() generated.DBTX {
+	return db.Generated(s.DB)
 }
 
 // makeCustomDomain assembles a *ports.CustomDomain from the 20

@@ -48,7 +48,15 @@ podAnnotations: {}
 service:
   type: ClusterIP
   port: 13002
+  # Fixed node port for the http port when type is NodePort; null lets the
+  # cluster pick one. The Helmfile dev-public install pins 30002, the port the
+  # k3d serverlb publishes to the host, so the edge on the host can reach it.
+  nodePort: null
 
+# Non-secret settings, one ConfigMap key each. The keys from kratosInternalUrl
+# down are rendered only when non-empty: the binary treats an unset variable
+# as "use my default" or "feature off", so an empty value would say nothing a
+# missing key does not.
 config:
   listenAddr: ":13002"
   kratosPublicUrl: "http://ory-kratos-public.ory.svc.cluster.local:80"
@@ -64,6 +72,72 @@ config:
   githubAppSlug: "loopzero-platform"
   appPublicUrl: "http://localhost:3000"
   authCookieDomain: ""
+  # Cluster-internal Kratos URL for server-side calls (session whoami, cookie
+  # verification); the browser-facing one is kratosPublicUrl. Unset, the binary
+  # falls back to kratosPublicUrl (KRATOS_INTERNAL_URL).
+  kratosInternalUrl: ""
+  # Issuer the JWT `iss` claim must equal byte for byte — no normalisation, so
+  # a trailing slash matters (JWT_ISSUER).
+  jwtIssuer: ""
+  # Where Stripe checkout returns the browser (BILLING_RETURN_URL).
+  billingReturnUrl: ""
+  # Data-plane base URLs. Each one unset leaves its dashboard surface off
+  # (RAG_BASE_URL, LENS_BASE_URL, TRAEFIK_MCP_BASE_URL).
+  ragBaseUrl: ""
+  lensBaseUrl: ""
+  traefikMcpBaseUrl: ""
+  # Prometheus the cost aggregator reads; unset, the aggregator does not start
+  # (LOOPZERO_PROMETHEUS_URL).
+  prometheusUrl: ""
+
+# Secrets this chart does not create, provisioned by ESO, a bootstrap task or an
+# operator. Rendered after the chart's own envFrom sources and existingSecret.
+# `optional: true` lets the pod start without the Secret, which is how a
+# dependency disappears without the startup saying anything (B-104), so the
+# schema requires a `reason` on every optional entry. Empty by default: an
+# install that provides everything through existingSecret needs neither list.
+secrets:
+  # envFrom secretRef entries: {name, optional, reason}.
+  additionalSources: []
+  # One key of an external Secret mapped onto a variable:
+  # {name, secretName, key, optional, reason}. An explicit variable outranks
+  # every envFrom source.
+  keyRefs: []
+
+# writable /tmp for a read-only root filesystem — data exports are staged under
+# /tmp/loopzero-exports (LOOPZERO_EXPORT_DIR default).
+tmpVolume:
+  sizeLimit: 512Mi
+
+# Traefik IngressRoute to the Service (loopzero-common.ingressRoute). Off: a published
+# chart does not assume an ingress controller. The Helmfile bootstrap turns it on.
+ingressRoute:
+  enabled: false
+  host: ""
+  entryPoints:
+    - websecure
+  middlewares: []
+  # CFManaged — TLS terminates at the Cloudflare edge, no Certificate is emitted.
+  certIssuer: CFManaged
+
+# Data-plane platform-admin keys (loopzero-rag, loopzero-lens) materialised by ESO from
+# OpenBao into Secrets loopzero-rag-admin-key / loopzero-lens-admin-key, key
+# RAG_PLATFORM_ADMIN_KEY / LENS_PLATFORM_ADMIN_KEY. Off by default: they need an
+# ESO controller and a ClusterSecretStore. The pod reads them through
+# secrets.keyRefs; rotation is `bao kv patch secret/<openBaoPath> <property>=<new>`,
+# then an ESO refresh and a rollout restart.
+rag:
+  externalSecretEnabled: false
+  secretStoreName: "loopzero-secrets-secrets"
+  openBaoPath: "loopzero/cloud"
+  openBaoProperty: "rag_platform_admin_key"
+  externalSecretRefreshInterval: "1h"
+lens:
+  externalSecretEnabled: false
+  secretStoreName: "loopzero-secrets-secrets"
+  openBaoPath: "loopzero/cloud"
+  openBaoProperty: "lens_platform_admin_key"
+  externalSecretRefreshInterval: "1h"
 
 resources:
   requests:
@@ -104,7 +178,9 @@ readinessProbe:
 metrics:
   serviceMonitor:
     enabled: false
-    port: metrics
+    # The Service exposes one named port, `http`, and /metrics is served on it —
+    # a ServiceMonitor naming `metrics` would select no endpoint.
+    port: http
     interval: 30s
     scrapeTimeout: 10s
 
@@ -146,14 +222,20 @@ affinity:
 tolerations: []
 nodeSelector: {}
 
-# billing.required declara que ESTE ambiente cobra de verdade.
+# billing.required declares that THIS environment really charges.
 #
-# Medido em 2026-08-11: o painel rodou 20h sem os Secrets de cobrança, `Running`, sem um
-# único evento — porque a opcionalidade era um literal `true`, igual em todo ambiente. Um
-# literal não pode divergir; um valor pode, e é essa divergência que separa o hermético
-# (que roda sem Stripe de propósito) do público (que mostra plano e preço na tela).
+# Measured 2026-08-11: the dashboard ran 20h without the billing Secrets, `Running`, with
+# not one event — because the optionality was a literal `true`, the same in every
+# environment. A literal cannot diverge; a value can, and that divergence is what separates
+# the hermetic install (which runs without Stripe on purpose) from the public one (which
+# shows plan and price on screen).
 #
-# Falso por padrão: preserva o caminho de boot sem Stripe. O ambiente que promete cobrar
-# liga isto explicitamente — declarar é o ato consciente, não o esquecimento.
+# False by default: keeps the boot path without Stripe. The environment that promises to
+# charge turns it on explicitly — declaring is the conscious act, not the omission.
 billing:
   required: false
+  # Secret holding the Stripe API keys (STRIPE_API_KEY and the price ids), separate from
+  # the webhook secret because the two rotate on different triggers. Empty: not mounted
+  # (an install passing them through existingSecret). Set, it is mounted with the same
+  # optionality as loopzero-stripe-webhook — required exactly when billing.required is.
+  apiKeysSecret: ""

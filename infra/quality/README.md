@@ -54,11 +54,15 @@ bash infra/scripts/ci/check-mock-budget.sh  # find files >5 mocks
 
 ## Adding a new gate
 
-1. Write script under `infra/scripts/ci/`
-2. Write hermetic test under `infra/tests/scripts/`
+1. Write the gate in Go under `cmd/loopzero-ops/internal/quality/<name>/` and register it from its own adapter, `cmd/loopzero-ops/internal/qualitycli/<name>_gate.go` (one file per gate; its `init()` calls `register`, and a gate that is deliberately not wired says why in its `Wiring` field). New `.sh` files are refused by the `no-new-bash` gate; this step said `infra/scripts/ci/` until 2026-09-23.
+2. Write its hermetic tests next to it (`check_test.go`); `task quality:hermetic` runs them.
 3. Wire the gate into `task quality:gates` (`taskfiles/quality.yml`). This step named `.github/workflows/quality-gates.yml` until 2026-09-11; that workflow exists in no commit, and Actions was retired as the pipeline in 2026-05-23.
-4. Add Required Status Check name to `.github/branch-protection-config.yml`
-5. Operator activates via `branch-protection-update.sh`
+4. For the gate to face every pull request, add its `loopzero-ops quality <name>` step to the `public-checks` job of `.github/workflows/ci.yml`. No branch-protection entry is needed: the only required check is `CI gate`, which aggregates the CI jobs (`.github/branch-protection-config.yml`). `assert_delivery_gate_armed.py` reports which gates run on the pull request and which only run locally.
+
+## Naming
+
+- **Shell tests end in `_test.sh`** (kebab-case name, snake `_test` suffix: `dev-public-login-rate-limit_test.sh`). The suffix is deliberate, not an inconsistency: it mirrors Go's `_test.go`, and gates recognise test files by it (`billinglayers`, `divergencematrix` treat `_test.sh` exactly like `_test.go`). Renaming to `-test.sh` would silently turn those files into production scripts for every such gate.
+- **Python scripts are snake_case** (`assert_delivery_gate_armed.py`), so any of them can be imported as a module instead of copied.
 
 ## Patterns reused across gates
 

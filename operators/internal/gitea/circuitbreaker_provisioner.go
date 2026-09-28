@@ -47,18 +47,6 @@ func (p *CircuitBreakerProvisioner) EnsureRepo(ctx context.Context, name string,
 	return url, err
 }
 
-// RepoExists delegates to the inner provisioner with circuit breaker protection.
-func (p *CircuitBreakerProvisioner) RepoExists(ctx context.Context, name string) (bool, error) {
-	exists, err := circuitbreaker.Execute(ctx, p.cb, func(ctx context.Context) (bool, error) {
-		return p.inner.RepoExists(ctx, name)
-	})
-	if err != nil && p.cb.State() == circuitbreaker.Open {
-		p.logger.WarnContext(ctx, "gitea circuit breaker open, skipping RepoExists",
-			"repo", name, "cb_state", p.cb.State().String())
-	}
-	return exists, err
-}
-
 // ArchiveRepo delegates to the inner provisioner with circuit breaker protection.
 func (p *CircuitBreakerProvisioner) ArchiveRepo(ctx context.Context, name string) error {
 	_, err := circuitbreaker.Execute(ctx, p.cb, func(ctx context.Context) (struct{}, error) {
@@ -66,18 +54,6 @@ func (p *CircuitBreakerProvisioner) ArchiveRepo(ctx context.Context, name string
 	})
 	if err != nil && p.cb.State() == circuitbreaker.Open {
 		p.logger.WarnContext(ctx, "gitea circuit breaker open, skipping ArchiveRepo",
-			"repo", name, "cb_state", p.cb.State().String())
-	}
-	return err
-}
-
-// UnarchiveRepo delegates to the inner provisioner with circuit breaker protection.
-func (p *CircuitBreakerProvisioner) UnarchiveRepo(ctx context.Context, name string) error {
-	_, err := circuitbreaker.Execute(ctx, p.cb, func(ctx context.Context) (struct{}, error) {
-		return struct{}{}, p.inner.UnarchiveRepo(ctx, name)
-	})
-	if err != nil && p.cb.State() == circuitbreaker.Open {
-		p.logger.WarnContext(ctx, "gitea circuit breaker open, skipping UnarchiveRepo",
 			"repo", name, "cb_state", p.cb.State().String())
 	}
 	return err

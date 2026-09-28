@@ -297,13 +297,13 @@ func TestLineCoverage_IsCovered_NilMap(t *testing.T) {
 }
 
 // =============================================================================
-// roundTo1Decimal
+// RoundTo1Decimal
 // =============================================================================
 
 func TestRoundTo1Decimal(t *testing.T) {
-	assert.Equal(t, 87.5, roundTo1Decimal(87.5))
-	assert.Equal(t, 87.5, roundTo1Decimal(87.5499))
-	assert.Equal(t, 87.6, roundTo1Decimal(87.5501))
-	assert.Equal(t, 0.0, roundTo1Decimal(0.0))
-	assert.Equal(t, 100.0, roundTo1Decimal(100.0))
+	assert.Equal(t, 87.5, RoundTo1Decimal(87.5))
+	assert.Equal(t, 87.5, RoundTo1Decimal(87.5499))
+	assert.Equal(t, 87.6, RoundTo1Decimal(87.5501))
+	assert.Equal(t, 0.0, RoundTo1Decimal(0.0))
+	assert.Equal(t, 100.0, RoundTo1Decimal(100.0))
 }

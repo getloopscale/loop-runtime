@@ -20,6 +20,8 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // stackDepth bounds frame capture in WrapWithStack — 32 frames is
@@ -82,16 +84,9 @@ func (e *LoopZeroError) Unwrap() error {
 
 // NewLoopZeroError creates a new LoopZeroError with the given code and message.
 //
-// The third int parameter (formerly HTTPStatus) is kept in the signature
-// for backward compatibility with callers from before T2.3 Stage C; it
-// is now IGNORED. New code should use the 2-parameter form via direct
-// struct literal:
-//
-//	return &errors.LoopZeroError{Code: "X", Message: "y"}
-//
-// HTTP status is resolved at the transport boundary via
-// pkg/errors/http.Status(err). See ADR-0030.
-func NewLoopZeroError(code, message string, _ int) *LoopZeroError {
+// A LoopZeroError carries no HTTP status: it is resolved at the transport
+// boundary by pkg/errors/http.Status from the code (ADR-0030).
+func NewLoopZeroError(code, message string) *LoopZeroError {
 	return &LoopZeroError{
 		Code:    code,
 		Message: message,
@@ -328,7 +323,7 @@ var (
 
 	// ErrSourceUploadFailed is the neutral fallback returned when pushing the
 	// bundle to the source store fails AND the typed PushBundleError mapping
-	// (see source.NewSourceUploadFailedFromPushReason) cannot identify a
+	// (PushBundleErrorReason.Summary in api/internal/source) cannot identify a
 	// specific reason. Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3
 	// (closes loopzero-cloud#31): replaced the legacy actively-misleading
 	// "Ensure your git history is clean and try again." text (the user's git
@@ -451,20 +446,10 @@ func NewReplicasExceedPlan(plan string, limit, requested int, appName string) *L
 	}
 }
 
-// displayPlanName returns a human-friendly plan name.
+// displayPlanName returns the product name of a plan tier; the naming rule
+// lives once, on domain.PlanTier.
 func displayPlanName(plan string) string {
-	switch plan {
-	case "starter":
-		return "Starter"
-	case "pro":
-		return "Pro"
-	case "team":
-		return "Team"
-	case "enterprise":
-		return "Enterprise"
-	default:
-		return plan
-	}
+	return domain.PlanTier(plan).DisplayName()
 }
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.
@@ -576,7 +561,7 @@ func NewIdempotencyConflict(key string) *LoopZeroError {
 // ACTIVE per env via the partial unique index; the second UPDATE hits
 // SQLSTATE 23505. Operator interpretation: race between sync_completion
 // callbacks; the loser retries on next reconcile tick (loop is idempotent).
-func NewConcurrentActivation(tenantID, projectID, env string) *LoopZeroError {
+func NewConcurrentActivation(projectID, env string) *LoopZeroError {
 	return &LoopZeroError{
 		Code: "CONCURRENT_ACTIVATION",
 		Message: fmt.Sprintf(
@@ -627,54 +612,6 @@ func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *Loop
 	}
 }
 
-// NewSourceUploadFailedFromPushReason returns a LoopZeroError with a reason-
-// specific Message keyed off the PushBundleError.Reason string. Sprint 4
-// plan qa-sprint4-cleanup-2026-06-25 T3.3 (closes loopzero-cloud#31).
-//
-// `reasonLabel` is the canonical string emitted by source.PushBundleErrorReason.String()
-// — kept as a string to avoid pulling api/internal/source into pkg/errors
-// (DIP boundary preserved: pkg/errors stays leaf-package).
-//
-// Per ADR D3 of the plan: Code stays SOURCE_UPLOAD_FAILED for backward-compat
-// with loopzero-cli EXIT_CODES (3 = deploy failure). The Message field is the
-// only thing that varies per reason.
-//
-// CR-9 cloud abstraction (loopzero-cloud/CLAUDE.md Rule 3): Messages say "source
-// backend" NOT "Gitea", "remote" NOT "git push" — internal terms are forbidden
-// in user-facing strings.
-func NewSourceUploadFailedFromPushReason(reasonLabel, detail string) *LoopZeroError {
-	return NewSourceUploadFailedFromPushReasonWithTrace(reasonLabel, detail, "")
-}
-
-// NewSourceUploadFailedFromPushReasonWithTrace is the trace-id-aware variant
-// per Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 (closes the Red Team
-// suggestion in loopzero-cloud#35: "Separar mensagem-de-cliente (genérica +
-// trace-id) de causa-de-log (verbatim, server-side)"). The existing
-// NewSourceUploadFailedFromPushReason delegates here with empty traceID for
-// backward compatibility — call sites that have a correlation ID available
-// (HTTP handlers via correlation.Read(r)) call this one directly.
-//
-// Composition logic (per Sprint 7 #35 ADR D2):
-//   - Scrubbed detail is "useful" (≥ 20 chars AND not exclusively redaction
-//     placeholders) → compose "<summary>: <verbatim detail>" (Sprint 5 DX).
-//   - Scrubbed detail is empty / fully-collapsed / placeholder-only → fall
-//     back to "<summary>. Reference: <trace-id>. Contact support if it
-//     persists." (no information disclosure; trace-id correlates server log).
-//   - Unknown reason label → neutral generic + optional trace-id appended.
-func NewSourceUploadFailedFromPushReasonWithTrace(reasonLabel, detail, traceID string) *LoopZeroError {
-	summary, ok := summaryByPushReason[reasonLabel]
-	if !ok {
-		return &LoopZeroError{
-			Code:    "SOURCE_UPLOAD_FAILED",
-			Message: appendTraceIDFallback(ErrSourceUploadFailed.Message, traceID),
-		}
-	}
-	return &LoopZeroError{
-		Code:    "SOURCE_UPLOAD_FAILED",
-		Message: composeMessageWithTraceID(summary, detail, traceID),
-	}
-}
-
 // ErrBuildSubmitFailed is the canonical LoopZeroError for build-trigger failures
 // that REACH the orchestrator (vs INTERNAL_ERROR which stays for unexpected
 // failures outside the orchestrator's responsibility). Sprint 6 plan qa-
@@ -685,37 +622,25 @@ var ErrBuildSubmitFailed = &LoopZeroError{
 	Message: "The build could not be triggered. Try again, or check `loopzero status` for details.",
 }
 
-// NewBuildSubmitFailedFromReason mirrors NewSourceUploadFailedFromPushReason
-// (Sprint 5) for the build-trigger surface. The reasonLabel is the canonical
-// SubmitBuildErrorReason.String() output emitted by api/internal/services;
-// keeping it as a string preserves the DIP boundary (pkg/errors imports
-// nothing from api/internal/services). Per Sprint 6 ADR D3, the message is
-// composed as "<actionable summary>: <verbatim detail>" so the operator
-// sees BOTH the actionable summary AND the underlying cause — same Vercel
-// canonical pattern Sprint 5 introduced.
+// NewComposed returns an error with base's code whose message pairs an
+// actionable summary with the underlying cause: "<summary>: <detail>".
 //
-// CR-9: zero internal terms in summaries (no Argo / Workflow / Postgres /
-// Gitea names). Detail is already scrubbed by api/internal/services
-// NewSubmitBuildError via source.ScrubInternalTerms.
-func NewBuildSubmitFailedFromReason(reasonLabel, detail string) *LoopZeroError {
-	return NewBuildSubmitFailedFromReasonWithTrace(reasonLabel, detail, "")
-}
-
-// NewBuildSubmitFailedFromReasonWithTrace is the trace-id-aware variant per
-// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1. Mirrors
-// NewSourceUploadFailedFromPushReasonWithTrace for the build-trigger surface.
-func NewBuildSubmitFailedFromReasonWithTrace(reasonLabel, detail, traceID string) *LoopZeroError {
-	summary, ok := summaryByBuildSubmitReason[reasonLabel]
-	if !ok {
-		return &LoopZeroError{
-			Code:    "BUILD_SUBMIT_FAILED",
-			Message: appendTraceIDFallback(ErrBuildSubmitFailed.Message, traceID),
-		}
+// When detail carries nothing useful — empty, or reduced to redaction
+// placeholders by the caller's scrubbing — the message falls back to
+// "<summary>. Reference: <traceID>. Contact support if it persists." so the
+// operator still has a handle on the server-side log without the cause
+// leaking (Red Team loopzero-cloud#35). An empty summary (a reason no catalog
+// names) uses base.Message and never the detail.
+//
+// The reason → summary catalogs live next to the reason enums that own them
+// (api/internal/source PushBundleErrorReason, api/internal/builds
+// SubmitBuildErrorReason), so an enum and its copy change together; this
+// function is only the composition rule.
+func NewComposed(base *LoopZeroError, summary, detail, traceID string) *LoopZeroError {
+	if summary == "" {
+		return &LoopZeroError{Code: base.Code, Message: appendTraceIDFallback(base.Message, traceID)}
 	}
-	return &LoopZeroError{
-		Code:    "BUILD_SUBMIT_FAILED",
-		Message: composeMessageWithTraceID(summary, detail, traceID),
-	}
+	return &LoopZeroError{Code: base.Code, Message: composeMessageWithTraceID(summary, detail, traceID)}
 }
 
 // Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 — composition helpers.
@@ -762,9 +687,8 @@ func appendTraceIDFallback(summary, traceID string) string {
 // unreachable: " (28 chars) but longer than "<orchestrator>" (14 chars)
 // so the heuristic flips at the right boundary.
 //
-// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 isolation: the
-// threshold + placeholder stripper live here (NOT in pushbundle_error.go)
-// so pkg/errors stays the single composition seam. DIP preserved.
+// The threshold and the placeholder stripper live here, with NewComposed, so
+// every reason catalog composes the same way.
 func isUsefulDetail(detail string) bool {
 	if len(detail) < 20 {
 		return false
@@ -775,33 +699,6 @@ func isUsefulDetail(detail string) bool {
 	stripped = whitespaceRE.ReplaceAllString(stripped, " ")
 	stripped = strings.Trim(stripped, " :;.,!?-")
 	return len(stripped) >= 8
-}
-
-// summaryByBuildSubmitReason — Sprint 6 ADR D3 canonical mapper. Sibling of
-// summaryByPushReason (Sprint 5).
-var summaryByBuildSubmitReason = map[string]string{
-	"BuildSubmitWorkflowFailed":      "Build trigger failed at workflow submit",
-	"BuildSubmitProjectEnsureFailed": "Build trigger failed while ensuring the project exists",
-	"BuildSubmitDBWriteFailed":       "Build trigger failed at a database write step",
-	"BuildSubmitAppNormalizeFailed":  "Build trigger failed validating one of the apps",
-	"BuildSubmitUnknown":             "Build trigger failed (cause not classified)",
-}
-
-// summaryByPushReason is the canonical operator-actionable summary keyed on
-// the source.PushBundleErrorReason String() output. Sprint 5 plan ADR D3 +
-// D1 — extends the Sprint 4 set with auth/capacity/unknown reasons; messages
-// are composed as "<summary>: <verbatim detail>" by
-// NewSourceUploadFailedFromPushReason. CR-9: zero internal terms (no Gitea /
-// MinIO / Kubernetes references).
-var summaryByPushReason = map[string]string{
-	"SourceBackendUnreachable": "Source backend is unreachable (network or DNS failure)",
-	"RemoteRejectedPush":       "The remote rejected the push",
-	"BundleMalformed":          "The source bundle is malformed. Re-run `loopzero deploy` from your project root",
-	"BundleTooLarge":           "The source bundle exceeds the size limit. Reduce the size of your source tree",
-	"ArchiveReadError":         "Could not read the source archive. Check your project files and try again",
-	"SourceBackendAuthFailure": "Source backend rejected authentication",
-	"SourceBackendCapacity":    "Source backend is out of capacity",
-	"UnknownDownstream":        "Source upload failed (cause not classified)",
 }
 
 // ErrSecretsBackendUnavailable marks a failure of the encryption backend that

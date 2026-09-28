@@ -107,7 +107,7 @@ func TestTransitPolicy_KeyPathCarriesUpdateNotJustCreate(t *testing.T) {
 
 // Encrypt and decrypt must be scoped to the same prefix. `+` matches ANY single
 // segment, which let the api encrypt with any key in the engine; the only key it
-// names comes from tenantKeyName.
+// names comes from TenantKeyName.
 func TestTransitPolicy_EncryptDecryptScopedToTheClientPrefix(t *testing.T) {
 	prefix := clientKeyPrefix(t)
 	policy := apiPolicy(t)
@@ -117,7 +117,7 @@ func TestTransitPolicy_EncryptDecryptScopedToTheClientPrefix(t *testing.T) {
 		if !strings.Contains(policy, want) {
 			t.Errorf("policy does not scope %s to %q. A bare `+` matches any single segment, so the "+
 				"api could %s with any key in the engine — and the only key it ever names is "+
-				"tenantKeyName's (B-072).", op, want, op)
+				"TenantKeyName's (B-072).", op, want, op)
 		}
 	}
 }

@@ -1,109 +1,145 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package trivyscan wraps `trivy fs` invocation as a pkg/quality gate.
-// T4.7 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md.
+// Package trivyscan wraps `trivy fs` invocation as a quality gate.
 //
-// Behavior: skip-on-missing — if trivy binary is absent (operator hasn't
-// installed locally), the gate reports Skipped=true rather than failing.
-// This avoids cascade failures when running `task quality:gates` em
-// dev environments without security tooling. Real PR-time enforcement
-// requires the chosen CI platform (T0.2 of plan) to provide trivy.
+// The gate fails CLOSED. A missing binary, a scan that dies with a FATAL, and any
+// exit code trivy does not document as "done" are returned as typed errors, never
+// as a pass or a skip: each of them produces exactly the silence a clean tree
+// produces, so reporting them as green would make the gate unable to fail on its
+// own breakage. trufflehogscan closed the same hole for secrets after a live
+// credential survived it; this package follows the same contract.
 package trivyscan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-// Config tells Check what to scan + which severities count as fail.
-type Config struct {
-	// RepoRoot is the path to scan (passed as `trivy fs <root>`).
-	RepoRoot string
-	// Severities filters which findings count (e.g., "CRITICAL,HIGH").
-	// Empty defaults to "CRITICAL,HIGH" per CLAUDE.md supply-chain.
-	Severities string
-}
+// The two ways a scan can fail to establish a verdict. Both are typed so the
+// caller can never collapse "could not verify" into "nothing found".
+var (
+	// ErrScannerMissing means trivy is not installed where the gate runs.
+	ErrScannerMissing = errors.New("trivy not found in PATH — install it (https://aquasecurity.github.io/trivy); without it a clean tree and an unscanned tree look identical")
+	// ErrScanFailed means trivy ran and could not complete the scan.
+	ErrScanFailed = errors.New("trivy could not complete the scan — this is not a vulnerability finding, and not a pass")
+)
 
-// Outcome is the gate result.
-type Outcome struct {
-	// Skipped=true means trivy binary not found OR scan unavailable.
-	// Operators should install trivy + re-run to enforce.
-	Skipped bool
-	// Reason for skip OR pass/fail summary.
-	Reason string
-	// Pass=true means scan completed AND zero matching-severity findings.
-	Pass bool
-}
+const defaultSeverities = "CRITICAL,HIGH"
 
-// Check runs `trivy fs --severity ${SEV} --exit-code 1 <repo>` if trivy
-// is installed. Returns Outcome with Skipped=true if trivy missing.
+// Scanner runs the vulnerability scan. It is the seam that keeps the binary, the
+// vulnerability DB and the network out of the unit tests.
 //
-// Skip-on-missing rationale: pkg/quality gates are designed to run em
-// developer laptops + CI alike. trivy is a 100MB+ download with vuln DB
-// sync requirements; not all dev machines have it. Skipping here logs
-// the absence but does NOT fail the local gate run. PR-time enforcement
-// happens in the real CI platform (T0.2 of plan), which IS expected
-// to have trivy provisioned.
-func Check(ctx context.Context, cfg Config) (*Outcome, error) {
-	binary, err := exec.LookPath("trivy")
-	if err != nil {
-		return &Outcome{
-			Skipped: true,
-			Reason:  "trivy binary not found in PATH; install via https://aquasecurity.github.io/trivy",
-		}, nil
-	}
+// It returns the combined output and the process exit code. A non-nil error means
+// the process could not be run at all and must wrap ErrScannerMissing or
+// ErrScanFailed.
+type Scanner interface {
+	Scan(ctx context.Context, root, severities string) (output string, exitCode int, err error)
+}
 
+// Config tells Check what to scan and which severities count as a failure.
+type Config struct {
+	// RepoRoot is the path to scan (passed as `trivy fs <root>`). Empty means ".".
+	RepoRoot string
+	// Severities filters which findings count (e.g. "CRITICAL,HIGH").
+	// Empty defaults to "CRITICAL,HIGH".
+	Severities string
+	// Scanner defaults to the real trivy process.
+	Scanner Scanner
+}
+
+// Outcome is the verdict of a scan that completed.
+type Outcome struct {
+	// Pass is true when the scan completed with zero matching-severity findings.
+	Pass bool
+	// Reason is the pass summary or the findings table.
+	Reason string
+}
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
+// Check scans cfg.RepoRoot and returns the verdict. It returns an error wrapping
+// ErrScannerMissing or ErrScanFailed whenever no complete scan happened.
+func Check(ctx context.Context, cfg Config) (*Outcome, error) {
 	severities := cfg.Severities
 	if severities == "" {
-		severities = "CRITICAL,HIGH"
+		severities = defaultSeverities
 	}
-	if cfg.RepoRoot == "" {
-		cfg.RepoRoot = "."
+	root := cfg.RepoRoot
+	if root == "" {
+		root = "."
+	}
+	scanner := cfg.Scanner
+	if scanner == nil {
+		scanner = execScanner{}
 	}
 
-	// Use --quiet to suppress progress output; --exit-code 1 makes trivy
-	// fail on matching-severity findings.
-	cmd := exec.CommandContext(ctx, binary, "fs",
+	out, exitCode, err := scanner.Scan(ctx, root, severities)
+	if err != nil {
+		return nil, err
+	}
+	return classifyExit(out, exitCode, severities)
+}
+
+// classifyExit maps trivy's exit code to a verdict. `--exit-code 1` makes trivy
+// exit 1 on matching findings, but trivy also exits 1 on a FATAL, so exit 1 is a
+// finding only when the output carries no FATAL line (see classifyExitOne).
+func classifyExit(out string, exitCode int, severities string) (*Outcome, error) {
+	switch exitCode {
+	case 0:
+		return &Outcome{Pass: true, Reason: fmt.Sprintf("trivy fs clean (severity=%s)", severities)}, nil
+	case 1:
+		if fatal, detail := classifyExitOne(out); fatal {
+			return nil, fmt.Errorf("%w (severity=%s): %s", ErrScanFailed, severities, detail)
+		}
+		return &Outcome{
+			Pass:   false,
+			Reason: fmt.Sprintf("trivy fs found vulnerabilities (severity=%s):\n%s", severities, out),
+		}, nil
+	default:
+		return nil, fmt.Errorf("%w (severity=%s): exit code %d: %s", ErrScanFailed, severities, exitCode, out)
+	}
+}
+
+// execScanner runs the real trivy process.
+type execScanner struct {
+	// binary defaults to "trivy".
+	binary string
+}
+
+func (e execScanner) Scan(ctx context.Context, root, severities string) (string, int, error) {
+	bin := e.binary
+	if bin == "" {
+		bin = "trivy"
+	}
+	path, err := exec.LookPath(bin)
+	if err != nil {
+		return "", 0, fmt.Errorf("%w: %w", ErrScannerMissing, err)
+	}
+
+	// --quiet suppresses progress output; --exit-code 1 makes trivy fail on
+	// matching-severity findings.
+	// #nosec G204 -- path comes from exec.LookPath over a fixed binary name; the
+	// remaining arguments are the operator's own flags.
+	cmd := exec.CommandContext(ctx, path, "fs",
 		"--quiet",
 		"--severity", severities,
 		"--exit-code", "1",
 		"--scanners", "vuln",
-		cfg.RepoRoot,
+		root,
 	)
-
 	out, runErr := cmd.CombinedOutput()
-	if runErr != nil {
-		// exit 1 means findings present; any other exit means trivy itself failed
-		if exitErr, ok := runErr.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			// ...except that trivy ALSO spends exit 1 on a FATAL, so the exit
-			// code alone cannot carry the distinction this branch depends on.
-			// Observed: a Maven Central HTTP 429 surfaced as "found
-			// vulnerabilities", failing the gate and aborting every gate wired
-			// after it — while zero vulnerabilities had been found. Inspect the
-			// output for the FATAL marker and route it to the execution-error
-			// branch below, which is where Check already intended it to go.
-			if execErr, detail := classifyExitOne(string(out)); execErr {
-				return &Outcome{
-					Skipped: true,
-					Reason: fmt.Sprintf("trivy could not complete the scan (severity=%s) — NOT a vulnerability finding: %s",
-						severities, detail),
-				}, nil
-			}
-			return &Outcome{
-				Pass:   false,
-				Reason: fmt.Sprintf("trivy fs found vulnerabilities (severity=%s):\n%s", severities, string(out)),
-			}, nil
-		}
-		return &Outcome{
-			Skipped: true,
-			Reason:  fmt.Sprintf("trivy execution error (DB sync? network?): %v", runErr),
-		}, nil
+	if runErr == nil {
+		return string(out), 0, nil
 	}
-
-	return &Outcome{
-		Pass:   true,
-		Reason: fmt.Sprintf("trivy fs clean (severity=%s)", severities),
-	}, nil
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		return string(out), exitErr.ExitCode(), nil
+	}
+	return string(out), 0, fmt.Errorf("%w: %w", ErrScanFailed, runErr)
 }

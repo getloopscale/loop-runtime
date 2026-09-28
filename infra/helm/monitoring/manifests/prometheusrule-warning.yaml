@@ -71,7 +71,7 @@ spec:
             runbook: "Check ArgoCD controller resources and application count. May indicate capacity issues."
 
         # MEET-2026-03-31-023 T0-3: Build stuck in RELEASING state.
-        # The metric loopzero_releasing_builds exists in api/internal/metrics/metrics.go.
+        # The metric loopzero_releasing_builds exists in api/internal/metrics/release_metrics.go.
         # This alert was designed but never created as a PrometheusRule.
         - alert: LoopZeroOrphanBuild
           expr: loopzero_releasing_builds > 0
@@ -323,7 +323,7 @@ spec:
           annotations:
             summary: "Tenant hitting build concurrency limit"
             description: "Tenant {{ $labels.tenant }} has builds deferred due to per-tenant concurrency limit for 5+ minutes."
-            runbook: "This means the tenant is submitting builds faster than they complete. Check if builds are stuck. Consider increasing MAX_BUILDS_PER_TENANT if the tenant has a legitimate burst workload."
+            runbook: "This means the tenant is submitting builds faster than they complete. Check if builds are stuck. Consider increasing MAX_CONCURRENT_BUILDS_PER_TENANT if the tenant has a legitimate burst workload."
 
         - alert: LoopZeroCFKVDriftDetected
           expr: loopzero_cfkv_drift_detected == 1

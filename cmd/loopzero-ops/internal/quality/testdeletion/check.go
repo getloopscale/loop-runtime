@@ -13,8 +13,12 @@
 package testdeletion
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config drives the gate.
@@ -39,16 +43,27 @@ type Outcome struct {
 	Reason       string
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 const justificationMarker = "test deletion justification:"
 const approvalLabel = "test-deletion-approved"
 
-// Check runs the gate.
-func Check(cfg Config) Outcome {
-	diffOut := ""
+// Check runs the gate. It returns an error when the range cannot be read — an
+// unreachable base (a shallow clone) or a git failure — because "no deletions"
+// is a verdict about a comparison, and there was none.
+func Check(cfg Config) (Outcome, error) {
+	var diffOut string
 	if cfg.DiffOverride != nil {
 		diffOut = *cfg.DiffOverride
 	} else {
-		diffOut = gitDeletions(cfg)
+		if err := revrange.VerifyReachable(cfg.RepoDir, baseRef(cfg)); err != nil {
+			return Outcome{}, err
+		}
+		var err error
+		if diffOut, err = gitDeletions(cfg); err != nil {
+			return Outcome{}, err
+		}
 	}
 
 	var deletedTests []string
@@ -63,21 +78,21 @@ func Check(cfg Config) Outcome {
 	}
 
 	if len(deletedTests) == 0 {
-		return Outcome{Pass: true, Reason: "no test file deletions"}
+		return Outcome{Pass: true, Reason: "no test file deletions"}, nil
 	}
 
 	// Approval label?
 	for _, lbl := range strings.Split(cfg.PRLabels, ",") {
 		if strings.TrimSpace(lbl) == approvalLabel {
 			return Outcome{Pass: true, DeletedTests: deletedTests,
-				Reason: "approved via '" + approvalLabel + "' label"}
+				Reason: "approved via '" + approvalLabel + "' label"}, nil
 		}
 	}
 
 	// Justification in PR body?
 	if strings.Contains(strings.ToLower(cfg.PRBody), justificationMarker) {
 		return Outcome{Pass: true, DeletedTests: deletedTests,
-			Reason: "justification found in PR body"}
+			Reason: "justification found in PR body"}, nil
 	}
 
 	// The commit body is the only channel that lives in the repository. PR body
@@ -92,62 +107,56 @@ func Check(cfg Config) Outcome {
 	// delivery-gate hook on the very commit that introduced it.
 	log := cfg.CommitLog
 	if log == "" && cfg.DiffOverride == nil {
-		log = gitCommitLog(cfg)
+		var err error
+		if log, err = gitCommitLog(cfg); err != nil {
+			return Outcome{}, err
+		}
 	}
 	if strings.Contains(strings.ToLower(log), justificationMarker) {
 		return Outcome{Pass: true, DeletedTests: deletedTests,
-			Reason: "justification found in a commit message"}
+			Reason: "justification found in a commit message"}, nil
 	}
 
 	return Outcome{Pass: false, DeletedTests: deletedTests,
-		Reason: "test deletions without approval label or PR-body justification"}
+		Reason: "test deletions without approval label or PR-body justification"}, nil
+}
+
+func baseRef(cfg Config) string {
+	if cfg.BaseRef == "" {
+		return "origin/main"
+	}
+	return cfg.BaseRef
+}
+
+func headRef(cfg Config) string {
+	if cfg.HeadRef == "" {
+		return "HEAD"
+	}
+	return cfg.HeadRef
+}
+
+// gitCommitLog returns the commit messages in BaseRef...HeadRef, where the
+// justification for a deletion naturally lives — next to the deletion.
+func gitCommitLog(cfg Config) (string, error) {
+	return runGit(cfg, "log", "--format=%B", baseRef(cfg)+"..."+headRef(cfg))
 }
 
 // gitDeletions runs `git diff --find-renames=80% --diff-filter=D --name-only`
-// to detect TRUE deletions (renames classified as R, not D — per EC-6).
-// gitCommitLog returns the commit messages in BaseRef...HeadRef, where the
-// justification for a deletion naturally lives — next to the deletion.
-func gitCommitLog(cfg Config) string {
-	base := cfg.BaseRef
-	if base == "" {
-		base = "origin/main"
-	}
-	head := cfg.HeadRef
-	if head == "" {
-		head = "HEAD"
-	}
-	//nolint:shell-wrap // git is an ALLOWED CLI (D5) — no mature Go-native log.
-	cmd := exec.Command("git", "log", "--format=%B", base+"..."+head)
-	if cfg.RepoDir != "" {
-		cmd.Dir = cfg.RepoDir
-	}
-	out, err := cmd.Output()
-	if err != nil {
-		return "" // best-effort: unresolvable range → no justification found
-	}
-	return string(out)
+// to detect TRUE deletions (renames are classified R, not D).
+func gitDeletions(cfg Config) (string, error) {
+	return runGit(cfg, "diff", "--find-renames=80%", "--diff-filter=D", "--name-only", baseRef(cfg)+"..."+headRef(cfg))
 }
 
-func gitDeletions(cfg Config) string {
-	base := cfg.BaseRef
-	if base == "" {
-		base = "origin/main"
-	}
-	head := cfg.HeadRef
-	if head == "" {
-		head = "HEAD"
-	}
-	//nolint:shell-wrap // git is an ALLOWED CLI (D5) — no mature Go-native diff.
-	cmd := exec.Command("git", "diff", "--find-renames=80%", "--diff-filter=D",
-		"--name-only", base+"..."+head)
-	if cfg.RepoDir != "" {
-		cmd.Dir = cfg.RepoDir
-	}
+// runGit runs git in cfg.RepoDir. git is an allowed CLI (D5): there is no
+// mature Go-native diff or log.
+func runGit(cfg Config, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = cfg.RepoDir
 	out, err := cmd.Output()
 	if err != nil {
-		return "" // best-effort: no diff resolvable → treat as no deletions
+		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
-	return string(out)
+	return string(out), nil
 }
 
 // isTestFile classifies a path as a test file by extension.

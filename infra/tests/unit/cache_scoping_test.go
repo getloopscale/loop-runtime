@@ -42,10 +42,12 @@ func TestCacheScoping_TenantOperatorScopesTenantAndEnvironment(t *testing.T) {
 	for _, must := range []string{
 		"platformCRDNamespaces",
 		"constants.NamespacePlatformSystem",
-		"Cache: cache.Options",
+		"func managerCacheOptions() (cache.Options, error)",
+		"Cache:                  cacheOpts",
 		"ByObject: map[client.Object]cache.ByObject",
 		"&loopzerov1.Tenant{}",
 		"&loopzerov1.Environment{}",
+		"&corev1.Secret{}:      secretScope",
 	} {
 		if !strings.Contains(text, must) {
 			t.Errorf("tenant-operator main.go missing C16/I-1 cache scoping clause: %s", must)
@@ -63,7 +65,9 @@ func TestCacheScoping_PlatformOperatorScopesPlatformCRDs(t *testing.T) {
 
 	for _, must := range []string{
 		"platformCRDNamespaces",
-		"Cache: cache.Options",
+		"func managerCacheOptions(argoCDNamespace string) (cache.Options, error)",
+		"Cache:                  cacheOpts",
+		"&corev1.Secret{}:               secretScope",
 		"&loopzerov1.PlatformBootstrap{}",
 		"&loopzerov1.GitRepositoryBinding{}",
 		"&loopzerov1.ClusterCredential{}",

@@ -1,13 +1,1 @@
-{{- if gt (int (default 1 .Values.replicaCount)) 1 }}
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: {{ include "loopzero-common.fullname" . }}
-  labels:
-    {{- include "loopzero-common.labels" . | nindent 4 }}
-spec:
-  minAvailable: 1
-  selector:
-    matchLabels:
-      {{- include "loopzero-common.selectorLabels" . | nindent 6 }}
-{{- end }}
+{{- include "loopzero-common.pdb" . }}

@@ -31,7 +31,7 @@ import (
 // continues reconciling existing installations without manual repair.
 //
 // J-23 LIVE catch 2026-06-07 #69: the renderer canonical refactor
-// (commit cd6235fc) updated the manifest namespace to the canonical
+// (commit a567cdbb5) updated the manifest namespace to the canonical
 // three-segment formula, but tenant_gitops.go was emitting destinations
 // via the legacy two-segment formula because there was no place in the
 // CR spec for the project name. Result: ArgoCD destination mismatch ->
@@ -42,8 +42,8 @@ import (
 // to the legacy two-segment formula. T1.1 ships CRD-level enforcement
 // (TenantEnvironmentEntry.Project required + RFC 1123 Pattern) so every
 // caller in production code (tenant_gitops.go:143, :186 + tenant_controller.go:337)
-// is guaranteed to pass a non-empty project. Per `rules/loopzero-design.md`
-// § Error Philosophy the silent fallback was the smoking gun that caused
+// is guaranteed to pass a non-empty project. A silent fallback is forbidden — it was
+// the smoking gun that caused
 // all 4 M2 LIVE workarounds — fail-fast with LoopZeroError is canonical
 // (feedback_m2_canonical_drift_operator_renderer memory).
 func canonicalDestNamespace(tenantSlug, projectSlug, envName string) (string, error) {
@@ -79,7 +79,7 @@ func (r *TenantReconciler) buildApplicationSpecs(
 ) ([]argocd.ApplicationSpec, error) {
 	cellID := tenant.Spec.CellID
 	if cellID == "" {
-		cellID = "cell-0"
+		cellID = domain.DefaultCellID
 	}
 
 	specs := make([]argocd.ApplicationSpec, 0, len(tenant.Spec.Environments)+len(previewEnvs))
@@ -163,8 +163,8 @@ func (r *TenantReconciler) expectedApplicationNames(
 // namespace list for a tenant. T2.2 of plan 2026-06-09-m2-operator-canonical-fix
 // v1.4: extracted from reconcileArgoCDApp so the (project, env) iteration is
 // unit-testable without spinning up envtest, and so the previous silent
-// error-drop (`if nsErr == nil { append }`) is replaced with fail-loud
-// propagation per `rules/loopzero-design.md` § Error Philosophy.
+// error-drop (`if nsErr == nil { append }`) is replaced with fail-loud propagation.
+// The rule is stated rather than cited: a pointer can rot, a stated rule cannot.
 //
 // Inputs:
 //   - tenant.Spec.Environments contributes one destination per (Project, Name) tuple.
@@ -296,11 +296,14 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 	// (strict CRD separation), but they still need an ArgoCD Application
 	// + AppProject destination to be deployable. Emitting them here keeps
 	// the AppProject single-source-of-truth.
-	previewEnvs, perr := r.listPreviewEnvsForTenant(ctx, tenant.Name)
-	if perr != nil {
-		log.FromContext(ctx).Info("argocd: preview env list failed (proceeding without)",
-			"tenant", tenant.Name, "error", perr.Error())
-		previewEnvs = nil
+	//
+	// A failed List is fatal for this step. The same slice decides which
+	// Applications the prune below protects, and an empty stand-in would
+	// delete every live preview of the tenant (the ArgoCD finalizer cascades
+	// the delete into the workload).
+	previewEnvs, err := r.listPreviewEnvsForTenant(ctx, tenant.Name)
+	if err != nil {
+		return fmt.Errorf("argocd appproject %s: %w", tenant.Name, err)
 	}
 	destNamespaces, err := buildAppProjectDestNamespaces(tenant, previewEnvs)
 	if err != nil {

@@ -7,7 +7,7 @@ domain: loopzero.example
 dnsZone: loopzero.example
 
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
-# Prod placeholder per T8.2 acceptance criteria: enable ONLY após
+# Prod placeholder per T8.2 acceptance criteria: enable ONLY after
 # (a) DOKS loopzero-secrets-prod cluster up (separate cluster, Shamir 5/3 + Raft +
 #     HTTPS + Kubernetes auth via cross-cluster CA chain);
 # (b) openbao-init Job ran (engines + auth + policies bootstrapped);
@@ -29,7 +29,6 @@ replicas:
   controller: 2
   argocd: 2
   gitea: 2
-  harbor: 2
 
 resources:
   default:
@@ -46,7 +45,6 @@ certIssuer:
 
 registries:
   docrPrefix: "registry.digitalocean.com/loopzero-system/"
-  harborPrefix: "harbor.loopzero.example/loopzero-platform/"
 
 loki:
   maxGlobalStreamsPerUser: 200000
@@ -131,3 +129,17 @@ dashboardRoute:
   verification: /verification
   settings: /settings
   error: /login
+
+# Environment profile — the behaviour that differs between environments, as named
+# values the helmfiles read (infra/helmfile/environments.yaml). A helmfile must not
+# switch on the environment NAME.
+profile:
+  highAvailability: true        # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
+  managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
+  kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
+  staticAssets: true            # install the static-assets server on the cells
+  loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone
+  smokeTest: true               # run the post-install smoke-test release
+  localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
+  localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
+  secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public

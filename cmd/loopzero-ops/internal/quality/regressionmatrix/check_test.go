@@ -5,18 +5,22 @@ package regressionmatrix
 
 import "testing"
 
-// fabricatedMatrix mirrors the synthetic matrix from audit-golden-test.sh:
+// fabricatedMatrix mirrors the synthetic matrix from audit-golden-test.sh. Its
+// Portuguese headers and cell values ("Pode Recorrer?" = "can it recur?",
+// CanRecurNo = "no", "SIM" = "yes", "Exercitado por L3?" = "exercised by L3?") are
+// the real matrix format the parser reads, so they stay verbatim. The "no" cell is
+// spliced in from CanRecurNo so the fixture and the gate share one spelling:
 //
 //	row 1: token resolves
-//	row 2: token does NOT resolve, Pode Recorrer? = NÃO -> critical MISS
+//	row 2: token does NOT resolve, can-recur = CanRecurNo -> critical MISS
 //	row 3: live verify -> SKIP
 const fabricatedMatrix = `# Broken Matrix (golden test — synthetic)
 
 | #  | Category | Problem | Resolved By | Protection | Type | Verification | Pode Recorrer? | Exercitado por L3? |
 |----|----------|---------|-------------|------------|------|--------------|----------------|--------------------|
-| 1  | TEST     | real    | something   | something  | (a)  | TestImageTagFormat exists | NÃO | SIM |
-| 2  | TEST     | broken  | something   | something  | (a)  | ghostdeadbeefcafetoken | NÃO | SIM |
-| 3  | TEST     | live    | something   | something  | (a)  | live verify by operator | NÃO | SIM |
+| 1  | TEST     | real    | something   | something  | (a)  | TestImageTagFormat exists | ` + CanRecurNo + ` | SIM |
+| 2  | TEST     | broken  | something   | something  | (a)  | ghostdeadbeefcafetoken | ` + CanRecurNo + ` | SIM |
+| 3  | TEST     | live    | something   | something  | (a)  | live verify by operator | ` + CanRecurNo + ` | SIM |
 `
 
 func TestParseMatrix_ExtractsDataRows(t *testing.T) {
@@ -24,7 +28,7 @@ func TestParseMatrix_ExtractsDataRows(t *testing.T) {
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 data rows, got %d: %+v", len(rows), rows)
 	}
-	if rows[0].ID != "1" || rows[0].Verification != "TestImageTagFormat exists" || rows[0].CanRecur != "NÃO" {
+	if rows[0].ID != "1" || rows[0].Verification != "TestImageTagFormat exists" || rows[0].CanRecur != CanRecurNo {
 		t.Errorf("row 0 parsed wrong: %+v", rows[0])
 	}
 	if rows[1].Verification != "ghostdeadbeefcafetoken" {
@@ -126,7 +130,7 @@ func TestGolden_FabricatedBrokenMatrixIsDetected(t *testing.T) {
 		t.Errorf("expected Miss=1, got %d", v.Miss)
 	}
 	if v.MissCritical != 1 {
-		t.Errorf("expected MissCritical=1 (row 2 is Pode Recorrer=NÃO), got %d", v.MissCritical)
+		t.Errorf("expected MissCritical=1 (row 2 has can-recur=CanRecurNo), got %d", v.MissCritical)
 	}
 	if !v.Failed() {
 		t.Error("expected gate to FAIL on critical miss")
@@ -157,7 +161,7 @@ func TestEvaluate_Strict_FailsOnNonCriticalMiss(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
-	// CanRecur=SIM so not critical. Non-strict passes; strict fails.
+	// CanRecur=SIM ("yes") so not critical. Non-strict passes; strict fails.
 	if Evaluate(rows, SetResolver{}, false).Failed() {
 		t.Error("non-strict should not fail on non-critical miss")
 	}

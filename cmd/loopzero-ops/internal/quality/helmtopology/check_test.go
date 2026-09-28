@@ -50,7 +50,7 @@ func entryFor(t *testing.T, rep *Report, chart string) Entry {
 
 // --- EC-1: the source has TWO declaration forms; reading one covers 19 of 44 ---------------
 
-func TestExtraiUpstreamPorValuesPath(t *testing.T) {
+func TestExtractsUpstreamByValuesPath(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"runtime": `
 releases:
@@ -79,7 +79,7 @@ releases:
 	}
 }
 
-func TestClassificaPelaFormaDeDeclaracao(t *testing.T) {
+func TestClassifiesByDeclarationForm(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"mgmt": `
 releases:
@@ -95,7 +95,7 @@ releases:
 
 	rep, _ := Check(root, ModeCheck, "doc.md")
 	if got := entryFor(t, rep, "loopzero-api").Nature; got != NatureOwn {
-		t.Errorf("loopzero-api nature = %q, want próprio", got)
+		t.Errorf("loopzero-api nature = %q, want ours", got)
 	}
 	if got := entryFor(t, rep, "argocd").Nature; got != NatureUpstream {
 		t.Errorf("argocd nature = %q, want upstream", got)
@@ -104,7 +104,7 @@ releases:
 
 // --- EC-2: conditionals are reproduced, never evaluated -------------------------------------
 
-func TestPreservaCondicionalLiteralmente(t *testing.T) {
+func TestPreservesConditionalLiterally(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"mgmt": `
 releases:
@@ -130,12 +130,12 @@ releases:
 
 // --- EC-3: a missing document is actionable, not a raw I/O error ----------------------------
 
-func TestDocumentoAusenteDaInstrucao(t *testing.T) {
+func TestMissingDocumentGivesInstruction(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"mgmt": "releases:\n  - name: a\n    chart: ../helm/a\n",
 	}, map[string]bool{"a": true})
 
-	rep, err := Check(root, ModeCheck, "nao-existe.md")
+	rep, err := Check(root, ModeCheck, "does-not-exist.md")
 	if err != nil {
 		t.Fatalf("missing doc must NOT be a raw error: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestDocumentoAusenteDaInstrucao(t *testing.T) {
 
 // --- EC-4 / EC-5: the directory is the key, not the release name ----------------------------
 
-func TestMultiplosValuesMesmoDiretorioNaoDuplica(t *testing.T) {
+func TestMultipleValuesSameDirectoryDoesNotDuplicate(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"mgmt": `
 releases:
@@ -174,7 +174,7 @@ releases:
 	}
 }
 
-func TestDuasReleasesMesmoDiretorioAgregaClusters(t *testing.T) {
+func TestTwoReleasesSameDirectoryAggregateClusters(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"mgmt":    "releases:\n  - name: admission-policies-mgmt\n    chart: ../helm/admission-policies\n",
 		"runtime": "releases:\n  - name: admission-policies\n    chart: ../helm/admission-policies\n",
@@ -190,25 +190,53 @@ func TestDuasReleasesMesmoDiretorioAgregaClusters(t *testing.T) {
 
 // --- EC-6: an undeclared directory is listed, never silently omitted ------------------------
 
-func TestDiretorioOrfaoApareceMarcado(t *testing.T) {
+func TestOrphanDirectoryAppearsMarked(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"mgmt": "releases:\n  - name: a\n    chart: ../helm/a\n",
-	}, map[string]bool{"a": true, "orfao": true})
+	}, map[string]bool{"a": true, "orphan": true})
 
 	rep, _ := Check(root, ModeCheck, "doc.md")
-	e := entryFor(t, rep, "orfao")
+	e := entryFor(t, rep, "orphan")
 	if e.Nature != NatureUndeclared {
-		t.Errorf("orfao nature = %q, want %q — omitting would hide dead charts (EC-6)",
+		t.Errorf("orphan nature = %q, want %q — omitting would hide dead charts (EC-6)",
 			e.Nature, NatureUndeclared)
 	}
 	if len(e.Clusters) != 0 {
-		t.Errorf("orfao clusters = %v, want empty", e.Clusters)
+		t.Errorf("orphan clusters = %v, want empty", e.Clusters)
+	}
+}
+
+// A chart deleted from git leaves its downloaded dependencies behind: `charts/`
+// under infra/helm is gitignored, so `git rm` keeps the directory alive on every
+// machine that ever ran `helm dependency build`. Listing it as undeclared made
+// the index depend on local artifacts — measured 2026-09-25 after infra/helm/harbor
+// was deleted, with only charts/harbor-1.16.0.tgz left on disk.
+func TestDirectoryHoldingOnlyDownloadedDependenciesIsNotAChart(t *testing.T) {
+	root := fixture(t, map[string]string{
+		"mgmt": "releases:\n  - name: a\n    chart: ../helm/a\n",
+	}, map[string]bool{"a": true, "leftover": false})
+	deps := filepath.Join(root, helmDir, "leftover", "charts")
+	if err := os.MkdirAll(deps, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deps, "leftover-1.0.0.tgz"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Check(root, ModeCheck, "doc.md")
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	for _, e := range rep.Entries {
+		if e.Chart == "leftover" {
+			t.Fatalf("a directory holding only downloaded dependencies was indexed as %q", e.Nature)
+		}
 	}
 }
 
 // --- the helmfiles are .gotmpl: any YAML parser fails on them -------------------------------
 
-func TestNaoParseiaGotmplComoYAML(t *testing.T) {
+func TestDoesNotParseGotmplAsYAML(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"mgmt": `
 {{- if eq .Environment.Name "prod" }}
@@ -228,7 +256,7 @@ releases:
 
 // --- D2: the date must not participate in the verdict ---------------------------------------
 
-func TestComparacaoIgnoraCarimboDeData(t *testing.T) {
+func TestComparisonIgnoresDateStamp(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"mgmt": "releases:\n  - name: a\n    chart: ../helm/a\n",
 	}, map[string]bool{"a": true})
@@ -239,8 +267,8 @@ func TestComparacaoIgnoraCarimboDeData(t *testing.T) {
 	}
 	p := filepath.Join(root, "doc.md")
 	raw, _ := os.ReadFile(p) //nolint:gosec // test fixture
-	edited := strings.Replace(string(raw), "# Topologia Helm",
-		"# Topologia Helm\n\nGerado em 1999-01-01.", 1)
+	edited := strings.Replace(string(raw), "# Helm Topology",
+		"# Helm Topology\n\nGenerated on 1999-01-01.", 1)
 	if err := os.WriteFile(p, []byte(edited), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +283,7 @@ func TestComparacaoIgnoraCarimboDeData(t *testing.T) {
 	}
 }
 
-func TestReprovaQuandoChartNovoNaoEstaNoIndice(t *testing.T) {
+func TestFailsWhenNewChartIsNotInIndex(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"mgmt": "releases:\n  - name: a\n    chart: ../helm/a\n",
 	}, map[string]bool{"a": true})
@@ -288,7 +316,7 @@ func TestReprovaQuandoChartNovoNaoEstaNoIndice(t *testing.T) {
 // Found running against the real repo: `installed: {{ .Values.inClusterPostgres | default false }}`
 // carries a `|`, which markdown reads as a column separator. Five rows rendered with six columns.
 // Fixture tests never caught it because no fixture had a pipe in the predicate.
-func TestEscapaPipeDentroDaCelula(t *testing.T) {
+func TestEscapesPipeInsideCell(t *testing.T) {
 	root := fixture(t, map[string]string{
 		"mgmt": `
 releases:
@@ -315,5 +343,37 @@ releases:
 			t.Errorf("row has %d unescaped pipes, want 6 — an unescaped pipe in a cell splits "+
 				"the markdown table into a phantom column:\n  %s", bare, line)
 		}
+	}
+}
+
+// A chart Helmfile installs straight from charts/ is ours and runs on that cluster.
+// When a bootstrap/published pair became one chart, the release moved from
+// `chart: ../helm/<name>` to `chart: ../../charts/<name>`; reading only the first
+// form dropped the release from the index while it kept running.
+func TestIndexesAChartInstalledFromTheChartsTree(t *testing.T) {
+	root := fixture(t, map[string]string{
+		"core": `
+releases:
+  - name: loopzero-api
+    installed: {{ .Values.apiEnabled }}
+    chart: ../../charts/loopzero-api
+    values:
+      - ../../charts/loopzero-api/values-bootstrap.yaml
+`,
+	}, map[string]bool{"cloudflared": true})
+
+	rep, err := Check(root, ModeCheck, "doc.md")
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	e := entryFor(t, rep, "loopzero-api")
+	if e.Nature != NatureOwn {
+		t.Errorf("loopzero-api nature = %q, want ours", e.Nature)
+	}
+	if len(e.Clusters) != 1 || e.Clusters[0] != "core" {
+		t.Errorf("loopzero-api clusters = %v, want [core]", e.Clusters)
+	}
+	if e.Conditional != "{{ .Values.apiEnabled }}" {
+		t.Errorf("loopzero-api conditional = %q, want the literal predicate", e.Conditional)
 	}
 }

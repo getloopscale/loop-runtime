@@ -16,8 +16,13 @@ load("ext://namespace", "namespace_create")
 # Ensure loopzero-system namespace exists
 namespace_create("loopzero-system")
 
-# Use the mgmt cluster context
+# The dev loop runs against the core cluster. `allow_k8s_contexts` alone never stopped
+# a wrong one — every k3d-* context already counts as local — and Tilt deploys into the
+# CURRENT context: left on k3d-loopzero-secrets, it put the platform into the secrets
+# cluster (#402). Pin it with `tilt up --context k3d-loopzero-core`.
 allow_k8s_contexts("k3d-loopzero-core")
+if k8s_context() != "k3d-loopzero-core":
+    fail("Tilt must run against k3d-loopzero-core, not %s — start it with: tilt up --context k3d-loopzero-core" % k8s_context())
 
 # ---------------------------------------------------------------------------
 # gomod_token — required by api/Dockerfile to fetch private loopzero-contracts
@@ -133,34 +138,16 @@ local_resource(
     labels=["loopzero"],
 )
 
-# db-migrate now relies on the long-lived PF (no inline kubectl).
-# T1.2/T1.3 backfill semantics preserved (see ADR D1 of
-# dogfood-2026-05-08-fixes).
+# db-migrate runs the canonical migration path, the one `task setup` uses: the
+# request/worker roles first (000062 and 000068 grant to them only if they exist),
+# then golang-migrate with version tracking, executed inside the Postgres pod. This
+# resource used to carry its own copy — a host `psql -f` loop over every *.up.sql
+# and a stamp of schema_migrations to version 10 — which failed on a machine
+# without psql and would have moved a database at 68 back to 10 (#403).
 local_resource(
     "db-migrate",
-    cmd="""
-        # Wait for pg-port-forward to be ready (up to 30s).
-        for i in $(seq 1 30); do
-            if nc -z localhost 15432 2>/dev/null; then break; fi
-            sleep 1
-        done
-        for f in api/internal/db/migrations/*.up.sql; do
-            PGPASSWORD=loopzero-dev-password psql -h localhost -p 15432 -U loopzero -d loopzero -f "$f"
-        done
-        # Pre-create schema_migrations so subsequent golang-migrate `up`
-        # detects the existing schema correctly (otherwise migrate would
-        # try to re-apply 1..10 from scratch).
-        PGPASSWORD=loopzero-dev-password psql -h localhost -p 15432 -U loopzero -d loopzero -v ON_ERROR_STOP=1 -c "
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                version BIGINT NOT NULL PRIMARY KEY,
-                dirty BOOLEAN NOT NULL
-            );
-            INSERT INTO schema_migrations (version, dirty)
-            SELECT MAX(v.version), false FROM (VALUES (1),(2),(4),(5),(6),(7),(8),(9),(10)) AS v(version)
-            ON CONFLICT (version) DO UPDATE SET dirty = false;
-        "
-    """,
-    resource_deps=["postgresql", "pg-port-forward"],
+    cmd="task db:roles && task db:migrate",
+    resource_deps=["postgresql"],
     deps=["api/internal/db/migrations"],
 )
 
@@ -180,7 +167,7 @@ docker_build(
     # same stale-helper-post-architecture-refactor class as PR #88.
     only=["api/", "pkg/", "go.work", "go.work.sum", "operators/api/", "operators/go.mod", "operators/go.sum", "infra/tests/go.mod", "infra/tests/go.sum", "infra/scripts/"],
     # gomod_token: BuildKit secret mount required by api/Dockerfile step 8/11
-    # to fetch the PRIVATE github.com/getloopscale/loopzero-contracts@v0.1.0 module
+    # to fetch the PRIVATE github.com/getloopscale/loopzero-contracts@v0.4.0 module
     # (M5 decomposition). Without secret=..., Docker build fails with
     # `could not read Username for 'https://github.com'`. Cleanroom catch
     # 2026-06-19 — same stale-helper-post-architecture-refactor class as #91.
@@ -191,33 +178,54 @@ docker_build(
 # Render loopzero-api ConfigMap+Secret from helm chart BEFORE applying Deployment.
 # Without this, the Deployment's envFrom: configMapRef/secretRef references resolve to
 # missing resources and Pod fails CrashLoopBackOff. Output written to .tilt-rendered/
-# (gitignored) — re-rendered on every values-dev.yaml or template edit.
-_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm template loopzero-api infra/helm/loopzero-api -f infra/helm/loopzero-api/values-dev.yaml -s templates/configmap-runtime.yaml -s templates/secret-runtime.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml"
+# (gitignored) — re-rendered on every values or template edit.
+#
+# The chart is charts/loopzero-api — the one loopzero-api chart Helmfile and ArgoCD install —
+# rendered with infra/tilt/loopzero-api-values.yaml, and only its ConfigMap and Secret
+# (both named loopzero-api). `helm dependency build` resolves the local loopzero-common
+# library, which the chart's templates include; it needs no network.
+# Replaces the rendered file only when its content changed. k8s_yaml below makes that
+# file a Tiltfile dependency, and rewriting it on every load reloaded the Tiltfile,
+# which rewrote it again — "(Tiltfile)" never left in_progress (#403). The render is
+# deterministic, so an unchanged file now stays untouched.
+_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm dependency build charts/loopzero-api >/dev/null && helm template loopzero-api charts/loopzero-api -f infra/tilt/loopzero-api-values.yaml -s templates/configmap.yaml -s templates/secret.yaml -s templates/clusterrole.yaml -s templates/clusterrolebinding.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml.next && { cmp -s .tilt-rendered/loopzero-api-runtime.yaml.next .tilt-rendered/loopzero-api-runtime.yaml && rm -f .tilt-rendered/loopzero-api-runtime.yaml.next || mv .tilt-rendered/loopzero-api-runtime.yaml.next .tilt-rendered/loopzero-api-runtime.yaml; }"
 
 local_resource(
     "loopzero-api-runtime",
     cmd=_API_RUNTIME_RENDER,
     deps=[
-        "infra/helm/loopzero-api/values-dev.yaml",
-        "infra/helm/loopzero-api/templates/configmap-runtime.yaml",
-        "infra/helm/loopzero-api/templates/secret-runtime.yaml",
+        "infra/tilt/loopzero-api-values.yaml",
+        "charts/loopzero-api/values.yaml",
+        "charts/loopzero-api/templates/configmap.yaml",
+        "charts/loopzero-api/templates/secret.yaml",
     ],
     labels=["loopzero"],
 )
 
-# Renderiza uma vez durante o CARREGAMENTO do Tiltfile, antes do k8s_yaml abaixo.
+# Renders once while the Tiltfile is LOADING, before the k8s_yaml below.
 #
-# Sem isto o Tiltfile nao carrega num clone novo, e o erro nao aponta para a causa:
-# `.tilt-rendered/` e gitignored, `k8s_yaml` le o arquivo no momento em que o Tiltfile
-# e avaliado, e quem o produz e o `local_resource` acima — que so roda DEPOIS que o
-# Tiltfile carregou. O recurso dependia do artefato que ele mesmo gera. Medido no
-# droplet app-dev em 2026-08-10, durante a reconstrucao total: `tilt up` abortou com
+# Without this the Tiltfile does not load on a fresh clone, and the error does not point
+# at the cause: `.tilt-rendered/` is gitignored, `k8s_yaml` reads the file at the moment
+# the Tiltfile is evaluated, and what produces it is the `local_resource` above — which
+# only runs AFTER the Tiltfile has loaded. The resource depended on the artifact it
+# generates itself. Measured on the app-dev droplet on 2026-08-10, during the full
+# rebuild: `tilt up` aborted with
 # "open .tilt-rendered/loopzero-api-runtime.yaml: no such file or directory".
 #
-# O `local_resource` continua existindo e nao e redundante: ele re-renderiza quando os
-# `deps` mudam, que e o laco de desenvolvimento. Este `local()` so garante o primeiro.
+# The `local_resource` still exists and is not redundant: it re-renders when the
+# `deps` change, which is the development loop. This `local()` only guarantees the first render.
 local(_API_RUNTIME_RENDER, quiet=True)
-k8s_yaml(".tilt-rendered/loopzero-api-runtime.yaml")
+# The chart declares no namespace — a Helm release supplies it — so the raw render
+# would land in `default`, and the loopzero-api Deployment in loopzero-system then failed with
+# `configmap "loopzero-api" not found` (#404). Place every rendered object in loopzero-system.
+_api_runtime_objects = decode_yaml_stream(read_file(".tilt-rendered/loopzero-api-runtime.yaml"))
+# loopzero-api's RBAC comes from the chart too, as in production (#414): the dev loop
+# kept a drifted copy that could not patch a Tenant. ClusterRole and binding are
+# cluster-scoped, so only the namespaced objects are placed in loopzero-system.
+for _obj in _api_runtime_objects:
+    if _obj["kind"] in ("ConfigMap", "Secret"):
+        _obj["metadata"]["namespace"] = "loopzero-system"
+k8s_yaml(encode_yaml_stream(_api_runtime_objects))
 
 k8s_yaml("infra/tilt/api-deployment.yaml")
 k8s_resource(
@@ -235,7 +243,7 @@ k8s_resource(
 # The cloud-API + dashboard now live in the standalone loopzero-cloud repo with their
 # own dev loop (which assumes the engine + loopzero-data are running). The engine
 # Tiltfile no longer builds/deploys cloud from source. The deployed loopzero-cloud
-# SERVICE chart (infra/helm/loopzero-cloud) remains platform infra, sourced from the
+# SERVICE chart (charts/loopzero-cloud) remains platform infra, sourced from the
 # loopzero-cloud repo's published image.
 
 # ---------------------------------------------------------------------------

@@ -437,7 +437,7 @@ type FindPendingCustomDomainsForAutoVerifyRow struct {
 // tenantpredicate:exempt
 // Cell-scoped via JOIN to tenants table (multi-cell isolation per
 // roadmap 03). Empty cellID is handled by the wrapper (defaults to
-// CellDefault before invocation).
+// domain.DefaultCellID before invocation).
 func (q *Queries) FindPendingCustomDomainsForAutoVerify(ctx context.Context, db DBTX, cellID string) ([]FindPendingCustomDomainsForAutoVerifyRow, error) {
 	rows, err := db.Query(ctx, findPendingCustomDomainsForAutoVerify, cellID)
 	if err != nil {

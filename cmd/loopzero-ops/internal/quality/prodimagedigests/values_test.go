@@ -34,33 +34,33 @@ func TestScanChartValues(t *testing.T) {
 		wantIn     string
 	}{
 		{
-			name:       "helper sem digest e a forma que o gate nao via",
+			name:       "helper without digest is the shape the gate did not see",
 			values:     "image:\n  repository: loopzero-api\n  tag: dev\n",
 			usesHelper: true, wantHit: true, wantIn: "digest",
 		},
 		{
-			name:       "digest declarado e imutavel, entao passa",
+			name:       "a declared digest is immutable, so it passes",
 			values:     "image:\n  repository: loopzero-api\n  digest: sha256:abc123\n",
 			usesHelper: true, wantHit: false,
 		},
 		{
-			name: "digest vazio nao conta como declarado — o helper cai na tag",
-			// `.Values.image.digest | default ""` trata vazio como ausente, e
-			// aceitar a chave presente-porem-vazia seria aceitar a aparencia da
-			// correcao no lugar dela.
+			name: "an empty digest does not count as declared — the helper falls back to the tag",
+			// `.Values.image.digest | default ""` treats empty as absent, and
+			// accepting the key-present-but-empty form would accept the appearance
+			// of the fix in place of the fix.
 			values:     "image:\n  repository: loopzero-api\n  digest: \"\"\n  tag: dev\n",
 			usesHelper: true, wantHit: true, wantIn: "digest",
 		},
 		{
-			name: "chart que NAO usa o helper nao e julgado aqui",
-			// Quem escreve `image:` literal ja e coberto pelo varredor de
-			// templates. Julgar duas vezes produziria dois achados para um
-			// defeito, e o leitor aprende a somar errado.
-			values:     "image:\n  repository: qualquer\n  tag: v1\n",
+			name: "a chart that does NOT use the helper is not judged here",
+			// Whoever writes a literal `image:` is already covered by the template
+			// scanner. Judging twice would produce two findings for one defect,
+			// and the reader learns to add wrong.
+			values:     "image:\n  repository: anything\n  tag: v1\n",
 			usesHelper: false, wantHit: false,
 		},
 		{
-			name:       "sem bloco image nenhum nao e violacao",
+			name:       "no image block at all is not a violation",
 			values:     "replicaCount: 2\n",
 			usesHelper: true, wantHit: false,
 		},
@@ -90,27 +90,27 @@ func TestScanChartValues(t *testing.T) {
 			}
 
 			if tc.wantHit && len(out.Violations) == 0 {
-				t.Fatalf("esperava violação, veio nenhuma")
+				t.Fatalf("expected a violation, got none")
 			}
 			if !tc.wantHit && len(out.Violations) > 0 {
-				t.Fatalf("não esperava violação, vieram %d: %v", len(out.Violations), out.Violations)
+				t.Fatalf("expected no violation, got %d: %v", len(out.Violations), out.Violations)
 			}
 			if tc.wantHit && tc.wantIn != "" && !strings.Contains(joinViolations(out.Violations), tc.wantIn) {
-				t.Errorf("a violação não nomeia a causa (%q): %v", tc.wantIn, out.Violations)
+				t.Errorf("the violation does not name the cause (%q): %v", tc.wantIn, out.Violations)
 			}
 		})
 	}
 }
 
-// TestScanChartValues_DiretorioAusenteNaoEhErro keeps the gate usable in a
+// TestScanChartValues_MissingDirectoryIsNotAnError keeps the gate usable in a
 // checkout that has no `charts/` — same tolerance the path walker already has.
-func TestScanChartValues_DiretorioAusenteNaoEhErro(t *testing.T) {
+func TestScanChartValues_MissingDirectoryIsNotAnError(t *testing.T) {
 	var out Outcome
-	if err := scanChartValues(filepath.Join(t.TempDir(), "nao-existe"), &out); err != nil {
-		t.Fatalf("diretório ausente virou erro: %v", err)
+	if err := scanChartValues(filepath.Join(t.TempDir(), "does-not-exist"), &out); err != nil {
+		t.Fatalf("a missing directory became an error: %v", err)
 	}
 	if len(out.Violations) != 0 {
-		t.Errorf("diretório ausente produziu violações: %v", out.Violations)
+		t.Errorf("a missing directory produced violations: %v", out.Violations)
 	}
 }
 
@@ -122,4 +122,26 @@ func joinViolations(vs []Violation) string {
 		parts = append(parts, v.String())
 	}
 	return strings.Join(parts, " ")
+}
+
+// A chart template the gate cannot read must not decide, by silence, that the
+// chart does not use the image helper — that would drop the chart from the
+// digest check.
+func TestScanChartValues_UnreadableTemplateIsAnError(t *testing.T) {
+	root := t.TempDir()
+	chartDir := filepath.Join(root, "charts", "api")
+	if err := os.MkdirAll(filepath.Join(chartDir, "templates"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(chartDir, "values.yaml"), []byte("image:\n  tag: dev\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(chartDir, "templates", "deploy.yaml")); err != nil {
+		t.Fatal(err)
+	}
+
+	var out Outcome
+	if err := scanChartValues(filepath.Join(root, "charts"), &out); err == nil {
+		t.Fatal("an unreadable template must be an error")
+	}
 }

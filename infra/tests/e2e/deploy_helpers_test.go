@@ -13,7 +13,6 @@
 package e2e
 
 import (
-	"os"
 	"os/exec"
 	"strings"
 
@@ -57,27 +56,5 @@ func initGitRepo(dir string) string {
 // additional arguments. Returns stdout, stderr, and the exit code.
 // Auth is via configStore (XDG_CONFIG_HOME from BeforeSuite), not env.
 func runLoopZeroDeploy(dir string, args ...string) (stdout, stderr string, exitCode int) {
-	allArgs := append([]string{"deploy"}, args...)
-	cmd := exec.Command("loopzero", allArgs...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"LOOPZERO_API_URL="+apiURL(),
-		"LOOPZERO_TOKEN=",
-	)
-
-	var stdoutBuf, stderrBuf strings.Builder
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-
-	err := cmd.Run()
-	exitCode = 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			exitCode = -1
-		}
-	}
-
-	return stdoutBuf.String(), stderrBuf.String(), exitCode
+	return execLoopZero(loopzeroInvocation{dir: dir}, append([]string{"deploy"}, args...)...)
 }

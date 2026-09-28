@@ -212,7 +212,7 @@ done
 # -----------------------------------------------------------------------------
 heading "C5: Multi-cell topology"
 
-for cell in cell-0 cell-0 cell-1; do
+for cell in cell-0 cell-1; do
   status=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential "$cell" \
     -o jsonpath='{.status.connected}' 2>/dev/null || echo "")
   if [[ "$status" == "true" ]]; then

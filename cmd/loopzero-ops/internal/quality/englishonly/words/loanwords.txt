@@ -1,0 +1,23 @@
+# Words English borrowed with their diacritics. An accented word outside this
+# list is read as Portuguese.
+café
+cafés
+résumé
+resumé
+cliché
+clichés
+fiancé
+fiancée
+décor
+entrée
+protégé
+déjà
+touché
+née
+rosé
+soufflé
+sauté
+communiqué
+exposé
+passé
+attaché

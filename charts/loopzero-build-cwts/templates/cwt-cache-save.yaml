@@ -36,7 +36,8 @@ spec:
             description: "Comma-separated directories to tar (e.g., node_modules)"
       container:
         # MOD-4 fix: Replaced amazon/aws-cli (~200MB) with minio/mc (~30MB).
-        image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+        # The clone runner carries mc, built from pinned source (#394).
+        image: {{ .Values.images.cloneRunner | default "registry.digitalocean.com/loopzero-system/loopzero-clone-runner:v0.1.0" }}
         # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
         # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
         env:
@@ -54,58 +55,38 @@ spec:
 
             # Configure mc alias for MinIO
             # MOD-6 fix: --insecure flag parametrized via Helm values (not hardcoded).
-            mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
-              {{- if .Values.minio.insecure }}
-              --insecure \
-              {{- end }}
-              --api S3v4 >/dev/null 2>&1
+            {{- include "loopzero-build-cwts.mcAlias" . | nindent 12 }}
 
-            # Compute lockfile hash for cache key precision (mirrors cache-restore logic).
-            SUFFIX="{{ "{{inputs.parameters.cache-key-suffix}}" }}"
-            if [ -z "$SUFFIX" ]; then
-              LOCKFILE=""
-              for f in /workspace/package-lock.json /workspace/yarn.lock /workspace/pnpm-lock.yaml \
-                       /workspace/go.sum /workspace/requirements.txt /workspace/poetry.lock; do
-                if [ -f "$f" ]; then
-                  LOCKFILE="$f"
-                  break
-                fi
-              done
-              if [ -n "$LOCKFILE" ]; then
-                SUFFIX=$(sha256sum "$LOCKFILE" | cut -c1-12)
-                echo "Computed cache suffix from ${LOCKFILE##*/}: ${SUFFIX}"
-              fi
-            fi
-
-            if [ -n "$SUFFIX" ]; then
-              CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}-${SUFFIX}"
-            else
-              CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}"
-            fi
-            CACHE_PATH="loopzero/{{ .Values.sourceBucket }}/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
+            # Cache key: the same derivation cache-restore uses (loopzero-build-cwts.cacheKey).
+            {{- include "loopzero-build-cwts.cacheKey" . | nindent 12 }}
 
             # Build list of dirs to cache from comma-separated input
             DIRS="{{ "{{inputs.parameters.cache-dirs}}" }}"
             EXISTING_DIRS=""
-            IFS=',' read -ra DIR_ARRAY <<< "$DIRS"
-            for d in "${DIR_ARRAY[@]}"; do
-              # Trim whitespace (portable — xargs not available in minio/mc 2025-08+)
+            # POSIX sh only: this runs in loopzero-clone-runner, whose `sh` is BusyBox
+            # ash — no arrays, no here-strings (#394). Split on commas with IFS and
+            # keep globbing off so a directory name is never expanded.
+            set -f
+            OLD_IFS="$IFS"
+            IFS=','
+            for d in $DIRS; do
+              IFS="$OLD_IFS"
+              # Trim surrounding whitespace
               d="${d#"${d%%[![:space:]]*}"}"
               d="${d%"${d##*[![:space:]]}"}"
-              if [ -d "$d" ]; then
+              if [ -n "$d" ] && [ -d "$d" ]; then
                 EXISTING_DIRS="$EXISTING_DIRS $d/"
               fi
             done
+            IFS="$OLD_IFS"
+            set +f
 
             if [ -n "$EXISTING_DIRS" ]; then
-              # B9 (CHG-2026-04-22-001): guard against missing `tar` in minio/mc image.
-              # minio/mc:RELEASE.2025-08-13T08-35-41Z does NOT ship tar. Without this guard,
-              # `tar: command not found` marks the entire workflow Failed, which propagates
-              # upstream so the API reports FAILED even when build+image+sign all succeeded.
-              # Cache save is inherently best-effort (see non-fatal echo below) — it MUST NOT
-              # break a successful build.
-              # TODO(T2 follow-up): migrate to dedicated loopzero-cache-runner image with tar+mc
-              # baked in, following SEC-006 pattern (clone-runner, cosign-signer).
+              # B9 (CHG-2026-04-22-001): the minio/mc image this step used to run in did
+              # not ship tar, and `tar: command not found` failed the whole workflow.
+              # loopzero-clone-runner carries BusyBox tar (#394), so the guard no longer
+              # fires there; it stays because cache save is best-effort and MUST NOT
+              # break a successful build if the image ever changes again.
               if command -v tar >/dev/null 2>&1; then
                 tar czf /tmp/cache.tar.gz $EXISTING_DIRS
                 mc cp /tmp/cache.tar.gz "${CACHE_PATH}" \

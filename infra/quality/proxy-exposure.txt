@@ -53,21 +53,24 @@ auth-dev.loopzero.example - | reviewed | Kratos public surface by design (login/
 auth-dev.loopzero.example /oauth2/* | reviewed | Hydra OAuth2/OIDC endpoints; public by the OIDC spec
 auth-dev.loopzero.example /.well-known/* | reviewed | OIDC discovery + JWKS; public by the OIDC spec
 auth-dev.loopzero.example /userinfo | reviewed | OIDC UserInfo; returns the bearer's own claims, public by spec
-# `/credentials` e `credentials_endpoint_draft_00` — um RASCUNHO do OAuth que o Hydra
-# ANUNCIA no documento de descoberta e NAO implementa nesta versao. Medido em 2026-08-10:
-# devolve 404, e a rota da borda existe encaminhando para o Hydra. A declaracao anterior
-# dizia "public by spec", o que confundia anunciado com servido.
+# `/credentials` is `credentials_endpoint_draft_00` — an OAuth DRAFT that Hydra
+# ANNOUNCES in its discovery document and does NOT implement in this version.
+# Measured 2026-08-10: it returns 404, and the edge route exists, forwarding to
+# Hydra. The earlier declaration said "public by spec", which confused announced
+# with served.
 #
-# Mantida declarada, e nao apagada, porque a rota da borda EXISTE: o gate proxy-exposure
-# exige declaracao para todo reverse_proxy, e apagar a linha reprovaria o gate sem tirar a
-# rota. Quando o Hydra passar a implementar o rascunho, esta linha ja cobre a superficie.
-auth-dev.loopzero.example /credentials | reviewed | rascunho do OAuth que o Hydra anuncia e nao implementa nesta versao — 404 medido em 2026-08-10; a rota da borda existe e por isso segue declarada
+# Kept declared, not deleted, because the edge route EXISTS: the proxy-exposure
+# gate requires a declaration for every reverse_proxy, and deleting the row would
+# fail the gate without removing the route. When Hydra implements the draft, this
+# row already covers the surface.
+auth-dev.loopzero.example /credentials | reviewed | OAuth draft that Hydra announces and does not implement in this version — 404 measured 2026-08-10; the edge route exists, so it stays declared
 auth-dev.loopzero.example /self-service/registration | reviewed | routed to the loopzero-cloud BFF for the anti-enumeration unifier (Red Team #43)
 auth-dev.loopzero.example /self-service/registration/methods/password | reviewed | same BFF unifier as above; byte-identical response for new vs existing email
 
-# cloud-dev.loopzero.example foi REMOVIDO em 2026-08-10 — era um segundo nome para o mesmo
-# painel, servindo 301, e o webhook do GitHub que justificava o host ja e registrado
-# contra app-dev (ver a linha app-dev.loopzero.example /api/v1/webhooks/github acima).
+# cloud-dev.loopzero.example was REMOVED on 2026-08-10 — it was a second name for the
+# same dashboard, serving 301, and the GitHub webhook that justified the host is
+# already registered against app-dev (see the app-dev.loopzero.example
+# /api/v1/webhooks/github row above).
 
 # --- app/cloud/auth.loopzero.example — same droplet, non-"-dev" hostnames ---------
 # Same Caddy process and same upstreams as the -dev hosts (see the file header:

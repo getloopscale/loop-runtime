@@ -25,12 +25,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loopzero/api/internal/k8s"
 	"github.com/getloopscale/loopzero/api/internal/leader"
 	"github.com/getloopscale/loopzero/api/internal/metering"
+	"github.com/getloopscale/loopzero/api/internal/placement"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
@@ -46,6 +47,8 @@ const (
 	// meteringMaxConcurrency bounds the per-tenant fan-out — kept ≤ the pool's
 	// MaxConns so the pool is never starved.
 	meteringMaxConcurrency = meteringWorkerPoolConns
+	// meteringCellRefresh is how often the cell router re-lists connected cells.
+	meteringCellRefresh = 60 * time.Second
 )
 
 // startMeteringLoop wires + starts the compute-metering loop on the elected
@@ -66,18 +69,38 @@ func startMeteringLoop(shutdownCtx context.Context, bgWg *sync.WaitGroup, cfg co
 		return
 	}
 
-	// Mgmt-cluster client: reads Tenant CRs (enumeration) + ClusterCredential CRs
-	// and their kubeconfig Secrets (per-cell pod listing). The scheme carries BOTH
+	// Mgmt-cluster client: reads Tenant CRs (enumeration) and the cells'
+	// kubeconfig Secrets (per-cell pod listing). The scheme carries BOTH
 	// the loopzero.io CRD types AND corev1 (for the kubeconfig Secret GET) — the k8s
 	// package's NewScheme is loopzero.io-only, so this client is built here.
-	mgmtClient, err := meteringMgmtClient(cfg)
+	mgmtRest, err := k8s.RestConfig(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
+	if err != nil {
+		pool.Close()
+		logger.Error("metering: mgmt rest config failed — metering disabled (observe-only, non-fatal)", "error", err)
+		return
+	}
+	mgmtClient, err := meteringMgmtClient(mgmtRest)
 	if err != nil {
 		pool.Close()
 		logger.Error("metering: mgmt client init failed — metering disabled (observe-only, non-fatal)", "error", err)
 		return
 	}
 
-	cellProvider := metering.NewSecretCellClientProvider(mgmtClient, tenantCRNamespace)
+	// Cells are discovered the one way the API discovers them: the
+	// DynamicRouter (connected ClusterCredentials only, periodic refresh).
+	cellStore, err := placement.NewK8sCellStore(mgmtRest, tenantCRNamespace)
+	if err != nil {
+		pool.Close()
+		logger.Error("metering: cell store init failed — metering disabled (observe-only, non-fatal)", "error", err)
+		return
+	}
+	cellRouter := placement.NewDynamicRouter(cellStore, meteringCellRefresh, logger)
+	bgWg.Add(1)
+	go func() {
+		defer bgWg.Done()
+		cellRouter.Start(shutdownCtx)
+	}()
+	cellProvider := metering.NewSecretCellClientProvider(cellRouter, mgmtClient)
 	loop := metering.NewWorkerLoop(pool, mgmtClient, cellProvider, metering.LoopConfig{
 		Interval:       meteringInterval,
 		MaxDelta:       meteringMaxDelta,
@@ -104,13 +127,8 @@ const tenantCRNamespace = "loopzero-system"
 
 // meteringMgmtClient builds a controller-runtime client for the mgmt cluster whose
 // scheme includes the loopzero.io CRD types (Tenant, ClusterCredential) AND corev1
-// (the kubeconfig Secret). In-cluster config first, then the kubeconfig + context
-// (mirrors k8s.restConfig's resolution order).
-func meteringMgmtClient(cfg config.Config) (ctrlclient.Client, error) {
-	restCfg, err := meteringMgmtRestConfig(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
-	if err != nil {
-		return nil, err
-	}
+// (the kubeconfig Secret), over the rest config k8s.RestConfig resolved.
+func meteringMgmtClient(restCfg *rest.Config) (ctrlclient.Client, error) {
 	scheme := runtime.NewScheme()
 	if err := apiv1.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("metering: register loopzero.io scheme: %w", err)
@@ -123,20 +141,4 @@ func meteringMgmtClient(cfg config.Config) (ctrlclient.Client, error) {
 		return nil, fmt.Errorf("metering: build mgmt client: %w", err)
 	}
 	return c, nil
-}
-
-func meteringMgmtRestConfig(kubeconfig, kubeContext string) (*rest.Config, error) {
-	if cfg, err := rest.InClusterConfig(); err == nil {
-		return cfg, nil
-	}
-	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig}
-	overrides := &clientcmd.ConfigOverrides{}
-	if kubeContext != "" {
-		overrides.CurrentContext = kubeContext
-	}
-	restCfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides).ClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("metering: resolve mgmt rest config: %w", err)
-	}
-	return restCfg, nil
 }

@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/getloopscale/loopzero-contracts/serviceauth"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 )
 
 // nonceStoreBootstrapTimeout caps how long bootstrap waits for the
@@ -25,10 +25,12 @@ import (
 // for the rationale.
 const nonceStoreBootstrapTimeout = 2 * time.Second
 
-// setupServiceAuthNonceStore wires `auth.ServiceAuthNonceStore`.
+// setupServiceAuthNonceStore returns the service-auth replay-protection nonce store.
 //
 // Env: LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR (e.g., "redis.loopzero-system:6379").
-// When empty OR unreachable, falls back to *InMemoryNonceStore.
+// When empty, it is the in-memory store. When set but unreachable, it is an
+// error: the boot fails instead of running every replica without shared
+// replay protection while the operator believes it is on.
 //
 // Per ADR Q2: Redis is the production target — multi-replica API
 // requires shared state for replay protection. In-memory is the
@@ -39,15 +41,11 @@ const nonceStoreBootstrapTimeout = 2 * time.Second
 // in pkg/middleware init(), but that default is process-local and
 // won't share state across replicas. This function replaces the
 // default with the Redis-backed implementation when env-configured.
-func setupServiceAuthNonceStore(logger *slog.Logger) {
+func setupServiceAuthNonceStore(logger *slog.Logger) (serviceauth.NonceStore, error) {
 	addr := os.Getenv("LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR")
 	if addr == "" {
-		// Default: in-memory store (already installed by middleware init).
-		// Re-install explicitly so the bootstrap is deterministic regardless
-		// of test pollution from prior runs.
-		auth.ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
 		logger.Info("service-auth nonce store: in-memory (set LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR for multi-replica Redis)")
-		return
+		return serviceauth.NewInMemoryNonceStore(5 * time.Minute), nil
 	}
 
 	client := redis.NewClient(&redis.Options{
@@ -56,19 +54,19 @@ func setupServiceAuthNonceStore(logger *slog.Logger) {
 		DB:       0,
 	})
 
-	// PING to confirm reachability before installing. If Redis is
-	// unreachable at bootstrap, fall back to in-memory rather than
-	// blocking startup — see test rationale.
+	// PING to confirm reachability before installing. Configured but
+	// unreachable is a boot failure, the same class as a missing database
+	// URL; the orchestrator restarts the pod until Redis answers.
 	ctx, cancel := context.WithTimeout(context.Background(), nonceStoreBootstrapTimeout)
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
-		_ = client.Close()
-		auth.ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
-		logger.Warn("service-auth nonce store: Redis ping failed at bootstrap; falling back to in-memory",
-			"addr", addr, "error", err)
-		return
+		if cerr := client.Close(); cerr != nil {
+			logger.Warn("service-auth nonce store: closing the unreachable Redis client failed", "error", cerr)
+		}
+		return nil, fmt.Errorf("service-auth nonce store: LOOPZERO_SERVICE_AUTH_NONCE_REDIS_ADDR=%s is set but Redis did not answer within %s: %w",
+			addr, nonceStoreBootstrapTimeout, err)
 	}
 
-	auth.ServiceAuthNonceStore = serviceauth.NewRedisNonceStore(client, 5*time.Minute)
 	logger.Info("service-auth nonce store: Redis", "addr", addr)
+	return serviceauth.NewRedisNonceStore(client, 5*time.Minute), nil
 }

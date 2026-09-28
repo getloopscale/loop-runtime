@@ -2,16 +2,16 @@
 // Copyright 2025-2026 The LoopZero Authors
 //
 // Plan v1.2 T2.4 (cutover-deep-review-hardening): cross-product integration
-// gate. v2 services.json flows through ValidateServicesJSON → RenderInput,
-// preserving project + service type all the way to the K8s emitter input.
+// gate. v2 services.json flows through ValidateServicesJSON with its project
+// and each service's type preserved.
 
 package integration
 
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	"github.com/getloopscale/loopzero/api/internal/manifests"
+	"github.com/getloopscale/loopzero/api/internal/source"
 )
 
 const v2ServicesJSON = `{
@@ -46,8 +46,7 @@ const v2ServicesJSON = `{
 }`
 
 func TestPhaseDE2E_V2Schema_PreservesProjectAndType(t *testing.T) {
-	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
-	m, err := source.ValidateServicesJSONNative(v2ServicesJSON)
+	m, err := source.ValidateServicesJSONNative(v2ServicesJSON, source.EnvBlocklistEnforce)
 	if err != nil {
 		t.Fatalf("v2 services.json must validate, got: %v", err)
 	}
@@ -59,38 +58,17 @@ func TestPhaseDE2E_V2Schema_PreservesProjectAndType(t *testing.T) {
 		t.Fatalf("expected 2 services, got %d", len(appNames))
 	}
 
-	// Translate through the mapping boundary the same way the production
-	// orchestrator does (RenderInput consumer).
-	svc := manifests.ServicesManifest{
-		Version: 2,
-		Services: []manifests.ServiceEntry{
-			{Name: "api", Runtime: "python", Type: manifests.ServiceTypeServer, Port: 8001, Proxy: "/api", Dev: "x", Start: "x", Healthcheck: "/health"},
-			{Name: "queue", Runtime: "node", Type: manifests.ServiceTypeWorker, Port: 4001, Proxy: "/internal/queue", Dev: "x", Start: "x", Healthcheck: "/health"},
-		},
+	// The validated manifest keeps each service's declared type: the renderer
+	// reads it to choose a worker (no traffic) or a server rollout.
+	if got := m.Services[0].Type; got != manifests.ServiceTypeServer {
+		t.Errorf("expected first service type=server, got %q", got)
 	}
-	input, err := manifests.RenderFromServicesManifestInput(svc, manifests.RenderOpts{
-		TenantID:          "tenant-1",
-		ProjectID:         source.ProjectNameFromManifest(m),
-		BaseDomain:        "test.local",
-		ClusterIssuerName: "letsencrypt-staging",
-		ImageRefDefault:   "registry.loopzero/app:v1",
-	})
-	if err != nil {
-		t.Fatalf("RenderInput build failed: %v", err)
-	}
-	if len(input.Apps) != 2 {
-		t.Fatalf("expected 2 apps in RenderInput, got %d", len(input.Apps))
-	}
-	if input.Apps[0].Type != manifests.ServiceTypeServer {
-		t.Errorf("expected first app type=server, got %q", input.Apps[0].Type)
-	}
-	if input.Apps[1].Type != manifests.ServiceTypeWorker {
-		t.Errorf("expected second app type=worker, got %q", input.Apps[1].Type)
+	if got := m.Services[1].Type; got != manifests.ServiceTypeWorker {
+		t.Errorf("expected second service type=worker, got %q", got)
 	}
 }
 
 func TestPhaseDE2E_V1Schema_FallsBackToServicesBundle(t *testing.T) {
-	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
 	const v1 = `{
 		"version": 1,
 		"services": [
@@ -107,7 +85,7 @@ func TestPhaseDE2E_V1Schema_FallsBackToServicesBundle(t *testing.T) {
 			}
 		]
 	}`
-	m, err := source.ValidateServicesJSONNative(v1)
+	m, err := source.ValidateServicesJSONNative(v1, source.EnvBlocklistEnforce)
 	if err != nil {
 		t.Fatalf("v1 must validate (deprecated path), got: %v", err)
 	}

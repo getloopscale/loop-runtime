@@ -71,28 +71,14 @@ func ParseGoProfile(r io.Reader) ([]PackageCoverage, error) {
 		if line == "" {
 			continue
 		}
-		// Format: `<file>:<startLine>.<col>,<endLine>.<col> <stmts> <count>`
-		fields := strings.Fields(line)
-		if len(fields) < 3 {
-			// Malformed — silently skip (matches awk `next`).
+		b, ok := ParseProfileLine(line)
+		if !ok {
+			// Malformed — skip (matches awk `next`).
 			continue
 		}
-		fileRange := fields[0]
-		colonIdx := strings.IndexByte(fileRange, ':')
-		if colonIdx <= 0 {
-			continue
-		}
-		file := fileRange[:colonIdx]
-		stmts, err := strconv.Atoi(fields[1])
-		if err != nil {
-			continue
-		}
-		count, err := strconv.Atoi(fields[2])
-		if err != nil {
-			continue
-		}
+		file, stmts := b.File, b.Stmts
 		fileStmts[file] += stmts
-		if count > 0 {
+		if b.Count > 0 {
 			fileCovered[file] += stmts
 		} else {
 			// Ensure key exists (matches awk semantic for files with no
@@ -130,7 +116,7 @@ func ParseGoProfile(r io.Reader) ([]PackageCoverage, error) {
 		}
 		out = append(out, PackageCoverage{
 			Package:  pkg,
-			Coverage: roundTo1Decimal(pct),
+			Coverage: RoundTo1Decimal(pct),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Package < out[j].Package })
@@ -148,9 +134,55 @@ func pkgFromFile(file string) string {
 	return dir
 }
 
-// roundTo1Decimal preserves the bash `printf "%.1f"` output precision.
+// ProfileBlock is one line of a Go cover profile.
+type ProfileBlock struct {
+	File      string
+	StartLine int
+	EndLine   int
+	Stmts     int
+	Count     int
+}
+
+// ParseProfileLine parses `<file>:<sLine>.<sCol>,<eLine>.<eCol> <stmts> <count>`.
+// The file is split at the LAST colon: the range carries none, and a Windows
+// path carries one of its own. It is the single parser for the format; the
+// coverage gates that read profiles must not keep their own.
+func ParseProfileLine(line string) (ProfileBlock, bool) {
+	colon := strings.LastIndexByte(line, ':')
+	if colon <= 0 {
+		return ProfileBlock{}, false
+	}
+	fields := strings.Fields(line[colon+1:])
+	if len(fields) < 3 {
+		return ProfileBlock{}, false
+	}
+	start, end, ok := strings.Cut(fields[0], ",")
+	if !ok {
+		return ProfileBlock{}, false
+	}
+	sLine, ok1 := lineOf(start)
+	eLine, ok2 := lineOf(end)
+	stmts, err1 := strconv.Atoi(fields[1])
+	count, err2 := strconv.Atoi(fields[2])
+	if !ok1 || !ok2 || err1 != nil || err2 != nil || sLine < 1 || eLine < sLine {
+		return ProfileBlock{}, false
+	}
+	return ProfileBlock{File: line[:colon], StartLine: sLine, EndLine: eLine, Stmts: stmts, Count: count}, true
+}
+
+// lineOf returns the line of a `<line>.<col>` position.
+func lineOf(pos string) (int, bool) {
+	l, _, ok := strings.Cut(pos, ".")
+	if !ok {
+		return 0, false
+	}
+	n, err := strconv.Atoi(l)
+	return n, err == nil
+}
+
+// RoundTo1Decimal preserves the bash `printf "%.1f"` output precision.
 // Avoids float drift on long sums (87.5499... → 87.5 not 87.6).
-func roundTo1Decimal(f float64) float64 {
+func RoundTo1Decimal(f float64) float64 {
 	rounded, _ := strconv.ParseFloat(fmt.Sprintf("%.1f", f), 64)
 	return rounded
 }
@@ -279,7 +311,7 @@ func ParseLCOV(r io.Reader) ([]PackageCoverage, error) {
 		avg := sum / float64(pkgCount[pkg])
 		out = append(out, PackageCoverage{
 			Package:  pkg,
-			Coverage: roundTo1Decimal(avg),
+			Coverage: RoundTo1Decimal(avg),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Package < out[j].Package })

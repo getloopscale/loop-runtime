@@ -14,18 +14,18 @@ import (
 
 // ErrBaselineMissing means the frozen counts are absent.
 //
-// Ausente é FALHA, nunca conjunto vazio implícito: sem o congelado não há como saber o que é
-// regressão, e tratar isso como "nenhuma regressão" é o verde-sobre-nada de sempre.
-var ErrBaselineMissing = errors.New("linha de base ausente — sem o congelado não há catraca")
+// Absent is a FAILURE, never an implicit empty set: without the frozen counts there is no way
+// to know what a regression is, and treating that as "no regression" is the usual green-over-nothing.
+var ErrBaselineMissing = errors.New("baseline missing — without the frozen counts there is no ratchet")
 
 // BaselineRelPath is where the frozen counts live.
 const BaselineRelPath = "infra/quality/lint-baseline.json"
 
 // Baseline holds the frozen per-module counts, one map per dimension.
 //
-// Por MÓDULO, e não um total: um número único deixaria `cmd/loopzero-ops` melhorar 10 e `api`
-// piorar 10 sem ninguém ver. É o que o baseline de 200 do `lint:strict` fazia — e ele estava
-// 200 fora da realidade quando foi medido.
+// Per MODULE, not a total: a single number would let `cmd/loopzero-ops` improve by 10 and `api`
+// worsen by 10 without anyone seeing it. That is what the 200 baseline of `lint:strict` did — and
+// it was 200 off from reality when it was measured.
 type Baseline struct {
 	Note  string         `json:"note,omitempty"`
 	Lint  map[string]int `json:"lint"`
@@ -45,33 +45,33 @@ type Improvement struct {
 	Was, Now int
 }
 
-// Verdict is the outcome of comparing one dimension.
-type Verdict struct {
+// Comparison is the outcome of comparing one dimension.
+type Comparison struct {
 	Regressions  []Regression
 	Improvements []Improvement
-	// Undeclared lists modules with no frozen entry. Um módulo novo entra DECLARADO, senão
-	// ele nasce com achados invisíveis — o defeito que esta fatia conserta.
+	// Undeclared lists modules with no frozen entry. A new module enters DECLARED, otherwise
+	// it is born with invisible findings — the defect this slice fixes.
 	Undeclared []string
 }
 
-const baselineNote = "Contagens congeladas por MODULO de golangci-lint e gofmt, lidas por " +
-	"`loopzero-ops quality lint-coverage`. A catraca recusa REGRESSAO: um modulo em 0 que ganhe um " +
-	"achado reprova, mesmo com centenas congeladas ao lado. Melhorar passa e aparece na saida, " +
-	"para que alguem recongele com `--write`. Um modulo sem entrada aqui e reportado — ele entra " +
-	"declarado, nunca em silencio. Ver B-121, B-083 e B-148."
+const baselineNote = "Per-MODULE frozen counts of golangci-lint and gofmt, read by " +
+	"`loopzero-ops quality lint-coverage`. The ratchet refuses REGRESSION: a module at 0 that gains a " +
+	"finding fails, even with hundreds frozen beside it. Improving passes and shows up in the output, " +
+	"so that someone refreezes with `--write`. A module with no entry here is reported — it enters " +
+	"declared, never silently. See B-121, B-083 and B-148."
 
 // LoadBaseline reads the frozen counts.
 func LoadBaseline(path string) (Baseline, error) {
 	var b Baseline
 	body, err := os.ReadFile(filepath.Clean(path))
 	if errors.Is(err, os.ErrNotExist) {
-		return b, fmt.Errorf("%w: %s (gere com `loopzero-ops quality lint-coverage --write`)", ErrBaselineMissing, path)
+		return b, fmt.Errorf("%w: %s (generate it with `loopzero-ops quality lint-coverage --write`)", ErrBaselineMissing, path)
 	}
 	if err != nil {
-		return b, fmt.Errorf("lendo %s: %w", path, err)
+		return b, fmt.Errorf("reading %s: %w", path, err)
 	}
 	if err := json.Unmarshal(body, &b); err != nil {
-		return b, fmt.Errorf("linha de base ilegível em %s: %w", path, err)
+		return b, fmt.Errorf("unreadable baseline at %s: %w", path, err)
 	}
 	if b.Lint == nil {
 		b.Lint = map[string]int{}
@@ -83,8 +83,8 @@ func LoadBaseline(path string) (Baseline, error) {
 }
 
 // Compare measures the observed counts against one frozen dimension.
-func (b Baseline) Compare(observed, frozen map[string]int, dimension string) Verdict {
-	var v Verdict
+func (b Baseline) Compare(observed, frozen map[string]int, dimension string) Comparison {
+	var v Comparison
 	mods := make([]string, 0, len(observed))
 	for m := range observed {
 		mods = append(mods, m)
@@ -117,11 +117,11 @@ func WriteBaseline(path string, lint, gofmtCounts map[string]int) error {
 	if b.Gofmt == nil {
 		b.Gofmt = map[string]int{}
 	}
-	// MarshalIndent sobre map ordena as chaves, então a saída é determinística — e um diff
-	// cuja ordem varia é ruído que ninguém revisa.
+	// MarshalIndent over a map sorts the keys, so the output is deterministic — and a diff
+	// whose order varies is noise nobody reviews.
 	body, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
-		return fmt.Errorf("serializando linha de base: %w", err)
+		return fmt.Errorf("serializing baseline: %w", err)
 	}
 	return os.WriteFile(path, append(body, '\n'), 0o600)
 }

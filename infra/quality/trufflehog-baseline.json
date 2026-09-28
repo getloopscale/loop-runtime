@@ -1,5 +1,5 @@
 {
-  "note": "Conjunto de candidatos ADJUDICADOS do trufflehog. Um candidato fora daqui REPROVA o gate até alguém regravar com `loopzero-ops quality trufflehog-scan --write` — e é o diff dessa regravação que é a adjudicação. `--write` RECUSA enquanto houver achado vivo: esta lista adjudica \"isto não é segredo\", nunca \"este segredo pode viver aqui\". `id` é sha256(detector+bruto) truncado — nenhum material de segredo mora neste arquivo. Ver B-143.",
+  "note": "Set of ADJUDICATED trufflehog candidates. A candidate outside this set FAILS the gate until someone rewrites it with `loopzero-ops quality trufflehog-scan --write` — and the diff of that rewrite is the adjudication. `--write` REFUSES while any live finding exists: this list adjudicates \"this is not a secret\", never \"this secret may live here\". `id` is a truncated sha256(detector+raw) — no secret material lives in this file. See B-143.",
   "entries": [
     {
       "id": "e0ae7fcc5b7dad8a",
@@ -92,29 +92,29 @@
       "first_seen_in": "cli/src/installer/profiles/example-values.yaml"
     },
     {
-      "id": "abd38b5e3fb0e34e",
-      "detector": "Postgres",
-      "first_seen_in": "code-review-output/code-review.db"
-    },
-    {
       "id": "126b9cbe3bfbd4fd",
       "detector": "Eraser",
-      "first_seen_in": "docs/architecture.md"
+      "first_seen_in": "docs/architecture/eraser-diagrams-index.md"
+    },
+    {
+      "id": "3752c28fa807eb85",
+      "detector": "Postgres",
+      "first_seen_in": "docs/knowledge-base/implementations/dashboard-badge-data-plane-poller/READY_TO_READ_TEAM-2026-07-02.md"
     },
     {
       "id": "6a867b62662cf001",
       "detector": "Postgres",
-      "first_seen_in": "dogfood-2026-05-08-fixes-plan"
+      "first_seen_in": "docs/plans/dogfood-2026-05-08-fixes-plan.md"
     },
     {
       "id": "81a963f476bdf6f3",
       "detector": "Docker",
-      "first_seen_in": "harbor-gaps-resolution"
+      "first_seen_in": "docs/plans/harbor-gaps-resolution.md"
     },
     {
       "id": "f7e813169b5bcf82",
       "detector": "Postgres",
-      "first_seen_in": "self-hosted-systematization"
+      "first_seen_in": "docs/plans/self-hosted-systematization.md"
     },
     {
       "id": "df235625d3592369",
@@ -177,9 +177,19 @@
       "first_seen_in": "infra/tests/snapshots/helmfile-drill-phase1.yaml"
     },
     {
-      "id": "3752c28fa807eb85",
+      "id": "76118ab9f6e7a8b9",
       "detector": "Postgres",
-      "first_seen_in": "knowledge-base/implementations/dashboard-badge-data-plane-poller/READY_TO_READ_TEAM-2026-07-02.md"
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+    },
+    {
+      "id": "8f009e0552c35796",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+    },
+    {
+      "id": "abd38b5e3fb0e34e",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
     },
     {
       "id": "62283828d0b786e1",

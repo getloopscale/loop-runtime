@@ -14,19 +14,103 @@ import (
 	"testing"
 )
 
-// pacotesDeServico sao os pacotes de cliente externo do operator. Um campo do
-// `TenantReconciler` cujo tipo venha de um deles E' um cliente de plano.
-var pacotesDeServico = map[string]bool{
-	"argocd": true, "gitea": true, "minio": true, "miniop": true,
-	"harbor": true, "vault": true,
+// The plane seam of this package.
+//
+// `operators/internal/tenant` is where more than one platform plane meets,
+// and the grouping is defensible: the Tenant aggregate IS the right unit —
+// a tenant really does need a repository, an image project and a bucket.
+// What was missing was a seam saying WHICH plane each file serves (B-060).
+//
+// Without it the information exists only as tribal knowledge, and tribal
+// knowledge ages without warning: the evidence that filed B-060 on
+// 2026-08-11 claimed four planes, and five days later Transit provisioning
+// left the operator (`e19e6dea5`, provisioning is api-side by ADR) with
+// nothing in the package recording the change. A declaration checked
+// against the code cannot age in silence — the tests below fail when it
+// diverges.
+//
+// The declaration is NOT an interface per plane. The shape B-060's DoD
+// proposed copying — the `gitea`/`argocd`/`minio` provisioners —
+// is a narrow facade over an EXTERNAL service, and each one already exists.
+// Repeating it here would produce single-implementer interfaces over
+// internal code, the anti-pattern `rules/architecture.md` and Rule 11 name.
+// The measured damage was not a missing abstraction; it was a missing seam.
+//
+// The declaration lives in this test file because nothing but these tests
+// reads it; production code carries no data it never uses.
+type plane string
+
+const (
+	// BUILD — what builds and stores artefacts: the tenant's bundle bucket.
+	planeBuild plane = "BUILD"
+	// CONTROL — what declares the desired state: the git repository and the
+	// ArgoCD project that syncs it.
+	planeControl plane = "CONTROL"
+	// SECRETS — today only the half that stayed: `VaultClient` carries
+	// `DeleteTenantKey` (crypto-shredding, B-075). Provisioning left on
+	// 2026-08-16 and must not come back as tidying — see
+	// `tenant_transit_ownership_test.go`, which locks the decision both ways.
+	planeSecrets plane = "SECRETS"
+)
+
+// planeOfClient says which plane each `TenantReconciler` client belongs to.
+// Keys are struct field names; a test checks that every client field of the
+// struct appears here, so a new client cannot arrive without a plane.
+var planeOfClient = map[string]plane{
+	"MinIOProvisioner":  planeBuild,
+	"GitProvisioner":    planeControl,
+	"ArgoCDProvisioner": planeControl,
+	"VaultClient":       planeSecrets,
 }
 
-// arquivosDoPacote lista os .go de producao do pacote.
-func arquivosDoPacote(t *testing.T) []string {
+// planesOfFile declares the planes each file of the package may touch,
+// measured on 2026-08-18 from the real `r.<Client>` uses.
+//
+// Two files cross planes, on purpose — the list says why, because "crosses
+// everything" with no written reason is the same as not declaring:
+//
+//   - `tenant_controller.go` is the orchestrator: it holds the clients and
+//     calls the steps. Crossing planes is its job.
+//   - `tenant_deletion.go` is the teardown: deleting a tenant undoes what each
+//     plane created, so it crosses by symmetry with creation.
+//
+// A file with no client is pure logic and declares an empty list — also a
+// checked claim: if it starts calling a client, the test fails until someone
+// decides which plane that belongs to.
+var planesOfFile = map[string][]plane{
+	"registry_auth_merge.go":   {},
+	"tenant_build.go":          {planeBuild},
+	"tenant_controller.go":     {planeBuild, planeControl, planeSecrets},
+	"tenant_credentials.go":    {},
+	"tenant_deletion.go":       {planeBuild, planeControl},
+	"tenant_gitops.go":         {planeControl},
+	"tenant_priority.go":       {},
+	"misplaced_tenant_scan.go": {},
+}
+
+// declares reports whether a file declared the given plane.
+func declares(declared []plane, p plane) bool {
+	for _, d := range declared {
+		if d == p {
+			return true
+		}
+	}
+	return false
+}
+
+// servicePackages are the operator's external-client packages. A
+// `TenantReconciler` field whose type comes from one of them IS a plane client.
+var servicePackages = map[string]bool{
+	"argocd": true, "gitea": true, "minio": true, "miniop": true,
+	"vault": true,
+}
+
+// packageFiles lists the package's production .go files.
+func packageFiles(t *testing.T) []string {
 	t.Helper()
 	ents, err := os.ReadDir(".")
 	if err != nil {
-		t.Fatalf("lendo o diretorio do pacote: %v", err)
+		t.Fatalf("reading the package directory: %v", err)
 	}
 	var out []string
 	for _, e := range ents {
@@ -40,36 +124,36 @@ func arquivosDoPacote(t *testing.T) []string {
 	return out
 }
 
-// Um arquivo novo entra no pacote sem plano declarado, e a costura passa a
-// cobrir menos do que aparenta. Declarar e' obrigatorio; declarar lista vazia
-// (logica pura) e' uma resposta valida e verificada.
-func TestCostura_TodoArquivoDeclaraSeusPlanos(t *testing.T) {
-	arqs := arquivosDoPacote(t)
-	if len(arqs) == 0 {
-		t.Fatal("zero arquivos varridos: uma costura sobre nada passa por vacuidade")
+// A new file entering the package without a declared plane makes the seam
+// cover less than it appears to. Declaring is mandatory; declaring an empty
+// list (pure logic) is a valid, checked answer.
+func TestPlaneSeam_EveryFileDeclaresItsPlanes(t *testing.T) {
+	files := packageFiles(t)
+	if len(files) == 0 {
+		t.Fatal("zero files scanned: a seam over nothing passes vacuously")
 	}
-	for _, a := range arqs {
-		if _, ok := planosDoArquivo[a]; !ok {
-			t.Errorf("%s nao declara plano em planosDoArquivo (planes.go)", a)
+	for _, f := range files {
+		if _, ok := planesOfFile[f]; !ok {
+			t.Errorf("%s declares no plane in planesOfFile (planes_test.go)", f)
 		}
 	}
-	for a := range planosDoArquivo {
-		if _, err := os.Stat(a); err != nil {
-			t.Errorf("planosDoArquivo declara %s, que nao existe — declaracao que sobreviveu ao arquivo", a)
+	for f := range planesOfFile {
+		if _, err := os.Stat(f); err != nil {
+			t.Errorf("planesOfFile declares %s, which does not exist — a declaration that outlived its file", f)
 		}
 	}
 }
 
-// Um cliente novo na struct sem entrada em `planoDoCliente` seria invisivel
-// para a verificacao seguinte: seus usos nao pertenceriam a plano nenhum e
-// passariam por omissao.
-func TestCostura_TodoClienteDaStructTemPlano(t *testing.T) {
+// A new client in the struct with no entry in `planeOfClient` would be
+// invisible to the next check: its uses would belong to no plane and pass by
+// omission.
+func TestPlaneSeam_EveryStructClientHasAPlane(t *testing.T) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "tenant_controller.go", nil, 0)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	var campos []string
+	var fields []string
 	ast.Inspect(f, func(n ast.Node) bool {
 		ts, ok := n.(*ast.TypeSpec)
 		if !ok || ts.Name.Name != "TenantReconciler" {
@@ -79,71 +163,71 @@ func TestCostura_TodoClienteDaStructTemPlano(t *testing.T) {
 		if !ok {
 			return false
 		}
-		for _, campo := range st.Fields.List {
-			sel, ok := campo.Type.(*ast.SelectorExpr)
+		for _, field := range st.Fields.List {
+			sel, ok := field.Type.(*ast.SelectorExpr)
 			if !ok {
 				continue
 			}
 			pkg, ok := sel.X.(*ast.Ident)
-			if !ok || !pacotesDeServico[pkg.Name] {
+			if !ok || !servicePackages[pkg.Name] {
 				continue
 			}
-			for _, nome := range campo.Names {
-				campos = append(campos, nome.Name)
+			for _, name := range field.Names {
+				fields = append(fields, name.Name)
 			}
 		}
 		return false
 	})
-	if len(campos) == 0 {
-		t.Fatal("nenhum cliente encontrado na struct: a varredura nao alcancou nada")
+	if len(fields) == 0 {
+		t.Fatal("no client found in the struct: the scan reached nothing")
 	}
-	for _, c := range campos {
-		if _, ok := planoDoCliente[c]; !ok {
-			t.Errorf("o campo %s e' cliente de servico externo e nao tem plano em planoDoCliente (planes.go)", c)
+	for _, c := range fields {
+		if _, ok := planeOfClient[c]; !ok {
+			t.Errorf("field %s is an external service client with no plane in planeOfClient (planes_test.go)", c)
 		}
 	}
-	for c := range planoDoCliente {
-		var achou bool
-		for _, v := range campos {
+	for c := range planeOfClient {
+		found := false
+		for _, v := range fields {
 			if v == c {
-				achou = true
+				found = true
 			}
 		}
-		if !achou {
-			t.Errorf("planoDoCliente declara %s, que nao e' mais campo da struct", c)
+		if !found {
+			t.Errorf("planeOfClient declares %s, which is no longer a struct field", c)
 		}
 	}
 }
 
-var usoDeCliente = regexp.MustCompile(`\br\.([A-Z][A-Za-z]*)\b`)
+var clientUse = regexp.MustCompile(`\br\.([A-Z][A-Za-z]*)\b`)
 
-// A verificacao que da' sentido as duas anteriores: o plano declarado precisa
-// cobrir os clientes que o arquivo realmente chama. E' isto que impede a
-// declaracao de envelhecer — mover uma chamada de plano sem mover a declaracao
-// reprova aqui.
-func TestCostura_UsosRespeitamOPlanoDeclarado(t *testing.T) {
-	var usos int
-	for _, a := range arquivosDoPacote(t) {
-		src, err := os.ReadFile(a)
+// The check that gives the two above their meaning: the declared plane must
+// cover the clients the file actually calls. This is what stops the
+// declaration from aging — moving a call to another plane without moving
+// the declaration fails here.
+func TestPlaneSeam_UsesStayWithinTheDeclaredPlanes(t *testing.T) {
+	var uses int
+	for _, f := range packageFiles(t) {
+		src, err := os.ReadFile(f)
 		if err != nil {
-			t.Fatalf("lendo %s: %v", a, err)
+			t.Fatalf("reading %s: %v", f, err)
 		}
-		declarados := planosDoArquivo[a]
-		for _, m := range usoDeCliente.FindAllStringSubmatch(string(src), -1) {
-			p, ehCliente := planoDoCliente[m[1]]
-			if !ehCliente {
+		declared := planesOfFile[f]
+		for _, m := range clientUse.FindAllStringSubmatch(string(src), -1) {
+			p, isClient := planeOfClient[m[1]]
+			if !isClient {
 				continue
 			}
-			usos++
-			if !serve(declarados, p) {
-				t.Errorf("%s usa r.%s (plano %s) mas declara %v", a, m[1], p, declarados)
+			uses++
+			if !declares(declared, p) {
+				t.Errorf("%s uses r.%s (plane %s) but declares %v", f, m[1], p, declared)
 			}
 		}
 	}
-	// O piso: um regex que deixasse de casar tornaria este teste verde sobre
-	// nada. Medido em 2026-08-18: 8 usos de cliente na arvore real.
-	if usos < 8 {
-		t.Fatalf("apenas %d usos de cliente varridos; a arvore real tinha 8 em 2026-08-18 — "+
-			"a varredura encolheu e o verde deixou de significar alguma coisa", usos)
+	// The floor: a regex that stopped matching would turn this test green
+	// over nothing. Measured on 2026-08-18: 8 client uses in the real tree.
+	if uses < 8 {
+		t.Fatalf("only %d client uses scanned; the real tree had 8 on 2026-08-18 — "+
+			"the scan shrank and green stopped meaning anything", uses)
 	}
 }

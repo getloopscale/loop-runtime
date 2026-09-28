@@ -6,14 +6,16 @@
 # LB IPs are used for HTTP traffic (Traefik on workload).
 #
 # Components patched:
-#   - K8s ConfigMap loopzero-api-runtime-config@loopzero-system on mgmt cluster:
+#   - K8s ConfigMap loopzero-api@loopzero-system on mgmt cluster (Tilt-rendered from charts/loopzero-api):
 #       MINIO_CROSS_CLUSTER_ENDPOINT, GITEA_CROSS_CLUSTER_URL,
 #       API_CROSS_CLUSTER_URL, WORKLOAD_INGRESS_URL
-#       (post-T1.1.b commit 927588b1: api-deployment.yaml uses envFrom now)
-#   - infra/tilt/operator-deployment.yaml   (WORKLOAD_CLUSTER_URL — still inline)
+#       (post-T1.1.b commit 3fbde9a13: api-deployment.yaml uses envFrom now)
 #   - Build cluster secrets                 (loopzero-minio-credentials MINIO_ENDPOINT)
-#   - infra/helm/monitoring/values.yaml     (scrape targets)
 #   - infra/helm/promtail/values.yaml       (Loki cross-cluster endpoint)
+#
+# It edits no file git tracks (#264): the committed cross-cluster addresses are
+# container names (monitoring scrape targets, the operators' WORKLOAD_CLUSTER_URL),
+# which Docker's DNS resolves on the k3d network, so nothing needs rewriting.
 #
 # ArgoCD cluster-workload secret and repo credentials are managed by
 # provision-api-tokens.sh (uses Docker hostnames, not IPs).
@@ -24,7 +26,6 @@ set -euo pipefail
 
 SHARED_NETWORK="k3d-loopzero"
 DEPLOYMENT="infra/tilt/api-deployment.yaml"
-OPERATOR_DEPLOYMENT="infra/tilt/operator-deployment.yaml"
 
 if [ ! -f "$DEPLOYMENT" ]; then
   echo "ERROR: $DEPLOYMENT not found. Run from repo root."
@@ -55,22 +56,17 @@ if [ -z "$WORKLOAD_LB" ]; then
 fi
 echo "  Workload LB: $WORKLOAD_LB (Traefik:80/443)"
 
-# Workload server IP (K8s API: 6443)
-WORKLOAD_SERVER=$(get_ip k3d-loopzero-cell-0-server-0)
-echo "  Workload server: $WORKLOAD_SERVER (K8s API:6443)"
-
-# Build LB IP (monitoring scrape targets)
-BUILD_LB=$(get_ip k3d-loopzero-build-serverlb)
-echo "  Build LB: $BUILD_LB (Argo metrics:30090)"
 
 # ---------------------------------------------------------------------------
-# Patch API runtime ConfigMap (loopzero-api-runtime-config)
+# Patch API ConfigMap (loopzero-api)
 #
-# Pre-T1.1.b (commit 927588b1): these 4 envs were inline in
+# Pre-T1.1.b (commit 3fbde9a13): these 4 envs were inline in
 # infra/tilt/api-deployment.yaml; this script sed-patched the file.
 #
 # Post-T1.1.b: the 4 envs migrated to envFrom: configMapRef:
-# loopzero-api-runtime-config (per code-review-remediation-147-findings
+# loopzero-api — rendered by the Tiltfile from charts/loopzero-api with
+# infra/tilt/loopzero-api-values.yaml (it was loopzero-api-runtime-config until the
+# bootstrap chart infra/helm/loopzero-api was deleted) (per code-review-remediation-147-findings
 # no-hardcode mandate). This script now patches the LIVE ConfigMap on
 # the mgmt cluster post-helmfile-sync, then triggers a rollout restart
 # so the API pod's envFrom re-reads.
@@ -80,11 +76,11 @@ echo "  Build LB: $BUILD_LB (Argo metrics:30090)"
 # may differ run-to-run).
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Patching loopzero-api-runtime-config ConfigMap (mgmt cluster) ==="
+echo "=== Patching loopzero-api ConfigMap (mgmt cluster) ==="
 
 MGMT_CTX="k3d-loopzero-core"
 API_CM_NS="loopzero-system"
-API_CM_NAME="loopzero-api-runtime-config"
+API_CM_NAME="loopzero-api"
 
 # Helper: patch ConfigMap key idempotently (no-op when value unchanged).
 patch_cm_key() {
@@ -120,34 +116,7 @@ if kubectl --context "$MGMT_CTX" get configmap "$API_CM_NAME" -n "$API_CM_NS" >/
 else
   echo "WARNING: ConfigMap ${API_CM_NAME} not found in ${API_CM_NS} on ${MGMT_CTX}"
   echo "  Skipping API runtime URL patches — Tilt apply will create the ConfigMap separately"
-  echo "  (T1.1.b drift: ConfigMap source is now infra/helm/loopzero-api/templates/configmap-runtime.yaml)"
-fi
-
-# ---------------------------------------------------------------------------
-# Patch operator deployment (still inline — operator-deployment.yaml was NOT
-# migrated by T1.1.b; remains Tilt-owned with inline value: for WORKLOAD_CLUSTER_URL)
-# ---------------------------------------------------------------------------
-patch_env_inline() {
-  local file="$1" env_name="$2" new_value="$3"
-  local OLD
-  # Defensive grep: || true prevents `set -e` exit when env_name absent.
-  OLD=$(grep "${env_name}" -A1 "$file" 2>/dev/null | grep 'value:' | head -1 | sed 's/.*value: "\([^"]*\)".*/\1/' || true)
-  if [ -z "$OLD" ]; then
-    echo "  ${env_name}: not found in $(basename "$file") (skipping)"
-    return 0
-  fi
-  if [ "$OLD" = "$new_value" ]; then
-    echo "  ${env_name}: already correct ($new_value)"
-    return 0
-  fi
-  sed -i "s|${OLD}|${new_value}|" "$file"
-  echo "  ${env_name}: $OLD → $new_value"
-}
-
-if [ -f "$OPERATOR_DEPLOYMENT" ]; then
-  echo ""
-  echo "=== Patching $OPERATOR_DEPLOYMENT ==="
-  patch_env_inline "$OPERATOR_DEPLOYMENT" "WORKLOAD_CLUSTER_URL" "https://${WORKLOAD_SERVER}:6443"
+  echo "  (the ConfigMap source is charts/loopzero-api/templates/configmap.yaml, rendered by the Tiltfile)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -172,35 +141,6 @@ if [ -n "$BUILD_KUBECONFIG" ]; then
   fi
 else
   echo "WARNING: Cannot get kubeconfig for loopzero-build — skipping"
-fi
-
-# ---------------------------------------------------------------------------
-# Monitoring values — cross-cluster scrape targets
-# ---------------------------------------------------------------------------
-MONITORING_VALUES="infra/helm/monitoring/values.yaml"
-if [ -f "$MONITORING_VALUES" ]; then
-  echo ""
-  echo "=== Patching $MONITORING_VALUES ==="
-
-  if [ -n "$BUILD_LB" ]; then
-    OLD_ARGO=$(grep -o '"[0-9.]*:30090"' "$MONITORING_VALUES" | tr -d '"' || true)
-    NEW_ARGO="${BUILD_LB}:30090"
-    if [ -n "$OLD_ARGO" ] && [ "$OLD_ARGO" != "$NEW_ARGO" ]; then
-      sed -i "s|\"${OLD_ARGO}\"|\"${NEW_ARGO}\"|g" "$MONITORING_VALUES"
-      echo "  Argo Workflows target: $OLD_ARGO → $NEW_ARGO"
-    else
-      echo "  Argo Workflows target: already correct ($NEW_ARGO)"
-    fi
-  fi
-
-  OLD_TRAEFIK=$(grep -o '"[0-9.]*:30091"' "$MONITORING_VALUES" | tr -d '"' || true)
-  NEW_TRAEFIK="${WORKLOAD_LB}:30091"
-  if [ -n "$OLD_TRAEFIK" ] && [ "$OLD_TRAEFIK" != "$NEW_TRAEFIK" ]; then
-    sed -i "s|\"${OLD_TRAEFIK}\"|\"${NEW_TRAEFIK}\"|g" "$MONITORING_VALUES"
-    echo "  Traefik target: $OLD_TRAEFIK → $NEW_TRAEFIK"
-  else
-    echo "  Traefik target: already correct ($NEW_TRAEFIK)"
-  fi
 fi
 
 # ---------------------------------------------------------------------------

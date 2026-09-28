@@ -4,6 +4,7 @@
 package orphanalerts
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,7 +29,7 @@ func TestNoOrphanPasses(t *testing.T) {
 	root := rulesRepo(t, map[string]string{
 		"alerts.yaml": "groups:\n- rules:\n  - alert: RealAlert\n    expr: up == 0\n",
 	})
-	if !Check(Config{Root: root}).Pass {
+	if !mustCheck(t, Config{Root: root}).Pass {
 		t.Error("real alert (no vector(0)) should pass")
 	}
 }
@@ -37,7 +38,7 @@ func TestOrphanFails(t *testing.T) {
 	root := rulesRepo(t, map[string]string{
 		"alerts.yaml": "groups:\n- rules:\n  - alert: GhostAlert\n    expr: vector(0) > 1\n",
 	})
-	o := Check(Config{Root: root})
+	o := mustCheck(t, Config{Root: root})
 	if o.Pass || len(o.Violations) != 1 {
 		t.Errorf("expected 1 orphan violation, got %v", o.Violations)
 	}
@@ -47,7 +48,7 @@ func TestOrphanInExceptionListPasses(t *testing.T) {
 	root := rulesRepo(t, map[string]string{
 		"alerts.yaml": "  - alert: KnownOrphan\n    expr: vector(0) > 1\n",
 	})
-	o := Check(Config{Root: root, ExceptionList: []string{"KnownOrphan"}})
+	o := mustCheck(t, Config{Root: root, ExceptionList: []string{"KnownOrphan"}})
 	if !o.Pass {
 		t.Errorf("allowlisted orphan should pass, got %v", o.Violations)
 	}
@@ -58,7 +59,7 @@ func TestOrphanWithoutAlertNameFlagged(t *testing.T) {
 		// vector(0) with no `alert:` within 5 lines above → name-undetermined violation.
 		"alerts.yaml": "x\nx\nx\nx\nx\nx\n    expr: vector(0) > 1\n",
 	})
-	o := Check(Config{Root: root})
+	o := mustCheck(t, Config{Root: root})
 	if o.Pass || len(o.Violations) != 1 {
 		t.Errorf("expected 1 name-undetermined violation, got %v", o.Violations)
 	}
@@ -69,7 +70,7 @@ func TestAlertNameWindowRespects5Lines(t *testing.T) {
 	root := rulesRepo(t, map[string]string{
 		"a.yaml": "  - alert: FarAway\n    f1\n    f2\n    f3\n    f4\n    f5\n    expr: vector(0) > 1\n",
 	})
-	o := Check(Config{Root: root})
+	o := mustCheck(t, Config{Root: root})
 	// name not found within window → still a violation (different message).
 	if o.Pass {
 		t.Error("orphan with alert name outside 5-line window must still fail")
@@ -80,7 +81,7 @@ func TestNearestAlertNameWins(t *testing.T) {
 	root := rulesRepo(t, map[string]string{
 		"a.yaml": "  - alert: First\n    expr: up == 0\n  - alert: Second\n    expr: vector(0) > 1\n",
 	})
-	o := Check(Config{Root: root})
+	o := mustCheck(t, Config{Root: root})
 	if o.Pass {
 		t.Fatal("expected violation for Second")
 	}
@@ -95,7 +96,7 @@ func TestMultipleFilesAndViolations(t *testing.T) {
 		"b.yaml": "  - alert: B\n    expr: vector(0) > 1\n",
 		"c.yaml": "  - alert: C\n    expr: up == 0\n", // not orphan
 	})
-	o := Check(Config{Root: root})
+	o := mustCheck(t, Config{Root: root})
 	if o.Pass || len(o.Violations) != 2 {
 		t.Errorf("expected 2 violations across files, got %v", o.Violations)
 	}
@@ -103,25 +104,57 @@ func TestMultipleFilesAndViolations(t *testing.T) {
 
 func TestNonYAMLIgnored(t *testing.T) {
 	root := rulesRepo(t, map[string]string{
-		"notes.txt": "  - alert: Z\n    expr: vector(0) > 1\n",
+		"alerts.yaml": "groups:\n- rules:\n  - alert: RealAlert\n    expr: up == 0\n",
+		"notes.txt":   "  - alert: Z\n    expr: vector(0) > 1\n",
 	})
-	if !Check(Config{Root: root}).Pass {
+	if !mustCheck(t, Config{Root: root}).Pass {
 		t.Error(".txt files in rules dir should be ignored")
 	}
 }
 
-func TestMissingRulesDirTolerated(t *testing.T) {
-	root := t.TempDir() // no infra/helm/monitoring/manifests
-	if !Check(Config{Root: root}).Pass {
-		t.Error("missing rules dir should pass (nothing to check)")
+// A rules directory that is missing, or holds no rule file, is a gate that read
+// nothing: it used to PASS as "nothing to check", which is also what it reports
+// the day the directory moves.
+func TestMissingRulesDirIsAnError(t *testing.T) {
+	if _, err := Check(Config{Root: t.TempDir()}); err == nil {
+		t.Fatal("a missing rules dir must be an error, not a pass")
 	}
+}
+
+func TestRulesDirWithoutYAMLIsNothingScanned(t *testing.T) {
+	root := rulesRepo(t, map[string]string{"notes.txt": "x\n"})
+
+	if _, err := Check(Config{Root: root}); !errors.Is(err, ErrNothingScanned) {
+		t.Fatalf("err = %v, want ErrNothingScanned", err)
+	}
+}
+
+func TestUnreadableRuleFileIsAnError(t *testing.T) {
+	root := rulesRepo(t, map[string]string{"alerts.yaml": "groups: []\n"})
+	link := filepath.Join(root, DefaultRulesDir, "broken.yaml")
+	if err := os.Symlink(filepath.Join(root, "missing-target"), link); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Check(Config{Root: root}); err == nil {
+		t.Fatal("a rule file that cannot be read must be an error, not skipped")
+	}
+}
+
+func mustCheck(t *testing.T, cfg Config) *Outcome {
+	t.Helper()
+	o, err := Check(cfg)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	return o
 }
 
 func TestExtraSpacingInExpr(t *testing.T) {
 	root := rulesRepo(t, map[string]string{
 		"a.yaml": "  - alert: Spaced\n    expr:   vector(0)  >  1\n",
 	})
-	if Check(Config{Root: root}).Pass {
+	if mustCheck(t, Config{Root: root}).Pass {
 		t.Error("expr with extra spacing should still match the orphan pattern")
 	}
 }

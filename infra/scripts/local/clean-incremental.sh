@@ -21,9 +21,9 @@ run() {
   if [[ "$DRY_RUN" == "--dry-run" ]]; then
     log "DRY-RUN: $*"
   else
-    # eval e' deliberado: run() recebe UMA string de comando ja' montada,
-    # com redirecionamentos (`>/dev/null`, `2>&1`) e filtros aspeados que
-    # "$@" trataria como argumentos literais.
+    # eval is deliberate: run() receives ONE already-assembled command string,
+    # with redirections (`>/dev/null`, `2>&1`) and quoted filters that
+    # "$@" would treat as literal arguments.
     # shellcheck disable=SC2294
     eval "$@" || true
   fi

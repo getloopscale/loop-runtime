@@ -120,12 +120,6 @@ spec:
                       - url
                       type: object
                     type: array
-                  tokenTTLSeconds:
-                    default: 7776000
-                    description: TokenTTLSeconds is the TTL for the generated ArgoCD
-                      JWT.
-                    format: int64
-                    type: integer
                 type: object
               gitea:
                 description: Gitea configures the Gitea git server bootstrap.
@@ -143,7 +137,7 @@ spec:
                     - name
                     type: object
                   internalURL:
-                    default: http://gitea-http.gitea.svc.cluster.local:3000
+                    default: http://gitea-http.loopzero-system.svc.cluster.local:3000
                     description: |-
                       InternalURL is the cluster-internal URL for Gitea HTTP API.
                       SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
@@ -175,30 +169,6 @@ spec:
                 description: MaxRetries is the maximum number of retries per phase
                   before transitioning to Failed.
                 type: integer
-              timeouts:
-                description: Timeouts configures per-phase timeouts in seconds.
-                properties:
-                  apiReadySeconds:
-                    default: 120
-                    description: APIReadySeconds is how long to wait for the API to
-                      be healthy.
-                    type: integer
-                  argoCDReadySeconds:
-                    default: 120
-                    description: ArgoCDReadySeconds is how long to wait for ArgoCD
-                      to be reachable.
-                    type: integer
-                  giteaReadySeconds:
-                    default: 120
-                    description: GiteaReadySeconds is how long to wait for Gitea to
-                      be reachable.
-                    type: integer
-                  totalBootstrapSeconds:
-                    default: 600
-                    description: TotalBootstrapSeconds is the overall timeout for
-                      the entire bootstrap process.
-                    type: integer
-                type: object
             required:
             - api
             - argocd

@@ -12,7 +12,7 @@ import (
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardrootparity"
 )
 
-// tree escreve um Caddyfile e um runbook mínimos.
+// tree writes a minimal Caddyfile and runbook.
 func tree(t *testing.T, caddy, runbook string) string {
 	t.Helper()
 	root := t.TempDir()
@@ -30,76 +30,76 @@ func tree(t *testing.T, caddy, runbook string) string {
 	return root
 }
 
-// O runbook tem de nomear o MESMO caminho que a borda serve.
+// The runbook must name the SAME path the edge serves.
 //
-// B-039, medido 2026-08-18: implantar um conserto no painel exigiu descobrir onde o código
-// mora no droplet — e o caminho óbvio, `~/loopzero-cloud`, é um clone do **umbrella**, não do
-// produto. Os dois clones que pareciam certos eram ad-hoc, com refspec restrito. O caminho
-// que a borda de fato serve, `~/loopzero-cloud/loopzero-cloud/dashboard/dist`, funciona e não estava
-// em runbook nenhum.
+// B-039, measured 2026-08-18: deploying a fix to the dashboard required finding out where the
+// code lives on the droplet — and the obvious path, `~/loopzero-cloud`, is a clone of the
+// **umbrella**, not of the product. The two clones that looked right were ad-hoc, with a
+// restricted refspec. The path the edge actually serves, `~/loopzero-cloud/loopzero-cloud/dashboard/dist`,
+// works and was in no runbook at all.
 //
-// Documentação que ninguém amarra apodrece: quem mudar o `root *` do Caddyfile deixaria o
-// runbook apontando para um caminho que já não é servido, e a próxima pessoa pagaria a mesma
-// descoberta com um documento que confirma o erro.
-// As fixtures usam `/home/dev/...` e nao o home real de ninguem. O gate
-// `publish-hygiene` reprova caminho de estacao de trabalho em arquivo versionado
-// — historia publicada e' publica retroativamente — e reprovava estas tres
-// linhas. `dev` esta' na lista de homes SINTETICOS que o proprio detector
-// declara aceitaveis (`publishhygiene/check.go:82`), entao isto e' o mecanismo
-// previsto e nao evasao. A logica deste gate nao le' o nome do usuario:
-// `check.go` nao contem o literal em ponto algum.
+// Documentation nobody ties down rots: whoever changes the Caddyfile's `root *` would leave the
+// runbook pointing at a path that is no longer served, and the next person would pay for the
+// same discovery with a document that confirms the error.
+// The fixtures use `/home/dev/...` and not anyone's real home. The `publish-hygiene`
+// gate refuses a workstation path in a versioned file — published history is
+// retroactively public — and it refused these three lines. `dev` is on the list of
+// SYNTHETIC homes the detector itself declares acceptable
+// (`publishhygiene/check.go:82`), so this is the intended mechanism and not evasion.
+// This gate's logic does not read the user name: `check.go` contains the literal
+// nowhere.
 func TestRunbookNamesTheServedRoot(t *testing.T) {
 	root := tree(t,
 		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
-		"# runbook\n\nO painel é construído em `~/loopzero-cloud/loopzero-cloud`.\n")
+		"# runbook\n\nThe dashboard is built in `~/loopzero-cloud/loopzero-cloud`.\n")
 
-	if _, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}); err != nil {
-		t.Fatalf("runbook e Caddyfile concordam; veio %v", err)
+	if _, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})); err != nil {
+		t.Fatalf("runbook and Caddyfile agree; got %v", err)
 	}
 }
 
-// Divergência é o defeito: o runbook manda a pessoa para onde a borda não serve.
+// Divergence is the defect: the runbook sends the person where the edge does not serve.
 func TestDivergenceIsRefused(t *testing.T) {
 	root := tree(t,
 		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
-		"# runbook\n\nO painel é construído em `~/.buildmeta-cloud/loopzero-cloud`.\n")
+		"# runbook\n\nThe dashboard is built in `~/.buildmeta-cloud/loopzero-cloud`.\n")
 
-	out, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})
+	out, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}))
 	if !errors.Is(err, dashboardrootparity.ErrDivergent) {
-		t.Fatalf("esperava ErrDivergent, veio %v", err)
+		t.Fatalf("expected ErrDivergent, got %v", err)
 	}
 	if out.Served == "" || out.Documented == "" {
-		t.Errorf("o erro precisa nomear os dois lados: %+v", out)
+		t.Errorf("the error must name both sides: %+v", out)
 	}
 }
 
-// Runbook que não menciona caminho algum é o estado ANTERIOR ao item, e não pode passar em
-// silêncio — foi ele que custou a descoberta.
+// A runbook that mentions no path at all is the state BEFORE the item, and must not pass in
+// silence — it is what made the discovery expensive.
 func TestSilentRunbookIsRefused(t *testing.T) {
 	root := tree(t,
 		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
-		"# runbook\n\nNada sobre onde o painel é construído.\n")
+		"# runbook\n\nNothing about where the dashboard is built.\n")
 
-	if _, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}); !errors.Is(err, dashboardrootparity.ErrUndocumented) {
-		t.Fatalf("esperava ErrUndocumented, veio %v", err)
+	if _, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})); !errors.Is(err, dashboardrootparity.ErrUndocumented) {
+		t.Fatalf("expected ErrUndocumented, got %v", err)
 	}
 }
 
-// Caddyfile sem `root *` significa que a borda não serve arquivo — não há paridade a
-// verificar, e reportar "de acordo" seria verde sobre nada.
+// A Caddyfile with no `root *` means the edge serves no files — there is no parity to
+// verify, and reporting "in agreement" would be green over nothing.
 func TestNoServedRootIsRefusedNotPassed(t *testing.T) {
 	root := tree(t, "app-dev.loopzero.example {\n  reverse_proxy localhost:1\n}\n", "# runbook\n")
 
-	if _, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}); !errors.Is(err, dashboardrootparity.ErrNothingServed) {
-		t.Fatalf("esperava ErrNothingServed, veio %v", err)
+	if _, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})); !errors.Is(err, dashboardrootparity.ErrNothingServed) {
+		t.Fatalf("expected ErrNothingServed, got %v", err)
 	}
 }
 
-// A população real: a árvore deste repositório tem de concordar consigo mesma.
+// The real population: this repository's tree must agree with itself.
 func TestRealTreeAgrees(t *testing.T) {
-	out, err := dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: filepath.Join("..", "..", "..", "..", "..")})
+	out, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: filepath.Join("..", "..", "..", "..", "..")}))
 	if err != nil {
-		t.Fatalf("árvore real diverge: %v (servido=%q documentado=%q)", err, out.Served, out.Documented)
+		t.Fatalf("real tree diverges: %v (served=%q documented=%q)", err, out.Served, out.Documented)
 	}
-	t.Logf("população real: servido=%q documentado=%q", out.Served, out.Documented)
+	t.Logf("real population: served=%q documented=%q", out.Served, out.Documented)
 }

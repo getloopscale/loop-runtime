@@ -1,27 +1,27 @@
-# Ponte NodePort — expõe o Kratos público para a borda (Caddy) do host.
+# NodePort bridge — exposes the public Kratos to the host's edge (Caddy).
 #
-# POR QUE ISTO EXISTE. Medido no droplet app-dev em 2026-08-10, durante a reconstrução
-# total: `auth-dev.loopzero.example` devolvia 502 com Kratos PERFEITAMENTE saudável no cluster.
-# O Service do chart é ClusterIP, e a borda o alcançava por um `kubectl port-forward` que
-# ninguém supervisionava — sem unidade systemd, sem nada. Destruir os clusters matou o
-# processo, e o login ficou fora até alguém reiniciá-lo à mão.
+# WHY THIS EXISTS. Measured on the app-dev droplet on 2026-08-10, during the full
+# rebuild: `auth-dev.loopzero.example` returned 502 with Kratos PERFECTLY healthy in the cluster.
+# The chart's Service is ClusterIP, and the edge reached it through a `kubectl port-forward` that
+# nobody supervised — no systemd unit, nothing. Destroying the clusters killed the
+# process, and login stayed down until someone restarted it by hand.
 #
-# É o mesmo defeito do B-010, que custou ao `/engine/*` uma janela de erro 502 a cada
-# reinício do encaminhamento (NRestarts=126499, ~1,8 por minuto). A resposta é a mesma:
-# port-forward é ferramenta de depuração, não transporte.
+# It is the same defect as B-010, which cost `/engine/*` a 502 error window on every
+# restart of the forwarding (NRestarts=126499, ~1.8 per minute). The answer is the same:
+# port-forward is a debugging tool, not a transport.
 #
-# AS TRÊS PONTAS TÊM DE CASAR, e moram em arquivos diferentes:
-#   1. este Service, com `nodePort: 30005` FIXO;
-#   2. `infra/k3d/core-cluster.yaml`, que publica `14433:30005` no loadbalancer;
-#   3. o Caddyfile, que encaminha `auth-dev` para `localhost:14433`.
-# Quebrar qualquer uma reproduz o 502. `infra/tests/charts/ory_edge_nodeport_test.go` trava
-# as três juntas, porque foi a divergência entre elas que produziu o incidente.
+# THE THREE ENDS MUST MATCH, and they live in different files:
+#   1. this Service, with a FIXED `nodePort: 30005`;
+#   2. `infra/k3d/core-cluster.yaml`, which publishes `14433:30005` on the loadbalancer;
+#   3. the Caddyfile, which forwards `auth-dev` to `localhost:14433`.
+# Breaking any of them reproduces the 502. `infra/tests/charts/ory_edge_nodeport_test.go` locks
+# the three together, because it was the divergence between them that produced the incident.
 #
-# O nodePort é FIXO de propósito: sem fixar, o Kubernetes sorteia uma porta livre a cada
-# recriação e o mapeamento do cluster — que é estático — passa a apontar para o vazio.
+# The nodePort is FIXED on purpose: without pinning it, Kubernetes picks a free port on every
+# recreation and the cluster mapping — which is static — ends up pointing at nothing.
 #
-# O Service do chart continua ClusterIP e intocado: esta ponte é aditiva, então nada que já
-# alcança o Kratos por dentro do cluster muda de caminho.
+# The chart's Service stays ClusterIP and untouched: this bridge is additive, so nothing that
+# already reaches Kratos from inside the cluster changes path.
 apiVersion: v1
 kind: Service
 metadata:
@@ -33,8 +33,9 @@ metadata:
     app.kubernetes.io/component: edge-bridge
 spec:
   type: NodePort
-  # Seletor copiado do Service do chart. Se ele mudar e este não, o Service passa a existir
-  # com ZERO endpoints — que responde igualzinho a não existir, e é bem mais difícil de ver.
+  # Selector copied from the chart's Service. If that one changes and this one does not, the
+  # Service goes on existing with ZERO endpoints — which answers exactly like not existing, and
+  # is much harder to see.
   selector:
     app.kubernetes.io/name: kratos
     app.kubernetes.io/instance: ory-kratos

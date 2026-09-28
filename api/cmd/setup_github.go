@@ -5,18 +5,19 @@ package main
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
-	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loopzero/api/internal/preview/previewadapter"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/services/preview"
+	"github.com/getloopscale/loopzero/api/internal/release"
+
+	"github.com/getloopscale/loopzero/api/internal/preview"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
@@ -24,24 +25,20 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/github"
 	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
-	"github.com/getloopscale/loopzero/api/internal/routes/integrations"
-	"github.com/getloopscale/loopzero/api/internal/routes/repositories"
+	"github.com/getloopscale/loopzero/api/internal/integrations/integrationsadapter"
+	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loopzero/api/internal/repositories/repositoriesadapter"
+	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
 )
-
-// ErrPreviewNotImplemented is returned by the GitHub PR webhook handler
-// while preview environments (Sprint 5 / T2.1 / COMP-001) are still in
-// progress. Closes COMP-008 trust gap by making the silent no-op visible
-// in logs and assertable in tests.
-var ErrPreviewNotImplemented = errors.New("preview environments not yet implemented")
 
 // GitHubDeps holds GitHub App integration components.
 type GitHubDeps struct {
 	WebhookHandler http.Handler
-	RepoHandler    *repositories.RepositoryHandler
+	RepoHandler    *repositorieshttp.RepositoryHandler
 	AppClient      *github.AppClient
 	// Plan J-09 T2.1 (2026-06-05): dashboard repo picker source.
 	// Nil when the GitHub App client is not configured -- router guards.
-	IntegrationsHandler *integrations.IntegrationsGitHubHandler
+	IntegrationsHandler *integrationshttp.IntegrationsGitHubHandler
 }
 
 // setupGitHub configures the GitHub App webhook handler, auto-deployer,
@@ -55,9 +52,9 @@ type GitHubDeps struct {
 // with `if cfg.GitHubWebhookHandler != nil`). This restores Rule 10
 // ("Local equals production") for the connect/disconnect flow.
 func setupGitHub(
-	dbAdapter *db.PgxAdapter,
+	dbAdapter, crossTenant *db.PgxAdapter,
 	stores *StoreDeps,
-	orch *build.BuildOrchestrator,
+	orch *builds.BuildOrchestrator,
 	k8sDeps *K8sDeps,
 	cfg config.Config,
 	shutdownCtx context.Context,
@@ -65,8 +62,8 @@ func setupGitHub(
 ) *GitHubDeps {
 	// Repository store for webhook lookups and CRUD. Required for the
 	// RepositoryHandler — always created when the DB is reachable.
-	repoStore := &store.PostgresRepositoryStore{DB: dbAdapter}
-	repoHandler := repositories.NewRepositoryHandler(&repoStoreAdapter{store: repoStore})
+	repoStore := newRepositoryStore(crossTenant)
+	repoHandler := repositorieshttp.NewRepositoryHandler(&repositoriesadapter.RepoStoreAdapter{Store: repoStore})
 
 	// GitHub App client for API calls (source download, commit status, PR comments).
 	// Optional — only needed when GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY are set.
@@ -80,7 +77,7 @@ func setupGitHub(
 			os.Exit(1)
 		}
 		var clientErr error
-		ghAppClient, clientErr = github.NewAppClient(appID, appPrivateKey)
+		ghAppClient, clientErr = github.NewAppClient(appID, appPrivateKey, cfg.GitHubAPIBaseURL)
 		if clientErr != nil {
 			logger.Error("github app client creation failed", "error", clientErr)
 		} else if ghAppClient != nil {
@@ -96,17 +93,17 @@ func setupGitHub(
 	// for the dashboard repo picker. Lives behind the ghAppClient nil
 	// guard because there is no way to list installation repos without an
 	// installation-token mint.
-	var integrationsHandler *integrations.IntegrationsGitHubHandler
+	var integrationsHandler *integrationshttp.IntegrationsGitHubHandler
 	if ghAppClient != nil {
-		statusNotifier := github.NewStatusNotifier(ghAppClient, &repoLookupAdapter{store: repoStore}, &buildLookupAdapter{store: stores.BuildStore}, cfg.BaseDomain, logger)
+		statusNotifier := github.NewStatusNotifier(ghAppClient, &repositoriesadapter.RepoLookupAdapter{Store: repoStore}, &buildsadapter.BuildLookupAdapter{Store: stores.BuildStore}, cfg.BaseDomain, logger)
 		if statusNotifier != nil {
 			release.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
 			release.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
 			logger.Info("github: commit status callbacks registered (global)")
 		}
-		integrationsHandler = integrations.NewIntegrationsGitHubHandler(
-			&installationRepoListerAdapter{client: ghAppClient},
-			&installationLookupAdapter{store: repoStore},
+		integrationsHandler = integrationshttp.NewIntegrationsGitHubHandler(
+			&integrationsadapter.InstallationRepoListerAdapter{Client: ghAppClient},
+			&integrationsadapter.InstallationLookupAdapter{Store: repoStore},
 		)
 		logger.Info("github: integrations handler registered", "endpoint", "/api/v1/integrations/github/installations/{id}/repositories")
 	}
@@ -120,9 +117,9 @@ func setupGitHub(
 	// (sponsor walkthrough catch 2026-06-09).
 	var buildSub github.BuildSubmitter
 	if orch != nil {
-		buildSub = &buildSubmitterAdapter{
-			orchestrator: orch,
-			logger:       logger,
+		buildSub = &buildsadapter.BuildSubmitterAdapter{
+			Orchestrator: orch,
+			Logger:       logger,
 		}
 	}
 	var autoDeployer *github.AutoDeployer
@@ -136,7 +133,7 @@ func setupGitHub(
 		// Wire connect-then-deploy onto the RepositoryHandler so POST
 		// /api/v1/projects/{name}/connect dispatches an immediate HEAD
 		// deploy after a successful link.
-		repoHandler = repoHandler.WithAutoDeployer(autoDeployer)
+		repoHandler = repoHandler.WithAutoDeployer(autoDeployer, shutdownCtx)
 	}
 
 	// Wire the GitHub App client as the RepositoryHandler's introspector
@@ -177,81 +174,21 @@ func setupGitHub(
 		}
 	}
 
-	wh := ghwebhook.NewHandler(githubWebhookSecret, logger)
-	wh.OnPush(func(event ghwebhook.PushEvent) error {
-		log := logger.With(
-			"repo", event.Repository.FullName,
-			"branch", event.Branch(),
-			"sha", event.After,
-			"sender", event.Sender.Login,
-			"installation_id", event.Installation.ID,
-		)
-
-		// Ignore non-branch pushes (tags, deletes)
-		if event.IsTag() || event.Deleted {
-			log.Debug("github webhook: ignoring tag/delete push")
-			return nil
-		}
-
-		// Only auto-deploy pushes to default branch (production)
-		if !event.IsDefaultBranch() {
-			log.Info("github webhook: push to non-default branch (preview env not yet supported)")
-			return nil
-		}
-
-		// Look up linked project
-		linked, err := repoStore.GetByRepo(context.Background(), event.Repository.FullName)
-		if err != nil {
-			log.Error("github webhook: repo lookup failed", "error", err)
-			return nil // don't fail the webhook
-		}
-		if linked == nil {
-			log.Debug("github webhook: repo not linked to any project, ignoring")
-			return nil
-		}
-		if !linked.AutoDeploy {
-			log.Info("github webhook: auto-deploy disabled for this project")
-			return nil
-		}
-
-		log = log.With("project", linked.ProjectName, "tenant", linked.TenantID)
-		log.Info("github webhook: auto-deploy triggered")
-
-		// Trigger auto-deploy (async — don't block webhook response)
-		commitMsg := ""
-		if event.HeadCommit != nil {
-			commitMsg = event.HeadCommit.Message
-		}
-		go func() {
-			// Use shutdownCtx-derived context so auto-deploy is cancelled on server shutdown.
-			// 5-minute timeout prevents indefinite hangs on slow GitHub/S3 operations.
-			deployCtx, cancel := context.WithTimeout(shutdownCtx, 5*time.Minute)
-			defer cancel()
-			if err := autoDeployer.HandlePush(deployCtx,
-				event.Repository.FullName, event.Branch(), event.After,
-				event.Installation.ID, linked.TenantID, linked.ProjectName,
-				commitMsg, event.Sender.Login,
-			); err != nil {
-				log.Error("github webhook: auto-deploy failed", "error", err)
-			}
-		}()
-
-		return nil
-	})
-	// Sprint 5 / T3.1 — wire PreviewDeployer.HandlePR. Replaces the
-	// COMP-008 stub (ErrPreviewNotImplemented). The deployer dispatches
+	wh := ghwebhook.NewHandler(shutdownCtx, githubWebhookSecret, logger)
+	wh.OnPush(newPushHandler(shutdownCtx, repoStore, autoDeployer, logger))
+	// Sprint 5 / T3.1 — wire PreviewDeployer.HandlePR. The deployer dispatches
 	// by event.Action: opened/synchronize/reopened → CreatePreview;
 	// closed → DeletePreviewByPR. Auto-deploy guard enforced inside.
 	previewStore := store.NewPostgresPreviewStore(dbAdapter, dbAdapter)
-	previewSvc, psErr := preview.NewPreviewService(preview.PreviewServiceDeps{
+	previewSvc, psErr := newPreviewLifecycle(preview.PreviewServiceDeps{
 		Store:     previewStore,
 		Builds:    orch,
-		BuildApps: &previewAppsLookupAdapter{builds: stores.BuildStore},
+		BuildApps: &previewadapter.PreviewAppsLookupAdapter{Builds: stores.BuildStore},
 		// LIVE catch 2026-06-07 J-23 bug #4: PreviewCRCreator interface
 		// had no production wiring. Canonical manager lives in
 		// internal/k8s next to TenantCRManager, sharing the namespace
 		// constant + dynamic client.
-		CRCreator:           &previewCRCreatorAdapter{mgr: k8sDeps.PreviewCRMgr},
+		CRCreator:           &previewadapter.PreviewCRCreatorAdapter{Mgr: k8sDeps.PreviewCRMgr},
 		BaseDomain:          cfg.BaseDomain,
 		PreviewPublicDomain: cfg.PreviewPublicDomain,
 		Logger:              logger,
@@ -260,36 +197,15 @@ func setupGitHub(
 		EnvTargets: stores.EnvTargetStore,
 	})
 	if psErr != nil {
-		logger.Error("preview service init failed (PR webhooks will be no-op)", "error", psErr)
+		// No PR handler is registered: a preview deployer over a service that
+		// does not exist would accept the delivery and fail on the first call.
+		logger.Error("preview service init failed — PR webhooks disabled", "error", psErr)
+	} else {
+		previewDeployer := github.NewPreviewDeployer(previewSvc, &repositoriesadapter.ConnectedRepoAdapter{Store: repoStore}, logger).
+			WithBundlePreparer(autoDeployer) // shares the same bundle-prep logic
+		wh.OnPullRequest(previewDeployer.HandlePR)
 	}
-	previewDeployer := github.NewPreviewDeployer(previewSvc, repoStore, logger).
-		WithBundlePreparer(autoDeployer) // shares the same bundle-prep logic
-	wh.OnPullRequest(previewDeployer.HandlePR)
-	wh.OnInstallation(func(event ghwebhook.InstallationEvent) error {
-		logger.Info("github webhook: installation event",
-			"action", event.Action,
-			"installation_id", event.Installation.ID,
-			"account", event.Installation.Account.Login,
-		)
-		// Save/remove installation in DB
-		switch event.Action {
-		case "created":
-			if err := repoStore.SaveInstallation(context.Background(),
-				event.Installation.ID, event.Installation.Account.Login,
-				event.Installation.Account.Type, nil); err != nil {
-				logger.Error("github webhook: failed to save installation",
-					"installation_id", event.Installation.ID,
-					"action", event.Action, "error", err)
-			}
-		case "deleted":
-			if err := repoStore.DeleteInstallation(context.Background(), event.Installation.ID); err != nil {
-				logger.Error("github webhook: failed to delete installation",
-					"installation_id", event.Installation.ID,
-					"action", event.Action, "error", err)
-			}
-		}
-		return nil
-	})
+	wh.OnInstallation(newInstallationHandler(repoStore, logger))
 
 	logger.Info("github webhook: handler registered", "endpoint", "/api/v1/webhooks/github")
 
@@ -299,4 +215,16 @@ func setupGitHub(
 		AppClient:           ghAppClient,
 		IntegrationsHandler: integrationsHandler,
 	}
+}
+
+// newRepositoryStore builds the store of GitHub installations and repository
+// links on the cross-tenant pool. Both are global objects: the webhook arrives
+// with no tenant and resolves the owner from them, and the API's authorization
+// gates ask which tenant owns an installation or a repository before letting
+// the caller act. Over the request pool, scoped to the caller, another tenant's
+// installation is hidden and "no owner" read as "not claimed" — the owner check
+// passed. The API-path queries carry their own tenant predicate
+// (queries/repositories.sql), and the handlers enforce ownership.
+func newRepositoryStore(crossTenant db.DBTX) *store.PostgresRepositoryStore {
+	return &store.PostgresRepositoryStore{DB: crossTenant}
 }

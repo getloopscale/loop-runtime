@@ -18,7 +18,7 @@ func baseInput() RenderInput {
 		BuildID:           "build-001",
 		ReleaseID:         "rel-001",
 		BaseDomain:        "loopzero.example.com",
-		ClusterIssuerName: "test-issuer", // B14: required by Render panic contract
+		ClusterIssuerName: "test-issuer", // B14: RenderDocs refuses an empty issuer
 	}
 }
 

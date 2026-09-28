@@ -40,6 +40,7 @@
 #   DRILL_PG_PORT     — managed PG port (default 25060 DO managed PG)
 #   SEED_USER_ID      — user id (default loopzero-bootstrap)
 #   SEED_TENANT_ID    — tenant id (default tn-e2etest)
+#   SEED_ACCOUNT_ID   — account created when the user owns none (default acct-bootstrap)
 #
 # EC-04 fix: explicit Hydra readiness wait BEFORE exec (race condition where
 # helmfile sync returns but Hydra pod still in init → exec fail → run wasted).
@@ -68,6 +69,7 @@ SEED_ROLE="${SEED_ROLE:-owner}"
 SEED_EMAIL="${SEED_EMAIL:-bootstrap@loopzero.local}"
 SEED_DISPLAY_NAME="${SEED_DISPLAY_NAME:-Drill Bootstrap}"
 SEED_USERNAME="${SEED_USERNAME:-bootstrap}"
+SEED_ACCOUNT_ID="${SEED_ACCOUNT_ID:-acct-bootstrap}"
 
 NS_LOOPZERO="${LOOPZERO_NAMESPACE:-loopzero-system}"
 # Bug #35 LIVE fix (2026-05-18 iter 28): drill helmfile installs ory-hydra
@@ -80,6 +82,18 @@ HYDRA_PORT_LOCAL="${HYDRA_PORT_LOCAL:-14444}"
 MIN_JWT_TTL_SECONDS=7200
 
 log() { printf '[drill-mint-jwt] %s\n' "$*" >&2; }
+
+# loopzero-ops is the Go home of the logic this script used to re-implement in sed
+# and SQL (#236). An installed binary wins; otherwise it is built from this
+# checkout.
+DRILL_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+loopzero_ops() {
+  if command -v loopzero-ops >/dev/null 2>&1; then
+    loopzero-ops "$@"
+  else
+    (cd "$DRILL_REPO_ROOT/cmd/loopzero-ops" && go run . "$@")
+  fi
+}
 
 # --- EC-04 fix: Hydra readiness wait (BEFORE any exec attempt) ---
 # Stdout suppressed; only failure surfaces via log + exit 2.
@@ -109,7 +123,6 @@ fi
 # DRILL_PG_HOST may be managed PG endpoint (Pulumi output) OR in-cluster
 # postgresql svc (default). If managed PG, use psql client directly (script
 # expects DRILL_PG_HOST + DRILL_PG_PASS env). Else exec into pod.
-SEED_SLUG=$(printf '%s' "$SEED_TENANT_ID" | tr -c 'a-zA-Z0-9' '-' | tr '[:upper:]' '[:lower:]')
 
 # Bug #37 LIVE FIX (2026-05-18 iter 30): drill uses managed PG (no in-cluster
 # postgresql svc). If DRILL_PG_HOST unset, auto-read from Pulumi outputs.
@@ -123,9 +136,10 @@ if [[ -z "${DRILL_PG_HOST:-}" ]] && [[ -d "infra/pulumi-drill" ]]; then
   DRILL_PG_HOST=$(PULUMI_GET pgHost) || true
   DRILL_PG_PORT=$(PULUMI_GET pgPort) || true
   PG_URI_FULL=$(PULUMI_GET pgUri --show-secrets) || true
-  # Parse password from pgUri (regex matches postgres:// + postgresql:// per Bug #17)
+  # Parse password from pgUri (postgres:// and postgresql://, Bug #17). A
+  # pgUri that does not parse aborts here rather than becoming the password.
   if [[ -n "$PG_URI_FULL" ]]; then
-    DRILL_PG_PASS=$(echo "$PG_URI_FULL" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')
+    DRILL_PG_PASS=$(printf '%s' "$PG_URI_FULL" | loopzero_ops dsn password)
     export DRILL_PG_HOST DRILL_PG_PORT DRILL_PG_PASS
     log "  ✓ DRILL_PG_HOST=$DRILL_PG_HOST DRILL_PG_PORT=$DRILL_PG_PORT (password parsed from pgUri)"
   fi
@@ -197,34 +211,16 @@ else
 fi
 
 log "Seeding user=$SEED_USER_ID tenant=$SEED_TENANT_ID role=$SEED_ROLE"
-run_psql -c "
-INSERT INTO users (id, email, display_name, username)
-VALUES ('$SEED_USER_ID', '$SEED_EMAIL', '$SEED_DISPLAY_NAME', '$SEED_USERNAME')
-ON CONFLICT (id) DO UPDATE SET
-  email = EXCLUDED.email,
-  display_name = EXCLUDED.display_name,
-  username = EXCLUDED.username,
-  updated_at = now();
-" >/dev/null
-
-run_psql -c "
-INSERT INTO tenants (id, slug, owner_id, display_name)
-VALUES ('$SEED_TENANT_ID', '$SEED_SLUG', '$SEED_USER_ID', '$SEED_TENANT_ID')
-ON CONFLICT (id) DO NOTHING;
-" >/dev/null
-
-run_psql -c "
-DELETE FROM tenant_members
-WHERE user_id = '$SEED_USER_ID' AND tenant_id <> '$SEED_TENANT_ID';
-" >/dev/null
-
-run_psql -c "
-INSERT INTO tenant_members (tenant_id, user_id, role)
-VALUES ('$SEED_TENANT_ID', '$SEED_USER_ID', '$SEED_ROLE')
-ON CONFLICT (tenant_id, user_id) DO UPDATE SET
-  role = EXCLUDED.role,
-  updated_at = now();
-" >/dev/null
+# The bootstrap-user rule (user + account + tenant + exactly ONE membership)
+# lives once in `loopzero-ops sql bootstrap-user`, shared with the local and E2E
+# seeds. This copy used to insert the tenant without account_id, which fails on
+# every database migrated past 000044. Rendered first, so a refused field stops
+# here instead of reaching the psql pod.
+SEED_SQL="$(loopzero_ops sql bootstrap-user \
+  --user-id "$SEED_USER_ID" --email "$SEED_EMAIL" --display-name "$SEED_DISPLAY_NAME" \
+  --username "$SEED_USERNAME" --account-id "$SEED_ACCOUNT_ID" \
+  --tenant-id "$SEED_TENANT_ID" --role "$SEED_ROLE")"
+run_psql -c "$SEED_SQL" >/dev/null
 log "Seed complete"
 
 # --- Hydra port-forward + JWT mint via shared lib ---

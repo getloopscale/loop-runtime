@@ -29,12 +29,14 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -97,20 +99,22 @@ func TestWorkerRole_Exists(t *testing.T) {
 }
 
 // TestWorkerRole_GrantsInvariant_AllTablesAccessible (S1 SHOULD TEST):
-// every table in public schema that the migration GRANTed should be
-// accessible via has_table_privilege checks for SELECT/INSERT/UPDATE/
-// DELETE. Catches the case where a future migration creates a table
-// but forgets to GRANT — the gate test will fail at CI time, not at
-// production runtime under a reconcile loop.
+// every table migration 000023 GRANTed stays accessible via
+// has_table_privilege checks for SELECT/INSERT/UPDATE/DELETE.
+//
+// It does NOT catch a table created later without a grant — its list is the
+// 000023 list, so a new table never appears in it. Thirteen tables were
+// missed that way (issue #385). That invariant is
+// worker_role_grants_test.go, which derives the required privileges from
+// the engine's SQL and the migrations.
 func TestWorkerRole_GrantsInvariant_AllTablesAccessible(t *testing.T) {
 	pool := loopzeroWorkerPool(t)
 	requireLoopZeroWorkerRole(t, pool)
 	ctx := context.Background()
 
-	// Tables explicitly GRANTed by migration 000023. If you add a new
-	// table that background loops touch, extend BOTH the migration AND
-	// this list. The intentional excludes (schema_migrations) are
-	// commented in the migration header.
+	// Tables explicitly GRANTed by migration 000023. A table created later
+	// gets its grant from a new migration, checked by
+	// worker_role_grants_test.go — not by extending this list.
 	grantedTables := []string{
 		"app_scaling_config",
 		"audit_log",
@@ -186,14 +190,18 @@ func TestWorkerRole_GrantsInvariant_AllTablesAccessible(t *testing.T) {
 // Locks the ADR D3 design invariant — splitting into worker role
 // restores RLS for background loops without requiring FORCE RLS.
 //
-// Requires that the test connection can SET ROLE (the default psql
-// user `loopzero` is a peer-grade role to loopzero_worker, NOT a member).
-// On managed PG (DOKS) the operator GRANTs membership via:
+// Everything runs in ONE transaction as loopzero_worker — the fixture included — and
+// is rolled back at the end. The fixture used to be written by the connecting
+// role (the owner), and since migration 000064 dropped the owner's
+// `*_owner_maintenance` policies the owner is refused by the tenants policy
+// (issue #387); seeding as the role whose reach this test measures is also
+// what production does.
 //
-//	GRANT loopzero_worker TO loopzero;
-//
-// If membership not granted, the SET ROLE fails and the test SKIPs
-// rather than reporting a misleading failure.
+// The transaction runs as loopzero_worker over LOOPZERO_WORKER_DATABASE_URL when it is
+// set (how the background loops connect). Otherwise it switches with SET LOCAL
+// ROLE, which needs membership (on managed PG the operator grants it with
+// `GRANT loopzero_worker TO loopzero;`); without membership the test SKIPs rather than
+// reporting a misleading failure.
 func TestRLS_WorkerRole_TenantIsolation(t *testing.T) {
 	pool := loopzeroWorkerPool(t)
 	requireLoopZeroWorkerRole(t, pool)
@@ -207,26 +215,28 @@ func TestRLS_WorkerRole_TenantIsolation(t *testing.T) {
 		t.Skipf("T3.1 RLS test skipped: RLS not enabled on releases (migration 000009)")
 	}
 
-	// Seed two tenants' data as the owner.
+	tx := beginAsWorker(t, ctx, pool)
+
+	// Seed two tenants' data as loopzero_worker, inside the transaction.
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	tenantA := "tn-rls-A-" + suffix
 	tenantB := "tn-rls-B-" + suffix
 
 	for _, tenant := range []string{tenantA, tenantB} {
-		// O gatilho da migration 000061 resolve builds.cell_id a partir do tenant
-		// e falha alto se ele não existir; a fixture é anterior ao gatilho.
-		seedTenantRow(t, pool, tenant)
+		// The migration 000061 trigger resolves builds.cell_id from the tenant
+		// and fails loudly if it does not exist; the fixture predates the trigger.
+		seedTenantRow(t, tx, tenant)
 
 		buildID := "bld-rls-" + tenant
 		releaseID := "rel-rls-" + tenant
-		_, err := pool.Exec(ctx,
+		_, err := tx.Exec(ctx,
 			`INSERT INTO builds (id, tenant_id, project_id, environment, status, correlation_id, created_by)
 			 VALUES ($1, $2, 'proj-rls', 'production', 'SUCCEEDED', 'corr-'||$2, 'system:test')`,
 			buildID, tenant)
 		if err != nil {
 			t.Fatalf("seed build for %s: %v", tenant, err)
 		}
-		_, err = pool.Exec(ctx,
+		_, err = tx.Exec(ctx,
 			`INSERT INTO releases (id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by)
 			 VALUES ($1, $2, $3, 'proj-rls', 'production', 'PENDING', 'corr-'||$3, 'system:test')`,
 			releaseID, buildID, tenant)
@@ -234,46 +244,20 @@ func TestRLS_WorkerRole_TenantIsolation(t *testing.T) {
 			t.Fatalf("seed release for %s: %v", tenant, err)
 		}
 	}
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(),
-			"DELETE FROM releases WHERE tenant_id IN ($1, $2)", tenantA, tenantB)
-		_, _ = pool.Exec(context.Background(),
-			"DELETE FROM builds WHERE tenant_id IN ($1, $2)", tenantA, tenantB)
-	})
 
-	// Try SET ROLE inside a tx + verify SET ROLE actually succeeded
-	// (SET ROLE silently no-ops when membership is missing on some
-	// configs — we check current_user post-SET to confirm).
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	if _, err := tx.Exec(ctx, "SET LOCAL ROLE loopzero_worker"); err != nil {
-		t.Skipf("T3.1 RLS test skipped: SET ROLE loopzero_worker failed (grant membership: GRANT loopzero_worker TO loopzero;): %v", err)
-	}
-	var currentUser string
-	if err := tx.QueryRow(ctx, "SELECT current_user").Scan(&currentUser); err != nil {
-		t.Fatalf("current_user: %v", err)
-	}
-	if currentUser != "loopzero_worker" {
-		t.Skipf("T3.1 RLS test skipped: SET ROLE no-op (current_user=%q); grant membership: GRANT loopzero_worker TO loopzero;", currentUser)
-	}
-
-	// O CONTRATO MUDOU NA MIGRATION 000062, e este teste guardava o anterior.
+	// THE CONTRACT CHANGED IN MIGRATION 000062, and this test guarded the old one.
 	//
-	// O desenho de 000023 era: o worker é filtrado pelo contexto como todo mundo,
-	// e "atravessa" pondo `app.tenant_id` em string VAZIA. 000062 tornou as
-	// policies fail-closed — vazio passou a casar com NADA — e deu ao worker uma
-	// policy NOMEADA (`releases_worker_cross_tenant`, USING true). A travessia
-	// agora vem do PAPEL, não do valor do contexto.
+	// The 000023 design was: the worker is filtered by the context like everyone
+	// else, and it "crosses" by setting `app.tenant_id` to an EMPTY string. 000062
+	// made the policies fail-closed — empty now matches NOTHING — and gave the
+	// worker a NAMED policy (`releases_worker_cross_tenant`, USING true). Crossing
+	// now comes from the ROLE, not from the context value.
 	//
-	// É a mesma crença que o `withCrossWorkspaceScope` dos produtos TS carregava:
-	// contexto vazio lido como "sem filtro", quando fail-closed lê como "nenhuma
-	// linha". Lá devolvia zero em silêncio; aqui o teste afirmava que o worker
-	// enxergaria um tenant só — e afirmar isso de um papel que atravessa por
-	// desenho é descrever um isolamento que ele deliberadamente não tem.
+	// It is the same belief the TS products' `withCrossWorkspaceScope` carried:
+	// an empty context read as "no filter", when fail-closed reads it as "no
+	// rows". There it returned zero in silence; here the test asserted the worker
+	// would see a single tenant — and asserting that of a role that crosses by
+	// design is describing an isolation it deliberately does not have.
 	if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantA); err != nil {
 		t.Fatalf("set_config A: %v", err)
 	}
@@ -291,15 +275,15 @@ func TestRLS_WorkerRole_TenantIsolation(t *testing.T) {
 	}
 	rows.Close()
 	if len(visible) != 2 {
-		t.Errorf("loopzero_worker atravessa tenants pela policy NOMEADA de 000062, então mesmo com "+
-			"app.tenant_id=A ele deve ver A e B; got %v — se aqui vier 1, a policy "+
-			"releases_worker_cross_tenant sumiu e os loops de background pararam de enxergar", visible)
+		t.Errorf("loopzero_worker crosses tenants through the NAMED policy from 000062, so even with "+
+			"app.tenant_id=A it must see A and B; got %v — if this comes back as 1, the "+
+			"releases_worker_cross_tenant policy is gone and the background loops stopped seeing", visible)
 	}
 
-	// Contexto vazio: NÃO é mais o que concede a travessia (000062 removeu o
-	// disjunto permissivo). O worker continua vendo os dois porque a policy do
-	// PAPEL admite tudo — o vazio simplesmente deixou de importar. Mantido como
-	// asserção justamente para pegar uma volta do desenho antigo.
+	// Empty context: it is NO longer what grants the crossing (000062 removed the
+	// permissive disjunct). The worker still sees both because the ROLE's policy
+	// admits everything — the empty value simply stopped mattering. Kept as an
+	// assertion precisely to catch a return of the old design.
 	if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', '', true)"); err != nil {
 		t.Fatalf("set_config empty: %v", err)
 	}
@@ -317,8 +301,8 @@ func TestRLS_WorkerRole_TenantIsolation(t *testing.T) {
 	}
 	rows.Close()
 	if len(visible) != 2 {
-		t.Errorf("com app.tenant_id='' o worker segue vendo os dois — a travessia vem do papel, "+
-			"não do vazio; got %v", visible)
+		t.Errorf("with app.tenant_id='' the worker keeps seeing both — crossing comes from the role, "+
+			"not from the empty value; got %v", visible)
 	}
 }
 
@@ -360,4 +344,52 @@ func TestMigration_000023_OwnerOnly(t *testing.T) {
 			t.Errorf("migration 000023 MUST NOT contain executable DROP ROLE (forward-only); found: %q", trimmed)
 		}
 	}
+}
+
+// beginAsWorker opens a transaction running as loopzero_worker, rolled back when the
+// test ends. Over LOOPZERO_WORKER_DATABASE_URL when set; otherwise by SET LOCAL ROLE
+// on pool, skipping when the connecting role is not a member of loopzero_worker.
+func beginAsWorker(t *testing.T, ctx context.Context, pool *pgxpool.Pool) pgx.Tx {
+	t.Helper()
+	if url := os.Getenv("LOOPZERO_WORKER_DATABASE_URL"); url != "" {
+		workerPool, err := pgxpool.New(ctx, url)
+		if err != nil {
+			t.Fatalf("connect as loopzero_worker: %v", err)
+		}
+		t.Cleanup(workerPool.Close)
+		pool = workerPool
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			t.Errorf("roll back the worker transaction: %v", err)
+		}
+	})
+
+	var currentUser string
+	if err := tx.QueryRow(ctx, "SELECT current_user").Scan(&currentUser); err != nil {
+		t.Fatalf("current_user: %v", err)
+	}
+	if currentUser == "loopzero_worker" {
+		return tx
+	}
+	// SET ROLE silently no-ops when membership is missing on some configs, so
+	// current_user is checked after it. Both skips below are a missing
+	// precondition of the database, not of the code: without a way to act as
+	// loopzero_worker the test cannot seed under production's role split
+	// (https://github.com/getloopscale/loopzero/issues/387).
+	if _, err := tx.Exec(ctx, "SET LOCAL ROLE loopzero_worker"); err != nil {
+		t.Skipf("T3.1 RLS test skipped: SET ROLE loopzero_worker failed (set LOOPZERO_WORKER_DATABASE_URL, or grant membership: GRANT loopzero_worker TO loopzero;): %v", err)
+	}
+	if err := tx.QueryRow(ctx, "SELECT current_user").Scan(&currentUser); err != nil {
+		t.Fatalf("current_user: %v", err)
+	}
+	if currentUser != "loopzero_worker" {
+		// Same missing precondition (https://github.com/getloopscale/loopzero/issues/387).
+		t.Skipf("T3.1 RLS test skipped: SET ROLE no-op (current_user=%q); set LOOPZERO_WORKER_DATABASE_URL, or grant membership: GRANT loopzero_worker TO loopzero;", currentUser)
+	}
+	return tx
 }

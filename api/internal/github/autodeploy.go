@@ -15,8 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/getloopscale/loopzero/api/internal/archive"
 	"github.com/getloopscale/loopzero/api/internal/gitclient"
 
@@ -93,160 +91,131 @@ func NewAutoDeployer(cfg AutoDeployConfig) *AutoDeployer {
 	return &AutoDeployer{cfg: cfg}
 }
 
+// PushRequest is one push to deploy: the repository and commit, the GitHub
+// App installation that can read it, the LoopZero project it is linked to, and the
+// commit metadata recorded on the build.
+type PushRequest struct {
+	RepoFullName   string
+	Branch         string
+	CommitSHA      string
+	InstallationID int64
+	TenantID       string
+	ProjectName    string
+	CommitMessage  string
+	SenderLogin    string
+}
+
+const (
+	// autoDeployEnvironment is the environment a push to the default branch
+	// deploys to.
+	autoDeployEnvironment = "production"
+	defaultSourceBucket   = "loopzero-builds"
+)
+
 // HandlePush processes a push event and triggers a deploy if the repo is linked.
 // This is called asynchronously from the webhook handler.
-func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, commitSHA string,
-	installationID int64, tenantID, projectName, commitMessage, senderLogin string) error {
-
+func (d *AutoDeployer) HandlePush(ctx context.Context, req PushRequest) error {
 	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.github.autodeploy",
 		trace.WithAttributes(
-			attribute.String("loopzero.github.repo", repoFullName),
-			attribute.String("loopzero.github.commit_sha", commitSHA),
+			attribute.String("loopzero.github.repo", req.RepoFullName),
+			attribute.String("loopzero.github.commit_sha", req.CommitSHA),
 		))
 	defer span.End()
 
-	log := d.cfg.Logger.With(
-		"repo", repoFullName,
-		"branch", branch,
-		"sha", commitSHA,
-		"project", projectName,
-	)
-
+	log := d.cfg.Logger.With("repo", req.RepoFullName, "branch", req.Branch,
+		"sha", req.CommitSHA, "project", req.ProjectName)
 	log.Info("auto-deploy: starting")
 
-	// Step 1: Download source tarball from GitHub
-	log.Info("auto-deploy: downloading source from GitHub")
-	parts := strings.SplitN(repoFullName, "/", 2)
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid repo name: %s", repoFullName)
+	owner, repo, err := splitRepoFullName(req.RepoFullName)
+	if err != nil {
+		return err
 	}
-	owner, repo := parts[0], parts[1]
-
-	tarballReader, err := d.cfg.AppClient.DownloadSource(ctx, installationID, owner, repo, commitSHA)
+	src, err := d.downloadSource(ctx, req.InstallationID, owner, repo, req.CommitSHA)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("auto-deploy: download source: %w", err)
+		return fmt.Errorf("auto-deploy: %w", err)
 	}
-	defer func() { _ = tarballReader.Close() }()
+	defer src.close()
 
-	// Step 2: Save tarball to temp file (need to read twice: parse loopzero.yaml + upload)
-	tmpFile, err := os.CreateTemp("", "loopzero-github-source-*.tar.gz")
+	loopzeroYaml, err := src.deployDescriptor()
 	if err != nil {
-		return fmt.Errorf("auto-deploy: create temp file: %w", err)
+		// Not deployable by the same rule Connect applies: nothing to build.
+		log.Warn("auto-deploy: repository is not deployable, skipping", "error", err)
+		return nil
 	}
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-	defer func() { _ = tmpFile.Close() }()
+	log.Info("auto-deploy: deploy descriptor found", "project_in_yaml", loopzeroYaml.Project, "apps", len(loopzeroYaml.Apps))
 
-	if _, err := io.Copy(tmpFile, tarballReader); err != nil {
-		return fmt.Errorf("auto-deploy: save tarball: %w", err)
-	}
-
-	// Step 3: Parse loopzero.yaml from tarball
-	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("auto-deploy: seek: %w", err)
+	if err := d.stageBundle(ctx, src, req.TenantID, req.CommitSHA, req.CommitMessage, req.SenderLogin); err != nil {
+		return fmt.Errorf("auto-deploy: %w", err)
 	}
 
-	loopzeroYaml, err := extractLoopZeroYaml(tmpFile)
-	if err != nil {
-		log.Warn("auto-deploy: no loopzero.yaml found in repo, skipping", "error", err)
-		return nil // not a LoopZero project — ignore silently
+	d.cancelSupersededBuilds(ctx, log, req)
+	if err := d.submitBuild(ctx, log, req, loopzeroYaml); err != nil {
+		return err
 	}
-
-	log.Info("auto-deploy: loopzero.yaml found", "project_in_yaml", loopzeroYaml.Project, "apps", len(loopzeroYaml.Apps))
-
-	// Step 4: Convert tarball to git bundle (loopzero-clone CWT expects .bundle format)
-	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("auto-deploy: seek for conversion: %w", err)
-	}
-	bundlePath, err := tarballToGitBundle(ctx, tmpFile, commitSHA, commitMessage, senderLogin)
-	if err != nil {
-		return fmt.Errorf("auto-deploy: convert to git bundle: %w", err)
-	}
-	defer func() { _ = os.Remove(bundlePath) }()
-	log.Info("auto-deploy: tarball converted to git bundle")
-
-	// Step 5: Upload git bundle to S3 for build cluster
-	if d.cfg.ObjectStore != nil {
-		// G304 false positive: bundlePath comes from tarballToGitBundle
-		// which returns a path under os.MkdirTemp — never user-controlled.
-		bundleFile, err := os.Open(bundlePath) //nolint:gosec // G304 false positive: bundlePath is tmpdir-internal
-		if err != nil {
-			return fmt.Errorf("auto-deploy: open bundle: %w", err)
-		}
-		defer func() { _ = bundleFile.Close() }()
-		objKey := fmt.Sprintf("%s/source/%s.bundle", tenantID, commitSHA)
-		bucket := d.cfg.SourceBucket
-		if bucket == "" {
-			bucket = "loopzero-builds"
-		}
-		if err := d.cfg.ObjectStore.Upload(ctx, bucket, objKey, bundleFile); err != nil {
-			return fmt.Errorf("auto-deploy: S3 upload: %w", err)
-		}
-		log.Info("auto-deploy: git bundle uploaded to S3")
-	}
-
-	// (Continues with cancel + submit below — those are push-flow-specific.)
-	// Bundle-prep ends here. Preview flow calls PrepareSourceBundle directly.
-
-	// Step 6: Cancel superseded QUEUED builds (MEET-044 P0).
-	// When a newer push arrives, older QUEUED builds for the same environment
-	// are cancelled. This ensures the LATEST push deploys, not the first.
-	// Without this, rapid pushes deploy the older (possibly broken) commit.
-	if d.cfg.BuildCanceller != nil {
-		cancelled, cancelErr := d.cfg.BuildCanceller.CancelQueuedBuilds(ctx, tenantID, projectName, "production")
-		if cancelErr != nil {
-			log.Warn("auto-deploy: cancel queued builds failed (non-fatal)", "error", cancelErr)
-		} else if cancelled > 0 {
-			log.Info("auto-deploy: cancelled superseded builds", "count", cancelled)
-		}
-	}
-
-	// Step 7: Submit build
-	if d.cfg.BuildSubmitter != nil {
-		if err := d.cfg.BuildSubmitter.SubmitBuildFromWebhook(ctx, WebhookBuildRequest{
-			TenantID:       tenantID,
-			ProjectName:    projectName,
-			Environment:    "production",
-			CommitSHA:      commitSHA,
-			InstallationID: installationID,
-			RepoFullName:   repoFullName,
-			Branch:         branch,
-			CommitMessage:  commitMessage,
-			SenderLogin:    senderLogin,
-			LoopZeroYaml:       loopzeroYaml,
-		}); err != nil {
-			return fmt.Errorf("auto-deploy: submit build: %w", err)
-		}
-		log.Info("auto-deploy: build submitted successfully")
-	} else {
-		log.Info("auto-deploy: build submitter not configured (webhook-only mode)")
-	}
-
-	// Step 6: Set commit status to pending.
-	//
-	// G118 expected: this is a fire-and-forget side-effect that runs
-	// AFTER HandlePush returns. Inheriting the parent ctx would cancel
-	// the commit-status update the moment the HTTP handler returns,
-	// defeating the purpose. Use a separate 30s timeout so the
-	// goroutine cannot run forever.
-	if d.cfg.AppClient != nil {
-		go func() { //nolint:gosec // G118 expected: detached fire-and-forget commit-status update
-			statusCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if err := d.cfg.AppClient.SetCommitStatus(statusCtx, installationID, owner, repo, commitSHA, CommitStatus{
-				State:       "pending",
-				Description: "Deploying to production...",
-				Context:     "loopzero/deploy",
-			}); err != nil {
-				log.Warn("auto-deploy: set commit status failed", "error", err)
-			} else {
-				log.Info("auto-deploy: commit status set to pending")
-			}
-		}()
-	}
-
+	d.markCommitPending(log, req, owner, repo)
 	return nil
+}
+
+// cancelSupersededBuilds cancels older QUEUED builds for the environment
+// (MEET-044 P0): the LATEST push deploys, not the first. Best-effort.
+func (d *AutoDeployer) cancelSupersededBuilds(ctx context.Context, log *slog.Logger, req PushRequest) {
+	if d.cfg.BuildCanceller == nil {
+		return
+	}
+	cancelled, err := d.cfg.BuildCanceller.CancelQueuedBuilds(ctx, req.TenantID, req.ProjectName, autoDeployEnvironment)
+	if err != nil {
+		log.Warn("auto-deploy: cancel queued builds failed (non-fatal)", "error", err)
+	} else if cancelled > 0 {
+		log.Info("auto-deploy: cancelled superseded builds", "count", cancelled)
+	}
+}
+
+func (d *AutoDeployer) submitBuild(ctx context.Context, log *slog.Logger, req PushRequest, loopzeroYaml *LoopZeroYamlMinimal) error {
+	if d.cfg.BuildSubmitter == nil {
+		log.Info("auto-deploy: build submitter not configured (webhook-only mode)")
+		return nil
+	}
+	if err := d.cfg.BuildSubmitter.SubmitBuildFromWebhook(ctx, WebhookBuildRequest{
+		TenantID:       req.TenantID,
+		ProjectName:    req.ProjectName,
+		Environment:    autoDeployEnvironment,
+		CommitSHA:      req.CommitSHA,
+		InstallationID: req.InstallationID,
+		RepoFullName:   req.RepoFullName,
+		Branch:         req.Branch,
+		CommitMessage:  req.CommitMessage,
+		SenderLogin:    req.SenderLogin,
+		LoopZeroYaml:       loopzeroYaml,
+	}); err != nil {
+		return fmt.Errorf("auto-deploy: submit build: %w", err)
+	}
+	log.Info("auto-deploy: build submitted successfully")
+	return nil
+}
+
+// markCommitPending sets the commit status to pending. It is a fire-and-forget
+// side-effect that outlives HandlePush: inheriting the caller's ctx would
+// cancel the update the moment the HTTP handler returns, so it runs detached
+// with its own 30s bound.
+func (d *AutoDeployer) markCommitPending(log *slog.Logger, req PushRequest, owner, repo string) {
+	if d.cfg.AppClient == nil {
+		return
+	}
+	go func() { //nolint:gosec // G118 expected: detached fire-and-forget commit-status update
+		statusCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := d.cfg.AppClient.SetCommitStatus(statusCtx, req.InstallationID, owner, repo, req.CommitSHA, CommitStatus{
+			State:       "pending",
+			Description: "Deploying to production...",
+			Context:     "loopzero/deploy",
+		}); err != nil {
+			log.Warn("auto-deploy: set commit status failed", "error", err)
+		} else {
+			log.Info("auto-deploy: commit status set to pending")
+		}
+	}()
 }
 
 // PrepareSourceBundle downloads the repo tarball at the given commit,
@@ -254,92 +223,133 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, repoFullName, branch, com
 // `<tenantID>/source/<commit>.bundle`. Idempotent: re-running for the
 // same commit overwrites the bundle (safe — bundle is the same artifact).
 //
-// Shared between push auto-deploy (called inline by HandlePush) and
-// PR preview deploy (called by PreviewDeployer before triggering
-// CreatePreview). Without this, the build clone-repo step fails with
-// "Object does not exist" trying to fetch the bundle from S3.
+// Shared between push auto-deploy and PR preview deploy (called by
+// PreviewDeployer before triggering CreatePreview). Without this, the build
+// clone-repo step fails with "Object does not exist" trying to fetch the
+// bundle from S3 (LIVE catch 2026-06-07 J-23).
 //
-// LIVE catch 2026-06-07 J-23: PR webhook flow was triggering
-// previewService.CreatePreview → SubmitBuild without first preparing
-// the source bundle, so preview builds always failed at clone-repo.
-//
-// Bonus return: the parsed loopzero.yaml — preview deploy uses it to populate
-// apps with framework/path/build so LanguageStrategy resolves the right
-// build steps (bug #3 of the J-23 LIVE chain). Caller may pass nil for
-// the LoopZeroYamlMinimal pointer when only the upload is needed.
+// It also returns the deploy descriptor (ParseDeployDescriptor) — preview
+// deploy uses it to populate apps with framework/path/build so
+// LanguageStrategy resolves the right build steps. A repository with no
+// deployable descriptor returns nil and still uploads: the preview then
+// inherits the apps of the latest successful build.
 func (d *AutoDeployer) PrepareSourceBundle(ctx context.Context, repoFullName, commitSHA string, installationID int64, tenantID string) (*LoopZeroYamlMinimal, error) {
-	log := d.cfg.Logger.With(
-		"repo", repoFullName,
-		"sha", commitSHA,
-		"tenant", tenantID,
-	)
+	log := d.cfg.Logger.With("repo", repoFullName, "sha", commitSHA, "tenant", tenantID)
 
-	parts := strings.SplitN(repoFullName, "/", 2)
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid repo name: %s", repoFullName)
+	owner, repo, err := splitRepoFullName(repoFullName)
+	if err != nil {
+		return nil, err
 	}
-	owner, repo := parts[0], parts[1]
-
 	log.Info("prepare-source-bundle: downloading tarball")
-	tarballReader, err := d.cfg.AppClient.DownloadSource(ctx, installationID, owner, repo, commitSHA)
+	src, err := d.downloadSource(ctx, installationID, owner, repo, commitSHA)
 	if err != nil {
-		return nil, fmt.Errorf("prepare-source-bundle: download: %w", err)
+		return nil, fmt.Errorf("prepare-source-bundle: %w", err)
 	}
-	defer func() { _ = tarballReader.Close() }()
+	defer src.close()
 
-	tmpFile, err := os.CreateTemp("", "loopzero-preview-source-*.tar.gz")
-	if err != nil {
-		return nil, fmt.Errorf("prepare-source-bundle: tmp file: %w", err)
-	}
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-	defer func() { _ = tmpFile.Close() }()
-
-	if _, err := io.Copy(tmpFile, tarballReader); err != nil {
-		return nil, fmt.Errorf("prepare-source-bundle: save tarball: %w", err)
-	}
-
-	// Parse loopzero.yaml from tarball (best-effort — preview build will fail
-	// noisily later if it's missing, so we don't double-error here).
-	if _, seekErr := tmpFile.Seek(0, io.SeekStart); seekErr != nil {
-		return nil, fmt.Errorf("prepare-source-bundle: seek for parse: %w", seekErr)
-	}
-	loopzeroYaml, loopzeroYamlErr := extractLoopZeroYaml(tmpFile)
-	if loopzeroYamlErr != nil {
-		log.Warn("prepare-source-bundle: loopzero.yaml not found", "error", loopzeroYamlErr)
-		// loopzeroYaml stays nil; caller treats as "no apps inherited from source".
+	loopzeroYaml, descriptorErr := src.deployDescriptor()
+	if descriptorErr != nil {
+		log.Warn("prepare-source-bundle: repository is not deployable; the preview falls back to the last build's apps", "error", descriptorErr)
+		loopzeroYaml = nil
 	} else {
-		log.Info("prepare-source-bundle: loopzero.yaml parsed", "apps", len(loopzeroYaml.Apps))
+		log.Info("prepare-source-bundle: deploy descriptor parsed", "apps", len(loopzeroYaml.Apps))
 	}
 
-	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("prepare-source-bundle: seek for convert: %w", err)
+	if err := d.stageBundle(ctx, src, tenantID, commitSHA, "preview build", "loopzero-preview-service"); err != nil {
+		return nil, fmt.Errorf("prepare-source-bundle: %w", err)
 	}
+	return loopzeroYaml, nil
+}
 
-	bundlePath, err := tarballToGitBundle(ctx, tmpFile, commitSHA, "preview build", "loopzero-preview-service")
+func splitRepoFullName(repoFullName string) (owner, repo string, err error) {
+	owner, repo, ok := splitOwnerRepo(repoFullName)
+	if !ok {
+		return "", "", fmt.Errorf("invalid repo name: %s", repoFullName)
+	}
+	return owner, repo, nil
+}
+
+// sourceTarball is a downloaded GitHub tarball kept in a temp file, because
+// it is read twice: once for the deploy descriptor, once for the bundle
+// conversion.
+type sourceTarball struct {
+	file *os.File
+}
+
+func (d *AutoDeployer) downloadSource(ctx context.Context, installationID int64, owner, repo, commitSHA string) (*sourceTarball, error) {
+	body, err := d.cfg.AppClient.DownloadSource(ctx, installationID, owner, repo, commitSHA)
 	if err != nil {
-		return nil, fmt.Errorf("prepare-source-bundle: convert: %w", err)
+		return nil, fmt.Errorf("download source: %w", err)
 	}
-	defer func() { _ = os.Remove(bundlePath) }()
+	defer func() { _ = body.Close() }()
+
+	f, err := os.CreateTemp("", "loopzero-github-source-*.tar.gz")
+	if err != nil {
+		return nil, fmt.Errorf("create temp file: %w", err)
+	}
+	src := &sourceTarball{file: f}
+	if _, err := io.Copy(f, body); err != nil {
+		src.close()
+		return nil, fmt.Errorf("save tarball: %w", err)
+	}
+	return src, nil
+}
+
+func (s *sourceTarball) rewound() (io.Reader, error) {
+	if _, err := s.file.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("rewind tarball: %w", err)
+	}
+	return s.file, nil
+}
+
+func (s *sourceTarball) deployDescriptor() (*LoopZeroYamlMinimal, error) {
+	r, err := s.rewound()
+	if err != nil {
+		return nil, err
+	}
+	return extractLoopZeroYaml(r)
+}
+
+func (s *sourceTarball) close() {
+	_ = s.file.Close()
+	_ = os.Remove(s.file.Name())
+}
+
+// stageBundle converts the tarball to a git bundle (the loopzero-clone step
+// expects bundle format) and uploads it to `<tenantID>/source/<sha>.bundle`.
+// With no object store configured the upload is skipped with a warning.
+func (d *AutoDeployer) stageBundle(ctx context.Context, src *sourceTarball, tenantID, commitSHA, commitMessage, author string) error {
+	r, err := src.rewound()
+	if err != nil {
+		return err
+	}
+	bundlePath, cleanup, err := tarballToGitBundle(ctx, r, commitSHA, commitMessage, author)
+	if err != nil {
+		return fmt.Errorf("convert to git bundle: %w", err)
+	}
+	defer cleanup()
 
 	if d.cfg.ObjectStore == nil {
-		log.Warn("prepare-source-bundle: ObjectStore is nil — skipping upload (build will fail at clone-repo)")
-		return loopzeroYaml, nil
+		d.cfg.Logger.Warn("source bundle: no object store configured — upload skipped (the build will fail at clone-repo)",
+			"tenant", tenantID, "sha", commitSHA)
+		return nil
 	}
-	bundleFile, err := os.Open(bundlePath) //nolint:gosec // tmpdir-internal
+	bundle, err := os.Open(bundlePath) //nolint:gosec // G304 false positive: bundlePath is inside tarballToGitBundle's private temp dir
 	if err != nil {
-		return nil, fmt.Errorf("prepare-source-bundle: open bundle: %w", err)
+		return fmt.Errorf("open bundle: %w", err)
 	}
-	defer func() { _ = bundleFile.Close() }()
-	objKey := fmt.Sprintf("%s/source/%s.bundle", tenantID, commitSHA)
+	defer func() { _ = bundle.Close() }()
+
 	bucket := d.cfg.SourceBucket
 	if bucket == "" {
-		bucket = "loopzero-builds"
+		bucket = defaultSourceBucket
 	}
-	if err := d.cfg.ObjectStore.Upload(ctx, bucket, objKey, bundleFile); err != nil {
-		return nil, fmt.Errorf("prepare-source-bundle: upload: %w", err)
+	key := fmt.Sprintf("%s/source/%s.bundle", tenantID, commitSHA)
+	if err := d.cfg.ObjectStore.Upload(ctx, bucket, key, bundle); err != nil {
+		return fmt.Errorf("S3 upload: %w", err)
 	}
-	log.Info("prepare-source-bundle: uploaded", "bucket", bucket, "key", objKey)
-	return loopzeroYaml, nil
+	d.cfg.Logger.Info("source bundle uploaded", "bucket", bucket, "key", key)
+	return nil
 }
 
 // --- loopzero.yaml extraction ---
@@ -356,11 +366,17 @@ type LoopZeroYamlMinimal struct {
 // SEC: Uses archive.SafeExtractTarGz with symlink rejection, path traversal
 // protection, and decompression size limits. Uses gitclient.GitRunner with
 // context propagation for cancellation support.
-func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commitMessage, author string) (string, error) {
+//
+// The bundle is written inside the conversion's private temp dir and the
+// returned cleanup removes that dir: two conversions of the same commit (a
+// push and a PR preview, or two tenants deploying one upstream commit) must
+// never share, and delete, one another's bundle.
+func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commitMessage, author string) (string, func(), error) {
 	tmpDir, err := os.MkdirTemp("", "loopzero-github-bundle-*")
 	if err != nil {
-		return "", fmt.Errorf("create temp dir: %w", err)
+		return "", nil, fmt.Errorf("create temp dir: %w", err)
 	}
+	cleanup := func() { _ = os.RemoveAll(tmpDir) }
 
 	// Write tarball to disk for SafeExtractTarGz (needs seekable file).
 	// G304 false positive: tarPath is constructed from os.MkdirTemp +
@@ -368,13 +384,13 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	tarPath := filepath.Join(tmpDir, "source.tar.gz")
 	tarFile, err := os.Create(tarPath) //nolint:gosec // G304 false positive: tmpdir + literal filename
 	if err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("create tar file: %w", err)
+		cleanup()
+		return "", nil, fmt.Errorf("create tar file: %w", err)
 	}
 	if _, err := io.Copy(tarFile, tarball); err != nil {
 		_ = tarFile.Close()
-		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("write tar file: %w", err)
+		cleanup()
+		return "", nil, fmt.Errorf("write tar file: %w", err)
 	}
 	_ = tarFile.Close()
 
@@ -382,12 +398,12 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	// to remove the GitHub "owner-repo-sha/" prefix directory.
 	repoDir := filepath.Join(tmpDir, "repo")
 	if err := os.MkdirAll(repoDir, 0o750); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("mkdir repo: %w", err)
+		cleanup()
+		return "", nil, fmt.Errorf("mkdir repo: %w", err)
 	}
 	if _, err := archive.SafeExtractTarGz(tarPath, repoDir, &archive.ExtractOpts{StripComponents: 1}); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("extract tarball: %w", err)
+		cleanup()
+		return "", nil, fmt.Errorf("extract tarball: %w", err)
 	}
 
 	// CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): defense-in-depth
@@ -416,12 +432,12 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	))
 
 	if err := git.Run(ctx, repoDir, "init"); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("git init: %w", err)
+		cleanup()
+		return "", nil, fmt.Errorf("git init: %w", err)
 	}
 	if err := git.Run(ctx, repoDir, "add", "."); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("git add: %w", err)
+		cleanup()
+		return "", nil, fmt.Errorf("git add: %w", err)
 	}
 
 	msg := commitMessage
@@ -429,26 +445,21 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 		msg = "Auto-deploy from GitHub push"
 	}
 	if err := git.Run(ctx, repoDir, "commit", "-m", msg, "--allow-empty"); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("git commit: %w", err)
+		cleanup()
+		return "", nil, fmt.Errorf("git commit: %w", err)
 	}
 
-	shaPrefix := commitSHA
-	if len(shaPrefix) > 12 {
-		shaPrefix = shaPrefix[:12]
-	}
-	bundlePath := filepath.Join(os.TempDir(), fmt.Sprintf("loopzero-bundle-%s.bundle", shaPrefix))
+	bundlePath := filepath.Join(tmpDir, "source.bundle")
 	if err := git.Run(ctx, repoDir, "bundle", "create", bundlePath, "HEAD"); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("git bundle create: %w", err)
+		cleanup()
+		return "", nil, fmt.Errorf("git bundle create: %w", err)
 	}
-
-	_ = os.RemoveAll(tmpDir)
-	return bundlePath, nil
+	return bundlePath, cleanup, nil
 }
 
-// extractLoopZeroYaml reads loopzero.yaml from a GitHub tarball (.tar.gz).
-// GitHub tarballs have a top-level directory like "owner-repo-sha/".
+// extractLoopZeroYaml reads the deploy descriptor from a GitHub tarball (.tar.gz)
+// and applies ParseDeployDescriptor to it. GitHub tarballs have a top-level
+// directory like "owner-repo-sha/".
 func extractLoopZeroYaml(r io.Reader) (*LoopZeroYamlMinimal, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
@@ -470,17 +481,13 @@ func extractLoopZeroYaml(r io.Reader) (*LoopZeroYamlMinimal, error) {
 		name := filepath.Base(header.Name)
 		// Also check one level deep (the loopzero.yaml is at repo root)
 		parts := strings.Split(header.Name, "/")
-		if len(parts) == 2 && name == "loopzero.yaml" {
+		if len(parts) == 2 && name == DeployDescriptorPath {
 			data, err := io.ReadAll(tr)
 			if err != nil {
-				return nil, fmt.Errorf("read loopzero.yaml: %w", err)
+				return nil, fmt.Errorf("read %s: %w", DeployDescriptorPath, err)
 			}
-			var cfg LoopZeroYamlMinimal
-			if err := yaml.Unmarshal(data, &cfg); err != nil {
-				return nil, fmt.Errorf("parse loopzero.yaml: %w", err)
-			}
-			return &cfg, nil
+			return ParseDeployDescriptor(data)
 		}
 	}
-	return nil, fmt.Errorf("loopzero.yaml not found in tarball")
+	return nil, fmt.Errorf("%s not found in tarball", DeployDescriptorPath)
 }

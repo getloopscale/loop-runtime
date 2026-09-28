@@ -32,6 +32,7 @@ import (
 	"regexp"
 	"sort"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -81,6 +82,9 @@ type Outcome struct {
 	Violations []Violation
 	Messages   []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // extractTuples parses one rendered manifest file into a sorted slice of
 // (Kind, Name, Namespace) tuples using a real multi-document YAML decoder —
@@ -200,16 +204,17 @@ func findSecurityDowngrades(diff string) []Violation {
 	return out
 }
 
-// unifiedDiff produces a minimal unified-diff between two files. The
+// computeDiff produces a minimal unified-diff between two files. The
 // output is the substring that the STRUCT-3 detectors scan. We rely on
 // the `diff -u` binary (exec.Command in diff.go) rather than reimplementing
 // Myers' algorithm — Go's stdlib has no built-in diff.
 //
 // For Phase 7 we keep parity with bash by shelling out to `diff -u`.
 // Future iteration may swap for a pure-Go diff library.
-func unifiedDiff(basePath, prPath string) (string, error) {
-	return runDiff(basePath, prPath)
-}
+//
+// It is a variable so tests can make the diff fail; Check must then refuse
+// to report on a STRUCT-3 class it never evaluated.
+var computeDiff = runDiff
 
 // Check executes the gate.
 func Check(cfg Config) (*Outcome, error) {
@@ -283,10 +288,15 @@ func Check(cfg Config) (*Outcome, error) {
 	out.Violations = append(out.Violations, findNamespaceMoves(baseTuples, prTuples)...)
 
 	// STRUCT-3: security-context downgrades.
-	diff, err := unifiedDiff(cfg.BasePath, cfg.PRPath)
-	if err == nil {
-		out.Violations = append(out.Violations, findSecurityDowngrades(diff)...)
+	diff, err := computeDiff(cfg.BasePath, cfg.PRPath)
+	if err != nil {
+		return nil, &loopzeroerrors.LoopZeroError{
+			Code:    "OPS_DEPLOY_FAILURE",
+			Message: fmt.Sprintf("helmdiffstructural: cannot compute the unified diff, so STRUCT-3 (security-context downgrades) was not evaluated: %v", err),
+			Cause:   err,
+		}
 	}
+	out.Violations = append(out.Violations, findSecurityDowngrades(diff)...)
 
 	for _, v := range out.Violations {
 		out.Messages = append(out.Messages,

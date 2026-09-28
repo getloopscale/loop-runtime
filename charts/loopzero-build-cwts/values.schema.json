@@ -23,70 +23,6 @@
       "minLength": 1,
       "description": "S3 bucket name for source bundles + build cache. Must match SOURCE_BUCKET env in loopzero-api."
     },
-    "controller": {
-      "type": "object",
-      "properties": {
-        "securityContext": {
-          "type": "object",
-          "properties": {
-            "runAsNonRoot": {
-              "type": "boolean"
-            }
-          }
-        },
-        "workflowWorkers": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 256,
-          "description": "Max concurrent workflow reconciliations"
-        },
-        "podWorkers": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 256,
-          "description": "Max concurrent pod reconciliations"
-        },
-        "livenessProbe": {
-          "type": "object"
-        },
-        "readinessProbe": {
-          "type": "object"
-        },
-        "resources": {
-          "type": "object"
-        }
-      }
-    },
-    "buildkit": {
-      "type": "object",
-      "properties": {
-        "image": {
-          "type": "string"
-        },
-        "resources": {
-          "type": "object"
-        }
-      }
-    },
-    "cosign": {
-      "type": "object",
-      "properties": {
-        "image": {
-          "type": "string"
-        },
-        "keyless": {
-          "type": "boolean"
-        }
-      }
-    },
-    "syft": {
-      "type": "object",
-      "properties": {
-        "image": {
-          "type": "string"
-        }
-      }
-    },
     "minio": {
       "type": "object",
       "properties": {
@@ -98,13 +34,7 @@
         }
       }
     },
-    "server": {
-      "type": "object"
-    },
     "workflow": {
-      "type": "object"
-    },
-    "workflowDefaults": {
       "type": "object"
     }
   },

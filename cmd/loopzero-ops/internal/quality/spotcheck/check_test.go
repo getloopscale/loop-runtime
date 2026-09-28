@@ -67,3 +67,16 @@ func TestRun_DistributionCoversMultipleDimensions(t *testing.T) {
 		t.Fatalf("selection appears stuck — only %d distinct dimension(s) over 100 seeds", len(seen))
 	}
 }
+
+// The baseline the next step compares against must be openable by whoever
+// reads the output: a path under the gitignored kit resolves for nobody.
+func TestRun_NextStepPointsAtAnOpenableBaseline(t *testing.T) {
+	out, err := Run(Config{Seed: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(out.Messages, "\n")
+	if !strings.Contains(joined, "git show f082f6ecd~1:") {
+		t.Fatalf("next_step does not point at the baseline's surviving copy:\n%s", joined)
+	}
+}

@@ -2,8 +2,8 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package migrationtestcoverage asserts every api/internal/db/migrations/
-// *.up.sql has a corresponding regression test in api/tests/unit/
-// migration_NNN*_test.go (CLAUDE.md "every bug fix MUST generate a
+// *.up.sql has a corresponding regression test in api/internal/db/
+// migration_NNN*_test.go, next to the migrations it reads (CLAUDE.md "every bug fix MUST generate a
 // regression test before the fix").
 //
 // Replaces infra/scripts/migration_test_coverage.sh (~91 LOC) per
@@ -20,14 +20,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // DefaultMigrationsDir — bash default.
 const DefaultMigrationsDir = "api/internal/db/migrations"
 
-// DefaultUnitTestsDir — bash default.
-const DefaultUnitTestsDir = "api/tests/unit"
+// DefaultUnitTestsDir is where the migration tests live: the db package,
+// beside the migrations directory they read.
+const DefaultUnitTestsDir = "api/internal/db"
 
 // DefaultExceptions — pre-T3.4-baseline migrations implicitly covered.
 // Entries match either the full migration base OR just the numeric
@@ -69,6 +71,9 @@ type Outcome struct {
 	Violations []Violation
 	Messages   []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // shortPrefix strips leading zeros from num.
 // "000011" → "11"  ;  "0" → "0"  ;  "000000" → "0".
@@ -260,7 +265,7 @@ func Check(cfg Config) (*Outcome, error) {
 		"",
 		fmt.Sprintf("FAIL — %d migration(s) without test.", len(out.Violations)),
 		"",
-		"To fix: create api/tests/unit/migration_NNN_<slug>_test.go with text-level",
+		"To fix: create api/internal/db/migration_NNN_<slug>_test.go with text-level",
 		"invariants. See migration_011_release_check_canonical_test.go or",
 		"migration_012_fk_on_delete_test.go for canonical patterns.",
 		"",

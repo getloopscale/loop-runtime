@@ -1,10 +1,23 @@
 {{- if .Values.rbac.create }}
-# Namespace-scoped Role for the operator in the loopzero-system namespace.
-# Grants ONLY `delete` on the platform-tokens Secret — the one Secret
-# the platformbootstrap_controller actually deletes. Combined with the
-# cluster-wide rule that removed `delete` from secrets, this narrows
-# the operator's destructive Secret authority to exactly one named
-# resource in one namespace.
+# Secret access in loopzero-system, the namespace every platform CR lives in.
+#
+# Read, list and watch — through the manager's Secret cache, scoped to this
+# namespace and the ArgoCD one (operators/cmd/platform-operator
+# managerCacheOptions):
+#   - clustercredential_controller: the kubeconfig Secret of each
+#     ClusterCredential, and a watch on Secrets so a rotated kubeconfig
+#     requeues its credential
+#   - platformbootstrap_controller: the Gitea admin Secret and platform-tokens
+#   - gitrepositorybinding_controller: the Git credential Secret
+# Update — platformbootstrap_controller stores the Gitea and ArgoCD tokens in
+# platform-tokens. The operator creates no Secret here.
+#
+# Delete is a separate rule on ONE named resource: platform-tokens, the only
+# Secret the platformbootstrap_controller removes (on PlatformBootstrap
+# deletion, and only when it carries this controller's managed-by label).
+#
+# The namespace is the literal the binary uses (constants.NamespacePlatformSystem),
+# not .Release.Namespace: the operator reads loopzero-system wherever it is installed.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -13,6 +26,9 @@ metadata:
   labels:
     {{- include "loopzero-common.labels" . | nindent 4 }}
 rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "update"]
   - apiGroups: [""]
     resources: ["secrets"]
     resourceNames: ["platform-tokens"]
@@ -27,7 +43,7 @@ metadata:
     {{- include "loopzero-common.labels" . | nindent 4 }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "loopzero-common.fullname" . }}
+    name: {{ include "loopzero-common.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io

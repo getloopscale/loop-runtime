@@ -1,92 +1,99 @@
-# workflow-hygiene — as propriedades de #233 e #250, MAIS a integridade do observador do portao.
+# workflow-hygiene — the properties of #233 and #250, PLUS the integrity of the gate's observer.
 #
-# Este repo hospeda `build-publish.yml`, o reusable que CINCO repos consumidores chamam. Um defeito
-# nele nao fica nele: propaga no proximo build de todos. Os dois defeitos que este gate cobre ja
-# foram corrigidos a mao uma vez, e nada impedia a reintroducao.
+# This repo hosts `build-publish.yml`, the reusable workflow FIVE consumer repos call. A defect in
+# it does not stay in it: it propagates into everyone's next build. The two defects this gate covers
+# were each fixed by hand once, and nothing prevented their reintroduction.
 #
-# O TERCEIRO ASSUNTO, adicionado em 2026-09-06 (B-192), e' de outra natureza e esta' aqui por um
-# motivo estrutural, nao por conveniencia: `delivery-gate-armed.yml` e' o unico check que reprova
-# quando o portao local de entrega nao esta' armado, E UM WORKFLOW NAO CONSEGUE REPORTAR A PROPRIA
-# DELECAO. Apagado, ele nao fica vermelho: ele some, e um check ausente le, num PR, igualzinho a um
-# repositorio que nunca o teve. Quem reporta essa delecao tem de ser um arquivo que o commit da
-# delecao nao apaga junto — e' este. Ver `.github/scripts/assert-gate-observers-intact.py`.
+# THE THIRD SUBJECT, added 2026-09-06 (B-192), is of another kind and is here for a structural
+# reason rather than for convenience: `delivery-gate-armed.yml` is the only check that fails when
+# the local delivery gate is not armed, AND A WORKFLOW CANNOT REPORT ITS OWN DELETION. Deleted, it
+# does not go red: it disappears, and an absent check reads, in a PR, exactly like a repository that
+# never had one. Whoever reports that deletion has to be a file the deleting commit does not remove
+# with it — this one. See `.github/scripts/assert_gate_observers_intact.py`.
 name: workflow-hygiene
 on:
-  # OS TRES GATILHOS, e cada um cobre um momento que os outros nao alcancam.
+  # THE THREE TRIGGERS, and each covers a moment the others cannot reach.
   #
-  # Ate' 2026-09-06 este bloco era so' `push: [develop, main]`. O cabecalho acima
-  # descrevia "os DOIS gatilhos ... o de PR mata o defeito antes de entrar no
-  # trunk" — verdade quando foi escrito, e falsa desde 464b9d7e3 (2026-08-12),
-  # o commit que removeu o `pull_request` e criou a decisao pos-merge cujas tres
-  # premissas o B-192 mediu falsas. A frase sobreviveu ao gatilho por todo esse
-  # tempo; a rodada anterior do B-192 corrigiu a mesma mentira em
-  # `check-workflow-hygiene.sh` e em `ci.yml` e deixou esta duas telas acima.
+  # Until 2026-09-06 this block was only `push: [develop, main]`. The header above described "the TWO
+  # triggers ... the PR one kills the defect before it enters the trunk" — true when written, and
+  # false from d1130c137 (2026-08-12), the commit that removed `pull_request` and created the
+  # post-merge decision whose three premises B-192 measured as false. The sentence outlived the
+  # trigger for all of that time; the previous round of B-192 corrected the same untruth in
+  # `check-workflow-hygiene.sh` and in `ci.yml` and left this one two screens above.
   #
-  # `workspace` entra porque a janela medida foi de quatro dias e 21 commits NELE.
-  # Sem `workspace`, o primeiro momento em que este arquivo poderia falar sobre um
-  # observador apagado seria o PR de promocao — que e' o mesmo atraso de quatro
-  # dias reaparecendo com outro nome.
+  # `workspace` is included because the measured window was four days and 21 commits ON IT. Without
+  # `workspace`, the first moment this file could speak about a deleted observer would be the
+  # promotion PR — which is the same four-day delay reappearing under another name.
   #
-  # `pull_request` volta porque e' o unico momento PRE-MERGE em que a delecao do
-  # observador aparece: num PR que apaga `delivery-gate-armed.yml`, aquele
-  # workflow nao roda (foi apagado) e este roda e reprova. Sem ele, esse PR fica
-  # verde. Custa segundos; `ci.yml` continua pos-merge por custo e por estar
-  # vermelho, o que nao vale para este arquivo.
+  # `pull_request` returns because it is the only PRE-MERGE moment at which the observer's deletion
+  # shows up: in a PR that deletes `delivery-gate-armed.yml`, that workflow does not run (it was
+  # deleted) and this one does, and fails. Without it, such a PR is green. It costs seconds; `ci.yml`
+  # stays post-merge for cost and because it is red, neither of which applies to this file.
   push:
     branches: [workspace, develop, main]
     paths: [".github/**"]
   pull_request:
     branches: [develop, main]
     paths: [".github/**"]
-  # Disparo manual: e' o gate mais barato do repo (segundos), entao e' com ele
-  # que se valida a frota apos uma migracao — o runbook do umbrella e' explicito
-  # em nao usar a suite longa para isso. Sem `workflow_dispatch` nao ha como
-  # exercitar um runner sem antes mergear em `develop`, o que inverte a ordem:
-  # validar-se-ia a frota DEPOIS de confiar nela.
+  # Manual dispatch: this is the cheapest gate in the repo (seconds), so it is the one used to
+  # validate the fleet after a migration — the umbrella runbook is explicit about not using the long
+  # suite for that. Without `workflow_dispatch` there is no way to exercise a runner without first
+  # merging to `develop`, which inverts the order: the fleet would be validated AFTER trusting it.
   workflow_dispatch: {}
 permissions:
   contents: read
+
+# Every push to an open PR pays for a full round of work nobody will read. This workflow only
+# inspects files, so cancelling a superseded run interrupts nothing halfway — unlike a deploy, where
+# `cancel-in-progress` is the mistake.
+concurrency:
+  group: hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   hygiene:
-    # Aspas obrigatorias: um `name:` terminado em `run:` o YAML le como mapping aninhado e o workflow
-    # morre em `startup_failure` — sem job algum, portanto sem sinal vermelho util.
-    name: "workflows — observador do portao intacto + actionlint + SHA-pin + sem interpolacao em run:"
-    # Frota Blacksmith, habilitada com a transferencia para a org `getloopscale`
-    # (2026-07-30). Label LITERAL: `vars.CI_RUNNER` nao resolve no repo e o
-    # fallback devolve a frota antiga em silencio (runbook do umbrella).
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # GitHub's default is 6 HOURS: a hung job burns that in billed minutes and holds a
+    # concurrency slot the whole time.
+    timeout-minutes: 10
+    # Quotes are mandatory: a `name:` ending in `run:` is read by YAML as a nested mapping and the
+    # workflow dies in `startup_failure` — with no job at all, and therefore no useful red signal.
+    name: "workflows — gate observer intact + actionlint + SHA-pin + no interpolation in run:"
+    # Blacksmith fleet, enabled by the transfer to the `getloopscale` org (2026-07-30). LITERAL label:
+    # `vars.CI_RUNNER` does not resolve in this repo and the fallback returns the old fleet in
+    # silence (umbrella runbook).
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false   # zizmor artipacked: no later step pushes
 
-      # PRIMEIRO passo, e a ordem e' deliberada. Os passos param no primeiro que
-      # falha, entao um actionlint vermelho por qualquer outro motivo esconderia
-      # este veredito — e este e' o unico assunto deste arquivo que nenhum outro
-      # arquivo cobre. Custa milissegundos: le' dois YAML e sai.
+      # FIRST step, and the order is deliberate. Steps stop at the first that fails, so an actionlint
+      # red for any other reason would hide this verdict — and this is the only subject of this file
+      # that no other file covers. It costs milliseconds: it reads two YAML files and exits.
       #
-      # Se o script sumir, `python3` sai diferente de zero e o passo reprova.
-      # Fecha por construcao: apagar o verificador nao produz um verde.
-      - name: o observador do portao de entrega esta' intacto
-        run: python3 .github/scripts/assert-gate-observers-intact.py
+      # If the script disappears, `python3` exits non-zero and the step fails. It closes by
+      # construction: deleting the checker does not produce a green.
+      - name: the delivery gate's observer is intact
+        run: python3 .github/scripts/assert_gate_observers_intact.py
 
-      # actionlint entra AQUI, e nao num workflow proprio como no loopzero-memory.
+      # actionlint goes HERE, and not in a workflow of its own as in loopzero-memory.
       #
-      # Os dois checam a mesma coisa — correcao de workflow — e separa-los daria
-      # duas superficies com os mesmos gatilhos e os mesmos `paths: .github/**`,
-      # que divergem no dia em que alguem editar so' uma. O modelo os separa
-      # porque la' nasceram em momentos diferentes, nao por contrato.
+      # The two check the same thing — workflow correctness — and separating them would give two
+      # surfaces with the same triggers and the same `paths: .github/**`, which diverge on the day
+      # somebody edits only one. The model separates them because there they were born at different
+      # moments, not by contract.
       #
-      # A cobertura e' COMPLEMENTAR, nao sobreposta:
-      #   actionlint                 sintaxe, expressoes, labels de runner, e
-      #                              shellcheck DENTRO dos blocos `run:`
-      #   check-workflow-hygiene.sh  SHA-pin das actions (#233) e ausencia de
-      #                              `${{ }}` dentro de `run:` (#250)
+      # The coverage is COMPLEMENTARY, not overlapping:
+      #   actionlint                 syntax, expressions, runner labels, and shellcheck INSIDE the
+      #                              `run:` blocks
+      #   check-workflow-hygiene.sh  SHA-pinning of actions (#233) and the absence of `${{ }}`
+      #                              inside `run:` (#250)
       #
-      # Nenhum dos dois pega o que o outro pega. Rodar so' um deixa metade.
+      # Neither catches what the other catches. Running only one leaves half.
       #
-      # Imagem fixada por DIGEST, mesmo padrao do loopzero-memory: um `:latest` num
-      # gate de qualidade e' a mesma classe de risco de supply-chain que o gate
-      # ao lado existe para impedir.
-      - name: actionlint (workflows + shellcheck dos blocos run:)
+      # The image is pinned by DIGEST, the same pattern as loopzero-memory: a `:latest` in a quality gate
+      # is the same class of supply-chain risk the gate next to it exists to prevent.
+      - name: "actionlint (workflows + shellcheck of run: blocks)"
         run: |
           docker run --rm -v "$PWD:/repo" --workdir /repo \
             rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \

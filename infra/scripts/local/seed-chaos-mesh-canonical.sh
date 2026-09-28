@@ -50,6 +50,7 @@ helm upgrade --install chaos-mesh "$REPO_ROOT/infra/helm/chaos-mesh" \
   --kube-context "$CORE_CONTEXT" \
   -n chaos-mesh \
   --create-namespace \
+  --wait --timeout 5m \
   -f "$REPO_ROOT/infra/helm/chaos-mesh/values.yaml" \
   -f "$REPO_ROOT/infra/helm/chaos-mesh/values-k3d.yaml"
 

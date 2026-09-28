@@ -12,11 +12,15 @@
 package orphanalerts
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultRulesDir holds the PrometheusRule manifests, relative to repo root.
@@ -40,8 +44,17 @@ type Outcome struct {
 	Violations []string // "<file>:<line> — alert <name> ..."
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
+// ErrNothingScanned means the rules directory held no rule file: a scan over
+// nothing cannot report the absence of orphans.
+var ErrNothingScanned = errors.New("no PrometheusRule YAML found in the rules directory — the gate read nothing")
+
 // Check scans PrometheusRule YAMLs for unallowlisted orphan-alert placeholders.
-func Check(cfg Config) *Outcome {
+// A rules directory that cannot be read, a rule file that cannot be read, or a
+// directory with no rule file is an error: none of them is a clean tree.
+func Check(cfg Config) (*Outcome, error) {
 	root := cfg.Root
 	if root == "" {
 		root = "."
@@ -59,8 +72,9 @@ func Check(cfg Config) *Outcome {
 	dir := filepath.Join(root, rulesDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return out // missing rules dir → nothing to check (bash: grep no-match)
+		return nil, fmt.Errorf("reading rules dir %s: %w", rulesDir, err)
 	}
+	scanned := 0
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
 			continue
@@ -68,8 +82,9 @@ func Check(cfg Config) *Outcome {
 		path := filepath.Join(dir, e.Name())
 		data, rerr := os.ReadFile(path)
 		if rerr != nil {
-			continue
+			return nil, fmt.Errorf("reading rule file: %w", rerr)
 		}
+		scanned++
 		lines := strings.Split(string(data), "\n")
 		for i, line := range lines {
 			if !orphanExprRe.MatchString(line) {
@@ -88,10 +103,13 @@ func Check(cfg Config) *Outcome {
 			}
 		}
 	}
+	if scanned == 0 {
+		return nil, fmt.Errorf("%s: %w", rulesDir, ErrNothingScanned)
+	}
 	if len(out.Violations) > 0 {
 		out.Pass = false
 	}
-	return out
+	return out, nil
 }
 
 // alertNameAbove returns the nearest `alert: NAME` within the 5 lines up to and

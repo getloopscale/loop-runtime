@@ -2,47 +2,48 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package decisionsdeletion implements the T1.14 gate: fail CI if a protected
-// governance artifact (ADR, MEET DR, operations runbook/inventory) is deleted
-// in a PR without a sibling file carrying a `superseded_by:` reference.
+// governance document is deleted in a PR without a sibling file carrying a
+// `superseded_by:` reference to it.
 //
-// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3:
-// replaces infra/scripts/check-decisions-deletion.sh + its hermetic test
-// (D6 AUTO-DIE). Pure-Go decision logic over `git` output (git is on the D5
-// allow-list — only pulumi/helm/kubectl/aws/gh are forbidden shell-wraps).
+// Plan T5.3 of 2026-05-22-shell-script-strategic-plan v1.3 replaced
+// infra/scripts/check-decisions-deletion.sh with this package.
 //
-// Per .claude/rules/pre-release-governance.md § Plan Amendment Policy, deletion
-// of a ratified artifact requires a superseding file with
-// `superseded_by: <deleted-basename>` frontmatter (or explicit MEET ratification).
+// The protected set follows the docs/ consolidation of 2026-09-11: the ADRs,
+// meeting records and runbooks that used to live under docs/wiki/ became the
+// living documents docs/decisions.md and docs/runbooks.md. Deleting one of
+// them requires a superseding .md in the same directory whose content says
+// `superseded_by: <basename>` (or lists the basename as a YAML item).
+//
+// Every git failure is a gate error. An unknown ref, a shallow clone or a
+// non-repository used to read as "nothing deleted", which is a clean result
+// the gate never measured.
 package decisionsdeletion
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
-	"path/filepath"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-// protectedPath couples a directory with the glob of protected basenames.
-type protectedPath struct {
-	Dir  string
-	Glob string
-}
-
-// ProtectedPaths are the governance artifact locations under deletion guard.
-var ProtectedPaths = []protectedPath{
-	{"docs/wiki/decisions", "*.md"},
-	{"docs/wiki/meetings", "*.md"},
-	{"docs/wiki/concepts/operations", "*-runbook.md"},
-	{"docs/wiki/concepts/operations", "*-inventory.md"},
+// ProtectedDocs are the governance documents under deletion guard, relative
+// to the repository root. Each must exist at the base ref.
+var ProtectedDocs = []string{
+	"docs/decisions.md",
+	"docs/runbooks.md",
 }
 
 // Config drives the gate.
 type Config struct {
 	RepoRoot string // dir to run git in (default ".")
-	BaseRef  string
-	HeadRef  string
+	BaseRef  string // default origin/main
+	HeadRef  string // default HEAD
 }
 
 // Outcome captures the result.
@@ -53,100 +54,137 @@ type Outcome struct {
 	Violations   []string // deleted without a superseder
 }
 
-// Check runs the gate. Git invocation failures (unknown ref/path, non-repo) are
-// tolerated as "no data" — mirroring the bash gate's `|| true`; a missing diff
-// means nothing was deleted, which is a clean result.
-func Check(cfg Config) *Outcome {
-	root := cfg.RepoRoot
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
+// Check runs the gate.
+func Check(cfg Config) (*Outcome, error) {
+	root, base, head := withDefaults(cfg)
+	for _, ref := range []string{base, head} {
+		if err := revrange.VerifyReachable(root, ref); err != nil {
+			return nil, err
+		}
+	}
+	for _, doc := range ProtectedDocs {
+		if _, err := git(root, "cat-file", "-e", base+":"+doc); err != nil {
+			return nil, fmt.Errorf("decisions-deletion: protected document %s does not exist at %s, "+
+				"so the gate would guard nothing — update ProtectedDocs to the current layout: %w", doc, base, err)
+		}
+	}
+
+	deleted, err := deletedProtectedDocs(root, base, head)
+	if err != nil {
+		return nil, err
+	}
+
+	out := &Outcome{Pass: true, DeletedFiles: deleted}
+	for _, doc := range deleted {
+		superseder, err := findSuperseder(root, head, doc)
+		if err != nil {
+			return nil, err
+		}
+		if superseder == "" {
+			out.Violations = append(out.Violations, doc)
+			continue
+		}
+		out.Superseded = append(out.Superseded, fmt.Sprintf("%s -> %s", doc, superseder))
+	}
+	out.Pass = len(out.Violations) == 0
+	return out, nil
+}
+
+func withDefaults(cfg Config) (root, base, head string) {
+	root, base, head = cfg.RepoRoot, cfg.BaseRef, cfg.HeadRef
 	if root == "" {
 		root = "."
 	}
-	base, head := cfg.BaseRef, cfg.HeadRef
 	if base == "" {
 		base = "origin/main"
 	}
 	if head == "" {
 		head = "HEAD"
 	}
-
-	out := &Outcome{Pass: true}
-
-	// 1. Collect protected files deleted between base and head.
-	seen := map[string]bool{}
-	for _, p := range ProtectedPaths {
-		for _, f := range gitDeletedInDir(root, base, head, p.Dir) {
-			if ok, _ := filepath.Match(p.Glob, filepath.Base(f)); ok && !seen[f] {
-				seen[f] = true
-				out.DeletedFiles = append(out.DeletedFiles, f)
-			}
-		}
-	}
-	sort.Strings(out.DeletedFiles)
-	if len(out.DeletedFiles) == 0 {
-		return out
-	}
-
-	// 2. For each deleted file, look for a sibling superseder at HEAD.
-	for _, deleted := range out.DeletedFiles {
-		if superseder := findSuperseder(root, head, filepath.Dir(deleted), filepath.Base(deleted)); superseder != "" {
-			out.Superseded = append(out.Superseded, fmt.Sprintf("%s -> %s", deleted, superseder))
-		} else {
-			out.Violations = append(out.Violations, deleted)
-		}
-	}
-	if len(out.Violations) > 0 {
-		out.Pass = false
-	}
-	return out
+	return root, base, head
 }
 
-// gitDeletedInDir lists files deleted (status D) under dir between base..head.
-func gitDeletedInDir(root, base, head, dir string) []string {
-	return gitLines(root, []string{"diff", "--name-only", "--diff-filter=D",
-		fmt.Sprintf("%s...%s", base, head), "--", dir + "/"})
+// deletedProtectedDocs lists the protected documents deleted between base and
+// head. The diff runs over the whole tree with rename detection: restricting
+// it to the protected paths would hide a rename's destination and report the
+// renamed document as deleted.
+func deletedProtectedDocs(root, base, head string) ([]string, error) {
+	lines, err := gitLines(root, "diff", "-M", "--name-status", "--diff-filter=D", base+"..."+head)
+	if err != nil {
+		return nil, err
+	}
+	protected := make(map[string]bool, len(ProtectedDocs))
+	for _, doc := range ProtectedDocs {
+		protected[doc] = true
+	}
+	var deleted []string
+	for _, l := range lines {
+		fields := strings.Split(l, "\t")
+		if len(fields) == 2 && protected[fields[1]] {
+			deleted = append(deleted, fields[1])
+		}
+	}
+	sort.Strings(deleted)
+	return deleted, nil
 }
 
-// findSuperseder returns the first .md file at head under dir whose content
-// references deletedBase via `superseded_by:` or a YAML list item, or "" if none.
-func findSuperseder(root, head, dir, deletedBase string) string {
-	q := regexp.QuoteMeta(deletedBase)
+// findSuperseder returns the first .md sibling of deleted at head whose
+// content references its basename via `superseded_by:` or a YAML list item,
+// or "" when there is none.
+func findSuperseder(root, head, deleted string) (string, error) {
+	q := regexp.QuoteMeta(path.Base(deleted))
 	re := regexp.MustCompile(`(?m)^superseded_by:.*` + q + `|^\s+- ` + q)
-	for _, cand := range gitLines(root, []string{"ls-tree", "-r", head, "--name-only", "--", dir + "/"}) {
+	dir := path.Dir(deleted)
+	candidates, err := gitLines(root, "ls-tree", "--name-only", head, dir+"/")
+	if err != nil {
+		return "", err
+	}
+	for _, cand := range candidates {
 		if !strings.HasSuffix(cand, ".md") {
 			continue
 		}
-		if re.MatchString(gitShow(root, head, cand)) {
-			return cand
+		body, err := git(root, "show", head+":"+cand)
+		if err != nil {
+			return "", err
+		}
+		if re.MatchString(body) {
+			return cand, nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
-// gitLines runs git under root and returns non-empty output lines. Git failures
-// (unknown ref/path, non-repo) are tolerated as "no lines" (bash `|| true`).
-func gitLines(root string, args []string) []string {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = root
-	outBytes, err := cmd.Output()
+// gitLines runs git under root and returns its non-empty output lines.
+func gitLines(root string, args ...string) ([]string, error) {
+	out, err := git(root, args...)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var lines []string
-	for _, l := range strings.Split(string(outBytes), "\n") {
+	for _, l := range strings.Split(out, "\n") {
 		if strings.TrimSpace(l) != "" {
 			lines = append(lines, l)
 		}
 	}
-	return lines
+	return lines, nil
 }
 
-// gitShow returns the content of path at ref, or "" if unreadable.
-func gitShow(root, ref, path string) string {
-	cmd := exec.Command("git", "show", ref+":"+path)
+// git runs one git command under root; a failure carries its stderr.
+func git(root string, args ...string) (string, error) {
+	// #nosec G204 -- refs and paths come from the gate's own config.
+	cmd := exec.Command("git", args...)
 	cmd.Dir = root
-	b, err := cmd.Output()
+	out, err := cmd.Output()
 	if err != nil {
-		return ""
+		stderr := ""
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			stderr = strings.TrimSpace(string(ee.Stderr))
+		}
+		return "", fmt.Errorf("decisions-deletion: git %s: %w: %s", strings.Join(args, " "), err, stderr)
 	}
-	return string(b)
+	return string(out), nil
 }

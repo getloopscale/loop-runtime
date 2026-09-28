@@ -64,20 +64,20 @@
 }
 
 # ============================================================================
-# Os hosts SEM sufixo (`app|cloud|auth.loopzero.example`) foram REMOVIDOS em 2026-08-19 (B-025).
+# The hosts WITHOUT a suffix (`app|cloud|auth.loopzero.example`) were REMOVED on 2026-08-19 (B-025).
 #
-# Eles eram descritos como "legacy, reserved for prod cutover", mas encaminhavam para as
-# MESMAS portas locais dos blocos `-dev` abaixo: 5173 (Vite), 3002 e 14433. Ou seja, tres
-# hostnames de producao servindo instancias de desenvolvimento — e o de identidade entre eles.
-# Medido ao vivo: `cloud` devolvia 401 e `auth` 200, os dois VIVOS.
+# They were described as "legacy, reserved for prod cutover", but they forwarded to the
+# SAME local ports as the `-dev` blocks below: 5173 (Vite), 3002 and 14433. In other words,
+# three production hostnames serving development instances — the identity one among them.
+# Measured live: `cloud` returned 401 and `auth` 200, both of them LIVE.
 #
-# Nao serviam o cutover que justificava guarda-los: um cutover real apontaria para upstreams
-# de producao, nao para portas de dev da maquina do operador — teriam de ser reescritos de
-# qualquer forma. Enquanto isso, `app.loopzero.example` ficava a um `npm run dev` de servir o
-# dev-server na internet sob nome de producao, que e' o que o Red Team ja' fechou duas vezes
-# (loopzero-cloud#66 e #141).
+# They did not serve the cutover that justified keeping them: a real cutover would point at
+# production upstreams, not at dev ports on the operator's machine — they would have had to be
+# rewritten anyway. Meanwhile, `app.loopzero.example` was one `npm run dev` away from serving the
+# dev-server on the internet under a production name, which is what the Red Team already closed
+# twice (loopzero-cloud#66 and #141).
 #
-# Registro: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-remove-legacy-prod-hostnames.md
+# Record: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-remove-legacy-prod-hostnames.md
 # ============================================================================
 
 # ============================================================================
@@ -108,7 +108,7 @@ app-dev.loopzero.example {
   # canonical shape. Operator workflow: cd loopzero-cloud/dashboard && npm run
   # build before task cloud:caddy:up. The Taskfile target cloud:caddy:up
   # exports DASHBOARD_DIST automatically to the workspace sibling repo
-  # loopzero-cloud/dashboard/dist (per /home/paulo/loopzero-cloud/{loopzero,loopzero-cloud,
+  # loopzero-cloud/dashboard/dist (per the sibling layout <REPO_PARENT>/{loopzero,loopzero-cloud,
   # loopzero-cli,loopzero-contracts} workspace layout). Override DASHBOARD_DIST
   # before task invocation if you have a non-standard layout.
   # See docs/runbooks.md.
@@ -321,7 +321,7 @@ app-dev.loopzero.example {
   # cache header for chunks (vite hashed filenames are content-addressed,
   # so cache forever is safe).
   handle /assets/* {
-    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
+    root * {$LOOPZERO_DASHBOARD_DIST:../loopzero-cloud/dashboard/dist}
     encode gzip
     header Cache-Control "public, max-age=31536000, immutable"
     file_server
@@ -337,7 +337,7 @@ app-dev.loopzero.example {
     path /sw.js /workbox-*.js
   }
   handle @pwa_service_worker {
-    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
+    root * {$LOOPZERO_DASHBOARD_DIST:../loopzero-cloud/dashboard/dist}
     encode gzip
     # Service worker MUST NOT be cached — the browser checks for a new
     # SW on every visit; cache it and the user is stuck on the old
@@ -364,24 +364,24 @@ app-dev.loopzero.example {
   # being present + DASHBOARD_DIST env var set) + Red Team #100
   # absorption (silent MIME outage on stale-chunk requests).
   handle {
-    root * /home/paulo/loopzero-cloud/loopzero-cloud/dashboard/dist
+    root * {$LOOPZERO_DASHBOARD_DIST:../loopzero-cloud/dashboard/dist}
     encode gzip
     header Cache-Control "no-cache"
     try_files {path} /index.html
     file_server
   }
 }
-# `cloud-dev.loopzero.example` foi REMOVIDO em 2026-08-10.
+# `cloud-dev.loopzero.example` was REMOVED on 2026-08-10.
 #
-# Ele tinha duas metades e as duas ja estavam cobertas aqui. A carga era o webhook do
-# GitHub, que nao pode carregar JWT (o GitHub assina o corpo com HMAC) e por isso ia
-# direto ao loopzero-api; mas o webhook e registrado contra `app-dev`
-# (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44) e o bloco `app-dev` acima ja
-# tem o mesmo desvio direto. A outra metade era um 301 de compatibilidade para clientes
-# antigos — que nao existem: a plataforma ainda nao foi lancada.
+# It had two halves and both were already covered here. The payload was the GitHub
+# webhook, which cannot carry a JWT (GitHub signs the body with HMAC) and so went
+# straight to loopzero-api; but the webhook is registered against `app-dev`
+# (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44) and the `app-dev` block above
+# already has the same direct bypass. The other half was a compatibility 301 for old
+# clients — which do not exist: the platform has not launched yet.
 #
-# O que sobrava era um host publico servindo redirecionamento e autorizado em CORS e em
-# URL de retorno de login. Superficie de auth concedida a ninguem.
+# What was left was a public host serving a redirect and authorized in CORS and as a
+# login return URL. Auth surface granted to nobody.
 
 
 auth-dev.loopzero.example {
@@ -520,19 +520,19 @@ auth-dev.loopzero.example {
   handle /credentials {
     reverse_proxy localhost:14444
   }
-  # A RAIZ leva ao login, em vez de devolver 404.
+  # The ROOT leads to login, instead of returning 404.
   #
-  # Quem digita `auth-dev.loopzero.example` no navegador e uma PESSOA. Ate 2026-08-10 ela
-  # recebia `404 page not found` em texto puro, e sem caminho nenhum dali: o 404 vinha do
-  # proprio Kratos, que e uma API de identidade e nao serve pagina na raiz. A borda
-  # encaminhava certo e recebia o 404 de volta.
+  # Whoever types `auth-dev.loopzero.example` in a browser is a PERSON. Until 2026-08-10 they
+  # got `404 page not found` in plain text, with no way forward from there: the 404 came
+  # from Kratos itself, which is an identity API and serves no page at the root. The edge
+  # forwarded correctly and got the 404 back.
   #
-  # Nenhum fluxo do produto leva aqui — os usos deste host sao todos programaticos (base
-  # de API, emissor de token, origem CORS) —, mas um endereco publico que nao leva a lugar
-  # nenhum e defeito de produto mesmo quando nada aponta para ele.
+  # No product flow leads here — the uses of this host are all programmatic (API base,
+  # token issuer, CORS origin) —, but a public address that leads nowhere
+  # is a product defect even when nothing points at it.
   #
-  # 302 e nao 301: o destino do login pode mudar, e um permanente fica no cache do
-  # navegador de quem visitou uma vez.
+  # 302 and not 301: the login destination may change, and a permanent one stays in the
+  # browser cache of anyone who visited once.
   handle / {
     redir https://app-dev.loopzero.example/login 302
   }
@@ -554,7 +554,7 @@ auth-dev.loopzero.example {
 # URL convention: <internal-sni>.preview-dev.loopzero.example
 #   where <internal-sni> is the IngressRoute Host match the manifest
 #   builder emits via appHostname(), e.g.,
-#   "tn-08fa2ecedc3c7e77-teste-api-preview-pr-1".
+#   "tn-08fa2ecedc3c7e77-sample-api-preview-pr-1".
 #
 # The {http.request.host.labels.3} expression extracts the first label
 # from the public hostname (Caddy indexes labels RIGHT-to-LEFT, so for
@@ -615,7 +615,7 @@ auth-dev.loopzero.example {
 # URL convention: <project>-<env>.prod-dev.loopzero.example
 # Per ADR D1 of plan 2026-06-12-dashboard-journey-j25-live-url-discoverability,
 # loopzero-api status.go:252 emits this format when BASE_DOMAIN=prod-dev.loopzero.example
-# (configured in infra/helm/loopzero-api/values-dev.yaml — Tilt-canonical for
+# (configured in infra/tilt/loopzero-api-values.yaml — Tilt-canonical for
 # dev-public per memory `feedback_tilt_owned_deployment_yaml_drift`).
 #
 # Pattern parallel to *.preview-dev.loopzero.example (J-23 delivered 2026-06-07):

@@ -27,6 +27,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 
@@ -35,7 +36,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loopzero/api/internal/projectstatus"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
@@ -63,7 +64,10 @@ func (s *PostgresProjectStore) CreateProject(ctx context.Context, input ports.Cr
 		return s.insertProject(ctx, input)
 	}
 	// Resolve the cap up-front (no lock). cap < 0 = unlimited → no enforcement.
-	_, plan, cap := s.capChecker.CheckProjectsValue(input.TenantID, 0)
+	_, plan, cap, err := s.capChecker.CheckProjectsValue(ctx, input.TenantID, 0)
+	if err != nil {
+		return ports.ProjectResult{}, err
+	}
 	if cap < 0 {
 		return s.insertProject(ctx, input) // EC-6: unlimited never locks/counts
 	}
@@ -73,26 +77,24 @@ func (s *PostgresProjectStore) CreateProject(ctx context.Context, input ports.Cr
 // insertProject is the non-enforced insert (nil checker / unlimited plan), via
 // the sqlc bridge. 23505 → ports.ErrProjectExists.
 func (s *PostgresProjectStore) insertProject(ctx context.Context, input ports.CreateProjectInput) (ports.ProjectResult, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return ports.ProjectResult{}, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
 	id := GenerateProjectID()
-	if err := q.InsertProject(ctx, bridge.GeneratedDB(), generated.InsertProjectParams{
+	createdAt, err := q.InsertProject(ctx, gdb, generated.InsertProjectParams{
 		ID:        id,
 		TenantID:  input.TenantID,
 		Name:      input.Name,
 		CreatedBy: input.CreatedBy,
-	}); err != nil {
+	})
+	if err != nil {
 		if db.IsPGUniqueViolation(err) {
 			return ports.ProjectResult{}, ports.ErrProjectExists
 		}
 		return ports.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)
 	}
 
-	return ports.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID}, nil
+	return createdProject(id, input, createdAt.Time), nil
 }
 
 // resolveAccountAndLock resolves the tenant's Account (tenants.account_id, NOT
@@ -206,10 +208,11 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input po
 	}
 
 	id := GenerateProjectID()
-	if _, err := tx.Exec(ctx,
-		"INSERT INTO projects (id, tenant_id, name, created_by) VALUES ($1, $2, $3, $4)",
+	var createdAt time.Time
+	if err := tx.QueryRow(ctx,
+		"INSERT INTO projects (id, tenant_id, name, created_by) VALUES ($1, $2, $3, $4) RETURNING created_at",
 		id, input.TenantID, input.Name, input.CreatedBy,
-	); err != nil {
+	).Scan(&createdAt); err != nil {
 		if db.IsPGUniqueViolation(err) {
 			return ports.ProjectResult{}, ports.ErrProjectExists
 		}
@@ -219,7 +222,7 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input po
 	if err := pgtx.Commit(ctx); err != nil {
 		return ports.ProjectResult{}, fmt.Errorf("project store: commit: %w", err)
 	}
-	return ports.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID}, nil
+	return createdProject(id, input, createdAt), nil
 }
 
 // EnsureProject creates a project if it doesn't exist (idempotent).
@@ -241,7 +244,10 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input po
 // and the nil-checker (dev) path stay zero-overhead (the early returns below).
 func (s *PostgresProjectStore) EnsureProject(ctx context.Context, tx db.DBTX, tenantID, name, createdBy string) error {
 	if s.capChecker != nil {
-		_, plan, cap := s.capChecker.CheckProjectsValue(tenantID, 0)
+		_, plan, cap, err := s.capChecker.CheckProjectsValue(ctx, tenantID, 0)
+		if err != nil {
+			return err
+		}
 		if cap >= 0 { // bounded plan → enforce atomically (cap < 0 = unlimited, EC-6)
 			return s.ensureProjectCapped(ctx, tx, tenantID, name, createdBy, plan, cap)
 		}
@@ -257,13 +263,10 @@ func (s *PostgresProjectStore) ensureProjectInsert(ctx context.Context, tx db.DB
 	if target == nil {
 		target = s.DB
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", target)
-	}
+	gdb := db.Generated(target)
 	q := generated.New()
 
-	if err := q.EnsureProject(ctx, bridge.GeneratedDB(), generated.EnsureProjectParams{
+	if err := q.EnsureProject(ctx, gdb, generated.EnsureProjectParams{
 		ID:        GenerateProjectID(),
 		TenantID:  tenantID,
 		Name:      name,
@@ -347,13 +350,10 @@ func (s *PostgresProjectStore) ensureProjectCapped(ctx context.Context, tx db.DB
 // ListByTenant returns all projects for a tenant, ordered by name.
 // Empty slice (not nil) when the tenant has no projects.
 func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string) ([]ports.ProjectResult, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	rows, err := q.ListProjectsByTenant(ctx, bridge.GeneratedDB(), tenantID)
+	rows, err := q.ListProjectsByTenant(ctx, gdb, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("project store: list by tenant: %w", err)
 	}
@@ -379,16 +379,13 @@ func (s *PostgresProjectStore) ListByTenant(ctx context.Context, tenantID string
 // 2026-06-08-dashboard-screens-review-fixes T2.1 + ADR D2.
 // Raw build status from the latest build row is mapped to the 5-value
 // dashboard ProjectStatus enum via
-// pkg/enforcement.MapBuildStatusToProjectStatus (exhaustive 7-state
+// api/internal/projectstatus.MapBuildStatusToProjectStatus (exhaustive 7-state
 // switch per EC-1 absorption).
 func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tenantID string) ([]ports.ProjectSummary, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	rows, err := q.ListProjectsWithSummaryByTenant(ctx, bridge.GeneratedDB(), tenantID)
+	rows, err := q.ListProjectsWithSummaryByTenant(ctx, gdb, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("project store: list by tenant with summary: %w", err)
 	}
@@ -411,8 +408,8 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			// MapProjectStatus reads release first, falls back to build
 			// when no release is consultable. See aggregate_project_
 			// status_test.go for the canonical decision tree.
-			LastDeployStatus: string(enforcement.MapProjectStatus(
-				r.ActiveReleaseStatusRaw,
+			LastDeployStatus: string(projectstatus.MapProjectStatus(
+				statemachine.State(r.ActiveReleaseStatusRaw),
 				statemachine.State(r.LastDeployStatusRaw),
 				r.LatestBuildEnvironment,
 			)),
@@ -440,7 +437,7 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 		// T3.2 of plan dashboard-badge-data-plane-poller (Red Team
 		// loopzero-cloud#128). Both pgtype fields carry .Valid=false when
 		// the environment_targets row has no data-plane snapshot yet
-		// (Cleanroom warm-up window before the first DataPlanePoller
+		// (Cleanroom warm-up window before the first readiness-poller
 		// tick OR the poller is disabled via the env-gate). Nil pointers
 		// + `json:"...,omitempty"` produce absent JSON keys — the
 		// dashboard maps absence to the honest "Unknown" state without
@@ -461,13 +458,10 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 // GetByName retrieves a project by tenant and name. Returns (nil,
 // nil) when not found (legacy contract).
 func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name string) (*ports.ProjectResult, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	row, err := q.GetProjectByName(ctx, bridge.GeneratedDB(), generated.GetProjectByNameParams{
+	row, err := q.GetProjectByName(ctx, gdb, generated.GetProjectByNameParams{
 		TenantID: tenantID,
 		Name:     name,
 	})
@@ -492,13 +486,10 @@ func (s *PostgresProjectStore) GetByName(ctx context.Context, tenantID, name str
 // DeleteProject removes a project from the database. 0 rows affected
 // → "project not found" error (legacy contract).
 func (s *PostgresProjectStore) DeleteProject(ctx context.Context, tenantID, projectID string) error {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("project store: DBTX %T does not implement SqlcBridge", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	rows, err := q.DeleteProjectByID(ctx, bridge.GeneratedDB(), generated.DeleteProjectByIDParams{
+	rows, err := q.DeleteProjectByID(ctx, gdb, generated.DeleteProjectByIDParams{
 		TenantID: tenantID,
 		ID:       projectID,
 	})
@@ -509,4 +500,10 @@ func (s *PostgresProjectStore) DeleteProject(ctx context.Context, tenantID, proj
 		return fmt.Errorf("project store: project not found")
 	}
 	return nil
+}
+
+// createdProject is the result of a successful insert: what the caller asked for plus
+// the creation time the database stored, which the create response carries (#411).
+func createdProject(id string, input ports.CreateProjectInput, createdAt time.Time) ports.ProjectResult {
+	return ports.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID, CreatedBy: input.CreatedBy, CreatedAt: createdAt}
 }

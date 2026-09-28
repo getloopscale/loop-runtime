@@ -4,14 +4,11 @@
 package preview
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
@@ -32,9 +29,9 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 		errMatch string
 	}{
 		{
-			// J-23 canonical refactor 2026-06-07 (sponsor verbatim
-			// "Pense bem ao inves de um if PARA preview o TUDO DEVERIA
-			// esta separado por projeto"): namespace formula is uniformly
+			// J-23 canonical refactor 2026-06-07 (the sponsor asked for
+			// every environment, previews included, to be separated by
+			// project rather than special-cased): namespace formula is uniformly
 			// `loopzero-<tenant>-<project>-<env>` for ALL envs including
 			// preview-pr-N. Pre-refactor was `<tenant>-<project>-pr-N`
 			// (no `loopzero-` prefix, no `preview-` env segment) — which
@@ -412,51 +409,17 @@ func TestPreviewReconciler_NamespaceName_RejectsLegacyFormat(t *testing.T) {
 	}
 }
 
-// TestRuntimeClientForPreview_NilFactory_ReturnsFallback — EC-1 from
-// deep-review-2026-05-10-remediation-plan edge-cases review.
-//
-// When RuntimeFactory is nil (legacy deployment without multi-cell
-// wiring), runtimeClientForPreview MUST return the static r.RuntimeClient
-// — never nil. Returning nil would propagate to the namespace ops added
-// in T0.1 and panic at Get/Delete/CreateOrUpdate.
-func TestRuntimeClientForPreview_NilFactory_ReturnsFallback(t *testing.T) {
-	t.Parallel()
-
-	scheme := runtime.NewScheme()
-	_ = loopzerov1.AddToScheme(scheme)
-	staticClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := &PreviewReconciler{
-		RuntimeFactory: nil,
-		RuntimeClient:  staticClient,
-	}
-	preview := &loopzerov1.PreviewEnvironment{
-		ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "loopzero-system"},
-		Spec: loopzerov1.PreviewEnvironmentSpec{
-			TenantID:  "tn-x",
-			ProjectID: "api",
-			CellID:    "cell-0", // even with CellID set, nil factory must fallback
-		},
-	}
-
-	got := r.runtimeClientForPreview(context.Background(), preview)
-	if got == nil {
-		t.Fatal("runtimeClientForPreview returned nil — must fallback to r.RuntimeClient when factory is nil")
-	}
-	if got != staticClient {
-		t.Errorf("runtimeClientForPreview returned non-static client when factory is nil")
-	}
-}
-
-// Limpeza de deprecated (2026-08-08): naming.PreviewNamespace foi deletada. Seu
-// doc-comment prometia o formato legado "{tenant}-{project}-pr-{N}", mas o corpo já
-// delegava para Namespace — era um wrapper redundante, não um formato à parte. Este
-// teste fixa a equivalência que tornou a deleção segura: o namespace de preview é o
-// canônico loopzero-{tenant}-{project}-preview-pr-{N}, igual a qualquer outro ambiente.
-func TestPreviewNamespaceName_FormatoCanonico(t *testing.T) {
+// Deprecation cleanup (2026-08-08): naming.PreviewNamespace was deleted. Its
+// doc comment promised the legacy "{tenant}-{project}-pr-{N}" format, but the
+// body already delegated to Namespace — a redundant wrapper, not a format of its
+// own. This test pins the equivalence that made the deletion safe: the preview
+// namespace is the canonical loopzero-{tenant}-{project}-preview-pr-{N}, like any
+// other environment.
+func TestPreviewNamespaceName_IsTheCanonicalFormat(t *testing.T) {
 	r := &PreviewReconciler{}
 	preview := &loopzerov1.PreviewEnvironment{
 		Spec: loopzerov1.PreviewEnvironmentSpec{
-			TenantID: "tn-acme", ProjectID: "teste", PRNumber: 3,
+			TenantID: "tn-acme", ProjectID: "sample", PRNumber: 3,
 		},
 	}
 
@@ -464,9 +427,9 @@ func TestPreviewNamespaceName_FormatoCanonico(t *testing.T) {
 	if err != nil {
 		t.Fatalf("previewNamespaceName: %v", err)
 	}
-	want := "loopzero-tn-acme-teste-preview-pr-3"
+	want := "loopzero-tn-acme-sample-preview-pr-3"
 	if got != want {
-		t.Errorf("previewNamespaceName = %q, want %q — o formato legado não corresponde a "+
-			"nenhum namespace existente em nenhum cluster", got, want)
+		t.Errorf("previewNamespaceName = %q, want %q — the legacy format matches "+
+			"no namespace on any cluster", got, want)
 	}
 }

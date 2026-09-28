@@ -4,7 +4,6 @@
 package auth
 
 import (
-	"crypto/ed25519"
 	"errors"
 	"net/http"
 	"strconv"
@@ -15,52 +14,6 @@ import (
 
 	"github.com/getloopscale/loopzero-contracts/serviceauth"
 )
-
-// ServiceAuthEd25519PublicKeys is the trust set for Ed25519 signature
-// verification on the service-auth path. Configured at startup from a
-// K8s ConfigMap (current + previous public keys during rotation
-// windows). Per RFC dual-key rotation, both keys validate during the
-// 7-day overlap; previous is dropped after rotation completes.
-//
-// Per RFC Q5 (fail-closed): if this slice is empty, EVERY signed
-// request fails — there is no silent fall-through to the legacy
-// single-control path. The Phase 1 flag below controls whether
-// UNSIGNED requests are accepted.
-var ServiceAuthEd25519PublicKeys []ed25519.PublicKey
-
-// ServiceAuthRequireSignature controls the Phase 1 → Phase 2 cutover.
-//
-//   - false (Phase 1, default): accept-both. Unsigned requests proceed
-//     through the legacy shared-secret check; signed requests get the
-//     extra Ed25519 verification on top.
-//   - true (Phase 2 + 3): require-signed. Unsigned requests are
-//     rejected with 401 + audit_log row `auth.service.signature_missing`.
-//
-// The flag is set from env var LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE
-// (matching the operator runbook in the new ADR). 7-day soak at 100%
-// coverage (per Q3 decision) is the prerequisite for flipping to true.
-var ServiceAuthRequireSignature bool
-
-// ServiceAuthNonceStore is the replay-protection nonce dedupe store.
-// Default is an in-memory store (suitable for tests + single-replica
-// dev). Production must inject a Redis-backed store per RFC Q2 —
-// without shared state across API replicas, a replay against a
-// different replica slips past the local-only cache.
-//
-// Initialized in init() so tests that don't explicitly set it have a
-// working fallback. Operators wire the production Redis store during
-// app bootstrap.
-var ServiceAuthNonceStore serviceauth.NonceStore
-
-// ServiceAuthReplayWindow is the timestamp-tolerance window for replay
-// protection. Default 60s per RFC § Replay protection. Configurable
-// via LOOPZERO_SERVICE_AUTH_REPLAY_WINDOW_SECONDS for operators who need
-// to tune for clock-skew issues observed in the field.
-var ServiceAuthReplayWindow = serviceauth.NewReplayWindow(60 * time.Second)
-
-func init() {
-	ServiceAuthNonceStore = serviceauth.NewInMemoryNonceStore(5 * time.Minute)
-}
 
 // serviceAuthSignaturePresent counts how often each request carried the
 // X-LoopZero-Signature header — drives the Phase 1 → Phase 2 cutover gate
@@ -100,7 +53,7 @@ const (
 //
 // The presence-vs-absence decision is made by the CALLER (auth middleware)
 // — this function only runs when all three signature headers are present.
-func verifyServiceAuthSignature(r *http.Request, userID, tenantID string) (ok bool, reason signatureRejectReason) {
+func (a *Authenticator) verifyServiceAuthSignature(r *http.Request, userID, tenantID string) (ok bool, reason signatureRejectReason) {
 	sig := r.Header.Get("X-LoopZero-Signature")
 	tsStr := r.Header.Get("X-LoopZero-Timestamp")
 	nonce := r.Header.Get("X-LoopZero-Nonce")
@@ -110,7 +63,7 @@ func verifyServiceAuthSignature(r *http.Request, userID, tenantID string) (ok bo
 		return false, rejectMalformedInput
 	}
 	asserted := time.Unix(tsInt, 0)
-	if err := ServiceAuthReplayWindow.Validate(asserted, time.Now()); err != nil {
+	if err := a.cfg.ReplayWindow.Validate(asserted, time.Now()); err != nil {
 		return false, rejectStaleTimestamp
 	}
 
@@ -122,7 +75,7 @@ func verifyServiceAuthSignature(r *http.Request, userID, tenantID string) (ok bo
 		UserID: userID, TenantID: tenantID, Timestamp: tsInt,
 		Nonce: nonce, Method: r.Method, Path: r.URL.Path,
 	}
-	if err := serviceauth.Verify(ServiceAuthEd25519PublicKeys, sig, in); err != nil {
+	if err := serviceauth.Verify(a.cfg.Ed25519PublicKeys, sig, in); err != nil {
 		if errors.Is(err, serviceauth.ErrNoTrustedKeys) {
 			return false, rejectNoTrustedKeys
 		}
@@ -132,7 +85,7 @@ func verifyServiceAuthSignature(r *http.Request, userID, tenantID string) (ok bo
 	// Claim the nonce only after the signature is proven valid.
 	// Per-user scope means a flood of forged-sig requests cannot
 	// exhaust another user's nonce namespace.
-	if err := ServiceAuthNonceStore.Claim(r.Context(), userID, nonce); err != nil {
+	if err := a.cfg.NonceStore.Claim(r.Context(), userID, nonce); err != nil {
 		return false, rejectReplayNonce
 	}
 	return true, ""

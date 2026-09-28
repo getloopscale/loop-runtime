@@ -30,6 +30,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate.
@@ -51,6 +53,9 @@ type Outcome struct {
 	Violations []Violation
 	Scanned    int
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // generatedStatusFuncs are the sqlc-generated status/transition UPDATE funcs.
 // Referencing any of them outside db/store/ (or db/generated/) is a Gate B

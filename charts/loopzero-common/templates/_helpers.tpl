@@ -299,6 +299,11 @@ spec:
     - port: {{ .Values.metrics.serviceMonitor.port | default "metrics" }}
       interval: {{ .Values.metrics.serviceMonitor.interval | default "30s" }}
       scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout | default "10s" }}
+      {{- if .Values.metrics.serviceMonitor.honorLabels }}
+      # Keep the labels the target exposes instead of renaming a clash to
+      # exported_<label> — for a binary that emits canonical labels of its own.
+      honorLabels: true
+      {{- end }}
 {{- end }}
 {{- end }}
 
@@ -332,46 +337,6 @@ spec:
 NETWORK POLICY
 ----------------------------------------------------------------------
 */}}
-
-{{/*
-----------------------------------------------------------------------
-TPLVALUES.RENDER (charts-sota T2.1 / ADR-0037)
-----------------------------------------------------------------------
-*/}}
-
-{{/*
-Render values that may contain Go template syntax. Bitnami common pattern.
-Usage:
-  {{ include "loopzero-common.tplvalues.render" (dict "value" .Values.podAnnotations "context" $) | nindent 8 }}
-*/}}
-{{- define "loopzero-common.tplvalues.render" -}}
-{{- $value := typeIs "string" .value | ternary .value (.value | toYaml) }}
-{{- if contains "{{" (toJson .value) }}
-  {{- if .scope }}
-    {{- tpl (cat "{{- with $.RelativeScope -}}" $value "{{- end }}") (merge (dict "RelativeScope" .scope) .context) }}
-  {{- else }}
-    {{- tpl $value .context }}
-  {{- end }}
-{{- else }}
-{{- $value }}
-{{- end }}
-{{- end -}}
-
-{{/*
-----------------------------------------------------------------------
-KUBE VERSION GUARD (charts-sota T2.2 / ADR-0037)
-----------------------------------------------------------------------
-*/}}
-
-{{/*
-Return target Kubernetes version. Allows .Values.kubeVersion override for
-test fixtures + matrix CI; otherwise uses cluster's actual version.
-Usage:
-  {{ if semverCompare ">=1.30" (include "loopzero-common.kubeVersion" .) }}...{{ end }}
-*/}}
-{{- define "loopzero-common.kubeVersion" -}}
-{{- default .Capabilities.KubeVersion.Version .Values.kubeVersion -}}
-{{- end -}}
 
 {{/*
 ----------------------------------------------------------------------
@@ -451,6 +416,157 @@ Usage:
 
 {{/*
 ----------------------------------------------------------------------
+SECRETS CREATED OUTSIDE THE CHART
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+envFrom entries for Secrets the chart does not create — provisioned by ESO,
+a bootstrap task or an operator. Each entry is typed and schema-validated in
+the consuming chart:
+
+  secrets:
+    additionalSources:
+      - name: loopzero-openbao-approle
+        optional: true
+        reason: "..."   # required when optional is true
+
+`optional: true` lets the kubelet start the container with the Secret absent,
+which is exactly the mechanism by which a dependency disappears without the
+startup saying anything (B-104). So an optional source must carry the reason
+it may be absent, and the consuming chart's schema refuses one without it.
+Render after the chart's own sources: a later envFrom source wins a key both
+define.
+
+Usage in a container:
+  envFrom:
+    ...
+    {{- include "loopzero-common.additionalSecretSources" . | nindent 12 }}
+*/}}
+{{- define "loopzero-common.additionalSecretSources" -}}
+{{- range ((.Values.secrets | default dict).additionalSources | default list) }}
+- secretRef:
+    name: {{ .name | quote }}
+    optional: {{ .optional }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Environment entries mapping ONE key of a Secret the chart does not create onto
+the variable the binary reads — for a Secret whose key is not the variable name
+(loopzero-db-credentials stores the URL as `uri`; the binary reads DATABASE_URL).
+Same typing and the same reason rule as additionalSources; the entry mirrors
+the Kubernetes shape (name, secretKeyRef name/key):
+
+  secrets:
+    keyRefs:
+      - name: DATABASE_URL
+        secretName: loopzero-db-credentials
+        key: uri
+        optional: true
+        reason: "..."
+
+An explicit container variable outranks every envFrom source, so a keyRef
+decides its variable regardless of what the ConfigMap or an envFrom Secret
+carries.
+
+Usage in a container:
+  env:
+    {{- include "loopzero-common.secretKeyRefs" . | nindent 12 }}
+*/}}
+{{- define "loopzero-common.secretKeyRefs" -}}
+{{- range ((.Values.secrets | default dict).keyRefs | default list) }}
+- name: {{ .name | quote }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .secretName | quote }}
+      key: {{ .key | quote }}
+      optional: {{ .optional }}
+{{- end }}
+{{- end -}}
+
+{{/*
+----------------------------------------------------------------------
+INGRESS ROUTE (Traefik)
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+A Traefik IngressRoute to the chart's Service, off unless the install enables
+it. A published chart does not assume an ingress exists in the target cluster;
+the Helmfile bootstrap does run Traefik, and turns this on.
+
+  ingressRoute:
+    enabled: false
+    host: ""                 # required when enabled
+    entryPoints: [websecure]
+    middlewares: []          # [{name, namespace}]
+    certIssuer: CFManaged    # a ClusterIssuer name, or CFManaged
+
+`CFManaged` means TLS terminates at the Cloudflare edge: the route carries an
+empty tls block and no cert-manager Certificate is emitted. Any other value is
+the ClusterIssuer of a Certificate named <fullname>-tls for the host.
+
+Usage (templates/ingressroute.yaml):
+  {{ include "loopzero-common.ingressRoute" . }}
+*/}}
+{{- define "loopzero-common.ingressRoute" -}}
+{{- $ir := .Values.ingressRoute | default dict -}}
+{{- if $ir.enabled }}
+{{- if not $ir.host }}
+{{- fail (printf "%s: ingressRoute.host is required when ingressRoute.enabled is true" .Chart.Name) }}
+{{- end }}
+{{- $name := include "loopzero-common.fullname" . }}
+{{- $cfManaged := eq ($ir.certIssuer | default "CFManaged") "CFManaged" }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    {{- toYaml ($ir.entryPoints | default (list "websecure")) | nindent 4 }}
+  routes:
+    - match: Host(`{{ $ir.host }}`)
+      kind: Rule
+      {{- with $ir.middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ $name }}
+          port: {{ .Values.service.port }}
+  tls:
+    {{- if $cfManaged }}
+    {}
+    {{- else }}
+    secretName: {{ $name }}-tls
+    {{- end }}
+{{- if not $cfManaged }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $name }}-tls
+  labels:
+    {{- include "loopzero-common.labels" . | nindent 4 }}
+spec:
+  secretName: {{ $name }}-tls
+  duration: 2160h     # 90d
+  renewBefore: 360h   # 15d
+  commonName: {{ $ir.host }}
+  dnsNames:
+    - {{ $ir.host }}
+  issuerRef:
+    name: {{ $ir.certIssuer | quote }}
+    kind: ClusterIssuer
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+----------------------------------------------------------------------
 TMP VOLUME (charts-sota T2.6 — readOnlyRootFilesystem compat)
 ----------------------------------------------------------------------
 */}}
@@ -471,7 +587,7 @@ And in deployment.spec.template.spec.volumes:
 {{- define "loopzero-common.tmpVolume" -}}
 - name: tmp
   emptyDir:
-    sizeLimit: {{ .Values.tmpVolume.sizeLimit | default "64Mi" }}
+    sizeLimit: {{ (.Values.tmpVolume | default dict).sizeLimit | default "64Mi" }}
 {{- end -}}
 
 {{/*
@@ -509,10 +625,24 @@ spec:
     {{- if .Values.networkPolicy.extraEgress }}
     {{- toYaml .Values.networkPolicy.extraEgress | nindent 4 }}
     {{- end }}
+    {{- /* The namespace the platform's Gitea runs in. core.helmfile installs Gitea
+           and tells each consumer where (networkPolicy.giteaNamespace), so the
+           egress rule follows the install instead of every environment
+           restating the whole extraEgress list to change one namespace. */}}
+    {{- with .Values.networkPolicy.giteaNamespace }}
+    - ports:
+        - protocol: TCP
+          port: 3000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+    {{- end }}
     {{- /* T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
            When the consuming chart declares dataPlanePoller.enabled=true,
            implicitly add the Prometheus egress rule the poller needs so
-           the operator does not need to duplicate it in every values file.
+           no values file has to duplicate it. loopzero-api is the one chart
+           that declares it (the poller moved there from loopzero-app-operator).
            `and` short-circuits on charts that do not declare
            .Values.dataPlanePoller at all — no leakage. */}}
     {{- if and .Values.dataPlanePoller .Values.dataPlanePoller.enabled }}
@@ -531,5 +661,136 @@ spec:
   ingress:
     {{- toYaml .Values.networkPolicy.ingress | nindent 4 }}
   {{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+----------------------------------------------------------------------
+OPERATOR DEPLOYMENT (template method — one skeleton, four operators)
+----------------------------------------------------------------------
+*/}}
+
+{{/*
+The Deployment every loopzero-*-operator chart renders. The four charts used to carry
+near-identical copies of this file that differed in three places only; those
+three places are the hooks:
+
+  checksum      the name of the checksum-annotations helper to include
+                ("loopzero-common.checksumAnnotations" when the chart ships a Secret
+                template, "loopzero-common.checksumAnnotationsConfigOnly" when not)
+  envFrom       extra envFrom entries after the chart ConfigMap (YAML list, may be "")
+  env           env entries (YAML list, may be "")
+  volumeMounts  extra volumeMounts after /tmp (YAML list, may be "")
+  volumes       extra volumes after tmp (YAML list, may be "")
+
+Usage (templates/deployment.yaml of an operator chart):
+  {{- include "loopzero-common.operatorDeployment" (dict
+        "root" .
+        "checksum" "loopzero-common.checksumAnnotations"
+        "envFrom" (include "loopzero-tenant-operator.envFrom" .)
+        "env" (include "loopzero-tenant-operator.env" .)
+        "volumeMounts" (include "loopzero-tenant-operator.volumeMounts" .)
+        "volumes" (include "loopzero-tenant-operator.volumes" .)) }}
+*/}}
+{{- define "loopzero-common.operatorDeployment" -}}
+{{- $hooks := . -}}
+{{- with .root -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "loopzero-common.fullname" . }}
+  labels:
+    {{- include "loopzero-common.operatorLabels" . | nindent 4 }}
+  {{- if .Values.reloader.enabled }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 3 }}
+  selector:
+    matchLabels:
+      {{- include "loopzero-common.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include $hooks.checksum . | nindent 8 }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "loopzero-common.selectorLabels" . | nindent 8 }}
+        loopzero.io/component: control-plane
+        app.kubernetes.io/component: loopzero-operator
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with (include "loopzero-common.imagePullSecrets" .) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      serviceAccountName: {{ include "loopzero-common.serviceAccountName" . }}
+      automountServiceAccountToken: {{ include "loopzero-common.automountServiceAccountToken" . }}
+      securityContext:
+        {{- include "loopzero-common.podSecurityContext" . | nindent 8 }}
+      {{- include "loopzero-common.priorityClassName" . | nindent 6 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "loopzero-common.affinity" . | nindent 6 }}
+      {{- include "loopzero-common.topologySpreadConstraints" . | nindent 6 }}
+      containers:
+        - name: controller
+          image: {{ include "loopzero-common.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - "--leader-elect={{ .Values.args.leaderElect }}"
+            - "--health-probe-bind-address={{ .Values.args.healthProbeBindAddress }}"
+            - "--metrics-bind-address={{ .Values.args.metricsBindAddress }}"
+          securityContext:
+            {{- include "loopzero-common.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+            - name: metrics
+              containerPort: 8443
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "loopzero-common.fullname" . }}
+            {{- with trim $hooks.envFrom }}
+            {{- . | nindent 12 }}
+            {{- end }}
+          {{- with trim $hooks.env }}
+          env:
+            {{- . | nindent 12 }}
+          {{- end }}
+          {{- include "loopzero-common.startupProbe" . | nindent 10 }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "loopzero-common.tmpVolumeMount" . | nindent 12 }}
+            {{- with trim $hooks.volumeMounts }}
+            {{- . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- include "loopzero-common.tmpVolume" . | nindent 8 }}
+        {{- with trim $hooks.volumes }}
+        {{- . | nindent 8 }}
+        {{- end }}
 {{- end }}
 {{- end }}

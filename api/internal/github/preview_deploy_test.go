@@ -8,8 +8,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-
 	"github.com/getloopscale/loopzero/api/internal/github/webhook"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 )
@@ -45,11 +43,11 @@ func (f *fakePreviewSvc) DeletePreviewByPR(_ context.Context, tenantID, projectI
 }
 
 type fakeRepoLookup struct {
-	repos    map[string]*store.ProjectRepository
+	repos    map[string]*ConnectedRepo
 	queryErr error
 }
 
-func (f *fakeRepoLookup) GetByRepo(_ context.Context, name string) (*store.ProjectRepository, error) {
+func (f *fakeRepoLookup) GetByRepo(_ context.Context, name string) (*ConnectedRepo, error) {
 	if f.queryErr != nil {
 		return nil, f.queryErr
 	}
@@ -75,14 +73,12 @@ func newPREvent(action string, prNumber int, branch, sha, repoName string) webho
 	return e
 }
 
-func newConnectedRepo(repoName, tenantID, projectName string, autoDeploy bool) map[string]*store.ProjectRepository {
-	return map[string]*store.ProjectRepository{
+func newConnectedRepo(repoName, tenantID, projectName string, autoDeploy bool) map[string]*ConnectedRepo {
+	return map[string]*ConnectedRepo{
 		repoName: {
-			ID:           "repo-x",
-			TenantID:     tenantID,
-			ProjectName:  projectName,
-			RepoFullName: repoName,
-			AutoDeploy:   autoDeploy,
+			TenantID:    tenantID,
+			ProjectName: projectName,
+			AutoDeploy:  autoDeploy,
 		},
 	}
 }
@@ -96,7 +92,7 @@ func TestPreviewDeployer_HandlePR_Opened_TriggersCreate(t *testing.T) {
 	repos := &fakeRepoLookup{repos: newConnectedRepo("acme/api", "tn-1", "api", true)}
 	d := NewPreviewDeployer(svc, repos, nil)
 
-	if err := d.HandlePR(newPREvent("opened", 42, "feat/x", "deadbeef1234", "acme/api")); err != nil {
+	if err := d.HandlePR(context.Background(), newPREvent("opened", 42, "feat/x", "deadbeef1234", "acme/api")); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	if len(svc.createCalls) != 1 {
@@ -120,7 +116,7 @@ func TestPreviewDeployer_HandlePR_Synchronize_TriggersCreate(t *testing.T) {
 	repos := &fakeRepoLookup{repos: newConnectedRepo("acme/api", "tn-1", "api", true)}
 	d := NewPreviewDeployer(svc, repos, nil)
 
-	if err := d.HandlePR(newPREvent("synchronize", 42, "feat/x", "newcommitabc", "acme/api")); err != nil {
+	if err := d.HandlePR(context.Background(), newPREvent("synchronize", 42, "feat/x", "newcommitabc", "acme/api")); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	if len(svc.createCalls) != 1 {
@@ -136,7 +132,7 @@ func TestPreviewDeployer_HandlePR_Reopened_TriggersCreate(t *testing.T) {
 	repos := &fakeRepoLookup{repos: newConnectedRepo("acme/api", "tn-1", "api", true)}
 	d := NewPreviewDeployer(svc, repos, nil)
 
-	if err := d.HandlePR(newPREvent("reopened", 7, "feat/x", "abc", "acme/api")); err != nil {
+	if err := d.HandlePR(context.Background(), newPREvent("reopened", 7, "feat/x", "abc", "acme/api")); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	if len(svc.createCalls) != 1 {
@@ -149,7 +145,7 @@ func TestPreviewDeployer_HandlePR_Closed_TriggersDelete(t *testing.T) {
 	repos := &fakeRepoLookup{repos: newConnectedRepo("acme/api", "tn-1", "api", true)}
 	d := NewPreviewDeployer(svc, repos, nil)
 
-	if err := d.HandlePR(newPREvent("closed", 42, "", "", "acme/api")); err != nil {
+	if err := d.HandlePR(context.Background(), newPREvent("closed", 42, "", "", "acme/api")); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	if len(svc.deleteCalls) != 1 {
@@ -169,7 +165,7 @@ func TestPreviewDeployer_HandlePR_ClosedMerged_StillDeletes(t *testing.T) {
 
 	event := newPREvent("closed", 42, "", "", "acme/api")
 	event.PullRequest.Merged = true
-	if err := d.HandlePR(event); err != nil {
+	if err := d.HandlePR(context.Background(), event); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	if len(svc.deleteCalls) != 1 {
@@ -186,7 +182,7 @@ func TestPreviewDeployer_HandlePR_AutoDeployDisabled_NoOp(t *testing.T) {
 	repos := &fakeRepoLookup{repos: newConnectedRepo("acme/api", "tn-1", "api", false)}
 	d := NewPreviewDeployer(svc, repos, nil)
 
-	if err := d.HandlePR(newPREvent("opened", 1, "x", "y", "acme/api")); err != nil {
+	if err := d.HandlePR(context.Background(), newPREvent("opened", 1, "x", "y", "acme/api")); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	if len(svc.createCalls) != 0 {
@@ -196,10 +192,10 @@ func TestPreviewDeployer_HandlePR_AutoDeployDisabled_NoOp(t *testing.T) {
 
 func TestPreviewDeployer_HandlePR_UnknownRepo_NoOp(t *testing.T) {
 	svc := &fakePreviewSvc{}
-	repos := &fakeRepoLookup{repos: map[string]*store.ProjectRepository{}} // empty
+	repos := &fakeRepoLookup{repos: map[string]*ConnectedRepo{}} // empty
 	d := NewPreviewDeployer(svc, repos, nil)
 
-	if err := d.HandlePR(newPREvent("opened", 1, "x", "y", "unknown/repo")); err != nil {
+	if err := d.HandlePR(context.Background(), newPREvent("opened", 1, "x", "y", "unknown/repo")); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	if len(svc.createCalls) != 0 {
@@ -207,14 +203,15 @@ func TestPreviewDeployer_HandlePR_UnknownRepo_NoOp(t *testing.T) {
 	}
 }
 
-func TestPreviewDeployer_HandlePR_RepoStoreError_NoOp(t *testing.T) {
+func TestPreviewDeployer_HandlePR_RepoStoreError_ReturnsErrorWithoutCreating(t *testing.T) {
 	svc := &fakePreviewSvc{}
 	repos := &fakeRepoLookup{queryErr: errors.New("db down")}
 	d := NewPreviewDeployer(svc, repos, nil)
 
-	// Repo lookup error should not crash or propagate to GitHub.
-	if err := d.HandlePR(newPREvent("opened", 1, "x", "y", "acme/api")); err != nil {
-		t.Fatalf("unexpected: %v", err)
+	// A lookup failure is not "repo not connected": it must surface, so a lost
+	// preview is visible instead of reading as an ignored event.
+	if err := d.HandlePR(context.Background(), newPREvent("opened", 1, "x", "y", "acme/api")); err == nil {
+		t.Fatal("HandlePR returned nil although the repository lookup failed")
 	}
 	if len(svc.createCalls) != 0 {
 		t.Errorf("repo error should skip, got %d calls", len(svc.createCalls))
@@ -227,7 +224,7 @@ func TestPreviewDeployer_HandlePR_UnknownAction_NoOp(t *testing.T) {
 	d := NewPreviewDeployer(svc, repos, nil)
 
 	for _, action := range []string{"labeled", "assigned", "unassigned", "edited", "review_requested", "ready_for_review"} {
-		if err := d.HandlePR(newPREvent(action, 1, "x", "y", "acme/api")); err != nil {
+		if err := d.HandlePR(context.Background(), newPREvent(action, 1, "x", "y", "acme/api")); err != nil {
 			t.Errorf("action %q unexpected error: %v", action, err)
 		}
 	}
@@ -243,11 +240,11 @@ func TestPreviewDeployer_HandlePR_OpenedMissingBranch_NoOp(t *testing.T) {
 	d := NewPreviewDeployer(svc, repos, nil)
 
 	// Branch present, commit empty → skip
-	if err := d.HandlePR(newPREvent("opened", 1, "feat", "", "acme/api")); err != nil {
+	if err := d.HandlePR(context.Background(), newPREvent("opened", 1, "feat", "", "acme/api")); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	// Branch empty, commit present → skip
-	if err := d.HandlePR(newPREvent("opened", 1, "", "abc", "acme/api")); err != nil {
+	if err := d.HandlePR(context.Background(), newPREvent("opened", 1, "", "abc", "acme/api")); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	if len(svc.createCalls) != 0 {
@@ -264,7 +261,7 @@ func TestPreviewDeployer_HandlePR_CreateError_Propagates(t *testing.T) {
 	repos := &fakeRepoLookup{repos: newConnectedRepo("acme/api", "tn-1", "api", true)}
 	d := NewPreviewDeployer(svc, repos, nil)
 
-	err := d.HandlePR(newPREvent("opened", 1, "x", "y", "acme/api"))
+	err := d.HandlePR(context.Background(), newPREvent("opened", 1, "x", "y", "acme/api"))
 	if err == nil {
 		t.Fatal("expected error when service create fails")
 	}
@@ -275,7 +272,7 @@ func TestPreviewDeployer_HandlePR_DeleteError_Propagates(t *testing.T) {
 	repos := &fakeRepoLookup{repos: newConnectedRepo("acme/api", "tn-1", "api", true)}
 	d := NewPreviewDeployer(svc, repos, nil)
 
-	err := d.HandlePR(newPREvent("closed", 1, "", "", "acme/api"))
+	err := d.HandlePR(context.Background(), newPREvent("closed", 1, "", "", "acme/api"))
 	if err == nil {
 		t.Fatal("expected error when service delete fails")
 	}
@@ -294,7 +291,7 @@ func TestPreviewDeployer_Construction_NilLogger_DefaultsToSlogDefault(t *testing
 
 func TestPreviewDeployer_NoServiceWired_NoOp(t *testing.T) {
 	d := NewPreviewDeployer(nil, &fakeRepoLookup{repos: newConnectedRepo("acme/api", "tn-1", "api", true)}, nil)
-	if err := d.HandlePR(newPREvent("opened", 1, "x", "y", "acme/api")); err != nil {
+	if err := d.HandlePR(context.Background(), newPREvent("opened", 1, "x", "y", "acme/api")); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 }

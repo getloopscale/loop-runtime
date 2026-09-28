@@ -64,10 +64,6 @@ type PlatformBootstrapSpec struct {
 	// API configures the API bootstrap endpoint for DB seeding.
 	API APIBootstrapSpec `json:"api"`
 
-	// Timeouts configures per-phase timeouts in seconds.
-	// +optional
-	Timeouts BootstrapTimeouts `json:"timeouts,omitempty"`
-
 	// MaxRetries is the maximum number of retries per phase before transitioning to Failed.
 	// +kubebuilder:default=10
 	// +optional
@@ -97,7 +93,7 @@ type GiteaBootstrapSpec struct {
 
 	// InternalURL is the cluster-internal URL for Gitea HTTP API.
 	// SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
-	// +kubebuilder:default="http://gitea-http.gitea.svc.cluster.local:3000"
+	// +kubebuilder:default="http://gitea-http.loopzero-system.svc.cluster.local:3000"
 	// +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`
 	// +optional
 	InternalURL string `json:"internalURL,omitempty"`
@@ -115,11 +111,6 @@ type ArgoCDBootstrapSpec struct {
 	// +kubebuilder:default="argocd-initial-admin-secret"
 	// +optional
 	AdminSecretName string `json:"adminSecretName,omitempty"`
-
-	// TokenTTLSeconds is the TTL for the generated ArgoCD JWT.
-	// +kubebuilder:default=7776000
-	// +optional
-	TokenTTLSeconds int64 `json:"tokenTTLSeconds,omitempty"`
 
 	// RepoCredentials defines the repo credential secrets to create for ArgoCD.
 	// +optional
@@ -164,29 +155,6 @@ type APIBootstrapSpec struct {
 	// B1: Without this, callBootstrapEndpoint fails 401 when SEC-003 is enabled.
 	// +optional
 	BootstrapSecretRef *SecretKeyRef `json:"bootstrapSecretRef,omitempty"`
-}
-
-// BootstrapTimeouts configures per-phase timeouts.
-type BootstrapTimeouts struct {
-	// GiteaReadySeconds is how long to wait for Gitea to be reachable.
-	// +kubebuilder:default=120
-	// +optional
-	GiteaReadySeconds int `json:"giteaReadySeconds,omitempty"`
-
-	// ArgoCDReadySeconds is how long to wait for ArgoCD to be reachable.
-	// +kubebuilder:default=120
-	// +optional
-	ArgoCDReadySeconds int `json:"argoCDReadySeconds,omitempty"`
-
-	// APIReadySeconds is how long to wait for the API to be healthy.
-	// +kubebuilder:default=120
-	// +optional
-	APIReadySeconds int `json:"apiReadySeconds,omitempty"`
-
-	// TotalBootstrapSeconds is the overall timeout for the entire bootstrap process.
-	// +kubebuilder:default=600
-	// +optional
-	TotalBootstrapSeconds int `json:"totalBootstrapSeconds,omitempty"`
 }
 
 // SecretKeyRef references a Kubernetes Secret.

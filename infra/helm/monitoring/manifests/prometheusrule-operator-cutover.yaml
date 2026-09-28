@@ -1,15 +1,11 @@
-# CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C15.
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C6.
 # Source: docs/decisions.md
 #
-# 24h post-cutover restart watcher. Alerts if any of the 4 split
-# operator deployments restarts > 5 times in a 24h window after the
-# topology cutover. Fires during the post-cutover soak (Step 5 of
-# operator-cutover-runbook.md), pages SRE on-call.
-#
-# This is the "blocks T2.5 deferred chart cleanup" gate (condition C15
-# spec): the monolith chart files MUST stay in tree until 30 days of
-# silence on this alert. Removing them earlier removes the rollback
-# escape hatch and breaks operator-cutover-rollback.sh.
+# Zero-Ready watcher for the four split operator deployments. It was written
+# for the topology cutover, and it is kept after the cutover because zero
+# ready reconcilers is a condition that does not expire with it: the two
+# post-cutover soak watchers that shared this file were retired in 49b52c0a5
+# as closed-window alerts, this one was not.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -48,7 +44,6 @@ spec:
               reconcilers run > 30s. This alert is the executable
               version of that invariant.
 
-              If during cutover: rollback IMMEDIATELY via
-              `bash infra/scripts/operator-cutover-rollback.sh <ctx>`.
-              If outside cutover: investigate as a routine OOM /
-              CrashLoop; same severity but different urgency.
+              Investigate as an OOM / CrashLoop of that operator:
+              `kubectl -n loopzero-system describe deploy {{ $labels.deployment }}`
+              and the previous container's logs.

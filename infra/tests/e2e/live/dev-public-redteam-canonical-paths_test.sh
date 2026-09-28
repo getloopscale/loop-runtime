@@ -13,7 +13,7 @@
 #       `/self-service/registration?flow=<id>` (browser flow). NEW and
 #       EXISTING (admin@loopzero.example) MUST return IDENTICAL status + body.
 #
-# Per `.claude/rules/cleanroom-up-live-test-mandate.md` INQUEBRÁVEL +
+# Per `.claude/rules/cleanroom-up-live-test-mandate.md` UNBREAKABLE +
 # `feedback_always_rebuild_push_rollout_for_red_team_2026_06_27`: this is
 # operator HARD STOP; Red Team can rerun it against dev-public to validate
 # the canonical-path closure.

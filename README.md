@@ -489,8 +489,8 @@ loopzero admin tenants pin --tenant X --cell Y    (operator override only)
 | Placement engine | `api/internal/placement/engine.go` | Bin-packing least-loaded; sticky reads |
 | Router cache | `api/internal/placement/dynamic_router.go` | Hash lookup `cellID -> CellConfig` |
 | Cell store | `api/internal/placement/k8s_cell_store.go` | Polls ClusterCredential CRs every 60s by `spec.cellID` |
-| Operator pin | `api/internal/services/placement/cell_pinner.go` | DB UPDATE + Tenant CR MergePatch |
-| Self-healing | `infra/scripts/local/k3d-cross-cluster-heal.sh` (H12+H13) | Auto-recovers cell-0 missing CC + cell-0 SA token rotation |
+| Operator pin | `api/internal/placement/cell_pinner.go` | DB UPDATE + Tenant CR MergePatch |
+| Self-healing | `infra/scripts/local/k3d-cross-cluster-heal.sh` (H12) | Re-bootstraps a missing or disconnected cell ClusterCredential (cell-0, cell-1) |
 
 **No automatic rebalancing.** Tenant assignment is sticky to preserve DNS continuity, ESO/MinIO state affinity, and ArgoCD App/Project bindings. Cell drain (`cells.status='draining'`) is operator-driven via `loopzero admin tenants pin --to cell-novo`. See ADR-0008 + ADR-0021 D3.
 
@@ -526,11 +526,15 @@ loopzero deploy (or git push)
 | Edge | Cloudflare Tunnel + Worker + KV + Zone Management |
 | Static assets | DigitalOcean Spaces + CDN |
 | Monitoring | Prometheus + Grafana + Loki + Tempo + OpenTelemetry |
-| IaC — L1 cloud primitives | **Being re-platformed DigitalOcean/Pulumi → AWS/Terraform** per the 2026-06-17 CTO mandate. Target: `../loopzero-infra-modules` (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units). The 5 Pulumi projects under `infra/` are **AS-IS legacy, live until the AM8 cutover** — do not add new Pulumi for target infra. |
+| IaC — L1 cloud primitives | **Being re-platformed DigitalOcean/Pulumi → AWS/Terraform** per the 2026-06-17 CTO mandate (`../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`). Target: `../loopzero-infra-modules` (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units). The 5 Pulumi projects under `infra/` are **AS-IS legacy** — do not add new Pulumi for target infra. |
 | IaC — L2 platform workloads | Helmfile v1.0+ (`infra/helmfile/`) — the source of truth for platform releases, **not** Pulumi |
 | IaC — L3 tenant Day-2 | ArgoCD (manual sync, from Gitea) |
 | CI/CD | 5 workflows in `.github/workflows/` (`build-publish`, `ci`, `delivery-gate-armed`, `release-artifacts`, `workflow-hygiene`). Actions was retired as the pipeline 2026-05-23; gates run via `task quality:*` |
 | Helm charts | 43 bootstrap (`infra/helm/`) + 12 published (`charts/`) |
+
+**The L1 schedule.** The Pulumi projects stay live until the AM9 cutover and are retired at
+AM10, per the ADR cited in the row above. The prohibition on adding to them is separate and
+unconditional: it carries no date and has been in force since the mandate.
 
 ### Edge Proxy vs Cluster Ingress (Caddy ↔ Traefik)
 
@@ -554,22 +558,22 @@ flow** (the canonical separation of concerns: AWS ALB + NGINX Ingress, Cloudflar
 
 ```
 Browser
-  ↓ DNS (Cloudflare: pr1-teste.preview-dev.loopzero.example → host IP)
+  ↓ DNS (Cloudflare: pr1-sample.preview-dev.loopzero.example → host IP)
   ↓
 Host machine, port 443
   ↓
 Caddy
   ├─ TLS termination (Let's Encrypt, automatic)
-  ├─ Block match: pr1-teste.preview-dev.loopzero.example
+  ├─ Block match: pr1-sample.preview-dev.loopzero.example
   └─ reverse_proxy https://172.18.0.10:443
-       header_up Host tn-...-teste-api-preview-pr-1.loopzero.local
+       header_up Host tn-...-sample-api-preview-pr-1.loopzero.local
   ↓
 Workload cluster Traefik LoadBalancer (172.18.0.10:443)
   ↓
 Traefik IngressRoute (in the preview namespace)
-  └─ match: Host(`tn-...-teste-api-preview-pr-1.loopzero.local`)
+  └─ match: Host(`tn-...-sample-api-preview-pr-1.loopzero.local`)
   ↓
-K8s Service teste-api-stable / teste-api-canary
+K8s Service sample-api-stable / sample-api-canary
   ↓
 Rollout Pod
   ↓
@@ -600,7 +604,7 @@ groups it. **Classifying a tool as adopted or missing from memory is forbidden**
 |--------|--------|
 | Identity / Auth | `ory-kratos`, `ory-hydra`, `redis` |
 | Secrets | `openbao-cert`, `openbao-init`, `openbao-snapshot-agent`, `external-secrets`, `loopzero-external-secrets` |
-| Build pipeline | `argo-workflows`, `argo-events`, `argo-events-bus`, `argo-ci-namespace`, `loopzero-ci-workflows`, `harbor` (auxiliary registry; prod uses DOCR) |
+| Build pipeline | `argo-workflows`, `argo-events`, `argo-events-bus`, `argo-ci-namespace`, `loopzero-ci-workflows` |
 | GitOps | `argocd`, `gitea` |
 | Progressive delivery | `argo-rollouts`, `keda`, `keda-http-addon` |
 | Ingress / TLS | `traefik`, `cert-manager`, `cluster-issuer`, `cloudflared` |
@@ -654,7 +658,7 @@ Build it first with `task quality:build`, then `/tmp/loopzero-ops quality --list
 | **kubeconform** | `task validate:manifests` | K8s manifest schema validation (`--strict`) |
 | **golangci-lint v2.11+** | `task lint` (all 9 workspace modules, with a per-module ratchet) | Go static analysis |
 | **helmfile template + kubeconform** | `task validate:helmfile-templates` · `task validate:matrix` | Renders every release and schema-checks the output |
-| **helm-diff / helm-drift** | `loopzero-ops quality helm-diff-structural` · `helm-drift` — **registered but not wired** into any task (`--list` shows `-`) | Structural pre-sync diff; rendered-vs-deployed drift |
+| **helm-diff** | `loopzero-ops quality helm-diff-structural` — **registered but not wired** into any task (`--list` shows `-`) | Structural pre-sync diff |
 | **chart-testing (ct) / helm-chartsnap** | `ct.yaml` + `.chart-testing/` config retained; **no runner wired** | Chart lint / install test / output-drift snapshots |
 | **Polaris (Fairwinds)** | `.polaris.yaml` retained; **no runner wired** (`run-polaris.sh` no longer exists) | K8s best-practices linter |
 | **Renovate** | `.github/renovate.json` | Dependency mgmt with `pinDigests: true` (INF-G18 SHA pinning), weekly grouped PRs |
@@ -723,7 +727,7 @@ cd operators     && go test ./...   # Operators (Ginkgo + envtest)
 cd cmd/loopzero-ops  && go test ./...   # Ops + quality binary
 
 # One package / one test
-cd api && go test ./internal/services/... -run TestScalingResolver -v
+cd api && go test ./internal/scaling/... -run TestResolve -v
 
 # One Ginkgo spec. `go test -timeout` alone does NOT raise Ginkgo's own 60min
 # suite timeout — pass -ginkgo.timeout too, or deploy-heavy suites hit TIMEDOUT:

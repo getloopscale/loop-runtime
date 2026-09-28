@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // mockVault implements VaultTransitClient for unit tests.
@@ -82,7 +84,7 @@ func TestEncryptForStore_RoutesToVaultWhenSet(t *testing.T) {
 // T10.5: the AES write fallback this used to assert was deleted by T10.3.
 // Its replacement is
 // TestEncryptForStore_ProducesOnlyTransitCiphertextOrRefuses in
-// secret_wrapper_t103_write_path_test.go, which asserts the refusal that
+// secret_wrapper_write_path_test.go, which asserts the refusal that
 // took its place — including the crypto_mode=plaintext case this test
 // never covered, where the write path returned the secret unchanged.
 
@@ -98,60 +100,44 @@ func TestEncryptForStore_PropagatesVaultError(t *testing.T) {
 	}
 }
 
-// TestEncryptForStore_PassthroughWhenVaultPrefixPresent — T2.5 of plan
-// 2026-06-10-j22-openbao-transit-eso-sync v1.2. The Bulk handler
-// pre-encrypts via h.transitClient.Encrypt (T2.3 contract); when the
-// store ALSO has s.vault wired (canonical production), encrypting again
-// here would produce a vault:v1: envelope around an already-vault:v1:
-// payload — DOUBLE ENCRYPT — and reads would unwrap only the outer
-// layer, surfacing the inner string as "plaintext". The pass-through
-// defense detects the vault:v1: prefix on input and returns the bytes
-// unchanged, so the row carries canonical single-encrypt ciphertext.
-//
-// Sub-assertions:
-//   - returned bytes are byte-identical to input (no transformation)
-//   - mockVault.encryptCalls did NOT increment (no second-trip to OpenBao)
-func TestEncryptForStore_PassthroughWhenVaultPrefixPresent(t *testing.T) {
-	mv := &mockVault{}
-	s := &PostgresSecretStore{vault: mv}
-
-	// Simulate the Bulk-handler-encrypted payload that Set receives:
-	// the canonical OpenBao Transit shape, "vault:v1:" + opaque body.
-	preEncrypted := []byte("vault:v1:Hk3KcRTjpUz7n8xQ-already-encrypted")
-	got, err := s.encryptForStore(context.Background(), "tenant-A", preEncrypted)
-	if err != nil {
-		t.Fatalf("encryptForStore: %v", err)
-	}
-	if string(got) != string(preEncrypted) {
-		t.Errorf("encryptForStore mutated pre-encrypted input: want %q, got %q", preEncrypted, got)
-	}
-	if mv.encryptCalls != 0 {
-		t.Errorf("encryptForStore double-encrypted: vault was called %d times, want 0", mv.encryptCalls)
-	}
-}
-
-// TestEncryptForStore_PassthroughWhenNoVaultButPrefixPresent — defense
-// in depth: even when s.vault is nil, an input that already carries the
-// vault:v1: prefix MUST NOT be AES-encrypted on top. Such a payload
-// belongs to a previous canonical write (e.g., re-import workflow); the
-// store stays neutral and the read-path dispatcher handles decryption.
-func TestEncryptForStore_PassthroughWhenNoVaultButPrefixPresent(t *testing.T) {
+// A user value is data, never a format marker. A value that happens to start
+// with "vault:v1:" must not bypass the write refusal on a store with no transit
+// client: that would persist the user's bytes unencrypted on a deployment that
+// is supposed to refuse every write.
+func TestEncryptForStore_RefusesCiphertextLookingValueWhenNoVault(t *testing.T) {
 	key := make([]byte, 32)
-	for i := range key {
-		key[i] = byte(i)
-	}
 	s, err := NewPostgresSecretStore(nil, key)
 	if err != nil {
 		t.Fatalf("NewPostgresSecretStore: %v", err)
 	}
 
-	preEncrypted := []byte("vault:v1:Hk3KcRTjpUz7n8xQ-already-encrypted")
-	got, err := s.encryptForStore(context.Background(), "tenant-A", preEncrypted)
+	_, err = s.encryptForStore(context.Background(), "tenant-A", []byte("vault:v1:user-typed-this"))
+	if !errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+		t.Fatalf("a store without transit must refuse every write; got %v", err)
+	}
+}
+
+// With transit wired, a value that looks like ciphertext is still the user's
+// plaintext and is encrypted like any other — reading it back returns exactly
+// what was written.
+func TestEncryptForStore_EncryptsCiphertextLookingValueWithVault(t *testing.T) {
+	mv := &mockVault{}
+	s := &PostgresSecretStore{vault: mv}
+
+	value := []byte("vault:v1:user-typed-this")
+	got, err := s.encryptForStore(context.Background(), "tenant-A", value)
 	if err != nil {
 		t.Fatalf("encryptForStore: %v", err)
 	}
-	if string(got) != string(preEncrypted) {
-		t.Errorf("encryptForStore AES-wrapped vault:v1: input: want %q, got %q", preEncrypted, got)
+	if mv.encryptCalls != 1 {
+		t.Fatalf("the value must go through transit; encrypt calls = %d", mv.encryptCalls)
+	}
+	back, err := s.decryptFromStore(context.Background(), "tenant-A", got)
+	if err != nil {
+		t.Fatalf("decryptFromStore: %v", err)
+	}
+	if string(back) != string(value) {
+		t.Errorf("round trip: got %q, want %q", back, value)
 	}
 }
 
@@ -227,41 +213,29 @@ func TestDecryptFromStore_PropagatesVaultError(t *testing.T) {
 	}
 }
 
-func TestDecryptFromStore_NoVaultClientFallsBackToAES(t *testing.T) {
-	// When vault == nil and ciphertext starts with vault prefix, still route
-	// to AES (which will likely fail decrypt but not panic).
+// A transit row read by a store with no transit client cannot be opened. It
+// must fail as an unavailable backend, not be fed to the AES path as if it were
+// a legacy blob.
+func TestDecryptFromStore_TransitRowWithoutVaultIsBackendUnavailable(t *testing.T) {
 	key := make([]byte, 32)
-	for i := range key {
-		key[i] = byte(i)
-	}
 	s, err := NewPostgresSecretStore(nil, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// vault prefix bytes will look like junk to AES → error, not panic
 	_, err = s.decryptFromStore(context.Background(), "tenant-A", []byte("vault:v1:would-be-vault"))
-	if err == nil {
-		t.Error("expected AES decrypt error for non-AES ciphertext, got nil")
+	if !errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+		t.Fatalf("want ErrSecretsBackendUnavailable, got %v", err)
 	}
 }
 
-func TestBytesHasPrefix(t *testing.T) {
-	cases := []struct {
-		b, prefix []byte
-		want      bool
-	}{
-		{[]byte("vault:v1:abc"), []byte("vault:v1:"), true},
-		{[]byte("vault:v1"), []byte("vault:v1:"), false}, // shorter than prefix
-		{[]byte("other:v1:abc"), []byte("vault:v1:"), false},
-		{[]byte("vault:v1:"), []byte("vault:v1:"), true}, // exact match
-		{[]byte{}, []byte("vault:v1:"), false},
-		{[]byte("vault:v1:"), []byte{}, true}, // empty prefix matches anything
-	}
-	for i, c := range cases {
-		got := bytesHasPrefix(c.b, c.prefix)
-		if got != c.want {
-			t.Errorf("case %d: bytesHasPrefix(%q, %q) = %v, want %v", i, c.b, c.prefix, got, c.want)
-		}
+// With neither a transit client nor a legacy AES key, a stored row has no key
+// that can open it. Returning the stored bytes as the "plaintext" would hand
+// ciphertext to the resync path as the secret value; it must fail instead.
+func TestDecryptFromStore_NoKeyAndNoVaultIsBackendUnavailable(t *testing.T) {
+	s := &PostgresSecretStore{}
+	got, err := s.decryptFromStore(context.Background(), "tenant-A", []byte("stored-bytes"))
+	if !errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+		t.Fatalf("want ErrSecretsBackendUnavailable, got value %q err %v", got, err)
 	}
 }
 

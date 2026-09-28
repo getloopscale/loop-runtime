@@ -120,8 +120,6 @@ func TestBackupRestore_AllSecretsPresent(t *testing.T) {
 		"loopzero-db-credentials",
 		"gitea-admin",
 		"minio-credentials",
-		"harbor-admin",
-		"harbor-redis-credentials",
 		"loopzero-registry-pull",
 	}
 	for _, name := range expected {

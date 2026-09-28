@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,6 +25,9 @@ type Outcome struct {
 	Pass    bool
 	Message string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Check asserts that primary.pdb.create is explicitly false in the given
 // postgresql values.yaml. Faithful to the original: pdb missing, create absent,

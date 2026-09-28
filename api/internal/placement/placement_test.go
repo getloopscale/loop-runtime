@@ -6,6 +6,7 @@ package placement
 import (
 	"context"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -89,8 +90,13 @@ func TestPassthroughRouter_ListCells(t *testing.T) {
 // --- RoundRobinEngine tests ---
 
 type fakeQuerier struct {
-	counts  map[string]int
-	cellIDs map[string]string
+	counts     map[string]int
+	cellIDs    map[string]string
+	capacities map[string]int
+}
+
+func (f *fakeQuerier) CapacityByCell(_ context.Context) (map[string]int, error) {
+	return f.capacities, nil
 }
 
 func (f *fakeQuerier) CountByCell(_ context.Context) (map[string]int, error) {
@@ -321,6 +327,10 @@ func TestStaticRouter_RejectsEmptyList(t *testing.T) {
 // see the same snapshot and all assign to the same cell. When an
 // AssignCell completes, the test code records the pick into this querier
 // so the NEXT caller (serialized or otherwise) observes the updated count.
+
+func (r *raceQuerier) CapacityByCell(_ context.Context) (map[string]int, error) {
+	return map[string]int{}, nil
+}
 
 type raceQuerier struct {
 	mu       sync.Mutex
@@ -848,7 +858,7 @@ func TestNewAdvisoryLockSerializer_NilPool_ReturnsNil(t *testing.T) {
 // --- TxFromContext ---
 
 func TestTxFromContext_NoTx_ReturnsNil(t *testing.T) {
-	tx := TxFromContext(context.Background())
+	tx := dbtx.TxFromContext(context.Background())
 	if tx != nil {
 		t.Error("expected nil tx from context without tx")
 	}
@@ -983,5 +993,11 @@ func TestDynamicRouter_Resolve_DeterministicConcurrent(t *testing.T) {
 	if drifts.Load() != 0 {
 		t.Fatalf("expected 0 drifts (deterministic) across %d concurrent calls, got %d",
 			goroutines*callsPerG, drifts.Load())
+	}
+}
+
+func TestExtractRegion_NumberedCellWithoutRegion(t *testing.T) {
+	if got := ExtractRegion("cell-1"); got != "1" {
+		t.Errorf("ExtractRegion(cell-1) = %q, want 1", got)
 	}
 }

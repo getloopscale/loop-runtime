@@ -84,9 +84,6 @@ run_hermetic_suites() {
   run_suite "hermetic: check-live-proof-syntax_test.sh" \
     "bash $REPO_ROOT/infra/tests/check-live-proof-syntax_test.sh"
 
-  run_suite "hermetic: check-patch-kratos-syntax_test.sh" \
-    "bash $REPO_ROOT/infra/tests/check-patch-kratos-syntax_test.sh"
-
   run_suite "hermetic: check-trio-dev-public-syntax_test.sh" \
     "bash $REPO_ROOT/infra/tests/check-trio-dev-public-syntax_test.sh"
 

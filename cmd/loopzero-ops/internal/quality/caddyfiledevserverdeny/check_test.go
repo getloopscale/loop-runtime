@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // Fixtures follow the pattern from caddyfilecspgate: create a synthetic
@@ -206,7 +208,7 @@ func TestCheck_MissingCaddyfile_SKIP(t *testing.T) {
 
 func TestCheck_RealRepo_PASS(t *testing.T) {
 	// Sanity: the real repo Caddyfile passes post-fix (M18/#141 remediation).
-	repoRoot := findRepoRoot(t)
+	repoRoot := qtestutil.Root(t)
 	out, err := Check(Config{RepoRoot: repoRoot})
 	if err != nil {
 		t.Fatalf("Check error: %v", err)
@@ -214,27 +216,6 @@ func TestCheck_RealRepo_PASS(t *testing.T) {
 	if !out.Pass {
 		t.Errorf("real-repo Caddyfile should pass #141 gate; violations: %v", out.Violations)
 	}
-}
-
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	// Walk up from the test cwd until we find ROADMAP.md
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	for i := 0; i < 10; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "ROADMAP.md")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("ROADMAP.md not found walking up")
-		}
-		dir = parent
-	}
-	t.Fatal("ROADMAP.md not found within 10 parents")
-	return ""
 }
 
 func containsViolation(vs []string, substr string) bool {

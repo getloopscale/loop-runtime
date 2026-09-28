@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-
 	"github.com/getloopscale/loopzero/api/internal/github/webhook"
 	"github.com/getloopscale/loopzero/api/internal/ports"
 )
@@ -22,10 +20,19 @@ type PreviewLifecycleService interface {
 	DeletePreviewByPR(ctx context.Context, tenantID, projectID string, prNumber int) error
 }
 
-// RepoLookup looks up a project repository by full GitHub name. Subset of
-// store.PostgresRepositoryStore — kept narrow for testability.
+// ConnectedRepo is what the preview deployer needs to know about a GitHub
+// repository linked to a project. It is this package's own type, so the
+// persistence model can change without reaching the GitHub integration.
+type ConnectedRepo struct {
+	TenantID    string
+	ProjectName string
+	AutoDeploy  bool
+}
+
+// RepoLookup finds the project a GitHub repository is linked to. It returns
+// (nil, nil) for a repository that is not linked; an error is a real failure.
 type RepoLookup interface {
-	GetByRepo(ctx context.Context, repoFullName string) (*store.ProjectRepository, error)
+	GetByRepo(ctx context.Context, repoFullName string) (*ConnectedRepo, error)
 }
 
 // SourceBundlePreparer prepares the source bundle on S3 for a commit
@@ -88,8 +95,7 @@ func (d *PreviewDeployer) WithBundlePreparer(p SourceBundlePreparer) *PreviewDep
 // auto-deploy disabled, missing PR data) — those are not errors. Errors
 // here are logged by the webhook dispatcher; nothing is returned to
 // GitHub.
-func (d *PreviewDeployer) HandlePR(event webhook.PullRequestEvent) error {
-	ctx := context.Background()
+func (d *PreviewDeployer) HandlePR(ctx context.Context, event webhook.PullRequestEvent) error {
 
 	log := d.logger.With(
 		"action", event.Action,
@@ -113,10 +119,9 @@ func (d *PreviewDeployer) HandlePR(event webhook.PullRequestEvent) error {
 	}
 	repo, err := d.repoStore.GetByRepo(ctx, event.Repository.FullName)
 	if err != nil {
-		// Lookup failure isn't a hard fail — log and skip. The PR may be
-		// for a repo we don't manage; GitHub still gets 200 from us.
-		log.Error("preview deploy: repo lookup failed", "error", err)
-		return nil
+		// An unmanaged repo comes back as (nil, nil) below; an error here is a
+		// real failure, and swallowing it would lose the preview silently.
+		return fmt.Errorf("preview deploy: look up repo %s: %w", event.Repository.FullName, err)
 	}
 	if repo == nil {
 		log.Debug("preview deploy: repo not connected, ignoring")
@@ -152,7 +157,7 @@ func (d *PreviewDeployer) HandlePR(event webhook.PullRequestEvent) error {
 func (d *PreviewDeployer) handleCreate(
 	ctx context.Context,
 	log *slog.Logger,
-	repo *store.ProjectRepository,
+	repo *ConnectedRepo,
 	event webhook.PullRequestEvent,
 ) error {
 	branch := event.PullRequest.Head.Ref
@@ -219,7 +224,7 @@ func (d *PreviewDeployer) handleCreate(
 func (d *PreviewDeployer) handleClosed(
 	ctx context.Context,
 	log *slog.Logger,
-	repo *store.ProjectRepository,
+	repo *ConnectedRepo,
 	event webhook.PullRequestEvent,
 ) error {
 	if event.Number <= 0 {

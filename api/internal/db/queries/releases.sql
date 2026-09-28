@@ -8,7 +8,7 @@
 --
 -- Every multi-tenant SELECT / UPDATE / DELETE carries `tenant_id` predicate
 -- per platform-security-engineer condition 1 + M-1 + M-2 (enforced by
--- pkg/quality/tenantpredicate gate).
+-- cmd/loopzero-ops/internal/quality/tenantpredicate gate).
 --
 -- Initial query set (5/13 total — remaining 8 queries added incrementally as
 -- callers migrate per T1.1 sub-step):
@@ -130,16 +130,25 @@ SET side_effects = COALESCE(side_effects, '{}'::jsonb) || $1::jsonb
 WHERE id = $2 AND tenant_id = $3
 RETURNING *;
 
--- name: CancelReleasesByEnv :many
--- Cancels all non-CANCELLED releases for a (tenant, project, env) tuple.
--- Used by `loopzero cancel` (env-scoped) + tenant deletion cascade.
-UPDATE releases
-SET status = 'CANCELLED'
+-- name: ListReleaseStatusesByEnv :many
+-- The distinct statuses present for a (tenant, project, env) tuple. The
+-- project-delete cascade reads them so the release state machine, not SQL,
+-- decides which of them move to CANCELLED.
+SELECT DISTINCT status FROM releases
 WHERE tenant_id = $1
   AND project_id = $2
-  AND environment = $3
-  AND status <> 'CANCELLED'
-  AND status <> 'ROLLED_BACK'
+  AND environment = $3;
+
+-- name: CancelReleasesByEnv :many
+-- Cancels the releases of a (tenant, project, env) tuple whose status is in
+-- from_statuses. The caller computes from_statuses from the release state
+-- machine (ProjectDeleted edges), so the transition table never leaks here.
+UPDATE releases
+SET status = 'CANCELLED'
+WHERE tenant_id = @tenant_id
+  AND project_id = @project_id
+  AND environment = @environment
+  AND status = ANY(@from_statuses::text[])
 RETURNING id;
 
 -- tenantpredicate:exempt
@@ -175,3 +184,11 @@ WHERE tenant_id = $1
   AND status = 'PENDING'
 ORDER BY created_at ASC
 LIMIT 100;
+
+-- name: ListLatestActiveReleasePerEnv :many
+-- The most recent ACTIVE release per environment across all of a tenant's
+-- projects: the dashboard's per-environment last-deploy KPI.
+SELECT DISTINCT ON (environment) environment, git_commit, created_at
+FROM releases
+WHERE tenant_id = $1 AND status = 'ACTIVE'
+ORDER BY environment, created_at DESC;

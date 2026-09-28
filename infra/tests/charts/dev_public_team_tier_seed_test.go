@@ -6,7 +6,7 @@
 //
 // Symptom (QA dogfooding 2026-06-21):
 //
-//   /projects/teste/scale → plan_tier='starter', ceiling=2, slider max=2
+//	/projects/sample/scale → plan_tier='starter', ceiling=2, slider max=2
 //
 // while QA doc J-20 asserts `team` tier (replicas=3 succeeds; only
 // >team triggers 402 PLAN_UPGRADE_REQUIRED).
@@ -65,10 +65,7 @@ func auditTeamTierSeed(body string) []string {
 
 func loadSeedPostCleanroomAll(t *testing.T) string {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	p := filepath.Join(root, "infra/scripts/local/seed-post-cleanroom-all.sh")
 	b, err := os.ReadFile(p)
 	if err != nil {

@@ -8,172 +8,153 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
-func raizRepo(t *testing.T) string {
+func write(t *testing.T, root, rel, body string) {
 	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("cwd: %v", err)
-	}
-	for i := 0; i < 12; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "operators", "go.mod")); err == nil {
-			return dir
-		}
-		pai := filepath.Dir(dir)
-		if pai == dir {
-			break
-		}
-		dir = pai
-	}
-	t.Fatal("nao achei a raiz do repositorio (procurei operators/go.mod)")
-	return ""
-}
-
-func escrever(t *testing.T, raiz, rel, corpo string) {
-	t.Helper()
-	p := filepath.Join(raiz, rel)
+	p := filepath.Join(root, rel)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(p, []byte(corpo), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// O mutante. Um persist de `.status` sem dobra nenhuma — nem em linha, nem por
-// `defer` em quem chama. Sem esta prova, um verde do gate seria indistinguivel de
-// um gate que nao enxerga a forma.
-func TestReprovaPersistSemDobraNenhuma(t *testing.T) {
-	raiz := t.TempDir()
-	escrever(t, raiz, "operators/internal/x/c.go", `package x
+// The mutant. A `.status` persist with no fold at all — neither inline nor via a
+// `defer` in the caller. Without this proof, a green from the gate would be
+// indistinguishable from a gate that cannot see the shape.
+func TestFailsPersistWithNoFoldAtAll(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "operators/internal/x/c.go", `package x
 
-func (r *R) reconcileAlgo() error {
+func (r *R) reconcileSomething() error {
 	return r.Status().Patch(nil, nil, nil)
 }
 `)
-	out, err := Check(Config{RepoRoot: raiz, Pacotes: []string{"operators/internal/x"}})
+	out, err := Check(Config{RepoRoot: root, Packages: []string{"operators/internal/x"}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if out.Pass {
-		t.Fatal("persist sem dobra passou — o gate nao enxerga a forma que existe para vigiar")
+		t.Fatal("a persist with no fold passed — the gate cannot see the shape it exists to watch")
 	}
-	if len(out.Violacoes) != 1 {
-		t.Fatalf("queria 1 violacao, veio %d: %+v", len(out.Violacoes), out.Violacoes)
+	if len(out.Violations) != 1 {
+		t.Fatalf("wanted 1 violation, got %d: %+v", len(out.Violations), out.Violations)
 	}
 }
 
-// A capacidade NOVA, e a razao deste gate existir: a dobra por `defer` acontece no
-// RECONCILE, e o persist vive num helper que ele chama. A guarda antiga
-// (`exposure_status_writer_test.go`) olha so' a funcao que envolve o `Patch`, entao
-// contava esta forma como ausencia — foi assim que o `preview` mediu "0 de 6"
-// tendo cobertura (B-138). `DeferReadinessSummary` re-busca o CR e PERSISTE o
-// sumario no retorno, ou seja, e' a ultima escrita; o persist do helper esta'
-// coberto.
-func TestAceitaDobraPorDeferEmQuemChama(t *testing.T) {
-	raiz := t.TempDir()
-	escrever(t, raiz, "operators/internal/x/c.go", `package x
+// The NEW capability, and the reason this gate exists: the fold via `defer` happens in
+// RECONCILE, and the persist lives in a helper it calls. The old guard
+// (`exposure_status_writer_test.go`) looks only at the function that encloses the `Patch`,
+// so it counted this shape as absence — that is how `preview` measured "0 of 6" while
+// having coverage (B-138). `DeferReadinessSummary` re-fetches the CR and PERSISTS the
+// summary on return, that is, it is the last write; the helper's persist is covered.
+func TestAcceptsFoldViaDeferInTheCaller(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "operators/internal/x/c.go", `package x
 
 func (r *R) Reconcile() error {
 	defer reconcileloop.DeferReadinessSummary(nil, nil, nil)()
-	return r.falhar()
+	return r.fail()
 }
 
-func (r *R) falhar() error {
+func (r *R) fail() error {
 	return r.Status().Patch(nil, nil, nil)
 }
 `)
-	out, err := Check(Config{RepoRoot: raiz, Pacotes: []string{"operators/internal/x"}})
+	out, err := Check(Config{RepoRoot: root, Packages: []string{"operators/internal/x"}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if !out.Pass {
-		t.Errorf("dobra por defer em quem chama foi reprovada; e' a forma canonica dos cinco reconcilers: %+v", out.Violacoes)
+		t.Errorf("a fold via defer in the caller was failed; it is the canonical shape of the five reconcilers: %+v", out.Violations)
 	}
 }
 
-// A dobra em linha cobre APENAS a propria funcao — ela e' uma mutacao antes da
-// escrita daquela funcao, e nao diz nada sobre o que outra funcao escreve.
-func TestDobraEmLinhaNaoCobreOutraFuncao(t *testing.T) {
-	raiz := t.TempDir()
-	escrever(t, raiz, "operators/internal/x/c.go", `package x
+// The inline fold covers ONLY its own function — it is a mutation before that
+// function's write, and says nothing about what another function writes.
+func TestInlineFoldDoesNotCoverAnotherFunction(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "operators/internal/x/c.go", `package x
 
-func (r *R) escreveDobrando() error {
+func (r *R) writesWithFold() error {
 	SetReadinessSummaryViaPkg(nil, nil)
 	return r.Status().Patch(nil, nil, nil)
 }
 
-func (r *R) escreveSemDobrar() error {
+func (r *R) writesWithoutFold() error {
 	return r.Status().Update(nil, nil)
 }
 `)
-	out, err := Check(Config{RepoRoot: raiz, Pacotes: []string{"operators/internal/x"}})
+	out, err := Check(Config{RepoRoot: root, Packages: []string{"operators/internal/x"}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if out.Pass {
-		t.Fatal("a dobra em linha de uma funcao cobriu o persist de OUTRA — isso nao e' o invariante")
+		t.Fatal("one function's inline fold covered the persist of ANOTHER — that is not the invariant")
 	}
-	if len(out.Violacoes) != 1 || !strings.Contains(out.Violacoes[0].Funcao, "escreveSemDobrar") {
-		t.Errorf("a violacao deveria ser escreveSemDobrar: %+v", out.Violacoes)
+	if len(out.Violations) != 1 || !strings.Contains(out.Violations[0].Func, "writesWithoutFold") {
+		t.Errorf("the violation should be writesWithoutFold: %+v", out.Violations)
 	}
 }
 
-// A populacao real: os seis pacotes de operators. Um mutante prova que o detector
-// dispara; so' isto diz o que ele encontra no que existe (`rules/testing.md` § 4.2).
-// O resultado fica registrado aqui mesmo, inclusive se for zero.
-func TestPopulacaoRealDosSeisPacotes(t *testing.T) {
-	out, err := Check(Config{RepoRoot: raizRepo(t)})
+// The real population: the six operators packages. A mutant proves the detector
+// fires; only this says what it finds in what exists (`rules/testing.md` § 4.2).
+// The result is recorded right here, even when it is zero.
+func TestRealPopulationOfTheSixPackages(t *testing.T) {
+	out, err := Check(Config{RepoRoot: qtestutil.Root(t)})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	if out.Pacotes < 6 {
-		t.Fatalf("varreu %d pacote(s); a populacao declarada do B-138 sao 6", out.Pacotes)
+	if out.Packages < 6 {
+		t.Fatalf("scanned %d package(s); B-138's declared population is 6", out.Packages)
 	}
-	if out.Sitios == 0 {
-		t.Fatal("zero persists encontrados — verde sobre nada nao e' verde")
+	if out.Sites == 0 {
+		t.Fatal("zero persists found — green over nothing is not green")
 	}
-	t.Logf("populacao: %d pacotes, %d persists, %d cobertos, %d violacao(oes)",
-		out.Pacotes, out.Sitios, out.Sitios-len(out.Violacoes), len(out.Violacoes))
-	for _, v := range out.Violacoes {
-		t.Logf("  descoberto: %s:%d %s (%s)", v.Arquivo, v.Linha, v.Funcao, v.Forma)
+	t.Logf("population: %d packages, %d persists, %d covered, %d violation(s)",
+		out.Packages, out.Sites, out.Sites-len(out.Violations), len(out.Violations))
+	for _, v := range out.Violations {
+		t.Logf("  uncovered: %s:%d %s (%s)", v.File, v.Line, v.Func, v.Shape)
 	}
 }
 
-// Dois tipos no MESMO pacote com metodo de mesmo nome. E' a forma real de
-// `operators/internal/app`, que tem dois `Reconcile` — Application e Exposure — e
-// so' o Exposure carrega o `defer`. Se o grafo indexar por NOME, o defer de um
-// cobre os helpers do outro e o gate reporta verde sobre um persist descoberto.
-func TestNaoConfundeMetodosHomonimosDeTiposDiferentes(t *testing.T) {
-	raiz := t.TempDir()
-	escrever(t, raiz, "operators/internal/x/c.go", `package x
+// Two types in the SAME package with a same-named method. It is the real shape of
+// `operators/internal/app`, which has two `Reconcile` — Application and Exposure — and
+// only Exposure carries the `defer`. If the graph indexes by NAME, one's defer covers
+// the other's helpers and the gate reports green over an uncovered persist.
+func TestDoesNotConfuseSameNamedMethodsOfDifferentTypes(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "operators/internal/x/c.go", `package x
 
-func (r *ComDefer) Reconcile() error {
+func (r *WithDefer) Reconcile() error {
 	defer reconcileloop.DeferReadinessSummary(nil, nil, nil)()
-	return r.persistir()
+	return r.persist()
 }
 
-func (r *ComDefer) persistir() error {
+func (r *WithDefer) persist() error {
 	return r.Status().Patch(nil, nil, nil)
 }
 
-func (r *SemDefer) Reconcile() error {
-	return r.gravar()
+func (r *WithoutDefer) Reconcile() error {
+	return r.save()
 }
 
-func (r *SemDefer) gravar() error {
+func (r *WithoutDefer) save() error {
 	return r.Status().Update(nil, nil)
 }
 `)
-	out, err := Check(Config{RepoRoot: raiz, Pacotes: []string{"operators/internal/x"}})
+	out, err := Check(Config{RepoRoot: root, Packages: []string{"operators/internal/x"}})
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
 	if out.Pass {
-		t.Fatal("o defer de um tipo cobriu o helper de OUTRO — o grafo esta' indexado por nome e vaza")
+		t.Fatal("one type's defer covered ANOTHER type's helper — the graph is indexed by name and leaks")
 	}
-	if len(out.Violacoes) != 1 || !strings.Contains(out.Violacoes[0].Funcao, "gravar") {
-		t.Errorf("a violacao deveria ser SemDefer.gravar: %+v", out.Violacoes)
+	if len(out.Violations) != 1 || !strings.Contains(out.Violations[0].Func, "save") {
+		t.Errorf("the violation should be WithoutDefer.save: %+v", out.Violations)
 	}
 }

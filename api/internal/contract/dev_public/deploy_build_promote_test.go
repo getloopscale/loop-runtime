@@ -67,7 +67,7 @@ func (s *deployState) handler(t *testing.T) http.Handler {
 			s.handleBuildGet(w, r)
 		case r.URL.Path == "/api/v1/projects" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"projects": []map[string]any{{"id": "proj-1", "name": "teste"}},
+				"projects": []map[string]any{{"id": "proj-1", "name": "sample"}},
 				"total":    1,
 			})
 		case strings.Contains(r.URL.Path, "/promote"):
@@ -149,7 +149,7 @@ func (s *deployState) handleReleaseGet(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"id":     "rel-1234567890abcdef",
 		"status": "ACTIVE",
-		"url":    "https://tn-243c747b30c41e51-teste-app-production.prod-dev.loopzero.example",
+		"url":    "https://tn-243c747b30c41e51-sample-app-production.prod-dev.loopzero.example",
 	})
 }
 
@@ -166,7 +166,7 @@ func (s *deployState) handlePromote(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"new_release": relID,
-		"url":         "https://tn-243c747b30c41e51-teste-app-production.prod-dev.loopzero.example",
+		"url":         "https://tn-243c747b30c41e51-sample-app-production.prod-dev.loopzero.example",
 		"env":         "production",
 	})
 }
@@ -259,7 +259,7 @@ func TestDevPublic_DeployBuildPromote_DeployLiveURL(t *testing.T) {
 
 	// Submit a build; verify status endpoint surfaces canonical AppURL.
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/builds",
-		strings.NewReader(`{"project":"teste","apps":[{"name":"app","runtime":"node"}]}`))
+		strings.NewReader(`{"project":"sample","apps":[{"name":"app","runtime":"node"}]}`))
 	req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-243c747b30c41e51"))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -355,14 +355,14 @@ func TestDevPublic_DeployBuildPromote_DeploymentsFlow(t *testing.T) {
 func TestDevPublic_DeployBuildPromote_LiveURLDiscoverability(t *testing.T) {
 	// Status contract per ADR D1 J-25: url + active_release.build_id.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/projects/teste/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/projects/sample/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Header.Get("Authorization") == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"url": "https://tn-243c747b30c41e51-teste-app-production.prod-dev.loopzero.example",
+			"url": "https://tn-243c747b30c41e51-sample-app-production.prod-dev.loopzero.example",
 			"active_release": map[string]any{
 				"build_id": "build-abc-def",
 				"status":   "ACTIVE",
@@ -372,7 +372,7 @@ func TestDevPublic_DeployBuildPromote_LiveURLDiscoverability(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/projects/teste/status?env=production", nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/projects/sample/status?env=production", nil)
 	req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-status"))
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -394,7 +394,7 @@ func TestDevPublic_DeployBuildPromote_PromoteCanonicalURL(t *testing.T) {
 	srv := httptest.NewServer(state.handler(t))
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/teste/promote",
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/sample/promote",
 		strings.NewReader(`{"from":"preview","to":"production"}`))
 	req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-promote"))
 	req.Header.Set("Content-Type", "application/json")
@@ -420,7 +420,7 @@ func TestDevPublic_DeployBuildPromote_PromoteEnsureEnv(t *testing.T) {
 	// EnsureEnvironment MUST run BEFORE service.Promote per #158 fix.
 	// This test asserts the handler exposes the promote endpoint AND returns
 	// canonical fields (proof the composition-root wiring is present).
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/teste/promote",
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/sample/promote",
 		strings.NewReader(`{"from":"preview","to":"production"}`))
 	req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-ensure"))
 	req.Header.Set("Content-Type", "application/json")
@@ -437,7 +437,7 @@ func TestDevPublic_DeployBuildPromote_PromoteNoOp(t *testing.T) {
 	srv := httptest.NewServer(newDeployState().handler(t))
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/teste/promote",
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/sample/promote",
 		strings.NewReader(`{"from":"preview","to":"production"}`))
 	req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-noop"))
 	req.Header.Set("Content-Type", "application/json")
@@ -460,7 +460,7 @@ func TestDevPublic_DeployBuildPromote_CliLogsListbuildsInference(t *testing.T) {
 	// #160: loopzero logs --env preview inference MUST use /builds?env=<env> (canonical build-history)
 	// instead of /status.last_build.id (release-bound view).
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/projects/teste/builds", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/projects/sample/builds", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		env := r.URL.Query().Get("env")
 		require.Equal(t, "preview", env)
@@ -474,7 +474,7 @@ func TestDevPublic_DeployBuildPromote_CliLogsListbuildsInference(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/projects/teste/builds?env=preview&limit=1", nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/projects/sample/builds?env=preview&limit=1", nil)
 	req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-cli-logs"))
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -494,7 +494,7 @@ func TestDevPublic_DeployBuildPromote_CliPromoteNonTTY(t *testing.T) {
 	// #161: promote in non-TTY context without --yes MUST return CONFIRMATION_REQUIRED
 	// (NOT hang on interactive prompt).
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/projects/teste/promote", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/projects/sample/promote", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// Mock enforces confirm via query param (real CLI checks stdin.isTTY).
 		if r.URL.Query().Get("confirm") == "" {
@@ -511,7 +511,7 @@ func TestDevPublic_DeployBuildPromote_CliPromoteNonTTY(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/teste/promote",
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/projects/sample/promote",
 		strings.NewReader(`{"from":"preview","to":"production"}`))
 	req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-non-tty"))
 	req.Header.Set("Content-Type", "application/json")
@@ -565,7 +565,7 @@ func TestDevPublic_DeployBuildPromote_ConcurrentBuildsUnderEnvLock_RaceAware(t *
 		defer doneWG.Done()
 		startWG.Wait() // barrier
 		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/builds",
-			strings.NewReader(`{"project":"teste","apps":[{"name":"app"}]}`))
+			strings.NewReader(`{"project":"sample","apps":[{"name":"app"}]}`))
 		req.Header.Set("Authorization", "Bearer "+mintTestJWT(t, "tn-race"))
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)

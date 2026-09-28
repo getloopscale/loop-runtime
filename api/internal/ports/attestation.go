@@ -6,8 +6,6 @@
 
 package ports
 
-import "context"
-
 // AttestationInfo describes the supply chain attestation for a build's releases.
 type AttestationInfo struct {
 	BuildID        string `json:"build_id"`
@@ -15,9 +13,4 @@ type AttestationInfo struct {
 	ImageSignature string `json:"image_signature,omitempty"`
 	SignedAt       string `json:"signed_at,omitempty"`
 	Signed         bool   `json:"signed"`
-}
-
-// AttestationStore is the minimal contract for reading attestation data.
-type AttestationStore interface {
-	GetBuildAttestation(ctx context.Context, buildID string) (*AttestationInfo, error)
 }

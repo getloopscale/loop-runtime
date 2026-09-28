@@ -134,29 +134,6 @@ func TestCheck_MissingTaskfile_Errors(t *testing.T) {
 	}
 }
 
-// TestCollectTaskNames_IgnoresMalformedInclude — include pointing to nonexistent
-// file is skipped gracefully (not fatal — best-effort collection).
-func TestCollectTaskNames_IgnoresMalformedInclude(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "Taskfile.yml"), `
-version: "3"
-includes:
-  ghost:
-    taskfile: ./taskfiles/does-not-exist.yml
-    flatten: true
-tasks:
-  setup:
-    desc: x
-`)
-	names, err := CollectTaskNames(root)
-	if err != nil {
-		t.Fatalf("CollectTaskNames should not fail on missing include: %v", err)
-	}
-	if !names["setup"] {
-		t.Errorf("expected setup still collected despite ghost include, got %v", names)
-	}
-}
-
 // TestCollectTaskNames_SurfacesParseError — EC: an include with a duplicate
 // task key (real defect Task v3 silently shadows) must be surfaced LOUD, not
 // swallowed. This is how T5.3 gate caught the test:coverage duplicate.
@@ -206,5 +183,76 @@ func TestExpectedCommands_NonEmpty(t *testing.T) {
 		if !present {
 			t.Errorf("ExpectedCommands missing core command %q", cmd)
 		}
+	}
+}
+
+// An include without `flatten: true` puts its tasks under the include's name,
+// the way Task v3 does: a task `setup` in a namespaced include is `drill:setup`,
+// and must not satisfy a public command spelled `setup`.
+func TestCollectTaskNames_NamespacesNonFlattenedIncludes(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "Taskfile.yml"), `
+version: "3"
+includes:
+  drill:
+    taskfile: ./taskfiles/drill.yml
+tasks:
+  doctor:
+    desc: root task
+`)
+	writeFile(t, filepath.Join(root, "taskfiles/drill.yml"), `
+version: "3"
+tasks:
+  setup:
+    desc: drill setup
+`)
+
+	names, err := CollectTaskNames(root)
+
+	if err != nil {
+		t.Fatalf("CollectTaskNames: %v", err)
+	}
+	if names["setup"] {
+		t.Error("a task of a non-flattened include must not appear under its bare name")
+	}
+	if !names["drill:setup"] {
+		t.Errorf("expected drill:setup, got %v", names)
+	}
+}
+
+// A missing include that is not declared `optional: true` breaks `task` itself,
+// so the inventory must not quietly drop it.
+func TestCollectTaskNames_MissingRequiredIncludeIsAnError(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "Taskfile.yml"), `
+version: "3"
+includes:
+  drill:
+    taskfile: ./taskfiles/drill.yml
+tasks:
+  doctor: {}
+`)
+
+	if _, err := CollectTaskNames(root); err == nil {
+		t.Fatal("a missing non-optional include must be an error")
+	}
+}
+
+func TestCollectTaskNames_MissingOptionalIncludeIsSkipped(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "Taskfile.yml"), `
+version: "3"
+includes:
+  extra:
+    taskfile: ./taskfiles/extra.yml
+    optional: true
+tasks:
+  doctor: {}
+`)
+
+	names, err := CollectTaskNames(root)
+
+	if err != nil || !names["doctor"] {
+		t.Fatalf("an optional missing include must be skipped; names=%v err=%v", names, err)
 	}
 }

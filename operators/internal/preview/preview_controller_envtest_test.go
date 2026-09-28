@@ -48,9 +48,15 @@ func newPreviewCR(name, tenantSlug, projectSlug string, prNumber int, ttl time.D
 			Branch:    "feature/x",
 			ExpiresAt: &expires,
 			ReleaseID: "rel-test",
+			CellID:    previewCellID,
+			PublicURL: fmt.Sprintf("https://%s-%s-web-preview-pr-%d.preview-test.example", tenantSlug, projectSlug, prNumber),
 		},
 	}
 }
+
+// previewCellID is the cell every preview in this suite is placed in, the way
+// the API stamps Spec.CellID at creation.
+const previewCellID = "cell-7"
 
 func previewKey(name string) types.NamespacedName {
 	return types.NamespacedName{Name: name, Namespace: "default"}
@@ -64,9 +70,9 @@ var _ = Describe("PreviewController", Ordered, func() {
 			tenantSlug  = "acme"
 			projectSlug = "api"
 			prNumber    = 101
-			// J-23 canonical namespace formula 2026-06-07 (sponsor
-			// "Pense bem ao inves de um if PARA preview o TUDO DEVERIA
-			// esta separado por projeto"): uniformly
+			// J-23 canonical namespace formula 2026-06-07 (the sponsor
+			// asked for every environment, previews included, to be
+			// separated by project rather than special-cased): uniformly
 			// `loopzero-<tenant>-<project>-<env>` for all envs including
 			// preview-pr-N (was `<tenant>-<project>-pr-N` pre-refactor).
 			expectedNS = "loopzero-acme-api-preview-pr-101"
@@ -83,6 +89,12 @@ var _ = Describe("PreviewController", Ordered, func() {
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: expectedNS}, &ns)).To(Succeed())
 				g.Expect(ns.Labels).To(HaveKeyWithValue("pod-security.kubernetes.io/enforce", "restricted"))
 				g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/preview", fmt.Sprintf("pr%d", prNumber)))
+			}, timeout, interval).Should(Succeed())
+		})
+
+		It("resolves the runtime cluster of the preview's cell", func() {
+			Eventually(func(g Gomega) {
+				g.Expect(cellFactory.Calls()).To(ContainElement(previewCellID))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -182,13 +194,11 @@ var _ = Describe("PreviewController", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("sets the public preview URL on Status", func() {
+		It("reports the public URL the API computed on Status", func() {
 			Eventually(func(g Gomega) {
 				var pe loopzerov1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &pe)).To(Succeed())
-				g.Expect(pe.Status.URL).To(Equal(
-					fmt.Sprintf("https://pr%d-%s.preview.preview-test.example", prNumber, projectSlug),
-				))
+				g.Expect(pe.Status.URL).To(Equal(pe.Spec.PublicURL))
 			}, timeout, interval).Should(Succeed())
 		})
 

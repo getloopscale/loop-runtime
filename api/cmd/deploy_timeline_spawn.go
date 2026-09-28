@@ -9,18 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/aggregator"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/timeline/aggregator"
 )
-
-// _ keeps the db import (releaseStore was removed in v2 of the spawner
-// after the wall-clock ladder was replaced by an sse_events subscription;
-// preserve the dependency surface for the v1.1 follow-up that may need
-// FindReleaseForBuild for richer fan-in).
-var _ db.ReleaseStore = nil
 
 // makeDeployTimelineSpawn returns the canonical spawner callback wired
 // into BuildOrchestratorDeps. Per plan deploy-timeline-canonical-5-phases
@@ -31,7 +24,7 @@ var _ db.ReleaseStore = nil
 // The release_db source alone delivers ~60% of the canonical timeline
 // signal (release transitions: PENDING → ACTIVE → ROLLED_BACK), enough
 // for the v1 dashboard hero card while the remaining adapters mature.
-func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db.ReleaseStore) build.DeployTimelineSpawner {
+func makeDeployTimelineSpawn(eventStore *store.PostgresEventStore) builds.DeployTimelineSpawner {
 	if eventStore == nil {
 		return nil
 	}
@@ -42,33 +35,27 @@ func makeDeployTimelineSpawn(eventStore *sse.PostgresEventStore, releaseStore db
 		// deploy.verifying/deploy.live/deploy.completed) and translate
 		// each into FSM-strict 5-phase transitions. Replaces the v1
 		// wall-clock ladder that emitted live.completed prematurely.
-		reader := aggregator.NewReleaseDBReader(&releaseStoreQuerier{eventStore: eventStore})
+		reader := aggregator.NewReleaseDBReader(&sseTimelineQuerier{eventStore: eventStore})
 		aggregator.SpawnFor(ctx, deployID, sink, []aggregator.SourceReader{reader})
 		slog.Default().Info("deploy_timeline aggregator spawned",
 			"deploy_id", deployID, "sources", 1)
 	}
 }
 
-// releaseStoreQuerier adapts db.ReleaseStore to the aggregator's
-// ReleaseStatusQuerier contract.
+// sseTimelineQuerier satisfies the aggregator's ReleaseStatusQuerier by
+// reading the deploy's own sse_events stream: each real orchestrator event
+// (build.started, build.succeeded, deploy.delivering, ...) is translated by
+// eventTypeToCanonicalTransitions into the in-order 5-phase transitions it
+// implies, queued, and handed out one per query. It reads no release rows.
 //
-// v1 simplification: the canonical FindReleaseForBuild path requires
-// tenant_id which the spawn-site doesn't carry. Instead of fabricating
-// release-phase events ahead of the real release row appearing (which
-// causes FSM out-of-order phase jumps → DEGRADED emission), this
-// querier walks a synthetic build→sign→release ladder driven by
-// wall-clock since spawn-time. The result: the FSM sees canonical
-// in-order transitions and emits the 5-phase timeline correctly.
-//
-// LIVE-caught 2026-06-18: returning "PENDING" without ladder caused
-// 119 DEGRADED events per build (out-of-order jump build/ready →
-// release/in_progress).
-//
-// v1.1 follow-up: replace the wall-clock ladder with real
-// FindReleaseForBuild + tenant-scoped query when the orchestrator
-// can pass tenant_id through the spawner signature.
-type releaseStoreQuerier struct {
-	eventStore *sse.PostgresEventStore
+// Why events and not release rows: the release-row path
+// (FindReleaseForBuild) needs a tenant_id the spawn site does not carry, and
+// guessing release-phase states ahead of the row made the FSM jump phases —
+// LIVE-caught 2026-06-18 as 119 DEGRADED events per build. An earlier
+// version stood in for the missing signal with a wall-clock ladder; the event
+// subscription replaced it.
+type sseTimelineQuerier struct {
+	eventStore *store.PostgresEventStore
 	mu         sync.Mutex
 	pending    []string
 	seen       map[string]bool
@@ -84,7 +71,7 @@ type releaseStoreQuerier struct {
 // build completion).
 //
 // Returned state names are mapped by releaseStateProjection
-// (api/internal/aggregator/adapter_release_db.go) to the canonical
+// (api/internal/timeline/aggregator/adapter_release_db.go) to the canonical
 // (phase, status) FSM tuple.
 func eventTypeToCanonicalTransitions(eventType string) []string {
 	switch eventType {
@@ -130,7 +117,7 @@ func eventTypeToCanonicalTransitions(eventType string) []string {
 	return nil
 }
 
-func (r *releaseStoreQuerier) QueryReleaseStatus(ctx context.Context, deployID string) (*aggregator.ReleaseStatusRow, error) {
+func (r *sseTimelineQuerier) QueryReleaseStatus(ctx context.Context, deployID string) (*aggregator.ReleaseStatusRow, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.seen == nil {

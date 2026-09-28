@@ -16,6 +16,13 @@ var roleLevel = map[string]int{
 	"member": 1,
 }
 
+// IsKnownRole reports whether role is one of the team roles. The role
+// vocabulary is roleLevel; nothing else keeps a copy of it.
+func IsKnownRole(role string) bool {
+	_, ok := roleLevel[role]
+	return ok
+}
+
 // HasMinRole checks if the user's role meets or exceeds the minimum required.
 func HasMinRole(userRole, minRole string) bool {
 	return roleLevel[userRole] >= roleLevel[minRole]

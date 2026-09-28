@@ -227,7 +227,7 @@ Shows three sections: Prometheus targets (with last scrape time), active alerts,
 
 ### Adding a new metric to the API
 
-1. Define the metric in `api/internal/metrics/metrics.go`
+1. Define the metric in the domain file under `api/internal/metrics/` (e.g. `build_metrics.go`)
 2. Register and emit it from the appropriate service/middleware
 3. Write a test in `api/internal/metrics/metrics_test.go`
 4. Add a panel to the relevant dashboard JSON

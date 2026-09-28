@@ -4,17 +4,20 @@
 // Package main implements the validate-rbac AST analyzer per ADR-0026 D4
 // + plan T4.3.
 //
-// Detects two anti-patterns in operator code:
+// What it checks, and only this:
 //
-//  1. "Call without marker" — controller code invokes r.Client.X(...)
-//     (where X ∈ {Get, List, Create, Update, Patch, Delete}) but no
-//     +kubebuilder:rbac marker on the enclosing Reconciler struct
-//     covers the (group, resource, verb) triple. This produces silent
-//     `Forbidden` errors at runtime that look like transient failures.
+//  1. Default mode — every +kubebuilder:rbac marker parses and declares
+//     verbs, and none uses the banned `resources=*` / `verbs=*` wildcards.
 //
-//  2. "Marker without call" (--strict) — markers granting verbs that no
-//     code path uses. Surfaces dead permissions accumulated over
-//     refactors. Per ADR-0026 condition #7 (k8s-controller-engineer).
+//  2. --strict — "marker without call": a marker none of whose verbs is
+//     used by an r.<Verb>(...) call in the same file. A verb-level
+//     heuristic: without type information the (group, resource) half of
+//     the marker is not matched.
+//
+// What it does NOT check: a call with no marker covering it. Deciding which
+// (group, resource) an r.Get(ctx, key, obj) touches needs the type of obj,
+// which this AST pass does not resolve, so a missing permission still
+// surfaces only at runtime as Forbidden. KNOWN_GAPS.md § 0 records this.
 //
 // Per ADR-0026 condition #5 (security-engineer): style-guide rules
 // enforced inline — bans `resources=*` and `verbs=*` wildcards.
@@ -181,8 +184,9 @@ func analyzeFile(fset *token.FileSet, path string, exit *errExit, strict bool) e
 		return true
 	})
 
-	// Don't fail on call sites we can't classify (would generate noise on
-	// every helper file). The strict mode catches the inverse direction:
+	// Call sites are only used by --strict: nothing here maps a call to the
+	// (group, resource) it touches, so a call without a marker is not
+	// reported (see the package doc).
 	if strict {
 		// Mark each marker as "unused" by default; clear flag if we find
 		// any matching call. Simplistic: we only verify the verb appears
@@ -228,11 +232,11 @@ func parseRBACMarker(line string, pos token.Position) (markerRule, error) {
 			rest = strings.Trim(rest, `"`)
 			switch currentKey {
 			case "groups":
-				rule.groups = append(rule.groups, splitFilter(rest, ";"))
+				rule.groups = append(rule.groups, rest)
 			case "resources":
-				rule.resources = append(rule.resources, splitFilter(rest, ";"))
+				rule.resources = append(rule.resources, rest)
 			case "verbs":
-				rule.verbs = append(rule.verbs, splitFilter(rest, ";"))
+				rule.verbs = append(rule.verbs, rest)
 			}
 		} else {
 			// Continuation chunk (comma-separated value within a key).
@@ -251,14 +255,6 @@ func parseRBACMarker(line string, pos token.Position) (markerRule, error) {
 		return rule, fmt.Errorf("marker missing verbs= clause")
 	}
 	return rule, nil
-}
-
-// splitFilter splits s on sep and returns the slice as a single string
-// (caller appends one entry; filtering empty values preserved as-is for
-// simplicity in v1).
-func splitFilter(s, sep string) string {
-	// Return joined for now; downstream verbMatch case-insensitive.
-	return s
 }
 
 // verbMatch returns true if call (e.g., "Get") corresponds to any of

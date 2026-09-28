@@ -12,7 +12,7 @@ import (
 // TestScrubEvent_PreservesCleanInput — pure inputs pass through unchanged.
 func TestScrubEvent_PreservesCleanInput(t *testing.T) {
 	in := PhaseEvent{Phase: "build", Status: "in_progress"}
-	out := ScrubEvent(in)
+	out := scrubEvent(in)
 	if out != in {
 		t.Fatalf("clean input should round-trip; got %+v want %+v", out, in)
 	}
@@ -46,7 +46,7 @@ func TestScrubEventWithCount_ReturnsAccurateReplacementCount(t *testing.T) {
 // TestScrubEvent_RemovesArgoCDTerm — exact-match canonical case.
 func TestScrubEvent_RemovesArgoCDTerm(t *testing.T) {
 	in := PhaseEvent{Phase: "deploy", Status: "in_progress", DegradedReason: "ArgoCD application sync timeout"}
-	out := ScrubEvent(in)
+	out := scrubEvent(in)
 	if strings.Contains(out.DegradedReason, "ArgoCD") {
 		t.Fatalf("scrubbed text still contains 'ArgoCD': %q", out.DegradedReason)
 	}
@@ -58,7 +58,7 @@ func TestScrubEvent_RemovesArgoCDTerm(t *testing.T) {
 // TestScrubEvent_RemovesCosignTerm — Sign-phase canonical leak.
 func TestScrubEvent_RemovesCosignTerm(t *testing.T) {
 	in := PhaseEvent{Phase: "sign", Status: "completed", DegradedReason: "cosign verify failed: no signature"}
-	out := ScrubEvent(in)
+	out := scrubEvent(in)
 	if strings.Contains(out.DegradedReason, "cosign") {
 		t.Fatalf("scrubbed text still contains 'cosign': %q", out.DegradedReason)
 	}
@@ -74,7 +74,7 @@ func TestScrubEvent_HandlesAllDenyListEntries(t *testing.T) {
 	}
 	for _, term := range denylist {
 		in := PhaseEvent{Phase: "deploy", DegradedReason: "test: " + term + " failed"}
-		out := ScrubEvent(in)
+		out := scrubEvent(in)
 		if strings.Contains(out.DegradedReason, term) {
 			t.Errorf("denylist term %q leaked: got %q", term, out.DegradedReason)
 		}
@@ -89,7 +89,7 @@ func TestScrubEvent_HandlesAllCellTopologyVariants(t *testing.T) {
 	}
 	for _, v := range variants {
 		in := PhaseEvent{Phase: "deploy", DegradedReason: "sync to " + v + " failed"}
-		out := ScrubEvent(in)
+		out := scrubEvent(in)
 		if strings.Contains(out.DegradedReason, v) {
 			t.Errorf("cell variant %q leaked: got %q", v, out.DegradedReason)
 		}
@@ -104,7 +104,7 @@ func TestScrubEvent_CaseInsensitiveArgoCD(t *testing.T) {
 	variants := []string{"ArgoCD", "argocd", "argo-cd", "Argo CD"}
 	for _, v := range variants {
 		in := PhaseEvent{Phase: "deploy", DegradedReason: v + " refused: 401"}
-		out := ScrubEvent(in)
+		out := scrubEvent(in)
 		if strings.Contains(out.DegradedReason, v) {
 			t.Errorf("argocd variant %q leaked: got %q", v, out.DegradedReason)
 		}
@@ -116,7 +116,7 @@ func TestScrubEvent_CaseInsensitiveArgoRollouts(t *testing.T) {
 	variants := []string{"Argo Rollouts", "argo-rollouts", "argorollouts"}
 	for _, v := range variants {
 		in := PhaseEvent{Phase: "deploy", DegradedReason: v + " aborted"}
-		out := ScrubEvent(in)
+		out := scrubEvent(in)
 		if strings.Contains(out.DegradedReason, v) {
 			t.Errorf("argo-rollouts variant %q leaked: got %q", v, out.DegradedReason)
 		}
@@ -152,4 +152,11 @@ func TestScrub_SourceFileContainsNoLeakedTerms(t *testing.T) {
 			t.Errorf("denylist term %q found OUTSIDE canonicalScrubRules block — possible leak", term)
 		}
 	}
+}
+
+// scrubEvent is ScrubEventWithCount without the count, for assertions that
+// only read the rewritten event.
+func scrubEvent(in PhaseEvent) PhaseEvent {
+	out, _ := ScrubEventWithCount(in)
+	return out
 }

@@ -12,31 +12,37 @@
 package alertrunbooks
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultRulesDir holds the PrometheusRule manifests, relative to repo root.
 //
-// Mantido para compatibilidade: e' o diretorio historico e segue sendo o primeiro da
-// lista. Quem varre e' `DefaultRulesDirs`.
+// Kept for compatibility: it is the historical directory and is still the first in the
+// list. What gets scanned is `DefaultRulesDirs`.
 const DefaultRulesDir = "infra/helm/monitoring/manifests"
 
-// DefaultRulesDirs sao TODOS os diretorios onde alertas de fato vivem (B-164).
+// DefaultRulesDirs are ALL the directories where alerts actually live (B-164).
 //
-// Ate' 2026-08-19 o gate varria apenas o primeiro. Medido nessa data: a arvore tem **233**
-// alertas e ele olhava **110** — 47%. E os dois de `admission-policies` sao justamente onde
-// vivem 22 das 23 anotacoes `runbook_url`, entao a metade nao varrida concentrava quase
-// toda a evidencia que este gate existe para conferir.
+// Until 2026-08-19 the gate scanned only the first. Measured on that date: the tree has
+// **233** alerts and it looked at **110** — 47%. And the two `admission-policies` ones are
+// precisely where 22 of the 23 `runbook_url` annotations live, so the unscanned half held
+// almost all the evidence this gate exists to check.
 //
-// `charts/` nao e' artefato de bootstrap: sao os charts OCI publicados que o ArgoCD entrega
-// aos tenants.
+// `charts/` is not only what ArgoCD delivers: charts/loopzero-admission-policies is also the
+// chart Helmfile installs on core and every cell. Its bootstrap copy under
+// infra/helm/admission-policies was listed here too until it was deleted — scanning two
+// identical copies scanned every admission alert twice.
 var DefaultRulesDirs = []string{
 	"infra/helm/monitoring/manifests",
 	"charts/loopzero-monitoring/templates",
-	"infra/helm/admission-policies/templates",
 	"charts/loopzero-admission-policies/templates",
 }
 
@@ -61,70 +67,75 @@ var DefaultExceptionList = []string{
 // Config drives the gate.
 type Config struct {
 	Root          string
-	RulesDir      string   // um unico diretorio (compat); vazio usa RulesDirs
-	RulesDirs     []string // default DefaultRulesDirs (relativos a Root)
+	RulesDir      string   // a single directory (compat); empty uses RulesDirs
+	RulesDirs     []string // default DefaultRulesDirs (relative to Root)
 	ExceptionList []string // default DefaultExceptionList
 }
 
 // Outcome captures the result.
 type Outcome struct {
 	Pass bool
-	// Violations sao SITES em violacao, no formato "<dir>/<arquivo>:<alerta>".
+	// Violations are SITES in violation, in the form "<dir>/<file>:<alert>".
 	//
-	// O diretorio faz parte da chave desde 2026-09-06 (B-067) e a razao e' medida: 9 dos
-	// arquivos de alerta existem DUAS vezes na arvore — uma copia em `infra/helm/...` e a
-	// copia espelhada em `charts/...` que o ArgoCD entrega aos tenants. Com a chave so' no
-	// basename, esses 9 pares produziam linhas IDENTICAS: o relatorio dizia duas vezes
-	// `policy-controller-alerts.yaml:LoopZeroPolicyControllerDown` sem dizer qual abrir, e
-	// consertar uma copia deixava a outra reprovando com a mesma linha — indistinguivel do
-	// trabalho que acabara de ser feito.
+	// The directory has been part of the key since 2026-09-06 (B-067) and the reason is
+	// measured: 9 of the alert files exist TWICE in the tree — one copy in `infra/helm/...`
+	// and the mirrored copy in `charts/...` that ArgoCD delivers to tenants. With the key
+	// being only the basename, those 9 pairs produced IDENTICAL lines: the report said
+	// `policy-controller-alerts.yaml:LoopZeroPolicyControllerDown` twice without saying which
+	// one to open, and fixing one copy left the other failing with the same line —
+	// indistinguishable from the work that had just been done.
 	Violations []string
-	// NomesEmViolacao guarda o nome de cada alerta em violacao, na ordem dos sites, para
-	// que `AlertasDistintos` possa separar "quantos alertas" de "quantos lugares".
-	NomesEmViolacao []string
-	// LinksMortos sao anotacoes de runbook que APONTAM PARA O NADA e que o gate
-	// consegue provar sem rede: caminho deste repositorio que nao existe em disco,
-	// ou URL do GitHub numa org diferente da identidade canonica do repo.
+	// ViolatingAlertNames holds the name of each alert in violation, in site order, so
+	// that `DistinctAlerts` can separate "how many alerts" from "how many places".
+	ViolatingAlertNames []string
+	// DeadLinks are runbook annotations that POINT TO NOTHING and that the gate can
+	// prove without the network: a path in this repository that does not exist on
+	// disk, or a GitHub URL in an organisation different from the repo's canonical
+	// identity.
 	//
-	// Medido em 2026-08-19 (B-161): das 7 URLs da arvore, SEIS nao levavam a nada, e
-	// todas as sete contavam como satisfeitas. Um alerta que dispara as 3 da manha
-	// mandando o operador para um 404 e' pior que um alerta sem link — o link promete.
-	LinksMortos []LinkMorto
-	// LinksNaoVerificaveis conta as URLs externas. Um gate hermetico nao pode dizer
-	// se `https://docs.loopzero.example/runbooks/x` esta viva; afirmar qualquer um dos dois
-	// seria inventar. Contar e' honesto, e o numero e' o que faz alguem conferir.
-	LinksNaoVerificaveis int
-	// DirsVarridos conta quantos diretorios de regras existiram de fato. Zero e' falha:
-	// e' a diferenca entre "nenhum alerta sem runbook" e "nenhum alerta olhado".
-	DirsVarridos int
-	// LinksConferidos conta TODAS as anotacoes examinadas, inclusive as saudaveis.
+	// Measured on 2026-08-19 (B-161): of the 7 URLs in the tree, SIX led nowhere, and
+	// all seven counted as satisfied. An alert that fires at 3am sending the operator
+	// to a 404 is worse than an alert without a link — the link makes a promise.
+	DeadLinks []DeadLink
+	// UnverifiableLinks counts the external URLs. A hermetic gate cannot tell whether
+	// `https://docs.loopzero.example/runbooks/x` is alive; asserting either would be
+	// inventing. Counting is honest, and the number is what makes someone check.
+	UnverifiableLinks int
+	// DirsScanned counts how many rules directories actually existed. Zero is a failure:
+	// it is the difference between "no alert without a runbook" and "no alert looked at".
+	DirsScanned int
+	// LinksChecked counts ALL annotations examined, including the healthy ones.
 	//
-	// Existe porque a varredura de populacao somava mortos + nao-verificaveis e tratava
-	// zero como "nao alcancou nada" — quando zero e' tambem o resultado de **todos os
-	// links estarem bons**. Confundir as duas coisas e' a forma exata que este gate existe
-	// para combater, e ela estava no teste que devia prova-lo.
-	LinksConferidos int
+	// It exists because the population scan summed dead + unverifiable and treated zero
+	// as "reached nothing" — when zero is also the result of **every link being good**.
+	// Confusing the two is the exact shape this gate exists to fight, and it was in the
+	// test that was supposed to prove it.
+	LinksChecked int
 }
 
-// AlertasDistintos conta ALERTAS, nao sites. Os dois numeros divergem exatamente quando um
-// alerta vive na copia `infra/helm` e na copia `charts` — e a diferenca importa porque sao
-// afirmacoes diferentes: "37 alertas nao dizem ao operador o que fazer" e' divida de
-// runbook; "46 lugares para editar" e' o tamanho do conserto. Reportar o segundo numero com
-// a palavra do primeiro infla a divida em 24% (medido 2026-09-06: 46 sites, 37 alertas).
-func (o *Outcome) AlertasDistintos() int {
-	vistos := make(map[string]struct{}, len(o.NomesEmViolacao))
-	for _, n := range o.NomesEmViolacao {
-		vistos[n] = struct{}{}
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
+// DistinctAlerts counts ALERTS, not sites. The two numbers diverge exactly when an alert
+// lives in the `infra/helm` copy and in the `charts` copy — and the difference matters
+// because they are different claims: "37 alerts do not tell the operator what to do" is
+// runbook debt; "46 places to edit" is the size of the fix. Reporting the second number
+// with the word of the first inflates the debt by 24% (measured 2026-09-06: 46 sites,
+// 37 alerts).
+func (o *Outcome) DistinctAlerts() int {
+	seen := make(map[string]struct{}, len(o.ViolatingAlertNames))
+	for _, n := range o.ViolatingAlertNames {
+		seen[n] = struct{}{}
 	}
-	return len(vistos)
+	return len(seen)
 }
 
-// LinkMorto e' uma anotacao de runbook provada inutil sem sair da maquina.
-type LinkMorto struct {
-	Arquivo string
-	Alerta  string
-	URL     string
-	Motivo  string
+// DeadLink is a runbook annotation proven useless without leaving the machine.
+type DeadLink struct {
+	File   string
+	Alert  string
+	URL    string
+	Reason string
 }
 
 // Check scans PrometheusRule YAMLs for alerts missing a runbook annotation.
@@ -154,152 +165,160 @@ func Check(cfg Config) *Outcome {
 	for _, rulesDir := range dirs {
 		dir := filepath.Join(root, rulesDir)
 		entries, err := os.ReadDir(dir)
-		if err != nil {
-			// Diretorio ausente e' tolerado — as arvores de teste tem so' um deles — mas
-			// NAO em silencio: `DirsVarridos` conta quantos existiram, e zero e' falha.
+		if errors.Is(err, fs.ErrNotExist) {
+			// An absent directory is tolerated — test trees hold only one of them —
+			// but NOT silently: `DirsScanned` counts how many existed, and zero fails.
 			continue
 		}
-		out.DirsVarridos++
-		varrerDiretorio(root, rulesDir, dir, entries, excepted, out)
+		if err != nil {
+			out.Violations = append(out.Violations,
+				fmt.Sprintf("%s: unreadable rules directory, not audited: %v", rulesDir, err))
+			continue
+		}
+		out.DirsScanned++
+		scanDirectory(root, rulesDir, dir, entries, excepted, out)
 	}
-	if out.DirsVarridos == 0 {
+	if out.DirsScanned == 0 {
 		out.Pass = false
 		out.Violations = append(out.Violations,
-			"NENHUM diretorio de regras encontrado — varredura que nao alcanca nada nao e' verde")
+			"NO rules directory found — a scan that reaches nothing is not green")
 	}
-	if len(out.Violations) > 0 || len(out.LinksMortos) > 0 {
+	if len(out.Violations) > 0 || len(out.DeadLinks) > 0 {
 		out.Pass = false
 	}
 	return out
 }
 
-func varrerDiretorio(root, relDir, dir string, entries []os.DirEntry, excepted map[string]struct{}, out *Outcome) {
+func scanDirectory(root, relDir, dir string, entries []os.DirEntry, excepted map[string]struct{}, out *Outcome) {
 	for _, e := range entries {
-		// O filtro historico exigia "prometheusrule" no nome — herdado do script bash que
-		// este gate substituiu. Medido em 2026-08-19 (B-164): os alertas de
-		// `admission-policies` vivem em `*-alerts.yaml` (`sigstore-storage-alerts.yaml`,
-		// `tenant-namespace-alerts.yaml`, …), entao ampliar o escopo de diretorios nao
-		// bastava: o filtro de NOME continuava descartando 37 alertas e 22 das 23
-		// anotacoes `runbook_url` da arvore.
+		// The historical filter required "prometheusrule" in the name — inherited from the
+		// bash script this gate replaced. Measured on 2026-08-19 (B-164): the
+		// `admission-policies` alerts live in `*-alerts.yaml` (`sigstore-storage-alerts.yaml`,
+		// `tenant-namespace-alerts.yaml`, …), so widening the directory scope was not
+		// enough: the NAME filter kept discarding 37 alerts and 22 of the 23
+		// `runbook_url` annotations in the tree.
 		//
-		// Aceita as duas formas. O que decide e' o arquivo declarar alerta, e ambos os
-		// nomes sao convencao viva do repositorio.
-		nome := e.Name()
-		relevante := strings.Contains(nome, "prometheusrule") || strings.Contains(nome, "alert")
-		if e.IsDir() || !relevante || !strings.HasSuffix(nome, ".yaml") {
+		// Accept both forms. What decides is the file declaring an alert, and both names
+		// are live conventions in the repository.
+		name := e.Name()
+		relevant := strings.Contains(name, "prometheusrule") || strings.Contains(name, "alert")
+		if e.IsDir() || !relevant || !strings.HasSuffix(name, ".yaml") {
 			continue
 		}
 		data, rerr := os.ReadFile(filepath.Join(dir, e.Name()))
 		if rerr != nil {
+			// An alert file nobody could read was never audited; it is not clean.
+			out.Violations = append(out.Violations,
+				fmt.Sprintf("%s/%s: unreadable, runbook links not checked: %v", relDir, e.Name(), rerr))
 			continue
 		}
 		for _, name := range missingRunbookAlerts(string(data), excepted) {
 			out.Violations = append(out.Violations, relDir+"/"+e.Name()+":"+name)
-			out.NomesEmViolacao = append(out.NomesEmViolacao, name)
+			out.ViolatingAlertNames = append(out.ViolatingAlertNames, name)
 		}
-		conferirLinks(root, e.Name(), string(data), out)
+		checkLinks(root, e.Name(), string(data), out)
 	}
 }
 
-// repoCanonico e' o NOME deste repositorio, tirado do caminho de modulo dos `go.mod`
-// (`github.com/getloopscale/loopzero/...`) e nao do remote git — o remote varia por checkout e
-// por alias de ssh, o caminho de modulo nao.
+// canonicalRepo is this repository's NAME, taken from the `go.mod` module path
+// (`github.com/getloopscale/loopzero/...`) rather than from the git remote, which varies
+// by checkout and by ssh alias.
 //
-// A comparacao e' pelo REPO e nao pela ORG, e isso e' correcao de um erro que este mesmo
-// arquivo carregou por algumas horas em 2026-08-19. A versao anterior tratava org
-// diferente de `getloopscale` como link morto "por construcao". Medido depois, com credencial
-// que enxerga: **`getloopscale/loopzero` existe e tem os arquivos**, tanto quanto
-// `getloopscale/loopzero`. Sao dois caminhos para o mesmo repositorio, e a regra teria produzido
-// falso positivo assim que o escopo do gate crescesse (B-164).
+// The comparison is by REPOSITORY, not by organisation: the same repository is
+// reachable under more than one organisation, so an organisation mismatch proves
+// nothing about whether the file exists. A version of this gate that treated a
+// different organisation as a dead link "by construction" held for a few hours on
+// 2026-08-19 and would have produced false positives (B-164).
 //
-// Como o erro entrou, porque a forma se repete: eu extrai as URLs truncadas, INVENTEI os
-// nomes de arquivo que elas pareciam ter (`sigstore-key-rotation.md`,
-// `tuf-root-rotation.md`), sondei ESSES nomes pela API e recebi Not Found. Os nomes reais
-// eram outros (`sigstore-storage-model.md`, `tuf-root-ceremony.md`) e resolvem. Sondar o
-// que eu supus em vez do que o arquivo diz e' fabricacao de evidencia com passo extra.
-const repoCanonico = "loopzero"
+// How that error got in, because the shape repeats: the truncated URLs were read,
+// the file names they SEEMED to have were guessed, and the guesses were probed and
+// returned Not Found. The real names were different and resolve. Probing what was
+// assumed instead of what the file says is evidence fabrication with an extra step.
+const canonicalRepo = "loopzero"
 
 var runbookURLRe = regexp.MustCompile(`runbook_url:\s*"([^"]+)"`)
 var blobRe = regexp.MustCompile(`^https://github\.com/([^/]+)/([^/]+)/blob/[^/]+/(.+)$`)
 
-// conferirLinks prova, SEM REDE, quais anotacoes de runbook nao levam a nada.
+// checkLinks proves, WITHOUT the network, which runbook annotations lead nowhere.
 //
-// So' afirma o que da' para afirmar hermeticamente:
-//   - URL de blob do GitHub nesta org  -> confere o caminho em disco
-//   - URL de blob do GitHub noutra org -> link morto por construcao (quem tem acesso
-//     a este repositorio nao alcanca o outro; medido no B-161 com `gh api`)
-//   - qualquer outra                   -> nao-verificavel, e fica CONTADA
-func conferirLinks(root, arquivo, conteudo string, out *Outcome) {
-	blocos := alertSplitRe.Split(conteudo, -1)
-	for _, blk := range blocos[1:] {
+// It asserts only what can be asserted hermetically:
+//   - a GitHub blob URL into THIS repository (any organisation) -> the path is
+//     checked on disk; a missing path is a dead link
+//   - a GitHub blob URL into ANOTHER repository -> unverifiable without the
+//     network: counted in UnverifiableLinks, never reported as dead
+//   - any other URL -> unverifiable, and COUNTED
+func checkLinks(root, file, content string, out *Outcome) {
+	blocks := alertSplitRe.Split(content, -1)
+	for _, blk := range blocks[1:] {
 		m := alertNameRe.FindStringSubmatch(blk)
 		if m == nil {
 			continue
 		}
-		alerta := m[1]
-		corpo := blk
-		if len(corpo) > runbookLookahead {
-			corpo = corpo[:runbookLookahead]
+		alert := m[1]
+		body := blk
+		if len(body) > runbookLookahead {
+			body = body[:runbookLookahead]
 		}
-		u := runbookURLRe.FindStringSubmatch(corpo)
+		u := runbookURLRe.FindStringSubmatch(body)
 		if u == nil {
 			continue
 		}
-		out.LinksConferidos++
+		out.LinksChecked++
 		url := u[1]
 		b := blobRe.FindStringSubmatch(url)
 		if b == nil {
-			out.LinksNaoVerificaveis++
+			out.UnverifiableLinks++
 			continue
 		}
-		repo, caminho := b[2], b[3]
-		// A ancora (e um eventual query) NAO fazem parte do caminho em disco. `blobRe`
-		// captura tudo depois do branch num grupo so', entao sem este corte o `Stat`
-		// pergunta por `runbook-security-alerts.md#loopzerounsignedreleasepushed` — nome que
-		// nenhum arquivo tem — e um runbook que existe e' acusado de morto.
+		repo, path := b[2], b[3]
+		// The anchor (and any query) are NOT part of the on-disk path. `blobRe` captures
+		// everything after the branch in a single group, so without this cut `Stat` asks
+		// for `runbook-security-alerts.md#loopzerounsignedreleasepushed` — a name no file has —
+		// and a runbook that exists is accused of being dead.
 		//
-		// Medido em 2026-09-04 (B-067): os OITO links mortos que este gate reportava na
-		// arvore eram os oito falsos, e quatro deles eram justamente os runbooks de
-		// seguranca entregues pela bala 2 do proprio item. Como `LinksMortos` nao-vazio
-		// forca `Pass = false`, o gate reprovava por defeito nenhum.
+		// Measured on 2026-09-04 (B-067): the EIGHT dead links this gate reported in the
+		// tree were the eight false ones, and four of them were precisely the security
+		// runbooks delivered by bullet 2 of the item itself. Since a non-empty `DeadLinks`
+		// forces `Pass = false`, the gate failed over no defect at all.
 		//
-		// O caminho vazio depois do corte continua morto: `Stat` na raiz responderia
-		// "existe" para um `runbook_url` que nao aponta a arquivo nenhum.
-		if i := strings.IndexAny(caminho, "#?"); i >= 0 {
-			caminho = caminho[:i]
+		// An empty path after the cut is still dead: `Stat` on the root would answer
+		// "exists" for a `runbook_url` that points at no file at all.
+		if i := strings.IndexAny(path, "#?"); i >= 0 {
+			path = path[:i]
 		}
-		if caminho == "" {
-			out.LinksMortos = append(out.LinksMortos, LinkMorto{
-				Arquivo: arquivo, Alerta: alerta, URL: url,
-				Motivo: "runbook_url sem caminho de arquivo",
+		if path == "" {
+			out.DeadLinks = append(out.DeadLinks, DeadLink{
+				File: file, Alert: alert, URL: url,
+				Reason: "runbook_url has no file path",
 			})
 			continue
 		}
-		if repo != repoCanonico {
-			// Outro repositorio: o caminho nao existe nesta arvore por definicao, e
-			// afirmar que ele nao existe NA DE LA' exigiria rede. Contado, nao acusado.
-			out.LinksNaoVerificaveis++
+		if repo != canonicalRepo {
+			// Another repository: the path does not exist in this tree by definition, and
+			// asserting it does not exist in THAT one would require the network. Counted,
+			// not accused.
+			out.UnverifiableLinks++
 			continue
 		}
-		// O caminho vem do CONTEUDO de um YAML — entrada nao confiavel. Sem tratamento,
-		// um `runbook_url` com `../../..` faria este `Stat` perguntar ao disco por um
-		// arquivo FORA da arvore, e um que existisse responderia "runbook ok". O gosec
-		// apontou (G703) e estava certo.
+		// The path comes from the CONTENT of a YAML file — untrusted input. Without
+		// handling, a `runbook_url` with `../../..` would make this `Stat` ask the disk for
+		// a file OUTSIDE the tree, and one that existed would answer "runbook ok". gosec
+		// flagged it (G703) and was right.
 		//
-		// `Clean("/"+caminho)` resolve os `..` contra a RAIZ e nao contra `root`, entao o
-		// resultado sempre comeca em `/` e sempre cai dentro de `root` depois do Join —
-		// a travessia vira um caminho relativo comum, que simplesmente nao existe.
+		// `Clean("/"+path)` resolves the `..` against the ROOT and not against `root`, so
+		// the result always starts with `/` and always lands inside `root` after the Join —
+		// the traversal becomes an ordinary relative path that simply does not exist.
 		//
-		// Escrevi tambem uma checagem de contencao aqui e a REMOVI: depois do `Clean` ela
-		// nao tinha como disparar. Guarda inalcancavel e' codigo morto que se le' como
-		// protecao, e este e' o repositorio errado para deixar uma dessas. Quem prova a
-		// neutralizacao e' `TestTravessiaNaoAlcancaArquivoForaDaRaiz`, que poe um arquivo
-		// REAL fora e exige que ele nao seja aceito.
-		alvo := filepath.Join(root, filepath.Clean("/"+caminho))
-		if _, err := os.Stat(alvo); err != nil {
-			out.LinksMortos = append(out.LinksMortos, LinkMorto{
-				Arquivo: arquivo, Alerta: alerta, URL: url,
-				Motivo: caminho + " nao existe neste repositorio",
+		// I also wrote a containment check here and REMOVED it: after the `Clean` it had no
+		// way to fire. An unreachable guard is dead code that reads as protection, and this
+		// is the wrong repository to leave one of those in. What proves the neutralisation
+		// is `TestTraversalDoesNotReachFileOutsideRoot`, which puts a REAL file outside and
+		// requires that it not be accepted.
+		target := filepath.Join(root, filepath.Clean("/"+path))
+		if _, err := os.Stat(target); err != nil {
+			out.DeadLinks = append(out.DeadLinks, DeadLink{
+				File: file, Alert: alert, URL: url,
+				Reason: path + " does not exist in this repository",
 			})
 		}
 	}

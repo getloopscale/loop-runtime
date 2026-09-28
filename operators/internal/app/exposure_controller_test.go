@@ -118,9 +118,10 @@ var _ = Describe("ExposureController", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			// #277: o Secret vive na cell do workload, no namespace do tenant, com o nome
-			// que o renderer cria — tls-{project}-{app} — e NÃO derivado do hostname.
-			// A cadeia é ExposedRoute -> LoopZeroApplication -> Tenant -> cellID -> namespace.
+			// #277: the Secret lives in the workload's cell, in the tenant namespace, under
+			// the name the renderer creates — tls-{project}-{app} — NOT one derived from
+			// the hostname. The chain is ExposedRoute -> LoopZeroApplication -> Tenant ->
+			// cellID -> namespace.
 			tenant := &loopzerov1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{Name: "tn-cert", Namespace: "default"},
 				Spec: loopzerov1.TenantSpec{
@@ -143,6 +144,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 					Project:     "certproj",
 					Environment: "production",
 					ServiceName: serviceName,
+					AppName:     serviceName,
 				},
 			}
 			Expect(k8sClient.Create(ctx, loopzeroApp)).To(Succeed())
@@ -150,7 +152,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 			certNS := &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{Name: "loopzero-tn-cert-certproj-production"},
 			}
-			_ = k8sClient.Create(ctx, certNS) // idempotente entre execuções do suite
+			_ = k8sClient.Create(ctx, certNS) // idempotent across suite runs
 
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{

@@ -168,42 +168,42 @@ export LOOPZERO_REGISTRY_ENDPOINT="registry.digitalocean.com/loopzero"
 # === First run — should generate randoms ===
 log ""
 log "=== Run 1 (initial install) ==="
-bash "$SECRETS_SCRIPT" dev mgmt 2>/dev/null
+bash "$SECRETS_SCRIPT" dev core 2>/dev/null
 
 # Capture generated values
 GITEA_PWD_1=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/gitea-admin/password" 2>/dev/null || echo "MISSING")
 GITEA_TOKEN_1=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/gitea-admin/token" 2>/dev/null || echo "MISSING")
-HARBOR_PWD_1=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/harbor-admin/password" 2>/dev/null || echo "MISSING")
-HARBOR_REDIS_PWD_1=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/harbor-redis-credentials/password" 2>/dev/null || echo "MISSING")
 
 log "  Generated GITEA_PWD: ${GITEA_PWD_1:0:8}..."
-log "  Generated HARBOR_PWD: ${HARBOR_PWD_1:0:8}..."
 
 # === Second run — should reuse same values ===
 log ""
 log "=== Run 2 (re-run / sync) ==="
-unset LOOPZERO_GITEA_ADMIN_PASSWORD LOOPZERO_HARBOR_ADMIN_PASSWORD LOOPZERO_HARBOR_REDIS_PASSWORD
-bash "$SECRETS_SCRIPT" dev mgmt 2>/dev/null
+unset LOOPZERO_GITEA_ADMIN_PASSWORD
+bash "$SECRETS_SCRIPT" dev core 2>/dev/null
 
 GITEA_PWD_2=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/gitea-admin/password" 2>/dev/null || echo "MISSING")
 GITEA_TOKEN_2=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/gitea-admin/token" 2>/dev/null || echo "MISSING")
-HARBOR_PWD_2=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/harbor-admin/password" 2>/dev/null || echo "MISSING")
-HARBOR_REDIS_PWD_2=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/harbor-redis-credentials/password" 2>/dev/null || echo "MISSING")
 
 # === Assertions ===
 export PATH="$ORIG_PATH"
 
-[[ "$GITEA_PWD_1" == "$GITEA_PWD_2" ]] && ok "gitea password preserved across runs" \
-  || fail "GITEA_PWD" "changed: '${GITEA_PWD_1:0:8}' → '${GITEA_PWD_2:0:8}'"
+# A value is PRESERVED only when it exists on both runs and did not change. Two
+# MISSING readings are equal, and comparing them used to pass all four checks
+# while the script had written nothing (it no-ops for any cluster but `core`).
+preserved() {
+  local label="$1" first="$2" second="$3"
+  if [[ "$first" == "MISSING" || "$second" == "MISSING" ]]; then
+    fail "$label" "not written (run 1: ${first:0:8}, run 2: ${second:0:8})"
+  elif [[ "$first" == "$second" ]]; then
+    ok "$label preserved across runs"
+  else
+    fail "$label" "changed: '${first:0:8}' → '${second:0:8}'"
+  fi
+}
 
-[[ "$GITEA_TOKEN_1" == "$GITEA_TOKEN_2" ]] && ok "gitea token preserved across runs" \
-  || fail "GITEA_TOKEN" "changed across runs"
-
-[[ "$HARBOR_PWD_1" == "$HARBOR_PWD_2" ]] && ok "harbor admin password preserved across runs" \
-  || fail "HARBOR_PWD" "changed: '${HARBOR_PWD_1:0:8}' → '${HARBOR_PWD_2:0:8}'"
-
-[[ "$HARBOR_REDIS_PWD_1" == "$HARBOR_REDIS_PWD_2" ]] && ok "harbor-redis password preserved across runs" \
-  || fail "HARBOR_REDIS_PWD" "changed across runs"
+preserved "gitea password" "$GITEA_PWD_1" "$GITEA_PWD_2"
+preserved "gitea token" "$GITEA_TOKEN_1" "$GITEA_TOKEN_2"
 
 # B4 — gitea token must be 32 chars (random_password output without trailing newline)
 TOKEN_LEN=${#GITEA_TOKEN_2}
@@ -216,5 +216,5 @@ DB_PWD_2=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/loopzero-db-credentials/pa
   || fail "DB_PWD" "expected 'db-pwd-from-pulumi', got '$DB_PWD_2'"
 
 log ""
-log "RESULT: ${PASS} PASS, ${FAIL} FAIL (idempotency target: 6/6)"
+log "RESULT: ${PASS} PASS, ${FAIL} FAIL (idempotency target: 4/4)"
 [[ "$FAIL" == "0" ]] && exit 0 || exit 1

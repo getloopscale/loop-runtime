@@ -56,7 +56,7 @@ func (r *GitRunner) Run(ctx context.Context, dir string, args ...string) error {
 	if err != nil {
 		sanitizedOutput := r.sanitizeOutput(string(output))
 		sanitizedArgs := r.sanitizeArgs(args)
-		return fmt.Errorf("git %s: %w (output: %s)", strings.Join(sanitizedArgs, " "), err, strings.TrimSpace(sanitizedOutput))
+		return &CommandError{Args: strings.Join(sanitizedArgs, " "), Output: strings.TrimSpace(sanitizedOutput), Err: err}
 	}
 	return nil
 }
@@ -75,16 +75,23 @@ func (r *GitRunner) Output(ctx context.Context, dir string, args ...string) (str
 	return strings.TrimSpace(string(output)), nil
 }
 
-// RunWithAuth runs a git command with the auth token injected via http.extraHeader.
-// SEC-1: Credentials are passed as HTTP header, not embedded in the URL,
-// preventing token exposure in /proc/PID/cmdline.
+// RunWithAuth runs a git command with the auth token injected as an
+// http.extraHeader. SEC-1: the credential is never embedded in the URL, and it
+// is passed through git's environment configuration (GIT_CONFIG_COUNT /
+// GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n, git >= 2.31) rather than as a `-c`
+// argument: argv is readable by every process in the pod through
+// /proc/<pid>/cmdline and shows in process listings, the environment is not.
 func (r *GitRunner) RunWithAuth(ctx context.Context, dir string, gitArgs ...string) error {
 	if r.token == "" {
 		return r.Run(ctx, dir, gitArgs...)
 	}
-	authArgs := []string{"-c", fmt.Sprintf("http.extraHeader=Authorization: token %s", r.token)}
-	fullArgs := append(authArgs, gitArgs...)
-	return r.Run(ctx, dir, fullArgs...)
+	authed := *r
+	authed.extraEnv = append(append([]string(nil), r.extraEnv...),
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=http.extraHeader",
+		"GIT_CONFIG_VALUE_0=Authorization: token "+r.token,
+	)
+	return authed.Run(ctx, dir, gitArgs...)
 }
 
 // buildEnv returns the environment for git commands.

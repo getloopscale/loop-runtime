@@ -74,57 +74,9 @@ func TestL1_10Tenants(t *testing.T) {
 	}
 
 	// Concurrent deploys
-	var (
-		wg       sync.WaitGroup
-		results  []DeployResult
-		mu       sync.Mutex
-		success  int64
-		failures int64
-	)
-
-	start := time.Now()
-
-	for i := 0; i < tenantCount; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			name := fmt.Sprintf("loadtest-%d", idx)
-			r := sim.SimulateDeploy(ctx, name, "production")
-			r.TenantIdx = idx
-
-			mu.Lock()
-			results = append(results, r)
-			mu.Unlock()
-
-			if r.Success {
-				atomic.AddInt64(&success, 1)
-			} else {
-				atomic.AddInt64(&failures, 1)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-	totalDuration := time.Since(start)
-
-	// Compute percentiles
-	var totalLatencies, uploadLatencies []time.Duration
-	for _, r := range results {
-		totalLatencies = append(totalLatencies, r.Latency.Total)
-		uploadLatencies = append(uploadLatencies, r.Latency.Upload)
-	}
-
-	report := &LoadTestResult{
-		TotalDeploys:     tenantCount,
-		SuccessCount:     success,
-		FailureCount:     failures,
-		Duration:         totalDuration,
-		DeployLatencyP50: percentile(totalLatencies, 50),
-		DeployLatencyP95: percentile(totalLatencies, 95),
-		DeployLatencyP99: percentile(totalLatencies, 99),
-		UploadLatencyP50: percentile(uploadLatencies, 50),
-		Results:          results,
-	}
+	report := sim.RunScenario(ctx, tenantCount, fanOutOptions{concurrency: tenantCount},
+		nil)
+	failures := report.FailureCount
 
 	printReport(t, report)
 
@@ -196,67 +148,14 @@ func TestL2_50Tenants(t *testing.T) {
 	}
 	t.Logf("  %d projects created", tenantCount)
 
-	// Sustained deploys
-	var (
-		results  []DeployResult
-		mu       sync.Mutex
-		success  int64
-		failures int64
-	)
-
-	start := time.Now()
-	deployInterval := time.Minute / time.Duration(deploysPerMinute)
-	ticker := time.NewTicker(deployInterval)
-	defer ticker.Stop()
-
-	deployIdx := 0
-	for {
-		select {
-		case <-ctx.Done():
-			goto done
-		case <-ticker.C:
-			if deployIdx >= tenantCount {
-				goto done
-			}
-			go func(idx int) {
-				name := fmt.Sprintf("loadtest-%d", idx)
-				r := sim.SimulateDeploy(ctx, name, "production")
-				r.TenantIdx = idx
-				mu.Lock()
-				results = append(results, r)
-				mu.Unlock()
-				if r.Success {
-					atomic.AddInt64(&success, 1)
-				} else {
-					atomic.AddInt64(&failures, 1)
-				}
-				t.Logf("  [%d/%d] %s: success=%v latency=%s",
-					idx+1, tenantCount, name, r.Success, r.Latency.Total.Round(time.Second))
-			}(deployIdx)
-			deployIdx++
-		}
-	}
-
-done:
-	totalDuration := time.Since(start)
-
-	var totalLatencies, uploadLatencies []time.Duration
-	for _, r := range results {
-		totalLatencies = append(totalLatencies, r.Latency.Total)
-		uploadLatencies = append(uploadLatencies, r.Latency.Upload)
-	}
-
-	report := &LoadTestResult{
-		TotalDeploys:     len(results),
-		SuccessCount:     success,
-		FailureCount:     failures,
-		Duration:         totalDuration,
-		DeployLatencyP50: percentile(totalLatencies, 50),
-		DeployLatencyP95: percentile(totalLatencies, 95),
-		DeployLatencyP99: percentile(totalLatencies, 99),
-		UploadLatencyP50: percentile(uploadLatencies, 50),
-		Results:          results,
-	}
+	// Sustained deploys: one start per interval, and every deploy is waited for
+	// before the report is read.
+	report := sim.RunScenario(ctx, tenantCount, fanOutOptions{concurrency: tenantCount, arrivalGap: time.Minute / time.Duration(deploysPerMinute)},
+		func(idx int, name string, r DeployResult) {
+			t.Logf("  [%d/%d] %s: success=%v latency=%s",
+				idx+1, tenantCount, name, r.Success, r.Latency.Total.Round(time.Second))
+		})
+	success, failures := report.SuccessCount, report.FailureCount
 
 	printReport(t, report)
 

@@ -6,6 +6,8 @@ package seed
 import (
 	"fmt"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
 )
 
 // StripeWebhookSecretSeed is the Go port of
@@ -19,7 +21,7 @@ import (
 //   - creds absent (Deps.Creds == nil)                 → SKIP
 //   - stripe.webhook_secret empty                      → SKIP
 //   - stripe.webhook_secret == "whsec_PLACEHOLDER"     → SKIP (M5 sponsor-blocked)
-//   - IsPlaceholder(webhook_secret) matches other sentinels (whsec_dev_, REPLACE_, …) → SKIP
+//   - credshape.IsPlaceholder(webhook_secret) matches other sentinels (whsec_dev_, REPLACE_, …) → SKIP
 //   - k8s API error                                    → FAIL
 //   - success (create OR update)                       → PASS
 type StripeWebhookSecretSeed struct{}
@@ -48,12 +50,12 @@ func (s *StripeWebhookSecretSeed) Run(d Deps) Result {
 	// Trim trailing newlines for byte-for-byte parity with the bash seed
 	// (python3 `d.get(...)` preserves the JSON string but bash `$(...)` strips
 	// trailing newlines; then `create secret --from-literal` embeds the raw value).
-	// B-108 — este seed e' invocavel sozinho (`loopzero-ops seed stripe-webhook-secret`), que e' como um
-	// operador conserta uma peca sem repetir a cadeia inteira. Ali nao ha ordem que
-	// garanta o namespace, e a falha e' silenciosa do nosso lado: o seed para, a
-	// cadeia segue, e o efeito aparece noutro sistema. Idempotente — um Get quando
-	// o namespace ja existe, que e' o caminho canonico.
-	if err := ensureNamespace(d, d.Kube, stripeSecretNamespace); err != nil {
+	// B-108 — this seed runs on its own (`loopzero-ops seed stripe-webhook-secret`), which is how an operator
+	// repairs one piece without repeating the whole chain. Nothing then guarantees
+	// the namespace, and the failure is silent on our side: the seed stops, the
+	// chain goes on, and the effect shows up in another system. Idempotent — a
+	// Get when the namespace exists, which is the usual path.
+	if err := d.Kube.EnsureNamespace(d.Ctx, stripeSecretNamespace); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("ensure namespace %s: %v", stripeSecretNamespace, err)}
 	}
 	value := []byte(strings.TrimRight(d.Creds.Stripe.WebhookSecret, "\n"))
@@ -87,7 +89,7 @@ func (s *StripeWebhookSecretSeed) precondition(d Deps) (Result, bool) {
 		return d.MissingInput(CapabilityBilling, "dev-credentials.json absent"), true
 	}
 	wh := d.Creds.Stripe.WebhookSecret
-	if wh == "" || wh == stripePlaceholder || IsPlaceholder(wh) {
+	if wh == "" || wh == stripePlaceholder || credshape.IsPlaceholder(wh) {
 		return d.MissingInput(CapabilityBilling, "stripe.webhook_secret placeholder/absent"), true
 	}
 	return Result{}, false

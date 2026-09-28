@@ -19,6 +19,11 @@ JOIN users u ON tm.user_id = u.id
 WHERE tm.tenant_id = $1
 ORDER BY tm.role, u.username;
 
+-- name: CountTenantMembers :one
+-- Plan enforcement: seats in use, gated against plan_limits.seats.
+SELECT COUNT(*)::int FROM tenant_members
+WHERE tenant_id = $1;
+
 -- name: AddTenantMember :exec
 -- Idempotent: ON CONFLICT (tenant_id, user_id) DO NOTHING preserves
 -- the original role + created_at when the same user is re-added.

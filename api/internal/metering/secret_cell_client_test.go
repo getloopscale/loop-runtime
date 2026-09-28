@@ -11,6 +11,7 @@ package metering
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -18,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/getloopscale/loopzero/api/internal/placement"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 )
 
@@ -54,15 +56,20 @@ func secretCellScheme(t *testing.T) *runtime.Scheme {
 	return s
 }
 
-func clusterCredential(cellID, secretName string) *apiv1.ClusterCredential {
-	return &apiv1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "cc-" + cellID, Namespace: "loopzero-system"},
-		Spec: apiv1.ClusterCredentialSpec{
-			ClusterName: cellID,
-			CellID:      cellID,
-			SecretRef:   apiv1.SecretReference{Name: secretName, Namespace: "loopzero-system"},
-		},
+// fakeCellResolver stands in for placement.DynamicRouter: it knows only the
+// connected cells it was given.
+type fakeCellResolver map[string]placement.CellConfig
+
+func (f fakeCellResolver) Resolve(_ context.Context, cellID string) (*placement.CellConfig, error) {
+	c, ok := f[cellID]
+	if !ok {
+		return nil, fmt.Errorf("cell %q not connected", cellID)
 	}
+	return &c, nil
+}
+
+func resolverWith(cellID, secretName string) fakeCellResolver {
+	return fakeCellResolver{cellID: {CellID: cellID, SecretRefName: secretName, SecretRefNamespace: "loopzero-system"}}
 }
 
 func kubeconfigSecret(name string, data map[string][]byte) *corev1.Secret {
@@ -83,11 +90,10 @@ func TestSecretCellClientProvider_ClientFor_ResolvesFromSecret(t *testing.T) {
 	c := fake.NewClientBuilder().
 		WithScheme(secretCellScheme(t)).
 		WithObjects(
-			clusterCredential("cell-0", "cc-secret"),
 			kubeconfigSecret("cc-secret", map[string][]byte{"kubeconfig": []byte(minimalKubeconfig)}),
 		).
 		Build()
-	p := NewSecretCellClientProvider(c, "loopzero-system")
+	p := NewSecretCellClientProvider(resolverWith("cell-0", "cc-secret"), c)
 
 	client, err := p.ClientFor(context.Background(), "cell-0")
 	if err != nil {
@@ -104,11 +110,10 @@ func TestSecretCellClientProvider_ClientFor_CachesClient(t *testing.T) {
 	c := fake.NewClientBuilder().
 		WithScheme(secretCellScheme(t)).
 		WithObjects(
-			clusterCredential("cell-0", "cc-secret"),
 			kubeconfigSecret("cc-secret", map[string][]byte{"kubeconfig": []byte(minimalKubeconfig)}),
 		).
 		Build()
-	p := NewSecretCellClientProvider(c, "loopzero-system")
+	p := NewSecretCellClientProvider(resolverWith("cell-0", "cc-secret"), c)
 
 	first, err := p.ClientFor(context.Background(), "cell-0")
 	if err != nil {
@@ -127,7 +132,7 @@ func TestSecretCellClientProvider_ClientFor_CachesClient(t *testing.T) {
 // with the requested spec.cellID → typed error (never a silent nil client).
 func TestSecretCellClientProvider_ClientFor_UnknownCell_Errors(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(secretCellScheme(t)).Build()
-	p := NewSecretCellClientProvider(c, "loopzero-system")
+	p := NewSecretCellClientProvider(fakeCellResolver{}, c)
 
 	if _, err := p.ClientFor(context.Background(), "cell-nope"); err == nil {
 		t.Fatal("ClientFor(unknown cell) must return an error")
@@ -140,13 +145,36 @@ func TestSecretCellClientProvider_ClientFor_SecretMissingKubeconfig_Errors(t *te
 	c := fake.NewClientBuilder().
 		WithScheme(secretCellScheme(t)).
 		WithObjects(
-			clusterCredential("cell-0", "cc-secret"),
 			kubeconfigSecret("cc-secret", map[string][]byte{"other": []byte("x")}),
 		).
 		Build()
-	p := NewSecretCellClientProvider(c, "loopzero-system")
+	p := NewSecretCellClientProvider(resolverWith("cell-0", "cc-secret"), c)
 
 	if _, err := p.ClientFor(context.Background(), "cell-0"); err == nil {
 		t.Fatal("ClientFor must error when the Secret has no data.kubeconfig")
+	}
+}
+
+// A rotated kubeconfig reaches the next call once the cached client is
+// invalidated — the cache must not pin a dead credential for the process life.
+func TestSecretCellClientProvider_InvalidateRebuildsTheClient(t *testing.T) {
+	c := fake.NewClientBuilder().
+		WithScheme(secretCellScheme(t)).
+		WithObjects(kubeconfigSecret("cc-secret", map[string][]byte{"kubeconfig": []byte(minimalKubeconfig)})).
+		Build()
+	p := NewSecretCellClientProvider(resolverWith("cell-0", "cc-secret"), c)
+	first, err := p.ClientFor(context.Background(), "cell-0")
+	if err != nil {
+		t.Fatalf("ClientFor: %v", err)
+	}
+
+	p.Invalidate("cell-0")
+	second, err := p.ClientFor(context.Background(), "cell-0")
+
+	if err != nil {
+		t.Fatalf("ClientFor after Invalidate: %v", err)
+	}
+	if first == second {
+		t.Error("Invalidate did not drop the cached client")
 	}
 }

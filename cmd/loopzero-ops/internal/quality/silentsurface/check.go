@@ -33,11 +33,12 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	gotypes "go/types"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Baseline is the number of route-registering guards that do NOT report their
@@ -110,11 +111,14 @@ type Verdict struct {
 	Baseline int
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Verdict) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // Summary renders the one-line result the gate runner prints.
 func (v Verdict) Summary() string {
 	if v.Pass {
-		return fmt.Sprintf("PASS — %d superfície(s) muda(s) sobre uma base de %d "+
-			"(%d guarda(s) de rota no total)", len(v.Silent), v.Baseline, v.Guarded)
+		return fmt.Sprintf("PASS — %d silent surface(s) against a baseline of %d "+
+			"(%d route guard(s) in total)", len(v.Silent), v.Baseline, v.Guarded)
 	}
 	var names []string
 	for _, s := range v.Silent {
@@ -123,23 +127,23 @@ func (v Verdict) Summary() string {
 	if len(names) > 8 {
 		names = append(names[:8], "…")
 	}
-	return fmt.Sprintf("FAIL — %d superfície(s) muda(s), acima da base de %d. "+
-		"Uma superfície nova nasceu sem reportar que pode estar desligada: %s",
+	return fmt.Sprintf("FAIL — %d silent surface(s), above the baseline of %d. "+
+		"A new surface was born without reporting that it can be off: %s",
 		len(v.Silent), v.Baseline, strings.Join(names, ", "))
 }
 
-// ActionableFix is printed under a failure.
-const ActionableFix = `Grave a decisão que o roteador já toma:
+// ActionableFix is printed under a failure. It shows the Recorded form, which
+// records the decision in the guard's own condition; the Record error it does
+// not return is programmer error, covered by the surfaces package's tests.
+const ActionableFix = `Record the decision the router already takes, in the guard itself:
 
-    if cfg.X != nil {
+    if surfaces.Recorded(cfg.Surfaces, surfaces.X, cfg.X != nil,
+        "WHICH_SECRET absent — what it serves") {
         r.Post("/…", cfg.X.ServeHTTP)
-        _ = cfg.Surfaces.Record(surfaces.X, true, "")
-    } else {
-        _ = cfg.Surfaces.Record(surfaces.X, false, "QUAL_SEGREDO ausente — o que ele serve")
     }
 
-Sem isso a superfície some em silêncio quando a dependência falta, e o único
-vestígio é um 404 que alguém descobre tarde. Contrato: B-104.`
+Without it the surface disappears silently when the dependency is missing, and
+the only trace is a 404 somebody discovers late. Contract: B-104.`
 
 // registrarMethods are the chi calls that put a route on the mux. `Use` is
 // deliberately absent: mounting middleware is not registering a surface, and
@@ -194,8 +198,10 @@ func guardedField(cond ast.Expr) string {
 	return ""
 }
 
-// containsRouteRegistration reports whether a block puts a route on the mux.
-func containsRouteRegistration(n ast.Node) bool {
+// containsRouteRegistration reports whether a block puts a route on the mux: a
+// registrar call whose receiver chain starts at a router (`r.Post(...)`,
+// `r.With(mw).Post(...)`).
+func containsRouteRegistration(n ast.Node, routers map[string]bool) bool {
 	found := false
 	ast.Inspect(n, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
@@ -206,15 +212,86 @@ func containsRouteRegistration(n ast.Node) bool {
 		if !ok || !registrarMethods[sel.Sel.Name] {
 			return true
 		}
-		// `r.Post(...)` / `r.With(...).Post(...)` — the receiver chain has to
-		// start at the router, otherwise `store.Get(...)` would count.
-		if strings.HasPrefix(gotypes.ExprString(sel.X), "r") {
+		if routers[rootIdent(sel.X)] {
 			found = true
 			return false
 		}
 		return true
 	})
 	return found
+}
+
+// rootIdent returns the identifier a selector/call chain starts at, or "".
+func rootIdent(e ast.Expr) string {
+	for {
+		switch x := e.(type) {
+		case *ast.Ident:
+			return x.Name
+		case *ast.SelectorExpr:
+			e = x.X
+		case *ast.CallExpr:
+			e = x.Fun
+		case *ast.ParenExpr:
+			e = x.X
+		default:
+			return ""
+		}
+	}
+}
+
+// routerNames returns the names bound to a chi router in the file: variables
+// assigned from chi.NewRouter()/chi.NewMux(), and parameters typed chi.Router or
+// *chi.Mux (the Group and Route closures). Identity, not a first letter, decides
+// what a router is — a prefix match on "r" counted repo.Get as a route.
+func routerNames(f *ast.File) map[string]bool {
+	names := map[string]bool{}
+	isChi := func(e ast.Expr, sels ...string) bool {
+		sel, ok := e.(*ast.SelectorExpr)
+		if !ok {
+			return false
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		if !ok || pkg.Name != "chi" {
+			return false
+		}
+		for _, s := range sels {
+			if sel.Sel.Name == s {
+				return true
+			}
+		}
+		return false
+	}
+	addParams := func(ft *ast.FuncType) {
+		for _, field := range ft.Params.List {
+			t := field.Type
+			if star, ok := t.(*ast.StarExpr); ok {
+				t = star.X
+			}
+			if isChi(t, "Router", "Mux") {
+				for _, n := range field.Names {
+					names[n.Name] = true
+				}
+			}
+		}
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.FuncDecl:
+			addParams(x.Type)
+		case *ast.FuncLit:
+			addParams(x.Type)
+		case *ast.AssignStmt:
+			for i, rhs := range x.Rhs {
+				if call, ok := rhs.(*ast.CallExpr); ok && isChi(call.Fun, "NewRouter", "NewMux") && i < len(x.Lhs) {
+					if id, ok := x.Lhs[i].(*ast.Ident); ok {
+						names[id.Name] = true
+					}
+				}
+			}
+		}
+		return true
+	})
+	return names
 }
 
 // recorderNames are the two spellings that report a registration decision.
@@ -263,13 +340,14 @@ func Analyze(src string) (Outcome, error) {
 	}
 
 	var out Outcome
+	routers := routerNames(parsed)
 	ast.Inspect(parsed, func(n ast.Node) bool {
 		ifStmt, ok := n.(*ast.IfStmt)
 		if !ok {
 			return true
 		}
 		field := guardedField(ifStmt.Cond)
-		if field == "" || !containsRouteRegistration(ifStmt.Body) {
+		if field == "" || !containsRouteRegistration(ifStmt.Body, routers) {
 			return true
 		}
 		out.Guarded++

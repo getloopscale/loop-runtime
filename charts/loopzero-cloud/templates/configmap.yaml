@@ -16,3 +16,24 @@ data:
   GITHUB_APP_SLUG: {{ .Values.config.githubAppSlug | quote }}
   APP_PUBLIC_URL: {{ .Values.config.appPublicUrl | quote }}
   AUTH_COOKIE_DOMAIN: {{ .Values.config.authCookieDomain | quote }}
+  {{- with .Values.config.kratosInternalUrl }}
+  KRATOS_INTERNAL_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.jwtIssuer }}
+  JWT_ISSUER: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.billingReturnUrl }}
+  BILLING_RETURN_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.ragBaseUrl }}
+  RAG_BASE_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.lensBaseUrl }}
+  LENS_BASE_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.traefikMcpBaseUrl }}
+  TRAEFIK_MCP_BASE_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.prometheusUrl }}
+  LOOPZERO_PROMETHEUS_URL: {{ . | quote }}
+  {{- end }}

@@ -28,6 +28,10 @@ ralph-loop.local.md
 *.tgz
 code-review-output-infra-tests/
 project-purge-output/
+architecture-output/
+# Schemathesis writes its per-run crash cache here. It is one fuzz run's output,
+# not source: findings worth keeping are filed, not committed as cache files.
+.schemathesis/
 # --------------------------------------------
 # Node.js / TypeScript (cli/)
 # --------------------------------------------
@@ -269,11 +273,11 @@ system-design-output/
 .review-loop/
 .review-runs/
 
-# Binarios de build que estavam versionados por engano (B-051, 2026-08-11)
+# Build binaries that were versioned by mistake (B-051, 2026-08-11)
 tools/loopzero-dockerfile-lint/loopzero-dockerfile-lint
 operators/app-operator
 
-# Artefatos de sessão do harness — nem versionados nem visíveis a um `git add -A`.
+# Harness session artifacts — neither versioned nor visible to a `git add -A`.
 .claude/.compaction-snapshots/
 .claude/.patch-backups/
 

@@ -44,12 +44,12 @@ func TestUnservedHostIsRefused(t *testing.T) {
 		"    app-dev.loopzero.example cloud-dev.loopzero.example",
 		"app-dev.loopzero.example {\n  reverse_proxy localhost:3000\n}\n")
 
-	out, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})
+	out, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}))
 	if !errors.Is(err, caddyhostparity.ErrUnserved) {
-		t.Fatalf("esperava ErrUnserved, veio %v", err)
+		t.Fatalf("expected ErrUnserved, got %v", err)
 	}
 	if len(out.Findings) != 1 || out.Findings[0].Host != "cloud-dev.loopzero.example" {
-		t.Fatalf("esperava cloud-dev como único achado, veio %+v", out.Findings)
+		t.Fatalf("expected cloud-dev as the only finding, got %+v", out.Findings)
 	}
 }
 
@@ -59,12 +59,12 @@ func TestFullyServedPasses(t *testing.T) {
 		"    app-dev.loopzero.example cloud-dev.loopzero.example",
 		"app-dev.loopzero.example {\n}\ncloud-dev.loopzero.example {\n}\n")
 
-	out, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})
+	out, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}))
 	if err != nil {
-		t.Fatalf("esperava passar, veio %v", err)
+		t.Fatalf("expected a pass, got %v", err)
 	}
 	if out.Scanned != 2 {
-		t.Fatalf("esperava 2 varridos, veio %d", out.Scanned)
+		t.Fatalf("expected 2 scanned, got %d", out.Scanned)
 	}
 }
 
@@ -75,8 +75,8 @@ func TestWildcardBlockServesItsSuffix(t *testing.T) {
 		"    pr-7.preview-dev.loopzero.example",
 		"*.preview-dev.loopzero.example {\n}\n")
 
-	if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); err != nil {
-		t.Fatalf("bloco curinga deveria servir o sufixo, veio %v", err)
+	if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); err != nil {
+		t.Fatalf("a wildcard block should serve its suffix, got %v", err)
 	}
 }
 
@@ -87,8 +87,8 @@ func TestMentionInsideDirectiveIsNotAServedHost(t *testing.T) {
 		"    cloud-dev.loopzero.example",
 		"app-dev.loopzero.example {\n  header Content-Security-Policy \"connect-src https://cloud-dev.loopzero.example\"\n}\n")
 
-	if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrUnserved) {
-		t.Fatalf("citação em CSP não é bloco de site; esperava ErrUnserved, veio %v", err)
+	if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); !errors.Is(err, caddyhostparity.ErrUnserved) {
+		t.Fatalf("a mention inside a CSP is not a site block; expected ErrUnserved, got %v", err)
 	}
 }
 
@@ -96,16 +96,16 @@ func TestMentionInsideDirectiveIsNotAServedHost(t *testing.T) {
 func TestEmptyDemandIsRefusedNotPassed(t *testing.T) {
 	root := tree(t, "", "app-dev.loopzero.example {\n}\n")
 
-	if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrNothingScanned) {
-		t.Fatalf("esperava ErrNothingScanned, veio %v", err)
+	if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); !errors.Is(err, caddyhostparity.ErrNothingScanned) {
+		t.Fatalf("expected ErrNothingScanned, got %v", err)
 	}
 }
 
 // Absent verifier: nothing prescribes a host list, so there is no parity to report.
 func TestMissingVerifierIsRefused(t *testing.T) {
 	root := t.TempDir()
-	if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrVerifierMissing) {
-		t.Fatalf("esperava ErrVerifierMissing, veio %v", err)
+	if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); !errors.Is(err, caddyhostparity.ErrVerifierMissing) {
+		t.Fatalf("expected ErrVerifierMissing, got %v", err)
 	}
 }
 
@@ -113,17 +113,17 @@ func TestMissingVerifierIsRefused(t *testing.T) {
 // the shape; only this says how many times it already happened in the real tree.
 func TestRealTreeIsMeasured(t *testing.T) {
 	root := "../../../../.."
-	out, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})
+	out, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}))
 	if errors.Is(err, caddyhostparity.ErrVerifierMissing) || errors.Is(err, caddyhostparity.ErrNothingScanned) {
-		t.Fatalf("a varredura não alcançou a árvore real: %v", err)
+		t.Fatalf("the scan did not reach the real tree: %v", err)
 	}
 	if out.Scanned == 0 {
-		t.Fatal("zero hostnames varridos — verde sobre nada")
+		t.Fatal("zero hostnames scanned — green over nothing")
 	}
-	t.Logf("população real: %d hostnames exigidos, %d servidos, %d sem bloco de site",
+	t.Logf("real population: %d hostnames demanded, %d served, %d without a site block",
 		out.Scanned, out.Served, len(out.Findings))
 	for _, f := range out.Findings {
-		t.Logf("  sem terminador TLS: %s", f.Host)
+		t.Logf("  no TLS terminator: %s", f.Host)
 	}
 }
 
@@ -131,15 +131,15 @@ func TestRealTreeIsMeasured(t *testing.T) {
 // with no signal — a PASS over hostnames never compared. Reproduced by review 2026-08-18.
 func TestParenInsideArrayDoesNotTruncateTheList(t *testing.T) {
 	root := tree(t,
-		"    # nota $(hostname -f) sobre a lista\n    app-dev.loopzero.example cloud.loopzero.example",
+		"    # note $(hostname -f) about the list\n    app-dev.loopzero.example cloud.loopzero.example",
 		"app-dev.loopzero.example {\n}\n")
 
-	out, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})
+	out, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}))
 	if out.Scanned != 2 {
-		t.Fatalf("um parêntese no corpo não pode engolir hostnames: esperava 2 varridos, veio %d", out.Scanned)
+		t.Fatalf("a parenthesis in the body must not swallow hostnames: expected 2 scanned, got %d", out.Scanned)
 	}
 	if !errors.Is(err, caddyhostparity.ErrUnserved) {
-		t.Fatalf("cloud.loopzero.example não tem bloco; esperava ErrUnserved, veio %v", err)
+		t.Fatalf("cloud.loopzero.example has no block; expected ErrUnserved, got %v", err)
 	}
 }
 
@@ -151,7 +151,7 @@ func TestEarlierArrayDoesNotWin(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	body := "#!/usr/bin/env bash\nlegacy_hosts=(velho.exemplo.com)\nverify_certs() {\n  local hosts=(\n    app-dev.loopzero.example\n  )\n}\n"
+	body := "#!/usr/bin/env bash\nlegacy_hosts=(old.example.com)\nverify_certs() {\n  local hosts=(\n    app-dev.loopzero.example\n  )\n}\n"
 	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -163,12 +163,12 @@ func TestEarlierArrayDoesNotWin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})
+	out, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}))
 	if err != nil {
-		t.Fatalf("a lista real serve o único host exigido; veio %v", err)
+		t.Fatalf("the real list serves the only demanded host; got %v", err)
 	}
 	if out.Scanned != 1 {
-		t.Fatalf("esperava ler a lista do verify, veio %d varridos", out.Scanned)
+		t.Fatalf("expected to read the verify list, got %d scanned", out.Scanned)
 	}
 }
 
@@ -182,8 +182,8 @@ func TestCommaSeparatedSiteAddressesAreServed(t *testing.T) {
 		"App-Dev.LoopZero.dev, CLOUD.loopzero.example {\n}\n",
 	} {
 		root := tree(t, "    app-dev.loopzero.example cloud.loopzero.example", caddy)
-		if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); err != nil {
-			t.Fatalf("forma servida pelo Caddy foi reprovada:\n%s\n  -> %v", caddy, err)
+		if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); err != nil {
+			t.Fatalf("a form Caddy serves was refused:\n%s\n  -> %v", caddy, err)
 		}
 	}
 }
@@ -191,9 +191,9 @@ func TestCommaSeparatedSiteAddressesAreServed(t *testing.T) {
 // A catch-all address serves every hostname; treating it as unserved is a false positive.
 func TestCatchAllServesEverything(t *testing.T) {
 	for _, addr := range []string{"*", ":443", ":80"} {
-		root := tree(t, "    qualquer.loopzero.example", addr+" {\n}\n")
-		if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); err != nil {
-			t.Fatalf("catch-all %q deveria servir tudo, veio %v", addr, err)
+		root := tree(t, "    anything.loopzero.example", addr+" {\n}\n")
+		if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); err != nil {
+			t.Fatalf("catch-all %q should serve everything, got %v", addr, err)
 		}
 	}
 }
@@ -202,8 +202,8 @@ func TestCatchAllServesEverything(t *testing.T) {
 // view is the green-over-nothing this package exists to refuse.
 func TestImportMakesParityUnverifiable(t *testing.T) {
 	root := tree(t, "    app-dev.loopzero.example", "import sites/*.caddyfile\n")
-	if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrPartialView) {
-		t.Fatalf("esperava ErrPartialView, veio %v", err)
+	if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); !errors.Is(err, caddyhostparity.ErrPartialView) {
+		t.Fatalf("expected ErrPartialView, got %v", err)
 	}
 }
 
@@ -212,10 +212,10 @@ func TestImportMakesParityUnverifiable(t *testing.T) {
 // the anchor existed — it had no coverage at all.
 func TestColumnAnchorIsWhatDiscardsIndentedMentions(t *testing.T) {
 	root := tree(t, "    cloud.loopzero.example",
-		"app-dev.loopzero.example {\n  respond \"veja cloud.loopzero.example {\" 200\n}\n")
+		"app-dev.loopzero.example {\n  respond \"see cloud.loopzero.example {\" 200\n}\n")
 
-	if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrUnserved) {
-		t.Fatalf("menção indentada não é bloco de site; esperava ErrUnserved, veio %v", err)
+	if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); !errors.Is(err, caddyhostparity.ErrUnserved) {
+		t.Fatalf("an indented mention is not a site block; expected ErrUnserved, got %v", err)
 	}
 }
 
@@ -223,8 +223,8 @@ func TestColumnAnchorIsWhatDiscardsIndentedMentions(t *testing.T) {
 func TestWildcardDoesNotServeDeeperHostsNorApex(t *testing.T) {
 	for _, host := range []string{"a.b.preview-dev.loopzero.example", "preview-dev.loopzero.example"} {
 		root := tree(t, "    "+host, "*.preview-dev.loopzero.example {\n}\n")
-		if _, err := caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root}); !errors.Is(err, caddyhostparity.ErrUnserved) {
-			t.Fatalf("curinga não deveria servir %q, veio %v", host, err)
+		if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); !errors.Is(err, caddyhostparity.ErrUnserved) {
+			t.Fatalf("the wildcard should not serve %q, got %v", host, err)
 		}
 	}
 }

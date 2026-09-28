@@ -12,19 +12,21 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // stubCapChecker is a fake store.ProjectCapChecker with a fixed bounded cap.
 type stubCapChecker struct{ cap int }
 
-func (s stubCapChecker) CheckProjectsValue(_ string, _ int) (bool, string, int) {
-	return false, "starter", s.cap
+func (s stubCapChecker) CheckProjectsValue(_ context.Context, _ string, _ int) (bool, string, int, error) {
+	return false, "starter", s.cap, nil
 }
 
 // nonPgxDBTX is a minimal db.DBTX that is NOT a *db.PgxAdapter, so the cap path
@@ -39,7 +41,7 @@ func (nonPgxDBTX) QueryRow(context.Context, string, ...any) db.Row { return nil 
 
 func TestWireProjectCap_WiresCheckerWhenPresent(t *testing.T) {
 	store := &store.PostgresProjectStore{DB: nonPgxDBTX{}}
-	wireProjectCap(store, stubCapChecker{cap: 1}) // bounded → enforcement intended
+	wireProjectCap(store, projectCapEnforcement{checker: stubCapChecker{cap: 1}}) // bounded → enforcement intended
 
 	// With the checker wired and a bounded cap, a deploy on a non-pgx handle (no
 	// pool to hold the advisory lock) MUST fail closed — proving the checker is
@@ -53,7 +55,7 @@ func TestWireProjectCap_WiresCheckerWhenPresent(t *testing.T) {
 
 func TestWireProjectCap_NilCheckerLeavesStoreUnenforced(t *testing.T) {
 	store := &store.PostgresProjectStore{DB: nonPgxDBTX{}}
-	wireProjectCap(store, nil) // no checker → no enforcement
+	wireProjectCap(store, projectCapEnforcement{}) // no checker → no enforcement
 
 	// With no checker, EnsureProject takes the original (unenforced) insert path,
 	// which fails on the non-SqlcBridge handle — but NOT with the cap "pgx pool"
@@ -61,5 +63,68 @@ func TestWireProjectCap_NilCheckerLeavesStoreUnenforced(t *testing.T) {
 	err := store.EnsureProject(context.Background(), nil, "tenant-1", "newproj", "user-1")
 	if err != nil && strings.Contains(err.Error(), "pgx pool") {
 		t.Fatalf("a nil checker must NOT engage the cap path; got cap error %v", err)
+	}
+}
+
+// scriptedRow answers one QueryRow with a fixed value or error.
+type scriptedRow struct {
+	value any
+	err   error
+}
+
+func (r scriptedRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	switch d := dest[0].(type) {
+	case *string:
+		*d = r.value.(string)
+	case *int:
+		*d = r.value.(int)
+	}
+	return nil
+}
+
+// deployTx plays the caller's (tenant-scoped, RLS-filtered) transaction on the
+// deploy path: it resolves the account, grants the advisory lock, reports the
+// project as new, and — being scoped to one tenant — counts only 0 projects.
+type deployTx struct{ nonPgxDBTX }
+
+func (deployTx) QueryRow(_ context.Context, sql string, _ ...any) db.Row {
+	switch {
+	case strings.Contains(sql, "SELECT account_id FROM tenants"):
+		return scriptedRow{value: "acct-1"}
+	case strings.Contains(sql, "SELECT 1 FROM projects"):
+		return scriptedRow{err: db.ErrNoRows}
+	default:
+		return scriptedRow{value: 0}
+	}
+}
+
+// accountWideCounter plays the cross-tenant connection: it sees every project
+// the Account holds across its tenants.
+type accountWideCounter struct {
+	nonPgxDBTX
+	projects int
+}
+
+func (c accountWideCounter) QueryRow(context.Context, string, ...any) db.Row {
+	return scriptedRow{value: c.projects}
+}
+
+func TestWireProjectCap_DeployCountsTheAccountAcrossItsTenants(t *testing.T) {
+	store := &store.PostgresProjectStore{DB: nonPgxDBTX{}}
+	wireProjectCap(store, projectCapEnforcement{
+		checker:     stubCapChecker{cap: 2},
+		crossTenant: accountWideCounter{projects: 2},
+	})
+
+	// The deploying tenant's own transaction sees 0 projects; the Account holds 2
+	// across its other tenants. A cap of 2 must refuse a third project — which it
+	// only does if the count went through the cross-tenant connection.
+	err := store.EnsureProject(context.Background(), deployTx{}, "tenant-1", "newproj", "user-1")
+	var te *loopzeroerrors.LoopZeroError
+	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
+		t.Fatalf("a deploy past the per-Account cap must be refused with PROJECTS_EXCEED_PLAN; got %v", err)
 	}
 }

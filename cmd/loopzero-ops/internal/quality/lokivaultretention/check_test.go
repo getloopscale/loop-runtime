@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFile(t *testing.T, path, body string) {
@@ -20,13 +22,6 @@ func writeFile(t *testing.T, path, body string) {
 		t.Fatalf("writefile %s: %v", path, err)
 	}
 }
-
-const canonicalLokiValues = `
-retention_period: 168h
-retention_stream:
-  - selector: '{namespace="secrets-system"}'
-    period: 2160h
-`
 
 const canonicalCronJob = `apiVersion: batch/v1
 kind: CronJob
@@ -67,10 +62,9 @@ spec:
 
 func TestCheck_HappyPath_PASS(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, lokiValuesRel), canonicalLokiValues)
 	writeFile(t, filepath.Join(root, archiveCronRel), canonicalCronJob)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected nil err, got %v; failures=%v", err, outcome.Failures)
 	}
@@ -79,48 +73,15 @@ func TestCheck_HappyPath_PASS(t *testing.T) {
 	}
 }
 
-func TestCheck_MissingLokiValues_FAIL(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, archiveCronRel), canonicalCronJob)
-
-	outcome, err := Check(Config{RepoRoot: root})
-	if !errors.Is(err, ErrViolations) {
-		t.Fatalf("expected ErrViolations for missing Loki values, got %v", err)
-	}
-	if !hasSubstring(outcome.Failures, "loki values.yaml MISSING") {
-		t.Fatalf("expected MISSING failure, got %v", outcome.Failures)
-	}
-}
-
 func TestCheck_MissingCronJob_FAIL(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, lokiValuesRel), canonicalLokiValues)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for missing CronJob, got %v", err)
 	}
 	if !hasSubstring(outcome.Failures, "cronjob-loki-vault-audit-archive.yaml MISSING") {
 		t.Fatalf("expected MISSING failure, got %v", outcome.Failures)
-	}
-}
-
-func TestCheck_LokiValuesMissingRetentionStream_FAIL(t *testing.T) {
-	root := t.TempDir()
-	// values.yaml missing retention_stream declaration.
-	brokenValues := `retention_period: 168h
-namespace_selector: 'app=loki'
-`
-	writeFile(t, filepath.Join(root, lokiValuesRel), brokenValues)
-	writeFile(t, filepath.Join(root, archiveCronRel), canonicalCronJob)
-
-	outcome, err := Check(Config{RepoRoot: root})
-	if !errors.Is(err, ErrViolations) {
-		t.Fatalf("expected ErrViolations, got %v", err)
-	}
-	// Expect ≥ 3 T8.2 failures (retention_stream + selector + period 2160h all missing).
-	if len(outcome.Failures) < 3 {
-		t.Fatalf("expected ≥ 3 T8.2 failures, got %v", outcome.Failures)
 	}
 }
 
@@ -148,10 +109,9 @@ spec:
               volumeMounts: []
       name: loki-archive-s3-creds
 `
-	writeFile(t, filepath.Join(root, lokiValuesRel), canonicalLokiValues)
 	writeFile(t, filepath.Join(root, archiveCronRel), brokenCron)
 
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -161,21 +121,8 @@ spec:
 }
 
 func TestCheck_RealRepoPasses(t *testing.T) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	root := cwd
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err == nil {
-			break
-		}
-		root = filepath.Dir(root)
-	}
-	if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err != nil {
-		t.Skipf("could not locate ROADMAP.md (skipping)")
-	}
-	outcome, err := Check(Config{RepoRoot: root})
+	root := qtestutil.Root(t)
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("real repo violation: %v; failures=%v", err, outcome.Failures)
 	}

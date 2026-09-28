@@ -28,6 +28,7 @@ import (
 	"io"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baseline"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
@@ -74,6 +75,9 @@ type Outcome struct {
 	// Pass=true, stderr-bound when Pass=false). Order-preserving.
 	Messages []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // Run executes the gate. Returns (*Outcome, error). Outcome.Pass
 // drives the caller's exit code; non-nil error means the gate itself

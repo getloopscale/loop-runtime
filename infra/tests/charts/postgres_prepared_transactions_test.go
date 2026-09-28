@@ -33,10 +33,7 @@ import (
 // valuesFiles are every Postgres values file that configures a real server.
 func valuesFiles(t *testing.T) map[string]string {
 	t.Helper()
-	dir, err := filepath.Abs(filepath.Join("..", "..", "helm", "postgresql"))
-	if err != nil {
-		t.Fatalf("resolve postgresql chart dir: %v", err)
-	}
+	dir := filepath.Join(repoRoot(t), "infra", "helm", "postgresql")
 	out := map[string]string{}
 	for _, name := range []string{"values.yaml", "values.production.yaml"} {
 		p := filepath.Join(dir, name)
@@ -81,10 +78,7 @@ func TestMaxPreparedTransactionsIsDeclaredZero(t *testing.T) {
 // justified by nothing using 2PC; if that stops being true, the justification has to
 // be revisited rather than the setting silently contradicting the code.
 func TestNoTwoPhaseCommitInTree(t *testing.T) {
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
+	root := repoRoot(t)
 	stmt := regexp.MustCompile(`(?i)\b(PREPARE\s+TRANSACTION|COMMIT\s+PREPARED|ROLLBACK\s+PREPARED)\b`)
 
 	var hits []string

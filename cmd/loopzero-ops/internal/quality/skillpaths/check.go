@@ -13,29 +13,18 @@ package skillpaths
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/taskfileinterface"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-const (
-	skillsDir        = ".claude/skills"
-	rootTaskfile     = "Taskfile.yml"
-	taskfilesDirName = "taskfiles"
-)
-
-// flattenedSubfiles are the taskfile includes that use `flatten: true` in
-// Taskfile.yml — their task names appear at root namespace (e.g. `task setup`).
-var flattenedSubfiles = []string{"test", "helm", "infra", "dev", "db", "k3d", "security", "observability"}
-
-// namespacedSubfiles map filename → namespace prefix for includes WITHOUT
-// `flatten: true` in Taskfile.yml.
-var namespacedSubfiles = map[string]string{
-	"drill.yml":   "drill:",
-	"quality.yml": "quality:",
-}
+const skillsDir = ".claude/skills"
 
 // skipSkillsForTaskInvocationCheck are skills that are generic (not LoopZero-
 // customized) — their `task X` refs are not real LoopZero task refs.
@@ -54,7 +43,30 @@ type Outcome struct {
 	CheckedPaths  int
 	CheckedTasks  int
 	Failures      []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+	// Unverified is why the check could verify nothing on this machine
+	// (wrapping one of its Err* reasons), or nil.
+	Unverified error
 }
+
+// Verdict is Fail when the check found a violation, NotVerified when it
+// could verify nothing on this machine, and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	switch {
+	case o.Violation != nil:
+		return verdict.Fail
+	case o.Unverified != nil:
+		return verdict.NotVerified
+	}
+	return verdict.Pass
+}
+
+// ErrSkillsRootMissing means .claude/skills is absent. That directory is the
+// installed kit, which .gitignore excludes, so a fresh clone never has it: the
+// gate verified nothing, and says so instead of reporting a count of zero.
+var ErrSkillsRootMissing = errors.New("the skills root " + skillsDir + " is absent — it is the installed, gitignored kit, so nothing was verified on this machine")
 
 // ErrViolations means at least one skill reference resolves to a missing file
 // / non-existent task.
@@ -64,7 +76,6 @@ var (
 	scriptRefRE    = regexp.MustCompile(`infra/scripts/[a-zA-Z0-9_./-]+\.sh`)
 	drillAbbrevRE  = regexp.MustCompile(`drill/[a-zA-Z0-9_-]+\.sh`)
 	backtickTaskRE = regexp.MustCompile("`task ([a-z][a-z0-9_:-]+)`")
-	taskNameLineRE = regexp.MustCompile(`^  ([a-z][a-z0-9:_-]*):[[:space:]]*(#.*)?$`)
 	dogfoodGHTokRE = regexp.MustCompile(`GH_TOKEN.*\.env|\.env.*GH_TOKEN`)
 	toPlanTeardown = regexp.MustCompile(`\btask teardown\b`)
 )
@@ -79,13 +90,16 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 
-	tasks, err := collectAllTaskNames(root)
+	tasks, err := taskfileinterface.CollectTaskNames(root)
 	if err != nil {
 		return Outcome{}, fmt.Errorf("collect task names: %w", err)
 	}
 
 	skillsRoot := filepath.Join(root, skillsDir)
 	entries, err := os.ReadDir(skillsRoot)
+	if errors.Is(err, fs.ErrNotExist) {
+		return Outcome{Unverified: ErrSkillsRootMissing}, nil
+	}
 	if err != nil {
 		return Outcome{}, fmt.Errorf("read skills dir %s: %w", skillsDir, err)
 	}
@@ -98,8 +112,11 @@ func Check(cfg Config) (Outcome, error) {
 		skillName := e.Name()
 		skillMD := filepath.Join(skillsRoot, skillName, "SKILL.md")
 		bodyBytes, err := os.ReadFile(skillMD)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // a directory with no SKILL.md is not a skill
+		}
 		if err != nil {
-			continue // no SKILL.md → skip
+			return out, fmt.Errorf("read %s: %w", skillMD, err)
 		}
 		body := string(bodyBytes)
 		out.CheckedSkills++
@@ -130,7 +147,7 @@ func Check(cfg Config) (Outcome, error) {
 		if !skipSkillsForTaskInvocationCheck[skillName] {
 			for _, task := range uniqTaskInvocations(body) {
 				out.CheckedTasks++
-				if _, present := tasks[task]; !present {
+				if !tasks[task] {
 					out.Failures = append(out.Failures, fmt.Sprintf("%s: references non-existent task '%s'", skillName, task))
 				}
 			}
@@ -146,68 +163,10 @@ func Check(cfg Config) (Outcome, error) {
 	}
 
 	if len(out.Failures) > 0 {
-		return out, ErrViolations
+		out.Violation = ErrViolations
+		return out, nil
 	}
 	return out, nil
-}
-
-// collectAllTaskNames walks Taskfile.yml + the include set (flattened + namespaced)
-// and returns the sorted set of canonical task names.
-func collectAllTaskNames(root string) (map[string]struct{}, error) {
-	set := map[string]struct{}{}
-	add := func(names []string, prefix string) {
-		for _, n := range names {
-			set[prefix+n] = struct{}{}
-		}
-	}
-	rootTasks, err := extractTasksFromFile(filepath.Join(root, rootTaskfile))
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", rootTaskfile, err)
-	}
-	add(rootTasks, "")
-	for _, sub := range flattenedSubfiles {
-		names, err := extractTasksFromFile(filepath.Join(root, taskfilesDirName, sub+".yml"))
-		if err != nil {
-			// Missing sub-file is not fatal (project may not have all subfiles).
-			continue
-		}
-		add(names, "")
-	}
-	for filename, prefix := range namespacedSubfiles {
-		names, err := extractTasksFromFile(filepath.Join(root, taskfilesDirName, filename))
-		if err != nil {
-			continue
-		}
-		add(names, prefix)
-	}
-	return set, nil
-}
-
-// extractTasksFromFile ports the bash awk task-name extractor.
-func extractTasksFromFile(path string) ([]string, error) {
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	inTasks := false
-	for _, line := range strings.Split(string(body), "\n") {
-		if !inTasks {
-			if strings.HasPrefix(line, "tasks:") {
-				inTasks = true
-			}
-			continue
-		}
-		// A top-level key (not indented) ends the tasks: block.
-		if len(line) > 0 && line[0] >= 'a' && line[0] <= 'z' {
-			inTasks = false
-			continue
-		}
-		if m := taskNameLineRE.FindStringSubmatch(line); m != nil {
-			names = append(names, m[1])
-		}
-	}
-	return names, nil
 }
 
 // uniqMatches returns the sorted unique regex matches over body.

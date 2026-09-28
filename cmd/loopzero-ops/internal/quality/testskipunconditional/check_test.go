@@ -459,3 +459,51 @@ func TestDead(t *testing.T) {
 		t.Errorf("violation must quote the skip's own reason; got:\n%s", joinViolations(o))
 	}
 }
+
+// A skip reached through a field is still a skip. The copy of isSkipCall this
+// gate kept required a bare identifier receiver, so `h.t.Skip()` over dead
+// assertions was invisible here while the sibling gate already counted it.
+func TestSkipThroughAFieldWithCodeBelowIsAViolation(t *testing.T) {
+	root := tree(t, "", map[string]string{
+		"infra/tests/honest_test.go": honest,
+		"infra/tests/field_test.go": `package t
+
+import "testing"
+
+type harness struct{ t *testing.T }
+
+func TestField(t *testing.T) {
+	h := harness{t: t}
+	h.t.Skip("moved")
+	h.t.Error("never runs")
+}
+`,
+	})
+
+	o, err := run(t, root)
+
+	if err != nil {
+		t.Fatalf("unexpected setup error: %v", err)
+	}
+	if !strings.Contains(joinViolations(o), "TestField") {
+		t.Fatalf("h.t.Skip() with a statement below must be a violation; got:\n%s", joinViolations(o))
+	}
+}
+
+// The stale-pin message must name the pin file the gate actually read.
+func TestStalePinViolationNamesTheConfiguredPinFile(t *testing.T) {
+	root := tree(t, "", map[string]string{"infra/tests/honest_test.go": honest})
+	custom := "infra/quality/custom-pin.txt"
+	if err := os.WriteFile(filepath.Join(root, custom), []byte(pinHeader+"infra/tests/gone_test.go\tTestGone\tthe contract moved to the api integration suite, which asserts the same invariant\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	o, err := Check(Config{RepoRoot: root, ScanDirs: []string{"infra/tests"}, PinFile: custom})
+
+	if err != nil {
+		t.Fatalf("unexpected setup error: %v", err)
+	}
+	if !strings.Contains(joinViolations(o), custom) {
+		t.Fatalf("stale-pin violation must name %s; got:\n%s", custom, joinViolations(o))
+	}
+}

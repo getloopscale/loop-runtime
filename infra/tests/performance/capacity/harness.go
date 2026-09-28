@@ -21,10 +21,11 @@
 //   - Baselines documented in capacity-baselines
 //
 // Usage:
-//   LOOPZERO_API_URL=https://api.dev.loopzero.example \
-//   LOOPZERO_SERVICE_AUTH=... \
-//   go test ./infra/tests/performance/capacity/ -run TestCapacityGitea \
-//     -args -rps=100 -duration=30s -out=/tmp/capacity-bench/gitea-$(date +%s).json
+//
+//	LOOPZERO_API_URL=https://api.dev.loopzero.example \
+//	LOOPZERO_SERVICE_AUTH=... \
+//	go test ./infra/tests/performance/capacity/ -run TestCapacityGitea \
+//	  -args -rps=100 -duration=30s -out=/tmp/capacity-bench/gitea-$(date +%s).json
 //
 // Opt-in: set LOOPZERO_CAPACITY=1 to run these tests. Otherwise skipped.
 package capacity
@@ -42,7 +43,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 )
@@ -80,50 +81,54 @@ func NewConfig(defaultName string) Config {
 
 // Result captures a benchmark outcome.
 type Result struct {
-	Subsystem   string        `json:"subsystem"`
-	StartedAt   time.Time     `json:"started_at"`
-	Duration    time.Duration `json:"duration"`
-	RequestedRPS float64      `json:"requested_rps"`
-	Workers     int           `json:"workers"`
-	TotalReqs   int64         `json:"total_reqs"`
-	Errors      int64         `json:"errors"`
-	ErrorRate   float64       `json:"error_rate"`
-	P50         time.Duration `json:"p50"`
-	P95         time.Duration `json:"p95"`
-	P99         time.Duration `json:"p99"`
-	ActualRPS   float64       `json:"actual_rps"`
-	Notes       string        `json:"notes,omitempty"`
+	Subsystem    string        `json:"subsystem"`
+	StartedAt    time.Time     `json:"started_at"`
+	Duration     time.Duration `json:"duration"`
+	RequestedRPS float64       `json:"requested_rps"`
+	Workers      int           `json:"workers"`
+	TotalReqs    int64         `json:"total_reqs"`
+	Errors       int64         `json:"errors"`
+	ErrorRate    float64       `json:"error_rate"`
+	P50          time.Duration `json:"p50"`
+	P95          time.Duration `json:"p95"`
+	P99          time.Duration `json:"p99"`
+	ActualRPS    float64       `json:"actual_rps"`
+	Notes        string        `json:"notes,omitempty"`
 }
 
-// Latencies is a thread-safe collection of request latencies.
+// Latencies is a bounded, concurrency-safe collection of request latencies.
+// Every request goroutine records into it at once.
 type Latencies struct {
+	mu      sync.Mutex
 	samples []time.Duration
-	idx     int64
 }
 
-// NewLatencies pre-allocates a fixed-size ring-like buffer for p50/95/99.
-// For benchmarks longer than 10s at high RPS, this avoids GC pressure.
-func NewLatencies(cap int) *Latencies {
-	return &Latencies{samples: make([]time.Duration, 0, cap)}
+// NewLatencies pre-allocates room for capacity samples; later samples are
+// dropped, so a long high-RPS run cannot grow the buffer without bound.
+func NewLatencies(capacity int) *Latencies {
+	return &Latencies{samples: make([]time.Duration, 0, capacity)}
 }
 
-// Record appends a latency sample (not thread-safe by itself; callers
-// should funnel through a single goroutine or pre-reserve slots).
+// Record appends a latency sample, dropping it once the buffer is full.
 func (l *Latencies) Record(d time.Duration) {
-	// Atomic reserve slot; if beyond cap, silently drop (reservoir-like).
-	i := atomic.AddInt64(&l.idx, 1) - 1
-	if i < int64(cap(l.samples)) {
-		l.samples = append(l.samples[:i], d)
-		// grow visible length
-		if int64(len(l.samples)) < i+1 {
-			// best-effort — race here is tolerable for bench accuracy
-			l.samples = append(l.samples, d)
-		}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.samples) < cap(l.samples) {
+		l.samples = append(l.samples, d)
 	}
+}
+
+// Count is the number of samples held.
+func (l *Latencies) Count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.samples)
 }
 
 // Percentile returns the pth percentile in the collected samples.
 func (l *Latencies) Percentile(p float64) time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if len(l.samples) == 0 {
 		return 0
 	}

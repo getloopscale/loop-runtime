@@ -16,6 +16,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultCoverageThreshold is the coverage floor.
@@ -67,6 +69,15 @@ type Outcome struct {
 	CoveragePct    float64
 	FailedPackages []string
 	SkipReason     string
+}
+
+// Verdict is Skip when the subject is absent from this checkout, and
+// otherwise Pass when the check passed and Fail when it did not.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Skipped {
+		return verdict.Skip
+	}
+	return verdict.FromPass(o.Pass)
 }
 
 // ErrCoverageBelowThreshold signals aggregate coverage below floor.
@@ -124,7 +135,7 @@ func Check(cfg Config) (Outcome, error) {
 
 	pct, failedPkgs, parseErr := parseCoverageJSON(stdout)
 	if parseErr != nil {
-		return Outcome{}, fmt.Errorf("%w: %v", ErrCoverageParseFailed, parseErr)
+		return Outcome{}, fmt.Errorf("%w: %w", ErrCoverageParseFailed, parseErr)
 	}
 
 	pass := pct >= threshold && len(failedPkgs) == 0

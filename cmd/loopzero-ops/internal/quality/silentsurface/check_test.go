@@ -10,16 +10,16 @@ import (
 	"testing"
 )
 
-// umaGravadaEUmaMuda tem a forma canônica (grava nos dois ramos) ao lado da
-// forma que a catraca existe para pegar.
-const umaGravadaEUmaMuda = `package server
+// oneRecordedOneSilent has the canonical shape (records in both arms) beside the
+// shape the ratchet exists to catch.
+const oneRecordedOneSilent = `package server
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 	if cfg.GitHubWebhookHandler != nil {
 		r.Post("/api/v1/webhooks/github", cfg.GitHubWebhookHandler.ServeHTTP)
 		_ = cfg.Surfaces.Record(surfaces.GitHubWebhook, true, "")
 	} else {
-		_ = cfg.Surfaces.Record(surfaces.GitHubWebhook, false, "segredo ausente")
+		_ = cfg.Surfaces.Record(surfaces.GitHubWebhook, false, "secret absent")
 	}
 	if cfg.AdminEvictor != nil {
 		r.Post("/api/v1/admin/evict", cfg.AdminEvictor.Handle)
@@ -27,31 +27,30 @@ func NewRouter(cfg Config) *chi.Mux {
 	return r
 }`
 
-func TestAnalyze_ContaSuperficieGuardadaSemGravacao(t *testing.T) {
-	got, err := Analyze(umaGravadaEUmaMuda)
+func TestAnalyze_CountsAGuardedSurfaceWithoutARecord(t *testing.T) {
+	got, err := Analyze(oneRecordedOneSilent)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
 	if len(got.Silent) != 1 {
-		t.Fatalf("mudas = %d, esperado 1: %+v", len(got.Silent), got.Silent)
+		t.Fatalf("silent = %d, want 1: %+v", len(got.Silent), got.Silent)
 	}
 	if got.Silent[0].Field != "AdminEvictor" {
-		t.Errorf("campo = %q, esperado AdminEvictor", got.Silent[0].Field)
+		t.Errorf("field = %q, want AdminEvictor", got.Silent[0].Field)
 	}
 	if got.Guarded != 2 {
-		t.Errorf("guardadas = %d, esperado 2", got.Guarded)
+		t.Errorf("guarded = %d, want 2", got.Guarded)
 	}
 }
 
-func TestAnalyze_FormaRecordedNaCondicaoConta(t *testing.T) {
-	// A forma canônica nova põe o relato na CONDIÇÃO do guard, não no corpo.
-	// Um gate que só olhasse o corpo reportaria como muda uma superfície que
-	// relata — e a resposta seria voltar à forma verbosa para agradar o gate,
-	// que é o gate governando o desenho em vez de protegê-lo.
+// The canonical form puts the report in the guard's CONDITION. A gate reading
+// only the body would call it silent, and the answer would be to go back to the
+// verbose form to please the gate.
+func TestAnalyze_RecordedFormInTheConditionCounts(t *testing.T) {
 	const viaHelper = `package server
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
-	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.BootstrapStore != nil, "razao") {
+	if surfaces.Recorded(cfg.Surfaces, surfaces.Bootstrap, cfg.BootstrapStore != nil, "reason") {
 		r.Post("/internal/bootstrap", h)
 	}
 	return r
@@ -61,19 +60,17 @@ func NewRouter(cfg Config) *chi.Mux {
 		t.Fatalf("Analyze: %v", err)
 	}
 	if got.Guarded != 1 {
-		t.Fatalf("guardadas = %d, esperado 1", got.Guarded)
+		t.Fatalf("guarded = %d, want 1", got.Guarded)
 	}
 	if len(got.Silent) != 0 {
-		t.Errorf("a forma `Recorded` foi contada como muda: %+v", got.Silent)
+		t.Errorf("the Recorded form was counted as silent: %+v", got.Silent)
 	}
 }
 
-func TestAnalyze_GuardaSemRotaNaoConta(t *testing.T) {
-	// Nem todo `if cfg.X != nil` registra superfície: alguns só montam
-	// middleware ou configuram um handler já registrado. Contá-los inflaria a
-	// linha de base com trabalho que não existe, e uma catraca que mede o
-	// número errado ensina a ignorá-la.
-	const semRota = `package server
+// Not every `if cfg.X != nil` registers a surface: some mount middleware.
+// Counting them would inflate the baseline with work that does not exist.
+func TestAnalyze_GuardWithoutARouteDoesNotCount(t *testing.T) {
+	const noRoute = `package server
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 	if cfg.IPRateLimit != nil {
@@ -81,52 +78,101 @@ func NewRouter(cfg Config) *chi.Mux {
 	}
 	return r
 }`
-	got, err := Analyze(semRota)
+	got, err := Analyze(noRoute)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
 	if len(got.Silent) != 0 {
-		t.Errorf("middleware foi contado como superfície: %+v", got.Silent)
+		t.Errorf("middleware was counted as a surface: %+v", got.Silent)
 	}
 }
 
-func TestEvaluate_RecusaAumentoSobreALinhaDeBase(t *testing.T) {
+// A call on something that merely starts with "r" is not a route registration:
+// the router is identified by what it is, not by its first letter.
+func TestAnalyze_ARepositoryGetIsNotARoute(t *testing.T) {
+	const notARouter = `package server
+func NewRouter(cfg Config) *chi.Mux {
+	r := chi.NewRouter()
+	if cfg.Repo != nil {
+		repo.Get("key")
+		registry.Delete("key")
+		resp.Header().Get("X")
+	}
+	return r
+}`
+	got, err := Analyze(notARouter)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if got.Guarded != 0 {
+		t.Fatalf("guarded = %d, want 0: repo/registry/resp are not the router", got.Guarded)
+	}
+}
+
+// A chi.Router parameter (a Group or Route closure) is a router, and a chain
+// that starts at it (r.With(mw).Post) registers a route.
+func TestAnalyze_RouterParameterAndWithChainCount(t *testing.T) {
+	const grouped = `package server
+func NewRouter(cfg Config) *chi.Mux {
+	mux := chi.NewRouter()
+	mux.Group(func(g chi.Router) {
+		if cfg.Upload != nil {
+			g.With(auth).Post("/upload", cfg.Upload.ServeHTTP)
+		}
+	})
+	return mux
+}`
+	got, err := Analyze(grouped)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if got.Guarded != 1 || len(got.Silent) != 1 {
+		t.Fatalf("guarded=%d silent=%v, want the grouped route counted as one silent surface", got.Guarded, got.Silent)
+	}
+}
+
+// The prescribed fix must not tell authors to discard the Record error.
+func TestActionableFixDoesNotPrescribeDiscardingTheError(t *testing.T) {
+	if strings.Contains(ActionableFix, "_ = cfg.Surfaces.Record") {
+		t.Fatalf("the fix template swallows the Record error:\n%s", ActionableFix)
+	}
+	if !strings.Contains(ActionableFix, "surfaces.Recorded(") {
+		t.Fatalf("the fix template must show the Recorded form:\n%s", ActionableFix)
+	}
+}
+
+func TestEvaluate_RefusesAnIncreaseOverTheBaseline(t *testing.T) {
 	out := Evaluate(Outcome{Guarded: 5, Silent: []Site{
 		{Field: "A", Line: 1}, {Field: "B", Line: 2}, {Field: "C", Line: 3}, {Field: "D", Line: 4},
 	}}, 3)
 	if out.Pass {
-		t.Fatal("aumento sobre a linha de base foi aprovado")
+		t.Fatal("an increase over the baseline was approved")
 	}
 	if !strings.Contains(out.Summary(), "4") || !strings.Contains(out.Summary(), "3") {
-		t.Errorf("o resumo não confronta medido com base: %s", out.Summary())
+		t.Errorf("the summary does not confront measured with baseline: %s", out.Summary())
 	}
 }
 
-func TestEvaluate_DiminuirAprova(t *testing.T) {
-	// Homing de verdade nunca é reprovado — é o ponto de a catraca ser
-	// monotônica em vez de uma igualdade.
+// Real homing is never refused — that is why the ratchet is monotonic rather
+// than an equality.
+func TestEvaluate_ADecreasePasses(t *testing.T) {
 	out := Evaluate(Outcome{Guarded: 5, Silent: []Site{{Field: "A", Line: 1}}}, 3)
 	if !out.Pass {
-		t.Fatalf("diminuir a dívida foi reprovado: %s", out.Summary())
+		t.Fatalf("a decrease in debt was refused: %s", out.Summary())
 	}
 }
 
-func TestEvaluate_IgualARBaseAprova(t *testing.T) {
+func TestEvaluate_EqualToTheBaselinePasses(t *testing.T) {
 	out := Evaluate(Outcome{Guarded: 5, Silent: []Site{{Field: "A", Line: 1}}}, 1)
 	if !out.Pass {
-		t.Fatalf("igual à base foi reprovado: %s", out.Summary())
+		t.Fatalf("equal to the baseline was refused: %s", out.Summary())
 	}
 }
 
-func TestCheck_RoteadorSemGuardaNenhumaEhFalhaENaoAprovacao(t *testing.T) {
-	// A mesma invariante do `status-writer-contract`: "não há o que checar" e
-	// "está tudo limpo" são fatos diferentes, e reportar o segundo pelo
-	// primeiro é como um gate fica mudo sem ninguém notar.
-	//
-	// A asserção é sobre `Check` e não sobre `Analyze`: uma fixture com zero
-	// guardas é legítima — é para isso que `Analyze` existe —, mas o roteador
-	// REAL sem nenhuma significa que ele mudou de forma e o gate parou de o
-	// reconhecer.
+// "Nothing to check" and "all clean" are different facts. A fixture with zero
+// guards is legitimate for Analyze; the REAL router with none means it changed
+// shape and the gate stopped recognising it.
+func TestCheck_RouterWithNoGuardIsAFailureNotAPass(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, filepath.Dir(RouterPath))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -138,19 +184,18 @@ func TestCheck_RoteadorSemGuardaNenhumaEhFalhaENaoAprovacao(t *testing.T) {
 	}
 
 	if _, err := Check(Config{Root: root}); err == nil {
-		t.Fatal("um roteador sem guarda nenhuma foi aceito como limpo — " +
-			"nesse ponto o gate deixou de medir o que diz medir")
+		t.Fatal("a router with no guard was accepted as clean")
 	}
 }
 
-func TestCheck_RoteadorAusenteFalhaAlto(t *testing.T) {
+func TestCheck_MissingRouterFails(t *testing.T) {
 	if _, err := Check(Config{Root: t.TempDir()}); err == nil {
-		t.Fatal("roteador ausente foi aceito")
+		t.Fatal("a missing router was accepted")
 	}
 }
 
-func TestAnalyze_FonteInvalidaFalhaAlto(t *testing.T) {
-	if _, err := Analyze("isto não é Go"); err == nil {
-		t.Fatal("fonte inválida foi aceita")
+func TestAnalyze_InvalidSourceFails(t *testing.T) {
+	if _, err := Analyze("this is not Go"); err == nil {
+		t.Fatal("invalid source was accepted")
 	}
 }

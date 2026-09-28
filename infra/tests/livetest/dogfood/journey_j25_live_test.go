@@ -37,9 +37,9 @@ var _ = Describe("J-25 Live URL Discoverability", Label("live", "dogfood", "j25"
 	AfterEach(func() { cancel() })
 
 	Context("Scenario A — status surfaces the live URL", func() {
-		It("GET /engine/api/v1/projects/teste/status returns 200 (source of the LIVE badge/URL)", func() {
+		It("GET /engine/api/v1/projects/sample/status returns 200 (source of the LIVE badge/URL)", func() {
 			status, _, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/engine/api/v1/projects/teste/status", jwt, nil)
+				env.CloudBaseURL+"/engine/api/v1/projects/sample/status", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
 		})

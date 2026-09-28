@@ -27,9 +27,9 @@ prometheus:
         metrics_path: /metrics
         static_configs:
           - targets:
-              # Build cluster LB IP on k3d-loopzero-build network.
-              # Updated by: bash infra/scripts/local/update-cross-cluster-ips.sh
-              - "10.0.3.9:30090"
+              # The build cluster's load balancer, by container name: Docker's DNS
+              # resolves it on the k3d network, so no setup step rewrites it (#264).
+              - "k3d-loopzero-build-serverlb:30090"
             labels:
               cluster: build
               component: argo-workflows
@@ -39,9 +39,8 @@ prometheus:
         metrics_path: /metrics
         static_configs:
           - targets:
-              # Workload cluster LB IP on k3d-loopzero-cell-0 network.
-              # Updated by: bash infra/scripts/local/update-cross-cluster-ips.sh
-              - "10.0.3.12:30091"
+              # The cell-0 load balancer, by container name (#264).
+              - "k3d-loopzero-cell-0-serverlb:30091"
             labels:
               cluster: workload
               component: traefik

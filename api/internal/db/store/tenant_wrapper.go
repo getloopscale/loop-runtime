@@ -28,6 +28,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
@@ -45,7 +47,7 @@ type TenantStoreSqlc struct {
 
 // NewTenantStoreSqlc constructs a sqlc-backed admin tenant store.
 // `pool` MUST implement SqlcBridge (PgxAdapter does); test fakes that
-// don't will panic at query time — by design (T0.6 reshape matrix).
+// don't fail each query with db.ErrNotSqlcBridge.
 func NewTenantStoreSqlc(pool db.DBTX) *TenantStoreSqlc {
 	return &TenantStoreSqlc{
 		q:    generated.New(),
@@ -58,14 +60,7 @@ func (s *TenantStoreSqlc) gen(tx db.DBTX) generated.DBTX {
 	if target == nil {
 		target = s.pool
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		panic(fmt.Sprintf(
-			"tenant_wrapper: DBTX %T does not implement SqlcBridge — sqlc-backed stores require PgxAdapter / PgxTxAdapter or pgxmock per T0.6 reshape matrix",
-			target,
-		))
-	}
-	return bridge.GeneratedDB()
+	return db.Generated(target)
 }
 
 // ListTenantIDsByPattern returns tenant IDs matching the LIKE pattern.
@@ -87,10 +82,11 @@ func (s *TenantStoreSqlc) ListTenantIDsByPattern(ctx context.Context, pattern st
 
 // DeleteTenantsFKOrdered runs the 8-step FK-safe cascade for the given
 // tenant IDs, plus a 9th SC-5 (ADR-13) step that GCs the compute-metering
-// cursors (no FK to tenants; order-free). The caller MUST supply a tx
-// (DBTX) so the whole cascade is atomic — either every row for every
-// tenant in the list is gone, or none of them are. No-op (zero counts)
-// for empty input.
+// cursors (no FK to tenants; order-free). The whole cascade runs in ONE
+// transaction the store opens on its pool and commits once: either every row
+// for every tenant in the list is gone, or none of them are. A failure at
+// step k rolls back steps 1..k-1 and returns zero counts. No-op (zero
+// counts) for empty input.
 //
 // FK order (validated by tools/admin-evict-tenants.sh step 5):
 //
@@ -107,7 +103,16 @@ func (s *TenantStoreSqlc) DeleteTenantsFKOrdered(ctx context.Context, tenantIDs 
 		return counts, nil
 	}
 
-	dbtx := s.gen(nil)
+	adapter, ok := s.pool.(*db.PgxAdapter)
+	if !ok || adapter.Pool == nil {
+		return counts, fmt.Errorf("tenant store: eviction needs a pgx pool to run atomically, got DBTX %T", s.pool)
+	}
+	pgtx, err := adapter.Pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return counts, fmt.Errorf("tenant store: begin eviction tx: %w", err)
+	}
+	defer func() { _ = pgtx.Rollback(ctx) }() // no-op after a successful Commit
+	dbtx := s.gen(&db.PgxTxAdapter{Tx: pgtx})
 
 	type step struct {
 		name  string
@@ -131,9 +136,12 @@ func (s *TenantStoreSqlc) DeleteTenantsFKOrdered(ctx context.Context, tenantIDs 
 	for i, st := range steps {
 		rows, err := st.fn()
 		if err != nil {
-			return counts, fmt.Errorf("tenant store: step %d (%s): %w", i+1, st.name, err)
+			return TenantDeletionCounts{}, fmt.Errorf("tenant store: step %d (%s), eviction rolled back: %w", i+1, st.name, err)
 		}
 		*st.tally = rows
+	}
+	if err := pgtx.Commit(ctx); err != nil {
+		return TenantDeletionCounts{}, fmt.Errorf("tenant store: commit eviction: %w", err)
 	}
 	return counts, nil
 }

@@ -15,9 +15,9 @@ import (
 	"time"
 )
 
-// fixtureRepo materializa um repo sintético em t.TempDir com a estrutura
-// mínima necessária para exercitar ScanRepo + DetectCallers + ProposeDisposition.
-// Retorna o root path; cleanup é automático via t.TempDir().
+// fixtureRepo materializes a synthetic repo in t.TempDir with the minimal
+// structure needed to exercise ScanRepo + DetectCallers + ProposeDisposition.
+// Returns the root path; cleanup is automatic via t.TempDir().
 func fixtureRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
@@ -33,8 +33,8 @@ func fixtureRepo(t *testing.T, files map[string]string) string {
 	return root
 }
 
-// TestScanRepo_FindsAllShellScripts — baseline assertion: ScanRepo retorna
-// todos os .sh do repo, com Path + LOC + LastMod populados.
+// TestScanRepo_FindsAllShellScripts — baseline assertion: ScanRepo returns
+// every .sh in the repo, with Path + LOC + LastMod populated.
 func TestScanRepo_FindsAllShellScripts(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/a.sh":            "#!/bin/bash\necho a\n",
@@ -63,8 +63,8 @@ func TestScanRepo_FindsAllShellScripts(t *testing.T) {
 	}
 }
 
-// TestScanRepo_ExcludesNodeModules — vendor/, node_modules/, .git/ devem ser
-// excluídos da varredura.
+// TestScanRepo_ExcludesNodeModules — vendor/, node_modules/, .git/ must be
+// excluded from the scan.
 func TestScanRepo_ExcludesNodeModules(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/real.sh":        "#!/bin/bash\necho real\n",
@@ -85,13 +85,13 @@ func TestScanRepo_ExcludesNodeModules(t *testing.T) {
 	}
 }
 
-// TestScanRepo_HandlesSymlinks_NoCycle — EC-07: symlinks são deduplicados
-// (script real é listado UMA vez) e não causam ciclo.
+// TestScanRepo_HandlesSymlinks_NoCycle — EC-07: symlinks are deduplicated
+// (the real script is listed ONCE) and do not cause a cycle.
 func TestScanRepo_HandlesSymlinks_NoCycle(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/real.sh": "#!/bin/bash\necho real\n",
 	})
-	// Criar symlink apontando para real.sh
+	// Create a symlink pointing to real.sh
 	linkPath := filepath.Join(root, "infra/scripts/alias.sh")
 	if err := os.Symlink(filepath.Join(root, "infra/scripts/real.sh"), linkPath); err != nil {
 		t.Skipf("symlink not supported on this filesystem: %v", err)
@@ -101,8 +101,9 @@ func TestScanRepo_HandlesSymlinks_NoCycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ScanRepo: %v", err)
 	}
-	// O contrato: lista UMA vez (não duas). Aceitamos seja o real ou o alias
-	// como path canônico — mas NUNCA ambos. Implementação resolve via EvalSymlinks.
+	// The contract: listed ONCE (not twice). We accept either the real one or the
+	// alias as the canonical path — but NEVER both. The implementation resolves via
+	// EvalSymlinks.
 	if len(scripts) > 1 {
 		t.Errorf("expected 1 unique script after symlink dedup, got %d", len(scripts))
 		for _, s := range scripts {
@@ -114,8 +115,8 @@ func TestScanRepo_HandlesSymlinks_NoCycle(t *testing.T) {
 	}
 }
 
-// TestDetectCallers_FindsTaskfileRefs — script invocado por Taskfile.yml ou
-// taskfiles/*.yml deve aparecer com o caller correspondente.
+// TestDetectCallers_FindsTaskfileRefs — a script invoked by Taskfile.yml or
+// taskfiles/*.yml must show up with the corresponding caller.
 func TestDetectCallers_FindsTaskfileRefs(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/target.sh": "#!/bin/bash\necho target\n",
@@ -156,8 +157,8 @@ tasks:
 	}
 }
 
-// TestDetectCallers_FindsCIYamlRefs — script referenciado em
-// .github/workflows/*.yml deve aparecer com o caller correspondente.
+// TestDetectCallers_FindsCIYamlRefs — a script referenced in
+// .github/workflows/*.yml must show up with the corresponding caller.
 func TestDetectCallers_FindsCIYamlRefs(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/ci-tool.sh": "#!/bin/bash\necho ci\n",
@@ -194,8 +195,8 @@ jobs:
 	}
 }
 
-// TestDetectCallers_FindsCrossScriptRefs — script A.sh que invoca B.sh
-// deve criar caller A em B.
+// TestDetectCallers_FindsCrossScriptRefs — a script A.sh that invokes B.sh
+// must create caller A on B.
 func TestDetectCallers_FindsCrossScriptRefs(t *testing.T) {
 	root := fixtureRepo(t, map[string]string{
 		"infra/scripts/parent.sh": "#!/bin/bash\nbash infra/scripts/child.sh\n",
@@ -227,8 +228,8 @@ func TestDetectCallers_FindsCrossScriptRefs(t *testing.T) {
 	}
 }
 
-// TestProposeDisposition_DeadCode — script com 0 callers + last-mod > 90d
-// é classificado como DELETE-DEAD.
+// TestProposeDisposition_DeadCode — a script with 0 callers + last-mod > 90d
+// is classified as DELETE-DEAD.
 func TestProposeDisposition_DeadCode(t *testing.T) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 	s := Script{
@@ -237,28 +238,28 @@ func TestProposeDisposition_DeadCode(t *testing.T) {
 		LastMod: old,
 		Callers: nil,
 	}
-	disp := ProposeDisposition(s)
+	disp := ProposeDisposition(s, time.Now())
 	if disp != "DELETE-DEAD" {
 		t.Errorf("expected DELETE-DEAD, got %s", disp)
 	}
 }
 
-// TestProposeDisposition_HermeticTest — X_test.sh é classificado como AUTO-DIE
-// (morre com o pai X.sh).
+// TestProposeDisposition_HermeticTest — X_test.sh is classified as AUTO-DIE
+// (it dies with its parent X.sh).
 func TestProposeDisposition_HermeticTest(t *testing.T) {
 	s := Script{
 		Path:    "infra/tests/scripts/foo_test.sh",
 		LOC:     30,
 		LastMod: time.Now(),
 	}
-	disp := ProposeDisposition(s)
+	disp := ProposeDisposition(s, time.Now())
 	if disp != "AUTO-DIE" {
 		t.Errorf("expected AUTO-DIE for hermetic test pattern, got %s", disp)
 	}
 }
 
-// TestProposeDisposition_BareHelmWrapper — script com conteúdo `helm upgrade`
-// é classificado como DELEGATE-HELMFILE (per D2).
+// TestProposeDisposition_BareHelmWrapper — a script whose content is `helm upgrade`
+// is classified as DELEGATE-HELMFILE (per D2).
 func TestProposeDisposition_BareHelmWrapper(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "install.sh")
@@ -268,10 +269,11 @@ func TestProposeDisposition_BareHelmWrapper(t *testing.T) {
 	}
 	s := Script{
 		Path:    path,
+		Body:    body,
 		LOC:     2,
 		LastMod: time.Now(),
 	}
-	disp := ProposeDisposition(s)
+	disp := ProposeDisposition(s, time.Now())
 	if disp != "DELEGATE-HELMFILE" {
 		t.Errorf("expected DELEGATE-HELMFILE, got %s", disp)
 	}
@@ -294,18 +296,14 @@ func TestScriptHasRealHelmInvocation(t *testing.T) {
 		{"none", "#!/bin/bash\nkubectl apply -f x.yaml\n", false},
 	}
 	for _, c := range cases {
-		path := filepath.Join(t.TempDir(), c.name+".sh")
-		if err := os.WriteFile(path, []byte(c.body), 0o644); err != nil {
-			t.Fatalf("write: %v", err)
-		}
-		if got := scriptHasRealHelmInvocation(path); got != c.want {
-			t.Errorf("%s: scriptHasRealHelmInvocation = %v, want %v", c.name, got, c.want)
+		if got := hasRealHelmInvocation(c.body); got != c.want {
+			t.Errorf("%s: hasRealHelmInvocation = %v, want %v", c.name, got, c.want)
 		}
 	}
 }
 
-// TestProposeDisposition_PureLogicGate — script pattern `check-*.sh` em
-// infra/scripts/ é candidato a MIGRATE-GO-PUREFN.
+// TestProposeDisposition_PureLogicGate — a script matching `check-*.sh` in
+// infra/scripts/ is a MIGRATE-GO-PUREFN candidate.
 func TestProposeDisposition_PureLogicGate(t *testing.T) {
 	s := Script{
 		Path:    "infra/scripts/check-prod-image-tags.sh",
@@ -313,7 +311,7 @@ func TestProposeDisposition_PureLogicGate(t *testing.T) {
 		LastMod: time.Now(),
 		Callers: []string{".github/workflows/ci.yml"},
 	}
-	disp := ProposeDisposition(s)
+	disp := ProposeDisposition(s, time.Now())
 	if disp != "MIGRATE-GO-PUREFN" {
 		t.Errorf("expected MIGRATE-GO-PUREFN, got %s", disp)
 	}
@@ -331,8 +329,8 @@ func TestProposeDisposition_CheckScriptThatShellsOut_NotPureFn(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	s := Script{Path: path, LOC: 3, LastMod: time.Now(), Callers: []string{".github/workflows/x.yml"}}
-	if disp := ProposeDisposition(s); disp == "MIGRATE-GO-PUREFN" {
+	s := Script{Path: path, Body: body, LOC: 3, LastMod: time.Now(), Callers: []string{".github/workflows/x.yml"}}
+	if disp := ProposeDisposition(s, time.Now()); disp == "MIGRATE-GO-PUREFN" {
 		t.Errorf("check-* that shells out must NOT be MIGRATE-GO-PUREFN, got %s", disp)
 	}
 }
@@ -346,8 +344,8 @@ func TestProposeDisposition_PureCheckScript_StaysPureFn(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	s := Script{Path: path, LOC: 3, LastMod: time.Now(), Callers: []string{".github/workflows/x.yml"}}
-	if disp := ProposeDisposition(s); disp != "MIGRATE-GO-PUREFN" {
+	s := Script{Path: path, Body: body, LOC: 3, LastMod: time.Now(), Callers: []string{".github/workflows/x.yml"}}
+	if disp := ProposeDisposition(s, time.Now()); disp != "MIGRATE-GO-PUREFN" {
 		t.Errorf("pure check-* must stay MIGRATE-GO-PUREFN, got %s", disp)
 	}
 }
@@ -363,8 +361,8 @@ func TestProposeDisposition_GeneratorThatShellsOut_NotPureGenerator(t *testing.T
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	s := Script{Path: path, LOC: 3, LastMod: time.Now(), Callers: []string{"Taskfile.yml"}}
-	if disp := ProposeDisposition(s); disp == "MIGRATE-GENERATOR" {
+	s := Script{Path: path, Body: body, LOC: 3, LastMod: time.Now(), Callers: []string{"Taskfile.yml"}}
+	if disp := ProposeDisposition(s, time.Now()); disp == "MIGRATE-GENERATOR" {
 		t.Errorf("generate-* that shells out must NOT be MIGRATE-GENERATOR, got %s", disp)
 	}
 }
@@ -378,32 +376,32 @@ func TestProposeDisposition_PureGenerator_StaysGenerator(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	s := Script{Path: path, LOC: 2, LastMod: time.Now(), Callers: []string{"Taskfile.yml"}}
-	if disp := ProposeDisposition(s); disp != "MIGRATE-GENERATOR" {
+	s := Script{Path: path, Body: body, LOC: 2, LastMod: time.Now(), Callers: []string{"Taskfile.yml"}}
+	if disp := ProposeDisposition(s, time.Now()); disp != "MIGRATE-GENERATOR" {
 		t.Errorf("pure generate-* must stay MIGRATE-GENERATOR, got %s", disp)
 	}
 }
 
 // TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead — EC-03:
-// Quando script é referenciado via interpolação dinâmica (`bash "$VAR"`),
-// caller_count fica em zero (regex não pega), mas a heurística NÃO deve marcar
-// como DELETE-DEAD para esses casos. Esta validação acontece em T1.1 via grep
-// dinâmico; aqui validamos que CallerCount > 0 derruba DELETE-DEAD.
+// When a script is referenced through dynamic interpolation (`bash "$VAR"`),
+// caller_count stays at zero (the regex does not catch it), but the heuristic must
+// NOT mark it DELETE-DEAD in those cases. That validation happens in T1.1 via a
+// dynamic grep; here we validate that CallerCount > 0 rules out DELETE-DEAD.
 func TestProposeDisposition_ScriptWithDynamicCaller_NotMarkedDead(t *testing.T) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 	s := Script{
 		Path:    "infra/scripts/lib/dispatcher.sh",
 		LOC:     50,
 		LastMod: old,
-		Callers: []string{"infra/scripts/main.sh"}, // tem caller documentado
+		Callers: []string{"infra/scripts/main.sh"}, // has a documented caller
 	}
-	disp := ProposeDisposition(s)
+	disp := ProposeDisposition(s, time.Now())
 	if disp == "DELETE-DEAD" {
 		t.Errorf("script with caller should not be DELETE-DEAD, got %s", disp)
 	}
 }
 
-// TestEmitCSV_StableSchema — CSV emite header e linhas com o schema canônico:
+// TestEmitCSV_StableSchema — the CSV emits a header and rows with the canonical schema:
 // path, loc, last_mod_utc, caller_count, disposition, callers
 func TestEmitCSV_StableSchema(t *testing.T) {
 	scripts := []Script{
@@ -455,7 +453,7 @@ func TestEmitCSV_StableSchema(t *testing.T) {
 	}
 }
 
-// TestEmitCSV_DeterministicOrder — output ordenado por path (estável em diff).
+// TestEmitCSV_DeterministicOrder — output sorted by path (stable in a diff).
 func TestEmitCSV_DeterministicOrder(t *testing.T) {
 	scripts := []Script{
 		{Path: "zeta.sh", LOC: 1, LastMod: time.Now(), Disposition: "X"},
@@ -502,8 +500,8 @@ func TestProposeDisposition_DelegateArgoCD(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	s := Script{Path: path, LOC: 2, LastMod: time.Now()}
-	if disp := ProposeDisposition(s); disp != "DELEGATE-ARGOCD" {
+	s := Script{Path: path, Body: body, LOC: 2, LastMod: time.Now()}
+	if disp := ProposeDisposition(s, time.Now()); disp != "DELEGATE-ARGOCD" {
 		t.Errorf("expected DELEGATE-ARGOCD, got %s", disp)
 	}
 }
@@ -511,7 +509,7 @@ func TestProposeDisposition_DelegateArgoCD(t *testing.T) {
 // TestProposeDisposition_MigrateGoSDK — pulumi-*.sh
 func TestProposeDisposition_MigrateGoSDK(t *testing.T) {
 	s := Script{Path: "infra/scripts/pulumi-archive.sh", LOC: 50, LastMod: time.Now()}
-	if disp := ProposeDisposition(s); disp != "MIGRATE-GO-SDK" {
+	if disp := ProposeDisposition(s, time.Now()); disp != "MIGRATE-GO-SDK" {
 		t.Errorf("expected MIGRATE-GO-SDK, got %s", disp)
 	}
 }
@@ -519,11 +517,11 @@ func TestProposeDisposition_MigrateGoSDK(t *testing.T) {
 // TestProposeDisposition_Generator — gen-*.sh
 func TestProposeDisposition_Generator(t *testing.T) {
 	s := Script{Path: "infra/scripts/gen-state-machine-dots.sh", LOC: 30, LastMod: time.Now()}
-	if disp := ProposeDisposition(s); disp != "MIGRATE-GENERATOR" {
+	if disp := ProposeDisposition(s, time.Now()); disp != "MIGRATE-GENERATOR" {
 		t.Errorf("expected MIGRATE-GENERATOR for gen-*, got %s", disp)
 	}
 	s2 := Script{Path: "infra/scripts/generate-secrets.sh", LOC: 20, LastMod: time.Now()}
-	if disp := ProposeDisposition(s2); disp != "MIGRATE-GENERATOR" {
+	if disp := ProposeDisposition(s2, time.Now()); disp != "MIGRATE-GENERATOR" {
 		t.Errorf("expected MIGRATE-GENERATOR for generate-*, got %s", disp)
 	}
 }
@@ -531,11 +529,11 @@ func TestProposeDisposition_Generator(t *testing.T) {
 // TestProposeDisposition_MigrateGinkgo — test orchestrators
 func TestProposeDisposition_MigrateGinkgo(t *testing.T) {
 	s := Script{Path: "infra/tests/parity/validate-matrix.sh", LOC: 80, LastMod: time.Now()}
-	if disp := ProposeDisposition(s); disp != "MIGRATE-GINKGO" {
+	if disp := ProposeDisposition(s, time.Now()); disp != "MIGRATE-GINKGO" {
 		t.Errorf("expected MIGRATE-GINKGO for parity test, got %s", disp)
 	}
 	s2 := Script{Path: "infra/tests/dogfood/journey-01.sh", LOC: 60, LastMod: time.Now()}
-	if disp := ProposeDisposition(s2); disp != "MIGRATE-GINKGO" {
+	if disp := ProposeDisposition(s2, time.Now()); disp != "MIGRATE-GINKGO" {
 		t.Errorf("expected MIGRATE-GINKGO for dogfood, got %s", disp)
 	}
 }
@@ -543,7 +541,7 @@ func TestProposeDisposition_MigrateGinkgo(t *testing.T) {
 // TestProposeDisposition_KeepOperatorBreakGlass — break-glass small script
 func TestProposeDisposition_KeepOperatorBreakGlass(t *testing.T) {
 	s := Script{Path: "infra/scripts/break-glass.sh", LOC: 50, LastMod: time.Now()}
-	if disp := ProposeDisposition(s); disp != "KEEP-OPERATOR" {
+	if disp := ProposeDisposition(s, time.Now()); disp != "KEEP-OPERATOR" {
 		t.Errorf("expected KEEP-OPERATOR for break-glass, got %s", disp)
 	}
 }
@@ -551,7 +549,7 @@ func TestProposeDisposition_KeepOperatorBreakGlass(t *testing.T) {
 // TestProposeDisposition_ReviewNeededDefault — script not matching any heuristic
 func TestProposeDisposition_ReviewNeededDefault(t *testing.T) {
 	s := Script{Path: "infra/scripts/random-utility.sh", LOC: 200, LastMod: time.Now(), Callers: []string{"X"}}
-	if disp := ProposeDisposition(s); disp != "REVIEW-NEEDED" {
+	if disp := ProposeDisposition(s, time.Now()); disp != "REVIEW-NEEDED" {
 		t.Errorf("expected REVIEW-NEEDED default, got %s", disp)
 	}
 }
@@ -578,33 +576,29 @@ func TestIsolatedStemPresent(t *testing.T) {
 	}
 }
 
-// TestCountLines_EmptyFile — empty file returns 0 lines
-func TestCountLines_EmptyFile(t *testing.T) {
-	tmp := filepath.Join(t.TempDir(), "empty.sh")
-	if err := os.WriteFile(tmp, []byte(""), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-	n, err := countLines(tmp)
-	if err != nil {
-		t.Fatalf("countLines: %v", err)
-	}
-	if n != 0 {
-		t.Errorf("expected 0 lines, got %d", n)
+func TestCountLines_EmptyContentIsZero(t *testing.T) {
+	if n := countLines(nil); n != 0 {
+		t.Errorf("countLines(empty) = %d, want 0", n)
 	}
 }
 
-// TestCountLines_NoTrailingNewline — last line counted even without final \n
-func TestCountLines_NoTrailingNewline(t *testing.T) {
-	tmp := filepath.Join(t.TempDir(), "noeol.sh")
-	if err := os.WriteFile(tmp, []byte("line1\nline2"), 0o644); err != nil {
-		t.Fatalf("write: %v", err)
+func TestCountLines_CountsALastLineWithoutNewline(t *testing.T) {
+	if n := countLines([]byte("line1\nline2")); n != 2 {
+		t.Errorf("countLines = %d, want 2", n)
 	}
-	n, err := countLines(tmp)
-	if err != nil {
-		t.Fatalf("countLines: %v", err)
+}
+
+// DELETE-DEAD is decided against the instant the caller passes, so the verdict
+// is a function of its inputs rather than of when the test runs.
+func TestProposeDisposition_AgeIsMeasuredAgainstTheGivenInstant(t *testing.T) {
+	lastMod := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	s := Script{Path: "infra/scripts/x.sh", LOC: 10, LastMod: lastMod}
+
+	if got := ProposeDisposition(s, lastMod.Add(89*24*time.Hour)); got == "DELETE-DEAD" {
+		t.Errorf("at 89 days: %s, want not DELETE-DEAD", got)
 	}
-	if n != 2 {
-		t.Errorf("expected 2 lines (last without \\n), got %d", n)
+	if got := ProposeDisposition(s, lastMod.Add(91*24*time.Hour)); got != "DELETE-DEAD" {
+		t.Errorf("at 91 days: %s, want DELETE-DEAD", got)
 	}
 }
 
@@ -722,7 +716,7 @@ func TestDetectsHookRegistration(t *testing.T) {
 		LastMod: old,
 		Callers: nil,
 	}
-	if disp := ProposeDisposition(s); disp == "DELETE-DEAD" {
+	if disp := ProposeDisposition(s, time.Now()); disp == "DELETE-DEAD" {
 		t.Errorf("harness hook must not be DELETE-DEAD, got %s", disp)
 	}
 }
@@ -745,5 +739,28 @@ func TestIsCallerSearchFile(t *testing.T) {
 		if got != want {
 			t.Errorf("isCallerSearchFile(%q) = %v, want %v", name, got, want)
 		}
+	}
+}
+
+// ScanRepo must classify by content read against --root, not against the
+// process working directory. The test process runs inside this package, so a
+// relative Script.Path read with os.ReadFile resolves to nothing and every
+// content rule silently falls through.
+func TestScanRepo_ClassifiesByContentRegardlessOfWorkingDirectory(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "check-cluster.sh"), []byte("#!/bin/bash\nkubectl get pods\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Taskfile.yml"), []byte("tasks:\n  c:\n    cmds:\n      - bash check-cluster.sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	scripts, err := ScanRepo(root)
+
+	if err != nil {
+		t.Fatalf("ScanRepo: %v", err)
+	}
+	if len(scripts) != 1 || scripts[0].Disposition != "KEEP-OPERATOR" {
+		t.Fatalf("scripts = %+v, want check-cluster.sh as KEEP-OPERATOR (it shells out to kubectl)", scripts)
 	}
 }

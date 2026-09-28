@@ -7,12 +7,16 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/pkg/gitearepo"
 )
 
 // T1.3 (plan 2026-05-21-deep-review-remediation): dev-default sentinels are
@@ -43,10 +47,33 @@ const (
 
 // Config holds all API server configuration, read from environment variables at startup.
 type Config struct {
+	// loadErrors are the variables Load could not parse; Validate reports them.
+	loadErrors []error
+
 	// Server
 	Port        string
 	MetricsPort string
 	Env         string // "development" or "production"
+
+	// TracingEnabled turns OpenTelemetry export on (LOOPZERO_TRACING_ENABLED,
+	// default true); OTelEndpoint is the collector (OTEL_EXPORTER_OTLP_ENDPOINT,
+	// empty = the tracing package default).
+	TracingEnabled bool
+	OTelEndpoint   string
+
+	// GitHubAPIBaseURL is the GitHub REST root (GITHUB_API_BASE_URL); a GitHub
+	// Enterprise Server install points it at its appliance.
+	GitHubAPIBaseURL string
+
+	// CosignImage and SyftImage override the build's signer and SBOM scanner
+	// images (LOOPZERO_COSIGN_IMAGE / LOOPZERO_SYFT_IMAGE); empty = built-in images.
+	CosignImage string
+	SyftImage   string
+
+	// EnvBlocklistMode is how services.json env keys on the reserved blocklist
+	// are handled (LOOPZERO_ENV_BLOCKLIST_MODE): "enforce" (default) or "warn".
+	// Warn is refused in production.
+	EnvBlocklistMode string
 
 	// HTTP Server Timeouts
 	ReadHeaderTimeout    time.Duration
@@ -102,15 +129,14 @@ type Config struct {
 	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
 	SourceBucket              string // S3 bucket for source bundles (default: "loopzero-builds")
 	RegistryURL               string
-	RegistryInsecure          bool   // true for local dev registries without TLS
-	HarborRegistryURL         string // MEET-048: secondary registry for dual-push during migration. Empty = disabled.
+	RegistryInsecure          bool // true for local dev registries without TLS
 
 	// Cosign keyless signing config (M2 T8.0 of plan 2026-05-27-M07-to-3-85 — v1.1 EC-3 wire env var).
 	// CosignKeyless=false (default): keyed mode via cosign-signing-key Secret.
 	// CosignKeyless=true: keyless via Fulcio + Rekor + projected SA token.
 	// Requires Sigstore stack provisioned on build cluster (per plan M2 Phase 7).
-	// Without this wire, helm values bonitos viram pod env mas InfraParams default
-	// fica false (keyed) — silent teatro pattern "Implemented but not wired" do CLAUDE.md.
+	// Without this wire, the helm values become pod env but InfraParams stays at its
+	// default false (keyed) — the silent "Implemented but not wired" pattern from CLAUDE.md.
 	CosignKeyless       bool
 	CosignAttestEnabled bool   // SLSA L3 SBOM-to-image attestation; requires CosignKeyless=true
 	CosignFulcioURL     string // Override default Fulcio URL when CosignKeyless=true. Empty = cosign default (sigstore public).
@@ -188,6 +214,27 @@ type Config struct {
 	// (canary still runs setWeight+pause but skips analysis steps).
 	PrometheusAddress string
 
+	// ProgressiveDelivery selects Rollout (canary) manifests over the legacy
+	// Deployment (argo-rollouts-progressive-delivery D8). On by default; set
+	// LOOPZERO_PROGRESSIVE_DELIVERY to "false" or "0" to revert to the legacy
+	// Deployment during an incident rollback.
+	ProgressiveDelivery bool
+
+	// LeanResources halves the renderer's fallback resource defaults (T-08
+	// contingency: fit 100 apps in the DO dev runtime cluster). Off by
+	// default; LOOPZERO_LEAN_RESOURCES "true" or "1" turns it on.
+	LeanResources bool
+
+	// Data-plane readiness poller (environments.ReadinessPoller,
+	// loopzero-cloud#128): records per-environment ready replicas for the
+	// dashboard badge. Off unless LOOPZERO_DATA_PLANE_POLLER_ENABLED; when on,
+	// DataPlanePollerPrometheusURL is the Prometheus the api queries — the
+	// one holding kube-state-metrics for the cells, reachable from the api
+	// pod (unlike PrometheusAddress, which workload pods must reach).
+	DataPlanePollerEnabled       bool
+	DataPlanePollerPrometheusURL string
+	DataPlanePollerInterval      time.Duration
+
 	// Credentials (read from env vars or K8s secrets)
 	GiteaToken          string
 	ArgocdToken         string
@@ -248,8 +295,7 @@ type Config struct {
 	ReleaseReaperInterval time.Duration
 
 	// Build Reconcile Loop (C-01 fix)
-	ReconcileInterval  time.Duration
-	MaxBuildsPerTenant int
+	ReconcileInterval time.Duration
 
 	// Loki (build log aggregation)
 	LokiURL string
@@ -291,6 +337,26 @@ type Config struct {
 	// Env: LOOPZERO_DISABLE_LEGACY_LOOPS ("true" to disable loops in the API).
 	DisableLegacyLoops bool
 
+	// API process switches, read here once rather than ad hoc in main.
+	//
+	// PprofEnabled starts the pprof server (LOOPZERO_PPROF_ENABLED "true" or "1";
+	// default off, dev/debug only) on PprofAddr (LOOPZERO_PPROF_ADDR, default
+	// ":6060"), reachable by port-forward and never by the public ingress.
+	PprofEnabled bool
+	PprofAddr    string
+	// EnvReadinessChecker makes EnsureEnvironment poll the Environment CR
+	// until status.phase is Active (LOOPZERO_ENV_READINESS_CHECKER "true").
+	EnvReadinessChecker bool
+	// BrokerToken is the bearer the ESO secret-fetch broker requires
+	// (LOOPZERO_BROKER_TOKEN); empty disables the broker endpoint.
+	BrokerToken string
+	// TrustedProxyCIDRs lists the proxies whose X-Forwarded-For the pre-auth
+	// IP rate limit honours (LOOPZERO_TRUSTED_PROXY_CIDRS, comma-separated).
+	TrustedProxyCIDRs string
+	// BillingUpgradeURL is the upgrade link a quota refusal points to
+	// (BILLING_UPGRADE_URL).
+	BillingUpgradeURL string
+
 	// Roadmap 07 — Backpressure and Admission Control.
 	//
 	// When AdmissionControl is true, the API consults the build admission
@@ -307,8 +373,13 @@ type Config struct {
 	// Env: MAX_TENANTS_PER_CELL (default: 5000)
 	MaxTenantsPerCell int
 
-	// MaxConcurrentBuildsPerTenant: per-tenant concurrent build limit.
-	// Env: MAX_CONCURRENT_BUILDS_PER_TENANT (default: 3)
+	// MaxConcurrentBuildsPerTenant is THE per-tenant concurrent build limit:
+	// the reconcile loop's backpressure, the admission gate's cap and the
+	// Tenant CR's maxBuildConcurrency all read it (principle_violations#49).
+	// Env: MAX_CONCURRENT_BUILDS_PER_TENANT (default: 3, the value the
+	// reconcile loop enforced in production before the three copies were
+	// merged). MAX_BUILDS_PER_TENANT, the loop's former copy, is accepted
+	// when it agrees and refused at boot when it does not.
 	MaxConcurrentBuildsPerTenant int
 
 	// PGCircuitBreakerThresholdPct: pool utilization % above which mutations are rejected.
@@ -351,33 +422,41 @@ func Load() Config {
 	home, _ := os.UserHomeDir()
 	defaultKubeconfig := home + "/.kube/config"
 
-	return Config{
+	l := &envLoader{}
+	cfg := Config{
 		// Server
 		Port:        envOr("PORT", "3001"),
 		MetricsPort: envOr("METRICS_PORT", "9090"),
 		Env:         envOr("LOOPZERO_ENV", "development"),
 
+		TracingEnabled:   envBool("LOOPZERO_TRACING_ENABLED", true),
+		OTelEndpoint:     os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		GitHubAPIBaseURL: envOr("GITHUB_API_BASE_URL", "https://api.github.com"),
+		CosignImage:      os.Getenv("LOOPZERO_COSIGN_IMAGE"),
+		SyftImage:        os.Getenv("LOOPZERO_SYFT_IMAGE"),
+		EnvBlocklistMode: strings.ToLower(strings.TrimSpace(envOr("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce"))),
+
 		// HTTP Server Timeouts
-		ReadHeaderTimeout:    envDuration("SERVER_READ_HEADER_TIMEOUT", 10*time.Second),
-		ReadTimeout:          envDuration("SERVER_READ_TIMEOUT", 30*time.Second),
-		IdleTimeout:          envDuration("SERVER_IDLE_TIMEOUT", 120*time.Second),
-		GracefulShutdownTime: envDuration("SERVER_GRACEFUL_SHUTDOWN", 15*time.Second),
+		ReadHeaderTimeout:    l.duration("SERVER_READ_HEADER_TIMEOUT", 10*time.Second),
+		ReadTimeout:          l.duration("SERVER_READ_TIMEOUT", 30*time.Second),
+		IdleTimeout:          l.duration("SERVER_IDLE_TIMEOUT", 120*time.Second),
+		GracefulShutdownTime: l.duration("SERVER_GRACEFUL_SHUTDOWN", 15*time.Second),
 
 		// Database
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		WorkerDatabaseURL: os.Getenv("LOOPZERO_WORKER_DATABASE_URL"),
 		// Database Pool
-		DBMaxConns:         int32(envInt("DB_MAX_CONNS", 25)),
-		DBMinConns:         int32(envInt("DB_MIN_CONNS", 5)),
-		DBMaxConnIdleTime:  envDuration("DB_MAX_CONN_IDLE_TIME", 30*time.Second),
-		DBMaxConnLifetime:  envDuration("DB_MAX_CONN_LIFETIME", 1*time.Hour),
-		DBHealthCheckTime:  envDuration("DB_HEALTH_CHECK_PERIOD", 30*time.Second),
-		DBConnectTimeout:   envDuration("DB_CONNECT_TIMEOUT", 5*time.Second),
+		DBMaxConns:         int32(l.int("DB_MAX_CONNS", 25)),
+		DBMinConns:         int32(l.int("DB_MIN_CONNS", 5)),
+		DBMaxConnIdleTime:  l.duration("DB_MAX_CONN_IDLE_TIME", 30*time.Second),
+		DBMaxConnLifetime:  l.duration("DB_MAX_CONN_LIFETIME", 1*time.Hour),
+		DBHealthCheckTime:  l.duration("DB_HEALTH_CHECK_PERIOD", 30*time.Second),
+		DBConnectTimeout:   l.duration("DB_CONNECT_TIMEOUT", 5*time.Second),
 		DBStatementTimeout: envOr("DB_STATEMENT_TIMEOUT", "30000"),
 
 		// HTTP Clients
-		HTTPClientTimeout:   envDuration("HTTP_CLIENT_TIMEOUT", 10*time.Second),
-		ArgocdClientTimeout: envDuration("ARGOCD_CLIENT_TIMEOUT", 90*time.Second), // T1.1 D1: bumped 30→90s for concurrent Ginkgo load headroom
+		HTTPClientTimeout:   l.duration("HTTP_CLIENT_TIMEOUT", 10*time.Second),
+		ArgocdClientTimeout: l.duration("ARGOCD_CLIENT_TIMEOUT", 90*time.Second), // T1.1 D1: bumped 30→90s for concurrent Ginkgo load headroom
 
 		// Kubernetes Contexts
 		MgmtKubeconfig:     envOr("CORE_KUBECONFIG", defaultKubeconfig),
@@ -388,7 +467,7 @@ func Load() Config {
 		RuntimeKubeContext: envOr("CELL_0_KUBE_CONTEXT", "k3d-loopzero-cell-0"),
 
 		// Service URLs
-		GiteaURL:             envOr("GITEA_URL", "http://gitea-http.gitea.svc.cluster.local:3000"),
+		GiteaURL:             envOr("GITEA_URL", gitearepo.DefaultInternalURL),
 		GiteaCrossClusterURL: envOr("GITEA_CROSS_CLUSTER_URL", ""),
 		GiteaOrg:             envOr("GITEA_ORG", "loopzero"),
 		APICrossClusterURL:   envOr("API_CROSS_CLUSTER_URL", "http://loopzero-api.loopzero-system.svc.cluster.local:3001"),
@@ -405,7 +484,6 @@ func Load() Config {
 		SourceBucket:              envOr("SOURCE_BUCKET", "loopzero-builds"),
 		RegistryURL:               envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
 		RegistryInsecure:          os.Getenv("REGISTRY_INSECURE") == "true",
-		HarborRegistryURL:         os.Getenv("HARBOR_REGISTRY_URL"), // MEET-048: empty = disabled
 
 		// Cosign keyless config (M2 T8.0, v1.1 EC-3 of plan 2026-05-27-M07-to-3-85)
 		// Defaults preserve keyed mode (safe regression). Operator sets LOOPZERO_COSIGN_KEYLESS=true
@@ -424,6 +502,12 @@ func Load() Config {
 		GrafanaBaseURL:        os.Getenv("LOOPZERO_GRAFANA_BASE_URL"),
 		ClusterIssuer:         os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
 		PrometheusAddress:     os.Getenv("LOOPZERO_PROMETHEUS_ADDRESS"),
+		ProgressiveDelivery:   progressiveDeliveryEnabled(os.Getenv("LOOPZERO_PROGRESSIVE_DELIVERY")),
+		LeanResources:         leanResourcesEnabled(os.Getenv("LOOPZERO_LEAN_RESOURCES")),
+
+		DataPlanePollerEnabled:       envBool("LOOPZERO_DATA_PLANE_POLLER_ENABLED", false),
+		DataPlanePollerPrometheusURL: os.Getenv("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL"),
+		DataPlanePollerInterval:      l.duration("LOOPZERO_DATA_PLANE_POLLER_INTERVAL", 30*time.Second),
 
 		// Credentials
 		GiteaToken:          os.Getenv("GITEA_TOKEN"),
@@ -447,43 +531,42 @@ func Load() Config {
 
 		// Circuit Breaker
 		CBKey:            envOr("CB_KEY", "argocd"),
-		CBOpenThreshold:  envInt("CB_OPEN_THRESHOLD", 3),
-		CBCloseThreshold: envInt("CB_CLOSE_THRESHOLD", 2),
-		CBRetryInterval:  envDuration("CB_RETRY_INTERVAL", 30*time.Second),
+		CBOpenThreshold:  l.int("CB_OPEN_THRESHOLD", 3),
+		CBCloseThreshold: l.int("CB_CLOSE_THRESHOLD", 2),
+		CBRetryInterval:  l.duration("CB_RETRY_INTERVAL", 30*time.Second),
 
 		// ArgoCD Sync
-		ArgocdPollInterval: envDuration("ARGOCD_POLL_INTERVAL", 10*time.Second),
-		ArgocdSyncTimeout:  envDuration("ARGOCD_SYNC_TIMEOUT", 300*time.Second),
+		ArgocdPollInterval: l.duration("ARGOCD_POLL_INTERVAL", 10*time.Second),
+		ArgocdSyncTimeout:  l.duration("ARGOCD_SYNC_TIMEOUT", 300*time.Second),
 		ArgocdInsecure:     os.Getenv("ARGOCD_INSECURE") == "true",
 
 		// SSE
-		SSEHeartbeatInterval:    envDuration("SSE_HEARTBEAT_INTERVAL", 15*time.Second),
-		SSEPollInterval:         envDuration("SSE_POLL_INTERVAL", 1*time.Second),
-		SSESafetyTimeout:        envDuration("SSE_SAFETY_TIMEOUT", 5*time.Minute),
-		SSEMaxConcurrentStreams: envInt("SSE_MAX_CONCURRENT_STREAMS", 200),
+		SSEHeartbeatInterval:    l.duration("SSE_HEARTBEAT_INTERVAL", 15*time.Second),
+		SSEPollInterval:         l.duration("SSE_POLL_INTERVAL", 1*time.Second),
+		SSESafetyTimeout:        l.duration("SSE_SAFETY_TIMEOUT", 5*time.Minute),
+		SSEMaxConcurrentStreams: l.int("SSE_MAX_CONCURRENT_STREAMS", 200),
 
 		// Auth
-		AuthCacheTTL: envDuration("AUTH_CACHE_TTL", 5*time.Minute),
+		AuthCacheTTL: l.duration("AUTH_CACHE_TTL", 5*time.Minute),
 
 		// Source Upload
-		MaxBundleSize:      int64(envInt("SOURCE_MAX_BUNDLE_SIZE", 500*1024*1024)),
-		MultipartMaxMemory: int64(envInt("SOURCE_MULTIPART_MAX_MEMORY", 32<<20)),
+		MaxBundleSize:      int64(l.int("SOURCE_MAX_BUNDLE_SIZE", 500*1024*1024)),
+		MultipartMaxMemory: int64(l.int("SOURCE_MULTIPART_MAX_MEMORY", 32<<20)),
 
 		// Build Reaper (spec §5.1)
-		BuildQueueTimeout:     envDuration("BUILD_QUEUE_TIMEOUT", 5*time.Minute),
-		BuildRunningTimeout:   envDuration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
-		BuildReleasingTimeout: envDuration("BUILD_RELEASING_TIMEOUT", 10*time.Minute),
-		BuildCancelTimeout:    envDuration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
-		BuildReaperInterval:   envDuration("BUILD_REAPER_INTERVAL", 30*time.Second),
+		BuildQueueTimeout:     l.duration("BUILD_QUEUE_TIMEOUT", 5*time.Minute),
+		BuildRunningTimeout:   l.duration("BUILD_RUNNING_TIMEOUT", 30*time.Minute),
+		BuildReleasingTimeout: l.duration("BUILD_RELEASING_TIMEOUT", 10*time.Minute),
+		BuildCancelTimeout:    l.duration("BUILD_CANCEL_TIMEOUT", 60*time.Second),
+		BuildReaperInterval:   l.duration("BUILD_REAPER_INTERVAL", 30*time.Second),
 
 		// Release Reaper (spec §5.2)
-		ReleaseReadyTimeout:   envDuration("RELEASE_READY_TIMEOUT", 5*time.Minute),
-		ReleasePendingTimeout: envDuration("RELEASE_PENDING_TIMEOUT", 6*time.Minute),
-		ReleaseReaperInterval: envDuration("RELEASE_REAPER_INTERVAL", 30*time.Second),
+		ReleaseReadyTimeout:   l.duration("RELEASE_READY_TIMEOUT", 5*time.Minute),
+		ReleasePendingTimeout: l.duration("RELEASE_PENDING_TIMEOUT", 6*time.Minute),
+		ReleaseReaperInterval: l.duration("RELEASE_REAPER_INTERVAL", 30*time.Second),
 
 		// Build Reconcile Loop (C-01 fix): polls Argo Workflow CRDs every 5s
-		ReconcileInterval:  envDuration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
-		MaxBuildsPerTenant: envInt("MAX_BUILDS_PER_TENANT", 3),
+		ReconcileInterval: l.duration("BUILD_RECONCILE_INTERVAL", 5*time.Second),
 
 		// Loki (build log aggregation)
 		LokiURL: envOr("LOKI_URL", "http://loki.monitoring:3100"),
@@ -505,12 +588,19 @@ func Load() Config {
 		// any background loops (controller binary runs them instead).
 		DisableLegacyLoops: os.Getenv("LOOPZERO_DISABLE_LEGACY_LOOPS") == "true",
 
+		PprofEnabled:        pprofEnabled(os.Getenv("LOOPZERO_PPROF_ENABLED")),
+		PprofAddr:           envOr("LOOPZERO_PPROF_ADDR", ":6060"),
+		EnvReadinessChecker: os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true",
+		BrokerToken:         os.Getenv("LOOPZERO_BROKER_TOKEN"),
+		TrustedProxyCIDRs:   os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS"),
+		BillingUpgradeURL:   os.Getenv("BILLING_UPGRADE_URL"),
+
 		// Roadmap 07 — Backpressure & Admission Control.
 		AdmissionControl:             os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
-		MaxConcurrentBuildsPerCell:   envInt("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
-		MaxTenantsPerCell:            envInt("MAX_TENANTS_PER_CELL", 5000),
-		MaxConcurrentBuildsPerTenant: envInt("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
-		PGCircuitBreakerThresholdPct: envInt("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
+		MaxConcurrentBuildsPerCell:   l.int("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
+		MaxTenantsPerCell:            l.int("MAX_TENANTS_PER_CELL", 5000),
+		MaxConcurrentBuildsPerTenant: l.int("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
+		PGCircuitBreakerThresholdPct: l.int("PG_CIRCUIT_BREAKER_THRESHOLD_PCT", 90),
 
 		// Scale 50k plan — Phase 0.2 feature flag (Phase 0.3 multi-cell is
 		// no longer toggle-gated; see CHG-2026-04-30-DELETE-SINGLE-CELL).
@@ -522,6 +612,15 @@ func Load() Config {
 		// KEDA scale-to-zero feature gate.
 		KEDAEnabled: os.Getenv("LOOPZERO_KEDA_ENABLED") == "true",
 	}
+	if legacy := os.Getenv("MAX_BUILDS_PER_TENANT"); legacy != "" {
+		if n := l.int("MAX_BUILDS_PER_TENANT", 0); n != 0 && n != cfg.MaxConcurrentBuildsPerTenant {
+			l.errs = append(l.errs, fmt.Errorf(
+				"MAX_BUILDS_PER_TENANT=%d disagrees with MAX_CONCURRENT_BUILDS_PER_TENANT=%d: they are one limit; "+
+					"set MAX_CONCURRENT_BUILDS_PER_TENANT and remove MAX_BUILDS_PER_TENANT", n, cfg.MaxConcurrentBuildsPerTenant))
+		}
+	}
+	cfg.loadErrors = l.errs
+	return cfg
 }
 
 // Validate logs warnings about insecure defaults and returns an error for
@@ -559,10 +658,19 @@ func isValidEnv(s string) bool {
 // valid) that later checks assume. Mirrors the pre-refactor order
 // verbatim so behavior is byte-identical for the existing test suite.
 func (c Config) Validate() error {
+	if len(c.loadErrors) > 0 {
+		return fmt.Errorf("config: unparseable environment variables: %w", errors.Join(c.loadErrors...))
+	}
 	if err := c.validateEnv(); err != nil {
 		return err
 	}
+	if err := c.validateEnvBlocklistMode(); err != nil {
+		return err
+	}
 	if err := c.validateClusterIssuer(); err != nil {
+		return err
+	}
+	if err := c.validateRegistryURLs(); err != nil {
 		return err
 	}
 	if err := c.validateTimeouts(); err != nil {
@@ -583,11 +691,34 @@ func (c Config) Validate() error {
 	if err := c.validateDatabaseSSL(); err != nil {
 		return err
 	}
+	if err := c.validateDataPlanePoller(); err != nil {
+		return err
+	}
 	c.logFeatureGates()
 	if err := c.validateOpenBaoTransit(); err != nil {
 		return err
 	}
 	c.logCryptoMode()
+	return nil
+}
+
+// validateDataPlanePoller refuses an enabled readiness poller it could not
+// run: no Prometheus, a Prometheus address that is not an absolute http(s)
+// URL, or an interval that would never tick.
+func (c Config) validateDataPlanePoller() error {
+	if !c.DataPlanePollerEnabled {
+		return nil
+	}
+	if c.DataPlanePollerPrometheusURL == "" {
+		return fmt.Errorf("LOOPZERO_DATA_PLANE_POLLER_ENABLED=true requires LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL")
+	}
+	u, err := url.Parse(c.DataPlanePollerPrometheusURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL=%q must be an absolute http(s) URL", c.DataPlanePollerPrometheusURL)
+	}
+	if c.DataPlanePollerInterval <= 0 {
+		return fmt.Errorf("LOOPZERO_DATA_PLANE_POLLER_INTERVAL=%s must be positive", c.DataPlanePollerInterval)
+	}
 	return nil
 }
 
@@ -597,6 +728,33 @@ func (c Config) Validate() error {
 func (c Config) validateEnv() error {
 	if !isValidEnv(c.Env) {
 		return fmt.Errorf("LOOPZERO_ENV=%q invalid; allowed: development, staging, production", c.Env)
+	}
+	return nil
+}
+
+// validateRegistryURLs rejects registry hosts that would break the
+// buildkitd.toml the build step writes them into (a quote, backslash or line
+// break ends or injects a TOML table header).
+// validateEnvBlocklistMode refuses an unknown mode, and warn in production:
+// the blocklist is what stops a tenant setting LD_PRELOAD or PATH on its
+// own process.
+func (c Config) validateEnvBlocklistMode() error {
+	switch c.EnvBlocklistMode {
+	case "", "enforce": // the zero value is the safe default
+		return nil
+	case "warn":
+		if c.IsProduction() {
+			return fmt.Errorf("config: LOOPZERO_ENV_BLOCKLIST_MODE=warn is not allowed in production")
+		}
+		return nil
+	default:
+		return fmt.Errorf("config: LOOPZERO_ENV_BLOCKLIST_MODE=%q must be enforce or warn", c.EnvBlocklistMode)
+	}
+}
+
+func (c Config) validateRegistryURLs() error {
+	if strings.ContainsAny(c.RegistryURL, "\"\\\r\n") {
+		return fmt.Errorf("REGISTRY_URL=%q contains a quote, backslash or line break; it must be host[:port]", c.RegistryURL)
 	}
 	return nil
 }
@@ -839,25 +997,40 @@ func envOr(key, defaultValue string) string {
 	return defaultValue
 }
 
-// envInt returns the environment variable as int or the default.
-func envInt(key string, defaultValue int) int {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return i
-		}
-	}
-	return defaultValue
+// envLoader reads typed environment variables for Load and keeps every value
+// it could not parse, so a typo stops startup (via Validate) instead of
+// silently running with the default.
+type envLoader struct {
+	errs []error
 }
 
-// envDuration returns the environment variable as duration or the default.
-// Accepts Go duration strings: "30s", "5m", "1h".
-func envDuration(key string, defaultValue time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
+// int returns the variable as an int, or defaultValue when it is unset.
+func (l *envLoader) int(key string, defaultValue int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue
 	}
-	return defaultValue
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		l.errs = append(l.errs, fmt.Errorf("%s=%q is not an integer", key, v))
+		return defaultValue
+	}
+	return i
+}
+
+// duration returns the variable as a Go duration ("30s", "5m", "1h"), or
+// defaultValue when it is unset. A bare number has no unit and is rejected.
+func (l *envLoader) duration(key string, defaultValue time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		l.errs = append(l.errs, fmt.Errorf("%s=%q is not a duration such as 30s or 5m", key, v))
+		return defaultValue
+	}
+	return d
 }
 
 // envTime parses an environment variable as an RFC 3339 timestamp.
@@ -870,6 +1043,27 @@ func envTime(key string) time.Time {
 		slog.Warn("invalid timestamp in environment variable — ignoring", "key", key, "value", v)
 	}
 	return time.Time{}
+}
+
+// pprofEnabled accepts exactly "true" or "1": profiling is opt-in, so any
+// other spelling (including "TRUE" and "yes") leaves it off.
+func pprofEnabled(v string) bool {
+	return v == "true" || v == "1"
+}
+
+// progressiveDeliveryEnabled reports whether LOOPZERO_PROGRESSIVE_DELIVERY leaves
+// progressive delivery on: everything but an explicit "false" or "0"
+// (case-insensitive, trimmed) does, so the default is on.
+func progressiveDeliveryEnabled(v string) bool {
+	v = strings.ToLower(strings.TrimSpace(v))
+	return v != "false" && v != "0"
+}
+
+// leanResourcesEnabled reports whether LOOPZERO_LEAN_RESOURCES turns lean resource
+// defaults on: only "true" or "1" (case-insensitive, trimmed) does.
+func leanResourcesEnabled(v string) bool {
+	v = strings.ToLower(strings.TrimSpace(v))
+	return v == "true" || v == "1"
 }
 
 // envBool parses an environment variable as bool. Accepts "true", "1", "yes" (case-insensitive)

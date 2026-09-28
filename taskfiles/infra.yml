@@ -70,9 +70,9 @@ tasks:
       - |
         HELMFILE_ENV="${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         echo "[infra:install:core] helmfile env: $HELMFILE_ENV"
-        bash infra/helmfile/scripts/generate-secrets.sh "$HELMFILE_ENV" mgmt
-      # GHCR canonical pre-flight (sponsor verbatim 2026-06-23 "NOSSO SISTEMA
-      # É GHCR"). For env dev-public, the 5 engine images (loopzero-api + 4 split
+        bash infra/helmfile/scripts/generate-secrets.sh "$HELMFILE_ENV" core
+      # GHCR canonical pre-flight (sponsor verbatim 2026-06-23 "NOSSO SISTEMA É GHCR",  # english-only: verbatim sponsor quote, kept as evidence
+      # i.e. "OUR SYSTEM IS GHCR"). For env dev-public, the 5 engine images (loopzero-api + 4 split
       # operators) AND loopzero-cloud + loopzero-dashboard are published canonically
       # by AM6 reusable workflow (.github/workflows/release-artifacts.yml +
       # build-publish.yml) to ghcr.io/getloopscale/*. Local engine task setup
@@ -128,11 +128,17 @@ tasks:
       # Post-sync: MinIO lifecycle rules (Job spec immutable — delete-and-recreate)
       - kubectl --context {{.CORE_CONTEXT}} delete job minio-lifecycle-setup -n loopzero-system --ignore-not-found 2>/dev/null
       - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
+      # Post-sync: the Ory edge NodePorts. infra/k3d/core-cluster.yaml reserves host
+      # ports 14433/14444 for them and the Caddyfile logs in through them; only
+      # `task cloud:setup` used to apply these, and setup never called it, so a
+      # cold install reserved the ports with nothing behind them (#401).
+      - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/ory-kratos/nodeport-service.yaml
+      - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/ory-hydra/nodeport-service.yaml
 
   infra:install:core-dashboard-only:
     desc: |
       Install only the 16 core-cluster releases the dashboard demo needs (skips
-      harbor, opencost, chaos-mesh, monitoring, loki, tempo, otel, blackbox,
+      opencost, chaos-mesh, monitoring, loki, tempo, otel, blackbox,
       smoke-test, velero, nfs). Defaults to ENV=dev-public; override with
       ENV=<env>. Per T0.1 of plan 2026-05-29-dashboard-public-integration-
       canonicalization-plan.md.
@@ -162,7 +168,7 @@ tasks:
         fi
         echo "OK: dashboard-only selector matched $count releases"
       # Same pre-sync as infra:install:core for LOOPZERO_DB_PASSWORD
-      - bash infra/helmfile/scripts/generate-secrets.sh {{.ENV}} mgmt
+      - bash infra/helmfile/scripts/generate-secrets.sh {{.ENV}} core
       - |
         export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system \
           get secret loopzero-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
@@ -216,10 +222,10 @@ tasks:
 
   infra:install:cell:
     desc: Install platform components in workload cluster via Helmfile (T2.3 of plan 2026-05-22)
-    # `requires` e o mecanismo NATIVO do Task: a task RECUSA rodar sem CELL_CTX, em vez
-    # de cair num padrao silencioso. Um default para a cell-0 recriaria o defeito na
-    # primeira chamada que esquecesse de passar o parametro — que foi exatamente como a
-    # divergencia entre as celulas nasceu.
+    # `requires` is Task's NATIVE mechanism: the task REFUSES to run without CELL_CTX,
+    # instead of falling back to a silent default. A default of cell-0 would recreate the
+    # defect on the first call that forgot to pass the parameter — which is exactly how
+    # the divergence between the cells was born.
     requires:
       vars: [CELL_CTX]
     deps: [helm:repos]
@@ -233,11 +239,11 @@ tasks:
       # generate-runtime-secrets.sh against the workload context (KUBECONFIG,
       # no global current-context mutation). Idempotent.
       - |
-        # O CLUSTER VEM DO PARAMETRO. Enquanto foi `loopzero-cell-0` fixo, este passo gerava o
-        # Secret `static-assets-s3` SEMPRE na primeira celula — e o `static-assets` da
-        # segunda ficava em CreateContainerConfigError com "secret not found", medido em
-        # 2026-08-10. E a mesma classe do defeito do contexto fixo, uma camada abaixo: nao
-        # basta instalar em cada celula se os segredos so nascem numa delas.
+        # THE CLUSTER COMES FROM THE PARAMETER. While it was a fixed `loopzero-cell-0`, this step
+        # generated the `static-assets-s3` Secret ALWAYS on the first cell — and the second
+        # cell's `static-assets` stayed in CreateContainerConfigError with "secret not found",
+        # measured on 2026-08-10. It is the same class as the fixed-context defect, one layer
+        # down: installing on every cell is not enough if the secrets are only born on one of them.
         CELL_CTX_K3D="{{.CELL_CTX}}"; CELL_CTX_K3D="${CELL_CTX_K3D#k3d-}"
         S3_KEY=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.accesskey}' | openssl base64 -d -A)
         S3_SECRET=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system get secret minio-credentials -o jsonpath='{.data.secretkey}' | openssl base64 -d -A)
@@ -249,24 +255,24 @@ tasks:
       # cert-manager, traefik, keda, keda-http-addon, argo-rollouts, policy-controller,
       # admission-policies, promtail, cloudflared, cluster-issuer, rbac, static-assets.
       #
-      # O CONTEXTO E PARAMETRO, e nao fixo. Enquanto foi `{{.CELL_0_CONTEXT}}`, esta task
-      # instalava as 28 releases SEMPRE na cell-0: a cell-1 ficava so com as 5 do
-      # `k3d:bootstrap-cell-1` e um tenant fixado nela recebia MENOS plataforma —
-      # sem KEDA (escala por demanda), sem static-assets, sem cloudflared, sem
-      # policy-controller. Ninguem escolhe a celula (o roteamento e bin-packing), entao
-      # duas celulas com capacidades diferentes tornam o comportamento do produto
-      # dependente de onde o tenant caiu. Medido em 2026-08-10: 8 componentes na cell-0
-      # contra 4 na cell-1.
+      # THE CONTEXT IS A PARAMETER, not fixed. While it was `{{.CELL_0_CONTEXT}}`, this task
+      # installed the 28 releases ALWAYS on cell-0: cell-1 was left with only the 5 from
+      # `k3d:bootstrap-cell-1`, and a tenant pinned to it got LESS platform —
+      # no KEDA (on-demand scaling), no static-assets, no cloudflared, no
+      # policy-controller. Nobody chooses the cell (routing is bin-packing), so
+      # two cells with different capabilities make the product's behaviour
+      # depend on where the tenant landed. Measured on 2026-08-10: 8 components on cell-0
+      # against 4 on cell-1.
       #
-      # Pior: `task clusters:recreate -- cell-1` chama esta mesma task (k3d.yml), entao
-      # recriar a cell-1 instalava no cluster ERRADO, sem erro.
-      # LOOPZERO_CELL_CONTEXT vem do MESMO CELL_CTX que a flag: uma origem, dois
-      # consumidores. O helmfile declara `kubeContext: {{ `{{` }} requiredEnv
-      # "LOOPZERO_CELL_CONTEXT" {{ `}}` }}` para que um `helmfile sync` sem flag
-      # NAO aterrisse no contexto ativo do kubectl (medido contra helmfile
-      # 1.1.6: sem declaracao e sem flag, o helm nao recebe --kube-context
-      # nenhum). Amarrar valor fixo ali recriaria o defeito que os comentarios
-      # acima descrevem; `requiredEnv` falha alto quando ninguem passa.
+      # Worse: `task clusters:recreate -- cell-1` calls this same task (k3d.yml), so
+      # recreating cell-1 installed onto the WRONG cluster, with no error.
+      # LOOPZERO_CELL_CONTEXT comes from the SAME CELL_CTX as the flag: one source, two
+      # consumers. The helmfile declares `kubeContext: {{ `{{` }} requiredEnv
+      # "LOOPZERO_CELL_CONTEXT" {{ `}}` }}` so that a `helmfile sync` without the flag
+      # does NOT land on kubectl's active context (measured against helmfile
+      # 1.1.6: with no declaration and no flag, helm receives no --kube-context
+      # at all). Binding a fixed value there would recreate the defect the comments
+      # above describe; `requiredEnv` fails loudly when nobody passes it.
       - >-
         LOOPZERO_CELL_CONTEXT="{{.CELL_CTX}}"
         helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl
@@ -305,7 +311,10 @@ tasks:
         -e "${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         --kube-context {{.BUILD_CONTEXT}}
         --selector name=loki sync --skip-deps
-      - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/loki/nodeport-service.yaml
+      # The cross-cluster query bridge (Service loki-cross-cluster, NodePort
+      # crossCluster.lokiNodePort) is part of the loki release above. A kubectl apply
+      # of infra/helm/loki/nodeport-service.yaml used to follow here — onto the CORE
+      # cluster, where no Loki runs, so its selector matched nothing.
       # Promtail DaemonSet — scrape config filters for Argo Workflow pods ONLY (`workflows_argoproj_io_workflow` label).
       # At setup time, no workflows exist yet, so promtail's `/ready` endpoint returns 500 ("Unable to find any logs to tail").
       # `--wait` would timeout every bootstrap; readiness converges automatically once the first build runs.
@@ -380,7 +389,9 @@ tasks:
       # Prometheus Operator CRs are cluster-scoped by kind but reference objects in specific clusters,
       # so each cluster needs the type registered independently before its charts install.
       - |
-        for CTX in {{.CORE_CONTEXT}} {{.BUILD_CONTEXT}} {{.CELL_0_CONTEXT}}; do
+        # Every cell from the inventory: this loop named only cell-0, so a chart
+        # on cell-1 that ships a ServiceMonitor failed for want of the CRD.
+        for CTX in {{.CORE_CONTEXT}} {{.BUILD_CONTEXT}} {{.CELL_CONTEXTS}}; do
           echo "=== Installing Prometheus CRDs + monitoring namespace on $CTX ==="
           kubectl --context "$CTX" create namespace monitoring --dry-run=client -o yaml \
             | kubectl --context "$CTX" apply -f -
@@ -396,15 +407,14 @@ tasks:
       - task: infra:install:monitoring-crds
       - task: infra:install:core
       - task: infra:install:build
-      # UMA CHAMADA POR CELULA. Chamar uma vez so deixava a cell-1 com 4 componentes
-      # contra 8 da cell-0 — e como ninguem escolhe a celula (o roteamento e
-      # bin-packing), o tenant que caisse nela recebia menos plataforma sem que nada
-      # avisasse. As celulas sao espelho por contrato; a lista abaixo cresce junto com
-      # `clusters:create`.
-      - task: infra:install:cell
-        vars: { CELL_CTX: '{{.CELL_0_CONTEXT}}' }
-      - task: infra:install:cell
-        vars: { CELL_CTX: '{{.CELL_1_CONTEXT}}' }
+      # ONE CALL PER CELL, over the inventory declared once in Taskfile.yml
+      # (CELL_CONTEXTS). Calling it once left cell-1 with 4 components against
+      # cell-0's 8, and since nobody chooses the cell (routing is bin-packing),
+      # a tenant landing there silently got less platform. Cells mirror each
+      # other by contract.
+      - for: { var: CELL_CONTEXTS }
+        task: infra:install:cell
+        vars: { CELL_CTX: '{{.ITEM}}' }
       - task: infra:install:monitoring
 
   # ---------------------------------------------------------------------------
@@ -457,10 +467,10 @@ tasks:
           --kube-context {{.CORE_CONTEXT}} \
           --selector name=ory-kratos --selector name=ory-hydra \
           sync --skip-deps
-      # Pontes NodePort para a borda. Sem elas, `auth-dev` so e alcancavel por
-      # `kubectl port-forward` — que morreu com os clusters em 2026-08-10 e derrubou o
-      # login com Kratos e Hydra saudaveis (B-018, mesmo defeito do B-010). Aditivas: os
-      # Services ClusterIP do chart seguem intactos.
+      # NodePort bridges to the edge. Without them, `auth-dev` is only reachable through
+      # `kubectl port-forward` — which died with the clusters on 2026-08-10 and took down
+      # login while Kratos and Hydra were healthy (B-018, same defect as B-010). Additive:
+      # the chart's ClusterIP Services stay intact.
       - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/ory-kratos/nodeport-service.yaml
       - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/ory-hydra/nodeport-service.yaml
       - task: cloud:health
@@ -579,7 +589,16 @@ tasks:
         curl -sf http://localhost:{{.PROMETHEUS_PORT}}/api/v1/alerts | jq -r '.data.alerts[] | "\(.labels.alertname)\t\(.state)\t\(.labels.severity)"' 2>/dev/null | column -t || echo "No alerts or Prometheus not reachable"
         echo ""
         echo "=== Grafana Dashboards ==="
-        curl -sf -u REDACTED_SECRET_056 http://localhost:{{.GRAFANA_PORT}}/api/search?type=dash-db | jq -r '.[].title' 2>/dev/null || echo "Grafana not reachable at localhost:{{.GRAFANA_PORT}}"
+        # The chart leaves adminPassword empty, so Grafana generates one and keeps it in
+        # the Secret. Read it at call time: a literal here goes stale the moment the
+        # release is reinstalled, which is how the previous one came to be wrong.
+        GRAFANA_PASS=$(kubectl --context {{.CORE_CONTEXT}} -n monitoring get secret \
+          monitoring-grafana -o jsonpath='{.data.admin-password}' 2>/dev/null | openssl base64 -d -A)
+        if [ -z "$GRAFANA_PASS" ]; then
+          echo "  (not checked: could not read the Grafana admin secret in ns/monitoring)"
+        else
+          curl -sf -u "admin:$GRAFANA_PASS" http://localhost:{{.GRAFANA_PORT}}/api/search?type=dash-db | jq -r '.[] | "  \(.title)"' 2>/dev/null || echo "  (none)"
+        fi
 
   # =========================================================================
   # MEET-055: Post-Stress-Test Operational Tasks
@@ -619,7 +638,6 @@ tasks:
         docker push registry.digitalocean.com/loopzero-system/loopzero-api:{{.TAG}}
         echo "Rolling out..."
         kubectl --context={{.CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-api
-        kubectl --context={{.CONTEXT}} -n loopzero-system rollout restart deploy/loopzero-controller
         echo ""
         echo "✅ Hotfix applied. Rollout status:"
         kubectl --context={{.CONTEXT}} -n loopzero-system rollout status deploy/loopzero-api --timeout=120s
@@ -693,9 +711,16 @@ tasks:
       - kubectl --context {{.CORE_CONTEXT}} -n loopzero-system port-forward deploy/loopzero-api 6060:6060
 
   pprof:operators:
-    desc: Port-forward to Operator pprof endpoint (http://localhost:6061/debug/pprof/)
+    desc: "Port-forward to one operator's pprof endpoint (http://localhost:6061/debug/pprof/). OPERATOR=tenant|app|preview|platform"
+    # The operators are four binaries since the split; each serves pprof on
+    # :6061 (operators/internal/operatorboot/pprof.go). The single
+    # deploy/loopzero-controller this used to target no longer exists.
+    requires:
+      vars:
+        - name: OPERATOR
+          enum: [tenant, app, preview, platform]
     cmds:
-      - kubectl --context {{.CORE_CONTEXT}} -n loopzero-system port-forward deploy/loopzero-controller 6061:6061
+      - kubectl --context {{.CORE_CONTEXT}} -n loopzero-system port-forward deploy/{{.OPERATOR}}-operator 6061:6061
 
   blackbox:status:
     desc: Check blackbox exporter health and probe results
@@ -920,13 +945,24 @@ tasks:
       - |
         echo "=== Building loopzero-clone-runner ==="
         # Pinned Tilt env vars to :v0.1.0; the build must publish BOTH
-        # :latest AND :v0.1.0 so api/internal/buildplane/argo/cosign.go can resolve
+        # :latest AND :v0.1.0 so api/internal/builds/argo/cosign.go can resolve
         # via LOOPZERO_CLONE_IMAGE env var.
         docker build -t localhost:5000/loopzero-clone-runner:latest infra/images/clone-runner/
         docker tag  localhost:5000/loopzero-clone-runner:latest localhost:5000/loopzero-clone-runner:v0.1.0
         docker push localhost:5000/loopzero-clone-runner:latest
         docker push localhost:5000/loopzero-clone-runner:v0.1.0
         echo "  Pushed: localhost:5000/loopzero-clone-runner:{latest,v0.1.0}"
+
+  images:build:minio:
+    desc: Build + push loopzero-minio, the MinIO server built from pinned source (#394)
+    cmds:
+      - |
+        echo "=== Building loopzero-minio (from source — MinIO publishes no community images) ==="
+        # The tag is the upstream release the image is built from; the core helmfile
+        # pins the same one for a local-registry profile.
+        docker build -t localhost:5000/loopzero-minio:RELEASE.2024-12-18T13-15-44Z infra/images/minio/
+        docker push localhost:5000/loopzero-minio:RELEASE.2024-12-18T13-15-44Z
+        echo "  Pushed: localhost:5000/loopzero-minio:RELEASE.2024-12-18T13-15-44Z"
 
   images:build:syft-scanner:
     desc: Build + push loopzero-syft-scanner (Sprint 6 SBOM generation)
@@ -960,6 +996,7 @@ tasks:
     # lint path (T2.2) are gone; the build uses canonical in-process Dockerfiles.
     cmds:
       - task: images:build:clone-runner
+      - task: images:build:minio
       - task: images:build:syft-scanner
       - task: images:build:cosign-signer
 
@@ -1301,37 +1338,48 @@ tasks:
     cmds:
       - bash infra/scripts/local/caddy-up-dev-public.sh --verify
 
-  dev-public:patch-kratos:
+  dev-public:sync-kratos:
     desc: |
-      Idempotently patches ory-kratos-config ConfigMap to enforce dev-public
-      env configuration (OIDC keys, base_redirect_uri, CORS, cookies,
-      selfservice flows ui_url, Resend Bearer). T2.3 of plan 2026-06-04.
+      Re-render and apply the ory-kratos release for dev-public: OIDC keys,
+      base_redirect_uri, CORS, cookies, selfservice ui_url and the Resend Bearer,
+      all from the environment values plus the operator's .env.
 
-      Use after `helmfile sync` (in case it drifts the config back to
-      localhost defaults) or after restarting mgmt cluster.
+      This replaced `dev-public:patch-kratos`, which ran a seed that rewrote the
+      live ory-kratos-config ConfigMap after helmfile sync. Every value it wrote is
+      what helmfile renders (infra/tests/charts/seeded_wiring_is_rendered_test.go,
+      principle_violations#67), so a drift is fixed by re-syncing the release, never
+      by patching the object helmfile owns. Kratos rolls on its own: the chart's
+      checksum/kratos-config annotation changes with the config.
 
-      Required env (loaded from .env):
+      Required env (exported from .env):
         LOOPZERO_GITHUB_CLIENT_ID, LOOPZERO_GITHUB_CLIENT_SECRET
         LOOPZERO_GOOGLE_CLIENT_ID, LOOPZERO_GOOGLE_CLIENT_SECRET
         LOOPZERO_RESEND_API_KEY
-
-      Flags: pass --dry-run / --skip-restart / --verify via TASK_ARGS.
     cmds:
-      - bash infra/scripts/local/patch-kratos-dev-public.sh --verify
-
-  dev-public:live-proof:
-    desc: |
-      Executes /live-proof for dev-public env. Validates 3 checks
-      (oidc, stripe, resend) × 3 layers (.env source, K8s rendered,
-      LIVE behavior). T7.1 of plan 2026-06-04.
-
-      Use ANY time as a quick health check — particularly after
-      `helmfile sync`, `kubectl rollout restart`, or first thing in a
-      session to assert the env is configured correctly.
-
-      Output: per-check PASS/FAIL with reason; non-zero exit on any FAIL.
-    cmds:
-      - bash archive/canonical-tests-v1/scripts/local/live-proof-dev-public.sh
+      - |
+        if [ -f .env ]; then
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+        fi
+        for var in LOOPZERO_GITHUB_CLIENT_ID LOOPZERO_GITHUB_CLIENT_SECRET LOOPZERO_GOOGLE_CLIENT_ID LOOPZERO_GOOGLE_CLIENT_SECRET LOOPZERO_RESEND_API_KEY; do
+          if [ -z "$(printenv "$var")" ]; then
+            echo "ERROR: $var is not set (export it or add it to .env) — Kratos would render the REPLACE_VIA_* placeholder"
+            exit 1
+          fi
+        done
+        export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system \
+          get secret loopzero-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}')
+        if [ -z "$LOOPZERO_DB_PASSWORD" ]; then
+          echo "ERROR: LOOPZERO_DB_PASSWORD not in loopzero-db-credentials Secret — run generate-secrets.sh first"
+          exit 1
+        fi
+        helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl \
+          -e dev-public \
+          --kube-context {{.CORE_CONTEXT}} \
+          --selector name=ory-kratos \
+          sync --skip-deps
 
   dev-public:trio:
     desc: |
@@ -1349,7 +1397,7 @@ tasks:
 
   dev-public:test:all:
     desc: |
-      Runs ALL 9 dev-public test suites (5 hermetic + 4 LIVE) and
+      Runs ALL 8 dev-public test suites (4 hermetic + 4 LIVE) and
       reports per-suite verdict + aggregate. T8.1+ of plan 2026-06-04.
       Use as pre-merge gate (after any dev-public script edit) or as
       daily health check.
@@ -1358,7 +1406,6 @@ tasks:
         Hermetic (~3s, no network):
           - dev-public-env_test.sh                15 asserts
           - check-live-proof-syntax_test.sh       22 asserts
-          - check-patch-kratos-syntax_test.sh     18 asserts
           - check-trio-dev-public-syntax_test.sh  17 asserts
           - check-dev-public-scripts-syntax_test  23 asserts
         LIVE (~30s, needs Caddy + Kratos + loopzero-cloud running):
@@ -1367,7 +1414,7 @@ tasks:
           - live-proof-dev-public.sh               9 asserts
           - trio-dev-public.sh                     4 asserts
 
-      Expected aggregate: 9 suites GREEN / 121 assertions PASS.
+      Expected aggregate: 8 suites GREEN / 103 assertions PASS.
     cmds:
       - bash infra/scripts/local/test-all-dev-public.sh
 
@@ -1397,7 +1444,6 @@ tasks:
         printf '[dev-public:bootstrap] DNS + Caddy OK.\n'
         printf '[dev-public:bootstrap] Next: \n'
         printf '  LOOPZERO_HELMFILE_ENV=dev-public task setup\n'
-        printf '  task dev-public:patch-kratos  # after helmfile sync\n'
         printf '  Then visit: https://app-dev.loopzero.example/login\n'
 
   # ---------------------------------------------------------------------------

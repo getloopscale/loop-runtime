@@ -8,210 +8,192 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
-func escreverRegra(t *testing.T, raiz, nome, corpo string) {
+func writeRule(t *testing.T, root, name, body string) {
 	t.Helper()
-	dir := filepath.Join(raiz, "infra", "helm", "monitoring", "manifests")
+	dir := filepath.Join(root, "infra", "helm", "monitoring", "manifests")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, nome), []byte(corpo), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func regraCom(url string) string {
+func ruleWith(url string) string {
 	return `spec:
   groups:
     - name: x
       rules:
-        - alert: LoopZeroAlgoQuebrou
+        - alert: LoopZeroSomethingBroke
           expr: up == 0
           annotations:
-            summary: "algo"
+            summary: "something"
             runbook_url: "` + url + `"
 `
 }
 
-// O gate media PRESENCA da anotacao, nao existencia do runbook. Medido em
-// 2026-08-19: das 7 URLs na arvore, SEIS nao levavam a nada — e todas as sete
-// contavam como satisfeitas. Um alerta que dispara as 3 da manha mandando o
-// operador para um 404 e' pior que um alerta sem link, porque o link promete.
-func TestAcusaCaminhoDoProprioRepoQueNaoExiste(t *testing.T) {
-	raiz := t.TempDir()
-	escreverRegra(t, raiz, "prometheusrule-teste.yaml", regraCom(
-		"https://github.com/getloopscale/loopzero/blob/main/docs/runbooks/nao-existe.md"))
+// The gate measured the annotation's PRESENCE, not the runbook's existence. Measured on
+// 2026-08-19: of the 7 URLs in the tree, SIX led nowhere — and all seven counted as
+// satisfied. An alert that fires at 3am sending the operator to a 404 is worse than an
+// alert without a link, because the link makes a promise.
+func TestFlagsOwnRepoPathThatDoesNotExist(t *testing.T) {
+	root := t.TempDir()
+	writeRule(t, root, "prometheusrule-test.yaml", ruleWith(
+		"https://github.com/getloopscale/loopzero/blob/main/docs/runbooks/does-not-exist.md"))
 
-	out := Check(Config{Root: raiz})
-	if len(out.LinksMortos) != 1 {
-		t.Fatalf("queria 1 link morto, veio %d: %+v", len(out.LinksMortos), out.LinksMortos)
+	out := Check(Config{Root: root})
+	if len(out.DeadLinks) != 1 {
+		t.Fatalf("wanted 1 dead link, got %d: %+v", len(out.DeadLinks), out.DeadLinks)
 	}
-	if !strings.Contains(out.LinksMortos[0].Motivo, "nao existe") {
-		t.Errorf("o motivo nao diz que o arquivo nao existe: %+v", out.LinksMortos[0])
+	if !strings.Contains(out.DeadLinks[0].Reason, "does not exist") {
+		t.Errorf("the reason does not say the file does not exist: %+v", out.DeadLinks[0])
 	}
 	if out.Pass {
-		t.Error("passou com um runbook apontando para arquivo inexistente no proprio repo")
+		t.Error("passed with a runbook pointing at a nonexistent file in the own repo")
 	}
 }
 
-// A contrapartida: o caminho que EXISTE nao pode ser acusado, senao o gate vira
-// ruido e as pessoas aprendem a contorna-lo.
-func TestNaoAcusaCaminhoDoProprioRepoQueExiste(t *testing.T) {
-	raiz := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(raiz, "docs", "runbooks"), 0o755); err != nil {
+// The counterpart: a path that EXISTS must not be flagged, otherwise the gate becomes
+// noise and people learn to work around it.
+func TestDoesNotFlagOwnRepoPathThatExists(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "docs", "runbooks"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(raiz, "docs", "runbooks", "existe.md"), []byte("# ok\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "docs", "runbooks", "exists.md"), []byte("# ok\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	escreverRegra(t, raiz, "prometheusrule-teste.yaml", regraCom(
-		"https://github.com/getloopscale/loopzero/blob/main/docs/runbooks/existe.md"))
+	writeRule(t, root, "prometheusrule-test.yaml", ruleWith(
+		"https://github.com/getloopscale/loopzero/blob/main/docs/runbooks/exists.md"))
 
-	out := Check(Config{Root: raiz})
-	if len(out.LinksMortos) != 0 {
-		t.Errorf("acusou um runbook que existe em disco: %+v", out.LinksMortos)
+	out := Check(Config{Root: root})
+	if len(out.DeadLinks) != 0 {
+		t.Errorf("flagged a runbook that exists on disk: %+v", out.DeadLinks)
 	}
 }
 
-// ORG diferente NAO e' link morto — e este teste substitui um que afirmava o contrario.
+// A different ORG is NOT a dead link — and this test replaces one that asserted the
+// opposite.
 //
-// A versao de algumas horas atras tratava qualquer org != `getloopscale` como morta "por
-// construcao". Medido depois, com credencial que enxerga: `getloopscale/loopzero` e
-// `getloopscale/loopzero` sao **o mesmo repositorio**, o primeiro redirecionando para o segundo,
-// e os arquivos resolvem nos dois. A regra teria produzido falso positivo assim que o
-// escopo do gate crescesse (B-164).
+// The version from a few hours earlier treated any org != `getloopscale` as dead "by
+// construction". Measured afterwards, with a credential that can see: `getloopscale/loopzero`
+// and `getloopscale/loopzero` are **the same repository**, the first redirecting to the second,
+// and the files resolve in both. The rule would have produced false positives as soon as
+// the gate's scope grew (B-164).
 //
-// Como o erro entrou: extrai URLs truncadas na saida, INVENTEI os nomes de arquivo que
-// elas pareciam ter, sondei ESSES nomes pela API e recebi Not Found. Os nomes reais eram
-// outros e resolvem. Sondar o que se supoe em vez do que o arquivo diz e' fabricacao de
-// evidencia com um passo a mais.
+// How the error got in: I extracted truncated URLs from the output, INVENTED the file
+// names they seemed to have, probed THOSE names through the API and got Not Found. The
+// real names were different and resolve. Probing what is assumed instead of what the file
+// says is evidence fabrication with an extra step.
 //
-// A regra que sobrevive a medicao e' por REPOSITORIO: se a URL aponta para este repo
-// (`loopzero`), o caminho e' conferido em disco, seja qual for a org; se aponta para outro
-// repo, o caminho nao existe nesta arvore por definicao e afirmar que nao existe NA DE LA'
-// exigiria rede — entao e' contado como nao-verificavel, nao acusado.
-func TestOrgDiferenteNoMesmoRepoAindaEConferidaEmDisco(t *testing.T) {
-	raiz := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(raiz, "docs", "runbooks"), 0o755); err != nil {
+// The rule that survives the measurement is by REPOSITORY: if the URL points at this repo
+// (`loopzero`), the path is checked on disk, whatever the org; if it points at another repo,
+// the path does not exist in this tree by definition, and asserting it does not exist in
+// THAT one would require the network — so it is counted as unverifiable, not accused.
+func TestDifferentOrgOnSameRepoIsStillCheckedOnDisk(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "docs", "runbooks"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(raiz, "docs", "runbooks", "existe.md"), []byte("# ok\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "docs", "runbooks", "exists.md"), []byte("# ok\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	escreverRegra(t, raiz, "prometheusrule-teste.yaml", regraCom(
-		"https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/existe.md"))
+	writeRule(t, root, "prometheusrule-test.yaml", ruleWith(
+		"https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/exists.md"))
 
-	out := Check(Config{Root: raiz})
-	if len(out.LinksMortos) != 0 {
-		t.Errorf("acusou como morto um link cujo arquivo EXISTE, so' porque a org do caminho difere. "+
-			"`getloopscale/loopzero` redireciona para `getloopscale/loopzero` — e' o mesmo repositorio: %+v", out.LinksMortos)
+	out := Check(Config{Root: root})
+	if len(out.DeadLinks) != 0 {
+		t.Errorf("flagged as dead a link whose file EXISTS, only because the org in the path differs. "+
+			"`getloopscale/loopzero` redirects to `getloopscale/loopzero` — it is the same repository: %+v", out.DeadLinks)
 	}
-	if out.LinksNaoVerificaveis != 0 {
-		t.Errorf("contou como nao-verificavel um link deste mesmo repo, que da' para conferir em disco")
+	if out.UnverifiableLinks != 0 {
+		t.Errorf("counted as unverifiable a link to this same repo, which can be checked on disk")
 	}
 }
 
-// Repositorio diferente e' NAO-VERIFICAVEL, nao morto: o caminho nao existe nesta arvore
-// por definicao, e dizer que nao existe na arvore DELE exigiria rede.
-func TestOutroRepositorioContaComoNaoVerificavel(t *testing.T) {
-	raiz := t.TempDir()
-	escreverRegra(t, raiz, "prometheusrule-teste.yaml", regraCom(
-		"https://github.com/getloopscale/outro-repo/blob/main/docs/x.md"))
+// A different repository is UNVERIFIABLE, not dead: the path does not exist in this tree
+// by definition, and saying it does not exist in ITS tree would require the network.
+func TestOtherRepositoryCountsAsUnverifiable(t *testing.T) {
+	root := t.TempDir()
+	writeRule(t, root, "prometheusrule-test.yaml", ruleWith(
+		"https://github.com/getloopscale/other-repo/blob/main/docs/x.md"))
 
-	out := Check(Config{Root: raiz})
-	if len(out.LinksMortos) != 0 {
-		t.Errorf("acusou de morto um link para OUTRO repositorio, sem ter como saber: %+v", out.LinksMortos)
+	out := Check(Config{Root: root})
+	if len(out.DeadLinks) != 0 {
+		t.Errorf("flagged as dead a link to ANOTHER repository, with no way of knowing: %+v", out.DeadLinks)
 	}
-	if out.LinksNaoVerificaveis != 1 {
-		t.Errorf("queria 1 nao-verificavel, veio %d", out.LinksNaoVerificaveis)
+	if out.UnverifiableLinks != 1 {
+		t.Errorf("wanted 1 unverifiable, got %d", out.UnverifiableLinks)
 	}
 }
 
-// A travessia nao pode alcancar arquivo fora da raiz. O mutante e' um arquivo REAL
-// plantado FORA — sem o tratamento, `Join(root, "../alvo.md")` resolveria nele e o
-// gate diria que o runbook existe. Com o tratamento, o `..` e' resolvido contra a
-// raiz e vira um caminho relativo comum que nao existe.
+// Traversal must not reach a file outside the root. The mutant is a REAL file planted
+// OUTSIDE — without the handling, `Join(root, "../target.md")` would resolve to it and the
+// gate would say the runbook exists. With the handling, the `..` is resolved against the
+// root and becomes an ordinary relative path that does not exist.
 //
-// Este teste substitui uma checagem de contencao que eu escrevi e removi: depois do
-// `Clean`, ela nao tinha como disparar. Guarda inalcancavel e' codigo morto que se
-// le' como protecao.
-func TestTravessiaNaoAlcancaArquivoForaDaRaiz(t *testing.T) {
+// This test replaces a containment check I wrote and removed: after the `Clean`, it had
+// no way to fire. An unreachable guard is dead code that reads as protection.
+func TestTraversalDoesNotReachFileOutsideRoot(t *testing.T) {
 	base := t.TempDir()
-	raiz := filepath.Join(base, "repo")
-	if err := os.MkdirAll(raiz, 0o755); err != nil {
+	root := filepath.Join(base, "repo")
+	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// O alvo da travessia, existente e fora da raiz.
-	if err := os.WriteFile(filepath.Join(base, "alvo.md"), []byte("# fora\n"), 0o644); err != nil {
+	// The traversal target, existing and outside the root.
+	if err := os.WriteFile(filepath.Join(base, "target.md"), []byte("# outside\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	escreverRegra(t, raiz, "prometheusrule-teste.yaml", regraCom(
-		"https://github.com/getloopscale/loopzero/blob/main/../alvo.md"))
+	writeRule(t, root, "prometheusrule-test.yaml", ruleWith(
+		"https://github.com/getloopscale/loopzero/blob/main/../target.md"))
 
-	out := Check(Config{Root: raiz})
-	if len(out.LinksMortos) != 1 {
-		t.Fatalf("a travessia alcancou o arquivo de fora e o link passou por vivo: %+v", out.LinksMortos)
+	out := Check(Config{Root: root})
+	if len(out.DeadLinks) != 1 {
+		t.Fatalf("the traversal reached the outside file and the link passed as alive: %+v", out.DeadLinks)
 	}
-	if !strings.Contains(out.LinksMortos[0].Motivo, "nao existe") {
-		t.Errorf("motivo inesperado: %+v", out.LinksMortos[0])
+	if !strings.Contains(out.DeadLinks[0].Reason, "does not exist") {
+		t.Errorf("unexpected reason: %+v", out.DeadLinks[0])
 	}
 }
 
-// O que o gate NAO pode verificar sem rede fica contado, nao escondido. Uma URL
-// externa pode estar viva ou morta; afirmar qualquer um dos dois hermeticamente
-// seria inventar. Contar e' honesto — e o numero e' o que faz alguem conferir.
-func TestUrlExternaContaComoNaoVerificavelEmVezDeSilencio(t *testing.T) {
-	raiz := t.TempDir()
-	escreverRegra(t, raiz, "prometheusrule-teste.yaml", regraCom("https://docs.loopzero.example/runbooks/algo"))
+// What the gate CANNOT verify without the network stays counted, not hidden. An external
+// URL may be alive or dead; asserting either hermetically would be inventing. Counting is
+// honest — and the number is what makes someone check.
+func TestExternalURLCountsAsUnverifiableInsteadOfSilence(t *testing.T) {
+	root := t.TempDir()
+	writeRule(t, root, "prometheusrule-test.yaml", ruleWith("https://docs.loopzero.example/runbooks/something"))
 
-	out := Check(Config{Root: raiz})
-	if len(out.LinksMortos) != 0 {
-		t.Errorf("acusou uma URL externa de morta sem poder saber: %+v", out.LinksMortos)
+	out := Check(Config{Root: root})
+	if len(out.DeadLinks) != 0 {
+		t.Errorf("flagged an external URL as dead without being able to know: %+v", out.DeadLinks)
 	}
-	if out.LinksNaoVerificaveis != 1 {
-		t.Errorf("queria 1 link nao-verificavel contado, veio %d", out.LinksNaoVerificaveis)
+	if out.UnverifiableLinks != 1 {
+		t.Errorf("wanted 1 unverifiable link counted, got %d", out.UnverifiableLinks)
 	}
 }
 
-// A populacao real (`rules/testing.md` § 4.2). Um mutante prova que o detector
-// dispara; so' isto diz o que ele acha no que existe.
-func TestPopulacaoRealDosLinksDeRunbook(t *testing.T) {
-	out := Check(Config{Root: raizDoRepo(t)})
-	// Conta os CONFERIDOS, nao os problematicos. A primeira versao somava mortos +
-	// nao-verificaveis e tratava zero como "nao alcancou nada" — mas zero e' TAMBEM o
-	// resultado de todos os links estarem bons, que e' o estado atual da arvore. Confundir
-	// "nao achei nada" com "nao ha' nada errado" e' a forma exata que este gate combate, e
-	// ela estava no teste que devia prova-lo.
-	if out.LinksConferidos == 0 {
-		t.Fatal("nenhum link de runbook alcancado — verde sobre nada nao e' verde")
+// The real population (`rules/testing.md` § 4.2). A mutant proves the detector fires;
+// only this says what it finds in what exists.
+func TestRealPopulationOfRunbookLinks(t *testing.T) {
+	out := Check(Config{Root: qtestutil.Root(t)})
+	// Count the CHECKED ones, not the problematic ones. The first version summed dead +
+	// unverifiable and treated zero as "reached nothing" — but zero is ALSO the result of
+	// every link being good, which is the current state of the tree. Confusing "found
+	// nothing" with "nothing is wrong" is the exact shape this gate fights, and it was in
+	// the test that was supposed to prove it.
+	if out.LinksChecked == 0 {
+		t.Fatal("no runbook link reached — green over nothing is not green")
 	}
-	if out.DirsVarridos == 0 {
-		t.Fatal("nenhum diretorio de regras varrido")
+	if out.DirsScanned == 0 {
+		t.Fatal("no rules directory scanned")
 	}
-	t.Logf("populacao: %d diretorio(s), %d link(s) conferido(s), %d morto(s), %d nao-verificavel(is)",
-		out.DirsVarridos, out.LinksConferidos, len(out.LinksMortos), out.LinksNaoVerificaveis)
-	for _, d := range out.LinksMortos {
-		t.Logf("  morto: %s [%s] %s — %s", d.Arquivo, d.Alerta, d.URL, d.Motivo)
+	t.Logf("population: %d directory(ies), %d link(s) checked, %d dead, %d unverifiable",
+		out.DirsScanned, out.LinksChecked, len(out.DeadLinks), out.UnverifiableLinks)
+	for _, d := range out.DeadLinks {
+		t.Logf("  dead: %s [%s] %s — %s", d.File, d.Alert, d.URL, d.Reason)
 	}
-}
-
-func raizDoRepo(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("cwd: %v", err)
-	}
-	for i := 0; i < 12; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "api", "go.mod")); err == nil {
-			return dir
-		}
-		pai := filepath.Dir(dir)
-		if pai == dir {
-			break
-		}
-		dir = pai
-	}
-	t.Fatal("nao achei a raiz do repositorio")
-	return ""
 }

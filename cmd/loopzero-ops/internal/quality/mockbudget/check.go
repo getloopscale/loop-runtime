@@ -18,6 +18,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultBudget is the per-file mock ceiling (ADR D8).
@@ -34,6 +36,9 @@ type Outcome struct {
 	Pass       bool
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 var excludedDirs = map[string]bool{
 	"vendor": true, "node_modules": true, ".git": true, "dist": true, "build": true,
@@ -67,13 +72,16 @@ func Check(cfg Config) (*Outcome, error) {
 			}
 			return nil
 		}
-		count, ok := mockCountForFile(d.Name(), path)
+		count, optOut, ok, err := mockCountForFile(d.Name(), path)
+		if err != nil {
+			return err
+		}
 		if !ok {
 			return nil // not a test file
 		}
 		fileBudget := budget
-		if ob := readOptOutBudgetFile(path); ob >= 0 {
-			fileBudget = ob
+		if optOut >= 0 {
+			fileBudget = optOut
 		}
 		if count > fileBudget {
 			outcome.Pass = false
@@ -89,21 +97,26 @@ func Check(cfg Config) (*Outcome, error) {
 	return outcome, nil
 }
 
-// mockCountForFile returns (count, isTestFile).
-func mockCountForFile(name, path string) (int, bool) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0, false
-	}
-	src := string(data)
+// mockCountForFile reports, for a test file, its mock count and its opt-out
+// budget (-1 when absent). ok is false for a file that is not a test file. A
+// test file that cannot be read is an error: its budget cannot be vouched for.
+func mockCountForFile(name, path string) (count, optOut int, ok bool, err error) {
+	var counter func(string) int
 	switch {
 	case strings.HasSuffix(name, "_test.go"):
-		return countGoMocks(src), true
+		counter = countGoMocks
 	case strings.HasSuffix(name, ".test.ts"), strings.HasSuffix(name, ".spec.ts"),
 		strings.HasSuffix(name, ".test.tsx"), strings.HasSuffix(name, ".spec.tsx"):
-		return countTSMocks(src), true
+		counter = countTSMocks
+	default:
+		return 0, -1, false, nil
 	}
-	return 0, false
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, -1, false, fmt.Errorf("reading test file: %w", err)
+	}
+	src := string(data)
+	return counter(src), readOptOutBudget(src), true, nil
 }
 
 func countGoMocks(src string) int {
@@ -112,16 +125,6 @@ func countGoMocks(src string) int {
 
 func countTSMocks(src string) int {
 	return len(tsMockRe.FindAllString(src, -1))
-}
-
-// readOptOutBudgetFile reads the first 50 lines for a `// mock-budget: N`.
-// Returns -1 if no annotation.
-func readOptOutBudgetFile(path string) int {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return -1
-	}
-	return readOptOutBudget(string(data))
 }
 
 // readOptOutBudget parses `// mock-budget: N` from the first 50 lines.

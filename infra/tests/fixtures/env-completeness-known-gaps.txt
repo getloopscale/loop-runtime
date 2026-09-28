@@ -40,7 +40,6 @@ phantom|AWS_ACCESS_KEY_ID|loopzero-build-cwts/SECRETS.md row; MinIO/S3 build-tim
 phantom|AWS_SECRET_ACCESS_KEY|same as AWS_ACCESS_KEY_ID — build runtime SECRET
 phantom|VITE_API_URL|loopzero-dashboard/CONFIG.md row (camelCase viteApiUrl); runtime config injected into __config.js; follow-up: add to master table § dashboard
 phantom|VITE_CLOUD_URL|same as VITE_API_URL — dashboard runtime config
-phantom|LOOPZERO_DATA_PLANE_POLLER_ENABLED|loopzero-app-operator/CONFIG.md row; T2.2 of plan dashboard-badge-data-plane-poller (#128) — feature-flag ConfigMap key; follow-up: add to master table § loopzero-app-operator
-phantom|LOOPZERO_DATA_PLANE_POLLER_PG_URL|same family — PG DSN the poller UPDATEs env_targets with; runtime CONFIG; follow-up: add to master table § loopzero-app-operator
-phantom|LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL|same family — Prometheus base URL for the poller instant query; follow-up: add to master table § loopzero-app-operator
-phantom|LOOPZERO_DATA_PLANE_POLLER_INTERVAL|same family — scrape cadence default 30s; follow-up: add to master table § loopzero-app-operator
+phantom|LOOPZERO_DATA_PLANE_POLLER_ENABLED|loopzero-api/CONFIG.md row (moved from loopzero-app-operator 2026-09-25, docs/decisions.md) — readiness-poller feature flag, dashboard badge #128; follow-up: add to master table § loopzero-api
+phantom|LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL|same family — Prometheus base URL the api's readiness poller queries; follow-up: add to master table § loopzero-api
+phantom|LOOPZERO_DATA_PLANE_POLLER_INTERVAL|same family — readiness poller cadence, default 30s; follow-up: add to master table § loopzero-api

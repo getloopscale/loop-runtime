@@ -33,9 +33,8 @@ import (
 )
 
 const (
-	cell2MgmtCtx = "k3d-loopzero-core"
-	cell1Ctx     = "k3d-loopzero-cell-0"   // cell-0 target (per H12/CLAUDE.md)
-	cell2RtCtx   = "k3d-loopzero-cell-1"  // cell-1 target (per H14)
+	cell1Ctx   = "k3d-loopzero-cell-0" // cell-0 target (per H12/CLAUDE.md)
+	cell2RtCtx = "k3d-loopzero-cell-1" // cell-1 target (per H14)
 	// standalone deterministic PG password (chart pins it; bash c1's Secret
 	// lookup is empty — see finding-2026-05-24).
 	cell2PGPass = "loopzero-dev-password"
@@ -43,7 +42,7 @@ const (
 
 // kmgmt runs kubectl against the mgmt cluster and returns trimmed stdout.
 func kmgmt(args ...string) (string, error) {
-	out, err := exec.Command("kubectl", append([]string{"--context", cell2MgmtCtx}, args...)...).CombinedOutput()
+	out, err := kubectlForCluster(ClusterMgmt, args...).CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
 
@@ -55,7 +54,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		connected, _ := kmgmt("-n", "loopzero-system", "get", "clustercredentials",
 			"-o", `jsonpath={.items[?(@.spec.cellID=="cell-1")].status.connected}`)
 		if !strings.Contains(connected, "true") {
-			Skip("cell-1 ClusterCredential not connected (run task k3d:heal — H14); activation invariants N/A")
+			Skip("cell-1 ClusterCredential not connected (run task k3d:heal — H12); activation invariants N/A")
 		}
 	})
 
@@ -104,25 +103,12 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		Skip("production-only (Stage 5a per ADR D6) — N/A on local k3d")
 	})
 
-	It("C4: rollback-SLO --dry-run validates mechanism (LIVE measurement is operator-run)", func() {
-		// LIVE rollback-SLO measurement (10 iterations × pin+probe+rollback) is
-		// operator-run before prod Stage 4 per MEET-ASYNC-AMENDMENT-2026-05-24-001
-		// (ratified). Ginkgo port invokes --dry-run: validates preflight,
-		// dependency presence, iteration loop structure, percentile-compute
-		// path. No tenant placement mutation. Stub SYNTH_TENANT_ID satisfies
-		// the env-var gate without touching real state.
-		repoRoot, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-		Expect(err).NotTo(HaveOccurred())
-		cmd := exec.Command("bash",
-			strings.TrimSpace(string(repoRoot))+"/infra/tests/parity/cell2-rollback-slo.sh",
-			"--dry-run")
-		cmd.Env = append(cmd.Environ(), "SYNTH_TENANT_ID=tn-ginkgo-dryrun")
-		out, err := cmd.CombinedOutput()
-		Expect(err).NotTo(HaveOccurred(),
-			"cell2-rollback-slo.sh --dry-run exit non-zero:\n%s", string(out))
-		Expect(string(out)).To(ContainSubstring("[dry-run]"),
-			"expected --dry-run mode markers in output:\n%s", string(out))
-	})
+	// C4 was REMOVED, not skipped (#240): it ran
+	// infra/tests/parity/cell2-rollback-slo.sh --dry-run, and that script was
+	// deleted in b61e6c307 (2026-07-07) with the rest of infra/tests/parity/.
+	// The spec could only fail on a missing file, so it measured nothing about
+	// rollback SLO. The LIVE measurement it stood in for is an operator
+	// procedure with no script in this tree.
 
 	It("C5: PVC/stateful guidance (runbook consolidated — no-op)", func() {
 		Skip("no-op gate — docs consolidated; nothing to assert at runtime")
@@ -135,7 +121,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		Expect(err).NotTo(HaveOccurred())
 		cmd := exec.Command("go", "test", "-count=1",
 			"-run", "Test.*CellPinner",
-			"./internal/services/...")
+			"./internal/placement/...")
 		cmd.Dir = strings.TrimSpace(string(repoRoot)) + "/api"
 		out, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(),
@@ -191,7 +177,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		Expect(err).NotTo(HaveOccurred())
 		cmd := exec.Command("go", "test", "-count=1",
 			"-run", "TestAdminPinCell_AuthzInvariantC11",
-			"./internal/routes/...")
+			"./internal/placement/...")
 		cmd.Dir = strings.TrimSpace(string(repoRoot)) + "/api"
 		out, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(),

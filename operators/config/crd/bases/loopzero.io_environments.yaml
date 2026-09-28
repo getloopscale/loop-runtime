@@ -88,8 +88,10 @@ spec:
                   RBAC rules.
                 enum:
                 - starter
-                - growth
+                - pro
+                - team
                 - enterprise
+                - growth
                 type: string
               project:
                 description: |-
@@ -144,6 +146,13 @@ spec:
           status:
             description: EnvironmentCRStatus defines the observed state of an Environment.
             properties:
+              cellID:
+                description: |-
+                  CellID is the cell whose runtime cluster holds Namespace, recorded when
+                  the namespace is provisioned. Deletion reads it so the namespace is
+                  removed where it was created, even after the Tenant was re-pinned to
+                  another cell or is already gone.
+                type: string
               conditions:
                 description: |-
                   Conditions represent the latest available observations of the environment's state.

@@ -21,6 +21,7 @@ import (
 
 	"github.com/getloopscale/loopzero/operators/internal/app"
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
 	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
@@ -85,19 +86,9 @@ func (f *FakeGitProvisioner) EnsureRepo(_ context.Context, name string, _ string
 	if url, ok := f.repos[name]; ok {
 		return url, nil
 	}
-	url := fmt.Sprintf("http://gitea-http.gitea.svc.cluster.local:3000/loopzero/%s.git", name)
+	url := fmt.Sprintf("http://gitea-http.loopzero-system.svc.cluster.local:3000/loopzero/%s.git", name)
 	f.repos[name] = url
 	return url, nil
-}
-
-func (f *FakeGitProvisioner) RepoExists(_ context.Context, name string) (bool, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.Err != nil {
-		return false, f.Err
-	}
-	_, ok := f.repos[name]
-	return ok, nil
 }
 
 func (f *FakeGitProvisioner) ArchiveRepo(_ context.Context, name string) error {
@@ -107,23 +98,6 @@ func (f *FakeGitProvisioner) ArchiveRepo(_ context.Context, name string) error {
 		return f.Err
 	}
 	delete(f.repos, name)
-	return nil
-}
-
-// UnarchiveRepo is a no-op in the fake — repos are tracked by presence in the
-// map, so "unarchive" is just "make sure it's present". Real production
-// behavior (flipping the archived flag back to false) is exercised by
-// integration tests that hit a real Gitea.
-func (f *FakeGitProvisioner) UnarchiveRepo(_ context.Context, name string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.Err != nil {
-		return f.Err
-	}
-	if _, ok := f.repos[name]; !ok {
-		url := fmt.Sprintf("http://gitea-http.gitea.svc.cluster.local:3000/loopzero/%s.git", name)
-		f.repos[name] = url
-	}
 	return nil
 }
 
@@ -327,13 +301,13 @@ func (f *FakeMinIOProvisioner) DeleteTenantCredentials(_ context.Context, tenant
 
 // SetupTenantController registers the TenantController with the given manager.
 // Use this in E2E tests to start the operator in-process against envtest.
-// buildClient and runtimeClient target the build and runtime clusters respectively.
-// In envtest, pass mgr.GetClient() for both (single API server).
+// buildClient targets the build cluster; runtimeFactory resolves the runtime
+// cluster of each tenant's cell (in envtest, the tracking factory).
 //
 // ADR-0023 D1: delegates to internal/tenant (canonical split-tree
 // implementation) instead of internal/controller (deprecated monolith).
-func SetupTenantController(mgr ctrl.Manager, gitProvisioner GitRepoProvisioner, argoCDProvisioner ArgoCDProvisioner, buildClient client.Client, runtimeClient client.Client) error {
-	return tenant.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeClient, tenant.TenantControllerConfig{})
+func SetupTenantController(mgr ctrl.Manager, gitProvisioner GitRepoProvisioner, argoCDProvisioner ArgoCDProvisioner, buildClient client.Client, runtimeFactory cellrouting.RuntimeClientFactory) error {
+	return tenant.SetupTenantController(mgr, gitProvisioner, argoCDProvisioner, buildClient, runtimeFactory, tenant.TenantControllerConfig{})
 }
 
 // SetupClusterCredentialController registers the ClusterCredentialController with the given manager.
@@ -348,35 +322,25 @@ func SetupClusterCredentialController(mgr ctrl.Manager) error {
 // envtest_suite.go calls SetupEnvironmentControllerWithFactory directly.
 
 // SetupApplicationController registers the ApplicationController with the given manager.
-// baseDomain is the base domain for hostname assignment (e.g., "dev.loopzero.example").
+// baseDomain is the base domain for hostname assignment (e.g., "dev.loopzero.example");
+// runtimeFactory resolves the runtime cluster of each tenant's cell.
 //
-// ADR-0023 D1: delegates to internal/app. Calls the canonical WithFactory
-// entry point with factory=nil (single-cell envtest mode), eliminating the
-// backward-compat wrapper that registration_test.go flagged as
-// "implemented but not wired" in app-operator main.go.
-func SetupApplicationController(mgr ctrl.Manager, baseDomain string) error {
-	return app.SetupApplicationControllerWithFactory(mgr, baseDomain, nil)
+// ADR-0023 D1: delegates to internal/app.
+func SetupApplicationController(mgr ctrl.Manager, baseDomain string, runtimeFactory cellrouting.RuntimeClientFactory) error {
+	return app.SetupApplicationControllerWithFactory(mgr, baseDomain, runtimeFactory)
 }
 
 // SetupExposureController registers the ExposureController with the given manager.
 // Enables AllowProbeURLOverride for test environments (SEC-005).
 //
 // ADR-0023 D1: delegates to internal/app.
-func SetupExposureController(mgr ctrl.Manager) error {
+func SetupExposureController(mgr ctrl.Manager, runtimeFactory cellrouting.RuntimeClientFactory) error {
 	return app.SetupExposureController(mgr, app.ExposureControllerConfig{
 		AllowProbeURLOverride: true,
-		// #277: em envtest há um cluster só, então a "cell do workload" é ele mesmo.
-		// Sem factory a checagem de certificado responde not-ready por não ter onde olhar,
-		// e todo teste de TLS falharia por um motivo que não é o que ele testa.
-		RuntimeFactory: sameClusterFactory{c: mgr.GetClient()},
+		// #277: the TLS Secret lives in the workload's cell, so the cert check
+		// resolves it through the same factory as every other runtime read.
+		RuntimeFactory: runtimeFactory,
 	})
-}
-
-// sameClusterFactory resolve qualquer cellID para o cluster local. Só para envtest.
-type sameClusterFactory struct{ c client.Client }
-
-func (f sameClusterFactory) For(context.Context, string) (client.Client, error) {
-	return f.c, nil
 }
 
 // SetupGitRepositoryBindingController registers the GitRepositoryBindingController with the given manager.
@@ -396,10 +360,9 @@ func SetupPlatformBootstrapController(mgr ctrl.Manager, httpClient *http.Client)
 }
 
 // SetupPreviewController registers the PreviewController with the given manager.
-// runtimeClient targets the runtime cluster; in envtest, pass mgr.GetClient().
-// baseDomain is used for preview URL hostnames.
+// runtimeFactory resolves the runtime cluster of each preview's cell.
 //
 // ADR-0023 D1: delegates to internal/preview.
-func SetupPreviewController(mgr ctrl.Manager, runtimeClient client.Client, baseDomain string) error {
-	return preview.SetupPreviewController(mgr, runtimeClient, baseDomain)
+func SetupPreviewController(mgr ctrl.Manager, runtimeFactory cellrouting.RuntimeClientFactory) error {
+	return preview.SetupPreviewController(mgr, runtimeFactory)
 }

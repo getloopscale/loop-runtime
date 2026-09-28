@@ -1,5 +1,5 @@
 # T0.2 POC: Gitea Actions workflow for PR-time `task quality:gates`.
-# DISABLED-BY-DEFAULT (.example suffix). Sponsor renames after Cenário A
+# DISABLED-BY-DEFAULT (.example suffix). Sponsor renames after Scenario A
 # meeting approval per ADR-2026-05-27-T0.2.
 #
 # After enabling:
@@ -8,8 +8,8 @@
 #   2. PRs targeting develop trigger this workflow.
 #   3. Failure → merge button disabled until fix push re-runs gates.
 #
-# Mirrors GHA syntax for max portability; if Cenário A trial fails, this
-# file moves verbatim to .github/workflows/ for Cenário C fallback (the
+# Mirrors GHA syntax for max portability; if Scenario A trial fails, this
+# file moves verbatim to .github/workflows/ for Scenario C fallback (the
 # `task quality:gates` invocation is runner-agnostic).
 
 name: quality

@@ -7,6 +7,7 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
@@ -16,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -32,26 +32,13 @@ const (
 	DefaultGitHubAPIBase = "https://api.github.com"
 )
 
-// resolveGitHubAPIBase returns the GitHub API root URL, preferring
-// GITHUB_API_BASE_URL env var when set. T2.4 of plan
-// 2026-06-11-code-review-remediation v1.2 — closes the hardcoded
-// `githubAPIBase` constant that lived at module scope and blocked GHES
-// operators from using LoopZero without forking. Per sponsor mandate
-// 2026-06-11 "PROIBINDO CONFIGURAÇÃO HARDCODED".
-func resolveGitHubAPIBase() string {
-	if v := os.Getenv("GITHUB_API_BASE_URL"); v != "" {
-		return v
-	}
-	return DefaultGitHubAPIBase
-}
-
 // AppClient authenticates as a GitHub App and manages installation tokens.
 // Thread-safe: tokens are cached and refreshed automatically.
 type AppClient struct {
 	appID      int64
 	privateKey *rsa.PrivateKey
 	httpClient *http.Client
-	baseURL    string // T2.4: resolved at construction from GITHUB_API_BASE_URL (defaults to DefaultGitHubAPIBase).
+	baseURL    string // GitHub REST root; empty means DefaultGitHubAPIBase.
 
 	mu         sync.RWMutex
 	tokenCache map[int64]*cachedToken
@@ -64,7 +51,10 @@ type cachedToken struct {
 
 // NewAppClient creates a GitHub App client from App ID and PEM-encoded private key.
 // Returns nil if credentials are missing (acceptable in local dev).
-func NewAppClient(appID int64, privateKeyPEM string) (*AppClient, error) {
+// apiBaseURL is the GitHub REST root (config.GitHubAPIBaseURL); a GitHub
+// Enterprise Server install points it at its appliance. Empty means
+// DefaultGitHubAPIBase.
+func NewAppClient(appID int64, privateKeyPEM, apiBaseURL string) (*AppClient, error) {
 	if appID == 0 || privateKeyPEM == "" {
 		return nil, nil
 	}
@@ -83,7 +73,7 @@ func NewAppClient(appID int64, privateKeyPEM string) (*AppClient, error) {
 		appID:      appID,
 		privateKey: key,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
-		baseURL:    resolveGitHubAPIBase(),
+		baseURL:    apiBaseURL,
 		tokenCache: make(map[int64]*cachedToken),
 	}, nil
 }
@@ -224,10 +214,17 @@ type CommitStatus struct {
 func (c *AppClient) SetCommitStatus(ctx context.Context, installationID int64, owner, repo, sha string, status CommitStatus) error {
 	url := fmt.Sprintf("%s/repos/%s/%s/statuses/%s", c.apiBase(), owner, repo, sha)
 
-	payload := fmt.Sprintf(`{"state":%q,"target_url":%q,"description":%q,"context":%q}`,
-		status.State, status.TargetURL, status.Description, status.Context)
+	payload, err := json.Marshal(struct {
+		State       string `json:"state"`
+		TargetURL   string `json:"target_url,omitempty"`
+		Description string `json:"description"`
+		Context     string `json:"context"`
+	}{status.State, status.TargetURL, status.Description, status.Context})
+	if err != nil {
+		return fmt.Errorf("github: encode commit status: %w", err)
+	}
 
-	resp, err := c.doAuthenticated(ctx, installationID, "POST", url, stringReader(payload))
+	resp, err := c.doAuthenticated(ctx, installationID, "POST", url, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("github: set commit status: %w", err)
 	}
@@ -238,33 +235,6 @@ func (c *AppClient) SetCommitStatus(ctx context.Context, installationID int64, o
 		return fmt.Errorf("github: set commit status (status %d): %s", resp.StatusCode, string(body))
 	}
 	return nil
-}
-
-// --- PR Comments ---
-
-// CommentOnPR posts a comment on a pull request.
-func (c *AppClient) CommentOnPR(ctx context.Context, installationID int64, owner, repo string, prNumber int, body string) error {
-	url := fmt.Sprintf("%s/repos/%s/%s/issues/%d/comments", c.apiBase(), owner, repo, prNumber)
-
-	payload := fmt.Sprintf(`{"body":%q}`, body)
-
-	resp, err := c.doAuthenticated(ctx, installationID, "POST", url, stringReader(payload))
-	if err != nil {
-		return fmt.Errorf("github: comment on PR: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("github: comment on PR (status %d): %s", resp.StatusCode, string(respBody))
-	}
-	return nil
-}
-
-// --- Helpers ---
-
-func stringReader(s string) io.Reader {
-	return strings.NewReader(s)
 }
 
 // Plan J-09 T5.1 + T2.1 (2026-06-05) — repo introspection helpers used by

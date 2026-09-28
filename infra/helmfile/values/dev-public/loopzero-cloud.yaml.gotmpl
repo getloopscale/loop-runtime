@@ -1,198 +1,123 @@
-# A borda (Caddy) roda no host e precisa alcancar o loopzero-cloud. Ate 2026-08-10 ela
-# fazia isso por `kubectl port-forward`, que e ferramenta de depuracao e nao
-# transporte: a unit systemd que o vigiava marcou NRestarts=126499 — ~1,8 reinicios
-# por minuto — e cada reinicio e uma janela de 502 em `/engine/*`, que carrega deploy,
-# whoami, listar projetos e status de build.
+# dev-public overlay for charts/loopzero-cloud, layered on charts/loopzero-cloud/values-bootstrap.yaml.
+
+# The edge (Caddy) runs on the host and must reach loopzero-cloud. Until 2026-08-10 it did
+# that through `kubectl port-forward`, which is a debugging tool, not a transport: the
+# systemd unit watching it recorded NRestarts=126499 — ~1.8 restarts per minute — and
+# every restart is a 502 window on `/engine/*`, which carries deploy, whoami, project
+# listing and build status.
 #
-# NodePort e o padrao que o irmao `loopzero-api` ja usa e que nunca teve o problema, porque
-# o serverlb do k3d publica a porta por mapeamento docker comum. 30002 e escolhida
-# porque `docker port k3d-loopzero-core-serverlb` ja a publica como host 3002 e ela nao
-# estava tomada; uma NodePort que o serverlb nao publique renderiza igual e continua
-# inalcancavel do host.
+# NodePort is the pattern the sibling `loopzero-api` already uses and never had that problem
+# with, because the k3d serverlb publishes the port through an ordinary docker mapping.
+# 30002 was chosen because `docker port k3d-loopzero-core-serverlb` already publishes it as
+# host 3002 and it was free; a NodePort the serverlb does not publish renders the same
+# and stays unreachable from the host.
 service:
   type: NodePort
   nodePort: 30002
 
 # CANONICAL 2026-06-19 (issue #104 Architecture A; ADR PROPOSED
-# `2026-06-19-loopzero-cloud-image-registry-canonical`). loopzero-cloud images
-# are published EXCLUSIVELY to GHCR by the AM6 reusable workflow
-# (loopzero/.github/workflows/build-publish.yml). The 2026-06-15 `multi-
-# aud-fix` workaround tag against k3d-loopzero-registry:5000 was a one-off
-# rebuild that the canonical AM6 CI made obsolete. Every Cleanroom
-# destroyed the local k3d registry, so dev-public loopzero-cloud pods
-# ImagePullBackOff'd for a tag that no longer existed. Aligning the
-# overlay to GHCR `:develop` (rolling) matches where the image actually
-# lives. `ghcr-pull` imagePullSecret is provisioned from
-# ~/.loopzero/ghcr-pull-token.txt by `task images:ghcr:pullsecret` (NEW —
-# sibling SoT of ~/.loopzero/gomod-token.txt per memory
-# reference_gomod_token_canonical_path).
+# `2026-06-19-loopzero-cloud-image-registry-canonical`). loopzero-cloud images are published
+# EXCLUSIVELY to GHCR by the AM6 reusable workflow (loopzero/.github/workflows/build-publish.yml).
+# `ghcr-pull` imagePullSecret is provisioned from ~/.loopzero/ghcr-pull-token.txt by
+# `task images:ghcr:pullsecret`.
+#
+# The registry prefix is overridable through LOOPZERO_PLATFORM_IMAGE_PREFIX; the default stays
+# GHCR, so anyone with a valid token sees no difference. It exists because this environment
+# depended WITHOUT ALTERNATIVE on a published image: measured on the app-dev droplet on
+# 2026-08-10, with the pull token expired (HTTP 401), 13 pods sat in ImagePullBackOff and the
+# platform did not come up — although every one of these images has a Dockerfile in this
+# repository and can be built locally (BACKLOG.md B-016).
+global:
+  registry: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" | trimSuffix "/" }}
+
 image:
-# O prefixo do registro e sobrescrevivel por LOOPZERO_PLATFORM_IMAGE_PREFIX; o padrao continua
-# sendo o GHCR, entao quem tem token valido nao ve diferenca. Existe porque este ambiente
-# dependia SEM ALTERNATIVA de imagem publicada: medido no droplet app-dev em 2026-08-10,
-# com o token de pull expirado (HTTP 401), 13 pods ficaram em ImagePullBackOff e a
-# plataforma nao subia — embora todas estas imagens tenham Dockerfile neste repositorio e
-# sejam construiveis localmente. Um ambiente que so funciona com credencial valida para um
-# registro remoto nao tem como ser reconstruido do zero quando a credencial falha, que e
-# exatamente quando reconstruir importa (BACKLOG.md B-016).
-  repository: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" }}loopzero-cloud
+  repository: loopzero-cloud
   tag: develop
   pullPolicy: Always
 
-# GHCR pull secret — provisioned by `task images:ghcr:pullsecret` from
-# ~/.loopzero/ghcr-pull-token.txt. The chart schema requires minItems=1.
 imagePullSecrets:
   - name: ghcr-pull
 
-# Plan J-09 T1.1 (2026-06-05) — GitHub App install handshake env vars.
-# Merged into the chart's env: map (range $k, $v := .Values.env in
-# templates/deployment.yaml). All three must be right or the handshake
-# breaks:
-#   - GITHUB_APP_SLUG: public slug of the GitHub App so the install
-#     button redirects to https://github.com/apps/{slug}/installations/new
-#   - APP_PUBLIC_URL: dashboard origin the callback returns the browser
-#     to (with installation_id + setup_action preserved in the query).
-#   - AUTH_COOKIE_DOMAIN: explicit Domain= on the state cookie so it
-#     survives the GitHub redirect across subdomains. loopzero.example is the
-#     apex shared by app-dev/cloud-dev/auth-dev.
-env:
-  GITHUB_APP_SLUG: "loopzero-platform"
-  APP_PUBLIC_URL: "https://app-dev.loopzero.example"
-  AUTH_COOKIE_DOMAIN: "loopzero.example"
+config:
+  # Plan J-09 T1.1 (2026-06-05) — GitHub App install handshake. All three must be right
+  # or the handshake breaks:
+  #   - githubAppSlug: public slug, so the install button redirects to
+  #     https://github.com/apps/{slug}/installations/new
+  #   - appPublicUrl: dashboard origin the callback returns the browser to
+  #   - authCookieDomain: explicit Domain= on the state cookie so it survives the GitHub
+  #     redirect across subdomains; loopzero.example is the apex shared by app-dev/cloud-dev/auth-dev.
+  githubAppSlug: "loopzero-platform"
+  appPublicUrl: "https://app-dev.loopzero.example"
+  authCookieDomain: "loopzero.example"
 
-  # T1.2 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2.
-  # Closes catch #20 from T6.2 session (memory j05-aprendizado-kratos-public-
-  # vs-internal-url-split): loopzero-cloud received Kratos public URL in handlers
-  # where INTERNAL was needed (and vice-versa) — J-05 device-flow redirect
-  # loops + J-04 cookie domain mismatch. Canonical split per ADR D8:
-  #   - KRATOS_PUBLIC_URL: HTTPS public FQDN — used for browser-facing
-  #     redirects (consent UI, settings UI links the user clicks)
-  #   - KRATOS_INTERNAL_URL: cluster-internal HTTP — used for server-side
-  #     admin API calls (CreateIdentity, GetSession, verify cookie)
-  KRATOS_PUBLIC_URL: "https://auth-dev.loopzero.example"
-  # CANONICAL FIX 2026-06-15 dev-public Cleanroom: service name was wrong
-  # (referenced "kratos" but ory-kratos chart creates `ory-kratos-public`
-  # service on port 80, NOT `kratos` on 4433). LIVE diagnosis showed
-  # loopzero-cloud /v1/auth/session/token returned 502 AUTH_SERVICE_UNAVAILABLE
-  # because DNS lookup failed. Canonical Ory chart service convention:
-  #   - ory-kratos-public (port 80): self-service flows + whoami + verify
-  #   - ory-kratos-admin (port 80): CreateIdentity + ListIdentities
-  # loopzero-cloud server-side cookie verification uses the PUBLIC API
-  # (/sessions/whoami), so INTERNAL_URL → ory-kratos-public.
-  KRATOS_INTERNAL_URL: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
+  # T1.2 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2. The public and
+  # internal Kratos URLs are split (ADR D8): the public HTTPS FQDN for browser-facing
+  # redirects, the cluster-internal one for server-side calls. The public one is set by
+  # the release from the environment's publicAuthUrl (core.helmfile.yaml.gotmpl).
+  #
+  # CANONICAL FIX 2026-06-15: the internal URL is `ory-kratos-public` on port 80, the
+  # service the Ory chart creates; server-side cookie verification uses the PUBLIC API
+  # (/sessions/whoami), so the internal URL points at ory-kratos-public.
+  kratosInternalUrl: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
 
-  # CANONICAL FIX 2026-07-14 (2nd regression of loopzero-cloud#131): JWT_ISSUER
-  # MUST be byte-equal to what Hydra actually emits (`iss` claim). Hydra's
-  # `URLS_SELF_ISSUER=https://auth-dev.loopzero.example/` (WITH trailing slash)
-  # is mirrored verbatim into JWT.iss, and `go-jwt.WithIssuer(...)` does
-  # exact-string comparison — no normalization. The trailing slash is
-  # non-negotiable: dropping it broke Red Team CLI device-flow 2026-07-14.
-  # If Hydra's URLS_SELF_ISSUER changes shape, this MUST change in lockstep
-  # (loopzero-cloud + loopzero-api overlays both). HYDRA_PUBLIC_URL kept as
-  # internal for JWKS fetch (faster, no outbound TLS).
-  JWT_ISSUER: "https://auth-dev.loopzero.example/"
+  # CANONICAL FIX 2026-07-14 (2nd regression of loopzero-cloud#131): the issuer MUST be
+  # byte-equal to what Hydra emits in `iss`. Hydra's URLS_SELF_ISSUER carries a trailing
+  # slash, and go-jwt.WithIssuer compares exactly — dropping the slash broke the CLI
+  # device flow. Changes in lockstep with the loopzero-api overlay and the ory-hydra overlay.
+  jwtIssuer: "https://auth-dev.loopzero.example/"
 
-  # T1 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md): supersedes the volatile
-  # `kubectl set env deployment/loopzero-cloud RAG_BASE_URL=...` applied 2026-07-15.
-  # Without RAG_BASE_URL the loopzero-rag broker in cmd/main.go stays nil and the
-  # `mountRagDashboard(...)` call at cmd/main.go:998 is skipped, so
-  # `/v1/dashboard/rag/*` returns 404 (breaks app-dev.loopzero.example/rag/analytics).
-  # `host.k3d.internal` e o hostAlias do k3d que resolve para o host.
+  # T1 CANONICAL 2026-07-16: without RAG_BASE_URL the loopzero-rag broker stays nil and
+  # `/v1/dashboard/rag/*` returns 404 (app-dev.loopzero.example/rag/analytics).
+  # `host.k3d.internal` is the k3d hostAlias that resolves to the host.
   #
-  # 2026-07-29 — A PORTA MUDOU DE :18082 PARA :8787, e a razao importa mais que a
-  # troca. Quando este valor foi fixado (2026-07-16) o loopzero-rag rodava APENAS como
-  # processo do host, iniciado a mao. Hoje convivem DOIS:
+  # 2026-07-29 — THE PORT MOVED FROM :18082 TO :8787, and the reason matters more than
+  # the move. When this value was fixed (2026-07-16) loopzero-rag ran ONLY as a host process
+  # started by hand. Two now coexist:
   #
-  #   :18082  processo `node` solto no host  — version "dev", built_at "unknown",
-  #                                            Node v22.12
-  #   :8787   container ghcr.io/getloopscale/loopzero-rag:develop — version
-  #                                            "develop-3dc878c", built_at real,
-  #                                            Node v22.23  <- ARTEFATO DA PIPELINE
+  #   :18082  a loose `node` process on the host — version "dev", built_at "unknown"
+  #   :8787   container ghcr.io/getloopscale/loopzero-rag:develop — the PIPELINE ARTIFACT
   #
-  # O gateway lia o processo solto. O sintoma so ficou visivel quando o painel de
-  # versoes (M21) passou a exibir o que cada servico reporta: a coluna do rag vinha
-  # VAZIA, porque o processo solto emite a sentinela "unknown" e o decodificador a
-  # normaliza (ADR D8) em vez de importa-la para o nosso contrato.
-  #
-  # A pagina estava certa. O ALVO e que era a instancia errada — e nada ficava
-  # vermelho, porque um processo solto responde 200 igual.
-  #
-  # Companion Secret loopzero-rag-admin-key provides RAG_PLATFORM_ADMIN_KEY (see
-  # infra/helm/loopzero-cloud/templates/deployment.yaml env block).
-  RAG_BASE_URL: "http://host.k3d.internal:8787"
+  # The gateway was reading the loose process. The page was right; the TARGET was the
+  # wrong instance — and nothing went red, because a loose process answers 200 the same.
+  ragBaseUrl: "http://host.k3d.internal:8787"
 
-  # 2026-07-20 — same durable-wiring contract as RAG above, for loopzero-lens.
-  # Without LENS_BASE_URL the loopzero-lens Model-B broker in cmd/main.go stays nil
-  # and the read-only (M41) + management (M44) `/v1/dashboard/lens/*` BFF routes
-  # are skipped, so the dashboard lens surface (app-dev.loopzero.example/lens) breaks.
-  # `host.k3d.internal` resolves to the host running loopzero-lens on :18084 (per
-  # dev-public data-plane topology: loopzero-lens runs as a host process outside the
-  # k3d cluster — dev-credentials data_plane.lens.host_port). Companion Secret
-  # loopzero-lens-admin-key provides LENS_PLATFORM_ADMIN_KEY (deployment.yaml env block).
-  LENS_BASE_URL: "http://host.k3d.internal:18084"
+  # 2026-07-20 — same durable-wiring contract as RAG, for loopzero-lens, which runs as a host
+  # process on :18084 in the dev-public data-plane topology.
+  lensBaseUrl: "http://host.k3d.internal:18084"
 
-  # 2026-07-31 — alvo do painel /status para o loopzero-traefik-mcp.
-  #
-  # Aponta para a RAIZ do processo, e NAO para a borda `/mcp` do Traefik. Aquele
-  # roteador nao remove o prefixo, e isso e' deliberado: o gateway precisa do path
-  # completo para rotear MCP. Medido de dentro do cluster antes de escolher a URL:
-  #
-  #   http://host.k3d.internal:8092/mcp    -> 404  (chega como /mcp/v1/version e
-  #                                                 cai no catch-all do proxy)
-  #   http://host.k3d.internal:18090/...   -> 000  (porta nao era publicada)
-  #
-  # A porta passou a ser publicada no compose do umbrella, como ja' faziam
-  # loopzero-rag (:8787), loopzero-lens (:18084) e loopzero-storage (:18086).
-  #
-  # Sem credencial companheira, ao contrario de RAG/LENS acima: o painel consome
-  # apenas `GET /v1/version`, auth-exempt por contrato do gateway.
-  TRAEFIK_MCP_BASE_URL: "http://host.k3d.internal:18090"
+  # 2026-07-31 — status-panel target for loopzero-traefik-mcp. It points at the process ROOT,
+  # not the Traefik `/mcp` edge: that router does not strip the prefix, deliberately, so
+  # `http://host.k3d.internal:8092/mcp` lands as /mcp/v1/version and 404s. The panel only
+  # reads `GET /v1/version`, auth-exempt by the gateway's contract, so no key.
+  traefikMcpBaseUrl: "http://host.k3d.internal:18090"
 
-  # B-033 (2026-08-31) — o agregador de custo em loopzero-cloud/cmd/main.go lê esta
-  # variável no boot; se vazia, ele imprime `logger.Info("cost aggregator disabled
-  # (LOOPZERO_PROMETHEUS_URL not set)")` (main.go:1995) e não sobe. `cost_counters` fica
-  # vazia, e o CostEnforcer no api/ degrada para pass-through — os tetos de build
-  # minutes, egresso e pulls de registro ficam sem enforcement no ambiente que serve
-  # app-dev.loopzero.example. A URL canônica é a mesma que loopzero-app-operator já consome
-  # no mesmo overlay (loopzero-app-operator.yaml.gotmpl linha 28) — se mudar aqui, mudar
-  # lá em lockstep (D1 do plano b033-prometheus-url-dev-public). Guarda hermética:
-  # infra/tests/check-loopzero-cloud-cost-aggregator-wiring_test.sh afirma A1/A2/A3
-  # (presença + valor canônico + parity byte-idêntica com loopzero-app-operator).
-  LOOPZERO_PROMETHEUS_URL: "http://prometheus-server.monitoring.svc.cluster.local:80"
+  # B-033 (2026-08-31) — the cost aggregator reads this at boot; empty, it logs
+  # "cost aggregator disabled" and does not start, `cost_counters` stays empty and the
+  # api's CostEnforcer degrades to pass-through. Same URL loopzero-api's readiness poller
+  # consumes (dataPlanePoller.prometheusUrl in its dev-public overlay) — change both in
+  # lockstep (infra/tests/charts/loopzero_cloud_dev_public_wiring_test.go).
+  prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local:80"
 
-# T2 CANONICAL 2026-07-16 (DELEGATION-M7-rag-ui.md § T2). Enable the
-# ExternalSecret that materializes k8s Secret `loopzero-rag-admin-key` from
-# OpenBao path `secret/loopzero/cloud` property `rag_platform_admin_key` via
-# the existing `loopzero-secrets-secrets` ClusterSecretStore. Chart template gates
-# on `.Values.rag.externalSecretEnabled` (default false in
-# infra/helm/loopzero-cloud/values.yaml). Rotation runbook: mint new key on
-# loopzero-rag → `bao kv patch secret/loopzero/cloud rag_platform_admin_key=<new>`
-# → ESO refresh within 1h → `kubectl rollout restart deployment/loopzero-cloud`
-# → revoke old key via DELETE /v1/admin/keys/{id}.
+# T2 CANONICAL 2026-07-16: materialise Secret `loopzero-rag-admin-key` from OpenBao
+# `secret/loopzero/cloud` property `rag_platform_admin_key` through the `loopzero-secrets-secrets`
+# ClusterSecretStore.
 rag:
   externalSecretEnabled: true
 
-# 2026-07-20 — loopzero-lens equivalent of the rag block above. Enables the
-# ExternalSecret that materializes k8s Secret `loopzero-lens-admin-key` from OpenBao
-# path `secret/loopzero/cloud` property `lens_platform_admin_key` via the same
-# `loopzero-secrets-secrets` ClusterSecretStore. Chart template gates on
-# `.Values.lens.externalSecretEnabled` (default false in
-# infra/helm/loopzero-cloud/values.yaml). Rotation runbook: mint new key on
-# loopzero-lens → `bao kv patch secret/loopzero/cloud lens_platform_admin_key=<new>`
-# → ESO refresh within 1h → `kubectl rollout restart deployment/loopzero-cloud`
-# → revoke old key via loopzero-lens DELETE /v1/admin/keys/{id}.
+# 2026-07-20 — the loopzero-lens equivalent: Secret `loopzero-lens-admin-key` from property
+# `lens_platform_admin_key`.
 lens:
   externalSecretEnabled: true
 
-# dev-public DECLARA que cobra de verdade.
+# dev-public DECLARES that it really charges.
 #
-# É o ambiente que serve app-dev.loopzero.example — o painel com plano, preço e botão de
-# upgrade na tela. Declarado aqui, a ausência dos Secrets de cobrança deixa de ser uma
-# configuração aceitável e passa a impedir o pod de subir.
+# It is the environment serving app-dev.loopzero.example — the dashboard with plan, price and an
+# upgrade button on screen. Declared here, missing billing Secrets stop being an acceptable
+# configuration and keep the pod from starting.
 #
-# Medido em 2026-08-11: com `optional: true` fixo, o painel rodou 20h sem
-# `loopzero-stripe-webhook`, `Running`, sem um único evento. Todo evento de pagamento que o
-# Stripe enviou nesse período foi recusado por falta do segredo que os verifica — enquanto
-# o log do boot afirmava "billing enabled".
+# Measured 2026-08-11: with a fixed `optional: true`, the dashboard ran 20h without
+# `loopzero-stripe-webhook`, `Running`, with not one event. Every payment event Stripe sent in
+# that window was refused for lack of the secret that verifies it — while the boot log said
+# "billing enabled".
 billing:
   required: true

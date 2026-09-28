@@ -11,19 +11,19 @@ import (
 	"os"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/leader"
+	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
-// cellID() must default to db.CellDefault when the env var is unset,
+// cellID() must default to domain.DefaultCellID when the env var is unset,
 // and honor LOOPZERO_CELL_ID when set. This is the same contract as the
 // store layer (roadmap 03) so the controller binary stays consistent.
 
 func TestCellID_DefaultsToCellDefaultWhenUnset(t *testing.T) {
 	_ = os.Unsetenv("LOOPZERO_CELL_ID")
 	got := cellID(stubConfig())
-	if got != db.CellDefault {
-		t.Errorf("cellID() = %q, want %q", got, db.CellDefault)
+	if got != domain.DefaultCellID {
+		t.Errorf("cellID() = %q, want %q", got, domain.DefaultCellID)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestReadyz_ReturnsFenced_WhenLeaseInvalid(t *testing.T) {
 	}
 	acq := leader.NewAcquirer(fake, leader.DefaultConfig())
 	lease := &leader.Lease{
-		Name: leaderLoopName, CellID: db.CellDefault,
+		Name: leaderLoopName, CellID: domain.DefaultCellID,
 		Holder: "this-pod", GenerationID: 1,
 	}
 
@@ -119,7 +119,7 @@ func TestReadyz_ReturnsOK_WhenLeaseValid(t *testing.T) {
 	}
 	acq := leader.NewAcquirer(fake, leader.DefaultConfig())
 	lease := &leader.Lease{
-		Name: leaderLoopName, CellID: db.CellDefault,
+		Name: leaderLoopName, CellID: domain.DefaultCellID,
 		Holder: "this-pod", GenerationID: 5,
 	}
 

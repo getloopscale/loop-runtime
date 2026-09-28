@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package billingsecrets reprova montagens de segredo de cobrança cuja opcionalidade é um
-// literal em vez de um valor.
+// Package billingsecrets fails billing-secret mounts whose optionality is a literal instead
+// of a value.
 //
-// MEDIDO em 2026-08-11 no app-dev: o pod do painel rodou 20h `Running` sem
-// `loopzero-stripe-webhook` e sem `loopzero-stripe-api-keys`, porque ambos são montados com
-// `optional: true`. Não houve evento, aviso ou condição — a ausência da credencial que
-// autoriza cobrar era, para o Kubernetes, uma configuração perfeitamente normal.
+// MEASURED on 2026-08-11 on app-dev: the dashboard pod ran 20h `Running` without
+// `loopzero-stripe-webhook` and without `loopzero-stripe-api-keys`, because both are mounted with
+// `optional: true`. There was no event, warning or condition — the absence of the
+// credential that authorises charging was, to Kubernetes, a perfectly normal configuration.
 //
-// O gate não exige que os segredos sejam sempre obrigatórios. Exige que a decisão seja
-// EXPRESSÁVEL: um literal `true` é o mesmo em todo ambiente, então o hermético e o público
-// necessariamente compartilham a escolha mais permissiva. Um valor pode divergir, e é essa
-// possibilidade de divergir que o gate protege.
+// The gate does not require the secrets to be always mandatory. It requires the decision
+// to be EXPRESSIBLE: a literal `true` is the same in every environment, so the hermetic
+// and the public environments necessarily share the most permissive choice. A value can
+// diverge, and it is that possibility of diverging that the gate protects.
 package billingsecrets
 
 import (
@@ -22,73 +22,109 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-// billingSecretNames são os segredos cuja ausência mata a cobrança.
+// billingSecretNames are the secrets whose absence kills billing.
 //
-// Lista fechada de propósito: um segredo novo de cobrança precisa ser acrescentado aqui
-// conscientemente, e é essa revisão que o gate compra. Uma heurística por prefixo
-// ("qualquer coisa com stripe") acertaria mais casos e não deixaria ninguém decidir nada.
+// A closed list on purpose: a new billing secret has to be added here deliberately, and
+// that review is what the gate buys. A prefix heuristic ("anything with stripe") would
+// hit more cases and would let nobody decide anything.
 var billingSecretNames = []string{
 	"loopzero-stripe-webhook",
 	"loopzero-stripe-api-keys",
 }
 
-// chartTemplates são os dois irmãos que precisam andar juntos.
-//
-// `CLAUDE.md § Helm chart dual system`: `loopzero-cloud` existe em `infra/helm/` (instalado
-// pelo Helmfile) e em `charts/` (publicado por OCI). Corrigir um só publica o defeito.
-var chartTemplates = []string{
-	"infra/helm/loopzero-cloud/templates/deployment.yaml",
-	"charts/loopzero-cloud/templates/deployment.yaml",
+// chartTemplate mounts the billing Secrets. There is one loopzero-cloud chart: Helmfile
+// installs charts/loopzero-cloud and ArgoCD consumes it; the bootstrap copy under infra/helm
+// was deleted when the pair became one chart (docs/decisions.md, "One chart per
+// bootstrap/published pair").
+const chartTemplate = "charts/loopzero-cloud/templates/deployment.yaml"
+
+// valuesFiles are the files that can mount a Secret with a literal optionality through
+// `secrets.additionalSources`: the chart's own values and every Helmfile environment
+// overlay of loopzero-cloud. The template alone cannot see a billing Secret listed there,
+// and that listing would carry exactly the literal this gate refuses.
+var valuesFiles = []string{
+	"charts/loopzero-cloud/values*.yaml",
+	"infra/helmfile/values/*/loopzero-cloud.yaml.gotmpl",
 }
 
-// Config é a entrada do gate.
+// scanTargets returns the template and every existing values file, in a stable order.
+func scanTargets(root string) ([]string, error) {
+	targets := []string{chartTemplate}
+	for _, pattern := range valuesFiles {
+		matches, err := filepath.Glob(filepath.Join(root, pattern))
+		if err != nil {
+			return nil, fmt.Errorf("glob %s: %w", pattern, err)
+		}
+		sort.Strings(matches)
+		for _, m := range matches {
+			rel, err := filepath.Rel(root, m)
+			if err != nil {
+				return nil, fmt.Errorf("relativise %s: %w", m, err)
+			}
+			targets = append(targets, filepath.ToSlash(rel))
+		}
+	}
+	return targets, nil
+}
+
+// Config is the gate's input.
 type Config struct {
 	RepoRoot string
 }
 
-// Finding é uma montagem cuja opcionalidade não pode variar por ambiente.
+// Finding is a mount whose optionality cannot vary by environment.
 type Finding struct {
 	File string
 	Line int
 	Why  string
 }
 
-// Outcome é o resultado do gate.
+// Outcome is the gate's result.
 type Outcome struct {
 	Findings []Finding
-	// Scanned lista os arquivos efetivamente lidos, para que um gate que não
-	// encontrou nada por não ter lido nada não se pareça com um gate que passou.
+	// Scanned lists the files actually read, so that a gate that found nothing because
+	// it read nothing does not look like a gate that passed.
 	Scanned []string
 }
 
-// Check varre os dois charts e reprova opcionalidade literal nos segredos de cobrança.
+// Verdict is Fail when any billing secret mount has literal optionality.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.Of(o.Findings) }
+
+// Check scans the chart template and the values that feed it, and fails literal
+// optionality on the billing secrets.
 //
-// Trabalha sobre o TEXTO do template, e não sobre YAML parseado, por uma razão concreta:
-// o arquivo contém sintaxe de template Go (`{{ ... }}`), que nenhum parser YAML aceita.
-// Renderizar exigiria o Helm instalado, transformando um verificador de lógica pura numa
-// casca em volta de um binário externo — o que `CLAUDE.md § D5` recusa.
+// It works on the template's TEXT, not on parsed YAML, for a concrete reason: the file
+// contains Go template syntax (`{{ ... }}`), which no YAML parser accepts. Rendering would
+// require Helm installed, turning a pure-logic checker into a shell around an external
+// binary — which `CLAUDE.md § D5` refuses.
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
-	for _, rel := range chartTemplates {
-		caminho := filepath.Join(cfg.RepoRoot, rel)
-		f, err := os.Open(caminho) // #nosec G304 -- caminho derivado de lista fixa
+	targets, err := scanTargets(cfg.RepoRoot)
+	if err != nil {
+		return out, err
+	}
+	for _, rel := range targets {
+		path := filepath.Join(cfg.RepoRoot, rel)
+		f, err := os.Open(path) // #nosec G304 -- path derived from a fixed list
 		if err != nil {
 			if os.IsNotExist(err) {
-				// Um repositório sem o chart não é uma violação. Inventar um achado
-				// aqui faria o gate falhar em qualquer checkout parcial.
+				// A repository without the chart is not a violation. Inventing a finding
+				// here would make the gate fail on any partial checkout.
 				continue
 			}
-			return out, fmt.Errorf("abrir %s: %w", rel, err)
+			return out, fmt.Errorf("open %s: %w", rel, err)
 		}
-		achados, err := scanTemplate(f, rel)
+		findings, err := scanTemplate(f, rel)
 		_ = f.Close()
 		if err != nil {
 			return out, err
 		}
 		out.Scanned = append(out.Scanned, rel)
-		out.Findings = append(out.Findings, achados...)
+		out.Findings = append(out.Findings, findings...)
 	}
 	sort.Slice(out.Findings, func(i, j int) bool {
 		if out.Findings[i].File != out.Findings[j].File {
@@ -99,54 +135,56 @@ func Check(cfg Config) (Outcome, error) {
 	return out, nil
 }
 
-// scanTemplate percorre o arquivo procurando `optional:` literal dentro do bloco de um
-// segredo de cobrança.
+// scanTemplate walks the file looking for a literal `optional:` inside the block of a
+// billing secret.
 //
-// O estado que carrega é deliberadamente curto: o nome do segredo visto por último. Um
-// `optional:` só é julgado enquanto esse nome for de cobrança, e o estado é descartado ao
-// encontrar o próximo `name:` — o que evita atribuir a um segredo a opcionalidade do
-// vizinho quando a indentação muda.
+// The state it carries is deliberately short: the name of the last secret seen. An
+// `optional:` is only judged while that name is a billing one, and the state is discarded
+// on meeting the next `name:` — which avoids attributing a neighbour's optionality to a
+// secret when the indentation changes.
 func scanTemplate(r *os.File, rel string) ([]Finding, error) {
-	var achados []Finding
+	var findings []Finding
 	sc := bufio.NewScanner(r)
-	atual := ""
+	current := ""
 	n := 0
 	for sc.Scan() {
 		n++
-		linha := strings.TrimSpace(sc.Text())
+		// A values list writes the first key of an entry after the dash
+		// (`- name: loopzero-stripe-webhook`); a template writes it on its own line.
+		line := strings.TrimPrefix(strings.TrimSpace(sc.Text()), "- ")
 
-		if nome, ok := strings.CutPrefix(linha, "name:"); ok {
-			atual = ""
-			nome = strings.Trim(strings.TrimSpace(nome), `"'`)
+		if name, ok := strings.CutPrefix(line, "name:"); ok {
+			current = ""
+			name = strings.Trim(strings.TrimSpace(name), `"'`)
 			for _, s := range billingSecretNames {
-				if nome == s {
-					atual = s
+				if name == s {
+					current = s
 				}
 			}
 			continue
 		}
 
-		valor, ok := strings.CutPrefix(linha, "optional:")
-		if !ok || atual == "" {
+		value, ok := strings.CutPrefix(line, "optional:")
+		if !ok || current == "" {
 			continue
 		}
-		valor = strings.TrimSpace(valor)
-		if strings.Contains(valor, "{{") {
-			// Decidido por valor: pode ser opcional no hermético e obrigatório no
-			// público. É exatamente o que se quer.
+		value = strings.TrimSpace(value)
+		if strings.Contains(value, "{{") {
+			// Decided by value: it can be optional in the hermetic environment and
+			// mandatory in the public one. That is exactly what is wanted.
 			continue
 		}
-		achados = append(achados, Finding{
+		findings = append(findings, Finding{
 			File: rel,
 			Line: n,
-			Why: fmt.Sprintf("`optional: %s` é literal no segredo %s — um literal vale para todo "+
-				"ambiente, então o público herda a escolha mais permissiva do hermético e sobe "+
-				"sem a credencial que autoriza cobrar. Use um valor (`{{ not .Values.billing.required }}`) "+
-				"para que os dois possam divergir", valor, atual),
+			Why: fmt.Sprintf("`optional: %s` is a literal on secret %s — a literal holds for every "+
+				"environment, so the public one inherits the hermetic one's most permissive choice and "+
+				"starts without the credential that authorises charging. Use a value "+
+				"(`{{ not .Values.billing.required }}`) so the two can diverge", value, current),
 		})
 	}
 	if err := sc.Err(); err != nil {
-		return nil, fmt.Errorf("ler %s: %w", rel, err)
+		return nil, fmt.Errorf("read %s: %w", rel, err)
 	}
-	return achados, nil
+	return findings, nil
 }

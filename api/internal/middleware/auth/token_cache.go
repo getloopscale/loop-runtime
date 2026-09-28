@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -116,13 +117,7 @@ func evictCache(cache *sync.Map, cacheSize *atomic.Int64, now time.Time) {
 	})
 
 	// Sort oldest first.
-	for i := 0; i < len(entries); i++ {
-		for j := i + 1; j < len(entries); j++ {
-			if entries[j].createdAt.Before(entries[i].createdAt) {
-				entries[i], entries[j] = entries[j], entries[i]
-			}
-		}
-	}
+	slices.SortFunc(entries, func(a, b entry) int { return a.createdAt.Compare(b.createdAt) })
 
 	// Delete oldest until under target.
 	// Use LoadAndDelete to prevent double-decrement from concurrent evictions.

@@ -4,89 +4,6 @@ metadata:
   name: loopzero-api
   namespace: loopzero-system
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: loopzero-api
-rules:
-- apiGroups:
-  - loopzero.io
-  resources:
-  - tenants
-  verbs:
-  - get
-  - create
-  - update
-- apiGroups:
-  - loopzero.io
-  resources:
-  - loopzeroapplications
-  verbs:
-  - get
-  - create
-  - update
-  - patch
-- apiGroups:
-  - loopzero.io
-  resources:
-  - clustercredentials
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - loopzero.io
-  resources:
-  - environments
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - loopzero.io
-  resources:
-  - previewenvironments
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - loopzero.io
-  resources:
-  - previewenvironments/status
-  verbs:
-  - get
-  - update
-  - patch
-- apiGroups:
-  - ''
-  resources:
-  - secrets
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: loopzero-api
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: loopzero-api
-subjects:
-- kind: ServiceAccount
-  name: loopzero-api
-  namespace: loopzero-system
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -150,8 +67,8 @@ spec:
               key: GITHUB_APP_PRIVATE_KEY
               optional: true
         # Canonical FAANG 2026-06-16: mirror the chart's
-        # OPENBAO_SPKI_PIN_SHA256 binding from
-        # infra/helm/loopzero-api/templates/deployment.yaml:202-207. Closes
+        # OPENBAO_SPKI_PIN_SHA256 binding (the secrets.keyRefs entry of
+        # charts/loopzero-api/values-bootstrap.yaml). Closes
         # the Tilt-owned-vs-chart drift (per memory
         # feedback_tilt_owned_deployment_yaml_drift). Without this env
         # var, api/internal/config/config.go:429 reads empty SPKI pin,
@@ -164,6 +81,11 @@ spec:
               name: openbao-spki-pin
               key: OPENBAO_SPKI_PIN_SHA256
               optional: true
+        # Paths into the kubeconfig mounts declared below, so they live beside them.
+        - name: BUILD_KUBECONFIG
+          value: /etc/loopzero/build-kubeconfig
+        - name: CELL_0_KUBECONFIG
+          value: /etc/loopzero/runtime/kubeconfig
         envFrom:
         - secretRef:
             name: loopzero-openbao-approle
@@ -171,10 +93,12 @@ spec:
         - secretRef:
             name: loopzero-broker-token
             optional: true
+        # ConfigMap and Secret `loopzero-api`, rendered by the Tiltfile from charts/loopzero-api
+        # with infra/tilt/loopzero-api-values.yaml.
         - configMapRef:
-            name: loopzero-api-runtime-config
+            name: loopzero-api
         - secretRef:
-            name: loopzero-api-runtime-secret
+            name: loopzero-api
         ports:
         - containerPort: 3001
           name: http

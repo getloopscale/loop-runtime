@@ -1,7 +1,6 @@
 package charts
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -25,7 +24,7 @@ import (
 // Picking an unpublished NodePort would render fine here and still leave the edge
 // unable to reach it.
 func TestLoopZeroCloudServiceIsNodePortForTheEdge(t *testing.T) {
-	rendered := renderLoopZeroCloudService(t)
+	rendered := renderDevPublicLoopZeroCloud(t)
 
 	svc := extractServiceBlock(rendered, "loopzero-cloud")
 	if svc == "" {
@@ -48,42 +47,18 @@ func TestLoopZeroCloudServiceIsNodePortForTheEdge(t *testing.T) {
 // only dev-public needs. The template must stay ClusterIP-capable, and emit the
 // nodePort line only when one is configured.
 func TestLoopZeroCloudNodePortIsOptional(t *testing.T) {
-	root := repoRoot(t)
-	cmd := exec.Command("helm", "template", "loopzero-cloud", "infra/helm/loopzero-cloud",
-		"--set", "service.type=ClusterIP", "--set", "service.nodePort=null")
-	cmd.Dir = root
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm template failed: %v\n%s", err, out)
-	}
-	svc := extractServiceBlock(string(out), "loopzero-cloud")
+	out := renderChart(t, publishedChart(t, "loopzero-cloud"), "loopzero-cloud",
+		map[string]string{"service.type": "ClusterIP", "service.nodePort": "null"})
+	svc := extractServiceBlock(out, "loopzero-cloud")
 	if strings.Contains(svc, "nodePort:") {
 		t.Errorf("a ClusterIP render must not emit nodePort; got:\n%s", svc)
 	}
 }
 
-func renderLoopZeroCloudService(t *testing.T) string {
+// renderDevPublicLoopZeroCloud renders the loopzero-cloud release of the dev-public core.
+func renderDevPublicLoopZeroCloud(t *testing.T) string {
 	t.Helper()
-	root := repoRoot(t)
-	cmd := exec.Command(
-		"helmfile",
-		"-f", "infra/helmfile/core.helmfile.yaml.gotmpl",
-		"-e", "dev-public",
-		"--selector", "name=loopzero-cloud",
-		// B-156: sem isto o `helmfile template` roda `helm repo add/update` contra os
-		// repositorios remotos declarados no arquivo, mesmo com o seletor apontando para um
-		// unico release. Medido em 2026-08-19: 17 chamadas de repo e 10s com rede boa; sob
-		// carga foram 123,89s e FALHA, barrando um commit que so' tocava CHANGELOG e BACKLOG.
-		// Com a flag: 0s e zero chamadas.
-		"--skip-deps",
-		"template",
-	)
-	cmd.Dir = root
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("helmfile template failed: %v\n%s", err, truncate(string(out), 1200))
-	}
-	return string(out)
+	return helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopzero-cloud", "charts/loopzero-cloud")
 }
 
 func truncate(s string, n int) string {

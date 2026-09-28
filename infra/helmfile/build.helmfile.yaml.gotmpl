@@ -6,39 +6,22 @@
 # Invocation:
 #   KUBECONFIG=~/.kube/loopzero-build.yaml helmfile -f infra/helmfile/build.helmfile.yaml -e dev sync
 
-environments:
-  dev:
-    values:
-      - environments/dev.yaml
-  prod:
-    values:
-      - environments/prod.yaml
-  standalone:
-    values:
-      - environments/standalone.yaml
-  standalone-multi:
-    # end-to-end-deploy-validation-plan T0.3 — 3 separate k3d clusters.
-    values:
-      - environments/standalone-multi.yaml
-  drill:
-    # Bug #30 LIVE fix (2026-05-17 iter 21): drill needs build cluster
-    # bootstrap to install Argo Workflows + BuildKit on the drill build
-    # DOKS cluster. Reuses drill.yaml values from mgmt helmfile.
-    values:
-      - environments/drill.yaml
+# The environments are declared once, in environments.yaml.
+bases:
+  - environments.yaml
 
 ---
 helmDefaults:
-  # O cluster deste plano, declarado onde o plano vive.
+  # This plane's cluster, declared where the plane lives.
   #
-  # Sem esta linha, um `helmfile sync` SEM --kube-context nao herda nada do
-  # arquivo: ele usa o contexto ATIVO do kubectl. Medido contra helmfile 1.1.6.
-  # Foi esse o defeito que o B-024 pagou noutro lugar — um seed operou o cluster
-  # errado e a mensagem de erro culpou o recurso ausente, nao o cluster.
+  # Without this line, a `helmfile sync` WITHOUT --kube-context inherits nothing
+  # from the file: it uses the ACTIVE kubectl context. Measured against helmfile
+  # 1.1.6. That was the defect B-024 paid for elsewhere — a seed operated on the
+  # wrong cluster and the error message blamed the missing resource, not the cluster.
   #
-  # A flag CONTINUA vencendo quando passada (medido: sobrescreve em silencio,
-  # sem erro). Quem transforma uma divergencia em reprovacao e o gate
-  # `helmfile-context-parity`, nao o helmfile. Ver ADR D1 da fatia slice-3.
+  # The flag STILL wins when passed (measured: it overrides silently, with no
+  # error). What turns a divergence into a failure is the
+  # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
   kubeContext: {{ env "LOOPZERO_BUILD_CONTEXT" | default "k3d-loopzero-build" }}
   wait: true
   waitForJobs: true
@@ -84,7 +67,15 @@ releases:
     needs:
       - argo/argo-workflows
     values:
-      - {}
+      # The bucket loopzero-api stages source bundles in (core.helmfile passes the
+      # same environment value to loopzero-api's config.sourceBucket).
+      - sourceBucket: {{ .Values | get "sourceBucket" "loopzero-builds" | quote }}
+{{- if .Values.profile.localRegistry }}
+        # The clone runner `task images:build` pushes to the local registry
+        # (taskfiles/infra.yml tags it v0.1.0, the chart's default tag).
+        images:
+          cloneRunner: "k3d-loopzero-registry:5000/loopzero-clone-runner:v0.1.0"
+{{- end }}
     # Skip ServiceAccount/RBAC duplication — argo-workflows release already
     # creates loopzero-build-sa with the right permissions.
     # 2026-04-30 NEW-8 fix: chart templates read `workflow.serviceAccount.create`
@@ -97,7 +88,7 @@ releases:
       - name: workflow.serviceAccount.create
         value: "false"
 
-  # T0.2 Cenário B POC — CI infrastructure releases (post-MEET-2026-05-27).
+  # T0.2 Scenario B POC — CI infrastructure releases (post-MEET-2026-05-27).
   # Per ADR-2026-05-27-T0.2-RATIFIED: Argo Workflows + Argo Events provide
   # PR-time enforcement of `task quality:gates` via Gitea webhook → Sensor
   # → quality-gate WorkflowTemplate. Boundary mitigation per D3: CI workflows
@@ -133,38 +124,76 @@ releases:
     values:
       - ../helm/argo-events-bus/values.yaml
 
-  # loopzero-ci-workflows APOSENTADO em 2026-08-18 (B-019).
+  # loopzero-ci-workflows RETIRED on 2026-08-18 (B-019).
   #
-  # O chart inteiro era nao-funcional, nao parte dele: `eventsource-gitea` -> `sensor-pr-trigger`
-  # -> `workflowTemplateRef` -> o WorkflowTemplate de quality gate, mais os quatro CronWorkflows,
-  # TODOS executando `registry.digitalocean.com/loopzero-system/loopzero-ops`. Medido em 2026-08-18:
+  # The whole chart was non-functional, not part of it: `eventsource-gitea` -> `sensor-pr-trigger`
+  # -> `workflowTemplateRef` -> the quality-gate WorkflowTemplate, plus the four CronWorkflows,
+  # ALL running `registry.digitalocean.com/loopzero-system/loopzero-ops`. Measured on 2026-08-18:
   #
-  #   o registro             `doctl registry get` -> 404 registry does not exist
-  #   o Dockerfile           nao existe nenhum para loopzero-ops na arvore
-  #   a task de build        nao existe — a unica mencao a ela era um comentario a declarando
-  #   a matriz               release-artifacts.yml publica 5 imagens; loopzero-ops fora
-  #   infra/images/ (3)      tambem fora da matriz — nao ha imagem alcancavel para hospedar
+  #   the registry           `doctl registry get` -> 404 registry does not exist
+  #   the Dockerfile         there is none for loopzero-ops in the tree
+  #   the build task         does not exist — the only mention of it was a comment declaring it
+  #   the matrix             release-artifacts.yml publishes 5 images; loopzero-ops is not among them
+  #   infra/images/ (3)      also outside the matrix — there is no reachable image to host it
   #
-  # E os workloads nao executavam o binario loopzero-ops: rodavam `task ...` e um script bash, sem
-  # clone do repositorio e sem volume. O que faltava era um RUNNER DE CI com a arvore e o
-  # toolchain dentro — artefato publicado novo, para rodar verificacoes que
-  # `hooks/delivery-gate.sh` ja roda em TODO push via `task quality:all`, sem cluster nenhum.
+  # And the workloads did not run the loopzero-ops binary: they ran `task ...` and a bash script, with
+  # no clone of the repository and no volume. What was missing was a CI RUNNER with the tree and
+  # the toolchain inside — a new published artifact, to run checks that
+  # `hooks/delivery-gate.sh` already runs on EVERY push via `task quality:all`, with no cluster at all.
   #
-  # Construir esse runner seria erguer infraestrutura para duplicar uma trava que funciona.
-  # `pre-release-governance.md`: legado e erro, deleta-se. A intencao dos quatro agendamentos
-  # (watchdog 6h, soak semanal, cobertura semanal, prazo do cosign diario) esta registrada em
-  # B-147; o git preserva o chart para quem reconstruir com um runner de verdade.
+  # Building that runner would mean standing up infrastructure to duplicate a lock that works.
+  # `pre-release-governance.md`: legacy is an error, it gets deleted. The intent of the four schedules
+  # (watchdog every 6h, weekly soak, weekly coverage, daily cosign deadline) is recorded in
+  # B-147; git preserves the chart for whoever rebuilds it with a real runner.
   - name: loki
     namespace: monitoring
     chart: grafana/loki
     version: 6.24.0
     values:
       - ../helm/loki/values.yaml
+{{- with .Values | get "crossCluster.lokiNodePort" nil }}
+      # The cross-cluster query bridge: loopzero-api on the core cluster reads Loki at
+      # host.k3d.internal:<lokiNodePort>, a port infra/k3d/build-cluster.yaml publishes
+      # on the build serverlb. The chart hard-codes its own `loki` Service as ClusterIP,
+      # so the bridge is a second Service rendered here — it used to be the
+      # `loki-cross-cluster` seed flipping the chart's Service to NodePort on the live
+      # cluster, which no sync knew about (principle_violations#67). Rendered only where
+      # the environment declares crossCluster.lokiNodePort: a published node port is a
+      # k3d topology fact, not something a managed cluster should open.
+      - extraObjects:
+          - apiVersion: v1
+            kind: Service
+            metadata:
+              name: loki-cross-cluster
+              namespace: monitoring
+              labels:
+                app.kubernetes.io/name: loki
+                app.kubernetes.io/component: cross-cluster-bridge
+            spec:
+              type: NodePort
+              selector:
+                app.kubernetes.io/name: loki
+                app.kubernetes.io/instance: loki
+                app.kubernetes.io/component: single-binary
+              ports:
+                - name: http-metrics
+                  port: 3100
+                  targetPort: http-metrics
+                  nodePort: {{ . }}
+                  protocol: TCP
+{{- end }}
 
   - name: promtail
     namespace: monitoring
     chart: grafana/promtail
     version: 6.16.6
+    # Read by ../helm/promtail/values.yaml.gotmpl: this Promtail runs in the same cluster
+    # as the Loki above, so where the environment publishes that Loki through
+    # crossCluster.lokiNodePort it pushes to the in-cluster Service, while the cells
+    # push to the published port. The `loki-cross-cluster` seed used to rewrite this cluster's Promtail
+    # Secret to the same URL after every sync.
+    labels:
+      lokiPush: colocated
     needs:
       - monitoring/loki
     values:

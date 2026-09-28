@@ -17,10 +17,10 @@ spec:
       type: RuntimeDefault
   containers:
     - name: wget
-      # Fixado por digest, nao por tag: uma tag e mutavel no registro, e o proximo
-      # `helm test` puxaria conteudo diferente sob o mesmo nome. Aqui fixar nao
-      # envelhece — a versao de terceiro ja estava presa (1.36), entao o digest
-      # tambem nao se move. Resolvido com `docker buildx imagetools inspect` em
+      # Pinned by digest, not by tag: a tag is mutable in the registry, and the next
+      # `helm test` would pull different content under the same name. Pinning here does
+      # not age — the third-party version was already pinned (1.36), so the digest
+      # does not move either. Resolved with `docker buildx imagetools inspect` on
       # 2026-08-17 (B-119).
       image: busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
       command: ['wget']

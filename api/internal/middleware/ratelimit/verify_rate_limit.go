@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loopzero/api/internal/middleware/slidingwindow"
 )
 
 // VerifyRateLimiter wraps RateLimiter providing route-scoped rate-limit for
@@ -33,11 +34,6 @@ type VerifyRateLimiter struct {
 // Canonical config per the J11D7 LOCKED ADR: rate=1, window=30*time.Second.
 func NewVerifyRateLimiter(rate int, window time.Duration) *VerifyRateLimiter {
 	return &VerifyRateLimiter{rl: NewRateLimiter(rate, window)}
-}
-
-// Stop signals the inner RateLimiter cleanup goroutine to exit. Idempotent.
-func (v *VerifyRateLimiter) Stop() {
-	v.rl.Stop()
 }
 
 // Middleware returns chi-compatible HTTP middleware. Key = "tenant:domain".
@@ -64,16 +60,16 @@ func (v *VerifyRateLimiter) Middleware() func(http.Handler) http.Handler {
 				return
 			}
 			key := uc.TenantID + ":" + domain
-			if !v.rl.Allow(key) {
+			if ok, retryAfter := v.rl.counter.Allow(key); !ok {
 				metrics.DomainVerifyRateLimitedTotal.WithLabelValues(uc.TenantID).Inc()
 
 				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("Retry-After", "30")
+				slidingwindow.SetRetryAfter(w, retryAfter)
 				w.WriteHeader(http.StatusTooManyRequests)
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"code":                "RATE_LIMITED",
-					"message":             "Verify endpoint rate-limited (1 request per 30 seconds per domain).",
-					"retry_after_seconds": 30,
+					"message":             "Too many verification attempts for this domain. Retry after the Retry-After delay.",
+					"retry_after_seconds": slidingwindow.RetryAfterSeconds(retryAfter),
 				})
 				return
 			}

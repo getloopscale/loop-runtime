@@ -35,7 +35,8 @@ spec:
       container:
         # MOD-4 fix: Replaced amazon/aws-cli (~200MB) with minio/mc (~30MB).
         # Faster image pull on the hot path (cache hit).
-        image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+        # The clone runner carries mc, built from pinned source (#394).
+        image: {{ .Values.images.cloneRunner | default "registry.digitalocean.com/loopzero-system/loopzero-clone-runner:v0.1.0" }}
         # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
         # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
         env:
@@ -52,38 +53,13 @@ spec:
 
             # Configure mc alias for MinIO
             # MOD-6 fix: --insecure flag parametrized via Helm values (not hardcoded).
-            mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
-              {{- if .Values.minio.insecure }}
-              --insecure \
-              {{- end }}
-              --api S3v4 >/dev/null 2>&1
+            {{- include "loopzero-build-cwts.mcAlias" . | nindent 12 }}
 
             # Compute lockfile hash for cache key precision.
             # If an explicit suffix is provided, use it. Otherwise, auto-detect
             # the lockfile from /workspace (available because clone runs first)
             # and hash it. This ensures cache invalidates when dependencies change.
-            SUFFIX="{{ "{{inputs.parameters.cache-key-suffix}}" }}"
-            if [ -z "$SUFFIX" ]; then
-              LOCKFILE=""
-              for f in /workspace/package-lock.json /workspace/yarn.lock /workspace/pnpm-lock.yaml \
-                       /workspace/go.sum /workspace/requirements.txt /workspace/poetry.lock; do
-                if [ -f "$f" ]; then
-                  LOCKFILE="$f"
-                  break
-                fi
-              done
-              if [ -n "$LOCKFILE" ]; then
-                SUFFIX=$(sha256sum "$LOCKFILE" | cut -c1-12)
-                echo "Computed cache suffix from ${LOCKFILE##*/}: ${SUFFIX}"
-              fi
-            fi
-
-            if [ -n "$SUFFIX" ]; then
-              CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}-${SUFFIX}"
-            else
-              CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}"
-            fi
-            CACHE_PATH="loopzero/{{ .Values.sourceBucket }}/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
+            {{- include "loopzero-build-cwts.cacheKey" . | nindent 12 }}
 
             mc cp "${CACHE_PATH}" /tmp/cache.tar.gz \
               {{- if .Values.minio.insecure }}

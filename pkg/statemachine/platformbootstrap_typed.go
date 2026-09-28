@@ -14,76 +14,28 @@ type PlatformBootstrapPhase string
 type PlatformBootstrapPhaseEvent string
 
 const (
-	PBPhEmpty            PlatformBootstrapPhase = ""
-	PBPhPending          PlatformBootstrapPhase = "Pending"
-	PBPhConfiguringGitea PlatformBootstrapPhase = "ConfiguringGitea"
-	PBPhConfiguringArgo  PlatformBootstrapPhase = "ConfiguringArgoCD"
-	PBPhWaitingForAPI    PlatformBootstrapPhase = "WaitingForAPI"
-	PBPhComplete         PlatformBootstrapPhase = "BootstrapComplete"
-	PBPhFailed           PlatformBootstrapPhase = "Failed"
+	PBPhEmpty            = PlatformBootstrapPhase(PlatformBootstrapEmpty)
+	PBPhPending          = PlatformBootstrapPhase(PlatformBootstrapPending)
+	PBPhConfiguringGitea = PlatformBootstrapPhase(PlatformBootstrapConfiguringGitea)
+	PBPhConfiguringArgo  = PlatformBootstrapPhase(PlatformBootstrapConfiguringArgo)
+	PBPhWaitingForAPI    = PlatformBootstrapPhase(PlatformBootstrapWaitingForAPI)
+	PBPhComplete         = PlatformBootstrapPhase(PlatformBootstrapComplete)
+	PBPhFailed           = PlatformBootstrapPhase(PlatformBootstrapFailed)
 )
 
 const (
-	PBPEventStart        PlatformBootstrapPhaseEvent = "Start"
-	PBPEventGiteaReady   PlatformBootstrapPhaseEvent = "GiteaReady"
-	PBPEventArgoCDReady  PlatformBootstrapPhaseEvent = "ArgoCDReady"
-	PBPEventAPISeeded    PlatformBootstrapPhaseEvent = "APISeeded"
-	PBPEventRetryExhaust PlatformBootstrapPhaseEvent = "RetryExhausted"
+	PBPEventStart        = PlatformBootstrapPhaseEvent(PlatformBootstrapStart)
+	PBPEventGiteaReady   = PlatformBootstrapPhaseEvent(PlatformBootstrapGiteaReady)
+	PBPEventArgoCDReady  = PlatformBootstrapPhaseEvent(PlatformBootstrapArgoCDReady)
+	PBPEventAPISeeded    = PlatformBootstrapPhaseEvent(PlatformBootstrapAPISeeded)
+	PBPEventRetryExhaust = PlatformBootstrapPhaseEvent(PlatformBootstrapRetryExhaust)
 )
 
-// PlatformBootstrapTypedMachine is the typed wrapper around the shared *Machine.
-type PlatformBootstrapTypedMachine struct {
-	inner *Machine
-}
+// PlatformBootstrapTypedMachine is the typed PlatformBootstrapPhase machine.
+type PlatformBootstrapTypedMachine = Typed[PlatformBootstrapPhase, PlatformBootstrapPhaseEvent]
 
+// NewPlatformBootstrapTypedMachine returns the typed machine over NewPlatformBootstrapMachine(), which stays the
+// single source of the transition table and the terminal set.
 func NewPlatformBootstrapTypedMachine() *PlatformBootstrapTypedMachine {
-	return &PlatformBootstrapTypedMachine{inner: NewPlatformBootstrapMachine()}
-}
-
-func (m *PlatformBootstrapTypedMachine) Transition(current PlatformBootstrapPhase, event PlatformBootstrapPhaseEvent) PlatformBootstrapPhase {
-	return PlatformBootstrapPhase(m.inner.Transition(State(current), Event(event)))
-}
-
-func (m *PlatformBootstrapTypedMachine) TryTransition(current PlatformBootstrapPhase, event PlatformBootstrapPhaseEvent) (PlatformBootstrapPhase, error) {
-	next, err := m.inner.TryTransition(State(current), Event(event))
-	if err != nil {
-		return "", err
-	}
-	return PlatformBootstrapPhase(next), nil
-}
-
-func (m *PlatformBootstrapTypedMachine) IsTerminal(p PlatformBootstrapPhase) bool {
-	return m.inner.IsTerminal(State(p))
-}
-
-func (m *PlatformBootstrapTypedMachine) Name() string {
-	return m.inner.Name()
-}
-
-func (m *PlatformBootstrapTypedMachine) IsKnownState(p PlatformBootstrapPhase) bool {
-	return m.inner.IsKnownState(State(p))
-}
-
-func (m *PlatformBootstrapTypedMachine) IsKnownEvent(e PlatformBootstrapPhaseEvent) bool {
-	return m.inner.IsKnownEvent(Event(e))
-}
-
-func (m *PlatformBootstrapTypedMachine) MustParseState(s string) PlatformBootstrapPhase {
-	return PlatformBootstrapPhase(m.inner.MustParseState(s))
-}
-
-func (m *PlatformBootstrapTypedMachine) MustParseEvent(e string) PlatformBootstrapPhaseEvent {
-	return PlatformBootstrapPhaseEvent(m.inner.MustParseEvent(e))
-}
-
-func (m *PlatformBootstrapTypedMachine) ValidEvents(phase PlatformBootstrapPhase) []PlatformBootstrapPhaseEvent {
-	untyped := m.inner.ValidEvents(State(phase))
-	if untyped == nil {
-		return nil
-	}
-	out := make([]PlatformBootstrapPhaseEvent, len(untyped))
-	for i, e := range untyped {
-		out[i] = PlatformBootstrapPhaseEvent(e)
-	}
-	return out
+	return newTyped[PlatformBootstrapPhase, PlatformBootstrapPhaseEvent](NewPlatformBootstrapMachine())
 }

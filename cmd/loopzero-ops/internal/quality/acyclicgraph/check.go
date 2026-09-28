@@ -25,6 +25,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check where the engine repo root is. Sibling repos are resolved
@@ -40,6 +42,10 @@ type Outcome struct {
 	Skipped    []string // siblings absent (informational)
 	Checked    []string // nodes actually scanned
 }
+
+// Verdict is Pass when the graph is acyclic and Fail otherwise. An absent
+// sibling is informational: it narrows what was checked, and the report says so.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // node is one graph vertex to scan: its directory + the import prefixes it MUST
 // NOT contain (the upward edges that would break the DAG).
@@ -141,6 +147,11 @@ func scanNode(n node) ([]string, error) {
 			if _, skip := skipDirs[d.Name()]; skip {
 				return filepath.SkipDir
 			}
+			// The Go toolchain never compiles a directory whose name starts with
+			// "." or "_", so nothing in one is an edge of the build graph.
+			if path != n.dir && (strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_")) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") {
@@ -152,7 +163,9 @@ func scanNode(n node) ([]string, error) {
 		fset := token.NewFileSet()
 		f, perr := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 		if perr != nil {
-			return nil // unparseable file — not our concern; other gates catch syntax
+			// A file whose imports were never read is a hole in the DAG check,
+			// not a clean file.
+			return fmt.Errorf("%s: cannot parse imports, so its edges are unknown: %w", path, perr)
 		}
 		for _, spec := range f.Imports {
 			imp := strings.Trim(spec.Path.Value, `"`)

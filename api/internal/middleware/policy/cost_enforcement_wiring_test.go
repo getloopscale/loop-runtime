@@ -16,50 +16,51 @@ import (
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
-// A metrica precisa ser ALIMENTADA pelo caminho real, nao apenas existir.
+// The metric must be FED by the real path, not merely exist.
 //
-// B-033. Uma metrica registrada e nunca incrementada e o padrao "implementado mas nao
-// ligado" que o `CLAUDE.md` deste repositorio nomeia — e seria especialmente perverso aqui,
-// porque o item existe justamente porque uma protecao estava instalada e inerte.
+// B-033. A metric registered and never incremented is the "implemented but not
+// wired" pattern this repository's CLAUDE.md names — and it would be especially
+// perverse here, because the item exists precisely because a protection was
+// installed and inert.
 func TestCostEnforcer_FeedsTheDecisionMetric(t *testing.T) {
-	const metrica = enforcement.MetricBuildMinutes
+	const metric = enforcement.MetricBuildMinutes
 
-	antes := testutil.ToFloat64(
-		metrics.CostCapDecisionsTotal.WithLabelValues(string(metrica), "unmeasured"))
+	before := testutil.ToFloat64(
+		metrics.CostCapDecisionsTotal.WithLabelValues(string(metric), "unmeasured"))
 
-	// Store vazio = nenhuma linha de contador = exatamente o estado medido no app-dev.
+	// An empty store = no counter rows = exactly the state measured on app-dev.
 	enforcer := NewCostEnforcer(
-		enforcement.NewCapChecker(storeVazio{}), planoFixo("starter"), nil)
+		enforcement.NewCapChecker(emptyCounterStore{}), fixedPlan("starter"), nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil)
 	req = req.WithContext(context.WithValue(req.Context(),
-		auth.UserContextKeyPublic(), &auth.UserContext{TenantID: "tn-metrica"}))
+		auth.UserContextKeyPublic(), &auth.UserContext{TenantID: "tn-metric"}))
 	rec := httptest.NewRecorder()
 
-	passou := false
-	enforcer.Middleware(metrica)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		passou = true
+	passed := false
+	enforcer.Middleware(metric)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		passed = true
 	})).ServeHTTP(rec, req)
 
-	if !passou {
-		t.Fatal("sem contador o portao deve liberar — o veredito nao muda com esta fatia")
+	if !passed {
+		t.Fatal("with no counter the gate must let the request through — this slice does not change the verdict")
 	}
 
-	depois := testutil.ToFloat64(
-		metrics.CostCapDecisionsTotal.WithLabelValues(string(metrica), "unmeasured"))
-	if depois <= antes {
-		t.Errorf("a serie `unmeasured` nao foi alimentada pelo middleware: %v -> %v", antes, depois)
+	after := testutil.ToFloat64(
+		metrics.CostCapDecisionsTotal.WithLabelValues(string(metric), "unmeasured"))
+	if after <= before {
+		t.Errorf("the `unmeasured` series was not fed by the middleware: %v -> %v", before, after)
 	}
 }
 
-type storeVazio struct{}
+type emptyCounterStore struct{}
 
-func (storeVazio) GetCounter(context.Context, string, enforcement.CostMetric) (enforcement.CostCounter, bool, error) {
+func (emptyCounterStore) GetCounter(context.Context, string, enforcement.CostMetric) (enforcement.CostCounter, bool, error) {
 	return enforcement.CostCounter{}, false, nil
 }
 
-type planoFixo string
+type fixedPlan string
 
-func (p planoFixo) GetTenantPlan(context.Context, string) (enforcement.Plan, error) {
+func (p fixedPlan) GetTenantPlan(context.Context, string) (enforcement.Plan, error) {
 	return enforcement.Plan(p), nil
 }

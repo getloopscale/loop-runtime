@@ -13,10 +13,14 @@ package advisorylock
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 // Config tells Check which repo to scan.
@@ -24,22 +28,21 @@ type Config struct {
 	RepoRoot string
 }
 
-// Outcome is the gate result.
-type Outcome struct {
-	Pass       bool
-	Violations []string
-}
-
-// scanDirs are the production trees scanned (relative to RepoRoot).
+// scanDirs are the production trees scanned (relative to RepoRoot). A tree may
+// be absent from a given checkout; all of them absent is ErrNothingScanned.
 var scanDirs = []string{"api", "infra/scripts", "infra/helmfile/scripts"}
 
-// Check fails any session-scoped pg_advisory_lock( in production code.
-func Check(cfg Config) (*Outcome, error) {
-	out := &Outcome{Pass: true}
+// Check fails any session-scoped pg_advisory_lock( in production code. It
+// returns scanresult.ErrNothingScanned when none of scanDirs holds a file.
+func Check(cfg Config) (scanresult.Result, error) {
+	var res scanresult.Result
 	for _, d := range scanDirs {
 		full := filepath.Join(cfg.RepoRoot, d)
 		if _, err := os.Stat(full); err != nil {
-			continue // dir absent — fine
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return res, fmt.Errorf("advisory-lock-scope: stat %s: %w", d, err)
 		}
 		err := filepath.Walk(full, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -52,15 +55,15 @@ func Check(cfg Config) (*Outcome, error) {
 			if err != nil {
 				return err
 			}
-			out.Violations = append(out.Violations, hits...)
+			res.Scanned++
+			res.Findings = append(res.Findings, hits...)
 			return nil
 		})
 		if err != nil {
-			return nil, err
+			return res, err
 		}
 	}
-	out.Pass = len(out.Violations) == 0
-	return out, nil
+	return res, res.Err()
 }
 
 // isExcludedFile skips test files and test helpers (faithful to the bash grep).
@@ -74,7 +77,10 @@ func scanFile(repoRoot, absPath string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	rel, _ := filepath.Rel(repoRoot, absPath)
+	rel, err := filepath.Rel(repoRoot, absPath)
+	if err != nil {
+		return nil, err
+	}
 	var hits []string
 	scanner := bufio.NewScanner(strings.NewReader(string(data)))
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)

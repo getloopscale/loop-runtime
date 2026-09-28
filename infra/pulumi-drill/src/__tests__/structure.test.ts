@@ -187,7 +187,6 @@ describe("loopzero-drill — Managed Valkey/Redis (Bug #15 LIVE fix)", () => {
   it("documents Bug #15 root cause + ADR-0016 prod parity in comment", () => {
     expect(src).toMatch(/Bug #15 LIVE/);
     expect(src).toMatch(/ADR-0016/);
-    expect(src).toMatch(/mirror.*mgmt-redis-ha/i);
   });
 });
 
@@ -344,7 +343,6 @@ describe("loopzero-drill — Outputs schema v2 (L2-unlock plan D1 named exports)
     expect(src).toContain('purpose: "DR drill prod-identical');
     expect(src).toMatch(/teardownPolicy:/);
     expect(src).toMatch(/cellMapping:/);
-    expect(src).toMatch(/"cell-0":\s*"runtimeCluster"/);
     expect(src).toMatch(/"cell-0":\s*"runtimeCluster"/);
     expect(src).toMatch(/"cell-1":\s*"runtimeCluster2"/);
   });

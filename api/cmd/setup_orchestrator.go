@@ -7,32 +7,35 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routes/argocd"
-	"github.com/getloopscale/loopzero/api/internal/routes/builds"
-	"github.com/getloopscale/loopzero/api/internal/routes/logs"
-	"github.com/getloopscale/loopzero/api/internal/routes/metrics"
-	"github.com/getloopscale/loopzero/api/internal/routes/promote"
-	"github.com/getloopscale/loopzero/api/internal/routes/rollback"
-	"github.com/getloopscale/loopzero/api/internal/routes/status"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loopzero/api/internal/environments"
+	"github.com/getloopscale/loopzero/api/internal/logs/logsadapter"
+	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
+	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
+	"github.com/getloopscale/loopzero/api/internal/projects"
+	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
+	"github.com/getloopscale/loopzero/api/internal/release/releaseadapter"
+	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loopzero/api/internal/status/statusadapter"
+	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 
-	"github.com/getloopscale/loopzero/api/internal/services/build"
+	"github.com/getloopscale/loopzero/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/services/release"
+	"github.com/getloopscale/loopzero/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/services/platform"
-
-	"github.com/getloopscale/loopzero/api/internal/services/scaling"
+	"github.com/getloopscale/loopzero/api/internal/scaling"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/loki"
-	"github.com/getloopscale/loopzero/api/internal/routes/scale"
+	"github.com/getloopscale/loopzero/api/internal/logs/loki"
+	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
@@ -43,55 +46,92 @@ type planLimiterCapAdapter struct {
 	limiter *enforcement.PlanLimiter
 }
 
-func (a *planLimiterCapAdapter) CheckReplicasValue(tenantID string, requested int) (bool, string, int) {
+func (a *planLimiterCapAdapter) CheckReplicasValue(ctx context.Context, tenantID string, requested int) (bool, string, int, error) {
 	if a == nil || a.limiter == nil {
-		return true, "dev", 0
+		return true, "dev", 0, nil
 	}
-	result := a.limiter.CheckValue(tenantID, "max_replicas_per_service", requested)
-	return result.Allowed, result.Plan, result.Limit
+	result, err := a.limiter.CheckValue(ctx, tenantID, "max_replicas_per_service", requested)
+	if err != nil {
+		return false, "", 0, err
+	}
+	return result.Allowed, result.Plan, result.Limit, nil
 }
 
 // CheckProjectsValue resolves the per-Account project cap (M4). Mirrors
 // CheckReplicasValue; satisfies store.ProjectCapChecker so the project-creation
 // store can enforce the cap atomically. Returns (allowed, plan, cap) where
 // cap < 0 = unlimited.
-func (a *planLimiterCapAdapter) CheckProjectsValue(tenantID string, current int) (bool, string, int) {
+func (a *planLimiterCapAdapter) CheckProjectsValue(ctx context.Context, tenantID string, current int) (bool, string, int, error) {
 	if a == nil || a.limiter == nil {
-		return true, "dev", -1 // dev/no-limiter → unlimited (no enforcement)
+		return true, "dev", -1, nil // dev/no-limiter → unlimited (no enforcement)
 	}
-	result := a.limiter.CheckProjectsValue(tenantID, current)
-	return result.Allowed, result.Plan, result.Limit
+	result, err := a.limiter.CheckProjectsValue(ctx, tenantID, current)
+	if err != nil {
+		return false, "", 0, err
+	}
+	return result.Allowed, result.Plan, result.Limit, nil
 }
 
-// wireProjectCap is the SINGLE path that wires a per-Account project-cap checker
-// onto a project store. Both project-creating stores — the API store
-// (setup_database.go) and the build-orchestrator store (setup_orchestrator.go) —
-// MUST go through here so they can never diverge again: the divergence (one store
-// capped, one not) was the exact root cause of #106. A nil checker leaves the
-// store unenforced (dev without a pool).
-func wireProjectCap(store *store.PostgresProjectStore, checker store.ProjectCapChecker) {
-	if store == nil || checker == nil {
+// projectCapEnforcement is everything a project store needs to enforce the
+// per-Account project cap, carried as ONE value so no store can be wired with
+// half of it. Both halves are load-bearing:
+//
+//   - checker resolves the plan's cap (nil = unenforced, dev without a pool);
+//   - crossTenant counts the Account's projects across ITS tenants. The request
+//     pool is RLS-scoped to one tenant since migration 000062, so a store
+//     counting through it turns a per-Account cap into a per-tenant one.
+//
+// planCap is the same adapter seen through the scaling port, so the build
+// orchestrator's replica cap and its project cap come from one limiter.
+type projectCapEnforcement struct {
+	checker     store.ProjectCapChecker
+	crossTenant db.DBTX
+	planCap     builds.PlanCapChecker
+}
+
+// newProjectCapEnforcement builds the enforcement from the plan limiter and the
+// cross-tenant (loopzero_worker) connection. A nil limiter yields the zero value:
+// no enforcement, which is the dev-without-pool path.
+func newProjectCapEnforcement(limiter *enforcement.PlanLimiter, crossTenant db.DBTX) projectCapEnforcement {
+	if limiter == nil {
+		return projectCapEnforcement{}
+	}
+	adapter := &planLimiterCapAdapter{limiter: limiter}
+	return projectCapEnforcement{checker: adapter, crossTenant: crossTenant, planCap: adapter}
+}
+
+// wireProjectCap is the SINGLE path that wires the per-Account project cap onto
+// a project store. Both project-creating stores — the API store and the
+// build-orchestrator store — MUST go through here with the same
+// projectCapEnforcement, so they can never diverge again: the divergence (one
+// store capped, one not — then one store counting across tenants, one not) was
+// the root cause of #106. A nil checker leaves the store unenforced.
+func wireProjectCap(s *store.PostgresProjectStore, e projectCapEnforcement) {
+	if s == nil || e.checker == nil {
 		return
 	}
-	store.SetProjectCapChecker(checker)
+	s.SetProjectCapChecker(e.checker)
+	if e.crossTenant != nil {
+		s.SetCrossTenantCounter(e.crossTenant)
+	}
 }
 
 // OrchestratorDeps holds the build orchestrator and related handlers.
 type OrchestratorDeps struct {
-	Orchestrator        *build.BuildOrchestrator
-	BuildOrchestrator   builds.BuildOrchestratorService
-	LogsHandler         *logs.LogsHandler
-	LogStreamHandler    *logs.LogStreamHandler
-	RollbackHandler     *rollback.RollbackHandler
-	PromoteHandler      *promote.PromoteHandler
-	StatusHandler       *status.StatusHandler
-	MetricsProxyHandler *metrics.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
-	StatusSSEHandler    *status.StatusSSEHandler     // T2.1 J-18 T1.3.b — SSE signal.changed stream
-	ScaleHandler        *scale.ScaleHandler
-	BuildListHandler    *builds.BuildListHandler
-	BuildStatsHandler   *builds.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
-	ProjectDeleter      ports.ProjectDeleter
-	ArgoCallbackHandler *argocd.ArgoCallbackHandler
+	Orchestrator        *builds.BuildOrchestrator
+	BuildOrchestrator   buildshttp.BuildOrchestratorService
+	LogsHandler         *logshttp.LogsHandler
+	LogStreamHandler    *logshttp.LogStreamHandler
+	RollbackHandler     *rollbackhttp.RollbackHandler
+	PromoteHandler      *promotehttp.PromoteHandler
+	StatusHandler       *statushttp.StatusHandler
+	MetricsProxyHandler *projectmetricshttp.MetricsProxyHandler // T1.2 J-18 — Prometheus query_range proxy (nil = degraded 503)
+	StatusSSEHandler    *statushttp.StatusSSEHandler            // T2.1 J-18 T1.3.b — SSE signal.changed stream
+	ScaleHandler        *scalinghttp.ScaleHandler
+	BuildListHandler    *buildshttp.BuildListHandler
+	BuildStatsHandler   *buildshttp.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
+	ProjectDeleter      projects.Deleter
+	ArgoCallbackHandler *argocdhttp.ArgoCallbackHandler
 }
 
 // setupOrchestrator creates the build orchestrator, logs, rollback, status,
@@ -103,35 +143,57 @@ func setupOrchestrator(
 	cfg config.Config,
 	httpTransport *http.Transport,
 	logger *slog.Logger,
-	planLimiter *enforcement.PlanLimiter,
+	projectCap projectCapEnforcement,
+	envEnsurer *environments.EnvironmentEnsurer,
 ) *OrchestratorDeps {
-	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): wire plan-cap enforcement.
-	// A nil limiter is legal — means the DB was unavailable (dev without pool)
-	// and enforcement is off. The orchestrator also accepts a nil PlanCap.
-	var planCap build.PlanCapChecker
-	// M5 (hermetic project-cap, #106): the orchestrator builds its OWN project
-	// store, which historically had NO cap checker — so the deploy-time
-	// EnsureProject path bypassed the per-Account project cap that M4 enforces on
-	// POST /api/v1/projects. Wire the SAME cap adapter onto this store via the
-	// shared wireProjectCap helper (the one path BOTH project-creating stores go
-	// through, so they can never diverge again — that divergence was the #106 root
-	// cause). The adapter doubles as the scaling PlanCap. nil limiter (dev without
-	// pool) leaves the store unenforced — no behavior change.
+	// The orchestrator builds its OWN project store for the deploy-time
+	// EnsureProject path (`loopzero deploy <new-name>`). It is wired through the same
+	// wireProjectCap and the same projectCapEnforcement as the API store, so the
+	// deploy path enforces the identical per-Account cap, counted across the
+	// Account's tenants. A zero projectCap (dev without a pool) leaves both the
+	// store and the scaling PlanCap unenforced; the orchestrator accepts nil.
 	buildProjectStore := &store.PostgresProjectStore{DB: dbAdapter}
-	if planLimiter != nil {
-		capAdapter := &planLimiterCapAdapter{limiter: planLimiter}
-		planCap = capAdapter
-		wireProjectCap(buildProjectStore, capAdapter)
-	}
+	wireProjectCap(buildProjectStore, projectCap)
+	planCap := projectCap.planCap
 
 	// B40 (CHG-2026-05-05-DOGFOOD-B40): instantiated BEFORE BuildOrchestrator
 	// because the orchestrator depends on it via Deps.ScalingResolver. The
 	// `scaleApply` closure below reuses the same scalingStore (single source
 	// of truth for app_scaling_config IO).
 	scalingStore := store.NewPostgresScalingStore(dbAdapter)
-	scalingResolver := scaling.NewDBScalingResolver(scalingStore)
+	scalingResolver, err := scaling.NewDBScalingResolver(scalingStore)
+	if err != nil {
+		// Unreachable with the store built on the line above; a wiring change
+		// that breaks it must stop the process rather than deploy the yaml's
+		// scaling while ignoring every persisted config.
+		logger.Error("setup orchestrator: scaling resolver", "error", err)
+		os.Exit(1)
+	}
 
-	orch := build.NewBuildOrchestrator(build.BuildOrchestratorDeps{
+	// One container delivery activator serves both build activation and
+	// rollback, so the two write through the same outbox and read manifests
+	// back with the same reader. It used to be built inside NewBuildOrchestrator
+	// as a fallback, which hid a concrete sqlc store in the build package and
+	// left rollback on a separate inline copy of the same delivery steps.
+	delivery := release.NewContainerDeliveryActivator(release.ContainerDeliveryDeps{
+		ReleaseStore:      stores.ReleaseStore,
+		EnvTargetStore:    stores.EnvTargetStore,
+		EventStore:        stores.PgEventStore,
+		Sync:              workflows.SyncClient,
+		Locker:            stores.Locker,
+		GitOps:            workflows.GitOpsPusher,
+		GitReader:         workflows.GitOpsPusher,
+		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
+		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
+		// T1.3b: the sqlc-backed wrapper preserves the ALL-signed atomicity
+		// invariant + F-S2-01 FK race closure (SaveAppAttestationsTx requires a
+		// non-nil tx for the atomic release+attestation commit).
+		AppAttestationStore: store.NewAppAttestationStoreSqlc(dbAdapter),
+		// J-16 slice 3: deploy.succeeded outbox.
+		DeployEventStore: store.NewDeployEventStoreSqlc(),
+	})
+
+	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{
 		BuildStore:        stores.BuildStore,
 		ReleaseStore:      stores.ReleaseStore,
 		EnvTargetStore:    stores.EnvTargetStore,
@@ -141,18 +203,13 @@ func setupOrchestrator(
 		Sync:              workflows.SyncClient,
 		Locker:            stores.Locker,
 		GitOps:            workflows.GitOpsPusher,
+		Delivery:          delivery,
 		RegistryURL:       cfg.RegistryURL,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
 		KVClient:          workflows.KVClient,
 		BaseDomain:        cfg.BaseDomain,
 		PlanCap:           planCap,
 		ScalingResolver:   scalingResolver, // B40
-		// Sprint 6 / T3.1: per-app attestation persistence (signature + SBOM).
-		// T1.3b (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper
-		// satisfies store.AppAttestationStore 1:1 — preserves ALL-signed
-		// atomicity invariant + F-S2-01 FK race closure (SaveAppAttestations
-		// Tx requires non-nil tx for atomic release+attestation commit).
-		AppAttestationStore: store.NewAppAttestationStoreSqlc(dbAdapter),
 		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit
 		// log. AuditLogger reuses WriteAuditLog as the canonical SQL.
 		AuditLogger: &store.AuditLogger{DB: dbAdapter},
@@ -162,13 +219,13 @@ func setupOrchestrator(
 		// adapters (loki_markers + argocd_app + loopzeroapp_informer +
 		// status_url_probe) are documented as the v1.1 production
 		// follow-up per the plan's Open Questions section. Nil-safe.
-		DeployTimelineSpawn: makeDeployTimelineSpawn(stores.PgEventStore, stores.ReleaseStore),
+		DeployTimelineSpawn: makeDeployTimelineSpawn(stores.PgEventStore),
 		// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox emit on the
 		// build-completed FAILED path.
 		DeployEventStore: store.NewDeployEventStoreSqlc(),
 	})
 
-	buildOrchestrator := &adapters.BuildOrchestratorAdapter{
+	buildOrchestrator := &buildsadapter.BuildOrchestratorAdapter{
 		Orch:       orch,
 		BuildStore: stores.BuildStore,
 	}
@@ -182,31 +239,28 @@ func setupOrchestrator(
 		Transport: httpTransport,
 	}
 	lokiClient := loki.NewClient(cfg.LokiURL, lokiHTTPClient, logger)
-	logBuildStore := &adapters.LogBuildStoreAdapter{Store: stores.BuildStore}
-	logsHandler := logs.NewLogsHandler(logBuildStore, lokiClient)
-	logStreamHandler := logs.NewLogStreamHandler(logBuildStore, lokiClient, logs.LogStreamHandlerOpts{
+	logBuildStore := &logsadapter.LogBuildStoreAdapter{Store: stores.BuildStore}
+	logsHandler := logshttp.NewLogsHandler(logBuildStore, lokiClient)
+	logStreamHandler := logshttp.NewLogStreamHandler(logBuildStore, lokiClient, logshttp.LogStreamHandlerOpts{
 		Logger: logger,
 	})
 
 	// Rollback orchestrator — coordinates release rollback with lock + state machine.
-	// ArgocdSyncTimeout closes the LIVE sponsor mandate (2026-06-18): the
-	// release-state flip happens ONLY after sync confirmation, never on
-	// trigger-and-hope. Default 120s suffices for single-app loopzerokit;
-	// production-grade monorepo deploys inherit cfg.ArgocdSyncTimeout.
+	// Re-delivery goes through the shared container delivery activator, which
+	// waits for sync confirmation (bounded by cfg.ArgocdSyncTimeout) before the
+	// orchestrator flips release state — the LIVE sponsor mandate of 2026-06-18.
 	rollbackOrch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
-		Releases:          stores.ReleaseStore,
-		EnvTargets:        stores.EnvTargetStore,
-		GitReader:         workflows.GitOpsPusher,
-		GitPusher:         workflows.GitOpsPusher,
-		Sync:              workflows.SyncClient,
-		Locker:            stores.Locker,
-		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
-		Logger:            logger,
+		Releases:     stores.ReleaseStore,
+		EnvTargets:   stores.EnvTargetStore,
+		Locker:       stores.Locker,
+		Delivery:     delivery,
+		PublicDomain: cfg.PublicDomain,
+		Logger:       logger,
 	})
-	rollbackService := &adapters.RollbackServiceAdapter{Orchestrator: rollbackOrch}
+	rollbackService := &releaseadapter.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &store.PostgresProjectStore{DB: dbAdapter}
-	rollbackHandler := rollback.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
-		WithReleaseLookup(&adapters.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
+	rollbackHandler := rollbackhttp.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
+		WithReleaseLookup(&releaseadapter.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
 
 	// Promotion orchestrator — coordinates release promotion across environments
 	promotionOrch := release.NewPromotionOrchestrator(release.PromotionOrchestratorDeps{
@@ -227,13 +281,17 @@ func setupOrchestrator(
 		PublicDomain: cfg.PublicDomain,
 		Logger:       logger,
 	})
-	promoteService := &adapters.PromoteServiceAdapter{Orchestrator: promotionOrch}
-	promoteHandler := promote.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
+	promoteService := &releaseadapter.PromoteServiceAdapter{Orchestrator: promotionOrch}
+	promoteHandler := promotehttp.NewPromoteHandler(projectStore, promoteService, cfg.BaseDomain)
+	if envEnsurer != nil {
+		// promote --to <new env> creates the target env like deploy does (#158).
+		promoteHandler = promoteHandler.WithEnvironmentEnsurer(envEnsurer)
+	}
 
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
-	statusBuildStore := &adapters.StatusBuildStoreAdapter{Store: stores.BuildStore}
-	statusReleaseStore := &adapters.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
-	statusHandler := status.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
+	statusBuildStore := &statusadapter.StatusBuildStoreAdapter{Store: stores.BuildStore}
+	statusReleaseStore := &statusadapter.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
+	statusHandler := statushttp.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
 
 	// T1.2 J-18 — Prometheus query_range proxy for the Status page KPI strip +
 	// SignalDetailSheet histograms. When LOOPZERO_PROMETHEUS_ADDRESS is set, wire the
@@ -241,18 +299,16 @@ func setupOrchestrator(
 	// ship nil so the handler returns 503 prometheus_not_configured honestly
 	// (plan v1.1 ADR D2 — degraded UI is the canonical disabled state). Hermetic
 	// Go tests inject httptest-backed fakes.
-	var promClient metrics.PrometheusQueryClient
+	var promClient projectmetricshttp.PrometheusQueryClient
 	if cfg.PrometheusAddress != "" {
-		promClient = metrics.NewPrometheusClient(cfg.PrometheusAddress, nil)
+		promClient = projectmetricshttp.NewPrometheusClient(cfg.PrometheusAddress, nil)
 	}
-	metricsProxyHandler := metrics.NewMetricsProxyHandler(projectStore, promClient)
+	metricsProxyHandler := projectmetricshttp.NewMetricsProxyHandler(projectStore, promClient)
 
-	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler.
-	// Wires canonical sse.EventStore (already constructed in setup_stores.go)
-	// to project-scoped SSE endpoint. Handler enforces tenant ownership +
-	// env validation + Flusher safety + Last-Event-ID dedup per plan
-	// 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1.
-	statusSSEHandler := status.NewStatusSSEHandler(projectStore, stores.EventStore, status.StatusSSEHandlerOpts{})
+	// T2.1 J-18 T1.3.b — SSE signal.changed stream handler, on the concrete
+	// PostgresEventStore (constructed in setup_stores.go): only it reads the
+	// environment-scoped signals, which are keyed by release id.
+	statusSSEHandler := statushttp.NewStatusSSEHandler(projectStore, stores.PgEventStore, statushttp.StatusSSEHandlerOpts{})
 
 	// Scale handler — scaling configuration for apps (KEDA scale-to-zero gate).
 	// Plan T2.2: real persistence via PostgresScalingStore (was: stub-202 returning acknowledged).
@@ -266,7 +322,7 @@ func setupOrchestrator(
 	// Two concurrent `loopzero scale` calls on the same env could TOCTOU-race the
 	// read-current/write-new sequence inside Upsert. Now wrapped in WithLock
 	// so concurrent attempts serialize via pg_advisory_xact_lock.
-	scaleApply := func(ctx context.Context, in scale.ScaleConfigInput) (bool, error) {
+	scaleApply := func(ctx context.Context, in scalinghttp.ScaleConfigInput) (bool, error) {
 		var changed bool
 		err := stores.Locker.WithLock(ctx, in.TenantID, in.ProjectID, in.Environment, func(tx db.DBTX) error {
 			c := &store.ScalingConfig{
@@ -289,7 +345,7 @@ func setupOrchestrator(
 		})
 		return changed, err
 	}
-	scaleHandler := scale.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
+	scaleHandler := scalinghttp.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
 	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
 	// plan-cap checker the build path uses so the scale endpoint can
 	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
@@ -315,21 +371,21 @@ func setupOrchestrator(
 	// so the /build-envs endpoint can reject cross-tenant probes with
 	// 404 PROJECT_NOT_FOUND (existence-leak prevention) BEFORE the
 	// underlying ListEnvsForProject query runs.
-	buildListHandler := builds.NewBuildListHandlerWithGate(
-		&adapters.BuildListStoreAdapter{Store: stores.BuildStore},
+	buildListHandler := buildshttp.NewBuildListHandlerWithGate(
+		&buildsadapter.BuildListStoreAdapter{Store: stores.BuildStore},
 		projectStore,
 	)
 
 	// J-06 D2: the Overview deploys-aggregate needs the concrete sqlc store
 	// (BuildStatsByDay is not on the db.BuildStore interface — ISP). A fresh
 	// BuildStoreSqlc off the same dbAdapter mirrors main.go's admission-querier.
-	buildStatsHandler := builds.NewBuildStatsHandler(
-		&adapters.BuildStatsStoreAdapter{Store: store.NewBuildStoreSqlc(dbAdapter)},
+	buildStatsHandler := buildshttp.NewBuildStatsHandler(
+		&buildsadapter.BuildStatsStoreAdapter{Store: store.NewBuildStoreSqlc(dbAdapter)},
 	)
 
 	// Project deleter — orchestrates project removal across DB, GitOps, and builds.
 	// WorkflowCanceller stops running Argo Workflows during deletion (DF-2.1).
-	projectDeleter := platform.NewProjectDeleter(platform.ProjectDeleterDeps{
+	projectDeleter := projects.NewProjectDeleter(projects.ProjectDeleterDeps{
 		BuildStore:        stores.BuildStore,
 		EnvTargetStore:    stores.EnvTargetStore,
 		ReleaseStore:      stores.ReleaseStore,
@@ -351,24 +407,20 @@ func setupOrchestrator(
 	syncCallbackActivator := release.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 	).WithDeployEventStore(store.NewDeployEventStoreSqlc()) // J-16 slice 3 — deploy.succeeded outbox
-	// Sprint B B3 (closes code-005): wire label-based lookup so the activator
-	// reads `loopzero.io/{tenant,environment}` off the live ArgoCD App CR instead
-	// of LastIndex-parsing the app name (which is structurally ambiguous when
-	// both tenant and env contain hyphens, e.g. `tn-loopzero-j-rollout-a`).
-	// Reader uses the same mgmt dynamic client as CellPinner. Backward-compat:
-	// when an App has no labels (apps pre-dating commit `8854f64e`), the
-	// activator falls back to ParseArgoAppName, so existing fixtures continue
-	// to work unchanged. Closure of code-005 lands progressively as old apps
-	// re-render with the new label.
-	if mgmtDynamic := buildMgmtDynamicClient(logger); mgmtDynamic != nil {
+	// The activator identifies the Application's tenant and environment from its
+	// loopzero.io/{tenant,environment} labels — the only decoder, since the
+	// "{tenant}-{project}-{env}" name cannot be split positionally. Without the
+	// mgmt dynamic client the callback cannot identify releases and activation
+	// falls to the convergence loop.
+	if mgmtDynamic := buildMgmtDynamicClient(cfg, logger); mgmtDynamic != nil {
 		syncCallbackActivator = syncCallbackActivator.WithAppLabelReader(
-			release.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
+			releaseadapter.NewDynamicArgoAppLabelReader(mgmtDynamic, "argocd"),
 		)
-		logger.Info("sync callback activator: label-based lookup wired (code-005 closure)")
+		logger.Info("sync callback activator: label-based lookup wired")
 	} else {
-		logger.Warn("sync callback activator: dynamic client unavailable; falling back to LastIndex parser (code-005 hyphen ambiguity remains)")
+		logger.Warn("sync callback activator: dynamic client unavailable; callback activation disabled, the convergence loop activates releases")
 	}
-	argoCallbackHandler := argocd.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
+	argoCallbackHandler := argocdhttp.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
 	return &OrchestratorDeps{
 		Orchestrator:        orch,

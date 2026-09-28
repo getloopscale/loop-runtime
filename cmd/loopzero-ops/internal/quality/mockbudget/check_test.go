@@ -140,3 +140,16 @@ func TestReadOptOut(t *testing.T) {
 		t.Errorf("expected -1 (no annotation), got %d", got)
 	}
 }
+
+// A test file the gate cannot read used to be "not a test file" and pass; the
+// budget cannot be vouched for over a file nobody read.
+func TestCheck_UnreadableTestFileIsAnError(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(root, "a_test.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Check(Config{TargetDir: root, Budget: 5}); err == nil {
+		t.Fatal("an unreadable test file must be an error")
+	}
+}

@@ -2,7 +2,7 @@
 // identifiers, and never a line where the same word meant something else.
 //
 // The rename of `mgmt` → `core` and `vault` → `secrets` changes 1.388 live
-// occurrences across 312 files (measured 2026-08-09, tree 26ba1340, see
+// occurrences across 312 files (measured 2026-08-09, tree 8a80d49b9, see
 // .claude/knowledge-base/discoveries/opportunities/cluster-topology-naming-opportunity.md).
 // At that volume a human reviewing the diff detects errors of FORM, not errors of
 // CLASSIFICATION: `// dispatches through the vault (OpenBao transit)` rewritten to
@@ -24,6 +24,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Occurrence is one line the baseline classified as GENERIC — a false positive of
@@ -41,6 +43,47 @@ type Baseline struct {
 	// baseline compares the new state with itself and passes forever.
 	TreeSHA string       `json:"tree_sha"`
 	Generic []Occurrence `json:"generic"`
+	// Amendments record captured lines that are legitimately gone — a file deleted for a
+	// reason that has nothing to do with the rename. Without them a baseline can only ever
+	// age into a permanent failure, because the tree it describes keeps moving.
+	//
+	// The field was in the JSON from 2026-08-09 and in no struct until 2026-09-16, so
+	// `json.Unmarshal` dropped it and the four paths somebody amended went on being
+	// reported as missing. A convention with no reader is worse than none: it looks like
+	// the escape is there, so the next person uses it and nothing says it did nothing.
+	Amendments []Amendment `json:"amendments"`
+}
+
+// Amendment exempts every occurrence under one of its paths.
+//
+// Scoped by PATH PREFIX so one entry covers a file or a subtree, and REFUSED WITHOUT A
+// REASON — an exemption nobody justified is the shape the allowlist sunset contract
+// rejects next door, and it is what turns a baseline into a rubber stamp.
+type Amendment struct {
+	Kind   string   `json:"kind"`
+	Date   string   `json:"date"`
+	Paths  []string `json:"paths"`
+	Reason string   `json:"reason"`
+	Count  int      `json:"count"`
+}
+
+// exempts reports whether any amendment carrying a reason covers this path.
+func exempts(amendments []Amendment, path string) bool {
+	for _, a := range amendments {
+		if strings.TrimSpace(a.Reason) == "" {
+			continue
+		}
+		for _, p := range a.Paths {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if path == p || strings.HasPrefix(path, strings.TrimSuffix(p, "/")+"/") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Config controls the check.
@@ -58,7 +101,12 @@ type Outcome struct {
 	Failures []string
 }
 
+// Verdict is Fail when any generic occurrence did not survive the rename.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.Of(o.Failures) }
+
 // Check verifies that every GENERIC occurrence in the baseline is still present.
+// A modified occurrence is a Failure on the outcome; the error means the check
+// could not run (an unreadable baseline, a baseline captured after the rename).
 func Check(cfg Config) (Outcome, error) {
 	var out Outcome
 
@@ -95,6 +143,9 @@ func Check(cfg Config) (Outcome, error) {
 		if body != "" && strings.Contains(body, occ.Content) {
 			continue
 		}
+		if exempts(base.Amendments, occ.Path) {
+			continue
+		}
 		// The line is not where the baseline recorded it. Before accusing anyone of
 		// renaming a false positive, look for it elsewhere: the plan moves files with
 		// `git mv` (EC-6), and the claim this guard defends is "the generic line still
@@ -108,9 +159,6 @@ func Check(cfg Config) (Outcome, error) {
 			occ.Path, occ.Token, strings.TrimSpace(occ.Content)))
 	}
 
-	if len(out.Failures) > 0 {
-		return out, errors.New("generic occurrences were modified")
-	}
 	return out, nil
 }
 
@@ -128,20 +176,48 @@ func existsAnywhere(root, baselinePath, content string) bool {
 	// as JSON, so searching it would find each one and the guard could never fail.
 	cmd := exec.Command("git", "grep", "--fixed-strings", "--quiet", trimmed, "--", ".", ":!"+baselinePath)
 	cmd.Dir = root
-	if err := cmd.Run(); err == nil {
+	err := cmd.Run()
+	if err == nil {
 		return true
 	}
+	// Exit 1 is git ANSWERING "not found", not git failing to be asked. Treating the two
+	// alike sent every absent occurrence through the fallback walk below — measured
+	// 2026-09-16 at over six minutes for one invocation, because the walk read all 554 MB
+	// of `.git` file by file, once per absent occurrence. A higher status, or no binary at
+	// all, is the only case where the question genuinely could not be put.
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && ee.ExitCode() == 1 {
+		return false
+	}
+	return walkFinds(root, baselinePath, trimmed)
+}
+
+// walkFinds is the fallback for when git cannot answer: no binary, or a root that is not
+// a repository (which is what the unit tests build).
+//
+// It skips the trees that are not the working tree. `.git` is an object store, and a
+// token found there is a token in history rather than in the code — the wrong answer as
+// well as the slow one. It stops at the first match instead of reading the rest.
+func walkFinds(root, baselinePath, trimmed string) bool {
+	skip := map[string]bool{".git": true, "node_modules": true, "vendor": true}
 	found := false
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || found {
+		if err != nil {
 			return nil //nolint:nilerr // an unreadable entry is not evidence of a rename
+		}
+		if info.IsDir() {
+			if skip[info.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if abs, _ := filepath.Abs(path); abs == mustAbs(root, baselinePath) {
 			return nil
 		}
-		b, readErr := os.ReadFile(path)
+		b, readErr := os.ReadFile(path) // #nosec G304 -- walking the repo root under audit
 		if readErr == nil && strings.Contains(string(b), trimmed) {
 			found = true
+			return filepath.SkipAll
 		}
 		return nil
 	})

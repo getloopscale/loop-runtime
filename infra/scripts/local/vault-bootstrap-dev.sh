@@ -9,8 +9,8 @@
 # secret_id + K8s Secret + SPKI pin) — Cleanroom seeds ZERO of them.
 # Without this task, operator hand-edits during live debug for 30+ min.
 #
-# SPLIT-CONTEXT contract (T1.1 / Jeito A canonical sponsor mandate
-# INQUEBRÁVEL 2026-06-19, issue #111): OpenBao runs in a SEPARATE
+# SPLIT-CONTEXT contract (T1.1 / Approach A canonical sponsor mandate
+# UNBREAKABLE 2026-06-19, issue #111): OpenBao runs in a SEPARATE
 # k3d-loopzero-secrets cluster (NOT mgmt). This script splits the kubectl
 # fan-out into:
 #   - OPENBAO_CONTEXT (default k3d-loopzero-secrets) → bao operator init /
@@ -20,7 +20,7 @@
 #     reads from) — the core-cluster side
 # Legacy single-context invocations (everything against mgmt) were
 # canonical only under the superseded `task k3d:secrets:bootstrap-in-core`
-# shortcut. Jeito A INQUEBRÁVEL forbids that shortcut.
+# shortcut. Approach A UNBREAKABLE forbids that shortcut.
 #
 # Per ADR D2: idempotent aggregator (re-run no-ops on already-initialized
 # state). Stores Shamir shards + root token at ~/.loopzero/cleanroom-unseal.json
@@ -44,7 +44,7 @@
 
 set -uo pipefail
 
-# SPLIT-CONTEXT (T1.1 — Jeito A INQUEBRÁVEL — issue #111).
+# SPLIT-CONTEXT (T1.1 — Approach A UNBREAKABLE — issue #111).
 # OPENBAO_CONTEXT is the secrets-cluster side (bao init/unseal/approle/SPKI).
 # TARGET_CONTEXT is the core-cluster side (Secret apply that loopzero-api
 # Deployment envFrom reads from loopzero-system ns).
@@ -66,8 +66,8 @@ UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
 # restart loses the wrapping key and the sealed data is unrecoverable;
 # acceptable in Cleanroom because the whole stack is re-created each run.
 # No seal-migration code (EC-8) — Cleanroom always fresh-inits OpenBao,
-# so the cofre is born with the active seal type; migrating an existing
-# Shamir cofre to Transit never happens here.
+# so the vault is born with the active seal type; migrating an existing
+# Shamir vault to Transit never happens here.
 # When transit auto-unseal is active, main OpenBao auto-unseals at pod
 # startup and the EC-3 contract requires the Transit backend to be
 # reachable (sys/health 200) BEFORE main init.
@@ -97,10 +97,10 @@ run() {
 log "Step 1: pre-flight — OpenBao pod state in $OPENBAO_CONTEXT"
 if ! kubectl --context "$OPENBAO_CONTEXT" -n "$NS" get pod "$POD" >/dev/null 2>&1; then
   log "FAIL: OpenBao pod $POD not found in $OPENBAO_CONTEXT/$NS."
-  log "Jeito A canonical (sponsor mandate INQUEBRÁVEL 2026-06-19, issue #111):"
+  log "Approach A canonical (sponsor mandate UNBREAKABLE 2026-06-19, issue #111):"
   log "  1. Provision separate vault cluster: task k3d:secrets:create"
   log "  2. Install OpenBao chart:            task k3d:secrets:bootstrap"
-  log "  3. Sponsor JUNTOS Shamir init + unseal × 3 (see docs/runbooks.md)"
+  log "  3. Joint session with the sponsor: Shamir init + unseal × 3 (see docs/runbooks.md)"
   log "Override OPENBAO_CONTEXT env if your vault cluster has a different name."
   exit 1
 fi
@@ -212,8 +212,10 @@ fi
 # (sealed-but-init normal exit code) was triggering `|| echo "true"` (lowercase)
 # that NEVER matched `"True"` (Python-capitalized) compare → unseal silently
 # SKIPPED on every fresh-init invocation. Vault stayed sealed forever; operator
-# had to manually `bao operator unseal $SHARD x3`. Sponsor "sem WORKAROUNDs"
-# explicit: capture stdout first, parse rc-independent, normalize to "True".
+# had to manually `bao operator unseal $SHARD x3`. The sponsor's mandate
+# ("no WORKAROUNDs") is explicit: capture stdout first, parse rc-independent,
+# normalize to "True". Verbatim, as the vault-bootstrap-unseal-loop gate requires:
+# Sponsor "sem WORKAROUNDs" # english-only: verbatim sponsor mandate the unseal-loop gate asserts
 log "Step 3: bao operator unseal × 3 (idempotent)"
 # T2.1: under AUTO_UNSEAL_MODE=transit, the Transit backend auto-unseals
 # main OpenBao at startup — no manual unseal required (blueprint D2).
@@ -416,8 +418,8 @@ else
   log "  Skip R3: OPENBAO_CONTEXT == TARGET_CONTEXT (single-cluster topology) OR DRY_RUN"
 fi
 
-# === Step 6+7: approle (a policy e do chart) ===
-log "Step 6+7: approle loopzero-api (policy vem do chart openbao-init)"
+# === Step 6+7: approle (the policy belongs to the chart) ===
+log "Step 6+7: approle loopzero-api (policy comes from the openbao-init chart)"
 export BAO_TOKEN="$ROOT_TOKEN"
 # `bao_auth` is now defined right after ROOT_TOKEN is set (Step 4) so
 # Step 5.5's auth/k8s-core wait-loop can actually call it. The legacy
@@ -426,26 +428,26 @@ export BAO_TOKEN="$ROOT_TOKEN"
 
 bao_auth auth enable approle 2>/dev/null || log "Skip: approle already enabled"
 
-# A policy NAO e escrita aqui. Ela e declarada no chart infra/helm/openbao-init
-# e aplicada pelo helmfile no passo 5, logo acima.
+# The policy is NOT written here. It is declared in the infra/helm/openbao-init chart
+# and applied by helmfile in step 5, just above.
 #
-# Ate 2026-08-13 este bloco fazia `bao policy write loopzero-api` com
-# transit/keys/* incluindo delete e list — minutos DEPOIS de o chart aplicar uma
-# policy do mesmo nome. Ultimo escritor vence, entao a versao versionada, que e a
-# que passa por revisao, nunca alcancava runtime nenhum: a correcao do B-072
-# ficou invisivel. E o conjunto daqui concedia `delete` em chave transit, que e o
-# verbo de crypto-shredding, a uma identidade que (B-075) nao tem caminho de
-# shredding nenhum.
+# Until 2026-08-13 this block ran `bao policy write loopzero-api` with
+# transit/keys/* including delete and list — minutes AFTER the chart applied a
+# policy of the same name. Last writer wins, so the versioned version, which is the
+# one that goes through review, never reached any runtime: the B-072 fix
+# became invisible. And the set here granted `delete` on transit keys, which is the
+# crypto-shredding verb, to an identity that (B-075) has no shredding path
+# at all.
 #
-# Medido antes de remover: o TransitClient monta exatamente tres caminhos, todos
-# sob loopzero-tenants-<id> (encrypt, keys, decrypt), mais o login por AppRole.
-# Nenhum LIST, nenhum DELETE, nenhum KV. O conjunto do chart cobre os tres.
+# Measured before removing it: the TransitClient builds exactly three paths, all
+# under loopzero-tenants-<id> (encrypt, keys, decrypt), plus the AppRole login.
+# No LIST, no DELETE, no KV. The chart's set covers all three.
 #
-# O que fica aqui e o ciclo de vida da CREDENCIAL — criar o AppRole, gerar o
-# secret_id, materializar o Secret — porque isso so roda contra um cofre vivo e
-# nao se declara em template.
+# What stays here is the CREDENTIAL lifecycle — create the AppRole, generate the
+# secret_id, materialize the Secret — because that only runs against a live vault and
+# cannot be declared in a template.
 #
-# Decisao: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-13-vault-policy-ownership.md
+# Decision: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-13-vault-policy-ownership.md
 if [[ "$DRY_RUN" -eq 0 ]]; then
   bao_auth write auth/approle/role/loopzero-api \
     token_policies=loopzero-api \
@@ -456,11 +458,11 @@ fi
 # === Step 8+9: extract role_id + secret_id ===
 log "Step 8+9: capture role_id + secret_id"
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  # O role_id NAO e' capturado aqui: quem o sincroniza e' o passo 7b do
-  # seed-post-cleanroom-all.sh (`loopzero-ops seed vault-role-id-sync`), que roda
-  # DEPOIS deste script e escreve o valor onde o loopzero-api o le'. A captura que
-  # existia aqui era atribuida e descartada — dava a impressao de que este
-  # script era o dono do artefato quando nao e'.
+  # The role_id is NOT captured here: what syncs it is step 7b of
+  # seed-post-cleanroom-all.sh (`loopzero-ops seed vault-role-id-sync`), which runs
+  # AFTER this script and writes the value where loopzero-api reads it. The capture that
+  # used to exist here was assigned and discarded — it gave the impression that this
+  # script owned the artifact when it does not.
   SECRET_ID=$(bao_auth write -f -format=json auth/approle/role/loopzero-api/secret-id 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['secret_id'])" 2>/dev/null || true)
 fi
 

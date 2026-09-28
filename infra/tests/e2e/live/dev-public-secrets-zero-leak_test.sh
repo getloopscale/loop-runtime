@@ -20,10 +20,10 @@ SKIP_LIVE=0
 REHEARSAL_MODE=0
 JSON_MODE=0
 SCENARIO_FILTER=""
-# CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): tenant_id is the
+# CANONICAL FIX 2026-06-15 (FAANG, NO WORKAROUND): tenant_id is the
 # LoopZero internal opaque ID (e.g., `tn-dc7f25705bbba5b3`), NOT a slug
 # derived from email/username. Test default `admin-loopzero-dev` (slug
-# guess) produced ns `loopzero-admin-loopzero-dev-teste-production` that
+# guess) produced ns `loopzero-admin-loopzero-dev-sample-production` that
 # NEVER exists in any cluster — canonical ns is
 # `loopzero-<tenant_id>-<project>-<env>` (pkg/naming.TenantNamespace).
 # Extract real tenant_id from session JWT claim (HMAC session JWT
@@ -34,7 +34,7 @@ if [ -z "${LOOPZERO_TEST_TENANT_ID:-}" ] && [ -f "${HOME}/.loopzero/local-dogfoo
     | python3 -c "import json,sys; sys.stdout.write(json.load(sys.stdin).get('tenant_id',''))" 2>/dev/null || echo "")
 fi
 TENANT_ID="${LOOPZERO_TEST_TENANT_ID:-admin-loopzero-dev}"
-PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-teste}"
+PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-sample}"
 ENV_NAME="${LOOPZERO_TEST_ENV:-production}"
 DEV_PUBLIC_BASE="${LOOPZERO_DEV_PUBLIC_BASE:-https://app-dev.loopzero.example}"
 KUBE_CONTEXT="${LOOPZERO_KUBE_CONTEXT:-k3d-loopzero-core}"
@@ -70,7 +70,7 @@ Flags:
 
 Env overrides:
   LOOPZERO_TEST_TENANT_ID    Tenant ID (default admin-loopzero-dev)
-  LOOPZERO_TEST_PROJECT      Project (default teste)
+  LOOPZERO_TEST_PROJECT      Project (default sample)
   LOOPZERO_TEST_ENV          Env (default production)
   LOOPZERO_DEV_PUBLIC_BASE   Cloud base URL (default https://cloud-dev.loopzero.example)
   LOOPZERO_KUBE_CONTEXT      Mgmt cluster context (default k3d-loopzero-core)
@@ -135,9 +135,9 @@ run_scenario() {
 }
 
 # === Cleanup trap (EC-14 from edge-case review) ===
-# Invocada via `trap cleanup EXIT INT TERM` logo abaixo. Os DOIS codigos porque o
-# diagnostico mudou de numero entre versoes do shellcheck: SC2317 no 0.9.x (o do
-# runner) e SC2329 no 0.10+.
+# Invoked via `trap cleanup EXIT INT TERM` just below. BOTH codes because the
+# diagnostic changed number between shellcheck versions: SC2317 in 0.9.x (the
+# runner's) and SC2329 in 0.10+.
 # shellcheck disable=SC2317,SC2329
 cleanup() {
   if [ $SKIP_LIVE -eq 1 ]; then return; fi
@@ -200,9 +200,10 @@ do_rehearsal() {
   rehearsal_check "R4 Secret loopzero-openbao-approle in loopzero-system ns" \
     "kubectl --context='$KUBE_CONTEXT' -n loopzero-system get secret loopzero-openbao-approle -o jsonpath='{.data.OPENBAO_VAULT_SECRET_ID}' | head -c 1 | grep -q ."
 
-  # R5: loopzero-api pods Running with OPENBAO_TRANSIT_ENABLED=true in env
-  rehearsal_check "R5 loopzero-api OPENBAO_TRANSIT_ENABLED=true env present" \
-    "kubectl --context='$KUBE_CONTEXT' -n loopzero-system get deploy loopzero-api -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name==\"OPENBAO_TRANSIT_ENABLED\")].value}' | grep -q '^true$'"
+  # R5: loopzero-api runs with OPENBAO_TRANSIT_ENABLED=true. charts/loopzero-api carries it in
+  # its ConfigMap (config.openbaoTransitEnabled), mounted through envFrom.
+  rehearsal_check "R5 loopzero-api OPENBAO_TRANSIT_ENABLED=true in its ConfigMap" \
+    "kubectl --context='$KUBE_CONTEXT' -n loopzero-system get configmap loopzero-api -o jsonpath='{.data.OPENBAO_TRANSIT_ENABLED}' | grep -q '^true$'"
 
   # Emit results
   if [ $JSON_MODE -eq 1 ]; then
@@ -249,7 +250,7 @@ if [ ! -f "$JWT_PATH" ]; then
 fi
 JWT="$(cat "$JWT_PATH")"
 
-# CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): pre-test cleanup of
+# CANONICAL FIX 2026-06-15 (FAANG, NO WORKAROUND): pre-test cleanup of
 # stale ESO state. Each test run creates a NEW ExternalSecret named after
 # the sentinel; all of them target the same per-tenant K8s Secret
 # `user-secrets-<tenant>-<project>-<env>` (per secret_k8s_manager.go
@@ -308,7 +309,7 @@ if run_scenario A; then
 fi
 
 # === Scenario B: workload K8s Secret has plaintext value (ESO sync OK) ===
-# CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): the canonical K8s Secret
+# CANONICAL FIX 2026-06-15 (FAANG, NO WORKAROUND): the canonical K8s Secret
 # is `user-secrets-tn-<tenant>-<project>-<env>` (per
 # api/internal/k8s/secret_k8s_manager.go:targetSecretName), holding ALL
 # tenant secrets as keys. Test originally expected one Secret per sentinel
@@ -319,7 +320,7 @@ fi
 if run_scenario B; then
   WORKLOAD_NS="loopzero-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
   CANONICAL_SECRET="user-secrets-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
-  # CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): broker returns
+  # CANONICAL FIX 2026-06-15 (FAANG, NO WORKAROUND): broker returns
   # plaintext_b64 (per internal_secret_fetch.go:200 response shape), ESO
   # stores it AS-IS into the K8s Secret data field, K8s itself
   # base64-encodes for storage. Net result: kubectl + base64 -d once
@@ -350,7 +351,7 @@ if run_scenario B; then
 fi
 
 # === Scenario C: pod printenv returns plaintext verbatim ===
-# CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): per
+# CANONICAL FIX 2026-06-15 (FAANG, NO WORKAROUND): per
 # api/internal/manifests/renderer_rollout.go:383-389 the pod envFrom
 # secretRef is wired ONLY when `app.Secrets` is non-empty in loopzero.yaml
 # (per-app Secret named `user-secrets-<tenant>-<project>-<env>-<app>`).
@@ -391,8 +392,8 @@ fi
 
 # === Scenario D: kubectl logs -A | grep sentinel → 0 matches ===
 if run_scenario D; then
-  # `grep -c` sai com 1 quando nao ha match; o script roda sem `set -e`, e o
-  # `|| true` deixa isso explicito em vez de depender disso.
+  # `grep -c` exits 1 when there is no match; the script runs without `set -e`, and the
+  # `|| true` makes that explicit instead of depending on it.
   MATCHES="$(kubectl --context="$KUBE_CONTEXT" logs --all-containers=true --since=2m -A 2>/dev/null | \
     grep -cF "$SENTINEL_VALUE" || true)"
   if [ "$MATCHES" -eq 0 ]; then
@@ -429,7 +430,7 @@ hits = []
 for item in data.get('items', []):
   ns = item['metadata']['namespace']
   for k, v in (item.get('data') or {}).items():
-    # CANONICAL FIX 2026-06-15 (FAANG SEM WORKAROUND): broker contract
+    # CANONICAL FIX 2026-06-15 (FAANG, NO WORKAROUND): broker contract
     # returns plaintext_b64; K8s base64-encodes data fields for storage.
     # Try single AND double decode to catch sentinel under both contracts
     # (matches the Scenario B reader behavior).

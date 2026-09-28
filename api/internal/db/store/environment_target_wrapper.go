@@ -36,6 +36,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
@@ -50,7 +51,7 @@ import (
 // pattern (`if tx != nil { executor = tx } else { executor = s.Exec
 // }`) is preserved exactly — the wrapper only changes the dispatch
 // target, not the selection logic.
-func (s *PostgresEnvironmentTargetStore) resolveSqlcDBTX(tx db.DBTX) (generated.DBTX, error) {
+func (s *PostgresEnvironmentTargetStore) resolveSqlcDBTX(tx db.DBTX) generated.DBTX {
 	var target db.DBTX
 	if tx != nil {
 		target = tx
@@ -61,28 +62,17 @@ func (s *PostgresEnvironmentTargetStore) resolveSqlcDBTX(tx db.DBTX) (generated.
 		// *PgxAdapter which satisfies both.
 		target = s.Exec
 	}
-	bridge, ok := target.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("environment target store: DBTX %T does not implement SqlcBridge", target)
-	}
-	return bridge.GeneratedDB(), nil
+	return db.Generated(target)
 }
 
-func (s *PostgresEnvironmentTargetStore) queryBridge() (generated.DBTX, error) {
-	bridge, ok := s.Query.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("environment target store: Query %T does not implement SqlcBridge", s.Query)
-	}
-	return bridge.GeneratedDB(), nil
+func (s *PostgresEnvironmentTargetStore) queryBridge() generated.DBTX {
+	return db.Generated(s.Query)
 }
 
 // SetDesired upserts environment_targets.desired_release_id. Runs
 // inside the env-lock transaction (Rule 6).
 func (s *PostgresEnvironmentTargetStore) SetDesired(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error {
-	dbtx, err := s.resolveSqlcDBTX(tx)
-	if err != nil {
-		return err
-	}
+	dbtx := s.resolveSqlcDBTX(tx)
 	q := generated.New()
 	if err := q.UpsertEnvironmentTargetDesired(ctx, dbtx, generated.UpsertEnvironmentTargetDesiredParams{
 		TenantID:         tenantID,
@@ -100,10 +90,7 @@ func (s *PostgresEnvironmentTargetStore) SetDesired(ctx context.Context, tx db.D
 // SetActive updates environment_targets.active_release_id after
 // ArgoCD confirms sync.
 func (s *PostgresEnvironmentTargetStore) SetActive(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID string) error {
-	dbtx, err := s.resolveSqlcDBTX(tx)
-	if err != nil {
-		return err
-	}
+	dbtx := s.resolveSqlcDBTX(tx)
 	q := generated.New()
 	if err := q.UpdateEnvironmentTargetActive(ctx, dbtx, generated.UpdateEnvironmentTargetActiveParams{
 		ActiveReleaseID: dbconv.StringEmptyToNilPtr(releaseID),
@@ -119,10 +106,7 @@ func (s *PostgresEnvironmentTargetStore) SetActive(ctx context.Context, tx db.DB
 // Get retrieves the environment target for a (tenant, project,
 // environment). Returns (nil, nil) when not found.
 func (s *PostgresEnvironmentTargetStore) Get(ctx context.Context, tenantID, projectID, env string) (*EnvironmentTarget, error) {
-	dbtx, err := s.queryBridge()
-	if err != nil {
-		return nil, err
-	}
+	dbtx := s.queryBridge()
 	q := generated.New()
 	row, err := q.GetEnvironmentTarget(ctx, dbtx, generated.GetEnvironmentTargetParams{
 		TenantID:    tenantID,
@@ -141,10 +125,7 @@ func (s *PostgresEnvironmentTargetStore) Get(ctx context.Context, tenantID, proj
 // ListByProject returns all environment targets for a (tenant,
 // project). Empty result → empty slice (not nil) per legacy contract.
 func (s *PostgresEnvironmentTargetStore) ListByProject(ctx context.Context, tenantID, projectID string) ([]EnvironmentTarget, error) {
-	dbtx, err := s.queryBridge()
-	if err != nil {
-		return nil, err
-	}
+	dbtx := s.queryBridge()
 	q := generated.New()
 	rows, err := q.ListEnvironmentTargetsByProject(ctx, dbtx, generated.ListEnvironmentTargetsByProjectParams{
 		TenantID:  tenantID,
@@ -163,10 +144,7 @@ func (s *PostgresEnvironmentTargetStore) ListByProject(ctx context.Context, tena
 // DeleteTarget removes an environment target within a transaction.
 // Idempotent — missing target → no-op.
 func (s *PostgresEnvironmentTargetStore) DeleteTarget(ctx context.Context, tx db.DBTX, tenantID, projectID, env string) error {
-	dbtx, err := s.resolveSqlcDBTX(tx)
-	if err != nil {
-		return err
-	}
+	dbtx := s.resolveSqlcDBTX(tx)
 	q := generated.New()
 	if err := q.DeleteEnvironmentTarget(ctx, dbtx, generated.DeleteEnvironmentTargetParams{
 		TenantID:    tenantID,
@@ -185,10 +163,7 @@ func (s *PostgresEnvironmentTargetStore) DeleteTarget(ctx context.Context, tx db
 // for the same (tenant, project, environment) update release tracking
 // but keep kind='preview'.
 func (s *PostgresEnvironmentTargetStore) SetPreviewDesired(ctx context.Context, tx db.DBTX, tenantID, projectID, env, releaseID, updatedBy, correlationID string) error {
-	dbtx, err := s.resolveSqlcDBTX(tx)
-	if err != nil {
-		return err
-	}
+	dbtx := s.resolveSqlcDBTX(tx)
 	q := generated.New()
 	if err := q.UpsertPreviewEnvironmentTarget(ctx, dbtx, generated.UpsertPreviewEnvironmentTargetParams{
 		TenantID:         tenantID,
@@ -208,10 +183,7 @@ func (s *PostgresEnvironmentTargetStore) SetPreviewDesired(ctx context.Context, 
 // limiter to gate POST /api/v1/environments against
 // plan_limits.environments cap. Preview envs are not counted.
 func (s *PostgresEnvironmentTargetStore) CountPermanent(ctx context.Context, tenantID string) (int, error) {
-	dbtx, err := s.queryBridge()
-	if err != nil {
-		return 0, err
-	}
+	dbtx := s.queryBridge()
 	q := generated.New()
 	n, err := q.CountPermanentEnvironments(ctx, dbtx, tenantID)
 	if err != nil {
@@ -224,10 +196,7 @@ func (s *PostgresEnvironmentTargetStore) CountPermanent(ctx context.Context, ten
 // alphabetically sorted. D7 helper for the dashboard /environments
 // grid (Bug B fix).
 func (s *PostgresEnvironmentTargetStore) ListPermanent(ctx context.Context, tenantID string) ([]string, error) {
-	dbtx, err := s.queryBridge()
-	if err != nil {
-		return nil, err
-	}
+	dbtx := s.queryBridge()
 	q := generated.New()
 	rows, err := q.ListPermanentEnvironments(ctx, dbtx, tenantID)
 	if err != nil {
@@ -244,10 +213,7 @@ func (s *PostgresEnvironmentTargetStore) ListPermanent(ctx context.Context, tena
 // when its kind column matches. D6 cleanup chain: used by
 // PreviewService.DeletePreviewByPR. Idempotent.
 func (s *PostgresEnvironmentTargetStore) DeleteByKind(ctx context.Context, tx db.DBTX, tenantID, projectID, env, kind string) error {
-	dbtx, err := s.resolveSqlcDBTX(tx)
-	if err != nil {
-		return err
-	}
+	dbtx := s.resolveSqlcDBTX(tx)
 	q := generated.New()
 	if err := q.DeleteEnvironmentTargetsByKind(ctx, dbtx, generated.DeleteEnvironmentTargetsByKindParams{
 		TenantID:    tenantID,
@@ -280,4 +246,27 @@ func generatedEnvTargetToEnvTarget(row generated.EnvironmentTarget) *Environment
 		t.UpdatedAt = row.UpdatedAt.Time
 	}
 	return t
+}
+
+// RecordReplicasReady writes the data-plane readiness snapshot of one
+// (tenant, project, environment): the ready replica count and when it was
+// observed. It touches only those two observation columns — never the
+// release pointers the environment lock guards — so it runs outside the
+// lock. found is false when no target row matches, which the caller must
+// report: a snapshot that is never written silently goes stale.
+//
+// Cross-tenant: build the store on the background (loopzero_worker) pool.
+func (s *PostgresEnvironmentTargetStore) RecordReplicasReady(ctx context.Context, tenantID, projectID, env string, replicasReady int32, at time.Time) (found bool, err error) {
+	q := generated.New()
+	rows, err := q.RecordEnvironmentTargetReplicasReady(ctx, s.resolveSqlcDBTX(nil), generated.RecordEnvironmentTargetReplicasReadyParams{
+		LastReplicasReadyValue: &replicasReady,
+		LastReplicasReadyAt:    dbconv.TimeToTimestamptz(at),
+		TenantID:               tenantID,
+		ProjectID:              projectID,
+		Environment:            env,
+	})
+	if err != nil {
+		return false, fmt.Errorf("environment target store: record replicas ready for %s/%s/%s: %w", tenantID, projectID, env, err)
+	}
+	return rows > 0, nil
 }

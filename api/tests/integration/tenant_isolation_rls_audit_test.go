@@ -187,7 +187,7 @@ func seedTwoTenants(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (stri
 			})
 		}
 		_, _ = pool.Exec(cctx, `DELETE FROM cells WHERE cell_id = $1`, cellID)
-		_, _ = pool.Exec(cctx, `DELETE FROM accounts WHERE id = $1`, acctID)
+		_ = execAsAccountsOwner(cctx, `DELETE FROM accounts WHERE id = $1`, acctID)
 		_, _ = pool.Exec(cctx, `DELETE FROM users WHERE id = $1`, userID)
 	})
 	return tenantA, tenantB, buildA, buildB

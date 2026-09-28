@@ -18,6 +18,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
 	"k8s.io/client-go/rest"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -54,13 +55,13 @@ func (v Verdict) String() string {
 	}
 }
 
-// ExitCode maps a verdict to the loopzero-ops exit-code contract (CLAUDE.md Rule 4):
-// PASS/SKIP are success (0); FAIL is a failure of the build/exec class (2).
+// ExitCode maps a verdict onto loopzero-ops' exit table (internal/exitcode):
+// PASS/SKIP are success; FAIL is the same failure status a gate returns.
 func (v Verdict) ExitCode() int {
 	if v == FAIL {
-		return 2
+		return exitcode.Failure
 	}
-	return 0
+	return exitcode.OK
 }
 
 // Result is a verdict plus a human-readable reason. Reason is REQUIRED for
@@ -86,41 +87,44 @@ type Deps struct {
 	// PortForwardCtor opens a Tunnel to a Pod matching podLabels in namespace.
 	// Composed by the composition root so seeds do not import client-go rest
 	// config directly. Seeds pass namespace/labels/remotePort/probePath.
-	PortForwardCtor func(ctx context.Context, contextName, namespace string, podLabels map[string]string, remotePort int, probePath string) (*Tunnel, error)
+	PortForwardCtor func(ctx context.Context, target TunnelTarget) (*Tunnel, error)
 	// RestConfig + CtrlClient are the raw client-go artifacts for the mgmt
 	// context — kept on Deps so the PortForwardCtor default implementation
 	// (in the composition root) can lazily resolve pods without re-reading
 	// kubeconfig. Test injection substitutes them.
 	RestConfig *rest.Config
 	CtrlClient ctrlclient.Client
-	Creds      *Creds
-	DryRun     bool
-	// Policy responde se a ausência do insumo de uma capacidade é tolerável neste
-	// ambiente. Nil = nada é exigido, que preserva o comportamento anterior a
-	// 2026-08-11 para todo chamador que não a injeta. Populada só na raiz de
-	// composição, como o resto de Deps.
+	// Host is what the seed reads from outside the cluster (environment,
+	// local tools, HTTP, Postgres). The zero value uses the real ones.
+	Host   Host
+	Creds  *Creds
+	DryRun bool
+	// Policy answers whether a missing capability input is tolerable in this
+	// environment. Nil means nothing is required, which keeps the behaviour from
+	// before 2026-08-11 for every caller that does not inject it. Set only at
+	// the composition root, like the rest of Deps.
 	Policy RequirementPolicy
-	// RolloutSettleTimeout é quanto um seed espera um Deployment assentar antes
-	// de seguir. Zero (ou negativo) = o default do próprio seed, que preserva o
-	// comportamento anterior a 2026-08-13 para todo chamador que não a injeta —
-	// o mesmo contrato de `Policy` acima, e pela mesma razão.
+	// RolloutSettleTimeout is how long a seed waits for a Deployment to settle
+	// before moving on. Zero (or negative) means the seed's own default, which
+	// keeps the behaviour from before 2026-08-13 for every caller that does not
+	// inject it — the same contract as Policy above, for the same reason.
 	//
-	// Existe porque a espera é política do AMBIENTE, não do seed: contra um
-	// cluster real, 120 s é o certo; contra o cliente falso de um teste
-	// hermético, o Deployment nunca assenta e o valor vira puro relógio de
-	// parede. Medido: quatro testes de `internal/seed` gastavam 390 s dos 408 s
-	// da suíte inteira de `cmd/loopzero-ops`, e era esse custo que mantinha os
-	// testes dos gates fora do caminho de push (B-101, e a bala 2 do B-088).
+	// It exists because the wait is the ENVIRONMENT's policy, not the seed's:
+	// against a real cluster 120 s is right; against a hermetic test's fake
+	// client the Deployment never settles and the value is pure wall clock.
+	// Measured: four internal/seed tests spent 390 s of the 408 s of the whole
+	// cmd/loopzero-ops suite, and that cost kept the gate tests off the push path
+	// (B-101, and item 2 of B-088).
 	RolloutSettleTimeout time.Duration
 }
 
-// settleTimeout resolve a espera efetiva: o injetado vence, o zero cai no
-// default que o seed passa.
+// settleTimeout resolves the effective wait: an injected value wins, and zero
+// falls back to the default the seed passes.
 //
-// O default é ARGUMENTO, não constante do pacote, porque os defaults divergem
-// de propósito — `loopzero-api` espera 120 s e o CoreDNS 60 s. Um default único
-// dobraria silenciosamente a espera do CoreDNS, que seria uma mudança de
-// comportamento em produção contrabandeada dentro de uma aceleração de teste.
+// The default is an ARGUMENT, not a package constant, because the defaults
+// differ on purpose — loopzero-api waits 120 s and CoreDNS 60 s. A single default
+// would silently double the CoreDNS wait, a production behaviour change
+// smuggled inside a test speed-up.
 func (d Deps) settleTimeout(seedDefault time.Duration) time.Duration {
 	if d.RolloutSettleTimeout <= 0 {
 		return seedDefault

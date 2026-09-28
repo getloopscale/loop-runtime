@@ -10,51 +10,34 @@
 #     helmfile -f infra/helmfile/cell.helmfile.yaml -e dev sync
 #   # repeat with KUBECONFIG=~/.kube/loopzero-cell-1.yaml for cell-1
 
-environments:
-  dev:
-    values:
-      - environments/dev.yaml
-  prod:
-    values:
-      - environments/prod.yaml
-  standalone:
-    values:
-      - environments/standalone.yaml
-  standalone-multi:
-    # end-to-end-deploy-validation-plan T0.3 — 3 separate k3d clusters.
-    values:
-      - environments/standalone-multi.yaml
-  drill:
-    # Bug #30 LIVE fix (2026-05-17 iter 21): drill runtime + runtime-2
-    # clusters need Traefik + cert-manager + cf-tunnel bootstrap.
-    # Reuses drill.yaml env values.
-    values:
-      - environments/drill.yaml
+# The environments are declared once, in environments.yaml.
+bases:
+  - environments.yaml
 
 ---
 helmDefaults:
-  # O cluster deste plano, declarado onde o plano vive.
+  # This plane's cluster, declared where the plane lives.
   #
-  # Sem esta linha, um `helmfile sync` SEM --kube-context nao herda nada do
-  # arquivo: ele usa o contexto ATIVO do kubectl. Medido contra helmfile 1.1.6.
-  # Foi esse o defeito que o B-024 pagou noutro lugar — um seed operou o cluster
-  # errado e a mensagem de erro culpou o recurso ausente, nao o cluster.
+  # Without this line, a `helmfile sync` WITHOUT --kube-context inherits nothing
+  # from the file: it uses the ACTIVE kubectl context. Measured against helmfile
+  # 1.1.6. That was the defect B-024 paid for elsewhere — a seed operated on the
+  # wrong cluster and the error message blamed the missing resource, not the cluster.
   #
-  # A flag CONTINUA vencendo quando passada (medido: sobrescreve em silencio,
-  # sem erro). Quem transforma uma divergencia em reprovacao e o gate
-  # `helmfile-context-parity`, nao o helmfile. Ver ADR D1 da fatia slice-3.
+  # The flag STILL wins when passed (measured: it overrides silently, with no
+  # error). What turns a divergence into a failure is the
+  # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
   #
-  # AQUI o contexto e PARAMETRO, e nao literal como nos outros tres planos: este
-  # helmfile serve N celulas. Amarrar `k3d-loopzero-cell-0` recriaria exatamente o
-  # defeito que os comentarios de taskfiles/infra.yml descrevem — a task
-  # instalando as 28 releases SEMPRE na primeira celula, medido em 2026-08-10.
-  # `requiredEnv` falha ALTO quando ninguem exporta; um `env ... | default`
-  # escolheria uma celula em silencio, que e a forma do defeito, nao a correcao.
+  # HERE the context is a PARAMETER, not a literal as in the other three planes: this
+  # helmfile serves N cells. Pinning `k3d-loopzero-cell-0` would recreate exactly the
+  # defect the comments in taskfiles/infra.yml describe — the task
+  # installing the 28 releases ALWAYS on the first cell, measured on 2026-08-10.
+  # `requiredEnv` fails LOUD when nobody exports it; an `env ... | default`
+  # would pick a cell silently, which is the shape of the defect, not the fix.
   #
-  # Quem invoca DEVE exportar LOOPZERO_CELL_CONTEXT. Uma var do Task NAO e var de
-  # ambiente: `taskfiles/infra.yml` passava o contexto so como flag, e amarrar
-  # aqui quebrou `task infra:install:cell` ate a task exportar a variavel a
-  # partir do mesmo CELL_CTX. O gate reprova essa omissao (ErrRequiredEnvNotSet).
+  # The caller MUST export LOOPZERO_CELL_CONTEXT. A Task var is NOT an environment
+  # variable: `taskfiles/infra.yml` passed the context only as a flag, and pinning
+  # it here broke `task infra:install:cell` until the task exported the variable
+  # from the same CELL_CTX. The gate fails that omission (ErrRequiredEnvNotSet).
   kubeContext: {{ requiredEnv "LOOPZERO_CELL_CONTEXT" }}
   wait: true
   waitForJobs: true
@@ -135,6 +118,39 @@ releases:
     values:
       - ../helm/external-secrets/values.yaml
 
+  # The ESO secret-fetch broker: a webhook ClusterSecretStore through which ExternalSecrets
+  # in tenant namespaces ask loopzero-api for a tenant secret, sending the bearer token the
+  # `loopzero-ops seed broker` writes into Secret external-secrets/loopzero-broker-token and the
+  # cell id loopzero-api binds the fetch to.
+  #
+  # This release used to be a `helm upgrade --install loopzero-broker` run by that seed, out
+  # of Helmfile's sight (principle_violations#67), with the core server-0 container IP as
+  # the API address and envName forced to dev-public so the chart's plaintext-bearer
+  # guard would pass in any environment. Here envName is the real environment, so the
+  # guard decides — and the environment opts in through profile.secretFetchBroker.
+  #
+  # The platform ExternalSecrets the chart also carries are for the core and build
+  # clusters (one targets loopzero-build, a namespace a cell does not have): a cell installs
+  # the broker store only.
+  - name: loopzero-broker
+    namespace: external-secrets
+    chart: ../helm/loopzero-external-secrets
+    installed: {{ .Values.profile.secretFetchBroker }}
+    needs:
+      - external-secrets/external-secrets
+{{- if .Values.profile.secretFetchBroker }}
+    values:
+      - envName: {{ .Environment.Name }}
+        externalSecrets: []
+        broker:
+          enabled: true
+          apiURL: {{ .Values.crossCluster.coreApi | quote }}
+          # The cell this sync targets, from the same LOOPZERO_CELL_CONTEXT that pins the
+          # context above (k3d-loopzero-cell-<N> -> cell-<N>). A context that does not end in
+          # a cell id fails the render instead of binding every cell to cell-0.
+          cellID: {{ requiredEnv "LOOPZERO_CELL_CONTEXT" | regexFind "cell-[0-9]+$" | required "LOOPZERO_CELL_CONTEXT must end in cell-<N> to derive the broker's cell id" }}
+{{- end }}
+
   - name: kube-state-metrics
     namespace: monitoring
     chart: prometheus-community/kube-state-metrics
@@ -149,6 +165,11 @@ releases:
     version: 2.16.1
     values:
       - ../helm/keda/values.yaml
+{{- if .Values.profile.highAvailability }}
+      # HA sizing for the DigitalOcean workload clusters (same env split as
+      # gitea's values-ha.yaml in core.helmfile).
+      - ../helm/keda/values.production.yaml
+{{- end }}
 
   - name: keda-http-addon
     namespace: keda
@@ -158,11 +179,14 @@ releases:
     # times out at 900s on DOKS small nodes. Drill L2 harness (50 deploys)
     # doesn't exercise scale-to-zero — KEDA itself is enough. Skip the
     # HTTP addon in drill to unblock Phase 4a runtime sync.
-    installed: {{ ne .Environment.Name "drill" }}
+    installed: {{ .Values.profile.kedaHttpAddon }}
     needs:
       - keda/keda
     values:
       - ../helm/keda-http-addon/values.yaml
+{{- if .Values.profile.highAvailability }}
+      - ../helm/keda-http-addon/values.production.yaml
+{{- end }}
 
   # argo-rollouts-progressive-delivery-plan T0.2 — Progressive delivery
   # controller. Manages Rollout/AnalysisRun/AnalysisTemplate/Experiment
@@ -189,13 +213,16 @@ releases:
       - ../helm/policy-controller/values.yaml
 
   # B16 — ClusterImagePolicy (loopzero-images-warn) shipped as Helm chart per T0.1.
+  #
+  # The published chart, installed directly: there is one admission-policies chart
+  # (docs/decisions.md, "One chart per bootstrap/published pair").
   - name: admission-policies
     namespace: cosign-system
-    chart: ../helm/admission-policies
+    chart: ../../charts/loopzero-admission-policies
     needs:
       - cosign-system/policy-controller
     values:
-      - ../helm/admission-policies/values.yaml
+      - ../../charts/loopzero-admission-policies/values.yaml
 {{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
       # B64 (end-to-end-deploy-validation-plan T2.3) — standalone-multi uses
       # prometheus-community/prometheus (no Operator CRDs). Disable PrometheusRule.
@@ -205,14 +232,12 @@ releases:
     set:
       - name: clusterImagePolicy.mode
         value: "{{ .Values.policyMode }}"
-      - name: domain
-        value: "{{ .Values.domain }}"
-{{- if has .Environment.Name (list "standalone-multi" "dev-public" "standalone-public") }}
+{{- if .Values.profile.localRegistry }}
       # Plan 2026-06-04 dev-public-domain-canonicalization — local envs run
       # BuildKit pipelines that push to k3d-loopzero-registry:5000. Without this
       # allowlist entry the tenant pods are rejected by VAP
       # loopzero-restrict-image-registries on admission. Production envs (drill/prod)
-      # leave it empty so DOCR/Harbor remain the only acceptable prefixes
+      # leave it empty so the chart's registry prefix is the only accepted source
       # (defense-in-depth supply-chain).
       - name: registries.additionalPrefixes[0]
         value: "k3d-loopzero-registry:5000/"
@@ -281,7 +306,7 @@ releases:
     # out at 15m on DOKS. Drill L2 harness doesn't deploy static apps —
     # only dynamic deploys (Rollout-backed services). Skip in drill to
     # unblock Phase 4a runtime sync.
-    installed: {{ ne .Environment.Name "drill" }}
+    installed: {{ .Values.profile.staticAssets }}
     needs:
       - loopzero-system/rbac
     values:

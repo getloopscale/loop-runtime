@@ -10,7 +10,7 @@ chart-repos: []
 # Test values overlay (optional).
 test-values: []
 
-# K8s version matrix — ADR-0039 N-1, N, N+1 cobre janela DOKS upgrade.
+# K8s version matrix — ADR-0039 N-1, N, N+1 covers the DOKS upgrade window.
 # DOKS production: 1.32.13. Update cadence: each K8s upstream release.
 kubernetes-versions:
   - v1.30.0

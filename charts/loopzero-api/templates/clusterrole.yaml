@@ -23,6 +23,19 @@ rules:
   - apiGroups: ["argoproj.io"]
     resources: ["workflows", "workflows/status", "workflowtemplates", "clusterworkflowtemplates"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- if .Values.rbac.argocdApplications }}
+  # ArgoCD Applications on the core cluster. The tenant operator owns their spec,
+  # so the API neither creates nor updates one. It READS an Application's labels to
+  # identify the release a sync notification belongs to
+  # (api/internal/adapters/argo_app_label_reader.go), and the administrative
+  # eviction LISTS, DELETES and clears the finalizers (PATCH) of a tenant's
+  # Applications (api/internal/k8s/tenancy/tenant_evictor.go). Without this rule
+  # both paths answer Forbidden. AppProjects: no API code path touches them, so
+  # they are not granted.
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "watch", "patch", "delete"]
+  {{- end }}
   # Namespaces (creating tenant build/runtime namespaces)
   - apiGroups: [""]
     resources: ["namespaces"]

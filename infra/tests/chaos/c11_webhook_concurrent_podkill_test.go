@@ -33,7 +33,7 @@ var _ = Describe("c11: webhook dispatch concurrent with loopzero-api leader pod-
 	})
 
 	It("durably queues the webhook + completes the 9-link chain within budget, SLO error rate < 1%", func() {
-		// Expected LIVE flow (operator/sponsor JUNTOS per cleanroom-up-live-test-mandate.md):
+		// Expected LIVE flow (operator and sponsor together, on a live cluster):
 		//   1. checkAPIHealth() — API serving before chaos (EC-11 preflight:
 		//      chaos-mesh operator has >= 4 Running pods).
 		//   2. applyChaos("pod-kill-api-leader.yaml") — PodChaos pod-kill on

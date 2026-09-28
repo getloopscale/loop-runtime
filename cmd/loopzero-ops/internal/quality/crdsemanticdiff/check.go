@@ -16,14 +16,17 @@
 package crdsemanticdiff
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -76,6 +79,9 @@ type Outcome struct {
 	Messages []string
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // rawCRD is the minimal shape of a CustomResourceDefinition YAML doc.
 type rawCRD struct {
 	Kind     string         `yaml:"kind"`
@@ -109,12 +115,9 @@ func parseHelmRender(raw string) (map[string]*rawCRD, error) {
 	for {
 		var crd rawCRD
 		if err := dec.Decode(&crd); err != nil {
-			if err.Error() == "EOF" {
-				return out, nil
-			}
-			// yaml.v3 returns io.EOF from the io package; match string above
-			// covers both wrapping flavors. If not EOF, surface the error.
-			if strings.Contains(err.Error(), "EOF") {
+			// Only io.EOF ends the stream. Matching "EOF" in the message would
+			// also swallow "unexpected EOF", a document cut in half.
+			if errors.Is(err, io.EOF) {
 				return out, nil
 			}
 			return nil, fmt.Errorf("yaml decode: %w", err)
@@ -164,22 +167,13 @@ func walkAndStrip(node any) {
 	}
 }
 
-// renderChart runs `helm template <chartPath>`. When the override is set,
-// returns it verbatim (test hook — keeps unit tests hermetic without helm).
+// renderChart renders the chart through quality/helmrender. When the override
+// is set, returns it verbatim (test hook — keeps unit tests hermetic without helm).
 func renderChart(chartPath, override string) (string, error) {
 	if override != "" {
 		return override, nil
 	}
-	// #nosec G204 -- chartPath is a repo-internal chart dir (charts/loopzero-crds),
-	// resolved from config defaults, not user input.
-	cmd := exec.Command("helm", "template", chartPath)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("helm template %s: %w: %s", chartPath, err, stderr.String())
-	}
-	return string(out), nil
+	return helmrender.Helm{}.Render(chartPath, nil)
 }
 
 // listSourceFiles returns sorted `loopzero.io_*.yaml` files in dir.
@@ -246,11 +240,7 @@ func Check(cfg Config) (*Outcome, error) {
 	sourceFiles, err := listSourceFiles(resolvedSource)
 	if err != nil {
 		if os.IsNotExist(err) {
-			out.Pass = true
-			out.Messages = []string{
-				fmt.Sprintf("PASS — source dir %s not found.", resolvedSource),
-			}
-			return out, nil
+			return nil, fmt.Errorf("%w: CRD source dir %s not found", scanresult.ErrNothingScanned, resolvedSource)
 		}
 		return nil, &loopzeroerrors.LoopZeroError{
 			Code:    "OPS_DEPLOY_FAILURE",
@@ -333,6 +323,9 @@ func Check(cfg Config) (*Outcome, error) {
 		}
 	}
 
+	if err := (scanresult.Result{Scanned: out.Scanned}).Err(); err != nil {
+		return nil, fmt.Errorf("%w: no source CRD in %s matched (filter %q)", err, resolvedSource, cfg.CRDFilter)
+	}
 	out.Messages = append(out.Messages, "", fmt.Sprintf("Scanned: %d CRDs", out.Scanned))
 	if len(out.Drifts) == 0 {
 		out.Pass = true

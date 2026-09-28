@@ -49,24 +49,6 @@ get_existing() {
   printf '%s' "$raw" | base64 -d 2>/dev/null || true
 }
 
-backup_runtime_secrets() {
-  local backup_dir="${HOME}/.loopzero/backups"
-  mkdir -p "$backup_dir"
-  chmod 700 "$backup_dir"
-  local ts
-  ts=$(date +%Y%m%d-%H%M%S)
-  local out="${backup_dir}/runtime-secrets-${CLUSTER_ID}-${ENV}-${ts}.yaml"
-  kubectl get secret -n loopzero-system cloudflared-tunnel-token -o yaml 2>/dev/null > "$out" || true
-  kubectl get secret -n external-secrets loopzero-eso-source -o yaml 2>/dev/null >> "$out" || true
-  if [[ -s "$out" ]]; then
-    chmod 600 "$out"
-    log "backup written: $out"
-    ls -t "${backup_dir}/runtime-secrets-${CLUSTER_ID}-${ENV}-"*.yaml 2>/dev/null | tail -n +11 | xargs -r rm -f
-  else
-    rm -f "$out"
-  fi
-}
-
 ensure_namespace loopzero-system
 
 # 1) cloudflared tunnel token (D9) — IDEMPOTENT.
@@ -150,6 +132,10 @@ if [[ -n "$S3_KEY" && -n "$S3_SECRET" ]]; then
 fi
 
 # 4) Backup runtime Secrets for disaster recovery.
-backup_runtime_secrets
+# The restorable backup lives in generate-secrets.sh; this one used to dump raw
+# `kubectl get -o yaml`, which does not re-apply after the Secret changed. This
+# script runs against the current context, so the backup is pinned to it.
+KUBECTL_CONTEXT="$(command kubectl config current-context)" "$(dirname "$0")/generate-secrets.sh" --backup-only \
+  "runtime-secrets-${CLUSTER_ID}-${ENV}" loopzero-system/cloudflared-tunnel-token external-secrets/loopzero-eso-source
 
 log "runtime secrets generated (env=$ENV, cluster=$CLUSTER_ID, idempotent)"

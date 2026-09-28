@@ -184,7 +184,6 @@ test_b18_runtime_max_nodes() {
 # Already protected by code/tests:
 test_b8_b10_workspace_build() { ok "B8-B10 — monorepo workspace tests (covered by api/internal/argo/workspace_build_test.go)"; }
 test_b12_registry_merge() { ok "B12 — registry merge convergence proof (7 unit tests in operators/internal/controller/registry_auth_merge_test.go)"; }
-test_b13_b15_harbor() { ok "B13-B15 — Harbor self-heal/DeleteRobot/annotation collisions (operators/internal/harbor)"; }
 
 # Run all tests
 test_b1_cosign_not_placeholder
@@ -197,7 +196,6 @@ test_b7_rbac_cluster_scoped
 test_b8_b10_workspace_build
 test_b11_no_archived_repos
 test_b12_registry_merge
-test_b13_b15_harbor
 test_b16_cluster_image_policy
 # B17 (repo-server cache) — runtime check, see health-check.sh wire role
 log "  B17 — repo-server cache restart (runtime check via health-check.sh wire)"

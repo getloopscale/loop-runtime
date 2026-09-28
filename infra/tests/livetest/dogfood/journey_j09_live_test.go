@@ -37,9 +37,9 @@ var _ = Describe("J-09 Project Connect", Label("live", "dogfood", "j09"), func()
 	AfterEach(func() { cancel() })
 
 	Context("Scenario A — connected project is reachable", func() {
-		It("GET /engine/api/v1/projects/teste returns 200 (canonical fixture repo connected)", func() {
+		It("GET /engine/api/v1/projects/sample returns 200 (canonical fixture repo connected)", func() {
 			status, _, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/engine/api/v1/projects/teste", jwt, nil)
+				env.CloudBaseURL+"/engine/api/v1/projects/sample", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
 		})

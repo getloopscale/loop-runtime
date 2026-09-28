@@ -22,7 +22,6 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 
@@ -71,12 +70,9 @@ func (s *SQLCostStore) GetCounter(ctx context.Context, tenantID string, metric p
 		return planpkg.CostCounter{}, false, loopzeroerrors.ErrInternalError.Wrap("nil SQLCostStore")
 	}
 
-	bridge, ok := s.db.(db.SqlcBridge)
-	if !ok {
-		return planpkg.CostCounter{}, false, fmt.Errorf("cost store: DBTX %T does not implement SqlcBridge", s.db)
-	}
+	gdb := db.Generated(s.db)
 	q := generated.New()
-	row, err := q.GetActiveCostCounter(ctx, bridge.GeneratedDB(), generated.GetActiveCostCounterParams{
+	row, err := q.GetActiveCostCounter(ctx, gdb, generated.GetActiveCostCounterParams{
 		TenantID: tenantID,
 		Metric:   string(metric),
 	})

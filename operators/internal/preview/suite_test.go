@@ -30,6 +30,9 @@ var (
 	scheme    *runtime.Scheme
 	ctx       context.Context
 	cancel    context.CancelFunc
+	// cellFactory is the factory the controllers resolve runtime clients
+	// through; specs assert which cell each preview was routed to.
+	cellFactory *operatortest.FakeRuntimeClientFactory
 )
 
 func TestPreviewControllers(t *testing.T) {
@@ -44,7 +47,6 @@ var _ = BeforeSuite(func() {
 		// Tenant is needed because PreviewEnvironment specs may reference
 		// existing Tenant CRs for cell-aware lookup.
 		EnableTenant: true,
-		BaseDomain:   "preview-test.example",
 	})
 	cfg = h.Cfg
 	k8sClient = h.K8sClient
@@ -52,6 +54,7 @@ var _ = BeforeSuite(func() {
 	scheme = h.Scheme
 	ctx = h.Ctx
 	cancel = h.Cancel
+	cellFactory = h.CellAwareFactory
 })
 
 var _ = AfterSuite(func() {

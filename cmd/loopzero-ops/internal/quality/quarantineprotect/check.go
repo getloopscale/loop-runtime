@@ -2,11 +2,12 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package quarantineprotect implements the T0.2 governance gate from
-// plan canonical-tests-rewrite-v2 v1.0 per ADR-2026-06-17-T3-canonical-tests-rewrite D5:
+// plan canonical-tests-rewrite-v2 v1.0 per ADR-2026-06-17-T3-canonical-tests-rewrite D5
+// (translated from the Portuguese original):
 //
-//	"Quarentena = arquivos consultáveis read-only (movidos para archive/canonical-tests-v1/...
-//	+ CI gate rejeita PRs editando arquivos quarentenados). Chain antiga continua executável
-//	durante a janela. Critério de exit: ... DELETE definitivo da antiga."
+//	"Quarantine = read-only consultable files (moved to archive/canonical-tests-v1/...
+//	+ a CI gate rejects PRs editing quarantined files). The old chain stays executable
+//	during the window. Exit criterion: ... definitive DELETE of the old one."
 //
 // The gate scans `git diff --diff-filter=AMD base...head -- archive/canonical-tests-v1/`
 // and fails if any path under archive/canonical-tests-v1/ is ADDED or MODIFIED.
@@ -22,11 +23,14 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // archiveDeleteMarker is the PR title substring that unlocks DELETE operations
 // inside the archive directory. Anti-accidental-delete safeguard per ADR D5
-// "critério de exit: ... + sponsor verbatim sign-off → DELETE".
+// "exit criterion: ... + sponsor verbatim sign-off → DELETE".
 const archiveDeleteMarker = "[ARCHIVE-DELETE]"
 
 // Config tells Check where to operate.
@@ -50,6 +54,9 @@ type Outcome struct {
 	Violations []string // human-readable per-violation messages
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // Check is the entry point invoked by `loopzero-ops quality quarantine-protect`.
 // Returns outcome + error. Error is reserved for INFRASTRUCTURE failures
 // (git missing, base-ref unreachable); policy violations come back via
@@ -63,7 +70,7 @@ func Check(cfg Config) (*Outcome, error) {
 		deleted = cfg.DiffDeleted
 	} else {
 		// Pre-flight: verify base-ref reachable (EC-04 from nonewbash).
-		if err := verifyRefReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
+		if err := revrange.VerifyReachable(cfg.RepoRoot, cfg.BaseRef); err != nil {
 			return nil, err
 		}
 		addedOrMod, err = gitDiffAddedOrModified(cfg.RepoRoot, cfg.BaseRef, cfg.HeadRef, cfg.ArchivePathRoot)
@@ -99,8 +106,8 @@ func Check(cfg Config) (*Outcome, error) {
 			outcome.Pass = false
 			outcome.Violations = append(outcome.Violations, fmt.Sprintf(
 				"deletion of %q under quarantine path %s is forbidden without the %s marker in the PR title. "+
-					"Anti-accidental-delete safeguard per ADR D5 critério de exit: requires sponsor verbatim sign-off "+
-					"after 3 consecutive chain-of-6-etapas GREEN. Add %s to your PR title only when CP3 is recorded.",
+					"Anti-accidental-delete safeguard per ADR D5 exit criterion: requires sponsor verbatim sign-off "+
+					"after 3 consecutive chain-of-6-stages GREEN. Add %s to your PR title only when CP3 is recorded.",
 				path, cfg.ArchivePathRoot, archiveDeleteMarker, archiveDeleteMarker))
 		}
 	}
@@ -112,22 +119,6 @@ func Check(cfg Config) (*Outcome, error) {
 // because git always emits forward slashes regardless of OS.
 func isUnder(path, prefix string) bool {
 	return strings.HasPrefix(path, prefix)
-}
-
-// verifyRefReachable does `git rev-parse --verify <ref>` to confirm presence.
-// On failure, returns a typed error with BASE_REF_UNREACHABLE.
-func verifyRefReachable(repoRoot, ref string) error {
-	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", ref+"^{commit}")
-	cmd.Dir = repoRoot
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf(
-			"BASE_REF_UNREACHABLE: base ref %q not found in local git history. "+
-				"This typically means a shallow clone (default GitHub Actions checkout depth=1). "+
-				"Fix: set `fetch-depth: 0` on actions/checkout@v4 step, OR run "+
-				"`git fetch origin %s` before invoking the gate. Underlying: %v",
-			ref, ref, err)
-	}
-	return nil
 }
 
 // gitDiffAddedOrModified returns paths under archivePathRoot with status A (added) or M (modified)

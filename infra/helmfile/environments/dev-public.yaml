@@ -37,7 +37,6 @@ replicas:
   controller: 1
   argocd: 1
   gitea: 1
-  harbor: 1
 
 resources:
   default:
@@ -53,31 +52,22 @@ certIssuer:
   name: selfsigned-issuer
 
 # Plan 2026-06-04-dev-public-docr-fix-forward T1.2 — DOCR REAL for max prod
-# parity (sponsor decision P1 over P2 Harbor / P3 k3d-import workaround).
+# parity (sponsor decision P1 over P3 k3d-import workaround).
 # Platform images (loopzero-api, 4 operators) come from DOCR via `do-registry`
 # imagePullSecret provisioned by `task do-registry:provision` (T1.4).
-# Harbor local kept as SECONDARY (opt-in if operator runs Harbor in parallel).
 # k3d-loopzero-registry stays for BuildKit tenant builds (fast local iteration).
 registries:
   docrPrefix: "registry.digitalocean.com/loopzero-system/"
-  harborPrefix: "harbor.loopzero.local/loopzero-platform/"
   additionalPrefixes:
     - "k3d-loopzero-registry:5000/"
-    - "harbor.loopzero.local/loopzero-platform/"
 
 loki:
   maxGlobalStreamsPerUser: 50000
-  # Canonical same-cluster ClusterIP URL (LIVE-caught 2026-06-09 sponsor
-  # walkthrough): Promtail + Loki both run on the build cluster monitoring
-  # namespace, so the canonical push path is the in-cluster Service —
-  # NOT a cross-cluster NodePort indirection. The previous literal
-  # http://172.18.0.3:30094 was a stale legacy IP from before the
-  # k3d-loopzero network re-IP (commit 4f37675b); Promtail was retrying
-  # forever with "connection refused" and zero logs reached Loki, so
-  # build pipeline logs showed empty in the dashboard. DNS name (no IP
-  # hardcode per feedback_no_hardcode_gate_2026_06_09) makes the wiring
-  # env-agnostic.
-  pushUrl: http://loki.monitoring.svc:3100/loki/api/v1/push
+  # No pushUrl: this environment publishes the build cluster's Loki through
+  # crossCluster.lokiNodePort, and infra/helm/promtail/values.yaml.gotmpl derives
+  # every Promtail's push address from that one value (in-cluster Service on the
+  # build cluster, host.k3d.internal:<port> on the cells). The in-cluster URL this
+  # used to carry was right only for the build cluster; the cells have no Loki.
 
 policyMode: warn
 inClusterPostgres: true
@@ -85,9 +75,18 @@ underlyingStorageClass: ""
 
 crossCluster:
   argoApi: "http://host.k3d.internal:30093"
-  lokiGateway: "http://host.k3d.internal:30094"
+  # The build cluster's Loki, published on the build serverlb (infra/k3d/build-cluster.yaml
+  # `30120:30120`). build.helmfile renders the NodePort Service on this port and the
+  # loopzero-api overlay reads Loki at host.k3d.internal:<this port>. Declared here so the
+  # three agree by construction; the `loki-cross-cluster` seed used to compute the
+  # pair at runtime and patch it onto live objects.
+  lokiNodePort: 30120
+  # loopzero-api, as a cell reaches it: host port 13001 is published by the core serverlb to
+  # loopzero-api's NodePort 30001 (infra/k3d/core-cluster.yaml). The cell's secret-fetch
+  # broker (cell.helmfile, release loopzero-broker) calls it. The broker seed used to
+  # record the core server-0 CONTAINER IP here, which docker reassigns on every restart.
+  coreApi: "http://host.k3d.internal:13001"
   giteaApi: "http://host.k3d.internal:3000"
-  harborApi: "http://host.k3d.internal:30002"
   prometheusApi: "http://host.k3d.internal:9090"
 
 velero:
@@ -96,17 +95,18 @@ velero:
   s3Url: http://minio.loopzero-system.svc:9000
 
 # D1 of plan 2026-06-04: *-dev.loopzero.example hostnames
-# uiBaseUrl controla 4 URLs em Hydra: login, consent, logout,
+# uiBaseUrl controls 4 URLs in Hydra: login, consent, logout,
 # post_device_done_url (device flow). Plan J-05 T2.2 D1.
-# Um painel, um nome. `cloud-dev` foi removido em 2026-08-10: ele declarava a MESMA
-# coisa que `app-dev` — dashboardOrigin e publicCloudUrl — e so funcionava porque
-# respondia 301 para ca. Era o mesmo defeito "duas palavras, mesma coisa" que motivou a
-# renomeacao dos clusters e a unificacao das cells, agora na camada de identidade, com o
-# agravante de autorizar em CORS e em URL de retorno um host que existia so para redirecionar.
+# One dashboard, one name. `cloud-dev` was removed on 2026-08-10: it declared the SAME
+# thing as `app-dev` — dashboardOrigin and publicCloudUrl — and only worked because it
+# answered 301 to here. It was the same "two words, same thing" defect that motivated
+# renaming the clusters and unifying the cells, now in the identity layer, with the
+# aggravating factor of authorizing, in CORS and as a return URL, a host that existed only
+# to redirect.
 #
-# Verificado antes de remover que nada dependia dele: o webhook do GitHub e registrado
-# contra `app-dev` (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44), e o
-# `app-dev` ja tem o mesmo desvio direto para o loopzero-api que o `cloud-dev` tinha.
+# Verified before removing that nothing depended on it: the GitHub webhook is registered
+# against `app-dev` (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44), and
+# `app-dev` already has the same direct bypass to loopzero-api that `cloud-dev` had.
 uiBaseUrl: "https://app-dev.loopzero.example"
 dashboardOrigin: "https://app-dev.loopzero.example"
 publicAuthUrl: "https://auth-dev.loopzero.example"
@@ -162,3 +162,17 @@ dashboardRoute:
 #         name: loopzero-github-webhook
 #         key: value
 #         optional: true   # absent secret => webhook handler off, NOT crash
+
+# Environment profile — the behaviour that differs between environments, as named
+# values the helmfiles read (infra/helmfile/environments.yaml). A helmfile must not
+# switch on the environment NAME.
+profile:
+  highAvailability: false       # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
+  managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
+  kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
+  staticAssets: true            # install the static-assets server on the cells
+  loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone
+  smokeTest: false              # run the post-install smoke-test release
+  localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
+  localRegistry: true           # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
+  secretFetchBroker: true       # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public

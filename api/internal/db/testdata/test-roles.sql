@@ -32,18 +32,10 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'loopzero_worker') THEN
         CREATE ROLE loopzero_worker LOGIN PASSWORD 'loopzero-worker' NOSUPERUSER NOBYPASSRLS;
     END IF;
-
-    -- Present so TestRolesExist reflects the documented role inventory.
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'loopzero_migrate') THEN
-        CREATE ROLE loopzero_migrate LOGIN PASSWORD 'loopzero-migrate' NOSUPERUSER NOBYPASSRLS;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'loopzero_readonly') THEN
-        CREATE ROLE loopzero_readonly LOGIN PASSWORD 'loopzero-readonly' NOSUPERUSER NOBYPASSRLS;
-    END IF;
 END $$;
 
 GRANT CREATE, USAGE ON SCHEMA public TO loopzero;
-GRANT USAGE ON SCHEMA public TO loopzero_api, loopzero_worker, loopzero_readonly;
+GRANT USAGE ON SCHEMA public TO loopzero_api, loopzero_worker;
 
 -- Table-level grants are applied by migration 000062 for loopzero_api and by
 -- migration 000023 for loopzero_worker. The defaults below cover tables created
@@ -52,5 +44,3 @@ ALTER DEFAULT PRIVILEGES FOR ROLE loopzero IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO loopzero_api, loopzero_worker;
 ALTER DEFAULT PRIVILEGES FOR ROLE loopzero IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO loopzero_api, loopzero_worker;
-ALTER DEFAULT PRIVILEGES FOR ROLE loopzero IN SCHEMA public
-    GRANT SELECT ON TABLES TO loopzero_readonly;

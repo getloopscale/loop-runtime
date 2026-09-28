@@ -99,7 +99,7 @@ var _ = Describe("Journey 13: Progressive Delivery (canary)", Ordered, Label("jo
 		Expect(buildID).NotTo(BeEmpty(), "build should succeed")
 
 		// Verify the workload cluster received a Rollout CR (not Deployment).
-		ns := "loopzero-" + seed.TenantID + "-" + env
+		ns := mustE2ENamespace(project, env)
 		resName := project + "-" + app
 
 		// Rollout CR exists. deployAndWaitSuccess waits for build SUCCEEDED
@@ -137,7 +137,7 @@ var _ = Describe("Journey 13: Progressive Delivery (canary)", Ordered, Label("jo
 	})
 
 	It("T5.1: TraefikService initial weights stable=100 canary=0", func() {
-		ns := "loopzero-" + seed.TenantID + "-" + env
+		ns := mustE2ENamespace(project, env)
 		resName := project + "-" + app
 
 		// Wait briefly for resources to settle.
@@ -160,7 +160,7 @@ var _ = Describe("Journey 13: Progressive Delivery (canary)", Ordered, Label("jo
 	})
 
 	It("T5.1: Rollout reaches Healthy phase (canary promoted to stable)", func() {
-		ns := "loopzero-" + seed.TenantID + "-" + env
+		ns := mustE2ENamespace(project, env)
 		resName := project + "-" + app
 
 		// Argo Rollouts marks .status.phase=Healthy when canary fully promoted.
@@ -236,7 +236,7 @@ var _ = Describe("Journey 13b: Progressive Delivery — Canary auto-abort", Orde
 		buildID, _ := deployAndWaitSuccess(workDir, env, deployTimeout)
 		Expect(buildID).NotTo(BeEmpty())
 
-		ns := "loopzero-" + seed.TenantID + "-" + env
+		ns := mustE2ENamespace(project, env)
 		resName := project + "-" + app
 
 		// Wait for Rollout to enter Degraded/Aborted phase. Pod readiness

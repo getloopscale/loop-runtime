@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
 // Package oidccredadminloopzero enforces the canonical dev credential — admin@loopzero.example
-// / loopzero-dev-password (LIVE-validated 2026-06-16, sponsor verbatim "SEMPRE vamos usar
-// nos testes"). Rejects the fabricated paulo@loopzero.test / LoopZeroDev2026! which does
+// / loopzero-dev-password (LIVE-validated 2026-06-16; the sponsor, translated: "we will ALWAYS use it
+// in tests"). Rejects the fabricated paulo@loopzero.test / LoopZeroDev2026! which does
 // NOT exist in dev-public (Kratos 401).
 //
 // Migrated from infra/tests/check-oidc-cred-admin-loopzero_test.sh (M-Migrate2, 2026-07-07).
@@ -10,10 +13,12 @@ package oidccredadminloopzero
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"regexp"
+	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 var forbiddenPattern = regexp.MustCompile(`paulo@loopzero\.test|LoopZeroDev2026!`)
@@ -24,8 +29,25 @@ var scanDirs = []string{
 }
 
 type Config struct{ RepoRoot string }
-type Outcome struct{ Violations []string }
+type Outcome struct {
+	Violations []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
 
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
+}
+
+// ErrNothingScanned means no scan dir exists, so nothing was read.
+var ErrNothingScanned = errors.New("no scan dir exists — the gate read nothing")
+
+// ErrViolations means a fabricated credential was found.
 var ErrViolations = errors.New("fabricated paulo@loopzero.test/LoopZeroDev2026! credentials detected — canonical is admin@loopzero.example/loopzero-dev-password")
 
 func Check(cfg Config) (Outcome, error) {
@@ -37,62 +59,26 @@ func Check(cfg Config) (Outcome, error) {
 		}
 	}
 	var violations []string
-	for _, d := range scanDirs {
-		full := filepath.Join(root, d)
-		if _, err := os.Stat(full); errors.Is(err, fs.ErrNotExist) {
-			continue
+	walked, err := linescan.Walk(root, scanDirs, func(string) bool { return true }, func(rel string, data []byte) error {
+		lines, err := linescan.Lines(data)
+		if err != nil {
+			return fmt.Errorf("%s: %w", rel, err)
 		}
-		// FIX-2 (M24, ADR-M24-3): fail-CLOSED — capture + propagate the walk error
-		// instead of discarding it (`_ =`) and swallowing per-entry/read errors.
-		if err := filepath.WalkDir(full, func(path string, e fs.DirEntry, entryErr error) error {
-			if entryErr != nil {
-				return entryErr
+		for i, line := range lines {
+			if forbiddenPattern.MatchString(line) {
+				violations = append(violations, fmt.Sprintf("%s:%d: %s", rel, i+1, strings.TrimSpace(line)))
 			}
-			if e.IsDir() {
-				return nil
-			}
-			body, err := os.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("%s: %w", path, err)
-			}
-			for i, line := range splitLines(body) {
-				if forbiddenPattern.MatchString(line) {
-					rel, _ := filepath.Rel(root, path)
-					violations = append(violations, fmt.Sprintf("%s:%d: %s", rel, i+1, trimSpace(line)))
-				}
-			}
-			return nil
-		}); err != nil {
-			return Outcome{}, fmt.Errorf("walk %s: %w", full, err)
 		}
+		return nil
+	})
+	if err != nil {
+		return Outcome{}, err
+	}
+	if walked.Dirs == 0 {
+		return Outcome{}, fmt.Errorf("%w: none of %s exists under %s", ErrNothingScanned, strings.Join(scanDirs, ", "), root)
 	}
 	if len(violations) > 0 {
-		return Outcome{Violations: violations}, ErrViolations
+		return Outcome{Violations: violations, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
-}
-
-func splitLines(b []byte) []string {
-	var out []string
-	start := 0
-	for i, c := range b {
-		if c == '\n' {
-			out = append(out, string(b[start:i]))
-			start = i + 1
-		}
-	}
-	if start < len(b) {
-		out = append(out, string(b[start:]))
-	}
-	return out
-}
-
-func trimSpace(s string) string {
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\t') {
-		s = s[1:]
-	}
-	for len(s) > 0 && (s[len(s)-1] == ' ' || s[len(s)-1] == '\t' || s[len(s)-1] == '\r') {
-		s = s[:len(s)-1]
-	}
-	return s
 }

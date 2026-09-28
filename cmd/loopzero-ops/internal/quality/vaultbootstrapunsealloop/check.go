@@ -11,7 +11,7 @@
 // on every fresh init. Vault stayed sealed; operator manually invoked
 // `bao operator unseal $SHARD x3` as workaround.
 //
-// Sponsor mandate 2026-06-15 "sem WORKAROUNDs": fix canonical means capture
+// Sponsor mandate 2026-06-15 "sem WORKAROUNDs" ("no workarounds"): fix canonical means capture // english-only: verbatim quote of the sponsor mandate
 // stdout first, parse rc-independent, normalize the bool string.
 //
 // Migrated from infra/tests/check-vault-bootstrap-unseal-loop_test.sh
@@ -28,6 +28,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const targetPath = "infra/scripts/local/vault-bootstrap-dev.sh"
@@ -69,8 +71,8 @@ var (
 	auditExitCodeRE = regexp.MustCompile(`exit-code SEMANTICS`)
 	// E2: pipefail + bao rc=2 rationale.
 	auditPipefailRE = regexp.MustCompile(`pipefail.*bao rc=2`)
-	// E3: sponsor mandate cited.
-	auditSemWorkaroundsRE = regexp.MustCompile(`sem WORKAROUNDs`)
+	// E3: sponsor mandate cited, verbatim, in the language it was given.
+	auditNoWorkaroundsRE = regexp.MustCompile(`sem WORKAROUNDs`) // english-only: verbatim quote the script must carry
 )
 
 // Config controls the check.
@@ -81,6 +83,17 @@ type Config struct {
 // Outcome carries the assertion failures.
 type Outcome struct {
 	Failures []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // ErrViolations means at least one assertion failed.
@@ -98,7 +111,7 @@ func Check(cfg Config) (Outcome, error) {
 	full := filepath.Join(root, targetPath)
 	body, err := os.ReadFile(full)
 	if err != nil {
-		return Outcome{Failures: []string{fmt.Sprintf("target script missing at %s: %v", targetPath, err)}}, ErrViolations
+		return Outcome{Failures: []string{fmt.Sprintf("target script missing at %s: %v", targetPath, err)}, Violation: ErrViolations}, nil
 	}
 
 	var failures []string
@@ -146,10 +159,10 @@ func Check(cfg Config) (Outcome, error) {
 	assertMatch("audit trail: CANONICAL FIX 2026-06-15 marker", auditCanonicalFixRE)
 	assertMatch("audit trail: exit-code SEMANTICS rationale", auditExitCodeRE)
 	assertMatch("audit trail: pipefail+bao rc=2 rationale", auditPipefailRE)
-	assertMatch("audit trail: sponsor mandate 'sem WORKAROUNDs' cited", auditSemWorkaroundsRE)
+	assertMatch("audit trail: sponsor no-workarounds mandate cited", auditNoWorkaroundsRE)
 
 	if len(failures) > 0 {
-		return Outcome{Failures: failures}, ErrViolations
+		return Outcome{Failures: failures, Violation: ErrViolations}, nil
 	}
 	return Outcome{}, nil
 }

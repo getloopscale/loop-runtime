@@ -12,11 +12,13 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func TestCheck_ChartMissing_FAIL(t *testing.T) {
 	root := t.TempDir()
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrChartMissing) {
 		t.Fatalf("expected ErrChartMissing, got %v", err)
 	}
@@ -27,10 +29,13 @@ func TestCheck_HelmAbsent_WARN(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, chartPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(root, chartPath, "values.yaml"), []byte("authMethods: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	oldPath := os.Getenv("PATH")
 	defer os.Setenv("PATH", oldPath)
 	os.Setenv("PATH", "/nonexistent")
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected nil (WARN), got %v", err)
 	}
@@ -43,21 +48,8 @@ func TestCheck_RealRepoWithHelm(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skip("helm not on PATH — skipping")
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	root := cwd
-	for i := 0; i < 8; i++ {
-		if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err == nil {
-			break
-		}
-		root = filepath.Dir(root)
-	}
-	if _, err := os.Stat(filepath.Join(root, "ROADMAP.md")); err != nil {
-		t.Skip("could not locate ROADMAP.md")
-	}
-	outcome, err := Check(Config{RepoRoot: root})
+	root := qtestutil.Root(t)
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("real-repo violation: %v; %v", err, outcome.Failures)
 	}
@@ -80,10 +72,7 @@ func TestCheck_RealRepoWithHelm(t *testing.T) {
 //
 // Decision: MEET-ASYNC-AMENDMENT-2026-08-13-vault-policy-ownership.
 func TestOpenBaoInitAuth_NoScriptWritesAPolicyTheChartOwns(t *testing.T) {
-	root, err := filepath.Abs("../../../../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := qtestutil.Root(t)
 
 	// Three forms, not one. The review wrote a script with each and the
 	// single-string version passed all three: the OpenBao docs show
@@ -101,7 +90,7 @@ func TestOpenBaoInitAuth_NoScriptWritesAPolicyTheChartOwns(t *testing.T) {
 	// next script does not have to land in infra/ to cause the same collision.
 	walkErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil //nolint:nilerr // an unreadable path is not a policy write
+			return err
 		}
 		if info.IsDir() {
 			if n := info.Name(); n == ".git" || n == "node_modules" || n == "vendor" {
@@ -159,10 +148,7 @@ func TestOpenBaoInitAuth_NoScriptWritesAPolicyTheChartOwns(t *testing.T) {
 // remedy is the same: compare the declaration against the source that executes,
 // rather than trusting that two hand-maintained copies agree.
 func TestOpenBaoInitAuth_ChartGrantsTheKeyPrefixTheCodeNames(t *testing.T) {
-	root, err := filepath.Abs("../../../../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := qtestutil.Root(t)
 
 	// The executing source: the Go constant the client concatenates.
 	goSrc, err := os.ReadFile(filepath.Join(root, "pkg", "vault", "transit_client.go"))
@@ -217,30 +203,18 @@ func TestOpenBaoInitAuth_ChartGrantsTheKeyPrefixTheCodeNames(t *testing.T) {
 // Reintroducing delete on the API prefix needs the B-075 decision on who owns
 // shredding first — not a permission that drifted back in.
 func TestOpenBaoInitAuth_NoPolicyGrantsDeleteOnATransitKey(t *testing.T) {
-	root, err := filepath.Abs("../../../../..")
-	if err != nil {
-		t.Fatal(err)
-	}
+	root := qtestutil.Root(t)
 	values, err := os.ReadFile(filepath.Join(root, "infra", "helm", "openbao-init", "values.yaml"))
 	if err != nil {
 		t.Fatalf("reading the chart values: %v", err)
 	}
 
-	// A asserção cobre QUALQUER caminho `transit/keys/`, e não só o prefixo que o api
-	// cria. A versão anterior era estreita porque a pergunta estava em aberto: ela
-	// dizia, na própria mensagem, *"who owns shredding is B-075, still undecided; a
-	// permission is not the place to answer it"* — e recusar o `delete` em `tenant-+`
-	// naquele momento teria sido este teste ANULANDO uma decisão em vez de guardá-la.
-	//
-	// A pergunta foi respondida em 2026-08-16 (`B-075`, ratificado): o shredding é
-	// **operator-side quando construído**, e enquanto não existir **nenhuma policy
-	// concede `delete`** em chave transit. As duas concessões sobre `tenant-+` foram
-	// removidas na mesma fatia. A partir daqui a proibição guarda a decisão, que é
-	// exatamente o que a versão anterior dizia não poder fazer ainda.
-	//
-	// Quando o shredder for construído, a concessão volta — apontando para o prefixo
-	// que o api de fato cria, de propósito, e esta asserção é emendada junto, na mesma
-	// mudança que a torna necessária.
+	// The assertion covers ANY `transit/keys/` path, not only the API's prefix.
+	// B-075 (ratified 2026-08-16) decided that shredding is operator-side when
+	// built, and that until it exists no policy grants `delete` on a transit key;
+	// the two grants on `tenant-+` were removed in the same slice. When the
+	// shredder is built the grant returns — pointed at the prefix the API
+	// actually creates — and this assertion is amended in the same change.
 	lines := strings.Split(string(values), "\n")
 	inTransitKeys := false
 	var keyPath string
@@ -272,5 +246,61 @@ func TestOpenBaoInitAuth_NoPolicyGrantsDeleteOnATransitKey(t *testing.T) {
 				inTransitKeys = false
 			}
 		}
+	}
+}
+
+const renderAllRoles = `enable_auth "k8s-core" "kubernetes"
+enable_auth "k8s-build" "kubernetes"
+enable_auth "k8s-cell-0" "kubernetes"
+write_policy "p" "/tmp/p.hcl"
+write_auth_role "k8s-core" "loopzero-api" "sa" "ns" "p" "1h"
+write_auth_role "k8s-core" "loopzero-tenant-operator" "sa" "ns" "p" "1h"
+write_auth_role "k8s-core" "loopzero-app-operator" "sa" "ns" "p" "1h"
+write_auth_role "k8s-core" "loopzero-preview-operator" "sa" "ns" "p" "1h"
+write_auth_role "k8s-core" "loopzero-platform-operator" "sa" "ns" "p" "1h"
+write_auth_role "k8s-build" "argo-workflows" "sa" "ns" "p" "1h"
+write_auth_role "k8s-cell-0" "external-secrets-broker" "sa" "ns" "p" "1h"
+`
+
+func TestCheckRendered_CompleteRenderPasses(t *testing.T) {
+	if f := checkRendered(renderAllRoles, []string{"k8s-core", "k8s-build", "k8s-cell-0"}); len(f) != 0 {
+		t.Fatalf("failures = %v", f)
+	}
+}
+
+// The cell merge left `k8s-cell-0` declared twice; the gate's own hand list
+// repeated it and so asserted four mounts while claiming five.
+func TestCheckRendered_DuplicateMountIsAFailure(t *testing.T) {
+	f := checkRendered(renderAllRoles, []string{"k8s-core", "k8s-build", "k8s-cell-0", "k8s-cell-0"})
+
+	if len(f) != 1 || !strings.Contains(f[0], "k8s-cell-0 is declared 2 times") {
+		t.Fatalf("failures = %v; want exactly the duplicate", f)
+	}
+}
+
+// A cell declared in values is checked without editing the gate: its mount must
+// render and its ESO broker role must exist.
+func TestCheckRendered_ANewCellIsCheckedFromValues(t *testing.T) {
+	f := checkRendered(renderAllRoles, []string{"k8s-core", "k8s-build", "k8s-cell-0", "k8s-cell-1"})
+
+	joined := strings.Join(f, "\n")
+	if !strings.Contains(joined, "auth/k8s-cell-1 enable_auth MISSING") || !strings.Contains(joined, "external-secrets-broker role on k8s-cell-1 MISSING") {
+		t.Fatalf("failures = %v; the new cell's mount and broker role must be required", f)
+	}
+}
+
+func TestCheckRendered_NoCellMountIsAFailure(t *testing.T) {
+	f := checkRendered(renderAllRoles, []string{"k8s-core", "k8s-build"})
+
+	if !strings.Contains(strings.Join(f, "\n"), "no k8s-cell-* auth mount") {
+		t.Fatalf("failures = %v", f)
+	}
+}
+
+func TestCheckRendered_LoopZeroAPIOnACellIsALeak(t *testing.T) {
+	r := renderAllRoles + `write_auth_role "k8s-cell-0" "loopzero-api" "sa" "ns" "p" "1h"` + "\n"
+
+	if f := checkRendered(r, []string{"k8s-core", "k8s-build", "k8s-cell-0"}); !strings.Contains(strings.Join(f, "\n"), "loopzero-api role LEAKED to k8s-cell-0") {
+		t.Fatalf("failures = %v", f)
 	}
 }

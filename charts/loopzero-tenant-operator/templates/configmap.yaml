@@ -8,9 +8,6 @@ data:
   ARGOCD_NAMESPACE: {{ .Values.config.argocdNamespace | quote }}
   GITEA_ORG: {{ .Values.config.giteaOrg | quote }}
   GITEA_URL: {{ .Values.config.giteaUrl | quote }}
-  HARBOR_ADMIN_USERNAME: {{ .Values.config.harborAdminUsername | quote }}
-  HARBOR_REGISTRY_HOST: {{ .Values.config.harborRegistryHost | quote }}
-  HARBOR_URL: {{ .Values.config.harborUrl | quote }}
   INGRESS_NAMESPACE: {{ .Values.config.ingressNamespace | quote }}
   MINIO_ENDPOINT: {{ .Values.config.minioEndpoint | quote }}
   REGISTRY_CIDRS: {{ .Values.config.registryCidrs | quote }}

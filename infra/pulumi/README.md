@@ -1,6 +1,17 @@
 # loopzero-infra
 
-Infrastructure-as-Code for the LoopZero platform. Provisions a complete production topology on DigitalOcean (portable to AWS) using Pulumi.
+> **LEGACY — retired at AM10.** This Pulumi project is the AS-IS L1 layer,
+> live until the AM9 cutover and retired at AM10 by the CTO mandate of
+> 2026-06-17 (ADR `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`).
+> The target infrastructure is Terraform in `../loopzero-infra-modules` and
+> `../loopzero-infra-live`. Do not add resources, providers or cells here; keep
+> changes to what the running stacks need until the cutover.
+
+`infra/pulumi-infra` declares the same project name, `loopzero-infra`; select this
+project by directory (`pulumi --cwd infra/pulumi ...`), never by a bare stack
+name.
+
+Infrastructure-as-Code for the LoopZero platform. Provisions a complete production topology on DigitalOcean using Pulumi.
 
 ## Topology
 
@@ -75,7 +86,6 @@ src/
 │   ├── network.ts              NetworkSpec / Output
 │   ├── kubernetes.ts           KubernetesClusterSpec / Output
 │   ├── storage.ts              ObjectStorageSpec / Output
-│   ├── dns.ts                  DnsRecordSpec / Output
 │   ├── compute.ts              ComputeInstanceSpec / Output (VMs)
 │   └── database.ts             DatabaseClusterSpec / Output
 ├── components/
@@ -87,7 +97,7 @@ src/
 │   ├── tags.test.ts            standardTags, tagsToStringArray
 │   ├── errors.test.ts          InfraError formatting + structured log
 │   ├── nodes.test.ts           resolveNodeSize, resolveDbSize
-│   └── dns-detection.test.ts   A vs CNAME vs AAAA auto-detection
+│   └── resolve-provider.test.ts DigitalOcean only; anything else is INVALID_CONFIG
 └── providers/
     ├── digitalocean/            Complete implementation (8 files)
     │   ├── index.ts             Factory
@@ -95,11 +105,9 @@ src/
     │   ├── network.ts           VPC
     │   ├── kubernetes.ts        DOKS cluster
     │   ├── storage.ts           Spaces bucket
-    │   ├── dns.ts               DNS records (A/CNAME/AAAA auto-detect)
-    │   ├── compute.ts           Droplets (VMs)
+        │   ├── compute.ts           Droplets (VMs)
     │   └── database.ts          Managed PostgreSQL
-    └── aws/
-        └── index.ts             Stub with an implementation guide
+    └── cloudflare/              Tunnel, Worker + KV static delivery
 ```
 
 ## Environments
@@ -301,31 +309,20 @@ CloudProviderFactory
 ├── IProviderNetwork          VPC / network
 ├── IProviderKubernetes       cluster K8s
 ├── IProviderStorage          object storage (S3-compatible)
-├── IProviderDns              DNS records
 ├── IProviderCompute          VMs (Droplet / EC2)
 └── IProviderDatabase         managed database (PostgreSQL)
 ```
 
 | Provider | Status |
 |----------|--------|
-| DigitalOcean | Implemented (6 capabilities) |
-| AWS | Stub with an implementation guide |
+| DigitalOcean | Implemented — the only provider this stack has |
 
-## Adding a new provider
-
-1. Create `src/providers/{name}/` with:
-   - `nodes.ts` — `NodeClass → instance type` + `NodeClass → DB size`
-   - `network.ts` — `IProviderNetwork`
-   - `kubernetes.ts` — `IProviderKubernetes`
-   - `storage.ts` — `IProviderStorage`
-   - `dns.ts` — `IProviderDns`
-   - `compute.ts` — `IProviderCompute`
-   - `database.ts` — `IProviderDatabase`
-   - `index.ts` — factory
-
-2. Register it in `src/components/infra.ts` → `resolveProvider()`
-
-3. Add the type in `src/core/types.ts` → `CloudProvider`
+No provider is added here. This stack is AS-IS legacy retired at AM10; the
+AWS re-platform is Terraform in `../loopzero-infra-modules` + `../loopzero-infra-live`
+(ADR `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`).
+The AWS stub and the unused DNS-record strategy (DigitalOcean + Cloudflare
+implementations nothing called) were removed on 2026-09-23; DNS for the
+platform is owned by the Cloudflare tunnel resource.
 
 ## Design decisions
 
@@ -339,7 +336,7 @@ CloudProviderFactory
 
 **Why ArgoCD only on the management cluster?** ArgoCD is Kubernetes-native and manages the runtime cluster through a kubeconfig. Putting it outside K8s makes no sense.
 
-**AWS portability:** Gitea VM → EC2, Spaces → S3, DOKS → EKS, DB → RDS. The model does not change — only the provider implementations do.
+**AWS portability:** Gitea VM → EC2, Spaces → S3, DOKS → EKS, DB → RDS. The AWS build happens in `../loopzero-infra-modules` and `../loopzero-infra-live` (Terraform), per `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`.
 
 ## Dependencies
 
@@ -356,7 +353,11 @@ CloudProviderFactory
 > holds `build-publish.yml`, `ci.yml`, `delivery-gate-armed.yml`, `release-artifacts.yml` and
 > `workflow-hygiene.yml`. `infra-preview.yml` and `infra-deploy.yml` are in no commit, and GitHub
 > Actions was retired as the pipeline on 2026-05-23. What follows is the intended shape, not what
-> runs — and `infra/pulumi*` is AS-IS legacy until the AM8 cutover to Terraform.
+> runs — and `infra/pulumi*` is AS-IS legacy: live until the AM9 cutover, and retired at AM10,
+> per `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`.
+>
+> Do not cite Pulumi as the forward path for infra construction, and do not add new Pulumi for target infra.
+> This rule is unconditional and carries no date.
 
 ### Workflows
 

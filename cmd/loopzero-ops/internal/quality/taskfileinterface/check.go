@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 	"gopkg.in/yaml.v3"
 )
 
@@ -33,7 +34,12 @@ var ExpectedCommands = []string{
 	"db:migrate",
 	"db:reset",
 	"validate:matrix",
-	"parity:preflight",
+
+	// `parity:preflight` was removed here on 2026-09-23 for the reason the
+	// cli:* entries below were: it ran infra/tests/parity/preflight.sh, deleted
+	// on 2026-07-07 when the parity scripts gave way to Ginkgo specs
+	// (Label("parity")), so the task could only fail with "No such file". The
+	// contract was asserting a capability the repository no longer has.
 
 	// `cli:link` and `cli:build` were removed here on 2026-07-30 (issue #254).
 	// They ran `cd cli && npm …`, but `cli/` left this repository at M2 of the
@@ -59,6 +65,9 @@ type Outcome struct {
 	Missing []string
 }
 
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
 // taskfileDoc is the minimal YAML shape we parse: the `tasks:` map keys are
 // task names; `includes:` maps include-name → include spec.
 type taskfileDoc struct {
@@ -66,15 +75,17 @@ type taskfileDoc struct {
 	Includes map[string]includeSpec `yaml:"includes"`
 }
 
-// includeSpec is the include directive. `taskfile:` may be a string (path) or
-// (rarely) a map; we only handle the common string form. flatten is recorded
-// for completeness but all LoopZero includes flatten into root namespace.
+// includeSpec is the include directive, in its common string form. Task v3
+// puts the tasks of an include under `<include-key>:` unless it declares
+// `flatten: true`, and refuses to run when an include that is not
+// `optional: true` is missing.
 type includeSpec struct {
 	Taskfile string `yaml:"taskfile"`
 	Flatten  bool   `yaml:"flatten"`
+	Optional bool   `yaml:"optional"`
 }
 
-// Check parses the repo's Taskfile.yml + flattened includes and verifies every
+// Check parses the repo's Taskfile.yml and its includes and verifies every
 // ExpectedCommand resolves.
 func Check(cfg Config) (*Outcome, error) {
 	names, err := CollectTaskNames(cfg.RepoRoot)
@@ -91,10 +102,12 @@ func Check(cfg Config) (*Outcome, error) {
 	return outcome, nil
 }
 
-// CollectTaskNames parses Taskfile.yml at root + every flattened include and
-// returns the set of all defined task names. Missing/malformed includes are
-// skipped (best-effort) so the gate degrades gracefully rather than crashing
-// on an unrelated include error.
+// CollectTaskNames parses Taskfile.yml at root and every include, and returns
+// the set of task names as `task` resolves them: a flattened include's tasks
+// under their own names, any other include's under `<include-key>:<task>`. A
+// missing include is skipped only when it is declared optional; a missing
+// required include, or one that does not parse, is an error, because `task`
+// itself would refuse to run.
 func CollectTaskNames(repoRoot string) (map[string]bool, error) {
 	rootPath := filepath.Join(repoRoot, "Taskfile.yml")
 	rootDoc, err := parseTaskfile(rootPath)
@@ -107,25 +120,27 @@ func CollectTaskNames(repoRoot string) (map[string]bool, error) {
 		names[name] = true
 	}
 
-	// Parse each include (flattened into root namespace).
-	for _, inc := range rootDoc.Includes {
+	for key, inc := range rootDoc.Includes {
 		if inc.Taskfile == "" {
 			continue
 		}
 		incPath := filepath.Join(repoRoot, filepath.Clean(inc.Taskfile))
 		incDoc, err := parseTaskfile(incPath)
 		if err != nil {
-			// Distinguish missing FILE (optional include — skip) from a parse
-			// ERROR on existing content (broken Taskfile — surface loud). A
-			// duplicate task key, for example, is a real defect Task v3 would
-			// silently shadow; the gate must NOT swallow it.
 			if os.IsNotExist(err) {
-				continue
+				if inc.Optional {
+					continue
+				}
+				return nil, fmt.Errorf("include %q (%s) is required and missing — task would refuse to run: %w", key, inc.Taskfile, err)
 			}
-			return nil, fmt.Errorf("include %q parse error (broken Taskfile): %w", inc.Taskfile, err)
+			return nil, fmt.Errorf("include %q (%s) is a broken Taskfile: %w", key, inc.Taskfile, err)
+		}
+		prefix := key + ":"
+		if inc.Flatten {
+			prefix = ""
 		}
 		for name := range incDoc.Tasks {
-			names[name] = true
+			names[prefix+name] = true
 		}
 	}
 

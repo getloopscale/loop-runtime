@@ -9,58 +9,103 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // KubeClient is the domain-facing abstraction over the k8s operations the
 // seeds need (architecture.md § Dependency Inversion). Seeds depend on this
-// interface; the composition root injects either the real controller-runtime
-// client (kubeClient) or a fake client in tests. This is what makes every
-// seed hermetically testable without a live cluster.
+// interface; the composition root injects the controller-runtime client
+// (kubeClient), and tests inject the same type over a fake client. This is
+// what makes every seed hermetically testable without a live cluster.
+//
+// It is composed of roles so a helper can depend on the one it uses. Every
+// operation a seed performs is on the port: there is no reach-through to the
+// concrete client, which used to make a substitute KubeClient silently skip
+// namespace creation and rollouts.
 type KubeClient interface {
+	SecretStore
+	ConfigStore
+	Rollouts
+	Namespaces
+	Services
+	ServiceAccountTokens
+}
+
+// ServiceAccountTokens mints bound ServiceAccount tokens through the
+// TokenRequest API — what `kubectl create token` calls.
+type ServiceAccountTokens interface {
+	// MintServiceAccountToken returns a token for namespace/name valid for ttl.
+	// A missing ServiceAccount is an error.
+	MintServiceAccountToken(ctx context.Context, namespace, name string, ttl time.Duration) (string, error)
+}
+
+// SecretStore reads and writes Secrets.
+type SecretStore interface {
 	// CreateOrUpdateSecret applies s idempotently: create if absent, else
-	// update preserving resourceVersion (sealos Idempotency pattern, blueprint T3).
-	// Returns created=true when the Secret did not exist before.
+	// update preserving resourceVersion. Returns created=true when the Secret
+	// did not exist before.
 	CreateOrUpdateSecret(ctx context.Context, s *corev1.Secret) (created bool, err error)
 	// GetSecret fetches a Secret (used by Verify probes).
 	GetSecret(ctx context.Context, namespace, name string) (*corev1.Secret, error)
-	// WaitDeploymentReady blocks until the Deployment's readyReplicas ==
-	// spec.replicas or the timeout elapses (apimachinery wait, blueprint T4).
-	WaitDeploymentReady(ctx context.Context, namespace, name string, timeout time.Duration) error
-	// RolloutRestartDeployment triggers a pod rollout by bumping the
-	// `kubectl.kubernetes.io/restartedAt` annotation on the Deployment template
-	// — same mechanism as `kubectl rollout restart`. Idempotent: two calls in
-	// rapid succession produce distinct annotation values.
-	//
-	// SKIP-friendly: NotFound → nil (returning error) so callers can decide
-	// whether a missing Deployment is a hard failure (bash returned exit 1
-	// in that case; the sibling seed's rollout is post-apply and non-fatal).
-	RolloutRestartDeployment(ctx context.Context, namespace, name string) error
 	// SecretExists reports whether a Secret is present. Returns (false, nil)
 	// on NotFound so callers can branch without inspecting a typed error.
-	// Used by seeds that patch an optional sibling Secret only when present
-	// (e.g. minio-credentials legacy alias).
 	SecretExists(ctx context.Context, namespace, name string) (bool, error)
 	// PatchSecretData replaces the given keys' values on the target Secret
-	// (Get+Update — preserves resourceVersion + other keys). Returns
-	// NotFound-shaped errors verbatim so callers can decide skip vs fail.
+	// (Get+Update — preserves resourceVersion and other keys). NotFound-shaped
+	// errors are returned verbatim so callers can decide skip vs fail.
 	PatchSecretData(ctx context.Context, namespace, name string, patch map[string][]byte) error
+	// MergeSecretData writes only the given keys: it creates the Secret with
+	// them when absent, and otherwise sets them on the live Secret, leaving
+	// every other key alone. It is the write for a Secret several producers
+	// share, where CreateOrUpdateSecret would erase the keys this caller does
+	// not own.
+	MergeSecretData(ctx context.Context, namespace, name string, data map[string][]byte) error
+}
+
+// ConfigStore reads and patches ConfigMaps.
+type ConfigStore interface {
 	// GetConfigMap fetches a ConfigMap. NotFound-shaped errors bubble up.
 	GetConfigMap(ctx context.Context, namespace, name string) (*corev1.ConfigMap, error)
 	// PatchConfigMapData replaces the given data keys on the target ConfigMap
-	// (Get+Update — preserves resourceVersion + other keys).
+	// (Get+Update — preserves resourceVersion and other keys).
 	PatchConfigMapData(ctx context.Context, namespace, name string, patch map[string]string) error
+}
+
+// Rollouts restarts workloads the way `kubectl rollout restart` does: by
+// stamping `kubectl.kubernetes.io/restartedAt` on the pod template.
+type Rollouts interface {
+	// RolloutRestartDeployment restarts a Deployment. A missing Deployment is
+	// an error; the caller decides whether that is fatal.
+	RolloutRestartDeployment(ctx context.Context, namespace, name string) error
+	// RolloutRestartDaemonSet restarts a DaemonSet. A missing DaemonSet is
+	// nothing to roll out and returns nil.
+	RolloutRestartDaemonSet(ctx context.Context, namespace, name string) error
+}
+
+// Namespaces ensures a namespace exists before a seed writes into it.
+type Namespaces interface {
+	// EnsureNamespace creates the namespace when absent; an existing one is
+	// left as it is.
+	EnsureNamespace(ctx context.Context, name string) error
+}
+
+// Services reads and updates Services.
+type Services interface {
+	// GetService fetches a Service; NotFound-shaped errors bubble up.
+	GetService(ctx context.Context, namespace, name string) (*corev1.Service, error)
+	// UpdateService writes s back (resourceVersion taken from the read).
+	UpdateService(ctx context.Context, s *corev1.Service) error
 }
 
 // kubeClient is the production KubeClient backed by a controller-runtime client.
 type kubeClient struct {
 	c client.Client
-	// contextName nomeia o cluster com que este cliente fala. Vazio quando o chamador
-	// nao o declarou — e ai as mensagens ficam como sempre foram.
+	// contextName names the cluster this client talks to. Empty when the caller
+	// did not declare it, and then messages read as they always did.
 	contextName string
 }
 
@@ -71,35 +116,37 @@ func NewKubeClient(c client.Client) KubeClient {
 	return &kubeClient{c: c}
 }
 
-// NewKubeClientForContext e o mesmo cliente sabendo com QUAL cluster fala.
+// NewKubeClientForContext is the same client, knowing WHICH cluster it talks to.
 //
-// # Por que existe
+// # Why it exists
 //
-// B-024, medido 2026-08-10: `loopzero-ops seed patch-kratos` reprovou com
-// `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found`, e
-// o ConfigMap existia. O seed falava com outro cluster — `k3d:secrets:create` troca o
-// contexto ativo como efeito colateral, e os seeds herdam o que estiver ativo. A mensagem
-// mandava procurar o recurso certo no cluster errado, e o custo era tempo de depuracao em
-// cima de um sistema que ja estava quebrado.
+// B-024, measured 2026-08-10: `loopzero-ops seed patch-kratos` failed with
+// `get configmap loopzero-auth/ory-kratos-config: configmaps "ory-kratos-config" not found`,
+// and the ConfigMap existed. The seed was talking to another cluster —
+// `k3d:secrets:create` switches the active context as a side effect, and seeds
+// inherit whatever is active. The message sent people to look for the right
+// resource in the wrong cluster, at the cost of debugging time on a system that
+// was already broken.
 //
-// # Por que um construtor irmao, e nao um parametro a mais
+// # Why a sibling constructor and not one more parameter
 //
-// `NewKubeClient` tem 98 chamadores, 96 deles em teste. Trocar a assinatura churnaria 96
-// sitios por um beneficio que nao os envolve — teste com cliente falso nao tem contexto de
-// kubeconfig para nomear. Este construtor e opt-in: a raiz de composicao usa, o resto fica.
+// NewKubeClient has 98 callers, 96 of them in tests. Changing its signature
+// would churn 96 sites for a benefit that does not involve them — a test with a
+// fake client has no kubeconfig context to name. This constructor is opt-in:
+// the composition root uses it, and nothing else has to.
 func NewKubeClientForContext(c client.Client, contextName string) KubeClient {
 	return &kubeClient{c: c, contextName: contextName}
 }
 
-// resourceAt descreve o alvo de uma operacao, nomeando o cluster quando ele e conhecido.
+// resourceAt names the target of an operation, with the cluster when known.
 //
-// Sem contexto declarado devolve exatamente o que a mensagem sempre trouxe — inventar um
-// rotulo vazio seria pior que a original.
+// With no declared context it returns exactly what the message always carried —
+// inventing an empty label would be worse than the original.
 func (k *kubeClient) resourceAt(namespace, name string) string {
 	if k.contextName == "" {
 		return namespace + "/" + name
 	}
-	return namespace + "/" + name + " (contexto " + k.contextName + ")"
+	return namespace + "/" + name + " (context " + k.contextName + ")"
 }
 
 func (k *kubeClient) CreateOrUpdateSecret(ctx context.Context, s *corev1.Secret) (bool, error) {
@@ -159,6 +206,36 @@ func (k *kubeClient) PatchSecretData(ctx context.Context, namespace, name string
 	return nil
 }
 
+func (k *kubeClient) MergeSecretData(ctx context.Context, namespace, name string, data map[string][]byte) error {
+	// Create first, so a Secret another producer creates concurrently is never
+	// overwritten: AlreadyExists falls through to a key-level patch.
+	fresh := make(map[string][]byte, len(data))
+	for key, v := range data {
+		fresh[key] = v
+	}
+	err := k.c.Create(ctx, secretOf(namespace, name, fresh))
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("create secret %s: %w", k.resourceAt(namespace, name), err)
+	}
+	return k.PatchSecretData(ctx, namespace, name, data)
+}
+
+func (k *kubeClient) MintServiceAccountToken(ctx context.Context, namespace, name string, ttl time.Duration) (string, error) {
+	seconds := int64(ttl.Seconds())
+	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name}}
+	req := &authenticationv1.TokenRequest{Spec: authenticationv1.TokenRequestSpec{ExpirationSeconds: &seconds}}
+	if err := k.c.SubResource("token").Create(ctx, sa, req); err != nil {
+		return "", fmt.Errorf("mint token for serviceaccount %s: %w", k.resourceAt(namespace, name), err)
+	}
+	if req.Status.Token == "" {
+		return "", fmt.Errorf("mint token for serviceaccount %s: the API returned an empty token", k.resourceAt(namespace, name))
+	}
+	return req.Status.Token, nil
+}
+
 func (k *kubeClient) GetConfigMap(ctx context.Context, namespace, name string) (*corev1.ConfigMap, error) {
 	var c corev1.ConfigMap
 	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &c); err != nil {
@@ -189,10 +266,10 @@ func (k *kubeClient) RolloutRestartDeployment(ctx context.Context, namespace, na
 	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &d); err != nil {
 		return fmt.Errorf("get deployment %s: %w", k.resourceAt(namespace, name), err)
 	}
-	if d.Spec.Template.ObjectMeta.Annotations == nil {
-		d.Spec.Template.ObjectMeta.Annotations = map[string]string{}
+	if d.Spec.Template.Annotations == nil {
+		d.Spec.Template.Annotations = map[string]string{}
 	}
-	d.Spec.Template.ObjectMeta.Annotations["kubectl.kubernetes.io/restartedAt"] =
+	d.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] =
 		time.Now().UTC().Format(time.RFC3339)
 	if err := k.c.Update(ctx, &d); err != nil {
 		return fmt.Errorf("update deployment %s: %w", k.resourceAt(namespace, name), err)
@@ -200,22 +277,53 @@ func (k *kubeClient) RolloutRestartDeployment(ctx context.Context, namespace, na
 	return nil
 }
 
-func (k *kubeClient) WaitDeploymentReady(ctx context.Context, namespace, name string, timeout time.Duration) error {
-	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true,
-		func(ctx context.Context) (bool, error) {
-			var d appsv1.Deployment
-			if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &d); err != nil {
-				if apierrors.IsNotFound(err) {
-					return false, nil // not created yet — keep polling
-				}
-				return false, err
-			}
-			want := int32(1)
-			if d.Spec.Replicas != nil {
-				want = *d.Spec.Replicas
-			}
-			return d.Status.ReadyReplicas == want, nil
-		})
+func (k *kubeClient) RolloutRestartDaemonSet(ctx context.Context, namespace, name string) error {
+	var ds appsv1.DaemonSet
+	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &ds); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil // no DaemonSet, nothing to roll out
+		}
+		return fmt.Errorf("get daemonset %s: %w", k.resourceAt(namespace, name), err)
+	}
+	if ds.Spec.Template.Annotations == nil {
+		ds.Spec.Template.Annotations = map[string]string{}
+	}
+	ds.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().UTC().Format(time.RFC3339)
+	if err := k.c.Update(ctx, &ds); err != nil {
+		return fmt.Errorf("update daemonset %s: %w", k.resourceAt(namespace, name), err)
+	}
+	return nil
+}
+
+func (k *kubeClient) EnsureNamespace(ctx context.Context, name string) error {
+	var ns corev1.Namespace
+	err := k.c.Get(ctx, client.ObjectKey{Name: name}, &ns)
+	if err == nil {
+		return nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("get namespace %s: %w", name, err)
+	}
+	created := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
+	if err := k.c.Create(ctx, created); err != nil && !apierrors.IsAlreadyExists(err) {
+		return fmt.Errorf("create namespace %s: %w", name, err)
+	}
+	return nil
+}
+
+func (k *kubeClient) GetService(ctx context.Context, namespace, name string) (*corev1.Service, error) {
+	var svc corev1.Service
+	if err := k.c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &svc); err != nil {
+		return nil, fmt.Errorf("get service %s: %w", k.resourceAt(namespace, name), err)
+	}
+	return &svc, nil
+}
+
+func (k *kubeClient) UpdateService(ctx context.Context, s *corev1.Service) error {
+	if err := k.c.Update(ctx, s); err != nil {
+		return fmt.Errorf("update service %s: %w", k.resourceAt(s.Namespace, s.Name), err)
+	}
+	return nil
 }
 
 // secretOf is a small helper for seeds to build a typed Secret with the

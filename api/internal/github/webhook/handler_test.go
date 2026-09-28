@@ -4,6 +4,7 @@
 package webhook
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -24,7 +25,7 @@ func sign(body, secret string) string {
 }
 
 func TestWebhook_ValidSignature_Returns200(t *testing.T) {
-	h := NewHandler(testSecret, slog.Default())
+	h := NewHandler(context.Background(), testSecret, slog.Default())
 	body := `{"ref":"refs/heads/main","after":"abc123"}`
 	sig := sign(body, testSecret)
 
@@ -42,7 +43,7 @@ func TestWebhook_ValidSignature_Returns200(t *testing.T) {
 }
 
 func TestWebhook_MissingSignature_Returns401(t *testing.T) {
-	h := NewHandler(testSecret, slog.Default())
+	h := NewHandler(context.Background(), testSecret, slog.Default())
 
 	req := httptest.NewRequest("POST", "/webhooks/github", strings.NewReader("{}"))
 	req.Header.Set(eventHeader, "push")
@@ -56,7 +57,7 @@ func TestWebhook_MissingSignature_Returns401(t *testing.T) {
 }
 
 func TestWebhook_InvalidSignature_Returns403(t *testing.T) {
-	h := NewHandler(testSecret, slog.Default())
+	h := NewHandler(context.Background(), testSecret, slog.Default())
 
 	req := httptest.NewRequest("POST", "/webhooks/github", strings.NewReader("{}"))
 	req.Header.Set(signatureHeader, "sha256=deadbeef")
@@ -71,7 +72,7 @@ func TestWebhook_InvalidSignature_Returns403(t *testing.T) {
 }
 
 func TestWebhook_WrongMethod_Returns405(t *testing.T) {
-	h := NewHandler(testSecret, slog.Default())
+	h := NewHandler(context.Background(), testSecret, slog.Default())
 
 	req := httptest.NewRequest("GET", "/webhooks/github", nil)
 	w := httptest.NewRecorder()
@@ -83,7 +84,7 @@ func TestWebhook_WrongMethod_Returns405(t *testing.T) {
 }
 
 func TestWebhook_UnknownEvent_Returns200(t *testing.T) {
-	h := NewHandler(testSecret, slog.Default())
+	h := NewHandler(context.Background(), testSecret, slog.Default())
 	body := `{}`
 	sig := sign(body, testSecret)
 
@@ -104,7 +105,7 @@ func TestWebhook_PushEvent_DispatchesToHandler(t *testing.T) {
 	var mu sync.Mutex
 	var received *PushEvent
 
-	h := NewHandler(testSecret, slog.Default()).OnPush(func(event PushEvent) error {
+	h := NewHandler(context.Background(), testSecret, slog.Default()).OnPush(func(_ context.Context, event PushEvent) error {
 		mu.Lock()
 		defer mu.Unlock()
 		received = &event
@@ -178,7 +179,7 @@ func TestWebhook_PullRequestEvent_DispatchesToHandler(t *testing.T) {
 	var mu sync.Mutex
 	var received *PullRequestEvent
 
-	h := NewHandler(testSecret, slog.Default()).OnPullRequest(func(event PullRequestEvent) error {
+	h := NewHandler(context.Background(), testSecret, slog.Default()).OnPullRequest(func(_ context.Context, event PullRequestEvent) error {
 		mu.Lock()
 		defer mu.Unlock()
 		received = &event
@@ -260,7 +261,7 @@ func TestPushEvent_BranchHelpers(t *testing.T) {
 
 func TestWebhook_CounterIncremented_AcceptedPath(t *testing.T) {
 	resetGitHubWebhookCounter()
-	h := NewHandler(testSecret, slog.Default())
+	h := NewHandler(context.Background(), testSecret, slog.Default())
 	body := `{"ref":"refs/heads/main","after":"abc123"}`
 	sig := sign(body, testSecret)
 
@@ -279,7 +280,7 @@ func TestWebhook_CounterIncremented_AcceptedPath(t *testing.T) {
 
 func TestWebhook_CounterIncremented_InvalidSignature(t *testing.T) {
 	resetGitHubWebhookCounter()
-	h := NewHandler(testSecret, slog.Default())
+	h := NewHandler(context.Background(), testSecret, slog.Default())
 	req := httptest.NewRequest("POST", "/webhooks/github", strings.NewReader("{}"))
 	req.Header.Set(signatureHeader, "sha256=deadbeef")
 	req.Header.Set(eventHeader, "push")
@@ -296,7 +297,7 @@ func TestWebhook_CounterIncremented_InvalidSignature(t *testing.T) {
 
 func TestWebhook_CounterIncremented_MissingSignature(t *testing.T) {
 	resetGitHubWebhookCounter()
-	h := NewHandler(testSecret, slog.Default())
+	h := NewHandler(context.Background(), testSecret, slog.Default())
 	req := httptest.NewRequest("POST", "/webhooks/github", strings.NewReader("{}"))
 	req.Header.Set(eventHeader, "push")
 	w := httptest.NewRecorder()
@@ -314,7 +315,7 @@ func TestWebhook_PropagatesGitHubDeliveryAsCorrelationID(t *testing.T) {
 	// attribute is present.
 	var buf strings.Builder
 	captureLogger := slog.New(slog.NewJSONHandler(&logWriter{w: &buf}, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	h := NewHandler(testSecret, captureLogger)
+	h := NewHandler(context.Background(), testSecret, captureLogger)
 
 	body := `{"ref":"refs/heads/main","after":"abc123"}`
 	sig := sign(body, testSecret)
@@ -337,7 +338,7 @@ func TestWebhook_FallsBackToXCorrelationIDHeader_WhenDeliveryMissing(t *testing.
 	// front-proxy can still thread the id through.
 	var buf strings.Builder
 	captureLogger := slog.New(slog.NewJSONHandler(&logWriter{w: &buf}, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	h := NewHandler(testSecret, captureLogger)
+	h := NewHandler(context.Background(), testSecret, captureLogger)
 
 	body := `{"ref":"refs/heads/main","after":"abc123"}`
 	sig := sign(body, testSecret)

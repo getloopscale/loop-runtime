@@ -41,7 +41,7 @@ func compliant() map[string]string {
 
 // The split shape passes: plumbing carries no domain vocabulary and every home is populated.
 func TestPlumbingWithoutDomainVocabularyPasses(t *testing.T) {
-	out, err := packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, compliant())})
+	out, err := violationOf(packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, compliant())}))
 	if err != nil {
 		t.Fatalf("the split shape should pass; got %v", err)
 	}
@@ -59,7 +59,7 @@ func TestPlumbingWithoutDomainVocabularyPasses(t *testing.T) {
 func TestDomainNamedFileInPlumbingIsRefused(t *testing.T) {
 	files := compliant()
 	files["tenant_evictor.go"] = "package k8s\n\ntype TenantK8sEvictor struct{}\n"
-	out, err := packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, files)})
+	out, err := violationOf(packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, files)}))
 	if !errors.Is(err, packageadmission.ErrForeignDomain) {
 		t.Fatalf("expected ErrForeignDomain, got %v", err)
 	}
@@ -87,7 +87,7 @@ func TestDomainNamedFileInPlumbingIsRefused(t *testing.T) {
 func TestNeutralFileNameWithDomainExportIsRefused(t *testing.T) {
 	files := compliant()
 	files["helpers.go"] = "package k8s\n\nfunc EnsureLoopZeroApplication() {}\n"
-	if _, err := packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, files)}); !errors.Is(err, packageadmission.ErrForeignDomain) {
+	if _, err := violationOf(packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, files)})); !errors.Is(err, packageadmission.ErrForeignDomain) {
 		t.Fatalf("a neutral file name does not launder a domain export; got %v", err)
 	}
 }
@@ -98,7 +98,7 @@ func TestNeutralFileNameWithDomainExportIsRefused(t *testing.T) {
 func TestUnexportedDomainHelperIsAllowed(t *testing.T) {
 	files := compliant()
 	files["resolve.go"] = "package k8s\n\nfunc resolveTenantEntry() {}\n"
-	if _, err := packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, files)}); err != nil {
+	if _, err := violationOf(packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, files)})); err != nil {
 		t.Fatalf("an unexported helper is not an admission; got %v", err)
 	}
 }
@@ -108,7 +108,7 @@ func TestUnexportedDomainHelperIsAllowed(t *testing.T) {
 func TestEmptiedHomeIsRefused(t *testing.T) {
 	files := compliant()
 	delete(files, "workload/application_cr_manager.go")
-	if _, err := packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, files)}); !errors.Is(err, packageadmission.ErrHomeMissing) {
+	if _, err := violationOf(packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, files)})); !errors.Is(err, packageadmission.ErrHomeMissing) {
 		t.Fatalf("expected ErrHomeMissing, got %v", err)
 	}
 }
@@ -118,7 +118,7 @@ func TestEmptiedHomeIsRefused(t *testing.T) {
 func TestHomeWithoutExportedTypeIsRefused(t *testing.T) {
 	files := compliant()
 	files["workload/application_cr_manager.go"] = "// Package workload ...\npackage workload\n"
-	if _, err := packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, files)}); !errors.Is(err, packageadmission.ErrHomeMissing) {
+	if _, err := violationOf(packageadmission.Check(packageadmission.Config{RepoRoot: tree(t, files)})); !errors.Is(err, packageadmission.ErrHomeMissing) {
 		t.Fatalf("expected ErrHomeMissing, got %v", err)
 	}
 }
@@ -126,14 +126,14 @@ func TestHomeWithoutExportedTypeIsRefused(t *testing.T) {
 // Absent package FAILS. Green over a directory that vanished is the failure mode the
 // sibling gate adapter-ports records.
 func TestMissingPackageIsRefused(t *testing.T) {
-	if _, err := packageadmission.Check(packageadmission.Config{RepoRoot: t.TempDir()}); !errors.Is(err, packageadmission.ErrNothingScanned) {
+	if _, err := violationOf(packageadmission.Check(packageadmission.Config{RepoRoot: t.TempDir()})); !errors.Is(err, packageadmission.ErrNothingScanned) {
 		t.Fatal("an absent governed package must fail")
 	}
 }
 
 // The real population.
 func TestRealTree(t *testing.T) {
-	out, err := packageadmission.Check(packageadmission.Config{RepoRoot: filepath.Join("..", "..", "..", "..", "..")})
+	out, err := violationOf(packageadmission.Check(packageadmission.Config{RepoRoot: filepath.Join("..", "..", "..", "..", "..")}))
 	if err != nil {
 		t.Fatalf("real tree: %v (violations: %v)", err, out.Violations)
 	}

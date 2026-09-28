@@ -74,9 +74,9 @@ func localContextFor(role ClusterRole) string {
 // but no longer flips the resolver mode by itself.
 //
 // Resolution order:
-//   1. LOOPZERO_TEST_ENV=drill + DRILL_KUBECONFIG_DIR set → drill DOKS resolver
-//   2. LOOPZERO_TEST_ENV=k3d (or unset) → local k3d resolver (default)
-//   3. LOOPZERO_TEST_ENV=prod → stub (per ADR-2026-05-20-D5)
+//  1. LOOPZERO_TEST_ENV=drill + DRILL_KUBECONFIG_DIR set → drill DOKS resolver
+//  2. LOOPZERO_TEST_ENV=k3d (or unset) → local k3d resolver (default)
+//  3. LOOPZERO_TEST_ENV=prod → stub (per ADR-2026-05-20-D5)
 //
 // All Task targets (`task e2e:drill`, `task drill:l2-scale`) already
 // set LOOPZERO_TEST_ENV; this removal closes the implicit-mode foot-gun

@@ -21,10 +21,10 @@ func write(t *testing.T, root, rel, body string) {
 	}
 }
 
-// TestDetectaOrgDivergente reproduces the exact defect that broke the loopzero-api image build on
+// TestDetectsDivergentOrg reproduces the exact defect that broke the loopzero-api image build on
 // merge to develop (2026-08-08): go.mod moved to getloopscale, the Dockerfile kept authenticating
 // to getloopscale.
-func TestDetectaOrgDivergente(t *testing.T) {
+func TestDetectsDivergentOrg(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/loopzero-contracts v0.4.0\n")
 	write(t, root, "api/Dockerfile", `FROM golang
@@ -45,7 +45,7 @@ RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://gi
 	}
 }
 
-func TestAceitaQuandoAsOrgsBatem(t *testing.T) {
+func TestAcceptsWhenOrgsAgree(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/loopzero-contracts v0.4.0\n")
 	write(t, root, "api/Dockerfile", `FROM golang
@@ -61,11 +61,11 @@ RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://gi
 
 // A comment naming the old org is history, not a credential path. Flagging it would push people
 // to delete the record of why something changed — the opposite of what the repo wants.
-func TestComentarioHistoricoNaoEAchado(t *testing.T) {
+func TestHistoricalCommentIsNotAFinding(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/loopzero-contracts v0.4.0\n")
 	write(t, root, "api/Dockerfile", `FROM golang
-# CORRIGIDO: antes autenticava para github.com/getloopscale/ e o build quebrava.
+# FIXED: it used to authenticate to github.com/getloopscale/ and the build broke.
 ENV GOPRIVATE=github.com/getloopscale/*
 RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
 `)
@@ -77,7 +77,7 @@ RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://gi
 }
 
 // A file that configures no module auth at all is not this gate's business.
-func TestArquivoSemAuthEIgnorado(t *testing.T) {
+func TestFileWithoutAuthIsIgnored(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/loopzero-contracts v0.4.0\n")
 	write(t, root, "api/Dockerfile", "FROM golang\nRUN echo hello\n")
@@ -89,7 +89,7 @@ func TestArquivoSemAuthEIgnorado(t *testing.T) {
 }
 
 // The real repository must pass — this is the assertion that the fix actually landed.
-func TestRepositorioRealPassa(t *testing.T) {
+func TestRealRepositoryPasses(t *testing.T) {
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)

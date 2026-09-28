@@ -11,16 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getLatestReleaseAttestationByBuild = `-- name: GetLatestReleaseAttestationByBuild :one
+const getLatestReleaseAttestationByBuildForTenant = `-- name: GetLatestReleaseAttestationByBuildForTenant :one
 
 SELECT image_digest, image_signature, image_signed_at
 FROM releases
-WHERE build_id = $1
+WHERE build_id = $1 AND tenant_id = $2
 ORDER BY created_at DESC
 LIMIT 1
 `
 
-type GetLatestReleaseAttestationByBuildRow struct {
+type GetLatestReleaseAttestationByBuildForTenantParams struct {
+	BuildID  string `json:"build_id"`
+	TenantID string `json:"tenant_id"`
+}
+
+type GetLatestReleaseAttestationByBuildForTenantRow struct {
 	ImageDigest    *string            `json:"image_digest"`
 	ImageSignature *string            `json:"image_signature"`
 	ImageSignedAt  pgtype.Timestamptz `json:"image_signed_at"`
@@ -40,35 +45,6 @@ type GetLatestReleaseAttestationByBuildRow struct {
 //   - Empty signature fields → signed=false (legacy releases pre-
 //     Phase 5)
 //
-// tenantpredicate:exempt
-// Caller-trusted (internal/admin) variant: any tenant. NoRows →
-// wrapper maps to loopzeroerrors.ErrBuildNotFound.
-func (q *Queries) GetLatestReleaseAttestationByBuild(ctx context.Context, db DBTX, buildID string) (GetLatestReleaseAttestationByBuildRow, error) {
-	row := db.QueryRow(ctx, getLatestReleaseAttestationByBuild, buildID)
-	var i GetLatestReleaseAttestationByBuildRow
-	err := row.Scan(&i.ImageDigest, &i.ImageSignature, &i.ImageSignedAt)
-	return i, err
-}
-
-const getLatestReleaseAttestationByBuildForTenant = `-- name: GetLatestReleaseAttestationByBuildForTenant :one
-SELECT image_digest, image_signature, image_signed_at
-FROM releases
-WHERE build_id = $1 AND tenant_id = $2
-ORDER BY created_at DESC
-LIMIT 1
-`
-
-type GetLatestReleaseAttestationByBuildForTenantParams struct {
-	BuildID  string `json:"build_id"`
-	TenantID string `json:"tenant_id"`
-}
-
-type GetLatestReleaseAttestationByBuildForTenantRow struct {
-	ImageDigest    *string            `json:"image_digest"`
-	ImageSignature *string            `json:"image_signature"`
-	ImageSignedAt  pgtype.Timestamptz `json:"image_signed_at"`
-}
-
 // Tenant-isolated variant: cross-tenant reads return NoRows (mapped
 // to ErrBuildNotFound in wrapper, NOT ErrForbidden) to avoid
 // existence leaks per ADR-0014 trust model.

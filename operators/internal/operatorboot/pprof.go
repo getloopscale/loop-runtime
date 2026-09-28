@@ -1,10 +1,10 @@
-// Package operatorboot guarda o que roda no ARRANQUE de um binário de operator,
-// antes de o gerenciador começar.
+// Package operatorboot holds what runs at the START of an operator binary,
+// before the manager begins.
 //
-// É um pacote pequeno de propósito (B-061). Ele é compartilhado pelos quatro
-// binários, então precisa ser um pacote; e o que guarda é a única coisa que roda
-// antes do laço de reconcile existir. A alternativa — devolvê-lo ao pacote de
-// reconcile — é exatamente a mistura que aquele item desfez.
+// It is small on purpose (B-061). The four binaries share it, so it has to be
+// a package; and what it holds is the only thing that runs before the
+// reconcile loop exists. The alternative — returning it to the reconcile
+// package — is exactly the mixing that item undid.
 package operatorboot
 
 import (

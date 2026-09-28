@@ -4,7 +4,7 @@
 // Package tenant implements the Tenant + Environment controllers
 // (operator binary `loopzero-tenant-operator` per ADR-0023). Owns the
 // per-tenant lifecycle: provisioning, multi-cell placement resolve
-// via cellmgr.RuntimeFactory, GitOps repo creation, credential
+// via cellrouting.RuntimeClientFactory, GitOps repo creation, credential
 // rotation, deletion (soft + grace + cleanup). Cross-cluster
 // reconciliation routes through ClusterCredential CR lookup by
 // `spec.cellID`.
@@ -29,10 +29,10 @@ import (
 
 	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
 	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
 	"github.com/getloopscale/loopzero/operators/internal/conditions"
 	"github.com/getloopscale/loopzero/operators/internal/constants"
 	"github.com/getloopscale/loopzero/operators/internal/gitea"
-	"github.com/getloopscale/loopzero/operators/internal/harbor"
 	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
 	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
 	"github.com/getloopscale/loopzero/operators/internal/vault"
@@ -54,19 +54,20 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // resources on the build and runtime clusters using separate clients.
 //   - r.Client        → mgmt cluster (Tenant CRDs, status, Gitea, ArgoCD)
 //   - r.BuildClient   → build cluster (build-{tenant} namespaces, quotas, secrets)
-//   - r.RuntimeClient → runtime cluster ({tenant}-{env} namespaces, RBAC, network policies)
+//   - r.RuntimeFactory → the runtime cluster of the tenant's cell, by Spec.CellID
+//     (PriorityClass). There is no default runtime cluster:
+//     a tenant pinned to cell-1 must never have its runtime objects written to cell-0.
 //
 // ARCH-002: Field usage by sub-file:
-//   - tenant_controller.go: Client, Scheme, RuntimeClient (environment CRs)
+//   - tenant_controller.go: Client, Scheme (environment CRs)
 //   - tenant_build.go:      BuildClient, MinIOProvisioner, Credentials
 //   - tenant_gitops.go:     Client, GitProvisioner, ArgoCDProvisioner, GiteaURL, WorkloadClusterURL
 //   - tenant_credentials.go: BuildClient, Credentials (DOToken, RegistryDockerConfig)
-//   - tenant_priority.go:   RuntimeClient
-//   - tenant_harbor.go:     HarborClient, HarborRegistryHost, BuildClient, RuntimeClient
+//   - tenant_priority.go:   RuntimeFactory
 //
 // ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers for the LOCAL
 // (mgmt cluster) RBAC. controller-gen rbac generates ClusterRole rules
-// from these. Cross-cluster RBAC (BuildClient, RuntimeClient) is
+// from these. Cross-cluster RBAC (BuildClient, RuntimeFactory) is
 // hand-maintained per ADR-0026 condition #2 and lives in
 // charts/loopzero-tenant-operator/templates/cross-cluster-rbac.yaml.
 //
@@ -76,7 +77,7 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // +kubebuilder:rbac:groups=loopzero.io,resources=environments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=resourcequotas,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.k8s.io,resources=priorityclasses,verbs=get;list;watch;create;update;patch
@@ -100,14 +101,12 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // § Decision on the domain term (2026-09-06).
 type TenantReconciler struct {
 	client.Client
-	Scheme             *runtime.Scheme
-	BuildClient        client.Client // targets the build cluster
-	RuntimeClient      client.Client // targets the runtime cluster
-	GitProvisioner     gitea.GitRepoProvisioner
-	ArgoCDProvisioner  argocd.Provisioner
-	MinIOProvisioner   miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
-	HarborClient       harbor.Provisioner           // nil disables Harbor integration (backward compat with DOCR)
-	HarborRegistryHost string                       // e.g. "harbor.dev.loopzero.example" — used in Docker config.json
+	Scheme            *runtime.Scheme
+	BuildClient       client.Client                    // targets the build cluster
+	RuntimeFactory    cellrouting.RuntimeClientFactory // resolves the runtime cluster of the tenant cell
+	GitProvisioner    gitea.GitRepoProvisioner
+	ArgoCDProvisioner argocd.Provisioner
+	MinIOProvisioner  miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
 	// T3.3 of openbao-adoption v1.3: per-tenant Vault Transit key management.
 	// nil disables (vault disabled mode); reconcileTransitKey skips step + sets no condition.
 	VaultClient        vault.TenantTransitClient
@@ -122,29 +121,18 @@ type TenantControllerConfig struct {
 	GiteaURL                string
 	WorkloadClusterURL      string
 	MinIOProvisioner        miniop.CredentialProvisioner // nil disables per-tenant MinIO credential isolation
-	HarborClient            harbor.Provisioner           // nil disables Harbor integration
-	HarborRegistryHost      string                       // e.g. "harbor.dev.loopzero.example"
 	Credentials             BuildCredentials             // storage + registry credentials
 	RegistryCIDRs           []string                     // CIDR ranges for container registry (RISK-007)
 	MaxConcurrentReconciles int                          // 0 defaults to 5 (MEET-052: backpressure for bulk deletion)
 }
 
-// tenantDetailTypes are the per-step conditions that SetReadinessSummary
-// classifies for kstatus. Per ADR-0025 D3.
-var tenantDetailTypes = []string{
-	conditions.TypeGitRepoReady,
-	conditions.TypeQuotaEnforced,
-	conditions.TypeBuildNamespaceReady,
-	conditions.TypePriorityClassReady,
-	conditions.TypeArgoCDAppReady,
-	// HarborProjectReady is only required when HarborClient is configured;
-	// included here so kstatus.Compute waits for it in Harbor mode. In DOCR
-	// mode the controller never sets it, so SetReadinessSummary classifies
-	// as Reconciling (missing detail). Acceptable: DOCR-mode tenants stay
-	// Reconciling forever from a kstatus standpoint UNTIL the per-tenant
-	// requiredProvisioningConditions() omits Harbor — TODO follow-up: add
-	// runtime-conditional detailTypes selector.
-	conditions.TypeHarborProjectReady,
+// runtimeClient resolves the runtime cluster of the tenant's cell.
+func (r *TenantReconciler) runtimeClient(ctx context.Context, tenant *loopzerov1.Tenant) (client.Client, error) {
+	c, err := r.RuntimeFactory.For(ctx, tenant.Spec.CellID)
+	if err != nil {
+		return nil, fmt.Errorf("tenant %s (cellID=%q): runtime cluster client: %w", tenant.Name, tenant.Spec.CellID, err)
+	}
+	return c, nil
 }
 
 // Reconcile handles the reconciliation loop for Tenant resources.
@@ -177,24 +165,6 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// logs + audit_log writes trace back to the originating request. No-op
 	// for background reconciles (watch event without annotation).
 	ctx = correlation.WithID(ctx, tenant.GetAnnotations()["loopzero.io/correlation-id"])
-
-	// kstatus universal: SetReadinessSummary MUST be the LAST status
-	// mutation per ADR-0025 D3 condition #1. Defer ensures it runs even
-	// on early return / panic from internal helpers.
-	// Adjust detailTypes for DOCR mode (HarborClient nil → skip Harbor).
-	dt := tenantDetailTypes
-	if r.HarborClient == nil {
-		dt = dt[:len(dt)-1] // drop trailing TypeHarborProjectReady
-	}
-	// Delegated to the shared helper (B-085). This was an inlined copy of it that
-	// persisted with `_ = r.Status().Update(...)` — the forbidden pattern, with the
-	// error discarded. Four sibling controllers already delegate, and slice-10
-	// fixed the helper to use a locked merge patch and to log the failure; keeping
-	// a local copy meant it silently diverged from the fixed one.
-	defer reconcileloop.DeferReadinessSummary(ctx, r.Client, req.NamespacedName,
-		func() *loopzerov1.Tenant { return &loopzerov1.Tenant{} },
-		func(t *loopzerov1.Tenant) *[]metav1.Condition { return &t.Status.Conditions },
-		dt)()
 
 	// Handle deletion with verify-then-remove finalizer pattern
 	if !tenant.DeletionTimestamp.IsZero() {
@@ -259,7 +229,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	// It carries no resourceVersion only BECAUSE `base` is captured after the
 	// finalizer write; see the snapshot comment above. That is asserted by
 	// TestTenantStatusPatch_CarriesNoResourceVersion, on the emitted bytes.
-	if err := r.Status().Patch(ctx, &tenant, client.MergeFrom(base)); err != nil {
+	if err := r.patchStatus(ctx, &tenant, base); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -282,8 +252,6 @@ func (r *TenantReconciler) provisioningSteps(ctx context.Context, tenant *loopze
 		{conditions.TypeArgoCDAppReady, func() error { return r.reconcileArgoCDApp(ctx, tenant) }},
 		{conditions.TypeBuildNamespaceReady, func() error { return r.reconcileBuildNamespace(ctx, tenant) }},
 		{conditions.TypePriorityClassReady, func() error { return r.reconcilePriorityClass(ctx, tenant) }},
-		{conditions.TypeHarborProjectReady, func() error { return r.ensureHarborProject(ctx, tenant) }},
-		{"", func() error { return r.ensureHarborRobotAccounts(ctx, tenant) }},
 		{"", func() error { return r.reconcileEnvironmentCRs(ctx, tenant) }},
 	}
 }
@@ -315,7 +283,7 @@ func (r *TenantReconciler) runSteps(ctx context.Context, tenant, base *loopzerov
 			// names only what changed, so there is nothing stale to dodge — see
 			// the snapshot comment in Reconcile for why the placement of `base`
 			// is what makes that true (B-085).
-			if statusErr := r.Status().Patch(ctx, tenant, client.MergeFrom(base)); statusErr != nil {
+			if statusErr := r.patchStatus(ctx, tenant, base); statusErr != nil {
 				logger.Error(statusErr, "failed to update tenant status", "tenant", tenant.Name)
 			}
 			return err
@@ -325,9 +293,10 @@ func (r *TenantReconciler) runSteps(ctx context.Context, tenant, base *loopzerov
 }
 
 // requiredProvisioningConditions returns the conditions that must be True
-// for a tenant to transition from PROVISIONING to ACTIVE.
-// When HarborClient is configured, HarborProjectReady is required.
-// When HarborClient is nil (DOCR mode), Harbor conditions are skipped.
+// for a tenant to transition from PROVISIONING to ACTIVE, and the detail
+// conditions the kstatus readiness summary classifies (ADR-0025 D3): one rule
+// for both, so a tenant is never Ready on a condition it is not required to
+// meet, nor Active while the summary waits on one it never gets.
 func (r *TenantReconciler) requiredProvisioningConditions() []string {
 	required := []string{
 		conditions.TypeGitRepoReady,
@@ -335,9 +304,6 @@ func (r *TenantReconciler) requiredProvisioningConditions() []string {
 		conditions.TypeBuildNamespaceReady,
 		conditions.TypeQuotaEnforced,
 		conditions.TypePriorityClassReady,
-	}
-	if r.HarborClient != nil {
-		required = append(required, conditions.TypeHarborProjectReady)
 	}
 	// TypeTransitKeyAvailable is deliberately NOT required, and the reason is a trap
 	// worth naming: it used to be appended whenever VaultClient != nil, and VaultClient
@@ -481,7 +447,10 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 // If empty, it defaults to the in-cluster Gitea service URL.
 // cfg.WorkloadClusterURL configures the workload cluster API server URL for ArgoCD Applications.
 // If empty, it defaults to "https://kubernetes.default.svc" (backward compatible for single-cluster setups).
-func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner, buildClient client.Client, runtimeClient client.Client, cfg TenantControllerConfig) error {
+func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisioner, argoCDProvisioner argocd.Provisioner, buildClient client.Client, runtimeFactory cellrouting.RuntimeClientFactory, cfg TenantControllerConfig) error {
+	if runtimeFactory == nil {
+		return fmt.Errorf("tenant controller: a runtime client factory is required")
+	}
 	giteaURL := cfg.GiteaURL
 	if giteaURL == "" {
 		giteaURL = constants.DefaultGiteaURL
@@ -525,15 +494,22 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 			Client:             mgr.GetClient(),
 			Scheme:             mgr.GetScheme(),
 			BuildClient:        buildClient,
-			RuntimeClient:      runtimeClient,
+			RuntimeFactory:     runtimeFactory,
 			GitProvisioner:     gitProvisioner,
 			ArgoCDProvisioner:  argoCDProvisioner,
 			MinIOProvisioner:   cfg.MinIOProvisioner,
-			HarborClient:       cfg.HarborClient,
-			HarborRegistryHost: cfg.HarborRegistryHost,
 			GiteaURL:           giteaURL,
 			WorkloadClusterURL: workloadClusterURL,
 			Credentials:        cfg.Credentials,
 			RegistryCIDRs:      cfg.RegistryCIDRs,
 		})
+}
+
+// patchStatus is the single status writer of this controller. It folds the
+// kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
+// with a merge patch off base, so every write carries a Ready condition that
+// agrees with the conditions written beside it.
+func (r *TenantReconciler) patchStatus(ctx context.Context, tenant, base *loopzerov1.Tenant) error {
+	conditions.SetReadinessSummaryViaPkg(&tenant.Status.Conditions, tenant.Generation, r.requiredProvisioningConditions())
+	return r.Status().Patch(ctx, tenant, client.MergeFrom(base))
 }

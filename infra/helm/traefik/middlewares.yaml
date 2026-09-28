@@ -1,22 +1,22 @@
 # Traefik middlewares available in this cluster.
 #
-# CORRECAO (#59): este cabecalho dizia "applied to ALL tenant IngressRoutes",
-# e isso era FALSO — e perigoso. Rastreado em
-# api/internal/manifests/renderer_ingress.go, as rotas de tenant (primaria e
-# dominios custom) sao renderizadas SEM campo `Middlewares`. Nada aqui e'
-# aplicado automaticamente.
+# CORRECTION (#59): this header used to say "applied to ALL tenant IngressRoutes",
+# and that was FALSE — and dangerous. Traced in
+# api/internal/manifests/renderer_ingress.go, tenant routes (primary and
+# custom domains) are rendered WITHOUT a `Middlewares` field. Nothing here is
+# applied automatically.
 #
-# Por que a frase errada era perigosa, e nao so' imprecisa: um operador lendo
-# "aplicado a todas" e vendo que nao estava aplicado tenderia a "consertar"
-# ligando o middleware de CSP as rotas de tenant. Isso sobrescreveria o header
-# Content-Security-Policy de TODA app LoopZeroKit, que serve nonce por requisicao —
-# o header passaria a divergir do `<script nonce="...">` do corpo, e o browser
-# bloquearia todo script inline EM SILENCIO. Sem erro no servidor, sem log.
+# Why the wrong sentence was dangerous, and not just inaccurate: an operator reading
+# "applied to all" and seeing it was not applied would tend to "fix" it by
+# attaching the CSP middleware to the tenant routes. That would overwrite the
+# Content-Security-Policy header of EVERY LoopZeroKit app, which serves a per-request nonce —
+# the header would diverge from the body's `<script nonce="...">`, and the browser
+# would block every inline script IN SILENCE. No server error, no log.
 #
-# Quem de fato e' referenciado pelas rotas geradas: `traefik-rate-limit@kubernetescrd`
-# e `traefik-body-limit@kubernetescrd`, por nome.
+# What the generated routes actually reference: `traefik-rate-limit@kubernetescrd`
+# and `traefik-body-limit@kubernetescrd`, by name.
 #
-# O invariante esta travado por `loopzero-ops quality tenant-csp-passthrough`.
+# The invariant is locked by `loopzero-ops quality tenant-csp-passthrough`.
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -48,13 +48,13 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  # RENOMEADO (#59): era `security-headers`. O nome antigo descrevia uma
-  # ambicao ("os headers de seguranca") e convidava exatamente ao erro acima —
-  # quem nao quer aplicar os headers de seguranca a todo mundo? O nome novo
-  # descreve o USO REAL: o site de marketing, cujo checkout Stripe precisa de
-  # `script-src https://js.stripe.com` e que NAO serve nonce por requisicao.
+  # RENAMED (#59): it was `security-headers`. The old name described an
+  # ambition ("the security headers") and invited exactly the mistake above —
+  # who would not want to apply the security headers to everyone? The new name
+  # describes the REAL USE: the marketing site, whose Stripe checkout needs
+  # `script-src https://js.stripe.com` and which does NOT serve a per-request nonce.
   #
-  # Este middleware NAO deve ser anexado a rota de tenant. Ver o cabecalho.
+  # This middleware must NOT be attached to a tenant route. See the header.
   name: marketing-site-csp
   namespace: traefik
 spec:

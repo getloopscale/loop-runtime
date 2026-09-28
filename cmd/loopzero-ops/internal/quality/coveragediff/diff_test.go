@@ -99,12 +99,25 @@ func TestRun_EmptyDiff_Pass(t *testing.T) {
 	assert.Contains(t, strings.Join(out.Messages, "\n"), "empty diff — PASS")
 }
 
-func TestRun_MissingDiffFile_Pass(t *testing.T) {
-	// Bash treats missing-or-empty equivalently as PASS (EC-7).
+// A missing diff file means the upstream gitdiff step did not run or
+// failed. That is not EC-7 (a diff that exists and is empty): reporting
+// PASS would grade a change nobody measured.
+func TestRun_MissingDiffFile_FailsAsGateError(t *testing.T) {
 	out, err := Run(Config{DiffPath: "/totally/missing/diff.txt"})
-	require.NoError(t, err)
-	assert.True(t, out.Pass)
-	assert.Equal(t, "empty-diff", out.SkipReason)
+	require.Error(t, err)
+	assert.Nil(t, out)
+	var te *loopzeroerrors.LoopZeroError
+	require.True(t, errors.As(err, &te))
+	assert.Equal(t, "OPS_DEPLOY_FAILURE", te.Code)
+}
+
+// An lcov path that exists but cannot be opened is not "no coverage data";
+// it is a report the gate could not read.
+func TestRun_UnreadableLCOV_FailsAsGateError(t *testing.T) {
+	diffPath := writeFile(t, "diff.txt", "pkg/foo/bar.go:10\n")
+	dir := t.TempDir() // a directory: os.Open succeeds, reading fails
+	_, err := Run(Config{DiffPath: diffPath, LCOVPath: dir})
+	require.Error(t, err)
 }
 
 func TestRun_MissingDiffPath_OpsUsage(t *testing.T) {
@@ -347,15 +360,4 @@ func TestOutcome_WriteMessages(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, o.WriteMessages(&buf))
 	assert.Equal(t, "line1\nline2\n", buf.String())
-}
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-func TestRoundTo1Decimal(t *testing.T) {
-	assert.Equal(t, 0.0, roundTo1Decimal(0))
-	assert.Equal(t, 50.0, roundTo1Decimal(50))
-	assert.Equal(t, 33.3, roundTo1Decimal(1.0/3.0*100))
-	assert.Equal(t, 66.7, roundTo1Decimal(2.0/3.0*100))
 }

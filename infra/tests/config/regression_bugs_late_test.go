@@ -14,13 +14,14 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
 
 // runRegressionScript invokes regression-checks.sh and returns combined output.
 func TestB50LoopZeroCloudPort13002(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-cloud/values.yaml")
+	data, err := os.ReadFile("../../../charts/loopzero-cloud/values.yaml")
 	if err != nil {
 		t.Fatalf("read loopzero-cloud values.yaml: %v", err)
 	}
@@ -28,61 +29,11 @@ func TestB50LoopZeroCloudPort13002(t *testing.T) {
 	if !strings.Contains(s, "port: 13002") {
 		t.Errorf("B50 regression: loopzero-cloud service.port must be 13002 (matches binary :13002)")
 	}
-	tplData, err := os.ReadFile("../../helm/loopzero-cloud/templates/deployment.yaml")
-	if err != nil {
-		t.Fatalf("read loopzero-cloud deployment.yaml: %v", err)
-	}
-	if !strings.Contains(string(tplData), "path: /health") {
+	// The probes are values of the one loopzero-cloud chart, rendered by its
+	// Deployment template; the bootstrap copy that spelled them in the
+	// template was deleted when the pair became one chart.
+	if !strings.Contains(s, "path: /health") {
 		t.Errorf("B50 regression: loopzero-cloud probes must use /health (not /)")
-	}
-}
-
-func TestB53ArgocdAppsValuesObject(t *testing.T) {
-	entries, err := os.ReadDir("../../argocd-bootstrap/apps")
-	if err != nil {
-		t.Fatalf("read apps dir: %v", err)
-	}
-	count := 0
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		data, err := os.ReadFile("../../argocd-bootstrap/apps/" + e.Name())
-		if err != nil {
-			continue
-		}
-		if strings.Contains(string(data), "valuesObject:") {
-			count++
-		}
-	}
-	if count < 25 {
-		t.Errorf("B53 regression: only %d Apps have helm.valuesObject (expected >= 25 — see iter 26 follow-up)", count)
-	}
-}
-
-func TestB53ArgocdAppsNoAutomatedSelfHeal(t *testing.T) {
-	entries, err := os.ReadDir("../../argocd-bootstrap/apps")
-	if err != nil {
-		t.Fatalf("read apps dir: %v", err)
-	}
-	count := 0
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		data, err := os.ReadFile("../../argocd-bootstrap/apps/" + e.Name())
-		if err != nil {
-			continue
-		}
-		// `selfHeal: true` triggers ArgoCD to overwrite helmfile state.
-		// Until T2 governance meeting decides re-enabling, this must be absent.
-		if strings.Contains(string(data), "selfHeal: true") {
-			t.Errorf("B53 regression: %s has selfHeal:true (governance meeting required first)", e.Name())
-			count++
-		}
-	}
-	if count > 0 {
-		t.Errorf("B53 regression: %d Apps still have selfHeal:true — governance meeting required", count)
 	}
 }
 
@@ -202,10 +153,20 @@ func TestB64AdmissionPoliciesAlertsConditional(t *testing.T) {
 }
 
 func TestB77LoopZeroApiGiteaOrgConfigurable(t *testing.T) {
+	// The API and the controller build their GitOps pusher through one
+	// constructor, backgroundloops.NewGitOpsPusher; the org is set there.
 	files := []string{
-		"../../../api/cmd/setup_workflows.go",
+		"../../../api/internal/backgroundloops/clients.go",
 		"../../../api/cmd/setup_stores.go",
-		"../../../api/cmd/controller/setup_services.go",
+	}
+	for _, root := range []string{"../../../api/cmd/setup_workflows.go", "../../../api/cmd/controller/setup_services.go"} {
+		data, err := os.ReadFile(root)
+		if err != nil {
+			t.Fatalf("read %s: %v", root, err)
+		}
+		if !strings.Contains(string(data), "backgroundloops.NewGitOpsPusher(") {
+			t.Errorf("B77 regression: %s must build its GitOps pusher through backgroundloops.NewGitOpsPusher, where the org comes from cfg.GiteaOrg", root)
+		}
 	}
 	for _, f := range files {
 		data, err := os.ReadFile(f)
@@ -235,23 +196,36 @@ func TestB77LoopZeroApiGiteaOrgConfigurable(t *testing.T) {
 }
 
 func TestB78LoopZeroApiHasGiteaTokenEnv(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
+	// Declared as a typed secrets.keyRefs entry of the values Helmfile installs
+	// the one loopzero-api chart with.
+	data, err := os.ReadFile("../../../charts/loopzero-api/values-bootstrap.yaml")
 	if err != nil {
-		t.Fatalf("read loopzero-api deployment.yaml: %v", err)
+		t.Fatalf("read loopzero-api bootstrap values: %v", err)
 	}
 	s := string(data)
 	if !strings.Contains(s, "name: GITEA_TOKEN") {
 		t.Error("B78 regression: loopzero-api Deployment must export env GITEA_TOKEN")
 	}
-	if !strings.Contains(s, "name: gitea-admin") {
+	if !strings.Contains(s, "secretName: gitea-admin") {
 		t.Error("B78 regression: GITEA_TOKEN must come from gitea-admin Secret")
 	}
 }
 
 func TestB79LoopZeroApiHasTmpVolume(t *testing.T) {
-	data, err := os.ReadFile("../../helm/loopzero-api/templates/deployment.yaml")
+	// The chart mounts the volume through the loopzero-common tmp helpers, so the
+	// deployment template names them and the helpers carry the shape.
+	dep, err := os.ReadFile("../../../charts/loopzero-api/templates/deployment.yaml")
 	if err != nil {
 		t.Fatalf("read loopzero-api deployment.yaml: %v", err)
+	}
+	for _, helper := range []string{`include "loopzero-common.tmpVolumeMount"`, `include "loopzero-common.tmpVolume"`} {
+		if !strings.Contains(string(dep), helper) {
+			t.Errorf("B79 regression: loopzero-api Deployment must %s", helper)
+		}
+	}
+	data, err := os.ReadFile("../../../charts/loopzero-common/templates/_helpers.tpl")
+	if err != nil {
+		t.Fatalf("read loopzero-common helpers: %v", err)
 	}
 	s := string(data)
 	// Must have a `name: tmp` volume with emptyDir
@@ -385,8 +359,8 @@ func TestB71BuildHelmfileHasCWTs(t *testing.T) {
 // "Constructs", not "imports". An audit measured the earlier wording false on
 // 2026-09-05: `go list -deps ./cmd/platform-operator` resolves
 // operators/internal/gitea too, through operators/internal/platform. The
-// conclusion survives — NewRealProvisioner is called only at
-// tenant-operator/main.go:148, and the platform path takes its organisations from
+// conclusion survives — NewRealProvisioner is called only in
+// tenant-operator/main.go, and the platform path takes its organisations from
 // pb.Spec.Gitea.Organizations rather than a literal — but the premise did not, and
 // a right conclusion through a false premise exonerates the wrong change next time.
 func TestB69GiteaOrgConfigurable(t *testing.T) {
@@ -402,12 +376,18 @@ func TestB69GiteaOrgConfigurable(t *testing.T) {
 	// "acme" would have satisfied it. Requiring the variable in the third position
 	// is the same correction a mutation run forced on the ADR-0018 metric
 	// assertions in regression_adr_test.go: check the declaration, not a mention.
-	if !strings.Contains(s, "gitea.NewRealProvisioner(giteaURL, giteaToken, giteaOrg)") {
+	// Since 4e6f524e0 the operator loads its settings once into a config struct
+	// (config.go), so the org reaches the provisioner as cfg.GiteaOrg.
+	if !strings.Contains(s, "gitea.NewRealProvisioner(cfg.GiteaURL, cfg.GiteaToken, cfg.GiteaOrg)") {
 		t.Error("B69 regression: the Gitea provisioner's orgName must be the configured " +
 			"giteaOrg variable, not a string literal")
 	}
-	if !strings.Contains(s, `os.Getenv("GITEA_ORG")`) {
-		t.Error("B69 regression: GITEA_ORG env var read missing -- required for configurable org")
+	cfgData, err := os.ReadFile("../../../operators/cmd/tenant-operator/config.go")
+	if err != nil {
+		t.Fatalf("read tenant-operator config.go: %v", err)
+	}
+	if !regexp.MustCompile(`GiteaOrg:\s+orDefault\("GITEA_ORG",`).Match(cfgData) {
+		t.Error("B69 regression: the tenant operator's config must load GiteaOrg from the GITEA_ORG env var")
 	}
 	// Reading the env is only half of the contract: a key the chart never sets is
 	// not configurable in any real install, which is what the (now absent)

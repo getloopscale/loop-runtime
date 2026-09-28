@@ -5,19 +5,19 @@ package main
 
 import (
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/lock"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/adapters"
-	"github.com/getloopscale/loopzero/api/internal/buildplane/source"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/routes/secrets"
-	sourceroutes "github.com/getloopscale/loopzero/api/internal/routes/source"
-	s3uploader "github.com/getloopscale/loopzero/api/internal/s3"
+	"github.com/getloopscale/loopzero/api/internal/objectstore"
+	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loopzero/api/internal/source"
+	sourceroutes "github.com/getloopscale/loopzero/api/internal/source/sourcehttp"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	"github.com/getloopscale/loopzero/pkg/vault"
 )
@@ -28,7 +28,7 @@ import (
 // ReleaseStore field types use the db.* interfaces so the sqlc-backed
 // wrappers (BuildStoreSqlc, ReleaseStoreSqlc) drop in transparently. The
 // rest of StoreDeps already mixes concrete + interface types (EventStore,
-// SecretStore, BootstrapStore are interfaces; DomainStore + CellStore
+// SecretStore are interfaces; DomainStore + CellStore
 // are still concrete pending their T1.x/T2.x sqlc migrations).
 type StoreDeps struct {
 	BuildStore       db.BuildStore
@@ -36,14 +36,17 @@ type StoreDeps struct {
 	EnvTargetStore   *store.PostgresEnvironmentTargetStore
 	PreviewSlotStore *store.PostgresPreviewSlotStore // 2026-06-07 D2 — single-slot preview
 	EventStore       sse.EventStore
-	PgEventStore     *sse.PostgresEventStore
-	SecretStore      secrets.SecretStore
-	BootstrapStore   ports.BootstrapStore
-	DomainStore      *store.PostgresDomainStore
-	CellStore        *store.PostgresCellStore
-	SourceStore      source.SourceStore
-	ObjUploader      sourceroutes.ObjectUploader
-	Locker           *adapters.PoolEnvironmentLocker
+	PgEventStore     *store.PostgresEventStore
+	SecretStore      secretshttp.SecretStore
+	// PgSecretStore is the same store as SecretStore, typed concretely for the
+	// two consumers that need more than the route port: the deploy-time
+	// resyncer (ListForResync) and the ESO broker (ReadValue).
+	PgSecretStore *store.PostgresSecretStore
+	DomainStore   *store.PostgresDomainStore
+	CellStore     *store.PostgresCellStore
+	SourceStore   source.SourceStore
+	ObjUploader   sourceroutes.ObjectUploader
+	Locker        *lock.PoolEnvironmentLocker
 
 	// SSE adapter
 	BuildStoreReader sse.BuildStoreReader
@@ -68,7 +71,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	// T1.3.b of plan 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1:
 	// EventStore must be constructed BEFORE releaseStore so AppendSideEffect
 	// can emit signal.changed events via canonical SSE infrastructure.
-	pgEventStore := sse.NewPostgresEventStore(dbAdapter, dbAdapter)
+	pgEventStore := store.NewPostgresEventStore(dbAdapter, dbAdapter)
 	// T1.1c2c (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed wrapper.
 	// Satisfies db.ReleaseStore interface 1:1 — service field types
 	// unchanged. State-machine SafeTransition runs at store layer (D4).
@@ -103,7 +106,11 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	// S3 uploader for source bundles — build cluster reads from Spaces.
 	var objUploader sourceroutes.ObjectUploader
 	if cfg.MinIOEndpoint != "" && cfg.MinIOAccessKey != "" && cfg.MinIOSecretKey != "" {
-		objUploader = s3uploader.New(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey)
+		objStore, err := objectstore.NewS3Store(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey)
+		if err != nil {
+			return nil, fmt.Errorf("object store: %w", err)
+		}
+		objUploader = objStore
 		logger.Info("s3 uploader enabled", "endpoint", cfg.MinIOEndpoint)
 	}
 
@@ -115,13 +122,13 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 		EventStore:       pgEventStore,
 		PgEventStore:     pgEventStore,
 		SecretStore:      secretStore,
-		BootstrapStore:   &store.PostgresBootstrapStore{DB: dbAdapter},
+		PgSecretStore:    secretStore,
 		DomainStore:      &store.PostgresDomainStore{DB: dbAdapter},
 		CellStore:        &store.PostgresCellStore{DB: dbAdapter},
 		SourceStore:      giteaSourceStore,
 		ObjUploader:      objUploader,
-		Locker:           &adapters.PoolEnvironmentLocker{Pool: dbAdapter.Pool},
-		BuildStoreReader: &adapters.BuildStoreReaderAdapter{Store: buildStore},
+		Locker:           &lock.PoolEnvironmentLocker{Pool: dbAdapter.Pool},
+		BuildStoreReader: &sse.BuildStoreReaderAdapter{Store: buildStore},
 	}, nil
 }
 
@@ -141,7 +148,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 // cfg.CryptoMode(); fail-loud refusal already fired upstream in
 // config.Validate() so reaching this function with the wrong combination
 // is a programming error, not a runtime error.
-func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.Transit, logger *slog.Logger) (secrets.SecretStore, error) {
+func setupSecretStore(dbAdapter db.DBTX, encKeyHex string, transit vault.Transit, logger *slog.Logger) (*store.PostgresSecretStore, error) {
 	var encKey []byte
 	if encKeyHex != "" {
 		var err error
@@ -151,9 +158,9 @@ func setupSecretStore(dbAdapter *db.PgxAdapter, encKeyHex string, transit vault.
 		}
 	}
 	if transit != nil {
-		// `transit` entra direto: `vault.Transit` satisfaz `store.VaultTransitClient`
-		// estruturalmente, e nenhum dos dois pacotes conhece o outro. A ponte que ficava
-		// aqui só renomeava métodos (B-043, bala 4).
+		// `transit` goes in directly: `vault.Transit` satisfies `store.VaultTransitClient`
+		// structurally, and neither package knows the other. The bridge that used to sit
+		// here only renamed methods (B-043, bullet 4).
 		store, err := store.NewPostgresSecretStoreWithVault(dbAdapter, transit, encKey)
 		if err != nil {
 			return nil, err

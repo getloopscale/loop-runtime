@@ -28,10 +28,10 @@
 # (3 evidence sources requirement).
 #
 # Usage:
-#   bash infra/scripts/drill-evidence-capture.sh <run_id> [--dry-run]
+#   bash infra/scripts/drill/evidence-capture.sh <run_id> [--dry-run]
 #
 # Example:
-#   bash infra/scripts/drill-evidence-capture.sh "drill-l2-2026-05-17-1430"
+#   bash infra/scripts/drill/evidence-capture.sh "drill-l2-2026-05-17-1430"
 #
 # Exit codes:
 #   0 — Evidence captured + committed (even if some fragments missing)
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=true; shift ;;
     -h|--help)
       cat <<'HELP'
-drill-evidence-capture.sh — Fault-tolerant drill evidence capture
+evidence-capture.sh — Fault-tolerant drill evidence capture
 
   <run_id>      Required: unique identifier for this drill run
                 Format: drill-{level}-{date}-{tag} (e.g., drill-l2-2026-05-17-1430)

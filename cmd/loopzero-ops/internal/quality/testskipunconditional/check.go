@@ -100,13 +100,11 @@
 //
 //   - WHERE THE SKIP SITS is read for two positions and not for others.
 //     Function declarations and function literals are both read, because the
-//     literal is where t.Run subtests live and six of this item's eight sites
-//     were in one. Still NOT read, each a way back in and none of them measured
-//     shut: a skip moved into a same-package helper (`skipUnless(t)`), which is
-//     not a t.Skip call at the site at all; and a two-level selector like
-//     `h.t.Skip()`, which isSkipCall does not even count. Both are B-188's,
-//     which owns the same two holes in the sibling gate -- one item, because
-//     one fix in the shared shape closes them in both.
+//     literal is where t.Run subtests live. A skip through any receiver
+//     (`h.t.Skip()`) is a skip: the definition is skipshape.IsSkipCall, shared
+//     with the sibling gate so the two cannot disagree about what a skip is.
+//     Still NOT read: a skip moved into a same-package helper (`skipUnless(t)`),
+//     which is not a skip call at the site at all.
 //
 //   - It reads a tree it does not build: parsing only, no type information. In
 //     a _test.go file `x.Skip(...)` is testing.TB's, and the receiver is not
@@ -128,13 +126,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skipshape"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-// DefaultScanDirs are the trees this gate is responsible for, repo-relative.
-// The same two `test-skip-absent-path` scans, for the same reason: the class is
-// one class in two spellings, and a tree one gate reads while the other does
-// not is a tree where the cheaper spelling is unguarded.
-var DefaultScanDirs = []string{"infra/tests", "api"}
+// DefaultScanDirs are the trees this gate governs; see skipshape.
+var DefaultScanDirs = skipshape.DefaultScanDirs
 
 // DefaultPinFile is the declaration of tracked unconditional skips. It sits in
 // infra/quality/ beside the other pinned contracts this repo keeps for its own
@@ -173,6 +171,9 @@ type Outcome struct {
 
 	Violations []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 // site is one unconditional skip, with what follows it.
 type site struct {
@@ -341,7 +342,7 @@ func Check(cfg Config) (Outcome, error) {
 				"unconditional skip with statements after it. Either the site was fixed and "+
 				"the line is stale prose, or this gate stopped detecting the shape it "+
 				"declares -- both need a human, neither is a pass",
-			DefaultPinFile, p.Raw, p.Func, p.File))
+			cfg.PinFile, p.Raw, p.Func, p.File))
 	}
 
 	sort.Strings(o.Violations)
@@ -354,7 +355,7 @@ func Check(cfg Config) (Outcome, error) {
 func scanFile(fset *token.FileSet, relFile string, f *ast.File) (int, []site) {
 	calls := 0
 	ast.Inspect(f, func(n ast.Node) bool {
-		if isSkipCall(n) {
+		if skipshape.IsSkipCall(n) {
 			calls++
 		}
 		return true
@@ -384,7 +385,7 @@ func bodySites(fset *token.FileSet, relFile, fn string, inLit bool, body *ast.Bl
 	var out []site
 	for i, st := range body.List {
 		es, ok := st.(*ast.ExprStmt)
-		if !ok || !isSkipCall(es.X) {
+		if !ok || !skipshape.IsSkipCall(es.X) {
 			continue
 		}
 		out = append(out, site{
@@ -420,37 +421,13 @@ func skipText(x ast.Expr) string {
 	return s
 }
 
-// isSkipCall reports whether n is `<x>.Skip(...)`, `.Skipf(...)` or
-// `.SkipNow()`. The receiver is not type-checked: this package parses without
-// type information on purpose, and in a _test.go file those three selectors are
-// testing.TB's. Kept byte-identical to test-skip-absent-path's, so the two
-// gates cannot disagree about what a skip is.
-func isSkipCall(n ast.Node) bool {
-	call, ok := n.(*ast.CallExpr)
-	if !ok {
-		return false
-	}
-	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	if _, ok := sel.X.(*ast.Ident); !ok {
-		return false
-	}
-	switch sel.Sel.Name {
-	case "Skip", "Skipf", "SkipNow":
-		return true
-	}
-	return false
-}
-
 // readPin parses the declaration file. Every parse failure is a BROKEN SETUP,
 // never a pass: a pin the gate cannot read is a set of declarations it cannot
 // honour, and continuing would turn tracked sites into fresh violations or, if
 // the file were skipped entirely, fresh violations into silence.
 func readPin(abs, rel string) (map[string]pinLine, error) {
 	// #nosec G304 -- abs is the pin file the gate is configured to read; same
-	// annotation and same reason as testskipabsentpath/check.go:2127, which reads
+	// annotation and same reason as testskipabsentpath's parsePins, which reads
 	// its own declaration file the same way.
 	f, err := os.Open(abs)
 	if err != nil {

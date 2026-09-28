@@ -4,53 +4,40 @@
 package manifests
 
 import (
-	"os"
-	"regexp"
-	"strings"
 	"testing"
 )
 
-// A plataforma injeta UMA env var no contentor do workload: `PORT`. O outro
-// ponto que escreve `container.Env` copia o env do PROPRIO app — valores do
-// usuario, nao da plataforma.
+// The platform injects exactly ONE environment variable into the workload
+// container: `PORT`. Every other env entry is copied from the app's own
+// configuration — user values, not platform values.
 //
-// Isto e' o que sustenta o rebaixamento do B-093. O validador do `services.json`
-// nao bloqueia `AWS_`, `DO_` nem `GOOGLE_`, e o env do tenant CHEGA a este
-// contentor — mas nao ha' sombreamento, porque a plataforma nao injeta nada com
-// esses prefixos aqui. A conclusao depende inteiramente deste fato, e ate' agora
-// ele vivia so' numa medicao datada.
+// This is what supports the B-093 downgrade. The services.json validator does
+// not block `AWS_`, `DO_` or `GOOGLE_`, and the tenant's env DOES reach this
+// container — but nothing is shadowed, because the platform injects nothing
+// with those prefixes here.
 //
-// Se alguem acrescentar uma injecao de plataforma, este teste reprova e manda
-// reabrir o B-093 — que e' exatamente a condicao que o item registra como "vira
-// alta". Sem esta guarda, a mudanca passaria e a analise do item continuaria
-// parecendo valida.
-func TestPlataformaInjetaApenasPORTNoContainerDoWorkload(t *testing.T) {
-	src, err := os.ReadFile("renderer_deployment.go")
-	if err != nil {
-		t.Fatalf("lendo o renderizador: %v", err)
-	}
+// Asserted on the shared container builder, which both the Rollout and the
+// legacy Deployment use. If someone adds a platform injection this test fails
+// and tells them to reopen B-093, the condition that item records as "becomes
+// high".
+func TestPlatformInjectsOnlyPortIntoTheWorkloadContainer(t *testing.T) {
+	// Arrange: an app that declares no env of its own, so every variable left
+	// in the container came from the platform.
+	ri := RenderInput{TenantID: "tn-x", ProjectID: "proj", Environment: "production"}
+	app := AppManifestInput{Name: "api", Port: 8080, Secrets: []string{"DB_URL"}}
 
-	// Cada ponto que acrescenta env ao contentor, com o nome que ele escreve.
-	re := regexp.MustCompile(`container\.Env = append\(container\.Env, k8sEnvVar\{[^}]*Name:\s*([^,}]+)`)
-	achados := re.FindAllStringSubmatch(string(src), -1)
-	if len(achados) == 0 {
-		t.Fatal("nenhum ponto de injecao encontrado: o regex deixou de casar e a guarda passou a vigiar nada")
-	}
+	// Act
+	c := buildAppContainer(scopeFor(t, ri), app, app.Port)
 
-	var daPlataforma []string
-	for _, m := range achados {
-		nome := strings.TrimSpace(m[1])
-		// `Name: k` copia a chave do env do proprio app — usuario, nao plataforma.
-		if !strings.HasPrefix(nome, `"`) {
-			continue
-		}
-		daPlataforma = append(daPlataforma, strings.Trim(nome, `"`))
+	// Assert
+	var injected []string
+	for _, e := range c.Env {
+		injected = append(injected, e.Name)
 	}
-
-	if len(daPlataforma) != 1 || daPlataforma[0] != "PORT" {
-		t.Errorf("a plataforma passou a injetar %v no contentor do workload; era apenas [PORT].\n\n"+
-			"Reabra o B-093: o validador do services.json NAO bloqueia AWS_, DO_ nem GOOGLE_, e o env do "+
-			"tenant chega a este mesmo contentor. Uma injecao de plataforma nova cria a possibilidade de "+
-			"sombreamento que o rebaixamento daquele item declarou inexistente.", daPlataforma)
+	if len(injected) != 1 || injected[0] != "PORT" {
+		t.Errorf("the platform now injects %v into the workload container; it was only [PORT].\n\n"+
+			"Reopen B-093: the services.json validator does NOT block AWS_, DO_ or GOOGLE_, and the "+
+			"tenant's env reaches this same container. A new platform injection creates the shadowing "+
+			"that item's downgrade declared impossible.", injected)
 	}
 }

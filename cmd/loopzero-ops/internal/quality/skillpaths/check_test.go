@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFixtureRepo(t *testing.T) string {
@@ -15,6 +17,12 @@ func writeFixtureRepo(t *testing.T) string {
 	root := t.TempDir()
 	// Minimal Taskfile.yml with a couple of tasks.
 	must(t, os.WriteFile(filepath.Join(root, "Taskfile.yml"), []byte(`version: '3'
+includes:
+  k3dfile:
+    taskfile: ./taskfiles/k3d.yml
+    flatten: true
+  quality:
+    taskfile: ./taskfiles/quality.yml
 tasks:
   setup:
     cmds:
@@ -63,7 +71,7 @@ func must(t *testing.T, err error) {
 func TestCheck_CanonicalPasses(t *testing.T) {
 	root := writeFixtureRepo(t)
 	writeSkillMD(t, root, "foo", "Uses `task setup` and script `infra/scripts/local/foo.sh` and `task quality:gates` and `task k3d:heal`.\n")
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS, got err=%v failures=%v", err, outcome.Failures)
 	}
@@ -72,7 +80,7 @@ func TestCheck_CanonicalPasses(t *testing.T) {
 func TestCheck_MissingScriptPathFails(t *testing.T) {
 	root := writeFixtureRepo(t)
 	writeSkillMD(t, root, "foo", "Uses `infra/scripts/local/does-not-exist.sh`\n")
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -81,7 +89,7 @@ func TestCheck_MissingScriptPathFails(t *testing.T) {
 func TestCheck_MissingTaskInvocationFails(t *testing.T) {
 	root := writeFixtureRepo(t)
 	writeSkillMD(t, root, "foo", "Invokes `task nonexistent-task`.\n")
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)
 	}
@@ -92,7 +100,7 @@ func TestCheck_TaskAutomationSkillSkipped(t *testing.T) {
 	// task-automation skill references non-existent task — must NOT fail
 	// (skip-list carries this exemption per bash guard).
 	writeSkillMD(t, root, "task-automation", "Refers to `task any-generic-task` which is not real.\n")
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS (skip-list), got err=%v failures=%v", err, outcome.Failures)
 	}
@@ -101,7 +109,7 @@ func TestCheck_TaskAutomationSkillSkipped(t *testing.T) {
 func TestCheck_WildcardsIgnored(t *testing.T) {
 	root := writeFixtureRepo(t)
 	writeSkillMD(t, root, "foo", "Docs pattern `infra/scripts/foo-*-bar.sh` — should not fire.\n")
-	outcome, err := Check(Config{RepoRoot: root})
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
 		t.Fatalf("expected PASS (wildcard skip), got err=%v failures=%v", err, outcome.Failures)
 	}
@@ -110,7 +118,7 @@ func TestCheck_WildcardsIgnored(t *testing.T) {
 func TestCheck_DogfoodGHTokenAntiPatternFails(t *testing.T) {
 	root := writeFixtureRepo(t)
 	writeSkillMD(t, root, "dogfood", "Uses GH_TOKEN from .env — legacy flow.\n")
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for dogfood GH_TOKEN/.env anti-pattern, got %v", err)
 	}
@@ -119,28 +127,55 @@ func TestCheck_DogfoodGHTokenAntiPatternFails(t *testing.T) {
 func TestCheck_ToPlanTearDownAntiPatternFails(t *testing.T) {
 	root := writeFixtureRepo(t)
 	writeSkillMD(t, root, "to-plan", "Run `task teardown` to clean up.\n")
-	_, err := Check(Config{RepoRoot: root})
+	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations for `task teardown` anti-pattern, got %v", err)
 	}
 }
 
-func TestCheck_RealRepoPasses(t *testing.T) {
-	abs, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatalf("abs: %v", err)
-	}
-	for i := 0; i < 8; i++ {
-		if _, statErr := os.Stat(filepath.Join(abs, rootTaskfile)); statErr == nil {
-			if _, sErr := os.Stat(filepath.Join(abs, skillsDir)); sErr == nil {
-				outcome, checkErr := Check(Config{RepoRoot: abs})
-				if checkErr != nil {
-					t.Fatalf("real repo must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
-				}
-				return
-			}
+// The skills tree is the installed kit, which .gitignore excludes, so a fresh
+// clone has none. On such a machine the gate must refuse by name; where the kit
+// is installed it must pass. Either way the assertion runs.
+func TestCheck_RealRepoPassesOrRefusesWithoutTheKit(t *testing.T) {
+	root := qtestutil.Root(t)
+	outcome, checkErr := violationOf(Check(Config{RepoRoot: root}))
+	if _, statErr := os.Stat(filepath.Join(root, skillsDir)); statErr != nil {
+		if !errors.Is(checkErr, ErrSkillsRootMissing) {
+			t.Fatalf("without the kit installed the gate must refuse by name, got %v", checkErr)
 		}
-		abs = filepath.Dir(abs)
+		return
 	}
-	t.Skip("could not locate Taskfile.yml + .claude/skills within 8 parent dirs; skipping")
+	if checkErr != nil {
+		t.Fatalf("real repo must satisfy invariant. err=%v failures=%v", checkErr, outcome.Failures)
+	}
+}
+
+func TestCheck_MissingSkillsRootIsNamed(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "Taskfile.yml"), []byte("version: '3'\ntasks:\n  a: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrSkillsRootMissing) {
+		t.Fatalf("a missing skills root must be reported as such, got %v", err)
+	}
+}
+
+// A SKILL.md that exists and cannot be read is not a skill without a SKILL.md.
+func TestCheck_UnreadableSkillDocIsAnError(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "Taskfile.yml"), []byte("version: '3'\ntasks:\n  a: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, skillsDir, "broken")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A directory where the file should be: present, and unreadable as a file.
+	if err := os.Mkdir(filepath.Join(dir, "SKILL.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := violationOf(Check(Config{RepoRoot: root}))
+	if err == nil || errors.Is(err, ErrViolations) {
+		t.Fatalf("an unreadable SKILL.md was skipped, got %v", err)
+	}
 }

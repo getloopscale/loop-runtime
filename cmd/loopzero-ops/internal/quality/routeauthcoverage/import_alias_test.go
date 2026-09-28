@@ -67,7 +67,7 @@ func TestAuthGroupIsFoundThroughAnImportAlias(t *testing.T) {
 				),
 			})
 
-			out, err := Check(Config{RepoRoot: root, MinRoutes: 1})
+			out, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1}))
 
 			if err != nil {
 				t.Fatalf("Check: %v", err)
@@ -91,7 +91,7 @@ func TestAuthGroupIsNotFoundThroughAnUnrelatedPackage(t *testing.T) {
 		),
 	})
 
-	if _, err := Check(Config{RepoRoot: root, MinRoutes: 1}); err == nil {
+	if _, err := violationOf(Check(Config{RepoRoot: root, MinRoutes: 1})); err == nil {
 		t.Fatal("a group gated by an unrelated package's Auth must not be accepted as THE auth group")
 	}
 }

@@ -1,0 +1,55 @@
+# The tools the cmd/loopzero-ops suite declares as prerequisites, pinned.
+#
+# Two tests in that suite fail loudly when a declared tool is absent, and on purpose — a
+# skip would erase the guard on exactly the machine that lacks it:
+#
+#   task        repoinvariants.TestTaskfileCommandsRender / TestHermeticLegRunsThisModulesWholeSuite
+#               (go-task is a prerequisite in CLAUDE.md, and `task quality:*` is the gate)
+#   trufflehog  trufflehogscan.TestRealTreeIsAdjudicated — without the scanner a green
+#               cannot tell a clean tree from an unscanned one
+#
+# A stock runner has neither, so every job that runs that suite installs both from here —
+# one place for the versions, so the jobs cannot drift apart. The versions match what the
+# suite was last measured green against (task 3.48.0, trufflehog 3.97.4).
+#
+# Both binaries go to /usr/local/bin, which is already on the runner's PATH, rather than
+# through $GITHUB_PATH: a step that edits the environment file of the steps after it is the
+# pattern zizmor's github-env audit flags, and nothing here needs it.
+name: Test prerequisites
+description: Install the pinned go-task and trufflehog the cmd/loopzero-ops suite requires.
+
+runs:
+  using: composite
+  steps:
+    # `go install <module>@<version>` fetches through the module proxy and verifies the
+    # module against the Go checksum database, so the version pin is also an integrity pin.
+    - name: go-task (pinned)
+      shell: bash
+      env:
+        GOWORK: "off"
+        TASK_VERSION: v3.48.0
+      run: |
+        set -euo pipefail
+        gobin="${RUNNER_TEMP}/go-task"
+        GOBIN="${gobin}" go install "github.com/go-task/task/v3/cmd/task@${TASK_VERSION}"
+        sudo install -m 0755 "${gobin}/task" /usr/local/bin/task
+        task --version
+
+    # A release archive, verified against the SHA-256 recorded here rather than against a
+    # checksum file fetched from the same place as the archive.
+    - name: trufflehog (pinned, SHA-256 verified)
+      shell: bash
+      env:
+        TRUFFLEHOG_VERSION: 3.97.4
+        TRUFFLEHOG_SHA256: dc24007c2f233bd61c05beabeb44aa27ea9b43288166279209abe0458c5ce76b
+      run: |
+        set -euo pipefail
+        dir="${RUNNER_TEMP}/trufflehog"
+        archive="trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz"
+        mkdir -p "${dir}"
+        curl -fsSL --retry 3 -o "${dir}/${archive}" \
+          "https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/${archive}"
+        echo "${TRUFFLEHOG_SHA256}  ${dir}/${archive}" | sha256sum -c -
+        tar -xzf "${dir}/${archive}" -C "${dir}" trufflehog
+        sudo install -m 0755 "${dir}/trufflehog" /usr/local/bin/trufflehog
+        trufflehog --version

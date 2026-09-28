@@ -75,7 +75,7 @@ func TestParseAllowlist_ParsesMarkdownTable(t *testing.T) {
 
 ## infra/scripts/
 
-| Script | LOC | Justificativa |
+| Script | LOC | Justification |
 |---|---:|---|
 | infra/scripts/break-glass.sh | 145 | Operator-time emergency |
 | infra/scripts/drill-jwt-gate.sh | 50 | Drill JWT validation |
@@ -302,22 +302,33 @@ func TestParseAllowlist_IgnoresNonSh(t *testing.T) {
 
 // === Additional coverage tests ===
 
-// TestCheck_AllowlistMissingFile — when allowlist path doesn't exist, error.
-func TestCheck_AllowlistMissingFile(t *testing.T) {
+// An absent allowlist exempts NOTHING, and the gate still decides.
+//
+// This test asserted the opposite until 2026-09-16 — that a missing allowlist is an
+// infrastructure failure — and that was the right reading while the file was tracked.
+// `3d4075ca3` (2026-09-08) removed `.claude/` from tracking and took the allowlist
+// with it, so the fatal read made this gate unrunnable in every clone: measured that
+// day, it exited 5 and blocked the repository's own pre-push hook.
+//
+// The substance the old assertion protected — an infrastructure failure must not be
+// swallowed — did not move. It is asserted by TestCheck_UnreadableAllowlistIsStillAnError,
+// against a path that exists and cannot be read. What changed is only the answer for
+// ABSENCE, and the new answer is the stricter one: with no allowlist, nothing is exempt.
+func TestCheck_AbsentAllowlistExemptsNothing(t *testing.T) {
 	root := initTestRepo(t, map[string]string{
 		"infra/scripts/x.sh": "#!/bin/bash\n",
 	})
-	_, err := Check(Config{
+	out, err := Check(Config{
 		RepoRoot:      root,
 		AllowlistPath: ".does-not-exist.md",
 		BaseRef:       "main",
 		HeadRef:       "main",
 	})
-	if err == nil {
-		t.Fatal("expected error on missing allowlist")
+	if err != nil {
+		t.Fatalf("an absent allowlist is not an infrastructure failure, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "read allowlist") {
-		t.Errorf("error should mention read allowlist, got: %v", err)
+	if out == nil {
+		t.Fatal("expected an outcome, got nil")
 	}
 }
 

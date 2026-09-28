@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// leak subcommand group — a sonda LIVE que prova o fecho da borda pública.
+// leak subcommand group — the LIVE probe that proves the public edge closes.
 //
-// Fica fora de `quality` porque todo gate de qualidade é hermético por contrato (sem
-// rede, sem kubectl, sem helmfile) e esta sonda depende de um alvo vivo. Fica ao lado de
-// `chaos` e `drill`, que são os grupos que tocam ambiente.
+// It lives outside `quality` because every quality gate is hermetic by contract
+// (no network, no kubectl, no helmfile) and this probe needs a live target. It
+// sits next to `chaos` and `drill`, the groups that touch an environment.
 package main
 
 import (
@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -20,300 +21,226 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
 )
 
-const leakHelpText = `loopzero-ops leak — sonda LIVE da superfície pública
+const leakHelpText = `loopzero-ops leak — LIVE probe of the public surface
 
 USAGE:
-  loopzero-ops leak live  [flags]   sonda a borda pública sem credencial
-  loopzero-ops leak ports [flags]   audita as portas do host contra o registro declarado
+  loopzero-ops leak live  [flags]   probe the public edge without a credential
+  loopzero-ops leak ports [flags]   audit the host's listening ports against the registry
 
-O QUE ELA PROVA:
-  Que a borda pública NEGA sem credencial (401/403) ou leva ao login (302), e que as
-  rotas públicas por especificação OIDC continuam respondendo 200. Os alvos são
-  derivados de infra/quality/proxy-exposure.txt, então a cobertura acompanha a
-  superfície por construção — uma família declarada lá sem representante concreto é
-  reportada como buraco, não silenciada.
+WHAT IT PROVES:
+  That the public edge DENIES without a credential (401/403) or leads to login
+  (302), and that the routes public by the OIDC specification keep answering 200.
+  Targets are derived from infra/quality/proxy-exposure.txt, so coverage follows
+  the surface by construction — a family declared there with no concrete
+  representative is reported as a coverage hole, not silenced.
 
-  404 NÃO conta como fecho: esconder não é negar, e aceitá-lo mascara rota quebrada
-  como se fosse proteção.
+  404 does NOT count as closed: hiding is not denying, and accepting it disguises
+  a broken route as protection.
 
-O QUE ELA NÃO PROVA:
-  Que uma resposta autenticada expõe só o que devia — isso depende do corpo e está
-  registrado, por rota, na coluna de descrição do inventário.
+WHAT IT DOES NOT PROVE:
+  That an authenticated response exposes only what it should — that depends on
+  the body and is recorded, per route, in the inventory's rationale column.
 
-FLAGS:
-  --host        host da aplicação      (padrão: app-dev.loopzero.example)
-  --auth-host   host da identidade     (padrão: auth-dev.loopzero.example)
-  --inventory   inventário declarado   (padrão: infra/quality/proxy-exposure.txt)
-  --json        saída legível por máquina
+FLAGS (live):
+  --host        probe only this application host (default: every declared host)
+  --auth-host   identity host              (default: auth-dev.loopzero.example)
+  --inventory   declared inventory         (default: infra/quality/proxy-exposure.txt)
+  --json        machine-readable output
 
-SAÍDA:
-  0 = a borda fecha    1 = algo passou sem credencial, ou uma família não é medida
+FLAGS (ports):
+  --registry    declared port registry     (default: infra/quality/host-ports.txt)
+  --json        machine-readable output
+
+EXIT:
+  0 = the edge closes    1 = usage error, something got through without a
+  credential, or a declared family is not measured
 `
 
-type leakReport struct {
-	// Upstream diz QUAL superficie caiu quando ha falha de gateway (B-022). Vazio em dia
-	// normal — um campo que fala sempre vira ruido e para de ser lido.
-	Upstream string `json:"upstream,omitempty"`
-	Pass     int    `json:"pass"`
-	Fail     int    `json:"fail"`
-	Skip     int    `json:"skip"`
-	// Uncovered conta o que a sonda NAO mede, separado do que ela mediu e reprovou.
-	//
-	// Somar os dois no `fail` impedia o operador de distinguir "a borda deixou passar algo"
-	// de "esta superficie nao e medida" — e as duas exigem acoes diferentes. Medido na
-	// revisao de B-025: a maioria das falhas era buraco de cobertura, e misturadas com
-	// vazamento elas fariam a sonda parar de ser lida.
-	Uncovered   int      `json:"uncovered"`
-	Failures    []string `json:"failures"`
-	NotMeasured []string `json:"not_measured"`
-	// Wildcards nomeia o que foi pulado por nao ter hostname concreto. Antes ficava so no
-	// modo texto, e o JSON — que e o contrato legivel por maquina — dizia `skip: 0` com
-	// curingas pulados (achado M-5 da revisao).
-	Wildcards []string `json:"wildcards,omitempty"`
+// leakEnv is what a leak run touches outside the process. runLeak uses the
+// real one; tests inject fakes so every path is exercised without a live edge.
+// The writers keep their first write error, and runLeakWith settles the exit
+// status against them once the probe has reported.
+type leakEnv struct {
+	stdout, stderr *cliout.Writer
+	client         *http.Client
+	discovery      func(ctx context.Context, cli *http.Client, host string) []string
+	placeholders   func() []string
+	listeningPorts func() ([]int, error)
 }
 
-func runLeak(args []string) int {
+func defaultLeakEnv() leakEnv {
+	return leakEnv{
+		stdout:         cliout.New(os.Stdout),
+		stderr:         cliout.New(os.Stderr),
+		client:         leak.DefaultClient(),
+		discovery:      probeDiscovery,
+		placeholders:   probePlaceholders,
+		listeningPorts: listeningPorts,
+	}
+}
+
+func runLeak(args []string) int { return runLeakWith(args, defaultLeakEnv()) }
+
+func runLeakWith(args []string, env leakEnv) int {
+	return cliout.Settle(dispatchLeak(args, env), env.stdout, env.stderr)
+}
+
+func dispatchLeak(args []string, env leakEnv) int {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
-		fmt.Print(leakHelpText)
+		env.stdout.Print(leakHelpText)
 		return 0
 	}
-	if args[0] == "ports" {
-		return runLeakPorts(args[1:])
-	}
-	if args[0] != "live" {
-		fmt.Fprintf(os.Stderr, "subcomando desconhecido %q (use: live|ports)\n", args[0])
+	switch args[0] {
+	case "live":
+		return runLeakLive(args[1:], env)
+	case "ports":
+		return runLeakPorts(args[1:], env)
+	default:
+		env.stderr.Printf("unknown subcommand %q (use: live|ports)\n", args[0])
 		return 1
 	}
+}
 
+// liveOptions are the parsed `leak live` flags.
+type liveOptions struct {
+	hosts     []string // nil: every declared host
+	authHost  string
+	inventory string
+	asJSON    bool
+}
+
+func parseLiveFlags(args []string, stderr io.Writer) (liveOptions, error) {
 	fs := flag.NewFlagSet("leak live", flag.ContinueOnError)
-	host := fs.String("host", "app-dev.loopzero.example", "host da aplicação")
-	authHost := fs.String("auth-host", "auth-dev.loopzero.example", "host da identidade")
-	inventory := fs.String("inventory", "infra/quality/proxy-exposure.txt", "inventário declarado")
-	asJSON := fs.Bool("json", false, "saída legível por máquina")
-	if err := fs.Parse(args[1:]); err != nil {
+	fs.SetOutput(stderr)
+	host := fs.String("host", "", "probe only this application host")
+	authHost := fs.String("auth-host", "auth-dev.loopzero.example", "identity host")
+	inventory := fs.String("inventory", "infra/quality/proxy-exposure.txt", "declared inventory")
+	asJSON := fs.Bool("json", false, "machine-readable output")
+	if err := fs.Parse(args); err != nil {
+		return liveOptions{}, err
+	}
+	opts := liveOptions{authHost: *authHost, inventory: *inventory, asJSON: *asJSON}
+	// fs.Visit only visits flags actually passed: `--host ""` must be refused,
+	// not read as "no filter" — probing zero application surface and exiting 0
+	// is the empty green this probe exists to refuse.
+	var hostErr error
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name != "host" {
+			return
+		}
+		if strings.TrimSpace(*host) == "" {
+			hostErr = fmt.Errorf("--host is empty: there is no surface to probe; omit the flag to sweep the inventory")
+			return
+		}
+		opts.hosts = []string{*host}
+	})
+	return opts, hostErr
+}
+
+func runLeakLive(args []string, env leakEnv) int {
+	opts, err := parseLiveFlags(args, env.stderr)
+	if err != nil {
+		env.stderr.Println(err)
 		return 1
 	}
-
-	// B-025: sonda TODO host que o inventario declara, nao apenas o do `--host`.
-	//
-	// Medido 2026-08-18: o inventario declarava 7 hosts e a sonda alcancava 2. Os cinco
-	// restantes eram inalcancaveis por construcao — `Targets` filtra por um unico host —, e
-	// dois deles serviam servico VIVO em hostname de producao: `cloud.loopzero.example`
-	// devolvia 401 em `/v1/billing` e `auth.loopzero.example` devolvia 200 em `/health/ready`.
-	//
-	// `--host` continua valendo, agora como filtro para uma execucao focada.
-	// `fs.Visit` so visita flag REALMENTE passada. Comparar com `DefValue` fazia
-	// `--host app-dev.loopzero.example` — o valor que o `--help` anuncia como padrao, e portanto
-	// o que o operador digita para focar — cair na varredura completa (achado HIGH-2 da
-	// revisao de B-025).
-	hostPassado := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "host" {
-			hostPassado = true
+	hosts := opts.hosts
+	if hosts == nil {
+		// Probe EVERY host the inventory declares: measured 2026-08-18, the
+		// inventory declared 7 hosts and a single-host probe reached 2.
+		if hosts, err = leak.Hosts(opts.inventory); err != nil {
+			env.stderr.Println(err)
+			return 1
 		}
+	}
+	plan, err := leak.BuildPlan(opts.inventory, hosts, opts.authHost)
+	if err != nil {
+		env.stderr.Println(err)
+		return 1
+	}
+	rep := leak.Run(context.Background(), plan, opts.inventory, leak.Checks{
+		Client: env.client,
+		Discovery: func(ctx context.Context, host string) []string {
+			return env.discovery(ctx, env.client, host)
+		},
+		Placeholders: env.placeholders,
 	})
 
-	var hostsAlvo []string
-	if hostPassado {
-		// `--host ""` sondaria zero superficie de aplicacao e sairia 0: verde vazio, que e
-		// a forma que esta sonda existe para recusar (achado M-6 da revisao de B-025).
-		if strings.TrimSpace(*host) == "" {
-			fmt.Fprintln(os.Stderr, "--host vazio: nao ha superficie a sondar; omita a flag para varrer o inventario")
-			return 1
-		}
-		hostsAlvo = []string{*host}
-	} else {
-		hs, err := leak.Hosts(*inventory)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			return 1
-		}
-		hostsAlvo = hs
-	}
-
-	var alvos []leak.Target
-	var semRepresentante []string
-	var curingas []string
-	for _, h := range hostsAlvo {
-		// Um curinga nao tem hostname concreto para resolver; sondar `*.x` produziria um
-		// erro de DNS que se pareceria com host fora do ar. Fica dito, nao escondido.
-		if strings.HasPrefix(h, "*.") {
-			curingas = append(curingas, h)
-			continue
-		}
-		a, semRep, err := leak.Targets(*inventory, h)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			return 1
-		}
-		alvos = append(alvos, a...)
-		semRepresentante = append(semRepresentante, semRep...)
-	}
-	// A identidade tambem segue os hosts descobertos (achado HIGH-1 da revisao de B-025).
-	//
-	// `auth.loopzero.example` servia Kratos VIVO num hostname de producao, e a varredura sabia
-	// que ele existia sem aplicar nele nenhuma assercao de identidade. Rodando com
-	// `--auth-host auth.loopzero.example` a revisao mediu tres defeitos concretos: descoberta
-	// OIDC 404, raiz 404 e `/userinfo` 404 — invisiveis enquanto o host aparecia so como
-	// "buraco nao medido".
-	hostsIdent := map[string]bool{*authHost: true}
-	for _, h := range hostsAlvo {
-		if strings.HasPrefix(h, "auth") {
-			hostsIdent[h] = true
-		}
-	}
-	identOrdenados := make([]string, 0, len(hostsIdent))
-	for h := range hostsIdent {
-		identOrdenados = append(identOrdenados, h)
-	}
-	sort.Strings(identOrdenados)
-	for _, h := range identOrdenados {
-		alvos = append(alvos, leak.IdentityTargets(h)...)
-	}
-
-	// Retira dos buracos o que a sonda de identidade acabou de cobrir: contabilizar como
-	// descoberto o que foi sondado e o relatorio discordando de si mesmo (HIGH-3).
-	semRepresentante = leak.SemCoberturaDeIdentidade(semRepresentante, alvos)
-
-	cli := leak.DefaultClient()
-	ctx := context.Background()
-	rep := leakReport{Failures: []string{}, NotMeasured: []string{}}
-
-	if len(curingas) > 0 {
-		rep.Wildcards = curingas
-		rep.Skip += len(curingas)
-		if !*asJSON {
-			fmt.Printf("  SKIP  %-46s curinga sem hostname concreto para resolver\n",
-				strings.Join(curingas, ", "))
-		}
-	}
-
-	// Guarda os codigos das duas superficies para separar QUEM caiu (B-022). O caminho do
-	// motor atravessa o painel, entao um 502 em `/engine/*` sozinho nao diz se o motor
-	// caiu ou se o painel levou os dois junto — e as duas situacoes pedem acoes diferentes.
-	var engineStatus, dashboardStatus int
-
-	for _, alvo := range alvos {
-		v := leak.Probe(ctx, cli, alvo)
-		switch {
-		case strings.HasPrefix(alvo.Path, "/engine/"):
-			engineStatus = v.Status
-		case strings.HasPrefix(alvo.Path, "/v1/"):
-			// Rota de produto do painel: nao atravessa o motor (medido em B-002). O
-			// primeiro que aparecer basta — o que importa e se o painel responde.
-			if dashboardStatus == 0 {
-				dashboardStatus = v.Status
-			}
-		}
-		switch {
-		case v.Skipped:
-			rep.Skip++
-			if !*asJSON {
-				fmt.Printf("  SKIP  %-46s %s\n", v.Host+v.Path, v.Reason)
-			}
-		case v.Passed:
-			rep.Pass++
-			if !*asJSON {
-				fmt.Printf("  ok    %-46s %d\n", v.Host+v.Path, v.Status)
-			}
-		default:
-			rep.Fail++
-			rep.Failures = append(rep.Failures, v.Host+v.Path+" "+v.Reason)
-			if !*asJSON {
-				fmt.Printf("  FAIL  %-46s %d\n", v.Host+v.Path, v.Status)
-			}
-		}
-	}
-
-	// B-022: com as duas superficies sondadas, o relatorio passa a dizer QUAL caiu em vez
-	// de deixar o operador com dois 502 iguais. So fala quando ha algo a separar — em dia
-	// normal isto e silencio.
-	if engineStatus != 0 && dashboardStatus != 0 {
-		if st := leak.ClassifyUpstream(engineStatus, dashboardStatus); st != leak.UpstreamBothUp {
-			rep.Upstream = st.Explicacao()
-			if !*asJSON {
-				fmt.Printf("  UPSTREAM  %s\n", rep.Upstream)
-			}
-		}
-	}
-
-	// O documento de descoberta OIDC é lido por todo cliente ANTES de existir token, e o
-	// `issuer` que ele anuncia é o valor que entra no token e que todo verificador compara.
-	// Anunciar um host de cluster ali quebra quem consumir o token depois — e nenhum gate
-	// hermético pega, porque o defeito não está no repositório: o chart já sabe usar o FQDN
-	// público, e o que roda é que não recebeu a variável.
-	if vazamentos := probeDiscovery(ctx, cli, *authHost); len(vazamentos) > 0 {
-		for _, v := range vazamentos {
-			rep.Fail++
-			rep.Failures = append(rep.Failures, *authHost+" descoberta OIDC: "+v)
-			if !*asJSON {
-				fmt.Printf("  FAIL  %-46s %s\n", *authHost+"/.well-known/openid-configuration", v)
-			}
-		}
-	}
-
-	// Um marcador de substituição que sobreviveu no cluster quebra o login inteiro e só
-	// aparece quando alguém tenta entrar — foi o `Erro 401: invalid_client` de 2026-08-10.
-	// A checagem só roda quando o kubectl alcança o cluster; fora dele, silêncio (a sonda
-	// mede a borda pública e não pode exigir acesso ao cluster para funcionar).
-	for _, achado := range probePlaceholders() {
-		rep.Fail++
-		rep.Failures = append(rep.Failures, "configuração de identidade: "+achado)
-		if !*asJSON {
-			fmt.Printf("  FAIL  %-46s %s\n", "ory-kratos-config", achado)
-		}
-	}
-
-	// Uma família declarada e não medida é buraco de cobertura, e continua contando para o
-	// código de saída: o modo de falha que esta sonda existe para impedir é justamente a
-	// rota nova que ninguém sonda, e um aviso silencioso reproduziria isso.
-	//
-	// O que mudou (revisão de B-025): ela conta num campo PRÓPRIO. Somada ao `fail`, ela
-	// impedia o operador de distinguir "a borda deixou passar algo" de "esta superfície não
-	// é medida" — e as duas exigem ações diferentes. A maioria das falhas era buraco, e
-	// misturadas com vazamento fariam a sonda parar de ser lida.
-	for _, f := range semRepresentante {
-		rep.Uncovered++
-		rep.NotMeasured = append(rep.NotMeasured,
-			fmt.Sprintf("família %q está declarada em %s e não tem representante na sonda; sem um caminho concreto ela nunca é medida",
-				f, *inventory))
-		if !*asJSON {
-			fmt.Printf("  NAO-MEDIDO  %-40s sem representante na sonda\n", f)
-		}
-	}
-
-	if *asJSON {
-		enc := json.NewEncoder(os.Stdout)
+	if opts.asJSON {
+		enc := json.NewEncoder(env.stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(rep); err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
+			env.stderr.Println(err)
 			return 1
 		}
 	} else {
-		fmt.Printf("\n  PASS=%d  FAIL=%d  NAO-MEDIDO=%d  SKIP=%d\n",
-			rep.Pass, rep.Fail, rep.Uncovered, rep.Skip)
+		renderLeakText(env.stdout, plan, rep)
 	}
-
-	if rep.Fail > 0 || rep.Uncovered > 0 {
-		fmt.Fprintln(os.Stderr, "\nA borda deixou passar algo sem credencial:")
-		for _, f := range rep.Failures {
-			fmt.Fprintf(os.Stderr, "  - %s\n", f)
-		}
+	renderLeakHeadline(env.stdout, env.stderr, rep, opts.asJSON)
+	if !rep.Closed() {
 		return 1
-	}
-	if !*asJSON {
-		fmt.Println("  A borda fecha em tudo que exige credencial, e abre no que a especificação exige.")
 	}
 	return 0
 }
 
-// probeDiscovery lê o documento de descoberta e devolve os campos que anunciam um host
-// inalcançável de fora, ou texto claro. Falha de leitura NÃO vira vazamento — a sonda de
-// fecho acima já cobre a indisponibilidade, e inventar um achado a partir de uma rede
-// ruim seria pior que não medir.
+// renderLeakText prints the run in probe order.
+func renderLeakText(w *cliout.Writer, plan leak.Plan, rep leak.Report) {
+	if len(rep.Wildcards) > 0 {
+		w.Printf("  SKIP  %-46s wildcard with no concrete hostname to resolve\n", strings.Join(rep.Wildcards, ", "))
+	}
+	for _, v := range rep.Verdicts {
+		switch {
+		case v.Skipped:
+			w.Printf("  SKIP  %-46s %s\n", v.Host+v.Path, v.Reason)
+		case v.Passed:
+			w.Printf("  ok    %-46s %d\n", v.Host+v.Path, v.Status)
+		default:
+			w.Printf("  FAIL  %-46s %d\n", v.Host+v.Path, v.Status)
+		}
+	}
+	if rep.Upstream != "" {
+		w.Printf("  UPSTREAM  %s\n", rep.Upstream)
+	}
+	for _, l := range rep.DiscoveryLeaks {
+		w.Printf("  FAIL  %-46s %s\n", plan.AuthHost+"/.well-known/openid-configuration", l)
+	}
+	for _, p := range rep.PlaceholderLeaks {
+		w.Printf("  FAIL  %-46s %s\n", "ory-kratos-config", p)
+	}
+	for _, f := range rep.UncoveredFamilies {
+		w.Printf("  NOT-MEASURED  %-38s no representative in the probe\n", f)
+	}
+	w.Printf("\n  PASS=%d  FAIL=%d  NOT-MEASURED=%d  SKIP=%d\n", rep.Pass, rep.Fail, rep.Uncovered, rep.Skip)
+}
+
+// renderLeakHeadline names what went wrong on stderr, keeping a leak and a
+// coverage hole apart: they call for different actions, and a run with only
+// coverage holes used to announce that "the edge let something through".
+func renderLeakHeadline(stdout, stderr *cliout.Writer, rep leak.Report, asJSON bool) {
+	if rep.Leaked() {
+		stderr.Println("\nThe edge let something through without a credential:")
+		for _, f := range rep.Failures {
+			stderr.Printf("  - %s\n", f)
+		}
+	}
+	if rep.Uncovered > 0 {
+		stderr.Println("\nCoverage holes — declared surface the probe does not measure:")
+		for _, n := range rep.NotMeasured {
+			stderr.Printf("  - %s\n", n)
+		}
+	}
+	if rep.Closed() && !asJSON {
+		stdout.Println("  The edge closes on everything that requires a credential, and opens where the specification requires.")
+	}
+}
+
+// probeDiscovery reads the discovery document and returns the fields that
+// advertise a host unreachable from outside, or plain text. A read failure is
+// NOT a leak — the closure probe already covers availability, and inventing a
+// finding from a bad network would be worse than not measuring.
 func probeDiscovery(ctx context.Context, cli *http.Client, host string) []string {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		"https://"+host+"/.well-known/openid-configuration", nil)
@@ -335,12 +262,12 @@ func probeDiscovery(ctx context.Context, cli *http.Client, host string) []string
 	return leak.DiscoveryLeak(doc)
 }
 
-// probePlaceholders lê a configuração do Kratos no cluster e devolve os campos que
-// ficaram com marcador de substituição.
+// probePlaceholders reads the Kratos configuration in the cluster and returns
+// the fields still holding a substitution marker.
 //
-// Sem kubectl alcançável não há achado — e isso é deliberado: esta sonda mede a borda
-// PÚBLICA, e exigir acesso ao cluster para ela rodar a tornaria inútil de fora. Quem
-// roda com acesso ganha a verificação de graça.
+// Without a reachable kubectl there is no finding — deliberately: this probe
+// measures the PUBLIC edge, and requiring cluster access would make it useless
+// from outside. Whoever runs it with access gets the check for free.
 func probePlaceholders() []string {
 	out, err := exec.Command("kubectl", "--context", "k3d-loopzero-core",
 		"-n", "loopzero-auth", "get", "cm", "ory-kratos-config", "-o", "yaml").Output()
@@ -350,94 +277,122 @@ func probePlaceholders() []string {
 	return leak.PlaceholderLeak(string(out))
 }
 
-// runLeakPorts audita o que escuta no host contra `infra/quality/host-ports.txt`.
+// portsReport is the `leak ports --json` shape. The English keys are the
+// contract; the Portuguese keys are the original names, still emitted with the
+// same values so existing consumers keep working (--json field names are a
+// stability contract: add, never rename). They are deprecated.
+type portsReport struct {
+	Listening  int                `json:"listening"`
+	Declared   int                `json:"declared"`
+	Undeclared []leak.PortFinding `json:"undeclared"`
+	Stale      []leak.PortFinding `json:"stale"`
+	ToClose    []leak.PortDecl    `json:"to_close"`
+
+	// Deprecated: use listening, declared, undeclared, stale and to_close.
+	LegacyListening  int                `json:"escutando"`      // english-only: deprecated --json key kept for compatibility
+	LegacyDeclared   int                `json:"declaradas"`     // english-only: deprecated --json key kept for compatibility
+	LegacyUndeclared []leak.PortFinding `json:"nao_declaradas"` // english-only: deprecated --json key kept for compatibility
+	LegacyStale      []leak.PortFinding `json:"obsoletas"`      // english-only: deprecated --json key kept for compatibility
+	LegacyToClose    []leak.PortDecl    `json:"a_fechar"`       // english-only: deprecated --json key kept for compatibility
+}
+
+// runLeakPorts audits what listens on the host against
+// infra/quality/host-ports.txt.
 //
-// FECHADO POR PADRÃO: porta que escuta em 0.0.0.0 e não está no registro REPROVA. O
-// firewall anterior tinha a polaridade oposta — abria por padrão, fechava por lista — e a
-// medição de 2026-08-10 encontrou 17 portas alcançáveis da internet fora de qualquer
-// lista, entre elas o ArgoCD e a identidade sem TLS.
-func runLeakPorts(args []string) int {
+// CLOSED BY DEFAULT: a port listening on 0.0.0.0 that is not in the registry
+// FAILS. The previous firewall had the opposite polarity, and the 2026-08-10
+// measurement found 17 internet-reachable ports on no list, ArgoCD and identity
+// without TLS among them.
+func runLeakPorts(args []string, env leakEnv) int {
 	fs := flag.NewFlagSet("leak ports", flag.ContinueOnError)
-	registro := fs.String("registry", "infra/quality/host-ports.txt", "registro declarado")
-	asJSON := fs.Bool("json", false, "saída legível por máquina")
+	fs.SetOutput(env.stderr)
+	registry := fs.String("registry", "infra/quality/host-ports.txt", "declared registry")
+	asJSON := fs.Bool("json", false, "machine-readable output")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	decls, err := leak.ParsePorts(*registro)
+	decls, err := leak.ParsePorts(*registry)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		env.stderr.Println(err)
+		return 1
+	}
+	listening, err := env.listeningPorts()
+	if err != nil {
+		env.stderr.Printf("could not read the listening ports: %v\n", err)
 		return 1
 	}
 
-	escutando, err := portasEscutando()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "não foi possível ler as portas em escuta: %v\n", err)
-		return 1
-	}
-
-	naoDecl, obsoletas := leak.AuditPorts(escutando, decls)
-	fechar := leak.PortsToClose(escutando, decls)
+	undeclared, stale := leak.AuditPorts(listening, decls)
+	toClose := leak.PortsToClose(listening, decls)
 
 	if *asJSON {
-		rep := map[string]any{
-			"escutando": len(escutando), "declaradas": len(decls),
-			"nao_declaradas": naoDecl, "obsoletas": obsoletas, "a_fechar": fechar,
+		rep := portsReport{
+			Listening: len(listening), Declared: len(decls),
+			Undeclared: undeclared, Stale: stale, ToClose: toClose,
+			LegacyListening: len(listening), LegacyDeclared: len(decls),
+			LegacyUndeclared: undeclared, LegacyStale: stale, LegacyToClose: toClose,
 		}
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(env.stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(rep); err != nil {
+			env.stderr.Println(err)
 			return 1
 		}
 	} else {
-		fmt.Printf("  escutando em 0.0.0.0: %d   declaradas: %d\n", len(escutando), len(decls))
-		for _, f := range naoDecl {
-			fmt.Printf("  FAIL  porta %-6d %s\n", f.Port, f.Why)
+		env.stdout.Printf("  listening on 0.0.0.0: %d   declared: %d\n", len(listening), len(decls))
+		for _, f := range undeclared {
+			env.stdout.Printf("  FAIL  port %-6d %s\n", f.Port, f.Why)
 		}
-		for _, f := range obsoletas {
-			fmt.Printf("  WARN  porta %-6d %s\n", f.Port, f.Why)
+		for _, f := range stale {
+			env.stdout.Printf("  WARN  port %-6d %s\n", f.Port, f.Why)
 		}
-		fmt.Printf("\n  a fechar (classe não admite alcance externo): %d\n", len(fechar))
-		for _, d := range fechar {
-			fmt.Printf("    %-6d %-8s %s\n", d.Port, d.Class, d.Reason)
+		env.stdout.Printf("\n  to close (class does not admit external reach): %d\n", len(toClose))
+		for _, d := range toClose {
+			env.stdout.Printf("    %-6d %-8s %s\n", d.Port, d.Class, d.Reason)
 		}
 	}
 
-	if len(naoDecl) > 0 {
-		fmt.Fprintf(os.Stderr, "\n%d porta(s) escutam sem estar no registro. O registro é fechado por "+
-			"padrão: declare cada uma com a classe e o consumidor, ou feche.\n", len(naoDecl))
+	if len(undeclared) > 0 {
+		env.stderr.Printf("\n%d port(s) listen without being in the registry. The registry is closed by "+
+			"default: declare each one with its class and consumer, or close it.\n", len(undeclared))
 		return 1
 	}
 	return 0
 }
 
-// portasEscutando lê as portas TCP em escuta em endereço de todas as interfaces.
-func portasEscutando() ([]int, error) {
+// listeningPorts reads the TCP ports listening on an all-interfaces address.
+func listeningPorts() ([]int, error) {
 	out, err := exec.Command("ss", "-ltn").Output()
 	if err != nil {
 		return nil, err
 	}
-	vistas := map[int]bool{}
-	for _, linha := range strings.Split(string(out), "\n") {
-		campos := strings.Fields(linha)
-		if len(campos) < 4 {
+	return parseListeningPorts(string(out)), nil
+}
+
+// parseListeningPorts extracts the ports bound to 0.0.0.0 or [::] from
+// `ss -ltn` output, sorted and without repeats.
+func parseListeningPorts(ssOutput string) []int {
+	seen := map[int]bool{}
+	for _, line := range strings.Split(ssOutput, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
 			continue
 		}
-		addr := campos[3]
+		addr := fields[3]
 		if !strings.HasPrefix(addr, "0.0.0.0:") && !strings.HasPrefix(addr, "[::]:") {
 			continue
 		}
-		i := strings.LastIndex(addr, ":")
-		p, err := strconv.Atoi(addr[i+1:])
+		p, err := strconv.Atoi(addr[strings.LastIndex(addr, ":")+1:])
 		if err != nil {
 			continue
 		}
-		vistas[p] = true
+		seen[p] = true
 	}
-	var portas []int
-	for p := range vistas {
-		portas = append(portas, p)
+	ports := make([]int, 0, len(seen))
+	for p := range seen {
+		ports = append(ports, p)
 	}
-	sort.Ints(portas)
-	return portas, nil
+	sort.Ints(ports)
+	return ports
 }

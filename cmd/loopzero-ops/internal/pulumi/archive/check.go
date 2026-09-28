@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package archive exports Pulumi stack state for paralelas dirs to
+// Package archive exports Pulumi stack state for parallel project dirs to
 // encrypted S3 (s3://loopzero-archive/pulumi-state/). Pre-flight verifies
 // archive bucket has required SSE-KMS encryption (C4). Per-stack export
 // goes through plaintext-secret regex scan (C9) before upload.
@@ -43,8 +43,8 @@ const PulumiVersionPinned = "3.140.0"
 // DefaultArchiveBucket — S3 bucket holding the pulumi state archives.
 const DefaultArchiveBucket = "loopzero-archive"
 
-// DefaultParalelas — pulumi paralelas dirs subject to archive.
-var DefaultParalelas = []string{
+// DefaultParallelProjects — pulumi parallel project dirs subject to archive.
+var DefaultParallelProjects = []string{
 	"infra/pulumi-infra",
 	"infra/pulumi-platform",
 }
@@ -81,8 +81,8 @@ type Config struct {
 	// Root is the repo root. Default: ".".
 	Root string
 
-	// Paralelas overrides DefaultParalelas.
-	Paralelas []string
+	// ParallelProjects overrides DefaultParallelProjects.
+	ParallelProjects []string
 
 	// ArchiveBucket overrides DefaultArchiveBucket.
 	ArchiveBucket string
@@ -106,15 +106,32 @@ type Config struct {
 	// TmpDir overrides the temp dir for archive files. Default:
 	// os.TempDir() + auto-generated subdir.
 	TmpDir string
+
+	// AcceptPlaintextHits uploads an archive even when the C9 scan found
+	// plaintext-secret candidates. Without it such an archive is held for
+	// operator review and the run does not pass.
+	AcceptPlaintextHits bool
 }
 
 // Outcome captures the archive run result.
+//
+// Pass is true only when every stack of every target was listed, its live
+// resource count was actually measured as zero, and its archive was uploaded.
+// Anything the run could not establish keeps Pass false: this is the
+// pre-flight for `pulumi stack rm`, so an unknown must never read as safe.
 type Outcome struct {
 	Pass              bool
 	Targets           []string
 	Archived          []Archived
 	LiveResourceCount int
-	Messages          []string
+	// UnlistedDirs are target dirs whose stacks could not be listed.
+	UnlistedDirs []string
+	// UnverifiedStacks ("dir/stack") had no measurable resource count.
+	UnverifiedStacks []string
+	// Held are exports withheld from upload because the C9 scan found
+	// plaintext-secret candidates and AcceptPlaintextHits was not set.
+	Held     []Archived
+	Messages []string
 }
 
 // preflight returns nil when env + bucket are OK to proceed. ArchiveOnly
@@ -205,10 +222,10 @@ func extractSSEAlgo(raw string) (string, error) {
 	return r.ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm, nil
 }
 
-// enumerateTargets returns paralelas dirs that have a Pulumi.yaml.
-func enumerateTargets(root string, paralelas []string) []string {
+// enumerateTargets returns parallel project dirs that have a Pulumi.yaml.
+func enumerateTargets(root string, parallelProjects []string) []string {
 	var out []string
-	for _, dir := range paralelas {
+	for _, dir := range parallelProjects {
 		pulumiYAML := filepath.Join(root, dir, "Pulumi.yaml")
 		if _, err := os.Stat(pulumiYAML); err == nil {
 			out = append(out, dir)
@@ -249,22 +266,26 @@ func listStacks(ctx context.Context, runner shellrun.Runner, repoRoot, dir strin
 	return out, nil
 }
 
-// stackResourceCount parses pulumi stack --stack X --json.
-func stackResourceCount(ctx context.Context, runner shellrun.Runner, repoRoot, dir, stack string) int {
+// stackResourceCount parses `pulumi stack --stack X --json`. A failed or
+// unparseable query is an error, never zero: zero live resources is the answer
+// that clears a stack for removal.
+func stackResourceCount(ctx context.Context, runner shellrun.Runner, repoRoot, dir, stack string) (int, error) {
 	res, err := runner.Run(ctx, "pulumi", []string{
 		"stack", "--stack", stack, "--json",
 	}, shellrun.WithCwd(filepath.Join(repoRoot, dir)))
-	if err != nil || res.ExitCode != 0 {
-		return 0 // bash || echo 0
+	if err != nil {
+		return 0, fmt.Errorf("pulumi stack --stack %s (dir=%s): %w", stack, dir, err)
 	}
-	type info struct {
+	if res.ExitCode != 0 {
+		return 0, fmt.Errorf("pulumi stack --stack %s (dir=%s): exit %d: %s", stack, dir, res.ExitCode, strings.TrimSpace(res.Stderr))
+	}
+	var inf struct {
 		Resources []json.RawMessage `json:"resources"`
 	}
-	var inf info
 	if err := json.Unmarshal([]byte(res.Stdout), &inf); err != nil {
-		return 0
+		return 0, fmt.Errorf("parse pulumi stack --stack %s (dir=%s): %w", stack, dir, err)
 	}
-	return len(inf.Resources)
+	return len(inf.Resources), nil
 }
 
 // exportStack invokes `pulumi stack export --stack X --file path`.
@@ -383,9 +404,9 @@ func Run(cfg Config) (*Outcome, error) {
 	if root == "" {
 		root = "."
 	}
-	paralelas := cfg.Paralelas
-	if paralelas == nil {
-		paralelas = DefaultParalelas
+	parallelProjects := cfg.ParallelProjects
+	if parallelProjects == nil {
+		parallelProjects = DefaultParallelProjects
 	}
 	bucket := cfg.ArchiveBucket
 	if bucket == "" {
@@ -397,16 +418,16 @@ func Run(cfg Config) (*Outcome, error) {
 	}
 
 	out := &Outcome{}
-	targets := enumerateTargets(root, paralelas)
+	targets := enumerateTargets(root, parallelProjects)
 	out.Targets = targets
 	out.Messages = append(out.Messages,
 		"[pulumi-archive] step 1: pre-flight",
-		"[pulumi-archive] step 2: enumerating paralelas Pulumi dirs",
+		"[pulumi-archive] step 2: enumerating the parallel Pulumi project dirs",
 		fmt.Sprintf("[pulumi-archive]   %d dirs to archive: %s", len(targets), strings.Join(targets, " ")))
 	if len(targets) == 0 {
 		out.Pass = true
 		out.Messages = append(out.Messages,
-			"[pulumi-archive]   no paralelas dirs found — Phase 3 already cleaned",
+			"[pulumi-archive]   no parallel project dirs found — Phase 3 already cleaned",
 			"[pulumi-archive] DONE — nothing to do")
 		return out, nil
 	}
@@ -422,110 +443,128 @@ func Run(cfg Config) (*Outcome, error) {
 				Cause:   err,
 			}
 		}
-		defer func() { _ = os.RemoveAll(tmpDir) }()
+		defer func() {
+			if err := os.RemoveAll(tmpDir); err != nil {
+				fmt.Fprintf(os.Stderr, "[pulumi-archive] WARN: could not remove temp dir %s: %v\n", tmpDir, err)
+			}
+		}()
 	}
 
-	ctx := context.Background()
+	a := archiver{ctx: context.Background(), cfg: cfg, runner: runner, root: root, bucket: bucket, ts: ts, tmpDir: tmpDir, out: out}
 	out.Messages = append(out.Messages, "[pulumi-archive] step 3: per-dir archive")
-
 	for _, dir := range targets {
-		out.Messages = append(out.Messages, fmt.Sprintf("[pulumi-archive]   --- %s ---", dir))
-		stacks, err := listStacks(ctx, runner, root, dir)
-		if err != nil {
-			out.Messages = append(out.Messages,
-				fmt.Sprintf("[pulumi-archive]     WARN: pulumi stack ls failed (auth?); skipping %s", dir))
-			continue
-		}
-		if len(stacks) == 0 {
-			out.Messages = append(out.Messages,
-				fmt.Sprintf("[pulumi-archive]     no stacks in %s", dir))
-			continue
-		}
-		for _, stack := range stacks {
-			out.Messages = append(out.Messages, fmt.Sprintf("[pulumi-archive]     stack: %s", stack))
-
-			resourceCount := stackResourceCount(ctx, runner, root, dir, stack)
-			if resourceCount > 0 {
-				out.Messages = append(out.Messages,
-					fmt.Sprintf("[pulumi-archive]     LIVE RESOURCES detected in %s/%s: %d resources",
-						dir, stack, resourceCount),
-					"[pulumi-archive]     Per condition C3, operator must verify against actual provider before T3.2 stack rm.")
-				out.LiveResourceCount++
-			}
-
-			archivePath := filepath.Join(tmpDir,
-				fmt.Sprintf("%s-%s-%s.json", archivePrefix(dir), stack, ts))
-			if cfg.DryRun {
-				out.Messages = append(out.Messages,
-					fmt.Sprintf("[pulumi-archive]     DRY_RUN: would export to %s then upload to S3", archivePath))
-				continue
-			}
-
-			if err := exportStack(ctx, runner, root, dir, stack, archivePath); err != nil {
-				return nil, &loopzeroerrors.LoopZeroError{
-					Code:    "OPS_DEPLOY_FAILURE",
-					Message: fmt.Sprintf("pulumi-archive: %v", err),
-					Cause:   err,
-				}
-			}
-			hits, err := scanPlaintextSecrets(archivePath)
-			if err != nil {
-				return nil, &loopzeroerrors.LoopZeroError{
-					Code:    "OPS_DEPLOY_FAILURE",
-					Message: fmt.Sprintf("pulumi-archive: C9 scan %s: %v", archivePath, err),
-					Cause:   err,
-				}
-			}
-			if hits > 0 {
-				out.Messages = append(out.Messages,
-					fmt.Sprintf("[pulumi-archive]     WARN: %d plaintext token candidates in archive (C9 regex scan)", hits),
-					fmt.Sprintf("[pulumi-archive]     Operator MUST review %s before C5 upload.", archivePath))
-			}
-			sha, err := hashFile(archivePath)
-			if err != nil {
-				return nil, &loopzeroerrors.LoopZeroError{
-					Code:    "OPS_DEPLOY_FAILURE",
-					Message: fmt.Sprintf("pulumi-archive: sha256 %s: %v", archivePath, err),
-					Cause:   err,
-				}
-			}
-			out.Messages = append(out.Messages,
-				fmt.Sprintf("[pulumi-archive]     archive: %s sha256=%s (resources=%d)",
-					filepath.Base(archivePath), sha, resourceCount))
-
-			s3Key := fmt.Sprintf("s3://%s/pulumi-state/%s/%s/%s.json",
-				bucket, archivePrefix(dir), stack, ts)
-			if err := uploadS3(ctx, runner, archivePath, s3Key, sha, resourceCount); err != nil {
-				return nil, &loopzeroerrors.LoopZeroError{
-					Code:    "OPS_DEPLOY_FAILURE",
-					Message: fmt.Sprintf("pulumi-archive: %v", err),
-					Cause:   err,
-				}
-			}
-
-			out.Archived = append(out.Archived, Archived{
-				Dir:           dir,
-				Stack:         stack,
-				S3Key:         s3Key,
-				SHA256:        sha,
-				ResourceCount: resourceCount,
-				PlaintextHits: hits,
-			})
+		if err := a.archiveDir(dir); err != nil {
+			return nil, err
 		}
 	}
+	a.summarise()
+	return out, nil
+}
 
-	out.Messages = append(out.Messages,
-		"[pulumi-archive] step 4: summary",
-		fmt.Sprintf("[pulumi-archive]   archived: %d", len(out.Archived)),
-		fmt.Sprintf("[pulumi-archive]   live-resources detected (operator must verify): %d", out.LiveResourceCount))
-	if out.LiveResourceCount > 0 {
+// archiver carries one run's inputs through the per-dir / per-stack steps.
+type archiver struct {
+	ctx    context.Context
+	cfg    Config
+	runner shellrun.Runner
+	root   string
+	bucket string
+	ts     string
+	tmpDir string
+	out    *Outcome
+}
+
+func (a *archiver) say(format string, args ...any) {
+	a.out.Messages = append(a.out.Messages, fmt.Sprintf("[pulumi-archive]"+format, args...))
+}
+
+func (a *archiver) archiveDir(dir string) error {
+	a.say("   --- %s ---", dir)
+	stacks, err := listStacks(a.ctx, a.runner, a.root, dir)
+	if err != nil {
+		a.out.UnlistedDirs = append(a.out.UnlistedDirs, dir)
+		a.say("     ERROR: cannot list stacks in %s — nothing archived there: %v", dir, err)
+		return nil
+	}
+	if len(stacks) == 0 {
+		a.say("     no stacks in %s", dir)
+		return nil
+	}
+	for _, stack := range stacks {
+		if err := a.archiveStack(dir, stack); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *archiver) archiveStack(dir, stack string) error {
+	a.say("     stack: %s", stack)
+	resourceCount, err := stackResourceCount(a.ctx, a.runner, a.root, dir, stack)
+	switch {
+	case err != nil:
+		a.out.UnverifiedStacks = append(a.out.UnverifiedStacks, dir+"/"+stack)
+		a.say("     ERROR: live-resource count unknown for %s/%s: %v", dir, stack, err)
+	case resourceCount > 0:
+		a.out.LiveResourceCount++
+		a.say("     LIVE RESOURCES detected in %s/%s: %d resources", dir, stack, resourceCount)
+		a.say("     Per condition C3, operator must verify against actual provider before T3.2 stack rm.")
+	}
+
+	archivePath := filepath.Join(a.tmpDir, fmt.Sprintf("%s-%s-%s.json", archivePrefix(dir), stack, a.ts))
+	if a.cfg.DryRun {
+		a.say("     DRY_RUN: would export to %s then upload to S3", archivePath)
+		return nil
+	}
+	if err := exportStack(a.ctx, a.runner, a.root, dir, stack, archivePath); err != nil {
+		return deployFailure(fmt.Sprintf("pulumi-archive: %v", err), err)
+	}
+	hits, err := scanPlaintextSecrets(archivePath)
+	if err != nil {
+		return deployFailure(fmt.Sprintf("pulumi-archive: C9 scan %s: %v", archivePath, err), err)
+	}
+	sha, err := hashFile(archivePath)
+	if err != nil {
+		return deployFailure(fmt.Sprintf("pulumi-archive: sha256 %s: %v", archivePath, err), err)
+	}
+	a.say("     archive: %s sha256=%s (resources=%d)", filepath.Base(archivePath), sha, resourceCount)
+
+	s3Key := fmt.Sprintf("s3://%s/pulumi-state/%s/%s/%s.json", a.bucket, archivePrefix(dir), stack, a.ts)
+	record := Archived{Dir: dir, Stack: stack, S3Key: s3Key, SHA256: sha, ResourceCount: resourceCount, PlaintextHits: hits}
+	if hits > 0 && !a.cfg.AcceptPlaintextHits {
+		a.out.Held = append(a.out.Held, record)
+		a.say("     HELD: %d plaintext token candidates in archive (C9 regex scan) — not uploaded.", hits)
+		a.say("     Review the export, then re-run with --accept-plaintext-hits to upload it.")
+		return nil
+	}
+	if hits > 0 {
+		a.say("     WARN: uploading with %d plaintext token candidates (accepted by operator)", hits)
+	}
+	if err := uploadS3(a.ctx, a.runner, archivePath, s3Key, sha, resourceCount); err != nil {
+		return deployFailure(fmt.Sprintf("pulumi-archive: %v", err), err)
+	}
+	a.out.Archived = append(a.out.Archived, record)
+	return nil
+}
+
+// summarise closes the run: Pass is true only when nothing is unknown, held
+// or live.
+func (a *archiver) summarise() {
+	out := a.out
+	a.say(" step 4: summary")
+	a.say("   archived: %d", len(out.Archived))
+	a.say("   held for plaintext review: %d", len(out.Held))
+	a.say("   dirs not listed: %d; stacks with unknown resource count: %d", len(out.UnlistedDirs), len(out.UnverifiedStacks))
+	a.say("   live-resources detected (operator must verify): %d", out.LiveResourceCount)
+	blocked := out.LiveResourceCount > 0 || len(out.UnlistedDirs) > 0 || len(out.UnverifiedStacks) > 0 || len(out.Held) > 0
+	if blocked {
 		out.Pass = false
-		out.Messages = append(out.Messages,
-			fmt.Sprintf("[pulumi-archive] WARN: live resources in %d stack(s) — DO NOT proceed to T3.2 stack rm without operator verification",
-				out.LiveResourceCount))
-		return out, nil
+		a.say(" NOT CLEAR — DO NOT proceed to T3.2 stack rm until every listed item above is resolved")
+		return
 	}
 	out.Pass = true
-	out.Messages = append(out.Messages, "[pulumi-archive] DONE")
-	return out, nil
+	a.say(" DONE")
+}
+
+func deployFailure(msg string, cause error) error {
+	return &loopzeroerrors.LoopZeroError{Code: "OPS_DEPLOY_FAILURE", Message: msg, Cause: cause}
 }

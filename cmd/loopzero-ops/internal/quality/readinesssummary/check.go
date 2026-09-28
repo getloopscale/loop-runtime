@@ -1,41 +1,40 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package readinesssummary garante o invariante do ADR-0025 D3 nos SEIS pacotes de
-// reconciler, e nao num so'.
+// Package readinesssummary enforces the ADR-0025 D3 invariant across the SIX reconciler
+// packages, not just one.
 //
-// O invariante e' de ORDEM: o sumario de prontidao e' a ULTIMA mutacao de status
-// antes de persistir, mesmo em retorno antecipado. Ordem e' o que uma tabela que
-// conta chamadas nao ve' — foi assim que o B-105 ficou escondido.
+// The invariant is one of ORDER: the readiness summary is the LAST status mutation
+// before persisting, even on an early return. Order is what a table that counts calls
+// does not see — that is how B-105 stayed hidden.
 //
-// Por que este gate existe tendo uma guarda antiga: a guarda que vivia em
-// `operators/internal/app/exposure_status_writer_test.go` e' de PACOTE e olha
-// apenas a funcao que ENVOLVE cada `Patch`. A forma canonica dos cinco reconcilers
-// e' outra — `defer reconcileloop.DeferReadinessSummary(...)()` no `Reconcile`, com
-// os persists vivendo em helpers que ele chama. Para a guarda antiga isso e'
-// ausencia: foi assim que o `preview` mediu "0 de 6" tendo cobertura (B-138).
+// Why this gate exists when there was an older guard: the guard that lived in
+// `operators/internal/app/exposure_status_writer_test.go` is PACKAGE-scoped and looks
+// only at the function that ENCLOSES each `Patch`. The canonical shape of the five
+// reconcilers is different — `defer reconcileloop.DeferReadinessSummary(...)()` in
+// `Reconcile`, with the persists living in helpers it calls. To the old guard that is
+// absence: that is how `preview` measured "0 of 6" while having coverage (B-138).
 //
-// `DeferReadinessSummary` re-busca o CR e PERSISTE o sumario no retorno, ou seja, e'
-// a ultima escrita do ciclo. Por isso a cobertura PROPAGA por chamada: um persist
-// numa funcao alcancavel a partir de quem carrega o defer esta' coberto. A dobra em
-// linha nao propaga — ela e' uma mutacao antes da escrita DAQUELA funcao.
+// `DeferReadinessSummary` re-fetches the CR and PERSISTS the summary on return, that is,
+// it is the last write of the cycle. That is why coverage PROPAGATES through calls: a
+// persist in a function reachable from the one carrying the defer is covered. The inline
+// fold does not propagate — it is a mutation before the write of THAT function.
 //
-// LIMITES MEDIDOS, e eles sao parte do resultado. O grafo e' intra-pacote e as
-// funcoes sao indexadas por RECEPTOR+NOME, nao por nome: `operators/internal/app`
-// tem DOIS `Reconcile` (Application e Exposure) e so' o Exposure carrega o defer —
-// indexar por nome fazia o defer de um cobrir os helpers do outro, e o gate
-// reportava verde sobre um persist descoberto. A resolucao de chamada e'
-// conservadora: `r.foo()` no receptor resolve para `T.foo`, `foo()` resolve para a
-// funcao livre, e QUALQUER outra forma fica sem resolver e nao propaga. Errar para
-// o lado de nao-propagar produz falso positivo, que alguem le'; o contrario produz
-// falso verde, que ninguem le'.
+// MEASURED LIMITS, and they are part of the result. The graph is intra-package and
+// functions are indexed by RECEIVER+NAME, not by name: `operators/internal/app` has TWO
+// `Reconcile` (Application and Exposure) and only Exposure carries the defer — indexing
+// by name made one's defer cover the other's helpers, and the gate reported green over
+// an uncovered persist. Call resolution is conservative: `r.foo()` on the receiver
+// resolves to `T.foo`, `foo()` resolves to the free function, and ANY other form stays
+// unresolved and does not propagate. Erring toward not-propagating produces a false
+// positive, which somebody reads; the opposite produces a false green, which nobody reads.
 //
-// A cobertura tambem e' INSENSIVEL A CAMINHO: se um helper e' alcancavel a partir de
-// quem tem o defer, ele conta como coberto mesmo que outro caminho chegue nele sem
-// o defer. Medido em 2026-08-19, isso e' aceitavel aqui e o motivo e' verificavel:
-// os SETE defers da arvore estao todos no `Reconcile`, que e' o unico ponto de
-// entrada que o controller-runtime chama. Se um defer aparecer fora de um
-// `Reconcile`, esta premissa deixa de valer.
+// Coverage is also PATH-INSENSITIVE: if a helper is reachable from the function that
+// has the defer, it counts as covered even if another path reaches it without the
+// defer. Measured on 2026-08-19, that is acceptable here and the reason is verifiable:
+// the SEVEN defers in the tree are all in `Reconcile`, which is the only entry point
+// controller-runtime calls. If a defer shows up outside a `Reconcile`, this premise
+// no longer holds.
 package readinesssummary
 
 import (
@@ -47,10 +46,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-// PacotesPadrao sao os seis pacotes de reconciler que o B-138 declara como populacao.
-var PacotesPadrao = []string{
+// DefaultPackages are the six reconciler packages B-138 declares as the population.
+var DefaultPackages = []string{
 	filepath.Join("operators", "internal", "app"),
 	filepath.Join("operators", "internal", "environment"),
 	filepath.Join("operators", "internal", "platform"),
@@ -62,31 +63,34 @@ var PacotesPadrao = []string{
 // Config drives the gate.
 type Config struct {
 	RepoRoot string
-	Pacotes  []string
+	Packages []string
 }
 
-// Sitio e' um persist de `.status` e a funcao que o contem.
-type Sitio struct {
-	Arquivo string
-	Linha   int
-	Funcao  string
-	Forma   string
+// Site is a `.status` persist and the function that contains it.
+type Site struct {
+	File  string
+	Line  int
+	Func  string
+	Shape string
 }
 
 // Outcome carries the gate result.
 type Outcome struct {
-	Pass      bool
-	Pacotes   int
-	Sitios    int
-	Violacoes []Sitio
+	Pass       bool
+	Packages   int
+	Sites      int
+	Violations []Site
 }
 
-type funcao struct {
-	nome     string
-	emLinha  bool
-	comDefer bool
-	chama    map[string]bool
-	sitios   []Sitio
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
+
+type function struct {
+	name      string
+	inline    bool
+	withDefer bool
+	calls     map[string]bool
+	sites     []Site
 }
 
 // Check runs the gate.
@@ -95,85 +99,85 @@ func Check(cfg Config) (Outcome, error) {
 	if cfg.RepoRoot == "" {
 		cfg.RepoRoot = "."
 	}
-	pacotes := cfg.Pacotes
-	if len(pacotes) == 0 {
-		pacotes = PacotesPadrao
+	packages := cfg.Packages
+	if len(packages) == 0 {
+		packages = DefaultPackages
 	}
 
-	for _, rel := range pacotes {
+	for _, rel := range packages {
 		dir := filepath.Join(cfg.RepoRoot, rel)
-		entradas, err := os.ReadDir(dir)
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			// Pacote ausente e' FALHA, nunca skip: uma varredura que nao alcanca
-			// nada reporta verde sobre nada.
-			return out, fmt.Errorf("lendo %s: %w", rel, err)
+			// A missing package is a FAILURE, never a skip: a scan that reaches
+			// nothing reports green over nothing.
+			return out, fmt.Errorf("reading %s: %w", rel, err)
 		}
-		out.Pacotes++
+		out.Packages++
 
-		funcs := map[string]*funcao{}
-		for _, e := range entradas {
-			nome := e.Name()
-			if e.IsDir() || !strings.HasSuffix(nome, ".go") || strings.HasSuffix(nome, "_test.go") {
+		funcs := map[string]*function{}
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 				continue
 			}
-			if err := varrer(cfg.RepoRoot, filepath.Join(dir, nome), funcs); err != nil {
+			if err := scan(cfg.RepoRoot, filepath.Join(dir, name), funcs); err != nil {
 				return out, err
 			}
 		}
-		colher(funcs, &out)
+		collect(funcs, &out)
 	}
 
-	sort.Slice(out.Violacoes, func(i, j int) bool {
-		if out.Violacoes[i].Arquivo != out.Violacoes[j].Arquivo {
-			return out.Violacoes[i].Arquivo < out.Violacoes[j].Arquivo
+	sort.Slice(out.Violations, func(i, j int) bool {
+		if out.Violations[i].File != out.Violations[j].File {
+			return out.Violations[i].File < out.Violations[j].File
 		}
-		return out.Violacoes[i].Linha < out.Violacoes[j].Linha
+		return out.Violations[i].Line < out.Violations[j].Line
 	})
-	out.Pass = len(out.Violacoes) == 0
+	out.Pass = len(out.Violations) == 0
 	return out, nil
 }
 
-func varrer(root, caminho string, funcs map[string]*funcao) error {
+func scan(root, path string, funcs map[string]*function) error {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, caminho, nil, 0)
+	f, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", caminho, err)
+		return fmt.Errorf("parse %s: %w", path, err)
 	}
-	rel, _ := filepath.Rel(root, caminho)
+	rel, _ := filepath.Rel(root, path)
 
 	for _, d := range f.Decls {
 		fd, ok := d.(*ast.FuncDecl)
 		if !ok || fd.Body == nil {
 			continue
 		}
-		recv, ident := receptor(fd)
-		chave := fd.Name.Name
+		recv, ident := receiver(fd)
+		key := fd.Name.Name
 		if recv != "" {
-			chave = recv + "." + fd.Name.Name
+			key = recv + "." + fd.Name.Name
 		}
-		fn := funcs[chave]
+		fn := funcs[key]
 		if fn == nil {
-			fn = &funcao{nome: chave, chama: map[string]bool{}}
-			funcs[chave] = fn
+			fn = &function{name: key, calls: map[string]bool{}}
+			funcs[key] = fn
 		}
 		ast.Inspect(fd.Body, func(n ast.Node) bool {
 			switch v := n.(type) {
 			case *ast.DeferStmt:
-				if nomeChamado(v.Call) == "DeferReadinessSummary" || chamaDentro(v.Call, "DeferReadinessSummary") {
-					fn.comDefer = true
+				if calledName(v.Call) == "DeferReadinessSummary" || callsInside(v.Call, "DeferReadinessSummary") {
+					fn.withDefer = true
 				}
 			case *ast.CallExpr:
-				alvo := nomeChamado(v)
-				if k := resolver(v, recv, ident); k != "" {
-					fn.chama[k] = true
+				target := calledName(v)
+				if k := resolve(v, recv, ident); k != "" {
+					fn.calls[k] = true
 				}
-				if alvo == "SetReadinessSummaryViaPkg" || alvo == "SetReadinessSummary" {
-					fn.emLinha = true
+				if target == "SetReadinessSummaryViaPkg" || target == "SetReadinessSummary" {
+					fn.inline = true
 				}
-				if forma := formaDePersist(v); forma != "" {
-					fn.sitios = append(fn.sitios, Sitio{
-						Arquivo: rel, Linha: fset.Position(v.Pos()).Line,
-						Funcao: chave, Forma: forma,
+				if shape := persistShape(v); shape != "" {
+					fn.sites = append(fn.sites, Site{
+						File: rel, Line: fset.Position(v.Pos()).Line,
+						Func: key, Shape: shape,
 					})
 				}
 			}
@@ -183,41 +187,41 @@ func varrer(root, caminho string, funcs map[string]*funcao) error {
 	return nil
 }
 
-// colher propaga a cobertura do `defer` por chamada e recolhe o que sobrou.
-func colher(funcs map[string]*funcao, out *Outcome) {
-	coberto := map[string]bool{}
-	var fila []string
-	for nome, fn := range funcs {
-		if fn.comDefer {
-			coberto[nome] = true
-			fila = append(fila, nome)
+// collect propagates the `defer` coverage through calls and gathers what is left.
+func collect(funcs map[string]*function, out *Outcome) {
+	covered := map[string]bool{}
+	var queue []string
+	for name, fn := range funcs {
+		if fn.withDefer {
+			covered[name] = true
+			queue = append(queue, name)
 		}
 	}
-	for len(fila) > 0 {
-		atual := fila[0]
-		fila = fila[1:]
-		fn := funcs[atual]
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		fn := funcs[current]
 		if fn == nil {
 			continue
 		}
-		for alvo := range fn.chama {
-			if !coberto[alvo] && funcs[alvo] != nil {
-				coberto[alvo] = true
-				fila = append(fila, alvo)
+		for target := range fn.calls {
+			if !covered[target] && funcs[target] != nil {
+				covered[target] = true
+				queue = append(queue, target)
 			}
 		}
 	}
-	for nome, fn := range funcs {
-		out.Sitios += len(fn.sitios)
-		if fn.emLinha || coberto[nome] {
+	for name, fn := range funcs {
+		out.Sites += len(fn.sites)
+		if fn.inline || covered[name] {
 			continue
 		}
-		out.Violacoes = append(out.Violacoes, fn.sitios...)
+		out.Violations = append(out.Violations, fn.sites...)
 	}
 }
 
-// formaDePersist devolve "Patch"/"Update" quando a chamada e' `...Status().X(...)`.
-func formaDePersist(c *ast.CallExpr) string {
+// persistShape returns "Patch"/"Update" when the call is `...Status().X(...)`.
+func persistShape(c *ast.CallExpr) string {
 	sel, ok := c.Fun.(*ast.SelectorExpr)
 	if !ok {
 		return ""
@@ -225,73 +229,73 @@ func formaDePersist(c *ast.CallExpr) string {
 	if sel.Sel.Name != "Patch" && sel.Sel.Name != "Update" {
 		return ""
 	}
-	if !chamaDentroExpr(sel.X, "Status") {
+	if !callsInsideExpr(sel.X, "Status") {
 		return ""
 	}
 	return sel.Sel.Name
 }
 
-// receptor devolve o nome do TIPO do receptor e o identificador usado para ele.
-func receptor(fd *ast.FuncDecl) (tipo, ident string) {
+// receiver returns the name of the receiver's TYPE and the identifier used for it.
+func receiver(fd *ast.FuncDecl) (typeName, ident string) {
 	if fd.Recv == nil || len(fd.Recv.List) == 0 {
 		return "", ""
 	}
-	campo := fd.Recv.List[0]
-	if len(campo.Names) > 0 {
-		ident = campo.Names[0].Name
+	field := fd.Recv.List[0]
+	if len(field.Names) > 0 {
+		ident = field.Names[0].Name
 	}
-	e := campo.Type
+	e := field.Type
 	if star, ok := e.(*ast.StarExpr); ok {
 		e = star.X
 	}
 	if id, ok := e.(*ast.Ident); ok {
-		tipo = id.Name
+		typeName = id.Name
 	}
-	return tipo, ident
+	return typeName, ident
 }
 
-// resolver devolve a chave da funcao chamada, ou "" quando nao da' para resolver.
-// Conservador de proposito: nao-resolver nao propaga cobertura.
-func resolver(c *ast.CallExpr, recvTipo, recvIdent string) string {
+// resolve returns the key of the called function, or "" when it cannot be resolved.
+// Conservative on purpose: not resolving does not propagate coverage.
+func resolve(c *ast.CallExpr, recvType, recvIdent string) string {
 	switch f := c.Fun.(type) {
 	case *ast.Ident:
 		return f.Name
 	case *ast.SelectorExpr:
 		if id, ok := f.X.(*ast.Ident); ok && recvIdent != "" && id.Name == recvIdent {
-			return recvTipo + "." + f.Sel.Name
+			return recvType + "." + f.Sel.Name
 		}
 	}
 	return ""
 }
 
-func nomeChamado(c *ast.CallExpr) string {
+func calledName(c *ast.CallExpr) string {
 	switch f := c.Fun.(type) {
 	case *ast.Ident:
 		return f.Name
 	case *ast.SelectorExpr:
 		return f.Sel.Name
 	case *ast.CallExpr: // `Helper(...)()`
-		return nomeChamado(f)
+		return calledName(f)
 	}
 	return ""
 }
 
-func chamaDentro(c *ast.CallExpr, nome string) bool { return chamaDentroExpr(c, nome) }
+func callsInside(c *ast.CallExpr, name string) bool { return callsInsideExpr(c, name) }
 
-func chamaDentroExpr(e ast.Expr, nome string) bool {
-	var achou bool
+func callsInsideExpr(e ast.Expr, name string) bool {
+	var found bool
 	ast.Inspect(e, func(n ast.Node) bool {
-		if ce, ok := n.(*ast.CallExpr); ok && nomeChamado(ce) == nome {
-			achou = true
+		if ce, ok := n.(*ast.CallExpr); ok && calledName(ce) == name {
+			found = true
 			return false
 		}
 		return true
 	})
-	return achou
+	return found
 }
 
 // Summary describes the outcome.
 func (o Outcome) Summary() string {
-	return fmt.Sprintf("%d pacote(s), %d persist(s) de .status, %d sem dobra do sumario",
-		o.Pacotes, o.Sitios, len(o.Violacoes))
+	return fmt.Sprintf("%d package(s), %d .status persist(s), %d without the summary fold",
+		o.Packages, o.Sites, len(o.Violations))
 }

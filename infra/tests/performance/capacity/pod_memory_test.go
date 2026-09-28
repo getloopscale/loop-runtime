@@ -4,17 +4,12 @@
 package capacity
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -141,14 +136,30 @@ func TestCapacityPodMemoryByFramework(t *testing.T) {
 		loopzeroYAML := fmt.Sprintf("version: 2\nproject: %s\napps:\n  api:\n    build: dockerfile\n    framework: %s\n    render: server\n    port: %d\n",
 			projectName, fw.Framework, fw.Port)
 
-		commitSHA, err := uploadBundle(ctx, client, apiURL, serviceAuth, tenant, loopzeroYAML, bundle)
+		auth := load.ServiceAuthHeaders(serviceAuth, tenant)
+		commitSHA, err := load.UploadSource(ctx, client, apiURL, auth, loopzeroYAML, bundle)
 		if err != nil {
 			t.Logf("  ERROR upload: %v", err)
 			continue
 		}
 
 		// Submit build.
-		buildID, err := submitFrameworkBuild(ctx, client, apiURL, serviceAuth, tenant, commitSHA, fw.Framework, fw.Port)
+		builds := load.BuildAPI{
+			APIURL:       apiURL,
+			Client:       client,
+			Auth:         auth,
+			PollInterval: 10 * time.Second,
+			RetryBackoff: load.DefaultSubmitBackoff,
+		}
+		buildID, err := builds.SubmitBuild(ctx, map[string]any{
+			"project_id":  tenant.ProjectName,
+			"environment": "production",
+			"commit_sha":  commitSHA,
+			"apps": []map[string]any{{
+				"name": "api", "build": "dockerfile", "framework": fw.Framework,
+				"render": "server", "port": fw.Port,
+			}},
+		}, fmt.Sprintf("pm-%s-%d", tenant.TenantID, time.Now().UnixNano()))
 		if err != nil {
 			t.Logf("  ERROR submit: %v", err)
 			continue
@@ -156,7 +167,9 @@ func TestCapacityPodMemoryByFramework(t *testing.T) {
 		t.Logf("  build: %s", buildID)
 
 		// Wait for build to complete.
-		status, err := waitBuild(ctx, client, apiURL, serviceAuth, tenant, buildID)
+		buildCtx, cancelBuild := context.WithTimeout(ctx, 30*time.Minute)
+		status, _, err := builds.WaitForBuild(buildCtx, buildID)
+		cancelBuild()
 		if err != nil || status != "SUCCEEDED" {
 			t.Logf("  ERROR build %s: %s (%v)", buildID, status, err)
 			continue
@@ -241,175 +254,16 @@ func TestCapacityPodMemoryByFramework(t *testing.T) {
 
 // --- Helpers ---
 
-func uploadBundle(ctx context.Context, client *http.Client, apiURL, serviceAuth string, t load.TenantIdentity, loopzeroYAML string, bundle []byte) (string, error) {
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-
-	yamlPart, err := writer.CreateFormField("loopzero_yaml")
-	if err != nil {
-		return "", err
-	}
-	yamlPart.Write([]byte(loopzeroYAML))
-
-	bundlePart, err := writer.CreateFormFile("bundle", "source.bundle")
-	if err != nil {
-		return "", err
-	}
-	bundlePart.Write(bundle)
-	writer.Close()
-
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL+"/api/v1/source/upload", &body)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("X-Service-Auth", serviceAuth)
-	req.Header.Set("X-LoopZero-User-ID", t.UserID)
-	req.Header.Set("X-LoopZero-Tenant", t.TenantID)
-	req.Header.Set("X-LoopZero-Email", t.Email)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("upload HTTP %d: %s", resp.StatusCode, string(b))
-	}
-
-	var result struct {
-		CommitSHA string `json:"commit_sha"`
-	}
-	json.NewDecoder(resp.Body).Decode(&result)
-	return result.CommitSHA, nil
-}
-
-func submitFrameworkBuild(ctx context.Context, client *http.Client, apiURL, serviceAuth string, t load.TenantIdentity, commitSHA, framework string, port int) (string, error) {
-	reqBody := fmt.Sprintf(`{
-		"project_id": %q,
-		"environment": "production",
-		"commit_sha": %q,
-		"apps": [{"name":"api","build":"dockerfile","framework":%q,"render":"server","port":%d}]
-	}`, t.ProjectName, commitSHA, framework, port)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL+"/api/v1/builds", strings.NewReader(reqBody))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Service-Auth", serviceAuth)
-	req.Header.Set("X-LoopZero-User-ID", t.UserID)
-	req.Header.Set("X-LoopZero-Tenant", t.TenantID)
-	req.Header.Set("X-LoopZero-Email", t.Email)
-	req.Header.Set("Idempotency-Key", fmt.Sprintf("pm-%s-%d", t.TenantID, time.Now().UnixNano()))
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != 202 && resp.StatusCode != 201 {
-		return "", fmt.Errorf("submit HTTP %d: %s", resp.StatusCode, string(b))
-	}
-
-	var result struct {
-		BuildID string `json:"build_id"`
-	}
-	json.Unmarshal(b, &result)
-	return result.BuildID, nil
-}
-
-func waitBuild(ctx context.Context, client *http.Client, apiURL, serviceAuth string, t load.TenantIdentity, buildID string) (string, error) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	deadline := time.After(30 * time.Minute)
-	for {
-		select {
-		case <-ctx.Done():
-			return "TIMEOUT", ctx.Err()
-		case <-deadline:
-			return "TIMEOUT", fmt.Errorf("build %s timed out after 30m", buildID)
-		case <-ticker.C:
-			req, _ := http.NewRequestWithContext(ctx, "GET", apiURL+"/api/v1/builds/"+buildID, nil)
-			req.Header.Set("X-Service-Auth", serviceAuth)
-			req.Header.Set("X-LoopZero-User-ID", t.UserID)
-			req.Header.Set("X-LoopZero-Tenant", t.TenantID)
-			req.Header.Set("X-LoopZero-Email", t.Email)
-
-			resp, err := client.Do(req)
-			if err != nil {
-				continue
-			}
-			var build struct {
-				Status string `json:"status"`
-			}
-			json.NewDecoder(resp.Body).Decode(&build)
-			resp.Body.Close()
-
-			switch build.Status {
-			case "SUCCEEDED":
-				return "SUCCEEDED", nil
-			case "FAILED", "CANCELLED":
-				return build.Status, fmt.Errorf("build %s: %s", buildID, build.Status)
-			}
-		}
-	}
-}
-
-// kubectlTopPod runs "kubectl top pod" in a namespace and parses the first
-// pod's memory and CPU. Returns (memoryMi, cpuMillis, podName, error).
+// kubectlTopPod reads the first pod of a namespace from the metrics-server
+// through the package's one `kubectl top` parser. Returns (memoryMi,
+// cpuMillis, podName, error).
 func kubectlTopPod(ctx context.Context, kubeCtx, namespace string) (int64, int64, string, error) {
-	cmd := exec.CommandContext(ctx, "kubectl", "--context="+kubeCtx, "-n", namespace, "top", "pod", "--no-headers")
-	out, err := cmd.CombinedOutput()
+	pods, err := KubectlTopPods(ctx, kubeCtx, namespace, "")
 	if err != nil {
-		return 0, 0, "", fmt.Errorf("kubectl top: %w: %s", err, string(out))
+		return 0, 0, "", err
 	}
-
-	// Parse output format: "POD_NAME  CPU(cores)  MEMORY(bytes)"
-	// Example: "api-7f8b4c9d-x2k4j  1m  23Mi"
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) == 0 {
+	if len(pods) == 0 {
 		return 0, 0, "", fmt.Errorf("no pods found in namespace %s", namespace)
 	}
-
-	// Use the first pod.
-	fields := strings.Fields(lines[0])
-	if len(fields) < 3 {
-		return 0, 0, "", fmt.Errorf("unexpected kubectl top output: %s", lines[0])
-	}
-
-	podName := fields[0]
-	cpuStr := fields[1]
-	memStr := fields[2]
-
-	// Parse CPU: "1m" → 1, "100m" → 100, "1" → 1000
-	var cpuMillis int64
-	if strings.HasSuffix(cpuStr, "m") {
-		fmt.Sscanf(cpuStr, "%dm", &cpuMillis)
-	} else {
-		var cores int64
-		fmt.Sscanf(cpuStr, "%d", &cores)
-		cpuMillis = cores * 1000
-	}
-
-	// Parse memory: "23Mi" → 23, "1Gi" → 1024, "23456Ki" → 22
-	var memMi int64
-	if strings.HasSuffix(memStr, "Mi") {
-		fmt.Sscanf(memStr, "%dMi", &memMi)
-	} else if strings.HasSuffix(memStr, "Gi") {
-		var gi int64
-		fmt.Sscanf(memStr, "%dGi", &gi)
-		memMi = gi * 1024
-	} else if strings.HasSuffix(memStr, "Ki") {
-		var ki int64
-		fmt.Sscanf(memStr, "%dKi", &ki)
-		memMi = ki / 1024
-	}
-
-	return memMi, cpuMillis, podName, nil
+	return pods[0].MemoryMi, pods[0].CPUMillis, pods[0].Name, nil
 }

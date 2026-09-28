@@ -3,64 +3,64 @@
 
 // Package trufflehogscan refuses to call clean what it could not verify.
 //
-// # O defeito que este pacote consertou, medido
+// # The defect this package fixed, measured
 //
-// Até 2026-08-18 este gate tinha **três** caminhos terminando em `exit 0`, e dois deles
-// não sabiam se havia segredo:
+// Until 2026-08-18 this gate had **three** paths ending in `exit 0`, and two of them
+// did not know whether there was a secret:
 //
-//	binário ausente        →  Skipped: true            →  exit 0
-//	erro de execução       →  Skipped: true            →  exit 0   ← o comentário do
-//	                          código dizia "(network? git access?)" e devolvia sucesso
+//	binary missing         →  Skipped: true            →  exit 0
+//	execution error        →  Skipped: true            →  exit 0   ← the code
+//	                          comment said "(network? git access?)" and returned success
 //	exit 0 --only-verified →  Pass: "scan clean"       →  exit 0
 //
-// O terceiro é o que custou cinco meses. `--only-verified` pergunta *"algum candidato
-// está vivo?"*, e essa pergunta **exige rede**. Sem rede nenhum candidato se verifica, a
-// ferramenta sai 0, e o gate imprimia "scan clean (no secrets detected)". **A ausência de
-// resposta era lida como resposta negativa** — e um token do DigitalOcean vivo atravessou
-// 2026-03-22 → 2026-08-17 e vários pushes no mesmo dia (B-142, issue #323).
+// The third is the one that cost five months. `--only-verified` asks *"is any candidate
+// live?"*, and that question **requires the network**. Without a network no candidate verifies, the
+// tool exits 0, and the gate printed "scan clean (no secrets detected)". **The absence of an
+// answer was read as a negative answer** — and a live DigitalOcean token went through
+// 2026-03-22 → 2026-08-17 and several pushes on the same day (B-142, issue #323).
 //
-// A suíte de testes anterior não poderia ter pego nada: três testes, um deles rodando o
-// gate real e descartando o resultado com `_ = got`.
+// The previous test suite could not have caught anything: three tests, one of them running the
+// real gate and discarding the result with `_ = got`.
 //
-// # Uma passada, dois fatos
+// # One pass, two facts
 //
-// A saída `--json` carrega `Verified` **por achado**. Uma execução responde as duas
-// perguntas — todos os achados são o CONJUNTO DE CANDIDATOS, os `Verified:true` são os
-// VIVOS. O primeiro rascunho pedia duas passadas; a medição derrubou o desenho (~70s cada,
-// e o que domina é o passeio pelos 5.420 commits, não a rede).
+// The `--json` output carries `Verified` **per finding**. One run answers both
+// questions — all findings are the CANDIDATE SET, the `Verified:true` ones are the
+// LIVE ones. The first draft asked for two passes; the measurement knocked the design down (~70s each,
+// and what dominates is the walk over the 5,420 commits, not the network).
 //
-//	binário ausente                    →  FAIL
-//	erro de execução (rede, git, prazo) →  FAIL — nunca mais SKIP → exit 0
-//	qualquer achado Verified:true       →  FAIL — a linha de base NÃO suprime
-//	candidato fora da linha de base     →  FAIL — novo e não adjudicado
-//	tudo adjudicado, nada vivo          →  PASS
+//	binary missing                       →  FAIL
+//	execution error (network, git, timeout) →  FAIL — never again SKIP → exit 0
+//	any Verified:true finding            →  FAIL — the baseline does NOT suppress
+//	candidate outside the baseline       →  FAIL — new and not adjudicated
+//	everything adjudicated, nothing live →  PASS
 //
-// O que muda: um verde significava *"nada se verificou como vivo"* — afirmação que a rede
-// pode fabricar. Passa a significar *"o conjunto de candidatos é exatamente o que já foi
-// adjudicado, e nada nele está vivo"*, e a primeira metade é **offline e determinística**.
-// O token teria sido barrado no dia em que entrou: candidato novo. Em março, não em agosto.
+// What changes: a green used to mean *"nothing verified as live"* — a claim the network
+// can fabricate. It now means *"the candidate set is exactly what has already been
+// adjudicated, and nothing in it is live"*, and the first half is **offline and deterministic**.
+// The token would have been blocked on the day it came in: a new candidate. In March, not in August.
 //
-// # A linha de base, e por que ela não é um bypass
+// # The baseline, and why it is not a bypass
 //
-// Um candidato novo **bloqueia** até alguém regravá-la, e a regravação aparece como diff
-// no PR — é esse diff que é a adjudicação. Mesmo mecanismo da catraca do `testpyramid`
-// (B-106) e das isenções do `publishhygiene` (B-130).
+// A new candidate **blocks** until someone rewrites the baseline, and the rewrite shows up as a diff
+// in the PR — that diff is the adjudication. Same mechanism as the `testpyramid` ratchet
+// (B-106) and the `publishhygiene` exemptions (B-130).
 //
-// Ela é gerada com `--no-verification`, e isso foi **medido**, não escolhido: esse modo
-// produz superconjunto estrito do verificado (67 ⊇ 65; o inverso é vazio — dois candidatos
-// `JDBC` que a verificação descarta). Gerar pelo superconjunto impede o modo de falha
-// oposto: se a rede cair e a varredura verificada passar a enxergar os dois, eles já estão
-// na base, e o gate não reprova por acidente de rede.
+// It is generated with `--no-verification`, and that was **measured**, not chosen: that mode
+// produces a strict superset of the verified one (67 ⊇ 65; the reverse is empty — two `JDBC`
+// candidates that verification discards). Generating from the superset prevents the
+// opposite failure mode: if the network drops and the verified scan starts seeing those two, they are already
+// in the baseline, and the gate does not fail because of a network accident.
 //
-// # O residual, dito em voz alta
+// # The residual, said out loud
 //
-// Um candidato **já adjudicado** que se torne vivo só é pego quando a verificação roda.
-// Não é hipótese fechada — é o que sobra deste desenho, e está escrito aqui em vez de ser
-// descoberto por alguém depois.
+// An **already adjudicated** candidate that becomes live is only caught when verification runs.
+// It is not a closed hypothesis — it is what is left of this design, and it is written here instead of being
+// discovered by someone later.
 //
-// Decisão registrada em
+// Decision recorded in
 // `.claude/knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-18-secret-gate-cannot-call-unverifiable-clean.md`
-// (T2, pendente de ratificação).
+// (T2, pending ratification).
 package trufflehogscan
 
 import (
@@ -71,37 +71,39 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // The four ways this gate refuses. Each is typed so the caller can never collapse
-// "não consegui verificar" into "não há" — the whole defect this package closed.
+// "I could not verify" into "there is none" — the whole defect this package closed.
 var (
 	// ErrLiveSecret means a candidate was confirmed live by its provider.
-	ErrLiveSecret = errors.New("credencial VIVA no histórico")
+	ErrLiveSecret = errors.New("LIVE credential in the history")
 	// ErrUnadjudicated means a candidate is absent from the baseline.
-	ErrUnadjudicated = errors.New("candidato novo não adjudicado")
+	ErrUnadjudicated = errors.New("new candidate not adjudicated")
 	// ErrScannerMissing means trufflehog is not installed.
 	//
-	// FAIL e não skip: uma suíte ausente aparece no relatório, mas um scanner de
-	// segredos ausente produz exatamente o mesmo `exit 0` de um repositório limpo.
-	// Mesmo precedente do `helmfile` em taskfiles/quality.yml.
-	ErrScannerMissing = errors.New("trufflehog não encontrado — sem ele o verde não distingue limpo de não-varrido")
+	// FAIL and not skip: a missing suite shows up in the report, but a missing secret
+	// scanner produces exactly the same `exit 0` as a clean repository.
+	// Same precedent as `helmfile` in taskfiles/quality.yml.
+	ErrScannerMissing = errors.New("trufflehog not found — without it a green cannot tell clean from unscanned")
 	// ErrScanFailed means the scan could not complete (network, git, timeout).
-	ErrScanFailed = errors.New("varredura não completou")
+	ErrScanFailed = errors.New("scan did not complete")
 	// ErrNothingScanned means the scan produced no candidate while the baseline holds some.
 	//
-	// Uma base com entradas e uma varredura com zero candidatos não é uma árvore que
-	// ficou limpa — é uma varredura que não alcançou o histórico. Reportar verde aí é a
-	// forma `PASS — 0 routes` que este repositório já pagou três vezes.
-	ErrNothingScanned = errors.New("varredura não alcançou nada — não achar nada não é o mesmo que não achar nada errado")
+	// A baseline with entries and a scan with zero candidates is not a tree that
+	// became clean — it is a scan that did not reach the history. Reporting green there is the
+	// `PASS — 0 routes` shape this repository has already paid for three times.
+	ErrNothingScanned = errors.New("scan reached nothing — finding nothing is not the same as finding nothing wrong")
 )
 
-// defaultTimeout — a varredura mede ~70s nesta árvore; o teto existe para que uma
-// varredura pendurada reprove em vez de travar o gate de entrega para sempre (EC-4).
+// defaultTimeout — the scan measures ~70s on this tree; the ceiling exists so that a
+// hung scan fails instead of locking the delivery gate forever (EC-4).
 const defaultTimeout = 20 * time.Minute
 
-// Scanner runs the secret scan. É a costura que tira rede e binário do caminho dos
-// testes (DIP) — sem ela, provar o comportamento offline exigiria estar offline.
+// Scanner runs the secret scan. It is the seam that takes the network and the binary out of the
+// tests' path (DIP) — without it, proving the offline behavior would require being offline.
 type Scanner interface {
 	Scan(ctx context.Context, repoRoot string) (string, error)
 }
@@ -122,6 +124,17 @@ type Outcome struct {
 	NewCandidates []Finding
 	StaleEntries  []Entry
 	Reason        string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o Outcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Check runs the scan and applies the policy.
@@ -145,8 +158,8 @@ func Check(ctx context.Context, cfg Config) (Outcome, error) {
 		scanner = execScanner{}
 	}
 
-	// A base é lida ANTES da varredura: sem o conjunto adjudicado não há verde possível,
-	// e gastar 70s para depois descobrir isso é desperdício.
+	// The baseline is read BEFORE the scan: without the adjudicated set no green is possible,
+	// and spending 70s only to find that out afterwards is waste.
 	base, err := LoadBaseline(basePath)
 	if err != nil {
 		return out, err
@@ -157,9 +170,9 @@ func Check(ctx context.Context, cfg Config) (Outcome, error) {
 
 	raw, err := scanner.Scan(scanCtx, root)
 	if err != nil {
-		// A garantia é DAQUI, não da implementação: qualquer Scanner que devolva erro
-		// cru — rede, prazo, git — vira ErrScanFailed. Deixar isso a cargo de cada
-		// implementação é como o skip voltaria a existir sem ninguém notar.
+		// The guarantee comes from HERE, not from the implementation: any Scanner that returns a raw
+		// error — network, deadline, git — becomes ErrScanFailed. Leaving that to each
+		// implementation is how the skip would come back without anyone noticing.
 		if errors.Is(err, ErrScannerMissing) || errors.Is(err, ErrScanFailed) {
 			return out, err
 		}
@@ -179,16 +192,16 @@ func Check(ctx context.Context, cfg Config) (Outcome, error) {
 	out.NewCandidates = base.Unadjudicated(findings)
 	out.StaleEntries = base.Stale(findings)
 
-	// Antes de qualquer veredito de conteúdo: a varredura chegou ao histórico?
-	// Se a árvore FOI mesmo limpa, o conserto é regravar a base — um humano confirmando
-	// "sim, tudo saiu". O gate não decide isso sozinho, em silêncio.
+	// Before any verdict about content: did the scan reach the history?
+	// If the tree really WAS cleaned, the fix is to rewrite the baseline — a human confirming
+	// "yes, everything is gone". The gate does not decide that on its own, silently.
 	if len(base.Entries) > 0 && out.Candidates == 0 {
-		return out, fmt.Errorf("%w: a linha de base tem %d entrada(s) e a varredura devolveu zero candidato(s)",
+		return out, fmt.Errorf("%w: the baseline has %d entry(ies) and the scan returned zero candidate(s)",
 			ErrNothingScanned, len(base.Entries))
 	}
 
-	// Ordem deliberada: o vivo reprova ANTES do não-adjudicado, porque é o defeito mais
-	// grave e porque a base não pode suprimí-lo (ADR-3).
+	// Deliberate order: the live one fails BEFORE the unadjudicated one, because it is the more
+	// serious defect and because the baseline cannot suppress it (ADR-3).
 	if out.Live > 0 {
 		var names []string
 		for _, f := range findings {
@@ -196,20 +209,22 @@ func Check(ctx context.Context, cfg Config) (Outcome, error) {
 				names = append(names, f.String())
 			}
 		}
-		return out, fmt.Errorf("%w: %s", ErrLiveSecret, strings.Join(names, "; "))
+		out.Violation = fmt.Errorf("%w: %s", ErrLiveSecret, strings.Join(names, "; "))
+		return out, nil
 	}
 	if len(out.NewCandidates) > 0 {
 		var names []string
 		for _, f := range out.NewCandidates {
 			names = append(names, f.String())
 		}
-		return out, fmt.Errorf("%w (%d): %s — remova o segredo, ou adjudique com `--write` (que RECUSA enquanto houver vivo)",
+		out.Violation = fmt.Errorf("%w (%d): %s — remove the secret, or adjudicate with `--write` (which REFUSES while any live one exists)",
 			ErrUnadjudicated, len(out.NewCandidates), strings.Join(names, "; "))
+		return out, nil
 	}
 
-	// A razão diz o que foi ESTABELECIDO. "scan clean" é a frase que sustentou cinco
-	// meses de exposição: ela não distingue "não há" de "não verifiquei".
-	out.Reason = fmt.Sprintf("%d candidato(s) varrido(s), todos adjudicados; %d verificado(s) como vivo(s); %d entrada(s) da linha de base sem achado nesta passada",
+	// The reason says what was ESTABLISHED. "scan clean" is the phrase that sustained five
+	// months of exposure: it does not distinguish "there is none" from "I did not verify".
+	out.Reason = fmt.Sprintf("%d candidate(s) scanned, all adjudicated; %d verified as live; %d baseline entry(ies) with no finding in this pass",
 		out.Candidates, out.Live, len(out.StaleEntries))
 	return out, nil
 }
@@ -217,7 +232,7 @@ func Check(ctx context.Context, cfg Config) (Outcome, error) {
 // execScanner runs the real trufflehog process.
 type execScanner struct {
 	binary string
-	// noVerification drives baseline generation — o superconjunto medido.
+	// noVerification drives baseline generation — the measured superset.
 	noVerification bool
 }
 
@@ -240,9 +255,9 @@ func (e execScanner) Scan(ctx context.Context, root string) (string, error) {
 		args = append(args, "--no-verification")
 	}
 
-	// #nosec G204 -- `path` vem de exec.LookPath sobre um nome de binário do próprio
-	// gate ("trufflehog"), sobrescrito apenas por teste; `args` são literais e a raiz
-	// do repositório já absolutizada. Nada aqui é entrada de usuário.
+	// #nosec G204 -- `path` comes from exec.LookPath over a binary name owned by the
+	// gate itself ("trufflehog"), overridden only by tests; `args` are literals and the
+	// repository root already made absolute. Nothing here is user input.
 	cmd := exec.CommandContext(ctx, path, args...)
 	stdout, runErr := cmd.Output()
 	if runErr != nil {
@@ -257,20 +272,30 @@ func (e execScanner) Scan(ctx context.Context, root string) (string, error) {
 
 // isScanRan reports whether an exit code means the scan completed.
 //
-// Com `--fail` o trufflehog sai 183 quando acha algo; sem, sai 0. Este gate não passa
-// `--fail` (decide pelo JSON), mas aceita os dois para não depender de qual comportamento
-// a versão instalada tem (EC-7).
+// With `--fail` trufflehog exits 183 when it finds something; without it, it exits 0. This gate does not pass
+// `--fail` (it decides from the JSON), but accepts both so it does not depend on which behavior
+// the installed version has (EC-7).
 func isScanRan(code int) bool { return code == 0 || code == 183 }
+
+// Generated reports an adjudicated baseline rewritten from a scan.
+type Generated struct {
+	// Candidates is the number of findings the baseline now adjudicates.
+	Candidates int
+}
+
+// Verdict is Pass: generating is an operation, and a Generated exists only
+// when the baseline was written. A live finding refuses the write, as an error.
+func (Generated) Verdict() verdict.Verdict { return verdict.Pass }
 
 // Generate (re)writes the adjudicated baseline.
 //
-// Roda com `--no-verification` DE PROPÓSITO: esse modo é superconjunto estrito do
-// verificado (medido 67 ⊇ 65), e gerar pelo superconjunto é o que impede um vermelho
-// falso quando a rede cai. Gerar pelo conjunto menor produziria exatamente isso — e uma
-// trava que reprova por acidente de rede é desligada.
+// Runs with `--no-verification` ON PURPOSE: that mode is a strict superset of the
+// verified one (measured 67 ⊇ 65), and generating from the superset is what prevents a false
+// red when the network drops. Generating from the smaller set would produce exactly that — and a
+// lock that fails because of a network accident gets switched off.
 //
-// A recusa quando há achado vivo mora em WriteBaseline, onde ela é indesviável.
-func Generate(ctx context.Context, cfg Config) (int, error) {
+// The refusal when a live finding exists lives in WriteBaseline, where it cannot be bypassed.
+func Generate(ctx context.Context, cfg Config) (Generated, error) {
 	root := cfg.RepoRoot
 	if root == "" {
 		root = "."
@@ -294,20 +319,20 @@ func Generate(ctx context.Context, cfg Config) (int, error) {
 	raw, err := scanner.Scan(scanCtx, root)
 	if err != nil {
 		if errors.Is(err, ErrScannerMissing) || errors.Is(err, ErrScanFailed) {
-			return 0, err
+			return Generated{}, err
 		}
-		return 0, fmt.Errorf("%w: %w", ErrScanFailed, err)
+		return Generated{}, fmt.Errorf("%w: %w", ErrScanFailed, err)
 	}
 	findings, err := ParseFindings(strings.NewReader(raw))
 	if err != nil {
-		return 0, err
+		return Generated{}, err
 	}
 	if err := WriteBaseline(basePath, findings); err != nil {
-		return 0, err
+		return Generated{}, err
 	}
 	b, err := LoadBaseline(basePath)
 	if err != nil {
-		return 0, err
+		return Generated{}, err
 	}
-	return len(b.Entries), nil
+	return Generated{Candidates: len(b.Entries)}, nil
 }

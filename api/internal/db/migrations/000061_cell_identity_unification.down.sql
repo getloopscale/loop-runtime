@@ -1,19 +1,19 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2025-2026 The LoopZero Authors
 
--- Reverte 000061 ATE ONDE E HONESTO REVERTER.
+-- Reverts 000061 AS FAR AS IT IS HONEST TO REVERT.
 --
--- A fase 1 da subida foi uma FUSAO: as linhas que estavam em `cell-default` e as que estavam em
--- `cell-1` viraram todas `cell-0`, e a informacao de qual era qual nao existe mais em lugar nenhum.
--- Um down que "desfizesse" isso teria de inventar a divisao, e um down que inventa dados e pior do
--- que um down que nao existe: ele devolve um banco que parece o antigo e nao e.
+-- Phase 1 of the up migration was a MERGE: the rows that were in `cell-default` and the ones in
+-- `cell-1` all became `cell-0`, and the information of which was which no longer exists anywhere.
+-- A down that "undid" that would have to invent the split, and a down that invents data is worse
+-- than a down that does not exist: it hands back a database that looks like the old one and is not.
 --
--- Entao este down faz o que da para fazer sem mentir:
---   * devolve a numeracao (`cell-1` volta a ser `cell-2`, `cell-0` volta a ser `cell-default`);
---   * devolve os defaults e o gatilho a forma anterior, com a sentinela;
---   * NAO recria a linha `cell-1` do catalogo, e NAO tenta separar as linhas fundidas.
--- O resultado e o esquema antigo com os dados fundidos. Quem precisar do estado exato anterior
--- restaura backup — que e a operacao correta para desfazer uma fusao.
+-- So this down does what can be done without lying:
+--   * restores the numbering (`cell-1` goes back to `cell-2`, `cell-0` goes back to `cell-default`);
+--   * restores the defaults and the trigger to their previous form, with the sentinel;
+--   * does NOT recreate the `cell-1` catalogue row, and does NOT try to split the merged rows.
+-- The result is the old schema with the merged data. Whoever needs the exact previous state
+-- restores a backup — which is the right operation to undo a merge.
 
 UPDATE tenants                  SET cell_id = 'cell-2' WHERE cell_id = 'cell-1';
 UPDATE builds                   SET cell_id = 'cell-2' WHERE cell_id = 'cell-1';

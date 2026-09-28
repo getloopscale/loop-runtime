@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/getloopscale/loopzero/operators/internal/constants"
@@ -47,8 +48,8 @@ const (
 //
 // drift-baseline.md port #3: r.ingressNS() resolves the Traefik namespace
 // (configurable via INGRESS_NAMESPACE env, defaults to constants.NamespaceIngress).
-func (r *PreviewReconciler) reconcilePreviewNetworkPolicies(ctx context.Context, nsName string) error {
-	return tenantpolicy.ApplyTenantNetworkPolicies(ctx, r.RuntimeClient, nsName, r.ingressNS(), "preview networkpolicy")
+func (r *PreviewReconciler) reconcilePreviewNetworkPolicies(ctx context.Context, rtClient client.Client, nsName string) error {
+	return tenantpolicy.ApplyTenantNetworkPolicies(ctx, rtClient, nsName, r.ingressNS(), "preview networkpolicy")
 }
 
 // reconcilePreviewServiceAccount ensures the `loopzero-app` ServiceAccount
@@ -71,19 +72,19 @@ func (r *PreviewReconciler) reconcilePreviewNetworkPolicies(ctx context.Context,
 // k3d previews use the k3d-loopzero-registry (HTTP, no pull secret needed).
 // If a future env requires private-registry previews, mirror the
 // environment_rbac.go ensurePullSecret path here as a separate concern.
-func (r *PreviewReconciler) reconcilePreviewServiceAccount(ctx context.Context, nsName string) error {
+func (r *PreviewReconciler) reconcilePreviewServiceAccount(ctx context.Context, rtClient client.Client, nsName string) error {
 	appSA := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "loopzero-app",
+			Name:      constants.SAApp,
 			Namespace: nsName,
 		},
 	}
 	falseVal := false
-	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, appSA, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, rtClient, appSA, func() error {
 		if appSA.Labels == nil {
 			appSA.Labels = make(map[string]string)
 		}
-		appSA.Labels[constants.LabelManagedBy] = "preview-controller"
+		appSA.Labels[constants.LabelManagedBy] = constants.ManagedByPreviewController
 		appSA.AutomountServiceAccountToken = &falseVal
 		return nil
 	})
@@ -96,14 +97,14 @@ func (r *PreviewReconciler) reconcilePreviewServiceAccount(ctx context.Context, 
 // reconcilePreviewQuota ensures a ResourceQuota and LimitRange exist in
 // the preview namespace. Quotas are tight on purpose — previews compete
 // with normal workloads on the same cluster.
-func (r *PreviewReconciler) reconcilePreviewQuota(ctx context.Context, nsName string) error {
+func (r *PreviewReconciler) reconcilePreviewQuota(ctx context.Context, rtClient client.Client, nsName string) error {
 	quota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      constants.QuotaTenant,
 			Namespace: nsName,
 		},
 	}
-	_, err := controllerutil.CreateOrUpdate(ctx, r.RuntimeClient, quota, func() error {
+	_, err := controllerutil.CreateOrUpdate(ctx, rtClient, quota, func() error {
 		quota.Spec.Hard = corev1.ResourceList{
 			corev1.ResourceRequestsCPU:            resource.MustParse(previewQuotaCPU),
 			corev1.ResourceRequestsMemory:         resource.MustParse(previewQuotaMemory),
@@ -117,5 +118,5 @@ func (r *PreviewReconciler) reconcilePreviewQuota(ctx context.Context, nsName st
 		return fmt.Errorf("preview resourcequota %s/%s: %w", nsName, constants.QuotaTenant, err)
 	}
 
-	return tenantpolicy.ApplyTenantLimitRange(ctx, r.RuntimeClient, nsName, "preview limitrange")
+	return tenantpolicy.ApplyTenantLimitRange(ctx, rtClient, nsName, "preview limitrange")
 }

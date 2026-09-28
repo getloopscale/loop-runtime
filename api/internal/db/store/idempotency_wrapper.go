@@ -27,27 +27,25 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/ports"
+
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
 )
 
 const idempotencyTTL = 24 * time.Hour
 
 // Get retrieves an idempotency record by key, scoped to a tenant.
 // Returns nil (not error) when the key is not found or has expired.
-func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID string) (*policy.IdempotencyRecord, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return nil, fmt.Errorf("idempotency store: DBTX %T does not implement SqlcBridge (per T0.6 reshape matrix)", s.DB)
-	}
+func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID string) (*ports.IdempotencyRecord, error) {
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	row, err := q.GetIdempotencyRecord(ctx, bridge.GeneratedDB(), generated.GetIdempotencyRecordParams{
+	row, err := q.GetIdempotencyRecord(ctx, gdb, generated.GetIdempotencyRecordParams{
 		Key:      key,
 		TenantID: tenantID,
 	})
@@ -58,7 +56,7 @@ func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID
 		return nil, fmt.Errorf("idempotency store: query failed: %w", err)
 	}
 
-	rec := &policy.IdempotencyRecord{
+	rec := &ports.IdempotencyRecord{
 		Key:            row.Key,
 		TenantID:       row.TenantID,
 		Endpoint:       row.Endpoint,
@@ -70,15 +68,12 @@ func (s *PostgresIdempotencyStore) Get(ctx context.Context, key string, tenantID
 }
 
 // Store persists an idempotency record with a 24-hour TTL.
-func (s *PostgresIdempotencyStore) Store(ctx context.Context, rec *policy.IdempotencyRecord) error {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return fmt.Errorf("idempotency store: DBTX %T does not implement SqlcBridge (per T0.6 reshape matrix)", s.DB)
-	}
+func (s *PostgresIdempotencyStore) Store(ctx context.Context, rec *ports.IdempotencyRecord) error {
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
 	expiresAt := time.Now().Add(idempotencyTTL)
-	if err := q.InsertIdempotencyRecord(ctx, bridge.GeneratedDB(), generated.InsertIdempotencyRecordParams{
+	if err := q.InsertIdempotencyRecord(ctx, gdb, generated.InsertIdempotencyRecordParams{
 		Key:            rec.Key,
 		TenantID:       rec.TenantID,
 		Endpoint:       rec.Endpoint,
@@ -95,13 +90,10 @@ func (s *PostgresIdempotencyStore) Store(ctx context.Context, rec *policy.Idempo
 // Cleanup removes expired idempotency records and returns the number
 // removed. Background-job path; cross-tenant by design.
 func (s *PostgresIdempotencyStore) Cleanup(ctx context.Context) (int64, error) {
-	bridge, ok := s.DB.(db.SqlcBridge)
-	if !ok {
-		return 0, fmt.Errorf("idempotency store: DBTX %T does not implement SqlcBridge (per T0.6 reshape matrix)", s.DB)
-	}
+	gdb := db.Generated(s.DB)
 	q := generated.New()
 
-	rows, err := q.CleanupExpiredIdempotencyKeys(ctx, bridge.GeneratedDB())
+	rows, err := q.CleanupExpiredIdempotencyKeys(ctx, gdb)
 	if err != nil {
 		return 0, fmt.Errorf("idempotency store: cleanup failed: %w", err)
 	}

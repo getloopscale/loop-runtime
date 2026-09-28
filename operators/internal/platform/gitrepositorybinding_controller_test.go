@@ -45,11 +45,11 @@ func newGitRepositoryBinding(name, namespace, repoURL, secretName, secretKey, se
 var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 
 	const (
-		bindingNamespace  = "default"
-		argoCDNs          = "argocd"
-		credentialKey     = "token"
-		testToken         = "ghp_test-token-12345"
-		rotatedToken      = "ghp_rotated-token-67890"
+		bindingNamespace = "default"
+		argoCDNs         = "argocd"
+		credentialKey    = "token"
+		testToken        = "fixture-credential-initial"
+		rotatedToken     = "fixture-credential-rotated"
 	)
 
 	BeforeAll(func() {

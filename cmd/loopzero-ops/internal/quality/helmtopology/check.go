@@ -22,8 +22,12 @@
 //
 // TWO DECLARATION FORMS — reading only one covers 19 of 44 (EC-1)
 //
-//	own:      chart: ../helm/<name>
+//	own:      chart: ../helm/<name>  or  chart: ../../charts/<name>
 //	upstream: chart: <repo>/<name>  +  values: - ../helm/<name>/values.yaml
+//
+// The second own form is a chart Helmfile installs straight from charts/ — every
+// former bootstrap/published pair since it became one chart (docs/decisions.md,
+// "One chart per bootstrap/published pair"), and the operator charts.
 //
 // The form itself classifies own vs upstream, which is a stronger signal than probing for
 // Chart.yaml: it describes how the release is INSTALLED rather than inferring from directory
@@ -51,6 +55,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const (
@@ -77,12 +83,12 @@ const (
 type Nature string
 
 const (
-	NatureOwn      Nature = "próprio"
+	NatureOwn      Nature = "ours"
 	NatureUpstream Nature = "upstream"
 	// NatureUndeclared marks a directory under infra/helm/ that no helmfile mentions. It is
 	// listed rather than omitted (EC-6): silence would hide dead charts, and "nobody installs
 	// this" is useful information — either debt or a mistake.
-	NatureUndeclared Nature = "não declarado"
+	NatureUndeclared Nature = "undeclared"
 )
 
 // Entry is one row of the index.
@@ -103,10 +109,19 @@ type Report struct {
 	Message string
 }
 
+// Verdict is Pass when the index was written, or when it is in sync with the
+// helmfiles; Fail when a check finds it missing, unmarked or out of date.
+func (r Report) Verdict() verdict.Verdict {
+	if r.Mode == ModeWrite {
+		return verdict.Pass
+	}
+	return verdict.FromPass(r.InSync)
+}
+
 // Regexes over the helmfile TEXT. The files are `.gotmpl` and carry Go template syntax, so any
 // YAML parser fails on them — the same trap the vap-delete-guardrail gate documents.
 var (
-	reOwnChart  = regexp.MustCompile(`(?m)^\s*chart:\s*\.\./helm/([A-Za-z0-9_.-]+)\s*$`)
+	reOwnChart  = regexp.MustCompile(`(?m)^\s*chart:\s*(?:\.\./helm|\.\./\.\./charts)/([A-Za-z0-9_.-]+)\s*$`)
 	reValuesRef = regexp.MustCompile(`(?m)^\s*-\s*\.\./helm/([A-Za-z0-9_.-]+)/[^\s]*values[^\s]*$`)
 	reRelease   = regexp.MustCompile(`(?m)^\s*-\s*name:\s*(\S+)`)
 	reVersion   = regexp.MustCompile(`(?m)^\s*version:\s*"?([0-9][^"\s]*)"?\s*$`)
@@ -236,6 +251,13 @@ func collect(root string) ([]Entry, error) {
 			continue
 		}
 		if _, seen := byChart[d.Name()]; !seen {
+			residue, err := onlyDownloadedDependencies(filepath.Join(root, helmDir, d.Name()))
+			if err != nil {
+				return nil, err
+			}
+			if residue {
+				continue
+			}
 			byChart[d.Name()] = &acc{clusters: map[string]bool{}, nature: NatureUndeclared}
 		}
 	}
@@ -292,7 +314,7 @@ func firstOr(existing, candidate string) string {
 
 func renderTable(entries []Entry) string {
 	var sb strings.Builder
-	sb.WriteString("| Chart | Cluster(s) | Natureza | Versão | Condicional |\n")
+	sb.WriteString("| Chart | Cluster(s) | Nature | Version | Conditional |\n")
 	sb.WriteString("|---|---|---|---|---|\n")
 	for _, e := range entries {
 		clusters := strings.Join(e.Clusters, ", ")
@@ -305,7 +327,7 @@ func renderTable(entries []Entry) string {
 		}
 		cond := e.Conditional
 		if cond == "" {
-			cond = "sempre"
+			cond = "always"
 		}
 		// A helmfile predicate can contain `|` — Go template pipelines are common, e.g.
 		// `{{ .Values.inClusterPostgres | default false }}`. Unescaped, markdown reads it as a
@@ -330,11 +352,54 @@ func extractBody(doc string) (string, bool) {
 }
 
 func writeDoc(full, body string) error {
-	if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
-		return fmt.Errorf("helm-topology: mkdir: %w", err)
+	// Splice between the markers; never replace the file.
+	//
+	// This used to build header + table + footer and write the whole document, which is
+	// right for an output nobody else touches and destructive for `docs/architecture.md`
+	// — a hand-maintained document that the 2026-09-11 consolidation made the default
+	// path, and that `pkg-usage-matrix` also writes into through its own marker pair.
+	// Measured 2026-09-16: one --write took it from 217 lines to 78 and deleted the
+	// sibling's section. The gate printed "run --write and commit it" on every failing
+	// run, so the remedy it named was the thing that destroyed the file.
+	raw, err := os.ReadFile(full) // #nosec G304 -- path is the configured doc under the repo root
+	if os.IsNotExist(err) {
+		// Nothing to preserve: the gate creates the document it is pointed at when that
+		// document does not exist, markers included, and owns it from then on. Only an
+		// EXISTING document is somebody else's, and that is the one this must not replace.
+		if mkErr := os.MkdirAll(filepath.Dir(full), 0o750); mkErr != nil {
+			return fmt.Errorf("helm-topology: mkdir: %w", mkErr)
+		}
+		fresh := docHeader() + bodyStart + "\n" + body + bodyEnd + "\n" + docFooter()
+		if wErr := os.WriteFile(full, []byte(fresh), 0o600); wErr != nil {
+			return fmt.Errorf("helm-topology: write %s: %w", full, wErr)
+		}
+		return nil
 	}
-	doc := docHeader() + bodyStart + "\n" + body + bodyEnd + "\n" + docFooter()
-	if err := os.WriteFile(full, []byte(doc), 0o600); err != nil {
+	if err != nil {
+		return fmt.Errorf("helm-topology: read %s: %w", full, err)
+	}
+	doc := string(raw)
+
+	startIdx := strings.Index(doc, bodyStart)
+	endIdx := strings.Index(doc, bodyEnd)
+	switch {
+	case startIdx < 0:
+		return fmt.Errorf("helm-topology: %s has no %s marker — add the marker pair where the table belongs; this gate does not own the document", full, bodyStart)
+	case endIdx < 0:
+		return fmt.Errorf("helm-topology: %s has no %s marker", full, bodyEnd)
+	case endIdx < startIdx:
+		return fmt.Errorf("helm-topology: %s has the markers inverted (%s precedes %s)", full, bodyEnd, bodyStart)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(doc[:startIdx])
+	sb.WriteString(bodyStart)
+	sb.WriteString("\n")
+	sb.WriteString(body)
+	sb.WriteString(bodyEnd)
+	sb.WriteString(doc[endIdx+len(bodyEnd):])
+
+	if err := os.WriteFile(full, []byte(sb.String()), 0o600); err != nil {
 		return fmt.Errorf("helm-topology: write %s: %w", full, err)
 	}
 	return nil
@@ -343,34 +408,59 @@ func writeDoc(full, body string) error {
 func docHeader() string {
 	return `---
 type: reference
-title: "Topologia Helm — o que roda em qual cluster"
+title: "Helm Topology — what runs on which cluster"
 ---
 
-# Topologia Helm
+# Helm Topology
 
-> **Documento gerado. Não edite à mão** — a próxima execução do gate sobrescreve.
-> Fonte: ` + "`infra/helmfile/*.helmfile.yaml.gotmpl`" + `. Regenerar:
+> **Generated document. Do not edit by hand** — the next run of the gate overwrites it.
+> Source: ` + "`infra/helmfile/*.helmfile.yaml.gotmpl`" + `. Regenerate with:
 > ` + "`loopzero-ops quality helm-topology-index --write`" + `
 
-Responde "em qual cluster este chart roda?" sem abrir os helmfiles. Cada linha vem da
-declaração da release, não de convenção de pasta.
+Answers "which cluster does this chart run on?" without opening the helmfiles. Every row
+comes from the release declaration, not from a folder convention.
 
-**Como ler as colunas**
+**How to read the columns**
 
-- **Natureza** — vem da *forma de declaração*: ` + "`chart: ../helm/X`" + ` é chart nosso;
-  chart remoto com ` + "`values:`" + ` local é configuração de upstream. ` + "`não declarado`" + `
-  é diretório que nenhum helmfile menciona — dívida ou engano, nunca omitido daqui.
-- **Condicional** — o predicado ` + "`installed:`" + ` **literal**, não avaliado. ` + "`sempre`" + `
-  significa incondicional. Um predicado aqui quer dizer que a release existe em alguns
-  ambientes e não em outros: ` + "`postgresql`" + ` roda no mgmt em standalone e não em prod.
+- **Nature** — taken from the *form of the declaration*: ` + "`chart: ../helm/X`" + ` is a
+  chart of ours; a remote chart with local ` + "`values:`" + ` is configuration of an
+  upstream one. ` + "`undeclared`" + ` is a directory no helmfile mentions — debt or a
+  mistake, and never omitted from here.
+- **Conditional** — the ` + "`installed:`" + ` predicate **literally**, not evaluated.
+  ` + "`always`" + ` means unconditional. A predicate here means the release exists in some
+  environments and not others: ` + "`postgresql`" + ` runs on core in standalone and not in
+  production.
 
-**Escopo:** só ` + "`infra/helm/`" + ` (bootstrap via Helmfile L2). Os charts publicados em
-` + "`charts/`" + `, consumidos por ArgoCD (L3), não estão aqui.
+**Scope:** what Helmfile (L2) installs — charts of ` + "`infra/helm/`" + ` and the charts of
+` + "`charts/`" + ` it installs directly. What ArgoCD (L3) deploys from ` + "`charts/`" + ` into
+tenant environments is not here.
 
 `
 }
 
 func docFooter() string {
-	return "\nA data de geração fica fora da tabela por desenho: um gate de frescor responde\n" +
-		"\"o conteúdo divergiu da fonte?\", não \"isto foi gerado hoje?\".\n"
+	return "\nThe generation date stays out of the table by design: a freshness gate answers\n" +
+		"\"has the content diverged from the source?\", not \"was this generated today?\".\n"
+}
+
+// onlyDownloadedDependencies reports whether dir holds nothing but a charts/
+// subdirectory. That subdirectory is where `helm dependency build` downloads a
+// chart's dependencies, and it is gitignored under infra/helm, so a chart
+// deleted from git leaves it behind on every machine that ever built it. Such a
+// directory is a local artifact, not a chart nobody declares: indexing it made
+// the index differ between a fresh clone and a working machine.
+func onlyDownloadedDependencies(dir string) (bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, fmt.Errorf("helm-topology: read %s: %w", dir, err)
+	}
+	if len(entries) == 0 {
+		return false, nil
+	}
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() != "charts" {
+			return false, nil
+		}
+	}
+	return true, nil
 }

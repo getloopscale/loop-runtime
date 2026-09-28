@@ -9,43 +9,45 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testinventory"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
-// # Por que a pirâmide passou a ser DERIVADA, e por que o veredito é catraca
+// # Why the pyramid became DERIVED, and why the verdict is a ratchet
 //
-// O gate lia três percentuais escritos em `infra/quality/test-inventory.json`. Medido
-// em 2026-08-17: o arquivo listava 710 arquivos, **335 não existiam**, e **649**
-// arquivos `_test.go` do disco não estavam nele — ele descrevia 375 de 988, **62%
-// cego**, e a pirâmide de 99,4% unit que declarava vinha dessa amostra, que exclui a
-// suíte `infra/tests/e2e` inteira.
+// The gate used to read three percentages written in `infra/quality/test-inventory.json`.
+// Measured on 2026-08-17: the file listed 710 files, **335 did not exist**, and **649**
+// `_test.go` files on disk were not in it — it described 375 of 988, **62%
+// blind**, and the 99.4% unit pyramid it declared came from that sample, which excludes
+// the entire `infra/tests/e2e` suite.
 //
-// Derivada da árvore, a pirâmide real é outra:
+// Derived from the tree, the real pyramid is different:
 //
-//	              declarado    derivado
-//	arquivos            710         988
-//	unit              99,4%       73,5%
-//	integração         0,4%       15,7%
-//	e2e                0,1%       10,8%
+//	              declared     derived
+//	files               710         988
+//	unit              99.4%       73.5%
+//	integration        0.4%       15.7%
+//	e2e                0.1%       10.8%
 //
-// # E aqui está a decisão que a medição forçou
+// # And here is the decision the measurement forced
 //
-// O alvo do ADR D7 é `e2e ≤ 5%`. Ele foi escolhido quando o arquivo afirmava 0,1% —
-// isto é, **calibrado contra ficção**. O número real é 10,8%, e 107 arquivos e2e num
-// produto cujo objeto É implantar não é obviamente um defeito.
+// The ADR D7 target is `e2e ≤ 5%`. It was chosen when the file claimed 0.1% —
+// that is, **calibrated against fiction**. The real number is 10.8%, and 107 e2e files
+// in a product whose purpose IS deploying is not obviously a defect.
 //
-// Fazer o gate reprovar hoje contra o alvo do ADR criaria uma trava que o repositório
-// não consegue satisfazer, e uma trava que não pode ficar verde é desligada na
-// primeira semana — o mesmo raciocínio que recusou `HARD` no `B-127` e a enforcement
-// total no `B-119`.
+// Making the gate fail today against the ADR target would create a lock the repository
+// cannot satisfy, and a lock that cannot turn green is switched off within the
+// first week — the same reasoning that refused `HARD` in `B-127` and full enforcement
+// in `B-119`.
 //
-// Então o veredito é **catraca**: a linha de base congela o que foi MEDIDO, e o gate
-// reprova quando um índice piora. A distância até o alvo do ADR é **reportada**, e a
-// pergunta "10,8% de e2e é certo?" virou item próprio — ela é do sponsor, não minha.
+// So the verdict is a **ratchet**: the baseline freezes what was MEASURED, and the gate
+// fails when a ratio gets worse. The distance to the ADR target is **reported**, and the
+// question "is 10.8% e2e right?" became an item of its own — it belongs to the sponsor, not to me.
 //
-// Isto não é "ajustar o número até passar": é separar *não regredir* (verificável
-// hoje) de *alcançar o alvo* (decisão que ninguém tomou contra dados reais).
+// This is not "tuning the number until it passes": it separates *not regressing* (verifiable
+// today) from *reaching the target* (a decision nobody has made against real data).
 
 // Baseline is the frozen measured pyramid.
 type Baseline struct {
@@ -59,30 +61,40 @@ type Baseline struct {
 
 // ErrBaselineMissing means the frozen baseline is absent.
 //
-// Ausência é FALHA, nunca skip: sem linha de base a catraca não compara nada, e um
-// gate que não compara nada reportando verde é o defeito que este item removeu.
-var ErrBaselineMissing = errors.New("linha de base da pirâmide ausente — sem ela a catraca não compara nada, e um veredito sobre nada não é um veredito (rode com --write)")
+// Absence is a FAILURE, never a skip: without a baseline the ratchet compares nothing, and a
+// gate that compares nothing while reporting green is the defect this item removed.
+var ErrBaselineMissing = errors.New("pyramid baseline missing — without it the ratchet compares nothing, and a verdict about nothing is not a verdict (run with --write)")
 
 // ErrRegressed means a ratio moved the wrong way past the baseline.
-var ErrRegressed = errors.New("a pirâmide regrediu em relação à linha de base medida")
+var ErrRegressed = errors.New("the pyramid regressed relative to the measured baseline")
 
-// tolerancePct absorve o ruído de um arquivo entrando ou saindo. Com ~988 arquivos,
-// um arquivo vale ~0,1 ponto; 0,5 dá folga para meia dúzia sem deixar passar uma
-// mudança de forma.
+// tolerancePct absorbs the noise of a file coming in or going out. With ~988 files,
+// one file is worth ~0.1 point; 0.5 leaves room for half a dozen without letting a
+// change of shape through.
 const tolerancePct = 0.5
 
 // DerivedOutcome reports both verdicts: what blocks and what is merely reported.
 type DerivedOutcome struct {
-	Deferred bool
 	Total    int
 	UnitPct  float64
 	IntegPct float64
 	E2EPct   float64
-	// Regressions bloqueiam.
+	// Regressions block.
 	Regressions []string
-	// AspirationGaps são a distância até o alvo do ADR — reportados, não bloqueantes,
-	// porque o alvo nunca foi medido contra a árvore real.
+	// AspirationGaps are the distance to the ADR target — reported, not blocking,
+	// because the target was never measured against the real tree.
 	AspirationGaps []string
+	// Violation is what the check found wrong (wrapping one of its Err*
+	// reasons), or nil. A violation is the check's verdict, never its error.
+	Violation error
+}
+
+// Verdict is Fail when the check found a violation and Pass otherwise.
+func (o DerivedOutcome) Verdict() verdict.Verdict {
+	if o.Violation != nil {
+		return verdict.Fail
+	}
+	return verdict.Pass
 }
 
 // Pass reports whether nothing regressed.
@@ -121,6 +133,52 @@ func WriteBaseline(path string, inv testinventory.Inventory, measuredAt, note st
 
 func round1(f float64) float64 { return float64(int(f*10+0.5)) / 10 }
 
+// DeferLabel is the PR label that defers the ratchet for a single PR.
+const DeferLabel = "pyramid-defer"
+
+// Deferred reports a run the DeferLabel excused from measuring.
+type Deferred struct{}
+
+// Verdict is Skip: a deferred run measured nothing, and that is the one case
+// where not measuring is the right answer.
+func (Deferred) Verdict() verdict.Verdict { return verdict.Skip }
+
+// Deferral returns a Deferred when labels (comma-separated, as PR_LABELS
+// carries them) include DeferLabel.
+func Deferral(labels string) (Deferred, bool) {
+	for _, lbl := range strings.Split(labels, ",") {
+		if strings.TrimSpace(lbl) == DeferLabel {
+			return Deferred{}, true
+		}
+	}
+	return Deferred{}, false
+}
+
+// Refrozen reports a baseline frozen from the current tree.
+type Refrozen struct {
+	Total                     int
+	UnitPct, IntegPct, E2EPct float64
+}
+
+// Verdict is Pass: freezing is an operation, and a Refrozen exists only when
+// the baseline was written.
+func (Refrozen) Verdict() verdict.Verdict { return verdict.Pass }
+
+// Refreeze derives the pyramid from the tree under repoRoot and freezes it at
+// baselinePath, dated measuredAt (YYYY-MM-DD).
+func Refreeze(repoRoot, baselinePath, measuredAt string) (Refrozen, error) {
+	derived, err := testinventory.Derive(repoRoot)
+	if err != nil {
+		return Refrozen{}, err
+	}
+	note := "Derived from the tree by testinventory.Derive, not declared (B-106)."
+	if err := WriteBaseline(baselinePath, derived, measuredAt, note); err != nil {
+		return Refrozen{}, err
+	}
+	u, i, e := derived.Ratios()
+	return Refrozen{Total: derived.Total(), UnitPct: u, IntegPct: i, E2EPct: e}, nil
+}
+
 // CheckDerived derives the pyramid from the tree and ratchets it against the frozen
 // baseline, reporting the distance to the ADR aspiration separately.
 func CheckDerived(repoRoot, baselinePath string, thresholds Thresholds) (DerivedOutcome, error) {
@@ -138,39 +196,40 @@ func CheckDerived(repoRoot, baselinePath string, thresholds Thresholds) (Derived
 	u, i, e := inv.Ratios()
 	out.Total, out.UnitPct, out.IntegPct, out.E2EPct = inv.Total(), round1(u), round1(i), round1(e)
 
-	// Catraca: unit só pode SUBIR, integração e e2e só podem DESCER.
+	// Ratchet: unit may only go UP, integration and e2e may only go DOWN.
 	if out.UnitPct < base.RatioUnitPct-tolerancePct {
 		out.Regressions = append(out.Regressions, fmt.Sprintf(
-			"unit caiu de %.1f%% (linha de base) para %.1f%%", base.RatioUnitPct, out.UnitPct))
+			"unit fell from %.1f%% (baseline) to %.1f%%", base.RatioUnitPct, out.UnitPct))
 	}
 	if out.IntegPct > base.RatioIntegrationPct+tolerancePct {
 		out.Regressions = append(out.Regressions, fmt.Sprintf(
-			"integração subiu de %.1f%% para %.1f%%", base.RatioIntegrationPct, out.IntegPct))
+			"integration rose from %.1f%% to %.1f%%", base.RatioIntegrationPct, out.IntegPct))
 	}
 	if out.E2EPct > base.RatioE2EPct+tolerancePct {
 		out.Regressions = append(out.Regressions, fmt.Sprintf(
-			"e2e subiu de %.1f%% para %.1f%%", base.RatioE2EPct, out.E2EPct))
+			"e2e rose from %.1f%% to %.1f%%", base.RatioE2EPct, out.E2EPct))
 	}
 
-	// A distância até o alvo do ADR — reportada, nunca bloqueante enquanto o alvo não
-	// tiver sido medido contra a árvore real.
+	// The distance to the ADR target — reported, never blocking while the target has not
+	// been measured against the real tree.
 	if out.UnitPct < thresholds.UnitMinPct {
 		out.AspirationGaps = append(out.AspirationGaps, fmt.Sprintf(
-			"unit %.1f%% < alvo %.1f%% (ADR D7)", out.UnitPct, thresholds.UnitMinPct))
+			"unit %.1f%% < target %.1f%% (ADR D7)", out.UnitPct, thresholds.UnitMinPct))
 	}
 	if out.IntegPct > thresholds.IntegrationMaxPct {
 		out.AspirationGaps = append(out.AspirationGaps, fmt.Sprintf(
-			"integração %.1f%% > alvo %.1f%% (ADR D7)", out.IntegPct, thresholds.IntegrationMaxPct))
+			"integration %.1f%% > target %.1f%% (ADR D7)", out.IntegPct, thresholds.IntegrationMaxPct))
 	}
-	// e2e RATIFICADO pela emenda do ADR D7 em 2026-09-06 (Option A do B-137):
-	// docs/decisions.md. Para um
-	// produto cujo objeto É implantar, ~9% de e2e é cobertura genuína — o alvo ≤5%
-	// foi calibrado contra ficção (0,1% declarados vs 10,8% reais) e a catraca já
-	// é o mecanismo canonical de enforcement (trajetória 10,8→9,6% em 20d sem
-	// intervenção). O gap de e2e deixa de ser reportado; a catraca continua ativa.
+	// e2e RATIFIED by the ADR D7 amendment on 2026-09-06 (Option A of B-137):
+	// docs/decisions.md. For a
+	// product whose purpose IS deploying, ~9% e2e is genuine coverage — the ≤5% target
+	// was calibrated against fiction (0.1% declared vs 10.8% real) and the ratchet is
+	// already the canonical enforcement mechanism (trajectory 10.8→9.6% in 20d with no
+	// intervention). The e2e gap is no longer reported; the ratchet stays active.
 
 	if !out.Pass() {
-		return out, ErrRegressed
+		out.Violation = ErrRegressed
+		return out, nil
 	}
 	return out, nil
 }

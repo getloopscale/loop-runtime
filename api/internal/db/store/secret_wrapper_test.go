@@ -23,10 +23,10 @@ package store
 //
 // These tests prove BOTH directions of the invariant:
 //   1. Same (tenant, project, app, name) across 4 envs → 4 distinct PKs,
-//      all rows INSERT successfully (TestSecret_L19_PKIncludesEnv).
+//      all rows INSERT successfully (TestSecret_PKIncludesEnvironment).
 //   2. Duplicate (tenant, project, env, app, name) → second call is an
-//      UPDATE (UPSERT), not an INSERT collision (TestSecret_L19_
-//      UpsertOnDuplicate).
+//      UPDATE (UPSERT), not an INSERT collision
+//      (TestSecret_UpsertOnDuplicateEnvironment).
 //
 // Per D6 ADR of the plan, this is an integration test against a real
 // PostgreSQL instance via DATABASE_URL (default
@@ -37,7 +37,7 @@ package store
 import (
 	"context"
 	"fmt"
-	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,24 +45,13 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
-// secretL19DBURL returns the PG connection string. Mirrors the convention
-// from api/tests/integration/lock_crash_recovery_test.go dbURL(); kept
-// inline here to avoid cross-package test-helper imports (the integration
-// suite uses package "integration", these tests live in package "db").
-func secretL19DBURL() string {
-	if u := os.Getenv("DATABASE_URL"); u != "" {
-		return u
-	}
-	return "postgres://postgres:postgres@localhost:5432/loopzero_test?sslmode=disable"
-}
-
-// secretL19Pool opens a pool or skips the test if PG is unreachable. The
+// secretPerEnvironmentPool opens a pool or skips the test if PG is unreachable. The
 // pool is closed via t.Cleanup.
-func secretL19Pool(t *testing.T) *pgxpool.Pool {
+func secretPerEnvironmentPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	pool, err := pgxpool.New(ctx, secretL19DBURL())
+	pool, err := pgxpool.New(ctx, fixtureDBURL())
 	if err != nil {
 		t.Skipf("L19 test skipped: cannot create pool: %v", err)
 	}
@@ -95,12 +84,12 @@ func requireSecretsTable(t *testing.T, pool *pgxpool.Pool) {
 	}
 }
 
-// TestSecret_L19_PKIncludesEnv (T7.1 RED #1): four envs for the same
+// TestSecret_PKIncludesEnvironment (T7.1 RED #1): four envs for the same
 // (tenant, project, app, name) tuple all INSERT successfully because
 // the PK template now includes environment. Pre-L19 the second call
 // would fail with secrets_pkey violation.
-func TestSecret_L19_PKIncludesEnv(t *testing.T) {
-	pool := secretL19Pool(t)
+func TestSecret_PKIncludesEnvironment(t *testing.T) {
+	pool := secretPerEnvironmentPool(t)
 	requireSecretsTable(t, pool)
 	ctx := context.Background()
 
@@ -119,7 +108,7 @@ func TestSecret_L19_PKIncludesEnv(t *testing.T) {
 			"DELETE FROM secrets WHERE tenant_id = $1", tenantID)
 	})
 
-	store, err := NewPostgresSecretStore(&db.PgxAdapter{Pool: pool}, nil)
+	store, err := NewPostgresSecretStoreWithVault(&db.PgxAdapter{Pool: pool}, echoTransit{}, nil)
 	if err != nil {
 		t.Fatalf("NewPostgresSecretStore: %v", err)
 	}
@@ -181,17 +170,17 @@ func TestSecret_L19_PKIncludesEnv(t *testing.T) {
 	}
 }
 
-// TestSecret_L19_UpsertOnDuplicate (T7.1 RED #2): a second Set with the
+// TestSecret_UpsertOnDuplicateEnvironment (T7.1 RED #2): a second Set with the
 // SAME (tenant, project, env, app, name) tuple is an UPSERT — created=
 // false on the second call (UPDATE path), value is replaced. This proves
 // the unique constraint + ON CONFLICT path still works after the PK
 // change, not just the new-row path.
 //
-// This is the negative-companion of TestSecret_L19_PKIncludesEnv: it
+// This is the negative-companion of TestSecret_PKIncludesEnvironment: it
 // closes the symmetric case where the PK SHOULD collide (same env) and
 // be handled gracefully via UPSERT, NOT bubble up as SQLSTATE 23505.
-func TestSecret_L19_UpsertOnDuplicate(t *testing.T) {
-	pool := secretL19Pool(t)
+func TestSecret_UpsertOnDuplicateEnvironment(t *testing.T) {
+	pool := secretPerEnvironmentPool(t)
 	requireSecretsTable(t, pool)
 	ctx := context.Background()
 
@@ -207,7 +196,7 @@ func TestSecret_L19_UpsertOnDuplicate(t *testing.T) {
 			"DELETE FROM secrets WHERE tenant_id = $1", tenantID)
 	})
 
-	store, err := NewPostgresSecretStore(&db.PgxAdapter{Pool: pool}, nil)
+	store, err := NewPostgresSecretStoreWithVault(&db.PgxAdapter{Pool: pool}, echoTransit{}, nil)
 	if err != nil {
 		t.Fatalf("NewPostgresSecretStore: %v", err)
 	}
@@ -255,7 +244,21 @@ func TestSecret_L19_UpsertOnDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SELECT value: %v", err)
 	}
-	if string(stored) != "v2" {
-		t.Errorf("expected stored value=%q after UPDATE, got %q", "v2", string(stored))
+	if want := echoCiphertext("v2"); string(stored) != want {
+		t.Errorf("expected stored value=%q after UPDATE, got %q", want, string(stored))
 	}
+}
+
+// echoTransit is a transit client whose ciphertext names its plaintext, so a test can
+// tell which value the row holds. The store refuses to write without a transit client.
+type echoTransit struct{}
+
+func echoCiphertext(plaintext string) string { return "vault:v1:echo:" + plaintext }
+
+func (echoTransit) Encrypt(_ context.Context, _ string, plaintext []byte) (string, error) {
+	return echoCiphertext(string(plaintext)), nil
+}
+
+func (echoTransit) Decrypt(_ context.Context, _ string, ciphertext string) ([]byte, error) {
+	return []byte(strings.TrimPrefix(ciphertext, echoCiphertext(""))), nil
 }

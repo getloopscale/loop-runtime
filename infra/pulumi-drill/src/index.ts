@@ -8,13 +8,16 @@
 // Plan: 2026-05-16-drill-prod-identical-multicluster-plan.md (v1.1)
 // MEET-ASYNC-AMENDMENT-2026-05-16-001 (pending ratification)
 //
-// Per CTO directive 2026-05-16: "nosso sistema NUNCA vai trabalhar com single
-// cell, remova essa posibilidade, e vamos alterar o drill-test para ser
-// IGUAL prod e ele deve fazer os teste reais 100% fiel a produção."
+// Per CTO directive 2026-05-16 (English: "our system will NEVER work with a single
+// cell, remove that possibility, and we will change the drill-test to be the SAME as
+// prod, and it must run the real tests 100% faithful to production"), verbatim:
+// "nosso sistema NUNCA vai trabalhar com single cell, remova essa posibilidade,"  // english-only: verbatim CTO directive, kept as evidence
+// "e vamos alterar o drill-test para ser IGUAL prod e ele deve fazer os"  // english-only: verbatim CTO directive, kept as evidence
+// "teste reais 100% fiel a produção."  // english-only: verbatim CTO directive, kept as evidence
 //
 // This stack mirrors `infra/pulumi/src/components/infra.ts:139-186` 4-cluster
 // topology (mgmt + build + runtime + runtime-2), enabling:
-//   - Multi-cell routing real (cell-0+cell-0 → runtime, cell-1 → runtime-2)
+//   - Multi-cell routing real (cell-0 → runtime, cell-1 → runtime-2)
 //   - Build cluster isolation real
 //   - Cross-cluster ArgoCD sync exercised
 //   - Stage 2 cell2-soaks 24h soak feasible (via expiresInHours param)
@@ -23,7 +26,7 @@
 // ADRs (per plan v1.1):
 //   D1: 4-cluster topology mirror prod
 //   D2: Sizing prod tier specs (mgmt=medium s-4vcpu-8gb-amd, runtime/build=small)
-//   D3: Cell mapping cell-0+cell-0 → runtimeCluster, cell-1 → runtimeCluster2
+//   D3: Cell mapping cell-0 → runtimeCluster, cell-1 → runtimeCluster2
 //   D4: Managed PG mgmt-tier (db-s-2vcpu-4gb) ephemeral per-run
 //   D5: Shared VPC loopzero-drill-vpc-sfo3 (10.40.0.0/16) — disjoint from prod 10.20/homolog 10.30
 //   D6: Auto-destroy watchdog parameterizable via expiresInHours (default 8h, max 48h)
@@ -140,10 +143,10 @@ const drillVpc = new LoopZeroVpc("drill-vpc", {
 // 4. DOKS clusters (4 — mgmt + build + runtime + runtime-2) — D1
 // =============================================================================
 //
-// Topology mirrors prod components/infra.ts:139-186.
+// Topology mirrors platformClusterPlans() in infra/pulumi/src/components/infra.ts.
 // Cell mapping per D3:
-//   cell-0 + cell-0 → runtimeCluster
-//   cell-1              → runtimeCluster2
+//   cell-0 → runtimeCluster
+//   cell-1 → runtimeCluster2
 
 // Plan v1.2 T3.1 — LoopZeroDOKSCluster component (4 instances replace inline declarations).
 const mgmtCluster = new LoopZeroDOKSCluster("drill-mgmt", {
@@ -343,7 +346,7 @@ new digitalocean.DatabaseFirewall("drill-pg-firewall", {
 });
 
 // =============================================================================
-// 7. Managed Valkey/Redis (Bug #15 LIVE fix — mirror infra/pulumi/src/components/mgmt-redis-ha.ts)
+// 7. Managed Valkey/Redis (Bug #15 LIVE fix)
 // =============================================================================
 //
 // Per ADR-0016 D-6 + CTO Golden Rule #0 ("ambiente local fidedigno ao prod"):
@@ -371,7 +374,7 @@ const drillRedis = new LoopZeroManagedDb("drill-redis", {
   clusterName: `${doProject}-redis`,
   engine: "valkey",
   version: "8",
-  size: "db-amd-1vcpu-2gb", // non-prod tier (mirrors mgmt-redis-ha.ts:45 non-prod)
+  size: "db-amd-1vcpu-2gb", // non-prod tier
   region,
   nodeCount: 1,
   privateNetworkUuid: drillVpc.id,
@@ -379,7 +382,7 @@ const drillRedis = new LoopZeroManagedDb("drill-redis", {
 });
 
 // Firewall: same 4 DOKS clusters as drill-pg (mgmt needs Redis for gitea
-// cache/session/queue + harbor sessions; build/runtime currently don't but
+// cache/session/queue; build/runtime currently don't but
 // kept symmetric for future hardening + zero added cost since rules are free).
 new digitalocean.DatabaseFirewall("drill-redis-firewall", {
   clusterId: drillRedis.id,
@@ -426,7 +429,7 @@ export const buildClusterName = buildCluster.name;
 export const buildClusterEndpoint = buildCluster.endpoint;
 export const buildClusterKubeconfig = buildCluster.kubeConfigs[0].rawConfig;
 
-// Per-cluster outputs (runtime — hosts cell-0 + cell-0 per D3)
+// Per-cluster outputs (runtime — hosts cell-0 per D3)
 export const runtimeClusterId = runtimeCluster.id;
 export const runtimeClusterName = runtimeCluster.name;
 export const runtimeClusterEndpoint = runtimeCluster.endpoint;
@@ -449,9 +452,8 @@ export const pgPort = drillPG.port;
 export const pgDatabase = drillPG.database;
 
 // Shared infrastructure — Managed Valkey/Redis (Bug #15 LIVE fix)
-// Mirrors prod precedent infra/pulumi/src/components/mgmt-redis-ha.ts:65-69.
-// Used by gitea (cache/session/queue) + harbor (sessions/queue/cache) via
-// drill-helmfile-bootstrap.sh exporting LOOPZERO_*_REDIS_HOST/PASSWORD env vars.
+// Used by gitea (cache/session/queue) via drill-helmfile-bootstrap.sh
+// exporting GITEA_REDIS_HOST/PORT/PASSWORD env vars.
 // privateHost ensures DOKS pods reach Valkey via internal VPC (10.40.0.0/16),
 // NOT public internet (would require explicit firewall allow per IP).
 export const redisHost = drillRedis.privateHost;
@@ -512,7 +514,6 @@ export const meta = {
   purpose: "DR drill prod-identical — isolated from prod per MEET-ASYNC-AMENDMENT-2026-05-16-001",
   teardownPolicy: "MANDATORY — pulumi destroy + drill-teardown-validator.sh (T4.1.bis)",
   cellMapping: {
-    "cell-0": "runtimeCluster",
     "cell-0": "runtimeCluster",
     "cell-1": "runtimeCluster2",
   },

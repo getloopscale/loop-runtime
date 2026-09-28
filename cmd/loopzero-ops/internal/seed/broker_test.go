@@ -132,3 +132,32 @@ func stringContainsAny(s string, subs ...string) bool {
 	}
 	return false
 }
+
+// The broker's release is the cell helmfile's (release loopzero-broker); the seed writes
+// the bearer token into the two Secrets and restarts loopzero-api, and nothing else. The
+// Host is left zero on purpose: it no longer carries a docker or helm hook, so a seed
+// that reached for either would not compile, and this run proves the remaining layers
+// converge without them (principle_violations#67).
+func TestBrokerSeed_Run_SeedsTheTokenWithoutInstallingTheRelease(t *testing.T) {
+	mgmt := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(makeLoopZeroAPIDeploymentWithEnv(nil)).Build()
+	workload := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	deps := Deps{
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(mgmt),
+		CtrlClient:           mgmt,
+		ClientCtor:           func(string) (KubeClient, error) { return NewKubeClient(workload), nil },
+	}
+
+	got := NewBrokerSeed().Run(deps)
+
+	if got.Verdict != PASS {
+		t.Fatalf("Verdict = %s (%s), want PASS", got.Verdict, got.Reason)
+	}
+	if _, err := NewKubeClient(workload).GetSecret(deps.Ctx, "external-secrets", "loopzero-broker-token"); err != nil {
+		t.Errorf("the cell's token Secret was not written: %v", err)
+	}
+	if _, err := NewKubeClient(mgmt).GetSecret(deps.Ctx, "loopzero-system", "loopzero-broker-token"); err != nil {
+		t.Errorf("the core's token Secret was not written: %v", err)
+	}
+}

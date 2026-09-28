@@ -14,7 +14,7 @@ import (
 
 var repoRoot = qtestutil.MustRepoRoot()
 
-func arvore(t *testing.T, files map[string]string) string {
+func tree(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
 	for rel, body := range files {
@@ -29,107 +29,125 @@ func arvore(t *testing.T, files map[string]string) string {
 	return root
 }
 
-const runbookOK = "O SA correto é `loopzero-workflow-submitter` (bound to a Role).\n" +
-	"Do **NOT** mint `loopzero-build-sa` here — ele é o executor.\n" +
+const runbookOK = "The correct SA is `loopzero-workflow-submitter` (bound to a Role).\n" +
+	"Do **NOT** mint `loopzero-build-sa` here — it is the executor.\n" +
 	"```bash\nkubectl -n argo create token loopzero-workflow-submitter --duration=720h\n```\n"
 
-// O DEFEITO MEDIDO em 2026-08-18: a mensagem de erro mandava rotacionar
-// `loopzero-build-sa`, e o runbook diz explicitamente para NÃO fazer isso — o SA errado
-// autentica e depois é proibido, trocando um 401 legível por um 403 que parece falha nova.
-func TestMensagemQueContradizORunbookReprova(t *testing.T) {
-	root := arvore(t, map[string]string{
-		runbookRel:  runbookOK,
+// THE DEFECT MEASURED on 2026-08-18: the error message said to rotate
+// `loopzero-build-sa`, and the runbook explicitly says NOT to do that — the wrong SA
+// authenticates and is then forbidden, trading a readable 401 for a 403 that looks like a
+// fresh failure.
+func TestMessageContradictingTheRunbookFails(t *testing.T) {
+	root := tree(t, map[string]string{
+		runbookRel: runbookOK,
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"argo step watcher: build cluster auth failed — rotate loopzero-build-sa token\",\n",
 	})
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrContradiction) {
-		t.Fatalf("mensagem que manda fazer o que o runbook proíbe reprova; err=%v", err)
+		t.Fatalf("a message that says to do what the runbook forbids fails; err=%v", err)
 	}
 	if len(out.Findings) != 1 || out.Findings[0].Named != "loopzero-build-sa" {
-		t.Fatalf("o achado precisa NOMEAR o SA errado e o certo: %+v", out.Findings)
+		t.Fatalf("the finding must NAME the wrong SA and the right one: %+v", out.Findings)
 	}
 	if out.Findings[0].Prescribed != "loopzero-workflow-submitter" {
-		t.Fatalf("o SA prescrito precisa vir do runbook: %+v", out.Findings[0])
+		t.Fatalf("the prescribed SA must come from the runbook: %+v", out.Findings[0])
 	}
 }
 
-func TestMensagemQueConcordaComORunbookPassa(t *testing.T) {
-	root := arvore(t, map[string]string{
-		runbookRel:  runbookOK,
+func TestMessageAgreeingWithTheRunbookPasses(t *testing.T) {
+	root := tree(t, map[string]string{
+		runbookRel: runbookOK,
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"argo step watcher: build cluster auth failed — rotate loopzero-workflow-submitter token\",\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); err != nil {
-		t.Fatalf("mensagem alinhada passa: %v", err)
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
+		t.Fatalf("an aligned message passes: %v", err)
 	}
 }
 
-// Ausência é FALHA: sem runbook não há prescrição contra a qual comparar, e reportar
-// "sem contradição" seria o verde-sobre-nada de sempre.
-func TestRunbookAusenteReprova(t *testing.T) {
-	root := arvore(t, map[string]string{
+// Absence is a FAILURE: without a runbook there is no prescription to compare against,
+// and reporting "no contradiction" would be the usual green-over-nothing.
+func TestMissingRunbookFails(t *testing.T) {
+	root := tree(t, map[string]string{
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"rotate loopzero-build-sa token\")\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrRunbookMissing) {
-		t.Fatalf("sem runbook não há o que comparar; err=%v", err)
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrRunbookMissing) {
+		t.Fatalf("without a runbook there is nothing to compare; err=%v", err)
 	}
 }
 
-func TestZeroMensagensVarridasReprova(t *testing.T) {
-	root := arvore(t, map[string]string{
+func TestZeroMessagesScannedFails(t *testing.T) {
+	root := tree(t, map[string]string{
 		runbookRel: runbookOK,
+		"api/x.go": "package x\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrNothingScanned) {
-		t.Fatalf("zero mensagens varridas reprova; err=%v", err)
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrNothingScanned) {
+		t.Fatalf("zero messages scanned fails; err=%v", err)
 	}
 }
 
-// A população real.
-func TestArvoreReal(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot})
+// The real population.
+func TestRealTree(t *testing.T) {
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot}))
 	if err != nil {
 		for _, f := range out.Findings {
-			t.Errorf("%s:%d — manda rotacionar %q, runbook prescreve %q", f.File, f.Line, f.Named, f.Prescribed)
+			t.Errorf("%s:%d — says to rotate %q, runbook prescribes %q", f.File, f.Line, f.Named, f.Prescribed)
 		}
-		t.Fatalf("árvore real: %v", err)
+		t.Fatalf("real tree: %v", err)
 	}
 	if out.Scanned == 0 {
-		t.Fatal("zero mensagens varridas — não achar nada não é o mesmo que não achar nada errado")
+		t.Fatal("zero messages scanned — finding nothing is not the same as finding nothing wrong")
 	}
 }
 
-// A FORMA REAL do runbook, e o gate era cego a ela.
+// The REAL SHAPE of the runbook, and the gate was blind to it.
 //
-// `Do **NOT** mint` termina a linha e o nome do SA vem na SEGUINTE, atrás de um `> ` de
-// citação markdown. O casamento parava no `>`, então `forbidden` ficava vazio e a varredura
-// da população passava — não porque a árvore estava limpa, mas porque o detector não via.
-// Terceira vez que esta armadilha aparece nesta sessão (B-090, B-019, esta).
-func TestProibicaoQuebradaEmDUASLinhasComCitacao(t *testing.T) {
+// `Do **NOT** mint` ends the line and the SA name comes on the NEXT one, behind a markdown
+// `> ` quote marker. The match stopped at the `>`, so `forbidden` stayed empty and the
+// population scan passed — not because the tree was clean, but because the detector could
+// not see. Third time this trap shows up in this session (B-090, B-019, this one).
+func TestProhibitionSplitAcrossTWOQuotedLines(t *testing.T) {
 	real := "> watch** build Workflows is `loopzero-workflow-submitter` (bound to a Role with\n" +
 		"> `workflows: [create, get, list, watch, delete]`). Do **NOT** mint\n" +
 		"> `loopzero-build-sa` here — that SA is the workflow *executor*.\n" +
 		"```bash\nkubectl -n argo create token loopzero-workflow-submitter --duration=720h\n```\n"
-	root := arvore(t, map[string]string{
-		runbookRel:  real,
+	root := tree(t, map[string]string{
+		runbookRel: real,
 		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"build cluster auth failed — rotate loopzero-build-sa token\",\n",
 	})
-	out, err := Check(Config{RepoRoot: root})
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrContradiction) {
-		t.Fatalf("a proibição quebrada em duas linhas precisa ser lida; err=%v (%+v)", err, out.Findings)
+		t.Fatalf("the prohibition split across two lines must be read; err=%v (%+v)", err, out.Findings)
 	}
 }
 
-// Um COMENTÁRIO que cita a mensagem antiga é documentação, não emissão — e o gate casava
-// com ele. Foi o próprio comentário que registra este conserto que disparou o falso
-// positivo. Mesma armadilha do `publishhygiene`: o texto que descreve o defeito aciona o
-// detector. Reescrever o comentário resolveria por fora e deixaria o gate errado.
-func TestComentarioQueCitaAMensagemAntigaNaoEAchado(t *testing.T) {
-	root := arvore(t, map[string]string{
+// A COMMENT quoting the old message is documentation, not emission — and the gate matched
+// it. It was the very comment recording this fix that triggered the false positive. Same
+// trap as `publishhygiene`: the text describing the defect triggers the detector.
+// Rewriting the comment would fix it from the outside and leave the gate wrong.
+func TestCommentQuotingTheOldMessageIsNotAFinding(t *testing.T) {
+	root := tree(t, map[string]string{
 		runbookRel: runbookOK,
 		"api/internal/services/build/argo_step_watcher.go": "" +
-			"\t\t// CORRIGIDO: esta mensagem dizia \"rotate loopzero-build-sa token\", e o runbook proíbe.\n" +
+			"\t\t// FIXED: this message used to say \"rotate loopzero-build-sa token\", and the runbook forbids it.\n" +
 			"\t\tlogger.Error(\"build cluster auth failed — rotate loopzero-workflow-submitter token\",\n",
 	})
-	if _, err := Check(Config{RepoRoot: root}); err != nil {
-		t.Fatalf("comentário que documenta o conserto não é achado: %v", err)
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
+		t.Fatalf("a comment documenting the fix is not a finding: %v", err)
+	}
+}
+
+// A Go file under api/ the gate cannot read may be the one that contradicts the
+// runbook; skipping it reports agreement over code nobody read.
+func TestUnreadableGoFileIsAnError(t *testing.T) {
+	root := tree(t, map[string]string{
+		runbookRel: runbookOK,
+		"api/internal/services/build/argo_step_watcher.go": "logger.Error(\"argo step watcher: build cluster auth failed — rotate loopzero-workflow-submitter token\",\n",
+	})
+	if err := os.Symlink(filepath.Join(root, "missing-target"), filepath.Join(root, "api", "unreadable.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err == nil {
+		t.Fatal("an unreadable Go file under api/ must be an error")
 	}
 }

@@ -59,6 +59,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultDeclarationFile is the pinned contract, repo-relative. It sits beside
@@ -120,6 +123,9 @@ type Outcome struct {
 	// SiblingChecked is false -- nothing was observed.
 	QueriedSeries []string
 }
+
+// Verdict is Pass when the check passed and Fail otherwise.
+func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
 var (
 	// metricDeclRe matches a prometheus Opts metric name declaration, which is
@@ -383,7 +389,8 @@ func scanEmitters(root string) (map[string]string, error) {
 		// read-only scan of tracked sources, so there is nothing for a TOCTOU race to win.
 		data, rerr := os.ReadFile(path)
 		if rerr != nil {
-			return nil // unreadable single file must not abort the scan
+			// The unreadable file may be the one that declares a pinned metric.
+			return fmt.Errorf("%s: unreadable, so its metric declarations are unknown: %w", path, rerr)
 		}
 		rel, relErr := filepath.Rel(root, path)
 		if relErr != nil {
@@ -417,29 +424,11 @@ func declaresMetric(src []byte, name string) bool {
 // Brace counting rather than a line-shape guess: the map is a composite
 // literal, and its closing brace is the one that balances the opening.
 func promQueriesBlock(src string) (string, bool) {
-	i := strings.Index(src, "var promQueries")
-	if i < 0 {
-		return "", false
-	}
-	open := strings.Index(src[i:], "{")
-	if open < 0 {
-		return "", false
-	}
-	open += i
-	depth := 0
-	for j := open; j < len(src); j++ {
-		switch src[j] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return src[open+1 : j], true
-			}
-		}
-	}
-	return "", false
+	return qgshell.ExtractBraceBlock(src, promQueriesOpenRe)
 }
+
+// promQueriesOpenRe opens the `var promQueries = map[...]...{` literal.
+var promQueriesOpenRe = regexp.MustCompile(`var promQueries\b[^{]*\{`)
 
 // seriesIn returns the sorted, de-duplicated loopzero_* series named in a PromQL
 // fragment.

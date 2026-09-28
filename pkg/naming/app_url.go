@@ -2,7 +2,6 @@ package naming
 
 import (
 	"fmt"
-	"strings"
 )
 
 // AppHostname returns the canonical internal hostname for a deployed app in
@@ -33,11 +32,7 @@ import (
 // but Traefik couldn't match against the canonical IngressRoute Host).
 func AppHostname(tenantID, projectID, appName, envName, baseDomain string) string {
 	subdomain := fmt.Sprintf("%s-%s-%s-%s", tenantID, projectID, appName, envName)
-	if len(subdomain) > 63 {
-		subdomain = subdomain[:63]
-	}
-	subdomain = strings.TrimRight(subdomain, "-")
-	return fmt.Sprintf("%s.%s", subdomain, baseDomain)
+	return fmt.Sprintf("%s.%s", truncateLabel(subdomain, MaxKubernetesNameLength), baseDomain)
 }
 
 // AppURL composes the full public URL exposed to users for a permanent

@@ -16,25 +16,25 @@ import (
 
 var repoRoot = qtestutil.MustRepoRoot()
 
-// insumo é COMPOSTO em tempo de execução.
+// input is COMPOSED at run time.
 //
-// Este arquivo é varrido pela própria âncora que ele testa (EC-1). Escrever o insumo por
-// extenso aqui faria o teste virar um arquivo não-declarado — e a trava reprovaria a si
-// mesma. É a terceira vez que esta armadilha aparece na sessão; nas outras duas
-// (`publishhygiene`, `trufflehogscan`) a saída foi a mesma.
-func insumo() string { return "loopzero-stripe" + "-webhook" }
+// This file is swept by the very anchor it tests (EC-1). Spelling the input out here would
+// turn the test into an undeclared file — and the lock would fail itself. This is the third
+// time this trap has come up in the session; in the other two (`publishhygiene`,
+// `trufflehogscan`) the way out was the same.
+func input() string { return "loopzero-stripe" + "-webhook" }
 
-// gitRepo cria um repositório de verdade: o gate lê `git ls-files`, que é o que será
-// publicado, e não o diretório de trabalho.
-func gitRepo(t *testing.T, arquivos map[string]string) string {
+// gitRepo creates a real repository: the gate reads `git ls-files`, which is what will be
+// published, and not the working directory.
+func gitRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
-	for rel, corpo := range arquivos {
+	for rel, body := range files {
 		p := filepath.Join(root, rel)
 		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte(corpo), 0o600); err != nil {
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -48,151 +48,185 @@ func gitRepo(t *testing.T, arquivos map[string]string) string {
 	return root
 }
 
-// base monta um repositório coerente: um registro, o arquivo da camada, o teste que a
-// guarda, o taskfile e o backlog.
+// base assembles a coherent repository: a registry, the layer file, the test that guards
+// it, the taskfile and the backlog.
 func base(t *testing.T, extra map[string]string) string {
 	t.Helper()
-	arquivos := map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + insumo() + "\n\n[piso]\n1\n\n" +
-			"[camadas]\nseed | loopzero | camada.go | test:guarda_test.go | pula sem credencial\n",
-		"camada.go":             "const s = \"" + insumo() + "\"\n",
-		"guarda_test.go":        "package a\n",
+	files := map[string]string{
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n1\n\n" +
+			"[layers]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n",
+		"layer.go":              "const s = \"" + input() + "\"\n",
+		"guard_test.go":         "package a\n",
 		"taskfiles/quality.yml": "cmds:\n",
-		"BACKLOG.md":            "## B-033 — x   [ ]\n\nstatus: triaged\n",
 	}
 	for k, v := range extra {
-		arquivos[k] = v
+		files[k] = v
 	}
-	return gitRepo(t, arquivos)
+	return gitRepo(t, files)
 }
 
 func run(t *testing.T, root, sibling string) (Outcome, error) {
 	t.Helper()
-	return Check(Config{RepoRoot: root, SiblingRoot: sibling})
+	return violationOf(Check(Config{RepoRoot: root, SiblingRoot: sibling}))
 }
 
-func TestTodasAsGuardasResolvemPassa(t *testing.T) {
+func TestPassesWhenEveryGuardResolves(t *testing.T) {
 	out, err := run(t, base(t, nil), "")
 	if err != nil {
-		t.Fatalf("registro coerente passa: %v (%+v)", err, out)
+		t.Fatalf("a coherent registry passes: %v (%+v)", err, out)
 	}
 	if out.Layers != 1 || out.Scanned == 0 {
-		t.Fatalf("contagens: %+v", out)
+		t.Fatalf("counts: %+v", out)
 	}
 }
 
-func TestUmaGuardaQuebradaReprovaNomeandoACamada(t *testing.T) {
+func TestBrokenGuardFailsNamingTheLayer(t *testing.T) {
 	root := base(t, map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + insumo() + "\n\n[piso]\n1\n\n" +
-			"[camadas]\nseed | loopzero | camada.go | test:apagado_test.go | pula sem credencial\n",
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n1\n\n" +
+			"[layers]\nseed | loopzero | layer.go | test:deleted_test.go | skips without a credential\n",
 	})
 	out, err := run(t, root, "")
 	if !errors.Is(err, ErrGuardUnresolved) {
-		t.Fatalf("guarda quebrada reprova; err=%v", err)
+		t.Fatalf("a broken guard fails; err=%v", err)
 	}
 	if len(out.Broken) != 1 || out.Broken[0].Layer != "seed" {
-		t.Fatalf("a camada precisa ser NOMEADA para ser consertável; got %+v", out.Broken)
+		t.Fatalf("the layer must be NAMED to be fixable; got %+v", out.Broken)
 	}
 }
 
-// O terceiro bullet do DoD: uma camada nova nasce dentro da verificação.
-func TestArquivoNaoDeclaradoQueReferenciaInsumoReprova(t *testing.T) {
-	root := base(t, map[string]string{"nova_camada.go": "const x = \"" + insumo() + "\"\n"})
+// The third DoD bullet: a new layer is born inside the check.
+func TestUndeclaredFileReferencingAnInputFails(t *testing.T) {
+	root := base(t, map[string]string{"new_layer.go": "const x = \"" + input() + "\"\n"})
 	out, err := run(t, root, "")
 	if !errors.Is(err, ErrUndeclaredSurface) {
-		t.Fatalf("arquivo novo com insumo reprova; err=%v", err)
+		t.Fatalf("a new file with an input fails; err=%v", err)
 	}
-	if len(out.Undeclared) != 1 || out.Undeclared[0] != "nova_camada.go" {
-		t.Fatalf("o arquivo precisa ser nomeado; got %+v", out.Undeclared)
+	if len(out.Undeclared) != 1 || out.Undeclared[0] != "new_layer.go" {
+		t.Fatalf("the file must be named; got %+v", out.Undeclared)
 	}
 }
 
-func TestReferenciaDeclaradaNaoReprova(t *testing.T) {
+func TestDeclaredReferenceDoesNotFail(t *testing.T) {
 	root := base(t, map[string]string{
-		"nova_camada.go": "const x = \"" + insumo() + "\"\n",
-		"infra/quality/billing-layers.txt": "[ancora]\n" + insumo() + "\n\n[piso]\n1\n\n" +
-			"[camadas]\nseed | loopzero | camada.go | test:guarda_test.go | pula sem credencial\n\n" +
-			"[referencias]\nnova_camada.go | é a guarda, não a camada\n",
+		"new_layer.go": "const x = \"" + input() + "\"\n",
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n1\n\n" +
+			"[layers]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n\n" +
+			"[references]\nnew_layer.go | it is the guard, not the layer\n",
 	})
 	if _, err := run(t, root, ""); err != nil {
-		t.Fatalf("referência declarada com razão não reprova: %v", err)
+		t.Fatalf("a reference declared with a reason does not fail: %v", err)
 	}
 }
 
-// EC-1: o próprio registro cita os insumos — é a DEFINIÇÃO deles, não um uso.
-func TestORegistroNaoReprovaASiMesmo(t *testing.T) {
+// EC-1: the registry itself cites the inputs — it is their DEFINITION, not a use.
+func TestRegistryDoesNotFailItself(t *testing.T) {
 	if _, err := run(t, base(t, nil), ""); err != nil {
-		t.Fatalf("o registro não é uma camada não-declarada: %v", err)
+		t.Fatalf("the registry is not an undeclared layer: %v", err)
 	}
 }
 
-// EC-4: apagar linhas não pode fazer o gate passar.
-func TestAbaixoDoPisoReprova(t *testing.T) {
+// EC-4: deleting lines must not make the gate pass.
+func TestBelowTheFloorFails(t *testing.T) {
 	root := base(t, map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + insumo() + "\n\n[piso]\n2\n\n" +
-			"[camadas]\nseed | loopzero | camada.go | test:guarda_test.go | pula sem credencial\n",
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n2\n\n" +
+			"[layers]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n",
 	})
 	if _, err := run(t, root, ""); !errors.Is(err, ErrBelowFloor) {
-		t.Fatalf("menos camadas que o piso reprova; err=%v", err)
+		t.Fatalf("fewer layers than the floor fails; err=%v", err)
 	}
 }
 
-// EC-8: presente-mas-incompleto não é ausente.
-func TestArquivoDeclaradoQueSumiuReprova(t *testing.T) {
+// EC-8: present-but-incomplete is not absent.
+func TestDeclaredFileThatDisappearedFails(t *testing.T) {
 	root := base(t, map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + insumo() + "\n\n[piso]\n1\n\n" +
-			"[camadas]\nseed | loopzero | sumiu.go | test:guarda_test.go | pula sem credencial\n",
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n1\n\n" +
+			"[layers]\nseed | loopzero | gone.go | test:guard_test.go | skips without a credential\n",
 	})
 	if _, err := run(t, root, ""); !errors.Is(err, ErrGuardUnresolved) {
-		t.Fatalf("arquivo declarado que não existe reprova; err=%v", err)
+		t.Fatalf("a declared file that does not exist fails; err=%v", err)
 	}
 }
 
-// Cobertura parcial é REPORTADA, nunca silenciada — e nunca reprova.
-func TestIrmaoAusenteReportaParcialENaoVerde(t *testing.T) {
+// Partial coverage is REPORTED, never silenced — and never fails.
+func TestAbsentSiblingReportsPartialNotGreen(t *testing.T) {
 	root := base(t, map[string]string{
-		"infra/quality/billing-layers.txt": "[ancora]\n" + insumo() + "\n\n[piso]\n2\n\n" +
-			"[camadas]\nseed | loopzero | camada.go | test:guarda_test.go | pula sem credencial\n" +
-			"custo | loopzero-cloud | cmd/main.go | open:B-033 | desliga sem prometheus\n",
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n2\n\n" +
+			"[layers]\nseed | loopzero | layer.go | test:guard_test.go | skips without a credential\n" +
+			"custo | loopzero-cloud | cmd/main.go | open:B-033 | switches off without prometheus\n",
 	})
 	out, err := run(t, root, "")
 	if err != nil {
-		t.Fatalf("irmão ausente não reprova: %v", err)
+		t.Fatalf("an absent sibling does not fail: %v", err)
 	}
 	if !out.Partial || len(out.NotVerified) != 1 {
-		t.Fatalf("o que não foi olhado precisa ser NOMEADO; got %+v", out)
+		t.Fatalf("what was not looked at must be NAMED; got %+v", out)
 	}
-	if !strings.Contains(out.Reason, "PARCIAL") {
-		t.Fatalf("a razão precisa dizer que a cobertura é parcial: %q", out.Reason)
+	if !strings.Contains(out.Reason, "PARTIAL") {
+		t.Fatalf("the reason must say coverage is partial: %q", out.Reason)
 	}
 }
 
-func TestRegistroAusenteReprova(t *testing.T) {
+func TestMissingRegistryFails(t *testing.T) {
 	root := gitRepo(t, map[string]string{"a.go": "package a\n"})
 	if _, err := run(t, root, ""); !errors.Is(err, ErrRegistryMalformed) {
-		t.Fatalf("registro ausente reprova; err=%v", err)
+		t.Fatalf("a missing registry fails; err=%v", err)
 	}
 }
 
-// A população real (rules/testing.md § 4.2).
-func TestArvoreRealPassa(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot, SiblingRoot: filepath.Join(repoRoot, "..", "loopzero-cloud")})
+// The real population (rules/testing.md § 4.2).
+func TestRealTreePasses(t *testing.T) {
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot, SiblingRoot: filepath.Join(repoRoot, "..", "loopzero-cloud")}))
 	if err != nil {
 		for i, b := range out.Broken {
 			if i == 8 {
 				break
 			}
-			t.Errorf("guarda: %s — %s", b.Layer, b.Why)
+			t.Errorf("guard: %s — %s", b.Layer, b.Why)
 		}
 		for i, u := range out.Undeclared {
 			if i == 8 {
 				break
 			}
-			t.Errorf("não declarado: %s", u)
+			t.Errorf("undeclared: %s", u)
 		}
-		t.Fatalf("árvore real: %v", err)
+		t.Fatalf("real tree: %v", err)
 	}
 	if out.Scanned == 0 || out.Layers == 0 {
-		t.Fatalf("varredura que não alcançou nada não pode reportar verde: %+v", out)
+		t.Fatalf("a sweep that reached nothing must not report green: %+v", out)
+	}
+}
+
+// The debt ledger is versioned: the gate resolves `open:` guards from the
+// registry's [debts] section and never from BACKLOG.md, which is gitignored
+// and absent on every clone.
+func TestOpenDebtResolvesFromTheVersionedRegistryWithoutABacklog(t *testing.T) {
+	root := base(t, map[string]string{
+		"infra/quality/billing-layers.txt": "[anchor]\n" + input() + "\n\n[floor]\n1\n\n" +
+			"[layers]\nseed | loopzero | layer.go | open:B-033 | skips without a credential\n\n" +
+			"[debts]\nB-033 | approved | the cost ceiling ships with a gate\n",
+	})
+	if _, err := os.Stat(filepath.Join(root, "BACKLOG.md")); err == nil {
+		t.Fatal("fixture must not carry a BACKLOG.md")
+	}
+	if _, err := run(t, root, ""); err != nil {
+		t.Fatalf("an open debt declared in the registry resolves: %v", err)
+	}
+}
+
+// A versioned file the sweep cannot read may be exactly the new layer it
+// exists to catch; it is an error, never a file without billing inputs.
+func TestUnreadableVersionedFileFailsTheSweep(t *testing.T) {
+	root := base(t, nil)
+	// A tracked dangling symlink is unreadable for every uid, root included.
+	if err := os.Symlink("does-not-exist.go", filepath.Join(root, "locked.go")); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "add", "locked.go")
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v %s", err, out)
+	}
+	if _, err := run(t, root, ""); err == nil || !strings.Contains(err.Error(), "locked.go") {
+		t.Fatalf("want an error naming the unreadable file, got %v", err)
 	}
 }

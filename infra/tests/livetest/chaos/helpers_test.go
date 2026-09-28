@@ -36,7 +36,7 @@ func TestManifest_TypeFields(t *testing.T) {
 }
 
 func TestChaosResult_VerdictValues(t *testing.T) {
-	// Verify ChaosResult struct shape matches v1 contra-prova verdict bag
+	// Verify ChaosResult struct shape matches the v1 counter-proof verdict bag
 	cases := []string{"PASS", "FAIL", "INCONCLUSIVE"}
 	for _, v := range cases {
 		r := ChaosResult{Verdict: v}

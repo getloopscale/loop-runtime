@@ -11,7 +11,6 @@ package tenancy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/ports"
 	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
 // tenantNamespace is the canonical namespace for all Tenant + Environment CRs.
@@ -46,12 +46,19 @@ var tenantsGroupResource = schema.GroupResource{Group: "loopzero.io", Resource: 
 // contract module, so the compiler checks every CR field at build time.
 type TenantCRManager struct {
 	Client client.Client
+	// BuildConcurrency is written to every Tenant CR's
+	// spec.limits.maxBuildConcurrency: the same per-tenant limit the API
+	// enforces (config.MaxConcurrentBuildsPerTenant).
+	BuildConcurrency int
 }
 
 // NewTenantCRManager creates a TenantCRManager connected to the management cluster.
 // It tries in-cluster config first (for when the API runs inside the cluster),
 // then falls back to kubeconfig with the specified context.
-func NewTenantCRManager(kubeconfig, kubeContext string) (*TenantCRManager, error) {
+func NewTenantCRManager(kubeconfig, kubeContext string, buildConcurrency int) (*TenantCRManager, error) {
+	if buildConcurrency <= 0 {
+		return nil, fmt.Errorf("k8s: tenant CR manager: build concurrency must be positive, got %d", buildConcurrency)
+	}
 	cfg, err := k8s.RestConfig(kubeconfig, kubeContext)
 	if err != nil {
 		return nil, fmt.Errorf("k8s: tenant CR manager config: %w", err)
@@ -60,7 +67,7 @@ func NewTenantCRManager(kubeconfig, kubeContext string) (*TenantCRManager, error
 	if err != nil {
 		return nil, fmt.Errorf("k8s: tenant CR manager typed client: %w", err)
 	}
-	return &TenantCRManager{Client: c}, nil
+	return &TenantCRManager{Client: c, BuildConcurrency: buildConcurrency}, nil
 }
 
 func tenantKey(tenantID string) client.ObjectKey {
@@ -76,7 +83,7 @@ func (m *TenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spe
 		var existing apiv1.Tenant
 		err := m.Client.Get(ctx, tenantKey(tenantID), &existing)
 		if k8serrors.IsNotFound(err) {
-			desired := buildTenant(tenantID, spec)
+			desired := buildTenant(tenantID, spec, m.BuildConcurrency)
 			createErr := m.Client.Create(ctx, desired)
 			if k8serrors.IsAlreadyExists(createErr) {
 				// Another caller created it between our Get and Create — retry as update.
@@ -93,7 +100,7 @@ func (m *TenantCRManager) EnsureTenant(ctx context.Context, tenantID string, spe
 
 		// CR exists — apply desired spec onto the fetched object, preserving its
 		// resourceVersion (carried by `existing`) for optimistic concurrency.
-		applyTenantSpec(&existing, spec)
+		applyTenantSpec(&existing, spec, m.BuildConcurrency)
 		if err := m.Client.Update(ctx, &existing); err != nil {
 			return err // RetryOnConflict handles Conflict errors automatically
 		}
@@ -110,8 +117,9 @@ func isEnvMatch(entry apiv1.TenantEnvironmentEntry, envName, project string) boo
 }
 
 // AddEnvironment adds an environment entry to the Tenant CR spec.environments[].
-// Idempotent on (name, project) tuple: if the same (envName, project) pair
-// already exists, it returns nil without changes.
+// When the same (envName, project) pair is already present it changes nothing
+// and returns ports.ErrEnvironmentExists, so a caller can tell a create from a
+// no-op: the create route answers 409, the first-deploy ensurer carries on.
 //
 // M2 v1.2 (2026-06-07): writes the canonical `project` field so the operator
 // can compute the 3-segment namespace `loopzero-<tenant>-<project>-<env>` via
@@ -146,7 +154,7 @@ func (m *TenantCRManager) AddEnvironment(ctx context.Context, tenantID, project,
 		// projects is intentional in M2 (each lands in its own namespace).
 		for _, e := range t.Spec.Environments {
 			if isEnvMatch(e, envName, project) {
-				return nil // tuple already present
+				return ports.ErrEnvironmentExists
 			}
 		}
 
@@ -163,7 +171,7 @@ func (m *TenantCRManager) AddEnvironment(ctx context.Context, tenantID, project,
 // environment is not present in the Tenant CR. Callers can map to HTTP 404.
 // AUDIT-12 (CHG-2026-04-23-AUDIT-12): previously this was silently idempotent,
 // causing `loopzero env delete nonexistent` to return "deleted" misleadingly.
-var ErrEnvironmentNotFound = errors.New("k8s: environment not found in tenant CR")
+var ErrEnvironmentNotFound = ports.ErrEnvironmentNotFound
 
 // RemoveEnvironment removes an environment entry from the Tenant CR spec.environments[].
 // Returns ErrEnvironmentNotFound if the (envName, project) tuple is not present —
@@ -279,14 +287,17 @@ func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, pr
 
 // buildTenant constructs a typed Tenant CR matching the CRD schema defined in
 // operators/api/v1/tenant_types.go. The compiler now enforces the spec shape.
-func buildTenant(tenantID string, spec ports.TenantCRSpec) *apiv1.Tenant {
+func buildTenant(tenantID string, spec ports.TenantCRSpec, buildConcurrency int) *apiv1.Tenant {
 	t := &apiv1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tenantID,
 			Namespace: tenantNamespace,
 		},
 	}
-	applyTenantSpec(t, spec)
+	applyTenantSpec(t, spec, buildConcurrency)
+	// Only a new CR takes the cell: applyTenantSpec also runs on update, and a project
+	// create must never move a tenant (#412). Empty keeps the CRD default.
+	t.Spec.CellID = spec.CellID
 	return t
 }
 
@@ -296,7 +307,7 @@ func buildTenant(tenantID string, spec ports.TenantCRSpec) *apiv1.Tenant {
 // routes/projects.go appends the production env via EnvironmentEnsurer right
 // after EnsureTenant (CRD allows MinItems=0). Pre-populating an env without a
 // project caused the LIVE admission rejection 2026-06-09.
-func applyTenantSpec(t *apiv1.Tenant, spec ports.TenantCRSpec) {
+func applyTenantSpec(t *apiv1.Tenant, spec ports.TenantCRSpec, buildConcurrency int) {
 	plan := spec.Plan
 	if plan == "" {
 		plan = "starter"
@@ -304,7 +315,7 @@ func applyTenantSpec(t *apiv1.Tenant, spec ports.TenantCRSpec) {
 	t.Spec.DisplayName = t.Name
 	t.Spec.Plan = apiv1.PlanTier(plan)
 	t.Spec.GitOps = apiv1.GitOpsSpec{
-		RepoName: fmt.Sprintf("%s-gitops", t.Name),
+		RepoName: naming.TenantGitOpsRepoName(t.Name),
 		Branch:   "main",
 	}
 	t.Spec.Preview = apiv1.PreviewSpec{
@@ -315,13 +326,13 @@ func applyTenantSpec(t *apiv1.Tenant, spec ports.TenantCRSpec) {
 		MaxCPU:              resource.MustParse("4"),
 		MaxMemory:           resource.MustParse("8Gi"),
 		MaxStorage:          resource.MustParse("20Gi"),
-		MaxBuildConcurrency: 2,
+		MaxBuildConcurrency: buildConcurrency,
 	}
-	// Environments: CRD declares `environments` em spec.required com MinItems=0.
-	// Slice nil sem omitempty serializa como "environments":null → admission rejeita
-	// (required + null inválido). Inicializar como slice vazio força JSON
-	// "environments":[] — válido per MinItems=0 e satisfaz required.
-	// EnvironmentEnsurer appenda a entrada de production logo após EnsureTenant.
+	// Environments: the CRD declares `environments` in spec.required with MinItems=0.
+	// A nil slice without omitempty serialises as "environments":null and admission
+	// rejects it (required + null is invalid). Initialising an empty slice forces
+	// "environments":[] — valid per MinItems=0 and satisfies required.
+	// EnvironmentEnsurer appends the production entry right after EnsureTenant.
 	if t.Spec.Environments == nil {
 		t.Spec.Environments = []apiv1.TenantEnvironmentEntry{}
 	}

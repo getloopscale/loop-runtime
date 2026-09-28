@@ -25,6 +25,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
 )
 
 // Disposition is the homed-ness of a script.
@@ -55,16 +57,11 @@ type Counts struct {
 	SuspectKeeps []string `json:"suspect_keeps,omitempty"`
 }
 
-// reimplementableLogicRe detects a Python HEREDOC — the script IS a Python
-// program wearing a bash costume (its substance is reimplementable logic). A
-// script that merely *calls* python3 for one step is classified by its domain.
-// Precise (heredoc) avoids mislabeling test/drill orchestrators that shell out
-// to python helpers as "python-wrappers".
-var reimplementableLogicRe = regexp.MustCompile(`(?m)(python3?\s+(-\s+)?<<|<<\s*['"]?(PY|PYEOF|PYTHON))`)
-
-// hasReimplementableLogic reports whether a script body embeds a Python heredoc.
+// hasReimplementableLogic reports whether a script body embeds a Python
+// heredoc: the script IS a Python program wearing a bash costume. A script that
+// merely calls python3 for one step is classified by its domain instead.
 func hasReimplementableLogic(body string) bool {
-	return reimplementableLogicRe.MatchString(body)
+	return shellscript.PythonHeredoc.MatchString(body)
 }
 
 // shellsExternalRe detects orchestration of external dev CLIs (gh/npm/go/node/
@@ -84,7 +81,7 @@ var shellsExternalRe = regexp.MustCompile(`\b(gh|npm|go|node|curl|psql)\b`)
 // legitimate CI-wired guards).
 var homedMarkers = []string{"KEEP-OPERATOR", "KEEP-CI-ORCHESTRATOR", "KEEP-CI-WIRED"}
 
-// classify decides homed-ness from the script path + its allowlist justificativa.
+// classify decides homed-ness from the script path + its allowlist justification.
 // Harness hooks (.claude/) and runtime container entrypoints are homed; an
 // explicit KEEP-* disposition is homed; everything else is un-homed.
 func classify(path, justif string) Disposition {
@@ -124,8 +121,15 @@ func domainOf(path string) string {
 	}
 }
 
-// allowlistRowRe matches a markdown table row whose first column ends in .sh.
-var allowlistRowRe = regexp.MustCompile(`^\|\s*([^\s|<>]+\.sh)\s*\|[^|]*\|([^|]*)\|`)
+// parseRow reads an allowlist row as (path, justification): the justification
+// is the third column, after the LOC.
+func parseRow(line string) (path, justif string, ok bool) {
+	row, ok := shellscript.ParseAllowlistRow(line)
+	if !ok || len(row.Cells) < 2 {
+		return "", "", false
+	}
+	return row.Path, row.Cells[1], true
+}
 
 // ReadBody returns a script's content for content-verification. May be nil
 // (label-only counting) or return ("", false) when a file is unreadable.
@@ -137,12 +141,10 @@ type ReadBody func(path string) (string, bool)
 func Count(allowlistMD string, readBody ReadBody) Counts {
 	c := Counts{ByDomain: map[string]int{}}
 	for _, line := range strings.Split(allowlistMD, "\n") {
-		m := allowlistRowRe.FindStringSubmatch(line)
-		if m == nil {
+		path, justif, ok := parseRow(line)
+		if !ok {
 			continue
 		}
-		path := strings.TrimSpace(m[1])
-		justif := m[2]
 		unhomed := classify(path, justif) == Unhomed
 
 		// Content verification: a KEEP claim is invalid if the body embeds
@@ -168,12 +170,13 @@ type Entry struct {
 	Domain         string
 	LOC            int
 	HasPython      bool // embeds/invokes Python (reimplementable logic)
-	ShellsLive     bool // invokes kubectl/k3d/doctl/helm/pulumi/argocd/cosign
+	ShellsLive     bool // invokes an effectful CLI (shellscript.EffectfulCLI)
 	ShellsExternal bool // invokes gh/npm/go/node/curl/psql (orchestrator, anti-pattern-8)
-	Disposition    string
+	Disposition    shellscript.Disposition
+	// Rationale says why the disposition was proposed, for the operator who
+	// ratifies it.
+	Rationale string
 }
-
-var shellsLiveRe = regexp.MustCompile(`\b(kubectl|k3d|doctl|helm|pulumi|argocd|cosign)\b`)
 
 // Ledger emits a proposed disposition + evidence per un-homed script, for
 // operator (sponsor) ratification in one pass. Heuristic dispositions — the
@@ -181,12 +184,10 @@ var shellsLiveRe = regexp.MustCompile(`\b(kubectl|k3d|doctl|helm|pulumi|argocd|c
 func Ledger(allowlistMD string, readBody ReadBody) []Entry {
 	var entries []Entry
 	for _, line := range strings.Split(allowlistMD, "\n") {
-		m := allowlistRowRe.FindStringSubmatch(line)
-		if m == nil {
+		path, justif, ok := parseRow(line)
+		if !ok {
 			continue
 		}
-		path := strings.TrimSpace(m[1])
-		justif := m[2]
 		if classify(path, justif) == Homed {
 			continue
 		}
@@ -195,39 +196,40 @@ func Ledger(allowlistMD string, readBody ReadBody) []Entry {
 			if body, ok := readBody(path); ok {
 				e.LOC = strings.Count(body, "\n")
 				e.HasPython = hasReimplementableLogic(body)
-				e.ShellsLive = shellsLiveRe.MatchString(body)
+				e.ShellsLive = shellscript.EffectfulCLI.MatchString(body)
 				e.ShellsExternal = shellsExternalRe.MatchString(body)
 			}
 		}
-		e.Disposition = proposeDisposition(e)
+		e.Disposition, e.Rationale = proposeDisposition(e)
 		entries = append(entries, e)
 	}
 	return entries
 }
 
-// proposeDisposition is the heuristic the operator ratifies.
-func proposeDisposition(e Entry) string {
+// proposeDisposition is the heuristic the operator ratifies, in the shared
+// disposition vocabulary.
+func proposeDisposition(e Entry) (shellscript.Disposition, string) {
 	switch {
 	case e.HasPython:
-		return "MIGRATE-go (python-wrapper — focused TDD)"
+		return shellscript.MigrateGoPureFn, "python wrapper — focused TDD"
 	case strings.HasSuffix(e.Path, "_test.sh"):
-		return "COUPLED (dies when its target homes)"
+		return shellscript.AutoDie, "dies when its target homes"
 	case e.Domain == "drill":
-		return "MIGRATE-loopzero-ops-drill (LIVE-gate before delete)"
+		return shellscript.MigrateLoopZeroOpsDrill, "LIVE gate before delete"
 	case e.Domain == "bootstrap":
-		return "DELEGATE-declarative (T2)"
+		return shellscript.DelegateHelmfile, "declarative bootstrap (T2)"
 	case e.Domain == "test" || e.Domain == "chaos":
-		return "MIGRATE-ginkgo (LIVE)"
+		return shellscript.MigrateGinkgo, "LIVE"
 	case e.ShellsLive:
-		return "KEEP-OPERATOR? (live-cluster tool — operator ratify)"
+		return shellscript.KeepOperator, "live-cluster tool — operator ratifies"
 	case e.ShellsExternal:
-		return "KEEP-orchestrator? (wraps gh/npm/go/curl — anti-pattern-8, ratify)"
+		return shellscript.KeepOrchestrator, "wraps gh/npm/go/curl — anti-pattern 8, operator ratifies"
 	default:
-		return "MIGRATE-loopzero-ops (pure-logic — autonomous)"
+		return shellscript.MigrateGoPureFn, "pure logic — autonomous"
 	}
 }
 
-// isKeepLabel reports whether the justificativa carries a KEEP-* disposition
+// isKeepLabel reports whether the justification carries a KEEP-* disposition
 // (as opposed to homed-by-path: hooks / container entrypoints).
 func isKeepLabel(justif string) bool {
 	for _, m := range homedMarkers {

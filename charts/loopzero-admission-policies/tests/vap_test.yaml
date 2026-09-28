@@ -9,6 +9,7 @@ templates:
   - vap-require-image-signature.yaml
   - vap-protect-platform-networkpolicies.yaml
   - vap-argocd-managed-by.yaml
+  - vap-tenant-namespace.yaml
 
 tests:
   - it: disallow-latest-tag renders as ValidatingAdmissionPolicy
@@ -26,10 +27,39 @@ tests:
     set:
       vaps.restrictRegistries: true
       registries.docrPrefix: "registry.digitalocean.com/loopzero-system/"
-      registries.harborPrefix: "harbor.dev.loopzero.example/loopzero-platform/"
     asserts:
       - hasDocuments:
           count: 2
+
+  # Harbor was retired (docs/decisions.md, "Retire Harbor"): the default allowlist
+  # admits the configured registry prefix and nothing that points at Harbor.
+  - it: restrict-registries admits no Harbor prefix by default
+    template: vap-restrict-registries.yaml
+    set:
+      vaps.restrictRegistries: true
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.validations[0].expression
+          pattern: 'startsWith\("registry\.digitalocean\.com/loopzero-system/"\)'
+      - notMatchRegex:
+          path: spec.validations[0].expression
+          pattern: '(?i)harbor'
+      - notMatchRegex:
+          path: spec.validations[1].expression
+          pattern: '(?i)harbor'
+      - notMatchRegex:
+          path: spec.validations[2].expression
+          pattern: '(?i)harbor'
+
+  - it: restrict-registries refuses a harborPrefix value
+    template: vap-restrict-registries.yaml
+    set:
+      vaps.restrictRegistries: true
+      registries.harborPrefix: "harbor.example.com/loopzero-platform/"
+    asserts:
+      - failedTemplate:
+          errorPattern: "harborPrefix"
 
   - it: require-resource-limits renders when enabled
     template: vap-require-resource-limits.yaml
@@ -60,8 +90,11 @@ tests:
       - contains:
           path: spec.matchConditions
           content:
-            name: skip-cluster-internal-gc
+            name: exclude-system-actors
           any: true
+      - matchRegex:
+          path: spec.matchConditions[0].expression
+          pattern: "startsWith\\('system:serviceaccount:kube-system:'\\)"
 
   - it: require-image-signature renders when enabled
     template: vap-require-image-signature.yaml
@@ -70,3 +103,18 @@ tests:
     asserts:
       - hasDocuments:
           count: 2
+
+  - it: tenant-namespace exempts the platform's own controllers (B-095)
+    template: vap-tenant-namespace.yaml
+    set:
+      vaps.tenantNamespace: true
+    documentSelector:
+      path: kind
+      value: ValidatingAdmissionPolicy
+    asserts:
+      - contains:
+          path: spec.matchConditions
+          content:
+            name: exclude-system-actors
+          any: true
+

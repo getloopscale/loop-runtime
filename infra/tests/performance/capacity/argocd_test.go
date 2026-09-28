@@ -6,11 +6,8 @@ package capacity
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -25,10 +22,11 @@ import (
 //   - error rate < 1%
 //
 // Run:
-//   LOOPZERO_CAPACITY=1 LOOPZERO_ARGOCD_URL=... \
-//   LOOPZERO_ARGOCD_TOKEN=... \
-//   go test ./infra/tests/performance/capacity/ -run TestCapacityArgoCD -v \
-//     -args -rps=50 -duration=60s -workers=20
+//
+//	LOOPZERO_CAPACITY=1 LOOPZERO_ARGOCD_URL=... \
+//	LOOPZERO_ARGOCD_TOKEN=... \
+//	go test ./infra/tests/performance/capacity/ -run TestCapacityArgoCD -v \
+//	  -args -rps=50 -duration=60s -workers=20
 func TestCapacityArgoCDAppGet(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
@@ -48,70 +46,16 @@ func TestCapacityArgoCDAppGet(t *testing.T) {
 	cfg := NewConfig("argocd-app-get")
 	t.Logf("config: rps=%v duration=%v workers=%d path=%s", cfg.RPS, cfg.Duration, cfg.Workers, path)
 
-	lat := NewLatencies(int(cfg.RPS*cfg.Duration.Seconds()) + 1000)
-	var total, errors int64
-
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Duration+30*time.Second)
-	defer cancel()
-	deadline := time.Now().Add(cfg.Duration)
-	interval := time.Duration(float64(time.Second) / cfg.RPS)
-	start := time.Now()
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, cfg.Workers)
-
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-		case <-time.After(interval):
-		}
-		if time.Now().After(deadline) {
-			break
-		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func() {
-			defer wg.Done()
-			defer func() { <-sem }()
-
-			req, _ := http.NewRequestWithContext(ctx, "GET", argocdURL+path, nil)
-			req.Header.Set("Authorization", "Bearer "+token)
-
-			t0 := time.Now()
-			resp, err := http.DefaultClient.Do(req)
-			d := time.Since(t0)
-			lat.Record(d)
-			atomic.AddInt64(&total, 1)
-
+	result, _ := RunOpenLoop(context.Background(), cfg, "argocd-app-get", AnyHTTPError,
+		func(ctx context.Context, _ int64) (int, error) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, argocdURL+path, nil)
 			if err != nil {
-				atomic.AddInt64(&errors, 1)
-				return
+				return 0, err
 			}
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode >= 400 {
-				atomic.AddInt64(&errors, 1)
-			}
-		}()
-	}
-	wg.Wait()
-
-	elapsed := time.Since(start)
-	result := Result{
-		Subsystem:    "argocd-app-get",
-		StartedAt:    start,
-		Duration:     elapsed,
-		RequestedRPS: cfg.RPS,
-		Workers:      cfg.Workers,
-		TotalReqs:    total,
-		Errors:       errors,
-		ErrorRate:    float64(errors) / float64(total),
-		P50:          lat.Percentile(0.50),
-		P95:          lat.Percentile(0.95),
-		P99:          lat.Percentile(0.99),
-		ActualRPS:    float64(total) / elapsed.Seconds(),
-		Notes:        fmt.Sprintf("path=%s; exercises repo-server + redis cache", path),
-	}
+			req.Header.Set("Authorization", "Bearer "+token)
+			return DoHTTP(req)
+		})
+	result.Notes = fmt.Sprintf("path=%s; exercises repo-server + redis cache", path)
 
 	t.Logf("=== argocd-app-get ===")
 	t.Logf("  requests:    %d (errors: %d, rate: %.2f%%)", result.TotalReqs, result.Errors, result.ErrorRate*100)

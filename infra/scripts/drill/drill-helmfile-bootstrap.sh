@@ -96,6 +96,18 @@ HEALTH_WAIT_TIMEOUT="${HEALTH_WAIT_TIMEOUT:-5m}"
 
 log() { printf '[drill-helmfile-bootstrap] %s\n' "$*" >&2; }
 
+# loopzero-ops is the Go home of the logic the drill scripts used to re-implement
+# in sed and SQL heredocs (#236): one implementation, tested once. An installed
+# binary wins; otherwise it is built from this checkout.
+DRILL_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+loopzero_ops() {
+  if command -v loopzero-ops >/dev/null 2>&1; then
+    loopzero-ops "$@"
+  else
+    (cd "$DRILL_REPO_ROOT/cmd/loopzero-ops" && go run . "$@")
+  fi
+}
+
 # --- Pre-flight checks ---
 log "Pre-flight checks..."
 
@@ -136,10 +148,10 @@ for cmd in helmfile kubectl pulumi; do
 done
 
 # Plan 2026-05-19-drill-skills-rigor-restoration Bug C cleanup:
-# Export DOKS context names ANTES de Phase 3 helmfile sync. loopzero-api drill
-# overlay (values-loopzero-api-drill.yaml.gotmpl) consome via `requiredEnv` —
-# substitui kubectl-set-env workaround pós-sync (que era revertido a cada
-# re-sync). Names extraídos do current-context line dos kubeconfigs baixados.
+# Export DOKS context names BEFORE the Phase 3 helmfile sync. The loopzero-api drill
+# overlay (values-loopzero-api-drill.yaml.gotmpl) consumes them via `requiredEnv` —
+# replacing the post-sync kubectl-set-env workaround (which was reverted on every
+# re-sync). Names extracted from the current-context line of the downloaded kubeconfigs.
 export CORE_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/mgmt.yaml" | awk '{print $2}')
 export BUILD_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/build.yaml" | awk '{print $2}')
 export CELL_0_KUBE_CONTEXT=$(grep "current-context" "$DRILL_KUBECONFIG_DIR/runtime.yaml" | awk '{print $2}')
@@ -251,13 +263,14 @@ export LOOPZERO_API_DSN="$LOOPZERO_API_DSN_VAL"
 KRATOS_DSN_VAL="" HYDRA_DSN_VAL="" GITEA_DSN_VAL="" LOOPZERO_API_DSN_VAL=""
 
 # Gitea uses 4 separate fields (NOT single DSN — chart-specific T3.3)
-# Parse DSN into HOST/USER/PASSWORD/DB for gitea chart consumption.
-# DSN format: postgres://USER:PASSWORD@HOST:PORT/DB?sslmode=require
-GITEA_USER=$(echo "$GITEA_DSN" | sed -E 's|postgres://([^:]+):.*|\1|')
-GITEA_PASSWORD=$(echo "$GITEA_DSN" | sed -E 's|postgres://[^:]+:([^@]+)@.*|\1|')
-GITEA_HOST=$(echo "$GITEA_DSN" | sed -E 's|.*@([^:]+):[0-9]+/.*|\1|')
-GITEA_PORT=$(echo "$GITEA_DSN" | sed -E 's|.*@[^:]+:([0-9]+)/.*|\1|')
-GITEA_DB=$(echo "$GITEA_DSN" | sed -E 's|.*/([^?]+)\?.*|\1|')
+# Split the DSN into HOST/PORT/USER/PASSWORD/DB for gitea chart consumption.
+# `loopzero-ops dsn` accepts postgres:// and postgresql:// and fails loudly on
+# anything else; the sed split it replaces matched postgres:// only.
+GITEA_USER=$(printf '%s' "$GITEA_DSN" | loopzero_ops dsn user)
+GITEA_PASSWORD=$(printf '%s' "$GITEA_DSN" | loopzero_ops dsn password)
+GITEA_HOST=$(printf '%s' "$GITEA_DSN" | loopzero_ops dsn host)
+GITEA_PORT=$(printf '%s' "$GITEA_DSN" | loopzero_ops dsn port)
+GITEA_DB=$(printf '%s' "$GITEA_DSN" | loopzero_ops dsn database)
 export GITEA_HOST GITEA_PORT GITEA_USER GITEA_PASSWORD GITEA_DB
 log "  4 DSN env vars exported (kratos, hydra, gitea split-4, loopzero-api)"
 
@@ -328,7 +341,6 @@ log "  ✓ 4 DSN secrets reconciled to drill mgmt cluster"
 #   loopzero-system/loopzero-db-credentials (loopzero-api uses .data.uri)
 #   loopzero-system/gitea-admin (gitea chart admin password)
 #   loopzero-system/minio-credentials (rootUser/rootPassword)
-#   loopzero-system/harbor-admin + loopzero-system/harbor-redis-credentials
 #   loopzero-system/loopzero-registry-pull
 #
 # Without these, velero install times out at 900s ("Error: context deadline
@@ -360,22 +372,13 @@ if [[ -z "$LOOPZERO_DB_PASSWORD" ]]; then
   # Fall back to extracting from pgUri (pulumi-drill doesn't export pgPassword
   # as separate output — only via pgUri composite).
   #
-  # Bug #17 LIVE FIX (caught 2026-05-17 iter 10 on loopzero-api CrashLoopBackOff
-  # "too many colons in address"): DO Managed PG returns pgUri with scheme
-  # "postgresql://" (NOT "postgres://"). The old sed regex `^postgres://`
-  # didn't match → substitution failed silently → LOOPZERO_DB_PASSWORD ended up
-  # being the ENTIRE URI → generate-secrets.sh built a double-wrapped DSN:
-  #   postgresql://doadmin:postgresql://doadmin:PASS@host:port/db?...@host:...
-  #
-  # Fix: regex matches both schemes via `postgres(ql)?://`. Defensive: also
-  # validate the extracted password doesn't contain `://` (a sentinel that
-  # extraction failed and we got the URI itself).
+  # Bug #17 (2026-05-17): a sed regex anchored on `postgres://` did not match
+  # the `postgresql://` URI DO Managed PG returns, printed the whole URI, and
+  # the URI became the password. `loopzero-ops dsn` parses both schemes and exits
+  # non-zero instead of echoing its input.
   PG_URI="$(pulumi_out pgUri true)"
-  LOOPZERO_DB_PASSWORD="$(echo "$PG_URI" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')"
-  if [[ -z "$LOOPZERO_DB_PASSWORD" || "$LOOPZERO_DB_PASSWORD" == *"://"* ]]; then
-    log "ERROR: pgUri password extraction failed (Bug #17 regression)"
-    log "  pgUri scheme may have changed; expected postgres:// or postgresql://"
-    log "  extracted: $(echo "$LOOPZERO_DB_PASSWORD" | sed 's/./*/g' | head -c 50)..."
+  if ! LOOPZERO_DB_PASSWORD="$(printf '%s' "$PG_URI" | loopzero_ops dsn password)"; then
+    log "ERROR: pgUri password extraction failed (see the loopzero-ops error above)"
     exit 2
   fi
 fi
@@ -391,10 +394,9 @@ export LOOPZERO_PROFILE="cloud"
 
 # Bug #15 LIVE FIX: Managed Valkey credentials (replaces in-cluster bitnami).
 # Per CTO Golden Rule #0 + ADR-0016 D-6: drill uses DO Managed Valkey,
-# mirrors prod posture. drill helmfile skips gitea-redis + harbor-redis
-# releases when env=drill (installed: false). These env vars feed:
-#   - gitea drill values override (cache/session/queue redis addr)
-#   - generate-secrets.sh harbor-redis-credentials Secret (HOST/PASSWORD)
+# mirrors prod posture. drill helmfile skips the gitea-redis release when
+# env=drill (installed: false). These env vars feed the gitea drill values
+# override (cache/session/queue redis addr).
 REDIS_HOST_VAL="$(pulumi_out redisHost false)"
 REDIS_PORT_VAL="$(pulumi_out redisPort false)"
 REDIS_PASSWORD_VAL="$(pulumi_out redisPassword true)"
@@ -414,14 +416,10 @@ export GITEA_REDIS_HOST="$REDIS_HOST_VAL"
 export GITEA_REDIS_PORT="$REDIS_PORT_VAL"
 export GITEA_REDIS_PASSWORD="$REDIS_PASSWORD_VAL"
 
-# Export for generate-secrets.sh harbor-redis-credentials path (line 303
-# in generate-secrets.sh uses LOOPZERO_HARBOR_REDIS_HOST default fallback).
-export LOOPZERO_HARBOR_REDIS_HOST="$REDIS_HOST_VAL"
-export LOOPZERO_HARBOR_REDIS_PASSWORD="$REDIS_PASSWORD_VAL"
-log "  ✓ Managed Valkey env exported (gitea + harbor will use $REDIS_HOST_VAL:$REDIS_PORT_VAL)"
+log "  ✓ Managed Valkey env exported (gitea will use $REDIS_HOST_VAL:$REDIS_PORT_VAL)"
 
 bash "$HELMFILE_DIR/scripts/generate-secrets.sh" drill mgmt
-log "  ✓ Platform Secrets generated (loopzero-db, gitea, minio, harbor, velero, registry-pull)"
+log "  ✓ Platform Secrets generated (loopzero-db, gitea, minio, velero, registry-pull)"
 
 # Bug #19 LIVE FIX (caught 2026-05-17 iter 12 on loopzero-api CrashLoopBackOff):
 # loopzero-api startup calls setupCellRouter which requires >=1 ClusterCredential
@@ -439,37 +437,24 @@ helmfile -e "$HELMFILE_ENV" --file "$HELMFILE_DIR/core.helmfile.yaml.gotmpl" --s
   log "ERROR: loopzero-crds install failed (Bug #19 fix pre-step)"
   exit 3
 }
-log "  ✓ loopzero-crds installed — applying 3 ClusterCredentials (cell-0 + cell-0 + cell-1)..."
+log "  ✓ loopzero-crds installed — applying 2 ClusterCredentials (cell-0, cell-1)..."
 export DRILL_KUBECONFIG="$CORE_KUBECONFIG"
 # Plan v1.2 T4.2: consolidated bootstrap-cell-cc.sh --cell --env
 CELL_SCRIPT="$(cd "$(dirname "$0")/../../.." && pwd)/infra/helmfile/scripts/bootstrap-cell-cc.sh"
-bash "$CELL_SCRIPT" --cell default --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-0 failed"
-  exit 3
-}
-bash "$CELL_SCRIPT" --cell 1 --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-0 failed"
-  exit 3
-}
-bash "$CELL_SCRIPT" --cell 2 --env drill 2>&1 | tail -3 || {
-  log "ERROR: bootstrap cell-1 failed"
-  exit 3
-}
-log "  ✓ 3 ClusterCredentials applied"
-
-# Bug #22 LIVE FIX (caught 2026-05-17 iter 15 on loopzero-api 0 CCs discovered):
-# K8sCellStore.LoadCells filters by status.connected=true (set by
-# ClusterCredentialController when apiServer is reachable). The operator
-# isn't installed yet (chicken-and-egg). For drill, we KNOW apiServers
-# are reachable (we provisioned them), so set status.connected=true
-# manually via kubectl patch. Mirrors `task k3d:heal` H13 pattern.
-log "Bug #22 fix: patching status.connected=true on 3 CCs..."
-for cell in cell-0 cell-0 cell-1; do
-  kubectl patch clustercredential "$cell" --type=merge --subresource=status \
-    -p '{"status":{"connected":true,"lastReconciledAt":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}' \
-    --namespace loopzero-system 2>&1 | grep -E "patched|^Error" | head -1
+# bootstrap-cell-cc.sh accepts only the post-rename cell ids 0 and 1; the
+# default/1/2 ids this used to pass were refused, and cell-0 was never created.
+for cell_id in 0 1; do
+  bash "$CELL_SCRIPT" --cell "$cell_id" --env drill 2>&1 | tail -3 || {
+    log "ERROR: bootstrap cell-$cell_id failed"
+    exit 3
+  }
 done
-log "  ✓ 3 CCs marked status.connected=true (loopzero-api will find cells at startup)"
+log "  ✓ 2 ClusterCredentials applied (cell-0, cell-1)"
+
+# ClusterCredential status is the ClusterCredential controller's to write: it
+# probes each cell and sets status.connected on every reconcile. loopzero-api
+# restarts until the cells are connected (its release is wait:false), and the
+# platform operator that connects them is installed by the same Phase 3 sync.
 
 # Bug #25 LIVE FIX (caught 2026-05-17 iter 18): operator charts require
 # GITEA_TOKEN env var. Extract from gitea-admin Secret (created by generate-
@@ -504,11 +489,11 @@ log "  ✓ ConfigMaps loopzero-build-kubeconfig + loopzero-cell-0-kubeconfig cre
 # password (DO standard token-only auth).
 if [[ -n "${DIGITALOCEAN_TOKEN:-}" ]]; then
   # Plan 2026-05-19-drill-skills-rigor-restoration Bug B fix:
-  # Operator (environment_rbac.go:170) lookup secret named "loopzero-system" em
-  # mgmt loopzero-system ns (source) — copia para tenant ns como "loopzero-system".
+  # Operator (environment_rbac.go:170) looks up the secret named "loopzero-system" in
+  # the mgmt loopzero-system ns (source) — and copies it to the tenant ns as "loopzero-system".
   # Previous bootstrap only created "loopzero-registry-pull" → operator log
-  # "SourceMissing" silently → tenant pods ImagePullBackOff. Fix: criar
-  # AMBOS nomes (canonical "loopzero-system" for operator + legacy
+  # "SourceMissing" silently → tenant pods ImagePullBackOff. Fix: create
+  # BOTH names (canonical "loopzero-system" for operator + legacy
   # "loopzero-registry-pull" for Argo workflow + build pipeline).
   log "Bug #16+B fix: re-creating loopzero-system + loopzero-registry-pull Secrets (DO token auth)..."
   for SECRET_NAME in loopzero-system loopzero-registry-pull; do
@@ -703,10 +688,11 @@ export KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
 # exported $LOOPZERO_API_DSN (line 231) which preserves the DSN through scope.
 # Without this fix, PG_PASS was parsed from empty string → empty → migrate
 # tried to auth doadmin with empty password → pq: password auth failed.
+LOOPZERO_API_DB_PASS="$(printf '%s' "$LOOPZERO_API_DSN" | loopzero_ops dsn password)"
 PG_HOST="$PG_HOST_VAL" \
 PG_PORT="$PG_PORT_VAL" \
 PG_USER=doadmin \
-PG_PASS=$(echo "$LOOPZERO_API_DSN" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|') \
+PG_PASS="$LOOPZERO_API_DB_PASS" \
 PG_DB=loopzero \
 PG_SSLMODE=require \
 DRILL_KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
@@ -726,16 +712,14 @@ log "Bug #50 fix: creating loopzero-platform-topology wiring ConfigMap..."
 export KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml"
 LOOPZERO_MGMT_INGRESS_IP=$(kubectl -n traefik get svc traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
 LOOPZERO_MGMT_INGRESS_IP="$LOOPZERO_MGMT_INGRESS_IP" \
-  bash "$HELMFILE_DIR/scripts/create-wiring-configmap.sh" drill 2>&1 | tail -5 | sed 's/^/  /' || true
+  bash "$HELMFILE_DIR/scripts/create-wiring-configmap.sh" drill 2>&1 | tail -5 | sed 's/^/  /'
 log "  ✓ wiring ConfigMap applied"
 
-# Bug #52 LIVE FIX (caught 2026-05-18 iter 41): infra/helm/loopzero-api/values.yaml
-# has GITEA_URL/GITEA_ORG/LOOPZERO_DYNAMIC_ROUTER indented under tracing: section
-# (yaml indent bug) — env vars never propagate to deployment. Override via
-# kubectl set env until chart values is fixed (T2 follow-up).
+# Bug #52 (the Gitea/ArgoCD address on loopzero-api) is rendered by the sync now:
+# core.helmfile tells loopzero-api where it installs Gitea (principle_violations#234).
 # Bug #46 LIVE FIX: inject LOOPZERO_SERVICE_AUTH_SECRET into loopzero-db-credentials
 # Secret (loopzero-api loads via envFrom) so harness X-Service-Auth path works.
-log "Bug #46+#52 fix: patching loopzero-api env (GITEA_URL/LOOPZERO_DYNAMIC_ROUTER/SERVICE_AUTH)..."
+log "Bug #46 fix: storing the service-auth secret loopzero-api reads..."
 SERVICE_AUTH_SECRET="${LOOPZERO_SERVICE_AUTH_SECRET:-drill-l2-test-shared-secret-$(openssl rand -hex 12)}"
 kubectl -n loopzero-system patch secret loopzero-db-credentials --type=json -p="[{\"op\":\"add\",\"path\":\"/data/LOOPZERO_SERVICE_AUTH_SECRET\",\"value\":\"$(echo -n "$SERVICE_AUTH_SECRET" | base64 -w0)\"}]" 2>/dev/null || \
   kubectl -n loopzero-system patch secret loopzero-db-credentials --type=json -p="[{\"op\":\"replace\",\"path\":\"/data/LOOPZERO_SERVICE_AUTH_SECRET\",\"value\":\"$(echo -n "$SERVICE_AUTH_SECRET" | base64 -w0)\"}]" 2>/dev/null
@@ -745,50 +729,17 @@ kubectl -n loopzero-system patch secret loopzero-db-credentials --type=json -p="
 # Consumers should `kubectl -n loopzero-system get secret loopzero-db-credentials -o jsonpath='{.data.LOOPZERO_SERVICE_AUTH_SECRET}' | base64 -d`.
 log "  SERVICE_AUTH_SECRET stored in K8s Secret loopzero-system/loopzero-db-credentials (LOOPZERO_SERVICE_AUTH_SECRET key)"
 
-kubectl -n loopzero-system set env deployment/loopzero-api \
-  GITEA_URL=http://gitea-http.loopzero-system.svc.cluster.local:3000 \
-  GITEA_ORG=loopzero \
-  LOOPZERO_DYNAMIC_ROUTER=true \
-  ARGOCD_URL=http://argocd-server.argocd.svc.cluster.local:80 >/dev/null
-log "  ✓ loopzero-api env patched"
-
 # Bug #54 LIVE FIX (caught 2026-05-18 iter 42): gitea-admin Secret token was
 # generated by generate-secrets.sh but NEVER registered with Gitea API →
-# loopzero-api gets HTTP 401 on Gitea repo creation. Local k3d runs
-# provision-api-tokens.sh which registers the token; drill never invoked it.
-log "Bug #54 fix: register Gitea token via API (POST /api/v1/users/.../tokens)..."
-kubectl -n loopzero-system port-forward svc/gitea-http 13030:3000 >/tmp/drill-gitea-pf.log 2>&1 &
-GPF=$!
-sleep 4
-GITEA_USER="${GITEA_ADMIN_USER:-gitea_admin}"
-# T1.3 (plan 2026-05-21-deep-review-remediation): no hardcoded fallback.
-# In drill, GITEA_ADMIN_PASS MUST be set in env (drill-l2-scale workflow
-# injects it from gitea-admin Secret minted earlier in the chain).
-# Read from K8s Secret if env unset, else fail fast.
-GITEA_PASS="${GITEA_ADMIN_PASS:-$(kubectl -n loopzero-system get secret gitea-admin -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
-if [[ -z "$GITEA_PASS" ]]; then
-  echo "ERROR: GITEA_ADMIN_PASS unset AND gitea-admin Secret missing" >&2
-  echo "       Run generate-secrets.sh first OR set GITEA_ADMIN_PASS env var" >&2
-  exit 1
-fi
-# Ensure loopzero org (idempotent)
-curl -s -X POST "http://localhost:13030/api/v1/orgs" -u "${GITEA_USER}:${GITEA_PASS}" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"loopzero","full_name":"LoopZero Platform","visibility":"private"}' >/dev/null 2>&1 || true
-# Delete + create token (idempotent)
-curl -s -X DELETE "http://localhost:13030/api/v1/users/${GITEA_USER}/tokens/loopzero-api-token" \
-  -u "${GITEA_USER}:${GITEA_PASS}" >/dev/null 2>&1 || true
-GITEA_TOKEN_NEW=$(curl -s -X POST "http://localhost:13030/api/v1/users/${GITEA_USER}/tokens" \
-  -u "${GITEA_USER}:${GITEA_PASS}" -H "Content-Type: application/json" \
-  -d '{"name":"loopzero-api-token","scopes":["write:repository","write:organization","write:user","write:admin"]}' \
-  2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('sha1', ''))" 2>/dev/null || echo "")
-kill "$GPF" 2>/dev/null || true
-if [[ -n "$GITEA_TOKEN_NEW" ]]; then
-  kubectl -n loopzero-system patch secret gitea-admin --type=json -p="[{\"op\":\"replace\",\"path\":\"/data/token\",\"value\":\"$(echo -n "$GITEA_TOKEN_NEW" | base64 -w0)\"}]" >/dev/null
-  log "  ✓ Gitea token (${#GITEA_TOKEN_NEW} chars) registered + patched into gitea-admin Secret"
-else
-  log "  ✗ failed to register Gitea token (continuing — may not be fatal if pre-registered)"
-fi
+# loopzero-api gets HTTP 401 on Gitea repo creation. The registration is
+# `loopzero-ops seed gitea-token`, the same implementation the local chain runs
+# (#236): it ensures the loopzero org, rotates the loopzero-api-token, and writes it to
+# gitea-admin.token, loopzero-api-tokens.gitea-token and the tenant operator's
+# Secret. It reads the admin credentials from the gitea-admin Secret and runs
+# against the current KUBECONFIG context (mgmt, exported above).
+log "Bug #54 fix: register the Gitea token (loopzero-ops seed gitea-token)..."
+loopzero_ops seed gitea-token 2>&1 | sed 's/^/  /'
+log "  ✓ Gitea token registered and synced"
 
 # Bugs #56-#82 LIVE PATCH CONSOLIDATION (session 2026-05-18 PM, iter 50-55).
 # Hermetic test guard: DRILL_BOOTSTRAP_SKIP_LIVE_PATCHES=true short-circuits
@@ -799,31 +750,17 @@ if [[ "${DRILL_BOOTSTRAP_SKIP_LIVE_PATCHES:-false}" == "true" ]]; then
   log ""
   log "✓ Bootstrap complete. LoopZero platform deployed on drill 4-cluster stack."
   log "  Next: bash infra/scripts/drill/drill-mint-jwt.sh"
-  log "  Then: bash infra/scripts/bootstrap-cell-{default,1,2}-cc-drill.sh"
+  log "  Then: bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell <0|1> --env drill"
   log "  Then: run L0+L1+L2 harness against drill cloud (Phase 6)"
   exit 0
 fi
 
-# Bug #65+#73+#79 LIVE FIX (caught 2026-05-18 iter 50-52): loopzero-api env needs
-# MINIO_ACCESS_KEY (not AWS_*), REGISTRY_URL (DOCR not k3d-local), BASE_DOMAIN
-# (loopzero-drill.example not loopzero.local), LOOPZERO_PACKS_IMAGE (v0.2.0 — v0.4.0 missing).
-log "Bug #65+#73+#79 fix: loopzero-api drill env (registry+domain+minio+packs)..."
-SPACES_KEY=$(awk -F= '/^SPACES_ACCESS_KEY_ID=/{print $2}' .env 2>/dev/null || echo "")
-SPACES_SECRET=$(awk -F= '/^SPACES_SECRET_ACCESS_KEY=/{print $2}' .env 2>/dev/null || echo "")
+# Bugs #65/#73/#79 (loopzero-api registry, domain and object store) are rendered by
+# the sync now: values/drill/loopzero-api.yaml.gotmpl and environments/drill.yaml.
+# The build-cluster Secrets below still need the Spaces key pair and the domain.
+SPACES_KEY="$LOOPZERO_SPACES_KEY"
+SPACES_SECRET="$LOOPZERO_SPACES_SECRET"
 DRILL_BASE_DOMAIN="${DRILL_BASE_DOMAIN:-loopzero-drill.example}"
-LOOPZERO_PACKS_TAG="${LOOPZERO_PACKS_IMAGE_TAG:-v0.2.0}"
-kubectl -n loopzero-system set env deployment/loopzero-api \
-  MINIO_ACCESS_KEY="$SPACES_KEY" \
-  MINIO_SECRET_KEY="$SPACES_SECRET" \
-  AWS_ACCESS_KEY_ID="$SPACES_KEY" \
-  AWS_SECRET_ACCESS_KEY="$SPACES_SECRET" \
-  REGISTRY_URL=registry.digitalocean.com/loopzero-system \
-  BASE_DOMAIN="$DRILL_BASE_DOMAIN" \
-  SOURCE_BUCKET=loopzero-drill-builds-sfo3 \
-  MINIO_ENDPOINT="https://sfo3.digitaloceanspaces.com" >/dev/null
-# T4.1 (simplify-deploy-loopzerokit-only v2.0): LOOPZERO_PACKS_IMAGE removed — loopzero-api
-# no longer uses loopzero-packs (canonical in-process Dockerfile generation).
-log "  ✓ loopzero-api env: REGISTRY_URL/BASE_DOMAIN/MINIO_* set"
 
 # Bug #56 LIVE FIX (caught 2026-05-18 iter 44): generate-secrets.sh creates
 # SYNTHETIC in-cluster kubeconfigs assuming single-cluster topology. Drill
@@ -838,39 +775,15 @@ kubectl -n loopzero-system create secret generic loopzero-cluster-kubeconfigs \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 # Plan 2026-05-19-drill-skills-rigor-restoration Bug C cleanup:
 # REMOVED kubectl-set-env workaround (lines 790-797 pre-fix). MGMT/BUILD/
-# CELL_0_KUBE_CONTEXT env vars são agora exportadas em Phase 0 pre-flight
-# e consumidas pelo Helm chart via .Values.kubeContexts (sobrevive re-sync).
+# CELL_0_KUBE_CONTEXT env vars are now exported in the Phase 0 pre-flight
+# and consumed by the Helm chart via .Values.kubeContexts (survives re-sync).
 log "  ✓ Real kubeconfigs mounted (context names provided to chart via export at Phase 0)"
 
-# Bug #60 LIVE FIX (caught 2026-05-18 iter 44): operator Secrets have dual
-# GITEA_TOKEN keys (upper + camel) — both must hold the registered token.
-# Bug #57 LIVE FIX: operator chart yaml indent bug means GITEA_URL/GITEA_ORG
-# env vars must be set via kubectl set env (T2 chart fix pending).
-log "Bug #57+#60 fix: operator drill env (GITEA_URL + dual GITEA_TOKEN)..."
-TOKEN_B64=$(echo -n "${GITEA_TOKEN_NEW:-stub}" | base64 -w0)
-for OP in loopzero-tenant-operator loopzero-app-operator loopzero-preview-operator loopzero-platform-operator; do
-  if kubectl -n loopzero-system get deployment "$OP" >/dev/null 2>&1; then
-    kubectl -n loopzero-system set env deployment/"$OP" \
-      GITEA_URL=http://gitea-http.loopzero-system.svc.cluster.local:3000 \
-      GITEA_ORG=loopzero \
-      ARGOCD_URL=http://argocd-server.argocd.svc.cluster.local:80 \
-      BASE_DOMAIN="$DRILL_BASE_DOMAIN" >/dev/null 2>&1 || true
-    if kubectl -n loopzero-system get secret "$OP" >/dev/null 2>&1 && [[ -n "${GITEA_TOKEN_NEW:-}" ]]; then
-      kubectl -n loopzero-system patch secret "$OP" --type=json -p="[{\"op\":\"replace\",\"path\":\"/data/GITEA_TOKEN\",\"value\":\"$TOKEN_B64\"},{\"op\":\"replace\",\"path\":\"/data/giteaToken\",\"value\":\"$TOKEN_B64\"}]" >/dev/null 2>&1 || true
-    fi
-  fi
-done
-log "  ✓ 4 operators env + Secret tokens patched"
-
-# Bug #59 LIVE FIX (caught 2026-05-18 iter 44): operator NetworkPolicy egress
-# port 3000 only allows kubernetes.io/metadata.name=gitea but drill Gitea is
-# in loopzero-system namespace (T2 chart fix pending).
-log "Bug #59 fix: operator NetworkPolicy egress to loopzero-system for Gitea..."
-for OP in loopzero-tenant-operator loopzero-app-operator loopzero-preview-operator loopzero-platform-operator; do
-  kubectl -n loopzero-system patch networkpolicy "$OP" --type=json \
-    -p='[{"op":"replace","path":"/spec/egress/2/to/0/namespaceSelector/matchLabels","value":{"kubernetes.io/metadata.name":"loopzero-system"}}]' >/dev/null 2>&1 || true
-done
-log "  ✓ NetworkPolicy egress patched (best-effort, some may already exist)"
+# Bugs #57/#59 are rendered by the sync now: core.helmfile gives the tenant
+# operator Gitea's address (the only operator that reads GITEA_URL) and both
+# Gitea-facing operators an egress rule to Gitea's namespace. The Bug #60 token
+# patch never ran — it was guarded by GITEA_TOKEN_NEW, which nothing sets;
+# `loopzero-ops seed gitea-token` (Bug #54) writes the tenant operator's token.
 
 # Bug #61 LIVE FIX (caught 2026-05-18 iter 51): Argo Workflow PVCs hardcode
 # `storageClassName: local-path` (workflow_builder.go:278 — Bug #21 fix for DO
@@ -909,14 +822,8 @@ KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl -n argo create secret gene
   --dry-run=client -o yaml | KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl apply -f - >/dev/null
 log "  ✓ loopzero-minio-credentials in argo ns"
 
-# Bug #64 LIVE FIX (caught 2026-05-18 iter 50): CWT loopzero-clone hardcodes
-# bucket name `loopzero-builds` (chart default sourceBucket). Drill bucket is
-# loopzero-drill-builds-sfo3 — patch CWT in build cluster (T2 chart fix pending).
-log "Bug #64 fix: patch loopzero-clone CWT bucket name to drill bucket..."
-KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl get clusterworkflowtemplate loopzero-clone -o yaml 2>/dev/null | \
-  sed 's|loopzero/loopzero-builds/|loopzero/loopzero-drill-builds-sfo3/|g' | \
-  KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl apply -f - >/dev/null 2>&1
-log "  ✓ CWT loopzero-clone bucket→loopzero-drill-builds-sfo3"
+# Bug #64 (loopzero-clone reading the chart's default bucket) is rendered by the
+# sync now: build.helmfile passes environments/drill.yaml sourceBucket.
 
 # Bug #72 LIVE FIX (caught 2026-05-18 iter 51): buildkit-registry-config
 # Secret missing in argo ns — BuildKit needs DOCR creds to push images.
@@ -948,22 +855,6 @@ if ! KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl -n argo get secret co
   fi
 else
   log "  ✓ cosign-signing-key already exists"
-fi
-
-# Bug #66 LIVE FIX (caught 2026-05-18 iter 47): ArgoCD on mgmt cluster needs
-# argocd-creds-gitea Secret to authenticate Gitea repo reads.
-log "Bug #66 fix: argocd-creds-gitea Secret in argocd ns..."
-if [[ -n "${GITEA_TOKEN_NEW:-}" ]]; then
-  kubectl -n argocd create secret generic argocd-creds-gitea \
-    --from-literal=type=git \
-    --from-literal=url="http://gitea-http.loopzero-system.svc.cluster.local:3000/" \
-    --from-literal=username=gitea_admin \
-    --from-literal=password="$GITEA_TOKEN_NEW" \
-    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-  kubectl -n argocd label secret argocd-creds-gitea argocd.argoproj.io/secret-type=repo-creds --overwrite >/dev/null 2>&1
-  # Restart ArgoCD repo-server to pick up new creds
-  kubectl -n argocd rollout restart deployment/argocd-repo-server >/dev/null 2>&1
-  log "  ✓ argocd-creds-gitea applied + repo-server restarted"
 fi
 
 # Bug #81 LIVE FIX (caught 2026-05-18 iter 53): runtime cluster needs
@@ -1074,25 +965,16 @@ if [[ -n "$CF_TOKEN_VAL" ]]; then
   fi
 fi
 
-# Bug #69 LIVE FIX (caught 2026-05-18 iter 47): loopzero-api restart cycles can
-# leak pg_advisory_lock when old pods don't release before new ones acquire.
-# Reconcile loops won't start without leader → builds get reaper-failed.
-# Heal: terminate any backend holding the leader lock before final restart.
-log "Bug #69 fix: terminate stale leader-election pg_advisory_lock holders..."
-# Bug #18 LIVE FIX (caught 2026-05-19): use $LOOPZERO_API_DSN (exported) not
-# $LOOPZERO_API_DSN_VAL (cleared at line 233 for defense-in-depth).
-PG_PASS_VAL=$(echo "$LOOPZERO_API_DSN" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*$|\2|')
-KILL_LOCK_POD="drill-kill-lock-$RANDOM"
-kubectl -n loopzero-system run "$KILL_LOCK_POD" --restart=Never --image=postgres:16-alpine --quiet \
-  --env="PGPASSWORD=$PG_PASS_VAL" --env="PGSSLMODE=require" --command -- \
-  psql --host="$PG_HOST_VAL" --port="$PG_PORT_VAL" --username=doadmin --dbname=loopzero \
-       --no-psqlrc -c "SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype='advisory' AND granted=true;" >/dev/null 2>&1 || true
-kubectl -n loopzero-system wait --for=jsonpath='{.status.phase}'=Succeeded "pod/$KILL_LOCK_POD" --timeout=60s >/dev/null 2>&1 || true
-kubectl -n loopzero-system delete pod "$KILL_LOCK_POD" --wait=false >/dev/null 2>&1 || true
-log "  ✓ Stale pg_advisory_lock holders terminated"
+# Bug #69 (caught 2026-05-18 iter 47) was a leader-election advisory lock leaked
+# across loopzero-api restarts, healed here by terminating its holder. The API no
+# longer elects with an advisory lock: it takes the fenced lease in
+# leader_generations (api/internal/leader), which a new pod takes over once the
+# old holder's heartbeat is older than StaleAfter. There is no session to kill,
+# and terminating backends by advisory lock would only reach the per-environment
+# deploy locks.
 
 # Restart loopzero-api to pick up env + secret changes
-log "Bug #46+#54 fix: restart loopzero-api to reload env vars..."
+log "Bug #46+#54 fix: restart loopzero-api to load the service-auth and Gitea token Secrets..."
 kubectl -n loopzero-system rollout restart deployment/loopzero-api >/dev/null
 kubectl -n loopzero-system rollout status deployment/loopzero-api --timeout=180s 2>&1 | tail -2 | sed 's/^/  /'
 
@@ -1114,14 +996,14 @@ if ! verify_jwt_auth_e2e \
 fi
 log "  ✓ JWT auth gate PASS"
 
-# Restart 4 split operators to pick up env changes
-log "Bug #57+#60 fix: restart operators to reload env + token..."
-for OP in loopzero-tenant-operator loopzero-app-operator loopzero-preview-operator loopzero-platform-operator; do
-  kubectl -n loopzero-system rollout restart deployment/"$OP" >/dev/null 2>&1 || true
-done
+# The tenant operator reads its Gitea token at start; `loopzero-ops seed
+# gitea-token` (Bug #54) rotated it after the operator came up.
+log "Bug #54: restart the tenant operator to load the registered Gitea token..."
+kubectl -n loopzero-system rollout restart deployment/loopzero-tenant-operator >/dev/null
+kubectl -n loopzero-system rollout status deployment/loopzero-tenant-operator --timeout=180s 2>&1 | tail -2 | sed 's/^/  /'
 
 log ""
 log "✓ Bootstrap complete. LoopZero platform deployed on drill 4-cluster stack."
 log "  Next: bash infra/scripts/drill/drill-mint-jwt.sh"
-log "  Then: bash infra/scripts/bootstrap-cell-{default,1,2}-cc-drill.sh"
+log "  Then: bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell <0|1> --env drill"
 log "  Then: run L0+L1+L2 harness against drill cloud"

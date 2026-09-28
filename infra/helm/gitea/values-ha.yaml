@@ -1,101 +1,74 @@
-# Gitea HA-Ready Values Override
+# Gitea HA Values Override
 #
-# This file brings Gitea from a singleton pod to a production-grade
-# deployment that can survive pod kills and node failures. Applied on
-# top of the base values.yaml:
+# Layered on top of values.yaml for the dev and prod environments only
+# (core.helmfile.yaml.gotmpl), so Gitea survives pod kills and node failures:
 #
 #   helm upgrade gitea gitea-charts/gitea -n loopzero-system \
 #     -f values.yaml -f values-ha.yaml
 #
-# What this changes:
-#   1. Redis for sessions/cache/queues/globalLock (no session loss on restart)
-#   2. S3 (DO Spaces) for non-git storage (LFS, attachments, avatars)
-#   3. PVC bumped to 10Gi for L3 (200 repos)
-#   4. Resource limits bumped for sustained load
+# What this changes, on top of the base values:
+#   1. Redis global_lock — required once there are two replicas writing repos.
+#      Sessions, cache and queues are already on Redis in values.yaml.
+#   2. LFS served by Gitea, structured console logs for Promtail/Loki.
+#   3. 2 replicas on a ReadWriteMany (NFS) volume, spread across nodes.
+#   4. Tighter probes for faster failure detection.
 #
-# What this does NOT change (yet):
-#   - Replicas stays at 1 (multi-replica needs shared git repo storage
-#     via NFS or Gitea's experimental S3 git storage — deferred to L4)
-#   - No external Elasticsearch (code search remains DB-backed)
+# Every Redis address points at the bitnami `gitea-redis` release's primary
+# Service, `gitea-redis-master:6379` — the same host values.yaml uses. The
+# `redis.loopzero-system.svc.cluster.local` host this file named before does not
+# exist (see the gitea-redis note in values.yaml).
 #
-# Prerequisites:
-#   - Redis deployed in loopzero-system (see redis section below)
-#   - DO Spaces bucket `gitea-storage` created (Pulumi handles this)
-#   - Spaces credentials available as K8s secret
+# Non-git data (LFS, avatars, attachments) stays on the shared volume. Moving it
+# to object storage needs a bucket and an access-key Secret wired into the pod,
+# and neither exists; declaring STORAGE_TYPE without them would crash Gitea at
+# startup instead of making it durable.
 #
-# Gitea Community Edition (1.22+) supports all of these features
-# without an Enterprise license (MIT license).
+# This file used to declare `gitea:` twice. Helm keeps only the LAST mapping of a
+# duplicated key, silently, so everything in the first block was dropped. It is
+# one block now; keep it that way — a second top-level `gitea:` erases this one.
+#
+# Gitea Community Edition (1.22+) supports all of this without an Enterprise
+# license (MIT license).
 #
 # Reference: https://docs.gitea.com/installation/install-with-docker
-# HA Guide: Gitea Enterprise docs (config format identical for Community)
-#
-# Roadmap: index § Gitea Bottleneck (escalation trigger at L4)
 
 gitea:
   config:
-    # ── Sessions via Redis ──
-    # Without this, sessions live in the pod's local /tmp. Every pod
-    # restart or reschedule logs out all users (the API uses tokens so
-    # this is less critical, but the dashboard Kratos sessions pass
-    # through Gitea OAuth and ARE affected).
-    session:
-      PROVIDER: redis
-      PROVIDER_CONFIG: "redis://:@redis.loopzero-system.svc.cluster.local:6379/0?pool_size=100&idle_timeout=120s"
-
-    # ── Cache via Redis ──
-    # Default is in-memory. Redis eliminates cold-start cache misses
-    # and allows future multi-replica cache coherence.
-    cache:
-      ADAPTER: redis
-      HOST: "redis://:@redis.loopzero-system.svc.cluster.local:6379/1"
-
-    # ── Task queues via Redis ──
-    # Without this, queues are leveldb on local disk. Crash = lost tasks.
-    # Redis queues survive pod restarts.
-    queue:
-      TYPE: redis
-      CONN_STR: "redis://:@redis.loopzero-system.svc.cluster.local:6379/2"
-
     # ── Global lock via Redis ──
     # Required for multi-replica (prevents concurrent repo writes).
-    # Even with 1 replica, this is a prerequisite for future scaling.
     global_lock:
       SERVICE_TYPE: redis
-      SERVICE_CONN_STR: "redis://:@redis.loopzero-system.svc.cluster.local:6379/5"
-
-    # ── S3 storage for non-git data ──
-    # LFS objects, avatars, attachments, packages — everything except
-    # the bare git repos themselves. This eliminates the local PVC
-    # dependency for these files and makes them durable across pod
-    # rescheduling.
-    storage:
-      STORAGE_TYPE: minio
-      MINIO_BUCKET: gitea-storage
-      MINIO_ENDPOINT: sfo3.digitaloceanspaces.com
-      MINIO_USE_SSL: true
-      # Access keys are injected via env vars from a K8s Secret.
-      # See the envFrom block below.
-
-    # ── Indexer ──
-    # Keep DB-backed issue indexer (good enough for L3).
-    # Code search via bleve (single-node only). At L4+ evaluate
-    # Elasticsearch if code search is a product feature.
-    indexer:
-      ISSUE_INDEXER_TYPE: db
-      REPO_INDEXER_ENABLED: false
+      SERVICE_CONN_STR: "network=tcp,addr=gitea-redis-master:6379,db=5,pool_size=100,idle_timeout=180s"
 
     # ── Server tuning ──
     server:
       LFS_START_SERVER: true
-      # JWT secret for LFS — MUST be shared across replicas if we
-      # scale beyond 1. Generate once and store in a K8s Secret.
-      # LFS_JWT_SECRET: <from secret>
 
     # ── Logging ──
     # Structured JSON for Loki/Promtail ingestion.
     log:
       MODE: console
       LEVEL: info
+
+  # ── Probes ──
+  # Tighter probes for faster failure detection. The default 120s
+  # initial delay is too long for a restart during load.
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # ── Metrics ──
+  metrics:
+    enabled: true
 
 # ── Resources ──
 # Bumped from 512Mi to 1Gi limit for sustained L3 (100 tenants = 200
@@ -154,25 +127,3 @@ affinity:
 # ── Pod security ──
 podSecurityContext:
   runAsNonRoot: true
-
-# ── Probes ──
-# Tighter probes for faster failure detection. The default 120s
-# initial delay is too long for a restart during load.
-gitea:
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 6
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 10
-    periodSeconds: 5
-    timeoutSeconds: 3
-    failureThreshold: 3
-
-# ── Metrics ──
-# Already enabled in base values. Kept here for visibility.
-  metrics:
-    enabled: true

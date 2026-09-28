@@ -23,10 +23,9 @@ rules:
     resources: ["clustercredentials/finalizers", "gitrepositorybindings/finalizers", "platformbootstraps/finalizers"]
     verbs: ["update"]
 
-  # --- Secrets: full CRUD for ArgoCD cluster secrets and credential management ---
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # --- Secrets: NOT here — Roles platform-operator-secrets-loopzero-system and
+  # platform-operator-secrets-argocd below. Mirrors
+  # charts/loopzero-platform-operator/templates/role-{loopzero-system,argocd}.yaml.
 
   # --- Events: emit Kubernetes events for observability ---
   - apiGroups: [""]
@@ -46,6 +45,62 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: platform-operator
+subjects:
+  - kind: ServiceAccount
+    name: platform-operator
+    namespace: loopzero-system
+---
+# Secret access in loopzero-system: kubeconfigs, Gitea admin Secret,
+# platform-tokens, Git credentials. Delete only on platform-tokens.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-operator-secrets-loopzero-system
+  namespace: loopzero-system
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["platform-tokens"]
+    verbs: ["delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-operator-secrets-loopzero-system
+  namespace: loopzero-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: platform-operator-secrets-loopzero-system
+subjects:
+  - kind: ServiceAccount
+    name: platform-operator
+    namespace: loopzero-system
+---
+# Secret access in the ArgoCD namespace: the cluster, repository and
+# repo-creds Secrets the operator writes, and the ArgoCD admin Secret.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-operator-secrets-argocd
+  namespace: argocd
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-operator-secrets-argocd
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: platform-operator-secrets-argocd
 subjects:
   - kind: ServiceAccount
     name: platform-operator

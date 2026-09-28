@@ -15,27 +15,27 @@ import (
 
 var repoRoot = qtestutil.MustRepoRoot()
 
-// arvore monta um repositorio sintetico: um chart com recurso agendado, os values dele,
-// e a matriz de publicacao.
-func arvore(t *testing.T, chart, template, values, matriz string) string {
+// tree builds a synthetic repository: a chart with a scheduled resource, its values,
+// and the publication matrix.
+func tree(t *testing.T, chart, template, values, matrix string) string {
 	t.Helper()
 	root := t.TempDir()
-	escreve := func(rel, corpo string) {
+	write := func(rel, body string) {
 		p := filepath.Join(root, rel)
 		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte(corpo), 0o600); err != nil {
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	escreve(filepath.Join("infra/helm", chart, "templates/cron.yaml"), template)
-	escreve(filepath.Join("infra/helm", chart, "values.yaml"), values)
-	escreve(".github/workflows/release-artifacts.yml", matriz)
+	write(filepath.Join("infra/helm", chart, "templates/cron.yaml"), template)
+	write(filepath.Join("infra/helm", chart, "values.yaml"), values)
+	write(".github/workflows/release-artifacts.yml", matrix)
 	return root
 }
 
-const matrizComLoopZeroAPI = `          ALL='[{"image":"loopzero-api","dockerfile":"api/Dockerfile","context":"."}]'` + "\n"
+const matrixWithLoopZeroAPI = `          ALL='[{"image":"loopzero-api","dockerfile":"api/Dockerfile","context":"."}]'` + "\n"
 
 const cronTemplate = `apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
@@ -45,98 +45,94 @@ spec:
         image: "{{ .Values.img.repository }}:{{ .Values.img.tag }}"
 `
 
-func TestImagemNossaComCaminhoDePublicacaoPassa(t *testing.T) {
-	root := arvore(t, "c1", cronTemplate,
+func TestOurImageWithAPublicationPathPasses(t *testing.T) {
+	root := tree(t, "c1", cronTemplate,
 		"crons:\n  a:\n    enabled: true\nimg:\n  repository: ghcr.io/getloopscale/loopzero-api\n  tag: develop\n",
-		matrizComLoopZeroAPI)
-	out, err := Check(Config{RepoRoot: root})
+		matrixWithLoopZeroAPI)
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if err != nil {
-		t.Fatalf("imagem publicada passa: %v (%+v)", err, out.Findings)
+		t.Fatalf("a published image passes: %v (%+v)", err, out.Findings)
 	}
 	if out.Scanned != 1 {
 		t.Fatalf("scanned=%d", out.Scanned)
 	}
 }
 
-// O defeito do B-019: agendamento apontando para imagem NOSSA que ninguem publica.
-func TestImagemNossaSemCaminhoDePublicacaoReprova(t *testing.T) {
-	root := arvore(t, "c1", cronTemplate,
+// The B-019 defect: a schedule pointing at an image of OURS that nobody publishes.
+func TestOurImageWithoutAPublicationPathFails(t *testing.T) {
+	root := tree(t, "c1", cronTemplate,
 		"crons:\n  a:\n    enabled: true\nimg:\n  repository: registry.digitalocean.com/loopzero-system/loopzero-ops\n  tag: v0.1.0\n",
-		matrizComLoopZeroAPI)
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+		matrixWithLoopZeroAPI)
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 	if !errors.Is(err, ErrNoPublicationPath) {
-		t.Fatalf("imagem sem caminho reprova; err=%v", err)
+		t.Fatalf("an image with no publication path fails; err=%v", err)
 	}
 	if len(out.Findings) != 1 || out.Findings[0].Image == "" {
-		t.Fatalf("o achado precisa NOMEAR a imagem; got %+v", out.Findings)
+		t.Fatalf("the finding must NAME the image; got %+v", out.Findings)
 	}
 }
 
-// Imagem de terceiro nao e nossa para publicar — e sao 6 das 7 desta arvore.
-func TestImagemDeTerceiroNaoEResponsabilidadeNossa(t *testing.T) {
+// A third-party image is not ours to publish.
+func TestThirdPartyImageIsNotOurs(t *testing.T) {
 	for _, img := range []string{"curlimages/curl", "bitnami/kubectl", "quay.io/openbao/openbao", "ghcr.io/openbao/openbao-snapshot-agent"} {
-		root := arvore(t, "c1", cronTemplate,
+		root := tree(t, "c1", cronTemplate,
 			"crons:\n  a:\n    enabled: true\nimg:\n  repository: "+img+"\n  tag: v1\n",
-			matrizComLoopZeroAPI)
-		if _, err := Check(Config{RepoRoot: root}); err != nil {
-			t.Fatalf("%s e de terceiro: %v", img, err)
+			matrixWithLoopZeroAPI)
+		if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
+			t.Fatalf("%s is third-party: %v", img, err)
 		}
 	}
 }
 
-// Imagem literal no template (sem passar por values) tambem e julgada.
-func TestImagemLiteralNoTemplateEJulgada(t *testing.T) {
+// A literal image in the template (not through values) is judged too.
+func TestLiteralImageInTemplateIsJudged(t *testing.T) {
 	lit := "kind: CronJob\nspec:\n  template:\n    spec:\n      containers:\n        - image: registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0\n"
-	root := arvore(t, "c1", lit, "crons:\n  a:\n    enabled: true\n", matrizComLoopZeroAPI)
-	if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}}); !errors.Is(err, ErrNoPublicationPath) {
-		t.Fatalf("literal tambem reprova; err=%v", err)
+	root := tree(t, "c1", lit, "crons:\n  a:\n    enabled: true\n", matrixWithLoopZeroAPI)
+	if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}})); !errors.Is(err, ErrNoPublicationPath) {
+		t.Fatalf("a literal fails too; err=%v", err)
 	}
 }
 
-// Um chart SEM recurso agendado nao e varrido — o gate mede agendamento, nao imagem.
-func TestChartSemAgendamentoNaoEVarrido(t *testing.T) {
-	semCron := "kind: Deployment\nspec:\n  template:\n    spec:\n      containers:\n        - image: registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0\n"
-	root := arvore(t, "c1", semCron, "x: 1\n", matrizComLoopZeroAPI)
-	out, err := Check(Config{RepoRoot: root})
+// A chart WITHOUT a scheduled resource is not scanned — the gate measures scheduling, not images.
+func TestChartWithoutScheduleIsNotScanned(t *testing.T) {
+	noCron := "kind: Deployment\nspec:\n  template:\n    spec:\n      containers:\n        - image: registry.digitalocean.com/loopzero-system/loopzero-ops:v0.1.0\n"
+	root := tree(t, "c1", noCron, "x: 1\n", matrixWithLoopZeroAPI)
+	out, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrNothingScanned) {
-		t.Fatalf("sem agendamento nao ha o que varrer, e zero varrido reprova; err=%v (%+v)", err, out)
+		t.Fatalf("with no schedule there is nothing to scan, and zero scanned fails; err=%v (%+v)", err, out)
 	}
 }
 
-// Ausencia e FALHA, nunca "sem violacao".
-func TestMatrizAusenteReprova(t *testing.T) {
+// Absence is a FAILURE, never "no violation".
+func TestMissingMatrixFails(t *testing.T) {
 	root := t.TempDir()
 	p := filepath.Join(root, "infra/helm/c1/templates/cron.yaml")
 	_ = os.MkdirAll(filepath.Dir(p), 0o750)
 	_ = os.WriteFile(p, []byte(cronTemplate), 0o600)
-	if _, err := Check(Config{RepoRoot: root}); !errors.Is(err, ErrMatrixUnreadable) {
-		t.Fatalf("sem a matriz nao da para saber o que e publicado; err=%v", err)
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrMatrixUnreadable) {
+		t.Fatalf("without the matrix nothing says what is published; err=%v", err)
 	}
 }
 
-// A populacao real (rules/testing.md § 4.2).
-func TestArvoreReal(t *testing.T) {
-	out, err := Check(Config{RepoRoot: repoRoot})
+// The real population.
+func TestRealTree(t *testing.T) {
+	out, err := violationOf(Check(Config{RepoRoot: repoRoot}))
 	if err != nil {
 		for _, f := range out.Findings {
 			t.Errorf("%s — %s: %s", f.Chart, f.Image, f.Why)
 		}
-		t.Fatalf("arvore real: %v", err)
+		t.Fatalf("real tree: %v", err)
 	}
 	if out.Scanned == 0 {
-		t.Fatal("zero manifestos agendados varridos — nao achar nada nao e o mesmo que nao achar nada errado")
+		t.Fatal("zero scheduled manifests scanned — finding nothing is not finding nothing wrong")
 	}
 }
 
-// A FORMA REAL desta árvore, e o gate era cego a ela.
-//
-// `cronworkflows.yaml` monta a imagem numa VARIÁVEL de template
-// (`{{- $image := printf "%s:%s" .Values.a .Values.b }}`) e só depois a usa
-// (`image: {{ $image | quote }}`). A primeira versão deste gate resolvia apenas `.Values`
-// inline, então a varredura da população passou — não porque a árvore estava limpa, mas
-// porque o detector era cego. É a mesma armadilha do `B-090`: seis fixtures sintéticas
-// verdes e a árvore real usando uma sétima forma.
-func TestImagemViaVariavelDeTemplateEResolvida(t *testing.T) {
+// The form the real tree uses: the image is assembled in a template variable
+// (`{{- $image := printf "%s:%s" .Values.a .Values.b }}`) and used afterwards
+// (`image: {{ $image | quote }}`). An inline-only resolver passed over it for the
+// wrong reason: not because the tree was clean, but because it could not see.
+func TestImageThroughATemplateVariableIsResolved(t *testing.T) {
 	real := `{{- $image := printf "%s:%s" .Values.loopzeroOpsImage.repository .Values.loopzeroOpsImage.tag }}
 kind: CronWorkflow
 spec:
@@ -144,21 +140,21 @@ spec:
     - container:
         image: {{ $image | quote }}
 `
-	root := arvore(t, "c1", real,
+	root := tree(t, "c1", real,
 		"crons:\n  a:\n    enabled: true\nloopzeroOpsImage:\n  repository: registry.digitalocean.com/loopzero-system/loopzero-ops\n  tag: v0.1.0\n",
-		matrizComLoopZeroAPI)
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}})
+		matrixWithLoopZeroAPI)
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
 	if !errors.Is(err, ErrNoPublicationPath) {
-		t.Fatalf("a forma real precisa ser resolvida; err=%v (%+v)", err, out.Findings)
+		t.Fatalf("the real form must be resolved; err=%v (%+v)", err, out.Findings)
 	}
 	if len(out.Findings) != 1 || !strings.Contains(out.Findings[0].Image, "loopzero-ops") {
-		t.Fatalf("a imagem precisa ser NOMEADA: %+v", out.Findings)
+		t.Fatalf("the image must be NAMED: %+v", out.Findings)
 	}
 }
 
-// A mesma forma, com imagem que TEM caminho — a fronteira que impede o resolvedor de
-// virar um "reprova tudo que passa por variável".
-func TestVariavelDeTemplateComImagemPublicadaPassa(t *testing.T) {
+// The same form with an image that IS published — the boundary that keeps the
+// resolver from failing everything that goes through a variable.
+func TestTemplateVariableWithPublishedImagePasses(t *testing.T) {
 	real := `{{- $image := printf "%s:%s" .Values.img.repository .Values.img.tag }}
 kind: CronWorkflow
 spec:
@@ -166,58 +162,86 @@ spec:
     - container:
         image: {{ $image | quote }}
 `
-	root := arvore(t, "c1", real,
+	root := tree(t, "c1", real,
 		"crons:\n  a:\n    enabled: true\nimg:\n  repository: ghcr.io/getloopscale/loopzero-api\n  tag: develop\n",
-		matrizComLoopZeroAPI)
-	if _, err := Check(Config{RepoRoot: root}); err != nil {
-		t.Fatalf("imagem publicada via variável passa: %v", err)
+		matrixWithLoopZeroAPI)
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
+		t.Fatalf("a published image through a variable passes: %v", err)
 	}
 }
 
-// A isenção precisa de razão E prazo. Sem os dois ela não declara nada, só cala.
-func TestIsencaoPrecisaDeRazaoEPrazo(t *testing.T) {
-	root := arvore(t, "c1", cronTemplate,
+// An exemption needs a reason AND a sunset. Without both it declares nothing, it only silences.
+func TestExemptionNeedsReasonAndSunset(t *testing.T) {
+	root := tree(t, "c1", cronTemplate,
 		"crons:\n  a:\n    enabled: true\nimg:\n  repository: registry.digitalocean.com/loopzero-system/loopzero-ops\n  tag: v1\n",
-		matrizComLoopZeroAPI)
+		matrixWithLoopZeroAPI)
 	for _, e := range []Exemption{
 		{Image: "loopzero-ops", Sunset: "2026-11-18"},
-		{Image: "loopzero-ops", Reason: "os crons não executam o binário"},
+		{Image: "loopzero-ops", Reason: "the crons do not run the binary"},
 	} {
-		if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{e}}); err == nil {
-			t.Fatalf("isenção incompleta não pode passar: %+v", e)
+		if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{e}})); err == nil {
+			t.Fatalf("an incomplete exemption must not pass: %+v", e)
 		}
 	}
-	ok := Exemption{Image: "loopzero-ops", Reason: "os crons não executam o binário", Sunset: "2026-11-18"}
-	out, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{ok}})
+	ok := Exemption{Image: "loopzero-ops", Reason: "the crons do not run the binary", Sunset: "2026-11-18"}
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{ok}}))
 	if err != nil {
-		t.Fatalf("isenção completa passa: %v", err)
+		t.Fatalf("a complete exemption passes: %v", err)
 	}
 	if out.Exempt != 1 {
-		t.Fatalf("a isenção precisa ser CONTADA para que sua existência apareça; got %d", out.Exempt)
+		t.Fatalf("the exemption must be COUNTED so its existence shows; got %d", out.Exempt)
 	}
 }
 
-// O WorkflowTemplate disparado por evento sofre do MESMO defeito, e a primeira versão deste
-// gate era cega a ele: varria só CronWorkflow/CronJob.
-//
-// Medido em 2026-08-18: `loopzero-ci-workflows` usa a mesma imagem impossível em DUAS superfícies
-// — os quatro crons e o `workflowtemplate-quality-gate.yaml`, disparado por PR via o sensor do
-// Gitea. Um gate que cobrisse só metade reportaria verde com o defeito idêntico um arquivo ao
-// lado — a superestimação de cobertura que este ecossistema já mediu em quatro itens.
-//
-// Os dois compartilham a propriedade que importa: a execução é AUTÔNOMA, então a falha aparece
-// longe de quem a causou.
-func TestWorkflowTemplateTambemEJulgado(t *testing.T) {
+// An event-triggered WorkflowTemplate has the same property that decides the
+// criterion — the execution is autonomous — and the same chart used the impossible
+// image in both a cron and a WorkflowTemplate.
+func TestWorkflowTemplateIsJudgedToo(t *testing.T) {
 	wt := `kind: WorkflowTemplate
 spec:
   templates:
     - container:
         image: "{{ .Values.img.repository }}:{{ .Values.img.tag }}"
 `
-	root := arvore(t, "c1", wt,
+	root := tree(t, "c1", wt,
 		"img:\n  repository: registry.digitalocean.com/loopzero-system/loopzero-ops\n  tag: v0.1.0\n",
-		matrizComLoopZeroAPI)
-	if _, err := Check(Config{RepoRoot: root, Exemptions: []Exemption{}}); !errors.Is(err, ErrNoPublicationPath) {
-		t.Fatalf("execução disparada por evento reprova igual; err=%v", err)
+		matrixWithLoopZeroAPI)
+	if _, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}})); !errors.Is(err, ErrNoPublicationPath) {
+		t.Fatalf("event-triggered execution fails the same way; err=%v", err)
+	}
+}
+
+// An image the gate cannot resolve (an include, a conditional) used to fall to
+// "third-party" and pass, while the package doc promised to report it.
+func TestUnresolvedImageExpressionIsAFinding(t *testing.T) {
+	inc := "kind: CronJob\nspec:\n  template:\n    spec:\n      containers:\n        - image: {{ include \"x.image\" . }}\n"
+	root := tree(t, "c1", inc, "crons:\n  a:\n    enabled: true\n", matrixWithLoopZeroAPI)
+
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
+
+	if !errors.Is(err, ErrNoPublicationPath) || len(out.Findings) != 1 || !strings.Contains(out.Findings[0].Why, "template expression") {
+		t.Fatalf("an unresolved image must be a finding; out=%+v err=%v", out, err)
+	}
+}
+
+// A values file that cannot be parsed must not become "no values" silently.
+func TestMalformedValuesIsAnError(t *testing.T) {
+	root := tree(t, "c1", cronTemplate, "img: [unclosed\n", matrixWithLoopZeroAPI)
+
+	if _, err := violationOf(Check(Config{RepoRoot: root})); err == nil || errors.Is(err, ErrNoPublicationPath) {
+		t.Fatalf("a malformed values.yaml must be an error of its own; err=%v", err)
+	}
+}
+
+// `{{ .Values.x | default "lit" }}` is the form two charts of this tree use: the
+// value when set, the literal otherwise.
+func TestDefaultPipeIsResolved(t *testing.T) {
+	tmpl := "kind: CronJob\nspec:\n  template:\n    spec:\n      containers:\n        - image: {{ .Values.job.image | default \"registry.digitalocean.com/loopzero-system/loopzero-ops:v1\" }}\n"
+	root := tree(t, "c1", tmpl, "job: {}\n", matrixWithLoopZeroAPI)
+
+	out, err := violationOf(Check(Config{RepoRoot: root, Exemptions: []Exemption{}}))
+
+	if !errors.Is(err, ErrNoPublicationPath) || len(out.Findings) != 1 || !strings.Contains(out.Findings[0].Image, "loopzero-ops:v1") {
+		t.Fatalf("the default literal must be the resolved image; out=%+v err=%v", out, err)
 	}
 }

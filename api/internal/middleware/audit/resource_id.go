@@ -28,6 +28,7 @@ package audit
 
 import (
 	"context"
+	"net/http"
 	"sync"
 )
 
@@ -36,12 +37,16 @@ import (
 // standard Go idiom documented in `context.WithValue`.
 type resourceIDKey struct{}
 
-// resourceIDSlot is the per-request cell the handler writes and the middleware
-// reads. The mutex guards the case where the handler declares the id from a
-// goroutine while the middleware is reading it after ServeHTTP returned.
+// resourceIDSlot is the per-request cell the route and the handler write and
+// the middleware reads: the resource id (declared by the handler) and the
+// action and resource type (declared where the route is registered, see
+// Declare). The mutex guards the case where the handler declares from a
+// goroutine while the middleware is reading after ServeHTTP returned.
 type resourceIDSlot struct {
-	mu sync.Mutex
-	id string
+	mu           sync.Mutex
+	id           string
+	action       string
+	resourceType string
 }
 
 func (s *resourceIDSlot) set(id string) {
@@ -54,6 +59,18 @@ func (s *resourceIDSlot) get() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.id
+}
+
+func (s *resourceIDSlot) declare(action, resourceType string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.action, s.resourceType = action, resourceType
+}
+
+func (s *resourceIDSlot) identity() (action, resourceType string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.action, s.resourceType
 }
 
 // WithResourceIDSlot returns a context carrying a fresh, empty declaration slot.
@@ -89,4 +106,32 @@ func GetResourceID(ctx context.Context) string {
 		return slot.get()
 	}
 	return ""
+}
+
+// Declare returns the per-route middleware that names what a mutation IS for
+// the audit trail: a stable action ("project.created") and the type of
+// resource it acts on ("project"). It is mounted where the route is
+// registered, so the router — which already knows each route — states the
+// identity instead of AuditLog reverse-engineering it from URL segments.
+// Adding a route is then additive: nothing else changes.
+//
+// It must run inside AuditLog, which installs the slot it writes to; outside
+// an audited group it does nothing.
+func Declare(action, resourceType string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if slot, ok := r.Context().Value(resourceIDKey{}).(*resourceIDSlot); ok {
+				slot.declare(action, resourceType)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// declaredIdentity returns what Declare stored for the request of ctx.
+func declaredIdentity(ctx context.Context) (action, resourceType string) {
+	if slot, ok := ctx.Value(resourceIDKey{}).(*resourceIDSlot); ok {
+		return slot.identity()
+	}
+	return "", ""
 }

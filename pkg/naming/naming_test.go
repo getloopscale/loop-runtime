@@ -189,7 +189,7 @@ func TestNamespace_canonical(t *testing.T) {
 		want      string
 		wantError bool
 	}{
-		{name: "production", tenant: "tn-x", project: "teste", env: "production", want: "loopzero-tn-x-teste-production"},
+		{name: "production", tenant: "tn-x", project: "sample", env: "production", want: "loopzero-tn-x-sample-production"},
 		{name: "staging", tenant: "tn-x", project: "api", env: "staging", want: "loopzero-tn-x-api-staging"},
 		{name: "preview", tenant: "tn-x", project: "web", env: "preview-pr-7", want: "loopzero-tn-x-web-preview-pr-7"},
 		{name: "empty tenant", tenant: "", project: "p", env: "e", wantError: true},
@@ -271,37 +271,6 @@ func TestGitOpsRepoName_empty_env(t *testing.T) {
 	_, err := GitOpsRepoName("acme", "backend", "")
 	if err == nil {
 		t.Error("should return error for empty env")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Hostname
-// ---------------------------------------------------------------------------
-
-func TestHostname_format(t *testing.T) {
-	got, err := Hostname("backend", "production", "example.com")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != "backend-production.example.com" {
-		t.Errorf("got %q, want %q", got, "backend-production.example.com")
-	}
-}
-
-func TestHostname_sanitizes_parts(t *testing.T) {
-	got, err := Hostname("My_App", "PROD", "example.com")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != "my-app-prod.example.com" {
-		t.Errorf("got %q, want %q", got, "my-app-prod.example.com")
-	}
-}
-
-func TestHostname_empty_subdomain_returns_error(t *testing.T) {
-	_, err := Hostname("@#$", "!!!", "example.com")
-	if err == nil {
-		t.Error("Hostname with all-special-char inputs should return error")
 	}
 }
 
@@ -524,7 +493,7 @@ func TestDeterminism_all_functions(t *testing.T) {
 			t.Fatalf("BuildNamespace not deterministic on iteration %d", i)
 		}
 
-		// Preview não é especial na camada de nomes: é a tripla como qualquer ambiente.
+		// Preview is not special in the naming layer: it is the triple like any other environment.
 		pn, _ := Namespace("acme", "api", "preview-pr-42")
 		if pn != "loopzero-acme-api-preview-pr-42" {
 			t.Fatalf("Namespace (preview) not deterministic on iteration %d", i)
@@ -538,11 +507,6 @@ func TestDeterminism_all_functions(t *testing.T) {
 		gn, _ := GitOpsRepoName("acme", "api", "prod")
 		if gn != "acme-api-prod" {
 			t.Fatalf("GitOpsRepoName not deterministic on iteration %d", i)
-		}
-
-		h, _ := Hostname("api", "prod", "example.com")
-		if h != "api-prod.example.com" {
-			t.Fatalf("Hostname not deterministic on iteration %d", i)
 		}
 
 		an, _ := ArgoAppName("acme", "api", "prod")
@@ -688,10 +652,10 @@ func TestIsPreviewEnv_RedTeam41(t *testing.T) {
 	}
 }
 
-// EnvironmentCRName — #273: a identidade do Environment CR precisa do projeto, porque o
-// conteúdo dele (spec.project, spec.namespace.name) já depende do projeto.
+// EnvironmentCRName — #273: the Environment CR's identity needs the project, because its
+// content (spec.project, spec.namespace.name) already depends on the project.
 
-func TestEnvironmentCRName_incluiOProjeto(t *testing.T) {
+func TestEnvironmentCRName_includesTheProject(t *testing.T) {
 	got, err := EnvironmentCRName("tn-acme", "backend", "production")
 	if err != nil {
 		t.Fatalf("EnvironmentCRName: %v", err)
@@ -701,50 +665,50 @@ func TestEnvironmentCRName_incluiOProjeto(t *testing.T) {
 	}
 }
 
-func TestEnvironmentCRName_projetosDistintosNaoColidem(t *testing.T) {
+func TestEnvironmentCRName_distinctProjectsDoNotCollide(t *testing.T) {
 	a, _ := EnvironmentCRName("tn-acme", "alpha", "preview")
 	b, _ := EnvironmentCRName("tn-acme", "beta", "preview")
 	if a == b {
-		t.Fatalf("dois projetos no mesmo ambiente colidiram em %q — é o defeito da #273", a)
+		t.Fatalf("two projects in the same environment collided on %q — this is the #273 defect", a)
 	}
 }
 
-func TestEnvironmentCRName_projetoVazioFalhaAlto(t *testing.T) {
+func TestEnvironmentCRName_emptyProjectFailsLoudly(t *testing.T) {
 	if _, err := EnvironmentCRName("tn-acme", "", "production"); err == nil {
-		t.Error("projeto vazio deve devolver erro, não um nome degenerado")
+		t.Error("an empty project must return an error, not a degenerate name")
 	}
 }
 
-// AppCertSecretName — #277: o renderer nomeia o Secret TLS como "tls-{project}-{app}"
-// (api/internal/manifests/renderer_ingress.go), enquanto o exposure controller o procurava
-// por CertSecretName(hostname) => "{hostname-sanitizado}-tls". Duas fórmulas para o mesmo
-// objeto, que nunca coincidiram: o ExposedRoute ficou Pending por 27 dias com o
-// certificado emitido e válido.
+// AppCertSecretName — #277: the renderer names the TLS Secret "tls-{project}-{app}"
+// (api/internal/manifests/renderer_ingress.go), while the exposure controller looked it up
+// via CertSecretName(hostname) => "{sanitized-hostname}-tls". Two formulas for the same
+// object, which never matched: the ExposedRoute stayed Pending for 27 days with the
+// certificate issued and valid.
 
-func TestAppCertSecretName_bateComORenderer(t *testing.T) {
-	got, err := AppCertSecretName("teste", "app")
+func TestAppCertSecretName_matchesTheRenderer(t *testing.T) {
+	got, err := AppCertSecretName("sample", "app")
 	if err != nil {
 		t.Fatalf("AppCertSecretName: %v", err)
 	}
-	// Este valor foi observado em app-dev: o Secret real criado pelo renderer.
-	if got != "tls-teste-app" {
-		t.Errorf("AppCertSecretName = %q, want %q — o renderer produz tls-{project}-{app}", got, "tls-teste-app")
+	// This value was observed in app-dev: the real Secret created by the renderer.
+	if got != "tls-sample-app" {
+		t.Errorf("AppCertSecretName = %q, want %q — the renderer produces tls-{project}-{app}", got, "tls-sample-app")
 	}
 }
 
-func TestAppCertSecretName_projetosDistintosNaoCompartilhamCert(t *testing.T) {
+func TestAppCertSecretName_distinctProjectsDoNotShareCert(t *testing.T) {
 	a, _ := AppCertSecretName("alpha", "api")
 	b, _ := AppCertSecretName("beta", "api")
 	if a == b {
-		t.Fatalf("dois projetos com o mesmo nome de app compartilhariam o cert: %q", a)
+		t.Fatalf("two projects with the same app name would share the cert: %q", a)
 	}
 }
 
-func TestAppCertSecretName_argumentoVazioFalhaAlto(t *testing.T) {
+func TestAppCertSecretName_emptyArgumentFailsLoudly(t *testing.T) {
 	if _, err := AppCertSecretName("", "api"); err == nil {
-		t.Error("projeto vazio deve falhar alto")
+		t.Error("an empty project must fail loudly")
 	}
 	if _, err := AppCertSecretName("alpha", ""); err == nil {
-		t.Error("app vazio deve falhar alto")
+		t.Error("an empty app must fail loudly")
 	}
 }

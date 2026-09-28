@@ -40,21 +40,24 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const (
-	// chartPath is the bootstrap chart (Helmfile L2). parityChartPath is the published
-	// OCI copy. Both must carry the policy — CLAUDE.md § Helm chart dual system lists
-	// loopzero-admission-policies among the 3 functionally overlapping charts.
-	chartPath       = "infra/helm/admission-policies"
-	parityChartPath = "charts/loopzero-admission-policies"
+	// chartPath is the one admission-policies chart: Helmfile installs it on core (with
+	// mgmtValues) and on every cell, and ArgoCD consumes it as the published OCI chart.
+	// There was a bootstrap copy under infra/helm, and this gate checked that both carried
+	// the policy; the copy was deleted when the pair became one chart (docs/decisions.md,
+	// "One chart per bootstrap/published pair"), and the parity check went with it.
+	chartPath = "charts/loopzero-admission-policies"
 
 	templateName = "vap-protect-platform-deletes.yaml"
 	policyName   = "loopzero-protect-platform-deletes"
 	toggleKey    = "protectPlatformDeletes"
 
 	mgmtHelmfile = "infra/helmfile/core.helmfile.yaml.gotmpl"
-	mgmtValues   = "infra/helm/admission-policies/values-mgmt.yaml"
+	mgmtValues   = "charts/loopzero-admission-policies/values-mgmt.yaml"
 
 	// minExemptIdentities is the EC-2 floor. Two is not arbitrary: exactly two
 	// components have a proven production Delete caller against the guarded resources —
@@ -97,6 +100,10 @@ type Report struct {
 // OK reports whether the gate passed.
 func (r Report) OK() bool { return len(r.Findings) == 0 }
 
+// Verdict is Fail when any finding was reported; warnings are advisory and
+// leave it a Pass.
+func (r Report) Verdict() verdict.Verdict { return verdict.Of(r.Findings) }
+
 // Renderer renders a chart to a YAML stream. Injected so the hermetic test does not
 // require the helm binary (crdsemanticdiff:63 precedent).
 type Renderer func(chartDir string, valuesFiles []string) (string, error)
@@ -131,7 +138,6 @@ func Check(repoRoot string, render Renderer) Report {
 	}
 
 	rep.checkTemplatePresent(repoRoot)
-	rep.checkParity(repoRoot)
 	rep.checkToggleDefaultOff(repoRoot)
 	rep.checkInstalledOnMgmt(repoRoot)
 
@@ -164,36 +170,25 @@ func (r *Report) checkTemplatePresent(root string) {
 	}
 }
 
-// checkParity enforces CLAUDE.md § Helm chart dual system: patch one, patch the other.
-func (r *Report) checkParity(root string) {
-	p := filepath.Join(root, parityChartPath, "templates", templateName)
-	if _, err := os.Stat(p); err != nil {
-		r.fail("dual-chart-parity",
-			"%s missing — published chart diverges from the bootstrap chart (plan T1.4)", p)
-	}
-}
-
-// checkToggleDefaultOff mirrors the tenantNamespace convention (values.yaml:84-89):
+// checkToggleDefaultOff mirrors the tenantNamespace convention of the chart values.yaml:
 // a VAP that can self-inflict a DoS ships OFF and is enabled by overlay.
 func (r *Report) checkToggleDefaultOff(root string) {
-	for _, chart := range []string{chartPath, parityChartPath} {
-		p := filepath.Join(root, chart, "values.yaml")
-		b, err := os.ReadFile(p)
-		if err != nil {
-			r.fail("toggle-default-off", "%s unreadable: %v", p, err)
-			continue
-		}
-		re := regexp.MustCompile(`(?m)^\s*` + toggleKey + `:\s*(\S+)`)
-		m := re.FindSubmatch(b)
-		if m == nil {
-			r.fail("toggle-default-off", "%s does not declare vaps.%s", p, toggleKey)
-			continue
-		}
-		if strings.TrimSpace(string(m[1])) != "false" {
-			r.fail("toggle-default-off",
-				"%s sets vaps.%s=%s; must default to false (enable via overlay after the Warn window)",
-				p, toggleKey, m[1])
-		}
+	p := filepath.Clean(filepath.Join(root, chartPath, "values.yaml"))
+	b, err := os.ReadFile(p)
+	if err != nil {
+		r.fail("toggle-default-off", "%s unreadable: %v", p, err)
+		return
+	}
+	re := regexp.MustCompile(`(?m)^\s*` + toggleKey + `:\s*(\S+)`)
+	m := re.FindSubmatch(b)
+	if m == nil {
+		r.fail("toggle-default-off", "%s does not declare vaps.%s", p, toggleKey)
+		return
+	}
+	if strings.TrimSpace(string(m[1])) != "false" {
+		r.fail("toggle-default-off",
+			"%s sets vaps.%s=%s; must default to false (enable via overlay after the Warn window)",
+			p, toggleKey, m[1])
 	}
 }
 
@@ -236,10 +231,26 @@ func (r *Report) checkRenderedPolicy(rendered string) {
 	}
 }
 
+// kubeSystemPrefixExemption is the negated prefix match the admission-policies helper
+// (loopzero-admission.systemActorExemptions) renders. It exempts every kube-system service
+// account — the namespace-controller included — so it satisfies the namespace-controller
+// requirement without naming it. Only the NEGATED form counts: a positive startsWith
+// would select the GC into the policy instead of keeping it out.
+const kubeSystemPrefixExemption = "!(request.userInfo.username.startsWith('system:serviceaccount:kube-system:'))"
+
+// exempted reports whether the rendered policy keeps identity ex out of its scope.
+func exempted(rendered, ex string) bool {
+	if strings.Contains(rendered, ex) {
+		return true
+	}
+	return strings.HasPrefix(ex, "system:serviceaccount:kube-system:") &&
+		strings.Contains(rendered, kubeSystemPrefixExemption)
+}
+
 // checkExemptions enforces EC-2 (floor of 2) and the B33 GC exemptions.
 func (r *Report) checkExemptions(rendered string) {
 	for _, ex := range clusterGCExemptions {
-		if !strings.Contains(rendered, ex) {
+		if !exempted(rendered, ex) {
 			r.fail("gc-exemption",
 				"matchConditions missing %q — a VAP with failurePolicy=Fail on DELETE that does "+
 					"not exempt the cluster GC deadlocks namespaces in Terminating (B33)", ex)

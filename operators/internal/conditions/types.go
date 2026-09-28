@@ -30,7 +30,6 @@ const (
 	TypeBuildNamespaceReady = apiv1.TypeBuildNamespaceReady
 	TypePriorityClassReady  = apiv1.TypePriorityClassReady
 	TypeArgoCDAppReady      = apiv1.TypeArgoCDAppReady
-	TypeHarborProjectReady  = apiv1.TypeHarborProjectReady
 	TypeTransitKeyAvailable = apiv1.TypeTransitKeyAvailable
 
 	// PlatformBootstrap conditions
@@ -60,8 +59,9 @@ const (
 	TypeApplicationHealthy = apiv1.TypeApplicationHealthy
 
 	// ClusterCredential conditions
-	TypeSecretNotFound = apiv1.TypeSecretNotFound
-	TypeConnected      = apiv1.TypeConnected
+	TypeSecretNotFound     = apiv1.TypeSecretNotFound
+	TypeConnected          = apiv1.TypeConnected
+	TypeArgoCDSecretSynced = apiv1.TypeArgoCDSecretSynced
 
 	// Preview conditions
 	TypePreviewNamespaceReady      = apiv1.TypePreviewNamespaceReady

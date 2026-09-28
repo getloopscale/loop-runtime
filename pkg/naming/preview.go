@@ -5,7 +5,6 @@ package naming
 
 import (
 	"fmt"
-	"strings"
 )
 
 // PreviewEnvName returns the canonical synthetic environment label used
@@ -55,10 +54,7 @@ func PreviewSubdomain(tenantID, projectID, entryApp string, prNumber int) string
 	} else {
 		subdomain = fmt.Sprintf("%s-%s-%s", tenantID, projectID, envName)
 	}
-	if len(subdomain) > 63 {
-		subdomain = subdomain[:63]
-	}
-	return strings.TrimRight(subdomain, "-")
+	return truncateLabel(subdomain, MaxKubernetesNameLength)
 }
 
 // PreviewURL composes the full public URL exposed to users for a

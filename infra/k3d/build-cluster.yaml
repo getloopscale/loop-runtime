@@ -28,20 +28,20 @@ ports:
   - port: 30194:30094
     nodeFilters:
       - loadbalancer
-  # loopzero-workspace#23 item 2 — a NodePort do Service `loki` (30120, fixada pelo seed
-  # `loki-cross-cluster`) precisa ser ALCANCAVEL de fora do cluster por um endereco
-  # ESTAVEL. Sem esta publicacao, o unico caminho era o IP do container
-  # `k3d-loopzero-build-server-0` — atribuido por DHCP, que EMBARALHA a cada
-  # `docker restart` / `k3d cluster create`. Quando embaralha, o LOKI_URL gravado
-  # passa a apontar para outro cluster EM SILENCIO, e o sintoma (`loopzero logs` vazio)
-  # le-se como "Loki fora do ar", nunca como "cluster errado" — foi o que fez duas
-  # investigacoes do #114 gastarem esforco rotacionando credencial.
+  # loopzero-workspace#23 item 2 — the NodePort of the Loki cross-cluster bridge (Service
+  # loki-cross-cluster, rendered by infra/helmfile/build.helmfile.yaml.gotmpl on
+  # crossCluster.lokiNodePort) must be reachable from outside the cluster at a STABLE
+  # address. Without this publication the only path was the IP of the
+  # `k3d-loopzero-build-server-0` container — assigned by DHCP, reshuffled on every
+  # `docker restart` / `k3d cluster create`. When it reshuffled, a recorded LOKI_URL
+  # pointed at another cluster IN SILENCE, and the symptom (an empty `loopzero logs`) read
+  # as "Loki is down", never as "wrong cluster".
   #
-  # Publicada, passa a ser alcancavel por gateway-da-rede + porta, o par estavel que
-  # ja tirou o item 1 do issue da classe. Mesma porta dentro e fora (30120:30120):
-  # nao ha colisao — medido nos cinco `infra/k3d/*.yaml`, as portas de host ocupadas
-  # sao 3000 3002 8090 8091 8200 8443 8444 9001 9090 13001 30081 30082 30090 30091
-  # 30093 30094 30095 30191 30193 30194.
+  # Published, it is reachable through the network gateway (host.k3d.internal) plus
+  # this port, the stable pair the loopzero-api overlays render as LOKI_URL. Same port
+  # inside and out (30120:30120): measured across the five `infra/k3d/*.yaml`, the
+  # host ports in use are 3000 3002 8090 8091 8200 8443 8444 9001 9090 13001 30081
+  # 30082 30090 30091 30093 30094 30095 30191 30193 30194.
   - port: 30120:30120
     nodeFilters:
       - loadbalancer

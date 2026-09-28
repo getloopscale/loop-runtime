@@ -18,6 +18,9 @@ if [[ -n "${_DRILL_SKILL_COMMON_SOURCED:-}" ]]; then
   return 0
 fi
 _DRILL_SKILL_COMMON_SOURCED=1
+# The drill scripts live in ../drill relative to this lib, wherever it is
+# sourced from.
+_DRILL_SKILL_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../drill" && pwd)"
 
 # --- Logging helper ---
 drill_skill_log() {
@@ -353,18 +356,21 @@ drill_skill_emit_finding() {
 }
 
 # --- D4: Mandatory teardown wrapper ---
-# Args: (none — uses DRILL_SKILL_AUDIT_DIR + invokes drill-teardown-validator.sh)
+# Args: (none — uses DRILL_SKILL_AUDIT_DIR + invokes drill/teardown-validator.sh)
 drill_skill_teardown() {
   drill_skill_log "Mandatory teardown initiated..."
 
   # Step 1: capture evidence pre-teardown (best-effort)
-  # drill-evidence-capture.sh expects an identifier (regex ^[a-zA-Z0-9._-]+$),
+  # evidence-capture.sh expects an identifier (regex ^[a-zA-Z0-9._-]+$),
   # NOT a path. Pass only the basename of DRILL_SKILL_AUDIT_DIR.
-  if [[ -x infra/scripts/drill-evidence-capture.sh ]]; then
+  local _evidence="$_DRILL_SKILL_SCRIPTS_DIR/evidence-capture.sh"
+  if [[ -f "$_evidence" ]]; then
     local _audit_id="${DRILL_SKILL_AUDIT_DIR:-/tmp/drill-audit-evac}"
     _audit_id="$(basename "$_audit_id")"
-    bash infra/scripts/drill-evidence-capture.sh "$_audit_id" 2>&1 \
-      | tail -5 | sed 's/^/  /' || true
+    bash "$_evidence" "$_audit_id" 2>&1 \
+      | tail -5 | sed 's/^/  /' || drill_skill_log "  WARN: evidence capture failed (continuing to teardown)"
+  else
+    drill_skill_log "  WARN: $_evidence not found — no pre-teardown evidence"
   fi
 
   # Step 2: Pulumi destroy (direct invocation — bypasses Task v3 dotenv gap)
@@ -412,12 +418,14 @@ drill_skill_teardown() {
       # Fallback: if rc=0 and we can't get count, trust the rc
       if [[ "$_pd_rc" -eq 0 ]]; then
         drill_skill_log "  ✓ pulumi destroy complete (rc=0, count unparseable)"
+        _drill_skill_finalize_teardown "CLEAN"
         return 0
       fi
       _resource_count="?"
     fi
     if [[ "$_resource_count" == "0" ]]; then
       drill_skill_log "  ✓ pulumi destroy complete (state empty after iter $_retry)"
+      _drill_skill_finalize_teardown "CLEAN"
       return 0
     fi
     drill_skill_log "  iter $_retry: rc=$_pd_rc, $_resource_count residual resources — refreshing + retrying"
@@ -429,26 +437,37 @@ drill_skill_teardown() {
   drill_skill_log "  ✗ pulumi destroy still has $_resource_count residual resources after 3 iters"
   drill_skill_log "  full log: $_pd_log"
 
-  # Step 3: validator (doctl fallback per T4.1.bis)
-  if [[ -x infra/scripts/drill-teardown-validator.sh ]]; then
-    if bash infra/scripts/drill-teardown-validator.sh 2>&1 | tail -5 | sed 's/^/  /'; then
-      drill_skill_log "  ✓ teardown validator PASS"
-    else
-      drill_skill_log "  ✗ teardown validator FAIL — residuals may exist"
-      return 7
-    fi
+  # Step 3: pulumi state still holds resources. Only the validator can say
+  # whether the cloud does too, so a missing or failing validator is a failed
+  # teardown, never a clean one.
+  local _validator="$_DRILL_SKILL_SCRIPTS_DIR/teardown-validator.sh"
+  if [[ ! -f "$_validator" ]]; then
+    drill_skill_log "  ✗ $_validator not found — cannot verify the residuals"
+    _drill_skill_finalize_teardown "RESIDUAL ($_resource_count in pulumi state, unverified)"
+    return 7
+  fi
+  if bash "$_validator" 2>&1 | tail -5 | sed 's/^/  /'; then
+    drill_skill_log "  ✓ teardown validator PASS"
+  else
+    drill_skill_log "  ✗ teardown validator FAIL — residuals may exist"
+    _drill_skill_finalize_teardown "RESIDUAL ($_resource_count in pulumi state, validator failed)"
+    return 7
   fi
 
-  # Step 4: finalize audit md
+  _drill_skill_finalize_teardown "CLEAN"
+  return 0
+}
+
+# _drill_skill_finalize_teardown appends the end time and the teardown outcome
+# to the run's audit markdown, when there is one.
+_drill_skill_finalize_teardown() {
   if [[ -n "${DRILL_SKILL_AUDIT_MD:-}" ]] && [[ -f "$DRILL_SKILL_AUDIT_MD" ]]; then
     {
       echo ""
       echo "**End:** $(date -u +%FT%TZ)"
-      echo "**Teardown:** CLEAN"
+      echo "**Teardown:** $1"
     } >> "$DRILL_SKILL_AUDIT_MD"
   fi
-
-  return 0
 }
 
 # --- Cleanup on exit (trap) ---

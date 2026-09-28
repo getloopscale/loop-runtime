@@ -6,7 +6,6 @@ package seed
 import (
 	"context"
 	"testing"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +24,21 @@ func newScheme(t *testing.T) *runtime.Scheme {
 		t.Fatalf("add appsv1: %v", err)
 	}
 	return s
+}
+
+// makeLoopZeroAPIDeploymentWithEnv builds a Deployment with N env vars.
+func makeLoopZeroAPIDeploymentWithEnv(envs []corev1.EnvVar) *appsv1.Deployment {
+	one := int32(1)
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &one,
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Env: envs}}},
+			},
+		},
+		Status: appsv1.DeploymentStatus{ReadyReplicas: 1, UpdatedReplicas: 1},
+	}
 }
 
 func TestCreateOrUpdateSecret_CreatesWhenAbsent(t *testing.T) {
@@ -63,34 +77,5 @@ func TestCreateOrUpdateSecret_UpdatesWhenExists(t *testing.T) {
 	got, _ := k.GetSecret(context.Background(), "loopzero-system", "s1")
 	if string(got.Data["k"]) != "new" {
 		t.Errorf("Data[k] = %q, want new (update applied)", got.Data["k"])
-	}
-}
-
-func TestWaitDeploymentReady_ReturnsWhenReady(t *testing.T) {
-	replicas := int32(2)
-	d := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
-		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
-		Status:     appsv1.DeploymentStatus{ReadyReplicas: 2},
-	}
-	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(d).Build()
-	k := NewKubeClient(c)
-	if err := k.WaitDeploymentReady(context.Background(), "loopzero-system", "loopzero-api", 3*time.Second); err != nil {
-		t.Errorf("ready deployment: unexpected err %v", err)
-	}
-}
-
-func TestWaitDeploymentReady_TimesOutWhenNeverReady(t *testing.T) {
-	replicas := int32(2)
-	d := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: "loopzero-api"},
-		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
-		Status:     appsv1.DeploymentStatus{ReadyReplicas: 0}, // never ready
-	}
-	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(d).Build()
-	k := NewKubeClient(c)
-	err := k.WaitDeploymentReady(context.Background(), "loopzero-system", "loopzero-api", 1*time.Second)
-	if err == nil {
-		t.Error("never-ready deployment: want timeout error, got nil")
 	}
 }
