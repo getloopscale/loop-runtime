@@ -118,5 +118,8 @@ bootstrap_cell_cc() {
     bash "$CC_CREATE" "$CELL_ID" "$CELL_ID" "$SCOPED_KC" || return 2
   [[ "$DRY" == "true" ]] && return 0
 
-  log_cell "applied: CC ${CELL_ID} -> ${SECRET_NAME} -> https://${TARGET_IP}:6443 (k3d cluster: loopzero-${K3D_CLUSTER})"
+  # The Secret's name is the constructor's to choose, and it logs it; naming it
+  # here again read ${SECRET_NAME}, which nothing set, and aborted under set -u
+  # after the apply had succeeded (#400).
+  log_cell "applied: CC ${CELL_ID} -> https://${TARGET_IP}:6443 (k3d cluster: loopzero-${K3D_CLUSTER})"
 }

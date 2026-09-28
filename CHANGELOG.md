@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A cold `task setup` connects the cells again: the cell credential bootstrap applied everything and then exited with an error on its closing log line, so the repair step reported both cells disconnected (#400)
+
 - A cold `task setup` no longer stops after generating the build signing key: the build-secrets script lost track of its own directory once it had generated the key and could not reach its backup step (#399)
 
 - A cold `task setup` no longer fails after provisioning API tokens: it created the MinIO buckets a third time by running the MinIO client inside the server, which the source-built server image does not carry; the chart already creates them (#394)
