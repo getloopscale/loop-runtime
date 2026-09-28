@@ -558,22 +558,22 @@ flow** (the canonical separation of concerns: AWS ALB + NGINX Ingress, Cloudflar
 
 ```
 Browser
-  ↓ DNS (Cloudflare: pr1-teste.preview-dev.loopzero.example → host IP)
+  ↓ DNS (Cloudflare: pr1-sample.preview-dev.loopzero.example → host IP)
   ↓
 Host machine, port 443
   ↓
 Caddy
   ├─ TLS termination (Let's Encrypt, automatic)
-  ├─ Block match: pr1-teste.preview-dev.loopzero.example
+  ├─ Block match: pr1-sample.preview-dev.loopzero.example
   └─ reverse_proxy https://172.18.0.10:443
-       header_up Host tn-...-teste-api-preview-pr-1.loopzero.local
+       header_up Host tn-...-sample-api-preview-pr-1.loopzero.local
   ↓
 Workload cluster Traefik LoadBalancer (172.18.0.10:443)
   ↓
 Traefik IngressRoute (in the preview namespace)
-  └─ match: Host(`tn-...-teste-api-preview-pr-1.loopzero.local`)
+  └─ match: Host(`tn-...-sample-api-preview-pr-1.loopzero.local`)
   ↓
-K8s Service teste-api-stable / teste-api-canary
+K8s Service sample-api-stable / sample-api-canary
   ↓
 Rollout Pod
   ↓

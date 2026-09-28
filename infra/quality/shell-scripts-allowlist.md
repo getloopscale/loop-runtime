@@ -244,7 +244,7 @@ KEEP-OPERATOR (truly justified per D4) or candidate for downstream phase action.
 
 | Script | LOC | Justification |
 |---|---:|---|
-| infra/scripts/local/connect-canonical-fixture.sh | ~190 | KEEP-OPERATOR 2026-06-08 — T2.1 of plan 2026-06-08-pre-release-test-rigor v1.2. Connects canonical fixture repo (getloopscale/loopzero-repotest) + creates canonical project (teste) in admin@loopzero.example tenant via LoopZero CLI. Idempotent — detects existing installation + project via /engine/api/v1/projects + suspended_at field on GitHub App installation (EC-10). EC-12 preflight: gh auth status + rate_limit headroom (require remaining ≥ 100) BEFORE any API call. --verify mode queries PG audit_log for project.connected event. --dry-run shows planned actions without mutation. Pure orchestration: gh CLI + curl + LoopZero CLI + kubectl + psql; irreducible per D4 (bash). |
+| infra/scripts/local/connect-canonical-fixture.sh | ~190 | KEEP-OPERATOR 2026-06-08 — T2.1 of plan 2026-06-08-pre-release-test-rigor v1.2. Connects canonical fixture repo (getloopscale/loopzero-repotest) + creates canonical project (sample) in admin@loopzero.example tenant via LoopZero CLI. Idempotent — detects existing installation + project via /engine/api/v1/projects + suspended_at field on GitHub App installation (EC-10). EC-12 preflight: gh auth status + rate_limit headroom (require remaining ≥ 100) BEFORE any API call. --verify mode queries PG audit_log for project.connected event. --dry-run shows planned actions without mutation. Pure orchestration: gh CLI + curl + LoopZero CLI + kubectl + psql; irreducible per D4 (bash). |
 
 ### Post-baseline additions (plan 2026-06-08-pre-release-test-rigor — T2.2)
 
