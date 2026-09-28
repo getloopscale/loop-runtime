@@ -156,7 +156,7 @@ tasks:
         echo ""
         echo "=== Ory Auth Services (mgmt cluster) ==="
         for SVC in ory-kratos-public ory-kratos-admin ory-hydra-public ory-hydra-admin; do
-          NS="loopzero-system"
+          NS="loopzero-auth"
           if kubectl --context {{.CORE_CONTEXT}} -n "$NS" get svc "$SVC" >/dev/null 2>&1; then
             READY=$(kubectl --context {{.CORE_CONTEXT}} -n "$NS" get endpoints "$SVC" -o jsonpath='{.subsets[0].addresses}' 2>/dev/null)
             if [ -n "$READY" ]; then
