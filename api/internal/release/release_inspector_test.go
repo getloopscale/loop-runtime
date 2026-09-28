@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -247,5 +248,22 @@ func TestReleaseInspector_TruncatedAuditWindowIsSignalled(t *testing.T) {
 	}
 	if got.AuditLogStatus != AuditLogTruncated {
 		t.Errorf("audit_log_status = %q, want %q when the upstream window held more rows than were read", got.AuditLogStatus, AuditLogTruncated)
+	}
+}
+
+// The release store answers a missing id with loopzeroerrors.ErrReleaseNotFound, never
+// (nil, nil): the inspector only recognised the second form, so the admin inspect
+// of an unknown release answered 500 INSPECT_FAILED instead of 404 (#415).
+func TestReleaseInspector_Inspect_StoreNotFoundIsNotFound(t *testing.T) {
+	store := &fakeReleaseStore{get: func(_ context.Context, _ string) (*db.Release, error) {
+		return nil, loopzeroerrors.ErrReleaseNotFound
+	}}
+	insp := NewReleaseInspector(store, &fakeAudit{}, &fakeBuildStore{})
+
+	_, err := insp.Inspect(context.Background(), "rel-missing")
+
+	var nfe ErrReleaseInspectionNotFound
+	if !errors.As(err, &nfe) {
+		t.Errorf("Inspect over a store not-found = %v (%T), want ErrReleaseInspectionNotFound", err, err)
 	}
 }

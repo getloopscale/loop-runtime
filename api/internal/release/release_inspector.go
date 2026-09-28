@@ -19,11 +19,13 @@ package release
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // ReleaseInspection is the JSON shape returned by
@@ -151,6 +153,10 @@ func NewReleaseInspector(
 // signing_path="unknown", NOT 500.
 func (s *releaseStoreInspector) Inspect(ctx context.Context, releaseID string) (*ReleaseInspection, error) {
 	rel, err := s.releases.GetByID(ctx, releaseID)
+	if errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
+		// The store's not-found; (nil, nil) below is the older form (#415).
+		return nil, ErrReleaseInspectionNotFound{ReleaseID: releaseID}
+	}
 	if err != nil {
 		return nil, err
 	}
