@@ -632,7 +632,14 @@ jobs:
           BASE_REF: origin/${{ github.base_ref || 'develop' }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "$BASE_BRANCH"
+          # The checkout above took full history (fetch-depth: 0), so the base branch
+          # is already here. A second `git fetch` needs credentials this job
+          # deliberately does not keep (persist-credentials: false), and on a private
+          # repository it died with "could not read Username" before any gate ran.
+          if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
+            echo "::error::base ${BASE_REF} (branch ${BASE_BRANCH}) is not in the checkout — the diff-scoped gates need it"
+            exit 1
+          fi
           (cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)
           # `no-new-bash` is NOT here, and the absence is measured rather than forgotten.
           # Measured 2026-09-16: it exits 5 — "read allowlist

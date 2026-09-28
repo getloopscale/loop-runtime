@@ -368,6 +368,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The public CI job runs its diff-scoped quality gates again: it re-fetched the base branch without credentials and died before any gate ran, although its checkout already holds the full history (#370)
+
 - A fresh install with the in-cluster database starts the API again: `task setup` creates the `loopzero_api` and `loopzero_worker` roles before the migrations and hands the API their connection URLs, instead of the table owner's, which the API refuses to serve requests over (#396)
 
 - A cold `task setup` provisions the core cluster's database credentials again: two install steps still named the cluster by its pre-rename name, which the credentials script silently skipped, and it now refuses a cluster name it does not handle (#397)
