@@ -5,7 +5,6 @@ package store
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -23,18 +22,11 @@ import (
 // Option C, MEET-2026-07-03-005). A fake store cannot prove this — only a real
 // tx that actually rolls back can.
 
-func deployEventDBURL() string {
-	if u := os.Getenv("DATABASE_URL"); u != "" {
-		return u
-	}
-	return "postgres://postgres:postgres@localhost:5432/loopzero_test?sslmode=disable"
-}
-
 func deployEventPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	pool, err := pgxpool.New(ctx, deployEventDBURL())
+	pool, err := pgxpool.New(ctx, fixtureDBURL())
 	if err != nil {
 		t.Skipf("deploy_events PG test skipped: cannot create pool: %v", err)
 	}

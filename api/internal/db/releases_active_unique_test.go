@@ -35,6 +35,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -47,15 +48,27 @@ import (
 // releasesUniqueDBURL mirrors secretL19DBURL. Kept inline (NOT in a
 // shared helper) so the test file is self-contained — explicit per
 // plan T5.1 acceptance criteria.
+// releasesUniqueDBURL is the cross-tenant worker role when LOOPZERO_WORKER_DATABASE_URL is
+// set: these fixtures write rows of arbitrary tenants with no tenant scope, which under
+// fail-closed RLS only the *_worker_cross_tenant policies admit — the owner lost its
+// maintenance policies in 000064 (#387).
 func releasesUniqueDBURL() string {
+	if u := os.Getenv("LOOPZERO_WORKER_DATABASE_URL"); u != "" {
+		return u
+	}
 	return secretL19DBURL()
 }
 
 func releasesUniquePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	return releasesPoolAt(t, releasesUniqueDBURL())
+}
+
+func releasesPoolAt(t *testing.T, url string) *pgxpool.Pool {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	pool, err := pgxpool.New(ctx, releasesUniqueDBURL())
+	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		t.Skipf("T5.1 test skipped: cannot create pool: %v", err)
 	}
@@ -264,7 +277,14 @@ func TestReleases_RolledBackThenNewActive_Succeeds(t *testing.T) {
 // for the high-signal regression: pre-flight contract is what
 // operators rely on to avoid migration failures in production.
 func TestReleases_PreFlightCheck_DetectsExistingViolations(t *testing.T) {
-	pool := releasesUniquePool(t)
+	// Dropping the index is DDL (the owner's), and the seed rows need a role RLS
+	// admits unscoped; only a superuser is both, so the test runs on the audit
+	// superuser the integration job already provides.
+	superURL := os.Getenv("LOOPZERO_RLS_AUDIT_SUPERUSER_URL")
+	if superURL == "" {
+		t.Skip("needs LOOPZERO_RLS_AUDIT_SUPERUSER_URL to drop the index and seed rows under RLS — https://github.com/getloopscale/loopzero/issues/387")
+	}
+	pool := releasesPoolAt(t, superURL)
 	requireReleasesUniqueIndex(t, pool)
 	ctx := context.Background()
 

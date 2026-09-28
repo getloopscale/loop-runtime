@@ -37,7 +37,7 @@ package store
 import (
 	"context"
 	"fmt"
-	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,24 +45,13 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 )
 
-// secretL19DBURL returns the PG connection string. Mirrors the convention
-// from api/tests/integration/lock_crash_recovery_test.go dbURL(); kept
-// inline here to avoid cross-package test-helper imports (the integration
-// suite uses package "integration", these tests live in package "db").
-func secretL19DBURL() string {
-	if u := os.Getenv("DATABASE_URL"); u != "" {
-		return u
-	}
-	return "postgres://postgres:postgres@localhost:5432/loopzero_test?sslmode=disable"
-}
-
 // secretPerEnvironmentPool opens a pool or skips the test if PG is unreachable. The
 // pool is closed via t.Cleanup.
 func secretPerEnvironmentPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	pool, err := pgxpool.New(ctx, secretL19DBURL())
+	pool, err := pgxpool.New(ctx, fixtureDBURL())
 	if err != nil {
 		t.Skipf("L19 test skipped: cannot create pool: %v", err)
 	}
@@ -119,7 +108,7 @@ func TestSecret_PKIncludesEnvironment(t *testing.T) {
 			"DELETE FROM secrets WHERE tenant_id = $1", tenantID)
 	})
 
-	store, err := NewPostgresSecretStore(&db.PgxAdapter{Pool: pool}, nil)
+	store, err := NewPostgresSecretStoreWithVault(&db.PgxAdapter{Pool: pool}, echoTransit{}, nil)
 	if err != nil {
 		t.Fatalf("NewPostgresSecretStore: %v", err)
 	}
@@ -207,7 +196,7 @@ func TestSecret_UpsertOnDuplicateEnvironment(t *testing.T) {
 			"DELETE FROM secrets WHERE tenant_id = $1", tenantID)
 	})
 
-	store, err := NewPostgresSecretStore(&db.PgxAdapter{Pool: pool}, nil)
+	store, err := NewPostgresSecretStoreWithVault(&db.PgxAdapter{Pool: pool}, echoTransit{}, nil)
 	if err != nil {
 		t.Fatalf("NewPostgresSecretStore: %v", err)
 	}
@@ -255,7 +244,21 @@ func TestSecret_UpsertOnDuplicateEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SELECT value: %v", err)
 	}
-	if string(stored) != "v2" {
-		t.Errorf("expected stored value=%q after UPDATE, got %q", "v2", string(stored))
+	if want := echoCiphertext("v2"); string(stored) != want {
+		t.Errorf("expected stored value=%q after UPDATE, got %q", want, string(stored))
 	}
+}
+
+// echoTransit is a transit client whose ciphertext names its plaintext, so a test can
+// tell which value the row holds. The store refuses to write without a transit client.
+type echoTransit struct{}
+
+func echoCiphertext(plaintext string) string { return "vault:v1:echo:" + plaintext }
+
+func (echoTransit) Encrypt(_ context.Context, _ string, plaintext []byte) (string, error) {
+	return echoCiphertext(string(plaintext)), nil
+}
+
+func (echoTransit) Decrypt(_ context.Context, _ string, ciphertext string) ([]byte, error) {
+	return []byte(strings.TrimPrefix(ciphertext, echoCiphertext(""))), nil
 }

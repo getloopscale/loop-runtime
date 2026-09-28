@@ -21,7 +21,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -78,21 +77,11 @@ func TestIsReleasesActiveUniqueViolation_UnwrapsChain(t *testing.T) {
 	}
 }
 
-// concurrentActivationDBURL mirrors the package-db test convention
-// (secretL19DBURL). Self-contained here because this test moved to the store
-// package (M9 5b) and can no longer reference the root-db test helper.
-func concurrentActivationDBURL() string {
-	if u := os.Getenv("DATABASE_URL"); u != "" {
-		return u
-	}
-	return "postgres://postgres:postgres@localhost:5432/loopzero_test?sslmode=disable"
-}
-
 func concurrentActivationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	pool, err := pgxpool.New(ctx, concurrentActivationDBURL())
+	pool, err := pgxpool.New(ctx, fixtureDBURL())
 	if err != nil {
 		t.Skipf("CV-M-1 test skipped: cannot create pool: %v", err)
 	}
