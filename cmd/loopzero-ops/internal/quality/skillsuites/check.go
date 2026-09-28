@@ -193,12 +193,8 @@ func Check(cfg Config) (Outcome, error) {
 		cfg.PerSuiteTimeout = defaultPerSuiteTimeout
 	}
 
-	if _, err := exec.LookPath("pytest"); err != nil {
-		if _, err := exec.LookPath("python3"); err != nil {
-			return Outcome{Advisory: true}, nil
-		}
-	}
-
+	// Discovery first: it needs no interpreter, and a tree holding no suite is a
+	// failure whether or not pytest is installed (see the package doc).
 	suites, err := Discover(cfg)
 	switch {
 	case errors.Is(err, ErrSkillsRootMissing):
@@ -207,6 +203,10 @@ func Check(cfg Config) (Outcome, error) {
 		return Outcome{Violation: err}, nil
 	case err != nil:
 		return Outcome{}, err
+	}
+
+	if !pytestRunnable() {
+		return Outcome{Advisory: true}, nil
 	}
 
 	var out Outcome
@@ -220,6 +220,22 @@ func Check(cfg Config) (Outcome, error) {
 		out.Violation = ErrSuitesFailed
 	}
 	return out, nil
+}
+
+// pytestRunnable reports whether the exact invocation runSuite makes can start.
+//
+// It asks the interpreter, not PATH. The earlier probe looked for a `pytest` binary
+// and, failing that, settled for `python3` existing — so on a host with python3 and no
+// pytest module (a stock CI runner is one) every suite ran, died on "No module named
+// pytest", and the gate reported fifteen red suites that nobody had executed. A
+// verdict about the suites must not be a verdict about the host's packages.
+func pytestRunnable() bool {
+	if _, err := exec.LookPath("python3"); err != nil {
+		return false
+	}
+	probe := exec.Command("python3", "-c", "import pytest")
+	probe.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
+	return probe.Run() == nil
 }
 
 func runSuite(dir, skill string, timeout time.Duration) Result {
