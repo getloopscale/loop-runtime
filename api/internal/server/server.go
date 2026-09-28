@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/projects/projectshttp"
 	"log/slog"
 	"net/http"
 	"os"
@@ -87,6 +88,9 @@ type Config struct {
 	// requires this to be wired so admin@loopzero.example (team tier) is
 	// served correctly.
 	PlanTierStore pkgdomain.PlanTierStore
+	// TenantCellResolver reads tenants.cell_id so the Tenant CR the project handler
+	// creates names the tenant's placed cell (#412).
+	TenantCellResolver projectshttp.TenantCellResolver
 	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4 (ADR D4):
 	// optional EnvironmentEnsurer wired into the project Create handler
 	// so every new project gets a `production` env auto-created. Reuses

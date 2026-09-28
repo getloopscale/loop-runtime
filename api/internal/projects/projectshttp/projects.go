@@ -72,7 +72,8 @@ type ProjectHandler struct {
 	store         ports.ProjectStore
 	crMgr         TenantCRManager
 	deleter       ProjectDeleter
-	envEnsurer    EnvironmentEnsurer      // T4.1: auto-create production env on POST /api/v1/projects
+	envEnsurer    EnvironmentEnsurer // T4.1: auto-create production env on POST /api/v1/projects
+	cellResolver  TenantCellResolver
 	planTierStore pkgdomain.PlanTierStore // T2.3.b: resolves tenant's canonical plan instead of hardcoded "starter"
 }
 
@@ -97,6 +98,17 @@ func (h *ProjectHandler) SetDeleter(d ProjectDeleter) {
 // behavior so the wider test suite keeps passing during transition).
 func (h *ProjectHandler) SetPlanTierStore(s pkgdomain.PlanTierStore) {
 	h.planTierStore = s
+}
+
+// TenantCellResolver reads the cell the engine placed a tenant on (tenants.cell_id).
+type TenantCellResolver interface {
+	GetTenantCellID(ctx context.Context, tenantID string) (string, error)
+}
+
+// SetTenantCellResolver wires the lookup Create uses so the Tenant CR it creates
+// names the tenant's placed cell instead of the CRD default (#412).
+func (h *ProjectHandler) SetTenantCellResolver(r TenantCellResolver) {
+	h.cellResolver = r
 }
 
 // SetEnvEnsurer wires the EnvironmentEnsurer used by Create to auto-create
@@ -281,7 +293,15 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	planValue := planTier.String()
-	if err := h.crMgr.EnsureTenant(ctx, uc.TenantID, TenantCRSpec{Plan: planValue}); err != nil {
+	cellID, cerr := h.tenantCell(ctx, uc.TenantID)
+	if cerr != nil {
+		slog.Error("failed to resolve the tenant's cell", "tenant_id", uc.TenantID, "error", cerr.Error())
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPlatformDegraded.Wrap(
+			fmt.Sprintf("tenant placement unavailable for %s — retry or contact support", uc.TenantID),
+		))
+		return
+	}
+	if err := h.crMgr.EnsureTenant(ctx, uc.TenantID, TenantCRSpec{Plan: planValue, CellID: cellID}); err != nil {
 		slog.Error("failed to ensure tenant CR",
 			"tenant_id", uc.TenantID,
 			"error", err.Error(),
@@ -467,4 +487,13 @@ func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Reques
 	}
 
 	httpio.WriteJSON(w, http.StatusOK, result)
+}
+
+// tenantCell returns the tenant's placed cell, or "" when no resolver is wired (the
+// Tenant CR then takes the CRD default, the pre-#412 behaviour).
+func (h *ProjectHandler) tenantCell(ctx context.Context, tenantID string) (string, error) {
+	if h.cellResolver == nil {
+		return "", nil
+	}
+	return h.cellResolver.GetTenantCellID(ctx, tenantID)
 }

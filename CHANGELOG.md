@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A tenant placed on a cell other than cell-0 is now provisioned on that cell: its first project creates the tenant's cluster resources on the cell the engine chose, instead of on cell-0 (#412)
+
 - Creating a project now answers with the stored creation time and creator instead of a 0001-01-01 timestamp (#411)
 
 - The admin seed now mints its session on standalone environments, resolving the path-only login action Kratos renders there instead of failing with an unsupported URL (#410)

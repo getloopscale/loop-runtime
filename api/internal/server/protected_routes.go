@@ -198,6 +198,9 @@ func registerProjectRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if cfg.PlanTierStore != nil {
 		h.SetPlanTierStore(cfg.PlanTierStore)
 	}
+	if cfg.TenantCellResolver != nil {
+		h.SetTenantCellResolver(cfg.TenantCellResolver)
+	}
 	// T4.1 (m2-operator-canonical-fix): POST /projects auto-creates `production`.
 	if cfg.ProjectEnvEnsurer != nil {
 		h.SetEnvEnsurer(cfg.ProjectEnvEnsurer)

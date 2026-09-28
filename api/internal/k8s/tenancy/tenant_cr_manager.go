@@ -295,6 +295,9 @@ func buildTenant(tenantID string, spec ports.TenantCRSpec, buildConcurrency int)
 		},
 	}
 	applyTenantSpec(t, spec, buildConcurrency)
+	// Only a new CR takes the cell: applyTenantSpec also runs on update, and a project
+	// create must never move a tenant (#412). Empty keeps the CRD default.
+	t.Spec.CellID = spec.CellID
 	return t
 }
 

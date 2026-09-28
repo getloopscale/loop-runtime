@@ -681,3 +681,54 @@ func TestProjects_Delete_NoDeleter(t *testing.T) {
 		t.Fatalf("want 500, got %d body=%s", w.Code, w.Body.String())
 	}
 }
+
+type fakeTenantCellResolver struct {
+	cell string
+	err  error
+}
+
+func (f fakeTenantCellResolver) GetTenantCellID(_ context.Context, _ string) (string, error) {
+	return f.cell, f.err
+}
+
+// The Tenant CR is created at the first project, and it must name the cell the
+// engine placed the tenant on — tenants.cell_id — not the CRD default (#412).
+func TestProjects_Create_TheTenantCRNamesThePlacedCell(t *testing.T) {
+	store := &fakeProjectStore{createResult: ports.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-x"}}
+	crMgr := &fakeTenantCRMgr{}
+	h := NewProjectHandler(store, crMgr)
+	h.SetTenantCellResolver(fakeTenantCellResolver{cell: "cell-1"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(`{"name":"api"}`))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d body=%s", w.Code, w.Body.String())
+	}
+	if crMgr.capturedSpec.CellID != "cell-1" {
+		t.Errorf("EnsureTenant got CellID=%q, want cell-1", crMgr.capturedSpec.CellID)
+	}
+}
+
+// A cell that cannot be read is not the default cell: provisioning on a guess is how
+// the tenant ends up split across two cells.
+func TestProjects_Create_CellLookupFailureReturns503(t *testing.T) {
+	store := &fakeProjectStore{createResult: ports.ProjectResult{ID: "p1", Name: "api", TeamID: "tn-x"}}
+	crMgr := &fakeTenantCRMgr{}
+	h := NewProjectHandler(store, crMgr)
+	h.SetTenantCellResolver(fakeTenantCellResolver{err: errors.New("cell store: no rows")})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewBufferString(`{"name":"api"}`))
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d body=%s", w.Code, w.Body.String())
+	}
+	if crMgr.capturedSpec != (TenantCRSpec{}) {
+		t.Errorf("EnsureTenant ran with %+v on an unknown cell", crMgr.capturedSpec)
+	}
+}

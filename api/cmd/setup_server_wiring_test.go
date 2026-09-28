@@ -86,3 +86,16 @@ func TestProvisioningIsWiredOnTheCrossTenantPoolOnly(t *testing.T) {
 		}
 	})
 }
+
+// The project handler creates the Tenant CR and must name the tenant's placed cell,
+// read through the same cell store the build handler uses (#412).
+func TestTheServerConfigCarriesTheTenantCellResolver(t *testing.T) {
+	w := quietWiring(t)
+	w.cellStore = &store.PostgresCellStore{}
+
+	sc := buildServerConfig(w)
+
+	if sc.TenantCellResolver == nil {
+		t.Fatal("server.Config.TenantCellResolver is nil with a cell store wired")
+	}
+}

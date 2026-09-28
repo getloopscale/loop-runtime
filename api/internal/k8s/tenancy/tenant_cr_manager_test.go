@@ -485,3 +485,40 @@ func TestEnsureTenant_concurrentUpdate(t *testing.T) {
 		t.Errorf("expected final plan 'growth' after concurrent updates, got %q", got.Spec.Plan)
 	}
 }
+
+// The Tenant CR names the cell the engine placed the tenant on. Without it the CRD
+// default cell-0 applies, and a tenant placed on cell-1 is provisioned on cell-0
+// while the engine routes its deploys to cell-1 (#412).
+func TestEnsureTenant_CreatesTheTenantOnItsPlacedCell(t *testing.T) {
+	mgr := newTenantMgr(t)
+
+	if err := mgr.EnsureTenant(context.Background(), "tn-placed", ports.TenantCRSpec{Plan: "starter", CellID: "cell-1"}); err != nil {
+		t.Fatalf("EnsureTenant: %v", err)
+	}
+
+	if got := getTenant(t, mgr, "tn-placed").Spec.CellID; got != "cell-1" {
+		t.Errorf("spec.cellID = %q, want cell-1", got)
+	}
+}
+
+// Moving a tenant is the admin pin's job — audited and atomic with the database.
+// EnsureTenant runs on every project create and must not move an existing tenant.
+func TestEnsureTenant_DoesNotMoveAnExistingTenant(t *testing.T) {
+	mgr := newTenantMgr(t)
+	ctx := context.Background()
+	if err := mgr.EnsureTenant(ctx, "tn-settled", ports.TenantCRSpec{Plan: "starter", CellID: "cell-0"}); err != nil {
+		t.Fatalf("first EnsureTenant: %v", err)
+	}
+
+	if err := mgr.EnsureTenant(ctx, "tn-settled", ports.TenantCRSpec{Plan: "pro", CellID: "cell-1"}); err != nil {
+		t.Fatalf("second EnsureTenant: %v", err)
+	}
+
+	got := getTenant(t, mgr, "tn-settled")
+	if got.Spec.CellID != "cell-0" {
+		t.Errorf("spec.cellID = %q, want cell-0 kept — a project create must not move the tenant", got.Spec.CellID)
+	}
+	if got.Spec.Plan != "pro" {
+		t.Errorf("spec.plan = %q, want pro (the update still applies)", got.Spec.Plan)
+	}
+}

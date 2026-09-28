@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"github.com/getloopscale/loopzero/api/internal/projects/projectshttp"
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/builds/admission"
@@ -112,12 +113,13 @@ func baseServerConfig(w serverWiring) server.Config {
 		Logger:      w.logger,
 		// ContextLogger enriches every handler's request-scoped logger with
 		// correlation_id and, from the span OtelHTTP opened, trace_id.
-		ContextLogger:  pkglogging.NewContextLogger(w.logger, observability.TraceIDs),
-		HealthServices: w.healthServices,
-		TokenValidator: w.tokenValidator,
-		TenantCRMgr:    w.k8sDeps.TenantCRMgr,
-		DomainHandler:  w.domainHandler,
-		BuildHandler:   w.buildHandler,
+		ContextLogger:      pkglogging.NewContextLogger(w.logger, observability.TraceIDs),
+		HealthServices:     w.healthServices,
+		TokenValidator:     w.tokenValidator,
+		TenantCRMgr:        w.k8sDeps.TenantCRMgr,
+		TenantCellResolver: tenantCellResolver(w.cellStore),
+		DomainHandler:      w.domainHandler,
+		BuildHandler:       w.buildHandler,
 		BuildAttestationHandler: buildshttp.NewBuildAttestationHandler(
 			store.NewPostgresAttestationStore(w.dbAdapter), w.logger,
 		),
@@ -454,4 +456,13 @@ func toSBOMURLGenerator(stores *StoreDeps) buildshttp.SBOMURLGenerator {
 		return g
 	}
 	return nil
+}
+
+// tenantCellResolver keeps a nil store a nil interface, so the route sees no resolver
+// rather than one that panics on its first call.
+func tenantCellResolver(s *store.PostgresCellStore) projectshttp.TenantCellResolver {
+	if s == nil {
+		return nil
+	}
+	return s
 }

@@ -307,6 +307,10 @@ type ProjectStore interface {
 // TenantCRSpec holds the spec for creating/updating a Tenant CR.
 type TenantCRSpec struct {
 	Plan string
+	// CellID is the cell the engine placed the tenant on (tenants.cell_id). It is
+	// written when the CR is created and never changes an existing one: moving a
+	// tenant is the admin pin's job (#412).
+	CellID string
 }
 
 // TenantCRManager abstracts Kubernetes Tenant CR operations (DIP).
