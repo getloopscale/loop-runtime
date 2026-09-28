@@ -225,6 +225,10 @@ jobs:
       # developer exercises locally, which is the property a gate is wanted for.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; issue #233)
         with:
+          # Full history: the cmd/loopzero-ops suite resolves commit SHAs cited in workflow
+          # comments and scans history for secrets, and a shallow clone makes both refuse
+          # to measure (they fail under CI rather than report a clean they did not see).
+          fetch-depth: 0
           persist-credentials: false   # zizmor artipacked: no later step pushes
           path: loopzero
 
@@ -321,6 +325,8 @@ jobs:
           cache-dependency-path: |
             loopzero/api/go.sum
             loopzero/operators/go.sum
+
+      - uses: ./loopzero/.github/actions/test-prerequisites
 
       # This repository is MULTI-MODULE and has no `go.mod` at the root: a `go build ./...`
       # there covers NOTHING. Each module is built explicitly. The list is `go.work`'s minus
@@ -583,6 +589,8 @@ jobs:
             cmd/loopzero-ops/go.sum
             operators/go.sum
 
+      - uses: ./.github/actions/test-prerequisites
+
       # `GOWORK=off` is the entire point of this job: with the workspace active Go tries to
       # resolve `../loopzero-contracts` and fails without the deploy key. Switched off, each
       # independent module resolves through its own go.mod.
@@ -597,9 +605,15 @@ jobs:
             echo "::endgroup::"
           done
 
+      # LOOPZERO_NO_PRIVATE_MODULE_CREDENTIAL declares what this job is: it runs on forks and
+      # receives no credential for the private loopzero-contracts module, so the modules that
+      # require it (api, pkg) cannot be built here. module-selfcontained reports them NOT
+      # VERIFIED instead of failing them; build-and-test, which holds the deploy key,
+      # verifies them.
       - name: Test the independent modules
         env:
           GOWORK: off
+          LOOPZERO_NO_PRIVATE_MODULE_CREDENTIAL: "1"
         run: |
           set -euo pipefail
           for m in cmd/loopzero-ops operators/api; do
