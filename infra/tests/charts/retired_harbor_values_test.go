@@ -4,6 +4,8 @@
 package charts
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -36,6 +38,34 @@ func TestAnInstallStillSettingAHarborKeyIsRefused(t *testing.T) {
 			leaf := tc.key[strings.LastIndex(tc.key, ".")+1:]
 			if err == nil || !strings.Contains(err.Error(), leaf) {
 				t.Fatalf("%s rendered with %s set (err = %v); the schema must refuse the retired key by name", tc.chart, tc.key, err)
+			}
+		})
+	}
+}
+
+// The schema makes a Harbor branch in a template unreachable, and an unreachable
+// branch is not harmless: it is what comes back live the day somebody loosens the
+// schema to accept one more key, delivering a credential nothing consumes. So the
+// retired keys must be gone from the templates too, not only refused at the door.
+func TestNoTemplateStillRendersAHarborValue(t *testing.T) {
+	for _, chart := range []string{"loopzero-api", "loopzero-tenant-operator"} {
+		t.Run(chart, func(t *testing.T) {
+			templates := filepath.Join(publishedChart(t, chart), "templates")
+			err := filepath.WalkDir(templates, func(path string, d os.DirEntry, err error) error {
+				if err != nil || d.IsDir() {
+					return err
+				}
+				body, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				if strings.Contains(strings.ToLower(string(body)), "harbor") {
+					t.Errorf("%s still names Harbor; a branch the schema cannot reach is dead code that returns live when the schema loosens", path)
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatalf("walk %s: %v", templates, err)
 			}
 		})
 	}

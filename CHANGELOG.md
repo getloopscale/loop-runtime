@@ -296,6 +296,7 @@ to [Semantic Versioning](https://semver.org/).
 - The Harbor alert rules, the "Registry (Harbor)" dashboard and the Harbor panels of the home and alerts-overview dashboards are removed, as is the Harbor mirror PrometheusRule of loopzero-admission-policies (design_pattern_findings#30)
 
 - The tenant-operator no longer provisions Harbor projects or robot accounts; the `harborUrl`, `harborAdminUsername`, `harborRegistryHost` and `harborAdminPassword` settings are removed from its chart and refused at install, and the per-plan registry storage quota that only Harbor enforced goes with them (design_pattern_findings#30)
+- The tenant-operator chart no longer carries a `HARBOR_ADMIN_PASSWORD` entry in its Secret template; the value was already refused at install, and the dead branch would have come back live the day the schema loosened (design_pattern_findings#30)
 
 - The build pipeline's Harbor dual-push mirror and the `harborRegistryUrl` setting of the loopzero-api chart are removed; images are pushed to `REGISTRY_URL` only, and a values file still setting the key is refused at install (design_pattern_findings#30)
 
