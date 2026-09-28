@@ -27,6 +27,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 
@@ -80,19 +81,20 @@ func (s *PostgresProjectStore) insertProject(ctx context.Context, input ports.Cr
 	q := generated.New()
 
 	id := GenerateProjectID()
-	if err := q.InsertProject(ctx, gdb, generated.InsertProjectParams{
+	createdAt, err := q.InsertProject(ctx, gdb, generated.InsertProjectParams{
 		ID:        id,
 		TenantID:  input.TenantID,
 		Name:      input.Name,
 		CreatedBy: input.CreatedBy,
-	}); err != nil {
+	})
+	if err != nil {
 		if db.IsPGUniqueViolation(err) {
 			return ports.ProjectResult{}, ports.ErrProjectExists
 		}
 		return ports.ProjectResult{}, fmt.Errorf("project store: insert failed: %w", err)
 	}
 
-	return ports.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID}, nil
+	return createdProject(id, input, createdAt.Time), nil
 }
 
 // resolveAccountAndLock resolves the tenant's Account (tenants.account_id, NOT
@@ -206,10 +208,11 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input po
 	}
 
 	id := GenerateProjectID()
-	if _, err := tx.Exec(ctx,
-		"INSERT INTO projects (id, tenant_id, name, created_by) VALUES ($1, $2, $3, $4)",
+	var createdAt time.Time
+	if err := tx.QueryRow(ctx,
+		"INSERT INTO projects (id, tenant_id, name, created_by) VALUES ($1, $2, $3, $4) RETURNING created_at",
 		id, input.TenantID, input.Name, input.CreatedBy,
-	); err != nil {
+	).Scan(&createdAt); err != nil {
 		if db.IsPGUniqueViolation(err) {
 			return ports.ProjectResult{}, ports.ErrProjectExists
 		}
@@ -219,7 +222,7 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input po
 	if err := pgtx.Commit(ctx); err != nil {
 		return ports.ProjectResult{}, fmt.Errorf("project store: commit: %w", err)
 	}
-	return ports.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID}, nil
+	return createdProject(id, input, createdAt), nil
 }
 
 // EnsureProject creates a project if it doesn't exist (idempotent).
@@ -497,4 +500,10 @@ func (s *PostgresProjectStore) DeleteProject(ctx context.Context, tenantID, proj
 		return fmt.Errorf("project store: project not found")
 	}
 	return nil
+}
+
+// createdProject is the result of a successful insert: what the caller asked for plus
+// the creation time the database stored, which the create response carries (#411).
+func createdProject(id string, input ports.CreateProjectInput, createdAt time.Time) ports.ProjectResult {
+	return ports.ProjectResult{ID: id, Name: input.Name, TeamID: input.TenantID, CreatedBy: input.CreatedBy, CreatedAt: createdAt}
 }

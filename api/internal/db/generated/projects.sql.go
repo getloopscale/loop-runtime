@@ -93,10 +93,11 @@ func (q *Queries) GetProjectByName(ctx context.Context, db DBTX, arg GetProjectB
 	return i, err
 }
 
-const insertProject = `-- name: InsertProject :exec
+const insertProject = `-- name: InsertProject :one
 
 INSERT INTO projects (id, tenant_id, name, created_by)
 VALUES ($1, $2, $3, $4)
+RETURNING created_at
 `
 
 type InsertProjectParams struct {
@@ -121,15 +122,18 @@ type InsertProjectParams struct {
 // contract.
 // Caller supplies id (generated via GenerateProjectID() helper).
 // 23505 on (tenant_id, name) UNIQUE → domain.ErrProjectExists in
-// wrapper.
-func (q *Queries) InsertProject(ctx context.Context, db DBTX, arg InsertProjectParams) error {
-	_, err := db.Exec(ctx, insertProject,
+// wrapper. Returns the stored creation time, which the create response
+// carries (#411).
+func (q *Queries) InsertProject(ctx context.Context, db DBTX, arg InsertProjectParams) (pgtype.Timestamptz, error) {
+	row := db.QueryRow(ctx, insertProject,
 		arg.ID,
 		arg.TenantID,
 		arg.Name,
 		arg.CreatedBy,
 	)
-	return err
+	var created_at pgtype.Timestamptz
+	err := row.Scan(&created_at)
+	return created_at, err
 }
 
 const listProjectsByTenant = `-- name: ListProjectsByTenant :many

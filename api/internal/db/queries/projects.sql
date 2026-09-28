@@ -12,12 +12,14 @@
 -- which the wrapper maps to domain.ErrProjectExists per legacy
 -- contract.
 
--- name: InsertProject :exec
+-- name: InsertProject :one
 -- Caller supplies id (generated via GenerateProjectID() helper).
 -- 23505 on (tenant_id, name) UNIQUE → domain.ErrProjectExists in
--- wrapper.
+-- wrapper. Returns the stored creation time, which the create response
+-- carries (#411).
 INSERT INTO projects (id, tenant_id, name, created_by)
-VALUES ($1, $2, $3, $4);
+VALUES ($1, $2, $3, $4)
+RETURNING created_at;
 
 -- name: EnsureProject :exec
 -- Idempotent upsert used by the deploy flow to guarantee the project
