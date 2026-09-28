@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The tenant-operator image builds again: every operator Dockerfile now compiles its command package instead of main.go alone, which broke once the tenant-operator config moved to its own file (#406)
+
 - A cold setup now syncs the OpenBao AppRole role_id right after the vault bootstrap issues it, so loopzero-api boots with transit enabled instead of crash-looping until the post-cleanroom seeds run (#405)
 
 - The Tilt dev loop now applies the loopzero-api runtime ConfigMap and Secret in loopzero-system, where the API reads them; they landed in default and loopzero-api never started (#404)
