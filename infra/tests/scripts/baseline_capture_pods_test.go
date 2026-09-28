@@ -74,3 +74,22 @@ func TestTheRuntimeLayerSeesAWorkloadLoseAPod(t *testing.T) {
 		t.Error("a Deployment with one pod no longer Running reads the same as one with both Running")
 	}
 }
+
+func svclbPod(name, owner string) string {
+	return `{"metadata":{"namespace":"kube-system","name":"` + name + `","labels":{` +
+		`"svccontroller.k3s.cattle.io/svcname":"traefik","svccontroller.k3s.cattle.io/svcnamespace":"traefik"},` +
+		`"ownerReferences":[{"kind":"DaemonSet","name":"` + owner + `"}]},"status":{"phase":"Running"}}`
+}
+
+// k3s names its ServiceLB DaemonSet svclb-<service>-<prefix of the Service UID>, so a
+// rebuild renames the DaemonSet itself: measured fa7e764e before, 778cbaf6 after, and
+// Phase 5 reported the one workload missing (#417). The pod's service labels are the
+// stable identity.
+func TestTheRuntimeLayerIdentifiesServiceLBPodsByTheirService(t *testing.T) {
+	before := `{"items":[` + svclbPod("svclb-traefik-fa7e764e-768x2", "svclb-traefik-fa7e764e") + `]}`
+	after := `{"items":[` + svclbPod("svclb-traefik-778cbaf6-p74qg", "svclb-traefik-778cbaf6") + `]}`
+
+	if a, b := runtimeLayer(t, before), runtimeLayer(t, after); a != b {
+		t.Errorf("a rebuilt ServiceLB DaemonSet reads as a different workload:\nbefore %s\nafter  %s", a, b)
+	}
+}

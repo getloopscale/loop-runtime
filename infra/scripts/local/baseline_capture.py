@@ -38,6 +38,12 @@ def _workload(pod: dict) -> str:
     """The workload that owns a pod: a Deployment's ReplicaSet loses its template
     hash, any other owner is named as-is, and an unowned pod is its own workload."""
     meta = pod.get("metadata", {})
+    labels = meta.get("labels") or {}
+    # k3s names a ServiceLB DaemonSet after a prefix of the Service UID, which a
+    # rebuild changes; the service it serves is the stable identity (#417).
+    svc = labels.get("svccontroller.k3s.cattle.io/svcname")
+    if svc:
+        return f"svclb-{labels.get('svccontroller.k3s.cattle.io/svcnamespace', '')}-{svc}"
     owners = meta.get("ownerReferences") or []
     if not owners:
         return meta.get("name", "")
