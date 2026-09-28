@@ -89,6 +89,12 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The integration-test role fixture creates only the roles the platform uses; TestRolesExist asserts loopzero_api, loopzero_worker and loopzero_cloud exist and cannot bypass Row Level Security (#387)
+
+- The tenant-isolation CI job builds its database from the whole migration chain with golang-migrate v4.19.1, the tool production runs, instead of a schema dump plus five hand-named migrations (#387)
+
+- CI installs the pinned go-task and trufflehog the cmd/loopzero-ops suite requires, and build-and-test checks out full history (#370)
+
 - `task quality:gates` skips the backlog-structure check and says why when `BACKLOG.md` or the installed kit is absent — both are gitignored, so a fresh clone has neither — instead of failing every clone; it runs in full where both exist (docs/decisions.md, 2026-09-26: a gate over the gitignored kit skips when the kit is absent)
 
 - On a clone without the gitignored development kit (`.claude/`, `.squad/`), the four quality gates that check that kit (`skill-suites`, `skill-script-paths`, `records-tree-split`, `ecosystem-validators`) now skip and print why, instead of three of them exiting 5, so `task quality:gates` can pass on a fresh clone; with the kit installed they run in full (docs/decisions.md, 2026-09-26: a gate over the gitignored kit skips when the kit is absent)
@@ -361,6 +367,12 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- The rollback and concurrent-build integration tests run under the production role split (loopzero_worker fixtures, tenant-scoped loopzero_api request pool) and no longer fail or flake under fail-closed Row Level Security (#387)
+
+- The module-selfcontained gate reports a module whose private dependency cannot be fetched without a credential as NOT VERIFIED and names it, instead of failing it; an unknown revision, a go.mod inconsistency or a compile error still fails (#370)
+
+- The skill-suites quality gate reports a host with python3 but no pytest module as advisory, instead of failing on suites that never ran (#370)
 
 - A cold start installs the object store again: MinIO withdrew every community binary and image, so the MinIO server and its `mc` client are now built from pinned upstream source commits (`loopzero-minio`, `loopzero-clone-runner`) and the chart, the build-cache steps and the lifecycle job use them instead of images that can no longer be pulled; the cache-save step no longer relies on bash-only syntax that fails in the new image. The upstream source is archived and unmaintained, so this is a bridge until the object store is replaced (#394)
 - `task cleanroom:v2` now actually runs the cold-start chain: every spec used to skip unconditionally, so the task reported SUCCESS in milliseconds with no cluster destroyed or recreated; the destructive specs now run on explicit consent (`LOOPZERO_CLEANROOM_DESTROY=1`), which the task grants for the full-chain spec only (#393)
