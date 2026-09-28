@@ -1,0 +1,156 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopZero Authors
+
+package charts
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+
+	"gopkg.in/yaml.v3"
+)
+
+// MinIO withdrew every binary channel of its community edition (#394): dl.min.io
+// answers 410, the quay.io/minio repositories require authentication, Docker Hub
+// minio/minio is gone, and github.com/minio/minio is archived as source-only.
+// A reference to any of them works only on a node that cached the image before,
+// so it passes on a warm cluster and fails on the first cold start — which is how
+// it went unnoticed until a real cleanroom ran.
+//
+// The object store and its client are therefore built here, from pinned source
+// commits (infra/images/minio, infra/images/clone-runner), and nothing may reach
+// for the withdrawn channels again.
+
+var withdrawnMinioChannel = regexp.MustCompile(
+	`dl\.min\.io|quay\.io/minio/|(^|[\s"'=:])(docker\.io/)?minio/(mc|minio)[:@"'\s]`)
+
+func TestNothingReachesForAWithdrawnMinioChannel(t *testing.T) {
+	root := repoRoot(t)
+	for _, dir := range []string{"charts", "infra/helm", "infra/helmfile", "infra/images", "infra/tests/e2e", "taskfiles"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d os.DirEntry, err error) error {
+			// A symlink points into a tree this walk already covers (loopzero-monitoring
+			// links infra/helm/monitoring), so it is skipped rather than read twice.
+			if err != nil || !d.Type().IsRegular() || strings.HasSuffix(path, ".md") || strings.HasSuffix(path, "_test.go") {
+				return err
+			}
+			body, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for i, line := range strings.Split(string(body), "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") {
+					continue
+				}
+				if withdrawnMinioChannel.MatchString(line) {
+					rel, _ := filepath.Rel(root, path)
+					t.Errorf("%s:%d reaches for a withdrawn MinIO channel (#394): %s", rel, i+1, trimmed)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", dir, err)
+		}
+	}
+}
+
+// The upstream minio/minio chart defaults both its server and its client image to
+// quay.io/minio, which no longer serves them. The core helmfile must replace all
+// four values in BOTH branches — the local-registry profile and every other
+// environment — or one of them falls back to the dead default silently.
+func TestCoreHelmfileReplacesBothMinioChartImagesInEveryBranch(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "infra", "helmfile", "core.helmfile.yaml.gotmpl"))
+	if err != nil {
+		t.Fatalf("read core helmfile: %v", err)
+	}
+	text := string(raw)
+	// Anchor on the chart, not the name: `- name: minio` is also the repositories entry.
+	chart := strings.Index(text, "    chart: minio/minio\n")
+	if chart < 0 {
+		t.Fatal("core helmfile declares no release of chart minio/minio")
+	}
+	release := text[strings.LastIndex(text[:chart], "\n  - name: ")+1:]
+	if next := strings.Index(release[1:], "\n  - name: "); next >= 0 {
+		release = release[:next+1]
+	}
+	for _, key := range []string{"image.repository", "image.tag", "mcImage.repository", "mcImage.tag"} {
+		if got := strings.Count(release, "- name: "+key+"\n"); got != 2 {
+			t.Errorf("minio release sets %s in %d branch(es), want 2 (local registry and every other environment)", key, got)
+		}
+	}
+}
+
+// A binary built from source is only as pinned as the commit it was built from. A
+// tag can be moved; a commit cannot. Each image must name its commit and refuse to
+// build if the checkout is anything else.
+func TestMinioImagesBuildFromAVerifiedSourceCommit(t *testing.T) {
+	commit := regexp.MustCompile(`ARG \w+_COMMIT=[0-9a-f]{40}\b`)
+	verifiesCommit := regexp.MustCompile(`git (-C \S+ )?rev-parse HEAD\)?"? = "\$\{\w+_COMMIT\}"`)
+	for _, dockerfile := range []string{"infra/images/minio/Dockerfile", "infra/images/clone-runner/Dockerfile"} {
+		body, err := os.ReadFile(filepath.Join(repoRoot(t), dockerfile))
+		if err != nil {
+			t.Fatalf("read %s: %v", dockerfile, err)
+		}
+		text := string(body)
+		if !commit.MatchString(text) {
+			t.Errorf("%s pins no 40-hex source commit", dockerfile)
+		}
+		if !verifiesCommit.MatchString(text) {
+			t.Errorf("%s does not verify the checked-out commit before building", dockerfile)
+		}
+	}
+}
+
+// The cache and clone steps run `sh -c` in loopzero-clone-runner, an Alpine image, so
+// `sh` is BusyBox ash. The minio/mc image they used before was RHEL-based, where
+// `sh` is bash, and a bash-only construct worked there and fails here with
+// "syntax error: unexpected redirection" — measured on cache-save when the image
+// changed (#394). Cache save is best-effort, so the failure would not even stop the
+// build: the cache would silently never be written.
+var bashOnlyConstruct = regexp.MustCompile(`<<<|\bread\s+-[a-zA-Z]*a|\[@\]|\[\[\s|\bdeclare\s+-a\b`)
+
+func TestShellStepsInTheCloneRunnerUseOnlyPosixSh(t *testing.T) {
+	rendered := renderChart(t, publishedChart(t, "loopzero-build-cwts"), "posix-sh", nil)
+	var checked int
+	for _, doc := range strings.Split(rendered, "\n---") {
+		var cwt struct {
+			Kind     string                `yaml:"kind"`
+			Metadata struct{ Name string } `yaml:"metadata"`
+			Spec     struct {
+				Templates []struct {
+					Name      string `yaml:"name"`
+					Container *struct {
+						Image   string   `yaml:"image"`
+						Command []string `yaml:"command"`
+					} `yaml:"container"`
+				} `yaml:"templates"`
+			} `yaml:"spec"`
+		}
+		if err := yaml.Unmarshal([]byte(doc), &cwt); err != nil || cwt.Kind != "ClusterWorkflowTemplate" {
+			continue
+		}
+		for _, tpl := range cwt.Spec.Templates {
+			c := tpl.Container
+			if c == nil || !strings.Contains(c.Image, "loopzero-clone-runner") || len(c.Command) < 3 || c.Command[0] != "sh" {
+				continue
+			}
+			checked++
+			for i, line := range strings.Split(c.Command[2], "\n") {
+				if strings.HasPrefix(strings.TrimSpace(line), "#") {
+					continue
+				}
+				if bashOnlyConstruct.MatchString(line) {
+					t.Errorf("%s/%s line %d uses a bash-only construct under BusyBox sh: %s",
+						cwt.Metadata.Name, tpl.Name, i+1, strings.TrimSpace(line))
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no `sh -c` step running loopzero-clone-runner was found; the check measured nothing")
+	}
+}

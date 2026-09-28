@@ -362,6 +362,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A cold start installs the object store again: MinIO withdrew every community binary and image, so the MinIO server and its `mc` client are now built from pinned upstream source commits (`loopzero-minio`, `loopzero-clone-runner`) and the chart, the build-cache steps and the lifecycle job use them instead of images that can no longer be pulled; the cache-save step no longer relies on bash-only syntax that fails in the new image. The upstream source is archived and unmaintained, so this is a bridge until the object store is replaced (#394)
 - `task cleanroom:v2` now actually runs the cold-start chain: every spec used to skip unconditionally, so the task reported SUCCESS in milliseconds with no cluster destroyed or recreated; the destructive specs now run on explicit consent (`LOOPZERO_CLEANROOM_DESTROY=1`), which the task grants for the full-chain spec only (#393)
 - `task validate:helmfile-templates` passes: Velero objects are validated against generated schemas instead of failing, the offline render no longer needs `LOOPZERO_DB_PASSWORD`, and the `dev` environment's missing loopzero-cloud values layer was added (#391)
 

@@ -35,7 +35,8 @@ spec:
       container:
         # MOD-4 fix: Replaced amazon/aws-cli (~200MB) with minio/mc (~30MB).
         # Faster image pull on the hot path (cache hit).
-        image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+        # The clone runner carries mc, built from pinned source (#394).
+        image: {{ .Values.images.cloneRunner | default "registry.digitalocean.com/loopzero-system/loopzero-clone-runner:v0.1.0" }}
         # Credentials injected from K8s Secret via envFrom — never as workflow parameters.
         # Secret loopzero-minio-credentials provides: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MINIO_ENDPOINT
         env:

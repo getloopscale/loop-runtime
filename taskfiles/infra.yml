@@ -947,6 +947,17 @@ tasks:
         docker push localhost:5000/loopzero-clone-runner:v0.1.0
         echo "  Pushed: localhost:5000/loopzero-clone-runner:{latest,v0.1.0}"
 
+  images:build:minio:
+    desc: Build + push loopzero-minio, the MinIO server built from pinned source (#394)
+    cmds:
+      - |
+        echo "=== Building loopzero-minio (from source — MinIO publishes no community images) ==="
+        # The tag is the upstream release the image is built from; the core helmfile
+        # pins the same one for a local-registry profile.
+        docker build -t localhost:5000/loopzero-minio:RELEASE.2024-12-18T13-15-44Z infra/images/minio/
+        docker push localhost:5000/loopzero-minio:RELEASE.2024-12-18T13-15-44Z
+        echo "  Pushed: localhost:5000/loopzero-minio:RELEASE.2024-12-18T13-15-44Z"
+
   images:build:syft-scanner:
     desc: Build + push loopzero-syft-scanner (Sprint 6 SBOM generation)
     cmds:
@@ -979,6 +990,7 @@ tasks:
     # lint path (T2.2) are gone; the build uses canonical in-process Dockerfiles.
     cmds:
       - task: images:build:clone-runner
+      - task: images:build:minio
       - task: images:build:syft-scanner
       - task: images:build:cosign-signer
 

@@ -279,6 +279,34 @@ releases:
 {{- if .Values.profile.highAvailability }}
       - ../helm/minio/values-distributed.yaml
 {{- end }}
+    # MinIO withdrew every binary channel of its community edition (#394): the
+    # chart's quay.io/minio defaults can no longer be pulled. Both images are built
+    # here from pinned source (infra/images/minio, infra/images/clone-runner). A
+    # local registry profile gets the ones `task images:build` pushes; any other
+    # environment takes them from its declared registry prefix — the same place its
+    # clone runner already comes from — or fails here, instead of falling back to a
+    # chart default that no longer exists.
+    set:
+{{- if .Values.profile.localRegistry }}
+      - name: image.repository
+        value: "k3d-loopzero-registry:5000/loopzero-minio"
+      - name: image.tag
+        value: "RELEASE.2024-12-18T13-15-44Z"
+      - name: mcImage.repository
+        value: "k3d-loopzero-registry:5000/loopzero-clone-runner"
+      - name: mcImage.tag
+        value: "v0.1.0"
+{{- else }}
+{{- $registry := required "registries.docrPrefix: MinIO is built from source now (#394) and published beside this environment's other images — declare the registry prefix" (.Values | get "registries.docrPrefix" "") }}
+      - name: image.repository
+        value: "{{ $registry }}loopzero-minio"
+      - name: image.tag
+        value: "RELEASE.2024-12-18T13-15-44Z"
+      - name: mcImage.repository
+        value: "{{ $registry }}loopzero-clone-runner"
+      - name: mcImage.tag
+        value: "v0.1.0"
+{{- end }}
 {{- if .Values.profile.localObjectStore }}
     # Standalone: pin MinIO root password deterministically. The chart leaves
     # rootPassword empty (fail-fast for prod), which makes the official chart
@@ -286,7 +314,6 @@ releases:
     # and static-assets consume the deterministic loopzero-dev-password. Random vs
     # hardcoded => SOURCE_UPLOAD_FAILED (access denied). Same deterministic-creds
     # pattern as PG (T1.3). rootUser=loopzero-admin comes from values.yaml.
-    set:
       - name: rootPassword
         value: "loopzero-dev-password"
 {{- end }}
