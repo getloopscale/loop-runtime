@@ -61,3 +61,6 @@ secrets:
   loopzeroArgoCallbackSecret: "dev-callback-secret"
   minioSecretKey: "loopzero-dev-password"
   loopzeroServiceAuthSecret: "cleanroom-service-auth-secret-do-not-use-in-prod"
+  # #413 — config.loopzeroAdminApi is on, and every /api/v1/admin/* route is gated by this
+  # secret alone; without it the admin routes answer 403 to everyone. Dev-only value.
+  loopzeroAdminServiceAuthSecret: "cleanroom-admin-service-auth-do-not-use-in-prod"

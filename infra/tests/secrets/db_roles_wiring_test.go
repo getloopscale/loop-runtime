@@ -160,3 +160,31 @@ func TestTheOpenBaoWiringSyncsTheRoleIDTheBootstrapIssued(t *testing.T) {
 		t.Errorf("the role-id sync must pin CORE_CONTEXT to the core context var; body:\n%s", text)
 	}
 }
+
+// The dev loop turns the admin API on, and every /api/v1/admin/* route is gated by
+// the admin service-auth secret alone (Authenticator.RequireAdminService). With the
+// flag on and no secret, the admin routes answer 403 to everyone, so evict, pin and
+// inspect cannot be exercised on the dev loop at all (#413).
+func TestTheTiltAPIEnablesTheAdminRoutesItTurnsOn(t *testing.T) {
+	raw, err := os.ReadFile("../../tilt/loopzero-api-values.yaml")
+	if err != nil {
+		t.Fatalf("read the Tilt values: %v", err)
+	}
+	var values struct {
+		Config struct {
+			LoopZeroAdminAPI string `yaml:"loopzeroAdminApi"`
+		} `yaml:"config"`
+		Secrets struct {
+			AdminServiceAuthSecret string `yaml:"loopzeroAdminServiceAuthSecret"`
+		} `yaml:"secrets"`
+	}
+	if err := yaml.Unmarshal(raw, &values); err != nil {
+		t.Fatalf("parse the Tilt values: %v", err)
+	}
+	if values.Config.LoopZeroAdminAPI != "true" {
+		t.Skip("the Tilt values do not enable the admin API — https://github.com/getloopscale/loopzero/issues/413")
+	}
+	if values.Secrets.AdminServiceAuthSecret == "" {
+		t.Error("loopzeroAdminApi is \"true\" but secrets.loopzeroAdminServiceAuthSecret is empty: every admin route answers 403")
+	}
+}
