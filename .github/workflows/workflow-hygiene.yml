@@ -16,7 +16,7 @@ on:
   #
   # Until 2026-09-06 this block was only `push: [develop, main]`. The header above described "the TWO
   # triggers ... the PR one kills the defect before it enters the trunk" — true when written, and
-  # false from 464b9d7e3 (2026-08-12), the commit that removed `pull_request` and created the
+  # false from d1130c137 (2026-08-12), the commit that removed `pull_request` and created the
   # post-merge decision whose three premises B-192 measured as false. The sentence outlived the
   # trigger for all of that time; the previous round of B-192 corrected the same untruth in
   # `check-workflow-hygiene.sh` and in `ci.yml` and left this one two screens above.

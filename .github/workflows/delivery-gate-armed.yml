@@ -27,10 +27,15 @@
 #
 #   1. `on:` FILTERS ARE PER-WORKFLOW, NOT PER-JOB. ci.yml ignores `.claude/**`,
 #      and `.claude/**` is the only place the gate can be disarmed from. Of the
-#      three commits that falsified the premises, 9a6e6e903 (the deletion) and
-#      53c1dc1ea (the restore that missed the wiring) touched NOTHING outside
-#      `.claude/**`; 63cc51c48 (the wiring removal) touched `.gitignore` and
-#      `.claude/**` and nothing else. Two of the three would not have started
+#      three commits that falsified the premises, the deletion ("chore: reinstall
+#      the Squad kit — mechanisms/, Python hooks, and the squad library",
+#      2026-09-02) and the restore that missed the wiring ("fix(.claude): restore
+#      three files the repo gates still require", 2026-08-29) touched NOTHING
+#      outside `.claude/**`; the wiring removal ("chore(.claude): adopt the
+#      reconfigured kit", 2026-08-29) touched `.gitignore` and `.claude/**` and
+#      nothing else. The published history holds only the `.gitignore` half of
+#      the third (39267fba1) and nothing of the first two: `.claude/**` is the
+#      gitignored kit and never reaches GitHub. Two of the three would not have started
 #      ci.yml at all, merged. A job inside ci.yml inherits that blindness in the
 #      exact case it exists for. This file therefore carries no paths filter, and
 #      that is not an oversight to tidy up later.
@@ -65,7 +70,7 @@ on:
   #
   # Measure this before trusting it, because the obvious measurement misleads:
   # `gh run list --branch workspace` returns 50 rows. All 50 are `pull_request`
-  # events dated 2026-08-10..2026-08-12, from before 464b9d7e3 ("validacao
+  # events dated 2026-08-10..2026-08-12, from before d1130c137 ("validacao
   # pos-merge em develop e main; PR sem acao") removed the trigger that produced
   # them. Nothing has run on this branch since. At seconds per run a push trigger
   # is affordable, and the push is the earliest event there is.

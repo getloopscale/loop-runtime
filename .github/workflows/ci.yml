@@ -33,7 +33,7 @@ name: CI
 #
 # This header used to describe a `pull_request` trigger and call it one of "the
 # TWO triggers, not one". The `on:` block below has not had a `pull_request` key
-# since 464b9d7e3, "ci: validacao pos-merge em develop e main; PR sem acao"  # english-only: verbatim quote of a commit subject
+# since d1130c137, "ci: validacao pos-merge em develop e main; PR sem acao"  # english-only: verbatim quote of a commit subject
 # (in English: "post-merge validation on develop and main; no action on PRs") — the
 # commit that made the decision this file records, which changed the trigger and
 # left the paragraph describing the old one. So the header outlived what it
@@ -53,9 +53,12 @@ on:
   # on red, with no bypass — so duplicating it on the PR would pay runner minutes
   # to re-run what already ran on the pusher's machine. Three premises, and all
   # three were false at the same time between 2026-08-29 and 2026-09-02: the
-  # hook file was deleted (9a6e6e903, third deletion), its wiring in
-  # `.claude/settings.json` had been gone four days longer (63cc51c48, and the
-  # restore four hours later put the FILE back and not the wiring), and "no
+  # hook file was deleted ("chore: reinstall the Squad kit — mechanisms/, Python
+  # hooks, and the squad library", 2026-09-02, the third deletion), its wiring in
+  # `.claude/settings.json` had been gone four days longer ("chore(.claude): adopt
+  # the reconfigured kit", 2026-08-29 — published as 39267fba1, which carries only
+  # its `.gitignore` half; and the restore four hours later put the FILE back and
+  # not the wiring), and "no
   # bypass" was false in four spellings, each one a real push that reached the
   # remote with the gate deciding nothing. 21 commits landed on `workspace` in
   # that window — an upper bound, since the repository records when a commit was
@@ -142,7 +145,7 @@ on:
 
   # THE MISSING TRIGGER, and why it was missing matters more than the line.
   #
-  # `464b9d7e3` (2026-08-12) removed `pull_request` and moved the gates into a pre-push
+  # `d1130c137` (2026-08-12) removed `pull_request` and moved the gates into a pre-push
   # hook. While the repository was private with one author the difference was loopzeroretical:
   # whoever pushes has the hook. Open, it stops being loopzeroretical — a stranger's PR would
   # reach `develop` without the suite having run once, because the `push:` above only
