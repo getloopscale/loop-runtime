@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The Tilt dev loop now applies the loopzero-api runtime ConfigMap and Secret in loopzero-system, where the API reads them; they landed in default and loopzero-api never started (#404)
+
 - The local dev loop starts the API again after a clean setup: it ran its own untracked copy of the database migrations with a client the host may not have, and it reloaded its own configuration forever; it now runs the same migration step as setup and settles (#403)
 
 - The local dev loop can no longer deploy into the wrong cluster: it deployed into whichever cluster was current, which after a clean setup was the secrets cluster, and it now refuses to start anywhere but the core cluster (#402)

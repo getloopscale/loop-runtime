@@ -215,7 +215,13 @@ local_resource(
 # The `local_resource` still exists and is not redundant: it re-renders when the
 # `deps` change, which is the development loop. This `local()` only guarantees the first render.
 local(_API_RUNTIME_RENDER, quiet=True)
-k8s_yaml(".tilt-rendered/loopzero-api-runtime.yaml")
+# The chart declares no namespace — a Helm release supplies it — so the raw render
+# would land in `default`, and the loopzero-api Deployment in loopzero-system then failed with
+# `configmap "loopzero-api" not found` (#404). Place every rendered object in loopzero-system.
+_api_runtime_objects = decode_yaml_stream(read_file(".tilt-rendered/loopzero-api-runtime.yaml"))
+for _obj in _api_runtime_objects:
+    _obj["metadata"]["namespace"] = "loopzero-system"
+k8s_yaml(encode_yaml_stream(_api_runtime_objects))
 
 k8s_yaml("infra/tilt/api-deployment.yaml")
 k8s_resource(
