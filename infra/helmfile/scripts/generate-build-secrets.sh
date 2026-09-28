@@ -19,6 +19,10 @@
 set -euo pipefail
 
 ENV="${1:?usage: $0 <env>}"
+# Absolute, resolved before anything changes directory: the cosign step below
+# `cd`s into a temporary directory on a cold install, and a path derived from $0
+# afterwards pointed nowhere (#399).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Issue #117 (generalizing #115) — pin the target cluster BY CONSTRUCTION.
 # This script writes Secrets to the BUILD cluster. Before this pin, it relied
@@ -132,7 +136,7 @@ fi
 # 4) Backup all build-cluster Secrets for disaster recovery.
 # The restorable backup lives in generate-secrets.sh; this one used to dump raw
 # `kubectl get -o yaml`, which does not re-apply after the Secret changed.
-KUBECTL_CONTEXT="$KUBECTL_CONTEXT" "$(dirname "$0")/generate-secrets.sh" --backup-only \
+KUBECTL_CONTEXT="$KUBECTL_CONTEXT" "$SCRIPT_DIR/generate-secrets.sh" --backup-only \
   "build-secrets-${ENV}" argo/cosign-signing-key argo/buildkit-registry-config argo/minio-credentials
 
 log "build secrets generated for env=$ENV (idempotent — re-runs preserve cosign signing key)"

@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A cold `task setup` no longer stops after generating the build signing key: the build-secrets script lost track of its own directory once it had generated the key and could not reach its backup step (#399)
+
 - A cold `task setup` no longer fails after provisioning API tokens: it created the MinIO buckets a third time by running the MinIO client inside the server, which the source-built server image does not carry; the chart already creates them (#394)
 
 - A cold `task setup` completes with or without the optional secrets cluster: a missing one no longer fails the cross-cluster DNS step, and when it exists setup now initialises OpenBao and hands the API its credentials, which nothing did before (#398)
