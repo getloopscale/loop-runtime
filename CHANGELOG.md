@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The Tilt dev loop runs loopzero-api under the chart's permissions, as production does, instead of a drifted copy that could not move a tenant between cells (#414)
+
 - The Tilt dev loop now carries an admin service-auth secret, so the admin routes it turns on answer instead of refusing everyone with 403 (#413)
 
 - A tenant placed on a cell other than cell-0 is now provisioned on that cell: its first project creates the tenant's cluster resources on the cell the engine chose, instead of on cell-0 (#412)

@@ -188,7 +188,7 @@ docker_build(
 # file a Tiltfile dependency, and rewriting it on every load reloaded the Tiltfile,
 # which rewrote it again — "(Tiltfile)" never left in_progress (#403). The render is
 # deterministic, so an unchanged file now stays untouched.
-_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm dependency build charts/loopzero-api >/dev/null && helm template loopzero-api charts/loopzero-api -f infra/tilt/loopzero-api-values.yaml -s templates/configmap.yaml -s templates/secret.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml.next && { cmp -s .tilt-rendered/loopzero-api-runtime.yaml.next .tilt-rendered/loopzero-api-runtime.yaml && rm -f .tilt-rendered/loopzero-api-runtime.yaml.next || mv .tilt-rendered/loopzero-api-runtime.yaml.next .tilt-rendered/loopzero-api-runtime.yaml; }"
+_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm dependency build charts/loopzero-api >/dev/null && helm template loopzero-api charts/loopzero-api -f infra/tilt/loopzero-api-values.yaml -s templates/configmap.yaml -s templates/secret.yaml -s templates/clusterrole.yaml -s templates/clusterrolebinding.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml.next && { cmp -s .tilt-rendered/loopzero-api-runtime.yaml.next .tilt-rendered/loopzero-api-runtime.yaml && rm -f .tilt-rendered/loopzero-api-runtime.yaml.next || mv .tilt-rendered/loopzero-api-runtime.yaml.next .tilt-rendered/loopzero-api-runtime.yaml; }"
 
 local_resource(
     "loopzero-api-runtime",
@@ -219,8 +219,12 @@ local(_API_RUNTIME_RENDER, quiet=True)
 # would land in `default`, and the loopzero-api Deployment in loopzero-system then failed with
 # `configmap "loopzero-api" not found` (#404). Place every rendered object in loopzero-system.
 _api_runtime_objects = decode_yaml_stream(read_file(".tilt-rendered/loopzero-api-runtime.yaml"))
+# loopzero-api's RBAC comes from the chart too, as in production (#414): the dev loop
+# kept a drifted copy that could not patch a Tenant. ClusterRole and binding are
+# cluster-scoped, so only the namespaced objects are placed in loopzero-system.
 for _obj in _api_runtime_objects:
-    _obj["metadata"]["namespace"] = "loopzero-system"
+    if _obj["kind"] in ("ConfigMap", "Secret"):
+        _obj["metadata"]["namespace"] = "loopzero-system"
 k8s_yaml(encode_yaml_stream(_api_runtime_objects))
 
 k8s_yaml("infra/tilt/api-deployment.yaml")
