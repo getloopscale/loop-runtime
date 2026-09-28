@@ -138,34 +138,16 @@ local_resource(
     labels=["loopzero"],
 )
 
-# db-migrate now relies on the long-lived PF (no inline kubectl).
-# T1.2/T1.3 backfill semantics preserved (see ADR D1 of
-# dogfood-2026-05-08-fixes).
+# db-migrate runs the canonical migration path, the one `task setup` uses: the
+# request/worker roles first (000062 and 000068 grant to them only if they exist),
+# then golang-migrate with version tracking, executed inside the Postgres pod. This
+# resource used to carry its own copy — a host `psql -f` loop over every *.up.sql
+# and a stamp of schema_migrations to version 10 — which failed on a machine
+# without psql and would have moved a database at 68 back to 10 (#403).
 local_resource(
     "db-migrate",
-    cmd="""
-        # Wait for pg-port-forward to be ready (up to 30s).
-        for i in $(seq 1 30); do
-            if nc -z localhost 15432 2>/dev/null; then break; fi
-            sleep 1
-        done
-        for f in api/internal/db/migrations/*.up.sql; do
-            PGPASSWORD=loopzero-dev-password psql -h localhost -p 15432 -U loopzero -d loopzero -f "$f"
-        done
-        # Pre-create schema_migrations so subsequent golang-migrate `up`
-        # detects the existing schema correctly (otherwise migrate would
-        # try to re-apply 1..10 from scratch).
-        PGPASSWORD=loopzero-dev-password psql -h localhost -p 15432 -U loopzero -d loopzero -v ON_ERROR_STOP=1 -c "
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                version BIGINT NOT NULL PRIMARY KEY,
-                dirty BOOLEAN NOT NULL
-            );
-            INSERT INTO schema_migrations (version, dirty)
-            SELECT MAX(v.version), false FROM (VALUES (1),(2),(4),(5),(6),(7),(8),(9),(10)) AS v(version)
-            ON CONFLICT (version) DO UPDATE SET dirty = false;
-        "
-    """,
-    resource_deps=["postgresql", "pg-port-forward"],
+    cmd="task db:roles && task db:migrate",
+    resource_deps=["postgresql"],
     deps=["api/internal/db/migrations"],
 )
 
@@ -202,7 +184,11 @@ docker_build(
 # rendered with infra/tilt/loopzero-api-values.yaml, and only its ConfigMap and Secret
 # (both named loopzero-api). `helm dependency build` resolves the local loopzero-common
 # library, which the chart's templates include; it needs no network.
-_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm dependency build charts/loopzero-api >/dev/null && helm template loopzero-api charts/loopzero-api -f infra/tilt/loopzero-api-values.yaml -s templates/configmap.yaml -s templates/secret.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml"
+# Replaces the rendered file only when its content changed. k8s_yaml below makes that
+# file a Tiltfile dependency, and rewriting it on every load reloaded the Tiltfile,
+# which rewrote it again — "(Tiltfile)" never left in_progress (#403). The render is
+# deterministic, so an unchanged file now stays untouched.
+_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm dependency build charts/loopzero-api >/dev/null && helm template loopzero-api charts/loopzero-api -f infra/tilt/loopzero-api-values.yaml -s templates/configmap.yaml -s templates/secret.yaml -n loopzero-system > .tilt-rendered/loopzero-api-runtime.yaml.next && { cmp -s .tilt-rendered/loopzero-api-runtime.yaml.next .tilt-rendered/loopzero-api-runtime.yaml && rm -f .tilt-rendered/loopzero-api-runtime.yaml.next || mv .tilt-rendered/loopzero-api-runtime.yaml.next .tilt-rendered/loopzero-api-runtime.yaml; }"
 
 local_resource(
     "loopzero-api-runtime",

@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The local dev loop starts the API again after a clean setup: it ran its own untracked copy of the database migrations with a client the host may not have, and it reloaded its own configuration forever; it now runs the same migration step as setup and settles (#403)
+
 - The local dev loop can no longer deploy into the wrong cluster: it deployed into whichever cluster was current, which after a clean setup was the secrets cluster, and it now refuses to start anywhere but the core cluster (#402)
 
 - A cold `task setup` installs the local login edge and mints the bootstrap token again: the identity service ports the local cluster reserves were never exposed, and the token step collided with one of them (#401)
