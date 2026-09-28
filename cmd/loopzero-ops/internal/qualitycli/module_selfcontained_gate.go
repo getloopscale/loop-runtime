@@ -34,6 +34,13 @@ func setupModuleSelfContained(_ *flag.FlagSet) Check {
 			}
 			return out, nil
 		}
+		if out.Verdict() == verdict.NotVerified {
+			inv.Stderr.Printf("module-selfcontained: NOT VERIFIED — %s\n", out.Reason)
+			for _, u := range out.Unreachable {
+				inv.Stderr.Printf("  %s: %s\n", u.Module, u.Err)
+			}
+			return out, nil
+		}
 		inv.Stdout.Printf("module-selfcontained: PASS — %s\n", out.Reason)
 		return out, nil
 	}

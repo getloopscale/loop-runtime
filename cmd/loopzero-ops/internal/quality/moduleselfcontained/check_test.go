@@ -97,4 +97,26 @@ func TestRealTree(t *testing.T) {
 	if out.Checked == 0 {
 		t.Fatal("zero modules checked — finding nothing is not the same as finding nothing wrong")
 	}
+	if len(out.Unreachable) == 0 {
+		return
+	}
+	// A module whose private dependency this machine cannot fetch was not verified. That
+	// is acceptable ONLY where the job declares it runs without the credential by design
+	// (the fork-safe CI job); anywhere else it is a missing credential that would turn
+	// this test into a silent pass over the modules that matter most.
+	for _, u := range out.Unreachable {
+		t.Logf("NOT VERIFIED: %s — %s", u.Module, u.Err)
+	}
+	if os.Getenv(noPrivateModuleCredentialEnv) != "1" {
+		t.Fatalf("%d module(s) could not be verified for lack of a credential to fetch a private dependency; "+
+			"provide the credential, or — only in a job that runs without one by design — set %s=1",
+			len(out.Unreachable), noPrivateModuleCredentialEnv)
+	}
+	if out.Checked == len(out.Unreachable) {
+		t.Fatal("no module was verified: the declaration covers modules it cannot fetch, not an empty run")
+	}
 }
+
+// noPrivateModuleCredentialEnv is how a job declares that it holds no credential for the
+// repository's private sibling modules, so their dependents cannot be verified there.
+const noPrivateModuleCredentialEnv = "LOOPZERO_NO_PRIVATE_MODULE_CREDENTIAL"
