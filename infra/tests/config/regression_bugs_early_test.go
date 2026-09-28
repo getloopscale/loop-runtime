@@ -13,6 +13,7 @@ package config
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -307,25 +308,69 @@ func TestB35DatabaseUrlMapping(t *testing.T) {
 	// API's data-access layer); only loopzero-api and loopzero-cloud carry
 	// the env. See finding `concepts/operations/finding-2026-05-15-
 	// infra-tests-load-regression-obsolete.md`.
-	// Both map the key through a typed secrets.keyRefs entry of the values
-	// Helmfile installs the chart with.
-	files := []string{
+	//
+	// B35 was DATABASE_URL pointing at nothing. The invariant is that it maps to a
+	// key the setup actually writes into loopzero-db-credentials — not a fixed key name:
+	// loopzero-api reads `api-uri` since the role split (#396) and loopzero-cloud reads `uri`.
+	written := dbCredentialKeysWritten(t)
+	for _, f := range []string{
 		"../../../charts/loopzero-api/values-bootstrap.yaml",
 		"../../../charts/loopzero-cloud/values-bootstrap.yaml",
-	}
-	for _, f := range files {
+	} {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatalf("read %s: %v", f, err)
 		}
-		s := string(data)
-		if !strings.Contains(s, "name: DATABASE_URL") {
+		var values struct {
+			Secrets struct {
+				KeyRefs []struct {
+					Name       string `yaml:"name"`
+					SecretName string `yaml:"secretName"`
+					Key        string `yaml:"key"`
+				} `yaml:"keyRefs"`
+			} `yaml:"secrets"`
+		}
+		if err := yaml.Unmarshal(data, &values); err != nil {
+			t.Fatalf("parse %s: %v", f, err)
+		}
+		found := false
+		for _, ref := range values.Secrets.KeyRefs {
+			if ref.Name != "DATABASE_URL" {
+				continue
+			}
+			found = true
+			if ref.SecretName != "loopzero-db-credentials" {
+				t.Errorf("B35 regression: %s maps DATABASE_URL from %q, want loopzero-db-credentials", f, ref.SecretName)
+			}
+			if !written[ref.Key] {
+				t.Errorf("B35 regression: %s maps DATABASE_URL to key %q, which generate-secrets.sh never writes (writes %v)", f, ref.Key, written)
+			}
+		}
+		if !found {
 			t.Errorf("B35 regression: %s must export env DATABASE_URL", f)
 		}
-		if !strings.Contains(s, "key: uri") {
-			t.Errorf("B35 regression: %s must map secret key 'uri' to DATABASE_URL", f)
-		}
 	}
+}
+
+// dbCredentialKeysWritten returns the keys generate-secrets.sh writes into
+// loopzero-db-credentials, read from its --from-literal flags.
+func dbCredentialKeysWritten(t *testing.T) map[string]bool {
+	t.Helper()
+	raw, err := os.ReadFile("../../../infra/helmfile/scripts/generate-secrets.sh")
+	if err != nil {
+		t.Fatalf("read generate-secrets.sh: %v", err)
+	}
+	s := string(raw)
+	from := strings.Index(s, "DB_ROLE_LITERALS=(")
+	to := strings.Index(s, `"${DB_ROLE_LITERALS[@]}"`)
+	if from < 0 || to < from {
+		t.Fatal("generate-secrets.sh no longer builds loopzero-db-credentials the way this test reads it")
+	}
+	keys := map[string]bool{}
+	for _, m := range regexp.MustCompile(`--from-literal=([a-z-]+)=`).FindAllStringSubmatch(s[from:to], -1) {
+		keys[m[1]] = true
+	}
+	return keys
 }
 
 func TestB40LoopZeroApiServicePort3001(t *testing.T) {
