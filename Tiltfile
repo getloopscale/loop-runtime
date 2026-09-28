@@ -16,8 +16,13 @@ load("ext://namespace", "namespace_create")
 # Ensure loopzero-system namespace exists
 namespace_create("loopzero-system")
 
-# Use the mgmt cluster context
+# The dev loop runs against the core cluster. `allow_k8s_contexts` alone never stopped
+# a wrong one — every k3d-* context already counts as local — and Tilt deploys into the
+# CURRENT context: left on k3d-loopzero-secrets, it put the platform into the secrets
+# cluster (#402). Pin it with `tilt up --context k3d-loopzero-core`.
 allow_k8s_contexts("k3d-loopzero-core")
+if k8s_context() != "k3d-loopzero-core":
+    fail("Tilt must run against k3d-loopzero-core, not %s — start it with: tilt up --context k3d-loopzero-core" % k8s_context())
 
 # ---------------------------------------------------------------------------
 # gomod_token — required by api/Dockerfile to fetch private loopzero-contracts

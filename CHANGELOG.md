@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The local dev loop can no longer deploy into the wrong cluster: it deployed into whichever cluster was current, which after a clean setup was the secrets cluster, and it now refuses to start anywhere but the core cluster (#402)
+
 - A cold `task setup` installs the local login edge and mints the bootstrap token again: the identity service ports the local cluster reserves were never exposed, and the token step collided with one of them (#401)
 
 - A cold `task setup` seeds the bootstrap user again: the seed wrote across tenants as the table owner, which row-level security now refuses, and it connects as the cross-tenant worker role instead (#396)

@@ -219,6 +219,17 @@ func TaskRun(ctx context.Context, opts Options, args ...string) error {
 	return nil
 }
 
+// TiltContext is the kube context the dev loop runs against. Tilt deploys into the
+// CURRENT context unless told otherwise, and a cleanroom leaves whichever context
+// was current before it — on the droplet that was the secrets cluster, so the
+// platform went there (#402).
+const TiltContext = "k3d-loopzero-core"
+
+// tiltUpArgs pins the context rather than inheriting it.
+func tiltUpArgs() []string {
+	return []string{"up", "--context", TiltContext}
+}
+
 // TiltUpBackground spawns `tilt up` detached, then sleeps TiltBootWait.
 // Returns nil if tilt PID stays alive through the wait window.
 func TiltUpBackground(ctx context.Context, opts Options) error {
@@ -232,7 +243,7 @@ func TiltUpBackground(ctx context.Context, opts Options) error {
 	}
 	defer tiltLog.Close()
 
-	cmd := exec.CommandContext(ctx, opts.TiltCmd, "up")
+	cmd := exec.CommandContext(ctx, opts.TiltCmd, tiltUpArgs()...)
 	cmd.Dir = opts.RepoRoot
 	cmd.Stdout = tiltLog
 	cmd.Stderr = tiltLog
