@@ -137,7 +137,10 @@ source "$LIB_HYDRA_MINT"
 
 # shellcheck disable=SC2034  # All exported for mint_jwt
 HYDRA_NAMESPACE="$NS_HYDRA"
-HYDRA_PORT_LOCAL=14444
+# A free local port, picked now: the fixed 14444 this used is a host port the core
+# k3d load balancer binds for the Hydra NodePort, so the port-forward never
+# started (#401).
+HYDRA_PORT_LOCAL="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
 KUBECTL_CMD="kubectl --context $SEED_CTX"
 CLIENT_ID="loopzero-bootstrap"
 CLIENT_SECRET="$CSEC"

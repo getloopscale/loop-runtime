@@ -128,6 +128,12 @@ tasks:
       # Post-sync: MinIO lifecycle rules (Job spec immutable — delete-and-recreate)
       - kubectl --context {{.CORE_CONTEXT}} delete job minio-lifecycle-setup -n loopzero-system --ignore-not-found 2>/dev/null
       - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
+      # Post-sync: the Ory edge NodePorts. infra/k3d/core-cluster.yaml reserves host
+      # ports 14433/14444 for them and the Caddyfile logs in through them; only
+      # `task cloud:setup` used to apply these, and setup never called it, so a
+      # cold install reserved the ports with nothing behind them (#401).
+      - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/ory-kratos/nodeport-service.yaml
+      - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/ory-hydra/nodeport-service.yaml
 
   infra:install:core-dashboard-only:
     desc: |

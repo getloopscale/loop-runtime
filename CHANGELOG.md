@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A cold `task setup` installs the local login edge and mints the bootstrap token again: the identity service ports the local cluster reserves were never exposed, and the token step collided with one of them (#401)
+
 - A cold `task setup` seeds the bootstrap user again: the seed wrote across tenants as the table owner, which row-level security now refuses, and it connects as the cross-tenant worker role instead (#396)
 
 - A cold `task setup` connects the cells again: the cell credential bootstrap applied everything and then exited with an error on its closing log line, so the repair step reported both cells disconnected (#400)
