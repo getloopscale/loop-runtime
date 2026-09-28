@@ -154,3 +154,35 @@ func TestShellStepsInTheCloneRunnerUseOnlyPosixSh(t *testing.T) {
 		t.Fatal("no `sh -c` step running loopzero-clone-runner was found; the check measured nothing")
 	}
 }
+
+// loopzero-minio is the server only: upstream's release image also carried mc, ours
+// does not, and the client lives in loopzero-clone-runner (#394). A script that runs
+// `mc` inside the MinIO server pod therefore fails — measured when
+// provision-api-tokens.sh stopped a cold setup at "Ensuring MinIO buckets exist".
+// The buckets are declared once, in infra/helm/minio/values.yaml, and created by
+// the chart's own job; nothing reaches into the server pod for them.
+func TestNoScriptRunsTheClientInsideTheMinioServerPod(t *testing.T) {
+	root := repoRoot(t)
+	execIntoMinio := regexp.MustCompile(`exec\s+"?\$\{?MINIO_POD`)
+	for _, dir := range []string{"infra/scripts", "infra/helmfile/scripts", "taskfiles"} {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d os.DirEntry, err error) error {
+			if err != nil || !d.Type().IsRegular() || strings.HasSuffix(path, ".md") {
+				return err
+			}
+			body, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for i, line := range strings.Split(string(body), "\n") {
+				if execIntoMinio.MatchString(line) {
+					rel, _ := filepath.Rel(root, path)
+					t.Errorf("%s:%d runs a command inside the MinIO server pod, which carries no mc: %s", rel, i+1, strings.TrimSpace(line))
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", dir, err)
+		}
+	}
+}

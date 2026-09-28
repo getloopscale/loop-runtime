@@ -237,23 +237,12 @@ export CORE_CONTEXT="$MGMT_CTX"
 loopzero_ops seed cluster-kubeconfigs
 
 # ---------------------------------------------------------------------------
-# 8. MinIO buckets (idempotent — mc mb --ignore-existing)
+# 8. MinIO buckets — not here
 # ---------------------------------------------------------------------------
-# The lifecycle Job can fail if MinIO isn't ready during Helm install.
-# By this point MinIO has been running for several minutes — guaranteed ready.
-echo "Ensuring MinIO buckets exist..."
-MINIO_POD=$(kubectl --context "$MGMT_CTX" -n "$NAMESPACE" get pod -l app=minio -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-if [ -n "$MINIO_POD" ]; then
-  kubectl --context "$MGMT_CTX" -n "$NAMESPACE" exec "$MINIO_POD" -- sh -c "
-    mc alias set local http://localhost:9000 \$MINIO_ROOT_USER \$MINIO_ROOT_PASSWORD 2>/dev/null
-    mc mb --ignore-existing local/loopzero-builds
-    mc mb --ignore-existing local/loopzero-artifacts
-    mc mb --ignore-existing local/loopzero-static-assets
-  " 2>&1 | grep -E "created|already"
-  echo "MinIO buckets: ensured"
-else
-  echo "WARNING: MinIO pod not found — buckets not created"
-fi
+# MinIO buckets are declared once, in infra/helm/minio/values.yaml (`buckets:`), and
+# created by the chart's own job during infra:install. This step used to create them a
+# third time by running `mc` inside the server pod; loopzero-minio carries no client since
+# MinIO withdrew its images (#394), so it failed a cold setup and added nothing.
 
 echo ""
 echo "=== Done ==="

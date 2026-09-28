@@ -370,6 +370,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A cold `task setup` no longer fails after provisioning API tokens: it created the MinIO buckets a third time by running the MinIO client inside the server, which the source-built server image does not carry; the chart already creates them (#394)
+
 - A cold `task setup` completes with or without the optional secrets cluster: a missing one no longer fails the cross-cluster DNS step, and when it exists setup now initialises OpenBao and hands the API its credentials, which nothing did before (#398)
 
 - The public CI job runs its diff-scoped quality gates again: it re-fetched the base branch without credentials and died before any gate ran, although its checkout already holds the full history (#370)
