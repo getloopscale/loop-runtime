@@ -50,3 +50,25 @@ func waitForRolloutSettled(ctx context.Context, cli ctrlclient.Client,
 				d.Status.ReadyReplicas == want && d.Status.UpdatedReplicas == want, nil
 		})
 }
+
+// waitForRolloutApplied waits until a restarted Deployment's pods all come from the
+// new template — they exist, and each read its envFrom at start — without requiring
+// them to be Ready. For a seed whose job is delivering a value to the pods, readiness
+// is someone else's question: on dev-public loopzero-api cannot be Ready when
+// vault-role-id-sync runs, because its database roles come later in setup (#444).
+func waitForRolloutApplied(ctx context.Context, cli ctrlclient.Client,
+	namespace, name string, timeout time.Duration,
+) error {
+	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true,
+		func(ctx context.Context) (bool, error) {
+			var d appsv1.Deployment
+			if err := cli.Get(ctx, ctrlclient.ObjectKey{Namespace: namespace, Name: name}, &d); err != nil {
+				return false, err
+			}
+			want := int32(1)
+			if d.Spec.Replicas != nil {
+				want = *d.Spec.Replicas
+			}
+			return d.Status.ObservedGeneration >= d.Generation && d.Status.UpdatedReplicas == want, nil
+		})
+}

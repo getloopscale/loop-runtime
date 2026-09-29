@@ -115,7 +115,9 @@ func (s *VaultRoleIDSyncSeed) Run(d Deps) Result {
 		}
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("restart loopzero-api: %v", err)}
 	}
-	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient,
+	// The restarted pods existing is the delivery; their readiness is not this seed's to
+	// wait for — on dev-public loopzero-api has no database yet at this point in setup (#444).
+	if err := waitForRolloutApplied(d.Ctx, d.CtrlClient,
 		loopzeroAPINamespaceInCore, loopzeroAPIDeploymentInCore, d.settleTimeout(loopzeroAPISettle)); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("rollout: %v", err)}
 	}
