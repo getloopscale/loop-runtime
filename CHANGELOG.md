@@ -375,7 +375,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- A cold dev-public install gets past `k3d:secrets:wire`. After writing the OpenBao role id, the seed waited for loopzero-api to be Ready, which it cannot be until its database roles are created later in setup; it now waits only for the restarted pods to exist, which is when they read the value (#444).
+- A cold dev-public install gets past `k3d:secrets:wire`. After writing the OpenBao role id, the seed waited for loopzero-api to be Ready, which it cannot be until its database roles are created later in setup; it now waits until the restart is applied — the new template observed and one pod running it — since every pod that starts from then reads the value, and the rolling update cannot replace loopzero-api's second replica until the first new one is healthy (#444).
 - Image publishing no longer fails on a private repository: GitHub's native provenance attestation, which the organisation's plan only offers to public repositories, now runs only there. It used to fail the publish after the push and before the cosign signature (#436).
 - The control plane connects to the database as `loopzero_cloud`, the non-owner role migration 000063 created for it, instead of as the owner — which it refuses at boot, so a current `loopzero-cloud` image did not start in any environment. `task db:roles` now sets that role's password and `loopzero-db-credentials` carries `cloud-uri` (#438).
 - Images publish from `develop` again. The image job did not grant `attestations: write`, which the shared build workflow requires since provenance attestation was added, so GitHub refused every run at startup with no log (#436).
