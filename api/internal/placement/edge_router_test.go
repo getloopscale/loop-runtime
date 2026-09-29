@@ -162,3 +162,46 @@ func TestEdgeRouterSkipsATenantWhoseCellCannotBeRead(t *testing.T) {
 		t.Errorf("a tenant with no readable cell must not resolve, err=%v", err)
 	}
 }
+
+type recordingPublisher struct {
+	index    map[string]string
+	complete bool
+	calls    int
+}
+
+func (r *recordingPublisher) Publish(_ context.Context, index map[string]string, complete bool) error {
+	r.index, r.complete = index, complete
+	r.calls++
+	return nil
+}
+
+// Each refresh hands the fresh index to the edge publisher, and says whether it is
+// complete: a tenant whose placement could not be read makes the round incomplete, so
+// the publisher keeps that tenant's routes instead of deleting them (#448).
+func TestEdgeRouterPublishesEachRefreshAndFlagsAnIncompleteOne(t *testing.T) {
+	src := &fakeEdgeRoutes{routes: []EdgeRoute{
+		{Hostname: "tn-ok-p-app-production.loopzero.local", TenantID: "tn-ok"},
+		{Hostname: "tn-gone-p-app-production.loopzero.local", TenantID: "tn-gone"},
+	}}
+	pub := &recordingPublisher{}
+	r := NewEdgeRouter(src, fakeTenantCells{"tn-ok": "cell-0"}, EdgeRouterConfig{
+		InternalDomain: internalDomain, PublicDomains: []string{prodDomain},
+		Interval: time.Minute, MinMissRefresh: time.Hour, Publisher: pub,
+	}, nil)
+
+	if err := r.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if pub.calls != 1 || pub.index["label:tn-ok-p-app-production"] != "cell-0" {
+		t.Errorf("publisher got %v after %d calls", pub.index, pub.calls)
+	}
+	if pub.complete {
+		t.Error("a round with an unreadable tenant was reported complete")
+	}
+
+	src.routes = src.routes[:1]
+	_ = r.Refresh(context.Background())
+	if !pub.complete {
+		t.Error("a round where every tenant resolved was reported incomplete")
+	}
+}

@@ -51,6 +51,15 @@ type EdgeRouterConfig struct {
 	// MinMissRefresh bounds how often an unknown host may trigger a refresh, so a
 	// scan of random names cannot turn into a list call per request.
 	MinMissRefresh time.Duration
+	// Publisher, when set, receives every refreshed index — the production edge store
+	// the Cloudflare Worker reads (#448). Nil publishes nothing.
+	Publisher EdgeRoutePublisher
+}
+
+// EdgeRoutePublisher mirrors the index somewhere an edge can read it. complete is false
+// when some tenant's placement could not be read, so its routes must not be removed.
+type EdgeRoutePublisher interface {
+	Publish(ctx context.Context, index map[string]string, complete bool) error
 }
 
 // EdgeRouter answers which cell serves a public host. Placement is decided once and
@@ -65,6 +74,7 @@ type EdgeRouter struct {
 	publicSuffixes []string
 	interval       time.Duration
 	minMissRefresh time.Duration
+	publisher      EdgeRoutePublisher
 	logger         *slog.Logger
 
 	refreshMu   sync.Mutex
@@ -93,6 +103,7 @@ func NewEdgeRouter(source EdgeRouteSource, cells TenantCellResolver, cfg EdgeRou
 		publicSuffixes: public,
 		interval:       cfg.Interval,
 		minMissRefresh: cfg.MinMissRefresh,
+		publisher:      cfg.Publisher,
 		logger:         logger.With("component", "edge-router"),
 		index:          map[string]string{},
 	}
@@ -209,6 +220,15 @@ func (r *EdgeRouter) refreshLocked(ctx context.Context) error {
 	r.loaded = true
 	r.mu.Unlock()
 	r.logger.Debug("edge routes refreshed", "routes", len(index), "ambiguous", len(ambiguous), "tenants_unplaced", skipped)
+	if r.publisher != nil {
+		snapshot := make(map[string]string, len(index))
+		for k, v := range index {
+			snapshot[k] = v
+		}
+		if err := r.publisher.Publish(ctx, snapshot, skipped == 0); err != nil {
+			r.logger.Warn("edge route publish failed; retried on the next refresh", "error", err)
+		}
+	}
 	return nil
 }
 

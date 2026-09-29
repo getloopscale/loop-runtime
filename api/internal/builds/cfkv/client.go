@@ -89,28 +89,6 @@ func (c *Client) Put(ctx context.Context, subdomain string, entry interface{}) e
 	return nil
 }
 
-// CellRoutingEntry is the value stored in KV for cell-based tenant routing.
-// Key format: "cell:{tenantName}" (e.g., "cell:tn-loopzero")
-// ADR-0008 Phase 1.
-type CellRoutingEntry struct {
-	CellID    string `json:"cellId"`
-	IngressIP string `json:"ingressIp"`
-}
-
-// PutCellRouting writes a cell routing entry for a tenant.
-// The CF Worker reads this to proxy dynamic app traffic to the correct Cell's ingress.
-func (c *Client) PutCellRouting(ctx context.Context, tenantName, cellID, ingressIP string) error {
-	key := "cell:" + strings.TrimPrefix(tenantName, "tn-")
-	entry := CellRoutingEntry{CellID: cellID, IngressIP: ingressIP}
-	return c.Put(ctx, key, entry)
-}
-
-// DeleteCellRouting removes a cell routing entry for a tenant.
-func (c *Client) DeleteCellRouting(ctx context.Context, tenantName string) error {
-	key := "cell:" + strings.TrimPrefix(tenantName, "tn-")
-	return c.Delete(ctx, key)
-}
-
 // Delete removes a routing entry from KV (used when deleting a static app).
 func (c *Client) Delete(ctx context.Context, subdomain string) error {
 	start := time.Now()

@@ -83,25 +83,6 @@ func TestClient_Get_NotFound_ReturnsNil(t *testing.T) {
 	}
 }
 
-func TestCellRoutingEntry_JSON(t *testing.T) {
-	entry := CellRoutingEntry{CellID: "cell-sfo3-01", IngressIP: "10.0.1.100"}
-	data, err := json.Marshal(entry)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-
-	var parsed CellRoutingEntry
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if parsed.CellID != "cell-sfo3-01" {
-		t.Errorf("CellID = %q, want cell-sfo3-01", parsed.CellID)
-	}
-	if parsed.IngressIP != "10.0.1.100" {
-		t.Errorf("IngressIP = %q, want 10.0.1.100", parsed.IngressIP)
-	}
-}
-
 func TestSubdomain_TrailingHyphenTrimmed(t *testing.T) {
 	// When truncation cuts in the middle of a hyphen-separated name,
 	// the trailing hyphen should be trimmed.
@@ -111,16 +92,6 @@ func TestSubdomain_TrailingHyphenTrimmed(t *testing.T) {
 	}
 	if strings.HasSuffix(result, "-") {
 		t.Error("subdomain should not end with a hyphen")
-	}
-}
-
-func TestClient_PutCellRouting_KeyFormat(t *testing.T) {
-	// Verify key format strips tn- prefix and adds cell: prefix.
-	// Since PutCellRouting delegates to Put which calls CF API,
-	// we only verify the key construction logic.
-	key := "cell:" + strings.TrimPrefix("tn-loopzero", "tn-")
-	if key != "cell:loopzero" {
-		t.Errorf("cell routing key = %q, want cell:loopzero", key)
 	}
 }
 
@@ -342,38 +313,5 @@ func TestClient_ListKeys_ServerError(t *testing.T) {
 	_, err := client.ListKeys(context.Background())
 	if err == nil {
 		t.Fatal("expected error for 500 response")
-	}
-}
-
-func TestClient_PutCellRouting(t *testing.T) {
-	var capturedPath string
-	client, srv := newHTTPTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedPath = r.URL.Path
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	err := client.PutCellRouting(context.Background(), "tn-loopzero", "cell-sfo3-01", "10.0.1.100")
-	if err != nil {
-		t.Fatalf("PutCellRouting failed: %v", err)
-	}
-	// The key should be "cell:loopzero" (stripped tn- prefix)
-	if !strings.Contains(capturedPath, "cell:loopzero") {
-		t.Errorf("path = %q, expected cell:loopzero in path", capturedPath)
-	}
-}
-
-func TestClient_DeleteCellRouting(t *testing.T) {
-	client, srv := newHTTPTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			t.Errorf("method = %q, want DELETE", r.Method)
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	err := client.DeleteCellRouting(context.Background(), "tn-acme")
-	if err != nil {
-		t.Fatalf("DeleteCellRouting failed: %v", err)
 	}
 }

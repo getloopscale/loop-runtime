@@ -38,13 +38,34 @@ function getCacheControl(pathname) {
   return "no-cache";
 }
 
+// routeToCell sends a dynamic app's request to the ingress of the cell that serves it
+// (#448). The engine publishes route:<label> for a platform host and route:<fqdn> for a
+// custom domain, each → { cellId }; the edge's own network maps a cell to its ingress,
+// ingress:<cellId> → { resolveOverride }. The request keeps its URL and Host — the cell
+// routes by Host — and is resolved to the ingress hostname: a Worker cannot fetch a raw
+// IP. Returns null when no route is published; a published route whose cell has no
+// ingress is refused with 503 rather than sent anywhere else.
+async function routeToCell(request, routeKey) {
+  var route = await LOOPZERO_ROUTING.get("route:" + routeKey, { type: "json" });
+  if (!route || !route.cellId) {
+    return null;
+  }
+  var ingress = await LOOPZERO_ROUTING.get("ingress:" + route.cellId, { type: "json" });
+  if (!ingress || !ingress.resolveOverride) {
+    return new Response("Service temporarily unavailable", { status: 503, headers: SECURITY_HEADERS });
+  }
+  return fetch(request, { cf: { resolveOverride: ingress.resolveOverride } });
+}
+
 async function handleRequest(request) {
   var url = new URL(request.url);
   var hostname = url.hostname;
   var suffix = "." + BASE_DOMAIN;
 
   if (!hostname.endsWith(suffix)) {
-    return fetch(request);
+    // A custom domain: routed by its full name when the engine published it.
+    var custom = await routeToCell(request, hostname);
+    return custom || fetch(request);
   }
 
   var subdomain = hostname.slice(0, -suffix.length);
@@ -52,33 +73,13 @@ async function handleRequest(request) {
     return fetch(request);
   }
 
-  // 1. Check static routing (existing — S3/CDN delivery)
+  // 1. Static app routing (S3/CDN delivery).
   var routingData = await LOOPZERO_ROUTING.get(subdomain, { type: "json" });
   if (!routingData) {
-    // 2. ADR-0008: Check cell routing for dynamic apps.
-    // Key format: "cell:{tenant}" → { cellId, ingressIp }
-    // Subdomain format: {app}.{tenant} or just {tenant}
-    var parts = subdomain.split(".");
-    if (parts.length >= 2) {
-      var tenant = parts[parts.length - 1]; // last segment = tenant
-      var cellRoute = await LOOPZERO_ROUTING.get("cell:" + tenant, { type: "json" });
-      if (cellRoute && cellRoute.ingressIp) {
-        // Proxy to the Cell's Traefik ingress (preserve original Host header)
-        var targetUrl = "https://" + cellRoute.ingressIp + url.pathname + url.search;
-        return fetch(targetUrl, {
-          method: request.method,
-          headers: new Headers({
-            ...Object.fromEntries(request.headers),
-            "Host": hostname,
-            "X-Forwarded-Host": hostname,
-            "X-Cell-ID": cellRoute.cellId,
-          }),
-          body: request.body,
-        });
-      }
-    }
-    // 3. Fallback: pass through to default origin (CF Tunnel)
-    return fetch(request);
+    // 2. Dynamic app routing by cell (#448).
+    var routed = await routeToCell(request, subdomain);
+    // 3. Fallback: pass through to the default origin.
+    return routed || fetch(request);
   }
 
   // Static app routing (existing logic — unchanged)
