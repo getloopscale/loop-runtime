@@ -37,6 +37,7 @@ SUBCOMMANDS:
   chaos <subcommand> [flags]           Chaos runner pure-logic helpers (see chaos --help)
   seed <name> [flags]                  Canonical post-Cleanroom seeds (see seed --help)
   dsn <field>                          Print one part of a Postgres DSN read on stdin
+  creds env                            Print the credentials file as shell exports (Kratos inputs)
   sql <script> [flags]                 Render a seed script for psql (see sql --help)
   kubeconform-schemas [--check]        Derive the loopzero.io kubeconform schemas from the CRDs
   validate-chart --release R --chart D Render one chart and schema-validate the render
@@ -74,6 +75,8 @@ func run(args []string) int {
 		return runSeed(args[1:])
 	case "dsn":
 		return runDSNMain(args[1:])
+	case "creds":
+		return runCredsMain(args[1:])
 	case "sql":
 		return runSQLMain(args[1:])
 	case "kubeconform-schemas":

@@ -70,6 +70,9 @@ tasks:
       - |
         HELMFILE_ENV="${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
         echo "[infra:install:core] helmfile env: $HELMFILE_ENV"
+        # The operator's credentials file fills what the environment leaves unset —
+        # the Resend key generate-secrets.sh stores for Kratos (#445).
+        eval "$(cd cmd/loopzero-ops && go run . creds env)"
         bash infra/helmfile/scripts/generate-secrets.sh "$HELMFILE_ENV" core
       - |
         HELMFILE_ENV="${LOOPZERO_HELMFILE_ENV:-standalone-multi}"
@@ -84,6 +87,10 @@ tasks:
           source .env
           set +a
         fi
+        # Then the operator's credentials file, for what is still unset: Kratos's
+        # OAuth clients and mail key live there, and the seeds read them from it too.
+        # Without this a cold dev-public install rendered REPLACE_VIA_* into Kratos (#445).
+        eval "$(cd cmd/loopzero-ops && go run . creds env)"
         # Portable secret extraction (T2.3.b EC-02) — works on macOS + Linux
         export LOOPZERO_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loopzero-system \
           get secret loopzero-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
@@ -1239,9 +1246,12 @@ tasks:
           source .env
           set +a
         fi
+        # Then ~/.loopzero/dev-credentials.json, the file the seeds read, for what is still
+        # unset (#445). The check below still refuses a variable neither source sets.
+        eval "$(cd cmd/loopzero-ops && go run . creds env)"
         for var in LOOPZERO_GITHUB_CLIENT_ID LOOPZERO_GITHUB_CLIENT_SECRET LOOPZERO_GOOGLE_CLIENT_ID LOOPZERO_GOOGLE_CLIENT_SECRET LOOPZERO_RESEND_API_KEY; do
           if [ -z "$(printenv "$var")" ]; then
-            echo "ERROR: $var is not set (export it or add it to .env) — Kratos would render the REPLACE_VIA_* placeholder"
+            echo "ERROR: $var is not set (export it, add it to .env, or fill ~/.loopzero/dev-credentials.json) — Kratos would render the REPLACE_VIA_* placeholder"
             exit 1
           fi
         done
