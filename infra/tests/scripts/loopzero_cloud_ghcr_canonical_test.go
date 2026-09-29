@@ -4,7 +4,6 @@
 package scripts
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -37,53 +36,10 @@ import (
 // This test asserts the overlay + chart default + provisioning task
 // canonical. It does NOT execute helmfile/kubectl.
 func TestLoopZeroCloudImageOverlayUsesGHCRCanonical(t *testing.T) {
-	overlayPath := repoFile(t, "infra", "helmfile", "values", "dev-public", "loopzero-cloud.yaml.gotmpl")
-	overlay := readFileText(t, overlayPath)
-
-	// T1. Overlay MUST NOT use `tag: multi-aud-fix` as the active YAML
-	// key value (comments documenting the history are fine — the test
-	// cares about the YAML key, not prose).
-	staleTagRe := regexp.MustCompile(`(?m)^\s*tag:\s*"?multi-aud-fix"?\s*$`)
-	if staleTagRe.MatchString(overlay) {
-		t.Error("infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl still USES `tag: multi-aud-fix` workaround — canonical fix drops this (issue #104 Architecture A)")
-	}
-
-	// T2. Overlay MUST NOT use `k3d-loopzero-registry:5000/loopzero-cloud` as
-	// the active repository value.
-	staleRepoRe := regexp.MustCompile(`(?m)^\s*repository:\s*"?k3d-loopzero-registry:5000/loopzero-cloud"?\s*$`)
-	if staleRepoRe.MatchString(overlay) {
-		t.Error("infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl still USES `repository: k3d-loopzero-registry:5000/loopzero-cloud` — issue #104 Architecture A")
-	}
-
-	// T3. The overlay MUST RESOLVE to the canonical GHCR repository
-	// `ghcr.io/getloopscale/loopzero-cloud` — where the AM6 workflow pushes
-	// loopzero-cloud images (`loopzero/.github/workflows/build-publish.yml:12`).
-	//
-	// Asserted on the RENDERED value, not on the source text. The repository is
-	// built from a parameterised prefix (`{{ env … | default "ghcr.io/getloopscale/" }}`
-	// followed by the literal `loopzero-cloud`), so the canonical string never
-	// appears contiguously and a substring match reported this correct file as
-	// broken — for an indeterminate time, because this package ran in no task
-	// target until B-092. See TestRenderedImageRepository for the contract.
-	gotRepo, err := renderedImageRepository(overlay)
-	if err != nil {
-		t.Errorf("could not render infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl: %v", err)
-	} else if gotRepo != "ghcr.io/getloopscale/loopzero-cloud" {
-		t.Errorf("dev-public overlay renders image.repository = %q, want the canonical GHCR repository %q — issue #104 Architecture A",
-			gotRepo, "ghcr.io/getloopscale/loopzero-cloud")
-	}
-
-	// T4. Overlay MUST reference the `ghcr-pull` imagePullSecret —
-	// `do-registry` is wrong for GHCR (DOCR-only). Architecture A
-	// provisions `ghcr-pull` via a NEW task.
-	if !strings.Contains(overlay, "ghcr-pull") {
-		t.Error("infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl does NOT use `ghcr-pull` imagePullSecret — `do-registry` is DOCR-only, incompatible with GHCR (issue #104)")
-	}
-
-	// T5. Traceability comment cites issue #104.
-	if !strings.Contains(overlay, "issue #104") && !strings.Contains(overlay, "Issue #104") {
-		t.Error("infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl has no `issue #104` traceability comment")
-	}
+	// The dev-public overlay no longer pulls from GHCR: it pulls from ECR by commit
+	// (#435), which infra/tests/charts/dev_public_platform_images_ecr_test.go proves on
+	// the rendered Deployment. What stays here is the chart default and the task that
+	// provisions the GHCR pull secret for the environments that still use it.
 
 	// --- Chart default assertions ---
 

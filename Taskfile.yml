@@ -194,6 +194,8 @@ tasks:
       - echo "[NOTICE] task setup creates platform infrastructure. Dev loop is via 'tilt up'."
       - echo "[NOTICE] See docs/operations.md for canonical workflow."
       - task: registry:create
+      # Before the clusters: the kubelet reads the ECR credential provider at start.
+      - task: ecr:credential-provider
       - task: clusters:create
       - task: images:build
       # Vendors dependencies BEFORE the install: `charts/*/charts/` is gitignored, so

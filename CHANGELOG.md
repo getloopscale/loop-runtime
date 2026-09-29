@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `task ecr:credential-provider` installs the kubelet image credential provider for Amazon ECR on the core and build k3d nodes — how EKS nodes pull, with no pull secret and no token-refresh job. It runs in `task setup` before the clusters are created, only for an environment that declares `platformImages`, and needs the read-only pull identity's key in `~/.loopzero/credentialprovider/aws-credentials` (#435).
 - Platform images are published to Amazon ECR, the registry production pulls from, alongside GHCR. Every engine image — the API, the four operators, and the MinIO, clone-runner, syft and cosign images, which no pipeline published before — is tagged in ECR by its full commit SHA and, on a release, by its version. ECR tags are immutable, so an environment that pins one runs exactly one commit. The push role is assumed through GitHub OIDC; set the repository variables `ECR_REGISTRY` and `AWS_IMAGE_PUBLISH_ROLE_ARN` to enable it (#435).
 - `loopzero-ops kubeconform-schemas --chart DIR` generates strict kubeconform schemas from the CRDs a chart's pinned dependency ships; the Velero schemas are committed and refreshed by `task helm:sync-kubeconform-schemas` (#391)
 
@@ -90,6 +91,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- dev-public pulls every platform image from Amazon ECR, pinned by the commit it was built from, instead of `:develop` from GHCR with `pullPolicy: Always`. `platformImages` in `environments/dev-public.yaml` says which commit each service runs, and promoting one is a commit that changes its line. MinIO, the clone runner and the sign and scan steps follow the same rule (#435).
 - The canonical fixture project the dev environment seeds, its preview hostnames and the live journeys that exercise it are named `sample` instead of the Portuguese `teste`; an environment seeded before this keeps the old project until it is re-seeded (#379)
 
 - The integration-test role fixture creates only the roles the platform uses; TestRolesExist asserts loopzero_api, loopzero_worker and loopzero_cloud exist and cannot bypass Row Level Security (#387)
@@ -298,6 +300,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- `task images:push:platform:dev-public` and its pull-secret task: they pushed to and authenticated against a DigitalOcean registry that no longer exists (#435).
 - `task k3d:heal` no longer re-applies the build registry config, loopzero-api image variables or the clone-template release, which the install already renders (principle_violations#243)
 
 - The legacy Pulumi stack drops the Harbor-only resources and outputs — the container-images bucket, the `harbor_db` database, the Harbor managed Valkey cluster and the `harborRedis*` outputs; the next `pulumi up` plans their deletion and prod needs the cluster unprotected first (design_pattern_findings#30)

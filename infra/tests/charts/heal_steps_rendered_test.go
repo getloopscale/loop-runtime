@@ -29,9 +29,11 @@ func cloneRunnerImage(t *testing.T, env string) string {
 }
 
 // H9 ran `helm upgrade` of loopzero-build-cwts with the local runner after every
-// restart; the environments whose cells pull from the local registry render it.
+// restart; an environment whose cells pull from the local registry, and that
+// declares no platform registry, renders it. dev-public declares one (#435) and
+// renders the ECR runner instead — TestDevPublicCloneRunnerComesFromECR.
 func TestLocalRegistryEnvironmentsCloneWithTheLocalRunner(t *testing.T) {
-	for _, env := range []string{"dev-public", "standalone-multi"} {
+	for _, env := range []string{"standalone-multi"} {
 		t.Run(env, func(t *testing.T) {
 			if got := cloneRunnerImage(t, env); got != localCloneRunner {
 				t.Errorf("clone runner = %q, want %q", got, localCloneRunner)
@@ -46,13 +48,6 @@ func TestRegistryBackedEnvironmentsKeepThePublishedRunner(t *testing.T) {
 	}
 }
 
-// H8 set LOOPZERO_COSIGN_IMAGE/LOOPZERO_SYFT_IMAGE on loopzero-api to :latest; the only
-// k3d environment whose loopzero-api Helmfile installs renders them itself.
-func TestDevPublicLoopZeroAPIRendersTheLocalAttestationImages(t *testing.T) {
-	data := configMapData(t, renderDevPublicLoopZeroAPI(t), "loopzero-api")
-	for _, key := range []string{"LOOPZERO_COSIGN_IMAGE", "LOOPZERO_SYFT_IMAGE"} {
-		if v, _ := data[key].(string); !strings.HasPrefix(v, "k3d-loopzero-registry:5000/") {
-			t.Errorf("loopzero-api %s = %q, want an image from the local registry", key, v)
-		}
-	}
-}
+// H8 set LOOPZERO_COSIGN_IMAGE/LOOPZERO_SYFT_IMAGE on loopzero-api to :latest. The dev-public
+// install renders them itself, pinned by commit from ECR (#435):
+// TestDevPublicBuildStepImagesComeFromECR.

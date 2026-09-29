@@ -51,11 +51,33 @@ certIssuer:
   kind: ClusterIssuer
   name: selfsigned-issuer
 
-# Plan 2026-06-04-dev-public-docr-fix-forward T1.2 — DOCR REAL for max prod
-# parity (sponsor decision P1 over P3 k3d-import workaround).
-# Platform images (loopzero-api, 4 operators) come from DOCR via `do-registry`
-# imagePullSecret provisioned by `task do-registry:provision` (T1.4).
-# k3d-loopzero-registry stays for BuildKit tenant builds (fast local iteration).
+# Platform images (#435): Amazon ECR, the registry production pulls from, provisioned
+# by getloopscale/loopzero-infra-live (`registry/ecr`). Every tag is the full commit SHA CI
+# built the image from; the repositories are immutable, so a tag names one build and
+# this file says exactly which commit each service runs. Promoting a service is a
+# commit that changes its line here.
+#
+# The nodes authenticate through the kubelet credential provider
+# (`task ecr:credential-provider`), as EKS nodes do — no pull secret.
+platformImages:
+  registry: "776217504929.dkr.ecr.us-east-1.amazonaws.com/"
+  tags:
+    # getloopscale/loopzero
+    loopzero-api: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    loopzero-tenant-operator: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    loopzero-app-operator: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    loopzero-preview-operator: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    loopzero-platform-operator: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    loopzero-minio: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    loopzero-clone-runner: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    loopzero-syft-scanner: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    loopzero-cosign-signer: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    # getloopscale/loopzero-cloud
+    loopzero-cloud: "fbf71463109f8548da7acf69e8258dbc8bf2daf7"
+
+# Tenant builds still push to and run from k3d-loopzero-registry (fast local iteration).
+# `docrPrefix` is read by the admission policies only; its registry was deleted and
+# the policies move to ECR separately (#435).
 registries:
   docrPrefix: "registry.digitalocean.com/loopzero-system/"
   additionalPrefixes:

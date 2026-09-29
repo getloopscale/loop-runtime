@@ -2,18 +2,17 @@
 # Minimal override for env dev-public.
 # Chart defaults canonical (DOCR + dev tag + IfNotPresent + HA).
 
+# Platform images come from Amazon ECR, pinned by the commit each was built from (#435):
+# the registry and the tag are `platformImages` in environments/dev-public.yaml, and a
+# missing entry fails the render instead of falling back to a moving tag. No pull
+# secret: the node's kubelet credential provider authenticates, as on EKS.
 global:
-# Overridable via LOOPZERO_PLATFORM_IMAGE_PREFIX (same reason recorded in
-# loopzero-api.yaml.gotmpl: the environment depended on a published image with no
-# alternative, and with the pull token expired there was no way to rebuild from
-# scratch). The default follows GHCR.
-  registry: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" | trimSuffix "/" }}
-  imagePullSecrets:
-    - name: ghcr-pull
+  registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" }}
+  imagePullSecrets: []
 
 image:
-  tag: develop
-  pullPolicy: Always
+  tag: {{ required "platformImages.tags.loopzero-preview-operator is not set" (index .Values.platformImages.tags "loopzero-preview-operator") | quote }}
+  pullPolicy: IfNotPresent
 
 # dev-public NetworkPolicy override: gitea is in loopzero-system ns (not the
 # chart-default `gitea` ns). Same fix as loopzero-tenant-operator.

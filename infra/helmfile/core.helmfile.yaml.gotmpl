@@ -281,33 +281,41 @@ releases:
 {{- end }}
     # MinIO withdrew every binary channel of its community edition (#394): the
     # chart's quay.io/minio defaults can no longer be pulled. Both images are built
-    # here from pinned source (infra/images/minio, infra/images/clone-runner). A
-    # local registry profile gets the ones `task images:build` pushes; any other
-    # environment takes them from its declared registry prefix — the same place its
-    # clone runner already comes from — and never from the chart's dead default.
-    set:
-{{- if .Values.profile.localRegistry }}
-      - name: image.repository
-        value: "k3d-loopzero-registry:5000/loopzero-minio"
-      - name: image.tag
-        value: "RELEASE.2024-12-18T13-15-44Z"
-      - name: mcImage.repository
-        value: "k3d-loopzero-registry:5000/loopzero-clone-runner"
-      - name: mcImage.tag
-        value: "v0.1.0"
+    # here from pinned source (infra/images/minio, infra/images/clone-runner).
+    #
+    # An environment that declares `platformImages` pulls them from that registry,
+    # pinned by the commit CI built them from (#435) — the same rule as every other
+    # platform image. Otherwise a local registry profile gets the ones `task
+    # images:build` pushes, and any other environment takes them from its declared
+    # registry prefix. Never the chart's dead default.
+    #
+    # Inline values rather than `set:` so `helmfile write-values` shows them: the
+    # chart is remote, and a network-free test can only read what reaches values.
+{{- $platformRegistry := .Values | get "platformImages.registry" "" }}
+      - image:
+{{- if $platformRegistry }}
+          repository: "{{ $platformRegistry }}loopzero-minio"
+          tag: {{ index .Values.platformImages.tags "loopzero-minio" | quote }}
+{{- else if .Values.profile.localRegistry }}
+          repository: "k3d-loopzero-registry:5000/loopzero-minio"
+          tag: "RELEASE.2024-12-18T13-15-44Z"
 {{- else }}
 {{- /* The same rule the platform charts follow: an environment that declares a
        registry prefix pulls from it; one that declares none (standalone self-host)
        gets the bare image name, as loopzero-api's `repository: loopzero-api` does there. */}}
-{{- $registry := .Values | get "registries.docrPrefix" "" }}
-      - name: image.repository
-        value: "{{ $registry }}loopzero-minio"
-      - name: image.tag
-        value: "RELEASE.2024-12-18T13-15-44Z"
-      - name: mcImage.repository
-        value: "{{ $registry }}loopzero-clone-runner"
-      - name: mcImage.tag
-        value: "v0.1.0"
+          repository: "{{ .Values | get "registries.docrPrefix" "" }}loopzero-minio"
+          tag: "RELEASE.2024-12-18T13-15-44Z"
+{{- end }}
+        mcImage:
+{{- if $platformRegistry }}
+          repository: "{{ $platformRegistry }}loopzero-clone-runner"
+          tag: {{ index .Values.platformImages.tags "loopzero-clone-runner" | quote }}
+{{- else if .Values.profile.localRegistry }}
+          repository: "k3d-loopzero-registry:5000/loopzero-clone-runner"
+          tag: "v0.1.0"
+{{- else }}
+          repository: "{{ .Values | get "registries.docrPrefix" "" }}loopzero-clone-runner"
+          tag: "v0.1.0"
 {{- end }}
 {{- if .Values.profile.localObjectStore }}
     # Standalone: pin MinIO root password deterministically. The chart leaves
@@ -316,6 +324,7 @@ releases:
     # and static-assets consume the deterministic loopzero-dev-password. Random vs
     # hardcoded => SOURCE_UPLOAD_FAILED (access denied). Same deterministic-creds
     # pattern as PG (T1.3). rootUser=loopzero-admin comes from values.yaml.
+    set:
       - name: rootPassword
         value: "loopzero-dev-password"
 {{- end }}

@@ -1,33 +1,22 @@
 # dev-public overlay for charts/loopzero-api, layered on charts/loopzero-api/values-bootstrap.yaml.
 # Plan 2026-06-04-dev-public-docr-fix-forward T2.1 (clusterRole=cloud-local).
 
-# CANONICAL 2026-06-22 (closes #142 LIVE deployment gap discovered while shipping #123
-# canonical fix qa-dogfood-cleanup-2026-06-21): the loopzero-api image is published to GHCR by
-# the AM6 reusable workflow (`loopzero/.github/workflows/build-publish.yml`) on every push to
-# develop — the same channel as loopzero-cloud (issue #104 Architecture A). The prior
-# `registry.digitalocean.com/loopzero-system/loopzero-api:dev` tag required a local
-# `task images:push:platform:dev-public` step that was easy to forget. GHCR `:develop`
-# (rolling) is the canonical channel: CI builds and pushes on every push, and
-# `pullPolicy: Always` picks up the new digest on `kubectl rollout restart`. The
-# `ghcr-pull` imagePullSecret is provisioned from ~/.loopzero/ghcr-pull-token.txt by
-# `task images:ghcr:pullsecret`.
-#
-# The registry prefix is overridable through LOOPZERO_PLATFORM_IMAGE_PREFIX; the default stays
-# GHCR, so anyone with a valid token sees no difference. It exists because this environment
-# depended WITHOUT ALTERNATIVE on a published image: measured on the app-dev droplet on
-# 2026-08-10, with the pull token expired (HTTP 401), 13 pods sat in ImagePullBackOff and the
-# platform did not come up — although every one of these images has a Dockerfile in this
-# repository and can be built locally (BACKLOG.md B-016).
+# Until 2026-09-28 this environment pulled `:develop` from GHCR with `pullPolicy: Always`
+# (#142), and before that from a DigitalOcean registry that no longer exists. A moving tag
+# cannot say which commit is running, and production pulls from ECR (#435).
+# Platform images come from Amazon ECR, pinned by the commit each was built from (#435):
+# the registry and the tag are `platformImages` in environments/dev-public.yaml, and a
+# missing entry fails the render instead of falling back to a moving tag. No pull
+# secret: the node's kubelet credential provider authenticates, as on EKS.
 global:
-  registry: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" | trimSuffix "/" }}
+  registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" }}
 
 image:
   repository: loopzero-api
-  tag: develop
-  pullPolicy: Always
+  tag: {{ required "platformImages.tags.loopzero-api is not set" (index .Values.platformImages.tags "loopzero-api") | quote }}
+  pullPolicy: IfNotPresent
 
-imagePullSecrets:
-  - name: ghcr-pull
+imagePullSecrets: []
 
 # The k3d-loopzero-core serverlb maps host port 13001 to node port 30001. Exposing loopzero-api as
 # NodePort 30001 lets `curl localhost:13001/api/...` reach the cluster Service directly —
@@ -37,12 +26,11 @@ service:
   nodePort: 30001
 
 config:
-  # CANONICAL FIX 2026-07-02 (Red Team #133): the build workflow's sign-image and
-  # attest-image steps must reference the locally imported k3d cosign/syft images, not the
-  # DOCR defaults of api/internal/argo/constants.go (which require prod DOCR pull secrets).
-  # Without these, the build stalls at sign-image-app with ImagePullBackOff 401.
-  loopzeroCosignImage: "k3d-loopzero-registry:5000/loopzero-cosign-signer:v0.1.0"
-  loopzeroSyftImage: "k3d-loopzero-registry:5000/loopzero-syft-scanner:v0.1.0"
+  # The build workflow's sign-image and attest-image steps (Red Team #133) run these
+  # images on the build cluster, whose nodes authenticate to ECR the same way the core
+  # nodes do. Pinned by commit like every other platform image (#435).
+  loopzeroCosignImage: "{{ .Values.platformImages.registry }}loopzero-cosign-signer:{{ index .Values.platformImages.tags "loopzero-cosign-signer" }}"
+  loopzeroSyftImage: "{{ .Values.platformImages.registry }}loopzero-syft-scanner:{{ index .Values.platformImages.tags "loopzero-syft-scanner" }}"
   # CANONICAL FIX 2026-06-15: the OpenBao Transit chain is on in dev-public. Both halves of
   # the AppRole arrive from Secret `loopzero-openbao-approle`: vault-bootstrap-dev.sh writes the
   # secret_id and `loopzero-ops seed vault-role-id-sync` the role_id, which OpenBao issues anew

@@ -15,28 +15,23 @@ service:
   type: NodePort
   nodePort: 30002
 
-# CANONICAL 2026-06-19 (issue #104 Architecture A; ADR PROPOSED
-# `2026-06-19-loopzero-cloud-image-registry-canonical`). loopzero-cloud images are published
-# EXCLUSIVELY to GHCR by the AM6 reusable workflow (loopzero/.github/workflows/build-publish.yml).
-# `ghcr-pull` imagePullSecret is provisioned from ~/.loopzero/ghcr-pull-token.txt by
-# `task images:ghcr:pullsecret`.
-#
-# The registry prefix is overridable through LOOPZERO_PLATFORM_IMAGE_PREFIX; the default stays
-# GHCR, so anyone with a valid token sees no difference. It exists because this environment
-# depended WITHOUT ALTERNATIVE on a published image: measured on the app-dev droplet on
-# 2026-08-10, with the pull token expired (HTTP 401), 13 pods sat in ImagePullBackOff and the
-# platform did not come up — although every one of these images has a Dockerfile in this
-# repository and can be built locally (BACKLOG.md B-016).
+# Until 2026-09-28 this environment pulled `:develop` from GHCR (issue #104), with an
+# overridable prefix added after an expired pull token held 13 pods in ImagePullBackOff
+# (B-016). A moving tag cannot say which commit is running, and production pulls from
+# ECR (#435); loopzero-cloud's own CI publishes there too.
+# Platform images come from Amazon ECR, pinned by the commit each was built from (#435):
+# the registry and the tag are `platformImages` in environments/dev-public.yaml, and a
+# missing entry fails the render instead of falling back to a moving tag. No pull
+# secret: the node's kubelet credential provider authenticates, as on EKS.
 global:
-  registry: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" | trimSuffix "/" }}
+  registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" }}
 
 image:
   repository: loopzero-cloud
-  tag: develop
-  pullPolicy: Always
+  tag: {{ required "platformImages.tags.loopzero-cloud is not set" (index .Values.platformImages.tags "loopzero-cloud") | quote }}
+  pullPolicy: IfNotPresent
 
-imagePullSecrets:
-  - name: ghcr-pull
+imagePullSecrets: []
 
 config:
   # Plan J-09 T1.1 (2026-06-05) — GitHub App install handshake. All three must be right
