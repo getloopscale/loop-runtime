@@ -371,6 +371,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Images publish from `develop` again. The image job did not grant `attestations: write`, which the shared build workflow requires since provenance attestation was added, so GitHub refused every run at startup with no log (#436).
 - The cleanroom's before/after comparison now recognises the same workloads after a rebuild instead of reporting every renamed pod, or a k3s load-balancer DaemonSet renamed by the rebuild, as missing, so the chain can pass end to end (#417)
 
 - The cleanroom chain can reach its dev-loop phase again: it started Tilt with process attributes the kernel refuses, so that phase failed before Tilt ran (#416)
