@@ -68,7 +68,18 @@ sync_runtime() {
 # droplet that directory does not exist: a reload without the variable replaced the
 # dashboard's root with nothing, and every page answered 404 (2026-09-29). Resolve it to an
 # absolute path here and refuse to touch the live edge when it holds no build.
+#
+# The bundle's source of record is the loopzero-dashboard image pinned in
+# environments/dev-public.yaml (#462): with LOOPZERO_DASHBOARD_IMAGE set and no
+# LOOPZERO_DASHBOARD_DIST override, it is extracted once per tag into ~/.cache.
 resolve_dashboard() {
+  if [[ -z "${LOOPZERO_DASHBOARD_DIST:-}" && -n "${LOOPZERO_DASHBOARD_IMAGE:-}" ]]; then
+    LOOPZERO_DASHBOARD_DIST="$HOME/.cache/loopzero/dashboard/${LOOPZERO_DASHBOARD_IMAGE##*:}"
+    if [[ ! -f "$LOOPZERO_DASHBOARD_DIST/index.html" ]]; then
+      extract_dashboard "$LOOPZERO_DASHBOARD_IMAGE" "$LOOPZERO_DASHBOARD_DIST"
+      [[ $DRY_RUN -eq 1 ]] && return
+    fi
+  fi
   local dir="${LOOPZERO_DASHBOARD_DIST:-$REPO_ROOT/../loopzero-cloud/dashboard/dist}"
   if [[ ! -f "$dir/index.html" ]]; then
     log "ERROR: no dashboard build at $dir (index.html missing). Set LOOPZERO_DASHBOARD_DIST to the built dashboard; the live edge was not touched."
@@ -76,6 +87,33 @@ resolve_dashboard() {
   fi
   LOOPZERO_DASHBOARD_DIST="$(cd "$dir" && pwd)"
   export LOOPZERO_DASHBOARD_DIST
+}
+
+# extract_dashboard copies the static bundle out of the pinned image. It runs a
+# short-lived pod on the core cluster rather than pulling with docker: the cluster's
+# nodes already authenticate to the registry (ECR, through the kubelet credential
+# provider), and this host's docker does not. The pod is removed however the copy ends.
+extract_dashboard() {
+  local image="$1" dest="$2" ctx="${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}"
+  local pod="loopzero-dashboard-dist-$$"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    log "would extract the dashboard from $image into $dest"
+    return
+  fi
+  log "extracting the dashboard from $image into $dest"
+  kubectl --context "$ctx" -n loopzero-system run "$pod" --image="$image" --restart=Never \
+    --command -- sleep 300 >/dev/null
+  # shellcheck disable=SC2064 # expand now: the trap must name this pod
+  trap "kubectl --context '$ctx' -n loopzero-system delete pod '$pod' --wait=false >/dev/null 2>&1 || true" EXIT
+  kubectl --context "$ctx" -n loopzero-system wait --for=condition=Ready "pod/$pod" --timeout=180s >/dev/null
+  local tmp="$dest.partial"
+  rm -rf -- "$tmp"
+  kubectl --context "$ctx" -n loopzero-system cp "$pod:/usr/share/nginx/html" "$tmp" >/dev/null
+  [[ -f "$tmp/index.html" ]] || { log "ERROR: $image holds no dashboard at /usr/share/nginx/html"; exit 1; }
+  mkdir -p "$(dirname "$dest")"
+  mv -- "$tmp" "$dest"
+  kubectl --context "$ctx" -n loopzero-system delete pod "$pod" --wait=false >/dev/null
+  trap - EXIT
 }
 
 load_edge_route_token() {

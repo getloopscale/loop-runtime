@@ -79,6 +79,8 @@ platformImages:
     loopzero-cosign-signer: "32e5643c313876f6eacff91648b5f2c257a95a6f"
     # getloopscale/loopzero-cloud
     loopzero-cloud: "03ff7b193dd60e1075052cbdb2c38bc96106bfd7"
+    # The dashboard bundle the edge serves at app-dev (extracted by dev-public:caddy, #462).
+    loopzero-dashboard: "03ff7b193dd60e1075052cbdb2c38bc96106bfd7"
     # getloopscale/loopzero-lens
     loopzero-lens: "3e3e4604109ab91ab8a930970c994f58ae8f9f9e"
     # getloopscale/loopzero-rag
