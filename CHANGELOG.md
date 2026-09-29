@@ -92,7 +92,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- dev-public runs loopzero-api and loopzero-app-operator from `11e6cab20` (ECR), the build that carries the cell-aware edge lookup and the public-URL route probe (#447).
+- dev-public runs loopzero-api and loopzero-app-operator from `b9ace523` (ECR): the cell-aware edge lookup, the public-URL route probe, routes that report ready, and releases that activate on every cell (#447).
 - dev-public runs the platform images that passed the vulnerability gate (API and operators at `1596e81f`) and the first control-plane image published since that repository's CI was restored (`03ff7b19`). The infrastructure images stay at their first ECR build until they pass the gate (#441).
 - dev-public pulls every platform image from Amazon ECR, pinned by the commit it was built from, instead of `:develop` from GHCR with `pullPolicy: Always`. `platformImages` in `environments/dev-public.yaml` says which commit each service runs, and promoting one is a commit that changes its line. MinIO, the clone runner and the sign and scan steps follow the same rule (#435).
 - The canonical fixture project the dev environment seeds, its preview hostnames and the live journeys that exercise it are named `sample` instead of the Portuguese `teste`; an environment seeded before this keeps the old project until it is re-seeded (#379)
@@ -377,6 +377,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A deploy that finished while its status went unchecked is reported as live instead of failed. The status check ran the time limit before looking at the service, so a release checked late — after a restart or a failover — was failed with "did not become healthy" about a service that was healthy (#447).
 - A deploy to a team placed on any cell other than the first now completes. The release activation and timeout loops only looked at the first cell, so a release elsewhere stayed pending forever: the app served traffic while the dashboard said no production deploy existed and reported the project degraded (#447).
 - A deployed app's route reports ready once it answers through the edge. Its readiness waited on an ingress condition that nothing ever set, so since 2026-05 no route reached ready even while serving traffic; the condition is now observed from the reachability check, and an unreachable route leaves it unknown rather than failed (#447).
 - The route-authentication gate lists `/internal/edge/route` among the internal routes, with the reason it is safe outside the session group: only the edge calls it, the handler refuses any caller without `LOOPZERO_EDGE_ROUTE_TOKEN`, and the route does not exist without a token (#447).

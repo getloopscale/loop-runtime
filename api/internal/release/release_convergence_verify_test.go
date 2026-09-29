@@ -295,3 +295,33 @@ func TestVerifyRelease_MatchingRevisionActivates(t *testing.T) {
 		t.Errorf("status event = %q, want SyncCompleted", f.status())
 	}
 }
+
+// A release checked late — the loop was down, a leader failed over, or its cell was not
+// scanned (#447) — is judged by its state, not by the clock. Healthy at its revision
+// means it deployed: it activates, and nothing is terminated.
+func TestVerifyRelease_HealthyReleasePastTheTimeoutActivates(t *testing.T) {
+	client := &verifySyncClient{synced: true, healthy: true, revision: "sha-new"}
+	f := newVerifyFixture(client, 12*time.Hour, func(r *db.Release) { r.GitCommit = "sha-new" })
+
+	f.verify()
+
+	if f.status() != string(statemachine.ReleaseSyncCompleted) {
+		t.Errorf("status event = %q, want SyncCompleted — the service is healthy at its revision", f.status())
+	}
+	if client.terminates != 0 {
+		t.Errorf("terminates = %d, want 0 — nothing is stuck", client.terminates)
+	}
+}
+
+// Past the timeout, a status that cannot be read is not a pass: the release fails,
+// as before, rather than waiting forever on a check that does not answer.
+func TestVerifyRelease_UnreadableStatusPastTheTimeoutStillFails(t *testing.T) {
+	client := &verifySyncClient{statusErr: errors.New("argocd unreachable")}
+	f := newVerifyFixture(client, 10*time.Minute, nil)
+
+	f.verify()
+
+	if f.status() != string(statemachine.RPEventSyncFailed) {
+		t.Errorf("status event = %q, want SyncFailed", f.status())
+	}
+}
