@@ -48,6 +48,10 @@ var allowlist = []string{
 	"/internal/bootstrap",
 	"/internal/argocd-callback",
 	"/internal/v1/secret-fetch",
+	// The edge's host -> cell lookup (#447). Called by the edge, which holds no user
+	// session; the handler refuses any caller without LOOPZERO_EDGE_ROUTE_TOKEN
+	// (constant-time compare) and is not registered at all without a token.
+	"/internal/edge/route",
 	"/api/v1/webhooks/github",
 	"/api/v1/admin/tenants/evict",
 	"/api/v1/admin/tenants/pin",
