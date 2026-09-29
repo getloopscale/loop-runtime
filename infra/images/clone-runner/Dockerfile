@@ -13,25 +13,34 @@
 #
 # SEC-004 still holds: nothing is downloaded at runtime.
 # Security: runs as non-root user 1000 (loopzero).
-FROM mirror.gcr.io/library/golang:1.23.12-alpine3.21@sha256:4bb4be21ac98da06bc26437ee870c4973f8039f13e9a1a36971b4517632b0fc6 AS mc-build
+FROM mirror.gcr.io/library/golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS mc-build
 
 # Tag RELEASE.2025-08-13T08-35-41Z of github.com/minio/mc. A tag can be moved; the
 # commit cannot, so the build refuses any checkout that is not this commit.
 ARG MC_TAG=RELEASE.2025-08-13T08-35-41Z
 ARG MC_COMMIT=7394ce0dd2a80935aded936b09fa12cbb3cb8096
+# The source is archived, so no upstream release will raise these. Each module is
+# raised to the first release that fixes the findings trivy reports for this tag
+# (measured 2026-09-29, #441). Exact versions keep the build reproducible; x/net
+# and x/text are raised by what these require (grpc needs x/net >= 0.58).
+ARG MC_DEP_FIXES="\
+github.com/prometheus/prometheus@v0.311.3 \
+golang.org/x/crypto@v0.55.0 \
+google.golang.org/grpc@v1.83.2"
 
 RUN apk add --no-cache git \
     && git clone --depth 1 --branch "${MC_TAG}" https://github.com/minio/mc.git /src/mc \
     && test "$(git -C /src/mc rev-parse HEAD)" = "${MC_COMMIT}"
 
 WORKDIR /src/mc
+RUN go get ${MC_DEP_FIXES} && go mod tidy
 # No -X version injection (see infra/images/minio/Dockerfile): the release and
 # commit are carried by the OCI labels below.
 RUN CGO_ENABLED=0 GOFLAGS=-mod=readonly go build -trimpath \
       -ldflags "-s -w" -o /out/mc . \
     && /out/mc --version
 
-FROM mirror.gcr.io/library/alpine:3.21.6@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709
+FROM mirror.gcr.io/library/alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
 
 ARG MC_TAG=RELEASE.2025-08-13T08-35-41Z
 ARG MC_COMMIT=7394ce0dd2a80935aded936b09fa12cbb3cb8096

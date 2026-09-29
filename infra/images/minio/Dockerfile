@@ -13,20 +13,40 @@
 # The layout matches upstream's Dockerfile.release at the same commit — the chart
 # calls /usr/bin/docker-entrypoint.sh and expects `minio` on PATH — with the
 # download-and-minisign step replaced by a build from a verified source commit.
-FROM mirror.gcr.io/library/golang:1.23.12-alpine3.21@sha256:4bb4be21ac98da06bc26437ee870c4973f8039f13e9a1a36971b4517632b0fc6 AS minio-build
+FROM mirror.gcr.io/library/golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS minio-build
 
-# Tag RELEASE.2024-12-18T13-15-44Z of github.com/minio/minio — the version the
-# chart pins. A tag can be moved; the commit cannot, so the build refuses any
-# checkout that is not this commit (the tag OBJECT is e1f26f7c; this is the commit
-# it points to).
-ARG MINIO_TAG=RELEASE.2024-12-18T13-15-44Z
-ARG MINIO_COMMIT=16f8cf1c52f0a77eeb8f7565aaf7f7df12454583
+# Tag RELEASE.2025-10-15T17-29-55Z of github.com/minio/minio — the last release
+# before the repository was archived, and the first that carries the server's own
+# security fix c1a49490c78e (sub-policy check), which the 2024-12-18 tag lacked (#441).
+# A tag can be moved; the commit cannot, so the build refuses any checkout that is
+# not this commit (a lightweight tag: this is the commit itself).
+ARG MINIO_TAG=RELEASE.2025-10-15T17-29-55Z
+ARG MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
+# The source is archived, so no upstream release will raise these. Each module is
+# raised to the first release that fixes the findings trivy reports for this tag
+# (measured 2026-09-29, #441). Exact versions keep the build reproducible; x/net and
+# x/text are raised by what these require (grpc needs x/net >= 0.58). A pin is
+# never below what another pin requires (grpc v1.83.2 needs otel >= v1.44.0).
+ARG MINIO_DEP_FIXES="\
+github.com/apache/thrift@v0.24.0 \
+github.com/buger/jsonparser@v1.1.2 \
+github.com/go-jose/go-jose/v4@v4.1.4 \
+github.com/prometheus/prometheus@v0.311.3 \
+github.com/rabbitmq/amqp091-go@v1.13.0 \
+go.opentelemetry.io/otel@v1.44.0 \
+go.opentelemetry.io/otel/sdk@v1.44.0 \
+golang.org/x/crypto@v0.55.0 \
+google.golang.org/grpc@v1.83.2"
 
 RUN apk add --no-cache git \
     && git clone --depth 1 --branch "${MINIO_TAG}" https://github.com/minio/minio.git /src/minio \
     && test "$(git -C /src/minio rev-parse HEAD)" = "${MINIO_COMMIT}"
 
 WORKDIR /src/minio
+# tidy -e: tidy also resolves the TESTS of dependencies, and a go-openapi test imports
+# a package its own module no longer ships. The build never loads it; any package the
+# build does need still fails `go build` below.
+RUN go get ${MINIO_DEP_FIXES} && go mod tidy -e
 # No -X version injection: the ldflag-symbols gate verifies every injection against
 # a module of THIS repository, and upstream's version strings are informational only
 # (user agent, a metric label, an admin message) — measured in cmd/ at this commit.
@@ -35,10 +55,10 @@ RUN CGO_ENABLED=0 GOFLAGS=-mod=readonly go build -trimpath -tags kqueue \
       -ldflags "-s -w" -o /out/minio . \
     && /out/minio --version
 
-FROM mirror.gcr.io/library/alpine:3.21.6@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709
+FROM mirror.gcr.io/library/alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
 
-ARG MINIO_TAG=RELEASE.2024-12-18T13-15-44Z
-ARG MINIO_COMMIT=16f8cf1c52f0a77eeb8f7565aaf7f7df12454583
+ARG MINIO_TAG=RELEASE.2025-10-15T17-29-55Z
+ARG MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
 
 LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero" \
       org.opencontainers.image.title="loopzero-minio" \
