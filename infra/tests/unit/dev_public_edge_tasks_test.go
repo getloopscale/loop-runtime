@@ -88,3 +88,32 @@ func TestTheLiveEdgeIsFoundByItsAdminAPINotItsProcessName(t *testing.T) {
 		t.Error("with no admin API answering, a Caddy was reported running")
 	}
 }
+
+// The dev-public edge needs two things only a finished install has: the edge-route token
+// Secret (the lookup) and the core cluster (it extracts the pinned dashboard). The edge
+// bootstrap runs before `task setup`, so every cleanroom still ended with the edge serving
+// the previous token until someone reloaded it by hand (#455). `task setup` now reloads
+// the edge as its last step on dev-public.
+func TestSetupReloadsTheDevPublicEdgeLast(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "Taskfile.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(data)
+	start := strings.Index(body, "\n  setup:\n")
+	if start < 0 {
+		t.Fatal("setup task not found")
+	}
+	setup := body[start+1:]
+	if end := regexp.MustCompile(`\n  [a-z][a-z0-9:-]*:\n`).FindStringIndex(setup[1:]); end != nil {
+		setup = setup[:end[0]+1]
+	}
+	steps := regexp.MustCompile(`(?m)^      - (.*)$`).FindAllStringSubmatch(setup, -1)
+	if len(steps) == 0 {
+		t.Fatal("setup has no steps")
+	}
+	last := steps[len(steps)-1][1]
+	if !strings.Contains(last, "dev-public:caddy") || !strings.Contains(last, `LOOPZERO_HELMFILE_ENV`) {
+		t.Errorf("setup's last step is %q, want the dev-public edge reload guarded by LOOPZERO_HELMFILE_ENV", last)
+	}
+}
