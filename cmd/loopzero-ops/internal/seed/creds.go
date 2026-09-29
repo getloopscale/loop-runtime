@@ -42,6 +42,11 @@ type Creds struct {
 	Cloud struct {
 		ServiceAccountKey string `json:"service_account_key"`
 	} `json:"cloud"`
+	// Cloudflare is the operator's DNS token: the dev-public edge issues wildcard
+	// certificates by DNS-01 with it, and dev-public:dns verifies the zone.
+	Cloudflare struct {
+		APIToken string `json:"api_token"`
+	} `json:"cloudflare"`
 }
 
 // ErrCredsAbsent signals the creds file does not exist. Seeds map this to SKIP

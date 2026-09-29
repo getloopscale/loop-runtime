@@ -1201,25 +1201,31 @@ tasks:
       Provision 3 Cloudflare A records pointing at this dev droplet:
       auth-dev.loopzero.example, app-dev.loopzero.example, cloud-dev.loopzero.example.
       Idempotent via CF API (PATCH if exists, POST if missing).
-    preconditions:
-      - sh: test -n "${CLOUDFLARE_API_TOKEN:-}"
-        msg: "CLOUDFLARE_API_TOKEN required (export from .env)"
-      - sh: test -n "${DROPLET_IP:-}"
-        msg: "DROPLET_IP required (e.g. DROPLET_IP=165.227.121.20)"
+      The Cloudflare token comes from the operator's credentials file and the IP from
+      the droplet's metadata service, unless the environment sets them (#455).
     cmds:
-      - bash infra/scripts/local/setup-dev-public-dns.sh --verify
+      - |
+        eval "$(cd cmd/loopzero-ops && go run . creds env)"
+        DROPLET_IP="${DROPLET_IP:-$(curl -fsS --max-time 3 http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null || true)}"
+        [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || { echo "CLOUDFLARE_API_TOKEN: set it, or add cloudflare.api_token to ~/.loopzero/dev-credentials.json"; exit 1; }
+        [ -n "$DROPLET_IP" ] || { echo "DROPLET_IP: set it (not on a droplet, so no metadata service answered)"; exit 1; }
+        export DROPLET_IP
+        bash infra/scripts/local/setup-dev-public-dns.sh --verify
 
   dev-public:caddy:
     desc: |
-      Start (or reload) Caddy with the canonical infra/local/Caddyfile.
-      Issues Let's Encrypt certs for all 6 hostnames (auth/app/cloud +
-      auth-dev/app-dev/cloud-dev .loopzero.example) via HTTP-01 challenge on :80.
+      Start (or reload) the edge with the canonical infra/local/Caddyfile: the
+      auth-dev/app-dev/cloud-dev hosts and the *.prod-dev / *.preview-dev app wildcards
+      (DNS-01 with the operator's Cloudflare token). Reloads whichever Caddy owns the
+      admin API, so a fresh edge-route token always reaches the live edge (#455).
       Idempotent.
     preconditions:
       - sh: command -v caddy >/dev/null 2>&1
         msg: "caddy binary not installed; install from caddyserver.com"
     cmds:
-      - bash infra/scripts/local/caddy-up-dev-public.sh --verify
+      - |
+        eval "$(cd cmd/loopzero-ops && go run . creds env)"
+        bash infra/scripts/local/caddy-up-dev-public.sh --verify
 
   dev-public:sync-kratos:
     desc: |

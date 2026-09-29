@@ -75,14 +75,18 @@ load_edge_route_token() {
   fi
 }
 
+# The live edge is whichever Caddy answers the admin API. Matching a process on this
+# script's config path missed an edge started any other way: the script then started a
+# second Caddy on the same ports and failed, and the new edge-route token never reached
+# the edge that serves traffic (#455). `caddy reload` goes through the same API.
 is_caddy_running() {
-  pgrep -f "caddy run.*$RUNTIME" >/dev/null 2>&1
+  curl -fsS --max-time 2 http://localhost:2019/config/ >/dev/null 2>&1
 }
 
 reload_or_start() {
   if [[ $DRY_RUN -eq 1 ]]; then
     if is_caddy_running; then
-      log "would 'caddy reload' (pid $(pgrep -f "caddy run.*$RUNTIME" | head -1))"
+      log "would 'caddy reload' the Caddy answering localhost:2019"
     else
       log "would start caddy with $RUNTIME"
     fi
@@ -99,7 +103,7 @@ reload_or_start() {
   # NOTE: --pingback removed (canonical 2026-06-16). The flag dials a
   # confirmation address after startup; intended for parent-forked Caddy
   # under a supervisor that opens the listener first. This script uses
-  # `nohup &` (no parent supervisor) and `sleep 3 + pgrep` as the readiness
+  # `nohup &` (no parent supervisor) and `sleep 3` + the admin API as the readiness
   # check, which is sufficient. With --pingback, Caddy exits 1 with
   # "dial confirmation address ... connection refused".
   nohup caddy run --config "$RUNTIME" >/tmp/caddy.log 2>&1 &
@@ -109,7 +113,7 @@ reload_or_start() {
     tail -20 /tmp/caddy.log >&2
     exit 1
   fi
-  log "Caddy started (pid $(pgrep -f "caddy run.*$RUNTIME" | head -1))"
+  log "Caddy started (admin API answering on localhost:2019)"
 }
 
 verify_certs() {
