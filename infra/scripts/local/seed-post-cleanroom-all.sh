@@ -111,8 +111,19 @@ run_step() {
   fi
   log "▶ $name"
   if eval "$cmd" >"/tmp/seed-${name}.log" 2>&1; then
-    RESULTS+=("PASS: $name")
-    PASS=$((PASS + 1))
+    # A seed that skips exits 0 — skipping is not an error (seed.go) — so the exit
+    # code alone called it PASS. On the 2026-09-29 cleanroom that hid a skipped admin
+    # seed behind two downstream failures (#453). The seed's own verdict line decides.
+    local skipped
+    skipped="$(grep -m1 -oE 'SKIP — .*' "/tmp/seed-${name}.log" || true)"
+    if [[ -n "$skipped" ]]; then
+      RESULTS+=("SKIP: $name — ${skipped#SKIP — }")
+      SKIP=$((SKIP + 1))
+      log "  SKIP: $name — ${skipped#SKIP — }"
+    else
+      RESULTS+=("PASS: $name")
+      PASS=$((PASS + 1))
+    fi
   else
     RESULTS+=("FAIL: $name (see /tmp/seed-${name}.log)")
     FAIL=$((FAIL + 1))
@@ -129,6 +140,57 @@ skip_step() {
   local reason="$1"
   RESULTS+=("SKIP: $name — $reason")
   SKIP=$((SKIP + 1))
+}
+
+# The seeds read their endpoints from the environment. On the 2026-09-29 cleanroom
+# nothing set them — they had been supplied by hand on earlier rounds — so the admin
+# seed skipped and the Hydra client seed could not reach Postgres (#453). The chain
+# opens what its seeds need, exports it, and closes it on exit. A value the operator
+# already set is left alone, and no port-forward is opened for it.
+PORT_FORWARD_PIDS=()
+# shellcheck disable=SC2317  # invoked by the EXIT trap below, not called directly
+close_port_forwards() {
+  local p
+  for p in "${PORT_FORWARD_PIDS[@]}"; do kill "$p" 2>/dev/null || true; done
+}
+trap close_port_forwards EXIT
+
+# port_forward <namespace> <service> <local:remote> — waits until the local port answers.
+port_forward() {
+  kubectl --context "$CORE_CONTEXT" -n "$1" port-forward "svc/$2" "$3" >/dev/null 2>&1 &
+  PORT_FORWARD_PIDS+=("$!")
+  local port="${3%%:*}" _
+  for _ in $(seq 1 30); do
+    (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && return 0
+    sleep 1
+  done
+  log "  port-forward svc/$2 did not open on :$port"
+  return 1
+}
+
+# secret_value <namespace> <secret> <key> — empty when the Secret or key is absent.
+secret_value() {
+  kubectl --context "$CORE_CONTEXT" -n "$1" get secret "$2" -o "jsonpath={.data.$3}" 2>/dev/null \
+    | base64 -d 2>/dev/null || true
+}
+
+ensure_seed_endpoints() {
+  if [[ -z "${KRATOS_ADMIN_URL:-}" ]] && port_forward loopzero-auth ory-kratos-admin 14435:80; then
+    export KRATOS_ADMIN_URL="http://127.0.0.1:14435"
+  fi
+  if [[ -z "${LOOPZERO_ADMIN_HYDRA_PG_URL:-}" ]]; then
+    local pw
+    pw="$(secret_value loopzero-system loopzero-db-credentials password)"
+    if [[ -n "$pw" ]] && port_forward loopzero-system postgresql 15432:5432; then
+      export LOOPZERO_ADMIN_HYDRA_PG_URL="postgres://loopzero:${pw}@127.0.0.1:15432/loopzero?sslmode=disable"
+    fi
+  fi
+  export LOOPZERO_API_URL="${LOOPZERO_API_URL:-http://localhost:13001}"
+  if [[ -z "${LOOPZERO_BOOTSTRAP_SECRET:-}" ]]; then
+    local bs
+    bs="$(secret_value loopzero-system loopzero-api-internal LOOPZERO_BOOTSTRAP_SECRET)"
+    if [[ -n "$bs" ]]; then export LOOPZERO_BOOTSTRAP_SECRET="$bs"; fi
+  fi
 }
 
 VERIFY_FLAG=""
@@ -191,6 +253,10 @@ else
 fi
 
 # Step 2
+if [[ "$DRY_RUN" != "1" ]]; then
+  ensure_seed_endpoints
+fi
+
 run_step "2-seed-minio" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed minio ${VERIFY_FLAG:+--verify})"
 
 # Step 3 — the admin login submit needs the dev-public Kratos URLs, which
