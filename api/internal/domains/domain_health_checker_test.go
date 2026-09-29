@@ -217,3 +217,12 @@ func TestDomainHealthChecker_ContextCancelled_StopsProcessing(t *testing.T) {
 	// Assert: some or all may be skipped due to cancellation
 	// The key assertion is no panic
 }
+
+// With no cell the checker covers every cell, as the loop graph documents; it used to
+// auto-verify custom domains on cell-0 only (#450).
+func TestDomainHealthChecker_EmptyCellCoversEveryCell(t *testing.T) {
+	h := NewDomainHealthChecker(newFakeDomainHealthStore(), slog.Default(), DomainHealthCheckerConfig{})
+	if h.cellID != "" {
+		t.Errorf("cell scope = %q, want \"\" (every cell)", h.cellID)
+	}
+}

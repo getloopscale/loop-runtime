@@ -199,8 +199,12 @@ func TestFindPendingCustomDomainsForAutoVerify_QuerySoT_ContainsJoinAndCellPredi
 	if !strings.Contains(queryBlock, "JOIN tenants") {
 		t.Errorf("FindPendingCustomDomainsForAutoVerify must JOIN tenants, got: %s", queryBlock)
 	}
-	if !strings.Contains(queryBlock, "t.cell_id = $1") {
-		t.Errorf("FindPendingCustomDomainsForAutoVerify must filter t.cell_id = $1, got: %s", queryBlock)
+	// A named cell filters to that cell; an empty one means every cell (#450).
+	if !strings.Contains(queryBlock, "sqlc.arg(cell_id)::text = ''") {
+		t.Errorf("FindPendingCustomDomainsForAutoVerify must read an empty cell as every cell, got: %s", queryBlock)
+	}
+	if !strings.Contains(queryBlock, "t.cell_id = sqlc.arg(cell_id)") {
+		t.Errorf("FindPendingCustomDomainsForAutoVerify must filter by the given cell, got: %s", queryBlock)
 	}
 	if !strings.Contains(queryBlock, "cd.status = 'pending_verification'") {
 		t.Errorf("FindPendingCustomDomainsForAutoVerify must filter status = 'pending_verification', got: %s", queryBlock)

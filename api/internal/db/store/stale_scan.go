@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/domain"
 )
 
 // StaleReleaseRow is a release that has sat in READY or PENDING past a cutoff.
@@ -30,8 +29,8 @@ type StaleBuildCutoffs struct {
 }
 
 // PostgresStaleScanner finds rows the reapers must time out. The queries are
-// scoped to one cell (roadmap 03); an empty cell means domain.DefaultCellID for
-// single-cell deployments. Both are capped at 100 rows, oldest first.
+// scoped to one cell (roadmap 03); an empty cell means every cell — how the API
+// runs its loops (#447, #450). Both are capped at 100 rows, oldest first.
 type PostgresStaleScanner struct {
 	DB db.DBTX
 }
@@ -71,7 +70,7 @@ func (s *PostgresStaleScanner) StaleReleaseRows(ctx context.Context, cellID stri
 func (s *PostgresStaleScanner) StaleBuildRows(ctx context.Context, cellID string, cutoffs StaleBuildCutoffs) ([]StaleBuildRow, error) {
 	const query = `
 		SELECT id, status FROM builds
-		WHERE cell_id = $5
+		WHERE ($5 = '' OR cell_id = $5)
 		  AND ((status = 'QUEUED' AND created_at < $1)
 		    OR (status = 'RUNNING' AND started_at < $2)
 		    OR (status = 'RELEASING' AND started_at < $3)
@@ -81,7 +80,7 @@ func (s *PostgresStaleScanner) StaleBuildRows(ctx context.Context, cellID string
 	`
 	rows, err := s.DB.Query(ctx, query,
 		cutoffs.QueuedBefore, cutoffs.RunningBefore, cutoffs.ReleasingBefore, cutoffs.CancellingBefore,
-		cellOrDefault(cellID))
+		cellID)
 	if err != nil {
 		return nil, fmt.Errorf("find stale builds: %w", err)
 	}
@@ -96,11 +95,4 @@ func (s *PostgresStaleScanner) StaleBuildRows(ctx context.Context, cellID string
 		result = append(result, r)
 	}
 	return result, rows.Err()
-}
-
-func cellOrDefault(cellID string) string {
-	if cellID == "" {
-		return domain.DefaultCellID
-	}
-	return cellID
 }
