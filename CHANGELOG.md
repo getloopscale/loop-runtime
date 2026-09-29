@@ -379,6 +379,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Reloading the dev-public edge no longer takes the dashboard down: the install refuses to touch the live edge when `LOOPZERO_DASHBOARD_DIST` holds no dashboard build, instead of serving a directory that does not exist, and its verification fails on a 404 it used to report as a healthy upstream (#462).
 - The shared image workflow verifies a signature it produced for another repository: it pinned the calling repository in the certificate identity, which a reusable workflow's certificate never carries, so `verify: true` failed after every cross-repository push. It now pins its own path in the certificate identity and the caller in the certificate's source-repository claim (#460).
 - A build stuck on any cell other than the first is now timed out, and a custom domain on any cell is now auto-verified. Like the release loops fixed earlier, the build timeout and domain verification loops only looked at the first cell (#450).
 - The dev-public edge is updated by the install itself. `task dev-public:caddy` reloads whichever Caddy serves the edge, found through its admin API, so a reinstall's new edge-route token reaches live traffic without a manual reload; it used to look for its own process only, start a second Caddy on the same ports, and fail. `task dev-public:dns` reads the Cloudflare token from the operator's credentials file and the droplet's address from its metadata service, so DNS verification no longer fails its precondition on every run (#455).
