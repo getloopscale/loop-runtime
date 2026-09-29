@@ -228,3 +228,25 @@ func TestWildcardDoesNotServeDeeperHostsNorApex(t *testing.T) {
 		}
 	}
 }
+
+// A snippet defined in the same file adds no site blocks, so importing it leaves the
+// view complete: parity is checked, and a host nobody serves still fails.
+func TestImportOfALocalSnippetKeepsParityVerifiable(t *testing.T) {
+	caddy := "(edge) {\n  reverse_proxy localhost:1\n}\n\napp-dev.loopzero.example {\n  import edge\n}\n"
+	root := tree(t, "    app-dev.loopzero.example", caddy)
+	if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); err != nil {
+		t.Fatalf("a local snippet import made parity unverifiable: %v", err)
+	}
+	root = tree(t, "    app-dev.loopzero.example\n    cloud.loopzero.example", caddy)
+	if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); !errors.Is(err, caddyhostparity.ErrUnserved) {
+		t.Fatalf("an unserved host passed next to a snippet import: %v", err)
+	}
+}
+
+// An import naming no snippet in this file is a file import, and the view is partial.
+func TestImportOfAnUndefinedNameIsStillPartial(t *testing.T) {
+	root := tree(t, "    app-dev.loopzero.example", "app-dev.loopzero.example {\n  import edge\n}\n")
+	if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); !errors.Is(err, caddyhostparity.ErrPartialView) {
+		t.Fatalf("expected ErrPartialView, got %v", err)
+	}
+}
