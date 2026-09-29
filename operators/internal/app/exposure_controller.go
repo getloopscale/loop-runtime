@@ -229,8 +229,20 @@ func (r *ExposureReconciler) recordProbe(route *loopzerov1.ExposedRoute, result 
 		conditions.SetCondition(&route.Status.Conditions, conditions.TypeRouteReachable,
 			metav1.ConditionTrue, conditions.ReasonReady,
 			fmt.Sprintf("probe returned %d", result), route.Generation)
+		// This controller does not own the ingress object — GitOps ships it — so the
+		// ingress serving the route is observed through the probe. Without this the
+		// summary awaited a condition nothing set, and no route ever reached Ready (#447).
+		conditions.SetCondition(&route.Status.Conditions, conditions.TypeIngressReady,
+			metav1.ConditionTrue, conditions.ReasonReady,
+			fmt.Sprintf("ingress served the route (probe returned %d)", result), route.Generation)
 		return true, false
 	}
+
+	// A failed probe does not isolate the ingress — DNS, the edge or the app may be at
+	// fault — so IngressReady becomes Unknown rather than a False nobody measured.
+	conditions.SetCondition(&route.Status.Conditions, conditions.TypeIngressReady,
+		metav1.ConditionUnknown, conditions.ReasonUnreachable,
+		"not observed: the probe did not reach the route", route.Generation)
 
 	route.Status.ConsecutiveFailures++
 	msg := fmt.Sprintf("probe failed: status %d", result)

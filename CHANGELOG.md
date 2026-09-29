@@ -377,6 +377,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A deployed app's route reports ready once it answers through the edge. Its readiness waited on an ingress condition that nothing ever set, so since 2026-05 no route reached ready even while serving traffic; the condition is now observed from the reachability check, and an unreachable route leaves it unknown rather than failed (#447).
 - The route-authentication gate lists `/internal/edge/route` among the internal routes, with the reason it is safe outside the session group: only the edge calls it, the handler refuses any caller without `LOOPZERO_EDGE_ROUTE_TOKEN`, and the route does not exist without a token (#447).
 - The edge upstream gate accepts per-cell routing: the app wildcards may import a local snippet that maps every cell to a `127.0.0.1` host port, instead of proxying to cell-0's port alone. A cell mapped to any other address still fails, which keeps the Docker-address drift that once sent every app request to the secrets cluster from coming back behind a map (#447).
 - The edge host-parity gate accepts an `import` of a snippet the Caddyfile defines itself; it refused every import as a partial view, which blocked any delivery once the app edge moved into a snippet. An import of anything else is still refused (#447).
