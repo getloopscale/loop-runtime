@@ -256,12 +256,21 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 			"environment", release.Environment, "error", nameErr)
 		return
 	}
+	// State before clock: a release checked late — the loop was down, a leader failed
+	// over, its cell was not scanned (#447) — that is already healthy at its revision
+	// deployed, and failing it would report "did not become healthy" about a service
+	// that did. Only a release that is not ready is timed out.
+	synced, healthy, err := r.checkSync(ctx, argoAppName, r.deployedAppNames(release))
+	if err == nil && synced && healthy && elapsed > r.cfg.SyncTimeout {
+		if r.revisionMatches(ctx, release, argoAppName) {
+			r.activateRelease(ctx, release)
+			return
+		}
+	}
 	if elapsed > r.cfg.SyncTimeout {
 		r.handleSyncTimeout(ctx, release, argoAppName, elapsed)
 		return
 	}
-
-	synced, healthy, err := r.checkSync(ctx, argoAppName, r.deployedAppNames(release))
 	if err != nil {
 		r.logger.Warn("release convergence: sync check error",
 			"release_id", release.ID, "error", err)

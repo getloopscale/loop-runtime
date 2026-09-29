@@ -377,6 +377,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A deploy that finished while its status went unchecked is reported as live instead of failed. The status check ran the time limit before looking at the service, so a release checked late — after a restart or a failover — was failed with "did not become healthy" about a service that was healthy (#447).
 - A deploy to a team placed on any cell other than the first now completes. The release activation and timeout loops only looked at the first cell, so a release elsewhere stayed pending forever: the app served traffic while the dashboard said no production deploy existed and reported the project degraded (#447).
 - A deployed app's route reports ready once it answers through the edge. Its readiness waited on an ingress condition that nothing ever set, so since 2026-05 no route reached ready even while serving traffic; the condition is now observed from the reachability check, and an unreachable route leaves it unknown rather than failed (#447).
 - The route-authentication gate lists `/internal/edge/route` among the internal routes, with the reason it is safe outside the session group: only the edge calls it, the handler refuses any caller without `LOOPZERO_EDGE_ROUTE_TOKEN`, and the route does not exist without a token (#447).
