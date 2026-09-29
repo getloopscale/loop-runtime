@@ -67,9 +67,9 @@ platformImages:
   registry: "776217504929.dkr.ecr.us-east-1.amazonaws.com/"
   tags:
     # getloopscale/loopzero
-    loopzero-api: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
+    loopzero-api: "11e6cab20a6cbe05b313e3003d87a028f66078ba"
     loopzero-tenant-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
-    loopzero-app-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
+    loopzero-app-operator: "11e6cab20a6cbe05b313e3003d87a028f66078ba"
     loopzero-preview-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
     loopzero-platform-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
     # Still the first ECR build: the infrastructure images do not pass the

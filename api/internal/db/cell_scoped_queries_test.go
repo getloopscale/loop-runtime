@@ -119,8 +119,13 @@ func TestFindPendingReleasesByCell_QuerySoT_ContainsCellAndStatusPredicates(t *t
 	contents := mustReadQuerySoT(t, queryFileReleases)
 	queryBlock := mustExtractQueryBlock(t, contents, "FindPendingReleasesByCell")
 
-	if !strings.Contains(queryBlock, "cell_id = $1") {
-		t.Errorf("FindPendingReleasesByCell must filter cell_id = $1, got query: %s", queryBlock)
+	// A named cell filters to that cell; an empty one means every cell — how the API
+	// runs its loops (#447). Both halves of the predicate must be present.
+	if !strings.Contains(queryBlock, "cell_id = sqlc.arg(cell_id)") {
+		t.Errorf("FindPendingReleasesByCell must filter by the given cell, got query: %s", queryBlock)
+	}
+	if !strings.Contains(queryBlock, "sqlc.arg(cell_id)::text = ''") {
+		t.Errorf("FindPendingReleasesByCell must read an empty cell as every cell, got query: %s", queryBlock)
 	}
 	if !strings.Contains(queryBlock, "status = 'PENDING'") {
 		t.Errorf("FindPendingReleasesByCell must filter status = 'PENDING', got query: %s", queryBlock)
@@ -131,8 +136,13 @@ func TestFindActiveReleasesByCell_QuerySoT_ContainsCellAndStatusPredicates(t *te
 	contents := mustReadQuerySoT(t, queryFileReleases)
 	queryBlock := mustExtractQueryBlock(t, contents, "FindActiveReleasesByCell")
 
-	if !strings.Contains(queryBlock, "cell_id = $1") {
-		t.Errorf("FindActiveReleasesByCell must filter cell_id = $1, got query: %s", queryBlock)
+	// A named cell filters to that cell; an empty one means every cell — how the API
+	// runs its loops (#447). Both halves of the predicate must be present.
+	if !strings.Contains(queryBlock, "cell_id = sqlc.arg(cell_id)") {
+		t.Errorf("FindActiveReleasesByCell must filter by the given cell, got query: %s", queryBlock)
+	}
+	if !strings.Contains(queryBlock, "sqlc.arg(cell_id)::text = ''") {
+		t.Errorf("FindActiveReleasesByCell must read an empty cell as every cell, got query: %s", queryBlock)
 	}
 	if !strings.Contains(queryBlock, "status = 'ACTIVE'") {
 		t.Errorf("FindActiveReleasesByCell must filter status = 'ACTIVE', got query: %s", queryBlock)

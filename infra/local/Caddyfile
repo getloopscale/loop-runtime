@@ -567,22 +567,27 @@ auth-dev.loopzero.example {
 # The cell -> ingress map is the edge's own network knowledge: k3d publishes cell-0's
 # load balancer on 8443 and cell-1's on 8444 (infra/k3d/cell-*-cluster.yaml).
 (cell_edge) {
-  request_header -X-LoopZero-Cell
-  forward_auth localhost:13001 {
-    uri /internal/edge/route
-    header_up Authorization "Bearer {$LOOPZERO_EDGE_ROUTE_TOKEN}"
-    copy_headers X-LoopZero-Cell
-  }
-  map {header.X-LoopZero-Cell} {cell_ingress} {
-    cell-0 127.0.0.1:8443
-    cell-1 127.0.0.1:8444
-    default 127.0.0.1:9
-  }
-  reverse_proxy {cell_ingress} {
-    header_up Host {http.request.host.labels.3}.loopzero.local
-    transport http {
-      tls
-      tls_insecure_skip_verify
+  # route keeps the written order. Caddy's default directive order runs
+  # forward_auth BEFORE request_header, which deleted the cell the lookup had just
+  # copied: the map fell to its default and every app answered 502.
+  route {
+    request_header -X-LoopZero-Cell
+    forward_auth localhost:13001 {
+      uri /internal/edge/route
+      header_up Authorization "Bearer {$LOOPZERO_EDGE_ROUTE_TOKEN}"
+      copy_headers X-LoopZero-Cell
+    }
+    map {header.X-LoopZero-Cell} {cell_ingress} {
+      cell-0 127.0.0.1:8443
+      cell-1 127.0.0.1:8444
+      default 127.0.0.1:9
+    }
+    reverse_proxy {cell_ingress} {
+      header_up Host {http.request.host.labels.3}.loopzero.local
+      transport http {
+        tls
+        tls_insecure_skip_verify
+      }
     }
   }
 }
