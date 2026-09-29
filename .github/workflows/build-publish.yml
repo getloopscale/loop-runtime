@@ -10,7 +10,7 @@
 #
 # Inputs added in the org-standardization pass (2026-06-30):
 #   trivy           — gate the image on CRITICAL/HIGH CVEs (Trivy) before push
-#   verify          — cosign verify the signature with an identity pinned to THIS workflow
+#   verify          — cosign verify the signature: this workflow's path in the SAN, the caller's repository in its claim
 #   dockerhub_image — also publish to docker.io/<this> when the DOCKERHUB_TOKEN secret is set
 name: build-publish
 on:
@@ -351,12 +351,17 @@ jobs:
         if: ${{ inputs.sign && inputs.verify }}
         env:
           IMAGE_REF: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
-          # The keyless identity derives from repo plus workflow path. Fixing the owner in
-          # text breaks verification on a transfer — and, worse, a WRONG owner here would
-          # accept a signature produced by ANOTHER workflow. This is the confused-deputy
-          # guard, so it follows the repo that actually runs.
-          IDENTITY_REPO: ${{ github.repository }}
+          # A certificate issued inside a reusable workflow names the REUSABLE in its SAN
+          # (this file, in getloopscale/loopzero) and the CALLER in its source-repository claim, so
+          # each half is pinned to the right thing (#460). The SAN alone would accept a
+          # signature any org repository produced by calling this workflow; the caller alone
+          # would accept one from any workflow of the caller. Together they are the
+          # confused-deputy guard. The owner follows the repository that runs, so a transfer
+          # does not break verification.
+          OWNER: ${{ github.repository_owner }}
+          CALLER_REPO: ${{ github.repository }}
         run: |
           cosign verify "${IMAGE_REF}" \
-            --certificate-identity-regexp "^https://github\.com/${IDENTITY_REPO}/\.github/workflows/build-publish\.yml@" \
+            --certificate-identity-regexp "^https://github\.com/${OWNER}/loopzero/\.github/workflows/build-publish\.yml@" \
+            --certificate-github-workflow-repository "${CALLER_REPO}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com

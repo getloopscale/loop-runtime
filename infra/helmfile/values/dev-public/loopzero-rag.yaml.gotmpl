@@ -1,0 +1,39 @@
+# dev-public overlay for infra/helm/data-plane-service: loopzero-rag (#446).
+#
+# Same contract as loopzero-memory.yaml.gotmpl. loopzero-rag runs two processes from one image:
+# the API (the image's default command) and the ingestion worker.
+image:
+  repository: {{ required "platformImages.registry is not set" .Values.platformImages.registry }}loopzero-rag
+  tag: {{ required "platformImages.tags.loopzero-rag is not set" (index .Values.platformImages.tags "loopzero-rag") | quote }}
+
+port: 8787
+# /v1/health requires a credential; /v1/healthz is the unauthenticated liveness endpoint
+# the image's own healthcheck uses.
+healthPath: /v1/healthz
+# Host port 18082 (infra/k3d/core-cluster.yaml).
+nodePort: 30182
+runAsUser: 1000
+
+existingSecret: loopzero-rag
+env:
+  PORT: "8787"
+  NODE_ENV: production
+  LOOPZERORAG_REQUIRE_CREDENTIAL: "true"
+secretEnv:
+  - { name: OPENAI_API_KEY, key: openai-api-key }
+  - { name: LOOPZERORAG_ADMIN_BOOTSTRAP_TOKEN, key: admin-bootstrap-token }
+
+workers:
+  - name: worker
+    command: ["node_modules/.bin/tsx", "src/worker.ts"]
+
+postgres:
+  # loopzero-rag's own database image (pgvector and its extensions), Postgres 18.
+  image: ghcr.io/getloopscale/loopzero-db:0.140.0@sha256:78af2811c159ef523fd0680f2141718587c35f4fccfe6dfad8e4fa1a6dcf5077
+  database: therag
+  user: therag
+  uriEnv: LOOPZERORAG_PG_URI
+  dataPath: /var/lib/postgresql
+  pgdata: /var/lib/postgresql/18/docker
+  storage: 5Gi
+  runAsUser: 999

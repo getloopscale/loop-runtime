@@ -115,3 +115,22 @@ func TestCredsEnvExportsTheCloudflareToken(t *testing.T) {
 		t.Errorf("output lacks the Cloudflare token export:\n%s", out)
 	}
 }
+
+// The data plane (#446) runs from Helmfile, and generate-secrets.sh builds its Secrets
+// from these two: the model provider key every service embeds or judges with, and the
+// token that lets an operator mint the first admin key of each service.
+func TestCredsEnvExportsTheDataPlaneCredentials(t *testing.T) {
+	path := writeCredsFile(t, `{"openai": {"api_key": "sk-test"}, "data_plane": {"admin_bootstrap_token": "dp-boot"}}`)
+	code, out, msg := credsEnvOutput(t, path, nil)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, msg)
+	}
+	for _, want := range []string{
+		"export LOOPZERO_OPENAI_API_KEY='sk-test'\n",
+		"export LOOPZERO_DATA_PLANE_ADMIN_BOOTSTRAP_TOKEN='dp-boot'\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+}

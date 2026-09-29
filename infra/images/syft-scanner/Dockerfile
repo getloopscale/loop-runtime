@@ -1,34 +1,49 @@
-# loopzero-syft-scanner: Alpine image with syft binary baked in.
+# loopzero-syft-scanner: Alpine image with syft baked in.
 # Used by the sbom-{app} Argo Workflow step (Sprint 6 / T1.1) to scan
 # signed container images and produce CycloneDX SBOMs.
 #
-# SEC-006: syft binary baked at build time with checksum verification.
-# No runtime downloads — eliminates supply chain risk in the SBOM step.
+# syft is BUILT HERE FROM SOURCE (#441). The upstream release binary is compiled with
+# the Go toolchain of its release day, so even the newest one (v1.52.0) carried 11
+# fixable HIGH findings in the Go standard library. Building the verified tag commit
+# with the current Go toolchain removes them without waiting for an upstream release.
+# The pin is a source commit, checked before the build, and the module graph is
+# verified against the Go checksum database — the guarantee the release checksum gave.
 #
+# SEC-006: nothing is downloaded at runtime.
 # Output: CycloneDX JSON written to /tmp (caller uploads to S3).
-# Size: ~50MB (Alpine + syft binary + aws-cli)
-# Security: runs as non-root user 1000, no privilege escalation
-FROM mirror.gcr.io/library/alpine:3.21.3@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c
+# Security: runs as non-root user 1000, no privilege escalation.
+FROM mirror.gcr.io/library/golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS syft-build
 
-LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
-LABEL org.opencontainers.image.title="loopzero-syft-scanner"
-LABEL org.opencontainers.image.description="syft SBOM scanner for LoopZero build pipeline (Sprint 6)"
+# Tag v1.52.0 of github.com/anchore/syft. A tag can be moved; the commit cannot, so
+# the build refuses any checkout that is not this commit.
+ARG SYFT_TAG=v1.52.0
+ARG SYFT_COMMIT=02ba369d13b4248395b20a504eca94b0cab564d8
 
-# syft version and checksum — update both when upgrading.
-# Checksum source:
-#   https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/syft_${SYFT_VERSION_BARE}_checksums.txt
-ARG SYFT_VERSION=v1.18.1
-ARG SYFT_VERSION_BARE=1.18.1
-ARG SYFT_SHA256=066c251652221e4d44fcc4d115ce3df33a91769da38c830a8533199db2f65aab
+RUN apk add --no-cache git \
+    && git clone --depth 1 --branch "${SYFT_TAG}" https://github.com/anchore/syft.git /src/syft \
+    && test "$(git -C /src/syft rev-parse HEAD)" = "${SYFT_COMMIT}"
+
+WORKDIR /src/syft
+# No -X version injection (the ldflag-symbols gate only accepts symbols of this
+# repository); the release and commit are carried by the OCI labels below.
+RUN CGO_ENABLED=0 GOFLAGS=-mod=readonly go build -trimpath \
+      -ldflags "-s -w" -o /out/syft ./cmd/syft \
+    && /out/syft --help >/dev/null
+
+FROM mirror.gcr.io/library/alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+
+ARG SYFT_TAG=v1.52.0
+ARG SYFT_COMMIT=02ba369d13b4248395b20a504eca94b0cab564d8
+
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero" \
+      org.opencontainers.image.title="loopzero-syft-scanner" \
+      org.opencontainers.image.description="syft SBOM scanner for LoopZero build pipeline, built from anchore/syft@${SYFT_COMMIT}" \
+      io.loopzero.syft.release="${SYFT_TAG}" \
+      io.loopzero.syft.revision="${SYFT_COMMIT}"
+
+COPY --from=syft-build /out/syft /usr/local/bin/syft
 
 RUN apk add --no-cache ca-certificates aws-cli \
-    && wget -q "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/syft_${SYFT_VERSION_BARE}_linux_amd64.tar.gz" \
-       -O /tmp/syft.tar.gz \
-    && echo "${SYFT_SHA256}  /tmp/syft.tar.gz" | sha256sum -c - \
-    && tar -xzf /tmp/syft.tar.gz -C /tmp \
-    && mv /tmp/syft /usr/local/bin/syft \
-    && chmod +x /usr/local/bin/syft \
-    && rm -f /tmp/syft.tar.gz /tmp/LICENSE /tmp/README.md \
     && adduser -D -u 1000 loopzero
 
 USER 1000

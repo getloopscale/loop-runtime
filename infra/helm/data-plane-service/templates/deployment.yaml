@@ -1,0 +1,78 @@
+{{- $image := printf "%s:%s" (required "image.repository is required" .Values.image.repository) (required "image.tag is required" .Values.image.tag) }}
+{{- $processes := list (dict "name" "" "command" list) }}
+{{- range .Values.workers }}{{ $processes = append $processes . }}{{ end }}
+{{- range $processes }}
+{{- $component := .name | default "app" }}
+{{- $name := ternary $.Release.Name (printf "%s-%s" $.Release.Name .name) (eq .name "") }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "dps.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  replicas: {{ $.Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $.Release.Name }}
+      app.kubernetes.io/component: {{ $component }}
+  template:
+    metadata:
+      labels:
+        {{- include "dps.labels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $component }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $.Values.runAsUser }}
+        seccompProfile: { type: RuntimeDefault }
+      # The service migrates its database on boot and exits when it cannot reach it;
+      # waiting here turns a crash-loop on every install into an ordered start.
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ $.Values.postgres.image }}
+          command: ["sh", "-c", "until pg_isready -h {{ include "dps.postgresHost" $ }} -p 5432 -U {{ $.Values.postgres.user }}; do sleep 2; done"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+      containers:
+        - name: {{ $component }}
+          image: {{ $image }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          {{- with .command }}
+          command: {{ toJson . }}
+          {{- end }}
+          env:
+            {{- include "dps.env" $ | nindent 12 }}
+          {{- if eq .name "" }}
+          ports:
+            - name: http
+              containerPort: {{ $.Values.port }}
+          readinessProbe:
+            httpGet: { path: {{ $.Values.healthPath }}, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: {{ $.Values.healthPath }}, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 6
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+{{- end }}

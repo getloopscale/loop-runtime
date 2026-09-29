@@ -73,6 +73,17 @@ get_or_generate() {
   random_password
 }
 
+# existing_value: the current value of an externally-sourced key, or nothing. Unlike
+# get_or_generate it never invents one: a random provider key would look authentic and
+# never authenticate.
+existing_value() {
+  local name="$1" ns="$2" key="$3" raw
+  raw=$(kubectl get secret "$name" -n "$ns" -o "jsonpath={.data.${key//./\\.}}" 2>/dev/null || true)
+  if [[ -n "$raw" ]]; then
+    printf '%s' "$raw" | base64 -d 2>/dev/null || true
+  fi
+}
+
 ensure_namespace() {
   local ns="$1"
   kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
@@ -307,6 +318,25 @@ apply_secret loopzero-edge-route-token loopzero-system \
 BOOTSTRAP_SECRET="${LOOPZERO_BOOTSTRAP_SECRET:-$(get_or_generate loopzero-api-internal loopzero-system LOOPZERO_BOOTSTRAP_SECRET)}"
 apply_secret loopzero-api-internal loopzero-system \
   --from-literal=LOOPZERO_BOOTSTRAP_SECRET="${BOOTSTRAP_SECRET}"
+
+# 1.e) The data plane (#446): dev-public runs memory, RAG and lens from Helmfile in the
+# loopzero-data-plane namespace, and each release reads one Secret named after it. The database
+# password is generated and preserved across runs, like the rest; the model provider key and
+# the admin bootstrap token are the operator's (`loopzero-ops creds env`), with the bootstrap
+# token generated when none is given. Other environments do not run the data plane here.
+if [[ "$ENV" == "dev-public" ]]; then
+  for svc in loopzero-memory loopzero-rag loopzero-lens; do
+    OPENAI_KEY="${LOOPZERO_OPENAI_API_KEY:-$(existing_value "$svc" loopzero-data-plane openai-api-key)}"
+    if [[ -z "$OPENAI_KEY" ]]; then
+      OPENAI_KEY="sk-NOT_SET"
+      log "WARN: LOOPZERO_OPENAI_API_KEY unset and no existing $svc Secret. $svc cannot embed or judge until it is set."
+    fi
+    apply_secret "$svc" loopzero-data-plane \
+      --from-literal=postgres-password="$(get_or_generate "$svc" loopzero-data-plane postgres-password)" \
+      --from-literal=admin-bootstrap-token="${LOOPZERO_DATA_PLANE_ADMIN_BOOTSTRAP_TOKEN:-$(get_or_generate "$svc" loopzero-data-plane admin-bootstrap-token)}" \
+      --from-literal=openai-api-key="$OPENAI_KEY"
+  done
+fi
 
 # 1.c) Resend HTTP-API key for Kratos courier (MEET-2026-04-06-036: DO blocks
 # SMTP, courier delivery_strategy=http via api.resend.com/emails). Consumed

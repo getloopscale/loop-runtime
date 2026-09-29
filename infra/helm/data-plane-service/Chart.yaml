@@ -1,0 +1,8 @@
+apiVersion: v2
+name: data-plane-service
+description: |
+  One data-plane service — memory, RAG or lens — with its own Postgres. Installed by
+  Helmfile once per service, so dev-public's data plane has a versioned definition
+  instead of compose directories nobody can recreate (getloopscale/loopzero#446).
+type: application
+version: 0.1.0

@@ -1,0 +1,37 @@
+# dev-public overlay for infra/helm/data-plane-service: loopzero-memory (#446).
+#
+# The image comes from Amazon ECR pinned by the commit it was built from, like every
+# platform image (`platformImages` in environments/dev-public.yaml); a missing tag fails
+# the render. The environment is what the compose deployment this replaces ran with,
+# measured on the droplet on 2026-09-29.
+image:
+  repository: {{ required "platformImages.registry is not set" .Values.platformImages.registry }}loopzero-memory
+  tag: {{ required "platformImages.tags.loopzero-memory is not set" (index .Values.platformImages.tags "loopzero-memory") | quote }}
+
+port: 8080
+healthPath: /v1/health
+# Host port 18081 (infra/k3d/core-cluster.yaml): the edge and the seed chain reach it there.
+nodePort: 30181
+# The image's USER is the distroless nonroot uid.
+runAsUser: 65532
+
+existingSecret: loopzero-memory
+env:
+  HOST: "0.0.0.0"
+  PORT: "8080"
+  THEMEMORY_REQUIRE_CREDENTIAL: "true"
+  LOOPZEROMEM_EMBEDDER: openai
+  TRANSFORMERS_CACHE: /tmp/.transformers-cache
+secretEnv:
+  - { name: OPENAI_API_KEY, key: openai-api-key }
+  - { name: THEMORY_ADMIN_BOOTSTRAP_TOKEN, key: admin-bootstrap-token }
+
+postgres:
+  image: mirror.gcr.io/ankane/pgvector:v0.5.1@sha256:d3a9d8ac27bb7e05e333ef25b634d2625adaa85336ab729954b9e94859bf6fa7
+  database: themem
+  user: themem
+  uriEnv: LOOPZEROMEM_PG_URI
+  dataPath: /var/lib/postgresql/data
+  pgdata: /var/lib/postgresql/data/pgdata
+  storage: 5Gi
+  runAsUser: 999

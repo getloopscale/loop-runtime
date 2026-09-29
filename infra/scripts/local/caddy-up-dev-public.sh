@@ -63,6 +63,21 @@ sync_runtime() {
 # generate-secrets.sh keeps, unless the caller already exported it. Without it the
 # engine refuses the lookup and every app URL answers 401 — the dashboard and auth
 # hosts keep working, so this warns rather than aborting.
+# The dashboard the edge serves at app-dev. The Caddyfile reads LOOPZERO_DASHBOARD_DIST and falls
+# back to a sibling loopzero-cloud checkout's build, relative to wherever Caddy runs. On the
+# droplet that directory does not exist: a reload without the variable replaced the
+# dashboard's root with nothing, and every page answered 404 (2026-09-29). Resolve it to an
+# absolute path here and refuse to touch the live edge when it holds no build.
+resolve_dashboard() {
+  local dir="${LOOPZERO_DASHBOARD_DIST:-$REPO_ROOT/../loopzero-cloud/dashboard/dist}"
+  if [[ ! -f "$dir/index.html" ]]; then
+    log "ERROR: no dashboard build at $dir (index.html missing). Set LOOPZERO_DASHBOARD_DIST to the built dashboard; the live edge was not touched."
+    exit 1
+  fi
+  LOOPZERO_DASHBOARD_DIST="$(cd "$dir" && pwd)"
+  export LOOPZERO_DASHBOARD_DIST
+}
+
 load_edge_route_token() {
   if [[ -z "${LOOPZERO_EDGE_ROUTE_TOKEN:-}" ]] && command -v kubectl >/dev/null 2>&1; then
     LOOPZERO_EDGE_ROUTE_TOKEN="$(kubectl --context "${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}" -n loopzero-system \
@@ -135,8 +150,9 @@ verify_certs() {
     auth-dev.loopzero.example app-dev.loopzero.example
   )
   # tls_ok if openssl handshake succeeds (cert issued + chain valid).
-  # http_code informational only — 200/404 means upstream is up, 502 means
-  # upstream down (legitimate during Phase 1 if loopzero-cloud not yet deployed).
+  # 200 means the page is served. 404 fails: at app-dev it is the dashboard missing, the
+  # outage resolve_dashboard now prevents. 502 is logged and tolerated — loopzero-cloud may
+  # not be deployed yet on a cold install.
   local all_tls_ok=1
   for h in "${hosts[@]}"; do
     local code
@@ -146,7 +162,8 @@ verify_certs() {
       | openssl x509 -noout -issuer 2>/dev/null | head -1)
     if echo "$issuer" | grep -qi "let.s encrypt\|^issuer=C = US, O = Let"; then
       case "$code" in
-        200|404) log "  $h -> HTTP $code (TLS LE OK, upstream UP)" ;;
+        200) log "  $h -> HTTP $code (TLS LE OK, upstream UP)" ;;
+        404) log "  $h -> HTTP 404 (TLS LE OK, but nothing serves the page) FAIL"; all_tls_ok=0 ;;
         502) log "  $h -> HTTP 502 (TLS LE OK, upstream DOWN — expected if loopzero-cloud absent)" ;;
         *) log "  $h -> HTTP $code (TLS LE OK, upstream status: $code)" ;;
       esac
@@ -159,6 +176,7 @@ verify_certs() {
 }
 
 main() {
+  resolve_dashboard
   if [[ $RELOAD_ONLY -eq 0 ]]; then
     sync_runtime || log "no-op sync (already current)"
   fi

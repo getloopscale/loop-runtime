@@ -1,0 +1,52 @@
+# The image is pinned by an environment: a repository and a tag naming one build. There is
+# no default tag, so a release that forgets it is refused instead of running a mutable one.
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+# The port the service listens on, and its unauthenticated health endpoint.
+port: 8080
+healthPath: /v1/health
+
+# Set to publish the service on a fixed node port (the edge reaches it through the
+# cluster's host port map). Unset, the Service is ClusterIP.
+nodePort: null
+
+# The uid the image runs as. Most of these images name their USER ("node"), which
+# Kubernetes cannot verify as non-root, so the uid is stated here.
+runAsUser: 1000
+
+# The Secret holding postgres-password and every secretEnv key, created per
+# installation (infra/helmfile/scripts/generate-secrets.sh on dev-public).
+existingSecret: ""
+
+# Plain environment, NAME: value.
+env: {}
+
+# Environment read from existingSecret: [{name, key}].
+secretEnv: []
+
+# Extra processes of the same image — same environment, no port, no probe.
+workers: []
+
+resources:
+  requests: { cpu: 50m, memory: 256Mi }
+  limits: { memory: 1Gi }
+
+postgres:
+  image: ""
+  database: ""
+  user: ""
+  # The env var that receives the connection URI (e.g. LOOPZEROMEM_PG_URI).
+  uriEnv: ""
+  # Where the volume mounts, and PGDATA when the image expects a subdirectory of it.
+  dataPath: /var/lib/postgresql/data
+  pgdata: ""
+  storage: 5Gi
+  runAsUser: 999
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }

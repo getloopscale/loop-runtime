@@ -137,6 +137,11 @@
       "first_seen_in": "infra/helmfile/values/drill/ory-kratos.yaml.gotmpl"
     },
     {
+      "id": "b2f0e728cf5f3eb3",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
+    },
+    {
       "id": "02c34a9d8d871290",
       "detector": "Postgres",
       "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"

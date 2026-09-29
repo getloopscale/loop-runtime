@@ -40,14 +40,19 @@ func assertECRImage(t *testing.T, where, ref, repository string) {
 // commit, with no pull secret — the node's kubelet credential provider authenticates,
 // as on EKS — and without re-pulling an immutable tag on every start.
 func TestDevPublicPlatformDeploymentsPullFromECR(t *testing.T) {
-	for release, chart := range map[string]string{
+	releases := map[string]string{
 		"loopzero-api":               "charts/loopzero-api",
 		"loopzero-tenant-operator":   "charts/loopzero-tenant-operator",
 		"loopzero-app-operator":      "charts/loopzero-app-operator",
 		"loopzero-preview-operator":  "charts/loopzero-preview-operator",
 		"loopzero-platform-operator": "charts/loopzero-platform-operator",
 		"loopzero-cloud":             "charts/loopzero-cloud",
-	} {
+	}
+	// The data plane (#446): one chart, one release per service enabled on dev-public.
+	for svc := range enabledDataPlane(t) {
+		releases[svc] = "infra/helm/data-plane-service"
+	}
+	for release, chart := range releases {
 		t.Run(release, func(t *testing.T) {
 			rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", release, chart, helmfileCoreEnv...)
 			deployments := renderedObjectsOfKind(t, rendered, "Deployment")

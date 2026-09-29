@@ -47,6 +47,15 @@ type Creds struct {
 	Cloudflare struct {
 		APIToken string `json:"api_token"`
 	} `json:"cloudflare"`
+	// OpenAI is the model provider key the data-plane services embed and judge with (#446).
+	OpenAI struct {
+		APIKey string `json:"api_key"`
+	} `json:"openai"`
+	// DataPlane.AdminBootstrapToken lets an operator mint the first admin key of each
+	// data-plane service.
+	DataPlane struct {
+		AdminBootstrapToken string `json:"admin_bootstrap_token"`
+	} `json:"data_plane"`
 }
 
 // ErrCredsAbsent signals the creds file does not exist. Seeds map this to SKIP
