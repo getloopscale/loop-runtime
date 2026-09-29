@@ -187,3 +187,37 @@ func TestImagesJobGrantsEveryPermissionTheReusableDeclares(t *testing.T) {
 		}
 	}
 }
+
+// GitHub-native attestations are unavailable to a private repository on the
+// organisation's plan ("Feature not available for the getloopscale organization"), and
+// every repository calling this workflow is private. Unconditional, the step failed the
+// whole publish after the image was already pushed — and before the cosign keyless
+// signature that follows it could run (loopzero-cloud run 36512769358). The cosign
+// signature is the guarantee; the native attestation is where a public repository
+// also publishes it.
+func TestNativeAttestationRunsOnlyOnPublicRepositories(t *testing.T) {
+	var step *workflowStep
+	for _, s := range loadWorkflow(t, buildPublishWorkflow).Jobs["build-publish"].Steps {
+		if s.Uses != "" && strings.HasPrefix(s.Uses, "actions/attest-build-provenance@") {
+			s := s
+			step = &s
+		}
+	}
+	if step == nil {
+		t.Fatalf("%s: no actions/attest-build-provenance step", buildPublishWorkflow)
+	}
+	if !strings.Contains(step.If, "!github.event.repository.private") {
+		t.Errorf("%s: the attestation step runs on private repositories (if: %q) — the org plan refuses it and the publish fails", buildPublishWorkflow, step.If)
+	}
+}
+
+// The engine's images go to production, so they pass the same vulnerability gate the
+// control plane's do (CRITICAL+HIGH with a fix available, in build-publish.yml). Without
+// it the images built on Go 1.26.1 reached ECR carrying 53 HIGH findings (loopzero-api) and
+// nothing measured them.
+func TestImagesJobGatesOnKnownVulnerabilities(t *testing.T) {
+	job := loadWorkflow(t, releaseArtifactsWorkflow).Jobs["images"]
+	if got, _ := job.With["trivy"].(bool); !got {
+		t.Errorf("%s: images.with.trivy = %v — the engine images publish without the vulnerability gate", releaseArtifactsWorkflow, job.With["trivy"])
+	}
+}

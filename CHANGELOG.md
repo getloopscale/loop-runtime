@@ -374,6 +374,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Image publishing no longer fails on a private repository: GitHub's native provenance attestation, which the organisation's plan only offers to public repositories, now runs only there. It used to fail the publish after the push and before the cosign signature (#436).
 - The control plane connects to the database as `loopzero_cloud`, the non-owner role migration 000063 created for it, instead of as the owner — which it refuses at boot, so a current `loopzero-cloud` image did not start in any environment. `task db:roles` now sets that role's password and `loopzero-db-credentials` carries `cloud-uri` (#438).
 - Images publish from `develop` again. The image job did not grant `attestations: write`, which the shared build workflow requires since provenance attestation was added, so GitHub refused every run at startup with no log (#436).
 - The cleanroom's before/after comparison now recognises the same workloads after a rebuild instead of reporting every renamed pod, or a k3s load-balancer DaemonSet renamed by the rebuild, as missing, so the chain can pass end to end (#417)
@@ -968,6 +969,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- The API and operator images are built on Go 1.26.6 and the API's runtime on Alpine 3.23, closing every fixable HIGH finding they carried — 53 in `loopzero-api` (Go standard library and OpenSSL) and 17 in each operator — and every image now passes the CRITICAL+HIGH vulnerability gate before it is published. The four infrastructure images do not pass it yet and stay at their last build (#441).
 - A team can no longer list the repositories of a GitHub installation that belongs to another team (#386)
 
 - The admission policies no longer admit images from a Harbor host: `registries.harborPrefix` and the Harbor image globs are removed, and the registries block now refuses unknown keys (design_pattern_findings#30)
