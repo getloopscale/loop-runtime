@@ -76,8 +76,20 @@ func TestCellEdgeAsksTheEngineAndMapsEveryCell(t *testing.T) {
 			t.Errorf("cell_edge does not map %s to 127.0.0.1:%s", cell, port)
 		}
 	}
-	// A client-supplied X-LoopZero-Cell must never choose the upstream.
-	if !strings.Contains(body, "request_header -X-LoopZero-Cell") {
-		t.Error("cell_edge does not strip a client-supplied X-LoopZero-Cell before the lookup")
+	// A client-supplied X-LoopZero-Cell must never choose the upstream, and the strip must
+	// run BEFORE the lookup. Caddy's default directive order runs forward_auth before
+	// request_header, which deleted the cell the lookup had just copied: every app
+	// answered 502. Only a `route` block executes directives in written order.
+	if !strings.Contains(body, "route {") {
+		t.Fatal("cell_edge is not a route block — Caddy would reorder its directives")
+	}
+	order := []string{"request_header -X-LoopZero-Cell", "forward_auth", "map {header.X-LoopZero-Cell}", "reverse_proxy {cell_ingress}"}
+	last := -1
+	for _, d := range order {
+		i := strings.Index(body, d)
+		if i < 0 || i < last {
+			t.Fatalf("cell_edge does not run %q in order %v", d, order)
+		}
+		last = i
 	}
 }
