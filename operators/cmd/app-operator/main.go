@@ -142,8 +142,11 @@ func main() {
 
 	// #277: the ExposureController needs the same factory as the ApplicationController —
 	// the TLS Secret it looks for lives in the workload's cell, not in this cluster.
+	// ROUTE_PROBE_PUBLIC_DOMAIN: probe the public URL instead of an internal route
+	// hostname that resolves nowhere (#447). Unset where route hostnames are public.
 	if err := app.SetupExposureController(mgr, app.ExposureControllerConfig{
-		RuntimeFactory: appFactory,
+		RuntimeFactory:    appFactory,
+		ProbePublicDomain: os.Getenv("ROUTE_PROBE_PUBLIC_DOMAIN"),
 	}); err != nil {
 		setupLog.Error(err, "unable to setup ExposureController")
 		os.Exit(1)

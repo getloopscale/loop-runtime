@@ -6,6 +6,7 @@ metadata:
     {{- include "loopzero-common.labels" . | nindent 4 }}
 data:
   BASE_DOMAIN: {{ .Values.config.baseDomain | quote }}
+  ROUTE_PROBE_PUBLIC_DOMAIN: {{ .Values.config.routeProbePublicDomain | quote }}
   OPERATOR_INSECURE_SKIP_TLS: {{ .Values.config.operatorInsecureSkipTls | quote }}
   LOOPZERO_REQUIRE_CELL_0_KUBECONFIG: {{ .Values.config.loopzeroRequireRuntimeKubeconfig | quote }}
   LOOPZERO_PPROF_ADDR: {{ .Values.config.loopzeroPprofAddr | quote }}

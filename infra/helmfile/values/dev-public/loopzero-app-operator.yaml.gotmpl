@@ -17,6 +17,9 @@ image:
 config:
   # Chart requires explicit baseDomain (no env-helmfile auto-injection).
   baseDomain: "{{ .Values.domain }}"
+  # Route hostnames here are the internal SNI (baseDomain); the probe asks for the
+  # public URL users reach instead (#447).
+  routeProbePublicDomain: {{ .Values.publicAppDomain | quote }}
 
 # dev-public NetworkPolicy override: gitea is in loopzero-system ns (not the
 # chart-default `gitea` ns). Same fix as loopzero-tenant-operator. Without

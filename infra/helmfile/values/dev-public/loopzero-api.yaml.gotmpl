@@ -80,7 +80,7 @@ config:
   #                      "Visit"): https://<tenant>-<project>-<entryApp>-<env>.<root>.
   # Mirrors the preview split above; single source of truth is pkg/naming.AppURL.
   baseDomain: "loopzero.local"
-  loopzeroPublicDomain: "prod-dev.loopzero.example"
+  loopzeroPublicDomain: {{ .Values.publicAppDomain | quote }}
 
 # The readiness poller behind the dashboard's /projects badge (Red Team #128) runs in
 # the api, which owns environment_targets. It queries the core Prometheus, which
