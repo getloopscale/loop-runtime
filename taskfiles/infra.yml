@@ -1225,6 +1225,11 @@ tasks:
     cmds:
       - |
         eval "$(cd cmd/loopzero-ops && go run . creds env)"
+        # The dashboard bundle comes from the loopzero-dashboard image pinned beside the
+        # platform images (#462); LOOPZERO_DASHBOARD_DIST, when set, still overrides it.
+        env_file=infra/helmfile/environments/dev-public.yaml
+        LOOPZERO_DASHBOARD_IMAGE="$(yq -r '.platformImages.registry + "loopzero-dashboard:" + .platformImages.tags."loopzero-dashboard"' "$env_file")"
+        export LOOPZERO_DASHBOARD_IMAGE
         bash infra/scripts/local/caddy-up-dev-public.sh --verify
 
   dev-public:sync-kratos:

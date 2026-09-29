@@ -70,3 +70,51 @@ func TestTheEdgeVerifyTreatsADashboard404AsAFailure(t *testing.T) {
 		t.Error("--verify still reports HTTP 404 as an upstream that is up")
 	}
 }
+
+// The dashboard used to be served from a directory copied by hand, with no record of the
+// commit it was built from (#462). The edge now takes it from the pinned loopzero-dashboard
+// image: when LOOPZERO_DASHBOARD_IMAGE is given and no LOOPZERO_DASHBOARD_DIST overrides it, the
+// bundle is copied out of a short-lived pod on the core cluster — which already
+// authenticates to the registry — into a directory named after the tag, and the edge
+// serves that.
+func TestTheEdgeServesTheDashboardFromItsPinnedImage(t *testing.T) {
+	bin, home := t.TempDir(), t.TempDir()
+	log := filepath.Join(t.TempDir(), "calls")
+	stubs := map[string]string{
+		"caddy": "echo \"caddy $*\" >> " + log,
+		"curl":  "exit 0", // the admin API answers: reload, do not start
+		// kubectl cp <pod>:/usr/share/nginx/html <dest> — lay down a bundle at <dest>.
+		"kubectl": "echo \"kubectl $*\" >> " + log + "\n" +
+			"case \"$*\" in *' cp '*) for a; do dest=\"$a\"; done; mkdir -p \"$dest\" && echo '<html>' > \"$dest/index.html\";; esac",
+	}
+	for name, body := range stubs {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	image := "registry.example/loopzero-dashboard:0123456789abcdef0123456789abcdef01234567"
+	cmd := exec.Command("bash", filepath.Join(repoRoot(), "infra", "scripts", "local", "caddy-up-dev-public.sh"))
+	env := []string{"PATH=" + bin + ":" + os.Getenv("PATH"), "HOME=" + home, "LOOPZERO_DASHBOARD_IMAGE=" + image, "LOOPZERO_EDGE_ROUTE_TOKEN=test"}
+	for _, e := range os.Environ() {
+		if !strings.HasPrefix(e, "LOOPZERO_DASHBOARD_DIST=") && !strings.HasPrefix(e, "PATH=") && !strings.HasPrefix(e, "HOME=") {
+			env = append(env, e)
+		}
+	}
+	cmd.Env = env
+
+	out, err := cmd.CombinedOutput()
+
+	if err != nil {
+		t.Fatalf("the edge did not come up from the pinned image: %v\n%s", err, out)
+	}
+	dist := filepath.Join(home, ".cache", "loopzero", "dashboard", "0123456789abcdef0123456789abcdef01234567")
+	if _, err := os.Stat(filepath.Join(dist, "index.html")); err != nil {
+		t.Errorf("no bundle at %s: %v", dist, err)
+	}
+	calls, _ := os.ReadFile(log)
+	for _, want := range []string{"run", image, " cp ", "delete pod", "caddy reload"} {
+		if !strings.Contains(string(calls), want) {
+			t.Errorf("calls lack %q:\n%s", want, calls)
+		}
+	}
+}
