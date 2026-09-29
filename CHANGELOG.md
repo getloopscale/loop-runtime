@@ -990,6 +990,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Images published to Amazon ECR — the registry production pulls from — are signed and verified there too. Only the GitHub Container Registry copy was signed, so nothing could prove where an ECR image came from. The signature is an OCI referrer, which the repositories' immutable tags and lifecycle rules leave alone (#461).
 - The four infrastructure images — MinIO, the clone runner, the SBOM scanner and the image signer — are built from pinned upstream source commits on Go 1.26.6 and Alpine 3.23, with each vulnerable module raised to the first release that fixes it. Each now has zero fixable HIGH or CRITICAL findings (it carried up to 38), so all four pass the vulnerability gate and can be published (#441).
 - The API and operator images are built on Go 1.26.6 and the API's runtime on Alpine 3.23, closing every fixable HIGH finding they carried — 53 in `loopzero-api` (Go standard library and OpenSSL) and 17 in each operator — and every image now passes the CRITICAL+HIGH vulnerability gate before it is published. The four infrastructure images do not pass it yet and stay at their last build (#441).
 - A team can no longer list the repositories of a GitHub installation that belongs to another team (#386)

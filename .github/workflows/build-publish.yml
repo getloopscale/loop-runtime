@@ -365,3 +365,26 @@ jobs:
             --certificate-identity-regexp "^https://github\.com/${OWNER}/loopzero/\.github/workflows/build-publish\.yml@" \
             --certificate-github-workflow-repository "${CALLER_REPO}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+      # The ECR copy is the one production pulls (#435), and the sign step above names only
+      # the GHCR reference, so the ECR digest carried no signature (#461). cosign v3 attaches
+      # the signature as an OCI 1.1 referrer: no tag, so the IMMUTABLE repositories accept it,
+      # and ECR's lifecycle rules neither count nor expire it — it goes with its image
+      # (measured 2026-09-29 against a scratch repository with the production rules).
+      - name: Keyless sign the ECR copy
+        if: ${{ inputs.sign && inputs.ecr_registry != '' }}
+        env:
+          ECR_REF: ${{ inputs.ecr_registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${ECR_REF}"
+
+      - name: Verify the ECR copy's signature
+        if: ${{ inputs.sign && inputs.verify && inputs.ecr_registry != '' }}
+        env:
+          ECR_REF: ${{ inputs.ecr_registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
+          OWNER: ${{ github.repository_owner }}
+          CALLER_REPO: ${{ github.repository }}
+        run: |
+          cosign verify "${ECR_REF}" \
+            --certificate-identity-regexp "^https://github\.com/${OWNER}/loopzero/\.github/workflows/build-publish\.yml@" \
+            --certificate-github-workflow-repository "${CALLER_REPO}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
