@@ -350,6 +350,9 @@ type Config struct {
 	// BrokerToken is the bearer the ESO secret-fetch broker requires
 	// (LOOPZERO_BROKER_TOKEN); empty disables the broker endpoint.
 	BrokerToken string
+	// BrokerTokens is LOOPZERO_BROKER_TOKENS: the broker's bearer per cell, as comma-separated
+	// cell=token pairs. Read through BrokerCellTokens (#456).
+	BrokerTokens string
 	// EdgeRouteToken is the bearer the edge presents to /internal/edge/route
 	// (LOOPZERO_EDGE_ROUTE_TOKEN); empty disables the route.
 	EdgeRouteToken string
@@ -595,6 +598,7 @@ func Load() Config {
 		PprofAddr:           envOr("LOOPZERO_PPROF_ADDR", ":6060"),
 		EnvReadinessChecker: os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true",
 		BrokerToken:         os.Getenv("LOOPZERO_BROKER_TOKEN"),
+		BrokerTokens:        os.Getenv("LOOPZERO_BROKER_TOKENS"),
 		EdgeRouteToken:      os.Getenv("LOOPZERO_EDGE_ROUTE_TOKEN"),
 		TrustedProxyCIDRs:   os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS"),
 		BillingUpgradeURL:   os.Getenv("BILLING_UPGRADE_URL"),
@@ -696,6 +700,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := c.validateDataPlanePoller(); err != nil {
+		return err
+	}
+	if err := c.validateBrokerTokens(); err != nil {
 		return err
 	}
 	c.logFeatureGates()

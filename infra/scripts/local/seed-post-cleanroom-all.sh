@@ -438,8 +438,9 @@ if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
   run_step "17a-data-plane-memory-host" "curl -fsS --max-time 5 http://localhost:18081/v1/health -o /dev/null"
   run_step "17b-data-plane-memory-edge-401" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 $DP_EDGE/v1/memory/)\" = '401'"
 
-  # loopzero-rag (port 18082) — /v1/health requires auth (401 without key proves process UP + auth active)
-  run_step "17c-data-plane-rag-host" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:18082/v1/health)\" = '401'"
+  # loopzero-rag (port 18082) — /v1/health is public liveness (HTTP surface contract B-115). It
+  # expected 401 while RAG ran a compose image older than that contract (#446).
+  run_step "17c-data-plane-rag-host" "curl -fsS --max-time 5 http://localhost:18082/v1/health -o /dev/null"
   run_step "17d-data-plane-rag-edge-401" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 $DP_EDGE/v1/rag/)\" = '401'"
 
   # loopzero-lens (port 18084) — /v1/healthz is the public liveness probe (CD playbook Phase 5)

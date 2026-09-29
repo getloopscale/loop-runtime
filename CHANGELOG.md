@@ -95,6 +95,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- RAG joins lens on dev-public's core cluster (`loopzero-rag 76fe189`, its database on `loopzero-db 0.167.0` — the image the compose deployment ran is no longer published), and loopzero-cloud reaches it by Service name. The compose database it replaces held no data (#446).
+- dev-public runs the engine and the infrastructure images built from `32e5643`: the API and the four operators, and MinIO, the clone runner, the SBOM scanner and the image signer, which pass the vulnerability gate for the first time since they moved to ECR (#441).
 - dev-public runs loopzero-api and loopzero-app-operator from `b9ace523` (ECR): the cell-aware edge lookup, the public-URL route probe, routes that report ready, and releases that activate on every cell (#447).
 - dev-public runs the platform images that passed the vulnerability gate (API and operators at `1596e81f`) and the first control-plane image published since that repository's CI was restored (`03ff7b19`). The infrastructure images stay at their first ECR build until they pass the gate (#441).
 - dev-public pulls every platform image from Amazon ECR, pinned by the commit it was built from, instead of `:develop` from GHCR with `pullPolicy: Always`. `platformImages` in `environments/dev-public.yaml` says which commit each service runs, and promoting one is a commit that changes its line. MinIO, the clone runner and the sign and scan steps follow the same rule (#435).
@@ -380,6 +382,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Apps on any cell can read their secrets: the secret-fetch broker authenticates each cell's External Secrets by a token of its own (`LOOPZERO_BROKER_TOKENS`) and serves the tenants placed on that cell. It treated every request as cell-0's, so a tenant on another cell was refused, and the dev seed issued the token to cell-0 only. loopzero-api refuses to start on a malformed `LOOPZERO_BROKER_TOKENS`, a cell listed twice, or two cells sharing a token, naming the problem without echoing a token (#456).
 - Reloading the dev-public edge no longer takes the dashboard down: the install refuses to touch the live edge when `LOOPZERO_DASHBOARD_DIST` holds no dashboard build, instead of serving a directory that does not exist, and its verification fails on a 404 it used to report as a healthy upstream (#462).
 - The shared image workflow verifies a signature it produced for another repository: it pinned the calling repository in the certificate identity, which a reusable workflow's certificate never carries, so `verify: true` failed after every cross-repository push. It now pins its own path in the certificate identity and the caller in the certificate's source-repository claim (#460).
 - A build stuck on any cell other than the first is now timed out, and a custom domain on any cell is now auto-verified. Like the release loops fixed earlier, the build timeout and domain verification loops only looked at the first cell (#450).
@@ -990,6 +993,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Images published to Amazon ECR — the registry production pulls from — are signed and verified there too. Only the GitHub Container Registry copy was signed, so nothing could prove where an ECR image came from. The signature is an OCI referrer, which the repositories' immutable tags and lifecycle rules leave alone (#461).
 - The four infrastructure images — MinIO, the clone runner, the SBOM scanner and the image signer — are built from pinned upstream source commits on Go 1.26.6 and Alpine 3.23, with each vulnerable module raised to the first release that fixes it. Each now has zero fixable HIGH or CRITICAL findings (it carried up to 38), so all four pass the vulnerability gate and can be published (#441).
 - The API and operator images are built on Go 1.26.6 and the API's runtime on Alpine 3.23, closing every fixable HIGH finding they carried — 53 in `loopzero-api` (Go standard library and OpenSSL) and 17 in each operator — and every image now passes the CRITICAL+HIGH vulnerability gate before it is published. The four infrastructure images do not pass it yet and stay at their last build (#441).
 - A team can no longer list the repositories of a GitHub installation that belongs to another team (#386)

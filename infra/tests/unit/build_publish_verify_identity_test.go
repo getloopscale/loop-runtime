@@ -52,3 +52,50 @@ func TestBuildPublishVerifyPinsTheCallerRepository(t *testing.T) {
 		t.Errorf("the verify step does not pin the calling repository's claim:\n%s", step)
 	}
 }
+
+// The copy pushed to ECR is the one production pulls (#435), and it carried no signature:
+// the sign step only named the GHCR reference (#461, measured with cosign v3). When an ECR
+// registry is given, the same digest is signed there and verified with the same identity.
+func buildPublishStepText(t *testing.T, name string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(repoRoot(), ".github", "workflows", "build-publish.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(data)
+	start := strings.Index(body, "- name: "+name+"\n")
+	if start < 0 {
+		t.Fatalf("build-publish.yml has no step %q", name)
+	}
+	rest := body[start:]
+	if end := strings.Index(rest[1:], "\n      - name:"); end >= 0 {
+		rest = rest[:end+1]
+	}
+	return rest
+}
+
+func TestBuildPublishSignsTheECRCopy(t *testing.T) {
+	step := buildPublishStepText(t, "Keyless sign the ECR copy")
+	for _, want := range []string{
+		"inputs.sign && inputs.ecr_registry != ''",
+		"ECR_REF: ${{ inputs.ecr_registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}",
+		`cosign sign --yes "${ECR_REF}"`,
+	} {
+		if !strings.Contains(step, want) {
+			t.Errorf("the ECR sign step lacks %q:\n%s", want, step)
+		}
+	}
+}
+
+func TestBuildPublishVerifiesTheECRCopyWithTheSameIdentity(t *testing.T) {
+	step := buildPublishStepText(t, "Verify the ECR copy's signature")
+	for _, want := range []string{
+		"inputs.sign && inputs.verify && inputs.ecr_registry != ''",
+		`--certificate-identity-regexp "^https://github\.com/${OWNER}/loopzero/\.github/workflows/build-publish\.yml@"`,
+		`--certificate-github-workflow-repository "${CALLER_REPO}"`,
+	} {
+		if !strings.Contains(step, want) {
+			t.Errorf("the ECR verify step lacks %q:\n%s", want, step)
+		}
+	}
+}

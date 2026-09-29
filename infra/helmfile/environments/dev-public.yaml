@@ -67,21 +67,22 @@ platformImages:
   registry: "776217504929.dkr.ecr.us-east-1.amazonaws.com/"
   tags:
     # getloopscale/loopzero
-    loopzero-api: "b9ace5238150290dca7b41a7b1dd26b5708753bc"
-    loopzero-tenant-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
-    loopzero-app-operator: "b9ace5238150290dca7b41a7b1dd26b5708753bc"
-    loopzero-preview-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
-    loopzero-platform-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
-    # Still the first ECR build: the infrastructure images do not pass the
-    # vulnerability gate yet, so nothing newer exists (#441).
-    loopzero-minio: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
-    loopzero-clone-runner: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
-    loopzero-syft-scanner: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
-    loopzero-cosign-signer: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    loopzero-api: "32e5643c313876f6eacff91648b5f2c257a95a6f"
+    loopzero-tenant-operator: "32e5643c313876f6eacff91648b5f2c257a95a6f"
+    loopzero-app-operator: "32e5643c313876f6eacff91648b5f2c257a95a6f"
+    loopzero-preview-operator: "32e5643c313876f6eacff91648b5f2c257a95a6f"
+    loopzero-platform-operator: "32e5643c313876f6eacff91648b5f2c257a95a6f"
+    # Built from pinned upstream source; they pass the vulnerability gate since #441.
+    loopzero-minio: "32e5643c313876f6eacff91648b5f2c257a95a6f"
+    loopzero-clone-runner: "32e5643c313876f6eacff91648b5f2c257a95a6f"
+    loopzero-syft-scanner: "32e5643c313876f6eacff91648b5f2c257a95a6f"
+    loopzero-cosign-signer: "32e5643c313876f6eacff91648b5f2c257a95a6f"
     # getloopscale/loopzero-cloud
     loopzero-cloud: "03ff7b193dd60e1075052cbdb2c38bc96106bfd7"
     # getloopscale/loopzero-lens
     loopzero-lens: "3e3e4604109ab91ab8a930970c994f58ae8f9f9e"
+    # getloopscale/loopzero-rag
+    loopzero-rag: "76fe1895e435cb0d9f8ec719d8a0bf59cae523a9"
 
 # The data plane (#446): memory, RAG and lens run on the core cluster from Helmfile,
 # pulled from ECR by commit like the platform images (`platformImages.tags`). A service is
@@ -89,6 +90,7 @@ platformImages:
 dataPlane:
   services:
     - loopzero-lens
+    - loopzero-rag
 
 # Tenant builds still push to and run from k3d-loopzero-registry (fast local iteration).
 # `docrPrefix` is read by the admission policies only; its registry was deleted and

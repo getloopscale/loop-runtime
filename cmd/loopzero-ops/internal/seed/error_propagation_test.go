@@ -23,13 +23,13 @@ import (
 
 // A transient read error is not "the Secret is absent": regenerating on it
 // silently rotated the broker token on any API hiccup.
-func TestBrokerAcquireToken_DoesNotRotateOnTransientReadError(t *testing.T) {
+func TestBrokerAcquireCellTokens_DoesNotRotateOnTransientReadError(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithInterceptorFuncs(interceptor.Funcs{
 		Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 			return errors.New("etcdserver: request timed out")
 		},
 	}).Build()
-	_, _, err := brokerAcquireToken(Deps{Ctx: context.Background(), Kube: NewKubeClient(c)})
+	_, _, err := brokerAcquireCellTokens(Deps{Ctx: context.Background(), Kube: NewKubeClient(c)}, []string{"cell-0"})
 	if err == nil {
 		t.Fatal("a transient read error must surface, not trigger a new token")
 	}

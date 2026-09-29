@@ -39,7 +39,8 @@ Generate a random hex secret with `openssl rand -hex 32` where indicated.
 | `LOOPZERO_ADMIN_API_KEY_PREVIOUS` | N | openssl rand -hex 32 | admin API key (rotation) |
 | `LOOPZERO_ADMIN_SERVICE_AUTH_SECRET` | when-admin | openssl rand -hex 32 | admin service-auth secret |
 | `LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS` | N | openssl rand -hex 32 | admin service-auth (rotation) |
-| `LOOPZERO_BROKER_TOKEN` | when-broker | openssl rand -hex 32 | ESO-sync broker token |
+| `LOOPZERO_BROKER_TOKEN` | when-broker | openssl rand -hex 32 | ESO-sync broker token of the default cell (`cell-0`) — the single-cell form |
+| `LOOPZERO_BROKER_TOKENS` | when-broker, multi-cell | `cell-0=<hex>,cell-1=<hex>`, one `openssl rand -hex 32` per cell | ESO-sync broker token per cell: a request is bound to the cell whose token it presents, so each cell's External Secrets holds only its own. Two cells may not share a token |
 | `LOOPZERO_EDGE_ROUTE_TOKEN` | when-edge | openssl rand -hex 32 | bearer for /internal/edge/route (edge host → cell lookup) |
 | `LOOPZERO_SERVICE_AUTH_SECRET` | Y | openssl rand -hex 32 | cloud->engine shared service-auth secret |
 | `LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS` | N | openssl rand -hex 32 | service-auth secret (rotation) |

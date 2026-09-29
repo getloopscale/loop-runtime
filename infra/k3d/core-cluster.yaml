@@ -45,7 +45,10 @@ ports:
   # at, paired with its nodePort in infra/helmfile/values/dev-public/loopzero-*.yaml.gotmpl. A
   # service's mapping joins here with its entry in `dataPlane.services`: until then its
   # compose container holds the host port, and mapping it would fail cluster creation.
-  # memory 18081:30181 and RAG 18082:30182 are next.
+  # memory 18081:30181 is next.
+  - port: 18082:30182
+    nodeFilters:
+      - loadbalancer
   - port: 18084:30184
     nodeFilters:
       - loadbalancer

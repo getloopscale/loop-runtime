@@ -5,145 +5,221 @@ package seed
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
+	"sort"
+	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // BrokerSeed is the Go port of infra/scripts/local/seed-broker-canonical.sh.
 //
-// It seeds the secret material of the ESO secret-fetch broker:
+// It seeds the secret material of the ESO secret-fetch broker, one token per cell
+// (#456): the broker binds a request to the cell whose token it presented, so each
+// cell's External Secrets must hold its own.
 //
-//  1. Generate/reuse the bearer token; apply mgmt loopzero-system/loopzero-broker-token
-//     Secret with keys {token, LOOPZERO_BROKER_TOKEN}.
-//  2. Mirror it to the workload cluster's external-secrets ns with the
-//     `external-secrets.io/type=webhook` canonical label.
-//  3. Rollout restart mgmt loopzero-api so envFrom picks up LOOPZERO_BROKER_TOKEN.
+//  1. Read the cells from the core's ClusterCredentials; reuse the tokens already
+//     issued and generate the rest. Apply the core loopzero-system/loopzero-broker-token
+//     Secret with LOOPZERO_BROKER_TOKENS (every cell=token pair) and LOOPZERO_BROKER_TOKEN /
+//     `token` (the default cell's, the single-cell form).
+//  2. Write each cell's external-secrets/loopzero-broker-token Secret with that cell's
+//     token and the `external-secrets.io/type=webhook` label.
+//  3. Rollout restart core loopzero-api so envFrom picks up the tokens.
 //
 // The broker's ClusterSecretStore is the cell helmfile's release `loopzero-broker`
-// (infra/helmfile/cell.helmfile.yaml.gotmpl). This seed used to install it with its
-// own `helm upgrade --install`, out of Helmfile's sight and with the core server-0
-// container IP as the API address (principle_violations#67); the release now reads
-// its address from the environment and this seed writes only the token.
+// (infra/helmfile/cell.helmfile.yaml.gotmpl), which reads its address from the
+// environment; this seed writes only the tokens (principle_violations#67).
 type BrokerSeed struct{}
 
 func NewBrokerSeed() *BrokerSeed   { return &BrokerSeed{} }
 func (s *BrokerSeed) Name() string { return "broker" }
 
 const (
-	brokerContextWorkload = "k3d-loopzero-cell-0"
-	brokerESONamespace    = "external-secrets"
-	brokerSecretName      = "loopzero-broker-token"
-	brokerTokenKey        = "token"
-	brokerCanonicalEnvKey = "LOOPZERO_BROKER_TOKEN"
+	brokerESONamespace     = "external-secrets"
+	brokerSecretName       = "loopzero-broker-token"
+	brokerTokenKey         = "token"
+	brokerCanonicalEnvKey  = "LOOPZERO_BROKER_TOKEN"
+	brokerCellTokensEnvKey = "LOOPZERO_BROKER_TOKENS"
+	brokerDefaultCell      = "cell-0" // domain.DefaultCellID; loopzero-ops does not import pkg/domain
 )
 
+// clusterCredentialGVK is the core's record of a cell (operators/api/v1). Read as
+// unstructured: loopzero-ops does not import the operators module.
+var clusterCredentialGVK = schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "ClusterCredential"}
+
+// brokerCellContext is the kube context of a cell's k3d cluster: infra/k3d names the
+// cluster loopzero-<cellID>, and k3d prefixes its contexts with k3d-.
+func brokerCellContext(cellID string) string { return "k3d-loopzero-" + cellID }
+
 func (s *BrokerSeed) Run(d Deps) Result {
-	// Layer 1: get-or-generate canonical token.
-	token, reused, err := brokerAcquireToken(d)
+	cells, err := brokerCells(d)
 	if err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 1 token: %v", err)}
+		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
-	tokenB := []byte(token)
-
+	tokens, generated, err := brokerAcquireCellTokens(d, cells)
+	if err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 1 tokens: %v", err)}
+	}
 	if d.DryRun {
-		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would %s token + apply Secrets + restart loopzero-api", tokenAction(reused))}
+		return Result{Verdict: PASS, Reason: fmt.Sprintf("dry-run: would seed broker tokens for %d cell(s) (%d new) and restart loopzero-api", len(cells), generated)}
 	}
-
-	// Layer 1 apply — mgmt Secret with both `token` (legacy) + canonical env key.
-	mgmtSec := brokerMgmtSecret(tokenB)
-	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx, mgmtSec); err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 1 apply mgmt Secret: %v", err)}
+	if _, err := d.Kube.CreateOrUpdateSecret(d.Ctx, brokerMgmtSecret(tokens, cells)); err != nil {
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 1 apply core Secret: %v", err)}
 	}
-
-	// Layer 2: workload cluster mirror with canonical webhook label.
-	workloadCli, err := d.ClientFor(brokerContextWorkload)
-	if err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 resolve workload: %v", err)}
+	for _, cell := range cells {
+		cellCli, err := d.ClientFor(brokerCellContext(cell))
+		if err != nil {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 resolve %s: %v", cell, err)}
+		}
+		if err := cellCli.EnsureNamespace(d.Ctx, brokerESONamespace); err != nil {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 %s ensure ns: %v", cell, err)}
+		}
+		if _, err := cellCli.CreateOrUpdateSecret(d.Ctx, brokerWorkloadSecret([]byte(tokens[cell]))); err != nil {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 %s apply Secret: %v", cell, err)}
+		}
 	}
-	if err := workloadCli.EnsureNamespace(d.Ctx, brokerESONamespace); err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 ensure ns: %v", err)}
-	}
-	workloadSec := brokerWorkloadSecret(tokenB)
-	if _, err := workloadCli.CreateOrUpdateSecret(d.Ctx, workloadSec); err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 apply workload Secret: %v", err)}
-	}
-
-	// Layer 3: rollout mgmt loopzero-api.
 	if err := d.Kube.RolloutRestartDeployment(d.Ctx, "loopzero-system", "loopzero-api"); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 rollout loopzero-api: %v", err)}
 	}
 	if err := waitForRolloutSettled(d.Ctx, d.CtrlClient, "loopzero-system", "loopzero-api", d.settleTimeout(loopzeroAPISettle)); err != nil {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 3 loopzero-api did not settle: %v", err)}
 	}
-
-	return Result{Verdict: PASS, Reason: fmt.Sprintf("broker token seeded on core and cell (%s)", tokenAction(reused))}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("broker tokens seeded on core and %d cell(s): %s (%d new)", len(cells), strings.Join(cells, ", "), generated)}
 }
 
-// Verify probes: (a) mgmt Secret has canonical env key non-empty,
-// (b) workload Secret has canonical label + token, (c) CSS Ready optional.
+// Verify checks that loopzero-api holds a token for every cell and that each cell's
+// External Secrets holds exactly that token.
 func (s *BrokerSeed) Verify(d Deps) Result {
 	sec, err := d.Kube.GetSecret(d.Ctx, "loopzero-system", brokerSecretName)
 	if err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("get mgmt Secret: %v", err)}
+		return Result{Verdict: FAIL, Reason: fmt.Sprintf("get core Secret: %v", err)}
 	}
-	if len(sec.Data[brokerCanonicalEnvKey]) == 0 {
-		return Result{Verdict: FAIL, Reason: "mgmt Secret missing LOOPZERO_BROKER_TOKEN"}
+	if len(sec.Data[brokerCanonicalEnvKey]) == 0 && len(sec.Data[brokerCellTokensEnvKey]) == 0 {
+		return Result{Verdict: FAIL, Reason: "core Secret carries neither LOOPZERO_BROKER_TOKEN nor LOOPZERO_BROKER_TOKENS"}
 	}
-	workloadCli, err := d.ClientFor(brokerContextWorkload)
+	cells, err := brokerCells(d)
 	if err != nil {
 		return Result{Verdict: FAIL, Reason: err.Error()}
 	}
-	wsec, err := workloadCli.GetSecret(d.Ctx, brokerESONamespace, brokerSecretName)
-	if err != nil {
-		return Result{Verdict: FAIL, Reason: fmt.Sprintf("get workload Secret: %v", err)}
+	tokens := parseBrokerCellTokens(string(sec.Data[brokerCellTokensEnvKey]))
+	for _, cell := range cells {
+		want := tokens[cell]
+		if want == "" {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("core Secret has no broker token for %s", cell)}
+		}
+		cellCli, err := d.ClientFor(brokerCellContext(cell))
+		if err != nil {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("resolve %s: %v", cell, err)}
+		}
+		wsec, err := cellCli.GetSecret(d.Ctx, brokerESONamespace, brokerSecretName)
+		if err != nil {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("get %s Secret: %v", cell, err)}
+		}
+		if wsec.Labels["external-secrets.io/type"] != "webhook" {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("%s Secret missing canonical `external-secrets.io/type=webhook` label", cell)}
+		}
+		if subtle.ConstantTimeCompare(wsec.Data[brokerTokenKey], []byte(want)) != 1 {
+			return Result{Verdict: FAIL, Reason: fmt.Sprintf("%s holds a broker token loopzero-api does not issue to it", cell)}
+		}
 	}
-	if wsec.Labels["external-secrets.io/type"] != "webhook" {
-		return Result{Verdict: FAIL, Reason: "workload Secret missing canonical `external-secrets.io/type=webhook` label"}
-	}
-	if len(wsec.Data[brokerTokenKey]) == 0 {
-		return Result{Verdict: FAIL, Reason: "workload Secret token key empty"}
-	}
-	return Result{Verdict: PASS, Reason: "mgmt + workload broker Secrets canonical"}
+	return Result{Verdict: PASS, Reason: fmt.Sprintf("core and %d cell broker Secrets agree", len(cells))}
 }
 
-// brokerAcquireToken returns the canonical token — reusing the existing one
-// unless the Secret is absent or carries no token. Any other read error is
-// returned: regenerating on it would silently rotate the broker token on a
-// transient API failure.
-func brokerAcquireToken(d Deps) (token string, reused bool, err error) {
+// brokerCells lists the cells the core knows, from its ClusterCredentials (spec.cellID),
+// sorted and without duplicates — two credentials may name one cell. None is an error: a
+// token written nowhere reports success for a broker no cell can reach.
+func brokerCells(d Deps) ([]string, error) {
+	if d.CtrlClient == nil {
+		return nil, fmt.Errorf("no core client to list ClusterCredentials")
+	}
+	list := &unstructured.UnstructuredList{}
+	listGVK := clusterCredentialGVK
+	listGVK.Kind += "List"
+	list.SetGroupVersionKind(listGVK)
+	if err := d.CtrlClient.List(d.Ctx, list); err != nil {
+		return nil, fmt.Errorf("list ClusterCredentials: %w", err)
+	}
+	seen := map[string]bool{}
+	var cells []string
+	for _, item := range list.Items {
+		cell, _, _ := unstructured.NestedString(item.Object, "spec", "cellID")
+		if cell != "" && !seen[cell] {
+			seen[cell] = true
+			cells = append(cells, cell)
+		}
+	}
+	if len(cells) == 0 {
+		return nil, fmt.Errorf("no ClusterCredential names a cell; the broker would serve none")
+	}
+	sort.Strings(cells)
+	return cells, nil
+}
+
+// brokerAcquireCellTokens returns a token per cell, reusing every token already issued:
+// LOOPZERO_BROKER_TOKENS, and the single token the seed wrote before tokens were per cell,
+// which stays the default cell's. Only a missing Secret or a missing entry generates; any
+// other read error is returned, because regenerating on it would silently rotate a token
+// on a transient API failure.
+func brokerAcquireCellTokens(d Deps, cells []string) (map[string]string, int, error) {
+	existing := map[string]string{}
 	sec, err := d.Kube.GetSecret(d.Ctx, "loopzero-system", brokerSecretName)
 	switch {
 	case err == nil:
-		if v := string(sec.Data[brokerTokenKey]); v != "" {
-			return v, true, nil
+		existing = parseBrokerCellTokens(string(sec.Data[brokerCellTokensEnvKey]))
+		if legacy := string(sec.Data[brokerTokenKey]); legacy != "" && existing[brokerDefaultCell] == "" {
+			existing[brokerDefaultCell] = legacy
 		}
 	case !apierrors.IsNotFound(err):
-		return "", false, fmt.Errorf("read broker token: %w", err)
+		return nil, 0, fmt.Errorf("read broker tokens: %w", err)
 	}
-	// Generate new (32 bytes hex = 64 chars — matches `openssl rand -hex 32`).
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return "", false, err
+	tokens := map[string]string{}
+	generated := 0
+	for _, cell := range cells {
+		if tok := existing[cell]; tok != "" {
+			tokens[cell] = tok
+			continue
+		}
+		buf := make([]byte, 32) // 64 hex chars, as `openssl rand -hex 32`
+		if _, err := rand.Read(buf); err != nil {
+			return nil, 0, err
+		}
+		tokens[cell] = hex.EncodeToString(buf)
+		generated++
 	}
-	return hex.EncodeToString(buf), false, nil
+	return tokens, generated, nil
 }
 
-func tokenAction(reused bool) string {
-	if reused {
-		return "reused"
+// parseBrokerCellTokens reads cell=token pairs; loopzero-api validates the same format.
+func parseBrokerCellTokens(raw string) map[string]string {
+	out := map[string]string{}
+	for _, entry := range strings.Split(raw, ",") {
+		if cell, token, ok := strings.Cut(strings.TrimSpace(entry), "="); ok && cell != "" && token != "" {
+			out[cell] = token
+		}
 	}
-	return "generated"
+	return out
 }
 
-// brokerMgmtSecret builds the mgmt/loopzero-system/loopzero-broker-token Secret with
-// both `token` (legacy alias) and `LOOPZERO_BROKER_TOKEN` (canonical envFrom key)
-// keys. Labels record the seed as manager (managed-by renamed to Go form).
-func brokerMgmtSecret(token []byte) *corev1.Secret {
+// brokerMgmtSecret builds the core loopzero-system/loopzero-broker-token Secret loopzero-api reads
+// through envFrom: LOOPZERO_BROKER_TOKENS lists every cell=token pair, and LOOPZERO_BROKER_TOKEN
+// (with its legacy `token` alias) is the default cell's, the single-cell form.
+func brokerMgmtSecret(tokens map[string]string, cells []string) *corev1.Secret {
+	pairs := make([]string, 0, len(cells))
+	for _, cell := range cells {
+		pairs = append(pairs, cell+"="+tokens[cell])
+	}
+	data := map[string][]byte{brokerCellTokensEnvKey: []byte(strings.Join(pairs, ","))}
+	if tok := tokens[brokerDefaultCell]; tok != "" {
+		data[brokerTokenKey] = []byte(tok)
+		data[brokerCanonicalEnvKey] = []byte(tok)
+	}
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "loopzero-system",
@@ -154,10 +230,7 @@ func brokerMgmtSecret(token []byte) *corev1.Secret {
 			},
 		},
 		Type: corev1.SecretTypeOpaque,
-		Data: map[string][]byte{
-			brokerTokenKey:        token,
-			brokerCanonicalEnvKey: token,
-		},
+		Data: data,
 	}
 }
 

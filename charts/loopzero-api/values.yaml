@@ -167,6 +167,8 @@ secrets:
   loopzeroAdminServiceAuthSecret: ""
   loopzeroAdminServiceAuthSecretPrevious: ""
   loopzeroBrokerToken: ""
+  # One broker token per cell, `cell-0=<hex>,cell-1=<hex>` (LOOPZERO_BROKER_TOKENS).
+  loopzeroBrokerTokens: ""
   loopzeroEdgeRouteToken: ""
   loopzeroServiceAuthSecret: ""
   loopzeroServiceAuthSecretPrevious: ""

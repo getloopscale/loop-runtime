@@ -690,6 +690,10 @@
         "loopzeroBrokerToken": {
           "type": "string"
         },
+        "loopzeroBrokerTokens": {
+          "type": "string",
+          "description": "cell=token pairs, comma-separated; loopzero-api refuses a malformed list at boot"
+        },
         "loopzeroEdgeRouteToken": {
           "type": "string"
         },
