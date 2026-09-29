@@ -153,11 +153,12 @@ RETURNING id;
 
 -- tenantpredicate:exempt
 -- name: FindPendingReleasesByCell :many
--- Cell-scoped reaper query: returns PENDING releases in a cell. The cell_id
+-- Cell-scoped reaper query: returns PENDING releases in a cell, or in every cell
+-- when the cell is empty (how the API runs its loops, #447). The cell_id
 -- filter provides the multi-cell isolation (callers are reapers; they intentionally
 -- scan across tenants within a cell). Roadmap 03 multi-cell.
 SELECT * FROM releases
-WHERE cell_id = $1
+WHERE (sqlc.arg(cell_id)::text = '' OR cell_id = sqlc.arg(cell_id))
   AND status = 'PENDING'
 ORDER BY created_at ASC
 LIMIT 100;
@@ -169,7 +170,7 @@ LIMIT 100;
 SELECT DISTINCT ON (tenant_id, project_id, environment)
        *
 FROM releases
-WHERE cell_id = $1
+WHERE (sqlc.arg(cell_id)::text = '' OR cell_id = sqlc.arg(cell_id))
   AND status = 'ACTIVE'
 ORDER BY tenant_id, project_id, environment, created_at DESC
 LIMIT 100;

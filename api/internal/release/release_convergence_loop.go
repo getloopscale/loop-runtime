@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/processing"
-	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/naming"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -38,8 +37,8 @@ type ReleaseConvergenceLoopConfig struct {
 	SyncTimeout time.Duration
 	// MaxConcurrent bounds parallel release verifications.
 	MaxConcurrent int
-	// CellID scopes the loop to a single cell (roadmap 03). Empty or
-	// domain.DefaultCellID means single-cell / backward-compatible behavior.
+	// CellID scopes the loop to a single cell (roadmap 03). Empty means every
+	// cell — how the API runs its loops (#447).
 	CellID string
 }
 
@@ -173,10 +172,10 @@ func (r *ReleaseConvergenceLoop) Start(ctx context.Context) {
 	}
 }
 
+// cellID is the cell scope passed to the store: empty means every cell, as
+// backgroundloops.Deps documents. It used to become cell-0, and the API — which runs
+// the loops with no cell — never activated a release on any other cell (#447).
 func (r *ReleaseConvergenceLoop) cellID() string {
-	if r.cfg.CellID == "" {
-		return domain.DefaultCellID
-	}
 	return r.cfg.CellID
 }
 

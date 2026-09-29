@@ -37,18 +37,19 @@ type PostgresStaleScanner struct {
 }
 
 // StaleReleaseRows returns releases in READY created before readyBefore and in
-// PENDING created before pendingBefore. The cell_id filter uses
+// PENDING created before pendingBefore, in cellID or — when cellID is empty — in
+// every cell, which is how the API runs its loops (#447). A cell filter uses
 // idx_releases_cell_status_created (migration 000029).
 func (s *PostgresStaleScanner) StaleReleaseRows(ctx context.Context, cellID string, readyBefore, pendingBefore time.Time) ([]StaleReleaseRow, error) {
 	const query = `
 		SELECT id, status, tenant_id, project_id, environment, build_id FROM releases
-		WHERE cell_id = $3
+		WHERE ($3 = '' OR cell_id = $3)
 		  AND ((status = 'READY' AND created_at < $1)
 		    OR (status = 'PENDING' AND created_at < $2))
 		ORDER BY created_at ASC
 		LIMIT 100
 	`
-	rows, err := s.DB.Query(ctx, query, readyBefore, pendingBefore, cellOrDefault(cellID))
+	rows, err := s.DB.Query(ctx, query, readyBefore, pendingBefore, cellID)
 	if err != nil {
 		return nil, fmt.Errorf("find stale releases: %w", err)
 	}

@@ -106,7 +106,7 @@ const findActiveReleasesByCell = `-- name: FindActiveReleasesByCell :many
 SELECT DISTINCT ON (tenant_id, project_id, environment)
        id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url
 FROM releases
-WHERE cell_id = $1
+WHERE ($1::text = '' OR cell_id = $1)
   AND status = 'ACTIVE'
 ORDER BY tenant_id, project_id, environment, created_at DESC
 LIMIT 100
@@ -159,14 +159,15 @@ func (q *Queries) FindActiveReleasesByCell(ctx context.Context, db DBTX, cellID 
 
 const findPendingReleasesByCell = `-- name: FindPendingReleasesByCell :many
 SELECT id, build_id, tenant_id, project_id, environment, status, correlation_id, created_by, git_commit, git_mirror_status, artifacts, side_effects, apps, cell_id, processing_by, processing_since, image_digest, image_signature, image_signed_at, created_at, image_attestation_rekor_url FROM releases
-WHERE cell_id = $1
+WHERE ($1::text = '' OR cell_id = $1)
   AND status = 'PENDING'
 ORDER BY created_at ASC
 LIMIT 100
 `
 
 // tenantpredicate:exempt
-// Cell-scoped reaper query: returns PENDING releases in a cell. The cell_id
+// Cell-scoped reaper query: returns PENDING releases in a cell, or in every cell
+// when the cell is empty (how the API runs its loops, #447). The cell_id
 // filter provides the multi-cell isolation (callers are reapers; they intentionally
 // scan across tenants within a cell). Roadmap 03 multi-cell.
 func (q *Queries) FindPendingReleasesByCell(ctx context.Context, db DBTX, cellID string) ([]Release, error) {

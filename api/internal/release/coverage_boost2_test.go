@@ -17,7 +17,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -281,12 +280,14 @@ func (f *fakeCallbackEventStore) Append(_ context.Context, buildID, eventType st
 // Release convergence loop — cellID helper
 // =============================================================================
 
-func TestReleaseConvergenceLoop_CellID_Default(t *testing.T) {
+// An empty cell scopes the loop to every cell, as backgroundloops.Deps documents. It
+// used to become cell-0, and a release placed on cell-1 stayed PENDING forever (#447).
+func TestReleaseConvergenceLoop_CellID_EmptyMeansEveryCell(t *testing.T) {
 	loop := &ReleaseConvergenceLoop{
 		cfg: ReleaseConvergenceLoopConfig{CellID: ""},
 	}
-	if loop.cellID() != domain.DefaultCellID {
-		t.Errorf("expected %q, got %q", domain.DefaultCellID, loop.cellID())
+	if loop.cellID() != "" {
+		t.Errorf("expected every cell (\"\"), got %q", loop.cellID())
 	}
 }
 

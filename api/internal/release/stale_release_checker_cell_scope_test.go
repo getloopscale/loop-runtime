@@ -13,7 +13,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -136,8 +135,14 @@ func TestStaleReleaseChecker_MapsStatusToTimeoutEventAndSkipsOthers(t *testing.T
 	if got[1].ID != "rel-2" || got[1].Event != statemachine.RPEventSyncTimeout || got[1].Environment != "production" {
 		t.Errorf("PENDING row mapped wrong: %+v", got[1])
 	}
-	if src.lastArgs[2] != domain.DefaultCellID {
-		t.Errorf("empty cell must default to %q, got %v", domain.DefaultCellID, src.lastArgs[2])
+	// An empty cell means every cell (backgroundloops.Deps: "Empty means every cell").
+	// It used to become cell-0, so the API — which runs the loops with no cell —
+	// never reaped a release on any other cell (#447).
+	if src.lastArgs[2] != "" {
+		t.Errorf("empty cell must scan every cell, got cell arg %v", src.lastArgs[2])
+	}
+	if !strings.Contains(src.lastSQL, "$3 = ''") {
+		t.Errorf("the query does not treat an empty cell as every cell:\n%s", src.lastSQL)
 	}
 }
 

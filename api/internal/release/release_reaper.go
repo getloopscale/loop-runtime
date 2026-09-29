@@ -13,7 +13,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/events"
-	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -26,8 +25,8 @@ type ReleaseReaperConfig struct {
 	PendingTimeout time.Duration
 	// Interval is how often the reaper runs.
 	Interval time.Duration
-	// CellID scopes the reaper to a single cell (roadmap 03). Empty or
-	// domain.DefaultCellID means single-cell / backward-compatible behavior.
+	// CellID scopes the reaper to a single cell (roadmap 03). Empty means every
+	// cell — how the API runs its loops (#447).
 	CellID string
 }
 
@@ -53,9 +52,8 @@ type StaleRelease struct {
 
 // ReleaseStaleChecker finds releases that have exceeded their state timeout.
 type ReleaseStaleChecker interface {
-	// FindStaleReleases returns stale releases belonging to the given cell.
-	// Roadmap 03: pass domain.DefaultCellID for single-cell / backward-compatible
-	// behavior.
+	// FindStaleReleases returns stale releases belonging to the given cell, or to
+	// every cell when cellID is empty.
 	FindStaleReleases(ctx context.Context, cellID string, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error)
 }
 
@@ -150,11 +148,8 @@ func releaseReaperReason(event statemachine.ReleasePhaseEvent) string {
 }
 
 func (r *ReleaseReaper) reap(ctx context.Context) int {
-	cellID := r.cfg.CellID
-	if cellID == "" {
-		cellID = domain.DefaultCellID
-	}
-	stale, err := r.checker.FindStaleReleases(ctx, cellID, r.cfg.ReadyTimeout, r.cfg.PendingTimeout)
+	// Empty means every cell (backgroundloops.Deps); see ReleaseConvergenceLoop.cellID.
+	stale, err := r.checker.FindStaleReleases(ctx, r.cfg.CellID, r.cfg.ReadyTimeout, r.cfg.PendingTimeout)
 	if err != nil {
 		r.logger.Error("release reaper: failed to find stale releases", "error", err)
 		return 0
@@ -270,7 +265,7 @@ type staleReleaseChecker struct {
 }
 
 // FindStaleReleases returns the releases of one cell (roadmap 03; empty means
-// domain.DefaultCellID) that exceeded their state timeout. READY times out with
+// every cell) that exceeded their state timeout. READY times out with
 // GitPushTimeout and PENDING with SyncTimeout; any other phase is skipped.
 func (c *staleReleaseChecker) FindStaleReleases(ctx context.Context, cellID string, readyTimeout, pendingTimeout time.Duration) ([]StaleRelease, error) {
 	now := c.now()
