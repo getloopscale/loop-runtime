@@ -266,6 +266,7 @@ func main() {
 	srvCfg.Guards.VerifyRateLimiter = verifyRateLimiter
 
 	srvCfg.Secrets.FetchHandler = newSecretFetchBroker(cfg, transit, dbAdapter, bgAdapter, stores, logger)
+	srvCfg.EdgeRoute = newEdgeRoute(cfg, bgAdapter, shutdownCtx, &bgWg, logger)
 	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: ADR D4 —
 	// every project gets a `production` env auto-created on POST
 	// /api/v1/projects. Same EnvironmentEnsurer that powers loopzero deploy

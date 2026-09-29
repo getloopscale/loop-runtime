@@ -167,6 +167,7 @@ secrets:
   loopzeroAdminServiceAuthSecret: ""
   loopzeroAdminServiceAuthSecretPrevious: ""
   loopzeroBrokerToken: ""
+  loopzeroEdgeRouteToken: ""
   loopzeroServiceAuthSecret: ""
   loopzeroServiceAuthSecretPrevious: ""
   loopzeroServiceAuthNonceRedisPassword: ""

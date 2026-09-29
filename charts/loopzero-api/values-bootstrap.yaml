@@ -80,6 +80,12 @@ secrets:
         LOOPZERO_BROKER_TOKEN for the ESO sync broker endpoint. Absent, the API logs that the
         secret-fetch broker is disabled and does not register the route, so tenant
         ExternalSecret reconciles answer 404 — visible, not silent.
+    - name: loopzero-edge-route-token
+      optional: true
+      reason: >-
+        LOOPZERO_EDGE_ROUTE_TOKEN, the bearer the public edge presents to ask which cell serves
+        a host. Absent, the API does not register /internal/edge/route and reports the
+        edge_route surface as off, so public app URLs stay unrouted — visible, not silent.
     - name: loopzero-api-minio
       optional: true
       reason: >-

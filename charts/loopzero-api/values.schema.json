@@ -690,6 +690,9 @@
         "loopzeroBrokerToken": {
           "type": "string"
         },
+        "loopzeroEdgeRouteToken": {
+          "type": "string"
+        },
         "loopzeroServiceAuthSecret": {
           "type": "string"
         },

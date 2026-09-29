@@ -83,6 +83,8 @@ spec:
       remoteRef: { key: "loopzero/api", property: "loopzero_admin_service_auth_secret_previous" }
     - secretKey: LOOPZERO_BROKER_TOKEN
       remoteRef: { key: "loopzero/api", property: "loopzero_broker_token" }
+    - secretKey: LOOPZERO_EDGE_ROUTE_TOKEN
+      remoteRef: { key: "loopzero/api", property: "loopzero_edge_route_token" }
     - secretKey: LOOPZERO_SERVICE_AUTH_SECRET
       remoteRef: { key: "loopzero/api", property: "loopzero_service_auth_secret" }
     - secretKey: LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS

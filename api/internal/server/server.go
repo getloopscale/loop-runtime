@@ -110,12 +110,15 @@ type Config struct {
 	EventStore       sse.EventStore
 	BuildStoreReader sse.BuildStoreReader
 	BootstrapStore   ports.BootstrapStore
-	BootstrapSecret  string                          // SEC-003: shared secret for /internal/bootstrap auth
-	CellPlacement    bootstrap.CellPlacementEngine   // ADR-0008: Cell assignment for new tenants
-	CellDiscovery    healthhttp.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
-	ShutdownCtx      context.Context
-	ShutdownCancel   context.CancelFunc
-	BuildHandler     *buildshttp.BuildHandler
+	BootstrapSecret  string                        // SEC-003: shared secret for /internal/bootstrap auth
+	CellPlacement    bootstrap.CellPlacementEngine // ADR-0008: Cell assignment for new tenants
+	// EdgeRoute serves /internal/edge/route (host -> cell for the edge). Nil when no
+	// edge token is configured or the route index could not be built.
+	EdgeRoute      http.Handler
+	CellDiscovery  healthhttp.CellDiscoveryChecker // MEET-053 A-04: optional — nil for StaticRouter
+	ShutdownCtx    context.Context
+	ShutdownCancel context.CancelFunc
+	BuildHandler   *buildshttp.BuildHandler
 	// CHG-2026-04-25-ATTESTATION-WIRE Phase 6: handler for
 	// GET /api/v1/builds/{id}/attestation. Wired in api/cmd/setup_routes.go
 	// against PostgresAttestationStore.

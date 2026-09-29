@@ -36,6 +36,7 @@ func TestControlSurfaces_DisabledOnesAreObservableWithAReason(t *testing.T) {
 		surfaces.AdminEvict:     {http.MethodPost, "/api/v1/admin/tenants/evict"},
 		surfaces.AdminPin:       {http.MethodPost, "/api/v1/admin/tenants/pin"},
 		surfaces.ReleaseInspect: {http.MethodGet, "/api/v1/admin/releases/r-1/inspect"},
+		surfaces.EdgeRoute:      {http.MethodGet, "/internal/edge/route"},
 	}
 
 	reg := surfaces.NewRegistry()
@@ -51,7 +52,7 @@ func TestControlSurfaces_DisabledOnesAreObservableWithAReason(t *testing.T) {
 	expected := []string{
 		surfaces.Bootstrap, surfaces.ArgoCallback, surfaces.SecretFetch,
 		surfaces.AdminEvict, surfaces.AdminPin, surfaces.ReleaseInspect,
-		surfaces.AuthProtected,
+		surfaces.EdgeRoute, surfaces.AuthProtected,
 	}
 
 	if _, recorded := recordedByName(reg)[surfaces.ActiveTeam]; recorded {

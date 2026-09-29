@@ -65,6 +65,9 @@ const (
 	// operator calls to resolve a tenant secret. Off means every ExternalSecret
 	// reconcile in every workload namespace gets a 404.
 	SecretFetch = "secret_fetch"
+	// EdgeRoute is /internal/edge/route — the edge asks which cell serves a
+	// public host before forwarding. Off means no public app URL is reachable.
+	EdgeRoute = "edge_route"
 	// AdminEvict is the operator primitive that tears a tenant down.
 	AdminEvict = "admin_evict"
 	// AdminPin is the ONLY path that moves a tenant between cells.
