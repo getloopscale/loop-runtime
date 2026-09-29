@@ -92,7 +92,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- dev-public runs loopzero-api and loopzero-app-operator from `11e6cab20` (ECR), the build that carries the cell-aware edge lookup and the public-URL route probe (#447).
+- dev-public runs loopzero-api and loopzero-app-operator from `b9ace523` (ECR): the cell-aware edge lookup, the public-URL route probe, routes that report ready, and releases that activate on every cell (#447).
 - dev-public runs the platform images that passed the vulnerability gate (API and operators at `1596e81f`) and the first control-plane image published since that repository's CI was restored (`03ff7b19`). The infrastructure images stay at their first ECR build until they pass the gate (#441).
 - dev-public pulls every platform image from Amazon ECR, pinned by the commit it was built from, instead of `:develop` from GHCR with `pullPolicy: Always`. `platformImages` in `environments/dev-public.yaml` says which commit each service runs, and promoting one is a commit that changes its line. MinIO, the clone runner and the sign and scan steps follow the same rule (#435).
 - The canonical fixture project the dev environment seeds, its preview hostnames and the live journeys that exercise it are named `sample` instead of the Portuguese `teste`; an environment seeded before this keeps the old project until it is re-seeded (#379)
