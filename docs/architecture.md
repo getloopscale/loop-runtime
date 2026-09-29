@@ -254,7 +254,7 @@ The `task pkg:usage-matrix:check` gate fails when the table is out of date (gate
 | `pkg/circuitbreaker` | 10 | 2 | 6 | 0 | 0 | 2 |
 | `pkg/conditions` | 3 | 0 | 2 | 0 | 0 | 1 |
 | `pkg/correlation` | 13 | 3 | 8 | 0 | 0 | 2 |
-| `pkg/domain` | 44 | 28 | 3 | 0 | 0 | 13 |
+| `pkg/domain` | 39 | 23 | 3 | 0 | 0 | 13 |
 | `pkg/enforcement` | 24 | 19 | 0 | 0 | 0 | 5 |
 | `pkg/errors` | 144 | 116 | 0 | 0 | 0 | 28 |
 | `pkg/gitearepo` | 14 | 8 | 3 | 0 | 0 | 3 |
