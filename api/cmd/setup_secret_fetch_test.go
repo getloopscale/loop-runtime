@@ -110,7 +110,7 @@ func (c *fakeCellQuerier) GetTenantCellID(_ context.Context, tenantID string) (s
 // TokenReview against the cell's K8s API (separate follow-up plan).
 func TestBrokerBearerMiddleware_RejectsClientSuppliedXCellID(t *testing.T) {
 	const expected = "secret"
-	handler := brokerBearerMiddleware(expected, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := brokerBearerMiddleware(map[string]string{domain.DefaultCellID: expected}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ident, ok := auth.CrossClusterFromContext(r.Context())
 		require.True(t, ok, "synthetic TokenReviewResult must be injected by middleware")
 		require.Equal(t, domain.DefaultCellID, ident.CellID,
@@ -128,7 +128,7 @@ func TestBrokerBearerMiddleware_RejectsClientSuppliedXCellID(t *testing.T) {
 // --- brokerBearerMiddleware T3.1 tests ---
 
 func Test_brokerBearerMiddleware_NoBearer_Returns401(t *testing.T) {
-	handler := brokerBearerMiddleware("secret", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := brokerBearerMiddleware(map[string]string{domain.DefaultCellID: "secret"}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		t.Fatal("downstream handler must not run when bearer is missing")
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -140,7 +140,7 @@ func Test_brokerBearerMiddleware_NoBearer_Returns401(t *testing.T) {
 }
 
 func Test_brokerBearerMiddleware_WrongBearer_Returns401_ConstantTime(t *testing.T) {
-	handler := brokerBearerMiddleware("right-token", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := brokerBearerMiddleware(map[string]string{domain.DefaultCellID: "right-token"}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		t.Fatal("downstream handler must not run on wrong bearer")
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -154,7 +154,7 @@ func Test_brokerBearerMiddleware_WrongBearer_Returns401_ConstantTime(t *testing.
 func Test_brokerBearerMiddleware_EmptyExpectedToken_Returns500(t *testing.T) {
 	// Mis-configured boot: brokerToken env empty. The middleware must
 	// fail-CLOSED with 500 (not silently accept any caller).
-	handler := brokerBearerMiddleware("", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := brokerBearerMiddleware(map[string]string{}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		t.Fatal("downstream must not run when expected token is empty (mis-config)")
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -169,7 +169,7 @@ func Test_brokerBearerMiddleware_EmptyExpectedToken_Returns500(t *testing.T) {
 // 401 path must trigger BEFORE synthetic cellID injection so a malformed
 // request never accidentally injects a phantom identity downstream.
 func Test_brokerBearerMiddleware_NoBearerNoCellID_Returns401_Not_500(t *testing.T) {
-	handler := brokerBearerMiddleware("secret", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := brokerBearerMiddleware(map[string]string{domain.DefaultCellID: "secret"}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		t.Fatal("downstream must not run when bearer is missing (even with cellID also empty)")
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -183,7 +183,7 @@ func Test_brokerBearerMiddleware_NoBearerNoCellID_Returns401_Not_500(t *testing.
 
 func Test_brokerBearerMiddleware_Concurrent_NoRace(t *testing.T) {
 	const expected = "secret"
-	handler := brokerBearerMiddleware(expected, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := brokerBearerMiddleware(map[string]string{domain.DefaultCellID: expected}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	var wg sync.WaitGroup
@@ -295,4 +295,41 @@ func Test_setupSecretFetchDeps_AllPresentWiresTheBroker(t *testing.T) {
 	deps := setupSecretFetchDeps(&fakeSecretValues{}, &fakeCellQuerier{}, &store.AuditLogger{})
 	require.NotNil(t, deps)
 	require.IsType(t, &brokerSecretReader{}, deps.SecretReader)
+}
+
+// --- one token per cell (#456) ---
+
+// Each cell's External Secrets presents its own token, and the cell a request comes from
+// is the cell whose token it presented. A tenant placed on cell-1 is served to cell-1's
+// External Secrets and to no other cell's.
+func Test_brokerBearerMiddleware_BindsTheRequestToTheCellWhoseTokenItPresented(t *testing.T) {
+	tokens := map[string]string{"cell-0": "tok-0", "cell-1": "tok-1"}
+	for cell, token := range tokens {
+		t.Run(cell, func(t *testing.T) {
+			var got string
+			handler := brokerBearerMiddleware(tokens, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				ident, _ := auth.CrossClusterFromContext(r.Context())
+				got = ident.CellID
+			}))
+			req := httptest.NewRequest(http.MethodPost, "/x", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			req.Header.Set("X-Cell-ID", "cell-evil")
+			rec := httptest.NewRecorder()
+			handler(rec, req)
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, cell, got, "the cell comes from the token, never from X-Cell-ID")
+		})
+	}
+}
+
+func Test_brokerBearerMiddleware_RefusesATokenNoCellOwns(t *testing.T) {
+	handler := brokerBearerMiddleware(map[string]string{"cell-0": "tok-0", "cell-1": "tok-1"},
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			t.Fatal("downstream must not run for a token no cell owns")
+		}))
+	req := httptest.NewRequest(http.MethodPost, "/x", nil)
+	req.Header.Set("Authorization", "Bearer tok-2")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }

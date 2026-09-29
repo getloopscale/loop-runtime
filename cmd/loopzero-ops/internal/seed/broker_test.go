@@ -14,40 +14,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestBrokerAcquireToken_ReusesExisting(t *testing.T) {
-	existing := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: brokerSecretName},
-		Data:       map[string][]byte{brokerTokenKey: []byte("canonical-token")},
-	}
-	c := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(existing).Build()
-	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c)}
-
-	tok, reused, err := brokerAcquireToken(deps)
-
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if !reused || tok != "canonical-token" {
-		t.Errorf("reused=%v tok=%q, want reused=true canonical-token", reused, tok)
-	}
-}
-
-func TestBrokerAcquireToken_GeneratesWhenAbsent(t *testing.T) {
-	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
-	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c)}
-
-	tok, reused, err := brokerAcquireToken(deps)
-
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if reused || len(tok) != 64 {
-		t.Errorf("reused=%v len(tok)=%d, want reused=false len=64", reused, len(tok))
-	}
-}
-
 func TestBrokerMgmtSecret_HasBothKeys(t *testing.T) {
-	got := brokerMgmtSecret([]byte("t"))
+	got := brokerMgmtSecret(map[string]string{"cell-0": "t"}, []string{"cell-0"})
 	if string(got.Data["token"]) != "t" || string(got.Data["LOOPZERO_BROKER_TOKEN"]) != "t" {
 		t.Errorf("mgmt Secret missing keys: %v", got.Data)
 	}
@@ -67,11 +35,12 @@ func TestBrokerSeed_Name(t *testing.T) {
 }
 
 func TestBrokerSeed_Run_DryRunReports(t *testing.T) {
-	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	c := fake.NewClientBuilder().WithScheme(cellScheme(t)).WithObjects(clusterCredential("cell-0", "cell-0")).Build()
 	deps := Deps{
 		RolloutSettleTimeout: time.Millisecond,
 		Ctx:                  context.Background(),
 		Kube:                 NewKubeClient(c),
+		CtrlClient:           c,
 		DryRun:               true,
 	}
 	got := NewBrokerSeed().Run(deps)
@@ -85,14 +54,14 @@ func TestBrokerSeed_Run_DryRunReports(t *testing.T) {
 
 func TestBrokerSeed_Run_FailsWhenClientCtorMissing(t *testing.T) {
 	// mgmt Kube present but no ClientCtor → workload resolution fails at Layer 2.
-	c := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
-	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c)}
+	c := fake.NewClientBuilder().WithScheme(cellScheme(t)).WithObjects(clusterCredential("cell-0", "cell-0")).Build()
+	deps := Deps{RolloutSettleTimeout: time.Millisecond, Ctx: context.Background(), Kube: NewKubeClient(c), CtrlClient: c}
 	got := NewBrokerSeed().Run(deps)
 	if got.Verdict != FAIL {
 		t.Fatalf("Verdict = %s (%s), want FAIL", got.Verdict, got.Reason)
 	}
-	// Must fail no later than Layer 2 (workload resolve).
-	if !stringContainsAny(got.Reason, "Layer 2", "resolve workload") {
+	// Must fail no later than Layer 2 (cell resolve).
+	if !stringContainsAny(got.Reason, "Layer 2") {
 		t.Errorf("Reason = %q, want Layer 2 failure marker", got.Reason)
 	}
 }
@@ -107,7 +76,8 @@ func TestBrokerSeed_Verify_FailWhenMgmtSecretAbsent(t *testing.T) {
 }
 
 func TestBrokerSeed_Verify_FailWhenCanonicalKeyMissing(t *testing.T) {
-	// Secret present but missing LOOPZERO_BROKER_TOKEN key (legacy-only shape).
+	// Secret present with only the legacy `token` key: neither LOOPZERO_BROKER_TOKEN nor
+	// LOOPZERO_BROKER_TOKENS reaches loopzero-api.
 	legacy := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "loopzero-system", Name: brokerSecretName},
 		Data:       map[string][]byte{brokerTokenKey: []byte("legacy-token-no-canonical")},
@@ -139,7 +109,8 @@ func stringContainsAny(s string, subs ...string) bool {
 // that reached for either would not compile, and this run proves the remaining layers
 // converge without them (principle_violations#67).
 func TestBrokerSeed_Run_SeedsTheTokenWithoutInstallingTheRelease(t *testing.T) {
-	mgmt := fake.NewClientBuilder().WithScheme(newScheme(t)).WithObjects(makeLoopZeroAPIDeploymentWithEnv(nil)).Build()
+	mgmt := fake.NewClientBuilder().WithScheme(cellScheme(t)).
+		WithObjects(makeLoopZeroAPIDeploymentWithEnv(nil), clusterCredential("cell-0", "cell-0")).Build()
 	workload := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
 	deps := Deps{
 		RolloutSettleTimeout: time.Millisecond,

@@ -34,6 +34,7 @@ meeting date is not the meeting.
 | 2026-05-25 | **Live CA fetch from `kube-root-ca.crt` on `ClusterCredential` reconcile** (RATIFIED, sponsor-direct). Prefer fetching the live source at reconcile time over snapshotting at bootstrap: snapshots go stale, live sources self-heal. |
 | 2026-09-29 | **The edge asks the engine which cell serves a host.** Full record below the table. |
 | 2026-09-29 | **The production edge reads the host → cell index from its KV store.** Full record below the table. |
+| 2026-09-29 | **The secret-fetch broker authenticates each cell by its own token.** Full record below the table. |
 
 
 **The edge asks the engine which cell serves a host** (2026-09-29, #447).
@@ -98,6 +99,30 @@ Rejected:
 
 Cost: routing converges on the refresh interval (30s) after a placement or route change, and
 the KV namespace now holds one key per published host.
+
+**The secret-fetch broker authenticates each cell by its own token** (2026-09-29, #456).
+
+External Secrets on a cell fetches a tenant's secret from loopzero-api's broker, and the broker
+may answer only for tenants placed on that cell (EC-07). It stamped every request with
+cell-0: the caller's `X-Cell-ID` is rightly ignored (#13), and there was no other source for
+the cell, so every tenant on another cell was refused.
+
+Each cell now holds its own bearer (`LOOPZERO_BROKER_TOKENS`, `cell=token` pairs; the old
+`LOOPZERO_BROKER_TOKEN` stays the default cell's). The broker compares the presented token with
+every configured one in constant time and binds the request to the cell that owns it. loopzero-api
+refuses at boot a malformed list, a cell named twice, and two cells sharing a token. The dev
+seed reads the cells from the core's ClusterCredentials, issues one token per cell, keeps the
+ones already issued, and gives each cell's External Secrets only its own.
+
+Rejected:
+- **Trust `X-Cell-ID`.** Any holder of the broker credential could claim any cell (#13).
+- **A TokenReview of the calling service account against its cell's API server.** Stronger
+  identity, but the broker would need a credential for every cell's API and a network path to
+  it on every fetch; a per-cell secret carries the same binding with neither.
+- **One shared token with a cell allowlist.** A leaked token would still read every cell.
+
+Cost: one secret per cell to rotate, and a new cell needs its token issued before its External
+Secrets can fetch.
 
 ### Data layer
 

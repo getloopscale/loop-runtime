@@ -24,7 +24,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/vault"
 
 	"github.com/jackc/pgx/v5"
@@ -32,16 +31,6 @@ import (
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 )
-
-// brokerSingleClusterCellID names the cell the broker bearer middleware
-// MUST inject into the synthetic TokenReviewResult for dev-public single
-// cluster. It references `domain.DefaultCellID` as the canonical
-// single source of truth (T1.1 of plan 2026-06-10-j22-layer2-code-review-fixes
-// ADR D1 + EC-3 absorption — closes consensus-CRITICAL #13 X-Cell-ID
-// forgery + the magic-literal `"cell-0"` sub-finding). There is no
-// multi-cluster broker authentication yet: the broker serves this one cell,
-// and serving another needs a per-cell TokenReview (ADR D1 follow-up).
-const brokerSingleClusterCellID = domain.DefaultCellID
 
 // tenantCellQuerier is the narrow surface inlineTenantBinding uses on
 // store.PostgresCellStore, so tests can supply a fake.
@@ -134,30 +123,25 @@ func setupSecretFetchDeps(secretStore secretValueReader, cellStore tenantCellQue
 	}
 }
 
-// brokerBearerMiddleware authenticates incoming broker requests using a
-// constant-time comparison against a Bearer token shared between
-// loopzero-api and the ESO ClusterSecretStore webhook backend. The token is
-// supplied via LOOPZERO_BROKER_TOKEN; the matching value is mounted into ESO
-// via a K8s Secret (`loopzero-broker-token`) — same opaque string both sides.
+// brokerBearerMiddleware authenticates the External Secrets webhook of each cell by the
+// bearer it presents: every cell has its own token, and the cell a request comes from is
+// the cell whose token matched (#456). The handler then binds the tenant to that cell
+// (EC-07), so a cell's credential can read only the tenants placed on it.
 //
-// Per `feedback_security_first_mandate`: this is the medium-strong path
-// in the {TokenReview, mTLS, Bearer-via-Secret, env-shared} hierarchy.
-// It is auditable (rotate by re-rolling the K8s Secret) and operationally
-// simple — both consumers read from a single source of truth (OpenBao via
-// ExternalSecrets in production, or directly from the Secret in dev).
-//
-// Successful auth injects a synthetic auth.TokenReviewResult into
-// the request context so the existing handler at routes/internal_secret_fetch.go
-// (which calls auth.CrossClusterFromContext) does not need a parallel
-// auth code path. CellID is derived SERVER-SIDE from the package-canonical
-// `domain.DefaultCellID` constant — the caller-supplied X-Cell-ID
-// header is intentionally ignored (T1.1 of plan
-// 2026-06-10-j22-layer2-code-review-fixes / ADR D1 / closes consensus-CRITICAL
-// #13 X-Cell-ID forgery). A multi-cluster path would replace this with a
-// per-cell TokenReview against the cell's K8s API; none exists yet.
-func brokerBearerMiddleware(expectedToken string, next http.HandlerFunc) http.HandlerFunc {
+// The caller-supplied X-Cell-ID header is ignored — trusting it would let any holder of a
+// broker token claim any cell (consensus-CRITICAL #13). Every configured token is compared
+// in constant time, whether or not an earlier one matched, so the time taken does not say
+// which cell's token was close. No configured token fails closed with 500.
+func brokerBearerMiddleware(cellTokens map[string]string, next http.HandlerFunc) http.HandlerFunc {
+	type cellToken struct{ cell, token string }
+	tokens := make([]cellToken, 0, len(cellTokens))
+	for cell, token := range cellTokens {
+		if token != "" {
+			tokens = append(tokens, cellToken{cell, token})
+		}
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		if expectedToken == "" {
+		if len(tokens) == 0 {
 			http.Error(w, `{"error":"broker_token_not_configured","code":"INTERNAL"}`, http.StatusInternalServerError)
 			return
 		}
@@ -167,22 +151,18 @@ func brokerBearerMiddleware(expectedToken string, next http.HandlerFunc) http.Ha
 			http.Error(w, `{"error":"missing_bearer","code":"AUTH_TOKEN_INVALID"}`, http.StatusUnauthorized)
 			return
 		}
-		presented := strings.TrimPrefix(authHeader, prefix)
-		// Constant-time compare to avoid timing-side-channel leaks.
-		if subtle.ConstantTimeCompare([]byte(presented), []byte(expectedToken)) != 1 {
+		presented := []byte(strings.TrimPrefix(authHeader, prefix))
+		cellID := ""
+		for _, ct := range tokens {
+			if subtle.ConstantTimeCompare(presented, []byte(ct.token)) == 1 {
+				cellID = ct.cell
+			}
+		}
+		if cellID == "" {
 			http.Error(w, `{"error":"bad_bearer","code":"AUTH_TOKEN_INVALID"}`, http.StatusUnauthorized)
 			return
 		}
-		// T1.1 / ADR D1 / closes #13: the caller-supplied X-Cell-ID
-		// header is intentionally ignored. Trusting it would let any
-		// holder of LOOPZERO_BROKER_TOKEN spoof any cell and read every
-		// tenant's secrets (consensus-CRITICAL of /loop-code-review).
-		// The cellID is derived server-side from the package-canonical
-		// `domain.DefaultCellID` constant. A multi-cluster path
-		// (per-cell TokenReview) is a follow-up that does not exist yet.
-		_ = r.Header.Get("X-Cell-ID")
-		cellID := brokerSingleClusterCellID
-		// Inject synthetic TokenReviewResult so the handler's
+		// Inject a synthetic TokenReviewResult so the handler's
 		// auth.CrossClusterFromContext check still passes.
 		ctx := auth.InjectCrossClusterResultForBroker(r.Context(), &auth.TokenReviewResult{
 			Authenticated: true,
@@ -215,9 +195,15 @@ func newSecretFetchBroker(cfg config.Config, transit vault.Transit, dbAdapter, c
 	if fetchDeps == nil {
 		return nil
 	}
-	if cfg.BrokerToken == "" {
-		logger.Warn("secret-fetch broker disabled: LOOPZERO_BROKER_TOKEN not set", "component", "broker")
+	cellTokens, err := cfg.BrokerCellTokens()
+	if err != nil {
+		logger.Error("secret-fetch broker disabled: invalid broker tokens", "component", "broker", "error", err)
 		return nil
 	}
-	return brokerBearerMiddleware(cfg.BrokerToken, secretshttp.NewSecretFetchHandler(*fetchDeps))
+	if len(cellTokens) == 0 {
+		logger.Warn("secret-fetch broker disabled: neither LOOPZERO_BROKER_TOKEN nor LOOPZERO_BROKER_TOKENS is set", "component", "broker")
+		return nil
+	}
+	logger.Info("secret-fetch broker serving cells", "component", "broker", "cells", len(cellTokens))
+	return brokerBearerMiddleware(cellTokens, secretshttp.NewSecretFetchHandler(*fetchDeps))
 }
