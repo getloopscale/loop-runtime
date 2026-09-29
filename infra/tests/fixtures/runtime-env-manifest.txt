@@ -96,6 +96,7 @@ OPENBAO_VAULT_ADDR|CONFIG|when-transit|loopzero-api
 OPENBAO_VAULT_ROLE_ID|SECRET|when-transit|loopzero-api
 OPENBAO_VAULT_SECRET_ID|SECRET|when-transit|loopzero-api
 OPERATOR_INSECURE_SKIP_TLS|CONFIG|N|loopzero-{app,platform,preview,tenant}-operator
+ROUTE_PROBE_PUBLIC_DOMAIN|CONFIG|N|loopzero-app-operator
 OTEL_EXPORTER_OTLP_ENDPOINT|CONFIG|N|loopzero-api
 OTEL_EXPORTER_OTLP_ENDPOINT|CONFIG|N|loopzero-cloud
 OTEL_EXPORTER_OTLP_ENDPOINT|CONFIG|N|loopzero-{app,platform,preview,tenant}-operator
