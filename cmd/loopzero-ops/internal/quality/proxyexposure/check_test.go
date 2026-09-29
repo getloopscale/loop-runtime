@@ -180,3 +180,64 @@ func contains(s, sub string) bool {
 		return false
 	})()
 }
+
+const snippetProxy = `(cell_edge) {
+  forward_auth localhost:13001 {
+    uri /internal/edge/route
+  }
+  reverse_proxy {cell_ingress}
+}
+
+*.prod-dev.loopzero.example {
+  import cell_edge
+}
+
+*.preview-dev.loopzero.example {
+  handle {
+    import cell_edge
+  }
+}
+`
+
+// A proxy written once in a snippet reaches the browser through every site that
+// imports it. Scanning only site blocks let the wildcard app edge pass with no
+// proxy found at all once its reverse_proxy moved into a snippet.
+func TestSnippetProxyIsAttributedToEverySiteThatImportsIt(t *testing.T) {
+	cfg := setup(t, snippetProxy, "*.prod-dev.loopzero.example - | reviewed | tenant app\n")
+	o, err := Check(cfg)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if o.Pass {
+		t.Fatal("expected FAIL — the preview site imports the proxy and declares nothing")
+	}
+	if len(o.Undeclared) != 1 || !contains(o.Undeclared[0], "*.preview-dev.loopzero.example /*") {
+		t.Errorf("undeclared = %v, want the preview site's import", o.Undeclared)
+	}
+}
+
+// forward_auth is a proxy too: on a non-2xx answer the upstream's response goes to
+// the client verbatim.
+func TestForwardAuthIsScannedAsAProxy(t *testing.T) {
+	cfg := setup(t, "app.example.com {\n  forward_auth localhost:9000 {\n    uri /check\n  }\n}\n", "")
+	o, err := Check(cfg)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if o.Pass || len(o.Undeclared) != 1 || !contains(o.Undeclared[0], "app.example.com -") {
+		t.Errorf("forward_auth was not scanned: pass=%v undeclared=%v", o.Pass, o.Undeclared)
+	}
+}
+
+// A snippet nobody imports exposes nothing.
+func TestUnimportedSnippetExposesNothing(t *testing.T) {
+	cfg := setup(t, "(unused) {\n  reverse_proxy localhost:1\n}\n\nsite.example.com {\n  reverse_proxy localhost:2\n}\n",
+		"site.example.com - | reviewed | the site's own upstream\n")
+	o, err := Check(cfg)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if !o.Pass {
+		t.Errorf("an unimported snippet was counted: undeclared=%v stale=%v", o.Undeclared, o.Stale)
+	}
+}
