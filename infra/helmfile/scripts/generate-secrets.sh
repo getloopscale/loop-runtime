@@ -301,6 +301,13 @@ EDGE_ROUTE_TOKEN="$(get_or_generate loopzero-edge-route-token loopzero-system LO
 apply_secret loopzero-edge-route-token loopzero-system \
   --from-literal=LOOPZERO_EDGE_ROUTE_TOKEN="${EDGE_ROUTE_TOKEN}"
 
+# 1.b'') The secret /internal/bootstrap requires. loopzero-api reads loopzero-api-internal as an
+# optional envFrom source; without it the binary falls back to its development default and
+# the endpoint is guarded only by the network (#453). Preserved across runs, like the rest.
+BOOTSTRAP_SECRET="${LOOPZERO_BOOTSTRAP_SECRET:-$(get_or_generate loopzero-api-internal loopzero-system LOOPZERO_BOOTSTRAP_SECRET)}"
+apply_secret loopzero-api-internal loopzero-system \
+  --from-literal=LOOPZERO_BOOTSTRAP_SECRET="${BOOTSTRAP_SECRET}"
+
 # 1.c) Resend HTTP-API key for Kratos courier (MEET-2026-04-06-036: DO blocks
 # SMTP, courier delivery_strategy=http via api.resend.com/emails). Consumed
 # by ory-kratos Deployment + ory-kratos-courier StatefulSet via
