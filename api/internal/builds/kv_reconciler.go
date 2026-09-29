@@ -6,6 +6,7 @@ package builds
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
@@ -85,11 +86,11 @@ func (r *KVReconciler) reconcile(ctx context.Context) {
 		return
 	}
 
-	// Build set of actual keys (excluding cell: routing keys)
+	// Build the set of actual keys, leaving out the edge's cell routing, which shares
+	// this store and is not static delivery's (#448).
 	actualSet := make(map[string]bool, len(actual))
 	for _, key := range actual {
-		// Skip cell routing keys — they are managed by CellService, not static delivery
-		if len(key) > 5 && key[:5] == "cell:" {
+		if isEdgeRoutingKey(key) {
 			continue
 		}
 		actualSet[key] = true
@@ -123,4 +124,18 @@ func (r *KVReconciler) reconcile(ctx context.Context) {
 		r.logger.Debug("kv reconciler: no drift detected",
 			"expected_count", len(expected), "actual_count", len(actualSet))
 	}
+}
+
+// edgeRoutingKeyPrefixes name the keys the edge's cell routing owns: route:<host> is
+// written by the engine's edge publisher and ingress:<cell> by cell provisioning. cell:
+// is the retired per-tenant form, ignored so a store still holding one is not drift.
+var edgeRoutingKeyPrefixes = []string{"route:", "ingress:", "cell:"}
+
+func isEdgeRoutingKey(key string) bool {
+	for _, p := range edgeRoutingKeyPrefixes {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
 }

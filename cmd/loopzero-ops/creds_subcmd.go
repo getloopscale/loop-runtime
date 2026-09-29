@@ -27,7 +27,7 @@ and prints one export per credential the Kratos render needs:
 
   LOOPZERO_GITHUB_CLIENT_ID  LOOPZERO_GITHUB_CLIENT_SECRET
   LOOPZERO_GOOGLE_CLIENT_ID  LOOPZERO_GOOGLE_CLIENT_SECRET
-  LOOPZERO_RESEND_API_KEY
+  LOOPZERO_RESEND_API_KEY     CLOUDFLARE_API_TOKEN (the edge's DNS-01 and dev-public:dns)
 
 A variable the environment already sets is left out: this fills gaps and never
 overrides. Empty and placeholder values are left out. No file prints nothing and exits
@@ -76,6 +76,7 @@ func credsResult(args []string, path string, lookup func(string) (string, bool))
 		"LOOPZERO_GOOGLE_CLIENT_ID":     creds.Google.ClientID,
 		"LOOPZERO_GOOGLE_CLIENT_SECRET": creds.Google.ClientSecret,
 		"LOOPZERO_RESEND_API_KEY":       creds.Resend.APIKey,
+		"CLOUDFLARE_API_TOKEN":      creds.Cloudflare.APIToken,
 	}
 	names := make([]string, 0, len(vars))
 	for name := range vars {

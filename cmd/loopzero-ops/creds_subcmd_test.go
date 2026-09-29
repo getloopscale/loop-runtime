@@ -101,3 +101,17 @@ func TestCredsEnvFailsOnAFileWithTheWrongMode(t *testing.T) {
 		t.Errorf("exit %d, output %q — a 0644 credentials file must be refused", code, out)
 	}
 }
+
+// The dev-public edge issues its wildcard certificates by DNS-01 and dev-public:dns
+// checks the zone, both with the operator's Cloudflare token — kept in this same file.
+// Nothing exported it, so every cleanroom's DNS verification failed its precondition (#455).
+func TestCredsEnvExportsTheCloudflareToken(t *testing.T) {
+	path := writeCredsFile(t, `{"cloudflare": {"api_token": "cf-token"}}`)
+	code, out, msg := credsEnvOutput(t, path, nil)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, msg)
+	}
+	if !strings.Contains(out, "export CLOUDFLARE_API_TOKEN='cf-token'\n") {
+		t.Errorf("output lacks the Cloudflare token export:\n%s", out)
+	}
+}

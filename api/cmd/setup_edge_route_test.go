@@ -31,7 +31,7 @@ func (s staticTenantCells) GetCell(_ context.Context, tenant string) (string, er
 
 // No token, no route: the lookup is never served unauthenticated.
 func TestEdgeRouteIsNotWiredWithoutAToken(t *testing.T) {
-	h, r := edgeRouteHandler(config.Config{BaseDomain: "loopzero.local"}, staticEdgeRoutes{}, staticTenantCells{}, quietLogger())
+	h, r := edgeRouteHandler(config.Config{BaseDomain: "loopzero.local"}, staticEdgeRoutes{}, staticTenantCells{}, nil, quietLogger())
 	if h != nil || r != nil {
 		t.Errorf("wired without a token: handler=%v router=%v", h, r)
 	}
@@ -48,7 +48,7 @@ func TestEdgeRouteResolvesUnderTheConfiguredPublicDomain(t *testing.T) {
 	}
 	h, r := edgeRouteHandler(cfg,
 		staticEdgeRoutes{{Hostname: "tn-a-p-web-production.loopzero.local", TenantID: "tn-a"}},
-		staticTenantCells{"tn-a": "cell-1"}, quietLogger())
+		staticTenantCells{"tn-a": "cell-1"}, nil, quietLogger())
 	if h == nil || r == nil {
 		t.Fatal("not wired with a token")
 	}
@@ -62,5 +62,23 @@ func TestEdgeRouteResolvesUnderTheConfiguredPublicDomain(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || rec.Header().Get("X-LoopZero-Cell") != "cell-1" {
 		t.Errorf("status=%d cell=%q", rec.Code, rec.Header().Get("X-LoopZero-Cell"))
+	}
+}
+
+type nopPublisher struct{}
+
+func (nopPublisher) Publish(context.Context, map[string]string, bool) error { return nil }
+
+// Production has no edge token — its edge is the Cloudflare Worker — but it needs the
+// router to publish host → cell into the Worker's store (#448). The router runs for the
+// publisher alone, and the lookup route stays unregistered without a token.
+func TestEdgeRouterRunsForThePublisherWithoutServingTheRoute(t *testing.T) {
+	h, r := edgeRouteHandler(config.Config{BaseDomain: "loopzero.local"}, staticEdgeRoutes{}, staticTenantCells{},
+		nopPublisher{}, quietLogger())
+	if r == nil {
+		t.Fatal("no router with a publisher configured")
+	}
+	if h != nil {
+		t.Error("the lookup route was served without a token")
 	}
 }

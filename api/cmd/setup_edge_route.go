@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/builds/cfkv"
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
@@ -22,26 +23,37 @@ const (
 	edgeRouteMissRefreshGap  = 5 * time.Second
 )
 
-// newEdgeRoute builds the /internal/edge/route handler and starts its index refresh.
-// It returns nil — and the route stays unregistered — without a token, without the
-// cross-tenant pool that reads tenants.cell_id, or without the in-cluster API.
+// newEdgeRoute builds the host → cell index and keeps it fresh. Two consumers read it:
+// the /internal/edge/route lookup (an edge that asks, like dev-public's Caddy — needs
+// LOOPZERO_EDGE_ROUTE_TOKEN) and the Cloudflare KV publisher (the production Worker, which
+// reads — needs the CF KV credentials, #448). With neither, nothing is built. It also
+// needs the cross-tenant pool that reads tenants.cell_id and the in-cluster API.
+// Returns the lookup handler, or nil when the route must stay unregistered.
 func newEdgeRoute(cfg config.Config, crossTenant *db.PgxAdapter, shutdownCtx context.Context,
 	bgWg *sync.WaitGroup, logger *slog.Logger) http.Handler {
-	if cfg.EdgeRouteToken == "" {
-		logger.Warn("edge route lookup disabled: LOOPZERO_EDGE_ROUTE_TOKEN not set", "component", "edge-router")
+	var publisher placement.EdgeRoutePublisher
+	if kv := cfkv.NewClient(cfg.CFAccountID, cfg.CFKVNamespaceID, cfg.CFAPIToken); kv != nil {
+		publisher = placement.NewEdgeKVPublisher(kv, logger)
+	}
+	if cfg.EdgeRouteToken == "" && publisher == nil {
+		logger.Warn("edge routing disabled: neither LOOPZERO_EDGE_ROUTE_TOKEN nor the Cloudflare KV credentials are set",
+			"component", "edge-router")
 		return nil
 	}
 	if crossTenant == nil {
-		logger.Warn("edge route lookup disabled: no cross-tenant database pool", "component", "edge-router")
+		logger.Warn("edge routing disabled: no cross-tenant database pool", "component", "edge-router")
 		return nil
 	}
 	source, err := placement.NewK8sEdgeRouteSource(nil, "loopzero-system")
 	if err != nil {
-		logger.Error("edge route lookup disabled: cannot reach the cluster", "component", "edge-router", "error", err)
+		logger.Error("edge routing disabled: cannot reach the cluster", "component", "edge-router", "error", err)
 		return nil
 	}
 	cells := placement.NewRoundRobinEngine(nil, &store.PostgresCellStore{DB: crossTenant}, cfg.MaxTenantsPerCell)
-	handler, router := edgeRouteHandler(cfg, source, cells, logger)
+	handler, router := edgeRouteHandler(cfg, source, cells, publisher, logger)
+	if router == nil {
+		return nil
+	}
 	bgWg.Add(1)
 	go func() {
 		defer bgWg.Done()
@@ -50,10 +62,11 @@ func newEdgeRoute(cfg config.Config, crossTenant *db.PgxAdapter, shutdownCtx con
 	return handler
 }
 
-// edgeRouteHandler composes the resolver and its handler; nil, nil without a token.
+// edgeRouteHandler composes the index and, with a token, its lookup handler. The router
+// is nil only when nothing would read it; the handler is nil without a token.
 func edgeRouteHandler(cfg config.Config, source placement.EdgeRouteSource, cells placement.TenantCellResolver,
-	logger *slog.Logger) (http.Handler, *placement.EdgeRouter) {
-	if cfg.EdgeRouteToken == "" {
+	publisher placement.EdgeRoutePublisher, logger *slog.Logger) (http.Handler, *placement.EdgeRouter) {
+	if cfg.EdgeRouteToken == "" && publisher == nil {
 		return nil, nil
 	}
 	var public []string
@@ -67,6 +80,10 @@ func edgeRouteHandler(cfg config.Config, source placement.EdgeRouteSource, cells
 		PublicDomains:  public,
 		Interval:       edgeRouteRefreshInterval,
 		MinMissRefresh: edgeRouteMissRefreshGap,
+		Publisher:      publisher,
 	}, logger)
+	if cfg.EdgeRouteToken == "" {
+		return nil, router // an untyped nil: a typed-nil handler would register the route
+	}
 	return placementhttp.NewEdgeRouteHandler(router, cfg.EdgeRouteToken), router
 }

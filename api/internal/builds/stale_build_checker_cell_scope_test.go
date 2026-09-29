@@ -13,7 +13,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -86,13 +85,18 @@ func TestStaleBuildChecker_FindStaleBuilds_ScopedByCellID(t *testing.T) {
 	}
 }
 
-func TestStaleBuildChecker_EmptyCellIDDefaultsToCellDefault(t *testing.T) {
+func TestStaleBuildChecker_EmptyCellIDScansEveryCell(t *testing.T) {
 	cap := &capturingDBTX{}
 	checker := staleBuildChecker(cap)
 
 	_, _ = checker.FindStaleBuilds(context.Background(), "", time.Minute, time.Minute, time.Minute, time.Minute)
-	if cap.lastArgs[4] != domain.DefaultCellID {
-		t.Errorf("empty cellID should default to %q, got %v", domain.DefaultCellID, cap.lastArgs[4])
+	// An empty cell means every cell (backgroundloops.Deps). It used to become cell-0,
+	// so a build stuck on any other cell was never timed out (#450).
+	if cap.lastArgs[4] != "" {
+		t.Errorf("empty cellID must scan every cell, got cell arg %v", cap.lastArgs[4])
+	}
+	if !strings.Contains(cap.lastSQL, "$5 = ''") {
+		t.Errorf("the query does not treat an empty cell as every cell:\n%s", cap.lastSQL)
 	}
 }
 

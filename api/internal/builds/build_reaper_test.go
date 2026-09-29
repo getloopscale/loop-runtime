@@ -100,12 +100,32 @@ func (f *fakeBuildStoreReaper) CancelActiveBuilds(_ context.Context, _ db.DBTX, 
 }
 
 type fakeStaleChecker struct {
-	result []StaleBuild
-	err    error
+	result  []StaleBuild
+	err     error
+	gotCell *string // the cell scope the reaper asked for, when a test wants it
 }
 
-func (f *fakeStaleChecker) FindStaleBuilds(_ context.Context, _ string, _, _, _, _ time.Duration) ([]StaleBuild, error) {
+func (f *fakeStaleChecker) FindStaleBuilds(_ context.Context, cellID string, _, _, _, _ time.Duration) ([]StaleBuild, error) {
+	if f.gotCell != nil {
+		*f.gotCell = cellID
+	}
 	return f.result, f.err
+}
+
+// The API runs the reaper with no cell, which backgroundloops.Deps documents as every
+// cell. It used to become cell-0, so a build stuck on any other cell was never timed out
+// (#450).
+func TestBuildReaper_EmptyCellScansEveryCell(t *testing.T) {
+	got := "unset"
+	checker := &fakeStaleChecker{gotCell: &got}
+	reaper := NewBuildReaper(newFakeBuildStoreReaper(), checker, &fakeLockerReaper{}, nil, nil,
+		slog.Default(), DefaultBuildReaperConfig(), &fakeReconcileChecker{})
+
+	reaper.ReapOnce(context.Background())
+
+	if got != "" {
+		t.Errorf("reaper asked for cell %q, want \"\" (every cell)", got)
+	}
 }
 
 type fakeReconcileChecker struct {

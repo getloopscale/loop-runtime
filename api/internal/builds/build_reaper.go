@@ -13,7 +13,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -210,11 +209,8 @@ func humanBudget(d time.Duration) string {
 }
 
 func (r *BuildReaper) reap(ctx context.Context) int {
-	cellID := r.cfg.CellID
-	if cellID == "" {
-		cellID = domain.DefaultCellID
-	}
-	stale, err := r.checker.FindStaleBuilds(ctx, cellID, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.ReleasingTimeout, r.cfg.CancelTimeout)
+	// Empty means every cell (backgroundloops.Deps) — how the API runs its loops (#450).
+	stale, err := r.checker.FindStaleBuilds(ctx, r.cfg.CellID, r.cfg.QueueTimeout, r.cfg.RunningTimeout, r.cfg.ReleasingTimeout, r.cfg.CancelTimeout)
 	if err != nil {
 		r.logger.Error("build reaper: failed to find stale builds", "error", err)
 		return 0

@@ -33,6 +33,7 @@ meeting date is not the meeting.
 | 2026-08-09 | **Cluster topology naming** — the `{core,build,cell-0,cell-1}` names on disk. The old `{mgmt,workload,runtime-2}` appear in no filename. |
 | 2026-05-25 | **Live CA fetch from `kube-root-ca.crt` on `ClusterCredential` reconcile** (RATIFIED, sponsor-direct). Prefer fetching the live source at reconcile time over snapshotting at bootstrap: snapshots go stale, live sources self-heal. |
 | 2026-09-29 | **The edge asks the engine which cell serves a host.** Full record below the table. |
+| 2026-09-29 | **The production edge reads the host → cell index from its KV store.** Full record below the table. |
 
 
 **The edge asks the engine which cell serves a host** (2026-09-29, #447).
@@ -66,6 +67,37 @@ Rejected:
 Cost: the engine is on the request path of the first lookup for a host after each
 refresh window, and an engine outage turns into 503 at the edge for hosts not yet
 cached by the edge — Caddy caches nothing, so every request pays one local subrequest.
+
+**The production edge reads the host → cell index from its KV store** (2026-09-29, #448).
+
+The Cloudflare Worker routed a dynamic app by parsing `{app}.{tenant}` out of the host and
+reading `cell:{tenant}` → `{cellId, ingressIp}`. The platform never emits that shape, nothing
+wrote those keys, and a Worker cannot `fetch` a raw IP — so the path could not route anything.
+
+The engine's edge router now mirrors its index into the same KV namespace the Worker reads:
+`route:<label>` for a platform host and `route:<fqdn>` for a custom domain, each →
+`{"cellId"}`. It writes only what changed, and removes a route only after a refresh that read
+every tenant's placement — a transient read failure never deletes a live route. The Worker
+maps the cell to its ingress with `ingress:<cellId>` → `{"resolveOverride"}` and fetches the
+request unchanged with `cf.resolveOverride`, so the cell still routes by `Host`. A route whose
+cell has no ingress entry answers 503; no route falls through to the default origin.
+
+**Who writes `ingress:<cellId>`:** cell provisioning, once per cell, because the ingress
+hostname is a property of the cell's infrastructure and not of any tenant. No provisioner
+writes it yet; until one does, a published route answers 503 at the production edge — the
+honest state, rather than traffic sent to the wrong cell. The dev-public edge does not use the
+Worker and is unaffected (it asks `/internal/edge/route`).
+
+Rejected:
+- **The Worker calls `/internal/edge/route`.** Puts the engine on the request path of every
+  cold edge location, and exposes an internal endpoint to the public internet.
+- **Store the ingress per route.** Duplicates one cell fact into every route and makes an
+  ingress change a rewrite of the whole index.
+- **Keep parsing the tenant from the host.** Impossible: `naming.AppHostname` joins
+  hyphenated parts with hyphens.
+
+Cost: routing converges on the refresh interval (30s) after a placement or route change, and
+the KV namespace now holds one key per published host.
 
 ### Data layer
 

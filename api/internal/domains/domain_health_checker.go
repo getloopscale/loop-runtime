@@ -13,7 +13,6 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -59,8 +58,8 @@ type DomainHealthCheckerConfig struct {
 	CNAMETarget string        // e.g., "cname.dev.loopzero.example"
 	GraceDays   int           // CNAME failure grace (default: 14, configurable via DOMAIN_CNAME_GRACE_DAYS)
 	StaleDays   int           // Pending cleanup threshold (default: 7)
-	// CellID scopes the checker to a single cell (roadmap 03). Empty or
-	// domain.DefaultCellID means single-cell / backward-compatible behavior.
+	// CellID scopes the checker to a single cell (roadmap 03). Empty means every
+	// cell — how the API runs its loops (#450).
 	CellID string
 }
 
@@ -91,10 +90,8 @@ func NewDomainHealthChecker(
 	if staleDays == 0 {
 		staleDays = 7
 	}
+	// Empty means every cell (backgroundloops.Deps) — how the API runs its loops (#450).
 	cellID := cfg.CellID
-	if cellID == "" {
-		cellID = domain.DefaultCellID
-	}
 	return &DomainHealthChecker{
 		store:       store,
 		cnameTarget: cfg.CNAMETarget,

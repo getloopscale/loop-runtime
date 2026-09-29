@@ -69,9 +69,11 @@ func TestKVReconciler_ExtraKeyReportsDrift(t *testing.T) {
 	}
 }
 
-// cell: routing keys are CellService's, not static delivery's.
-func TestKVReconciler_CellRoutingKeysAreIgnored(t *testing.T) {
-	got := driftAfter(t, fakeKVKeys{keys: []string{"a", "cell:tn-1"}}, map[string]bool{"a": true})
+// The edge's cell routing shares this store: route:<host> is the engine's edge
+// publisher's and ingress:<cell> the cell provisioner's (#448). Neither is static
+// delivery's drift.
+func TestKVReconciler_EdgeRoutingKeysAreIgnored(t *testing.T) {
+	got := driftAfter(t, fakeKVKeys{keys: []string{"a", "route:tn-1-web-production", "ingress:cell-1"}}, map[string]bool{"a": true})
 
 	if got != 0 {
 		t.Errorf("drift gauge = %v, want 0", got)

@@ -406,7 +406,7 @@ SELECT cd.id, cd.tenant_id, cd.project_name, cd.app_name, cd.environment, cd.dom
        cd.cf_zone_id, cd.cf_zone_status, cd.cf_nameservers, cd.dns_records_imported
 FROM custom_domains cd
 JOIN tenants t ON cd.tenant_id = t.id
-WHERE cd.status = 'pending_verification' AND t.cell_id = $1
+WHERE cd.status = 'pending_verification' AND ($1::text = '' OR t.cell_id = $1)
 ORDER BY cd.created_at ASC
 LIMIT 50
 `
