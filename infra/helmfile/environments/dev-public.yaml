@@ -63,17 +63,19 @@ platformImages:
   registry: "776217504929.dkr.ecr.us-east-1.amazonaws.com/"
   tags:
     # getloopscale/loopzero
-    loopzero-api: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
-    loopzero-tenant-operator: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
-    loopzero-app-operator: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
-    loopzero-preview-operator: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
-    loopzero-platform-operator: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
+    loopzero-api: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
+    loopzero-tenant-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
+    loopzero-app-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
+    loopzero-preview-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
+    loopzero-platform-operator: "1596e81f2ab64a4eb08a7d180e33639138f96b7f"
+    # Still the first ECR build: the infrastructure images do not pass the
+    # vulnerability gate yet, so nothing newer exists (#441).
     loopzero-minio: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
     loopzero-clone-runner: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
     loopzero-syft-scanner: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
     loopzero-cosign-signer: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
     # getloopscale/loopzero-cloud
-    loopzero-cloud: "9793e3ecc714ccf317efd0d18fea96e8f3142022"
+    loopzero-cloud: "03ff7b193dd60e1075052cbdb2c38bc96106bfd7"
 
 # Tenant builds still push to and run from k3d-loopzero-registry (fast local iteration).
 # `docrPrefix` is read by the admission policies only; its registry was deleted and
