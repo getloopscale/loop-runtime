@@ -29,7 +29,6 @@ func (s staticTenantCells) GetCell(_ context.Context, tenant string) (string, er
 	return "", errors.New("unplaced")
 }
 
-
 // No token, no route: the lookup is never served unauthenticated.
 func TestEdgeRouteIsNotWiredWithoutAToken(t *testing.T) {
 	h, r := edgeRouteHandler(config.Config{BaseDomain: "loopzero.local"}, staticEdgeRoutes{}, staticTenantCells{}, quietLogger())
