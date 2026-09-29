@@ -299,6 +299,14 @@ func TestVaultRoleIDSync_PassesWhenTheRestartedPodsExistButAreNotReadyYet(t *tes
 	if err := mgmt.Get(deps.Ctx, ctrlclient.ObjectKey{Namespace: "loopzero-system", Name: "loopzero-api"}, &d); err != nil {
 		t.Fatalf("get loopzero-api: %v", err)
 	}
+	// Measured live on the first cold dev-public install: replicas=2, one pod from the
+	// restarted template, none Ready — a rolling update does not replace the second pod
+	// until the first new one is available, which it cannot be before its database.
+	two := int32(2)
+	d.Spec.Replicas = &two
+	if err := mgmt.Update(deps.Ctx, &d); err != nil {
+		t.Fatalf("scale loopzero-api to 2: %v", err)
+	}
 	d.Status.ReadyReplicas = 0
 	d.Status.UpdatedReplicas = 1
 	if err := mgmt.Status().Update(deps.Ctx, &d); err != nil {

@@ -51,11 +51,17 @@ func waitForRolloutSettled(ctx context.Context, cli ctrlclient.Client,
 		})
 }
 
-// waitForRolloutApplied waits until a restarted Deployment's pods all come from the
-// new template — they exist, and each read its envFrom at start — without requiring
-// them to be Ready. For a seed whose job is delivering a value to the pods, readiness
-// is someone else's question: on dev-public loopzero-api cannot be Ready when
-// vault-role-id-sync runs, because its database roles come later in setup (#444).
+// waitForRolloutApplied waits until a restart has taken effect: the controller has
+// observed the new template and at least one pod runs from it. From then on every pod
+// that starts reads its envFrom afresh, and the rolling update replaces the rest as
+// soon as the workload can become available.
+//
+// Not "every pod from the new template", and not Ready: a rolling update does not
+// replace the next pod until the previous new one is available, so on an install
+// where the workload cannot be healthy yet — dev-public's loopzero-api before its
+// database exists — both of those wait forever. Measured live: replicas=2,
+// updatedReplicas=1, readyReplicas=0 (#444). Readiness is the concern of whatever
+// needs the workload working, not of a seed delivering a value to it.
 func waitForRolloutApplied(ctx context.Context, cli ctrlclient.Client,
 	namespace, name string, timeout time.Duration,
 ) error {
@@ -65,10 +71,6 @@ func waitForRolloutApplied(ctx context.Context, cli ctrlclient.Client,
 			if err := cli.Get(ctx, ctrlclient.ObjectKey{Namespace: namespace, Name: name}, &d); err != nil {
 				return false, err
 			}
-			want := int32(1)
-			if d.Spec.Replicas != nil {
-				want = *d.Spec.Replicas
-			}
-			return d.Status.ObservedGeneration >= d.Generation && d.Status.UpdatedReplicas == want, nil
+			return d.Status.ObservedGeneration >= d.Generation && d.Status.UpdatedReplicas >= 1, nil
 		})
 }
