@@ -127,6 +127,9 @@ jobs:
       dockerfile: ${{ matrix.dockerfile }}
       context: ${{ matrix.context }}
       sign: ${{ needs.plan.outputs.sign == 'true' }}
+      # The CRITICAL+HIGH gate (fixed only) the control plane's images already pass. Off,
+      # images built on Go 1.26.1 reached ECR with 53 HIGH findings in loopzero-api.
+      trivy: true
       # Amazon ECR, the registry production pulls from. Both are repository variables:
       # unset, the reusable skips ECR entirely instead of failing the GHCR channel.
       ecr_registry: ${{ vars.ECR_REGISTRY }}

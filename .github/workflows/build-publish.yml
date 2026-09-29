@@ -310,8 +310,14 @@ jobs:
       # It is LEADING practice, not a floor — it goes in because it is free on a public
       # repository, and because this workflow already signs with cosign, so the alternative
       # would be signing without leaving the statement where a consumer finds it.
+      #
+      # PUBLIC repositories only. On a private repository the organisation's plan refuses it
+      # ("Feature not available for the getloopscale organization"), and every caller today is
+      # private: unconditional, this step failed the whole publish after the push and before
+      # the cosign signature below could run (loopzero-cloud run 36512769358). The cosign keyless
+      # signature is the guarantee either way.
       - name: Attest build provenance (GitHub-native)
-        if: ${{ inputs.sign }}
+        if: ${{ inputs.sign && !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}
