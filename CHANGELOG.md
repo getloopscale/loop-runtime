@@ -95,6 +95,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- RAG joins lens on dev-public's core cluster (`loopzero-rag 76fe189`, its database on `loopzero-db 0.167.0` — the image the compose deployment ran is no longer published), and loopzero-cloud reaches it by Service name. The compose database it replaces held no data (#446).
 - dev-public runs the engine and the infrastructure images built from `32e5643`: the API and the four operators, and MinIO, the clone runner, the SBOM scanner and the image signer, which pass the vulnerability gate for the first time since they moved to ECR (#441).
 - dev-public runs loopzero-api and loopzero-app-operator from `b9ace523` (ECR): the cell-aware edge lookup, the public-URL route probe, routes that report ready, and releases that activate on every cell (#447).
 - dev-public runs the platform images that passed the vulnerability gate (API and operators at `1596e81f`) and the first control-plane image published since that repository's CI was restored (`03ff7b19`). The infrastructure images stay at their first ECR build until they pass the gate (#441).

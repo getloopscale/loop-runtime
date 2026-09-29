@@ -28,8 +28,10 @@ workers:
     command: ["node_modules/.bin/tsx", "src/worker.ts"]
 
 postgres:
-  # loopzero-rag's own database image (pgvector and its extensions), Postgres 18.
-  image: ghcr.io/getloopscale/loopzero-db:0.140.0@sha256:78af2811c159ef523fd0680f2141718587c35f4fccfe6dfad8e4fa1a6dcf5077
+  # loopzero-rag's own database image (Postgres 18 with the `vector` compatibility layer rag
+  # creates). 0.140.0, which the compose deployment ran, is no longer published; rag needs
+  # only `vector`, which 0.167.0 provides (measured 2026-09-29).
+  image: ghcr.io/getloopscale/loopzero-db:0.167.0@sha256:74af05709e17eb8dd1bc4a6d189ea24f30e52fd422df94760fdec9132b39d384
   database: therag
   user: therag
   uriEnv: LOOPZERORAG_PG_URI
