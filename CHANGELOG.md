@@ -374,6 +374,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The control plane connects to the database as `loopzero_cloud`, the non-owner role migration 000063 created for it, instead of as the owner — which it refuses at boot, so a current `loopzero-cloud` image did not start in any environment. `task db:roles` now sets that role's password and `loopzero-db-credentials` carries `cloud-uri` (#438).
 - Images publish from `develop` again. The image job did not grant `attestations: write`, which the shared build workflow requires since provenance attestation was added, so GitHub refused every run at startup with no log (#436).
 - The cleanroom's before/after comparison now recognises the same workloads after a rebuild instead of reporting every renamed pod, or a k3s load-balancer DaemonSet renamed by the rebuild, as missing, so the chain can pass end to end (#417)
 

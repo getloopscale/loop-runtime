@@ -73,7 +73,7 @@ platformImages:
     loopzero-syft-scanner: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
     loopzero-cosign-signer: "b7aeb94c64856304e709f33f4d5dd94d97e2b161"
     # getloopscale/loopzero-cloud
-    loopzero-cloud: "fbf71463109f8548da7acf69e8258dbc8bf2daf7"
+    loopzero-cloud: "9793e3ecc714ccf317efd0d18fea96e8f3142022"
 
 # Tenant builds still push to and run from k3d-loopzero-registry (fast local iteration).
 # `docrPrefix` is read by the admission policies only; its registry was deleted and

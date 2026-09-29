@@ -50,12 +50,14 @@ secrets:
       optional: true
       reason: >-
         Written by infra/helmfile/scripts/generate-secrets.sh after the chart can be
-        installed. Only its `uri` key is read (see keyRefs); mounting it whole is what
+        installed. Only its `cloud-uri` key is read (see keyRefs); mounting it whole is what
         the bootstrap chart did, and nothing here depends on the other keys.
   keyRefs:
     - name: DATABASE_URL
       secretName: loopzero-db-credentials
-      key: uri
+      # The non-owner `loopzero_cloud` role (#438): the control plane refuses to serve as
+      # the owner, which holds DDL and an unnamed cross-tenant privilege.
+      key: cloud-uri
       optional: true
       reason: >-
         The database credentials Secret is created by the bootstrap chain after

@@ -102,7 +102,7 @@ tasks:
       - task: db:reset
       - task: dev:seed
   db:roles:
-    desc: Create the non-owner roles loopzero-api connects as (loopzero_api, loopzero_worker) on the in-cluster Postgres
+    desc: Create the non-owner roles loopzero-api and loopzero-cloud connect as (loopzero_api, loopzero_worker, loopzero_cloud) on the in-cluster Postgres
     # #396 — no migration creates loopzero_api, and 000023 creates loopzero_worker WITH
     # PASSWORD NULL, so on an in-cluster Postgres nothing could log in as either and
     # loopzero-api refused to boot. Runs BEFORE db:migrate: 000062 and 000068 grant to
@@ -120,16 +120,17 @@ tasks:
         SUPER_PASSWORD=$(secret_key postgres-password)
         API_PASSWORD=$(secret_key api-password)
         WORKER_PASSWORD=$(secret_key worker-password)
-        if [ -z "$API_PASSWORD" ] || [ -z "$WORKER_PASSWORD" ]; then
-          echo "ERROR: loopzero-db-credentials has no api-password/worker-password — run generate-secrets.sh <env> core first" >&2
+        CLOUD_PASSWORD=$(secret_key cloud-password)
+        if [ -z "$API_PASSWORD" ] || [ -z "$WORKER_PASSWORD" ] || [ -z "$CLOUD_PASSWORD" ]; then
+          echo "ERROR: loopzero-db-credentials has no api-password/worker-password/cloud-password — run generate-secrets.sh <env> core first" >&2
           exit 1
         fi
         POD=$(kubectl --context "$CTX" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
         kubectl --context "$CTX" -n loopzero-system exec -i "$POD" -c postgresql -- \
           env PGPASSWORD="$SUPER_PASSWORD" psql -U postgres -d "{{.PG_DB}}" -q \
-            -v api_password="$API_PASSWORD" -v worker_password="$WORKER_PASSWORD" \
+            -v api_password="$API_PASSWORD" -v worker_password="$WORKER_PASSWORD" -v cloud_password="$CLOUD_PASSWORD" \
           < infra/scripts/production/provision-db-roles.sql
-        echo "[db:roles] loopzero_api and loopzero_worker provisioned"
+        echo "[db:roles] loopzero_api, loopzero_worker and loopzero_cloud provisioned"
 
   db:migrate:
     desc: Run database migrations against PostgreSQL via golang-migrate canonical

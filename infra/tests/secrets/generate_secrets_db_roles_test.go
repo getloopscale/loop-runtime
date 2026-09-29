@@ -116,7 +116,17 @@ func TestTheBackgroundPoolURLConnectsAsTheWorkerRole(t *testing.T) {
 	}
 }
 
-// The owner URL stays: migrations run as the owner, and loopzero-cloud still reads `uri`.
+// The control plane connects as `loopzero_cloud`, the non-owner role migration 000063
+// created for it: loopzero-cloud refuses to serve as a role holding an unnamed
+// cross-tenant privilege — superuser, BYPASSRLS, or table owner (#438).
+func TestTheControlPlaneURLConnectsAsTheCloudRole(t *testing.T) {
+	creds := dbCredentials(t)
+	if got := roleOf(t, creds, "cloud-uri"); got != "loopzero_cloud" {
+		t.Errorf("cloud-uri connects as %q, want loopzero_cloud — loopzero-cloud refuses to serve as the owner", got)
+	}
+}
+
+// The owner URL stays: migrations run as the owner.
 func TestTheOwnerURLIsKeptForMigrations(t *testing.T) {
 	creds := dbCredentials(t)
 	if got := roleOf(t, creds, "uri"); got != "loopzero" {
@@ -125,9 +135,12 @@ func TestTheOwnerURLIsKeptForMigrations(t *testing.T) {
 }
 
 func TestTheRolePasswordsCanBeOverridden(t *testing.T) {
-	creds := dbCredentials(t, "LOOPZERO_DB_API_PASSWORD=api-override", "LOOPZERO_DB_WORKER_PASSWORD=worker-override")
+	creds := dbCredentials(t, "LOOPZERO_DB_API_PASSWORD=api-override", "LOOPZERO_DB_WORKER_PASSWORD=worker-override", "LOOPZERO_DB_CLOUD_PASSWORD=cloud-override")
 	if creds["api-password"] != "api-override" || creds["worker-password"] != "worker-override" {
 		t.Errorf("overrides ignored: api-password=%q worker-password=%q", creds["api-password"], creds["worker-password"])
+	}
+	if creds["cloud-password"] != "cloud-override" || !strings.Contains(creds["cloud-uri"], ":cloud-override@") {
+		t.Errorf("cloud override ignored: cloud-password=%q", creds["cloud-password"])
 	}
 	if !strings.Contains(creds["api-uri"], ":api-override@") {
 		t.Errorf("api-uri does not carry the api password it declares")
