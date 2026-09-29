@@ -193,6 +193,34 @@ ensure_seed_endpoints() {
   fi
 }
 
+# Each seed runs in its own process, so what one seed produces never reaches the next
+# unless the chain hands it on. The admin seed reports the tenant it provisioned in its
+# result ("(tenant tn-…)"); the fixture seed needs it as LOOPZERO_TENANT_ID (#453).
+export_admin_tenant_id() {
+  [[ -n "${LOOPZERO_TENANT_ID:-}" ]] && return 0
+  local id
+  id="$(grep -m1 -oE '\(tenant tn-[a-z0-9-]+\)' "$1" 2>/dev/null | grep -oE 'tn-[a-z0-9-]+' || true)"
+  if [[ -n "$id" ]]; then export LOOPZERO_TENANT_ID="$id"; fi
+  return 0
+}
+
+# The fixture step creates its project through the CLI. Prefer LOOPZERO_BIN, then a `loopzero` on
+# PATH; otherwise install the PUBLISHED CLI — what a user gets — into a per-version cache.
+# A cold droplet has none, and earlier rounds used one installed by hand (#453).
+LOOPZERO_CLI_VERSION="${LOOPZERO_CLI_VERSION:-0.4.0}"
+ensure_loopzero_cli() {
+  [[ -n "${LOOPZERO_BIN:-}" ]] && return 0
+  if command -v loopzero >/dev/null 2>&1; then
+    LOOPZERO_BIN="$(command -v loopzero)"; export LOOPZERO_BIN; return 0
+  fi
+  local prefix="$HOME/.cache/loopzero-cli/${LOOPZERO_CLI_VERSION:-0.4.0}"
+  if [[ ! -x "$prefix/node_modules/.bin/loopzero" ]]; then
+    npm install --silent --no-audit --no-fund --prefix "$prefix" "@loopzero/cli@${LOOPZERO_CLI_VERSION:-0.4.0}" >/dev/null 2>&1 \
+      || { log "  could not install @loopzero/cli@${LOOPZERO_CLI_VERSION:-0.4.0}"; return 0; }
+  fi
+  export LOOPZERO_BIN="$prefix/node_modules/.bin/loopzero"
+}
+
 VERIFY_FLAG=""
 [[ "$VERIFY" == "1" ]] && VERIFY_FLAG="--verify"
 
@@ -255,6 +283,7 @@ fi
 # Step 2
 if [[ "$DRY_RUN" != "1" ]]; then
   ensure_seed_endpoints
+  ensure_loopzero_cli
 fi
 
 run_step "2-seed-minio" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed minio ${VERIFY_FLAG:+--verify})"
@@ -263,6 +292,7 @@ run_step "2-seed-minio" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed minio 
 # `helmfile sync` renders (it used to wait on the patch-kratos and hydra-urls
 # seeds, Finding #4 of issue #91; those patches are environment values now).
 run_step "3-seed-admin-loopzero-dev" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed admin-loopzero-dev ${VERIFY_FLAG:+--verify})"
+export_admin_tenant_id "/tmp/seed-3-seed-admin-loopzero-dev.log"
 
 # Step 3b (NEW 2026-06-29 per Red Team #117 closure) — QA Red Team
 # canonical identity. The seed-admin script is generic over EMAIL +
