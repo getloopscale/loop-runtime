@@ -41,6 +41,14 @@ ports:
   - port: 14444:30006
     nodeFilters:
       - loadbalancer
+  # The data plane (#446), on the host port the edge and the seed chain reach each service
+  # at, paired with its nodePort in infra/helmfile/values/dev-public/loopzero-*.yaml.gotmpl. A
+  # service's mapping joins here with its entry in `dataPlane.services`: until then its
+  # compose container holds the host port, and mapping it would fail cluster creation.
+  # memory 18081:30181 and RAG 18082:30182 are next.
+  - port: 18084:30184
+    nodeFilters:
+      - loadbalancer
   # 30094 exposes loki-cross-cluster so Promtail (build cluster) can ship workflow
   # pod logs to Loki (mgmt cluster). Without this, `loopzero logs --build <id>` works
   # only if logs arrive via another path. F1.4 E2E validation 2026-04-23.

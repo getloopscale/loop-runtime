@@ -87,19 +87,6 @@ func TestDevPublicLoopZeroCloudReachesTheDashboardBrokers(t *testing.T) {
 	}
 }
 
-// TestDevPublicLoopZeroCloudReachesThePipelineRAGContainer — a URL that answers is not
-// proof of the right target. Until 2026-07-29 RAG_BASE_URL named :18082, a `node`
-// process started by hand on the host, while the container CI publishes served
-// :8787; the endpoint answered 200 and the only symptom was an empty version
-// column, because the loose process reports built_at "unknown".
-func TestDevPublicLoopZeroCloudReachesThePipelineRAGContainer(t *testing.T) {
-	url, _ := configMapData(t, renderDevPublicLoopZeroCloud(t), "loopzero-cloud")["RAG_BASE_URL"].(string)
-	if strings.Contains(url, ":18082") {
-		t.Errorf("RAG_BASE_URL = %q points at :18082, the loose host process; the pipeline container serves :8787 "+
-			"(see infra/helmfile/values/dev-public/loopzero-cloud.yaml.gotmpl)", url)
-	}
-}
-
 func TestDevPublicLoopZeroCloudReadsTheBrokerAdminKeysFromTheirSecrets(t *testing.T) {
 	rendered := renderDevPublicLoopZeroCloud(t)
 	deploy := renderedObject(t, rendered, "Deployment", "loopzero-cloud")

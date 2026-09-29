@@ -167,6 +167,7 @@ trees, by name or as a template-identical copy under another name.
 | `chaos-mesh` | core | ours | — | `{{ .Values \| get "installChaosMesh" false }}` |
 | `cloudflared` | cell | ours | — | `always` |
 | `cluster-issuer` | cell, secrets | ours | — | `always` |
+| `data-plane-service` | core | ours | — | `{{ has $svc ($.Values \| get "dataPlane.services" list) }}` |
 | `external-secrets` | cell, core | upstream | 0.14.3 | `always` |
 | `gitea` | core | upstream | 10.6.0 | `always` |
 | `k6-operator` | — | undeclared | — | `always` |

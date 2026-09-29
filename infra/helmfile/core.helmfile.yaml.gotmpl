@@ -657,6 +657,20 @@ releases:
           billingReturnUrl: {{ .Values.uiBaseUrl | trimSuffix "/" | quote }}
 {{- end }}
 
+  # The data plane (#446): memory, RAG and lens, one release each of one chart, every
+  # service with its own Postgres. dev-public ran them as compose containers started from
+  # directories that no longer exist; this is their versioned definition. Secrets come from
+  # generate-secrets.sh (loopzero-data-plane namespace), images from `platformImages`.
+{{- range $svc := list "loopzero-memory" "loopzero-rag" "loopzero-lens" }}
+  - name: {{ $svc }}
+    namespace: loopzero-data-plane
+    chart: ../helm/data-plane-service
+    installed: {{ has $svc ($.Values | get "dataPlane.services" list) }}
+    wait: false
+    values:
+      - values/{{ $.Environment.Name }}/{{ $svc }}.yaml.gotmpl
+{{- end }}
+
   # Wave 90: Chaos engineering (active-execution-plan §3.A.4, iter 2)
   # Sprint 8 T0.3 installed CRDs via separate path; this release wires the
   # controller via the `loopzero-chaos-mesh` wrapper chart (infra/helm/chaos-mesh)

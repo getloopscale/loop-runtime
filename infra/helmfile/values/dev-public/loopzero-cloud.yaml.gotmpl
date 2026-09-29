@@ -61,24 +61,15 @@ config:
   # device flow. Changes in lockstep with the loopzero-api overlay and the ory-hydra overlay.
   jwtIssuer: "https://auth-dev.loopzero.example/"
 
-  # T1 CANONICAL 2026-07-16: without RAG_BASE_URL the loopzero-rag broker stays nil and
-  # `/v1/dashboard/rag/*` returns 404 (app-dev.loopzero.example/rag/analytics).
-  # `host.k3d.internal` is the k3d hostAlias that resolves to the host.
-  #
-  # 2026-07-29 — THE PORT MOVED FROM :18082 TO :8787, and the reason matters more than
-  # the move. When this value was fixed (2026-07-16) loopzero-rag ran ONLY as a host process
-  # started by hand. Two now coexist:
-  #
-  #   :18082  a loose `node` process on the host — version "dev", built_at "unknown"
-  #   :8787   container ghcr.io/getloopscale/loopzero-rag:develop — the PIPELINE ARTIFACT
-  #
-  # The gateway was reading the loose process. The page was right; the TARGET was the
-  # wrong instance — and nothing went red, because a loose process answers 200 the same.
-  ragBaseUrl: "http://host.k3d.internal:8787"
-
-  # 2026-07-20 — same durable-wiring contract as RAG, for loopzero-lens, which runs as a host
-  # process on :18084 in the dev-public data-plane topology.
-  lensBaseUrl: "http://host.k3d.internal:18084"
+  # Without RAG_BASE_URL the loopzero-rag broker stays nil and `/v1/dashboard/rag/*` returns
+  # 404. A data-plane service that runs on this cluster (`dataPlane.services`, #446) is
+  # reached by Service name; one not moved yet, where its compose container publishes it on
+  # the host. The host address drifted twice — a loose process instead of the pipeline
+  # artifact, then :8787, a port the host never published — and a Service name cannot
+  # point at the wrong instance.
+{{- $dataPlane := .Values | get "dataPlane.services" list }}
+  ragBaseUrl: {{ ternary "http://loopzero-rag.loopzero-data-plane.svc.cluster.local:8787" "http://host.k3d.internal:18082" (has "loopzero-rag" $dataPlane) | quote }}
+  lensBaseUrl: {{ ternary "http://loopzero-lens.loopzero-data-plane.svc.cluster.local:4318" "http://host.k3d.internal:18084" (has "loopzero-lens" $dataPlane) | quote }}
 
   # 2026-07-31 — status-panel target for loopzero-traefik-mcp. It points at the process ROOT,
   # not the Traefik `/mcp` edge: that router does not strip the prefix, deliberately, so
