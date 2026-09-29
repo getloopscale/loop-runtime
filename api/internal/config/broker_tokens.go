@@ -32,6 +32,7 @@ func (c Config) BrokerCellTokens() (map[string]string, error) {
 			return nil, err
 		}
 	}
+	listed := map[string]bool{}
 	for i, entry := range strings.Split(c.BrokerTokens, ",") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
@@ -42,9 +43,10 @@ func (c Config) BrokerCellTokens() (map[string]string, error) {
 		if !ok || cell == "" || token == "" {
 			return nil, fmt.Errorf("LOOPZERO_BROKER_TOKENS entry %d is not cell=token", i+1)
 		}
-		if _, dup := tokens[cell]; dup && !(cell == domain.DefaultCellID && c.BrokerToken != "") {
+		if listed[cell] {
 			return nil, fmt.Errorf("LOOPZERO_BROKER_TOKENS names cell %q twice", cell)
 		}
+		listed[cell] = true
 		if err := add(cell, token); err != nil {
 			return nil, err
 		}
