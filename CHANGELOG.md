@@ -376,6 +376,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The edge upstream gate accepts per-cell routing: the app wildcards may import a local snippet that maps every cell to a `127.0.0.1` host port, instead of proxying to cell-0's port alone. A cell mapped to any other address still fails, which keeps the Docker-address drift that once sent every app request to the secrets cluster from coming back behind a map (#447).
 - The edge host-parity gate accepts an `import` of a snippet the Caddyfile defines itself; it refused every import as a partial view, which blocked any delivery once the app edge moved into a snippet. An import of anything else is still refused (#447).
 - The edge-exposure gate now sees a proxy written inside a Caddyfile snippet, attributing it to every site that imports it, and treats `forward_auth` as a proxy, since its upstream's refusal reaches the client verbatim. Before, a proxy moved into a snippet reached the browser with nothing declaring what it lets through (#447).
 - On dev-public a deployed app's reachability check asks for the URL users reach (`<label>.prod-dev.loopzero.example`) instead of the internal `*.loopzero.local` name the edge rewrites to, which resolves nowhere and kept every app from being marked live. The app-operator takes it from `config.routeProbePublicDomain`; the environment's `publicAppDomain` feeds both it and the URL loopzero-api announces (#447).
