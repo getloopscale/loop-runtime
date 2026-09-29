@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -145,4 +146,57 @@ func TestCheck_RealRepoCaddyfilePasses(t *testing.T) {
 		abs = filepath.Dir(abs)
 	}
 	t.Skip("could not locate infra/local/Caddyfile within 8 parent dirs; skipping real-repo assertion")
+}
+
+const cellEdgeBody = `(cell_edge) {
+  forward_auth localhost:13001 {
+    uri /internal/edge/route
+  }
+  map {header.X-LoopZero-Cell} {cell_ingress} {
+    cell-0 127.0.0.1:8443
+    cell-1 127.0.0.1:8444
+    default 127.0.0.1:9
+  }
+  reverse_proxy {cell_ingress} {
+    transport http {
+      tls
+    }
+  }
+}
+
+*.preview-dev.loopzero.example {
+  import cell_edge
+}
+
+*.prod-dev.loopzero.example {
+  import cell_edge
+}
+`
+
+// The wildcards may route per cell through a snippet, as long as every cell maps to
+// a stable host port — the property the canonical single upstream protected.
+func TestCheck_CellEdgeSnippetOverLoopbackPasses(t *testing.T) {
+	root := writeFixture(t, cellEdgeBody)
+	outcome, err := violationOf(Check(Config{RepoRoot: root}))
+	if err != nil {
+		t.Fatalf("expected PASS, got err=%v violations=%v", err, outcome.Violations)
+	}
+}
+
+// A cell mapped to a Docker network address is the #127 drift again, behind a map.
+func TestCheck_CellEdgeMappingADockerAddressFails(t *testing.T) {
+	body := strings.Replace(cellEdgeBody, "cell-1 127.0.0.1:8444", "cell-1 k3d-loopzero-cell-1-serverlb:443", 1)
+	root := writeFixture(t, body)
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrViolations) {
+		t.Fatalf("expected ErrViolations for a non-loopback cell, got %v", err)
+	}
+}
+
+// Importing a snippet that proxies somewhere else does not satisfy the invariant.
+func TestCheck_ImportOfASnippetWithoutACellMapFails(t *testing.T) {
+	body := "(other) {\n  reverse_proxy localhost:5173\n}\n\n*.preview-dev.loopzero.example {\n  import other\n}\n\n*.prod-dev.loopzero.example {\n  import other\n}\n"
+	root := writeFixture(t, body)
+	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrViolations) {
+		t.Fatalf("expected ErrViolations, got %v", err)
+	}
 }

@@ -137,6 +137,11 @@ func NewRouter(cfg Config) *chi.Mux {
 		bootstrap := bootstraphttp.NewBootstrapHandler(cfg.BootstrapStore, cfg.BootstrapSecret, cfg.CellPlacement)
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
 	}
+	if surfaces.Recorded(cfg.Surfaces, surfaces.EdgeRoute, cfg.EdgeRoute != nil,
+		"LOOPZERO_EDGE_ROUTE_TOKEN is not set, or the route index could not reach the cluster "+
+			"(wireEdgeRoute, setup_server.go) — the edge then has no host to cell lookup") {
+		r.Get("/internal/edge/route", cfg.EdgeRoute.ServeHTTP)
+	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.ArgoCallback, cfg.ArgoCallbackHandler != nil,
 		"the orchestrator dependencies did not come up — the handler comes from `orchDeps` "+
 			"(setup_server.go:236), which is nil when build orchestration was not assembled") {

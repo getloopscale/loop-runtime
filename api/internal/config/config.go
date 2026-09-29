@@ -350,6 +350,9 @@ type Config struct {
 	// BrokerToken is the bearer the ESO secret-fetch broker requires
 	// (LOOPZERO_BROKER_TOKEN); empty disables the broker endpoint.
 	BrokerToken string
+	// EdgeRouteToken is the bearer the edge presents to /internal/edge/route
+	// (LOOPZERO_EDGE_ROUTE_TOKEN); empty disables the route.
+	EdgeRouteToken string
 	// TrustedProxyCIDRs lists the proxies whose X-Forwarded-For the pre-auth
 	// IP rate limit honours (LOOPZERO_TRUSTED_PROXY_CIDRS, comma-separated).
 	TrustedProxyCIDRs string
@@ -592,6 +595,7 @@ func Load() Config {
 		PprofAddr:           envOr("LOOPZERO_PPROF_ADDR", ":6060"),
 		EnvReadinessChecker: os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true",
 		BrokerToken:         os.Getenv("LOOPZERO_BROKER_TOKEN"),
+		EdgeRouteToken:      os.Getenv("LOOPZERO_EDGE_ROUTE_TOKEN"),
 		TrustedProxyCIDRs:   os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS"),
 		BillingUpgradeURL:   os.Getenv("BILLING_UPGRADE_URL"),
 

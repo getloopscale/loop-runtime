@@ -39,8 +39,11 @@ const DefaultCaddyfile = "infra/local/Caddyfile"
 const DefaultRegistry = "infra/quality/proxy-exposure.txt"
 
 var (
-	blockOpenRe   = regexp.MustCompile(`^(.*?)\{\s*$`)
-	reverseProxRe = regexp.MustCompile(`^\s*reverse_proxy\b`)
+	blockOpenRe = regexp.MustCompile(`^(.*?)\{\s*$`)
+	// forward_auth is a proxy too: a non-2xx answer from its upstream is relayed
+	// to the client verbatim.
+	reverseProxRe = regexp.MustCompile(`^\s*(reverse_proxy|forward_auth)\b`)
+	importRe      = regexp.MustCompile(`^\s*import\s+(\S+)\s*$`)
 	commentRe     = regexp.MustCompile(`^\s*#`)
 )
 
@@ -151,9 +154,18 @@ func Check(cfg Config) (*Outcome, error) {
 
 // parseExposures walks the Caddyfile tracking the brace stack, so each
 // reverse_proxy is attributed to its site and, when present, its handle path.
+// A proxy inside a snippet `(name) { ... }` is attributed to every site that
+// imports it, at the importing position — written once, it reaches the browser
+// through each of them.
 func parseExposures(src string) []Exposure {
 	var stack []string
 	var out []Exposure
+	snippets := map[string][]Exposure{}
+	type use struct {
+		name, site, path string
+		line             int
+	}
+	var imports []use
 
 	for i, raw := range strings.Split(src, "\n") {
 		line := raw
@@ -166,11 +178,18 @@ func parseExposures(src string) []Exposure {
 		}
 
 		if reverseProxRe.MatchString(line) {
-			site, path := attribute(stack)
-			if site != "" {
+			if name := snippetName(stack); name != "" {
+				_, path := attribute(stack[1:])
+				snippets[name] = append(snippets[name], Exposure{Path: path, Line: i + 1})
+			} else if site, path := attribute(stack); site != "" {
 				out = append(out, Exposure{Site: site, Path: path, Line: i + 1})
 			}
 			// fallthrough: a reverse_proxy line may itself open a block
+		}
+		if m := importRe.FindStringSubmatch(line); m != nil {
+			if site, path := attribute(stack); site != "" {
+				imports = append(imports, use{name: m[1], site: site, path: path, line: i + 1})
+			}
 		}
 
 		if m := blockOpenRe.FindStringSubmatch(line); m != nil {
@@ -181,7 +200,33 @@ func parseExposures(src string) []Exposure {
 			stack = stack[:len(stack)-1]
 		}
 	}
+	seen := map[string]bool{}
+	for _, u := range imports {
+		for _, e := range snippets[u.name] {
+			path := u.path
+			if e.Path != "" {
+				path = e.Path
+			}
+			// Two proxies of one snippet land on one site+path: one exposure.
+			if key := u.site + " " + path; !seen[key] {
+				seen[key] = true
+				out = append(out, Exposure{Site: u.site, Path: path, Line: u.line})
+			}
+		}
+	}
 	return out
+}
+
+// snippetName returns the snippet a position is inside of, or "".
+func snippetName(stack []string) string {
+	if len(stack) == 0 {
+		return ""
+	}
+	head := strings.TrimSpace(stack[0])
+	if strings.HasPrefix(head, "(") && strings.HasSuffix(head, ")") {
+		return strings.TrimSuffix(strings.TrimPrefix(head, "("), ")")
+	}
+	return ""
 }
 
 // attribute reads the site (outermost frame that looks like a hostname) and the

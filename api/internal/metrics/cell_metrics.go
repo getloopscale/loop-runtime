@@ -52,6 +52,14 @@ var (
 		Help: "Routing decisions made by DynamicRouter, labelled by cell + outcome (assigned|fallback|error).",
 	}, []string{"cell", "decision"})
 
+	// EdgeRouteLookups counts the edge's host -> cell lookups by outcome
+	// (routed|not_found|unavailable|unauthorized|bad_request). A rise in
+	// "unavailable" means the edge is refusing live traffic.
+	EdgeRouteLookups = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "loopzero_edge_route_lookups_total",
+		Help: "Edge host-to-cell lookups served by /internal/edge/route, labelled by outcome.",
+	}, []string{"outcome"})
+
 	// CellHealth is 1 if the cell's ClusterCredential reports
 	// status.connected=true AND its kubeconfig responds to a probe within
 	// the refresh interval, else 0. Aggregates the connectivity SoT (CC

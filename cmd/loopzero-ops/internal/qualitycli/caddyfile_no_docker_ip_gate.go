@@ -36,7 +36,7 @@ func setupCaddyfileNoDockerIP(_ *flag.FlagSet) Check {
 			}
 			return outcome, nil
 		}
-		inv.Stdout.Println("caddyfile-no-docker-ip: PASS — Caddyfile canonical (no 172.18.x.x, both wildcard blocks use https://127.0.0.1:8443)")
+		inv.Stdout.Println("caddyfile-no-docker-ip: PASS — Caddyfile canonical (no 172.18.x.x, both wildcard blocks reach the cells over loopback host ports)")
 		return outcome, nil
 	}
 }

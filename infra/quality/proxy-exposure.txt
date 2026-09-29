@@ -82,5 +82,5 @@ auth-dev.loopzero.example /self-service/registration/methods/password | reviewed
 # response is the tenant's app, not platform data — the isolation that matters
 # here is Traefik's host routing, covered by the tenant-predicate and
 # multi-cell placement guards rather than by this registry.
-*.preview-dev.loopzero.example - | reviewed | PR preview of a tenant's own app via Traefik host routing; response is the tenant's application
-*.prod-dev.loopzero.example - | reviewed | tenant's own app via Traefik host routing; response is the tenant's application
+*.preview-dev.loopzero.example - | reviewed | PR preview of a tenant's own app on the cell the engine names (cell_edge); response is the tenant's application, or the engine's fixed 401/404/503 text on a refused lookup
+*.prod-dev.loopzero.example - | reviewed | tenant's own app on the cell the engine names (cell_edge); response is the tenant's application, or the engine's fixed 401/404/503 text on a refused lookup

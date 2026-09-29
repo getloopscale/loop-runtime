@@ -293,6 +293,14 @@ fi
 apply_secret loopzero-service-auth loopzero-system \
   --from-literal=LOOPZERO_SERVICE_AUTH_SECRET="${SERVICE_AUTH_SECRET}"
 
+# 1.b') Bearer the public edge presents to /internal/edge/route (host -> cell
+# lookup, docs/decisions.md 2026-09-29). loopzero-api reads it through the optional
+# `loopzero-edge-route-token` envFrom source; the edge reads the same Secret when it
+# is (re)configured. Preserved across runs so a reinstall does not lock the edge out.
+EDGE_ROUTE_TOKEN="$(get_or_generate loopzero-edge-route-token loopzero-system LOOPZERO_EDGE_ROUTE_TOKEN)"
+apply_secret loopzero-edge-route-token loopzero-system \
+  --from-literal=LOOPZERO_EDGE_ROUTE_TOKEN="${EDGE_ROUTE_TOKEN}"
+
 # 1.c) Resend HTTP-API key for Kratos courier (MEET-2026-04-06-036: DO blocks
 # SMTP, courier delivery_strategy=http via api.resend.com/emails). Consumed
 # by ory-kratos Deployment + ory-kratos-courier StatefulSet via

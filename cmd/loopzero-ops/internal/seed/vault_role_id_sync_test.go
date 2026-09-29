@@ -286,3 +286,40 @@ func TestVaultRoleIDSync_WritesTheRoleIDWhenLoopZeroAPIIsNotDeployedYet(t *testi
 		t.Errorf("Secret OPENBAO_VAULT_ROLE_ID = %q, want %q", sec.Data["OPENBAO_VAULT_ROLE_ID"], roleID)
 	}
 }
+
+// On an environment whose loopzero-api Helmfile installs (dev-public), the seed runs while
+// the API cannot be Ready yet: its database roles and schema come later in `task
+// setup`. The seed's job is that every new pod reads the role id — a pod reads its
+// envFrom at start, whether or not it then passes readiness. Waiting for Ready made the
+// seed fail setup at `k3d:secrets:wire` on a cold dev-public install (#444).
+func TestVaultRoleIDSync_PassesWhenTheRestartedPodsExistButAreNotReadyYet(t *testing.T) {
+	deps, mgmt := roleIDSyncDeps(t, "fresh-role-id-1234567890abcdef0123",
+		approleSecret(map[string][]byte{"OPENBAO_VAULT_SECRET_ID": []byte("secret-id-from-bootstrap")}))
+	var d appsv1.Deployment
+	if err := mgmt.Get(deps.Ctx, ctrlclient.ObjectKey{Namespace: "loopzero-system", Name: "loopzero-api"}, &d); err != nil {
+		t.Fatalf("get loopzero-api: %v", err)
+	}
+	// Measured live on the first cold dev-public install: replicas=2, one pod from the
+	// restarted template, none Ready — a rolling update does not replace the second pod
+	// until the first new one is available, which it cannot be before its database.
+	two := int32(2)
+	d.Spec.Replicas = &two
+	if err := mgmt.Update(deps.Ctx, &d); err != nil {
+		t.Fatalf("scale loopzero-api to 2: %v", err)
+	}
+	d.Status.ReadyReplicas = 0
+	d.Status.UpdatedReplicas = 1
+	if err := mgmt.Status().Update(deps.Ctx, &d); err != nil {
+		t.Fatalf("mark loopzero-api not ready: %v", err)
+	}
+	var marked appsv1.Deployment
+	if err := mgmt.Get(deps.Ctx, ctrlclient.ObjectKey{Namespace: "loopzero-system", Name: "loopzero-api"}, &marked); err != nil || marked.Status.ReadyReplicas != 0 {
+		t.Fatalf("the fixture did not take: ready=%d err=%v — the test would measure nothing", marked.Status.ReadyReplicas, err)
+	}
+
+	got := NewVaultRoleIDSyncSeed().Run(deps)
+
+	if got.Verdict != PASS {
+		t.Fatalf("Verdict = %s (%s), want PASS — the restarted pods exist and read the role id at start", got.Verdict, got.Reason)
+	}
+}

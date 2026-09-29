@@ -58,6 +58,23 @@ sync_runtime() {
   return 0
 }
 
+# The Caddyfile's cell edge substitutes {$LOOPZERO_EDGE_ROUTE_TOKEN} when the config is
+# adapted, i.e. by this shell's `caddy reload` / `caddy run`. Read it from the Secret
+# generate-secrets.sh keeps, unless the caller already exported it. Without it the
+# engine refuses the lookup and every app URL answers 401 — the dashboard and auth
+# hosts keep working, so this warns rather than aborting.
+load_edge_route_token() {
+  if [[ -z "${LOOPZERO_EDGE_ROUTE_TOKEN:-}" ]] && command -v kubectl >/dev/null 2>&1; then
+    LOOPZERO_EDGE_ROUTE_TOKEN="$(kubectl --context "${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}" -n loopzero-system \
+      get secret loopzero-edge-route-token -o 'jsonpath={.data.LOOPZERO_EDGE_ROUTE_TOKEN}' 2>/dev/null \
+      | base64 -d 2>/dev/null || true)"
+  fi
+  export LOOPZERO_EDGE_ROUTE_TOKEN="${LOOPZERO_EDGE_ROUTE_TOKEN:-}"
+  if [[ -z "$LOOPZERO_EDGE_ROUTE_TOKEN" ]]; then
+    log "WARN: LOOPZERO_EDGE_ROUTE_TOKEN unavailable (no loopzero-edge-route-token Secret); app URLs will answer 401"
+  fi
+}
+
 is_caddy_running() {
   pgrep -f "caddy run.*$RUNTIME" >/dev/null 2>&1
 }
@@ -141,6 +158,7 @@ main() {
   if [[ $RELOAD_ONLY -eq 0 ]]; then
     sync_runtime || log "no-op sync (already current)"
   fi
+  load_edge_route_token
   reload_or_start
   verify_certs
   log "done"

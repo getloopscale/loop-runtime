@@ -50,3 +50,27 @@ func waitForRolloutSettled(ctx context.Context, cli ctrlclient.Client,
 				d.Status.ReadyReplicas == want && d.Status.UpdatedReplicas == want, nil
 		})
 }
+
+// waitForRolloutApplied waits until a restart has taken effect: the controller has
+// observed the new template and at least one pod runs from it. From then on every pod
+// that starts reads its envFrom afresh, and the rolling update replaces the rest as
+// soon as the workload can become available.
+//
+// Not "every pod from the new template", and not Ready: a rolling update does not
+// replace the next pod until the previous new one is available, so on an install
+// where the workload cannot be healthy yet — dev-public's loopzero-api before its
+// database exists — both of those wait forever. Measured live: replicas=2,
+// updatedReplicas=1, readyReplicas=0 (#444). Readiness is the concern of whatever
+// needs the workload working, not of a seed delivering a value to it.
+func waitForRolloutApplied(ctx context.Context, cli ctrlclient.Client,
+	namespace, name string, timeout time.Duration,
+) error {
+	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true,
+		func(ctx context.Context) (bool, error) {
+			var d appsv1.Deployment
+			if err := cli.Get(ctx, ctrlclient.ObjectKey{Namespace: namespace, Name: name}, &d); err != nil {
+				return false, err
+			}
+			return d.Status.ObservedGeneration >= d.Generation && d.Status.UpdatedReplicas >= 1, nil
+		})
+}

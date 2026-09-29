@@ -24,6 +24,10 @@
 #   8. Browser: https://app-dev.loopzero.example/login
 
 domain: loopzero.local
+# The public root of every app URL: users reach <label>.prod-dev.loopzero.example, and the
+# edge rewrites it to <label>.loopzero.local for the cell's Traefik. loopzero-api announces it
+# (status.url) and the app-operator probes under it (#447) — one value, two readers.
+publicAppDomain: prod-dev.loopzero.example
 dnsZone: loopzero.local
 
 # clusterRole=cloud-local: triggers loopzero-cloud + loopzero-api install via helmfile

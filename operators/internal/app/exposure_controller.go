@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -73,6 +74,13 @@ type ExposureReconciler struct {
 	// secret lives there, next to the app — not in this cluster. Nil means the check
 	// degrades to "not ready", which is the honest answer when we cannot look (#277).
 	RuntimeFactory cellrouting.RuntimeClientFactory
+
+	// ProbePublicDomain, when set, makes the reachability probe ask for the URL users
+	// reach — the hostname's first label under this domain, over TLS — instead of the
+	// route hostname itself. For an environment whose route hostnames are an internal
+	// SNI the edge rewrites to (dev-public's *.loopzero.local), which resolves nowhere and
+	// failed the probe for every app (#447). Empty where the hostname is public.
+	ProbePublicDomain string
 }
 
 // exposureDetailTypes per ADR-0025 D3.
@@ -335,6 +343,10 @@ func (r *ExposureReconciler) resolveProbeURL(route *loopzerov1.ExposedRoute) str
 			return override
 		}
 	}
+	if r.ProbePublicDomain != "" {
+		label, _, _ := strings.Cut(route.Spec.Hostname, ".")
+		return "https://" + label + "." + r.ProbePublicDomain
+	}
 	if route.Spec.TLS.Enabled {
 		return "https://" + route.Spec.Hostname
 	}
@@ -373,6 +385,9 @@ type ExposureControllerConfig struct {
 	// passes cellrouting.NewUnavailableRuntimeClientFactory, and the cert check
 	// then reports not-ready, which is the honest answer (#277).
 	RuntimeFactory cellrouting.RuntimeClientFactory
+
+	// ProbePublicDomain — see ExposureReconciler.ProbePublicDomain.
+	ProbePublicDomain string
 }
 
 // SetupExposureController registers the ExposureController with the manager.
@@ -389,5 +404,6 @@ func SetupExposureController(mgr ctrl.Manager, cfg ExposureControllerConfig) err
 			HTTPClient:            httpclient.NewWithTimeout(constants.ProbeTimeout),
 			AllowProbeURLOverride: cfg.AllowProbeURLOverride,
 			RuntimeFactory:        cfg.RuntimeFactory,
+			ProbePublicDomain:     cfg.ProbePublicDomain,
 		})
 }

@@ -34,8 +34,9 @@
 //
 // It compares declarations. It does not prove the certificate was issued, that DNS
 // resolves, or that the destination behind the address answers. A block pointing at the
-// wrong port passes here and fails live. When the `Caddyfile` uses `import`, the view is
-// partial and the gate refuses instead of reporting parity over half the file.
+// wrong port passes here and fails live. When the `Caddyfile` imports anything but a
+// snippet it defines itself, the view is partial and the gate refuses instead of
+// reporting parity over half the file.
 package caddyhostparity
 
 import (
@@ -90,8 +91,10 @@ var (
 	// the opening brace, on the SAME line. The column anchor is what separates a served
 	// site from a mention inside a directive.
 	siteAddrLineRE = regexp.MustCompile(`(?m)^([^\s{][^{\n]*?)[ \t]*\{[ \t]*$`)
-	// importRE detects blocks this gate cannot see.
-	importRE = regexp.MustCompile(`(?m)^\s*import\s+\S`)
+	// importRE finds imports. One naming a snippet defined in this file adds no site
+	// block and is local; any other import pulls blocks this gate cannot see.
+	importRE  = regexp.MustCompile(`(?m)^\s*import\s+(\S+)`)
+	snippetRE = regexp.MustCompile(`(?m)^\(([^)\s]+)\)[ \t]*\{`)
 )
 
 // Config drives the check.
@@ -172,11 +175,20 @@ func servedBlocks(root string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrCaddyfileMissing, caddyfileRel)
 	}
-	if importRE.MatchString(string(body)) {
-		return nil, fmt.Errorf("%w: %s", ErrPartialView, caddyfileRel)
+	snippets := map[string]bool{}
+	for _, m := range snippetRE.FindAllStringSubmatch(string(body), -1) {
+		snippets[m[1]] = true
+	}
+	for _, m := range importRE.FindAllStringSubmatch(string(body), -1) {
+		if !snippets[m[1]] {
+			return nil, fmt.Errorf("%w: %s", ErrPartialView, caddyfileRel)
+		}
 	}
 	var blocks []string
 	for _, m := range siteAddrLineRE.FindAllStringSubmatch(string(body), -1) {
+		if strings.HasPrefix(strings.TrimSpace(m[1]), "(") {
+			continue // a snippet definition, not a site
+		}
 		// The comma is Caddy's canonical multi-host form; each token is an address.
 		for _, tok := range strings.Split(m[1], ",") {
 			if a := normalizeAddr(tok); a != "" {

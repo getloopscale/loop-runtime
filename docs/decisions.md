@@ -32,6 +32,40 @@ meeting date is not the meeting.
 | 2026-08-09 | **Unify cell and cluster 1:1, retiring `cell-default`.** Retroactively ratified 2026-09-06. |
 | 2026-08-09 | **Cluster topology naming** — the `{core,build,cell-0,cell-1}` names on disk. The old `{mgmt,workload,runtime-2}` appear in no filename. |
 | 2026-05-25 | **Live CA fetch from `kube-root-ca.crt` on `ClusterCredential` reconcile** (RATIFIED, sponsor-direct). Prefer fetching the live source at reconcile time over snapshotting at bootstrap: snapshots go stale, live sources self-heal. |
+| 2026-09-29 | **The edge asks the engine which cell serves a host.** Full record below the table. |
+
+
+**The edge asks the engine which cell serves a host** (2026-09-29, #447).
+
+Placement is decided once and stored in `tenants.cell_id`; an app's route is published
+on that cell's ingress. The dev-public edge forwarded every `*.prod-dev` and
+`*.preview-dev` host to cell-0's ingress, so an app placed on cell-1 served on its cell
+and answered 404 at its public URL.
+
+The engine now answers `GET /internal/edge/route`: the edge sends the host in
+`X-Forwarded-Host` with a bearer (`LOOPZERO_EDGE_ROUTE_TOKEN`), and gets `200` plus
+`X-LoopZero-Cell`, `404` for a host no route publishes, or `503` while the index has never
+loaded. The index is built in memory from the `ExposedRoute` CRs on the management
+cluster (hostname, `loopzero.io/tenant`) and `tenants.cell_id` on the cross-tenant pool,
+refreshed every 30s and on a miss at most every 5s. A label two tenants publish is
+refused rather than guessed. The edge maps the cell to the ingress it knows and proxies
+there; Caddy does it with `forward_auth`, a bodyless subrequest, so request bodies are
+never replayed.
+
+Rejected:
+- **Try cell-0, fall back to cell-1 on 404.** Measured on the droplet: the fallback
+  loses a POST body even with request buffering, and it doubles the latency of every
+  cell-1 request. It also routes by trial, so a stale route on the wrong cell wins.
+- **Encode the tenant in the hostname and look it up at the edge.** `naming.AppHostname`
+  joins tenant, project, app and environment with hyphens, each of which may contain
+  hyphens, so the tenant cannot be parsed back out. The production Cloudflare Worker
+  assumes an `{app}.{tenant}` shape the platform does not emit, filed separately.
+- **Publish every route on every cell.** It duplicates ingress state across cells and
+  breaks the isolation placement exists for.
+
+Cost: the engine is on the request path of the first lookup for a host after each
+refresh window, and an engine outage turns into 503 at the edge for hosts not yet
+cached by the edge — Caddy caches nothing, so every request pays one local subrequest.
 
 ### Data layer
 

@@ -198,6 +198,11 @@
         },
         "loopzeroTracingEnabled": {
           "type": "string"
+        },
+        "routeProbePublicDomain": {
+          "type": "string",
+          "description": "Public domain the route reachability probe asks under, when route hostnames are an internal SNI (#447). Empty: probe the route hostname.",
+          "pattern": "^$|^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
         }
       }
     },

@@ -25,6 +25,10 @@ service:
 # Operator configuration (environment variables via ConfigMap)
 config:
   baseDomain: ""
+  # Set where route hostnames are an internal SNI the edge rewrites to (dev-public's
+  # *.loopzero.local): the reachability probe then asks for https://<first label>.<this>,
+  # the URL users reach. Empty where route hostnames are public (#447).
+  routeProbePublicDomain: ""
   operatorInsecureSkipTls: "false"
   loopzeroRequireRuntimeKubeconfig: "false"
   loopzeroPprofAddr: ""

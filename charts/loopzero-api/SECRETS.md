@@ -40,6 +40,7 @@ Generate a random hex secret with `openssl rand -hex 32` where indicated.
 | `LOOPZERO_ADMIN_SERVICE_AUTH_SECRET` | when-admin | openssl rand -hex 32 | admin service-auth secret |
 | `LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS` | N | openssl rand -hex 32 | admin service-auth (rotation) |
 | `LOOPZERO_BROKER_TOKEN` | when-broker | openssl rand -hex 32 | ESO-sync broker token |
+| `LOOPZERO_EDGE_ROUTE_TOKEN` | when-edge | openssl rand -hex 32 | bearer for /internal/edge/route (edge host → cell lookup) |
 | `LOOPZERO_SERVICE_AUTH_SECRET` | Y | openssl rand -hex 32 | cloud->engine shared service-auth secret |
 | `LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS` | N | openssl rand -hex 32 | service-auth secret (rotation) |
 | `LOOPZERO_SERVICE_AUTH_NONCE_REDIS_PASSWORD` | when-nonce-redis | redis password | service-auth nonce Redis password |

@@ -10,6 +10,7 @@ Set-equal to the rendered ConfigMap keys (hermetic Go guard).
 | `BASE_DOMAIN` | (empty) | operator runtime config |
 | `OPERATOR_INSECURE_SKIP_TLS` | `false` | operator runtime config |
 | `LOOPZERO_REQUIRE_CELL_0_KUBECONFIG` | `false` | operator runtime config |
+| `ROUTE_PROBE_PUBLIC_DOMAIN` | (empty) | when set, a route is probed at `https://<first label>.<domain>` — the URL users reach through the edge — instead of its internal hostname |
 | `LOOPZERO_PPROF_ADDR` | (empty) | operator runtime config |
 | `LOOPZERO_PPROF_ENABLED` | `false` | operator runtime config |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | (empty) | operator runtime config |
