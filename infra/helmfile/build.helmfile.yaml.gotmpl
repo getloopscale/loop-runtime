@@ -70,7 +70,12 @@ releases:
       # The bucket loopzero-api stages source bundles in (core.helmfile passes the
       # same environment value to loopzero-api's config.sourceBucket).
       - sourceBucket: {{ .Values | get "sourceBucket" "loopzero-builds" | quote }}
-{{- if .Values.profile.localRegistry }}
+{{- if .Values | get "platformImages.registry" "" }}
+        # Pinned by the commit CI built it from, from the environment's platform
+        # registry (#435) — the same rule as every other platform image.
+        images:
+          cloneRunner: "{{ .Values.platformImages.registry }}loopzero-clone-runner:{{ index .Values.platformImages.tags "loopzero-clone-runner" }}"
+{{- else if .Values.profile.localRegistry }}
         # The clone runner `task images:build` pushes to the local registry
         # (taskfiles/infra.yml tags it v0.1.0, the chart's default tag).
         images:

@@ -59,28 +59,28 @@ func TestNothingReachesForAWithdrawnMinioChannel(t *testing.T) {
 }
 
 // The upstream minio/minio chart defaults both its server and its client image to
-// quay.io/minio, which no longer serves them. The core helmfile must replace all
-// four values in BOTH branches — the local-registry profile and every other
-// environment — or one of them falls back to the dead default silently.
-func TestCoreHelmfileReplacesBothMinioChartImagesInEveryBranch(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "infra", "helmfile", "core.helmfile.yaml.gotmpl"))
-	if err != nil {
-		t.Fatalf("read core helmfile: %v", err)
-	}
-	text := string(raw)
-	// Anchor on the chart, not the name: `- name: minio` is also the repositories entry.
-	chart := strings.Index(text, "    chart: minio/minio\n")
-	if chart < 0 {
-		t.Fatal("core helmfile declares no release of chart minio/minio")
-	}
-	release := text[strings.LastIndex(text[:chart], "\n  - name: ")+1:]
-	if next := strings.Index(release[1:], "\n  - name: "); next >= 0 {
-		release = release[:next+1]
-	}
-	for _, key := range []string{"image.repository", "image.tag", "mcImage.repository", "mcImage.tag"} {
-		if got := strings.Count(release, "- name: "+key+"\n"); got != 2 {
-			t.Errorf("minio release sets %s in %d branch(es), want 2 (local registry and every other environment)", key, got)
-		}
+// quay.io/minio, which no longer serves them. Every environment that installs the
+// release must replace both, or it falls back to the dead default silently.
+//
+// Rendered, not counted: this used to count `- name: image.repository` lines in the
+// helmfile text, which says nothing about which branch an environment takes — and
+// the branches grew a third (a declared platform registry, #435).
+func TestEveryEnvironmentReplacesBothMinioChartImages(t *testing.T) {
+	for _, env := range []string{"dev", "dev-public", "drill", "prod", "standalone", "standalone-multi", "standalone-public"} {
+		t.Run(env, func(t *testing.T) {
+			values := helmfileValues(t, "core.helmfile.yaml.gotmpl", env, "minio", helmfileCoreEnv...)
+			for _, image := range []string{"image", "mcImage"} {
+				repo, _ := dig(values, image, "repository").(string)
+				tag, _ := dig(values, image, "tag").(string)
+				if repo == "" || tag == "" {
+					t.Errorf("%s: %s = %q:%q — the chart's withdrawn default would be used", env, image, repo, tag)
+					continue
+				}
+				if withdrawnMinioChannel.MatchString(" " + repo + ":") {
+					t.Errorf("%s: %s = %q reaches for a withdrawn MinIO channel (#394)", env, image, repo)
+				}
+			}
+		})
 	}
 }
 

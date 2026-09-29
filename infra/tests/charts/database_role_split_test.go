@@ -30,3 +30,18 @@ func TestBootstrapLoopZeroAPIConnectsThroughTheRoleSplitKeys(t *testing.T) {
 		}
 	}
 }
+
+// loopzero-cloud refuses to serve as the owner (#438), so its bootstrap install reads the
+// non-owner `loopzero_cloud` role's URL.
+func TestBootstrapLoopZeroCloudConnectsAsTheCloudRole(t *testing.T) {
+	chart := publishedChart(t, "loopzero-cloud")
+	rendered := renderChart(t, chart, "role-split", nil, filepath.Join(chart, "values-bootstrap.yaml"))
+	ref := regexp.MustCompile(`(?s)- name: "?DATABASE_URL"?\s+valueFrom:\s+secretKeyRef:\s+name: "?loopzero-db-credentials"?\s+key: "?([a-z-]+)"?`)
+	m := ref.FindStringSubmatch(rendered)
+	if m == nil {
+		t.Fatal("the bootstrap loopzero-cloud Deployment does not read DATABASE_URL from loopzero-db-credentials")
+	}
+	if m[1] != "cloud-uri" {
+		t.Errorf("loopzero-cloud reads DATABASE_URL from key %q, want cloud-uri — the owner's uri makes it refuse to serve", m[1])
+	}
+}

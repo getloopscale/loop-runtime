@@ -59,6 +59,17 @@ registries:
       "registry-1.docker.io":
         endpoint:
           - https://mirror.gcr.io
+# Kubelet image credential provider for Amazon ECR (#435) — how EKS nodes pull, with
+# no pull secret in any namespace. k3s enables it only when the bin directory AND the
+# config exist under /var/lib/rancher/credentialprovider, and `task
+# ecr:credential-provider` writes them only for an environment that declares
+# `platformImages`; everywhere else the directory is empty and nothing changes.
+# ${HOME} is expanded by k3d (it expands environment variables in this file).
+volumes:
+  - volume: ${HOME}/.loopzero/credentialprovider:/var/lib/rancher/credentialprovider
+    nodeFilters:
+      - server:*
+      - agent:*
 options:
   k3d:
     wait: true

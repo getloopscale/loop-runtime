@@ -231,8 +231,10 @@ DB_URI="${LOOPZERO_DB_URI:-postgresql://${LOOPZERO_DB_USER:-loopzero}:${DB_PASSW
 DB_ADMIN_PASSWORD="${LOOPZERO_DB_ADMIN_PASSWORD:-$(get_or_generate loopzero-db-credentials loopzero-system postgres-password)}"
 # #396 — loopzero-api refuses to serve requests over a pool that can bypass RLS
 # (db.AssertRequestPoolIsolated), so it connects as the non-owner `loopzero_api` role
-# and runs its cross-tenant loops as `loopzero_worker`. `uri` stays the OWNER's URL:
-# migrations run as the owner, and loopzero-cloud still reads it.
+# and runs its cross-tenant loops as `loopzero_worker`. loopzero-cloud refuses to serve as a
+# role holding an unnamed cross-tenant privilege, so it connects as `loopzero_cloud`, the
+# non-owner role migration 000063 creates (#438). `uri` stays the OWNER's URL: only
+# migrations run as the owner.
 #   in-cluster Postgres: both roles are created by `task db:roles` with these
 #     passwords — the same deterministic dev default as the owner's, for the same
 #     reason (the local toolchain and the Tilt values read it), overridable per role.
@@ -242,18 +244,25 @@ DB_ADMIN_PASSWORD="${LOOPZERO_DB_ADMIN_PASSWORD:-$(get_or_generate loopzero-db-c
 if [[ "$LOOPZERO_DB_HOST" == "postgresql.loopzero-system.svc.cluster.local" ]]; then
   DB_API_PASSWORD="${LOOPZERO_DB_API_PASSWORD:-loopzero-dev-password}"
   DB_WORKER_PASSWORD="${LOOPZERO_DB_WORKER_PASSWORD:-loopzero-dev-password}"
+  DB_CLOUD_PASSWORD="${LOOPZERO_DB_CLOUD_PASSWORD:-loopzero-dev-password}"
   DB_API_URI="postgresql://loopzero_api:${DB_API_PASSWORD}@${LOOPZERO_DB_HOST}:${LOOPZERO_DB_PORT:-5432}/${LOOPZERO_DB_NAME:-loopzero}?sslmode=${DB_SSLMODE}"
   DB_WORKER_URI="postgresql://loopzero_worker:${DB_WORKER_PASSWORD}@${LOOPZERO_DB_HOST}:${LOOPZERO_DB_PORT:-5432}/${LOOPZERO_DB_NAME:-loopzero}?sslmode=${DB_SSLMODE}"
+  DB_CLOUD_URI="postgresql://loopzero_cloud:${DB_CLOUD_PASSWORD}@${LOOPZERO_DB_HOST}:${LOOPZERO_DB_PORT:-5432}/${LOOPZERO_DB_NAME:-loopzero}?sslmode=${DB_SSLMODE}"
   DB_ROLE_LITERALS=(
     --from-literal=api-password="${DB_API_PASSWORD}"
     --from-literal=worker-password="${DB_WORKER_PASSWORD}"
     --from-literal=api-uri="${DB_API_URI}"
     --from-literal=worker-uri="${DB_WORKER_URI}"
+    --from-literal=cloud-password="${DB_CLOUD_PASSWORD}"
+    --from-literal=cloud-uri="${DB_CLOUD_URI}"
   )
 else
   DB_ROLE_LITERALS=(--from-literal=api-uri="${DB_URI}")
   if [[ -n "${LOOPZERO_WORKER_DB_URI:-}" ]]; then
     DB_ROLE_LITERALS+=(--from-literal=worker-uri="${LOOPZERO_WORKER_DB_URI}")
+  fi
+  if [[ -n "${LOOPZERO_CLOUD_DB_URI:-}" ]]; then
+    DB_ROLE_LITERALS+=(--from-literal=cloud-uri="${LOOPZERO_CLOUD_DB_URI}")
   fi
 fi
 apply_secret loopzero-db-credentials loopzero-system \
