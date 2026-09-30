@@ -186,6 +186,26 @@ The `chart-pairs` gate refuses a chart present in both trees, by `name` or as a 
 
 **The admission policies are ONE chart**, `charts/loopzero-admission-policies`: Helmfile installs it on core (release `admission-policies-mgmt`, overlay `charts/loopzero-admission-policies/values-mgmt.yaml`) and on every cell (release `admission-policies`), and ArgoCD consumes the same chart. The bootstrap copy `infra/helm/admission-policies` was deleted on 2026-09-25 (docs/decisions.md, "One chart per bootstrap/published pair"); it had been kept byte-identical by a parity test after 8 of 20 templates diverged. The system-actor exemption is one helper, `loopzero-admission.systemActorExemptions`, fed by `systemActorExemptions.platformServiceAccounts`.
 
+### Container images — two classes, two homes (read before touching any registry, build or publish path)
+
+The platform runs one region per cloud — Europe on AWS, Brazil on Google Cloud, the United States on
+Azure — with **private** images. Two classes of image, decided separately (`docs/decisions.md`,
+"Two image classes, two homes", 2026-09-30):
+
+| | Platform images | Tenant images |
+|---|---|---|
+| What | our software (loopzero-api, operators, loopzero-cloud, dashboard, data plane) | the customer's application, one per `loopzero deploy` |
+| Built by | our CI, once per version | the build plane of the tenant's region |
+| Lives in | **every** region's cloud registry (replicated, same digest, signed) | **only** the tenant's region's cloud registry (data residency) |
+| Namespace | `platform/*`, written only by CI via OIDC | `tenants/<tenant>/*`, written only by that region's build plane |
+
+- **The runtime registry is always the region's cloud registry** (ECR / Artifact Registry / ACR).
+  A cluster pulls only from its own region, with the cloud's workload identity.
+- **GHCR is never a runtime dependency and never holds tenant images.** It is a development copy of
+  the platform images only.
+- A new region adds its registry as a target of `.github/workflows/build-publish.yml` **when the
+  region is provisioned**, not before.
+
 ### Infrastructure — AWS re-platform in progress
 
 > **CTO mandate 2026-06-17** (ADR `../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`, ACCEPTED). The **L1 cloud-primitives layer** is being re-platformed **DigitalOcean/Pulumi → AWS/Terraform**, into two sibling repos: `../loopzero-infra-modules` (versioned blueprints) + `../loopzero-infra-live` (per-env Terragrunt units, per-component state isolation). Tooling is **Terraform**, not OpenTofu, not Pulumi.
@@ -333,6 +353,8 @@ in `CHANGELOG.md`.
 
 | Mistake | Fix |
 |---------|-----|
+| Pushing a tenant (application) image to GHCR, or to a registry outside the tenant's region | Tenant images live only in their region's cloud registry, under `tenants/<tenant>/*` — data residency (`docs/decisions.md`, "Two image classes, two homes") |
+| A cluster pulling a platform image from GHCR at runtime | Pull from the region's cloud registry; GHCR is a development copy, and a private GHCR would need a long-lived GitHub token in every cloud |
 | `pg_advisory_lock` (session-scoped) | Use `pg_advisory_xact_lock` |
 | Reading a default from the constructor fallback instead of the config | `api/internal/placement/engine.go:91` has `if maxPerCell <= 0 { maxPerCell = 500 }` — that is the **fallback**, not the delivered value. The real one is `config.go:511` (`envInt("MAX_TENANTS_PER_CELL", 5000)`) plus `charts/loopzero-api/values.yaml:121`. A capacity simulator read the 500, inflated the cell count tenfold, invented a `cell_count` bottleneck that does not exist, and produced a "Phase 1" that would have been a downgrade. When citing a default, cite the **config**, never the defensive guard. |
 | A CEL expression over `object.` in a `DELETE` rule | On `DELETE` the `object` is **not populated** as it is on CREATE/UPDATE. The expression raises an evaluation error and, under `failurePolicy: Fail`, that becomes a **general block**. Use `oldObject` to inspect the resource, or `request.*` to decide by identity. Third CEL trap in the family (the other two: `!has(request.subResource)` and the GC exemptions of B33). The `vap-delete-guardrail` gate blocks it. |

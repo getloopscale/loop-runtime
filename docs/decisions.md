@@ -265,7 +265,60 @@ requires it to name who is affected, what breaks and what was rejected — above
 
 | Date | Decision |
 |---|---|
+| 2026-09-30 | **Two image classes, two homes** — platform images are built once by our CI and replicated, signed and by digest, into the registry of every region that runs a cell; tenant (application) images are built and stored only in the registry of the tenant's own region. The runtime registry is always the region's cloud registry (ECR, Artifact Registry, ACR); GHCR is never a runtime dependency and never holds tenant images. Full record below the table. |
 | 2026-09-25 | **Retire Harbor; the registry is managed** — ECR on AWS, provisioned in `../loopzero-infra-live`; a self-hoster brings their own registry through `REGISTRY_URL`; locally `k3d-loopzero-registry` stays. Harbor leaves the engine entirely: the Helmfile releases, the wrapper chart, the api dual-push mirror, the tenant-operator provisioner, the admission allowlist entries, the monitoring rules and the Harbor-only resources of the legacy Pulumi stack. **Supersedes MEET-2026-04-11-048** (the DOCR→Harbor migration). Full record below the table. |
+
+**Two image classes, two homes** (2026-09-30, #470). Ratified by the project owner.
+
+The platform runs in several regions, each on its cloud — Europe on AWS, Brazil on Google Cloud,
+the United States on Azure — and its images are private. Two kinds of image cross that boundary,
+and their requirements point in opposite directions, so they are decided separately.
+
+| | **Platform images** | **Tenant images** |
+|---|---|---|
+| What | our software: loopzero-api, the operators, loopzero-cloud, the dashboard, the data plane (memory, rag, lens, promptly, skills, trust, storage) | the application a customer deploys, built by the build plane on each `loopzero deploy` |
+| Who builds | our CI (GitHub Actions), once per version | the build plane (BuildKit + cosign) of the tenant's region |
+| How many | a few, versioned | one per deploy per tenant, short-lived |
+| Where they must live | in **every** region that runs a cell | **only** in the tenant's region — data residency |
+| Who may write | the CI, through OIDC, from `develop`/`main` only | only that region's build plane, into that tenant's namespace |
+| Retention | by release | by deploy and retention policy |
+
+**Decision.**
+- **The runtime registry is the region's cloud registry** — ECR in an AWS region, Artifact
+  Registry in a Google Cloud region, ACR in an Azure region — for both classes. A cluster pulls
+  only from the registry of its own region, with the cloud's native workload identity; no
+  cluster depends on GitHub to start a pod.
+- **Platform images are replicated.** The CI builds once and pushes the same digest to each
+  regional registry, federated through OIDC (no stored registry credential), and signs and
+  verifies each copy with keyless cosign. Admission verifies by digest.
+- **Tenant images are resident.** The build plane of a region pushes to that region's registry
+  and nowhere else. They never go to GHCR.
+- **Inside a regional registry the classes are separate namespaces** — `platform/*` written only
+  by the CI, `tenants/<tenant>/*` written only by that region's build plane — each with its own
+  access policy and lifecycle rules.
+- **GHCR stays a development copy of the platform images**, not a runtime dependency. Removing it
+  is a separate decision, taken after measuring what still pulls from it (the dev-public
+  `loopzero-db` image and the loopzero-cloud edge e2e did on 2026-09-30).
+- A self-hoster still brings their own registry through `REGISTRY_URL` (2026-09-25 below).
+
+**What was rejected.**
+- *Centralise on GHCR and pull from it at runtime.* With private images every regional cluster —
+  or a pull-through cache in front of it — needs a GitHub credential, and GHCR accepts only a
+  classic personal access token for packages: long-lived, tied to a user, stored in every
+  cloud. Production would also depend on GitHub's availability to start a pod. And tenant code
+  would leave its region.
+- *A pull-through cache per region with GHCR upstream.* It suits public images; with private
+  ones it carries the same stored credential into every region. Pushing from CI with OIDC
+  stores none.
+- *One global registry for tenant images.* It breaks data residency and puts every tenant's
+  code behind one blast radius.
+
+**Consequences.**
+- Today the CI publishes platform images to GHCR and to ECR (the AWS region). A new region adds
+  its registry as one more target of `.github/workflows/build-publish.yml` when that region is
+  provisioned — not before (the input is `ecr_registry` today and becomes a list then).
+- Tenant images on dev-public still go to `k3d-loopzero-registry`; the per-region tenant registry is
+  provisioned with the cells (#448, `../loopzero-infra-live`).
 
 **Retire Harbor; the registry is managed** (2026-09-25). Decided by the project owner.
 

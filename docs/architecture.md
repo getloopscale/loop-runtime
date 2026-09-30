@@ -208,6 +208,24 @@ trees, by name or as a template-identical copy under another name.
 | `velero` | core | ours | — | `always` |
 <!-- END GENERATED TABLE -->
 
+## Container images — two classes, two homes
+
+One region per cloud (Europe on AWS, Brazil on Google Cloud, the United States on Azure), private
+images, and two classes with opposite requirements. The full record, with the alternatives
+rejected, is in `docs/decisions.md` ("Two image classes, two homes", 2026-09-30).
+
+| | Platform images | Tenant images |
+|---|---|---|
+| What | our software (loopzero-api, operators, loopzero-cloud, dashboard, data plane) | the customer's application, one per `loopzero deploy` |
+| Built by | our CI, once per version | the build plane of the tenant's region |
+| Lives in | **every** region's cloud registry (replicated, same digest, signed) | **only** the tenant's region's cloud registry (data residency) |
+| Namespace | `platform/*`, written only by CI via OIDC | `tenants/<tenant>/*`, written only by that region's build plane |
+
+A cluster pulls only from its own region's cloud registry, with native workload identity; the CI
+pushes platform images there through OIDC and signs each copy with keyless cosign, and admission
+verifies by digest. GHCR is a development copy of the platform images, never a runtime dependency,
+and never holds tenant images.
+
 ## Infrastructure — AWS re-platform in progress
 
 CTO mandate 2026-06-17. The **L1 cloud-primitives layer** is being re-platformed

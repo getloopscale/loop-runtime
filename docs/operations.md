@@ -172,6 +172,8 @@ Reconciled by `task bootstrap:standalone` locally, by Pulumi + Helmfile on drill
 | `static-assets-s3` | loopzero-system | `generate-runtime-secrets.sh:126` | nginx-s3-gateway | with the Spaces creds |
 | `loopzero-registry-pull` | loopzero-system (workload) | `bootstrap-cluster.sh:76` | every `loopzero-*` imagePullSecret | `doctl registry kubernetes-manifest` |
 
+**Registries** follow `docs/decisions.md` ("Two image classes, two homes", 2026-09-30): a cluster pulls only from its region's cloud registry — ECR on AWS, read by the dev cluster through the ECR kubelet credential provider — and the DOCR row above predates it. Tenant images stay in their region; GHCR is never a runtime source.
+
 **ESO-managed:** the ClusterCredential kubeconfig Secret in `loopzero-system` (core) is synced into the
 workload cluster as `cell-0.kubeconfig` for loopzero-api.
 

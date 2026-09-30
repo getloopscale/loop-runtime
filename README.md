@@ -643,7 +643,7 @@ This list named a thirteenth, `loopzero-platform`, until 2026-09-11; `charts/loo
 | **sigstore policy-controller** | `infra/helm/policy-controller/` | Admission deny-by-default; `loopzero-images-warn` warn-mode ClusterImagePolicy |
 
 > **Reusable image workflow.** `.github/workflows/build-publish.yml` is **reusable** and consumed cross-repo by sibling
-> projects (e.g. `loopzero-cloud` publishes its `loopzero-cloud` + `loopzero-dashboard` GHCR images through it —
+> projects (e.g. `loopzero-cloud` publishes its `loopzero-cloud` + `loopzero-dashboard` images to GHCR and to each region's registry through it —
 > keyless cosign + SBOM + SLSA). It exposes a `runner` input (default `ubuntu-latest`) so callers on
 > a billing-blocked org can build on a self-hosted runner: `runner: '["self-hosted","linux","x64"]'`.
 
@@ -673,7 +673,7 @@ Adding a new `.sh` file is refused by the `no-new-bash` gate — new logic belon
 |----------|---------------|
 | 3 DOKS clusters | v1.32, 2 nodes each, SFO3. Named `core`, `build`, `cell-N` since the B-001 rename — the old `mgmt` / `workload` / `runtime` appear in no filename |
 | PostgreSQL | v16, managed |
-| Container Registry | DigitalOcean (Professional) |
+| Container Registry | The region's cloud registry (ECR on AWS today). Platform images are replicated to every region; tenant images stay in their region — `docs/decisions.md`, "Two image classes, two homes" |
 | Edge proxy | Cloudflare Tunnel (zero public IPs, WAF/DDoS) |
 | Static delivery | CF Worker + DO Spaces CDN |
 | DNS | `*.dev.loopzero.example` via CF Tunnel |
