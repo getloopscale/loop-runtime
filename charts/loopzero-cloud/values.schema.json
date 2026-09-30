@@ -257,6 +257,11 @@
           "pattern": "^$|^https?://[^\\s]+$",
           "description": "Where Stripe checkout returns the browser (BILLING_RETURN_URL). Rendered only when set."
         },
+        "memoryBaseUrl": {
+          "type": "string",
+          "pattern": "^$|^https?://[^\\s]+$",
+          "description": "loopzero-memory base URL; unset leaves the memory surfaces and the edge's memory forward-auth off (THEMORY_BASE_URL)."
+        },
         "ragBaseUrl": {
           "type": "string",
           "pattern": "^$|^https?://[^\\s]+$",

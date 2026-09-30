@@ -82,7 +82,10 @@ config:
   # Where Stripe checkout returns the browser (BILLING_RETURN_URL).
   billingReturnUrl: ""
   # Data-plane base URLs. Each one unset leaves its dashboard surface off
-  # (RAG_BASE_URL, LENS_BASE_URL, TRAEFIK_MCP_BASE_URL).
+  # (THEMORY_BASE_URL, RAG_BASE_URL, LENS_BASE_URL, TRAEFIK_MCP_BASE_URL). The memory,
+  # RAG and lens ones also register the edge's forward-auth for /v1/{memory,rag,lens}/*.
+  # A wiringConfigMap may still supply THEMORY_BASE_URL; set only one of the two.
+  memoryBaseUrl: ""
   ragBaseUrl: ""
   lensBaseUrl: ""
   traefikMcpBaseUrl: ""

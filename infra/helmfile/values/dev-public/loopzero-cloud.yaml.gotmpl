@@ -67,7 +67,14 @@ config:
   # the host. The host address drifted twice — a loose process instead of the pipeline
   # artifact, then :8787, a port the host never published — and a Service name cannot
   # point at the wrong instance.
+  #
+  # Memory joins them for the edge (#470): THEMORY_BASE_URL is what registers loopzero-cloud's
+  # /internal/authz/forward, the authoriser the edge asks before /v1/memory/* reaches the
+  # service. It has no compose fallback — the compose memory was never reached from here.
 {{- $dataPlane := .Values | get "dataPlane.services" list }}
+{{- if has "loopzero-memory" $dataPlane }}
+  memoryBaseUrl: "http://loopzero-memory.loopzero-data-plane.svc.cluster.local:8080"
+{{- end }}
   ragBaseUrl: {{ ternary "http://loopzero-rag.loopzero-data-plane.svc.cluster.local:8787" "http://host.k3d.internal:18082" (has "loopzero-rag" $dataPlane) | quote }}
   lensBaseUrl: {{ ternary "http://loopzero-lens.loopzero-data-plane.svc.cluster.local:4318" "http://host.k3d.internal:18084" (has "loopzero-lens" $dataPlane) | quote }}
 
@@ -84,16 +91,18 @@ config:
   # lockstep (infra/tests/charts/loopzero_cloud_dev_public_wiring_test.go).
   prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local:80"
 
-# T2 CANONICAL 2026-07-16: materialise Secret `loopzero-rag-admin-key` from OpenBao
-# `secret/loopzero/cloud` property `rag_platform_admin_key` through the `loopzero-secrets-secrets`
-# ClusterSecretStore.
+# The data-plane admin keys (`loopzero-memory-platform-admin`, `loopzero-rag-admin-key`,
+# `loopzero-lens-admin-key`) are minted from each service's bootstrap token and written by
+# `loopzero-ops seed data-plane-admin-keys` (#470). The ExternalSecrets this overlay turned on
+# from 2026-07-16 never synced: they read `secret/loopzero/cloud` properties no step writes,
+# through a `loopzero-secrets-secrets` ClusterSecretStore the core cluster does not run
+# (measured 2026-09-30: SecretSyncedError on both). Left on, ESO would be a second writer
+# for the Secrets the seed owns.
 rag:
-  externalSecretEnabled: true
+  externalSecretEnabled: false
 
-# 2026-07-20 — the loopzero-lens equivalent: Secret `loopzero-lens-admin-key` from property
-# `lens_platform_admin_key`.
 lens:
-  externalSecretEnabled: true
+  externalSecretEnabled: false
 
 # dev-public DECLARES that it really charges.
 #

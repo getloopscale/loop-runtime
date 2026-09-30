@@ -56,32 +56,31 @@ func TestDevPublicLoopZeroCloudAndLoopZeroAPIQueryTheSamePrometheus(t *testing.T
 	}
 }
 
-// dashboardBroker is one backend the loopzero-cloud dashboard reaches through a broker:
-// a base URL in the ConfigMap, and an admin key delivered by an ExternalSecret.
+// dashboardBroker is one backend whose admin key the loopzero-cloud container reads
+// through a secretKeyRef.
 type dashboardBroker struct {
-	name      string // rag, lens
-	baseURL   string // ConfigMap key
-	adminKey  string // env var and Secret key
-	secret    string // target Secret and ExternalSecret name
-	vaultProp string // property under loopzero/cloud
+	name     string // rag, lens
+	adminKey string // env var and Secret key
+	secret   string // the Secret the seed writes
 }
 
 var dashboardBrokers = []dashboardBroker{
-	{"rag", "RAG_BASE_URL", "RAG_PLATFORM_ADMIN_KEY", "loopzero-rag-admin-key", "rag_platform_admin_key"},
-	{"lens", "LENS_BASE_URL", "LENS_PLATFORM_ADMIN_KEY", "loopzero-lens-admin-key", "lens_platform_admin_key"},
+	{"rag", "RAG_PLATFORM_ADMIN_KEY", "loopzero-rag-admin-key"},
+	{"lens", "LENS_PLATFORM_ADMIN_KEY", "loopzero-lens-admin-key"},
 }
 
 // TestDevPublicLoopZeroCloudReachesTheDashboardBrokers — with the base URL empty the
 // broker stays nil and every /v1/dashboard/<name>/* route is skipped (the RAG half
 // was delegated brief 2026-07-15; the lens half covers M41 read-only + M44
-// management routes).
+// management routes). THEMORY_BASE_URL also registers the edge's memory
+// forward-auth: unset, /v1/memory/* is authorised by nothing on this cluster (#470).
 func TestDevPublicLoopZeroCloudReachesTheDashboardBrokers(t *testing.T) {
 	data := configMapData(t, renderDevPublicLoopZeroCloud(t), "loopzero-cloud")
-	for _, b := range dashboardBrokers {
-		t.Run(b.name, func(t *testing.T) {
-			url, _ := data[b.baseURL].(string)
+	for _, baseURL := range []string{"THEMORY_BASE_URL", "RAG_BASE_URL", "LENS_BASE_URL"} {
+		t.Run(baseURL, func(t *testing.T) {
+			url, _ := data[baseURL].(string)
 			if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-				t.Errorf("ConfigMap/loopzero-cloud %s = %q, want an http(s):// URL", b.baseURL, url)
+				t.Errorf("ConfigMap/loopzero-cloud %s = %q, want an http(s):// URL", baseURL, url)
 			}
 		})
 	}
@@ -106,10 +105,16 @@ func TestDevPublicLoopZeroCloudReadsTheBrokerAdminKeysFromTheirSecrets(t *testin
 	}
 }
 
-// TestDevPublicLoopZeroCloudRendersTheBrokerAdminKeyExternalSecrets — the Secrets the
-// Deployment reads are materialised from OpenBao at loopzero/cloud, and owned by their
-// ExternalSecret so deleting it does not orphan the Secret.
-func TestDevPublicLoopZeroCloudRendersTheBrokerAdminKeyExternalSecrets(t *testing.T) {
+// TestDevPublicLoopZeroCloudLeavesTheBrokerAdminKeysToTheSeed — on dev-public the admin
+// keys are minted by `loopzero-ops seed data-plane-admin-keys`, which writes the Secrets the
+// Deployment reads. The ExternalSecrets that used to target the same Secrets never
+// synced here: they read an OpenBao property no step writes, through a
+// ClusterSecretStore this environment does not run (measured 2026-09-30:
+// SecretSyncedError on both, no ClusterSecretStore on the core cluster). Rendering them
+// would give each Secret a second writer, owned by ESO, that could overwrite the seed's
+// key the day a store appears (#470). The template stays for installations that do
+// hold the keys in OpenBao.
+func TestDevPublicLoopZeroCloudLeavesTheBrokerAdminKeysToTheSeed(t *testing.T) {
 	template := filepath.Join(repoRoot(t), "charts/loopzero-cloud/templates/externalsecret-admin-keys.yaml")
 	if _, err := os.Stat(template); err != nil {
 		t.Fatalf("the ExternalSecret template is gone: %v", err)
@@ -117,22 +122,34 @@ func TestDevPublicLoopZeroCloudRendersTheBrokerAdminKeyExternalSecrets(t *testin
 	rendered := renderDevPublicLoopZeroCloud(t)
 	for _, b := range dashboardBrokers {
 		t.Run(b.name, func(t *testing.T) {
-			es := renderedObject(t, rendered, "ExternalSecret", b.secret)
-			if es == nil {
-				t.Fatalf("ExternalSecret/%s is not rendered (%s.externalSecretEnabled off?)", b.secret, b.name)
-			}
-			if got := dig(es, "spec", "target", "name"); got != b.secret {
-				t.Errorf("target.name = %v, want %s", got, b.secret)
-			}
-			if got := dig(es, "spec", "target", "creationPolicy"); got != "Owner" {
-				t.Errorf("target.creationPolicy = %v, want Owner", got)
-			}
-			ref := externalSecretRemoteRef(es, b.adminKey)
-			if ref == nil || ref["key"] != "loopzero/cloud" || ref["property"] != b.vaultProp {
-				t.Errorf("remoteRef for %s = %v, want key=loopzero/cloud property=%s", b.adminKey, ref, b.vaultProp)
+			if es := renderedObject(t, rendered, "ExternalSecret", b.secret); es != nil {
+				t.Errorf("ExternalSecret/%s is rendered — a second writer for the Secret the seed owns", b.secret)
 			}
 		})
 	}
+}
+
+// TestDevPublicLoopZeroCloudReadsTheMemoryAdminKeyFromTheSeededSecret — the memory
+// platform-admin key reaches the pod through envFrom, optional, from the Secret the
+// seed writes.
+func TestDevPublicLoopZeroCloudReadsTheMemoryAdminKeyFromTheSeededSecret(t *testing.T) {
+	deploy := renderedObject(t, renderDevPublicLoopZeroCloud(t), "Deployment", "loopzero-cloud")
+	if deploy == nil {
+		t.Fatal("no Deployment loopzero-cloud in the render")
+	}
+	containers, _ := dig(deploy, "spec", "template", "spec", "containers").([]any)
+	for _, c := range containers {
+		sources, _ := dig(c, "envFrom").([]any)
+		for _, src := range sources {
+			if dig(src, "secretRef", "name") == "loopzero-memory-platform-admin" {
+				if dig(src, "secretRef", "optional") != true {
+					t.Error("envFrom loopzero-memory-platform-admin is not optional — loopzero-cloud would not start before the seed ran")
+				}
+				return
+			}
+		}
+	}
+	t.Error("no container reads envFrom secretRef loopzero-memory-platform-admin")
 }
 
 // containerEnvSecretRef returns valueFrom.secretKeyRef of the named env var of the
@@ -149,18 +166,6 @@ func containerEnvSecretRef(deploy map[string]any, container, env string) map[str
 				ref, _ := dig(e, "valueFrom", "secretKeyRef").(map[string]any)
 				return ref
 			}
-		}
-	}
-	return nil
-}
-
-// externalSecretRemoteRef returns the remoteRef of the data entry for secretKey, or nil.
-func externalSecretRemoteRef(es map[string]any, secretKey string) map[string]any {
-	data, _ := dig(es, "spec", "data").([]any)
-	for _, d := range data {
-		if dig(d, "secretKey") == secretKey {
-			ref, _ := dig(d, "remoteRef").(map[string]any)
-			return ref
 		}
 	}
 	return nil
