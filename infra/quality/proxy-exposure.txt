@@ -41,9 +41,9 @@ app-dev.loopzero.example /sessions/whoami | reviewed | narrowed from /sessions/*
 app-dev.loopzero.example /self-service/* | reviewed | Kratos self-service flow UI; the browser drives these flows and needs the flow body
 app-dev.loopzero.example /v1/* | reviewed | loopzero-cloud BFF; authenticated, returns only the caller's own tenant data
 app-dev.loopzero.example /v1/integrations/github/* | reviewed | loopzero-cloud BFF; GitHub installation data scoped to the caller's tenant
-app-dev.loopzero.example /v1/memory/* | reviewed | data-plane loopzero-memory behind the BFF admin key; edge is fail-closed 401 without it
-app-dev.loopzero.example /v1/rag/* | reviewed | data-plane loopzero-rag behind the BFF admin key; edge is fail-closed 401 without it
-app-dev.loopzero.example /v1/lens/* | reviewed | data-plane loopzero-lens behind the BFF admin key; edge is fail-closed 401 without it
+app-dev.loopzero.example /v1/memory/* | reviewed | data-plane loopzero-memory (core NodePort :18081) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
+app-dev.loopzero.example /v1/rag/* | reviewed | data-plane loopzero-rag (core NodePort :18082) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
+app-dev.loopzero.example /v1/lens/* | reviewed | data-plane loopzero-lens (core NodePort :18084) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
 app-dev.loopzero.example @auth_bff | reviewed | loopzero-cloud BFF auth exchange; mints the caller's own token
 app-dev.loopzero.example /engine/* | reviewed | engine API via BFF; tenant-scoped by the same auth the CLI uses
 app-dev.loopzero.example /api/v1/webhooks/github | internal | inbound GitHub webhook; the response is consumed by GitHub, never rendered in a browser

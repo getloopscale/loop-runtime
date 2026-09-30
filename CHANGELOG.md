@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `loopzero-ops seed data-plane-admin-keys` gives loopzero-cloud a working platform-admin key for each data-plane service on the core cluster — keeping one that still authenticates, minting one from the service's bootstrap token otherwise, failing with a clear reason when the bootstrap is refused, and rolling loopzero-cloud onto the keys; `loopzero-ops seed data-plane-edge` checks that the public edge refuses an anonymous data-plane call through loopzero-cloud's own authoriser. Both run in the post-cleanroom seed chain (#470)
+
 - dev-public runs its data plane — memory, RAG and lens — from Helmfile on the core cluster, one service at a time as each repository publishes to Amazon ECR, each with its own Postgres and pinned by commit. Lens moves first. They ran as compose containers started from directories that no longer exist, so nothing versioned could recreate them, and two answered where nothing looked: memory on 8080 while the seed chain probed 18081, and loopzero-cloud reached RAG at :8787, a port the host never published — it now reaches a moved service by Service name and one not moved yet where it actually listens (#446).
 - The production edge routes a dynamic app to the cell its tenant was placed on. The engine publishes each host's cell to the edge's KV store (`route:<host>`), writing only changes and never removing a route on a refresh that could not read every tenant; the Worker maps the cell to its ingress (`ingress:<cell>`) and answers 503 when that ingress is unknown. The old path parsed a tenant out of the host, which the platform's hostnames do not allow, and could not reach any cell (#448).
 
@@ -94,6 +96,8 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+
+- On dev-public, `/v1/memory/*`, `/v1/rag/*` and `/v1/lens/*` at app-dev.loopzero.example are authorised by the core cluster's loopzero-cloud — the same accounts the dashboard and `loopzero login` use — and served by the core cluster's data plane, instead of passing through an unversioned compose stack with its own user database; the edge also refuses `/internal/*` outright (#470)
 
 - The core cluster runs agentgateway (v1.5.0) on the Kubernetes Gateway API (v1.6.0, vendored and pinned by sha256), in every environment. It is the MCP gateway the platform moves to: every MCP server becomes an OAuth 2.1 resource server behind it, per the 2026-07-28 MCP authorization spec (#470).
 - A data-plane service can declare the database roles it serves requests as (`postgres.roles`); each is created without superuser or BYPASSRLS before the service migrates, with its own generated password. loopzero-memory serves as `themory_app` and migrates as the owner: it refuses to start as a superuser, whom row level security does not bind, and crash-looped on its first install for exactly that reason (#446).
@@ -384,6 +388,8 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+
+- A seed that restarts a workload (loopzero-api, loopzero-cloud, CoreDNS) waits until the old pod is gone; it used to report the rollout settled while the old pod was still the one answering and the new one was not ready (#470)
 
 - A dev-public install no longer needs a hand reload of the edge: `task setup` reloads it as its last step on dev-public, when the edge-route token and the core cluster exist, so app URLs route with the fresh token and the dashboard is served from its pinned image (#455).
 - dev-public's edge serves the dashboard from the `loopzero-dashboard` image pinned beside the platform images, extracted once per tag, instead of a directory copied by hand with no record of the commit it came from. A fresh droplet now serves the dashboard with no manual step (#462).

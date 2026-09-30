@@ -27,7 +27,7 @@ var dataPlanePorts = map[string]struct {
 	nodePort, hostPort, servicePort int
 	consumerKey                     string // loopzero-cloud config key, "" when loopzero-cloud does not call it
 }{
-	"loopzero-memory": {30181, 18081, 8080, ""},
+	"loopzero-memory": {30181, 18081, 8080, "memoryBaseUrl"},
 	"loopzero-rag":    {30182, 18082, 8787, "ragBaseUrl"},
 	"loopzero-lens":   {30184, 18084, 4318, "lensBaseUrl"},
 }

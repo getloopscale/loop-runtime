@@ -77,16 +77,16 @@ secrets:
       key: RAG_PLATFORM_ADMIN_KEY
       optional: true
       reason: >-
-        Materialised only where rag.externalSecretEnabled is on (an ESO controller is
-        required); without it the RAG dashboard broker cannot mint tenant keys and its
+        Written by ESO where rag.externalSecretEnabled is on, or minted by
+        `loopzero-ops seed data-plane-admin-keys` where it is not (dev-public); without it the RAG dashboard broker cannot mint tenant keys and its
         surface stays off.
     - name: LENS_PLATFORM_ADMIN_KEY
       secretName: loopzero-lens-admin-key
       key: LENS_PLATFORM_ADMIN_KEY
       optional: true
       reason: >-
-        Materialised only where lens.externalSecretEnabled is on (an ESO controller is
-        required); without it the lens dashboard broker cannot mint tenant keys and its
+        Written by ESO where lens.externalSecretEnabled is on, or minted by
+        `loopzero-ops seed data-plane-admin-keys` where it is not (dev-public); without it the lens dashboard broker cannot mint tenant keys and its
         surface stays off.
 
 billing:

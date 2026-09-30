@@ -46,8 +46,12 @@ func waitForRolloutSettled(ctx context.Context, cli ctrlclient.Client,
 			if d.Spec.Replicas != nil {
 				want = *d.Spec.Replicas
 			}
+			// Status.Replicas above the desired count means an old pod the rolling update
+			// has not removed yet — and it is that old pod readyReplicas is counting while
+			// the new one starts (measured on loopzero-cloud, #470).
 			return d.Status.ObservedGeneration >= d.Generation &&
-				d.Status.ReadyReplicas == want && d.Status.UpdatedReplicas == want, nil
+				d.Status.ReadyReplicas == want && d.Status.UpdatedReplicas == want &&
+				d.Status.Replicas <= want, nil
 		})
 }
 

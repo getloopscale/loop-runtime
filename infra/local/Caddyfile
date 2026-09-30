@@ -215,22 +215,64 @@ app-dev.loopzero.example {
     }
   }
 
-  # DP7 (2026-07-14) — Data-plane products loopzero-memory / loopzero-rag / loopzero-lens
-  # onboarded per Model B ForwardAuth pattern. Traefik :8092 (loopzero-workspace
-  # docker-compose edge) owns the per-tenant credential mint
-  # (loopzero_live_* / rag_live_* → forward-auth-{memory,rag,lens} → data-plane
-  # host processes on ports 18081/18082/18084). Caddy proxies /v1/{memory,rag,
-  # lens}/* through so the Red Team reaches them at app-dev.loopzero.example.
-  # MUST precede the /v1/* catch-all below (Caddy first-match by longest
-  # prefix). ADR: .claude/knowledge-base/decisions/2026-07-14-data-plane-cleanroom-integration.md
+  # Data plane — loopzero-memory / loopzero-rag / loopzero-lens (#470). Each call is authorised by the
+  # core cluster's loopzero-cloud (localhost:3002, its NodePort) before it reaches a service:
+  # its forward-auth endpoint validates the caller's loopzero_live_* key, mints a per-tenant
+  # key on the service, and answers it in `Authorization` plus the caller's identity in
+  # `X-LoopZero-User-Id`; any other answer (401/403/503) goes back to the client and nothing
+  # reaches the service. The path loses its product prefix (/v1/memory/x → /v1/x) and
+  # goes to the service's NodePort on the core cluster (infra/k3d/core-cluster.yaml).
+  #
+  # Until #470 these went to a docker-compose Traefik on :8092 that authorised against a
+  # second loopzero-cloud with its own user database, from directories no longer on the host.
+  #
+  # A client-supplied X-LoopZero-User-Id is dropped BEFORE forward_auth so only the one the
+  # authoriser returns reaches the service, and `route` keeps that order: Caddy's default
+  # order runs forward_auth before request_header, which would drop the identity the
+  # authoriser just copied (the same trap `cell_edge` below records).
+  #
+  # MUST precede the /v1/* catch-all below.
   handle /v1/memory/* {
-    reverse_proxy localhost:8092
+    route {
+      request_header -X-LoopZero-User-Id
+      forward_auth localhost:3002 {
+        uri /internal/authz/forward
+        copy_headers Authorization X-LoopZero-User-Id
+      }
+      uri path_regexp ^/v1/memory/ /v1/
+      reverse_proxy localhost:18081
+    }
   }
   handle /v1/rag/* {
-    reverse_proxy localhost:8092
+    route {
+      request_header -X-LoopZero-User-Id
+      forward_auth localhost:3002 {
+        uri /internal/authz/forward-rag
+        copy_headers Authorization X-LoopZero-User-Id
+      }
+      uri path_regexp ^/v1/rag/ /v1/
+      reverse_proxy localhost:18082
+    }
   }
   handle /v1/lens/* {
-    reverse_proxy localhost:8092
+    route {
+      request_header -X-LoopZero-User-Id
+      forward_auth localhost:3002 {
+        uri /internal/authz/forward-lens
+        copy_headers Authorization X-LoopZero-User-Id
+      }
+      uri path_regexp ^/v1/lens/ /v1/
+      reverse_proxy localhost:18084
+    }
+  }
+
+  # loopzero-cloud's /internal/* routes (forward-auth, the MCP resolve) are the authorisation
+  # itself and sit outside every auth middleware; the edge above calls them on the host.
+  # From the internet, /internal/authz/forward would hand any valid loopzero_live_* key a
+  # per-tenant data-plane key in a response header. Nothing below proxies /internal/*
+  # today; this makes it a refusal rather than an absence (#470).
+  handle /internal/* {
+    respond 404
   }
 
   # T6.2 follow-up canonical (2026-06-12 sponsor walkthrough catch): loopzero-cloud

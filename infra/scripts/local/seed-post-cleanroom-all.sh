@@ -23,6 +23,8 @@
 # 7. loopzero-ops seed broker (M15 W3)       — loopzero-broker token (the store is the
 #                                    cell helmfile's release loopzero-broker)
 # 9. seed-tenant-fixture-canonical.sh — subscription plan + GH installation
+# 17. loopzero-ops seed data-plane-admin-keys — loopzero-cloud's data-plane admin keys (#470)
+# 17g. loopzero-ops seed data-plane-edge      — the edge authorises the data plane (#470)
 #
 # A step seeds secret material or data no helmfile can declare. The four that
 # patched objects helmfile renders — patch-kratos, hydra-urls, loki-cross-cluster
@@ -414,45 +416,35 @@ else
   skip_step "16-data-plane-poller-first-tick" "skipped — loopzero-api ConfigMap has LOOPZERO_DATA_PLANE_POLLER_ENABLED='${POLLER_ENABLED_CFG:-<absent>}' (poller not wired for this env)"
 fi
 
-# Step 17 (NEW 2026-07-14) — data-plane host + edge fail-closed probes.
-# Per ADR .claude/knowledge-base/decisions/2026-07-14-data-plane-cleanroom-integration.md
-# (Option D — inline curl probes, no new .sh). Asserts the 3 data-plane
-# products (loopzero-memory / loopzero-rag / loopzero-lens) are UP + reachable through the
-# Caddy dev-public edge with the Model B ForwardAuth fail-closed contract
-# holding (401 without a `loopzero_live_*` / `rag_live_*` key). Env-gated to
-# dev-public — only environment where Caddy proxies data-plane paths.
+# Step 17 (#470) — loopzero-cloud's platform-admin key for every data-plane service on the
+# core cluster. loopzero-cloud mints per-tenant keys with it behind the edge's forward-auth;
+# without it every authorised /v1/{memory,rag,lens}/* call answers 503. Keeps a stored
+# key that still authenticates, mints one otherwise, and rolls loopzero-cloud onto the keys
+# (waiting for it). SKIPs where no data-plane service is deployed.
+run_step "17-seed-data-plane-admin-keys" "(cd $REPO_ROOT/cmd/loopzero-ops && go run . seed data-plane-admin-keys ${VERIFY_FLAG:+--verify})"
+
+# Step 17a-g — data-plane services up, and the edge authorising them. Env-gated to
+# dev-public, the only environment whose Caddy edge serves the data plane.
 #
-# 6 probes total (2 per product):
-#   - Host process alive (memory expects 200 on /v1/health; rag expects 401 on
-#     /v1/health because rag's healthz requires auth by design; lens expects
-#     200 on /health).
-#   - Edge fail-closed (all 3: 401 on app-dev.loopzero.example/v1/{memory,rag,lens}/).
+# The host probes reach each service's NodePort on the core cluster (infra/k3d/
+# core-cluster.yaml): memory /v1/health 200, rag /v1/health 200 (HTTP surface contract
+# B-115), lens /v1/healthz 200.
 #
-# A FAIL here means (a) the workspace docker stack is down (`make up-local`)
-# OR (b) the data-plane host process is down (`make {memory,rag,lens}-up`)
-# OR (c) Caddy dev-public routes regressed. Fix path is documented in the ADR.
+# The edge probe is `loopzero-ops seed data-plane-edge`: an anonymous call must be refused
+# by loopzero-cloud's forward-auth itself. It replaced three `curl … = 401` checks, which
+# the compose Traefik this edge used before #470 passed just as well — a 401 from the
+# service, or from a different authoriser, looked identical to them.
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
   DP_EDGE="${LOOPZERO_DATA_PLANE_EDGE:-https://app-dev.loopzero.example}"
-
-  # loopzero-memory (port 18081) — /v1/health is public (returns 200)
   run_step "17a-data-plane-memory-host" "curl -fsS --max-time 5 http://localhost:18081/v1/health -o /dev/null"
-  run_step "17b-data-plane-memory-edge-401" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 $DP_EDGE/v1/memory/)\" = '401'"
-
-  # loopzero-rag (port 18082) — /v1/health is public liveness (HTTP surface contract B-115). It
-  # expected 401 while RAG ran a compose image older than that contract (#446).
   run_step "17c-data-plane-rag-host" "curl -fsS --max-time 5 http://localhost:18082/v1/health -o /dev/null"
-  run_step "17d-data-plane-rag-edge-401" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 $DP_EDGE/v1/rag/)\" = '401'"
-
-  # loopzero-lens (port 18084) — /v1/healthz is the public liveness probe (CD playbook Phase 5)
   run_step "17e-data-plane-lens-host" "curl -fsS --max-time 5 http://localhost:18084/v1/healthz -o /dev/null"
-  run_step "17f-data-plane-lens-edge-401" "test \"\$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 $DP_EDGE/v1/lens/)\" = '401'"
+  run_step "17g-seed-data-plane-edge" "(cd $REPO_ROOT/cmd/loopzero-ops && LOOPZERO_EDGE_URL=$DP_EDGE go run . seed data-plane-edge)"
 else
   skip_step "17a-data-plane-memory-host" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-  skip_step "17b-data-plane-memory-edge-401" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
   skip_step "17c-data-plane-rag-host" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-  skip_step "17d-data-plane-rag-edge-401" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
   skip_step "17e-data-plane-lens-host" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
-  skip_step "17f-data-plane-lens-edge-401" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
+  skip_step "17g-seed-data-plane-edge" "skipped — only applicable in dev-public (current: ${LOOPZERO_HELMFILE_ENV:-unset})"
 fi
 
 # Summary
