@@ -235,6 +235,10 @@ tasks:
       - task: bootstrap:standalone:post-db
       - task: dev:seed
       - task: tokens:provision
+      # dev-public: reload the edge now that the edge-route token Secret and the core
+      # cluster exist — the edge bootstrap runs before setup, so without this every
+      # cleanroom served the previous token until a hand reload (#455).
+      - '[ "${LOOPZERO_HELMFILE_ENV:-}" != "dev-public" ] || task dev-public:caddy'
 
   bootstrap:standalone:
     desc: |

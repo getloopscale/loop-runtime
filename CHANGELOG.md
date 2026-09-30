@@ -382,6 +382,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A dev-public install no longer needs a hand reload of the edge: `task setup` reloads it as its last step on dev-public, when the edge-route token and the core cluster exist, so app URLs route with the fresh token and the dashboard is served from its pinned image (#455).
 - dev-public's edge serves the dashboard from the `loopzero-dashboard` image pinned beside the platform images, extracted once per tag, instead of a directory copied by hand with no record of the commit it came from. A fresh droplet now serves the dashboard with no manual step (#462).
 - Apps on any cell can read their secrets: the secret-fetch broker authenticates each cell's External Secrets by a token of its own (`LOOPZERO_BROKER_TOKENS`) and serves the tenants placed on that cell. It treated every request as cell-0's, so a tenant on another cell was refused, and the dev seed issued the token to cell-0 only. loopzero-api refuses to start on a malformed `LOOPZERO_BROKER_TOKENS`, a cell listed twice, or two cells sharing a token, naming the problem without echoing a token (#456).
 - Reloading the dev-public edge no longer takes the dashboard down: the install refuses to touch the live edge when `LOOPZERO_DASHBOARD_DIST` holds no dashboard build, instead of serving a directory that does not exist, and its verification fails on a 404 it used to report as a healthy upstream (#462).
