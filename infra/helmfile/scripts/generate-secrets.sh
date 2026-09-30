@@ -321,7 +321,8 @@ apply_secret loopzero-api-internal loopzero-system \
 
 # 1.e) The data plane (#446): dev-public runs memory, RAG and lens from Helmfile in the
 # loopzero-data-plane namespace, and each release reads one Secret named after it. The database
-# password is generated and preserved across runs, like the rest; the model provider key and
+# password, and the password of the role a service serves requests as (postgres.roles in
+# infra/helm/data-plane-service), are generated and preserved across runs, like the rest; the model provider key and
 # the admin bootstrap token are the operator's (`loopzero-ops creds env`), with the bootstrap
 # token generated when none is given. Other environments do not run the data plane here.
 if [[ "$ENV" == "dev-public" ]]; then
@@ -333,6 +334,7 @@ if [[ "$ENV" == "dev-public" ]]; then
     fi
     apply_secret "$svc" loopzero-data-plane \
       --from-literal=postgres-password="$(get_or_generate "$svc" loopzero-data-plane postgres-password)" \
+      --from-literal=app-role-password="$(get_or_generate "$svc" loopzero-data-plane app-role-password)" \
       --from-literal=admin-bootstrap-token="${LOOPZERO_DATA_PLANE_ADMIN_BOOTSTRAP_TOKEN:-$(get_or_generate "$svc" loopzero-data-plane admin-bootstrap-token)}" \
       --from-literal=openai-api-key="$OPENAI_KEY"
   done

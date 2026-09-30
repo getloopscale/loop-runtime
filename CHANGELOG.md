@@ -95,6 +95,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- A data-plane service can declare the database roles it serves requests as (`postgres.roles`); each is created without superuser or BYPASSRLS before the service migrates, with its own generated password. loopzero-memory serves as `themory_app` and migrates as the owner: it refuses to start as a superuser, whom row level security does not bind, and crash-looped on its first install for exactly that reason (#446).
 - Memory completes dev-public's data plane on the core cluster (`loopzero-memory 01988fb`), published on host port 18081 where the seed chain probes it. The compose deployment it replaces answered on 8080 and held no memories (#446).
 - RAG joins lens on dev-public's core cluster (`loopzero-rag 76fe189`, its database on `loopzero-db 0.167.0` — the image the compose deployment ran is no longer published), and loopzero-cloud reaches it by Service name. The compose database it replaces held no data (#446).
 - dev-public runs the engine and the infrastructure images built from `32e5643`: the API and the four operators, and MinIO, the clone runner, the SBOM scanner and the image signer, which pass the vulnerability gate for the first time since they moved to ECR (#441).
