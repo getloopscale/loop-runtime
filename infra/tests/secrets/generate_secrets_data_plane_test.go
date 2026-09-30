@@ -93,3 +93,18 @@ func TestGenerateSecretsGivesEachDataPlaneServiceAnApplicationRolePassword(t *te
 		}
 	}
 }
+
+// A service whose worker connects as its own role (loopzero-rag's rag_worker, #474) reads that
+// role's password from the same Secret, distinct from the app role's and the owner's.
+func TestGenerateSecretsGivesEachDataPlaneServiceAWorkerRolePassword(t *testing.T) {
+	got := dataPlaneLiterals(t, "dev-public", "LOOPZERO_OPENAI_API_KEY=sk-test")
+	for _, name := range dataPlaneSecrets {
+		pw := got[name]["worker-role-password"]
+		if len(pw) < 32 {
+			t.Errorf("%s: worker-role-password missing or short (len %d)", name, len(pw))
+		}
+		if pw == got[name]["app-role-password"] || pw == got[name]["postgres-password"] {
+			t.Errorf("%s: worker-role-password reuses another role's password", name)
+		}
+	}
+}

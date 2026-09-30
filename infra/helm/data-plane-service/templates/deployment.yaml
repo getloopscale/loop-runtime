@@ -89,7 +89,7 @@ spec:
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           command: {{ toJson $.Values.migrations.command }}
           env:
-            {{- include "dps.env" $ | nindent 12 }}
+            {{- include "dps.env" (dict "root" $ "process" "app") | nindent 12 }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -107,7 +107,7 @@ spec:
           command: {{ toJson . }}
           {{- end }}
           env:
-            {{- include "dps.env" $ | nindent 12 }}
+            {{- include "dps.env" (dict "root" $ "process" $component) | nindent 12 }}
           {{- if eq .name "" }}
           ports:
             - name: http

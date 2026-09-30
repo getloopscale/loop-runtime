@@ -156,3 +156,29 @@ func readCoreClusterPorts(t *testing.T) map[string]bool {
 	}
 	return published
 }
+
+// loopzero-rag refuses to serve as a superuser and its worker refuses any role that cannot
+// cross workspaces, while its migrations need the owner (#474). dev-public connects each
+// process as the role it insists on and migrates as the owner before the app starts.
+func TestDevPublicRAGConnectsEachProcessAsItsRoleAndMigratesAsTheOwner(t *testing.T) {
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopzero-rag",
+		"infra/helm/data-plane-service", helmfileCoreEnv...)
+	docs := parseDocs(t, rendered)
+
+	for deploy, role := range map[string]string{"loopzero-rag": "rag_app", "loopzero-rag-worker": "rag_worker"} {
+		env := asWorkload(t, findDoc(t, docs, "Deployment", deploy)).Spec.Template.Spec.Containers[0].Env
+		i := envIndex(env, "LOOPZERORAG_PG_URI")
+		if i < 0 || !strings.HasPrefix(env[i].Value, "postgres://"+role+":") {
+			t.Errorf("%s: LOOPZERORAG_PG_URI does not connect as %s: %+v", deploy, role, env)
+		}
+	}
+
+	init := asWorkload(t, findDoc(t, docs, "Deployment", "loopzero-rag")).Spec.Template.Spec.InitContainers
+	last := init[len(init)-1]
+	if last.Name != "migrate" || strings.Join(last.Command, " ") != "node_modules/.bin/tsx src/migrate.ts" {
+		t.Fatalf("loopzero-rag's last init container = %s %v, want migrate running src/migrate.ts", last.Name, last.Command)
+	}
+	if i := envIndex(last.Env, "LOOPZERORAG_MIGRATE_PG_URI"); i < 0 || !strings.HasPrefix(last.Env[i].Value, "postgres://therag:") {
+		t.Errorf("migrate does not connect as the owner: %+v", last.Env)
+	}
+}
