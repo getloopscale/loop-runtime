@@ -367,3 +367,94 @@ func TestDataPlaneServiceRefusesARoleNameThatIsNotAnIdentifier(t *testing.T) {
 		t.Error("rendered a role whose name breaks out of the SQL literal")
 	}
 }
+
+// A service whose migrations are a separate command (loopzero-rag, #474) declares it; the
+// chart runs it with the service's own image and environment as the app's last init
+// container — after its roles exist, before it serves — so a deploy leaves the schema at
+// the version the image expects. Only the app runs it: a worker migrating too would race
+// the app for the same schema.
+func migrationValues() string {
+	return dataPlaneValues + "migrations:\n  command: [\"node\", \"dist/migrate.js\"]\n"
+}
+
+func TestDataPlaneServiceMigratesBeforeTheAppStarts(t *testing.T) {
+	w := asWorkload(t, findDoc(t, renderDataPlane(t, migrationValues()), "Deployment", "loopzero-memory"))
+	init := w.Spec.Template.Spec.InitContainers
+
+	last := init[len(init)-1]
+	if last.Name != "migrate" {
+		t.Fatalf("init containers = %+v, want migrate last", init)
+	}
+	if last.Image != "registry.example/loopzero-memory:0123456789abcdef0123456789abcdef01234567" {
+		t.Errorf("migrate runs %s, want the service's own image", last.Image)
+	}
+	if got := strings.Join(last.Command, " "); got != "node dist/migrate.js" {
+		t.Errorf("migrate command = %q, want %q", got, "node dist/migrate.js")
+	}
+	if envIndex(last.Env, "LOOPZEROMEM_PG_URI") < 0 || envIndex(last.Env, "POSTGRES_PASSWORD") < 0 {
+		t.Errorf("migrate env = %+v, want the service's database environment", last.Env)
+	}
+}
+
+func TestDataPlaneServiceWorkersDoNotMigrate(t *testing.T) {
+	w := asWorkload(t, findDoc(t, renderDataPlane(t, migrationValues()), "Deployment", "loopzero-memory-worker"))
+	for _, c := range w.Spec.Template.Spec.InitContainers {
+		if c.Name == "migrate" {
+			t.Errorf("the worker runs the migrations too; only the app may")
+		}
+	}
+}
+
+func TestDataPlaneServiceWithoutMigrationsHasNoMigrateStep(t *testing.T) {
+	w := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopzero-memory"))
+	for _, c := range w.Spec.Template.Spec.InitContainers {
+		if c.Name == "migrate" {
+			t.Errorf("a service that declares no migrations got a migrate init container")
+		}
+	}
+}
+
+// loopzero-rag's server and worker read the same LOOPZERORAG_PG_URI but must connect as different
+// roles — rag_app is bound to one workspace by row level security, rag_worker crosses them
+// through named policies — and each refuses to boot as the other (#474). A role can name
+// the processes it serves ("app" is the service itself); without that it serves them all.
+func perProcessRoleValues() string {
+	return strings.Replace(dataPlaneValues, "uriEnv: LOOPZEROMEM_PG_URI\n  dataPath", `uriEnv: LOOPZEROMEM_MIGRATE_PG_URI
+  roles:
+    - { name: themory_app, uriEnv: LOOPZEROMEM_PG_URI, passwordKey: app-role-password, processes: [app] }
+    - { name: themory_worker, uriEnv: LOOPZEROMEM_PG_URI, passwordKey: worker-role-password, processes: [worker] }
+  dataPath`, 1)
+}
+
+func TestDataPlaneServiceConnectsEachProcessAsItsOwnRole(t *testing.T) {
+	docs := renderDataPlane(t, perProcessRoleValues())
+	for deploy, wantRole := range map[string]string{"loopzero-memory": "themory_app", "loopzero-memory-worker": "themory_worker"} {
+		env := asWorkload(t, findDoc(t, docs, "Deployment", deploy)).Spec.Template.Spec.Containers[0].Env
+		var uris []string
+		for _, e := range env {
+			if e.Name == "LOOPZEROMEM_PG_URI" {
+				uris = append(uris, e.Value)
+			}
+		}
+		if len(uris) != 1 || !strings.HasPrefix(uris[0], "postgres://"+wantRole+":") {
+			t.Errorf("%s: LOOPZEROMEM_PG_URI = %q, want exactly one, as %s", deploy, uris, wantRole)
+		}
+	}
+}
+
+func TestDataPlaneServiceCreatesEveryRoleWhateverProcessItServes(t *testing.T) {
+	init := asWorkload(t, findDoc(t, renderDataPlane(t, perProcessRoleValues()), "Deployment", "loopzero-memory")).Spec.Template.Spec.InitContainers
+	for _, c := range init {
+		if c.Name != "ensure-roles" {
+			continue
+		}
+		script := strings.Join(c.Command, " ")
+		for _, role := range []string{"themory_app", "themory_worker"} {
+			if !strings.Contains(script, role) {
+				t.Errorf("ensure-roles does not create %s", role)
+			}
+		}
+		return
+	}
+	t.Fatal("no ensure-roles init container")
+}

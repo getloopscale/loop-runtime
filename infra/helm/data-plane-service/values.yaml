@@ -32,6 +32,12 @@ secretEnv: []
 # Extra processes of the same image — same environment, no port, no probe.
 workers: []
 
+# A service whose migrations are a separate command declares it here; the app runs it as
+# its last init container, with the service's image and environment. Empty: the service
+# migrates itself, or has nothing to migrate.
+migrations:
+  command: []
+
 resources:
   requests: { cpu: 50m, memory: 256Mi }
   limits: { memory: 1Gi }
