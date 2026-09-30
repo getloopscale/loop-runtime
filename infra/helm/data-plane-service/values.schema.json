@@ -32,6 +32,13 @@
         "additionalProperties": false
       }
     },
+    "migrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
     "workers": {
       "type": "array",
       "items": {

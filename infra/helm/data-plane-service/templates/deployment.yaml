@@ -80,6 +80,25 @@ spec:
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
         {{- end }}
+        {{- if and (eq .name "") $.Values.migrations.command }}
+        # The service's migrations, with its own image and environment, after its roles
+        # exist and before it serves. Only the app runs them: a worker migrating too
+        # would race the app for the same schema.
+        - name: migrate
+          image: {{ $image }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: {{ toJson $.Values.migrations.command }}
+          env:
+            {{- include "dps.env" $ | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+        {{- end }}
       containers:
         - name: {{ $component }}
           image: {{ $image }}

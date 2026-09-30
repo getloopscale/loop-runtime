@@ -367,3 +367,49 @@ func TestDataPlaneServiceRefusesARoleNameThatIsNotAnIdentifier(t *testing.T) {
 		t.Error("rendered a role whose name breaks out of the SQL literal")
 	}
 }
+
+// A service whose migrations are a separate command (loopzero-rag, #474) declares it; the
+// chart runs it with the service's own image and environment as the app's last init
+// container — after its roles exist, before it serves — so a deploy leaves the schema at
+// the version the image expects. Only the app runs it: a worker migrating too would race
+// the app for the same schema.
+func migrationValues() string {
+	return dataPlaneValues + "migrations:\n  command: [\"node\", \"dist/migrate.js\"]\n"
+}
+
+func TestDataPlaneServiceMigratesBeforeTheAppStarts(t *testing.T) {
+	w := asWorkload(t, findDoc(t, renderDataPlane(t, migrationValues()), "Deployment", "loopzero-memory"))
+	init := w.Spec.Template.Spec.InitContainers
+
+	last := init[len(init)-1]
+	if last.Name != "migrate" {
+		t.Fatalf("init containers = %+v, want migrate last", init)
+	}
+	if last.Image != "registry.example/loopzero-memory:0123456789abcdef0123456789abcdef01234567" {
+		t.Errorf("migrate runs %s, want the service's own image", last.Image)
+	}
+	if got := strings.Join(last.Command, " "); got != "node dist/migrate.js" {
+		t.Errorf("migrate command = %q, want %q", got, "node dist/migrate.js")
+	}
+	if envIndex(last.Env, "LOOPZEROMEM_PG_URI") < 0 || envIndex(last.Env, "POSTGRES_PASSWORD") < 0 {
+		t.Errorf("migrate env = %+v, want the service's database environment", last.Env)
+	}
+}
+
+func TestDataPlaneServiceWorkersDoNotMigrate(t *testing.T) {
+	w := asWorkload(t, findDoc(t, renderDataPlane(t, migrationValues()), "Deployment", "loopzero-memory-worker"))
+	for _, c := range w.Spec.Template.Spec.InitContainers {
+		if c.Name == "migrate" {
+			t.Errorf("the worker runs the migrations too; only the app may")
+		}
+	}
+}
+
+func TestDataPlaneServiceWithoutMigrationsHasNoMigrateStep(t *testing.T) {
+	w := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopzero-memory"))
+	for _, c := range w.Spec.Template.Spec.InitContainers {
+		if c.Name == "migrate" {
+			t.Errorf("a service that declares no migrations got a migrate init container")
+		}
+	}
+}
