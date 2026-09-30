@@ -175,6 +175,7 @@ trees, by name or as a template-identical copy under another name.
 | `keda` | cell | upstream | 2.16.1 | `always` |
 | `keda-http-addon` | cell | upstream | 0.8.0 | `{{ .Values.profile.kedaHttpAddon }}` |
 | `loki` | build | upstream | 6.24.0 | `always` |
+| `mcp-gateway` | core | ours | — | `always` |
 | `minio` | core | upstream | 5.4.0 | `always` |
 | `monitoring` | cell, core | upstream | 3.12.1 | `{{ .Values \| get "installMetricsServer" false }}` |
 | `network-policies` | cell | ours | — | `always` |
