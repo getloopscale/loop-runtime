@@ -85,6 +85,8 @@ platformImages:
     loopzero-lens: "3e3e4604109ab91ab8a930970c994f58ae8f9f9e"
     # getloopscale/loopzero-rag
     loopzero-rag: "76fe1895e435cb0d9f8ec719d8a0bf59cae523a9"
+    # getloopscale/loopzero-memory
+    loopzero-memory: "01988fbf2c17aba8721138a42c44f9ca06a780f5"
 
 # The data plane (#446): memory, RAG and lens run on the core cluster from Helmfile,
 # pulled from ECR by commit like the platform images (`platformImages.tags`). A service is
@@ -92,6 +94,7 @@ platformImages:
 dataPlane:
   services:
     - loopzero-lens
+    - loopzero-memory
     - loopzero-rag
 
 # Tenant builds still push to and run from k3d-loopzero-registry (fast local iteration).
