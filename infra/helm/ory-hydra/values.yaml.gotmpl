@@ -104,6 +104,16 @@ hydra:
     # --- OAuth2 ---
     oauth2:
       expose_internal_errors: false
+      # Every platform token comes from Hydra (docs/decisions.md, § Identity, #477), and a
+      # resource server reads the tenant and account from the token itself. Consent-session
+      # claims otherwise land only under `ext`. Still mirrored into `ext` while the readers
+      # that look there are migrated.
+      allowed_top_level_claims:
+        - tenant_id
+        - account_id
+        - email
+        - name
+      mirror_top_level_claims: true
 
     # --- Serve ---
     serve:
