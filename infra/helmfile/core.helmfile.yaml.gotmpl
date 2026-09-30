@@ -85,6 +85,11 @@ repositories:
   # resource backups (BSL on DO Spaces in cloud, MinIO in standalone).
   - name: vmware-tanzu
     url: https://vmware-tanzu.github.io/helm-charts
+  # agentgateway (Linux Foundation / AAIF) fronts every MCP server on the core cluster
+  # (docs/decisions.md, "One control plane, and MCP behind agentgateway", #470).
+  - name: agentgateway
+    url: cr.agentgateway.dev/charts
+    oci: true
 
 # ---------------------------------------------------------------------------
 # Pre-sync secret generation (called by the CLI orchestrator BEFORE this
@@ -119,6 +124,27 @@ releases:
     set:
       - name: installCRDs
         value: "true"
+
+  # The MCP gateway (#470). The Gateway API is vendored and pinned by sha256
+  # (infra/tests/charts/mcp_gateway_test.go); agentgateway implements it. Installed in
+  # every environment: a component one environment lacks is the local-versus-production
+  # drift CLAUDE.md Rule 10 forbids.
+  - name: gateway-api-crds
+    namespace: kube-system
+    chart: ../helm/gateway-api-crds
+
+  - name: agentgateway-crds
+    namespace: agentgateway-system
+    chart: agentgateway/agentgateway-crds
+    version: v1.5.0
+
+  - name: agentgateway
+    namespace: agentgateway-system
+    chart: agentgateway/agentgateway
+    version: v1.5.0
+    needs:
+      - kube-system/gateway-api-crds
+      - agentgateway-system/agentgateway-crds
 
   # B26 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — metrics-server is pre-installed
   # by k3d (k3s built-in) and DOKS (managed control plane add-on). The Helm

@@ -124,6 +124,41 @@ Rejected:
 Cost: one secret per cell to rotate, and a new cell needs its token issued before its External
 Secrets can fetch.
 
+**One control plane, and MCP behind agentgateway on the core cluster** (2026-09-30, #470,
+RATIFIED sponsor-direct in session: "migrate to the cluster … always the most state-of-the-art
+level; no backward compatibility").
+
+dev-public ran a second platform from compose directories that no longer exist on the host:
+its own loopzero-cloud, Kratos and Postgres, a Traefik whose forward-auth the repo edge used for
+`/v1/memory`, `/v1/rag` and `/v1/lens`, an MCP gateway whose two upstreams were both down,
+and promptly, skills, trust and storage. A reboot would have lost all of it, identity was
+split between two user databases, and memory data between two stores.
+
+Everything moves to the core cluster through Helmfile, and the compose control plane is
+retired. MCP follows the 2026-07-28 authorization spec: every MCP endpoint is an OAuth 2.1
+resource server that publishes RFC 9728 metadata and accepts only tokens whose audience is
+itself. The gateway is **agentgateway** (Linux Foundation / AAIF, Gateway API conformant):
+it serves the protected-resource metadata, validates Hydra-issued JWTs against the audience
+of the route, federates the memory, RAG, promptly and skills MCP servers, and authorises
+per tool in CEL, hiding from `tools/list` what a caller may not call. Hydra does not
+implement RFC 8707, so loopzero-cloud's consent step grants the requested `resource` as the
+token audience.
+
+Rejected:
+- **Re-anchor the compose stack from a fresh loopzero-workspace clone.** Versioned again, but
+  still two control planes, two identity stores and a split memory — and it contradicts
+  Rule 10 of CLAUDE.md ("no Docker Compose shortcuts").
+- **Finish and deploy our own `loopzero-traefik-mcp` gateway.** Its README lists every milestone
+  (MG1–MG4, including RFC 9728 metadata and JWT) as planned. agentgateway ships all four;
+  building them is the reinvention Unbreakable Principle 9 forbids.
+- **Envoy AI Gateway.** Also spec-compliant, but it needs Envoy Gateway as its base; the
+  core cluster runs neither, and agentgateway carries its own data plane.
+
+Cost: a new control plane component (agentgateway, Gateway API CRDs 1.6) on the core
+cluster; every MCP server must accept a Hydra JWT and derive its tenant from a claim;
+loopzero-cloud's consent step gains audience binding; and clients holding `loopzero_live_*` keys
+for MCP must switch to OAuth — there is no backward compatibility by decision.
+
 ### Data layer
 
 | Date | Decision |
