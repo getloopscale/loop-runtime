@@ -2,6 +2,11 @@
   "note": "Set of ADJUDICATED trufflehog candidates. A candidate outside this set FAILS the gate until someone rewrites it with `loopzero-ops quality trufflehog-scan --write` — and the diff of that rewrite is the adjudication. `--write` REFUSES while any live finding exists: this list adjudicates \"this is not a secret\", never \"this secret may live here\". `id` is a truncated sha256(detector+raw) — no secret material lives in this file. See B-143.",
   "entries": [
     {
+      "id": "b2f0e728cf5f3eb3",
+      "detector": "Postgres",
+      "first_seen_in": ""
+    },
+    {
       "id": "e0ae7fcc5b7dad8a",
       "detector": "Postgres",
       "first_seen_in": ""
@@ -137,7 +142,7 @@
       "first_seen_in": "infra/helmfile/values/drill/ory-kratos.yaml.gotmpl"
     },
     {
-      "id": "b2f0e728cf5f3eb3",
+      "id": "cb12f39680f62610",
       "detector": "Postgres",
       "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
     },

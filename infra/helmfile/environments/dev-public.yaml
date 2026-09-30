@@ -86,7 +86,7 @@ platformImages:
     # getloopscale/loopzero-rag
     loopzero-rag: "76fe1895e435cb0d9f8ec719d8a0bf59cae523a9"
     # getloopscale/loopzero-memory
-    loopzero-memory: "01988fbf2c17aba8721138a42c44f9ca06a780f5"
+    loopzero-memory: "b4edd0d2a47f26ff1a455a9b2f55acf95f15649b"
 
 # The data plane (#446): memory, RAG and lens run on the core cluster from Helmfile,
 # pulled from ECR by commit like the platform images (`platformImages.tags`). A service is

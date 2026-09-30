@@ -77,3 +77,19 @@ func TestGenerateSecretsLeavesTheDataPlaneOutOfOtherEnvironments(t *testing.T) {
 		}
 	}
 }
+
+// A service that serves requests through a non-owner role (loopzero-memory's themory_app,
+// which the data-plane chart creates) reads that role's password from its Secret,
+// generated and preserved like the database password.
+func TestGenerateSecretsGivesEachDataPlaneServiceAnApplicationRolePassword(t *testing.T) {
+	got := dataPlaneLiterals(t, "dev-public", "LOOPZERO_OPENAI_API_KEY=sk-test")
+	for _, name := range dataPlaneSecrets {
+		pw := got[name]["app-role-password"]
+		if len(pw) < 32 {
+			t.Errorf("%s: app-role-password missing or short (len %d)", name, len(pw))
+		}
+		if pw == got[name]["postgres-password"] {
+			t.Errorf("%s: app-role-password reuses the owner's password", name)
+		}
+	}
+}

@@ -42,6 +42,12 @@ postgres:
   user: ""
   # The env var that receives the connection URI (e.g. LOOPZEROMEM_PG_URI).
   uriEnv: ""
+  # Login roles the service connects as instead of the owner: [{name, uriEnv, passwordKey}].
+  # Each is created without superuser or BYPASSRLS before the service starts, its password
+  # read from existingSecret[passwordKey], and its URI set on uriEnv. The owner's URI stays
+  # on postgres.uriEnv, for the migrations. loopzero-memory needs this: it refuses to serve
+  # requests as a superuser, which row level security does not bind.
+  roles: []
   # Where the volume mounts, and PGDATA when the image expects a subdirectory of it.
   dataPath: /var/lib/postgresql/data
   pgdata: ""

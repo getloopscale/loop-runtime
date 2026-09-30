@@ -295,3 +295,75 @@ func TestDataPlaneServiceWaitsForItsDatabaseBeforeStarting(t *testing.T) {
 		}
 	}
 }
+
+// loopzero-memory refuses to serve requests as a superuser: row level security does not
+// apply to one, so its tenant isolation would hold nothing (measured 2026-09-30, the
+// first install crash-looped on exactly that refusal). A service declares the login
+// roles it connects as; the chart creates each one without superuser or BYPASSRLS
+// before the service starts, and the owner's URI stays on postgres.uriEnv for migrations.
+const dataPlaneRoleValues = dataPlaneValues + `  roles:
+    - name: themory_app
+      uriEnv: LOOPZEROMEM_PG_URI
+      passwordKey: app-role-password
+`
+
+func roleValues() string {
+	return strings.Replace(dataPlaneRoleValues, "uriEnv: LOOPZEROMEM_PG_URI\n  dataPath", "uriEnv: LOOPZEROMEM_MIGRATE_PG_URI\n  dataPath", 1)
+}
+
+func TestDataPlaneServiceConnectsAsItsDeclaredRole(t *testing.T) {
+	env := asWorkload(t, findDoc(t, renderDataPlane(t, roleValues()), "Deployment", "loopzero-memory")).Spec.Template.Spec.Containers[0].Env
+
+	pw, uri := envIndex(env, "THEMORY_APP_PASSWORD"), envIndex(env, "LOOPZEROMEM_PG_URI")
+	if pw < 0 || uri < 0 || pw > uri {
+		t.Fatalf("env = %+v, want THEMORY_APP_PASSWORD defined before LOOPZEROMEM_PG_URI", env)
+	}
+	if want := "postgres://themory_app:$(THEMORY_APP_PASSWORD)@loopzero-memory-postgres:5432/themem"; env[uri].Value != want {
+		t.Errorf("LOOPZEROMEM_PG_URI = %q, want %q", env[uri].Value, want)
+	}
+	if ref, _ := env[pw].ValueFrom["secretKeyRef"].(map[string]any); ref["key"] != "app-role-password" || ref["name"] != "loopzero-memory" {
+		t.Errorf("THEMORY_APP_PASSWORD reads %v, want loopzero-memory/app-role-password", env[pw].ValueFrom)
+	}
+	if m := envIndex(env, "LOOPZEROMEM_MIGRATE_PG_URI"); m < 0 || !strings.HasPrefix(env[m].Value, "postgres://themem:") {
+		t.Errorf("the owner's URI is not on LOOPZEROMEM_MIGRATE_PG_URI: %+v", env)
+	}
+}
+
+func TestDataPlaneServiceCreatesItsRolesBeforeItStarts(t *testing.T) {
+	init := asWorkload(t, findDoc(t, renderDataPlane(t, roleValues()), "Deployment", "loopzero-memory")).Spec.Template.Spec.InitContainers
+
+	if len(init) != 2 || init[0].Name != "wait-for-postgres" || init[1].Name != "ensure-roles" {
+		t.Fatalf("init containers = %+v, want wait-for-postgres then ensure-roles", init)
+	}
+	script := strings.Join(init[1].Command, " ")
+	for _, want := range []string{"themory_app", "NOSUPERUSER", "NOBYPASSRLS", "ON_ERROR_STOP=1", "THEMORY_APP_PASSWORD"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("ensure-roles does not carry %q:\n%s", want, script)
+		}
+	}
+	if envIndex(init[1].Env, "THEMORY_APP_PASSWORD") < 0 || envIndex(init[1].Env, "POSTGRES_PASSWORD") < 0 {
+		t.Errorf("ensure-roles env = %+v, want the owner's and the role's password", init[1].Env)
+	}
+}
+
+func TestDataPlaneServiceWithoutRolesConnectsAsTheOwner(t *testing.T) {
+	init := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopzero-memory")).Spec.Template.Spec.InitContainers
+	for _, c := range init {
+		if c.Name == "ensure-roles" {
+			t.Errorf("a service that declares no role got an ensure-roles init container")
+		}
+	}
+}
+
+// A role name is written into ensure-roles' SQL as a literal, so the schema admits only a
+// plain lowercase identifier: a quote in it would end the literal and run what follows.
+func TestDataPlaneServiceRefusesARoleNameThatIsNotAnIdentifier(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "values.yaml")
+	values := strings.Replace(roleValues(), "- name: themory_app", `- name: "x'); DROP TABLE memories; --"`, 1)
+	if err := os.WriteFile(f, []byte(values), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderChartE(t, uniqueChart(t, "data-plane-service"), "loopzero-memory", nil, f); err == nil {
+		t.Error("rendered a role whose name breaks out of the SQL literal")
+	}
+}

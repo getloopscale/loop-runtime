@@ -6,6 +6,9 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 
 {{- define "dps.postgresHost" -}}{{ .Release.Name }}-postgres{{- end }}
 
+{{/* The env var holding a postgres.roles entry's password: themory_app -> THEMORY_APP_PASSWORD. */}}
+{{- define "dps.rolePasswordEnv" -}}{{ upper .name }}_PASSWORD{{- end }}
+
 {{/* The environment shared by the app and its workers. POSTGRES_PASSWORD comes first:
      $(VAR) expansion only resolves a variable defined earlier in the list. */}}
 {{- define "dps.env" -}}
@@ -14,6 +17,13 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
     secretKeyRef: { name: {{ .Values.existingSecret }}, key: postgres-password }
 - name: {{ .Values.postgres.uriEnv }}
   value: "postgres://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@{{ include "dps.postgresHost" . }}:5432/{{ .Values.postgres.database }}"
+{{- range .Values.postgres.roles }}
+- name: {{ include "dps.rolePasswordEnv" . }}
+  valueFrom:
+    secretKeyRef: { name: {{ $.Values.existingSecret }}, key: {{ .passwordKey }} }
+- name: {{ .uriEnv }}
+  value: "postgres://{{ .name }}:$({{ include "dps.rolePasswordEnv" . }})@{{ include "dps.postgresHost" $ }}:5432/{{ $.Values.postgres.database }}"
+{{- end }}
 {{- range .Values.secretEnv }}
 - name: {{ .name }}
   valueFrom:

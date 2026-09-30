@@ -30,7 +30,11 @@ postgres:
   image: mirror.gcr.io/ankane/pgvector:v0.5.1@sha256:d3a9d8ac27bb7e05e333ef25b634d2625adaa85336ab729954b9e94859bf6fa7
   database: themem
   user: themem
-  uriEnv: LOOPZEROMEM_PG_URI
+  # The owner migrates; requests go through themory_app, which the service insists on:
+  # it refuses to serve as a superuser, whom row level security does not bind.
+  uriEnv: LOOPZEROMEM_MIGRATE_PG_URI
+  roles:
+    - { name: themory_app, uriEnv: LOOPZEROMEM_PG_URI, passwordKey: app-role-password }
   dataPath: /var/lib/postgresql/data
   pgdata: /var/lib/postgresql/data/pgdata
   storage: 5Gi
