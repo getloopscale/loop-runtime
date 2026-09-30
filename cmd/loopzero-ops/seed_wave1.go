@@ -33,4 +33,7 @@ func init() {
 	seedRegistry.Register(seed.NewGitHubWebhookFixtureSeed())
 	seedRegistry.Register(seed.NewTenantFixtureSeed())
 	seedRegistry.Register(seed.NewAdminLoopzeroDevSeed())
+	// #470 — loopzero-cloud's data-plane admin keys, then the edge that depends on them.
+	seedRegistry.Register(seed.NewDataPlaneAdminKeysSeed())
+	seedRegistry.Register(seed.NewDataPlaneEdgeSeed())
 }
