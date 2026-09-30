@@ -46,7 +46,9 @@
 3000  | edge  | NodePort behind Caddy
 3002  | edge  | loopzero-cloud — the edge serves it at https://app-dev.loopzero.example
 13001 | edge  | loopzero-api — reached through loopzero-cloud, never directly
-8092  | edge  | workspace ingress — consumed by the host, through Caddy
+8092  | edge  | compose Traefik (loopzero-workspace) — the edge stopped using it in #470; closed until the compose stack is retired
+18081 | edge  | loopzero-memory NodePort (core cluster) — the edge serves it at https://app-dev.loopzero.example/v1/memory/ behind forward_auth
+18082 | edge  | loopzero-rag NodePort (core cluster) — the edge serves it at https://app-dev.loopzero.example/v1/rag/ behind forward_auth
 8443  | edge  | TLS ingress
 8444  | edge  | TLS ingress
 
