@@ -458,3 +458,82 @@ func TestDataPlaneServiceCreatesEveryRoleWhateverProcessItServes(t *testing.T) {
 	}
 	t.Fatal("no ensure-roles init container")
 }
+
+// An MCP server is a second process of the same service: same image, same database, its own
+// port. The gateway reaches it through a ClusterIP Service of its own, and it gets settings
+// the app must not see (LOOPZERO_MCP_RESOURCE switches loopzero-memory's transport and auth).
+const servingWorkerValues = `
+  - name: mcp
+    command: ["themory", "mcp"]
+    port: 3100
+    healthPath: /.well-known/oauth-protected-resource
+    env:
+      LOOPZERO_MCP_RESOURCE: https://app.example.test/mcp/memory
+      LOOPZEROMEM_EMBEDDER: none
+`
+
+func renderWithServingWorker(t *testing.T) []workloadDoc {
+	t.Helper()
+	values := strings.Replace(dataPlaneValues, "workers:\n", "workers:"+servingWorkerValues, 1)
+	return renderDataPlane(t, values)
+}
+
+func TestDataPlaneServiceExposesAServingWorkerInsideTheCluster(t *testing.T) {
+	svc := findDoc(t, renderWithServingWorker(t), "Service", "loopzero-memory-mcp").raw
+	for _, want := range []string{"type: ClusterIP", "port: 3100", "app.kubernetes.io/component: mcp"} {
+		if !strings.Contains(svc, want) {
+			t.Errorf("worker Service lacks %q:\n%s", want, svc)
+		}
+	}
+	if strings.Contains(svc, "nodePort") {
+		t.Errorf("a worker is reached through the gateway, never on a node port:\n%s", svc)
+	}
+}
+
+func TestDataPlaneServiceProbesAServingWorkerOnItsOwnPort(t *testing.T) {
+	c := asWorkload(t, findDoc(t, renderWithServingWorker(t), "Deployment", "loopzero-memory-mcp")).Spec.Template.Spec.Containers[0]
+	if len(c.Ports) != 1 || c.Ports[0].ContainerPort != 3100 {
+		t.Errorf("worker ports = %+v, want 3100", c.Ports)
+	}
+	if got := dig(c.ReadinessProbe, "httpGet", "path"); got != "/.well-known/oauth-protected-resource" {
+		t.Errorf("worker readiness path = %v, want its own healthPath", got)
+	}
+}
+
+func TestDataPlaneServiceGivesAWorkerItsOwnEnvironment(t *testing.T) {
+	docs := renderWithServingWorker(t)
+	worker := asWorkload(t, findDoc(t, docs, "Deployment", "loopzero-memory-mcp")).Spec.Template.Spec.Containers[0].Env
+	app := asWorkload(t, findDoc(t, docs, "Deployment", "loopzero-memory")).Spec.Template.Spec.Containers[0].Env
+
+	if i := envIndex(worker, "LOOPZERO_MCP_RESOURCE"); i < 0 || worker[i].Value != "https://app.example.test/mcp/memory" {
+		t.Errorf("worker env lacks its own LOOPZERO_MCP_RESOURCE: %+v", worker)
+	}
+	if envIndex(app, "LOOPZERO_MCP_RESOURCE") >= 0 {
+		t.Error("the app received a worker-only setting")
+	}
+	// A worker value overrides the shared one; listing the name twice would leave the
+	// winner to the order Kubernetes happens to apply.
+	var count int
+	for _, e := range worker {
+		if e.Name == "LOOPZEROMEM_EMBEDDER" {
+			count++
+			if e.Value != "none" {
+				t.Errorf("worker LOOPZEROMEM_EMBEDDER = %q, want its own value", e.Value)
+			}
+		}
+	}
+	if count != 1 {
+		t.Errorf("worker lists LOOPZEROMEM_EMBEDDER %d times, want once", count)
+	}
+}
+
+func TestDataPlaneServiceRefusesAHealthPathOnAWorkerThatServesNothing(t *testing.T) {
+	values := strings.Replace(dataPlaneValues, "workers:\n", "workers:\n  - name: mcp\n    command: [\"themory\", \"mcp\"]\n    healthPath: /health\n", 1)
+	f := filepath.Join(t.TempDir(), "values.yaml")
+	if err := os.WriteFile(f, []byte(values), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderChartE(t, uniqueChart(t, "data-plane-service"), "loopzero-memory", nil, f); err == nil {
+		t.Error("rendered a worker probe with no port to probe")
+	}
+}

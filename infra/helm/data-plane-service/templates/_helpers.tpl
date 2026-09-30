@@ -12,7 +12,8 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/* One process's environment: the app ("app") or a worker (its name). Called with
      (dict "root" $ "process" <name>). POSTGRES_PASSWORD comes first: $(VAR) expansion only
      resolves a variable defined earlier in the list. A postgres.roles entry that names
-     processes serves only those; one that names none serves them all. */}}
+     processes serves only those; one that names none serves them all. A worker's own env
+     map is merged over the shared one, so a name appears once and the worker's value wins. */}}
 {{- define "dps.env" -}}
 {{- $root := .root }}
 {{- $process := .process }}
@@ -35,7 +36,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
   valueFrom:
     secretKeyRef: { name: {{ $root.Values.existingSecret }}, key: {{ .key }} }
 {{- end }}
-{{- range $k, $v := $root.Values.env }}
+{{- range $k, $v := merge (dict) (.workerEnv | default dict) (get $root.Values "env") }}
 - name: {{ $k }}
   value: {{ $v | quote }}
 {{- end }}

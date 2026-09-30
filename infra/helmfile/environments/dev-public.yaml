@@ -86,7 +86,7 @@ platformImages:
     # getloopscale/loopzero-rag
     loopzero-rag: "532e55a347ca7fc4d7030fbafa54dae5bf4cb2e3"
     # getloopscale/loopzero-memory
-    loopzero-memory: "e0189eed338553483b6a038932f817e6f98e9e5e"
+    loopzero-memory: "02e004700865676c7a3500b9bb39cbffe5c91602"
 
 # The data plane (#446): memory, RAG and lens run on the core cluster from Helmfile,
 # pulled from ECR by commit like the platform images (`platformImages.tags`). A service is
@@ -96,6 +96,16 @@ dataPlane:
     - loopzero-lens
     - loopzero-memory
     - loopzero-rag
+
+# MCP servers behind infra/helm/mcp-gateway (#470). A server joins once it validates Hydra
+# tokens itself; its resource URI is `publicCloudUrl` + `path`.
+mcp:
+  servers:
+    - name: memory
+      path: /mcp/memory
+      host: loopzero-memory-mcp.loopzero-data-plane.svc.cluster.local
+      port: 3100
+      upstreamPath: /mcp
 
 # Tenant builds still push to and run from k3d-loopzero-registry (fast local iteration).
 # `docrPrefix` is read by the admission policies only; its registry was deleted and

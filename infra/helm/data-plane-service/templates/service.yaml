@@ -16,3 +16,25 @@ spec:
       {{- with .Values.nodePort }}
       nodePort: {{ . }}
       {{- end }}
+{{- range .Values.workers }}
+{{- if .port }}
+---
+# A worker that serves (an MCP server, for one) is reached inside the cluster only — the
+# MCP gateway fronts it, never a node port.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Release.Name }}-{{ .name }}
+  labels:
+    {{- include "dps.labels" $ | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ $.Release.Name }}
+    app.kubernetes.io/component: {{ .name }}
+  ports:
+    - name: http
+      port: {{ .port }}
+      targetPort: http
+{{- end }}
+{{- end }}

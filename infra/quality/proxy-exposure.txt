@@ -44,6 +44,9 @@ app-dev.loopzero.example /v1/integrations/github/* | reviewed | loopzero-cloud B
 app-dev.loopzero.example /v1/memory/* | reviewed | data-plane loopzero-memory (core NodePort :18081) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
 app-dev.loopzero.example /v1/rag/* | reviewed | data-plane loopzero-rag (core NodePort :18082) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
 app-dev.loopzero.example /v1/lens/* | reviewed | data-plane loopzero-lens (core NodePort :18084) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
+app-dev.loopzero.example /mcp/* | reviewed | MCP gateway (core NodePort :18091, infra/helm/mcp-gateway); the gateway and each MCP server validate a Hydra token whose audience is that server, and a tool result is the caller's own tenant data; without a valid token the 401 carries only the metadata link (#470)
+app-dev.loopzero.example /.well-known/oauth-protected-resource/mcp/* | internal | RFC 9728 metadata served by the MCP gateway: the resource URI and its authorization server, public by design, no user data (#470)
+app-dev.loopzero.example /.well-known/oauth-authorization-server/mcp/* | internal | RFC 8414 metadata the MCP gateway proxies from Hydra: endpoints and supported algorithms, public by design, no user data (#470)
 app-dev.loopzero.example @auth_bff | reviewed | loopzero-cloud BFF auth exchange; mints the caller's own token
 app-dev.loopzero.example /engine/* | reviewed | engine API via BFF; tenant-scoped by the same auth the CLI uses
 app-dev.loopzero.example /api/v1/webhooks/github | internal | inbound GitHub webhook; the response is consumed by GitHub, never rendered in a browser

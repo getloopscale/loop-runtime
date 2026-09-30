@@ -107,7 +107,18 @@ spec:
           command: {{ toJson . }}
           {{- end }}
           env:
-            {{- include "dps.env" (dict "root" $ "process" $component) | nindent 12 }}
+            {{- include "dps.env" (dict "root" $ "process" $component "workerEnv" (get . "env")) | nindent 12 }}
+          {{- if .port }}
+          ports:
+            - name: http
+              containerPort: {{ .port }}
+          {{- with .healthPath }}
+          readinessProbe:
+            httpGet: { path: {{ . }}, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          {{- end }}
+          {{- end }}
           {{- if eq .name "" }}
           ports:
             - name: http

@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- loopzero-memory's MCP server is reachable at `<public origin>/mcp/memory` behind the MCP gateway, with a Hydra token issued for that URL and carrying the caller's team. A data-plane service can now run a second serving process (its own port, probe, settings and in-cluster address) beside its API (#470)
 - The core cluster runs one MCP gateway for every MCP server: a server joins it through `mcp.servers` and is reached at `<public origin>/mcp/<name>` only with a Hydra-issued token whose audience is that URL. A client without one gets a 401 that points it at the discovery documents (RFC 9728), and the token reaches the server so it can validate it too (#470)
 - `loopzero-ops seed data-plane-admin-keys` gives loopzero-cloud a working platform-admin key for each data-plane service on the core cluster — keeping one that still authenticates, minting one from the service's bootstrap token otherwise, failing with a clear reason when the bootstrap is refused, and rolling loopzero-cloud onto the keys; `loopzero-ops seed data-plane-edge` checks that the public edge refuses an anonymous data-plane call through loopzero-cloud's own authoriser. Both run in the post-cleanroom seed chain (#470)
 

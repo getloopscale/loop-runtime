@@ -215,6 +215,24 @@ app-dev.loopzero.example {
     }
   }
 
+  # MCP servers (#470) — the core cluster's MCP gateway (infra/helm/mcp-gateway, host port
+  # 18091 → NodePort 30190). No forward_auth here: every MCP server is an OAuth 2.1 resource
+  # server, and the gateway and the server each validate the Hydra token and its audience.
+  # The two discovery prefixes are the RFC 9728 / RFC 8414 documents a client fetches after
+  # the 401; the gateway serves the first and proxies the second from Hydra. Responses are
+  # streamed (SSE), so nothing is buffered.
+  handle /mcp/* {
+    reverse_proxy localhost:18091 {
+      flush_interval -1
+    }
+  }
+  handle /.well-known/oauth-protected-resource/mcp/* {
+    reverse_proxy localhost:18091
+  }
+  handle /.well-known/oauth-authorization-server/mcp/* {
+    reverse_proxy localhost:18091
+  }
+
   # Data plane — loopzero-memory / loopzero-rag / loopzero-lens (#470). Each call is authorised by the
   # core cluster's loopzero-cloud (localhost:3002, its NodePort) before it reaches a service:
   # its forward-auth endpoint validates the caller's loopzero_live_* key, mints a per-tenant

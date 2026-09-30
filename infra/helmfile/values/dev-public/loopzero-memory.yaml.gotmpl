@@ -26,6 +26,22 @@ secretEnv:
   - { name: OPENAI_API_KEY, key: openai-api-key }
   - { name: THEMORY_ADMIN_BOOTSTRAP_TOKEN, key: admin-bootstrap-token }
 
+# The MCP server (#470): an OAuth 2.1 resource server behind infra/helm/mcp-gateway. Its
+# resource URI and issuer are the audience and issuer the gateway enforces — spelled from the
+# same environment values, and compared by infra/tests/charts/mcp_gateway_test.go. The app
+# migrates; this process only serves.
+workers:
+  - name: mcp
+    command: ["/nodejs/bin/node", "/app/dist/agent-tools/cli.js", "mcp", "--host", "0.0.0.0", "--port", "3100"]
+    port: 3100
+    healthPath: /.well-known/oauth-protected-resource
+    env:
+      LOOPZERO_MCP_RESOURCE: {{ printf "%s/mcp/memory" (.Values.publicCloudUrl | trimSuffix "/") | quote }}
+      LOOPZERO_OAUTH_ISSUER: {{ printf "%s/" (.Values.publicAuthUrl | trimSuffix "/") | quote }}
+      LOOPZERO_OAUTH_JWKS_URI: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
+      LOOPZERO_MCP_TLS_TERMINATED_UPSTREAM: "true"
+      THEMEMORY_SKIP_MIGRATIONS: "true"
+
 postgres:
   image: mirror.gcr.io/ankane/pgvector:v0.5.1@sha256:d3a9d8ac27bb7e05e333ef25b634d2625adaa85336ab729954b9e94859bf6fa7
   database: themem

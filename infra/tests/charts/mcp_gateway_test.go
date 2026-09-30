@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -135,5 +136,72 @@ func TestCoreClusterPublishesTheMCPGateway(t *testing.T) {
 	mapping := fmt.Sprintf("18091:%d", values.Gateway.NodePort)
 	if !readCoreClusterPorts(t)[mapping] {
 		t.Errorf("infra/k3d/core-cluster.yaml does not publish %s on the load balancer", mapping)
+	}
+}
+
+// The gateway and the server each validate the token (defence in depth), each against its
+// own copy of the resource URI. If the copies disagree every request fails one of the two
+// checks, so they are compared here rather than trusted to be typed the same twice.
+func TestDevPublicMemoryMCPIsBehindTheGatewayWithOneResourceURI(t *testing.T) {
+	gw := helmfileValues(t, "core.helmfile.yaml.gotmpl", "dev-public", "mcp-gateway", helmfileCoreEnv...)
+	var server map[string]any
+	servers, _ := gw["servers"].([]any)
+	for _, s := range servers {
+		if m, _ := s.(map[string]any); m["name"] == "memory" {
+			server = m
+		}
+	}
+	if server == nil {
+		t.Fatalf("dev-public mcp.servers = %v, want a memory server", servers)
+	}
+	if server["host"] != "loopzero-memory-mcp.loopzero-data-plane.svc.cluster.local" || server["port"] != 3100 {
+		t.Errorf("memory server target = %v:%v, want the loopzero-memory-mcp Service on 3100", server["host"], server["port"])
+	}
+	gatewayResource := fmt.Sprint(gw["publicOrigin"], server["path"])
+
+	mem := helmfileValues(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopzero-memory", helmfileCoreEnv...)
+	var worker map[string]any
+	workers, _ := mem["workers"].([]any)
+	for _, w := range workers {
+		if m, _ := w.(map[string]any); m["name"] == "mcp" {
+			worker = m
+		}
+	}
+	if worker == nil {
+		t.Fatalf("loopzero-memory workers = %v, want an mcp worker", workers)
+	}
+	if worker["port"] != 3100 {
+		t.Errorf("mcp worker port = %v, want 3100", worker["port"])
+	}
+	env, _ := worker["env"].(map[string]any)
+	if env["LOOPZERO_MCP_RESOURCE"] != gatewayResource {
+		t.Errorf("server resource %v != gateway audience %v", env["LOOPZERO_MCP_RESOURCE"], gatewayResource)
+	}
+	if env["LOOPZERO_OAUTH_ISSUER"] != gw["issuer"] {
+		t.Errorf("server issuer %v != gateway issuer %v", env["LOOPZERO_OAUTH_ISSUER"], gw["issuer"])
+	}
+	if env["LOOPZERO_MCP_TLS_TERMINATED_UPSTREAM"] != "true" {
+		t.Errorf("LOOPZERO_MCP_TLS_TERMINATED_UPSTREAM = %v, want \"true\": the server binds 0.0.0.0 behind the gateway", env["LOOPZERO_MCP_TLS_TERMINATED_UPSTREAM"])
+	}
+}
+
+// The public edge sends the MCP paths and both discovery prefixes to the gateway's host port.
+// Missing either discovery prefix is invisible until a client follows the 401's
+// resource_metadata link and lands on the dashboard instead of the metadata document.
+func TestEdgeSendsMCPAndItsDiscoveryPathsToTheGateway(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "infra", "local", "Caddyfile"))
+	if err != nil {
+		t.Fatalf("canonical Caddyfile missing: %v", err)
+	}
+	cfg := string(b)
+	for _, prefix := range []string{
+		"/mcp/*",
+		"/.well-known/oauth-protected-resource/mcp/*",
+		"/.well-known/oauth-authorization-server/mcp/*",
+	} {
+		re := regexp.MustCompile(`(?s)handle ` + regexp.QuoteMeta(prefix) + ` \{\s*reverse_proxy localhost:18091\b`)
+		if !re.MatchString(cfg) {
+			t.Errorf("the Caddyfile has no `handle %s { reverse_proxy localhost:18091 … }`", prefix)
+		}
 	}
 }
