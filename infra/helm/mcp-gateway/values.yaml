@@ -1,0 +1,31 @@
+# The Hydra issuer, verbatim — it is matched exactly against the token's `iss`.
+# Required once a server is declared.
+issuer: ""
+
+# The public origin clients reach the MCP servers at, without a trailing slash. A server's
+# resource URI — the audience its tokens must carry (RFC 8707) — is this origin plus its path.
+# Required once a server is declared.
+publicOrigin: ""
+
+# Where the gateway fetches Hydra's signing keys, in-cluster.
+jwks:
+  service: ory-hydra-public
+  namespace: loopzero-auth
+  port: 4444
+  path: /.well-known/jwks.json
+
+gateway:
+  # The listener port inside the cluster.
+  port: 8080
+  # The node port the edge reaches the gateway on. Pinned because agentgateway otherwise
+  # creates a LoadBalancer Service on a port nobody chose.
+  nodePort: 30190
+
+# One entry per MCP server. A server joins only once it validates tokens itself — the
+# gateway is defence in depth, never the only check.
+#   - name: memory                     # kebab-case, names the backend, route and policy
+#     path: /mcp/memory                # public path; the resource URI is publicOrigin + path
+#     host: loopzero-memory.loopzero-data-plane.svc.cluster.local
+#     port: 8080
+#     upstreamPath: /mcp               # the server's own streamable-HTTP endpoint
+servers: []

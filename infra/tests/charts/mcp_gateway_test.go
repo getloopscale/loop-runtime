@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,6 +72,7 @@ func TestEveryCoreEnvironmentInstallsTheMCPGateway(t *testing.T) {
 		"gateway-api-crds":  {Namespace: "kube-system", Chart: "../helm/gateway-api-crds"},
 		"agentgateway-crds": {Namespace: "agentgateway-system", Chart: "agentgateway/agentgateway-crds", Version: agentgatewayPin},
 		"agentgateway":      {Namespace: "agentgateway-system", Chart: "agentgateway/agentgateway", Version: agentgatewayPin},
+		"mcp-gateway":       {Namespace: "loopzero-mcp", Chart: "../helm/mcp-gateway"},
 	}
 	for _, env := range declaredPlatformEnvironments(t) {
 		t.Run(env, func(t *testing.T) {
@@ -96,5 +98,42 @@ func TestEveryCoreEnvironmentInstallsTheMCPGateway(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The gateway binds each server to the issuer Hydra actually stamps and to the public
+// origin clients reach, so both come from the same environment values Hydra and the edge
+// read — a second spelling of either is a token the gateway refuses for no visible reason.
+func TestDevPublicMCPGatewayTakesItsIdentityFromTheEnvironment(t *testing.T) {
+	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "dev-public", "mcp-gateway", helmfileCoreEnv...)
+
+	if got := values["issuer"]; got != "https://auth-dev.loopzero.example/" {
+		t.Errorf("issuer = %v, want Hydra's dev-public issuer https://auth-dev.loopzero.example/", got)
+	}
+	if got := values["publicOrigin"]; got != "https://app-dev.loopzero.example" {
+		t.Errorf("publicOrigin = %v, want https://app-dev.loopzero.example", got)
+	}
+}
+
+// A NodePort the load balancer does not publish is reachable from inside the cluster only;
+// the edge on the host would get connection refused.
+// The mapping is checked against the node port the chart actually defaults to, so moving
+// one without the other fails here.
+func TestCoreClusterPublishesTheMCPGateway(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "infra", "helm", "mcp-gateway", "values.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var values struct {
+		Gateway struct {
+			NodePort int `yaml:"nodePort"`
+		} `yaml:"gateway"`
+	}
+	if err := yaml.Unmarshal(raw, &values); err != nil {
+		t.Fatal(err)
+	}
+	mapping := fmt.Sprintf("18091:%d", values.Gateway.NodePort)
+	if !readCoreClusterPorts(t)[mapping] {
+		t.Errorf("infra/k3d/core-cluster.yaml does not publish %s on the load balancer", mapping)
 	}
 }

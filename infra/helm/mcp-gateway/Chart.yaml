@@ -1,0 +1,9 @@
+apiVersion: v2
+name: mcp-gateway
+description: >-
+  One agentgateway Gateway in front of every MCP server on the core cluster (#470). Each
+  server is an OAuth 2.1 resource server, and the gateway enforces the same contract in
+  front of it: a Hydra RS256 token whose audience is the server's resource URI
+  (docs/decisions.md, § Identity). Shapes pinned in infra/tests/charts/mcp_gateway_chart_test.go.
+type: application
+version: 0.1.0

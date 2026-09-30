@@ -1,0 +1,34 @@
+# The listener and the Service the edge reaches it through. agentgateway generates the
+# Service; the parameters pin it to a node port instead of a LoadBalancer on a random one.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: mcp
+  namespace: {{ .Release.Namespace }}
+spec:
+  gatewayClassName: agentgateway
+  infrastructure:
+    parametersRef:
+      group: agentgateway.dev
+      kind: AgentgatewayParameters
+      name: mcp
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: {{ .Values.gateway.port }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayParameters
+metadata:
+  name: mcp
+  namespace: {{ .Release.Namespace }}
+spec:
+  service:
+    spec:
+      type: NodePort
+      ports:
+        - port: {{ .Values.gateway.port }}
+          nodePort: {{ .Values.gateway.nodePort }}

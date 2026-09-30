@@ -146,6 +146,19 @@ releases:
       - kube-system/gateway-api-crds
       - agentgateway-system/agentgateway-crds
 
+  # Every MCP server behind one Gateway (#470, infra/helm/mcp-gateway). The issuer is
+  # spelled exactly as ory-hydra's values spell it — the gateway matches `iss` verbatim —
+  # and a server joins through `mcp.servers` only once it validates tokens itself.
+  - name: mcp-gateway
+    namespace: loopzero-mcp
+    chart: ../helm/mcp-gateway
+    needs:
+      - agentgateway-system/agentgateway
+    values:
+      - issuer: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444{{ end }}/"
+        publicOrigin: {{ .Values | get "publicCloudUrl" "" | trimSuffix "/" | quote }}
+        servers: {{ .Values | get "mcp.servers" list | toJson }}
+
   # B26 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — metrics-server is pre-installed
   # by k3d (k3s built-in) and DOKS (managed control plane add-on). The Helm
   # install fails with "invalid ownership metadata" because the cluster

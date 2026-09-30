@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The core cluster runs one MCP gateway for every MCP server: a server joins it through `mcp.servers` and is reached at `<public origin>/mcp/<name>` only with a Hydra-issued token whose audience is that URL. A client without one gets a 401 that points it at the discovery documents (RFC 9728), and the token reaches the server so it can validate it too (#470)
 - `loopzero-ops seed data-plane-admin-keys` gives loopzero-cloud a working platform-admin key for each data-plane service on the core cluster — keeping one that still authenticates, minting one from the service's bootstrap token otherwise, failing with a clear reason when the bootstrap is refused, and rolling loopzero-cloud onto the keys; `loopzero-ops seed data-plane-edge` checks that the public edge refuses an anonymous data-plane call through loopzero-cloud's own authoriser. Both run in the post-cleanroom seed chain (#470)
 
 - dev-public runs its data plane — memory, RAG and lens — from Helmfile on the core cluster, one service at a time as each repository publishes to Amazon ECR, each with its own Postgres and pinned by commit. Lens moves first. They ran as compose containers started from directories that no longer exist, so nothing versioned could recreate them, and two answered where nothing looked: memory on 8080 while the seed chain probed 18081, and loopzero-cloud reached RAG at :8787, a port the host never published — it now reaches a moved service by Service name and one not moved yet where it actually listens (#446).

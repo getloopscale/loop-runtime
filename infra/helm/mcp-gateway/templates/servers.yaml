@@ -1,0 +1,77 @@
+{{- range .Values.servers }}
+{{- $resource := printf "%s%s" $.Values.publicOrigin .path }}
+{{- $name := printf "mcp-%s" .name }}
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayBackend
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  mcp:
+    targets:
+      - name: {{ .name }}
+        static:
+          host: {{ .host }}
+          port: {{ .port }}
+          path: {{ .upstreamPath }}
+          protocol: StreamableHTTP
+---
+# The server's path plus the two discovery documents clients fetch after a 401: the
+# protected-resource metadata (RFC 9728), served by the gateway, and the authorization
+# server metadata, proxied from Hydra. Without them the 401's resource_metadata URL 404s.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  parentRefs:
+    - name: mcp
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: {{ .path }} }
+        - path: { type: PathPrefix, value: /.well-known/oauth-protected-resource{{ .path }} }
+        - path: { type: PathPrefix, value: /.well-known/oauth-authorization-server{{ .path }} }
+      backendRefs:
+        - group: agentgateway.dev
+          kind: AgentgatewayBackend
+          name: {{ $name }}
+---
+apiVersion: agentgateway.dev/v1alpha1
+kind: AgentgatewayPolicy
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: {{ $name }}
+  traffic:
+    jwtAuthentication:
+      mode: Strict
+      providers:
+        - issuer: {{ $.Values.issuer | quote }}
+          # RFC 8707: a token minted for any other resource does not pass.
+          audiences:
+            - {{ $resource | quote }}
+          jwks:
+            remote:
+              backendRef:
+                kind: Service
+                name: {{ $.Values.jwks.service }}
+                namespace: {{ $.Values.jwks.namespace }}
+                port: {{ $.Values.jwks.port }}
+              jwksPath: {{ $.Values.jwks.path }}
+      mcp:
+        # Raw JSON values: an object here is published as {"value": ...}, which no RFC 9728
+        # client accepts.
+        resourceMetadata:
+          resource: {{ $resource | quote }}
+  # The gateway strips the token by default. The server validates it too, so it is passed
+  # through — to this resource only, which is the audience it was issued for.
+  backend:
+    auth:
+      passthrough: {}
+{{- end }}

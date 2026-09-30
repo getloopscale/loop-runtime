@@ -54,6 +54,12 @@ ports:
   - port: 18084:30184
     nodeFilters:
       - loadbalancer
+  # The MCP gateway (#470, infra/helm/mcp-gateway), on the host port the edge proxies
+  # `/mcp/*` and its discovery documents to. Not 18090: the compose MCP gateway still holds it,
+  # and mapping a held port fails cluster creation.
+  - port: 18091:30190
+    nodeFilters:
+      - loadbalancer
   # 30094 exposes loki-cross-cluster so Promtail (build cluster) can ship workflow
   # pod logs to Loki (mgmt cluster). Without this, `loopzero logs --build <id>` works
   # only if logs arrive via another path. F1.4 E2E validation 2026-04-23.
