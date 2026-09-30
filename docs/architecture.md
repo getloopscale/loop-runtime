@@ -169,6 +169,7 @@ trees, by name or as a template-identical copy under another name.
 | `cluster-issuer` | cell, secrets | ours | — | `always` |
 | `data-plane-service` | core | ours | — | `{{ has $svc ($.Values \| get "dataPlane.services" list) }}` |
 | `external-secrets` | cell, core | upstream | 0.14.3 | `always` |
+| `gateway-api-crds` | core | ours | — | `always` |
 | `gitea` | core | upstream | 10.6.0 | `always` |
 | `k6-operator` | — | undeclared | — | `always` |
 | `keda` | cell | upstream | 2.16.1 | `always` |
