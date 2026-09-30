@@ -1,0 +1,9 @@
+apiVersion: v2
+name: gateway-api-crds
+description: >-
+  The Kubernetes Gateway API standard channel, vendored verbatim from the upstream
+  release asset and pinned by sha256 in infra/tests/charts/mcp_gateway_test.go.
+  agentgateway implements it on the core cluster (docs/decisions.md, #470).
+type: application
+version: 1.6.0
+appVersion: v1.6.0
