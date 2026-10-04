@@ -35,6 +35,92 @@ meeting date is not the meeting.
 | 2026-09-29 | **The edge asks the engine which cell serves a host.** Full record below the table. |
 | 2026-09-29 | **The production edge reads the host → cell index from its KV store.** Full record below the table. |
 | 2026-09-29 | **The secret-fetch broker authenticates each cell by its own token.** Full record below the table. |
+| 2026-10-04 | **Who creates the cell clusters on AWS: Cluster API, from an operations cluster built by Terraform** (#490). Full record below the table. |
+
+**Who creates the cell clusters on AWS: Cluster API, from an operations cluster built by Terraform** (2026-10-04, #490). ACCEPTED, ratified by the sponsor on 2026-10-04.
+
+Two records disagree. The Cluster API proposal (2026-08-07, D15) makes every cell, ours and
+BYOC, a CAPI object reconciled from a dedicated operations cluster. The re-platform ADR
+(`../loopzero-workspace/docs/decisions/2026-06-17-infra-state-decomposition-aws.md`, D3) builds the
+cluster as a Terragrunt unit, `compute/eks`. The EKS module (loopzero-infra-modules#11) cannot be
+written until one of them owns the cell, because node groups, Pod Identity and the upgrade regime
+are configured in a different place under each.
+
+A first draft of this record (2026-10-02) proposed Terraform now and CAPI on a named trigger, the
+first trigger being a committed BYOC customer. On 2026-10-04 the sponsor decided that BYOC ships at
+launch (brainstorm session, `.squad/wiki/product/product-vision.md`): small companies with no
+platform team run their LoopZeroKit agents in their own cloud account. The trigger has fired, so the
+question is no longer whether CAPI arrives but whether our own cells use it too.
+
+Measured on 2026-10-02:
+
+| Fact | Value | Source |
+|---|---|---|
+| CAPI objects in the repository | 0 (`grep -r "cluster\.x-k8s\.io"`) | this repository |
+| BYOC as a product commitment | launch feature, decided 2026-10-04 | `.squad/wiki/product/product-vision.md` |
+| DELETE guardrail on boundary resources (CAPI D4) | exists, runs as `Warn` | `charts/loopzero-admission-policies/templates/vap-protect-platform-deletes.yaml:102` |
+| Operations cluster (CAPI D8) | does not exist | `infra/k3d/`, `../loopzero-infra-live` |
+| EKS control plane | US$0.10 per cluster-hour on standard support, US$0.60 on extended support; new clusters default to extended | AWS EKS pricing and the EKS user guide |
+| CAPA, EKS control plane | "Feature status: Stable"; managed machine pools "still classed as experimental" | cluster-api-aws.sigs.k8s.io |
+| CAPG, GKE | "Feature status: Experimental", behind the `GKE=true` gate | cluster-api-gcp.sigs.k8s.io |
+| CAPZ, AKS | "Feature status: GA" | capz.sigs.k8s.io |
+
+| | A. Terraform only | B. CAPI for every cell | D. Terraform for ours, CAPI for BYOC |
+|---|---|---|---|
+| BYOC at launch | not served | served | served |
+| Ways to create a cell | one | one | two |
+| Clusters added before the first cell | none | the operations cluster, with its own HA, backup and DR | the operations cluster |
+| Fixed cost added | none | one more EKS control plane (US$0.10/h) plus its nodes, not sized here | same as B |
+| Upgrade regimes | EKS version, Terraform providers | EKS version, plus the CAPI contract, which reaches every cell at once (CAPI D13) | both of A's and B's |
+| Node groups | EKS managed node groups, GA | CAPA managed machine pools, experimental | both |
+| A second cloud | one module per cloud, all GA | CAPZ GA; CAPG for GKE experimental | both |
+
+**Proposed: option B.** Every cell, ours and every BYOC cell, is a CAPI `Cluster` reconciled from
+one operations cluster. Terraform builds only what CAPI cannot build for itself: the operations
+cluster (CAPI D8, D12) and the account-level resources around it. The EKS module of
+loopzero-infra-modules#11 therefore narrows to the operations cluster. It sets the upgrade policy to
+`STANDARD` explicitly, because the extended default costs six times as much per hour.
+
+Launch work that B adds, in order:
+
+1. The DELETE guardrail runs as `Deny` before the first `Cluster` object exists (CAPI D4).
+2. The operations cluster, built by Terraform in `loopzero-infra-live`, with its HA, backup and DR.
+3. CAPI core and CAPA on it, pinned to explicit versions, and the IAM that CAPA assumes in our
+   account.
+4. The bootstrap IAM contract a BYOC customer runs in their own account, with `ExternalId`
+   validation (CAPI D5, D10). The customer has no platform team, so this has to be one step they
+   can run without understanding it.
+5. The first internal cell, as a CAPI object.
+
+Rejected:
+- **A, Terraform only.** It cannot serve BYOC, which is now a launch feature.
+- **D, Terraform for our cells and CAPI for BYOC.** Two ways to create the same thing, two upgrade
+  matrices and two DR paths, which is the duplication CAPI D15 rejects. With BYOC at launch the
+  CAPI half must exist anyway, so keeping Terraform for our cells only adds the second mechanism.
+- **The 2026-10-02 draft (Terraform now, CAPI on a trigger).** Its trigger has fired.
+
+Cost of B, stated:
+- **One more cluster to run before the first cell**, and with one developer the operating cost
+  lands on the same person who builds the product.
+- **A CAPI contract upgrade reaches every cell at once**, ours and every customer's (CAPI D13).
+- **CAPA managed machine pools are experimental.** Which node-pool kind the cells use is not decided
+  here and is tested before the first cell.
+- **Whether CAPA sets the EKS upgrade policy to `STANDARD`** on a control plane it creates is not
+  verified. If it cannot, every CAPI cell pays extended support pricing, and that is measured
+  before the first cell.
+- **The operations cluster holds authority to create and destroy infrastructure in customer
+  accounts** (CAPI D5). Its threat model changes and is reviewed before the first BYOC customer.
+- **A BYOC customer pays at least one EKS control plane plus its nodes** to their provider, on top
+  of what LoopZero charges. Pricing has to account for that floor.
+
+Consequences outside this repository: the re-platform ADR's D3 (`compute/eks` as the cell unit) is
+amended in `../loopzero-workspace` to name the operations cluster instead of the cells, and
+loopzero-infra-modules#11 is rescoped the same way.
+
+Not decided here: which cloud each region runs on. The 2026-09-30 image-registry record names AWS
+for Europe and Azure for the United States; the first production region is AWS `us-east-1`
+(loopzero#488 reconciles the two). Brazil on Google Cloud would put cells on CAPG for GKE, which is
+experimental; that is a risk for the region decision, not for this one.
 
 
 **The edge asks the engine which cell serves a host** (2026-09-29, #447).
