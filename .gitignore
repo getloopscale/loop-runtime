@@ -297,6 +297,7 @@ operators/app-operator
 # It was tracked until 2026-09-09, when a pull hit a modify/delete conflict between
 # a local deletion and remote edits — the ignore rule is what stops that recurring.
 BACKLOG.md
+.BACKLOG.md.lock
 
 # The Squad kit and the data it writes — a dependency and an output, kept apart.
 #
