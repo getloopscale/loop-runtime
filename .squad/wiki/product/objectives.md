@@ -1,6 +1,6 @@
 # Objectives: loopzero
 
-Agreed in the brainstorm session of 2026-10-04
+Agreed in the brainstorm session of 2026-10-04 and 2026-10-05
 (`.squad/records/brainstorms/2026-10-04-session.md`). Phase 2 of 4; not yet signed.
 
 Production launch is 2026-11-01. Every objective is judged twice: its dogfooding criterion on
@@ -29,3 +29,8 @@ why: fear of the monthly bill is the third cost in the vision, and usage-based p
 metric: the customer runs exactly one artifact in their account (the IAM bootstrap) and no manual Kubernetes or network step, counted on the onboarding script; 60 minutes or less from running the bootstrap to the first agent answering over HTTPS in the customer's account; a scan of our secret stores and database finds only a role ARN and an `ExternalId` per customer account and zero access keys; only platform telemetry leaves the customer's account, checked on the cell's egress flows. Dogfooding uses a separate member account of our AWS organization acting as the customer.
 horizon: dogfooding judged 2026-11-01; production judged 2027-01-30
 why: BYOC ships at launch for the same user, who needs agents and data on infrastructure they own; each cell is a Cluster API object (loopzero#490, option B) and access uses AssumeRole with ExternalId (CAPI proposal D5).
+
+## OBJ-5 - An agent uses every managed service through one key and one MCP endpoint, with nothing extra to run
+metric: in dogfooding, 5 of 5 runs pass, each with the sample project's agents calling all eight managed services (memory, document retrieval, context, prompts, skills, trust policies, file storage, and traces in Lens) with the account's single key through its single MCP endpoint; every call succeeds, the execution's trace appears in Lens, no step falls outside `loopzero` and the agent's code, and 15 minutes or less pass from the first deploy to the last call. In production, at least 40% of active teams call at least one managed service in their first 30 days; each service fails under 0.1% of the month's calls with an error on our side (5xx); and zero accesses by one team to another team's data happen in any service.
+horizon: dogfooding judged 2026-11-01; production judged 2027-01-30
+why: the vision now promises the managed services in one account with no extra infrastructure, and the sponsor defined the product as the whole ecosystem on 2026-10-05; the three production numbers say whether teams use the services, whether they work, and whether they stay isolated.
