@@ -16,12 +16,16 @@
 
 ## Reviewer sign-off
 
-- [x] The problem stated in the vision is the real one  <!-- signed-by: human/paulo -->
+- [x] The problem stated in the vision is the real one  <!-- signed-by: human/paulo -->  <!-- signed-by: human/paulo -->
 - [x] These are the right objectives, and the metrics are the right metrics
 - [x] The requirements follow from the objectives
 - [x] The pieces cover every requirement
 
 <!-- signed-by: -->
+
+**Signed 2026-10-05 by `human/paulo` — a person, not a judge.**
+
+What a signature asserts is that someone read this and is willing to say it holds. It does not assert that a machine checked it: the deterministic score sits above, and the two are separate claims on purpose.
 
 **Signed 2026-10-05 by `human/paulo` — a person, not a judge.**
 

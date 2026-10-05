@@ -142,3 +142,33 @@ acceptance: for one execution of the sample agent, Lens shows a trace with one s
 serves: OBJ-5
 statement: each managed service records its failures per call, so the month's 5xx rate per service can be queried, and its errors use one shared shape in product language.
 acceptance: a test takes down each service's dependency and makes one call; the month's 5xx query counts that failure, and the response body carries `code` and `message` and no term forbidden by Rule 3.
+
+## REQ-28 - Published images are clean and signed where they are pulled from
+serves: OBJ-6
+statement: every image a release publishes carries no fixable HIGH or CRITICAL vulnerability and is signed in every registry the platform pulls from.
+acceptance: a scan of each image in the release reports zero fixable HIGH or CRITICAL findings, and the signature verifies against the reference the platform pulls.
+
+## REQ-29 - No live credential lives in any repository
+serves: OBJ-6
+statement: no repository of the ecosystem holds a live credential in its tree or history, and any credential found exposed is revoked.
+acceptance: a secret scan with verification over the full history of every repository in the routing table finds no live credential.
+
+## REQ-30 - Data is backed up and restorable
+serves: OBJ-6
+statement: the platform's databases and Git repositories are backed up on a schedule and can be restored losing at most 1 hour of data and within 4 hours (both hypotheses).
+acceptance: a drill on staging destroys the database and the Git repositories, restores them from backup, and records a measured loss of at most 1 hour and a restore time of at most 4 hours.
+
+## REQ-31 - A production failure reaches a person, with a runbook and a public status
+serves: OBJ-6
+statement: a failure of a production component fires an alert that reaches the on-call person, has a runbook, and shows on a public status page.
+acceptance: an injected API failure on staging fires an alert that reaches the on-call channel within 5 minutes (hypothesis), the runbook for that alert exists, and the status page shows the incident.
+
+## REQ-32 - An external penetration test closes before launch
+serves: OBJ-6
+statement: an external party tests the platform before launch, and no critical finding stays open.
+acceptance: the penetration test report lists zero open critical findings.
+
+## REQ-33 - Staging and production are created from versioned infrastructure code
+serves: OBJ-6
+statement: the staging and production environments are created only from versioned infrastructure code, with no manual console step.
+acceptance: a fresh staging is created from the code with no console step recorded, and an OBJ-1 run passes against it.

@@ -86,3 +86,15 @@ responsibility: uploading, downloading, listing and sharing an agent's files.
 ## PIECE-20 - Traces
 realises: REQ-25, REQ-26, REQ-27
 responsibility: recording each execution with the managed-service calls it made and the cost of each.
+
+## PIECE-21 - Platform security
+realises: REQ-28, REQ-29, REQ-32
+responsibility: scanning and signing every published image, keeping credentials out of every repository and revoking exposed ones, isolating platform components on the network, and the external penetration test.
+
+## PIECE-22 - Operations
+realises: REQ-30, REQ-31
+responsibility: scheduled backups and restore drills, alerting and paging, runbooks, and the public status page.
+
+## PIECE-23 - Environments as code
+realises: REQ-33
+responsibility: the versioned infrastructure code that creates the staging and production environments and everything they run on.
