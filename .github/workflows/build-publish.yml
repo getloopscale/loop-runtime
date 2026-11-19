@@ -352,7 +352,7 @@ jobs:
         env:
           IMAGE_REF: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
           # A certificate issued inside a reusable workflow names the REUSABLE in its SAN
-          # (this file, in getloopscale/loopzero) and the CALLER in its source-repository claim, so
+          # (this file, in getloopscale/engine) and the CALLER in its source-repository claim, so
           # each half is pinned to the right thing (#460). The SAN alone would accept a
           # signature any org repository produced by calling this workflow; the caller alone
           # would accept one from any workflow of the caller. Together they are the
@@ -362,7 +362,7 @@ jobs:
           CALLER_REPO: ${{ github.repository }}
         run: |
           cosign verify "${IMAGE_REF}" \
-            --certificate-identity-regexp "^https://github\.com/${OWNER}/loopzero/\.github/workflows/build-publish\.yml@" \
+            --certificate-identity-regexp "^https://github\.com/${OWNER}/engine/\.github/workflows/build-publish\.yml@" \
             --certificate-github-workflow-repository "${CALLER_REPO}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
@@ -385,6 +385,6 @@ jobs:
           CALLER_REPO: ${{ github.repository }}
         run: |
           cosign verify "${ECR_REF}" \
-            --certificate-identity-regexp "^https://github\.com/${OWNER}/loopzero/\.github/workflows/build-publish\.yml@" \
+            --certificate-identity-regexp "^https://github\.com/${OWNER}/engine/\.github/workflows/build-publish\.yml@" \
             --certificate-github-workflow-repository "${CALLER_REPO}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com

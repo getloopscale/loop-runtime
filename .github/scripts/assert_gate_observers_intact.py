@@ -48,8 +48,8 @@ nothing, because every reporter named above is in it. Terminating that regress
 needs an authority outside the file tree, and the only one GitHub offers is a
 REQUIRED status check. Measured 2026-09-06 against this repository:
 
-    gh api repos/getloopscale/loopzero/branches/develop/protection  -> 403
-    gh api repos/getloopscale/loopzero/rulesets                     -> 403
+    gh api repos/getloopscale/engine/branches/develop/protection  -> 403
+    gh api repos/getloopscale/engine/rulesets                     -> 403
     "Upgrade to GitHub Pro or make this repository public to enable this
      feature."   (org `getloopscale` is on the `free` plan; `loopzero` is PRIVATE)
 

@@ -110,9 +110,9 @@ on:
   # stops nothing until branch protection marks it required, and on 2026-09-06
   # that setting was not merely unset — it is unavailable:
   #
-  #     gh api repos/getloopscale/loopzero/branches/develop/protection  -> 403
-  #     gh api repos/getloopscale/loopzero/branches/main/protection     -> 403
-  #     gh api repos/getloopscale/loopzero/rulesets                     -> 403
+  #     gh api repos/getloopscale/engine/branches/develop/protection  -> 403
+  #     gh api repos/getloopscale/engine/branches/main/protection     -> 403
+  #     gh api repos/getloopscale/engine/rulesets                     -> 403
   #     "Upgrade to GitHub Pro or make this repository public to enable this
   #      feature."
   #
@@ -275,7 +275,7 @@ jobs:
           # key get used.
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
-          git ls-remote git@github.com:getloopscale/loopzero-contracts.git >/dev/null
+          git ls-remote git@github.com:getloopscale/contracts.git >/dev/null
           echo "deploy key OK — loopzero-contracts reachable."
 
       # WHICH version of loopzero-contracts to check out — derived from `go.mod`, never fixed
@@ -314,7 +314,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
           persist-credentials: false   # zizmor artipacked: no later step pushes
-          repository: getloopscale/loopzero-contracts
+          repository: getloopscale/contracts
           ref: ${{ steps.contracts.outputs.ref }}
           path: loopzero-contracts
           ssh-key: ${{ secrets.GOMOD_SSH_KEY }}
@@ -466,7 +466,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
           persist-credentials: false   # zizmor artipacked: no later step pushes
-          repository: getloopscale/loopzero-contracts
+          repository: getloopscale/contracts
           ref: ${{ steps.contracts.outputs.ref }}
           path: loopzero-contracts
           ssh-key: ${{ secrets.GOMOD_SSH_KEY }}
