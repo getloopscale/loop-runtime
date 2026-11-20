@@ -82,11 +82,16 @@ The repository is a Go workspace with nine modules and no `go.mod` at the root. 
 modules is the sibling repository `loopzero-contracts`, which `go.work` expects at
 `../loopzero-contracts`. Clone it next to this one, or the workspace does not build.
 
+### Setup
+
 ```bash
-task setup    # creates the local k3d clusters and installs the platform
-tilt up       # development loop with reload of the API and the operators
+task setup    # one-shot: creates the local k3d clusters and installs the platform
+tilt up       # dev loop: reload of the API and the operators on file save
 task doctor   # checks prerequisites and the health of the environment
 ```
+
+`task setup` provisions the platform once. The dev loop is `tilt up`. The full workflow is in
+[docs/operations.md](docs/operations.md).
 
 Tests run per module, or through the task runner:
 

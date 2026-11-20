@@ -2,6 +2,11 @@
   "note": "Set of ADJUDICATED trufflehog candidates. A candidate outside this set FAILS the gate until someone rewrites it with `loopzero-ops quality trufflehog-scan --write` — and the diff of that rewrite is the adjudication. `--write` REFUSES while any live finding exists: this list adjudicates \"this is not a secret\", never \"this secret may live here\". `id` is a truncated sha256(detector+raw) — no secret material lives in this file. See B-143.",
   "entries": [
     {
+      "id": "9caeb962635860e1",
+      "detector": "Postgres",
+      "first_seen_in": ""
+    },
+    {
       "id": "b2f0e728cf5f3eb3",
       "detector": "Postgres",
       "first_seen_in": ""
@@ -32,6 +37,11 @@
       "first_seen_in": "BACKLOG.md"
     },
     {
+      "id": "017180ea7a17122c",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
       "id": "0414b2464cc40598",
       "detector": "Postgres",
       "first_seen_in": "api/internal/config/config_test.go"
@@ -43,6 +53,21 @@
     },
     {
       "id": "6203c9985d04df67",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "8998bccf46bffd07",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "a705503ed7a7850d",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "aa82939522494e77",
       "detector": "Postgres",
       "first_seen_in": "api/internal/config/config_test.go"
     },
@@ -67,6 +92,11 @@
       "first_seen_in": "api/internal/routes/secrets_backend_error_test.go"
     },
     {
+      "id": "6bd3461890d51a32",
+      "detector": "URI",
+      "first_seen_in": "api/internal/source/gitea_store.go"
+    },
+    {
       "id": "dad706e7b2385151",
       "detector": "URI",
       "first_seen_in": "api/internal/source/gitea_store.go"
@@ -82,9 +112,19 @@
       "first_seen_in": "api/tests/integration/project_cap_hermetic_m5_test.go"
     },
     {
+      "id": "396a7f029c02708a",
+      "detector": "Postgres",
+      "first_seen_in": "api/tests/integration/project_cap_m4_test.go"
+    },
+    {
       "id": "4df01e360d804595",
       "detector": "Postgres",
       "first_seen_in": "cli/src/installer/bootstrap.ts"
+    },
+    {
+      "id": "1599e7620fda5b04",
+      "detector": "Postgres",
+      "first_seen_in": "cli/src/installer/components.ts"
     },
     {
       "id": "f32b2072e9084d39",
@@ -107,6 +147,16 @@
       "first_seen_in": "docs/knowledge-base/implementations/dashboard-badge-data-plane-poller/READY_TO_READ_TEAM-2026-07-02.md"
     },
     {
+      "id": "49ba200dbd1b4eaa",
+      "detector": "Postgres",
+      "first_seen_in": "docs/knowledge-base/implementations/dashboard-badge-data-plane-poller/READY_TO_READ_TEAM-2026-07-02.md"
+    },
+    {
+      "id": "42bbdb988420f0a2",
+      "detector": "Postgres",
+      "first_seen_in": "docs/plans/dogfood-2026-05-08-fixes-plan.md"
+    },
+    {
       "id": "6a867b62662cf001",
       "detector": "Postgres",
       "first_seen_in": "docs/plans/dogfood-2026-05-08-fixes-plan.md"
@@ -127,6 +177,11 @@
       "first_seen_in": "infra/helm/ory-kratos/values.schema.json"
     },
     {
+      "id": "a2178346a1b89310",
+      "detector": "Postgres",
+      "first_seen_in": "infra/helmfile/values/dev-public/loopzero-app-operator.yaml.gotmpl"
+    },
+    {
       "id": "fbad722999310ac4",
       "detector": "Postgres",
       "first_seen_in": "infra/helmfile/values/dev-public/loopzero-app-operator.yaml.gotmpl"
@@ -140,6 +195,11 @@
       "id": "9d65904ff5622d4e",
       "detector": "Postgres",
       "first_seen_in": "infra/helmfile/values/drill/ory-kratos.yaml.gotmpl"
+    },
+    {
+      "id": "1e8e04a1847bd456",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
     },
     {
       "id": "cb12f39680f62610",
@@ -172,6 +232,11 @@
       "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
     },
     {
+      "id": "f273d63b5bf12428",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
+    },
+    {
       "id": "f9b037b6a6dd9aae",
       "detector": "Postgres",
       "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
@@ -187,12 +252,27 @@
       "first_seen_in": "infra/tests/snapshots/helmfile-drill-phase1.yaml"
     },
     {
+      "id": "58f11604ca8770e1",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+    },
+    {
       "id": "76118ab9f6e7a8b9",
       "detector": "Postgres",
       "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
     },
     {
+      "id": "89e3207386bd09e7",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+    },
+    {
       "id": "8f009e0552c35796",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+    },
+    {
+      "id": "a982da9b26fd712f",
       "detector": "Postgres",
       "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
     },
