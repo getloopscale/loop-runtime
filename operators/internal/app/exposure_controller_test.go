@@ -46,7 +46,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 		const (
 			routeName   = "route-fin-test"
 			appRef      = "app-fin-route"
-			hostname    = "fin-test.dev.loopzero.example"
+			hostname    = "fin-test.dev.getloopscale.com"
 			serviceName = "fin-svc"
 		)
 
@@ -70,7 +70,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 		const (
 			routeName   = "route-del-test"
 			appRef      = "app-del-route"
-			hostname    = "del-test.dev.loopzero.example"
+			hostname    = "del-test.dev.getloopscale.com"
 			serviceName = "del-svc"
 		)
 
@@ -113,7 +113,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 		const (
 			routeName   = "route-cert-ready"
 			appRef      = "app-cert-test"
-			hostname    = "cert-test.dev.loopzero.example"
+			hostname    = "cert-test.dev.getloopscale.com"
 			serviceName = "cert-svc"
 		)
 
@@ -201,7 +201,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 		const (
 			routeName   = "route-no-cert"
 			appRef      = "app-no-cert"
-			hostname    = "no-cert.dev.loopzero.example"
+			hostname    = "no-cert.dev.getloopscale.com"
 			serviceName = "no-cert-svc"
 		)
 
@@ -240,7 +240,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 		const (
 			routeName   = "route-no-tls"
 			appRef      = "app-no-tls"
-			hostname    = "no-tls.dev.loopzero.example"
+			hostname    = "no-tls.dev.getloopscale.com"
 			serviceName = "no-tls-svc"
 		)
 

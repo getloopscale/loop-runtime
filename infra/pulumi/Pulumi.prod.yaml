@@ -2,8 +2,8 @@ config:
   loopzero-infra:environment: prod
   loopzero-infra:provider: digitalocean
   loopzero-infra:region: nyc3
-  loopzero-infra:domain: loopzero.example
-  loopzero-infra:dnsZone: loopzero.example
+  loopzero-infra:domain: getloopscale.com
+  loopzero-infra:dnsZone: getloopscale.com
   loopzero-infra:infraVersion: v1
   # Management cluster — platform services (ArgoCD, API, Traefik, cert-manager)
   loopzero-infra:mgmtK8sVersion: "1.33.9-do.4"

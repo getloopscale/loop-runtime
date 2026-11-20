@@ -32,10 +32,10 @@ import (
 //	kubectl --context=$LOOPZERO_CORE_CONTEXT -n loopzero-system port-forward svc/loopzero-api-metrics 19090:9090 &
 //
 //	LOOPZERO_CAPACITY=1 \
-//	LOOPZERO_API_URL=https://api.dev.loopzero.example \
+//	LOOPZERO_API_URL=https://api.dev.getloopscale.com \
 //	LOOPZERO_API_METRICS_URL=http://localhost:19090 \
 //	LOOPZERO_SERVICE_AUTH=... \
-//	LOOPZERO_APP_DOMAIN=dev.loopzero.example \
+//	LOOPZERO_APP_DOMAIN=dev.getloopscale.com \
 //	LOOPZERO_BUILD_NODES=2 \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityBuildKitConcurrency -v -timeout 60m
 func TestCapacityBuildKitConcurrency(t *testing.T) {

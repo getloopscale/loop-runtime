@@ -1,7 +1,7 @@
 # NodePort bridge — exposes the public Kratos to the host's edge (Caddy).
 #
 # WHY THIS EXISTS. Measured on the app-dev droplet on 2026-08-10, during the full
-# rebuild: `auth-dev.loopzero.example` returned 502 with Kratos PERFECTLY healthy in the cluster.
+# rebuild: `auth-dev.getloopscale.com` returned 502 with Kratos PERFECTLY healthy in the cluster.
 # The chart's Service is ClusterIP, and the edge reached it through a `kubectl port-forward` that
 # nobody supervised — no systemd unit, nothing. Destroying the clusters killed the
 # process, and login stayed down until someone restarted it by hand.

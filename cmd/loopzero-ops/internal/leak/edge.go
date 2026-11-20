@@ -147,7 +147,7 @@ var representatives = map[string]string{
 //
 // The site-level path `-` is deliberately NOT exempt. It declares the WIDEST
 // possible exposure, and exempting it made whole hosts vanish from the probe —
-// measured 2026-08-18: cloud.loopzero.example and auth.loopzero.example produced zero
+// measured 2026-08-18: cloud.getloopscale.com and auth.getloopscale.com produced zero
 // targets and zero complaints while serving live services. It falls into the
 // uncovered list instead; no `/` representative is invented, because the
 // responses measured at the root (404, 200) prove no closure.
@@ -247,7 +247,7 @@ func Targets(inventory string, host string) (targets []Target, uncovered []strin
 //
 // The root is PublicBySpec because whoever reaches it is a PERSON who typed the
 // address and needs a way to the login, not a dead end. Measured 2026-08-10:
-// `https://auth-dev.loopzero.example/` returned a plain-text `404 page not found`
+// `https://auth-dev.getloopscale.com/` returned a plain-text `404 page not found`
 // from Kratos itself. No product flow leads there, but a public address that
 // leads nowhere is a product defect even when nothing links to it.
 func IdentityTargets(host string) []Target {

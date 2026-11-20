@@ -23,14 +23,14 @@
 #   8. drill-teardown-validator.sh                      (T4.1.bis doctl fallback)
 #
 # Differences vs prod.yaml (intentional, documented):
-#   - Domain isolated: loopzero-drill.example (separate CF Zone, D7)
+#   - Domain isolated: drill.getloopscale.com (separate CF Zone, D7)
 #   - ephemeral lifecycle (expires-at tag, watchdog auto-destroy)
 #   - chaos-mesh installed by default (drill IS the chaos test env)
 #   - policyMode: enforce (validates prod-bound mitigations BEFORE prod)
 #   - VAP noRuntimeImageMutations: Deny (full posture validation)
 
-domain: loopzero-drill.example
-dnsZone: loopzero-drill.example
+domain: drill.getloopscale.com
+dnsZone: drill.getloopscale.com
 
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
 # Opt-in flag: when true, core.helmfile installs ESO operator +
@@ -78,7 +78,7 @@ registries:
 
 loki:
   maxGlobalStreamsPerUser: 50000
-  pushUrl: http://loki-internal.drill.loopzero-drill.example:3100/loki/api/v1/push
+  pushUrl: http://loki-internal.drill.drill.getloopscale.com:3100/loki/api/v1/push
 
 # Policy mode: enforce — validates D2 mitigation #4 against prod-identical
 # stack BEFORE real prod gets it. If chaos+maturity in drill shows enforce
@@ -148,21 +148,21 @@ velero:
 #   crossCluster.prometheusApi: <mgmtCluster prometheus endpoint>
 
 # Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder (drill DOKS)
-uiBaseUrl: "https://app.loopzero-drill.example"
-dashboardOrigin: "https://cloud.loopzero-drill.example"
+uiBaseUrl: "https://app.drill.getloopscale.com"
+dashboardOrigin: "https://cloud.drill.getloopscale.com"
 
 # T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
-publicAuthUrl: "https://auth.loopzero-drill.example"
-publicCloudUrl: "https://cloud.loopzero-drill.example"
-cookieDomain: "loopzero-drill.example"
+publicAuthUrl: "https://auth.drill.getloopscale.com"
+publicCloudUrl: "https://cloud.drill.getloopscale.com"
+cookieDomain: "drill.getloopscale.com"
 corsAllowedOrigins:
-  - "https://app.loopzero-drill.example"
-  - "https://cloud.loopzero-drill.example"
+  - "https://app.drill.getloopscale.com"
+  - "https://cloud.drill.getloopscale.com"
 allowedReturnUrls:
-  - "https://app.loopzero-drill.example"
-  - "https://app.loopzero-drill.example/"
-  - "https://cloud.loopzero-drill.example"
-  - "https://cloud.loopzero-drill.example/"
+  - "https://app.drill.getloopscale.com"
+  - "https://app.drill.getloopscale.com/"
+  - "https://cloud.drill.getloopscale.com"
+  - "https://cloud.drill.getloopscale.com/"
 dashboardRoute:
   login: /login
   register: /register

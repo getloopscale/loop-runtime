@@ -119,7 +119,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 
 		// publicDomain non-empty triggers canonical URL emission per ADR D3.
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "dev.loopzero.example", "")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "dev.getloopscale.com", "")
 		req := newStatusRequest("my-app", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -149,8 +149,8 @@ func TestStatusRoute(t *testing.T) {
 		// `<tenantID>-<projectID>-<appName>-<envName>.<publicDomain>`
 		// (J-25 sponsor walkthrough 2026-06-12 catches #21+#22 — closes the
 		// mismatch between status.url and the IngressRoute Host rule).
-		if resp["url"] != "https://acme-my-app-web-production.dev.loopzero.example" {
-			t.Errorf("expected canonical url 'https://acme-my-app-web-production.dev.loopzero.example', got '%v'", resp["url"])
+		if resp["url"] != "https://acme-my-app-web-production.dev.getloopscale.com" {
+			t.Errorf("expected canonical url 'https://acme-my-app-web-production.dev.getloopscale.com', got '%v'", resp["url"])
 		}
 
 		lastBuild, ok := resp["last_build"].(map[string]interface{})
@@ -182,7 +182,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "")
 		req := newStatusRequest("nonexistent", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -229,7 +229,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "")
 		req := newStatusRequest("my-app", "", true)
 		rec := httptest.NewRecorder()
 
@@ -256,7 +256,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{builds: []statushttp.StatusBuild{}}
 		releases := &fakeStatusReleaseStore{release: nil}
 
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "")
 		req := newStatusRequest("my-app", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -293,7 +293,7 @@ func TestStatusRoute(t *testing.T) {
 		builds := &fakeStatusBuildStore{}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "")
 		req := newStatusRequest("my-app", "production", false)
 		rec := httptest.NewRecorder()
 
@@ -331,7 +331,7 @@ func TestStatusRoute(t *testing.T) {
 		}
 		releases := &fakeStatusReleaseStore{}
 
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "")
 		req := newStatusRequest("my-app", "staging", true)
 		rec := httptest.NewRecorder()
 
@@ -377,7 +377,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 	releases := &fakeStatusReleaseStore{}
 
 	t.Run("metrics_range_url is templated when grafanaBaseURL set", func(t *testing.T) {
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "https://grafana.loopzero.local")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "https://grafana.loopzero.local")
 		req := newStatusRequest("sample", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -399,7 +399,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 	})
 
 	t.Run("metrics_range_url is empty (honest) when grafanaBaseURL empty", func(t *testing.T) {
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "")
 		req := newStatusRequest("sample", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -420,7 +420,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 	})
 
 	t.Run("prom_query_keys is always present with 8 canonical names in order", func(t *testing.T) {
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "")
 		req := newStatusRequest("sample", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -466,7 +466,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 		// Defense: the prom_query_keys list is canonical and independent of
 		// grafanaBaseURL — dashboard consumers need the list to render
 		// signal pills regardless of whether Grafana link is available.
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.loopzero.example", "", "https://grafana.loopzero.local")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "https://grafana.loopzero.local")
 		req := newStatusRequest("sample", "production", true)
 		rec := httptest.NewRecorder()
 

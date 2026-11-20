@@ -120,7 +120,7 @@ kratos:
       # `$ui` captures the trimmed UI base URL once; dashboardRoute map provides
       # per-flow paths (defaults match the React routes in cloud/dashboard/src/app.tsx).
       # v1.1 EC-05: trimSuffix prevents double slash when env yaml ships
-      # `uiBaseUrl: "https://app.loopzero.example/"`. v1.1 dashboardRoute map prevents
+      # `uiBaseUrl: "https://app.getloopscale.com/"`. v1.1 dashboardRoute map prevents
       # the /registration-vs-/register mismatch that caused 404 on signup in
       # the 2026-05-29 LIVE session.
       flows:
@@ -221,9 +221,9 @@ kratos:
     # --- Cookies (CSRF + Session shared domain) ---
     # Top-level `cookies.domain` applies to BOTH the anti-CSRF cookie and the
     # session cookie. Without this, CSRF cookie defaults to host-only scope
-    # (no Domain attribute), and breaks when init flow runs via app.loopzero.example
-    # (Caddy proxy) but form-action POSTs to auth.loopzero.example: browser stores
-    # cookie under app.loopzero.example, doesn't send to auth.loopzero.example, Kratos
+    # (no Domain attribute), and breaks when init flow runs via app.getloopscale.com
+    # (Caddy proxy) but form-action POSTs to auth.getloopscale.com: browser stores
+    # cookie under app.getloopscale.com, doesn't send to auth.getloopscale.com, Kratos
     # rejects with "Cookie header empty".
     # session.cookie.domain (below) overrides this for the session cookie
     # specifically — kept for backwards-compat with existing session
@@ -242,8 +242,8 @@ kratos:
         same_site: "Lax"
         # T2.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
         # When cookieDomain is set, the session cookie is scoped to that domain
-        # (eTLD+1 of app/cloud/auth), letting cloud.loopzero.example and
-        # app.loopzero.example read the cookie that auth.loopzero.example set. When unset
+        # (eTLD+1 of app/cloud/auth), letting cloud.getloopscale.com and
+        # app.getloopscale.com read the cookie that auth.getloopscale.com set. When unset
         # (local dev), cookie defaults to the request host. Schema enforces
         # cookieDomain ↔ publicAuthUrl coupling.
         {{- if hasKey .Values "cookieDomain" }}
@@ -277,7 +277,7 @@ kratos:
   identitySchemas:
     "identity.default.schema.json": |
       {
-        "$id": "https://schemas.loopzero.example/identity.schema.json",
+        "$id": "https://schemas.getloopscale.com/identity.schema.json",
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "LoopZero Identity",
         "type": "object",

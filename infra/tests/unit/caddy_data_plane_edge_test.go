@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// The public edge serves the data plane at app-dev.loopzero.example/v1/{memory,rag,lens}/*.
+// The public edge serves the data plane at app-dev.getloopscale.com/v1/{memory,rag,lens}/*.
 // Until #470 it forwarded those paths to a docker-compose Traefik on :8092 that nothing
 // versioned any more, which authorised them against a second loopzero-cloud with its own
 // user database. The edge now asks the core cluster's loopzero-cloud (localhost:3002)
@@ -54,7 +54,7 @@ func caddyHandle(t *testing.T, body, matcher string) string {
 }
 
 func TestDataPlaneEdgeAuthorisesThroughTheCoreCloudBeforeProxying(t *testing.T) {
-	app := caddyBlock(t, caddyfileText(t), "app-dev.loopzero.example")
+	app := caddyBlock(t, caddyfileText(t), "app-dev.getloopscale.com")
 	for _, r := range dataPlaneRoutes {
 		t.Run(r.prefix, func(t *testing.T) {
 			body := caddyHandle(t, app, r.prefix+"*")
@@ -97,7 +97,7 @@ func TestEdgeNoLongerUsesTheComposeTraefik(t *testing.T) {
 // internet, /internal/authz/forward mints a per-tenant data-plane key for any valid
 // loopzero_live_* key and hands it back in a response header.
 func TestPublicEdgeRefusesTheCloudInternalRoutes(t *testing.T) {
-	app := caddyBlock(t, caddyfileText(t), "app-dev.loopzero.example")
+	app := caddyBlock(t, caddyfileText(t), "app-dev.getloopscale.com")
 	body := caddyHandle(t, app, "/internal/*")
 	if !regexp.MustCompile(`(?m)^\s*respond 404\s*$`).MatchString(body) {
 		t.Errorf("handle /internal/* does not answer 404: %q", body)

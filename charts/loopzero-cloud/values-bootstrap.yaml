@@ -103,5 +103,5 @@ networkPolicy:
 # parameterised by environment on this path, and is not here either.
 ingressRoute:
   enabled: true
-  host: app.dev.loopzero.example
+  host: app.dev.getloopscale.com
   certIssuer: CFManaged

@@ -22,7 +22,7 @@
 #
 # Frozen 2026-08-06 against the 26 proxies then present.
 
-# --- app-dev.loopzero.example — the public dashboard edge -------------------------
+# --- app-dev.getloopscale.com — the public dashboard edge -------------------------
 # The one that prompted this gate. Ory returns the whole session; the dashboard
 # read only identity.{id,traits.email,traits.name}, verifiable_addresses and
 # authentication_methods, while devices[].ip_address, devices[].user_agent and
@@ -37,25 +37,25 @@
 # AFTER the new dashboard bundle is deployed to dev-public. Removing it first
 # would break login for the bundle currently served there. That ordering is the
 # one thing this row is here to record.
-app-dev.loopzero.example /sessions/whoami | reviewed | narrowed from /sessions/*; body still over-exposes devices[].ip_address + recovery_addresses, but the dashboard stopped reading it (loopzero-cloud eb81cb6) — DELETE this proxy once the new bundle is deployed
-app-dev.loopzero.example /self-service/* | reviewed | Kratos self-service flow UI; the browser drives these flows and needs the flow body
-app-dev.loopzero.example /v1/* | reviewed | loopzero-cloud BFF; authenticated, returns only the caller's own tenant data
-app-dev.loopzero.example /v1/integrations/github/* | reviewed | loopzero-cloud BFF; GitHub installation data scoped to the caller's tenant
-app-dev.loopzero.example /v1/memory/* | reviewed | data-plane loopzero-memory (core NodePort :18081) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
-app-dev.loopzero.example /v1/rag/* | reviewed | data-plane loopzero-rag (core NodePort :18082) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
-app-dev.loopzero.example /v1/lens/* | reviewed | data-plane loopzero-lens (core NodePort :18084) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
-app-dev.loopzero.example /mcp/* | reviewed | MCP gateway (core NodePort :18091, infra/helm/mcp-gateway); the gateway and each MCP server validate a Hydra token whose audience is that server, and a tool result is the caller's own tenant data; without a valid token the 401 carries only the metadata link (#470)
-app-dev.loopzero.example /.well-known/oauth-protected-resource/mcp/* | internal | RFC 9728 metadata served by the MCP gateway: the resource URI and its authorization server, public by design, no user data (#470)
-app-dev.loopzero.example /.well-known/oauth-authorization-server/mcp/* | internal | RFC 8414 metadata the MCP gateway proxies from Hydra: endpoints and supported algorithms, public by design, no user data (#470)
-app-dev.loopzero.example @auth_bff | reviewed | loopzero-cloud BFF auth exchange; mints the caller's own token
-app-dev.loopzero.example /engine/* | reviewed | engine API via BFF; tenant-scoped by the same auth the CLI uses
-app-dev.loopzero.example /api/v1/webhooks/github | internal | inbound GitHub webhook; the response is consumed by GitHub, never rendered in a browser
+app-dev.getloopscale.com /sessions/whoami | reviewed | narrowed from /sessions/*; body still over-exposes devices[].ip_address + recovery_addresses, but the dashboard stopped reading it (loopzero-cloud eb81cb6) — DELETE this proxy once the new bundle is deployed
+app-dev.getloopscale.com /self-service/* | reviewed | Kratos self-service flow UI; the browser drives these flows and needs the flow body
+app-dev.getloopscale.com /v1/* | reviewed | loopzero-cloud BFF; authenticated, returns only the caller's own tenant data
+app-dev.getloopscale.com /v1/integrations/github/* | reviewed | loopzero-cloud BFF; GitHub installation data scoped to the caller's tenant
+app-dev.getloopscale.com /v1/memory/* | reviewed | data-plane loopzero-memory (core NodePort :18081) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
+app-dev.getloopscale.com /v1/rag/* | reviewed | data-plane loopzero-rag (core NodePort :18082) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
+app-dev.getloopscale.com /v1/lens/* | reviewed | data-plane loopzero-lens (core NodePort :18084) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
+app-dev.getloopscale.com /mcp/* | reviewed | MCP gateway (core NodePort :18091, infra/helm/mcp-gateway); the gateway and each MCP server validate a Hydra token whose audience is that server, and a tool result is the caller's own tenant data; without a valid token the 401 carries only the metadata link (#470)
+app-dev.getloopscale.com /.well-known/oauth-protected-resource/mcp/* | internal | RFC 9728 metadata served by the MCP gateway: the resource URI and its authorization server, public by design, no user data (#470)
+app-dev.getloopscale.com /.well-known/oauth-authorization-server/mcp/* | internal | RFC 8414 metadata the MCP gateway proxies from Hydra: endpoints and supported algorithms, public by design, no user data (#470)
+app-dev.getloopscale.com @auth_bff | reviewed | loopzero-cloud BFF auth exchange; mints the caller's own token
+app-dev.getloopscale.com /engine/* | reviewed | engine API via BFF; tenant-scoped by the same auth the CLI uses
+app-dev.getloopscale.com /api/v1/webhooks/github | internal | inbound GitHub webhook; the response is consumed by GitHub, never rendered in a browser
 
-# --- auth-dev.loopzero.example — Ory Kratos + Hydra -------------------------------
-auth-dev.loopzero.example - | reviewed | Kratos public surface by design (login/registration/recovery flows); this IS the auth service's own hostname
-auth-dev.loopzero.example /oauth2/* | reviewed | Hydra OAuth2/OIDC endpoints; public by the OIDC spec
-auth-dev.loopzero.example /.well-known/* | reviewed | OIDC discovery + JWKS; public by the OIDC spec
-auth-dev.loopzero.example /userinfo | reviewed | OIDC UserInfo; returns the bearer's own claims, public by spec
+# --- auth-dev.getloopscale.com — Ory Kratos + Hydra -------------------------------
+auth-dev.getloopscale.com - | reviewed | Kratos public surface by design (login/registration/recovery flows); this IS the auth service's own hostname
+auth-dev.getloopscale.com /oauth2/* | reviewed | Hydra OAuth2/OIDC endpoints; public by the OIDC spec
+auth-dev.getloopscale.com /.well-known/* | reviewed | OIDC discovery + JWKS; public by the OIDC spec
+auth-dev.getloopscale.com /userinfo | reviewed | OIDC UserInfo; returns the bearer's own claims, public by spec
 # `/credentials` is `credentials_endpoint_draft_00` — an OAuth DRAFT that Hydra
 # ANNOUNCES in its discovery document and does NOT implement in this version.
 # Measured 2026-08-10: it returns 404, and the edge route exists, forwarding to
@@ -66,16 +66,16 @@ auth-dev.loopzero.example /userinfo | reviewed | OIDC UserInfo; returns the bear
 # gate requires a declaration for every reverse_proxy, and deleting the row would
 # fail the gate without removing the route. When Hydra implements the draft, this
 # row already covers the surface.
-auth-dev.loopzero.example /credentials | reviewed | OAuth draft that Hydra announces and does not implement in this version — 404 measured 2026-08-10; the edge route exists, so it stays declared
-auth-dev.loopzero.example /self-service/registration | reviewed | routed to the loopzero-cloud BFF for the anti-enumeration unifier (Red Team #43)
-auth-dev.loopzero.example /self-service/registration/methods/password | reviewed | same BFF unifier as above; byte-identical response for new vs existing email
+auth-dev.getloopscale.com /credentials | reviewed | OAuth draft that Hydra announces and does not implement in this version — 404 measured 2026-08-10; the edge route exists, so it stays declared
+auth-dev.getloopscale.com /self-service/registration | reviewed | routed to the loopzero-cloud BFF for the anti-enumeration unifier (Red Team #43)
+auth-dev.getloopscale.com /self-service/registration/methods/password | reviewed | same BFF unifier as above; byte-identical response for new vs existing email
 
-# cloud-dev.loopzero.example was REMOVED on 2026-08-10 — it was a second name for the
+# cloud-dev.getloopscale.com was REMOVED on 2026-08-10 — it was a second name for the
 # same dashboard, serving 301, and the GitHub webhook that justified the host is
-# already registered against app-dev (see the app-dev.loopzero.example
+# already registered against app-dev (see the app-dev.getloopscale.com
 # /api/v1/webhooks/github row above).
 
-# --- app/cloud/auth.loopzero.example — same droplet, non-"-dev" hostnames ---------
+# --- app/cloud/auth.getloopscale.com — same droplet, non-"-dev" hostnames ---------
 # Same Caddy process and same upstreams as the -dev hosts (see the file header:
 # one edge, several hostnames). Classified identically, not separately, because
 # the exposure is identical.
@@ -85,5 +85,5 @@ auth-dev.loopzero.example /self-service/registration/methods/password | reviewed
 # response is the tenant's app, not platform data — the isolation that matters
 # here is Traefik's host routing, covered by the tenant-predicate and
 # multi-cell placement guards rather than by this registry.
-*.preview-dev.loopzero.example - | reviewed | PR preview of a tenant's own app on the cell the engine names (cell_edge); response is the tenant's application, or the engine's fixed 401/404/503 text on a refused lookup
-*.prod-dev.loopzero.example - | reviewed | tenant's own app on the cell the engine names (cell_edge); response is the tenant's application, or the engine's fixed 401/404/503 text on a refused lookup
+*.preview-dev.getloopscale.app - | reviewed | PR preview of a tenant's own app on the cell the engine names (cell_edge); response is the tenant's application, or the engine's fixed 401/404/503 text on a refused lookup
+*.prod-dev.getloopscale.app - | reviewed | tenant's own app on the cell the engine names (cell_edge); response is the tenant's application, or the engine's fixed 401/404/503 text on a refused lookup

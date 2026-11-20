@@ -12,7 +12,7 @@
 #       anti-enumeration "fase code" response WITHOUT enqueueing an
 #       email (canonical Kratos behavior; was misread as "broken" in
 #       the report). Asserted via `was_notified:false` in Kratos logs.
-#   (2) Recovery for a KNOWN address (the canonical admin@loopzero.example
+#   (2) Recovery for a KNOWN address (the canonical admin@getloopscale.com
 #       seeded by seed-admin-loopzero-dev.sh) MUST enqueue + dispatch
 #       through Resend, with Resend confirming `delivered` or `sent`.
 #   (3) Signup for a fresh email MUST create a Kratos identity,
@@ -23,7 +23,7 @@
 # Pre-conditions:
 #   - dev-public canonical chain ran (seed-admin-loopzero-dev.sh, and
 #     helmfile sync of ory-kratos with LOOPZERO_RESEND_API_KEY exported —
-#     `task dev-public:sync-kratos`) — identity for admin@loopzero.example
+#     `task dev-public:sync-kratos`) — identity for admin@getloopscale.com
 #     present AND ConfigMap has the Bearer Resend key, NOT the
 #     placeholder REPLACE_VIA_LOOPZERO_RESEND_API_KEY string.
 #   - $RESEND_API_KEY exported (the operator's Resend account API key
@@ -38,7 +38,7 @@
 #   0  3 scenarios PASS (anti-enumeration mute + admin delivery +
 #      signup pipeline)
 #   1  At least one scenario FAILS — actual product regression
-#   2  BLOCKED (RESEND_API_KEY missing OR auth-dev.loopzero.example
+#   2  BLOCKED (RESEND_API_KEY missing OR auth-dev.getloopscale.com
 #      unreachable OR kubectl context broken)
 #
 # Usage:
@@ -47,9 +47,9 @@
 
 set -euo pipefail
 
-TARGET_HOST="${TARGET_HOST:-https://auth-dev.loopzero.example}"
+TARGET_HOST="${TARGET_HOST:-https://auth-dev.getloopscale.com}"
 KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-core}"
-KNOWN_EMAIL="${KNOWN_EMAIL:-admin@loopzero.example}"
+KNOWN_EMAIL="${KNOWN_EMAIL:-admin@getloopscale.com}"
 UNKNOWN_EMAIL="${UNKNOWN_EMAIL:-unknown-redteam-117@example.invalid}"
 SKIP_LIVE=0
 JSON_OUTPUT=0
@@ -164,7 +164,7 @@ scenario_a() {
   fi
 }
 
-# Scenario B: KNOWN admin@loopzero.example recovery MUST enqueue + Resend MUST
+# Scenario B: KNOWN admin@getloopscale.com recovery MUST enqueue + Resend MUST
 # return delivered/sent.
 scenario_b() {
   local flow_id

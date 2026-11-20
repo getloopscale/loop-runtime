@@ -48,7 +48,7 @@ func caddyBlock(t *testing.T, text, header string) string {
 
 func TestAppWildcardsRouteThroughTheCellLookup(t *testing.T) {
 	text := caddyfileText(t)
-	for _, site := range []string{"*.prod-dev.loopzero.example", "*.preview-dev.loopzero.example"} {
+	for _, site := range []string{"*.prod-dev.getloopscale.app", "*.preview-dev.getloopscale.app"} {
 		body := caddyBlock(t, text, site)
 		if !strings.Contains(body, "import cell_edge") {
 			t.Errorf("%s does not import the cell_edge lookup", site)

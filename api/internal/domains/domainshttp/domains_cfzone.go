@@ -22,7 +22,7 @@ import (
 // createWithCFZone implements the v2 domain creation flow:
 // 1. Create CF zone for the domain
 // 2. Scan existing DNS records (email preservation)
-// 3. Add CNAME @ → cname.dev.loopzero.example (proxied, CF flattening)
+// 3. Add CNAME @ → cname.dev.getloopscale.com (proxied, CF flattening)
 // 4. Return nameservers for user to configure at registrar
 //
 // Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
@@ -122,7 +122,7 @@ func (h *DomainHandler) createWithCFZone(w http.ResponseWriter, r *http.Request,
 // removeConflictingApexRecords deletes A/AAAA/CNAME records at the apex
 // of the zone before our routing CNAME is created. The CF DNS scan may
 // import existing A records from registrar parking — those conflict
-// with the canonical CNAME @ → cname.dev.loopzero.example required for CF
+// with the canonical CNAME @ → cname.dev.getloopscale.com required for CF
 // proxy + Traefik routing.
 func (h *DomainHandler) removeConflictingApexRecords(ctx context.Context, zoneID, domain string) {
 	scannedRecords, listErr := h.cfZone.ListDNSRecords(ctx, zoneID)

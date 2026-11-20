@@ -49,7 +49,7 @@ func TestExposedRoute_SpecFields(t *testing.T) {
 		},
 		Spec: ExposedRouteSpec{
 			ApplicationRef: "my-app",
-			Hostname:       "web.acme.dev.loopzero.example",
+			Hostname:       "web.acme.dev.getloopscale.com",
 			ServiceRef: ServiceRef{
 				Name: "web-svc",
 				Port: 8080,
@@ -64,8 +64,8 @@ func TestExposedRoute_SpecFields(t *testing.T) {
 	if route.Spec.ApplicationRef != "my-app" {
 		t.Errorf("expected ApplicationRef %q, got %q", "my-app", route.Spec.ApplicationRef)
 	}
-	if route.Spec.Hostname != "web.acme.dev.loopzero.example" {
-		t.Errorf("expected Hostname %q, got %q", "web.acme.dev.loopzero.example", route.Spec.Hostname)
+	if route.Spec.Hostname != "web.acme.dev.getloopscale.com" {
+		t.Errorf("expected Hostname %q, got %q", "web.acme.dev.getloopscale.com", route.Spec.Hostname)
 	}
 	if route.Spec.ServiceRef.Name != "web-svc" {
 		t.Errorf("expected ServiceRef.Name %q, got %q", "web-svc", route.Spec.ServiceRef.Name)

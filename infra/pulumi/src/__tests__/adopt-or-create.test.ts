@@ -196,14 +196,14 @@ describe("adopt-or-create — Cloudflare", () => {
   describe("lookupExistingDnsRecord", () => {
     it("returns zoneId/recordId when CNAME record exists at name", () => {
       mocks.execSync.mockReturnValueOnce(
-        JSON.stringify({ result: [{ id: "rec-id", name: "*.dev.loopzero.example", type: "CNAME" }] }) as never,
+        JSON.stringify({ result: [{ id: "rec-id", name: "*.dev.getloopscale.com", type: "CNAME" }] }) as never,
       );
-      expect(lookupExistingDnsRecord("zone", "*.dev.loopzero.example", "CNAME")).toBe("zone/rec-id");
+      expect(lookupExistingDnsRecord("zone", "*.dev.getloopscale.com", "CNAME")).toBe("zone/rec-id");
     });
 
     it("returns undefined when no record matches", () => {
       mocks.execSync.mockReturnValueOnce(JSON.stringify({ result: [] }) as never);
-      expect(lookupExistingDnsRecord("zone", "missing.dev.loopzero.example", "CNAME")).toBeUndefined();
+      expect(lookupExistingDnsRecord("zone", "missing.dev.getloopscale.com", "CNAME")).toBeUndefined();
     });
   });
 
@@ -228,16 +228,16 @@ describe("adopt-or-create — Cloudflare", () => {
   describe("lookupExistingWorkerRoute", () => {
     it("returns zoneId/routeId when pattern matches existing route", () => {
       mocks.execSync.mockReturnValueOnce(
-        JSON.stringify({ result: [{ id: "route-id", pattern: "*.dev.loopzero.example/*" }] }) as never,
+        JSON.stringify({ result: [{ id: "route-id", pattern: "*.dev.getloopscale.com/*" }] }) as never,
       );
-      expect(lookupExistingWorkerRoute("zone", "*.dev.loopzero.example/*")).toBe("zone/route-id");
+      expect(lookupExistingWorkerRoute("zone", "*.dev.getloopscale.com/*")).toBe("zone/route-id");
     });
 
     it("returns undefined when pattern does not match", () => {
       mocks.execSync.mockReturnValueOnce(
-        JSON.stringify({ result: [{ id: "x", pattern: "different.dev.loopzero.example/*" }] }) as never,
+        JSON.stringify({ result: [{ id: "x", pattern: "different.dev.getloopscale.com/*" }] }) as never,
       );
-      expect(lookupExistingWorkerRoute("zone", "*.dev.loopzero.example/*")).toBeUndefined();
+      expect(lookupExistingWorkerRoute("zone", "*.dev.getloopscale.com/*")).toBeUndefined();
     });
   });
 });
@@ -262,17 +262,17 @@ describe("resolveOrphans — orchestrator (Sprint 8 v3.2 contract)", () => {
       .mockReturnValueOnce(JSON.stringify({ registry: { name: "loopzero-system" } }) as never)
       .mockReturnValueOnce(JSON.stringify({ result: [{ id: "tunnel-id", name: "loopzero-tunnel-dev" }] }) as never)
       .mockReturnValueOnce(JSON.stringify({ result: [{ id: "kv-id", title: "loopzero-routing-dev" }] }) as never)
-      .mockReturnValueOnce(JSON.stringify({ result: [{ id: "dns-id", name: "*.dev.loopzero.example", type: "CNAME" }] }) as never)
+      .mockReturnValueOnce(JSON.stringify({ result: [{ id: "dns-id", name: "*.dev.getloopscale.com", type: "CNAME" }] }) as never)
       .mockReturnValueOnce(JSON.stringify({ result: [{ id: "loopzero-static-delivery-dev" }] }) as never)
-      .mockReturnValueOnce(JSON.stringify({ result: [{ id: "route-id", pattern: "*.dev.loopzero.example/*" }] }) as never);
+      .mockReturnValueOnce(JSON.stringify({ result: [{ id: "route-id", pattern: "*.dev.getloopscale.com/*" }] }) as never);
 
     const result: OrphanLookupResult = resolveOrphans({
       vpcName: "loopzero-infra-dev-sfo3-net",
       tunnelName: "loopzero-tunnel-dev",
       kvTitle: "loopzero-routing-dev",
-      dnsWildcard: "*.dev.loopzero.example",
+      dnsWildcard: "*.dev.getloopscale.com",
       workerScriptName: "loopzero-static-delivery-dev",
-      workerRoutePattern: "*.dev.loopzero.example/*",
+      workerRoutePattern: "*.dev.getloopscale.com/*",
       cfAccountId: "acc",
       cfZoneId: "zone",
     });

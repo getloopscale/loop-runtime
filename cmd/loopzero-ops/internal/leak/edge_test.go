@@ -51,11 +51,11 @@ func writeInventory(t *testing.T, content string) string {
 // list of their own that would age alone.
 func TestTargetsDeriveFromTheInventory(t *testing.T) {
 	inv := writeInventory(t, `# comments are ignored
-app-dev.loopzero.example /engine/* | reviewed | engine via BFF
-app-dev.loopzero.example /v1/* | reviewed | BFF
-other-host.loopzero.example /v1/* | reviewed | a different host, must not be included
+app-dev.getloopscale.com /engine/* | reviewed | engine via BFF
+app-dev.getloopscale.com /v1/* | reviewed | BFF
+other-host.getloopscale.com /v1/* | reviewed | a different host, must not be included
 `)
-	targets, uncovered, err := Targets(inv, "app-dev.loopzero.example")
+	targets, uncovered, err := Targets(inv, "app-dev.getloopscale.com")
 	if err != nil {
 		t.Fatalf("Targets: %v", err)
 	}
@@ -66,7 +66,7 @@ other-host.loopzero.example /v1/* | reviewed | a different host, must not be inc
 		t.Fatalf("want 2 targets, got %d: %+v", len(targets), targets)
 	}
 	for _, target := range targets {
-		if target.Host != "app-dev.loopzero.example" {
+		if target.Host != "app-dev.getloopscale.com" {
 			t.Errorf("a target from another host leaked in: %+v", target)
 		}
 		if strings.Contains(target.Path, "*") {
@@ -78,8 +78,8 @@ other-host.loopzero.example /v1/* | reviewed | a different host, must not be inc
 // A new declared family without a representative must not vanish in silence:
 // silence becomes a PASS that measured nothing.
 func TestTargetsReportAFamilyWithoutARepresentative(t *testing.T) {
-	inv := writeInventory(t, "app-dev.loopzero.example /v1/invoicing/* | reviewed | new surface\n")
-	targets, uncovered, err := Targets(inv, "app-dev.loopzero.example")
+	inv := writeInventory(t, "app-dev.getloopscale.com /v1/invoicing/* | reviewed | new surface\n")
+	targets, uncovered, err := Targets(inv, "app-dev.getloopscale.com")
 	if err != nil {
 		t.Fatalf("Targets: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestTargetsReportAFamilyWithoutARepresentative(t *testing.T) {
 	if len(uncovered) != 1 {
 		t.Fatalf("want exactly one reported hole, got %v", uncovered)
 	}
-	if !strings.Contains(uncovered[0], "/v1/invoicing/*") || !strings.Contains(uncovered[0], "app-dev.loopzero.example") {
+	if !strings.Contains(uncovered[0], "/v1/invoicing/*") || !strings.Contains(uncovered[0], "app-dev.getloopscale.com") {
 		t.Errorf("the hole must name its family and its host: %q", uncovered[0])
 	}
 }
@@ -97,11 +97,11 @@ func TestTargetsReportAFamilyWithoutARepresentative(t *testing.T) {
 // Exempting is a decision, forgetting is a defect: exempt families produce
 // neither a target nor a hole.
 func TestTargetsDoNotConfuseExemptWithForgotten(t *testing.T) {
-	inv := writeInventory(t, `app-dev.loopzero.example /self-service/* | reviewed | browser flow
-app-dev.loopzero.example @auth_bff | reviewed | named matcher
-app-dev.loopzero.example /api/v1/webhooks/github | internal | HMAC
+	inv := writeInventory(t, `app-dev.getloopscale.com /self-service/* | reviewed | browser flow
+app-dev.getloopscale.com @auth_bff | reviewed | named matcher
+app-dev.getloopscale.com /api/v1/webhooks/github | internal | HMAC
 `)
-	targets, uncovered, err := Targets(inv, "app-dev.loopzero.example")
+	targets, uncovered, err := Targets(inv, "app-dev.getloopscale.com")
 	if err != nil {
 		t.Fatalf("Targets: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestProbeMarksAnUnreachableTargetSkipped(t *testing.T) {
 // routes would fail that fix. 200 serves the content, 302 leads to it.
 func TestProbeAcceptsARedirectOnAPublicRoute(t *testing.T) {
 	cli, host := tlsServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		http.Redirect(w, &http.Request{}, "https://app-dev.loopzero.example/login", http.StatusFound)
+		http.Redirect(w, &http.Request{}, "https://app-dev.getloopscale.com/login", http.StatusFound)
 	})
 	v := Probe(context.Background(), cli, Target{Host: host, Path: "/", PublicBySpec: true,
 		Why: "whoever types the address is a person and needs a way to the login"})
@@ -197,7 +197,7 @@ func TestDiscoveryLeakCatchesAnInternalHost(t *testing.T) {
 	doc := map[string]any{
 		"issuer":                 "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/",
 		"jwks_uri":               "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json",
-		"authorization_endpoint": "https://auth-dev.loopzero.example/oauth2/auth",
+		"authorization_endpoint": "https://auth-dev.getloopscale.com/oauth2/auth",
 		"scopes_supported":       []any{"openid"},
 	}
 	got := DiscoveryLeak(doc)
@@ -213,9 +213,9 @@ func TestDiscoveryLeakCatchesAnInternalHost(t *testing.T) {
 
 func TestDiscoveryLeakAcceptsACorrectDocument(t *testing.T) {
 	doc := map[string]any{
-		"issuer":                 "https://auth-dev.loopzero.example/",
-		"jwks_uri":               "https://auth-dev.loopzero.example/.well-known/jwks.json",
-		"authorization_endpoint": "https://auth-dev.loopzero.example/oauth2/auth",
+		"issuer":                 "https://auth-dev.getloopscale.com/",
+		"jwks_uri":               "https://auth-dev.getloopscale.com/.well-known/jwks.json",
+		"authorization_endpoint": "https://auth-dev.getloopscale.com/oauth2/auth",
 	}
 	if got := DiscoveryLeak(doc); len(got) != 0 {
 		t.Errorf("a correct document must not yield a leak, got %v", got)

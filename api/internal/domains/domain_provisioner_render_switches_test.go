@@ -51,7 +51,7 @@ func TestDomainProvisionerRendersWithTheConfiguredDeliverySwitches(t *testing.T)
 				slog.Default(),
 				DomainProvisionerConfig{
 					Interval:            time.Second,
-					BaseDomain:          "dev.loopzero.example",
+					BaseDomain:          "dev.getloopscale.com",
 					RegistryURL:         "registry.example.com",
 					ClusterIssuer:       "test-issuer",
 					ProgressiveDelivery: tc.progressive,

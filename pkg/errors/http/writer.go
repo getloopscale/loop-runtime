@@ -14,15 +14,15 @@ import (
 // ProblemTypeBase is the URI prefix for RFC 9457 "type" fields.
 // The full URI is constructed as ProblemTypeBase + kebab-case(code).
 //
-// Example: code "LOCK_TIMEOUT" → "https://loopzero.example/errors/lock-timeout".
+// Example: code "LOCK_TIMEOUT" → "https://getloopscale.com/errors/lock-timeout".
 //
 // Per ADR-0030 + gate PKG-G15.
-const ProblemTypeBase = "https://loopzero.example/errors/"
+const ProblemTypeBase = "https://getloopscale.com/errors/"
 
 // problemDetails is the RFC 9457 wire payload. Shape:
 //
 //	{
-//	  "type":     "https://loopzero.example/errors/lock-timeout",
+//	  "type":     "https://getloopscale.com/errors/lock-timeout",
 //	  "title":    "Lock Timeout",
 //	  "status":   409,
 //	  "detail":   "could not acquire environment lock within timeout",

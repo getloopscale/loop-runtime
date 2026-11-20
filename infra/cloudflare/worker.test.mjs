@@ -37,19 +37,19 @@ function loadWorker(kv) {
 test("a published host is sent to its cell's ingress with its Host intact", async () => {
   const { handle, fetches } = loadWorker({
     "route:tn-a-web-production": { cellId: "cell-1" },
-    "ingress:cell-1": { resolveOverride: "cell-1.ingress.dev.loopzero.example" },
+    "ingress:cell-1": { resolveOverride: "cell-1.ingress.dev.getloopscale.com" },
   });
-  const res = await handle("https://tn-a-web-production.dev.loopzero.example/api?x=1");
+  const res = await handle("https://tn-a-web-production.dev.getloopscale.com/api?x=1");
   assert.equal(res.status, 200);
   assert.equal(fetches.length, 1);
-  assert.equal(new URL(fetches[0].url).host, "tn-a-web-production.dev.loopzero.example");
-  assert.equal(fetches[0].init.cf.resolveOverride, "cell-1.ingress.dev.loopzero.example");
+  assert.equal(new URL(fetches[0].url).host, "tn-a-web-production.dev.getloopscale.com");
+  assert.equal(fetches[0].init.cf.resolveOverride, "cell-1.ingress.dev.getloopscale.com");
 });
 
 // A cell the edge has no ingress for is refused, never guessed: 503, nothing fetched.
 test("a route whose cell has no ingress is refused with 503", async () => {
   const { handle, fetches } = loadWorker({ "route:tn-a-web-production": { cellId: "cell-9" } });
-  const res = await handle("https://tn-a-web-production.dev.loopzero.example/");
+  const res = await handle("https://tn-a-web-production.dev.getloopscale.com/");
   assert.equal(res.status, 503);
   assert.equal(fetches.length, 0);
 });
@@ -58,18 +58,18 @@ test("a route whose cell has no ingress is refused with 503", async () => {
 test("a custom domain is routed by its full hostname", async () => {
   const { handle, fetches } = loadWorker({
     "route:shop.example.com": { cellId: "cell-0" },
-    "ingress:cell-0": { resolveOverride: "cell-0.ingress.dev.loopzero.example" },
+    "ingress:cell-0": { resolveOverride: "cell-0.ingress.dev.getloopscale.com" },
   });
   const res = await handle("https://shop.example.com/");
   assert.equal(res.status, 200);
-  assert.equal(fetches[0].init.cf.resolveOverride, "cell-0.ingress.dev.loopzero.example");
+  assert.equal(fetches[0].init.cf.resolveOverride, "cell-0.ingress.dev.getloopscale.com");
 });
 
 // The old tenant-parsing path (cell:<tenant> from an {app}.{tenant} host) is gone: the
 // platform never emits such hosts, and nothing ever wrote those keys.
 test("no route and no static app passes the request through unchanged", async () => {
   const { handle, fetches } = loadWorker({ "cell:web": { cellId: "cell-1", ingressIp: "10.0.0.1" } });
-  await handle("https://app.web.dev.loopzero.example/");
+  await handle("https://app.web.dev.getloopscale.com/");
   assert.equal(fetches.length, 1);
   assert.equal(fetches[0].init, undefined, "a pass-through carries no override");
 });

@@ -28,13 +28,13 @@ func writeFixture(t *testing.T, body string) string {
 
 const canonicalBody = `# Canonical dev-public edge Caddyfile fixture.
 
-*.preview-dev.loopzero.example {
+*.preview-dev.getloopscale.app {
   reverse_proxy https://127.0.0.1:8443 {
     transport http { tls_insecure_skip_verify }
   }
 }
 
-*.prod-dev.loopzero.example {
+*.prod-dev.getloopscale.app {
   reverse_proxy https://127.0.0.1:8443 {
     transport http { tls_insecure_skip_verify }
   }
@@ -53,11 +53,11 @@ func TestCheck_CanonicalCaddyfilePasses(t *testing.T) {
 }
 
 func TestCheck_DockerNetworkIPHardcodedFails(t *testing.T) {
-	body := `*.preview-dev.loopzero.example {
+	body := `*.preview-dev.getloopscale.app {
   reverse_proxy https://172.18.0.10:443
 }
 
-*.prod-dev.loopzero.example {
+*.prod-dev.getloopscale.app {
   reverse_proxy https://127.0.0.1:8443
 }
 `
@@ -70,10 +70,10 @@ func TestCheck_DockerNetworkIPHardcodedFails(t *testing.T) {
 
 func TestCheck_DockerNetworkIPInCommentIsAllowed(t *testing.T) {
 	body := `# The upstream MUST NOT be 172.18.0.10:443 — that IP drifts across docker restart.
-*.preview-dev.loopzero.example {
+*.preview-dev.getloopscale.app {
   reverse_proxy https://127.0.0.1:8443
 }
-*.prod-dev.loopzero.example {
+*.prod-dev.getloopscale.app {
   reverse_proxy https://127.0.0.1:8443
 }
 `
@@ -85,11 +85,11 @@ func TestCheck_DockerNetworkIPInCommentIsAllowed(t *testing.T) {
 }
 
 func TestCheck_ProdDevBlockMissingCanonicalUpstreamFails(t *testing.T) {
-	body := `*.preview-dev.loopzero.example {
+	body := `*.preview-dev.getloopscale.app {
   reverse_proxy https://127.0.0.1:8443
 }
 
-*.prod-dev.loopzero.example {
+*.prod-dev.getloopscale.app {
   reverse_proxy https://loopzero-cell-0.local:443
 }
 `
@@ -101,10 +101,10 @@ func TestCheck_ProdDevBlockMissingCanonicalUpstreamFails(t *testing.T) {
 }
 
 func TestCheck_PreviewDevBlockMissingCanonicalUpstreamFails(t *testing.T) {
-	body := `*.preview-dev.loopzero.example {
+	body := `*.preview-dev.getloopscale.app {
   reverse_proxy https://loopzero-cell-0.local:443
 }
-*.prod-dev.loopzero.example {
+*.prod-dev.getloopscale.app {
   reverse_proxy https://127.0.0.1:8443
 }
 `
@@ -164,11 +164,11 @@ const cellEdgeBody = `(cell_edge) {
   }
 }
 
-*.preview-dev.loopzero.example {
+*.preview-dev.getloopscale.app {
   import cell_edge
 }
 
-*.prod-dev.loopzero.example {
+*.prod-dev.getloopscale.app {
   import cell_edge
 }
 `
@@ -194,7 +194,7 @@ func TestCheck_CellEdgeMappingADockerAddressFails(t *testing.T) {
 
 // Importing a snippet that proxies somewhere else does not satisfy the invariant.
 func TestCheck_ImportOfASnippetWithoutACellMapFails(t *testing.T) {
-	body := "(other) {\n  reverse_proxy localhost:5173\n}\n\n*.preview-dev.loopzero.example {\n  import other\n}\n\n*.prod-dev.loopzero.example {\n  import other\n}\n"
+	body := "(other) {\n  reverse_proxy localhost:5173\n}\n\n*.preview-dev.getloopscale.app {\n  import other\n}\n\n*.prod-dev.getloopscale.app {\n  import other\n}\n"
 	root := writeFixture(t, body)
 	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations, got %v", err)

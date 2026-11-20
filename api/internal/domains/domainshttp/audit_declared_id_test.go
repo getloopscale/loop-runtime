@@ -19,7 +19,7 @@ import (
 // hand. The handler declares it now.
 func TestDomainsCreateDeclaresProjectAsResourceID(t *testing.T) {
 	// Arrange.
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
 	req = routestest.WithAuditSlot(routestest.WithAuth(req, routestest.DefaultUserContext()))

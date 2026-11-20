@@ -325,7 +325,7 @@ func TestK3d_RegressionSuiteRunsAgainstClusterPartial(t *testing.T) {
 	kcPath := strings.TrimSpace(kc)
 	defer os.Remove(kcPath)
 
-	cmd := exec.Command("bash", "../../../helmfile/scripts/regression-checks.sh", "dev.loopzero.example")
+	cmd := exec.Command("bash", "../../../helmfile/scripts/regression-checks.sh", "dev.getloopscale.com")
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kcPath)
 	out, _ := cmd.CombinedOutput()
 	output := string(out)

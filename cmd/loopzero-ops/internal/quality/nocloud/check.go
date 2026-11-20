@@ -1,6 +1,6 @@
 // Package nocloud enforces the T1.1 hermetic guard of plan
 // m1-commit-canonical-30-fixes: no test/seed script may declare a default
-// env-var value pointing at `cloud-dev.loopzero.example` (the Caddy 301
+// env-var value pointing at `cloud-dev.getloopscale.com` (the Caddy 301
 // redirect trap introduced by commit ee77b8da 2026-06-22).
 //
 // EC-1 absorption: the `/api/v1/webhooks/github` handler is the
@@ -37,11 +37,11 @@ var scanRoots = []string{
 	"infra/scripts/local",
 }
 
-// forbiddenRE matches `${VAR:-https://cloud-dev.loopzero.example...` — the
+// forbiddenRE matches `${VAR:-https://cloud-dev.getloopscale.com...` — the
 // default-value form that silently routes through Caddy's redirect trap.
 //
-// Bash regex was: \$\{[A-Z_]+:-https://cloud-dev\.loopzero\.example
-var forbiddenRE = regexp.MustCompile(`\$\{[A-Z_]+:-https://cloud-dev\.loopzero\.example`)
+// Bash regex was: \$\{[A-Z_]+:-https://cloud-dev\.getloopscale\.com
+var forbiddenRE = regexp.MustCompile(`\$\{[A-Z_]+:-https://cloud-dev\.getloopscale\.com`)
 
 // webhookExceptionRE is the EC-1 stage-2 filter — paths under
 // /api/v1/webhooks/github are handler-direct (Caddyfile 142-156 exception)

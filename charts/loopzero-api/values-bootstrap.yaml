@@ -233,7 +233,7 @@ rbac:
 # except in drill, which overrides it.
 ingressRoute:
   enabled: true
-  host: api.dev.loopzero.example
+  host: api.dev.getloopscale.com
   # SD-04.6 — the edge is the one place a single instance of the rate limit exists, so
   # neither per-replica multiplication nor the fixed-window boundary burst applies to
   # traffic on this route. body-limit matches SOURCE_MAX_BUNDLE_SIZE (SD-14.1;

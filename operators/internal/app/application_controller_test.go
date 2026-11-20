@@ -46,7 +46,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			env         = "production"
 			serviceName = "myapi-svc"
 
-			routedHostname = "tn-acme-myapi-myapi-svc-production.dev.loopzero.example"
+			routedHostname = "tn-acme-myapi-myapi-svc-production.dev.getloopscale.com"
 		)
 
 		BeforeAll(func() {
@@ -55,7 +55,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		It("should set the routed hostname via naming.AppHostname", func() {
-			// naming.AppHostname("tn-acme", "myapi", "myapi-svc", "production", "dev.loopzero.example"),
+			// naming.AppHostname("tn-acme", "myapi", "myapi-svc", "production", "dev.getloopscale.com"),
 			// the Host rule the IngressRoute renderer emits for this app.
 			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
 				g.Expect(app.Spec.Hostname).To(Equal(routedHostname))
@@ -165,8 +165,8 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			env         = "production"
 			serviceName = "web"
 
-			legacyHostname = "shop-production.dev.loopzero.example"
-			routedHostname = "tn-legacy-shop-web-production.dev.loopzero.example"
+			legacyHostname = "shop-production.dev.getloopscale.com"
+			routedHostname = "tn-legacy-shop-web-production.dev.getloopscale.com"
 		)
 
 		BeforeAll(func() {

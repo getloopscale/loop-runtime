@@ -149,7 +149,7 @@ func (f *fakeReleaseConvergenceStoreForCallback) CancelAllByEnv(_ context.Contex
 
 func TestNewSyncCallbackActivator(t *testing.T) {
 	store := &fakeReleaseConvergenceStoreForCallback{}
-	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.loopzero.example", "", nil)
+	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.getloopscale.com", "", nil)
 	if activator == nil {
 		t.Fatal("expected non-nil activator")
 	}
@@ -157,7 +157,7 @@ func TestNewSyncCallbackActivator(t *testing.T) {
 
 func TestSyncCallbackActivator_OnSyncCompleted_UnlabelledAppIsRejected(t *testing.T) {
 	store := &fakeReleaseConvergenceStoreForCallback{}
-	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.loopzero.example", "", nil).
+	activator := NewSyncCallbackActivator(store, nil, nil, nil, "dev.getloopscale.com", "", nil).
 		WithAppLabelReader(&fakeLabelReader{})
 
 	err := activator.OnSyncCompleted("nohyphen", "abc123")
@@ -171,7 +171,7 @@ func TestSyncCallbackActivator_OnSyncCompleted_NoMatchingReleases(t *testing.T) 
 		pendingReleases: nil, // no pending releases
 	}
 	es := &fakeCallbackEventStore{}
-	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger()).
+	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.getloopscale.com", "", testLogger()).
 		WithAppLabelReader(labelsFor("tn-acme-app-production", "tn-acme", "production"))
 
 	// Should succeed with 0 activations
@@ -193,7 +193,7 @@ func TestSyncCallbackActivator_OnSyncCompleted_SkipsEmptyGitCommit(t *testing.T)
 		},
 	}
 	es := &fakeCallbackEventStore{}
-	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger()).
+	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.getloopscale.com", "", testLogger()).
 		WithAppLabelReader(labelsFor("tn-acme-app-production", "tn-acme", "production"))
 
 	err := activator.OnSyncCompleted("tn-acme-app-production", "rev123")
@@ -218,7 +218,7 @@ func TestSyncCallbackActivator_OnSyncCompleted_SkipsMismatchedRevision(t *testin
 		},
 	}
 	es := &fakeCallbackEventStore{}
-	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.loopzero.example", "", testLogger()).
+	activator := NewSyncCallbackActivator(store, nil, nil, es, "dev.getloopscale.com", "", testLogger()).
 		WithAppLabelReader(labelsFor("tn-acme-app-production", "tn-acme", "production"))
 
 	err := activator.OnSyncCompleted("tn-acme-app-production", "different-revision")
@@ -232,7 +232,7 @@ func TestSyncCallbackActivator_OnSyncCompleted_SkipsMismatchedRevision(t *testin
 }
 
 func TestSyncCallbackActivator_OnSyncCompleted_ActivatesMatchingRelease(t *testing.T) {
-	appsJSON, _ := json.Marshal([]deploycontracts.AppRelease{{Name: "api", URL: "https://api.dev.loopzero.example"}})
+	appsJSON, _ := json.Marshal([]deploycontracts.AppRelease{{Name: "api", URL: "https://api.dev.getloopscale.com"}})
 	store := &fakeReleaseConvergenceStoreForCallback{
 		pendingReleases: []db.Release{
 			{
@@ -247,7 +247,7 @@ func TestSyncCallbackActivator_OnSyncCompleted_ActivatesMatchingRelease(t *testi
 	ets := newFakeEnvTargetStoreStatic()
 	locker := &fakeLockerStatic{}
 
-	activator := NewSyncCallbackActivator(store, ets, locker, es, "dev.loopzero.example", "", testLogger()).
+	activator := NewSyncCallbackActivator(store, ets, locker, es, "dev.getloopscale.com", "", testLogger()).
 		WithAppLabelReader(labelsFor("tn-acme-app-production", "tn-acme", "production"))
 
 	err := activator.OnSyncCompleted("tn-acme-app-production", "commit-abc")
@@ -311,7 +311,7 @@ func TestReleaseAppsToActivationApps_EmptyApps(t *testing.T) {
 		Environment: "production",
 		Apps:        json.RawMessage(`[]`),
 	}
-	apps := releaseAppsToActivationApps(release, "dev.loopzero.example", "")
+	apps := releaseAppsToActivationApps(release, "dev.getloopscale.com", "")
 	if len(apps) != 0 {
 		t.Errorf("expected 0 apps, got %d", len(apps))
 	}
@@ -319,8 +319,8 @@ func TestReleaseAppsToActivationApps_EmptyApps(t *testing.T) {
 
 func TestReleaseAppsToActivationApps_WithApps(t *testing.T) {
 	appsJSON, _ := json.Marshal([]deploycontracts.AppRelease{
-		{Name: "api", URL: "https://api.dev.loopzero.example", Type: "server"},
-		{Name: "web", URL: "https://web.dev.loopzero.example", Type: "static"},
+		{Name: "api", URL: "https://api.dev.getloopscale.com", Type: "server"},
+		{Name: "web", URL: "https://web.dev.getloopscale.com", Type: "static"},
 	})
 	release := &db.Release{
 		TenantID:    "tn-acme",
@@ -328,7 +328,7 @@ func TestReleaseAppsToActivationApps_WithApps(t *testing.T) {
 		Environment: "production",
 		Apps:        appsJSON,
 	}
-	apps := releaseAppsToActivationApps(release, "dev.loopzero.example", "")
+	apps := releaseAppsToActivationApps(release, "dev.getloopscale.com", "")
 	if len(apps) != 2 {
 		t.Fatalf("expected 2 apps, got %d", len(apps))
 	}
@@ -342,7 +342,7 @@ func TestReleaseAppsToActivationApps_InvalidJSON(t *testing.T) {
 		TenantID: "tn-acme", ProjectID: "my-app", Environment: "production",
 		Apps: json.RawMessage(`invalid-json`),
 	}
-	apps := releaseAppsToActivationApps(release, "dev.loopzero.example", "")
+	apps := releaseAppsToActivationApps(release, "dev.getloopscale.com", "")
 	if len(apps) != 0 {
 		t.Errorf("expected 0 apps for invalid JSON, got %d", len(apps))
 	}
@@ -353,7 +353,7 @@ func TestReleaseAppsToActivationApps_NilApps(t *testing.T) {
 		TenantID: "tn-acme", ProjectID: "my-app", Environment: "production",
 		Apps: nil,
 	}
-	apps := releaseAppsToActivationApps(release, "dev.loopzero.example", "")
+	apps := releaseAppsToActivationApps(release, "dev.getloopscale.com", "")
 	if len(apps) != 0 {
 		t.Errorf("expected 0 apps for nil Apps, got %d", len(apps))
 	}
@@ -362,11 +362,11 @@ func TestReleaseAppsToActivationApps_NilApps(t *testing.T) {
 // TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61 is the
 // release-blockers-2026-06-25-set v1.1 #61 RED test. When both baseDomain
 // ("loopzero.local" — internal, non-resolvable) AND publicDomain
-// ("prod-dev.loopzero.example" — canonical public wildcard) are set, the URL
+// ("prod-dev.getloopscale.app" — canonical public wildcard) are set, the URL
 // emitted on deploy.completed MUST use publicDomain — the SAME URL that
 // `loopzero status` returns. Pre-#61 the function only accepted baseDomain →
 // `loopzero deploy` announced `.loopzero.local` while `loopzero status` returned
-// `.prod-dev.loopzero.example`. The mismatch is the bug.
+// `.prod-dev.getloopscale.app`. The mismatch is the bug.
 func TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61(t *testing.T) {
 	appsJSON, _ := json.Marshal([]deploycontracts.AppRelease{
 		{Name: "app", Type: "server"},
@@ -377,11 +377,11 @@ func TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61(t *testin
 		Environment: "preview",
 		Apps:        appsJSON,
 	}
-	apps := releaseAppsToActivationApps(release, "loopzero.local", "prod-dev.loopzero.example")
+	apps := releaseAppsToActivationApps(release, "loopzero.local", "prod-dev.getloopscale.app")
 	if len(apps) != 1 {
 		t.Fatalf("expected 1 app, got %d", len(apps))
 	}
-	wantURL := "https://tn-cb13ca5299a9391a-loopzerokit-example-app-preview.prod-dev.loopzero.example"
+	wantURL := "https://tn-cb13ca5299a9391a-loopzerokit-example-app-preview.prod-dev.getloopscale.app"
 	if apps[0].URL != wantURL {
 		t.Errorf("#61 regression: got URL %q, want %q (publicDomain MUST be preferred over .loopzero.local)",
 			apps[0].URL, wantURL)
@@ -405,8 +405,8 @@ func TestReleaseAppsToActivationApps_FallsBackToBaseDomainWhenPublicEmpty_M61(t 
 		Environment: "production",
 		Apps:        appsJSON,
 	}
-	apps := releaseAppsToActivationApps(release, "dev.loopzero.example", "")
-	wantURL := "https://tn-acme-my-app-app-production.dev.loopzero.example"
+	apps := releaseAppsToActivationApps(release, "dev.getloopscale.com", "")
+	wantURL := "https://tn-acme-my-app-app-production.dev.getloopscale.com"
 	if apps[0].URL != wantURL {
 		t.Errorf("expected fallback URL %q, got %q", wantURL, apps[0].URL)
 	}

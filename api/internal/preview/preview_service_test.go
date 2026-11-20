@@ -395,12 +395,12 @@ func TestPreviewURL_CanonicalWildcardConvention(t *testing.T) {
 	}{
 		{
 			name:     "public domain + entry app — canonical clickable URL",
-			public:   "preview-dev.loopzero.example",
+			public:   "preview-dev.getloopscale.app",
 			tenant:   "tn-08fa2ecedc3c7e77",
 			project:  "sample",
 			entry:    "api",
 			prNumber: 1,
-			want:     "https://tn-08fa2ecedc3c7e77-sample-api-preview-pr-1.preview-dev.loopzero.example",
+			want:     "https://tn-08fa2ecedc3c7e77-sample-api-preview-pr-1.preview-dev.getloopscale.app",
 		},
 		{
 			name:     "public empty → falls back to base domain (legacy local)",
@@ -413,12 +413,12 @@ func TestPreviewURL_CanonicalWildcardConvention(t *testing.T) {
 		},
 		{
 			name:     "no entry app — URL omits app segment (structurally valid, won't match IngressRoute)",
-			public:   "preview-dev.loopzero.example",
+			public:   "preview-dev.getloopscale.app",
 			tenant:   "acme",
 			project:  "webapp",
 			entry:    "",
 			prNumber: 7,
-			want:     "https://acme-webapp-preview-pr-7.preview-dev.loopzero.example",
+			want:     "https://acme-webapp-preview-pr-7.preview-dev.getloopscale.app",
 		},
 		{
 			name:     "both domains empty — empty URL (no surface)",

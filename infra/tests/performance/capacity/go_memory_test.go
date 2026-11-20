@@ -34,10 +34,10 @@ import (
 //	kubectl --context=$LOOPZERO_CORE_CONTEXT -n loopzero-system port-forward svc/loopzero-api-metrics 19090:9090 &
 //
 //	LOOPZERO_CAPACITY=1 \
-//	LOOPZERO_API_URL=https://api.dev.loopzero.example \
+//	LOOPZERO_API_URL=https://api.dev.getloopscale.com \
 //	LOOPZERO_API_METRICS_URL=http://localhost:19090 \
 //	LOOPZERO_SERVICE_AUTH=... \
-//	LOOPZERO_APP_DOMAIN=dev.loopzero.example \
+//	LOOPZERO_APP_DOMAIN=dev.getloopscale.com \
 //	LOOPZERO_CORE_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-mgmt \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityGoMemory -v -timeout 45m \
 //	  -args -workers=10

@@ -29,7 +29,7 @@ func runRegressionScript(t *testing.T) (string, int) {
 		t.Fatalf("regression-checks.sh not found at %s", scriptPath)
 	}
 	cmd := exec.Command("bash", scriptPath)
-	cmd.Env = append(os.Environ(), "LOOPZERO_DOMAIN=dev.loopzero.example")
+	cmd.Env = append(os.Environ(), "LOOPZERO_DOMAIN=dev.getloopscale.com")
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf

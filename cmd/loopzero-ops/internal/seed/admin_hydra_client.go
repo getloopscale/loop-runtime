@@ -25,7 +25,7 @@ import (
 // infra/scripts/local/seed-admin-hydra-client-canonical.sh.
 //
 // It registers/refreshes the admin-cli Hydra OAuth2 client whose client_id ==
-// admin@loopzero.example user_id (a UUID from users table). This makes the
+// admin@getloopscale.com user_id (a UUID from users table). This makes the
 // `client_credentials` grant emit a JWT with `sub == client_id ==
 // admin_user_id` — engine auth resolves tenant via tenant_members DB lookup
 // on `user_id = sub`.
@@ -46,7 +46,7 @@ func (s *AdminHydraClientSeed) Name() string         { return "admin-hydra-clien
 const (
 	pgDatabaseURLEnv          = "LOOPZERO_ADMIN_HYDRA_PG_URL"
 	pgDatabaseURLDefault      = "postgres://loopzero:loopzero-dev-password@127.0.0.1:15432/loopzero?sslmode=disable"
-	adminEmailCanonical       = "admin@loopzero.example"
+	adminEmailCanonical       = "admin@getloopscale.com"
 	hydraAdminNamespaceCanon  = "loopzero-auth"
 	hydraAdminServiceName     = "ory-hydra-admin"
 	hydraAdminRemotePort      = 4445
@@ -68,7 +68,7 @@ func (s *AdminHydraClientSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("PG lookup: %v (run seed admin-loopzero-dev first)", err)}
 	}
 	if userID == "" {
-		return Result{Verdict: FAIL, Reason: "admin@loopzero.example not in users table (run seed admin-loopzero-dev first)"}
+		return Result{Verdict: FAIL, Reason: "admin@getloopscale.com not in users table (run seed admin-loopzero-dev first)"}
 	}
 
 	// Step 2 — port-forward Hydra admin API.
@@ -102,7 +102,7 @@ func (s *AdminHydraClientSeed) Verify(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("PG lookup: %v", err)}
 	}
 	if userID == "" {
-		return Result{Verdict: FAIL, Reason: "admin@loopzero.example not in users"}
+		return Result{Verdict: FAIL, Reason: "admin@getloopscale.com not in users"}
 	}
 	tunnel, err := openHydraAdminTunnel(d)
 	if err != nil {

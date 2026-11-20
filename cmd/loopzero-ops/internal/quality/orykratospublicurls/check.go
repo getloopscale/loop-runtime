@@ -72,13 +72,13 @@ type regexpAssertion struct {
 var standaloneAssertions = envAssertion{
 	env: "standalone-public",
 	musts: []regexpAssertion{
-		{"base_url with public auth host", regexp.MustCompile(`base_url:\s*"?https://auth\.loopzero\.example/?"?`)},
+		{"base_url with public auth host", regexp.MustCompile(`base_url:\s*"?https://auth\.getloopscale\.com/?"?`)},
 		{"CORS enabled", regexp.MustCompile(`enabled:\s*true`)},
 		{"CORS allow_credentials", regexp.MustCompile(`allow_credentials:\s*true`)},
-		{"cookie domain set to loopzero.example", regexp.MustCompile(`domain:\s*"?loopzero\.example"?`)},
+		{"cookie domain set to getloopscale.com", regexp.MustCompile(`domain:\s*"?getloopscale\.com"?`)},
 		{"allowed_return_urls present", regexp.MustCompile(`allowed_return_urls:`)},
-		{"registration ui_url uses /register", regexp.MustCompile(`ui_url:\s*"?https://app\.loopzero\.example/register"?`)},
-		{"login ui_url uses /login", regexp.MustCompile(`ui_url:\s*"?https://app\.loopzero\.example/login"?`)},
+		{"registration ui_url uses /register", regexp.MustCompile(`ui_url:\s*"?https://app\.getloopscale\.com/register"?`)},
+		{"login ui_url uses /login", regexp.MustCompile(`ui_url:\s*"?https://app\.getloopscale\.com/login"?`)},
 	},
 }
 

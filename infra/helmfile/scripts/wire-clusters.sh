@@ -31,9 +31,9 @@ if [[ -n "${LOOPZERO_BUILD_KUBECONFIG:-}" ]]; then
 fi
 
 # cell-1-activation-plan T1.3 / ADR C7: shared ingress-domain across cells.
-# Default for production is dev.loopzero.example (matches Pulumi infra). Override
+# Default for production is dev.getloopscale.com (matches Pulumi infra). Override
 # via LOOPZERO_INGRESS_DOMAIN env var. Local k3d sets loopzero.local via heal script.
-INGRESS_DOMAIN_VAL="${LOOPZERO_INGRESS_DOMAIN:-dev.loopzero.example}"
+INGRESS_DOMAIN_VAL="${LOOPZERO_INGRESS_DOMAIN:-dev.getloopscale.com}"
 
 # Issue #67: local k3d uses self-signed CAs that rotate across k3s container
 # restarts (server CA in /var/lib/rancher/k3s/server/tls/server-ca.crt is

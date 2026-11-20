@@ -123,7 +123,7 @@ func TestStripeWebhookEndpoint_SkipWhenAPIKeyPlaceholder(t *testing.T) {
 }
 
 func TestStripeWebhookEndpoint_SkipWhenEndpointAndWhsecCanonical(t *testing.T) {
-	targetURL := "https://app-dev.loopzero.example/v1/webhooks/stripe"
+	targetURL := "https://app-dev.getloopscale.com/v1/webhooks/stripe"
 	stub := newStripeStub(t, "rk_test_abc", targetURL, "we_existing", stripeAPIWebhookEndpoint{})
 	defer stub.Close()
 	dir := t.TempDir()
@@ -147,7 +147,7 @@ func TestStripeWebhookEndpoint_SkipWhenEndpointAndWhsecCanonical(t *testing.T) {
 }
 
 func TestStripeWebhookEndpoint_DryRunReports(t *testing.T) {
-	targetURL := "https://app-dev.loopzero.example/v1/webhooks/stripe"
+	targetURL := "https://app-dev.getloopscale.com/v1/webhooks/stripe"
 	stub := newStripeStub(t, "rk_test_abc", "", "", stripeAPIWebhookEndpoint{})
 	defer stub.Close()
 	dir := t.TempDir()
@@ -166,7 +166,7 @@ func TestStripeWebhookEndpoint_DryRunReports(t *testing.T) {
 }
 
 func TestStripeWebhookEndpoint_CreatesAndDelegatesToSibling(t *testing.T) {
-	targetURL := "https://app-dev.loopzero.example/v1/webhooks/stripe"
+	targetURL := "https://app-dev.getloopscale.com/v1/webhooks/stripe"
 	stub := newStripeStub(t, "rk_test_abc", "", "", stripeAPIWebhookEndpoint{
 		ID: "we_new_abc", Secret: "whsec_test_new_secret",
 	})
@@ -214,7 +214,7 @@ func TestStripeWebhookEndpoint_CreatesAndDelegatesToSibling(t *testing.T) {
 }
 
 func TestStripeWebhookEndpoint_DeletesStaleBeforeCreate(t *testing.T) {
-	targetURL := "https://app-dev.loopzero.example/v1/webhooks/stripe"
+	targetURL := "https://app-dev.getloopscale.com/v1/webhooks/stripe"
 	stub := newStripeStub(t, "rk_test_abc", targetURL, "we_stale", stripeAPIWebhookEndpoint{
 		ID: "we_new", Secret: "whsec_test_fresh",
 	})
@@ -238,7 +238,7 @@ func TestStripeWebhookEndpoint_DeletesStaleBeforeCreate(t *testing.T) {
 }
 
 func TestStripeWebhookEndpoint_FailWhenStripeReturnsPlaceholderSecret(t *testing.T) {
-	targetURL := "https://app-dev.loopzero.example/v1/webhooks/stripe"
+	targetURL := "https://app-dev.getloopscale.com/v1/webhooks/stripe"
 	stub := newStripeStub(t, "rk_test_abc", "", "", stripeAPIWebhookEndpoint{
 		ID: "we_ok", Secret: "whsec_dev_placeholder_from_stub",
 	})
@@ -261,7 +261,7 @@ func TestStripeWebhookEndpoint_FailWhenStripeReturnsPlaceholderSecret(t *testing
 }
 
 func TestStripeWebhookEndpoint_Verify_PassWhenCanonical(t *testing.T) {
-	targetURL := "https://app-dev.loopzero.example/v1/webhooks/stripe"
+	targetURL := "https://app-dev.getloopscale.com/v1/webhooks/stripe"
 	stub := newStripeStub(t, "rk_test_abc", targetURL, "we_ok", stripeAPIWebhookEndpoint{})
 	defer stub.Close()
 

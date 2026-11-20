@@ -139,7 +139,7 @@ type EnvtestConfig struct {
 	EnablePlatform bool
 
 	// BaseDomain is used by the Application controller for hostname
-	// assignment. Defaults to "dev.loopzero.example" if empty.
+	// assignment. Defaults to "dev.getloopscale.com" if empty.
 	BaseDomain string
 }
 
@@ -251,7 +251,7 @@ func baseDomainOrDefault(baseDomain string) string {
 	if baseDomain != "" {
 		return baseDomain
 	}
-	return "dev.loopzero.example"
+	return "dev.getloopscale.com"
 }
 
 // newEnvtestHandle builds the scheme, clients, manager and fakes a suite

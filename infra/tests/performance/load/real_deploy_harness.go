@@ -39,7 +39,7 @@ import (
 // produces REAL running apps that respond to HTTP requests.
 type RealDeployHarness struct {
 	apiURL          string
-	appDomain       string // e.g., "dev.loopzero.example" — for URL verification
+	appDomain       string // e.g., "dev.getloopscale.com" — for URL verification
 	serviceAuth     string
 	bootstrapSecret string
 	client          *http.Client
@@ -66,9 +66,9 @@ type fixtureApp struct {
 
 // RealDeployConfig configures the harness.
 type RealDeployConfig struct {
-	// APIURL is the LoopZero API endpoint (e.g., "https://api.dev.loopzero.example").
+	// APIURL is the LoopZero API endpoint (e.g., "https://api.dev.getloopscale.com").
 	APIURL string
-	// AppDomain is the base domain for deployed apps (e.g., "dev.loopzero.example").
+	// AppDomain is the base domain for deployed apps (e.g., "dev.getloopscale.com").
 	// App URLs are constructed as: {project}-{app}-{env}.{AppDomain}
 	AppDomain string
 	// ServiceAuth is the X-Service-Auth bypass token.

@@ -430,7 +430,7 @@ func (s *PreviewService) validate(req ports.CreatePreviewRequest) error {
 // and the dashboard surfaces a structurally valid URL.
 //
 // Public domain resolution: prefer PreviewPublicDomain (the Caddy/CF
-// wildcard root, e.g., `preview-dev.loopzero.example`); fall back to
+// wildcard root, e.g., `preview-dev.getloopscale.app`); fall back to
 // BaseDomain when empty (legacy local behavior where Caddy is absent and
 // the internal SNI domain == public domain).
 // previewURL delegates to pkg/naming.PreviewURL — T2.5 of plan

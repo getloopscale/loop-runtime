@@ -40,7 +40,7 @@ if [[ -z "${LOOPZERO_RUNTIME_INGRESS_IP:-}" ]]; then
   LOOPZERO_RUNTIME_INGRESS_IP="${LOOPZERO_MGMT_INGRESS_IP}"  # default to mgmt for standalone
 fi
 
-DOMAIN="${LOOPZERO_DOMAIN:-dev.loopzero.example}"
+DOMAIN="${LOOPZERO_DOMAIN:-dev.getloopscale.com}"
 
 # Build the ConfigMap manifest.
 cat <<EOF | kubectl apply -f - >/dev/null

@@ -4,7 +4,7 @@
 // Package workercsp guards the Content-Security-Policy the Cloudflare static
 // worker attaches to every response it serves (issue #235).
 //
-// The worker fronts tenant static content on *.dev.loopzero.example, so its CSP is
+// The worker fronts tenant static content on *.dev.getloopscale.com, so its CSP is
 // the last header a tenant's users receive. `script-src 'unsafe-inline'` there
 // negates most of what the CSP would buy: any injected inline <script> in the
 // served HTML executes, and the blast radius is every tenant's static surface.

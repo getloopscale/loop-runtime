@@ -2,7 +2,7 @@
 # seed-demo-data.sh — T6.1 of plan
 # 2026-05-29-dashboard-public-integration-canonicalization
 #
-# Idempotent seed of the local demo tenant (admin@loopzero.example) with:
+# Idempotent seed of the local demo tenant (admin@getloopscale.com) with:
 #   - 2 projects (api-gateway, web-app)
 #   - 8 builds across both, varied states (SUCCEEDED/FAILED/CANCELLED/RUNNING)
 #   - 5 releases (ACTIVE on prod, SUPERSEDED, etc.)
@@ -20,13 +20,13 @@
 #
 # Exit codes:
 #   0  seed applied (or already present)
-#   1  user admin@loopzero.example does not exist (run /v1/auth/session/token first)
+#   1  user admin@getloopscale.com does not exist (run /v1/auth/session/token first)
 #   2  PG unreachable
 set -euo pipefail
 
 CONTEXT="${CONTEXT:-k3d-loopzero-core}"
 NAMESPACE="${NAMESPACE:-loopzero-system}"
-EMAIL="${EMAIL:-admin@loopzero.example}"
+EMAIL="${EMAIL:-admin@getloopscale.com}"
 DRY_RUN="${DRY_RUN:-0}"
 
 while [ $# -gt 0 ]; do

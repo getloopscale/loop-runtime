@@ -8,7 +8,7 @@
 // Why a declaration and not a scan of the response: a reverse_proxy inherits
 // its response contract from whatever sits behind it, so the risk is invisible
 // in this repository. `handle /sessions/* { reverse_proxy <kratos> }` on
-// app-dev.loopzero.example returns the whole Ory session — including
+// app-dev.getloopscale.com returns the whole Ory session — including
 // devices[].ip_address and recovery_addresses, neither of which the dashboard
 // reads (measured 2026-08-06 against loopzero-cloud/dashboard/src). Nothing in the
 // Caddyfile says so, and nothing failed when it started being true.
@@ -49,7 +49,7 @@ var (
 
 // Exposure is one reverse_proxy found on the edge.
 type Exposure struct {
-	Site string // e.g. app-dev.loopzero.example
+	Site string // e.g. app-dev.getloopscale.com
 	Path string // e.g. /sessions/*  ("" when the proxy is site-level)
 	Line int
 }

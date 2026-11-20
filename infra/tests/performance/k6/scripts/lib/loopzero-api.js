@@ -33,10 +33,10 @@ import { Counter, Trend, Rate } from 'k6/metrics';
 /* ------------------------------------------------------------------ */
 
 // All config comes from env vars so the same script runs locally
-// against api.dev.loopzero.example and in-cluster against the service DNS.
+// against api.dev.getloopscale.com and in-cluster against the service DNS.
 export const API_URL = __ENV.K6_API_URL || 'http://loopzero-api.platform-system.svc.cluster.local:8080';
 export const SVC_AUTH = __ENV.K6_SVC_AUTH || 'dev-service-auth-secret-default';
-export const APP_DOMAIN = __ENV.K6_APP_DOMAIN || 'dev.loopzero.example';
+export const APP_DOMAIN = __ENV.K6_APP_DOMAIN || 'dev.getloopscale.com';
 
 /* ------------------------------------------------------------------ */
 /* Custom metrics                                                      */

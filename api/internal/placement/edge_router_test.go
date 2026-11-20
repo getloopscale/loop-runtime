@@ -33,8 +33,8 @@ func (f fakeTenantCells) GetCell(_ context.Context, tenantID string) (string, er
 
 const (
 	internalDomain = "loopzero.local"
-	prodDomain     = "prod-dev.loopzero.example"
-	previewDomain  = "preview-dev.loopzero.example"
+	prodDomain     = "prod-dev.getloopscale.app"
+	previewDomain  = "preview-dev.getloopscale.app"
 )
 
 func newTestEdgeRouter(src *fakeEdgeRoutes, cells fakeTenantCells) *EdgeRouter {
@@ -57,9 +57,9 @@ func TestEdgeRouterResolvesAPublicHostToTheTenantsCell(t *testing.T) {
 	r := newTestEdgeRouter(src, fakeTenantCells{"tn-admin": "cell-1", "tn-e2e": "cell-0"})
 
 	for host, want := range map[string]string{
-		"tn-admin-sample-app-production.prod-dev.loopzero.example":    "cell-1",
-		"TN-E2E-web-api-production.prod-dev.loopzero.example:443":     "cell-0",
-		"tn-admin-sample-app-production.preview-dev.loopzero.example": "cell-1",
+		"tn-admin-sample-app-production.prod-dev.getloopscale.app":    "cell-1",
+		"TN-E2E-web-api-production.prod-dev.getloopscale.app:443":     "cell-0",
+		"tn-admin-sample-app-production.preview-dev.getloopscale.app": "cell-1",
 	} {
 		got, err := r.Resolve(context.Background(), host)
 		if err != nil || got != want {
@@ -80,7 +80,7 @@ func TestEdgeRouterResolvesACustomDomainByItsFullName(t *testing.T) {
 	if got, err := r.Resolve(context.Background(), "www.customer.example"); err != nil || got != "cell-1" {
 		t.Errorf("custom domain resolved to %q, %v; want cell-1", got, err)
 	}
-	if got, err := r.Resolve(context.Background(), "www.prod-dev.loopzero.example"); err != nil || got != "cell-0" {
+	if got, err := r.Resolve(context.Background(), "www.prod-dev.getloopscale.app"); err != nil || got != "cell-0" {
 		t.Errorf("platform host resolved to %q, %v; want cell-0", got, err)
 	}
 }
@@ -88,7 +88,7 @@ func TestEdgeRouterResolvesACustomDomainByItsFullName(t *testing.T) {
 // A host nobody publishes is not routed anywhere.
 func TestEdgeRouterRefusesAnUnknownHost(t *testing.T) {
 	r := newTestEdgeRouter(&fakeEdgeRoutes{}, fakeTenantCells{})
-	for _, host := range []string{"nobody.prod-dev.loopzero.example", "evil.example", "", "prod-dev.loopzero.example"} {
+	for _, host := range []string{"nobody.prod-dev.getloopscale.app", "evil.example", "", "prod-dev.getloopscale.app"} {
 		if _, err := r.Resolve(context.Background(), host); !errors.Is(err, ErrEdgeRouteNotFound) {
 			t.Errorf("Resolve(%q) err = %v, want ErrEdgeRouteNotFound", host, err)
 		}
@@ -103,7 +103,7 @@ func TestEdgeRouterRefusesALabelTwoTenantsPublish(t *testing.T) {
 		{Hostname: "dup-app-production.loopzero.local", TenantID: "tn-b"},
 	}}
 	r := newTestEdgeRouter(src, fakeTenantCells{"tn-a": "cell-0", "tn-b": "cell-1"})
-	if _, err := r.Resolve(context.Background(), "dup-app-production.prod-dev.loopzero.example"); !errors.Is(err, ErrEdgeRouteNotFound) {
+	if _, err := r.Resolve(context.Background(), "dup-app-production.prod-dev.getloopscale.app"); !errors.Is(err, ErrEdgeRouteNotFound) {
 		t.Errorf("an ambiguous label resolved (err=%v) — it must be refused", err)
 	}
 }
@@ -122,13 +122,13 @@ func TestEdgeRouterRefreshesOnAMissAtMostOncePerGap(t *testing.T) {
 	src.routes = []EdgeRoute{{Hostname: "tn-new-p-app-production.loopzero.local", TenantID: "tn-new"}}
 
 	// The gap has not elapsed since the refresh above: a miss does not refresh yet.
-	if _, err := r.Resolve(context.Background(), "tn-new-p-app-production.prod-dev.loopzero.example"); !errors.Is(err, ErrEdgeRouteNotFound) {
+	if _, err := r.Resolve(context.Background(), "tn-new-p-app-production.prod-dev.getloopscale.app"); !errors.Is(err, ErrEdgeRouteNotFound) {
 		t.Fatalf("resolved before any refresh saw the route: %v", err)
 	}
 	callsBefore := src.calls.Load()
 
 	r.minMissRefresh = 0
-	got, err := r.Resolve(context.Background(), "tn-new-p-app-production.prod-dev.loopzero.example")
+	got, err := r.Resolve(context.Background(), "tn-new-p-app-production.prod-dev.getloopscale.app")
 	if err != nil || got != "cell-1" {
 		t.Fatalf("after the gap, the miss refresh should find the new route: %q, %v", got, err)
 	}
@@ -142,7 +142,7 @@ func TestEdgeRouterRefreshesOnAMissAtMostOncePerGap(t *testing.T) {
 func TestEdgeRouterReportsNotLoadedWhenTheSourceNeverAnswered(t *testing.T) {
 	r := newTestEdgeRouter(&fakeEdgeRoutes{err: errors.New("apiserver down")}, fakeTenantCells{})
 	r.minMissRefresh = 0
-	if _, err := r.Resolve(context.Background(), "x.prod-dev.loopzero.example"); !errors.Is(err, ErrEdgeRoutesNotLoaded) {
+	if _, err := r.Resolve(context.Background(), "x.prod-dev.getloopscale.app"); !errors.Is(err, ErrEdgeRoutesNotLoaded) {
 		t.Errorf("err = %v, want ErrEdgeRoutesNotLoaded", err)
 	}
 }
@@ -155,10 +155,10 @@ func TestEdgeRouterSkipsATenantWhoseCellCannotBeRead(t *testing.T) {
 		{Hostname: "tn-ok-p-app-production.loopzero.local", TenantID: "tn-ok"},
 	}}
 	r := newTestEdgeRouter(src, fakeTenantCells{"tn-ok": "cell-0"})
-	if got, err := r.Resolve(context.Background(), "tn-ok-p-app-production.prod-dev.loopzero.example"); err != nil || got != "cell-0" {
+	if got, err := r.Resolve(context.Background(), "tn-ok-p-app-production.prod-dev.getloopscale.app"); err != nil || got != "cell-0" {
 		t.Errorf("tn-ok resolved to %q, %v", got, err)
 	}
-	if _, err := r.Resolve(context.Background(), "tn-gone-p-app-production.prod-dev.loopzero.example"); !errors.Is(err, ErrEdgeRouteNotFound) {
+	if _, err := r.Resolve(context.Background(), "tn-gone-p-app-production.prod-dev.getloopscale.app"); !errors.Is(err, ErrEdgeRouteNotFound) {
 		t.Errorf("a tenant with no readable cell must not resolve, err=%v", err)
 	}
 }

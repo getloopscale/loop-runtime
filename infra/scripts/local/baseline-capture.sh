@@ -38,8 +38,8 @@ set -euo pipefail
 
 OUTPUT=""
 CONTEXT="${CONTEXT:-k3d-loopzero-core}"
-PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"
-PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
+PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.getloopscale.com}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.getloopscale.com}"
 FIXTURE_DIR="${BASELINE_FIXTURE_DIR:-}"
 DETERMINISTIC="${DETERMINISTIC:-0}"
 

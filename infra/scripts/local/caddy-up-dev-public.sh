@@ -5,7 +5,7 @@
 #
 # Caddy obtains TLS via Let's Encrypt HTTP-01 challenge on :80, so the droplet
 # must have port 80 + 443 reachable from the internet (no CF proxy in front).
-# DNS records (auth/app/cloud {,-dev}.loopzero.example) must already point at this
+# DNS records (auth/app/cloud {,-dev}.getloopscale.com) must already point at this
 # droplet — run infra/scripts/local/setup-dev-public-dns.sh first.
 #
 # Idempotent: if Caddy already running with same config, reload via API.
@@ -173,7 +173,7 @@ verify_certs() {
   [[ $VERIFY -eq 1 && $DRY_RUN -eq 0 ]] || return 0
   log "waiting 8s for cert issuance + reload..."
   sleep 8
-  # cloud-dev.loopzero.example left this list on 2026-08-18. The Caddyfile removed it
+  # cloud-dev.getloopscale.com left this list on 2026-08-18. The Caddyfile removed it
   # deliberately on 2026-08-10 (it was a public host serving a redirect, with an
   # auth surface granted to nobody) and this list did not follow. The result
   # was a verifier that demanded a certificate for a hostname nobody serves — and
@@ -185,7 +185,7 @@ verify_certs() {
   # development processes under a production name. Verifying their TLS here would fail forever,
   # which is exactly the gate-that-cannot-pass shape described in the comment above.
   local hosts=(
-    auth-dev.loopzero.example app-dev.loopzero.example
+    auth-dev.getloopscale.com app-dev.getloopscale.com
   )
   # tls_ok if openssl handshake succeeds (cert issued + chain valid).
   # 200 means the page is served. 404 fails: at app-dev it is the dashboard missing, the

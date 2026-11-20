@@ -66,7 +66,7 @@ type PromotionOrchestratorDeps struct {
 	Locker     deploycontracts.EnvironmentLocker
 	BaseDomain string
 	// PublicDomain is the canonical wildcard domain used to compose user-facing
-	// Live URLs (e.g., "prod-dev.loopzero.example"). When non-empty it takes
+	// Live URLs (e.g., "prod-dev.getloopscale.app"). When non-empty it takes
 	// precedence over BaseDomain in the response URL — mirroring the post-#61
 	// retrofit applied to ReleaseConvergenceLoop + SyncCallbackActivator
 	// (setup_orchestrator.go:296-302). BaseDomain is the internal cluster
@@ -309,7 +309,7 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 
 	// 2026-06-30 (closes Red Team loopzero-cloud#120 sub-finding 3 — #61 regression
 	// on promote path): prefer PublicDomain over BaseDomain so the response URL
-	// is the canonical user-facing Live URL ("prod-dev.loopzero.example") not the
+	// is the canonical user-facing Live URL ("prod-dev.getloopscale.app") not the
 	// internal cluster placeholder ("loopzero.local"). Fallback to BaseDomain
 	// preserves back-compat for setups (local Tilt dev) where LOOPZERO_PUBLIC_DOMAIN
 	// is unset. Mirrors the canonical pattern at setup_orchestrator.go:296-302
@@ -317,7 +317,7 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 	//
 	// 2026-07-01 (closes Red Team loopzero-cloud#159): switch from the simplified
 	// legacy formula `{ProjectName}-{ToEnv}.{domain}` (which produced hostnames
-	// like `loopzerokit-example-production.prod-dev.loopzero.example` that Traefik 404'd
+	// like `loopzerokit-example-production.prod-dev.getloopscale.app` that Traefik 404'd
 	// because they lacked the tenant + entryApp segments) to the FAANG canonical
 	// naming.AppURL(tenantID, projectID, entryApp, envName, publicDomain) — the
 	// SAME formula the IngressRoute renderer + status.go already use. EntryApp

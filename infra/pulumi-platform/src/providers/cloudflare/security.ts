@@ -28,11 +28,11 @@ export interface EdgeSecurityConfig {
   readonly zoneId: string;
   /** Cloudflare account ID */
   readonly accountId: string;
-  /** Base domain (e.g., "dev.loopzero.example") */
+  /** Base domain (e.g., "dev.getloopscale.com") */
   readonly domain: string;
   /** Environment name for naming */
   readonly environment: string;
-  /** Email domains allowed for Zero Trust Access (e.g., ["loopzero.example"]) */
+  /** Email domains allowed for Zero Trust Access (e.g., ["getloopscale.com"]) */
   readonly allowedEmailDomains?: string[];
 }
 
@@ -131,7 +131,7 @@ export function createRateLimitRules(config: EdgeSecurityConfig): cloudflare.Rul
  * Eliminates need for VPN or public exposure of admin interfaces.
  */
 export function createZeroTrustAccess(config: EdgeSecurityConfig): void {
-  const allowedDomains = config.allowedEmailDomains ?? ["loopzero.example"];
+  const allowedDomains = config.allowedEmailDomains ?? ["getloopscale.com"];
 
   const adminApps = [
     { name: "ArgoCD", subdomain: "argocd" },

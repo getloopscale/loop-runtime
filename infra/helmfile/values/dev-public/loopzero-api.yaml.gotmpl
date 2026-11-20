@@ -50,12 +50,12 @@ config:
   # `loki-cross-cluster` seed's Deployment env patch until the value moved here.
   lokiUrl: "http://host.k3d.internal:{{ .Values.crossCluster.lokiNodePort }}"
   # The public Hydra serves the JWKS for JWT verification.
-  jwksUrl: "https://auth-dev.loopzero.example/.well-known/jwks.json"
+  jwksUrl: "https://auth-dev.getloopscale.com/.well-known/jwks.json"
   # CANONICAL FIX 2026-07-14 (2nd regression of loopzero-cloud#131): the issuer MUST be
   # byte-equal to Hydra's URLS_SELF_ISSUER (WITH the trailing slash). go-jwt.WithIssuer
   # compares exactly — dropping the slash broke the CLI device flow on 2026-07-14. Changes
   # in lockstep with the loopzero-cloud overlay and the ory-hydra overlay.
-  jwtIssuer: "https://auth-dev.loopzero.example/"
+  jwtIssuer: "https://auth-dev.getloopscale.com/"
   # BuildKit (in k3d-loopzero-build) pushes tenant images to k3d-loopzero-registry over plain HTTP;
   # the build submitter writes `http = true, insecure = true` for it from this hint.
   registryInsecure: "true"
@@ -63,9 +63,9 @@ config:
   # `*.loopzero.local` hostnames — no public Let's Encrypt for internal domains.
   loopzeroClusterIssuer: "loopzero-ca-issuer"
   # J-23 wildcard preview URL convention: public preview URLs live under the Caddy/CF
-  # wildcard root, not the internal base domain. Caddy's `*.preview-dev.loopzero.example` block
+  # wildcard root, not the internal base domain. Caddy's `*.preview-dev.getloopscale.app` block
   # reverse-proxies <internal-sni>.loopzero.local to Traefik (infra/local/Caddyfile).
-  loopzeroPreviewPublicDomain: "preview-dev.loopzero.example"
+  loopzeroPreviewPublicDomain: "preview-dev.getloopscale.app"
   # Admin endpoints are gated by this defense-in-depth flag; without it the admin journeys
   # (B38) get HTTP 404 for every /admin/* call.
   loopzeroAdminApi: "true"

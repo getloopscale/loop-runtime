@@ -11,7 +11,7 @@
   "links": [
     {
       "title": "OpenBao Audit Runbook",
-      "url": "https://docs.loopzero.example/runbooks/vault-audit-stalled",
+      "url": "https://docs.getloopscale.com/runbooks/vault-audit-stalled",
       "type": "link"
     }
   ],

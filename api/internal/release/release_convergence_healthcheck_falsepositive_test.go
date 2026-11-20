@@ -63,7 +63,7 @@ func TestReleaseConvergenceLoop_HealthCheck_ConvergingNotFlagged(t *testing.T) {
 			loop := NewReleaseConvergenceLoop(
 				rs, newFakeConvergenceEnvTargetStore(), sc, &fakeConvergenceLocker{},
 				&fakeConvergenceEventStore{},
-				"dev.loopzero.example", "", slog.Default(),
+				"dev.getloopscale.com", "", slog.Default(),
 				ReleaseConvergenceLoopConfig{Interval: time.Second, HealthInterval: time.Second},
 			)
 

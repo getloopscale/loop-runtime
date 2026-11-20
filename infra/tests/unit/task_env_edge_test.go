@@ -14,7 +14,7 @@ import (
 
 // B-165: the `standalone-public` helmfile environment was left as the default of
 // `task infra:install:core-dashboard-only` after B-025 removed the three bare
-// hostnames (app|cloud|auth.loopzero.example) it serves from infra/local/Caddyfile.
+// hostnames (app|cloud|auth.getloopscale.com) it serves from infra/local/Caddyfile.
 // A task default that names an environment no edge serves breaks silently: the
 // install succeeds and nothing answers on the hostname. This test pins the
 // invariant so the pairing cannot drift apart again.
@@ -23,14 +23,14 @@ import (
 var taskEnvDefaultRe = regexp.MustCompile(`\{\{\s*\.ENV\s*\|\s*default\s+"([^"]+)"\s*\}\}`)
 
 // caddySiteBlockRe captures a Caddyfile site address opening a block, e.g.
-// `app-dev.loopzero.example {` or `*.preview-dev.loopzero.example {`. Comment lines are
+// `app-dev.getloopscale.com {` or `*.preview-dev.getloopscale.app {`. Comment lines are
 // skipped by the caller, so a hostname that survives only in prose does not
 // count as an edge.
 var caddySiteBlockRe = regexp.MustCompile(`^([A-Za-z0-9*.:-]+)\s*\{`)
 
-// publicHostRe finds loopzero.example hostnames inside a helmfile environment's
+// publicHostRe finds getloopscale.com hostnames inside a helmfile environment's
 // public URL settings.
-var publicHostRe = regexp.MustCompile(`https://([a-z0-9.-]+\.loopzero\.example)`)
+var publicHostRe = regexp.MustCompile(`https://([a-z0-9.-]+\.getloopscale\.com)`)
 
 // publicURLKeys are the environment settings that name a hostname a browser or
 // an external caller is expected to reach through the local Caddy edge.
@@ -84,7 +84,7 @@ func hostIsServed(host string, served map[string]bool) bool {
 		if !strings.HasPrefix(addr, "*.") {
 			continue
 		}
-		suffix := addr[1:] // ".preview-dev.loopzero.example"
+		suffix := addr[1:] // ".preview-dev.getloopscale.app"
 		if strings.HasSuffix(host, suffix) &&
 			!strings.Contains(strings.TrimSuffix(host, suffix), ".") {
 			return true

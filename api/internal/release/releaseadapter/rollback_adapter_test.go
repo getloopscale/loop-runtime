@@ -25,7 +25,7 @@ func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
 			ReactivatedRelease: &db.Release{ID: "rel-old"},
 			RolledBackRelease:  &db.Release{ID: "rel-new"},
 			Environment:        "production",
-			URL:                "https://app.dev.loopzero.example",
+			URL:                "https://app.dev.getloopscale.com",
 		},
 	}
 
@@ -49,7 +49,7 @@ func TestRollbackServiceAdapter_Rollback_Success(t *testing.T) {
 	if output.ReactivatedReleaseID != "rel-old" {
 		t.Errorf("expected rel-old, got %s", output.ReactivatedReleaseID)
 	}
-	if output.URL != "https://app.dev.loopzero.example" {
+	if output.URL != "https://app.dev.getloopscale.com" {
 		t.Errorf("expected URL, got %s", output.URL)
 	}
 }

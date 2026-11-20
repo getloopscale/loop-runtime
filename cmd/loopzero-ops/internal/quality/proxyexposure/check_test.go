@@ -23,10 +23,10 @@ func setup(t *testing.T, caddy, registry string) Config {
 	return Config{Root: root, Caddyfile: c, Registry: r}
 }
 
-const twoProxies = `app-dev.loopzero.example {
+const twoProxies = `app-dev.getloopscale.com {
   handle /sessions/* {
     reverse_proxy localhost:14433 {
-      header_up Host auth-dev.loopzero.example
+      header_up Host auth-dev.getloopscale.com
     }
   }
   handle /assets/* {
@@ -40,7 +40,7 @@ const twoProxies = `app-dev.loopzero.example {
 // user's IP and recovery addresses — with nothing in the repo recording it.
 func TestUndeclaredProxyFails(t *testing.T) {
 	cfg := setup(t, twoProxies,
-		"app-dev.loopzero.example /sessions/* | filtered | field allowlist applied at the edge\n")
+		"app-dev.getloopscale.com /sessions/* | filtered | field allowlist applied at the edge\n")
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -51,15 +51,15 @@ func TestUndeclaredProxyFails(t *testing.T) {
 	if len(o.Undeclared) != 1 {
 		t.Fatalf("expected 1 undeclared, got %v", o.Undeclared)
 	}
-	if !contains(o.Undeclared[0], "app-dev.loopzero.example /assets/*") {
+	if !contains(o.Undeclared[0], "app-dev.getloopscale.com /assets/*") {
 		t.Errorf("undeclared entry should name site+path, got %q", o.Undeclared[0])
 	}
 }
 
 func TestFullyDeclaredPasses(t *testing.T) {
 	cfg := setup(t, twoProxies,
-		"# header\napp-dev.loopzero.example /sessions/* | filtered | field allowlist applied at the edge\n"+
-			"app-dev.loopzero.example /assets/* | internal | static bundle, no user data\n")
+		"# header\napp-dev.getloopscale.com /sessions/* | filtered | field allowlist applied at the edge\n"+
+			"app-dev.getloopscale.com /assets/* | internal | static bundle, no user data\n")
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -76,9 +76,9 @@ func TestFullyDeclaredPasses(t *testing.T) {
 // more than it does.
 func TestStaleDeclarationFails(t *testing.T) {
 	cfg := setup(t, twoProxies,
-		"app-dev.loopzero.example /sessions/* | filtered | allowlist\n"+
-			"app-dev.loopzero.example /assets/* | internal | static\n"+
-			"app-dev.loopzero.example /gone/* | reviewed | removed last quarter\n")
+		"app-dev.getloopscale.com /sessions/* | filtered | allowlist\n"+
+			"app-dev.getloopscale.com /assets/* | internal | static\n"+
+			"app-dev.getloopscale.com /gone/* | reviewed | removed last quarter\n")
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -86,15 +86,15 @@ func TestStaleDeclarationFails(t *testing.T) {
 	if o.Pass {
 		t.Error("expected FAIL on the stale row")
 	}
-	if len(o.Stale) != 1 || o.Stale[0] != "app-dev.loopzero.example /gone/*" {
+	if len(o.Stale) != 1 || o.Stale[0] != "app-dev.getloopscale.com /gone/*" {
 		t.Errorf("expected the stale row named, got %v", o.Stale)
 	}
 }
 
 // A site-level reverse_proxy (no enclosing handle) is still an exposure.
 func TestSiteLevelProxyIsScanned(t *testing.T) {
-	cfg := setup(t, "auth-dev.loopzero.example {\n  reverse_proxy localhost:14433\n}\n",
-		"auth-dev.loopzero.example - | reviewed | Kratos public surface, deliberately whole\n")
+	cfg := setup(t, "auth-dev.getloopscale.com {\n  reverse_proxy localhost:14433\n}\n",
+		"auth-dev.getloopscale.com - | reviewed | Kratos public surface, deliberately whole\n")
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -111,8 +111,8 @@ func TestSiteLevelProxyIsScanned(t *testing.T) {
 // oversight wearing a label, so an empty rationale must not satisfy the gate.
 func TestEmptyRationaleIsMalformed(t *testing.T) {
 	cfg := setup(t, twoProxies,
-		"app-dev.loopzero.example /sessions/* | filtered |\n"+
-			"app-dev.loopzero.example /assets/* | internal | static\n")
+		"app-dev.getloopscale.com /sessions/* | filtered |\n"+
+			"app-dev.getloopscale.com /assets/* | internal | static\n")
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -127,8 +127,8 @@ func TestEmptyRationaleIsMalformed(t *testing.T) {
 
 func TestUnknownClassIsMalformed(t *testing.T) {
 	cfg := setup(t, twoProxies,
-		"app-dev.loopzero.example /sessions/* | probably-fine | vibes\n"+
-			"app-dev.loopzero.example /assets/* | internal | static\n")
+		"app-dev.getloopscale.com /sessions/* | probably-fine | vibes\n"+
+			"app-dev.getloopscale.com /assets/* | internal | static\n")
 	o, _ := Check(cfg)
 	if o.Pass || len(o.Malformed) != 1 {
 		t.Errorf("expected 1 malformed row for the unknown class, got pass=%v %v", o.Pass, o.Malformed)
@@ -139,8 +139,8 @@ func TestUnknownClassIsMalformed(t *testing.T) {
 // /sessions/whoami hazard in prose, and a naive scan would match it.
 func TestCommentedProxyIgnored(t *testing.T) {
 	cfg := setup(t,
-		"app-dev.loopzero.example {\n  # reverse_proxy localhost:9999 (historical note)\n  handle /assets/* {\n    reverse_proxy localhost:5173\n  }\n}\n",
-		"app-dev.loopzero.example /assets/* | internal | static bundle\n")
+		"app-dev.getloopscale.com {\n  # reverse_proxy localhost:9999 (historical note)\n  handle /assets/* {\n    reverse_proxy localhost:5173\n  }\n}\n",
+		"app-dev.getloopscale.com /assets/* | internal | static bundle\n")
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -152,7 +152,7 @@ func TestCommentedProxyIgnored(t *testing.T) {
 
 // Zero scanned is a broken parser or a wrong path, never a clean edge.
 func TestZeroProxiesFailsClosed(t *testing.T) {
-	cfg := setup(t, "app-dev.loopzero.example {\n  encode gzip\n}\n", "")
+	cfg := setup(t, "app-dev.getloopscale.com {\n  encode gzip\n}\n", "")
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -188,11 +188,11 @@ const snippetProxy = `(cell_edge) {
   reverse_proxy {cell_ingress}
 }
 
-*.prod-dev.loopzero.example {
+*.prod-dev.getloopscale.app {
   import cell_edge
 }
 
-*.preview-dev.loopzero.example {
+*.preview-dev.getloopscale.app {
   handle {
     import cell_edge
   }
@@ -203,7 +203,7 @@ const snippetProxy = `(cell_edge) {
 // imports it. Scanning only site blocks let the wildcard app edge pass with no
 // proxy found at all once its reverse_proxy moved into a snippet.
 func TestSnippetProxyIsAttributedToEverySiteThatImportsIt(t *testing.T) {
-	cfg := setup(t, snippetProxy, "*.prod-dev.loopzero.example - | reviewed | tenant app\n")
+	cfg := setup(t, snippetProxy, "*.prod-dev.getloopscale.app - | reviewed | tenant app\n")
 	o, err := Check(cfg)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
@@ -211,7 +211,7 @@ func TestSnippetProxyIsAttributedToEverySiteThatImportsIt(t *testing.T) {
 	if o.Pass {
 		t.Fatal("expected FAIL — the preview site imports the proxy and declares nothing")
 	}
-	if len(o.Undeclared) != 1 || !contains(o.Undeclared[0], "*.preview-dev.loopzero.example /*") {
+	if len(o.Undeclared) != 1 || !contains(o.Undeclared[0], "*.preview-dev.getloopscale.app /*") {
 		t.Errorf("undeclared = %v, want the preview site's import", o.Undeclared)
 	}
 }

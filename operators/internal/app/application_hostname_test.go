@@ -13,7 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
 
-const hostnameTestBaseDomain = "dev.loopzero.example"
+const hostnameTestBaseDomain = "dev.getloopscale.com"
 
 func hostnameTestApp(appName, appLabel, hostname string) *loopzerov1.LoopZeroApplication {
 	app := &loopzerov1.LoopZeroApplication{
@@ -33,7 +33,7 @@ func hostnameTestApp(appName, appLabel, hostname string) *loopzerov1.LoopZeroApp
 }
 
 // The routed formula the IngressRoute renderer emits for this app.
-const routedHost = "tn-acme-shop-web-production.dev.loopzero.example"
+const routedHost = "tn-acme-shop-web-production.dev.getloopscale.com"
 
 func TestHostnameToAssign_UsesTheRoutedFormulaWhenSpecNamesTheApp(t *testing.T) {
 	got, assign, err := hostnameToAssign(hostnameTestApp("web", "", ""), hostnameTestBaseDomain)
@@ -64,16 +64,16 @@ func TestHostnameToAssign_KeepsAnExplicitHostname(t *testing.T) {
 }
 
 func TestHostnameToAssign_ReplacesTheLegacyProjectEnvDefault(t *testing.T) {
-	// "shop-production.dev.loopzero.example" is what the controller used to write
+	// "shop-production.dev.getloopscale.com" is what the controller used to write
 	// by default; no IngressRoute ever matched it (the J-25 defect).
-	got, assign, err := hostnameToAssign(hostnameTestApp("web", "", "shop-production.dev.loopzero.example"), hostnameTestBaseDomain)
+	got, assign, err := hostnameToAssign(hostnameTestApp("web", "", "shop-production.dev.getloopscale.com"), hostnameTestBaseDomain)
 	if err != nil || !assign || got != routedHost {
 		t.Fatalf("hostnameToAssign = (%q, %v, %v), want (%q, true, nil)", got, assign, err, routedHost)
 	}
 }
 
 func TestHostnameToAssign_KeepsTheLegacyDefaultWhenTheAppIsUnknown(t *testing.T) {
-	_, assign, err := hostnameToAssign(hostnameTestApp("", "", "shop-production.dev.loopzero.example"), hostnameTestBaseDomain)
+	_, assign, err := hostnameToAssign(hostnameTestApp("", "", "shop-production.dev.getloopscale.com"), hostnameTestBaseDomain)
 	if err != nil || assign {
 		t.Fatalf("hostnameToAssign assign=%v err=%v, want the stored hostname kept", assign, err)
 	}

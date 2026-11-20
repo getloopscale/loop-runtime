@@ -393,7 +393,7 @@ func TestNewProjectsExceedPlan_FormatsContext(t *testing.T) {
 	if !strings.Contains(msg, "acct-abc123") {
 		t.Errorf("message missing account: %s", msg)
 	}
-	if !strings.Contains(msg, "loopzero.example/pricing") {
+	if !strings.Contains(msg, "getloopscale.com/pricing") {
 		t.Errorf("EC-4: message missing the upgrade URL: %s", msg)
 	}
 }

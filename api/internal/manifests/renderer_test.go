@@ -17,7 +17,7 @@ func baseInput() RenderInput {
 		Environment:       "production",
 		BuildID:           "build-001",
 		ReleaseID:         "rel-001",
-		BaseDomain:        "loopzero.example.com",
+		BaseDomain:        "getloopscale.app.com",
 		ClusterIssuerName: "test-issuer", // B14: RenderDocs refuses an empty issuer
 	}
 }
@@ -150,7 +150,7 @@ func TestRender_ReturnsErrorOnEmptyClusterIssuerName(t *testing.T) {
 		Environment: "production",
 		BuildID:     "build-001",
 		ReleaseID:   "rel-001",
-		BaseDomain:  "loopzero.example.com",
+		BaseDomain:  "getloopscale.app.com",
 		// ClusterIssuerName intentionally empty
 		Apps: []AppManifestInput{
 			{Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/a/b:c"},
@@ -245,7 +245,7 @@ func TestRender_Hostname(t *testing.T) {
 
 	result, _ := Render(input)
 
-	expectedHost := "acme-webapp-api-production.loopzero.example.com"
+	expectedHost := "acme-webapp-api-production.getloopscale.app.com"
 	if !strings.Contains(result, expectedHost) {
 		t.Errorf("expected hostname %q in IngressRoute", expectedHost)
 	}

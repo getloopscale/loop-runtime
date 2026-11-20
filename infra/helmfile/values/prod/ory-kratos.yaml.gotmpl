@@ -5,7 +5,7 @@
 # cross-subdomain session continuity gaps.
 #
 # Per ADR D8 contract for prod:
-#   - cookieDomain: loopzero.example (eTLD+1 — apex shared by auth / app / cloud
+#   - cookieDomain: getloopscale.com (eTLD+1 — apex shared by auth / app / cloud
 #     prod subdomains; ensures session cookie survives redirect chain)
 #   - allowed_return_urls: enumerate canonical prod post-auth redirect
 #     targets (Kratos rejects any return_to= query param NOT in allowlist)
@@ -14,13 +14,13 @@ kratos:
   config:
     session:
       cookie:
-        domain: loopzero.example
+        domain: getloopscale.com
         same_site: Lax
 
     selfservice:
       allowed_return_urls:
-        - https://app.loopzero.example
-        - https://app.loopzero.example/
-        - https://cloud.loopzero.example
-        - https://cloud.loopzero.example/
-        - https://auth.loopzero.example
+        - https://app.getloopscale.com
+        - https://app.getloopscale.com/
+        - https://cloud.getloopscale.com
+        - https://cloud.getloopscale.com/
+        - https://auth.getloopscale.com

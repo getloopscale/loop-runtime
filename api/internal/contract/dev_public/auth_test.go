@@ -167,7 +167,7 @@ func mockKratosRegisterHandler(t *testing.T) http.Handler {
 			}
 			// EC-J01-3 absorption + Red Team #75: duplicate email surfaces the
 			// canonical product copy, not the raw Kratos parenthetical.
-			if strings.Contains(string(body), `"email":"admin@loopzero.example"`) {
+			if strings.Contains(string(body), `"email":"admin@getloopscale.com"`) {
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"ui": map[string]any{
@@ -205,7 +205,7 @@ func TestDevPublic_Auth_RegisterFlow(t *testing.T) {
 
 	t.Run("B_fresh_email_registers_200", func(t *testing.T) {
 		resp, err := http.Post(srv.URL+"/self-service/registration", "application/json",
-			strings.NewReader(`{"email":"new-user@loopzero.example","password":"secret123"}`))
+			strings.NewReader(`{"email":"new-user@getloopscale.com","password":"secret123"}`))
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -245,7 +245,7 @@ func TestDevPublic_Auth_RegisterResponseShape(t *testing.T) {
 
 	// Duplicate email produces the canonical product-copy message (Red Team #75),
 	// NOT the raw Kratos "identifier (email, phone, username, ...)" leak.
-	body := `{"email":"admin@loopzero.example","password":"secret123"}`
+	body := `{"email":"admin@getloopscale.com","password":"secret123"}`
 	resp, err := http.Post(srv.URL+"/self-service/registration", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -433,9 +433,9 @@ func TestDevPublic_Auth_OIDCRedirect(t *testing.T) {
 		var location string
 		switch provider {
 		case "google":
-			location = "https://accounts.google.com/o/oauth2/auth?redirect_uri=https%3A%2F%2Fauth-dev.loopzero.example%2Fself-service%2Fmethods%2Foidc%2Fcallback%2Fgoogle&state=x"
+			location = "https://accounts.google.com/o/oauth2/auth?redirect_uri=https%3A%2F%2Fauth-dev.getloopscale.com%2Fself-service%2Fmethods%2Foidc%2Fcallback%2Fgoogle&state=x"
 		case "github":
-			location = "https://github.com/login/oauth/authorize?redirect_uri=https%3A%2F%2Fauth-dev.loopzero.example%2Fself-service%2Fmethods%2Foidc%2Fcallback%2Fgithub&state=x"
+			location = "https://github.com/login/oauth/authorize?redirect_uri=https%3A%2F%2Fauth-dev.getloopscale.com%2Fself-service%2Fmethods%2Foidc%2Fcallback%2Fgithub&state=x"
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -457,7 +457,7 @@ func TestDevPublic_Auth_OIDCRedirect(t *testing.T) {
 			require.Equal(t, http.StatusSeeOther, resp.StatusCode)
 			loc := resp.Header.Get("Location")
 			require.NotEmpty(t, loc)
-			require.Contains(t, loc, "auth-dev.loopzero.example",
+			require.Contains(t, loc, "auth-dev.getloopscale.com",
 				"OIDC redirect_uri MUST cite canonical dev-public auth host, NOT localhost")
 		})
 	}

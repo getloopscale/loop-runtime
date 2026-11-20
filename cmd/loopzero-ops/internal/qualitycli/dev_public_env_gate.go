@@ -13,7 +13,7 @@ import (
 func init() {
 	register(Gate{
 		Name:    "dev-public-env",
-		Summary: "Locks dev-public.yaml canonical shape: publicAuthUrl/publicCloudUrl/uiBaseUrl/dashboardOrigin point to *-dev.loopzero.example, cookieDomain=loopzero.example, CORS + allowedReturnUrls cover both dev hosts with trailing-slash variants, no localhost or legacy non-dev URLs leak, D5 OAuth reuse (no _DEV env var override), Stripe webhook per-env split documented. M-Migrate2 2026-07-07 replaces infra/tests/helm/dev-public-env_test.sh.",
+		Summary: "Locks dev-public.yaml canonical shape: publicAuthUrl/publicCloudUrl/uiBaseUrl/dashboardOrigin point to *-dev.getloopscale.com, cookieDomain=getloopscale.com, CORS + allowedReturnUrls cover both dev hosts with trailing-slash variants, no localhost or legacy non-dev URLs leak, D5 OAuth reuse (no _DEV env var override), Stripe webhook per-env split documented. M-Migrate2 2026-07-07 replaces infra/tests/helm/dev-public-env_test.sh.",
 		Setup:   setupDevPublicEnv,
 	})
 }

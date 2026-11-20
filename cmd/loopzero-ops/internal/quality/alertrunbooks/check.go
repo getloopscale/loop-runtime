@@ -98,7 +98,7 @@ type Outcome struct {
 	// to a 404 is worse than an alert without a link — the link makes a promise.
 	DeadLinks []DeadLink
 	// UnverifiableLinks counts the external URLs. A hermetic gate cannot tell whether
-	// `https://docs.loopzero.example/runbooks/x` is alive; asserting either would be
+	// `https://docs.getloopscale.com/runbooks/x` is alive; asserting either would be
 	// inventing. Counting is honest, and the number is what makes someone check.
 	UnverifiableLinks int
 	// DirsScanned counts how many rules directories actually existed. Zero is a failure:

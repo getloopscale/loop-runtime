@@ -2,8 +2,8 @@ config:
   loopzero-infra:environment: dev
   loopzero-infra:provider: digitalocean
   loopzero-infra:region: sfo3
-  loopzero-infra:domain: dev.loopzero.example
-  loopzero-infra:dnsZone: loopzero.example
+  loopzero-infra:domain: dev.getloopscale.com
+  loopzero-infra:dnsZone: getloopscale.com
   loopzero-infra:infraVersion: v3
   # Management cluster
   loopzero-infra:mgmtK8sVersion: "1.32.13-do.2"

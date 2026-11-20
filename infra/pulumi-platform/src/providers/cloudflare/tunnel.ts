@@ -19,7 +19,7 @@ export interface TunnelConfig {
   readonly zoneId: string;
   /** Environment name (dev, staging, prod) — used to namespace CF resources */
   readonly environment: string;
-  /** Base domain (e.g., "dev.loopzero.example") — wildcard CNAME points to tunnel */
+  /** Base domain (e.g., "dev.getloopscale.com") — wildcard CNAME points to tunnel */
   readonly baseDomain: string;
   /** K8s provider for the runtime cluster (where cloudflared runs) */
   readonly runtimeProvider: k8s.Provider;

@@ -90,7 +90,7 @@ describe('Loki cross-cluster push URL wiring (audit M08 #18 / §6.C.4b)', () => 
     it('drill points at the DOKS internal LB for the drill cluster', () => {
       const env = loadEnv('drill');
       expect(env.loki?.pushUrl).toBe(
-        'http://loki-internal.drill.loopzero-drill.example:3100/loki/api/v1/push',
+        'http://loki-internal.drill.drill.getloopscale.com:3100/loki/api/v1/push',
       );
     });
 

@@ -172,7 +172,7 @@ func TestDomainHealthChecker_SkipsCFManagedDomains(t *testing.T) {
 
 	checker := NewDomainHealthChecker(store, slog.Default(), DomainHealthCheckerConfig{
 		Interval:    time.Second,
-		CNAMETarget: "cname.dev.loopzero.example",
+		CNAMETarget: "cname.dev.getloopscale.com",
 	})
 
 	// Act

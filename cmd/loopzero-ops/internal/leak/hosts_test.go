@@ -18,16 +18,16 @@ var realInventory = filepath.Join("..", "..", "..", "..", "infra", "quality", "p
 // host it declares, in declaration order, without repeats.
 func TestHosts_ListsEveryDeclaredHost(t *testing.T) {
 	inv := writeInventory(t, `# comment ignored
-app-dev.loopzero.example /v1/x | reviewed | note
-cloud.loopzero.example - | reviewed | other
-app-dev.loopzero.example /v1/y | reviewed | repeated
-auth.loopzero.example - | reviewed | third
+app-dev.getloopscale.com /v1/x | reviewed | note
+cloud.getloopscale.com - | reviewed | other
+app-dev.getloopscale.com /v1/y | reviewed | repeated
+auth.getloopscale.com - | reviewed | third
 `)
 	got, err := leak.Hosts(inv)
 	if err != nil {
 		t.Fatalf("Hosts: %v", err)
 	}
-	want := []string{"app-dev.loopzero.example", "cloud.loopzero.example", "auth.loopzero.example"}
+	want := []string{"app-dev.getloopscale.com", "cloud.getloopscale.com", "auth.getloopscale.com"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("hosts = %v, want %v (declaration order)", got, want)
 	}
@@ -55,7 +55,7 @@ func TestHosts_RealInventoryListsEveryDeclaredHost(t *testing.T) {
 		t.Errorf("only %d host(s) reached (%v); the inventory declared 4 on 2026-08-19", len(hosts), hosts)
 	}
 	for _, h := range hosts {
-		for _, forbidden := range []string{"app.loopzero.example", "cloud.loopzero.example", "auth.loopzero.example"} {
+		for _, forbidden := range []string{"app.getloopscale.com", "cloud.getloopscale.com", "auth.getloopscale.com"} {
 			if h == forbidden {
 				t.Errorf("%s is back in the inventory; it was removed for serving a development "+
 					"instance under a production name", h)
@@ -77,8 +77,8 @@ func writeInventory(t *testing.T, body string) string {
 // it is the widest exposure there is, and exempting it once made live hosts
 // produce zero targets and zero complaints.
 func TestTargets_WholeSiteIsReportedNotSilentlyExempt(t *testing.T) {
-	inv := writeInventory(t, "cloud.loopzero.example - | reviewed | authenticated BFF\n")
-	targets, uncovered, err := leak.Targets(inv, "cloud.loopzero.example")
+	inv := writeInventory(t, "cloud.getloopscale.com - | reviewed | authenticated BFF\n")
+	targets, uncovered, err := leak.Targets(inv, "cloud.getloopscale.com")
 	if err != nil {
 		t.Fatalf("Targets: %v", err)
 	}
@@ -115,12 +115,12 @@ func TestTargets_NoDeclaredHostVanishesSilently(t *testing.T) {
 // A coverage hole must say WHOSE it is: several identical "-" lines tell the
 // reader nothing about which host is uncovered.
 func TestTargets_CoverageHoleNamesItsHost(t *testing.T) {
-	inv := writeInventory(t, "cloud.loopzero.example - | reviewed | authenticated BFF\n")
-	_, uncovered, err := leak.Targets(inv, "cloud.loopzero.example")
+	inv := writeInventory(t, "cloud.getloopscale.com - | reviewed | authenticated BFF\n")
+	_, uncovered, err := leak.Targets(inv, "cloud.getloopscale.com")
 	if err != nil {
 		t.Fatalf("Targets: %v", err)
 	}
-	if len(uncovered) == 0 || !strings.Contains(uncovered[0], "cloud.loopzero.example") {
+	if len(uncovered) == 0 || !strings.Contains(uncovered[0], "cloud.getloopscale.com") {
 		t.Errorf("the hole does not name its host: %v", uncovered)
 	}
 }
@@ -156,11 +156,11 @@ func TestTargets_InternalClassIsNotACoverageHole(t *testing.T) {
 // report used to show `/userinfo` as "ok 401" and, lines below, as uncovered.
 func TestUncoveredAfterIdentity_RemovesTheContradiction(t *testing.T) {
 	holes := []string{
-		"auth-dev.loopzero.example /userinfo",
-		"auth-dev.loopzero.example /.well-known/*",
-		"auth-dev.loopzero.example /oauth2/*",
+		"auth-dev.getloopscale.com /userinfo",
+		"auth-dev.getloopscale.com /.well-known/*",
+		"auth-dev.getloopscale.com /oauth2/*",
 	}
-	rest := leak.UncoveredAfterIdentity(holes, leak.IdentityTargets("auth-dev.loopzero.example"))
+	rest := leak.UncoveredAfterIdentity(holes, leak.IdentityTargets("auth-dev.getloopscale.com"))
 	if len(rest) != 1 || !strings.Contains(rest[0], "/oauth2/") {
 		t.Errorf("only /oauth2/* is not probed by identity and must remain a hole; got %v", rest)
 	}
@@ -170,11 +170,11 @@ func TestUncoveredAfterIdentity_RemovesTheContradiction(t *testing.T) {
 // The inventory format is shared with the proxy-exposure gate, which rejects
 // the same row; the probe must not treat it as absent.
 func TestHostsAndTargets_RefuseAMalformedInventory(t *testing.T) {
-	inv := writeInventory(t, "app-dev.loopzero.example /v1/* | reviewed | ok\napp-dev.loopzero.example /v2/* | nonsense\n")
+	inv := writeInventory(t, "app-dev.getloopscale.com /v1/* | reviewed | ok\napp-dev.getloopscale.com /v2/* | nonsense\n")
 	if _, err := leak.Hosts(inv); err == nil {
 		t.Error("Hosts: want an error for a malformed row")
 	}
-	if _, _, err := leak.Targets(inv, "app-dev.loopzero.example"); err == nil {
+	if _, _, err := leak.Targets(inv, "app-dev.getloopscale.com"); err == nil {
 		t.Error("Targets: want an error for a malformed row")
 	}
 }
