@@ -121,10 +121,10 @@ func TestValidator_AllowedSimilarDomains(t *testing.T) {
 
 	// These look similar but should be allowed
 	allowed := []string{
-		"loopzero.com",       // different TLD
-		"notloopzero.example",    // different domain
-		"myloopzero.example",     // different domain
-		"api.mycompany.dev", // different domain, same TLD
+		"loopzero.com",        // different TLD
+		"notloopzero.example", // different domain
+		"myloopzero.example",  // different domain
+		"api.mycompany.dev",   // different domain, same TLD
 	}
 
 	for _, domain := range allowed {

@@ -19,9 +19,9 @@ func TestNewScheme_registersLoopZeroTypes(t *testing.T) {
 		t.Fatalf("NewScheme: %v", err)
 	}
 	cases := map[string]runtime.Object{
-		"Tenant":             &apiv1.Tenant{},
-		"LoopZeroApplication":    &apiv1.LoopZeroApplication{},
-		"PreviewEnvironment": &apiv1.PreviewEnvironment{},
+		"Tenant":              &apiv1.Tenant{},
+		"LoopZeroApplication": &apiv1.LoopZeroApplication{},
+		"PreviewEnvironment":  &apiv1.PreviewEnvironment{},
 	}
 	for want, obj := range cases {
 		gvks, _, err := s.ObjectKinds(obj)

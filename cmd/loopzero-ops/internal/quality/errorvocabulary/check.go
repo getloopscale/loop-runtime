@@ -40,10 +40,10 @@ import (
 var errorWriters = map[string]bool{
 	"WriteLoopZeroError":                true,
 	"WriteLoopZeroErrorWithFieldErrors": true,
-	"WriteCodeErrorJSON":            true,
-	"WriteErrorJSON":                true,
-	"WriteJSONWithErrors":           true,
-	"FieldError":                    true,
+	"WriteCodeErrorJSON":                true,
+	"WriteErrorJSON":                    true,
+	"WriteJSONWithErrors":               true,
+	"FieldError":                        true,
 }
 
 // A handler that builds its error before writing it authors the message in the

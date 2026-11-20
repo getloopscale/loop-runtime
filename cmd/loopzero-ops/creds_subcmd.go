@@ -77,7 +77,7 @@ func credsResult(args []string, path string, lookup func(string) (string, bool))
 		"LOOPZERO_GOOGLE_CLIENT_ID":     creds.Google.ClientID,
 		"LOOPZERO_GOOGLE_CLIENT_SECRET": creds.Google.ClientSecret,
 		"LOOPZERO_RESEND_API_KEY":       creds.Resend.APIKey,
-		"CLOUDFLARE_API_TOKEN":      creds.Cloudflare.APIToken,
+		"CLOUDFLARE_API_TOKEN":          creds.Cloudflare.APIToken,
 		"LOOPZERO_OPENAI_API_KEY":       creds.OpenAI.APIKey,
 
 		"LOOPZERO_DATA_PLANE_ADMIN_BOOTSTRAP_TOKEN": creds.DataPlane.AdminBootstrapToken,

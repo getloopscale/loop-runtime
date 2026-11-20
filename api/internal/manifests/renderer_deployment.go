@@ -15,7 +15,7 @@ func buildDeployment(ri renderScope, app AppManifestInput, port int) k8sDeployme
 	// Selector must use the project-scoped `app` label so two projects with
 	// an app of the same name never share pods (Achado #17).
 	selectorLabels := map[string]string{
-		"app":             resName,
+		"app":                 resName,
 		"loopzero.io/tenant":  ri.TenantID,
 		"loopzero.io/project": ri.ProjectID,
 	}
@@ -246,7 +246,7 @@ func buildPDB(ri renderScope, app AppManifestInput) k8sPDB {
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
-		"app":             resName,
+		"app":                 resName,
 		"loopzero.io/tenant":  ri.TenantID,
 		"loopzero.io/project": ri.ProjectID,
 	}

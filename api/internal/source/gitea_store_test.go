@@ -100,9 +100,9 @@ func TestGiteaSourceStore_PushRealBundle(t *testing.T) {
 	ctx := context.Background()
 
 	bundle := createTestBundle(t, map[string]string{
-		"index.js":     `console.log("hello");`,
-		"package.json": `{"name":"test","version":"1.0.0"}`,
-		"loopzero.yaml":    "project: test\napps:\n  api:\n    port: 3000\n",
+		"index.js":      `console.log("hello");`,
+		"package.json":  `{"name":"test","version":"1.0.0"}`,
+		"loopzero.yaml": "project: test\napps:\n  api:\n    port: 3000\n",
 	})
 
 	result, err := store.PushBundle(ctx, "acme", "push-test", bytes.NewReader(bundle))

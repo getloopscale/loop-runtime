@@ -17,9 +17,9 @@ func TestRepairHint_WarnsThatTheDirectPatchIsDenied(t *testing.T) {
 	hint := repairHint("loopzero-system", "tn-abc", "cell-1")
 
 	for _, required := range []string{
-		"DENIED",                 // the central fact
+		"DENIED",                     // the central fact
 		"loopzero-tenant-cr-shape",   // which policy
-		"system:masters",         // who is exempt
+		"system:masters",             // who is exempt
 		"kubectl -n loopzero-system", // the command stays quoted, for whoever IS exempt
 		"tn-abc",
 		"cell-1",

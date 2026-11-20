@@ -654,7 +654,7 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"abc": []byte("y")}},
 		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
 		Locker:       &fakePromotionLocker{},
-		BaseDomain:   "loopzero.local",           // internal cluster domain (#61 leaker)
+		BaseDomain:   "loopzero.local",            // internal cluster domain (#61 leaker)
 		PublicDomain: "prod-dev.loopzero.example", // canonical public — should win
 		Logger:       slog.Default(),
 	})

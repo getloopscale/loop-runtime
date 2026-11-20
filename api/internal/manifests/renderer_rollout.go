@@ -37,7 +37,7 @@ func buildRollout(ri renderScope, app AppManifestInput, port int) k8sRollout {
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
-		"app":             resName,
+		"app":                 resName,
 		"loopzero.io/tenant":  ri.TenantID,
 		"loopzero.io/project": ri.ProjectID,
 	}
@@ -266,7 +266,7 @@ func buildRolloutService(ri renderScope, app AppManifestInput, svcName string, p
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
-		"app":             resName,
+		"app":                 resName,
 		"loopzero.io/tenant":  ri.TenantID,
 		"loopzero.io/project": ri.ProjectID,
 	}

@@ -23,8 +23,8 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/stretchr/testify/require"
 	coreV1 "k8s.io/api/core/v1"
 )
 

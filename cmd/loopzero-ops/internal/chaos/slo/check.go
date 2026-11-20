@@ -47,8 +47,8 @@ func DefaultThresholds() Thresholds {
 // the verdict (the jq paths used in run-scenario.sh:137-210). Pointers
 // distinguish "missing" (nil → INCONCLUSIVE) from a real zero value.
 type Sample struct {
-	P95ms           *int
-	SuccessPct      *int
+	P95ms               *int
+	SuccessPct          *int
 	LoopZeroAPIRestarts *int
 }
 
@@ -69,8 +69,8 @@ func ParseSample(data []byte) (Sample, error) {
 		return Sample{}, err
 	}
 	return Sample{
-		P95ms:           r.APIHealth.LatencyP95ms,
-		SuccessPct:      r.APIHealth.SuccessRate,
+		P95ms:               r.APIHealth.LatencyP95ms,
+		SuccessPct:          r.APIHealth.SuccessRate,
 		LoopZeroAPIRestarts: r.PodRestartCounts.LoopZeroAPI,
 	}, nil
 }

@@ -80,8 +80,8 @@ const (
 	volumeWorkspace      = "workspace"
 	workspacePVCSize     = "5Gi"
 	workspaceMountPath   = "/workspace"
-	secretRegistryConfig = "buildkit-registry-config" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
-	secretMinIOCreds     = "loopzero-minio-credentials"   //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
+	secretRegistryConfig = "buildkit-registry-config"   //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
+	secretMinIOCreds     = "loopzero-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 	secretCosignKey      = "cosign-signing-key"
 	cosignKeyMountPath   = "/cosign"
 	// Sigstore keyless mode: workflow-level projected SA token volume + mount.

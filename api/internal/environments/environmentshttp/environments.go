@@ -41,7 +41,7 @@ import (
 var reservedEnvironmentNames = map[string]bool{
 	"default":                     true,
 	"kube-system":                 true,
-	"loopzero-system":                 true,
+	"loopzero-system":             true,
 	"argocd":                      true,
 	"monitoring":                  true,
 	pkgdomain.DefaultPermanentEnv: true, // M2 v1.2 — EC-8 cross-project reserved

@@ -51,12 +51,12 @@ type TenantK8sEvictor struct {
 // ArgoCD Applications first (they reference the other CRs), then the loopzero.io
 // CRs.
 var (
-	argoApplicationsGVR = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}
-	exposedRoutesGVR    = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "exposedroutes"}
+	argoApplicationsGVR     = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}
+	exposedRoutesGVR        = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "exposedroutes"}
 	loopzeroApplicationsGVR = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "loopzeroapplications"}
-	environmentsGVR     = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "environments"}
-	tenantsGVR          = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "tenants"}
-	argoWorkflowGVR     = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "workflows"}
+	environmentsGVR         = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "environments"}
+	tenantsGVR              = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "tenants"}
+	argoWorkflowGVR         = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "workflows"}
 )
 
 var mgmtCRTypes = []schema.GroupVersionResource{

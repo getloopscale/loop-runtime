@@ -39,9 +39,9 @@ func readHeal(t *testing.T) string {
 func TestHeal_OverwritesNothingTheInstallRenders(t *testing.T) {
 	heal := readHeal(t)
 	for name, pattern := range map[string]string{
-		"H6 buildkit-registry-config": `create secret generic buildkit-registry-config`,
-		"H8 loopzero-api image env":       `set env deploy/loopzero-api`,
-		"H9 loopzero-build-cwts upgrade":  `helm upgrade[^\n]*loopzero-build-cwts`,
+		"H6 buildkit-registry-config":    `create secret generic buildkit-registry-config`,
+		"H8 loopzero-api image env":      `set env deploy/loopzero-api`,
+		"H9 loopzero-build-cwts upgrade": `helm upgrade[^\n]*loopzero-build-cwts`,
 	} {
 		if regexp.MustCompile(pattern).MatchString(heal) {
 			t.Errorf("the heal still overwrites what the install renders: %s", name)

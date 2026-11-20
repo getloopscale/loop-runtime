@@ -11,11 +11,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/go-chi/chi/v5"
 )
 
 // BuildInfo holds the minimal build information needed by the stream handler.

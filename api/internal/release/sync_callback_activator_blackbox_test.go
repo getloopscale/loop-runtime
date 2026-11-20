@@ -27,7 +27,7 @@ func (l labelledApps) GetAppLabels(_ context.Context, appName string) (map[strin
 }
 
 var callbackTestApps = labelledApps{
-	"tn-loopzero-my-app-production":   {"tn-loopzero", "production"},
+	"tn-loopzero-my-app-production":  {"tn-loopzero", "production"},
 	"other-tenant-my-app-production": {"other-tenant", "production"},
 	"acme-my-app-production":         {"acme", "production"},
 }

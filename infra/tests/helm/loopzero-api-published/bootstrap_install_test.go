@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/stretchr/testify/require"
 	appsV1 "k8s.io/api/apps/v1"
 	coreV1 "k8s.io/api/core/v1"
 	rbacV1 "k8s.io/api/rbac/v1"
@@ -103,7 +103,7 @@ func TestAPIBootstrapInstall_TakesTheGitOpsTokensFromTheirSecrets(t *testing.T) 
 	t.Parallel()
 	_, c := apiContainer(t, renderBootstrap(t, nil))
 	for name, want := range map[string][2]string{
-		"GITEA_TOKEN":  {"gitea-admin", "token"},            // B78
+		"GITEA_TOKEN":  {"gitea-admin", "token"},                // B78
 		"ARGOCD_TOKEN": {"loopzero-api-tokens", "argocd-token"}, // F-12
 	} {
 		ref := envVar(t, c, name).ValueFrom.SecretKeyRef

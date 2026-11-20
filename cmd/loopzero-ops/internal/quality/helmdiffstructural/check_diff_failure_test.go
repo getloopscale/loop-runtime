@@ -7,9 +7,9 @@ import (
 	"errors"
 	"testing"
 
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // When the unified diff cannot be computed, STRUCT-3 (the security-context

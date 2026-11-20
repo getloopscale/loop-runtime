@@ -252,10 +252,10 @@ func TestValidateProductionEnv(t *testing.T) {
 
 	t.Run("returns nil when all required vars are set", func(t *testing.T) {
 		vars := map[string]string{
-			"DATABASE_URL":              "postgres://localhost:5432/loopzero",
+			"DATABASE_URL":                  "postgres://localhost:5432/loopzero",
 			"LOOPZERO_ARGO_CALLBACK_SECRET": "some-secret",
-			"GITEA_TOKEN":               "tok-123",
-			"ARGOCD_TOKEN":              "tok-456",
+			"GITEA_TOKEN":                   "tok-123",
+			"ARGOCD_TOKEN":                  "tok-456",
 		}
 		err := server.ValidateProductionEnv(logger, vars)
 		if err != nil {
@@ -265,10 +265,10 @@ func TestValidateProductionEnv(t *testing.T) {
 
 	t.Run("returns error when a required var is empty", func(t *testing.T) {
 		vars := map[string]string{
-			"DATABASE_URL":              "postgres://localhost:5432/loopzero",
+			"DATABASE_URL":                  "postgres://localhost:5432/loopzero",
 			"LOOPZERO_ARGO_CALLBACK_SECRET": "",
-			"GITEA_TOKEN":               "tok-123",
-			"ARGOCD_TOKEN":              "tok-456",
+			"GITEA_TOKEN":                   "tok-123",
+			"ARGOCD_TOKEN":                  "tok-456",
 		}
 		err := server.ValidateProductionEnv(logger, vars)
 		if err == nil {
@@ -278,10 +278,10 @@ func TestValidateProductionEnv(t *testing.T) {
 
 	t.Run("returns error listing all missing vars", func(t *testing.T) {
 		vars := map[string]string{
-			"DATABASE_URL":              "",
+			"DATABASE_URL":                  "",
 			"LOOPZERO_ARGO_CALLBACK_SECRET": "",
-			"GITEA_TOKEN":               "",
-			"ARGOCD_TOKEN":              "",
+			"GITEA_TOKEN":                   "",
+			"ARGOCD_TOKEN":                  "",
 		}
 		err := server.ValidateProductionEnv(logger, vars)
 		if err == nil {

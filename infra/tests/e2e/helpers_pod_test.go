@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/onsi/gomega"
 	"github.com/getloopscale/loopzero/infra/scripts/seed"
 	"github.com/getloopscale/loopzero/pkg/naming"
+	. "github.com/onsi/gomega"
 )
 
 // e2eNamespace is the workload namespace of the E2E tenant's (project, env),

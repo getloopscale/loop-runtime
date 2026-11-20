@@ -11,9 +11,9 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware/slidingwindow"
+	"github.com/go-chi/chi/v5"
 )
 
 // VerifyRateLimiter wraps RateLimiter providing route-scoped rate-limit for

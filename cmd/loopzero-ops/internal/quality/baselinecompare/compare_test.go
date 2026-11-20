@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // pkgEntry is a tiny test fixture for writeBaseline.

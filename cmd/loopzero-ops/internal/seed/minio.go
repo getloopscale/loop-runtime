@@ -43,7 +43,7 @@ const (
 	minioBuildNamespace           = "argo"
 	minioBuildSecret              = "loopzero-minio-credentials"
 	minioBuildSecretKey           = "AWS_SECRET_ACCESS_KEY"
-	minioLoopZeroAPIDeployment        = "loopzero-api"
+	minioLoopZeroAPIDeployment    = "loopzero-api"
 	minioCanonicalPasswordDefault = "loopzero-dev-password"
 )
 

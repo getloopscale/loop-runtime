@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================

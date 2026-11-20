@@ -57,8 +57,8 @@ const (
 	// dataPlaneKeysAnnotation records, on loopzero-cloud's pod template, which versions of the
 	// admin-key Secrets its pods were started with. Changing it is what rolls them.
 	dataPlaneKeysAnnotation = "loopzero.io/data-plane-admin-keys"
-	loopzeroCloudNamespace      = "loopzero-system"
-	loopzeroCloudDeployment     = "loopzero-cloud"
+	loopzeroCloudNamespace  = "loopzero-system"
+	loopzeroCloudDeployment = "loopzero-cloud"
 	dataPlaneKeyName        = "gateway-platform-admin"
 )
 

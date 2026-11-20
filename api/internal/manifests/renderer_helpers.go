@@ -58,11 +58,11 @@ func commonLabels(ri renderScope, app AppManifestInput) map[string]string {
 	return map[string]string{
 		"app":                          resourceName(ri.ProjectID, app.Name),
 		"app.kubernetes.io/managed-by": "loopzero",
-		"loopzero.io/tenant":               ri.TenantID,
-		"loopzero.io/project":              ri.ProjectID,
-		"loopzero.io/app-name":             app.Name,
-		"loopzero.io/environment":          ri.Environment,
-		"loopzero.io/app-type":             app.Type,
+		"loopzero.io/tenant":           ri.TenantID,
+		"loopzero.io/project":          ri.ProjectID,
+		"loopzero.io/app-name":         app.Name,
+		"loopzero.io/environment":      ri.Environment,
+		"loopzero.io/app-type":         app.Type,
 	}
 }
 

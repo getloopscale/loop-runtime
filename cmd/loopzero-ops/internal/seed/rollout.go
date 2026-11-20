@@ -26,7 +26,7 @@ import (
 // environment can inject its own without changing the production value.
 const (
 	loopzeroAPISettle = 120 * time.Second
-	corednsSettle = 60 * time.Second
+	corednsSettle     = 60 * time.Second
 )
 
 // waitForRolloutSettled polls the Deployment until the controller has observed

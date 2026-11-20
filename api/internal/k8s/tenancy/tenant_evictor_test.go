@@ -28,11 +28,11 @@ const (
 
 var listKinds = map[schema.GroupVersionResource]string{
 	argoWorkflowGVR: "WorkflowList",
-	{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}: "ApplicationList",
-	{Group: "loopzero.io", Version: "v1", Resource: "exposedroutes"}:          "ExposedRouteList",
-	{Group: "loopzero.io", Version: "v1", Resource: "loopzeroapplications"}:       "LoopZeroApplicationList",
-	{Group: "loopzero.io", Version: "v1", Resource: "environments"}:           "EnvironmentList",
-	{Group: "loopzero.io", Version: "v1", Resource: "tenants"}:                "TenantList",
+	{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}:   "ApplicationList",
+	{Group: "loopzero.io", Version: "v1", Resource: "exposedroutes"}:        "ExposedRouteList",
+	{Group: "loopzero.io", Version: "v1", Resource: "loopzeroapplications"}: "LoopZeroApplicationList",
+	{Group: "loopzero.io", Version: "v1", Resource: "environments"}:         "EnvironmentList",
+	{Group: "loopzero.io", Version: "v1", Resource: "tenants"}:              "TenantList",
 }
 
 func labelled(apiVersion, kind, ns, name, tenant string) *unstructured.Unstructured {

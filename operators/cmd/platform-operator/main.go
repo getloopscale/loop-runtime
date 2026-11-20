@@ -165,7 +165,7 @@ func managerCacheOptions(argoCDNamespace string) (cache.Options, error) {
 			&loopzerov1.PlatformBootstrap{}:    {Namespaces: platformCRDNamespaces},
 			&loopzerov1.GitRepositoryBinding{}: {Namespaces: platformCRDNamespaces},
 			&loopzerov1.ClusterCredential{}:    {Namespaces: platformCRDNamespaces},
-			&corev1.Secret{}:               secretScope,
+			&corev1.Secret{}:                   secretScope,
 		},
 	}, nil
 }

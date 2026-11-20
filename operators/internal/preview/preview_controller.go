@@ -267,7 +267,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 			Labels: map[string]string{
 				constants.LabelTenant:    preview.Spec.TenantID,
 				constants.LabelManagedBy: constants.ManagedByPreviewController,
-				"loopzero.io/preview":        fmt.Sprintf("pr%d", preview.Spec.PRNumber),
+				"loopzero.io/preview":    fmt.Sprintf("pr%d", preview.Spec.PRNumber),
 			},
 		},
 	}

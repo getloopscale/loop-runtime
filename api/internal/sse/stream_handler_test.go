@@ -18,10 +18,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	"github.com/getloopscale/loopzero/api/internal/sse"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/go-chi/chi/v5"
 )
 
 // --- Fakes for SSE stream tests ---

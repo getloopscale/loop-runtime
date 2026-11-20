@@ -59,7 +59,7 @@ func TestMalformedLineFails(t *testing.T) {
 		"[layers]\nseed | loopzero | a.go | test:t_test.go |\n", // empty description
 		"[layers]\nseed | loopzero |  | test:t_test.go | why\n", // no file
 		"[layers]\nseed | loopzero | a.go | foo:x | why\n",      // unknown guard
-		"[references]\nc.go\n",                              // reference without a reason
+		"[references]\nc.go\n",                                  // reference without a reason
 	} {
 		if _, err := ParseRegistry(strings.NewReader(bad)); err == nil {
 			t.Fatalf("a malformed line must fail: %q", bad)

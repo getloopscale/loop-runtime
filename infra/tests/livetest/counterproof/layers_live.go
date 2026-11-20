@@ -20,7 +20,7 @@ import (
 
 // LiveConfig captures everything needed to execute layers 4-7.
 type LiveConfig struct {
-	LoopZeroCLI      string        // path to compiled $LOOPZERO binary
+	LoopZeroCLI  string        // path to compiled $LOOPZERO binary
 	ProjectName  string        // counter-proof-{ts}
 	FixtureDir   string        // /tmp/counter-proof-deploy-{ts}/
 	EnvName      string        // production
@@ -34,7 +34,7 @@ type LiveConfig struct {
 // DefaultLiveConfig with conventional values.
 func DefaultLiveConfig(timestamp string) LiveConfig {
 	return LiveConfig{
-		LoopZeroCLI:      "loopzero",
+		LoopZeroCLI:  "loopzero",
 		ProjectName:  "counter-proof-" + timestamp,
 		FixtureDir:   filepath.Join("/tmp", "counter-proof-deploy-"+timestamp),
 		EnvName:      "production",

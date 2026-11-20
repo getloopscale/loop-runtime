@@ -350,10 +350,10 @@ func validateProductionEnv(cfg config.Config, logger *slog.Logger) error {
 		return nil
 	}
 	return server.ValidateProductionEnv(logger, map[string]string{
-		"DATABASE_URL":              os.Getenv("DATABASE_URL"),
+		"DATABASE_URL":                  os.Getenv("DATABASE_URL"),
 		"LOOPZERO_ARGO_CALLBACK_SECRET": os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET"),
-		"GITEA_TOKEN":               cfg.GiteaToken,
-		"ARGOCD_TOKEN":              cfg.ArgocdToken,
+		"GITEA_TOKEN":                   cfg.GiteaToken,
+		"ARGOCD_TOKEN":                  cfg.ArgocdToken,
 	})
 }
 

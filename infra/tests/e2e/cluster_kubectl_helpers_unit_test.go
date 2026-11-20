@@ -41,7 +41,7 @@ func withEnv(t *testing.T, vars map[string]string) {
 
 func TestClusterKubectlArgs_DefaultK3D(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":        "",
+		"LOOPZERO_TEST_ENV":    "",
 		"DRILL_KUBECONFIG_DIR": "",
 	})
 
@@ -56,7 +56,7 @@ func TestClusterKubectlArgs_DefaultK3D(t *testing.T) {
 
 func TestClusterKubectlArgs_LOOPZERO_TEST_ENV_K3D_Explicit(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":        "k3d",
+		"LOOPZERO_TEST_ENV":    "k3d",
 		"DRILL_KUBECONFIG_DIR": "",
 	})
 
@@ -72,7 +72,7 @@ func TestClusterKubectlArgs_LOOPZERO_TEST_ENV_K3D_Explicit(t *testing.T) {
 // re-adds the fallback.
 func TestClusterKubectlArgs_LegacyFallback_Removed(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":        "",
+		"LOOPZERO_TEST_ENV":    "",
 		"DRILL_KUBECONFIG_DIR": "/tmp/drill-kc",
 	})
 
@@ -91,7 +91,7 @@ func TestClusterKubectlArgs_LegacyFallback_Removed(t *testing.T) {
 
 func TestClusterKubectlArgs_Drill_Explicit(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":        "drill",
+		"LOOPZERO_TEST_ENV":    "drill",
 		"DRILL_KUBECONFIG_DIR": "/tmp/drill-kc",
 	})
 
@@ -106,7 +106,7 @@ func TestClusterKubectlArgs_Drill_Explicit(t *testing.T) {
 
 func TestClusterKubectlArgs_Drill_MissingKubeconfigDir_Panics(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":        "drill",
+		"LOOPZERO_TEST_ENV":    "drill",
 		"DRILL_KUBECONFIG_DIR": "",
 	})
 
@@ -151,7 +151,7 @@ func TestClusterKubectlArgs_Prod_Stub_Panics(t *testing.T) {
 
 func TestClusterKubectlArgs_PerClusterRole(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":        "drill",
+		"LOOPZERO_TEST_ENV":    "drill",
 		"DRILL_KUBECONFIG_DIR": "/tmp/drill-kc",
 	})
 

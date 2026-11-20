@@ -35,8 +35,8 @@ func (s *ArgoCDTokenSeed) Name() string    { return "argocd-token" }
 const (
 	argocdInitialAdminSecret = "argocd-initial-admin-secret"
 	argocdInitialAdminKey    = "password"
-	loopzeroAPITokensSecret      = "loopzero-api-tokens"
-	loopzeroAPITokensKey         = "argocd-token"
+	loopzeroAPITokensSecret  = "loopzero-api-tokens"
+	loopzeroAPITokensKey     = "argocd-token"
 )
 
 func (s *ArgoCDTokenSeed) Run(d Deps) Result {

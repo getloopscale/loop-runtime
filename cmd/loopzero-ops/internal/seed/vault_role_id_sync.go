@@ -48,17 +48,17 @@ func NewVaultRoleIDSyncSeed() *VaultRoleIDSyncSeed { return &VaultRoleIDSyncSeed
 func (s *VaultRoleIDSyncSeed) Name() string        { return "vault-role-id-sync" }
 
 const (
-	vaultContextName           = "k3d-loopzero-secrets"
-	vaultNamespace             = "secrets-system"
-	vaultUnsealFileEnv         = "LOOPZERO_VAULT_UNSEAL_FILE"
-	vaultUnsealFileDefault     = ".loopzero/cleanroom-unseal.json"
-	vaultOpenBaoPortRemote     = 8200
-	openBaoVaultRoleIDKey      = "OPENBAO_VAULT_ROLE_ID"
+	vaultContextName               = "k3d-loopzero-secrets"
+	vaultNamespace                 = "secrets-system"
+	vaultUnsealFileEnv             = "LOOPZERO_VAULT_UNSEAL_FILE"
+	vaultUnsealFileDefault         = ".loopzero/cleanroom-unseal.json"
+	vaultOpenBaoPortRemote         = 8200
+	openBaoVaultRoleIDKey          = "OPENBAO_VAULT_ROLE_ID"
 	vaultRoleIDReadPathLoopZeroAPI = "/v1/auth/approle/role/loopzero-api/role-id"
 	// The Secret both AppRole halves live in, where loopzero-api reads them (charts/loopzero-api
 	// values-bootstrap.yaml secrets.additionalSources; infra/tilt/api-deployment.yaml).
-	openBaoAppRoleNamespace = "loopzero-system"
-	openBaoAppRoleSecret    = "loopzero-openbao-approle"
+	openBaoAppRoleNamespace     = "loopzero-system"
+	openBaoAppRoleSecret        = "loopzero-openbao-approle"
 	loopzeroAPINamespaceInCore  = "loopzero-system"
 	loopzeroAPIDeploymentInCore = "loopzero-api"
 )

@@ -17,16 +17,16 @@ type ErrorClass string
 // Canonical error classes. Order matters in Classify (most specific
 // wins). Frontend mirrors this list in sse-events.ts.
 const (
-	ErrorClassOOM             ErrorClass = "OOM"
-	ErrorClassBuildTimeout    ErrorClass = "BUILD_TIMEOUT"
-	ErrorClassImagePullFail   ErrorClass = "IMAGE_PULL_FAILED"
-	ErrorClassCosignFailed    ErrorClass = "COSIGN_FAILED"
-	ErrorClassRegistryAuth    ErrorClass = "REGISTRY_AUTH"
-	ErrorClassDockerfileLint  ErrorClass = "DOCKERFILE_LINT"
+	ErrorClassOOM                 ErrorClass = "OOM"
+	ErrorClassBuildTimeout        ErrorClass = "BUILD_TIMEOUT"
+	ErrorClassImagePullFail       ErrorClass = "IMAGE_PULL_FAILED"
+	ErrorClassCosignFailed        ErrorClass = "COSIGN_FAILED"
+	ErrorClassRegistryAuth        ErrorClass = "REGISTRY_AUTH"
+	ErrorClassDockerfileLint      ErrorClass = "DOCKERFILE_LINT"
 	ErrorClassLoopZeroYAMLInvalid ErrorClass = "LOOPZERO_YAML_INVALID"
-	ErrorClassCancelledByUser ErrorClass = "CANCELLED_BY_USER"
-	ErrorClassWorkflowDeleted ErrorClass = "WORKFLOW_DELETED"
-	ErrorClassUnknown         ErrorClass = "UNKNOWN"
+	ErrorClassCancelledByUser     ErrorClass = "CANCELLED_BY_USER"
+	ErrorClassWorkflowDeleted     ErrorClass = "WORKFLOW_DELETED"
+	ErrorClassUnknown             ErrorClass = "UNKNOWN"
 )
 
 // suggestions maps an error class to a user-facing actionable hint. Rule 3:
@@ -45,9 +45,9 @@ var suggestions = map[ErrorClass]string{
 	// compat — Classify() still matches "loopzero.yaml" substrings upstream — but
 	// the user-visible suggestion is honest.
 	ErrorClassLoopZeroYAMLInvalid: "Project manifest could not be parsed. Check your `.loopzero/services.json` and run `loopzero validate` locally.",
-	ErrorClassCancelledByUser: "Deploy was cancelled. Trigger a new deploy when ready.",
-	ErrorClassWorkflowDeleted: "Build was interrupted by an operator. Trigger a new deploy.",
-	ErrorClassUnknown:         "Build step failed. See build logs for details.",
+	ErrorClassCancelledByUser:     "Deploy was cancelled. Trigger a new deploy when ready.",
+	ErrorClassWorkflowDeleted:     "Build was interrupted by an operator. Trigger a new deploy.",
+	ErrorClassUnknown:             "Build step failed. See build logs for details.",
 }
 
 // SuggestionFor returns the user-facing actionable hint for an error class.

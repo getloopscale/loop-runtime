@@ -41,8 +41,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // secretPerEnvironmentPool opens a pool or skips the test if PG is unreachable. The

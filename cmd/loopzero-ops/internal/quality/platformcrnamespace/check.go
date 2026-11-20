@@ -76,9 +76,9 @@ func (o Output) Verdict() verdict.Verdict {
 }
 
 var (
-	reKind      = regexp.MustCompile(`^\s*kind:\s*(Tenant|Environment)\s*$`)
-	reNamespace = regexp.MustCompile(`^\s*namespace:\s*["']?([A-Za-z0-9_.${}:-]+)["']?\s*$`)
-	reAPILoopZero   = regexp.MustCompile(`^\s*apiVersion:\s*loopzero\.io/`)
+	reKind        = regexp.MustCompile(`^\s*kind:\s*(Tenant|Environment)\s*$`)
+	reNamespace   = regexp.MustCompile(`^\s*namespace:\s*["']?([A-Za-z0-9_.${}:-]+)["']?\s*$`)
+	reAPILoopZero = regexp.MustCompile(`^\s*apiVersion:\s*loopzero\.io/`)
 )
 
 // Check scans the trees and returns the violations.

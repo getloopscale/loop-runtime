@@ -32,18 +32,18 @@ type Disposition string
 
 // The disposition vocabulary, one name per outcome.
 const (
-	KeepOperator        Disposition = "KEEP-OPERATOR"
-	KeepOrchestrator    Disposition = "KEEP-ORCHESTRATOR"
-	DelegateHelmfile    Disposition = "DELEGATE-HELMFILE"
-	DelegateArgoCD      Disposition = "DELEGATE-ARGOCD"
-	MigrateGoPureFn     Disposition = "MIGRATE-GO-PUREFN"
-	MigrateGoSDK        Disposition = "MIGRATE-GO-SDK"
-	MigrateGinkgo       Disposition = "MIGRATE-GINKGO"
-	MigrateGenerator    Disposition = "MIGRATE-GENERATOR"
+	KeepOperator            Disposition = "KEEP-OPERATOR"
+	KeepOrchestrator        Disposition = "KEEP-ORCHESTRATOR"
+	DelegateHelmfile        Disposition = "DELEGATE-HELMFILE"
+	DelegateArgoCD          Disposition = "DELEGATE-ARGOCD"
+	MigrateGoPureFn         Disposition = "MIGRATE-GO-PUREFN"
+	MigrateGoSDK            Disposition = "MIGRATE-GO-SDK"
+	MigrateGinkgo           Disposition = "MIGRATE-GINKGO"
+	MigrateGenerator        Disposition = "MIGRATE-GENERATOR"
 	MigrateLoopZeroOpsDrill Disposition = "MIGRATE-LOOPZERO-OPS-DRILL"
-	AutoDie             Disposition = "AUTO-DIE"
-	DeleteDead          Disposition = "DELETE-DEAD"
-	ReviewNeeded        Disposition = "REVIEW-NEEDED"
+	AutoDie                 Disposition = "AUTO-DIE"
+	DeleteDead              Disposition = "DELETE-DEAD"
+	ReviewNeeded            Disposition = "REVIEW-NEEDED"
 )
 
 // allowlistPath is the first cell of an allowlist row: a .sh path, never a

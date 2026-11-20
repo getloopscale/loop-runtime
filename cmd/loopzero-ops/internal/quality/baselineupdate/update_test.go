@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 // writeGoProfile writes a Go coverage profile fixture.

@@ -29,11 +29,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
 	"github.com/getloopscale/loopzero/api/internal/middleware/auth/authtest"
 	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
 	"github.com/getloopscale/loopzero/api/internal/server"
+	"github.com/go-chi/chi/v5"
 )
 
 // recordingLocker captures every WithLock call for assertion in tests.

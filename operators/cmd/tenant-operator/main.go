@@ -160,7 +160,7 @@ func managerCacheOptions() (cache.Options, error) {
 		ByObject: map[client.Object]cache.ByObject{
 			&loopzerov1.Tenant{}:      {Namespaces: platformCRDNamespaces},
 			&loopzerov1.Environment{}: {Namespaces: platformCRDNamespaces},
-			&corev1.Secret{}:      secretScope,
+			&corev1.Secret{}:          secretScope,
 		},
 	}, nil
 }

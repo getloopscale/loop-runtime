@@ -454,7 +454,7 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 		client.InNamespace(ns),
 		client.MatchingLabels{
 			constants.LabelProject:     app.Spec.Project,
-			"loopzero.io/app-name":         app.Spec.ServiceName,
+			"loopzero.io/app-name":     app.Spec.ServiceName,
 			constants.LabelEnvironment: app.Spec.Environment,
 		},
 	); err != nil {

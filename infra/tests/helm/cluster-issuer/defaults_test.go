@@ -6,8 +6,8 @@ package clusterissuer_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )
 

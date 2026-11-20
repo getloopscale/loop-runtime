@@ -46,7 +46,7 @@ import (
 
 var (
 	reExecLoopZeroAPISelector = regexp.MustCompile(`exec deployment/loopzero-api -c (\S+) --`)
-	reMintAppJwtFunc      = regexp.MustCompile(`(?m)^mint_app_jwt\(\) \{`)
+	reMintAppJwtFunc          = regexp.MustCompile(`(?m)^mint_app_jwt\(\) \{`)
 )
 
 func loadConnectCanonicalFixture(t *testing.T) string {

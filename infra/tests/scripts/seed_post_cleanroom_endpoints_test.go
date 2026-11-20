@@ -90,7 +90,7 @@ func TestTheChainOpensTheEndpointsItsSeedsNeed(t *testing.T) {
 // overwritten and no port-forward is opened for it.
 func TestTheChainKeepsEndpointsTheOperatorSet(t *testing.T) {
 	got := endpointsHarness(t, map[string]string{
-		"KRATOS_ADMIN_URL":        "http://kratos.example",
+		"KRATOS_ADMIN_URL":            "http://kratos.example",
 		"LOOPZERO_ADMIN_HYDRA_PG_URL": "postgres://elsewhere",
 		"LOOPZERO_API_URL":            "http://api.example",
 		"LOOPZERO_BOOTSTRAP_SECRET":   "operator-value",

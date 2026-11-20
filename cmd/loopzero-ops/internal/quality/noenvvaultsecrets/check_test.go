@@ -332,9 +332,9 @@ spec:
 
 func TestSuggestVaultPath_FollowsD6Convention(t *testing.T) {
 	cases := map[string]string{
-		"GITHUB_APP_PRIVATE_KEY":     "github/app/private/key",
+		"GITHUB_APP_PRIVATE_KEY":         "github/app/private/key",
 		"LOOPZERO_SECRET_ENCRYPTION_KEY": "loopzero/secret/encryption/key",
-		"COSIGN_PASSWORD":            "cosign/password",
+		"COSIGN_PASSWORD":                "cosign/password",
 	}
 	for input, expectKey := range cases {
 		got := suggestVaultPath(input)

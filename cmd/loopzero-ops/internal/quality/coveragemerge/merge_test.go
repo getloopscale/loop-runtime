@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 )
 
 func writeFile(t *testing.T, dir, rel, body string) string {

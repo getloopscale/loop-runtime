@@ -96,7 +96,7 @@ func TestNetworkingCorednsSeed_HappyPath(t *testing.T) {
 		"172.20.0.20 k3d-loopzero-cell-0-serverlb", // alias
 		"172.20.0.30 k3d-loopzero-secrets-server-0",
 		"172.20.0.30 k3d-loopzero-secrets-serverlb", // alias
-		"127.0.0.1 preexisting-alias",           // preserved
+		"127.0.0.1 preexisting-alias",               // preserved
 	} {
 		if !strings.Contains(block, want) {
 			t.Errorf("NodeHosts missing %q\nGot:\n%s", want, block)

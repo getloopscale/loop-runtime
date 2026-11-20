@@ -41,7 +41,7 @@ import (
 type AdminLoopzeroDevSeed struct{}
 
 func NewAdminLoopzeroDevSeed() *AdminLoopzeroDevSeed { return &AdminLoopzeroDevSeed{} }
-func (s *AdminLoopzeroDevSeed) Name() string        { return "admin-loopzero-dev" }
+func (s *AdminLoopzeroDevSeed) Name() string         { return "admin-loopzero-dev" }
 
 // Defaults mirror bash constants line-by-line.
 const (

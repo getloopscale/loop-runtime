@@ -112,7 +112,7 @@ func TestAuth_Whoami_ServiceAccount_UsesUsername(t *testing.T) {
 
 	uc := &auth.UserContext{
 		UserID:   "loopzero-e2e", // no github- prefix
-		Email:    "",         // no email for client_credentials
+		Email:    "",             // no email for client_credentials
 		TenantID: "e2e-tenant",
 		Role:     "owner",
 	}

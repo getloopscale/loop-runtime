@@ -68,8 +68,8 @@ func TestDrillBootstrap_PatchesNoChartRenderedObject(t *testing.T) {
 	drill := readDrillBootstrap(t)
 	for name, pattern := range map[string]string{
 		"loopzero-api env (Bugs #52, #65/#73/#79)": `set env deployment/loopzero-api`,
-		"operator env (Bug #57)":               `set env deployment/"\$OP"`,
-		"operator NetworkPolicy (Bug #59)":     `patch networkpolicy`,
+		"operator env (Bug #57)":                   `set env deployment/"\$OP"`,
+		"operator NetworkPolicy (Bug #59)":         `patch networkpolicy`,
 		"loopzero-clone template (Bug #64)":        `clusterworkflowtemplate loopzero-clone`,
 	} {
 		if regexp.MustCompile(pattern).MatchString(drill) {

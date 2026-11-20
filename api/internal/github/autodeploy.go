@@ -78,7 +78,7 @@ type WebhookBuildRequest struct {
 	Branch         string
 	CommitMessage  string
 	SenderLogin    string
-	LoopZeroYaml       *LoopZeroYamlMinimal
+	LoopZeroYaml   *LoopZeroYamlMinimal
 }
 
 // AutoDeployer handles auto-deploy on push events.
@@ -187,7 +187,7 @@ func (d *AutoDeployer) submitBuild(ctx context.Context, log *slog.Logger, req Pu
 		Branch:         req.Branch,
 		CommitMessage:  req.CommitMessage,
 		SenderLogin:    req.SenderLogin,
-		LoopZeroYaml:       loopzeroYaml,
+		LoopZeroYaml:   loopzeroYaml,
 	}); err != nil {
 		return fmt.Errorf("auto-deploy: submit build: %w", err)
 	}

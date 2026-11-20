@@ -267,8 +267,8 @@ func TestProdOverlay_InlineMutableTag(t *testing.T) {
 		}
 	}
 	pass := map[string]string{
-		"repo_name_stable": "  image: registry.io/foo-stable:v1.2.3\n", // stable in repo name
-		"pinned_suffix":    "  image: registry.io/loopzero:stable-v2\n",    // stable-v2 is a pin
+		"repo_name_stable": "  image: registry.io/foo-stable:v1.2.3\n",  // stable in repo name
+		"pinned_suffix":    "  image: registry.io/loopzero:stable-v2\n", // stable-v2 is a pin
 	}
 	for name, content := range pass {
 		dir := t.TempDir()

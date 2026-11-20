@@ -15,8 +15,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/go-chi/chi/v5"
 )
 
 // --- mocks ---

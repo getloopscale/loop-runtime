@@ -32,11 +32,11 @@ func NewGiteaTokenSeed() *GiteaTokenSeed { return &GiteaTokenSeed{} }
 func (s *GiteaTokenSeed) Name() string   { return "gitea-token" }
 
 const (
-	giteaTokenName           = "loopzero-api-token"
+	giteaTokenName               = "loopzero-api-token"
 	loopzeroTenantOperatorSecret = "loopzero-tenant-operator" // #nosec G101 -- K8s Secret resource NAME, not a credential value
 	loopzeroTenantOperatorKey    = "GITEA_TOKEN"
 	loopzeroAPITokensGiteaKey    = "gitea-token"
-	giteaAdminTokenSecretKey = "token"
+	giteaAdminTokenSecretKey     = "token"
 	loopzeroTenantOperatorDeploy = "loopzero-tenant-operator"
 )
 

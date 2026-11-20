@@ -83,8 +83,8 @@ func TestClusterCredentialCreateRendersTheCanonicalLabelSet(t *testing.T) {
 	}
 	labels := field(t, cc, "metadata", "labels").(map[string]any)
 	want := map[string]string{
-		"loopzero.io/cell":                 "cell-0",
-		"loopzero.io/ingress-domain":       "loopzero.local",
+		"loopzero.io/cell":             "cell-0",
+		"loopzero.io/ingress-domain":   "loopzero.local",
 		"app.kubernetes.io/managed-by": "bootstrap-cell-cc",
 	}
 	for k, v := range want {

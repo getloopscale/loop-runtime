@@ -309,7 +309,7 @@ func TestAdminProvisionTenantRefusesToRunWithoutTheBootstrapSecret(t *testing.T)
 
 func TestIdentityHandleIsTheSanitizedEmailLocalPart(t *testing.T) {
 	for email, want := range map[string]string{
-		"admin@loopzero.example":            "admin",
+		"admin@loopzero.example":       "admin",
 		"paulohenrique.java@gmail.com": "paulohenrique-java",
 		"Some_User+qa@example.test":    "some-user-qa",
 	} {

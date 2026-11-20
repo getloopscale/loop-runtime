@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/go-chi/chi/v5"
 )
 
 // T1.1 of plan m3-verify-rate-limit-middleware (v1.1 SHIPPABLE 90.4).

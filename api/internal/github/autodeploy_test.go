@@ -64,8 +64,8 @@ apps:
 `
 	tarball := makeTarGz(t, map[string]string{
 		"owner-repo-abc123/loopzero.yaml": yamlContent,
-		"owner-repo-abc123/main.go":   "package main",
-		"owner-repo-abc123/go.mod":    "module example",
+		"owner-repo-abc123/main.go":       "package main",
+		"owner-repo-abc123/go.mod":        "module example",
 	})
 
 	// Act
@@ -281,7 +281,7 @@ func newGitHubTarballServer(t *testing.T, loopzeroYamlContent string) *httptest.
 	t.Helper()
 	return newGitHubTarballServerWithFiles(t, map[string]string{
 		"owner-repo-abc123/loopzero.yaml": loopzeroYamlContent,
-		"owner-repo-abc123/main.go":   "package main",
+		"owner-repo-abc123/main.go":       "package main",
 	})
 }
 
