@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	forge "github.com/getloopscale/loopzero-forge"
-	"github.com/getloopscale/loopzero-forge/model"
+	forge "github.com/getloopscale/argo-workflows-go"
+	"github.com/getloopscale/argo-workflows-go/model"
 )
 
 // CHG-2026-04-25-ATTESTATION-WIRE Phase 1 (AC-1.2): the buildImage

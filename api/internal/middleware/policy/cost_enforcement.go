@@ -25,7 +25,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
 
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	planpkg "github.com/getloopscale/contracts/plan"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 

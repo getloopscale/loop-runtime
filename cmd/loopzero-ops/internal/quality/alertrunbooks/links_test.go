@@ -103,12 +103,12 @@ func TestDifferentOrgOnSameRepoIsStillCheckedOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeRule(t, root, "prometheusrule-test.yaml", ruleWith(
-		"https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks/exists.md"))
+		"https://github.com/getloopscaledev/loopzero/blob/develop/docs/runbooks/exists.md"))
 
 	out := Check(Config{Root: root})
 	if len(out.DeadLinks) != 0 {
 		t.Errorf("flagged as dead a link whose file EXISTS, only because the org in the path differs. "+
-			"`getloopscale/loopzero` redirects to `getloopscale/loopzero` — it is the same repository: %+v", out.DeadLinks)
+			"`getloopscaledev/loopzero` redirects to `getloopscale/loopzero` — it is the same repository: %+v", out.DeadLinks)
 	}
 	if out.UnverifiableLinks != 0 {
 		t.Errorf("counted as unverifiable a link to this same repo, which can be checked on disk")

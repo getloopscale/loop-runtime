@@ -6,7 +6,7 @@ package enforcement
 import (
 	"time"
 
-	"github.com/getloopscale/loopzero-contracts/plan"
+	"github.com/getloopscale/contracts/plan"
 )
 
 // CurrentPeriod returns the start and end of the current calendar month (UTC).

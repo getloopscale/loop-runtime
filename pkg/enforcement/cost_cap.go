@@ -6,7 +6,7 @@ package enforcement
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero-contracts/plan"
+	"github.com/getloopscale/contracts/plan"
 )
 
 // T1.9 of plans/2026-05-12-launch-readiness-waves-plan.md (v1.4).

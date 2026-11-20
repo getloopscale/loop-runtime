@@ -12,7 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/getloopscale/loopzero-contracts/serviceauth"
+	"github.com/getloopscale/contracts/serviceauth"
 )
 
 // serviceAuthSignaturePresent counts how often each request carried the

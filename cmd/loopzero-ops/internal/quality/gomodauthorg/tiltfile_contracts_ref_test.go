@@ -24,17 +24,17 @@ import (
 // The existing gomod-auth-org gate cannot catch this for two independent reasons:
 //  1. the Tiltfile is not in its authFiles list, and
 //  2. its org set is legitimately {getloopscale, getloopscale} because api/go.mod still requires
-//     getloopscale/loopzero-forge, so the *org* name alone is not a violation. The defect is at the
+//     getloopscale/argo-workflows-go, so the *org* name alone is not a violation. The defect is at the
 //     (org, module) PAIR level.
 //
 // This test asserts the pair, and the version, that the Tiltfile hands a newcomer.
 
-// reTiltContractsRef captures the org named immediately before "/loopzero-contracts" anywhere in
+// reTiltContractsRef captures the org named immediately before "/contracts" anywhere in
 // the Tiltfile, whether in executable instruction text or in a comment describing the build.
-var reTiltContractsRef = regexp.MustCompile(`(loopzero[a-z]+)/loopzero-contracts(@v([0-9]+\.[0-9]+\.[0-9]+))?`)
+var reTiltContractsRef = regexp.MustCompile(`(getloopscale[a-z]*)/contracts(@v([0-9]+\.[0-9]+\.[0-9]+))?`)
 
 // reRequiredContracts captures the org and version go.mod actually requires.
-var reRequiredContracts = regexp.MustCompile(`github\.com/(loopzero[a-z]+)/loopzero-contracts\s+v([0-9]+\.[0-9]+\.[0-9]+)`)
+var reRequiredContracts = regexp.MustCompile(`github\.com/(getloopscale[a-z]*)/contracts\s+v([0-9]+\.[0-9]+\.[0-9]+)`)
 
 func repoRootFromTest(t *testing.T) string {
 	t.Helper()

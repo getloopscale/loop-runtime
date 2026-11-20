@@ -33,7 +33,7 @@
 //
 // # A dependency it cannot fetch is not a verdict about the module
 //
-// `api` and `pkg` require `github.com/getloopscale/loopzero-contracts`, a PRIVATE module. A job
+// `api` and `pkg` require `github.com/getloopscale/contracts`, a PRIVATE module. A job
 // that runs without a credential for it — the fork-safe CI job, by design — cannot
 // download it, and `go build` stops before the compiler. That says nothing about whether
 // the module stands alone, so such a module is reported NOT VERIFIED and named, apart from

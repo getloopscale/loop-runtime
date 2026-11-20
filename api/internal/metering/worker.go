@@ -20,7 +20,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero-contracts/plan"
+	"github.com/getloopscale/contracts/plan"
 
 	"github.com/getloopscale/loopzero/api/internal/leader"
 )

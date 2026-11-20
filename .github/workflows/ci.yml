@@ -33,7 +33,7 @@ name: CI
 #
 # This header used to describe a `pull_request` trigger and call it one of "the
 # TWO triggers, not one". The `on:` block below has not had a `pull_request` key
-# since d1130c137, "ci: validacao pos-merge em develop e main; PR sem acao"  # english-only: verbatim quote of a commit subject
+# since bcb52c9ac, "ci: validacao pos-merge em develop e main; PR sem acao"  # english-only: verbatim quote of a commit subject
 # (in English: "post-merge validation on develop and main; no action on PRs") — the
 # commit that made the decision this file records, which changed the trigger and
 # left the paragraph describing the old one. So the header outlived what it
@@ -56,7 +56,7 @@ on:
   # hook file was deleted ("chore: reinstall the Squad kit — mechanisms/, Python
   # hooks, and the squad library", 2026-09-02, the third deletion), its wiring in
   # `.claude/settings.json` had been gone four days longer ("chore(.claude): adopt
-  # the reconfigured kit", 2026-08-29 — published as 39267fba1, which carries only
+  # the reconfigured kit", 2026-08-29 — published as 8526133a2, which carries only
   # its `.gitignore` half; and the restore four hours later put the FILE back and
   # not the wiring), and "no
   # bypass" was false in four spellings, each one a real push that reached the
@@ -110,9 +110,9 @@ on:
   # stops nothing until branch protection marks it required, and on 2026-09-06
   # that setting was not merely unset — it is unavailable:
   #
-  #     gh api repos/getloopscale/engine/branches/develop/protection  -> 403
-  #     gh api repos/getloopscale/engine/branches/main/protection     -> 403
-  #     gh api repos/getloopscale/engine/rulesets                     -> 403
+  #     gh api repos/getloopscale/loopzero/branches/develop/protection  -> 403
+  #     gh api repos/getloopscale/loopzero/branches/main/protection     -> 403
+  #     gh api repos/getloopscale/loopzero/rulesets                     -> 403
   #     "Upgrade to GitHub Pro or make this repository public to enable this
   #      feature."
   #
@@ -145,7 +145,7 @@ on:
 
   # THE MISSING TRIGGER, and why it was missing matters more than the line.
   #
-  # `d1130c137` (2026-08-12) removed `pull_request` and moved the gates into a pre-push
+  # `bcb52c9ac` (2026-08-12) removed `pull_request` and moved the gates into a pre-push
   # hook. While the repository was private with one author the difference was loopzeroretical:
   # whoever pushes has the hook. Open, it stops being loopzeroretical — a stranger's PR would
   # reach `develop` without the suite having run once, because the `push:` above only
@@ -201,7 +201,7 @@ jobs:
     timeout-minutes: 20
 
     env:
-      GOPRIVATE: github.com/getloopscale/*,github.com/getloopscale/*
+      GOPRIVATE: github.com/getloopscale/*
 
     steps:
       # TWO checkouts, and the second is not optional.
@@ -237,8 +237,8 @@ jobs:
       # with the private half in GOMOD_SSH_KEY.
       #
       # UPDATED 2026-08-07: the import path does NOT stay on `getloopscale` any more. Commit
-      # 696fe5c62 (2026-08-06) rewrote api/go.mod and pkg/go.mod to
-      # `github.com/getloopscale/loopzero-contracts v0.4.0`, reversing the premise above — but
+      # 0b4bbd63d (2026-08-06) rewrote api/go.mod and pkg/go.mod to
+      # `github.com/getloopscale/contracts v0.6.0`, reversing the premise above — but
       # this workflow stayed on `getloopscale` and stopped finding the version, failing with
       # "pkg/go.mod does not declare loopzero-contracts". The last green run was 2026-07-31;
       # the whole pipeline was blocked from the migration onwards.
@@ -254,7 +254,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${GOMOD_SSH_KEY:-}" ]; then
-            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/loopzero-contracts (privado). Registre a chave privada da deploy key read-only."
+            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/contracts (private). Register the private half of the read-only deploy key."
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -273,7 +273,6 @@ jobs:
           SSHCFG
           # go/git fetch the module over HTTPS; rewriting to SSH is what makes the deploy
           # key get used.
-          git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git ls-remote git@github.com:getloopscale/contracts.git >/dev/null
           echo "deploy key OK — loopzero-contracts reachable."
@@ -295,17 +294,17 @@ jobs:
         id: contracts
         run: |
           set -euo pipefail
-          pkg_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/pkg/go.mod | head -1)
-          api_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/api/go.mod | head -1)
+          pkg_v=$(awk '/getloopscale\/contracts/ {print $2}' loopzero/pkg/go.mod | head -1)
+          api_v=$(awk '/getloopscale\/contracts/ {print $2}' loopzero/api/go.mod | head -1)
           if [ -z "$pkg_v" ]; then
-            echo "::error::loopzero/pkg/go.mod does not declare loopzero-contracts — the gate has no version toa exercitar."
+            echo "::error::loopzero/pkg/go.mod does not declare loopzero-contracts — the gate has no version to exercise."
             exit 1
           fi
           # A divergence between modules is real drift: go.work hides which of the two
           # wins, and an external consumer of each module would see different versions.
           # Fail loudly rather than pick one in silence.
           if [ "$pkg_v" != "$api_v" ]; then
-            echo "::error::pkg/go.mod asks for $pkg_v and api/go.mod asks for $api_v — align them before de seguir."
+            echo "::error::pkg/go.mod asks for $pkg_v and api/go.mod asks for $api_v — align them before going on."
             exit 1
           fi
           echo "loopzero-contracts: $pkg_v"
@@ -408,7 +407,7 @@ jobs:
     timeout-minutes: 15
 
     env:
-      GOPRIVATE: github.com/getloopscale/*,github.com/getloopscale/*
+      GOPRIVATE: github.com/getloopscale/*
 
     services:
       postgres:
@@ -436,7 +435,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${GOMOD_SSH_KEY:-}" ]; then
-            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/loopzero-contracts (privado)."
+            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/contracts (private)."
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -450,13 +449,12 @@ jobs:
             IdentityAgent none
           SSHCFG
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
-          git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
 
       - name: Resolve the loopzero-contracts version go.mod requires
         id: contracts
         run: |
           set -euo pipefail
-          api_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/api/go.mod | head -1)
+          api_v=$(awk '/getloopscale\/contracts/ {print $2}' loopzero/api/go.mod | head -1)
           if [ -z "$api_v" ]; then
             echo "::error::loopzero/api/go.mod does not declare loopzero-contracts."
             exit 1
@@ -535,7 +533,7 @@ jobs:
             exit 1
           fi
           if [ "$rls" -lt 30 ] || [ "$forced" -lt 30 ]; then
-            echo "::error::esperado >=30 tabelas com RLS e FORCE, medido rls=$rls forced=$forced."
+            echo "::error::expected >=30 tables with RLS and FORCE, measured rls=$rls forced=$forced."
             exit 1
           fi
 

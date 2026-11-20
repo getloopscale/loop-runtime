@@ -34,7 +34,7 @@
 #      outside `.claude/**`; the wiring removal ("chore(.claude): adopt the
 #      reconfigured kit", 2026-08-29) touched `.gitignore` and `.claude/**` and
 #      nothing else. The published history holds only the `.gitignore` half of
-#      the third (39267fba1) and nothing of the first two: `.claude/**` is the
+#      the third (8526133a2) and nothing of the first two: `.claude/**` is the
 #      gitignored kit and never reaches GitHub. Two of the three would not have started
 #      ci.yml at all, merged. A job inside ci.yml inherits that blindness in the
 #      exact case it exists for. This file therefore carries no paths filter, and
@@ -70,7 +70,7 @@ on:
   #
   # Measure this before trusting it, because the obvious measurement misleads:
   # `gh run list --branch workspace` returns 50 rows. All 50 are `pull_request`
-  # events dated 2026-08-10..2026-08-12, from before d1130c137 ("validacao
+  # events dated 2026-08-10..2026-08-12, from before bcb52c9ac ("validacao
   # pos-merge em develop e main; PR sem acao") removed the trigger that produced
   # them. Nothing has run on this branch since. At seconds per run a push trigger
   # is affordable, and the push is the earliest event there is.

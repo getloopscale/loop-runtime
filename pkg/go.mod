@@ -26,7 +26,7 @@ require (
 	github.com/hashicorp/hcl v1.0.1-vault-7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
-	github.com/getloopscale/loopzero-contracts v0.4.0
+	github.com/getloopscale/contracts v0.6.0
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )

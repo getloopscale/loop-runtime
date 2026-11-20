@@ -6,7 +6,7 @@
 // # The defect it prevents, measured
 //
 // B-057: the shared vocabulary package, api/internal/ports (renamed from
-// api/internal/domain in c2db12817), is imported by 90 files of the api module, 49 of
+// api/internal/domain in c571c7180), is imported by 90 files of the api module, 49 of
 // them production code (measured 2026-09-25 with `git grep`; the number moves with the
 // tree). It can be imported that widely precisely because it drags no dependency along:
 // `go list` reports 9 imports, all from the standard library.

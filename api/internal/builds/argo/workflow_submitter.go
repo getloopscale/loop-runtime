@@ -14,8 +14,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/k8s"
 
-	forge "github.com/getloopscale/loopzero-forge"
-	forgemodel "github.com/getloopscale/loopzero-forge/model"
+	forge "github.com/getloopscale/argo-workflows-go"
+	forgemodel "github.com/getloopscale/argo-workflows-go/model"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

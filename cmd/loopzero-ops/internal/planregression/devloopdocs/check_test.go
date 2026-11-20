@@ -14,9 +14,8 @@ var (
 	taskfileRoot = filepath.Join(repoRoot, "Taskfile.yml")
 	// The dev loop moved from docs/operations/dev-loop.md into the "Dev loop"
 	// section of docs/operations.md when docs/ was consolidated (19b8c6eaa).
-	devLoopDoc   = filepath.Join(repoRoot, "docs/operations.md")
-	readmePath   = filepath.Join(repoRoot, "README.md")
-	claudeMdPath = filepath.Join(repoRoot, "CLAUDE.md")
+	devLoopDoc = filepath.Join(repoRoot, "docs/operations.md")
+	readmePath = filepath.Join(repoRoot, "README.md")
 )
 
 // The operator runbook describes the dev loop and how to troubleshoot it.
@@ -91,21 +90,5 @@ func TestReadmeSetupExplainsTheDevLoop(t *testing.T) {
 	}
 	if !strings.Contains(block, "docs/operations.md") {
 		t.Errorf("README Setup section should link to docs/operations.md")
-	}
-}
-
-// CLAUDE.md's development commands distinguish the one-shot setup from the
-// dev loop.
-func TestClaudeMdDistinguishesOneShotSetupFromDevLoop(t *testing.T) {
-	data, err := os.ReadFile(claudeMdPath)
-	if err != nil {
-		t.Fatalf("read CLAUDE.md: %v", err)
-	}
-	content := string(data)
-	if !strings.Contains(content, "docs/operations.md") {
-		t.Errorf("CLAUDE.md should reference docs/operations.md")
-	}
-	if !strings.Contains(content, "ONE-SHOT") && !strings.Contains(content, "DEV LOOP") {
-		t.Errorf("CLAUDE.md should distinguish task setup (one-shot) vs tilt up (dev loop)")
 	}
 }

@@ -4,7 +4,7 @@
 # Zero-Ready watcher for the four split operator deployments. It was written
 # for the topology cutover, and it is kept after the cutover because zero
 # ready reconcilers is a condition that does not expire with it: the two
-# post-cutover soak watchers that shared this file were retired in 49b52c0a5
+# post-cutover soak watchers that shared this file were retired in 126768569
 # as closed-window alerts, this one was not.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule

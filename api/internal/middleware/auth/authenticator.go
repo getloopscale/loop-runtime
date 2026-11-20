@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero-contracts/serviceauth"
+	"github.com/getloopscale/contracts/serviceauth"
 )
 
 // Config is the authentication configuration. The composition root reads it

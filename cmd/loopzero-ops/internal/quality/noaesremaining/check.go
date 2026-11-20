@@ -119,7 +119,7 @@ type Hit struct {
 //	github.com/getloopscale/loopzero/api            85 pkgs  ->  api/
 //	github.com/getloopscale/loopzero/pkg            10 pkgs  ->  pkg/
 //	github.com/getloopscale/loopzero/operators/api   1 pkg   ->  operators/api/
-//	github.com/getloopscale/loopzero-contracts       3 pkgs  ->  outside this repo, see GAP
+//	github.com/getloopscale/contracts       3 pkgs  ->  outside this repo, see GAP
 //
 // The root used to be `api` alone, and the reason first written for it was
 // false: "everything the api module compiles into a running binary lives under

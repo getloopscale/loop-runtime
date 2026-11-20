@@ -32,7 +32,7 @@ import (
 // other would be the same defect facing the other way.
 func TestFindRepoRoot_AcceptsGitAsFileAndAsDirectory(t *testing.T) {
 	// newRepo builds a plausible root — `.git` in the requested shape plus the
-	// CHANGELOG.md the discovery also requires — with a nested package dir to
+	// go.work the discovery also requires — with a nested package dir to
 	// walk up from, mirroring api/internal/metrics.
 	newRepo := func(t *testing.T, gitIsDir bool) (root, nested string) {
 		t.Helper()
@@ -51,8 +51,8 @@ func TestFindRepoRoot_AcceptsGitAsFileAndAsDirectory(t *testing.T) {
 				t.Fatalf("write .git file: %v", err)
 			}
 		}
-		if err := os.WriteFile(filepath.Join(root, "CHANGELOG.md"), []byte("# Changelog\n"), 0o644); err != nil {
-			t.Fatalf("write CHANGELOG.md: %v", err)
+		if err := os.WriteFile(filepath.Join(root, "go.work"), []byte("go 1.26.11\n"), 0o644); err != nil {
+			t.Fatalf("write go.work: %v", err)
 		}
 		nested = filepath.Join(root, "api", "internal", "metrics")
 		if err := os.MkdirAll(nested, 0o755); err != nil {
@@ -83,10 +83,10 @@ func TestFindRepoRoot_AcceptsGitAsFileAndAsDirectory(t *testing.T) {
 		}
 	})
 
-	// The CHANGELOG.md half of the marker is load-bearing now that `.git` is
+	// The go.work half of the marker is load-bearing now that `.git` is
 	// only checked for existence: without it, any stray `.git` above the tree
 	// would stop the walk early and the tests would read the wrong files.
-	t.Run("a bare .git without CHANGELOG.md is not a root", func(t *testing.T) {
+	t.Run("a bare .git without go.work is not a root", func(t *testing.T) {
 		root := t.TempDir()
 		if err := os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: /elsewhere\n"), 0o644); err != nil {
 			t.Fatalf("write .git file: %v", err)
@@ -96,7 +96,7 @@ func TestFindRepoRoot_AcceptsGitAsFileAndAsDirectory(t *testing.T) {
 			t.Fatalf("mkdir nested: %v", err)
 		}
 		if got, err := findRepoRoot(nested); err == nil {
-			t.Errorf("findRepoRoot = %q with no CHANGELOG.md present, want an error — relaxing the .git check must not relax the whole marker", got)
+			t.Errorf("findRepoRoot = %q with no go.work present, want an error — relaxing the .git check must not relax the whole marker", got)
 		}
 	})
 }

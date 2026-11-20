@@ -34,6 +34,10 @@ github.com/fxamacker/cbor/v2 v2.9.0 h1:NpKPmjDBgUfBms6tr6JZkTHtfFGcMKsw3eGcmD/sa
 github.com/fxamacker/cbor/v2 v2.9.0/go.mod h1:vM4b+DJCtHn+zz7h3FFp/hDAI9WNWCsZj23V5ytsSxQ=
 github.com/getkin/kin-openapi v0.144.0 h1:hIRcTH+KjLfkLpYU6bSSfdFpi0fZi1fp+hSPi4aQu9Y=
 github.com/getkin/kin-openapi v0.144.0/go.mod h1:3BH9M9XDe/y9M5DSvEocVYAYq1w0qrhJHjC/vZi0AaY=
+github.com/getloopscale/argo-workflows-go v0.8.0 h1:zuUwguJ4smKVxlQCVea74R0q+25wct6oHu1AhVeN6uc=
+github.com/getloopscale/argo-workflows-go v0.8.0/go.mod h1:wDWMM3oKM3JUp6Ha5q1Hw6etLUPADjGlLl2UvEjtZDI=
+github.com/getloopscale/contracts v0.6.0 h1:oc+loV61GbcdEB4kYNvAW9to5L0mMjUh7Syde8XZeek=
+github.com/getloopscale/contracts v0.6.0/go.mod h1:bgujW1xEOhHQiP6B+PM2c9Lj8z/puiOjnvI83IuN9xk=
 github.com/go-chi/chi/v5 v5.2.5 h1:Eg4myHZBjyvJmAFjFvWgrqDTXFyOzjj7YIm3L3mu6Ug=
 github.com/go-chi/chi/v5 v5.2.5/go.mod h1:X7Gx4mteadT3eDOMTsXzmI4/rwUpOwBHLpAfupzFJP0=
 github.com/go-ini/ini v1.67.0 h1:z6ZrTEZqSWOTyH2FlglNbNgARyHG8oLW9gMELqKr06A=
@@ -185,10 +189,6 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/getloopscale/loopzero-contracts v0.4.0 h1:8P0WFwtahCiIag+cnBtZBgBHQUZxjc5trERwZ4go0u8=
-github.com/getloopscale/loopzero-contracts v0.4.0/go.mod h1:2Swv5wfI1LKGDQO/X2RkWzNVkaRwDGgHqZU4e0AOYpg=
-github.com/getloopscale/loopzero-forge v0.6.0 h1:ZguDtTYBKiUR4VnU+1sA/7aT2KBysuRjTVOjpb0r4nk=
-github.com/getloopscale/loopzero-forge v0.6.0/go.mod h1:P3ldWSYV9Say0dTlWpg+yUnaiBTRP3kXGulZdAduZVI=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M=

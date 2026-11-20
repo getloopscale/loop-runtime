@@ -15,7 +15,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 
-	loopzerojwt "github.com/getloopscale/loopzero-contracts/jwt"
+	loopzerojwt "github.com/getloopscale/contracts/jwt"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"

@@ -12,15 +12,15 @@ import (
 // What `go build` printed in the fork-safe CI job, which receives no credential for the
 // private sibling module: the build never reached the compiler, so it says nothing about
 // whether the module stands alone.
-const privateModuleWithoutCredential = `go: downloading github.com/getloopscale/loopzero-contracts v0.4.0
-cmd/setup_auth.go:18:2: reading github.com/getloopscale/loopzero-contracts/go.mod at revision v0.4.0: git ls-remote -q --end-of-options https://github.com/getloopscale/loopzero-contracts in /home/runner/go/pkg/mod/cache/vcs/3ec5: exit status 128:
+const privateModuleWithoutCredential = `go: downloading github.com/getloopscale/contracts v0.4.0
+cmd/setup_auth.go:18:2: reading github.com/getloopscale/contracts/go.mod at revision v0.4.0: git ls-remote -q --end-of-options https://github.com/getloopscale/contracts in /home/runner/go/pkg/mod/cache/vcs/3ec5: exit status 128:
 	fatal: could not read Username for 'https://github.com': terminal prompts disabled
 Confirm the import path was entered correctly.
 If this is a private repository, see https://golang.org/doc/faq#git_https for additional information.`
 
 func TestDependencyThatCannotBeFetchedForLackOfCredentialsIsNamed(t *testing.T) {
 	mods, ok := unreachableDependencies(privateModuleWithoutCredential)
-	if !ok || len(mods) != 1 || mods[0] != "github.com/getloopscale/loopzero-contracts" {
+	if !ok || len(mods) != 1 || mods[0] != "github.com/getloopscale/contracts" {
 		t.Fatalf("an authentication failure fetching a dependency must be recognised and name it; got %v, %v", mods, ok)
 	}
 }
@@ -51,7 +51,7 @@ func TestCompileErrorBesideAnAccessFailureIsStillADefect(t *testing.T) {
 func TestModuleWhoseDependencyIsUnreachableIsNotVerifiedNotFailed(t *testing.T) {
 	root := tree(t, "api", "operators")
 	b := &fakeBuilder{failures: map[string]error{
-		"api": &UnreachableDependencyError{Dependencies: []string{"github.com/getloopscale/loopzero-contracts"}, Output: privateModuleWithoutCredential},
+		"api": &UnreachableDependencyError{Dependencies: []string{"github.com/getloopscale/contracts"}, Output: privateModuleWithoutCredential},
 	}}
 	out, err := Check(Config{RepoRoot: root, Builder: b})
 	if err != nil {
@@ -71,7 +71,7 @@ func TestModuleWhoseDependencyIsUnreachableIsNotVerifiedNotFailed(t *testing.T) 
 func TestAViolationOutranksAnUnreachableDependency(t *testing.T) {
 	root := tree(t, "api", "operators")
 	b := &fakeBuilder{failures: map[string]error{
-		"api":       &UnreachableDependencyError{Dependencies: []string{"github.com/getloopscale/loopzero-contracts"}},
+		"api":       &UnreachableDependencyError{Dependencies: []string{"github.com/getloopscale/contracts"}},
 		"operators": errorString("go: updates to go.mod needed"),
 	}}
 	out, _ := Check(Config{RepoRoot: root, Builder: b})

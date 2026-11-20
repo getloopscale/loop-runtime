@@ -40,8 +40,8 @@ var scanRoots = []string{
 // forbiddenRE matches `${VAR:-https://cloud-dev.loopzero.example...` — the
 // default-value form that silently routes through Caddy's redirect trap.
 //
-// Bash regex was: \$\{[A-Z_]+:-https://cloud-dev\.loopzero\.dev
-var forbiddenRE = regexp.MustCompile(`\$\{[A-Z_]+:-https://cloud-dev\.loopzero\.dev`)
+// Bash regex was: \$\{[A-Z_]+:-https://cloud-dev\.loopzero\.example
+var forbiddenRE = regexp.MustCompile(`\$\{[A-Z_]+:-https://cloud-dev\.loopzero\.example`)
 
 // webhookExceptionRE is the EC-1 stage-2 filter — paths under
 // /api/v1/webhooks/github are handler-direct (Caddyfile 142-156 exception)

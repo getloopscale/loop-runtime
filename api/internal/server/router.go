@@ -24,7 +24,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	planpkg "github.com/getloopscale/contracts/plan"
 	"github.com/getloopscale/loopzero/api/internal/bootstrap/bootstraphttp"
 	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
 	"github.com/getloopscale/loopzero/api/internal/metrics"

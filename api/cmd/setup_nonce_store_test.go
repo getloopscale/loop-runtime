@@ -10,7 +10,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
-	"github.com/getloopscale/loopzero-contracts/serviceauth"
+	"github.com/getloopscale/contracts/serviceauth"
 )
 
 // TestSetupServiceAuthNonceStore_DefaultsToInMemory — when no Redis

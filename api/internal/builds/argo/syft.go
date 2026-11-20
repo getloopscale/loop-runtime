@@ -6,8 +6,8 @@ package argo
 import (
 	"fmt"
 
-	forge "github.com/getloopscale/loopzero-forge"
-	"github.com/getloopscale/loopzero-forge/model"
+	forge "github.com/getloopscale/argo-workflows-go"
+	"github.com/getloopscale/argo-workflows-go/model"
 
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
