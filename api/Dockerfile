@@ -2,7 +2,7 @@ FROM golang:1.26.11-alpine3.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832d
 WORKDIR /workspace
 
 ENV GOWORK=off
-ENV GOPRIVATE=github.com/getloopscale/*,github.com/getloopscale/*
+ENV GOPRIVATE=github.com/getloopscale/*
 
 # loopzero-contracts is a PINNED published module (M5 version-pin cutover — api/go.mod
 # requires github.com/getloopscale/loopzero-contracts v0.4.0, NO replace). The private module
@@ -38,9 +38,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
       ssh-keyscan -t ed25519 github.com >> /root/.ssh/known_hosts 2>/dev/null; \
       printf "Host github.com\n  IdentityFile /root/.ssh/gomod_key\n  IdentitiesOnly yes\n  IdentityAgent none\n" > /root/.ssh/config; \
       git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"; \
-      git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"; \
     elif [ -s /run/secrets/gomod_token ]; then \
-      git config --global url."https://x-access-token:$(cat /run/secrets/gomod_token)@github.com/getloopscale/".insteadOf "https://github.com/getloopscale/"; \
       git config --global url."https://x-access-token:$(cat /run/secrets/gomod_token)@github.com/getloopscale/".insteadOf "https://github.com/getloopscale/"; \
     fi' \
     && cd api && { go mod download || { \

@@ -110,9 +110,9 @@ on:
   # stops nothing until branch protection marks it required, and on 2026-09-06
   # that setting was not merely unset — it is unavailable:
   #
-  #     gh api repos/getloopscale/engine/branches/develop/protection  -> 403
-  #     gh api repos/getloopscale/engine/branches/main/protection     -> 403
-  #     gh api repos/getloopscale/engine/rulesets                     -> 403
+  #     gh api repos/getloopscale/loopzero/branches/develop/protection  -> 403
+  #     gh api repos/getloopscale/loopzero/branches/main/protection     -> 403
+  #     gh api repos/getloopscale/loopzero/rulesets                     -> 403
   #     "Upgrade to GitHub Pro or make this repository public to enable this
   #      feature."
   #
@@ -201,7 +201,7 @@ jobs:
     timeout-minutes: 20
 
     env:
-      GOPRIVATE: github.com/getloopscale/*,github.com/getloopscale/*
+      GOPRIVATE: github.com/getloopscale/*
 
     steps:
       # TWO checkouts, and the second is not optional.
@@ -254,7 +254,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${GOMOD_SSH_KEY:-}" ]; then
-            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/loopzero-contracts (privado). Registre a chave privada da deploy key read-only."
+            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/loopzero-contracts (private). Register the private half of the read-only deploy key."
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -273,7 +273,6 @@ jobs:
           SSHCFG
           # go/git fetch the module over HTTPS; rewriting to SSH is what makes the deploy
           # key get used.
-          git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git ls-remote git@github.com:getloopscale/contracts.git >/dev/null
           echo "deploy key OK — loopzero-contracts reachable."
@@ -298,14 +297,14 @@ jobs:
           pkg_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/pkg/go.mod | head -1)
           api_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/api/go.mod | head -1)
           if [ -z "$pkg_v" ]; then
-            echo "::error::loopzero/pkg/go.mod does not declare loopzero-contracts — the gate has no version toa exercitar."
+            echo "::error::loopzero/pkg/go.mod does not declare loopzero-contracts — the gate has no version to exercise."
             exit 1
           fi
           # A divergence between modules is real drift: go.work hides which of the two
           # wins, and an external consumer of each module would see different versions.
           # Fail loudly rather than pick one in silence.
           if [ "$pkg_v" != "$api_v" ]; then
-            echo "::error::pkg/go.mod asks for $pkg_v and api/go.mod asks for $api_v — align them before de seguir."
+            echo "::error::pkg/go.mod asks for $pkg_v and api/go.mod asks for $api_v — align them before going on."
             exit 1
           fi
           echo "loopzero-contracts: $pkg_v"
@@ -408,7 +407,7 @@ jobs:
     timeout-minutes: 15
 
     env:
-      GOPRIVATE: github.com/getloopscale/*,github.com/getloopscale/*
+      GOPRIVATE: github.com/getloopscale/*
 
     services:
       postgres:
@@ -436,7 +435,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${GOMOD_SSH_KEY:-}" ]; then
-            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/loopzero-contracts (privado)."
+            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/loopzero-contracts (private)."
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -449,7 +448,6 @@ jobs:
             IdentitiesOnly yes
             IdentityAgent none
           SSHCFG
-          git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
 
       - name: Resolve the loopzero-contracts version go.mod requires
@@ -535,7 +533,7 @@ jobs:
             exit 1
           fi
           if [ "$rls" -lt 30 ] || [ "$forced" -lt 30 ]; then
-            echo "::error::esperado >=30 tabelas com RLS e FORCE, medido rls=$rls forced=$forced."
+            echo "::error::expected >=30 tables with RLS and FORCE, measured rls=$rls forced=$forced."
             exit 1
           fi
 

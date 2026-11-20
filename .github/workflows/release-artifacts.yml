@@ -1,6 +1,6 @@
 # AM6 — loopzero artifact pipeline, dual-channel + low-cost.
 #   develop push  → DEV channel: build only CHANGED services (paths-filter), tags :develop/:develop-<sha>, NO sign (cheap/fast)
-#   tag v*        → RELEASE channel: build ALL 9 images + ALL 13 charts, SBOM + provenance + keyless cosign
+#   tag v*        → RELEASE channel: build ALL 9 images + ALL charts, SBOM + provenance + keyless cosign
 #   workflow_dispatch → build ALL (unsigned), manual
 # Low-cost levers: change-detection (dev), GHA layer cache (build-publish.yml), amd64-only, cancel-in-progress (dev only).
 name: artifacts
@@ -180,7 +180,7 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
         run: printenv GHCR_TOKEN | helm registry login ghcr.io -u "${GHCR_USER}" --password-stdin
-      - name: Package + push the 13 charts (OCI)
+      - name: Package + push the charts (OCI)
         # The namespace comes from the REPOSITORY OWNER, not from fixed text.
         #
         # It read `oci://ghcr.io/getloopscale/charts`. With the repo transferred to the
@@ -201,7 +201,7 @@ jobs:
           # local (file://) deps into charts/<chart>/charts/ before packaging.
           for c in charts/*/; do
             [ -f "$c/Chart.yaml" ] || continue
-            helm dependency update "$c" 2>/dev/null || true
+            helm dependency update "$c"
             helm package "$c" -d /tmp/charts
           done
           for tgz in /tmp/charts/*.tgz; do
