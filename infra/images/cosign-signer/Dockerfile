@@ -15,7 +15,7 @@
 #
 # SEC-006: nothing is downloaded at runtime.
 # Security: runs as non-root user 1000, no privilege escalation.
-FROM mirror.gcr.io/library/golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS cosign-build
+FROM mirror.gcr.io/library/golang:1.26.11-alpine3.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a AS cosign-build
 
 # Tag v2.6.5 of github.com/sigstore/cosign. A tag can be moved; the commit cannot, so
 # the build refuses any checkout that is not this commit.
@@ -29,13 +29,15 @@ ARG COSIGN_COMMIT=3e82f50a2839855693aacf7b3d0e7e2f30774cb4
 # needs docker/cli >= v29.4.0): Go refuses the lower one.
 ARG COSIGN_DEP_FIXES="\
 github.com/docker/cli@v29.4.0+incompatible \
-github.com/go-jose/go-jose/v4@v4.1.4 \
+github.com/go-jose/go-jose/v4@v4.1.6 \
+github.com/klauspost/compress@v1.18.7 \
 github.com/sigstore/fulcio@v1.8.6 \
 github.com/sigstore/rekor@v1.5.2 \
-go.opentelemetry.io/otel@v1.44.0 \
 go.opentelemetry.io/otel/sdk@v1.44.0 \
+go.opentelemetry.io/otel@v1.44.0 \
 golang.org/x/crypto@v0.55.0 \
 golang.org/x/mod@v0.40.0 \
+golang.org/x/net@v0.62.0 \
 google.golang.org/grpc@v1.83.2"
 
 RUN apk add --no-cache git \
@@ -50,7 +52,7 @@ RUN CGO_ENABLED=0 GOFLAGS=-mod=readonly go build -trimpath \
       -ldflags "-s -w" -o /out/cosign ./cmd/cosign \
     && /out/cosign version >/dev/null
 
-FROM mirror.gcr.io/library/alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+FROM mirror.gcr.io/library/alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039b444be8e5d638f7abbada189971eb2
 
 ARG COSIGN_TAG=v2.6.5
 ARG COSIGN_COMMIT=3e82f50a2839855693aacf7b3d0e7e2f30774cb4

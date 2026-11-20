@@ -1,4 +1,4 @@
-FROM golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS builder
+FROM golang:1.26.11-alpine3.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a AS builder
 WORKDIR /workspace
 
 ENV GOWORK=off
@@ -99,13 +99,13 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-controller ./cmd/controller/
 
 # Build migrate from source (same Go toolchain) to avoid CVEs in pre-compiled binary.
-FROM golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS migrate-builder
+FROM golang:1.26.11-alpine3.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a AS migrate-builder
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go install -tags 'postgres' -trimpath -ldflags="-s -w" \
     github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
 
-FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+FROM alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039b444be8e5d638f7abbada189971eb2
 
 LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
 LABEL org.opencontainers.image.title="loopzero-api"

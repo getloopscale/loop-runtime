@@ -13,7 +13,7 @@
 # The layout matches upstream's Dockerfile.release at the same commit — the chart
 # calls /usr/bin/docker-entrypoint.sh and expects `minio` on PATH — with the
 # download-and-minisign step replaced by a build from a verified source commit.
-FROM mirror.gcr.io/library/golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS minio-build
+FROM mirror.gcr.io/library/golang:1.26.11-alpine3.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a AS minio-build
 
 # Tag RELEASE.2025-10-15T17-29-55Z of github.com/minio/minio — the last release
 # before the repository was archived, and the first that carries the server's own
@@ -30,12 +30,14 @@ ARG MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
 ARG MINIO_DEP_FIXES="\
 github.com/apache/thrift@v0.24.0 \
 github.com/buger/jsonparser@v1.1.2 \
-github.com/go-jose/go-jose/v4@v4.1.4 \
+github.com/go-jose/go-jose/v4@v4.1.6 \
+github.com/klauspost/compress@v1.18.7 \
 github.com/prometheus/prometheus@v0.311.3 \
 github.com/rabbitmq/amqp091-go@v1.13.0 \
-go.opentelemetry.io/otel@v1.44.0 \
 go.opentelemetry.io/otel/sdk@v1.44.0 \
+go.opentelemetry.io/otel@v1.44.0 \
 golang.org/x/crypto@v0.55.0 \
+golang.org/x/net@v0.62.0 \
 google.golang.org/grpc@v1.83.2"
 
 RUN apk add --no-cache git \
@@ -55,7 +57,7 @@ RUN CGO_ENABLED=0 GOFLAGS=-mod=readonly go build -trimpath -tags kqueue \
       -ldflags "-s -w" -o /out/minio . \
     && /out/minio --version
 
-FROM mirror.gcr.io/library/alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+FROM mirror.gcr.io/library/alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039b444be8e5d638f7abbada189971eb2
 
 ARG MINIO_TAG=RELEASE.2025-10-15T17-29-55Z
 ARG MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a

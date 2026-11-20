@@ -12,12 +12,12 @@
 # SEC-006: nothing is downloaded at runtime.
 # Output: CycloneDX JSON written to /tmp (caller uploads to S3).
 # Security: runs as non-root user 1000, no privilege escalation.
-FROM mirror.gcr.io/library/golang:1.26.6-alpine3.23@sha256:e57c41c1d5864341031181b0db34b9a537bb5773eb6428e4e5bdaea0f9135406 AS syft-build
+FROM mirror.gcr.io/library/golang:1.26.11-alpine3.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a AS syft-build
 
-# Tag v1.52.0 of github.com/anchore/syft. A tag can be moved; the commit cannot, so
+# Tag v1.57.2 of github.com/anchore/syft. A tag can be moved; the commit cannot, so
 # the build refuses any checkout that is not this commit.
-ARG SYFT_TAG=v1.52.0
-ARG SYFT_COMMIT=02ba369d13b4248395b20a504eca94b0cab564d8
+ARG SYFT_TAG=v1.57.2
+ARG SYFT_COMMIT=1a72047fd46c72e0a12ee77e24b23d2316753d08
 
 RUN apk add --no-cache git \
     && git clone --depth 1 --branch "${SYFT_TAG}" https://github.com/anchore/syft.git /src/syft \
@@ -30,10 +30,10 @@ RUN CGO_ENABLED=0 GOFLAGS=-mod=readonly go build -trimpath \
       -ldflags "-s -w" -o /out/syft ./cmd/syft \
     && /out/syft --help >/dev/null
 
-FROM mirror.gcr.io/library/alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+FROM mirror.gcr.io/library/alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039b444be8e5d638f7abbada189971eb2
 
-ARG SYFT_TAG=v1.52.0
-ARG SYFT_COMMIT=02ba369d13b4248395b20a504eca94b0cab564d8
+ARG SYFT_TAG=v1.57.2
+ARG SYFT_COMMIT=1a72047fd46c72e0a12ee77e24b23d2316753d08
 
 LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero" \
       org.opencontainers.image.title="loopzero-syft-scanner" \

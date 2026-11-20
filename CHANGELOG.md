@@ -1009,6 +1009,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- All nine published images pass the Trivy gate again: they are built on Go 1.26.11 with a refreshed Alpine 3.23 base (`musl`, `zlib`), and carry `golang.org/x/net` 0.62.0, `github.com/go-jose/go-jose/v4` 4.1.6 and `github.com/klauspost/compress` 1.18.7. The SBOM scanner moves to Syft 1.57.2, which brings `containerd` 2.4.2.
 - The Pulumi programs resolve `brace-expansion` 5.0.12 and `undici` 6.29.0, past two stack-exhaustion flaws in the first (CVE-2026-102276, CVE-2026-102278) and a denial of service through an unrequested WebSocket subprotocol in the second (CVE-2026-19534), published after the lockfiles were last resolved (#467).
 - Images published to Amazon ECR — the registry production pulls from — are signed and verified there too. Only the GitHub Container Registry copy was signed, so nothing could prove where an ECR image came from. The signature is an OCI referrer, which the repositories' immutable tags and lifecycle rules leave alone (#461).
 - The four infrastructure images — MinIO, the clone runner, the SBOM scanner and the image signer — are built from pinned upstream source commits on Go 1.26.6 and Alpine 3.23, with each vulnerable module raised to the first release that fixes it. Each now has zero fixable HIGH or CRITICAL findings (it carried up to 38), so all four pass the vulnerability gate and can be published (#441).
