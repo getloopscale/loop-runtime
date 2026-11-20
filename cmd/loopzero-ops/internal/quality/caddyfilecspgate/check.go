@@ -52,13 +52,13 @@ func (o Outcome) Verdict() verdict.Verdict {
 }
 
 // blockOpenRe finds the opening `app-dev.loopzero.example {` line of the host block.
-var blockOpenRe = regexp.MustCompile(`(?m)^app-dev\.loopzero\.dev\s*\{`)
+var blockOpenRe = regexp.MustCompile(`(?m)^app-dev\.loopzero\.example\s*\{`)
 
 // authDevBlockOpenRe finds the opening `auth-dev.loopzero.example {` line of the
 // host block (T1.3 of plan kratos-self-service-rate-limit-systemic v1.1 —
 // rate_limit + trusted_proxies invariants extend the gate to the auth-dev
 // host beyond the existing app-dev coverage).
-var authDevBlockOpenRe = regexp.MustCompile(`(?m)^auth-dev\.loopzero\.dev\s*\{`)
+var authDevBlockOpenRe = regexp.MustCompile(`(?m)^auth-dev\.loopzero\.example\s*\{`)
 
 // canonicalRateLimitZones are the 4 zones that MUST be present in the
 // auth-dev host block per T1.2 of plan kratos-self-service-rate-limit-systemic

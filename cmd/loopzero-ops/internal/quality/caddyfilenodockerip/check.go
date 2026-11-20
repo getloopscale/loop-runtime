@@ -40,8 +40,8 @@ var dockerNetIPPattern = regexp.MustCompile(`172\.18\.[0-9]+\.[0-9]+`)
 // the fix pattern MUST honor. The `{` at end must be present so a stray
 // comment reference to the hostname elsewhere is not mistaken for the block.
 var (
-	prodDevHeader    = regexp.MustCompile(`(?m)^\*\.prod-dev\.loopzero\.dev\s*\{`)
-	previewDevHeader = regexp.MustCompile(`(?m)^\*\.preview-dev\.loopzero\.dev\s*\{`)
+	prodDevHeader    = regexp.MustCompile(`(?m)^\*\.prod-dev\.loopzero\.example\s*\{`)
+	previewDevHeader = regexp.MustCompile(`(?m)^\*\.preview-dev\.loopzero\.example\s*\{`)
 )
 
 // canonicalUpstream is the stable host-port form the two wildcard blocks

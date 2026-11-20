@@ -7,7 +7,7 @@ package main
 // four citations it found would have come back with nothing to say so.
 //
 // What it found on 2026-09-16: four comments in production code citing a design rule
-// deleted in `9a4a29755`. Two were repointed at `CLAUDE.md`, which is versioned and
+// deleted in `852ade70f`. Two were repointed at `CLAUDE.md`, which is versioned and
 // declares itself the contract rather than a summary of one; three stated the rule
 // instead of pointing at it, because it fits in a sentence and a stated rule cannot rot.
 //

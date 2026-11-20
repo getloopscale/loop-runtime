@@ -30,7 +30,7 @@ var caddySiteBlockRe = regexp.MustCompile(`^([A-Za-z0-9*.:-]+)\s*\{`)
 
 // publicHostRe finds loopzero.example hostnames inside a helmfile environment's
 // public URL settings.
-var publicHostRe = regexp.MustCompile(`https://([a-z0-9.-]+\.loopzero\.dev)`)
+var publicHostRe = regexp.MustCompile(`https://([a-z0-9.-]+\.loopzero\.example)`)
 
 // publicURLKeys are the environment settings that name a hostname a browser or
 // an external caller is expected to reach through the local Caddy edge.

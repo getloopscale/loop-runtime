@@ -13,7 +13,7 @@
 //
 // # WHY A GATE AND NOT A FIX
 //
-// This defect shipped twice in two days from a single root cause. Commit 696fe5c62 (2026-08-06)
+// This defect shipped twice in two days from a single root cause. Commit 0b4bbd63d (2026-08-06)
 // rewrote api/go.mod and pkg/go.mod from `getloopscaledev` to `getloopscale`. The places that
 // authenticate did not follow:
 //

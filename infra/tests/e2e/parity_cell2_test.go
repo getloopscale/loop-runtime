@@ -105,7 +105,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 
 	// C4 was REMOVED, not skipped (#240): it ran
 	// infra/tests/parity/cell2-rollback-slo.sh --dry-run, and that script was
-	// deleted in b61e6c307 (2026-07-07) with the rest of infra/tests/parity/.
+	// deleted in 3d9716390 (2026-07-07) with the rest of infra/tests/parity/.
 	// The spec could only fail on a missing file, so it measured nothing about
 	// rollback SLO. The LIVE measurement it stood in for is an operator
 	// procedure with no script in this tree.

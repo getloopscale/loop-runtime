@@ -179,7 +179,7 @@ func TestCommaSeparatedSiteAddressesAreServed(t *testing.T) {
 		"app-dev.loopzero.example, cloud.loopzero.example {\n}\n",
 		"app-dev.loopzero.example,cloud.loopzero.example {\n}\n",
 		"https://app-dev.loopzero.example, cloud.loopzero.example:8443 {\n}\n",
-		"App-Dev.LoopZero.dev, CLOUD.loopzero.example {\n}\n",
+		"App-Dev.LoopZero.example, CLOUD.loopzero.example {\n}\n",
 	} {
 		root := tree(t, "    app-dev.loopzero.example cloud.loopzero.example", caddy)
 		if _, err := violationOf(caddyhostparity.Check(caddyhostparity.Config{RepoRoot: root})); err != nil {

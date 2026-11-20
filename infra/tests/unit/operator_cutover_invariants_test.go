@@ -40,7 +40,7 @@ func repoRoot() string {
 // T-01 pinned the text of infra/scripts/production/operator-cutover-execute.sh
 // and T-02 was a permanent t.Skip naming its rollback partner. Neither script
 // could run: the pre-flight called infra/tests/parity/validate-matrix.sh
-// (deleted in b61e6c307, 2026-07-07) and the failure trap called
+// (deleted in 3d9716390, 2026-07-07) and the failure trap called
 // infra/scripts/operator-cutover-rollback.sh (deleted in 27cfe6cd, 2026-05-04),
 // so every invocation stopped at the pre-flight and the advertised
 // auto-rollback had no code behind it. The operator split it orchestrated is
@@ -157,7 +157,7 @@ func TestT08_OperatorCutoverAlertsLoaded(t *testing.T) {
 		t.Error("missing alert: ZeroReadyOperatorWindow")
 	}
 
-	// The other two were RETIRED deliberately by `49b52c0a5` (2026-09-07), which recorded
+	// The other two were RETIRED deliberately by `126768569` (2026-09-07), which recorded
 	// the evidence: both declare themselves "24h post-cutover" watchers of CHG-2026-04-30,
 	// and the operator split is complete — so they watch for a window that has closed.
 	//
@@ -171,7 +171,7 @@ func TestT08_OperatorCutoverAlertsLoaded(t *testing.T) {
 		"OperatorReconcileLatencyPostCutover24h",
 	} {
 		if strings.Contains(text, retired) {
-			t.Errorf("%s was retired by 49b52c0a5 as a closed-window watcher and is back; "+
+			t.Errorf("%s was retired by 126768569 as a closed-window watcher and is back; "+
 				"re-open that reasoning before restoring it", retired)
 		}
 	}

@@ -2,7 +2,7 @@
 // identifiers, and never a line where the same word meant something else.
 //
 // The rename of `mgmt` → `core` and `vault` → `secrets` changes 1.388 live
-// occurrences across 312 files (measured 2026-08-09, tree 8a80d49b9, see
+// occurrences across 312 files (measured 2026-08-09, tree 2a94065ed, see
 // .claude/knowledge-base/discoveries/opportunities/cluster-topology-naming-opportunity.md).
 // At that volume a human reviewing the diff detects errors of FORM, not errors of
 // CLASSIFICATION: `// dispatches through the vault (OpenBao transit)` rewritten to
