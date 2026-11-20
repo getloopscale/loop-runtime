@@ -29,7 +29,7 @@ export interface CellConfig {
   readonly cluster: ProvisionedCluster;
   /** Environment name for labeling. */
   readonly environment: string;
-  /** Base domain for app routing (e.g., "dev.loopzero.example"). */
+  /** Base domain for app routing (e.g., "dev.getloopscale.com"). */
   readonly domain: string;
 }
 

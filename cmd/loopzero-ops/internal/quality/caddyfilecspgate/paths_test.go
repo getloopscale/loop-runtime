@@ -35,7 +35,7 @@ func TestCheck_UnreadableCaddyfileIsAnError(t *testing.T) {
 func TestCheck_AppDevBlockWithoutHeaderFailsTheSanityCheck(t *testing.T) {
 	// Every canonical line mentioning a header carries the substring, so the
 	// only block that trips the sanity check is one with no header at all.
-	bare := "app-dev.loopzero.example {\n  file_server\n}\n"
+	bare := "app-dev.getloopscale.com {\n  file_server\n}\n"
 	if !containsViolation(violationsFor(t, bare), "assert_app_dev_block_bounded") {
 		t.Fatal("want the bounded-block sanity violation")
 	}

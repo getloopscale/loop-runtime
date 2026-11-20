@@ -297,18 +297,18 @@ func TestDevPublicKratosDeclaresTheURLsThePatchSeedWrote(t *testing.T) {
 	cfg := dig(values, "kratos", "config")
 
 	want := map[string]string{
-		"serve.public.base_url":                                     "https://auth-dev.loopzero.example/",
-		"selfservice.methods.oidc.config.base_redirect_uri":         "https://auth-dev.loopzero.example/",
-		"selfservice.default_browser_return_url":                    "https://app-dev.loopzero.example/",
-		"selfservice.flows.login.ui_url":                            "https://app-dev.loopzero.example/login",
-		"selfservice.flows.registration.ui_url":                     "https://app-dev.loopzero.example/register",
-		"selfservice.flows.verification.ui_url":                     "https://app-dev.loopzero.example/verification",
-		"selfservice.flows.recovery.ui_url":                         "https://app-dev.loopzero.example/recovery",
-		"selfservice.flows.settings.ui_url":                         "https://app-dev.loopzero.example/settings",
-		"selfservice.flows.error.ui_url":                            "https://app-dev.loopzero.example/login",
-		"selfservice.flows.logout.after.default_browser_return_url": "https://app-dev.loopzero.example/login",
-		"cookies.domain":                                            "loopzero.example",
-		"session.cookie.domain":                                     "loopzero.example",
+		"serve.public.base_url":                                     "https://auth-dev.getloopscale.com/",
+		"selfservice.methods.oidc.config.base_redirect_uri":         "https://auth-dev.getloopscale.com/",
+		"selfservice.default_browser_return_url":                    "https://app-dev.getloopscale.com/",
+		"selfservice.flows.login.ui_url":                            "https://app-dev.getloopscale.com/login",
+		"selfservice.flows.registration.ui_url":                     "https://app-dev.getloopscale.com/register",
+		"selfservice.flows.verification.ui_url":                     "https://app-dev.getloopscale.com/verification",
+		"selfservice.flows.recovery.ui_url":                         "https://app-dev.getloopscale.com/recovery",
+		"selfservice.flows.settings.ui_url":                         "https://app-dev.getloopscale.com/settings",
+		"selfservice.flows.error.ui_url":                            "https://app-dev.getloopscale.com/login",
+		"selfservice.flows.logout.after.default_browser_return_url": "https://app-dev.getloopscale.com/login",
+		"cookies.domain":                                            "getloopscale.com",
+		"session.cookie.domain":                                     "getloopscale.com",
 		"selfservice.methods.oidc.config.providers.0.client_id":     "gh-id",
 		"selfservice.methods.oidc.config.providers.1.client_id":     "google-id",
 		"courier.http.request_config.headers.Authorization":         "Bearer re_render_test",
@@ -322,7 +322,7 @@ func TestDevPublicKratosDeclaresTheURLsThePatchSeedWrote(t *testing.T) {
 		t.Errorf("kratos CORS enabled = %v, want true", got)
 	}
 	origins, _ := dig(cfg, "serve", "public", "cors", "allowed_origins").([]any)
-	if len(origins) == 0 || origins[0] != "https://app-dev.loopzero.example" {
+	if len(origins) == 0 || origins[0] != "https://app-dev.getloopscale.com" {
 		t.Errorf("kratos CORS origins = %v, want the dashboard origin", origins)
 	}
 }
@@ -334,14 +334,14 @@ func TestDevPublicHydraDeclaresTheURLsTheSeedRewrote(t *testing.T) {
 	urls := dig(values, "hydra", "config", "urls")
 
 	want := map[string]string{
-		"self.issuer":         "https://auth-dev.loopzero.example/",
-		"self.public":         "https://auth-dev.loopzero.example/",
-		"device.verification": "https://app-dev.loopzero.example/device-verify",
-		"device.success":      "https://app-dev.loopzero.example/device-success",
-		"login":               "https://app-dev.loopzero.example/auth/login",
-		"consent":             "https://app-dev.loopzero.example/auth/consent",
-		"logout":              "https://app-dev.loopzero.example/logout",
-		"error":               "https://app-dev.loopzero.example/auth/error",
+		"self.issuer":         "https://auth-dev.getloopscale.com/",
+		"self.public":         "https://auth-dev.getloopscale.com/",
+		"device.verification": "https://app-dev.getloopscale.com/device-verify",
+		"device.success":      "https://app-dev.getloopscale.com/device-success",
+		"login":               "https://app-dev.getloopscale.com/auth/login",
+		"consent":             "https://app-dev.getloopscale.com/auth/consent",
+		"logout":              "https://app-dev.getloopscale.com/logout",
+		"error":               "https://app-dev.getloopscale.com/auth/error",
 	}
 	for path, expected := range want {
 		if got := dig(urls, dottedPath(path)...); got != expected {

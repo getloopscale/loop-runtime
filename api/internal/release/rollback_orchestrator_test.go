@@ -132,7 +132,7 @@ func TestRollback_HappyPath(t *testing.T) {
 		ProjectName: "my-proj",
 		Environment: "production",
 		UserID:      "user-1",
-		BaseDomain:  "dev.loopzero.example",
+		BaseDomain:  "dev.getloopscale.com",
 	})
 
 	if err != nil {
@@ -434,7 +434,7 @@ func TestRollback_URLGeneration(t *testing.T) {
 		ProjectID:   "proj-1",
 		ProjectName: "my-app",
 		Environment: "staging",
-		BaseDomain:  "dev.loopzero.example",
+		BaseDomain:  "dev.getloopscale.com",
 	})
 
 	if err != nil {
@@ -442,7 +442,7 @@ func TestRollback_URLGeneration(t *testing.T) {
 	}
 	// The canonical host the IngressRoute serves (naming.AppURL), not the legacy
 	// "{project}-{env}.{domain}" that Traefik answered with 404 (loopzero-cloud#159).
-	expected := "https://tn-1-proj-1-web-staging.dev.loopzero.example"
+	expected := "https://tn-1-proj-1-web-staging.dev.getloopscale.com"
 	if result.URL != expected {
 		t.Errorf("URL = %q, want %q", result.URL, expected)
 	}

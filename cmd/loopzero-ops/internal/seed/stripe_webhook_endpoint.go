@@ -48,7 +48,7 @@ func (s *StripeWebhookEndpointSeed) Name() string { return "stripe-webhook-endpo
 const (
 	stripeAPIDefaultBase       = "https://api.stripe.com"
 	stripeAPIEnv               = "STRIPE_API_BASE" // test override
-	stripeDefaultWebhookURL    = "https://app-dev.loopzero.example/v1/webhooks/stripe"
+	stripeDefaultWebhookURL    = "https://app-dev.getloopscale.com/v1/webhooks/stripe"
 	stripeWebhookURLEnv        = "LOOPZERO_WEBHOOK_URL"
 	stripeCredsPathEnv         = "LOOPZERO_DEV_CREDENTIALS" // matches bash env var
 	stripeWhsecPlaceholderPref = "whsec_dev_"

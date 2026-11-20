@@ -16,7 +16,7 @@ import (
 // infra/local/Caddyfile under a temp dir and run Check.
 
 const canonicalAppDevBlock = `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   header {
     X-Frame-Options "DENY"
     Content-Security-Policy "default-src 'self'"
@@ -82,7 +82,7 @@ func TestCheck_MatcherMissing_FAIL(t *testing.T) {
 	// loopzero-cloud#141 pre-fix state: no @dev_server_only matcher present.
 	tmp := t.TempDir()
 	writeCaddyfile(t, tmp, `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   handle {
     root * /some/dist
     file_server
@@ -106,7 +106,7 @@ func TestCheck_MissingCriticalPath_FAIL(t *testing.T) {
 	// The .env is arguably the highest-impact path for #141 — pin per-path.
 	tmp := t.TempDir()
 	writeCaddyfile(t, tmp, `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   @dev_server_only {
     path /src/* /@vite/* /@react-refresh /node_modules/* /vite.config.* /tsconfig.* /package.json /package-lock.json
   }
@@ -139,7 +139,7 @@ app-dev.loopzero.example {
 func TestCheck_NoRespond404_FAIL(t *testing.T) {
 	tmp := t.TempDir()
 	writeCaddyfile(t, tmp, `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   @dev_server_only {
     path /src/* /@vite/* /@react-refresh /node_modules/* /vite.config.* /tsconfig.* /package.json /package-lock.json /.env /.env.*
   }
@@ -167,7 +167,7 @@ func TestCheck_MatcherAfterCatchAll_FAIL(t *testing.T) {
 	// the deny with SPA-fallback to index.html.
 	tmp := t.TempDir()
 	writeCaddyfile(t, tmp, `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   handle {
     root * /some/dist
     try_files {path} /index.html

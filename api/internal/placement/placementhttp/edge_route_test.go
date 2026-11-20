@@ -43,7 +43,7 @@ func edgeRequest(host, token string) *http.Request {
 }
 
 func serveEdge(req *http.Request) *httptest.ResponseRecorder {
-	h := NewEdgeRouteHandler(fakeEdgeResolver{"app.prod-dev.loopzero.example": "cell-1"}, edgeToken)
+	h := NewEdgeRouteHandler(fakeEdgeResolver{"app.prod-dev.getloopscale.app": "cell-1"}, edgeToken)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
@@ -52,7 +52,7 @@ func serveEdge(req *http.Request) *httptest.ResponseRecorder {
 // The edge asks which cell serves the host it received and forwards there; the
 // answer travels in a header the edge copies into its own request.
 func TestEdgeRouteAnswersTheCellForAPublishedHost(t *testing.T) {
-	rec := serveEdge(edgeRequest("app.prod-dev.loopzero.example", edgeToken))
+	rec := serveEdge(edgeRequest("app.prod-dev.getloopscale.app", edgeToken))
 	if rec.Code != http.StatusOK || rec.Header().Get("X-LoopZero-Cell") != "cell-1" {
 		t.Errorf("status=%d cell=%q", rec.Code, rec.Header().Get("X-LoopZero-Cell"))
 	}
@@ -60,7 +60,7 @@ func TestEdgeRouteAnswersTheCellForAPublishedHost(t *testing.T) {
 
 // An unknown host is refused with a 404 the edge relays as-is, in product language.
 func TestEdgeRouteRefusesAnUnpublishedHost(t *testing.T) {
-	rec := serveEdge(edgeRequest("nobody.prod-dev.loopzero.example", edgeToken))
+	rec := serveEdge(edgeRequest("nobody.prod-dev.getloopscale.app", edgeToken))
 	if rec.Code != http.StatusNotFound || rec.Header().Get("X-LoopZero-Cell") != "" {
 		t.Errorf("status=%d cell=%q", rec.Code, rec.Header().Get("X-LoopZero-Cell"))
 	}
@@ -89,7 +89,7 @@ func TestEdgeRouteTreatsAnUnexpectedErrorAsUnavailable(t *testing.T) {
 // Only the edge may ask: a missing or wrong bearer is refused before any lookup.
 func TestEdgeRouteRefusesACallerWithoutTheToken(t *testing.T) {
 	for _, token := range []string{"", "wrong"} {
-		rec := serveEdge(edgeRequest("app.prod-dev.loopzero.example", token))
+		rec := serveEdge(edgeRequest("app.prod-dev.getloopscale.app", token))
 		if rec.Code != http.StatusUnauthorized || rec.Header().Get("X-LoopZero-Cell") != "" {
 			t.Errorf("token %q: status=%d cell=%q", token, rec.Code, rec.Header().Get("X-LoopZero-Cell"))
 		}

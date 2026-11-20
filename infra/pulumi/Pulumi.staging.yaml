@@ -2,8 +2,8 @@ config:
   loopzero-infra:environment: staging
   loopzero-infra:provider: digitalocean
   loopzero-infra:region: nyc3
-  loopzero-infra:domain: staging.loopzero.example
-  loopzero-infra:dnsZone: loopzero.example
+  loopzero-infra:domain: staging.getloopscale.com
+  loopzero-infra:dnsZone: getloopscale.com
   loopzero-infra:infraVersion: v1
 
   # Management cluster — platform services
@@ -29,7 +29,7 @@ config:
   loopzero-infra:dbVersion: "16"
   loopzero-infra:dbNodeCount: "1"
 
-  # Cloudflare — same zone, different subdomain (staging.loopzero.example)
+  # Cloudflare — same zone, different subdomain (staging.getloopscale.com)
   loopzero-infra:cfAccountId: "362767409c4de7fda7990c10103efdd9"
   loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
 

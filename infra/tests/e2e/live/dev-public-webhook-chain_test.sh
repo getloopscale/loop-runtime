@@ -35,9 +35,9 @@ TENANT_ID="${TENANT_ID:-tn-08fa2ecedc3c7e77}"
 PROJECT_NAME="${PROJECT_NAME:-sample}"
 ENV_NAME="${ENV_NAME:-production}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
-PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"
-PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
-PUBLIC_FIXTURE_URL="${PUBLIC_FIXTURE_URL:-https://${PROJECT_NAME}-dev.loopzero.example}"
+PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.getloopscale.com}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.getloopscale.com}"
+PUBLIC_FIXTURE_URL="${PUBLIC_FIXTURE_URL:-https://${PROJECT_NAME}-dev.getloopscale.com}"
 CONTEXT="${CONTEXT:-k3d-loopzero-core}"
 PG_NAMESPACE="${PG_NAMESPACE:-loopzero-system}"
 
@@ -101,7 +101,7 @@ preflight() {
     return 1
   fi
   if [ ! -s "$SESSION_FILE" ] ; then
-    log "ERROR (EC-12): admin@loopzero.example session file missing/empty at $SESSION_FILE"
+    log "ERROR (EC-12): admin@getloopscale.com session file missing/empty at $SESSION_FILE"
     log "       Run: loopzero-ops seed admin-loopzero-dev --verify"
     return 1
   fi

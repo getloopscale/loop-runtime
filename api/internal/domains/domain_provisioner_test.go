@@ -188,7 +188,7 @@ func TestDomainProvisioner_ProcessOnce_ProvisionVerifiedDomain(t *testing.T) {
 		slog.Default(),
 		DomainProvisionerConfig{
 			Interval:      time.Second,
-			BaseDomain:    "dev.loopzero.example",
+			BaseDomain:    "dev.getloopscale.com",
 			RegistryURL:   "registry.example.com",
 			ClusterIssuer: "test-issuer",
 		},
@@ -270,7 +270,7 @@ func TestDomainProvisioner_ProcessOnce_GitOpsFails_StaysInProvisioning(t *testin
 	provisioner := NewDomainProvisioner(
 		store, releaseStore, buildStore, gitops, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second, BaseDomain: "dev.loopzero.example", RegistryURL: "reg.io", ClusterIssuer: "test-issuer"},
+		DomainProvisionerConfig{Interval: time.Second, BaseDomain: "dev.getloopscale.com", RegistryURL: "reg.io", ClusterIssuer: "test-issuer"},
 	)
 
 	// Act
@@ -313,7 +313,7 @@ func TestDomainProvisioner_ProcessOnce_RemovesDomain(t *testing.T) {
 	provisioner := NewDomainProvisioner(
 		store, releaseStore, buildStore, gitops, &fakeLockerProvisioner{},
 		slog.Default(),
-		DomainProvisionerConfig{Interval: time.Second, BaseDomain: "dev.loopzero.example", RegistryURL: "reg.io", ClusterIssuer: "test-issuer"},
+		DomainProvisionerConfig{Interval: time.Second, BaseDomain: "dev.getloopscale.com", RegistryURL: "reg.io", ClusterIssuer: "test-issuer"},
 	)
 
 	// Act

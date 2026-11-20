@@ -31,24 +31,24 @@ func TestProbeURLIsTheRouteHostnameWhenNoPublicDomainIsSet(t *testing.T) {
 // for the URL users reach — the hostname's first label under that domain, over TLS,
 // through the edge.
 func TestProbeURLIsThePublicURLWhenAPublicDomainIsSet(t *testing.T) {
-	r := &ExposureReconciler{ProbePublicDomain: "prod-dev.loopzero.example"}
+	r := &ExposureReconciler{ProbePublicDomain: "prod-dev.getloopscale.app"}
 	got := r.resolveProbeURL(routeWithHostname("tn-admin-sample-app-production.loopzero.local", true))
-	if want := "https://tn-admin-sample-app-production.prod-dev.loopzero.example"; got != want {
+	if want := "https://tn-admin-sample-app-production.prod-dev.getloopscale.app"; got != want {
 		t.Errorf("probe URL = %q, want %q", got, want)
 	}
 }
 
 // The public edge serves TLS whatever the route's own setting.
 func TestProbeURLThroughThePublicDomainIsAlwaysHTTPS(t *testing.T) {
-	r := &ExposureReconciler{ProbePublicDomain: "prod-dev.loopzero.example"}
-	if got := r.resolveProbeURL(routeWithHostname("x-y.loopzero.local", false)); got != "https://x-y.prod-dev.loopzero.example" {
+	r := &ExposureReconciler{ProbePublicDomain: "prod-dev.getloopscale.app"}
+	if got := r.resolveProbeURL(routeWithHostname("x-y.loopzero.local", false)); got != "https://x-y.prod-dev.getloopscale.app" {
 		t.Errorf("probe URL = %q", got)
 	}
 }
 
 // The test-only override still wins when it is allowed, so envtest keeps its seam.
 func TestProbeURLOverrideStillWinsOverThePublicDomain(t *testing.T) {
-	r := &ExposureReconciler{ProbePublicDomain: "prod-dev.loopzero.example", AllowProbeURLOverride: true}
+	r := &ExposureReconciler{ProbePublicDomain: "prod-dev.getloopscale.app", AllowProbeURLOverride: true}
 	route := routeWithHostname("x-y.loopzero.local", true)
 	route.Annotations = map[string]string{probeURLOverrideAnnotation: "http://127.0.0.1:9/"}
 	if got := r.resolveProbeURL(route); got != "http://127.0.0.1:9/" {

@@ -470,7 +470,7 @@ func TestDevPublic_EnvDomainSecretsScale_StatusURLProbe(t *testing.T) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"url": "https://tn-243c747b30c41e51-sample-app-production.prod-dev.loopzero.example",
+			"url": "https://tn-243c747b30c41e51-sample-app-production.prod-dev.getloopscale.app",
 			"active_release": map[string]any{
 				"build_id": "build-active-1",
 				"status":   "ACTIVE",
@@ -496,6 +496,6 @@ func TestDevPublic_EnvDomainSecretsScale_StatusURLProbe(t *testing.T) {
 	require.NotEmpty(t, parsed.URL, "J-25 SEPA sequence step 3: URL MUST be non-empty (HALT-J-25.A trigger)")
 	require.Contains(t, parsed.URL, "tn-243c747b30c41e51",
 		"J-25 SEPA sequence step 4: URL MUST match naming.AppURL formula (tenant prefix)")
-	require.Contains(t, parsed.URL, "prod-dev.loopzero.example",
+	require.Contains(t, parsed.URL, "prod-dev.getloopscale.app",
 		"J-25 SEPA sequence step 4: URL MUST cite canonical dev-public base domain")
 }

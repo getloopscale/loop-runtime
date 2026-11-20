@@ -27,26 +27,26 @@ func writeExec(t *testing.T, path, body string) {
 
 const cleanScript = `#!/usr/bin/env bash
 # Uses canonical hostname — no cloud-dev default.
-API="${API:-https://app-dev.loopzero.example}"
+API="${API:-https://app-dev.getloopscale.com}"
 echo "$API"
 `
 
 const forbiddenScript = `#!/usr/bin/env bash
 # WRONG: default value points at cloud-dev (Caddy 301 trap).
-API="${API:-https://cloud-dev.loopzero.example/api/v1/projects}"
+API="${API:-https://cloud-dev.getloopscale.com/api/v1/projects}"
 echo "$API"
 `
 
 const webhookAllowedScript = `#!/usr/bin/env bash
 # EC-1 absorption: webhook handler is handler-direct — allowed.
-WEBHOOK="${WEBHOOK_URL:-https://cloud-dev.loopzero.example/api/v1/webhooks/github}"
+WEBHOOK="${WEBHOOK_URL:-https://cloud-dev.getloopscale.com/api/v1/webhooks/github}"
 curl -X POST "$WEBHOOK"
 `
 
 const mixedScript = `#!/usr/bin/env bash
 # Two lines: one violation + one allowed webhook exception.
-BAD="${API:-https://cloud-dev.loopzero.example/api/v1/projects}"
-OK="${WEBHOOK:-https://cloud-dev.loopzero.example/api/v1/webhooks/github}"
+BAD="${API:-https://cloud-dev.getloopscale.com/api/v1/projects}"
+OK="${WEBHOOK:-https://cloud-dev.getloopscale.com/api/v1/webhooks/github}"
 `
 
 func TestCheck_CleanRepo_PASS(t *testing.T) {

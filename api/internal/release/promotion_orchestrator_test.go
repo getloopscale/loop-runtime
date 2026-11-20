@@ -184,7 +184,7 @@ func TestPromote_HappyPath(t *testing.T) {
 		Environment: "staging",
 		Status:      string(statemachine.ReleaseActive),
 		GitCommit:   "abc123",
-		Apps:        json.RawMessage(`[{"name":"api","type":"server","url":"https://api.staging.dev.loopzero.example"}]`),
+		Apps:        json.RawMessage(`[{"name":"api","type":"server","url":"https://api.staging.dev.getloopscale.com"}]`),
 	}
 	rs.releases["rel-src-1"] = sourceRelease
 	rs.activeByEnv["tn-1-proj-1-staging"] = sourceRelease
@@ -201,7 +201,7 @@ func TestPromote_HappyPath(t *testing.T) {
 		GitPusher:  gitPusher,
 		Sync:       syncClient,
 		Locker:     &fakePromotionLocker{},
-		BaseDomain: "dev.loopzero.example",
+		BaseDomain: "dev.getloopscale.com",
 		Logger:     slog.Default(),
 	})
 
@@ -245,7 +245,7 @@ func TestPromote_HappyPath(t *testing.T) {
 		t.Errorf("expected to production, got %s", result.ToEnv)
 	}
 	// Red Team #159 canonical formula: `{tenant}-{project}-{entryApp}-{env}.{domain}`.
-	if result.URL != "https://tn-1-my-api-api-production.dev.loopzero.example" {
+	if result.URL != "https://tn-1-my-api-api-production.dev.getloopscale.com" {
 		t.Errorf("expected canonical URL, got %s", result.URL)
 	}
 
@@ -400,7 +400,7 @@ func TestPromote_SyncFailure_DoesNotFail(t *testing.T) {
 		GitPusher:  &fakePromotionGitPusher{},
 		Sync:       syncClient,
 		Locker:     &fakePromotionLocker{},
-		BaseDomain: "dev.loopzero.example",
+		BaseDomain: "dev.getloopscale.com",
 		Logger:     slog.Default(),
 	})
 
@@ -497,7 +497,7 @@ func newPromoteTestFixture() promoteTestFixture {
 		Environment: "staging",
 		Status:      string(statemachine.ReleaseActive),
 		GitCommit:   "src-commit-t21",
-		Apps:        json.RawMessage(`[{"name":"api","type":"server","url":"https://api.staging.dev.loopzero.example"}]`),
+		Apps:        json.RawMessage(`[{"name":"api","type":"server","url":"https://api.staging.dev.getloopscale.com"}]`),
 	}
 	rs.releases[sourceRelease.ID] = sourceRelease
 	rs.activeByEnv["tn-t21-proj-t21-staging"] = sourceRelease
@@ -509,7 +509,7 @@ func newPromoteTestFixture() promoteTestFixture {
 		GitPusher:  &fakePromotionGitPusher{},
 		Sync:       &fakePromotionSyncClient{},
 		Locker:     &fakePromotionLocker{},
-		BaseDomain: "dev.loopzero.example",
+		BaseDomain: "dev.getloopscale.com",
 		Logger:     slog.Default(),
 	})
 
@@ -645,7 +645,7 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 	src := &db.Release{
 		ID: "rel-src-1", BuildID: "build-1", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "preview", Status: string(statemachine.ReleaseActive), GitCommit: "abc",
-		Apps: json.RawMessage(`[{"name":"api","type":"server","url":"https://api.preview.dev.loopzero.example"}]`),
+		Apps: json.RawMessage(`[{"name":"api","type":"server","url":"https://api.preview.dev.getloopscale.com"}]`),
 	}
 	rs.releases["rel-src-1"] = src
 	rs.activeByEnv["tn-1-proj-1-preview"] = src
@@ -655,7 +655,7 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
 		Locker:       &fakePromotionLocker{},
 		BaseDomain:   "loopzero.local",            // internal cluster domain (#61 leaker)
-		PublicDomain: "prod-dev.loopzero.example", // canonical public — should win
+		PublicDomain: "prod-dev.getloopscale.app", // canonical public — should win
 		Logger:       slog.Default(),
 	})
 	result, err := orch.Promote(context.Background(), PromotionRequest{
@@ -668,11 +668,11 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 	if strings.Contains(result.URL, "loopzero.local") {
 		t.Errorf("Red Team #120 — URL %q must NOT contain 'loopzero.local' when PublicDomain is set", result.URL)
 	}
-	if !strings.Contains(result.URL, "prod-dev.loopzero.example") {
-		t.Errorf("Red Team #120 — URL %q must contain canonical PublicDomain 'prod-dev.loopzero.example'", result.URL)
+	if !strings.Contains(result.URL, "prod-dev.getloopscale.app") {
+		t.Errorf("Red Team #120 — URL %q must contain canonical PublicDomain 'prod-dev.getloopscale.app'", result.URL)
 	}
 	// Red Team #159 canonical FAANG formula: tn + project + entryApp + env
-	want := "https://tn-1-my-app-api-production.prod-dev.loopzero.example"
+	want := "https://tn-1-my-app-api-production.prod-dev.getloopscale.app"
 	if result.URL != want {
 		t.Errorf("expected URL %q, got %q", want, result.URL)
 	}
@@ -688,7 +688,7 @@ func TestPromote_PublicDomainEmpty_FallsBackToBaseDomain(t *testing.T) {
 	src := &db.Release{
 		ID: "rel-src-1", BuildID: "build-1", TenantID: "tn-1", ProjectID: "proj-1",
 		Environment: "preview", Status: string(statemachine.ReleaseActive), GitCommit: "abc",
-		Apps: json.RawMessage(`[{"name":"api","type":"server","url":"https://api.preview.dev.loopzero.example"}]`),
+		Apps: json.RawMessage(`[{"name":"api","type":"server","url":"https://api.preview.dev.getloopscale.com"}]`),
 	}
 	rs.releases["rel-src-1"] = src
 	rs.activeByEnv["tn-1-proj-1-preview"] = src
@@ -697,7 +697,7 @@ func TestPromote_PublicDomainEmpty_FallsBackToBaseDomain(t *testing.T) {
 		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"abc": []byte("y")}},
 		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
 		Locker:       &fakePromotionLocker{},
-		BaseDomain:   "dev.loopzero.example",
+		BaseDomain:   "dev.getloopscale.com",
 		PublicDomain: "", // unset — should fall back
 		Logger:       slog.Default(),
 	})
@@ -709,7 +709,7 @@ func TestPromote_PublicDomainEmpty_FallsBackToBaseDomain(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Red Team #159 canonical FAANG formula (fallback BaseDomain path).
-	want := "https://tn-1-my-app-api-production.dev.loopzero.example"
+	want := "https://tn-1-my-app-api-production.dev.getloopscale.com"
 	if result.URL != want {
 		t.Errorf("expected fallback URL %q, got %q", want, result.URL)
 	}
@@ -719,7 +719,7 @@ func TestPromote_PublicDomainEmpty_FallsBackToBaseDomain(t *testing.T) {
 // canonical URL formula (naming.AppURL) that promote now uses so it matches
 // the IngressRoute Host rule + status.go emission. Pre-fix the URL was
 // `{project}-{env}.{domain}` which produced hostnames like
-// `loopzerokit-example-production.prod-dev.loopzero.example` that Traefik 404'd
+// `loopzerokit-example-production.prod-dev.getloopscale.app` that Traefik 404'd
 // because they lacked the tenant + entryApp segments — the exact user-visible
 // symptom of #159 (CLI reports success + URL that 404s while the real ingress
 // serves 200 at a different hostname).
@@ -730,7 +730,7 @@ func TestPromote_URL_UsesCanonicalNamingFormula_RedTeam159(t *testing.T) {
 		Environment: "preview", Status: string(statemachine.ReleaseActive), GitCommit: "abc",
 		// FAANG entryApp resolution: server > frontend non-static > empty.
 		// This fixture mirrors the Red Team's actual repro loopzerokit-example.
-		Apps: json.RawMessage(`[{"name":"app","type":"server","url":"https://preview.dev.loopzero.example"}]`),
+		Apps: json.RawMessage(`[{"name":"app","type":"server","url":"https://preview.dev.getloopscale.com"}]`),
 	}
 	rs.releases["rel-src-1"] = src
 	rs.activeByEnv["tn-1ae1c0d930691e45-loopzerokit-example-preview"] = src
@@ -739,7 +739,7 @@ func TestPromote_URL_UsesCanonicalNamingFormula_RedTeam159(t *testing.T) {
 		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"abc": []byte("y")}},
 		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
 		Locker:       &fakePromotionLocker{},
-		PublicDomain: "prod-dev.loopzero.example",
+		PublicDomain: "prod-dev.getloopscale.app",
 		Logger:       slog.Default(),
 	})
 	result, err := orch.Promote(context.Background(), PromotionRequest{
@@ -753,12 +753,12 @@ func TestPromote_URL_UsesCanonicalNamingFormula_RedTeam159(t *testing.T) {
 	// Canonical: `{tenant}-{project}-{entryApp}-{env}.{domain}` — matches
 	// IngressRoute Host rule + status.go emission (SAME URL both surfaces
 	// print → user can copy either and it opens).
-	wantCanonical := "https://tn-1ae1c0d930691e45-loopzerokit-example-app-production.prod-dev.loopzero.example"
+	wantCanonical := "https://tn-1ae1c0d930691e45-loopzerokit-example-app-production.prod-dev.getloopscale.app"
 	if result.URL != wantCanonical {
 		t.Errorf("Red Team #159 — URL %q must equal canonical FAANG %q", result.URL, wantCanonical)
 	}
 	// Anti-regression: URL MUST NOT emit the legacy simplified formula.
-	legacyWrong := "https://loopzerokit-example-production.prod-dev.loopzero.example"
+	legacyWrong := "https://loopzerokit-example-production.prod-dev.getloopscale.app"
 	if result.URL == legacyWrong {
 		t.Errorf("Red Team #159 — URL %q is the legacy formula that produced Traefik 404", result.URL)
 	}
@@ -782,7 +782,7 @@ func TestPromote_URL_EmptyWhenNoEntryApp_RedTeam159(t *testing.T) {
 		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"def": []byte("y")}},
 		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
 		Locker:       &fakePromotionLocker{},
-		PublicDomain: "prod-dev.loopzero.example",
+		PublicDomain: "prod-dev.getloopscale.app",
 		Logger:       slog.Default(),
 	})
 	result, err := orch.Promote(context.Background(), PromotionRequest{

@@ -11,7 +11,7 @@ import * as cloudflare from "@pulumi/cloudflare";
 import * as pulumi from "@pulumi/pulumi";
 
 export interface LoopZeroCFZoneArgs {
-  /** Domain name (e.g., "loopzero-drill.example"). */
+  /** Domain name (e.g., "drill.getloopscale.com"). */
   domain: pulumi.Input<string>;
   /** Cloudflare account ID (typically secret-sourced). */
   accountId: pulumi.Input<string>;

@@ -1,7 +1,7 @@
 encryptionsalt: v1:rwO+QhqlQiQ=:v1:u0zsfY7XeCS75A1o:gdx5mty+r8Ranl5FYyJPVaiSHC1YZQ==
 config:
   # === Stack-wide ===
-  loopzero-drill:domain: loopzero-drill.example
+  loopzero-drill:domain: drill.getloopscale.com
   loopzero-drill:doProject: loopzero-drill
   loopzero-drill:region: sfo3
   # === Lifecycle (T3.4.bis EC-01 fix) ===

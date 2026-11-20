@@ -173,12 +173,12 @@ func TestCreateDNSRecord(t *testing.T) {
 		}
 		var body DNSRecord
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if body.Type != "CNAME" || body.Content != "cname.dev.loopzero.example" {
+		if body.Type != "CNAME" || body.Content != "cname.dev.getloopscale.com" {
 			t.Errorf("unexpected record: %+v", body)
 		}
 		_ = json.NewEncoder(w).Encode(cfResponse[DNSRecord]{
 			Success: true,
-			Result:  DNSRecord{ID: "new-1", Type: "CNAME", Name: "empresa.com", Content: "cname.dev.loopzero.example", Proxied: &proxied},
+			Result:  DNSRecord{ID: "new-1", Type: "CNAME", Name: "empresa.com", Content: "cname.dev.getloopscale.com", Proxied: &proxied},
 		})
 	}))
 	defer srv.Close()
@@ -187,7 +187,7 @@ func TestCreateDNSRecord(t *testing.T) {
 	rec, err := c.CreateDNSRecord(context.Background(), "zone-123", DNSRecord{
 		Type:    "CNAME",
 		Name:    "empresa.com",
-		Content: "cname.dev.loopzero.example",
+		Content: "cname.dev.getloopscale.com",
 		TTL:     1,
 		Proxied: &proxied,
 	})

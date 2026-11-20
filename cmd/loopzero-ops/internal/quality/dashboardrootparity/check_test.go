@@ -50,7 +50,7 @@ func tree(t *testing.T, caddy, runbook string) string {
 // nowhere.
 func TestRunbookNamesTheServedRoot(t *testing.T) {
 	root := tree(t,
-		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
+		"app-dev.getloopscale.com {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
 		"# runbook\n\nThe dashboard is built in `~/loopzero-cloud/loopzero-cloud`.\n")
 
 	if _, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})); err != nil {
@@ -61,7 +61,7 @@ func TestRunbookNamesTheServedRoot(t *testing.T) {
 // Divergence is the defect: the runbook sends the person where the edge does not serve.
 func TestDivergenceIsRefused(t *testing.T) {
 	root := tree(t,
-		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
+		"app-dev.getloopscale.com {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
 		"# runbook\n\nThe dashboard is built in `~/.buildmeta-cloud/loopzero-cloud`.\n")
 
 	out, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root}))
@@ -77,7 +77,7 @@ func TestDivergenceIsRefused(t *testing.T) {
 // silence — it is what made the discovery expensive.
 func TestSilentRunbookIsRefused(t *testing.T) {
 	root := tree(t,
-		"app-dev.loopzero.example {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
+		"app-dev.getloopscale.com {\n  root * /home/dev/loopzero-cloud/loopzero-cloud/dashboard/dist\n}\n",
 		"# runbook\n\nNothing about where the dashboard is built.\n")
 
 	if _, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})); !errors.Is(err, dashboardrootparity.ErrUndocumented) {
@@ -88,7 +88,7 @@ func TestSilentRunbookIsRefused(t *testing.T) {
 // A Caddyfile with no `root *` means the edge serves no files — there is no parity to
 // verify, and reporting "in agreement" would be green over nothing.
 func TestNoServedRootIsRefusedNotPassed(t *testing.T) {
-	root := tree(t, "app-dev.loopzero.example {\n  reverse_proxy localhost:1\n}\n", "# runbook\n")
+	root := tree(t, "app-dev.getloopscale.com {\n  reverse_proxy localhost:1\n}\n", "# runbook\n")
 
 	if _, err := violationOf(dashboardrootparity.Check(dashboardrootparity.Config{RepoRoot: root})); !errors.Is(err, dashboardrootparity.ErrNothingServed) {
 		t.Fatalf("expected ErrNothingServed, got %v", err)

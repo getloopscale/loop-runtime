@@ -9,7 +9,7 @@
     "uiBaseUrl": {
       "type": "string",
       "pattern": "^https?://[a-z0-9][a-z0-9.-]*(:[0-9]+)?$",
-      "description": "Base URL for Kratos UI redirects (login, registration, etc.). Anchored pattern: scheme http(s), FQDN-like host ([a-z0-9.-] starting with alnum), optional :NNNN numeric port. NO trailing slash (EC-8), NO query/fragment, NO userinfo (catches http://user:pass@host injection), NO non-numeric port (catches http://host:abc). Per env: dev/standalone/standalone-multi=http://localhost:4455; drill=https://app.loopzero-drill.example; prod=https://app.loopzero.example. Set via infra/helmfile/environments/<env>.yaml. (2026-05-20 pattern audit closed shadow bug class: old pattern '^https?://[^/]+(:[0-9]+)?\\$' was too permissive — '[^/]+' greedy-matched any non-slash sequence including :abc, ?query, @userinfo.)"
+      "description": "Base URL for Kratos UI redirects (login, registration, etc.). Anchored pattern: scheme http(s), FQDN-like host ([a-z0-9.-] starting with alnum), optional :NNNN numeric port. NO trailing slash (EC-8), NO query/fragment, NO userinfo (catches http://user:pass@host injection), NO non-numeric port (catches http://host:abc). Per env: dev/standalone/standalone-multi=http://localhost:4455; drill=https://app.drill.getloopscale.com; prod=https://app.getloopscale.com. Set via infra/helmfile/environments/<env>.yaml. (2026-05-20 pattern audit closed shadow bug class: old pattern '^https?://[^/]+(:[0-9]+)?\\$' was too permissive — '[^/]+' greedy-matched any non-slash sequence including :abc, ?query, @userinfo.)"
     },
     "publicAuthUrl": {
       "type": "string",
@@ -19,7 +19,7 @@
     "cookieDomain": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9.-]*$",
-      "description": "eTLD+1 for session cookie scope (e.g., loopzero.example). Must be a parent of every host that consumes the cookie (app/cloud/auth subdomains all share it). When unset (local dev), Kratos defaults to the request host. v1.1 EC-D2: legacy leading dot not required for modern browsers."
+      "description": "eTLD+1 for session cookie scope (e.g., getloopscale.com). Must be a parent of every host that consumes the cookie (app/cloud/auth subdomains all share it). When unset (local dev), Kratos defaults to the request host. v1.1 EC-D2: legacy leading dot not required for modern browsers."
     },
     "corsAllowedOrigins": {
       "type": "array",

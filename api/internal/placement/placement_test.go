@@ -525,7 +525,7 @@ func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 			KubeContext:   "cell-0",
 			ArgocdURL:     "http://argocd-legacy.argocd.svc",
 			ArgocdToken:   "legacy-token",
-			IngressDomain: "dev.loopzero.example",
+			IngressDomain: "dev.getloopscale.com",
 		},
 		{
 			CellID:        "cell-sfo3-02",
@@ -533,7 +533,7 @@ func TestRouting_CellDefault_BackwardCompat(t *testing.T) {
 			KubeContext:   "cell-sfo3-02",
 			ArgocdURL:     "http://argocd-sfo3-02.argocd.svc",
 			ArgocdToken:   "new-token",
-			IngressDomain: "dev.loopzero.example",
+			IngressDomain: "dev.getloopscale.com",
 		},
 	})
 	if err != nil {

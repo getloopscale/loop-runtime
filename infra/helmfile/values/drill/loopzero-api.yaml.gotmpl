@@ -26,10 +26,10 @@ imagePullSecrets:
   - name: loopzero-registry-pull
 
 # Bug #40 LIVE fix (2026-05-18 iter 34): the route host must be the drill API host
-# (api.loopzero-drill.example, from the pulumi-drill Cloudflare zone), or Traefik answers 404
+# (api.drill.getloopscale.com, from the pulumi-drill Cloudflare zone), or Traefik answers 404
 # on /health.
 ingressRoute:
-  host: api.loopzero-drill.example
+  host: api.drill.getloopscale.com
 
 config:
   # Bugs #65/#73/#79: drill-helmfile-bootstrap.sh used to `kubectl set env` these

@@ -10,7 +10,7 @@ export interface PlatformStackConfig {
   readonly provider: CloudProvider;
   readonly region: string;
   readonly domain: string;
-  /** Root DNS zone managed by the provider (e.g. loopzero.example). Defaults to domain. */
+  /** Root DNS zone managed by the provider (e.g. getloopscale.com). Defaults to domain. */
   readonly dnsZone: string;
   readonly infraVersion: string;
 

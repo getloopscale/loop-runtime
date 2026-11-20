@@ -492,7 +492,7 @@ func TestRenderDeployment_ScaleToZero_GeneratesHTTPScaledObject(t *testing.T) {
 		t.Errorf("HTTPScaledObject apiVersion: got %q, want http.keda.sh/v1alpha1", hso.APIVersion)
 	}
 
-	expectedHost := "acme-webapp-api-production.loopzero.example.com"
+	expectedHost := "acme-webapp-api-production.getloopscale.app.com"
 	if len(hso.Spec.Hosts) == 0 || hso.Spec.Hosts[0] != expectedHost {
 		t.Errorf("HTTPScaledObject hosts: got %v, want [%s]", hso.Spec.Hosts, expectedHost)
 	}
@@ -685,7 +685,7 @@ func TestRenderDeployment_ScaleToZero_CustomDomains(t *testing.T) {
 
 	hso := parseHTTPScaledObject(t, mustRender(t, input))
 
-	expectedHost := "acme-webapp-api-production.loopzero.example.com"
+	expectedHost := "acme-webapp-api-production.getloopscale.app.com"
 	customHost := "api.mycompany.com"
 
 	if len(hso.Spec.Hosts) != 2 {

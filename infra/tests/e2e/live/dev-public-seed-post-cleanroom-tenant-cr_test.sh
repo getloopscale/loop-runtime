@@ -16,7 +16,7 @@
 #   - seed-post-cleanroom-all.sh just succeeded (this test is the post-condition)
 #
 # Scenarios:
-#   A — admin@loopzero.example's Tenant CR (tn-243c747b30c41e51) present
+#   A — admin@getloopscale.com's Tenant CR (tn-243c747b30c41e51) present
 #   B — paulohenrique.java@gmail.com's Tenant CR (tn-ffdf1c7f4cc0168e) present  ← the bug
 #
 # Pre-fix expectation: A passes, B fails (NotFound) → 1/2 PASS, exit non-zero.
@@ -42,7 +42,7 @@ APIVERSION_GROUP="tenants.loopzero.io"
 
 # Canonical tenant_ids — pinned LIVE 2026-06-29 against dev-public PG state.
 # These are the deterministic outputs of seed-admin-loopzero-dev.sh for the
-# canonical EMAIL=admin@loopzero.example and EMAIL=paulohenrique.java@gmail.com
+# canonical EMAIL=admin@getloopscale.com and EMAIL=paulohenrique.java@gmail.com
 # seed runs respectively (per seed-admin script lines 230-280: tenant_id is
 # derived from the Kratos identity id via a stable canonical format).
 TENANT_ADMIN="tn-243c747b30c41e51"
@@ -131,7 +131,7 @@ fi
 
 scenario_a() {
   local tenant="$TENANT_ADMIN"
-  local label="A (admin@loopzero.example tenant CR present)"
+  local label="A (admin@getloopscale.com tenant CR present)"
   log "Scenario $label — tenant=$tenant"
 
   if ! kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get tenants.loopzero.io "$tenant" >/dev/null 2>&1; then

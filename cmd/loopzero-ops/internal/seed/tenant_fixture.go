@@ -55,7 +55,7 @@ func NewTenantFixtureSeed() *TenantFixtureSeed { return &TenantFixtureSeed{} }
 func (s *TenantFixtureSeed) Name() string      { return "tenant-fixture" }
 
 const (
-	tenantFixtureDefaultCloudBase      = "https://app-dev.loopzero.example"
+	tenantFixtureDefaultCloudBase      = "https://app-dev.getloopscale.com"
 	tenantFixtureDefaultInstallationID = "138325349"
 	tenantFixtureDefaultAccountLogin   = "getloopscale"
 	tenantFixtureDefaultPlanTier       = "team"

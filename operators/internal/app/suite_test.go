@@ -43,7 +43,7 @@ var _ = BeforeSuite(func() {
 	h := operatortest.StartEnvtest(GinkgoT(), operatortest.EnvtestConfig{
 		CRDPath:    "../../config/crd/bases",
 		EnableApp:  true,
-		BaseDomain: "dev.loopzero.example",
+		BaseDomain: "dev.getloopscale.com",
 	})
 	cfg = h.Cfg
 	k8sClient = h.K8sClient

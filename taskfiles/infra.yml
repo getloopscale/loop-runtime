@@ -47,7 +47,7 @@ tasks:
       # (idempotent — picks up existing for re-runs). Required by ory-kratos +
       # ory-hydra values.yaml.gotmpl `requiredEnv "LOOPZERO_DB_PASSWORD"`.
       # T2.2 of plan 2026-06-04: honor LOOPZERO_HELMFILE_ENV when set so
-      # `LOOPZERO_HELMFILE_ENV=dev-public task setup` produces *-dev.loopzero.example
+      # `LOOPZERO_HELMFILE_ENV=dev-public task setup` produces *-dev.getloopscale.com
       # URLs in the Kratos ConfigMap. Default remains standalone-multi for
       # backwards compatibility with the legacy localhost flow.
       #
@@ -138,7 +138,7 @@ tasks:
       canonicalization-plan.md.
 
       The default was standalone-public until B-165. B-025 removed the three
-      bare hostnames that env serves (app|cloud|auth.loopzero.example) from
+      bare hostnames that env serves (app|cloud|auth.getloopscale.com) from
       infra/local/Caddyfile, so the default named an environment no edge
       answered for. dev-public is the canonical replacement and its hostnames
       do have site blocks. The standalone-public env file is kept and still
@@ -1058,7 +1058,7 @@ tasks:
     desc: |
       Start Caddy reverse proxy for the local-public dashboard flow. Caddy
       binds :80 + :443 (requires sudo) and terminates Let's Encrypt TLS for
-      app/cloud/auth.loopzero.example. Serves dashboard prod-bundle via file_server
+      app/cloud/auth.getloopscale.com. Serves dashboard prod-bundle via file_server
       (canonical Option B per plan caddyfile-app-dev-prod-bundle-file-server-
       canonical v1.1 closing Red Team loopzero-cloud#66). Routes /sessions/* +
       /self-service/* to :14433 (ory-kratos-public), /v1/* to :13002 (cloud).
@@ -1142,7 +1142,7 @@ tasks:
       Requires `stripe login` (one-time per droplet). T4.1 of plan.
       v1.1 EC-D2 pre-check: aborts if stripe CLI is not logged in.
     vars:
-      WEBHOOK_URL: '{{.WEBHOOK_URL | default "https://cloud.loopzero.example/v1/webhooks/stripe"}}'
+      WEBHOOK_URL: '{{.WEBHOOK_URL | default "https://cloud.getloopscale.com/v1/webhooks/stripe"}}'
     cmds:
       - |
         if ! command -v stripe >/dev/null 2>&1; then
@@ -1199,7 +1199,7 @@ tasks:
   dev-public:dns:
     desc: |
       Provision 3 Cloudflare A records pointing at this dev droplet:
-      auth-dev.loopzero.example, app-dev.loopzero.example, cloud-dev.loopzero.example.
+      auth-dev.getloopscale.com, app-dev.getloopscale.com, cloud-dev.getloopscale.com.
       Idempotent via CF API (PATCH if exists, POST if missing).
       The Cloudflare token comes from the operator's credentials file and the IP from
       the droplet's metadata service, unless the environment sets them (#455).
@@ -1341,7 +1341,7 @@ tasks:
         printf '[dev-public:bootstrap] DNS + Caddy OK.\n'
         printf '[dev-public:bootstrap] Next: \n'
         printf '  LOOPZERO_HELMFILE_ENV=dev-public task setup\n'
-        printf '  Then visit: https://app-dev.loopzero.example/login\n'
+        printf '  Then visit: https://app-dev.getloopscale.com/login\n'
 
   # ---------------------------------------------------------------------------
   # S0.14: Composite tasks

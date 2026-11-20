@@ -5,7 +5,7 @@ issuerKind: selfsigned
 
 # ACME-only fields
 acme:
-  email: ops@loopzero.example
+  email: ops@getloopscale.com
   server: https://acme-v02.api.letsencrypt.org/directory
   privateKeySecretRef: letsencrypt-prod-account-key
 

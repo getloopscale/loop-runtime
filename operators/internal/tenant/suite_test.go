@@ -56,7 +56,7 @@ var _ = BeforeSuite(func() {
 		EnableApp:      true,
 		EnablePreview:  true,
 		EnablePlatform: true,
-		BaseDomain:     "dev.loopzero.example",
+		BaseDomain:     "dev.getloopscale.com",
 	})
 	cfg = h.Cfg
 	k8sClient = h.K8sClient

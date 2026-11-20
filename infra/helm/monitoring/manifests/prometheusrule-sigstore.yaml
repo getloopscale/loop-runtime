@@ -45,7 +45,7 @@ spec:
           annotations:
             summary: "Cosign sign P99 latency > 60s"
             description: "Cosign sign step P99 latency exceeded 60s over the last 10m. Investigate Fulcio cert-issue or Rekor-record subcalls."
-            runbook: "https://docs.loopzero.example/runbooks/alerts/LoopZeroCosignSignSlow"
+            runbook: "https://docs.getloopscale.com/runbooks/alerts/LoopZeroCosignSignSlow"
 
         # 2. Sign error rate. Denominator (sign_total) added in T4.1
         # specifically as part of EC-7. Threshold 1% over 10m of 5m
@@ -65,7 +65,7 @@ spec:
           annotations:
             summary: "Cosign sign error rate > 1%"
             description: "Cosign sign error rate exceeded 1% over 10m. Group by `component` (fulcio|rekor|ctlog) to root-cause via loopzero_cosign_sign_errors_total."
-            runbook: "https://docs.loopzero.example/runbooks/alerts/LoopZeroCosignSignErrorRate"
+            runbook: "https://docs.getloopscale.com/runbooks/alerts/LoopZeroCosignSignErrorRate"
 
         # 3. Rekor URL null rate. This is the SLI for the LIVE
         # 2026-05-28 3-layer bug class: cosign attest succeeded but
@@ -92,4 +92,4 @@ spec:
           annotations:
             summary: "Release attestation Rekor-URL null rate > 1%"
             description: "More than 1% of releases over 10m landed with null image_attestation_rekor_url. Inspect attest step output extraction (cosign_attest.go) + release_store.go enrichment path."
-            runbook: "https://docs.loopzero.example/runbooks/alerts/LoopZeroReleaseAttestationRekorURLNullRate"
+            runbook: "https://docs.getloopscale.com/runbooks/alerts/LoopZeroReleaseAttestationRekorURLNullRate"

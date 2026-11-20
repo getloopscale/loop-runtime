@@ -435,7 +435,7 @@ run_step "17-seed-data-plane-admin-keys" "(cd $REPO_ROOT/cmd/loopzero-ops && go 
 # the compose Traefik this edge used before #470 passed just as well — a 401 from the
 # service, or from a different authoriser, looked identical to them.
 if [[ "${LOOPZERO_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  DP_EDGE="${LOOPZERO_DATA_PLANE_EDGE:-https://app-dev.loopzero.example}"
+  DP_EDGE="${LOOPZERO_DATA_PLANE_EDGE:-https://app-dev.getloopscale.com}"
   run_step "17a-data-plane-memory-host" "curl -fsS --max-time 5 http://localhost:18081/v1/health -o /dev/null"
   run_step "17c-data-plane-rag-host" "curl -fsS --max-time 5 http://localhost:18082/v1/health -o /dev/null"
   run_step "17e-data-plane-lens-host" "curl -fsS --max-time 5 http://localhost:18084/v1/healthz -o /dev/null"

@@ -45,7 +45,7 @@ Load Test Corrections & Learnings — 2026-04-09
 
 ### 1. Manifest Gate — Certificate CR Blocked (FIXED in ec12233)
 - Problem: manifest_gate.go blocked ALL Certificate CRs, including those
-  required for platform-managed subdomains (*.dev.loopzero.example).
+  required for platform-managed subdomains (*.dev.getloopscale.com).
 - Root cause: Gate was designed to prevent CF-managed domain Certificate CRs
   (which get stuck "Progressing"), but was applied universally.
 - Manual fix: Removed "kind: Certificate" from blockedResourceKinds.

@@ -7,12 +7,12 @@
 //
 // It audits the operator-local edge in `infra/local/Caddyfile`:
 //
-//   - the `app-dev.loopzero.example { ... }` block serves the prod bundle through
+//   - the `app-dev.getloopscale.com { ... }` block serves the prod bundle through
 //     file_server (never Vite dev), keeps the security headers and a header
 //     CSP that is a superset of the dashboard <meta> CSP, routes the API
 //     prefixes before the SPA fallback, and keeps that fallback inside the
 //     unnamed catch-all `handle {}`;
-//   - the `auth-dev.loopzero.example { ... }` block rate-limits the Kratos
+//   - the `auth-dev.getloopscale.com { ... }` block rate-limits the Kratos
 //     self-service flows per real client IP and routes registration through
 //     the loopzero-cloud BFF;
 //   - the global `trusted_proxies static` block pins Cloudflare's IPv4 and
@@ -51,14 +51,14 @@ func (o Outcome) Verdict() verdict.Verdict {
 	return verdict.FromPass(o.Pass)
 }
 
-// blockOpenRe finds the opening `app-dev.loopzero.example {` line of the host block.
-var blockOpenRe = regexp.MustCompile(`(?m)^app-dev\.loopzero\.example\s*\{`)
+// blockOpenRe finds the opening `app-dev.getloopscale.com {` line of the host block.
+var blockOpenRe = regexp.MustCompile(`(?m)^app-dev\.getloopscale\.com\s*\{`)
 
-// authDevBlockOpenRe finds the opening `auth-dev.loopzero.example {` line of the
+// authDevBlockOpenRe finds the opening `auth-dev.getloopscale.com {` line of the
 // host block (T1.3 of plan kratos-self-service-rate-limit-systemic v1.1 —
 // rate_limit + trusted_proxies invariants extend the gate to the auth-dev
 // host beyond the existing app-dev coverage).
-var authDevBlockOpenRe = regexp.MustCompile(`(?m)^auth-dev\.loopzero\.example\s*\{`)
+var authDevBlockOpenRe = regexp.MustCompile(`(?m)^auth-dev\.getloopscale\.com\s*\{`)
 
 // canonicalRateLimitZones are the 4 zones that MUST be present in the
 // auth-dev host block per T1.2 of plan kratos-self-service-rate-limit-systemic
@@ -91,7 +91,7 @@ func Check(cfg Config) (*Outcome, error) {
 	block, ok := extractAppDevBlock(content)
 	if !ok {
 		return &Outcome{Violations: []string{
-			"app-dev.loopzero.example block not found (or unbalanced braces) — block extraction failed",
+			"app-dev.getloopscale.com block not found (or unbalanced braces) — block extraction failed",
 		}}, nil
 	}
 
@@ -253,7 +253,7 @@ var (
 func checkAuthDevBlock(content string) []string {
 	block, ok := extractAuthDevBlock(content)
 	if !ok {
-		return []string{"assert_auth_dev_block_present — `auth-dev.loopzero.example { ... }` host block MISSING. Plan kratos-self-service-rate-limit-systemic T1.2 declares 4 rate_limit zones MUST live inside this block."}
+		return []string{"assert_auth_dev_block_present — `auth-dev.getloopscale.com { ... }` host block MISSING. Plan kratos-self-service-rate-limit-systemic T1.2 declares 4 rate_limit zones MUST live inside this block."}
 	}
 	violations := checkRateLimit(block)
 	return append(violations, checkRegisterRoute(block)...)
@@ -392,7 +392,7 @@ func indexNonSpace(s string) int {
 	return -1
 }
 
-// extractAuthDevBlock returns the body of the `auth-dev.loopzero.example { ... }`
+// extractAuthDevBlock returns the body of the `auth-dev.getloopscale.com { ... }`
 // host block via brace-balance counting starting at the opening `{`. T1.3 of
 // plan kratos-self-service-rate-limit-systemic v1.1. Returns (body, true) on
 // success, ("", false) when the opening directive is missing or unbalanced.
@@ -400,7 +400,7 @@ func extractAuthDevBlock(content string) (string, bool) {
 	return qgshell.ExtractBraceBlock(content, authDevBlockOpenRe)
 }
 
-// extractAppDevBlock returns the body of the `app-dev.loopzero.example { ... }`
+// extractAppDevBlock returns the body of the `app-dev.getloopscale.com { ... }`
 // block via brace-balance counting starting at the opening `{`. Returns
 // (body, true) on success, ("", false) when the opening directive is missing
 // or the braces are unbalanced.

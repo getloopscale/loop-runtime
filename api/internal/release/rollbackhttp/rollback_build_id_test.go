@@ -82,7 +82,7 @@ func TestRollback_BuildIDSugar_ResolvesToReleaseID(t *testing.T) {
 			RolledBackReleaseID:  "rel-old",
 			ReactivatedReleaseID: "rel-canon-42",
 			Environment:          "production",
-			URL:                  "https://app.loopzero.example",
+			URL:                  "https://app.getloopscale.com",
 		},
 		captured: &captured,
 	}

@@ -25,7 +25,7 @@ func TestRender_NoCollisionBetweenProjectsWithSameAppName(t *testing.T) {
 			Environment:       "production",
 			BuildID:           "build-1",
 			ReleaseID:         "rel-1",
-			BaseDomain:        "loopzero.example.com",
+			BaseDomain:        "getloopscale.com.com",
 			ClusterIssuerName: "letsencrypt-prod",
 			Apps: []AppManifestInput{
 				{Name: "api", Type: "server", Port: 8080, ImageRef: "reg/acme/" + project + "/api:abc"},

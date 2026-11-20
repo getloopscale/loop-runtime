@@ -615,7 +615,7 @@ func defaultSucceededCallback() deploycontracts.BuildCallbackRequest {
 		Status:    "succeeded",
 		Manifests: testManifests,
 		Apps: []deploycontracts.AppRelease{
-			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
+			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.getloopscale.app", DurationMs: 45000},
 		},
 	}
 }
@@ -744,7 +744,7 @@ func TestBuildOrchestrator_OnBuildCompleted_Success_FullFlow(t *testing.T) {
 		Status:    "succeeded",
 		Manifests: testManifests,
 		Apps: []deploycontracts.AppRelease{
-			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
+			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.getloopscale.app", DurationMs: 45000},
 		},
 	}
 	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
@@ -953,7 +953,7 @@ func TestBuildOrchestrator_OnBuildCompleted_EnvironmentTargetsUpdated(t *testing
 		Status:    "succeeded",
 		Manifests: testManifests,
 		Apps: []deploycontracts.AppRelease{
-			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 10000},
+			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.getloopscale.app", DurationMs: 10000},
 		},
 	}
 	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
@@ -1004,7 +1004,7 @@ func TestBuildOrchestrator_OnBuildCompleted_CallbackWithBuildInQueued(t *testing
 		Status:    "succeeded",
 		Manifests: testManifests,
 		Apps: []deploycontracts.AppRelease{
-			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 5000},
+			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.getloopscale.app", DurationMs: 5000},
 		},
 	}
 	err := orch.OnBuildCompleted(context.Background(), buildID, cbReq)
@@ -1035,7 +1035,7 @@ func TestBuildOrchestrator_OnBuildCompleted_DuplicateCallback(t *testing.T) {
 		Status:    "succeeded",
 		Manifests: testManifests,
 		Apps: []deploycontracts.AppRelease{
-			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 10000},
+			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.getloopscale.app", DurationMs: 10000},
 		},
 	}
 	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)
@@ -1123,7 +1123,7 @@ func TestBuildOrchestrator_OnBuildCompleted_PreviousReleaseSuperseded(t *testing
 		Status:    "succeeded",
 		Manifests: testManifests,
 		Apps: []deploycontracts.AppRelease{
-			{Name: "api", ImageDigest: "sha256:new", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 20000},
+			{Name: "api", ImageDigest: "sha256:new", URL: "https://production.proj-abc123.tenant-1.getloopscale.app", DurationMs: 20000},
 		},
 	}
 
@@ -1159,7 +1159,7 @@ func TestBuildOrchestrator_DeployCompletedSSE_DeployIDFormat(t *testing.T) {
 		Status:    "succeeded",
 		Manifests: testManifests,
 		Apps: []deploycontracts.AppRelease{
-			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 10000},
+			{Name: "api", ImageDigest: "sha256:abc", URL: "https://production.proj-abc123.tenant-1.getloopscale.app", DurationMs: 10000},
 		},
 	}
 
@@ -1202,7 +1202,7 @@ func TestBuildOrchestrator_OnBuildCompleted_SyncFailsAfterBuildSucceeded(t *test
 		Status:    "succeeded",
 		Manifests: testManifests,
 		Apps: []deploycontracts.AppRelease{
-			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", Type: "server", DurationMs: 45000},
+			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.getloopscale.app", Type: "server", DurationMs: 45000},
 		},
 	}
 
@@ -1518,7 +1518,7 @@ func TestStep6_GitOpsPush_ReceivesManifestsFromCallback(t *testing.T) {
 		Status:    "succeeded",
 		Manifests: customManifests,
 		Apps: []deploycontracts.AppRelease{
-			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.loopzero.example", DurationMs: 45000},
+			{Name: "api", ImageDigest: "sha256:abc123", URL: "https://production.proj-abc123.tenant-1.getloopscale.app", DurationMs: 45000},
 		},
 	}
 	err = orch.OnBuildCompleted(context.Background(), resp.BuildID, cbReq)

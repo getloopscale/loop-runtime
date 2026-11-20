@@ -101,7 +101,7 @@ type StatusHandler struct {
 // NewStatusHandler creates a new StatusHandler.
 //
 // publicDomain is the operator-configured wildcard root for the public URL
-// (e.g. `prod-dev.loopzero.example` for dev-public). When empty, the handler
+// (e.g. `prod-dev.getloopscale.app` for dev-public). When empty, the handler
 // falls back to baseDomain (internal hostname). Parallels PreviewPublicDomain
 // + BaseDomain split at PreviewService — closes catches #21+#22 from T6.2
 // session addendum 2026-06-12 (J-25 sponsor walkthrough LIVE catch).
@@ -299,7 +299,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	//
 	// Resolution order for the public-facing wildcard domain:
 	//   1. h.publicDomain (operator-configured LOOPZERO_PUBLIC_DOMAIN, e.g.
-	//      `prod-dev.loopzero.example` for dev-public). When set + release exists +
+	//      `prod-dev.getloopscale.app` for dev-public). When set + release exists +
 	//      entryApp resolved, emit the canonical public URL routed by Caddy
 	//      wildcard block to Traefik with Host rewrite.
 	//   2. Empty when no active release OR entryApp couldn't be resolved —

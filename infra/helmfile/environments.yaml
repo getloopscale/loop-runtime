@@ -39,7 +39,7 @@ environments:
       - environments/standalone-public.yaml
   dev-public:
     # T2.1 of plan 2026-06-04-dev-public-domain-canonicalization. Variant of
-    # standalone-public using *-dev.loopzero.example hostnames. Used by
+    # standalone-public using *-dev.getloopscale.com hostnames. Used by
     # `task dev-public:bootstrap` + `LOOPZERO_HELMFILE_ENV=dev-public task setup`.
     values:
       - environments/dev-public.yaml

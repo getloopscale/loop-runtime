@@ -38,7 +38,7 @@ func TestGiteaConcurrentClones(t *testing.T) {
 
 	giteaURL := os.Getenv("LOOPZERO_GITEA_URL")
 	if giteaURL == "" {
-		t.Fatal("LOOPZERO_GITEA_URL required (e.g., https://git.dev.loopzero.example)")
+		t.Fatal("LOOPZERO_GITEA_URL required (e.g., https://git.dev.getloopscale.com)")
 	}
 	token := os.Getenv("LOOPZERO_GITEA_TOKEN")
 	if token == "" {

@@ -38,8 +38,8 @@ func TestWriteJSON_EmitsRFC9457Shape(t *testing.T) {
 	if pd["code"] != "LOCK_TIMEOUT" {
 		t.Errorf("code = %v, want LOCK_TIMEOUT", pd["code"])
 	}
-	if !strings.HasPrefix(pd["type"].(string), "https://loopzero.example/errors/") {
-		t.Errorf("type = %v, want https://loopzero.example/errors/* URI", pd["type"])
+	if !strings.HasPrefix(pd["type"].(string), "https://getloopscale.com/errors/") {
+		t.Errorf("type = %v, want https://getloopscale.com/errors/* URI", pd["type"])
 	}
 	if pd["instance"] != "/projects/foo/deploys" {
 		t.Errorf("instance = %v, want /projects/foo/deploys", pd["instance"])

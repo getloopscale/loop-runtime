@@ -18,15 +18,15 @@
 ##
 ## Required prereqs:
 ##   - Caddy >= 2.7 installed
-##   - Cloudflare DNS A records pointing app/cloud/auth.loopzero.example at the host
+##   - Cloudflare DNS A records pointing app/cloud/auth.getloopscale.com at the host
 ##   - `task cloud:port-forward:up` to expose loopzero-cloud + ory-kratos locally
 
 {
-  email admin@loopzero.example
+  email admin@getloopscale.com
 
   # T1.2 of plan kratos-self-service-rate-limit-systemic v1.1 (EC-2 absorption +
   # F-sec-4 absorption — also pin CF IPv6 ranges).
-  # Caddy lives behind Cloudflare Tunnel for auth-dev.loopzero.example — `{remote_host}`
+  # Caddy lives behind Cloudflare Tunnel for auth-dev.getloopscale.com — `{remote_host}`
   # resolves to CF's internal hop address, NOT the real end-user IP. Without
   # `trusted_proxies` Caddy refuses to honor the `CF-Connecting-IP` header that
   # CF forwards, so every rate_limit zone keyed on that header would silently
@@ -64,7 +64,7 @@
 }
 
 # ============================================================================
-# The hosts WITHOUT a suffix (`app|cloud|auth.loopzero.example`) were REMOVED on 2026-08-19 (B-025).
+# The hosts WITHOUT a suffix (`app|cloud|auth.getloopscale.com`) were REMOVED on 2026-08-19 (B-025).
 #
 # They were described as "legacy, reserved for prod cutover", but they forwarded to the
 # SAME local ports as the `-dev` blocks below: 5173 (Vite), 3002 and 14433. In other words,
@@ -73,7 +73,7 @@
 #
 # They did not serve the cutover that justified keeping them: a real cutover would point at
 # production upstreams, not at dev ports on the operator's machine — they would have had to be
-# rewritten anyway. Meanwhile, `app.loopzero.example` was one `npm run dev` away from serving the
+# rewritten anyway. Meanwhile, `app.getloopscale.com` was one `npm run dev` away from serving the
 # dev-server on the internet under a production name, which is what the Red Team already closed
 # twice (loopzero-cloud#66 and #141).
 #
@@ -83,13 +83,13 @@
 # ============================================================================
 # DEV-PUBLIC env (plan 2026-06-04-dev-public-domain-canonicalization, T1.1)
 # ============================================================================
-# Mirrors the auth/app/cloud blocks above on *-dev.loopzero.example so dev test
-# infra can coexist with the legacy *.loopzero.example (reserved for prod cutover).
-# Cookie domain = loopzero.example — shared by both env so dashboard cross-host
+# Mirrors the auth/app/cloud blocks above on *-dev.getloopscale.com so dev test
+# infra can coexist with the legacy *.getloopscale.com (reserved for prod cutover).
+# Cookie domain = getloopscale.com — shared by both env so dashboard cross-host
 # session works identically. OAuth callbacks for the dev OAuth apps go to
-# https://auth-dev.loopzero.example/self-service/methods/oidc/callback/{provider}.
+# https://auth-dev.getloopscale.com/self-service/methods/oidc/callback/{provider}.
 
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   # Plan release-blockers-2026-06-25-set T1.1 + T2.1 (closes #44+#45+#47).
   # 4-header response set (X-Frame DENY + nosniff + Referrer + HSTS) applied at
   # every response from this host block. Closes #44 clickjacking + #45 nosniff/
@@ -137,7 +137,7 @@ app-dev.loopzero.example {
     # devtools when prior version stripped Google Fonts via narrower header
     # CSP intersection. Plan caddyfile-app-dev-prod-bundle-file-server-
     # canonical v1.2.
-    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.getloopscale.com; form-action 'self' https://auth-dev.getloopscale.com https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 
@@ -184,7 +184,7 @@ app-dev.loopzero.example {
   # in infra/quality/proxy-exposure.txt.
   handle /sessions/whoami {
     reverse_proxy localhost:14433 {
-      header_up Host auth-dev.loopzero.example
+      header_up Host auth-dev.getloopscale.com
     }
   }
   # Everything else under /sessions/ is denied explicitly. Without this block
@@ -197,7 +197,7 @@ app-dev.loopzero.example {
   }
   handle /self-service/* {
     reverse_proxy localhost:14433 {
-      header_up Host auth-dev.loopzero.example
+      header_up Host auth-dev.getloopscale.com
     }
   }
 
@@ -206,12 +206,12 @@ app-dev.loopzero.example {
   # (/v1/integrations/github/install?return_to=...). Without this
   # handle the request hits Vite and 404s, breaking the install flow.
   # Proxy /v1/integrations/github/* to loopzero-cloud so install + callback
-  # both work from app-dev.loopzero.example. Cookies are set with Domain=
-  # loopzero.example (AUTH_COOKIE_DOMAIN) so they travel cross-subdomain
+  # both work from app-dev.getloopscale.com. Cookies are set with Domain=
+  # getloopscale.com (AUTH_COOKIE_DOMAIN) so they travel cross-subdomain
   # back to app-dev when GitHub redirects.
   handle /v1/integrations/github/* {
     reverse_proxy localhost:3002 {
-      header_up Host app-dev.loopzero.example
+      header_up Host app-dev.getloopscale.com
     }
   }
 
@@ -302,14 +302,14 @@ app-dev.loopzero.example {
   # canonical + CORS not needed. Aligns dev-public arch with MEET-040 via edge.
   handle /v1/* {
     reverse_proxy localhost:3002 {
-      header_up Host app-dev.loopzero.example
+      header_up Host app-dev.getloopscale.com
     }
   }
 
   # Red Team loopzero-cloud#112 closure (2026-06-28) — Hydra consent / device-flow
   # routes wired in loopzero-cloud cmd/main.go:542-545 (consent.Login + LoginComplete +
   # Consent + DeviceVerify). The CLI device-flow lands the operator at
-  # https://app-dev.loopzero.example/auth/login?login_challenge=<id>; without this
+  # https://app-dev.getloopscale.com/auth/login?login_challenge=<id>; without this
   # handle the request fell through to the SPA file_server catch-all and React
   # Router rendered "Page not found" — BLOCKER for `loopzero login --device-flow`,
   # which was preventing the deploy chain end-to-end (P0 mandate 2026-06-28).
@@ -326,7 +326,7 @@ app-dev.loopzero.example {
   @auth_bff path /auth/login /auth/login/complete /auth/consent /auth/device
   handle @auth_bff {
     reverse_proxy localhost:3002 {
-      header_up Host app-dev.loopzero.example
+      header_up Host app-dev.getloopscale.com
     }
   }
 
@@ -345,19 +345,19 @@ app-dev.loopzero.example {
   # cross-origin proxy entry).
   handle /engine/* {
     reverse_proxy localhost:3002 {
-      header_up Host app-dev.loopzero.example
+      header_up Host app-dev.getloopscale.com
     }
   }
 
   # GitHub webhook direct-to-loopzero-api (mirrors cloud-dev bloc handling for
   # /api/v1/webhooks/github). GitHub App webhook_url is registered against
-  # app-dev.loopzero.example (canonical surface post-2026-06-22). Without this
+  # app-dev.getloopscale.com (canonical surface post-2026-06-22). Without this
   # explicit handle the POST falls through to the SPA file_server which
   # only advertises GET/HEAD → GitHub delivery attempts 405 forever.
   # HMAC-SHA256 in webhook body is validated by loopzero-api directly
   # (api/internal/github/webhook/handler.go); Caddy is the single edge
   # boundary here per the same defense-in-layers rationale as the
-  # cloud-dev.loopzero.example bloc below.
+  # cloud-dev.getloopscale.com bloc below.
   handle /api/v1/webhooks/github {
     reverse_proxy localhost:13001 {
       header_up Host loopzero-api.loopzero-system.svc.cluster.local
@@ -431,7 +431,7 @@ app-dev.loopzero.example {
     file_server
   }
 }
-# `cloud-dev.loopzero.example` was REMOVED on 2026-08-10.
+# `cloud-dev.getloopscale.com` was REMOVED on 2026-08-10.
 #
 # It had two halves and both were already covered here. The payload was the GitHub
 # webhook, which cannot carry a JWT (GitHub signs the body with HMAC) and so went
@@ -444,7 +444,7 @@ app-dev.loopzero.example {
 # login return URL. Auth surface granted to nobody.
 
 
-auth-dev.loopzero.example {
+auth-dev.getloopscale.com {
   # Plan release-blockers-2026-06-25-set T1.3 (closes #45 — HSTS on /auth-dev).
   # Kratos/Hydra public endpoints assert HSTS at the edge.
   header Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -543,7 +543,7 @@ auth-dev.loopzero.example {
   # Split into two explicit handles (was a single `@bff_register_paths`
   # named matcher). Functional behavior is identical (both paths still
   # reverse-proxy to the loopzero-cloud BFF at localhost:3002 with the
-  # canonical `Host: cloud-dev.loopzero.example` header); the explicit shape
+  # canonical `Host: cloud-dev.getloopscale.com` header); the explicit shape
   # is required by the `caddyfile-csp` gate's canonical detection
   # (`handle /self-service/registration/methods/password { ... }` +
   # `handle /self-service/registration { ... }` — assertions
@@ -553,17 +553,17 @@ auth-dev.loopzero.example {
   # + 2 blocks — the matcher form is not fundamentally shorter).
   handle /self-service/registration/methods/password {
     reverse_proxy localhost:3002 {
-      header_up Host app-dev.loopzero.example
+      header_up Host app-dev.getloopscale.com
     }
   }
   handle /self-service/registration {
     reverse_proxy localhost:3002 {
-      header_up Host app-dev.loopzero.example
+      header_up Host app-dev.getloopscale.com
     }
   }
 
   # Plan J-05 (2026-06-05) — Hydra public routes. The device-flow
-  # verification_uri Hydra emits is https://auth-dev.loopzero.example/oauth2/device/verify,
+  # verification_uri Hydra emits is https://auth-dev.getloopscale.com/oauth2/device/verify,
   # so browser must reach Hydra (port-forward localhost:14444), not Kratos.
   # Same for the OIDC discovery document, JWKs, userinfo, and credentials
   # endpoints that OIDC clients hit on auth-dev directly. handle blocks
@@ -582,7 +582,7 @@ auth-dev.loopzero.example {
   }
   # The ROOT leads to login, instead of returning 404.
   #
-  # Whoever types `auth-dev.loopzero.example` in a browser is a PERSON. Until 2026-08-10 they
+  # Whoever types `auth-dev.getloopscale.com` in a browser is a PERSON. Until 2026-08-10 they
   # got `404 page not found` in plain text, with no way forward from there: the 404 came
   # from Kratos itself, which is an identity API and serves no page at the root. The edge
   # forwarded correctly and got the 404 back.
@@ -594,7 +594,7 @@ auth-dev.loopzero.example {
   # 302 and not 301: the login destination may change, and a permanent one stays in the
   # browser cache of anyone who visited once.
   handle / {
-    redir https://app-dev.loopzero.example/login 302
+    redir https://app-dev.getloopscale.com/login 302
   }
 
   handle /admin/* {
@@ -657,18 +657,18 @@ auth-dev.loopzero.example {
 # ONE Caddy block + ONE Cloudflare wildcard A record cover EVERY future
 # PR for every tenant + project automatically. Zero per-PR config.
 #
-# URL convention: <internal-sni>.preview-dev.loopzero.example
+# URL convention: <internal-sni>.preview-dev.getloopscale.app
 #   where <internal-sni> is the IngressRoute Host match the manifest
 #   builder emits via appHostname(), e.g.,
 #   "tn-08fa2ecedc3c7e77-sample-api-preview-pr-1".
 #
 # The {http.request.host.labels.3} expression extracts the first label
 # from the public hostname (Caddy indexes labels RIGHT-to-LEFT, so for
-# `foo.preview-dev.loopzero.example` → labels.3 = "foo"). The Host header
+# `foo.preview-dev.getloopscale.app` → labels.3 = "foo"). The Host header
 # forwarded to the workload Traefik LB substitutes the .loopzero.local
 # suffix, matching the IngressRoute exactly.
 #
-# Cloudflare DNS: wildcard A record `*.preview-dev.loopzero.example` →
+# Cloudflare DNS: wildcard A record `*.preview-dev.getloopscale.app` →
 # 165.227.121.20 (proxied=false; preserves HTTP-01 challenge path).
 #
 # TLS — DNS-01 via Cloudflare (J-23 #68 of 4-task batch, 2026-06-07):
@@ -679,7 +679,7 @@ auth-dev.loopzero.example {
 # in `infra/scripts/local/caddy-build-with-cloudflare.sh` — produces
 # `/usr/local/bin/caddy` with the cloudflare TXT-record updater wired.
 #
-# The CF API token MUST have Zone:DNS:Edit on loopzero.example (operator
+# The CF API token MUST have Zone:DNS:Edit on getloopscale.com (operator
 # provisions via `CLOUDFLARE_API_TOKEN=…` env var — canonical name shared
 # with `taskfiles/infra.yml` dev-public:dns precondition + the 5 scripts
 # under `infra/scripts/{local,production,drill}/`). `task dev-public:caddy`
@@ -703,7 +703,7 @@ auth-dev.loopzero.example {
 # workload serverlb host-port mapping (443 → 8443) which does NOT drift
 # across restarts. Regression-protector:
 # infra/tests/check-caddyfile-no-docker-network-ip_test.sh (hermetic).
-*.preview-dev.loopzero.example {
+*.preview-dev.getloopscale.app {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     resolvers 1.1.1.1
@@ -713,21 +713,21 @@ auth-dev.loopzero.example {
 }
 
 # J-25 prod-dev wildcard — production deploy URLs (Vercel-canonical)
-# URL convention: <project>-<env>.prod-dev.loopzero.example
+# URL convention: <project>-<env>.prod-dev.getloopscale.app
 # Per ADR D1 of plan 2026-06-12-dashboard-journey-j25-live-url-discoverability,
-# loopzero-api status.go:252 emits this format when BASE_DOMAIN=prod-dev.loopzero.example
+# loopzero-api status.go:252 emits this format when BASE_DOMAIN=prod-dev.getloopscale.app
 # (configured in infra/tilt/loopzero-api-values.yaml — Tilt-canonical for
 # dev-public per memory `feedback_tilt_owned_deployment_yaml_drift`).
 #
-# Pattern parallel to *.preview-dev.loopzero.example (J-23 delivered 2026-06-07):
-# Caddy rewrites external `<project>-<env>.prod-dev.loopzero.example` →
+# Pattern parallel to *.preview-dev.getloopscale.app (J-23 delivered 2026-06-07):
+# Caddy rewrites external `<project>-<env>.prod-dev.getloopscale.app` →
 # internal `<project>-<env>.loopzero.local` so Traefik IngressRoute matches.
 # labels.3 extracts the 3rd dot-separated label from the request host:
-#   `foo-production.prod-dev.loopzero.example` → labels.3 = "foo-production"
-#   `kitchensink-production.prod-dev.loopzero.example` → labels.3 = "kitchensink-production"
+#   `foo-production.prod-dev.getloopscale.app` → labels.3 = "foo-production"
+#   `kitchensink-production.prod-dev.getloopscale.app` → labels.3 = "kitchensink-production"
 #
-# Cloudflare DNS prerequisite: wildcard A record `*.prod-dev.loopzero.example`
-# → droplet IP (parallel to existing `*.preview-dev.loopzero.example` record).
+# Cloudflare DNS prerequisite: wildcard A record `*.prod-dev.getloopscale.app`
+# → droplet IP (parallel to existing `*.preview-dev.getloopscale.app` record).
 # Without this DNS step, the Caddy block is unreachable from the public
 # internet — operator MUST add the CF DNS record before sponsor walkthrough.
 #
@@ -735,14 +735,14 @@ auth-dev.loopzero.example {
 # canonical (same as preview block above).
 #
 # Red Team loopzero-cloud#127 root cause (2026-06-30 → 2026-07-01): same
-# as the *.preview-dev.loopzero.example block above — the previous
+# as the *.preview-dev.getloopscale.app block above — the previous
 # `https://172.18.0.10:443` hardcoded Docker network IP drifted from
 # k3d-loopzero-cell-0-serverlb to k3d-loopzero-secrets-serverlb after a docker
 # restart and every customer-app request routed to VAULT → 502
 # sustentado. Canonical stable form: `https://127.0.0.1:8443`.
 # Regression-protector:
 # infra/tests/check-caddyfile-no-docker-network-ip_test.sh (hermetic).
-*.prod-dev.loopzero.example {
+*.prod-dev.getloopscale.app {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     resolvers 1.1.1.1

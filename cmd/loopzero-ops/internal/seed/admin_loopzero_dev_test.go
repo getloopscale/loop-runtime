@@ -51,7 +51,7 @@ func newKratosStub(t *testing.T, existingIdentityID string) (*kratosAdminStub, *
 			// Fetch identity for PUT base
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"id":     stub.existingID,
-				"traits": map[string]any{"email": "admin@loopzero.example"},
+				"traits": map[string]any{"email": "admin@getloopscale.com"},
 			})
 		case strings.HasPrefix(r.URL.Path, "/admin/identities/") && r.Method == http.MethodPut:
 			stub.putSetPw = true
@@ -85,7 +85,7 @@ func newKratosStub(t *testing.T, existingIdentityID string) (*kratosAdminStub, *
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"identity": map[string]any{
-					"traits": map[string]string{"email": "admin@loopzero.example"},
+					"traits": map[string]string{"email": "admin@getloopscale.com"},
 				},
 			})
 		default:
@@ -113,13 +113,13 @@ func TestLoadAdminConfig_UsesDefaults(t *testing.T) {
 func TestLoadAdminConfig_EnvOverride(t *testing.T) {
 	var host Host
 	host.Getenv = envOf(map[string]string{
-		adminEmailEnv:        "other@loopzero.example",
+		adminEmailEnv:        "other@getloopscale.com",
 		adminSeedPasswordEnv: "custom-pw",
 		adminPublicKratosEnv: "https://other-kratos",
 		adminKratosAdminEnv:  "http://127.0.0.1:54434",
 	})
 	cfg := loadAdminConfig(host)
-	if cfg.Email != "other@loopzero.example" {
+	if cfg.Email != "other@getloopscale.com" {
 		t.Errorf("Email = %q", cfg.Email)
 	}
 	if cfg.SeedPassword != "custom-pw" {
@@ -154,7 +154,7 @@ func TestAdminLoopzeroDev_DryRunReports(t *testing.T) {
 func TestKratosResolveOrCreateIdentity_ReusesExisting(t *testing.T) {
 	stub, server := newKratosStub(t, "id-existing")
 	defer server.Close()
-	cfg := AdminLoopzeroDevConfig{Email: "admin@loopzero.example", KratosAdminURL: server.URL}
+	cfg := AdminLoopzeroDevConfig{Email: "admin@getloopscale.com", KratosAdminURL: server.URL}
 	id, err := kratosResolveOrCreateIdentity(context.Background(), http.DefaultClient, cfg)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
@@ -171,7 +171,7 @@ func TestKratosResolveOrCreateIdentity_CreatesWhenAbsent(t *testing.T) {
 	stub, server := newKratosStub(t, "")
 	defer server.Close()
 	cfg := AdminLoopzeroDevConfig{
-		Email:          "admin@loopzero.example",
+		Email:          "admin@getloopscale.com",
 		DisplayName:    "LoopZero Admin",
 		KratosAdminURL: server.URL,
 	}
@@ -206,7 +206,7 @@ func TestKratosMintSessionCookie_ReturnsCookie(t *testing.T) {
 	_, server := newKratosStub(t, "id-x")
 	defer server.Close()
 	cfg := AdminLoopzeroDevConfig{
-		Email:           "admin@loopzero.example",
+		Email:           "admin@getloopscale.com",
 		SeedPassword:    "pw",
 		PublicKratosURL: server.URL,
 		KratosAdminURL:  server.URL,
@@ -262,7 +262,7 @@ func engineBootstrapStub(t *testing.T, status int, body string) (*httptest.Serve
 func TestAdminProvisionTenantAsksTheEngineToProvisionTheIdentity(t *testing.T) {
 	srv, sent, auth := engineBootstrapStub(t, http.StatusOK, `{"status":"ok","user_id":"kratos-id-1","tenant_id":"tn-admin","created":true}`)
 	cfg := AdminLoopzeroDevConfig{
-		Email: "admin@loopzero.example", Username: "admin", DisplayName: "LoopZero Admin", TenantSlug: "admin",
+		Email: "admin@getloopscale.com", Username: "admin", DisplayName: "LoopZero Admin", TenantSlug: "admin",
 		APIURL: srv.URL, BootstrapSecret: "boot-secret",
 	}
 
@@ -274,7 +274,7 @@ func TestAdminProvisionTenantAsksTheEngineToProvisionTheIdentity(t *testing.T) {
 	if *auth != "Bearer boot-secret" {
 		t.Errorf("Authorization = %q, want the bootstrap secret", *auth)
 	}
-	want := map[string]string{"admin_user_id": "kratos-id-1", "admin_login": "admin", "admin_email": "admin@loopzero.example", "tenant_slug": "admin", "plan": "starter"}
+	want := map[string]string{"admin_user_id": "kratos-id-1", "admin_login": "admin", "admin_email": "admin@getloopscale.com", "tenant_slug": "admin", "plan": "starter"}
 	for k, v := range want {
 		if (*sent)[k] != v {
 			t.Errorf("request %s = %q, want %q", k, (*sent)[k], v)
@@ -309,7 +309,7 @@ func TestAdminProvisionTenantRefusesToRunWithoutTheBootstrapSecret(t *testing.T)
 
 func TestIdentityHandleIsTheSanitizedEmailLocalPart(t *testing.T) {
 	for email, want := range map[string]string{
-		"admin@loopzero.example":       "admin",
+		"admin@getloopscale.com":       "admin",
 		"paulohenrique.java@gmail.com": "paulohenrique-java",
 		"Some_User+qa@example.test":    "some-user-qa",
 	} {
@@ -386,7 +386,7 @@ func TestKratosMintSessionCookie_ResolvesARelativeFlowAction(t *testing.T) {
 	defer server.Close()
 	stub.relativeAction = true
 	cfg := AdminLoopzeroDevConfig{
-		Email:           "admin@loopzero.example",
+		Email:           "admin@getloopscale.com",
 		SeedPassword:    "pw",
 		PublicKratosURL: server.URL,
 		KratosAdminURL:  server.URL,

@@ -14,7 +14,7 @@ import (
 // appHostname returns the flat hostname for an app.
 // Format: {tenant}-{project}-{app}-{env}.{baseDomain}
 // This produces a single-level subdomain under baseDomain, which is compatible
-// with wildcard TLS certificates (*.dev.loopzero.example covers all apps).
+// with wildcard TLS certificates (*.dev.getloopscale.com covers all apps).
 //
 // FAANG canonical (J-25 sponsor walkthrough catch 2026-06-12): delegate to
 // pkg/naming.AppHostname so the IngressRoute Host emitter AND the public

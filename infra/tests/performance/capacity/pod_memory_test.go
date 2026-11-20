@@ -32,9 +32,9 @@ import (
 // Run:
 //
 //	LOOPZERO_CAPACITY=1 \
-//	LOOPZERO_API_URL=https://api.dev.loopzero.example \
+//	LOOPZERO_API_URL=https://api.dev.getloopscale.com \
 //	LOOPZERO_SERVICE_AUTH=... \
-//	LOOPZERO_APP_DOMAIN=dev.loopzero.example \
+//	LOOPZERO_APP_DOMAIN=dev.getloopscale.com \
 //	LOOPZERO_CELL_0_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-runtime \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityPodMemoryByFramework -v -timeout 120m
 func TestCapacityPodMemoryByFramework(t *testing.T) {

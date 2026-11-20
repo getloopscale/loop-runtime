@@ -322,7 +322,7 @@ func SetupClusterCredentialController(mgr ctrl.Manager) error {
 // envtest_suite.go calls SetupEnvironmentControllerWithFactory directly.
 
 // SetupApplicationController registers the ApplicationController with the given manager.
-// baseDomain is the base domain for hostname assignment (e.g., "dev.loopzero.example");
+// baseDomain is the base domain for hostname assignment (e.g., "dev.getloopscale.com");
 // runtimeFactory resolves the runtime cluster of each tenant's cell.
 //
 // ADR-0023 D1: delegates to internal/app.

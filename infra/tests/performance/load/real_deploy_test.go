@@ -27,8 +27,8 @@ import (
 // Environment variables:
 //
 //	LOOPZERO_REAL_DEPLOY=1         — gate (skip if unset)
-//	LOOPZERO_API_URL               — required (e.g., https://api.dev.loopzero.example)
-//	LOOPZERO_APP_DOMAIN            — required (e.g., dev.loopzero.example)
+//	LOOPZERO_API_URL               — required (e.g., https://api.dev.getloopscale.com)
+//	LOOPZERO_APP_DOMAIN            — required (e.g., dev.getloopscale.com)
 //	LOOPZERO_SERVICE_AUTH          — required (service auth bypass token)
 //	LOOPZERO_FIXTURE_PATH          — optional (default: ../../e2e/fixtures/hello-server)
 func TestRealDeploy_L1_10Tenants(t *testing.T) {

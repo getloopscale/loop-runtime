@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # T0.1 of plan 2026-06-04-dev-public-domain-canonicalization-plan.md
-# Provisions 3 A records on loopzero.example zone for dev-public env:
-#   auth-dev.loopzero.example  -> $DROPLET_IP
-#   app-dev.loopzero.example   -> $DROPLET_IP
+# Provisions 3 A records on getloopscale.com zone for dev-public env:
+#   auth-dev.getloopscale.com  -> $DROPLET_IP
+#   app-dev.getloopscale.com   -> $DROPLET_IP
 #
 # proxied=false because Caddy on droplet terminates TLS via Let's Encrypt
 # HTTP-01 challenge. Cloudflare proxy would intercept :80 and break ACME.
@@ -11,8 +11,8 @@
 # DROPLET_IP issues PATCH to update content.
 #
 # Inputs (env vars):
-#   CLOUDFLARE_API_TOKEN  — token with Zone:DNS:Edit on loopzero.example
-#   CF_LOOPZERO_DEV_ZONE_ID — zone id for loopzero.example (default committed below)
+#   CLOUDFLARE_API_TOKEN  — token with Zone:DNS:Edit on getloopscale.com
+#   CF_LOOPZERO_DEV_ZONE_ID — zone id for getloopscale.com (default committed below)
 #   DROPLET_IP            — public IPv4 of this dev droplet
 #
 # Flags:
@@ -47,7 +47,7 @@ api() {
 
 upsert_record() {
   local sub="$1"
-  local fqdn="$sub.loopzero.example"
+  local fqdn="$sub.getloopscale.com"
 
   local existing
   existing=$(api "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records?name=$fqdn&type=A" \
@@ -94,11 +94,11 @@ main() {
     local all_ok=1
     for sub in auth-dev app-dev; do
       local got
-      got=$(dig +short "$sub.loopzero.example" @1.1.1.1 2>&1 | head -1)
+      got=$(dig +short "$sub.getloopscale.com" @1.1.1.1 2>&1 | head -1)
       if [[ "$got" == "$DROPLET_IP" ]]; then
-        log "  $sub.loopzero.example -> $got OK"
+        log "  $sub.getloopscale.com -> $got OK"
       else
-        log "  $sub.loopzero.example -> '$got' WRONG (expected $DROPLET_IP)"
+        log "  $sub.getloopscale.com -> '$got' WRONG (expected $DROPLET_IP)"
         all_ok=0
       fi
     done

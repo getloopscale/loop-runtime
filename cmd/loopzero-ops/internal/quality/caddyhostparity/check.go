@@ -9,7 +9,7 @@
 // On 2026-08-18, the GitHub App delivery log (id 3319955) showed **every** delivery
 // failing the same way, including the `push` of a real commit:
 //
-//	POST https://cloud-dev.loopzero.example/api/v1/webhooks/github
+//	POST https://cloud-dev.getloopscale.com/api/v1/webhooks/github
 //	giving up after 1 attempt(s): remote error: tls: internal error   code=500
 //
 // The first reading blamed the `Caddyfile` for not declaring a block for that hostname. It
@@ -127,7 +127,7 @@ func (o Outcome) Verdict() verdict.Verdict {
 }
 
 // serves reports whether a declared site address covers the hostname, honouring the
-// wildcard form: `*.preview-dev.loopzero.example` serves every single label beneath it, and
+// wildcard form: `*.preview-dev.getloopscale.app` serves every single label beneath it, and
 // neither a deeper host nor the apex.
 func serves(block, host string) bool {
 	// Caddy serves everything behind a catch-all; treating it as unserved would fail a

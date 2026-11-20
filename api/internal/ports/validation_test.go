@@ -8,7 +8,7 @@ import (
 )
 
 func TestValidator_ValidDomains(t *testing.T) {
-	v := NewValidator("dev.loopzero.example", nil)
+	v := NewValidator("dev.getloopscale.com", nil)
 
 	valid := []string{
 		"api.mycompany.com",
@@ -27,7 +27,7 @@ func TestValidator_ValidDomains(t *testing.T) {
 }
 
 func TestValidator_InvalidFormat(t *testing.T) {
-	v := NewValidator("dev.loopzero.example", nil)
+	v := NewValidator("dev.getloopscale.com", nil)
 
 	cases := []struct {
 		domain string
@@ -52,7 +52,7 @@ func TestValidator_InvalidFormat(t *testing.T) {
 }
 
 func TestValidator_MaxLength(t *testing.T) {
-	v := NewValidator("dev.loopzero.example", nil)
+	v := NewValidator("dev.getloopscale.com", nil)
 
 	// 254 chars should fail
 	long := ""
@@ -69,7 +69,7 @@ func TestValidator_MaxLength(t *testing.T) {
 }
 
 func TestValidator_ReservedDomains(t *testing.T) {
-	v := NewValidator("dev.loopzero.example", nil)
+	v := NewValidator("dev.getloopscale.com", nil)
 
 	reserved := []string{
 		"localhost",
@@ -89,24 +89,24 @@ func TestValidator_ReservedDomains(t *testing.T) {
 }
 
 func TestValidator_PlatformDomainProtection(t *testing.T) {
-	v := NewValidator("dev.loopzero.example", nil)
+	v := NewValidator("dev.getloopscale.com", nil)
 
 	blocked := []string{
 		// BaseDomain and subdomains
-		"dev.loopzero.example",
-		"anything.dev.loopzero.example",
-		"deep.sub.dev.loopzero.example",
+		"dev.getloopscale.com",
+		"anything.dev.getloopscale.com",
+		"deep.sub.dev.getloopscale.com",
 		// SEC-001 fix: parent zone apex and ALL subdomains
-		"loopzero.example",         // root zone apex
-		"www.loopzero.example",     // unlisted subdomain
-		"staging.loopzero.example", // unlisted subdomain
-		"app.loopzero.example",     // unlisted subdomain
-		"docs.loopzero.example",    // unlisted subdomain
+		"getloopscale.com",         // root zone apex
+		"www.getloopscale.com",     // unlisted subdomain
+		"staging.getloopscale.com", // unlisted subdomain
+		"app.getloopscale.com",     // unlisted subdomain
+		"docs.getloopscale.com",    // unlisted subdomain
 		// Named infra subdomains (still blocked)
-		"api.loopzero.example",
-		"argocd.loopzero.example",
-		"git.loopzero.example",
-		"cname.loopzero.example",
+		"api.getloopscale.com",
+		"argocd.getloopscale.com",
+		"git.getloopscale.com",
+		"cname.getloopscale.com",
 	}
 
 	for _, domain := range blocked {
@@ -117,13 +117,13 @@ func TestValidator_PlatformDomainProtection(t *testing.T) {
 }
 
 func TestValidator_AllowedSimilarDomains(t *testing.T) {
-	v := NewValidator("dev.loopzero.example", nil)
+	v := NewValidator("dev.getloopscale.com", nil)
 
 	// These look similar but should be allowed
 	allowed := []string{
 		"loopzero.com",        // different TLD
-		"notloopzero.example", // different domain
-		"myloopzero.example",  // different domain
+		"notgetloopscale.com", // different domain
+		"mygetloopscale.com",  // different domain
 		"api.mycompany.dev",   // different domain, same TLD
 	}
 
@@ -135,7 +135,7 @@ func TestValidator_AllowedSimilarDomains(t *testing.T) {
 }
 
 func TestValidator_BlockedSuffixes(t *testing.T) {
-	v := NewValidator("dev.loopzero.example", []string{"blocked.example.net"})
+	v := NewValidator("dev.getloopscale.com", []string{"blocked.example.net"})
 
 	if err := v.Validate("api.blocked.example.net"); err == nil {
 		t.Error("expected blocked suffix domain to be rejected")
@@ -147,7 +147,7 @@ func TestValidator_BlockedSuffixes(t *testing.T) {
 }
 
 func TestValidator_PunycodeRejected(t *testing.T) {
-	v := NewValidator("dev.loopzero.example", nil)
+	v := NewValidator("dev.getloopscale.com", nil)
 
 	punycode := []string{
 		"xn--pi-8cd.mycompany.com", // Cyrillic "а" homograph for "api"
@@ -163,7 +163,7 @@ func TestValidator_PunycodeRejected(t *testing.T) {
 }
 
 func TestValidator_CaseInsensitive(t *testing.T) {
-	v := NewValidator("dev.loopzero.example", nil)
+	v := NewValidator("dev.getloopscale.com", nil)
 
 	// Should normalize and validate
 	if err := v.Validate("API.MyCompany.Com"); err != nil {
@@ -171,7 +171,7 @@ func TestValidator_CaseInsensitive(t *testing.T) {
 	}
 
 	// Platform domain should be caught case-insensitively
-	if err := v.Validate("ANYTHING.DEV.LOOPZERO.EXAMPLE"); err == nil {
+	if err := v.Validate("ANYTHING.DEV.GETLOOPSCALE.COM"); err == nil {
 		t.Error("expected case-insensitive platform domain to be rejected")
 	}
 }

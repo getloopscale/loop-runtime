@@ -349,7 +349,7 @@ tasks:
       - /tmp/loopzero-ops quality canonical-fixture-repo                             # M16 T1.3 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07) but not wired until now.
       - /tmp/loopzero-ops quality install-git-hooks                                  # M16 T1.4 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07) but not wired until now.
       - /tmp/loopzero-ops quality render-schema-gen-sql                              # M16 T1.5 (2026-07-10): pre-Wave-1 backfill. Registered by M-Migrate2 (2026-07-07) but not wired until now.
-      - /tmp/loopzero-ops quality no-cloud-dev-default                              # M16 T2.3 (2026-07-10): M-Migrate2 Wave 1 — replaces infra/tests/check-no-cloud-dev-default_test.sh (T1.1 Caddy 301 redirect trap guard: no test/seed script may default to cloud-dev.loopzero.example; webhook handler /api/v1/webhooks/github is single exception).
+      - /tmp/loopzero-ops quality no-cloud-dev-default                              # M16 T2.3 (2026-07-10): M-Migrate2 Wave 1 — replaces infra/tests/check-no-cloud-dev-default_test.sh (T1.1 Caddy 301 redirect trap guard: no test/seed script may default to cloud-dev.getloopscale.com; webhook handler /api/v1/webhooks/github is single exception).
       - /tmp/loopzero-ops quality divergence-matrix                                # every LOCAL ONLY (LP-NNN) marker has a row in docs/operations.md and every OPEN row a live marker. Wired once the matrix moved into a versioned document; before, it read a gitignored path and exited 5 on every clone.
       - /tmp/loopzero-ops quality docs-contract-refs                                # B-052 (2026-08-11): every .claude/rules/*.md reference in CLAUDE.md and every ADR-NNNN cited in a Go comment resolves, or has a dated exception. A normative reference that does not resolve is worse than none: it gets followed.
       - /tmp/loopzero-ops quality test-target-coverage                                # B-087/B-088 (2026-08-13): 5 of the 9 modules had no test running through any task, and the target that would aggregate them had aborted since M9. The cause in both was a hand-written list never compared with the disk; this gate is that comparison.
@@ -483,6 +483,6 @@ tasks:
       the network against a live target. That is why it lives in `loopzero-ops leak`, next to `chaos`
       and `drill`. It is not part of `task quality:gates`.
 
-      Default target: app-dev.loopzero.example + auth-dev.loopzero.example. Pass flags via CLI_ARGS.
+      Default target: app-dev.getloopscale.com + auth-dev.getloopscale.com. Pass flags via CLI_ARGS.
     cmds:
       - /tmp/loopzero-ops leak live {{.CLI_ARGS}}

@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package caddyfiledevserverdeny enforces defense-in-depth for loopzero-cloud#141
-// (SECURITY): the app-dev.loopzero.example host block MUST explicitly 404 the
+// (SECURITY): the app-dev.getloopscale.com host block MUST explicitly 404 the
 // dev-server-only paths so that even a stale/dev build accidentally landed
 // in DASHBOARD_DIST cannot expose /src/*, /.env, /@vite/*, /node_modules/*,
 // or config files.
@@ -66,7 +66,7 @@ var requiredPaths = []string{
 	"/package.json",
 }
 
-var blockOpenRe = regexp.MustCompile(`(?m)^app-dev\.loopzero\.example\s*\{`)
+var blockOpenRe = regexp.MustCompile(`(?m)^app-dev\.getloopscale\.com\s*\{`)
 
 // Check enforces the loopzero-cloud#141 defense-in-depth invariants against
 // the app-dev host block of infra/local/Caddyfile.
@@ -87,7 +87,7 @@ func Check(cfg Config) (*Outcome, error) {
 	if !ok {
 		out.Pass = false
 		out.Violations = append(out.Violations,
-			"app-dev.loopzero.example block not found in infra/local/Caddyfile")
+			"app-dev.getloopscale.com block not found in infra/local/Caddyfile")
 		return out, nil
 	}
 
@@ -146,7 +146,7 @@ func Check(cfg Config) (*Outcome, error) {
 }
 
 // extractAppDevBlock returns the body between the opening
-// `app-dev.loopzero.example {` and its matching closing brace.
+// `app-dev.getloopscale.com {` and its matching closing brace.
 func extractAppDevBlock(content string) (string, bool) {
 	return qgshell.ExtractBraceBlock(content, blockOpenRe)
 }

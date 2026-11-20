@@ -1,6 +1,6 @@
 config:
   loopzero-drill:domain:
-    value: loopzero-drill.example
+    value: drill.getloopscale.com
   loopzero-drill:doProject:
     value: loopzero-drill
   loopzero-drill:region:

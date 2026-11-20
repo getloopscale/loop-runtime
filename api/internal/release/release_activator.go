@@ -326,11 +326,11 @@ func (k ActivationKernel) emitCompleted(ctx context.Context, release *db.Release
 // Closes loopzero-cloud#61 ("loopzero deploy announces .loopzero.local URL not publicly
 // resolvable"). The deploy.completed SSE event URL composition is now the
 // SAME canonical that status.go uses — operator-configured LOOPZERO_PUBLIC_DOMAIN
-// (e.g. `prod-dev.loopzero.example`) preferred when set; falls back to BASE_DOMAIN
+// (e.g. `prod-dev.getloopscale.app`) preferred when set; falls back to BASE_DOMAIN
 // (legacy default `loopzero.local`) only when no public override is wired. This
 // mirrors the existing `StatusHandler.publicDomain` fallback ladder so
 // `loopzero deploy` and `loopzero status` emit byte-identical URLs (no more
-// "deploy says .loopzero.local, status says .prod-dev.loopzero.example" mismatch).
+// "deploy says .loopzero.local, status says .prod-dev.getloopscale.app" mismatch).
 func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain string) []ActivationAppInfo {
 	var specs []db.BuildAppSpec
 	if release.Apps != nil {

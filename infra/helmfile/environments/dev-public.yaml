@@ -1,15 +1,15 @@
 # Helmfile environment: dev-public
 # T2.1 of plan 2026-06-04-dev-public-domain-canonicalization-plan.md
 #
-# Variant of `standalone-public` that uses *-dev.loopzero.example hostnames.
-# Per D1 of plan: reserves *.loopzero.example for future prod cutover; this env
+# Variant of `standalone-public` that uses *-dev.getloopscale.com hostnames.
+# Per D1 of plan: reserves *.getloopscale.com for future prod cutover; this env
 # is the canonical dev infra (paulo@droplet 165.227.121.20).
 #
 # Differences vs `standalone-public`:
 #   - publicAuthUrl / publicCloudUrl / uiBaseUrl / dashboardOrigin use the
-#     `-dev` subdomain (auth-dev / app-dev / cloud-dev . loopzero.example)
+#     `-dev` subdomain (auth-dev / app-dev / cloud-dev . getloopscale.com)
 #   - allowedReturnUrls + corsAllowedOrigins enumerate the dev hosts
-#   - cookieDomain stays `loopzero.example` (eTLD+1) — same shape as standalone-public
+#   - cookieDomain stays `getloopscale.com` (eTLD+1) — same shape as standalone-public
 #   - OAuth credentials read from LOOPZERO_*_DEV env vars (per T3.2 of plan) so
 #     dev OAuth apps coexist with prod ones in the same .env file
 #
@@ -21,13 +21,13 @@
 #   5. infra/scripts/local/caddy-up-dev-public.sh --verify
 #   6. helmfile -e dev-public -f infra/helmfile/core.helmfile.yaml.gotmpl sync
 #   7. task doctor (38/0)
-#   8. Browser: https://app-dev.loopzero.example/login
+#   8. Browser: https://app-dev.getloopscale.com/login
 
 domain: loopzero.local
-# The public root of every app URL: users reach <label>.prod-dev.loopzero.example, and the
+# The public root of every app URL: users reach <label>.prod-dev.getloopscale.app, and the
 # edge rewrites it to <label>.loopzero.local for the cell's Traefik. loopzero-api announces it
 # (status.url) and the app-operator probes under it (#447) — one value, two readers.
-publicAppDomain: prod-dev.loopzero.example
+publicAppDomain: prod-dev.getloopscale.app
 dnsZone: loopzero.local
 
 # clusterRole=cloud-local: triggers loopzero-cloud + loopzero-api install via helmfile
@@ -148,7 +148,7 @@ velero:
   region: us-east-1
   s3Url: http://minio.loopzero-system.svc:9000
 
-# D1 of plan 2026-06-04: *-dev.loopzero.example hostnames
+# D1 of plan 2026-06-04: *-dev.getloopscale.com hostnames
 # uiBaseUrl controls 4 URLs in Hydra: login, consent, logout,
 # post_device_done_url (device flow). Plan J-05 T2.2 D1.
 # One dashboard, one name. `cloud-dev` was removed on 2026-08-10: it declared the SAME
@@ -161,16 +161,16 @@ velero:
 # Verified before removing that nothing depended on it: the GitHub webhook is registered
 # against `app-dev` (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44), and
 # `app-dev` already has the same direct bypass to loopzero-api that `cloud-dev` had.
-uiBaseUrl: "https://app-dev.loopzero.example"
-dashboardOrigin: "https://app-dev.loopzero.example"
-publicAuthUrl: "https://auth-dev.loopzero.example"
-publicCloudUrl: "https://app-dev.loopzero.example"
-cookieDomain: "loopzero.example"
+uiBaseUrl: "https://app-dev.getloopscale.com"
+dashboardOrigin: "https://app-dev.getloopscale.com"
+publicAuthUrl: "https://auth-dev.getloopscale.com"
+publicCloudUrl: "https://app-dev.getloopscale.com"
+cookieDomain: "getloopscale.com"
 corsAllowedOrigins:
-  - "https://app-dev.loopzero.example"
+  - "https://app-dev.getloopscale.com"
 allowedReturnUrls:
-  - "https://app-dev.loopzero.example"
-  - "https://app-dev.loopzero.example/"
+  - "https://app-dev.getloopscale.com"
+  - "https://app-dev.getloopscale.com/"
 dashboardRoute:
   login: /login
   register: /register
@@ -180,7 +180,7 @@ dashboardRoute:
   error: /login
 
 # D5 of plan 2026-06-04 (operator decision 2026-06-04): OAuth apps were
-# reused (the legacy GitHub + Google clients had `auth-dev.loopzero.example/
+# reused (the legacy GitHub + Google clients had `auth-dev.getloopscale.com/
 # self-service/methods/oidc/callback/{provider}` callback URLs added to
 # the SAME client_id rather than provisioning new dev-specific OAuth
 # apps). Consequence: dev + legacy prod share OAuth client_id. Cognitive
@@ -200,7 +200,7 @@ dashboardRoute:
 # loopzero-api Deployment can mount GITHUB_WEBHOOK_SECRET via envFrom. Without
 # the secret the webhook handler stays unmounted (router nil-guards) and
 # auto-deploy never fires. The secret value is the SAME string configured
-# on the GitHub App webhook URL https://app-dev.loopzero.example/api/v1/webhooks/github
+# on the GitHub App webhook URL https://app-dev.getloopscale.com/api/v1/webhooks/github
 # so HMAC validation succeeds end-to-end.
 #
 # Runbook:

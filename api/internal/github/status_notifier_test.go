@@ -55,20 +55,20 @@ func statusCapture(t *testing.T) (*AppClient, *map[string]string) {
 func TestOnBuildSucceededLinksToTheDeployedAppsRealURL(t *testing.T) {
 	// Arrange: the project's one served app is called "checkout", not "api".
 	client, got := statusCapture(t)
-	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{apps: []string{"checkout"}}, "loopzero.example", slog.Default())
+	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{apps: []string{"checkout"}}, "getloopscale.com", slog.Default())
 
 	// Act
 	n.OnBuildSucceeded(context.Background(), "tn-1", "shop", "build-1", "production")
 
 	// Assert
-	if want := "https://tn-1-shop-checkout-production.loopzero.example"; (*got)["target_url"] != want {
+	if want := "https://tn-1-shop-checkout-production.getloopscale.app"; (*got)["target_url"] != want {
 		t.Errorf("target_url = %q, want %q", (*got)["target_url"], want)
 	}
 }
 
 func TestOnBuildSucceededDoesNotGuessAURLForSeveralApps(t *testing.T) {
 	client, got := statusCapture(t)
-	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{apps: []string{"web", "admin"}}, "loopzero.example", slog.Default())
+	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{apps: []string{"web", "admin"}}, "getloopscale.com", slog.Default())
 
 	n.OnBuildSucceeded(context.Background(), "tn-1", "shop", "build-1", "production")
 

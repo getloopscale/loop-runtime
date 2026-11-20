@@ -1,5 +1,5 @@
 const S3_ENDPOINT = "https://loopzero-static-assets.sfo3.digitaloceanspaces.com";
-const BASE_DOMAIN = "dev.loopzero.example";
+const BASE_DOMAIN = "dev.getloopscale.com";
 
 const SECURITY_HEADERS = {
   "X-Frame-Options": "DENY",
@@ -7,7 +7,7 @@ const SECURITY_HEADERS = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
   // Issue #232/#235 — `script-src` no longer carries 'unsafe-inline'.
   //
-  // This worker fronts tenant static content on *.dev.loopzero.example, so this CSP is
+  // This worker fronts tenant static content on *.dev.getloopscale.com, so this CSP is
   // the last header those users receive. With 'unsafe-inline' any injected inline
   // <script> in the served HTML executed, which negated most of what the policy
   // was there to buy; the blast radius was every tenant's static surface.
@@ -22,7 +22,7 @@ const SECURITY_HEADERS = {
   // deferred alongside the cosmetic one. Hardening it is its own change.
   //
   // Guarded by `loopzero-ops quality worker-csp`.
-  "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.dev.loopzero.example",
+  "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.dev.getloopscale.com",
 };
 
 function getCacheControl(pathname) {

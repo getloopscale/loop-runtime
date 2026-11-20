@@ -25,7 +25,7 @@ export LOOPZERO_REGISTRY_ENDPOINT="registry.digitalocean.com/loopzero"
 export LOOPZERO_BUCKET_NAME="loopzero-static"
 export LOOPZERO_BUCKET_ENDPOINT="https://sfo3.digitaloceanspaces.com"
 export LOOPZERO_CF_KV_NAMESPACE="abc123"
-export LOOPZERO_DOMAIN="dev.loopzero.example"
+export LOOPZERO_DOMAIN="dev.getloopscale.com"
 export LOOPZERO_MGMT_INGRESS_IP="1.2.3.4"
 export LOOPZERO_RUNTIME_INGRESS_IP="1.2.3.5"
 

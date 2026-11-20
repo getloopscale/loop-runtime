@@ -10,7 +10,7 @@
 # applied to fix those — only this declarative overlay survives.
 #
 # Per-env contract:
-#   - dev-public hosts: auth-dev / app-dev / cloud-dev . loopzero.example
+#   - dev-public hosts: auth-dev / app-dev / cloud-dev . getloopscale.com
 #   - issuer/public point at auth-dev (Hydra's own FQDN)
 #   - device.verification + device.success point at app-dev (dashboard UI)
 #     because Hydra's built-in /oauth2/fallbacks/device is literally the
@@ -31,7 +31,7 @@
 # (browsers reject SameSite=None without Secure per RFC 6265bis-12 §5.4.7).
 #
 # dev-public is production-shaped (HTTPS issuer via Caddy + Let's Encrypt prod
-# certs, real public DNS auth-dev.loopzero.example), so dev mode MUST be off here.
+# certs, real public DNS auth-dev.getloopscale.com), so dev mode MUST be off here.
 # Standalone-multi (local k3d) keeps chart-default dev:true for HTTP issuer.
 #
 # Per ADR knowledge-base/decisions/2026-06-24-hydra-v2-3-0-sql-injection-allowlist.md
@@ -60,8 +60,8 @@ hydra:
     # updated so future Cleanrooms preserve the config.
     serve:
       cookies:
-        # loopzero.example covers auth-dev + app-dev + cloud-dev subdomains.
-        domain: "loopzero.example"
+        # getloopscale.com covers auth-dev + app-dev + cloud-dev subdomains.
+        domain: "getloopscale.com"
         # Lax allows OAuth2 top-level GET/POST redirects while blocking
         # cross-site iframes; canonical for the device flow chain.
         same_site_mode: "Lax"
@@ -71,14 +71,14 @@ hydra:
       public:
         cors:
           allowed_origins:
-            - "https://app-dev.loopzero.example"
-            - "https://auth-dev.loopzero.example"
-            - "https://cloud-dev.loopzero.example"
+            - "https://app-dev.getloopscale.com"
+            - "https://auth-dev.getloopscale.com"
+            - "https://cloud-dev.getloopscale.com"
 
     urls:
       self:
-        issuer: "https://auth-dev.loopzero.example/"
-        public: "https://auth-dev.loopzero.example/"
+        issuer: "https://auth-dev.getloopscale.com/"
+        public: "https://auth-dev.getloopscale.com/"
 
       # device-flow URLs — per memory j05-aprendizado-hydra-urls-canonical-via-helmfile-overlay
       # + reference_hydra_v2_device_flow_complete_chain_2026_06_05.
@@ -87,18 +87,18 @@ hydra:
       # accepts user_code input + calls Hydra admin AcceptUserCodeRequest.
       # `urls.device.success` is shown post-accept.
       device:
-        verification: "https://app-dev.loopzero.example/device-verify"
-        success: "https://app-dev.loopzero.example/device-success"
+        verification: "https://app-dev.getloopscale.com/device-verify"
+        success: "https://app-dev.getloopscale.com/device-success"
 
       # OAuth2 consent + login redirect URLs.
       # Per qa-dogfood-cleanup-2026-06-21 refactor: canonical surface is
-      # app-dev.loopzero.example (cloud-dev.loopzero.example is 301-redirected to
+      # app-dev.getloopscale.com (cloud-dev.getloopscale.com is 301-redirected to
       # app-dev at the Caddy edge, so bypassing the redirect avoids the
       # CSRF cookie loss during 301 follow). loopzero-cloud BFF handlers live
       # under /auth/* on the app-dev host post-#162 Caddyfile narrowing.
-      # Overrides prior J-05 iter 4 amendment (cloud-dev.loopzero.example/auth/*)
+      # Overrides prior J-05 iter 4 amendment (cloud-dev.getloopscale.com/auth/*)
       # which pre-dated the 2026-06-22 Caddy canonical-surface refactor.
-      login: "https://app-dev.loopzero.example/auth/login"
-      consent: "https://app-dev.loopzero.example/auth/consent"
-      logout: "https://app-dev.loopzero.example/logout"
-      error: "https://app-dev.loopzero.example/auth/error"
+      login: "https://app-dev.getloopscale.com/auth/login"
+      consent: "https://app-dev.getloopscale.com/auth/consent"
+      logout: "https://app-dev.getloopscale.com/logout"
+      error: "https://app-dev.getloopscale.com/auth/error"

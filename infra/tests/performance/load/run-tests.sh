@@ -10,8 +10,8 @@
 #   LOOPZERO_SERVICE_AUTH=<token> ./run-tests.sh unit   # unit tests only
 #
 # Environment variables:
-#   LOOPZERO_API_URL          API endpoint (default: https://api.dev.loopzero.example)
-#   LOOPZERO_APP_DOMAIN       App domain (default: dev.loopzero.example)
+#   LOOPZERO_API_URL          API endpoint (default: https://api.dev.getloopscale.com)
+#   LOOPZERO_APP_DOMAIN       App domain (default: dev.getloopscale.com)
 #   LOOPZERO_SERVICE_AUTH     Service auth token (required for real tests)
 #   LOOPZERO_BOOTSTRAP_SECRET Bootstrap secret (default: loopzero-dev-bootstrap-secret)
 #   LOOPZERO_FIXTURE_PATH     Fixture dir (default: ../e2e/fixtures/hello-server)
@@ -24,8 +24,8 @@ LEVEL="${1:-unit}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Defaults
-export LOOPZERO_API_URL="${LOOPZERO_API_URL:-https://api.dev.loopzero.example}"
-export LOOPZERO_APP_DOMAIN="${LOOPZERO_APP_DOMAIN:-dev.loopzero.example}"
+export LOOPZERO_API_URL="${LOOPZERO_API_URL:-https://api.dev.getloopscale.com}"
+export LOOPZERO_APP_DOMAIN="${LOOPZERO_APP_DOMAIN:-dev.getloopscale.com}"
 export LOOPZERO_REAL_DEPLOY=1
 
 echo "═══════════════════════════════════════════════════════"

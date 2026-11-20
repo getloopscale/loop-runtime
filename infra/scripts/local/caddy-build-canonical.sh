@@ -8,7 +8,7 @@
 # BOTH:
 #
 #   1. github.com/caddy-dns/cloudflare        — DNS-01 challenge for
-#                                                 *.preview-dev.loopzero.example
+#                                                 *.preview-dev.getloopscale.app
 #                                                 wildcard cert (J-23 #68);
 #   2. github.com/mholt/caddy-ratelimit@<sha> — edge rate-limit for
 #                                                 Red Team #68 (login) +
@@ -36,7 +36,7 @@
 # Operator pre-requisites:
 #   - Go 1.21+ on PATH (`go version`)
 #   - Network access to proxy.golang.org + github.com
-#   - $CF_API_TOKEN env var with Zone:DNS:Edit scope on loopzero.example
+#   - $CF_API_TOKEN env var with Zone:DNS:Edit scope on getloopscale.com
 #     (NOT used during build — Caddy reads it at runtime).
 #
 # Usage:
@@ -145,6 +145,6 @@ echo
 "$CADDY_OUTPUT" list-modules | grep -E 'dns\.providers\.cloudflare|http\.handlers\.rate_limit'
 echo
 echo "Next:"
-echo "  1. export CF_API_TOKEN=<token-with-Zone-DNS-Edit-on-loopzero.example>"
+echo "  1. export CF_API_TOKEN=<token-with-Zone-DNS-Edit-on-getloopscale.com>"
 echo "  2. \`task cloud:caddy:up\` to reload the auth-dev + preview-dev blocks"
 echo "  3. T1.4/T1.5/T3.5 LIVE bash tests verify the rate_limit zones engage."

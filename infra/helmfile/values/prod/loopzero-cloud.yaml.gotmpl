@@ -2,7 +2,7 @@
 #
 # T1.2 of plan 2026-06-11-cleanroom-canonical-5-defense-layers v1.2 — the canonical
 # loopzero-cloud contract for prod per ADR D1 + D8, which splits the Kratos URLs:
-#   - prod hosts: auth/app/cloud.loopzero.example (NO -dev suffix)
+#   - prod hosts: auth/app/cloud.getloopscale.com (NO -dev suffix)
 #   - the public Kratos URL (HTTPS FQDN, browser redirects) is set by the release from
 #     the environment's publicAuthUrl (core.helmfile.yaml.gotmpl)
 #   - kratosInternalUrl: cluster-internal HTTP for server-side calls
@@ -23,6 +23,6 @@ imagePullSecrets:
 
 config:
   githubAppSlug: "loopzero-platform"
-  appPublicUrl: "https://app.loopzero.example"
-  authCookieDomain: "loopzero.example"
+  appPublicUrl: "https://app.getloopscale.com"
+  authCookieDomain: "getloopscale.com"
   kratosInternalUrl: "http://kratos.loopzero-auth.svc.cluster.local:4433"

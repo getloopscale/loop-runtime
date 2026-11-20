@@ -54,7 +54,7 @@ func TestVerifyRateLimit_IntegrationFirstAllowedSecondDenied(t *testing.T) {
 		},
 	}
 	verifier := &fakeDomainVerifier{verified: true}
-	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	vrl := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
 
@@ -103,7 +103,7 @@ func TestVerifyRateLimit_IntegrationPerDomainIsolation(t *testing.T) {
 		},
 	}
 	verifier := &fakeDomainVerifier{verified: true}
-	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	vrl := ratelimit.NewVerifyRateLimiter(1, 30*time.Second)
 

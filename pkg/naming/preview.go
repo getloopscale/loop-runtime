@@ -65,7 +65,7 @@ func PreviewSubdomain(tenantID, projectID, entryApp string, prNumber int) string
 // URL configured" without parsing the result.
 //
 // publicDomain is the operator-configured wildcard root (e.g.
-// `preview-dev.loopzero.example` for the dev-public env). Callers in
+// `preview-dev.getloopscale.app` for the dev-public env). Callers in
 // PreviewService resolve it from PreviewPublicDomain with fallback to
 // the legacy BaseDomain — that resolution stays at the call site
 // because it is a service-wiring concern, not a naming concern.

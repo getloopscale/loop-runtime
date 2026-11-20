@@ -508,7 +508,7 @@ func TestBuildOrchestrator_WriteStaticRoutingEntries_WritesKV(t *testing.T) {
 		Workflow:   &fakeWorkflowSubmitterOrch{},
 		EventStore: &fakeEventStoreContainer{},
 		KVClient:   kv,
-		BaseDomain: "dev.loopzero.example",
+		BaseDomain: "dev.getloopscale.com",
 	})
 
 	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}

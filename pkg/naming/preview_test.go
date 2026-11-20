@@ -59,8 +59,8 @@ func TestPreviewSubdomain_TruncatesAtRFC1123Cap(t *testing.T) {
 }
 
 func TestPreviewURL_HappyPath(t *testing.T) {
-	got := PreviewURL("tn-acme", "my-api", "web", "preview-dev.loopzero.example", 42)
-	want := "https://tn-acme-my-api-web-preview-pr-42.preview-dev.loopzero.example"
+	got := PreviewURL("tn-acme", "my-api", "web", "preview-dev.getloopscale.app", 42)
+	want := "https://tn-acme-my-api-web-preview-pr-42.preview-dev.getloopscale.app"
 	if got != want {
 		t.Errorf("PreviewURL drift:\n  got:  %q\n  want: %q", got, want)
 	}
@@ -76,8 +76,8 @@ func TestPreviewURL_EmptyDomainReturnsEmpty(t *testing.T) {
 }
 
 func TestPreviewURL_WithoutEntryApp(t *testing.T) {
-	got := PreviewURL("tn-acme", "my-api", "", "preview-dev.loopzero.example", 42)
-	want := "https://tn-acme-my-api-preview-pr-42.preview-dev.loopzero.example"
+	got := PreviewURL("tn-acme", "my-api", "", "preview-dev.getloopscale.app", 42)
+	want := "https://tn-acme-my-api-preview-pr-42.preview-dev.getloopscale.app"
 	if got != want {
 		t.Errorf("PreviewURL without app: got %q; want %q", got, want)
 	}

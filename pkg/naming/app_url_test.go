@@ -41,8 +41,8 @@ func TestAppHostname_canonical_full_formula(t *testing.T) {
 			projectID: "sample",
 			appName:   "api",
 			envName:   "production",
-			base:      "prod-dev.loopzero.example",
-			want:      "tn-82988ea9aef248ef-sample-api-production.prod-dev.loopzero.example",
+			base:      "prod-dev.getloopscale.app",
+			want:      "tn-82988ea9aef248ef-sample-api-production.prod-dev.getloopscale.app",
 		},
 		{
 			name:      "staging env",
@@ -97,8 +97,8 @@ func TestAppHostname_truncates_over_63_chars_rfc1123(t *testing.T) {
 }
 
 func TestAppURL_https_scheme_and_publicDomain(t *testing.T) {
-	got := AppURL("tn-82988ea9aef248ef", "sample", "api", "production", "prod-dev.loopzero.example")
-	want := "https://tn-82988ea9aef248ef-sample-api-production.prod-dev.loopzero.example"
+	got := AppURL("tn-82988ea9aef248ef", "sample", "api", "production", "prod-dev.getloopscale.app")
+	want := "https://tn-82988ea9aef248ef-sample-api-production.prod-dev.getloopscale.app"
 	if got != want {
 		t.Fatalf("AppURL = %q; want %q", got, want)
 	}

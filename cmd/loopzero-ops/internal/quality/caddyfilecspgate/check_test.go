@@ -30,7 +30,7 @@ func makeCaddyfile(t *testing.T, content string) string {
 // AND IPv6 ranges so Caddy honors the cf-connecting-ip header from CF
 // tunnel only (covers BOTH families — IPv6 bypass closed per F-sec-4).
 const canonicalGlobalConfigBlock = `{
-  email admin@loopzero.example
+  email admin@getloopscale.com
   servers {
     trusted_proxies static \
       173.245.48.0/20 \
@@ -63,7 +63,7 @@ const canonicalGlobalConfigBlock = `{
 // kratos-self-service-rate-limit-systemic) canonical shape: 4 rate_limit zones
 // keyed on cf-connecting-ip + register-route handle proxied to loopzero-cloud BFF
 // + HSTS header preserved.
-const canonicalAuthDevBlock = `auth-dev.loopzero.example {
+const canonicalAuthDevBlock = `auth-dev.getloopscale.com {
   header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
   rate_limit {
@@ -103,7 +103,7 @@ const canonicalAuthDevBlock = `auth-dev.loopzero.example {
 
   handle /self-service/registration/methods/password {
     reverse_proxy localhost:3002 {
-      header_up Host cloud-dev.loopzero.example
+      header_up Host cloud-dev.getloopscale.com
     }
   }
 
@@ -115,12 +115,12 @@ const canonicalAuthDevBlock = `auth-dev.loopzero.example {
 // plan caddyfile-app-dev-prod-bundle-file-server-canonical ADR D1+D2, paired
 // with the v1.5 global config + auth-dev block per T1.3.
 const canonicalAppDevBlock = canonicalGlobalConfigBlock + `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   header {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
     Referrer-Policy "strict-origin-when-cross-origin"
-    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.getloopscale.com https://cloud-dev.getloopscale.com; form-action 'self' https://auth-dev.getloopscale.com https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 
@@ -299,9 +299,9 @@ func TestCheck_RegressionDetected_CSPStripperShape_v12(t *testing.T) {
 	// v1.2: header CSP MUST be a SUPERSET of dashboard meta CSP. A canonical-
 	// looking but-narrower CSP (no Google Fonts) MUST fail the superset gate.
 	// Browser-LIVE-caught 2026-06-26 by Red Team Chrome devtools.
-	narrowerCSP := `Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; object-src 'none'; base-uri 'self'; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; frame-ancestors 'none'"`
+	narrowerCSP := `Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://auth-dev.getloopscale.com https://cloud-dev.getloopscale.com; object-src 'none'; base-uri 'self'; form-action 'self' https://auth-dev.getloopscale.com https://accounts.google.com https://github.com; frame-ancestors 'none'"`
 	regressed := strings.Replace(canonicalAppDevBlock,
-		`Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"`,
+		`Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.getloopscale.com https://cloud-dev.getloopscale.com; form-action 'self' https://auth-dev.getloopscale.com https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"`,
 		narrowerCSP, 1)
 	dir := makeCaddyfile(t, regressed)
 	out, err := Check(Config{RepoRoot: dir})
@@ -384,12 +384,12 @@ func TestCheck_RegressionDetected_MissingEngineHandle_v14(t *testing.T) {
 // try_files in an unnamed catch-all `handle {}` block at the end so the
 // SPA-fallback rewrite only applies after every explicit handle missed.
 func TestCheck_RegressionDetected_TryFilesAtTopLevel_v13(t *testing.T) {
-	regressedTopLevel := `app-dev.loopzero.example {
+	regressedTopLevel := `app-dev.getloopscale.com {
   header {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
     Referrer-Policy "strict-origin-when-cross-origin"
-    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.getloopscale.com https://cloud-dev.getloopscale.com; form-action 'self' https://auth-dev.getloopscale.com https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 
@@ -433,12 +433,12 @@ func TestCheck_TryFilesCommentReferenceMustNotFalsePositive_v15(t *testing.T) {
 	// tripped the walker into reporting /engine/* as the enclosing handle for
 	// the (real) try_files that actually lives inside handle {} below.
 	caddyfileWithCommentedTryFiles := canonicalGlobalConfigBlock + `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   header {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
     Referrer-Policy "strict-origin-when-cross-origin"
-    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.loopzero.example https://cloud-dev.loopzero.example; form-action 'self' https://auth-dev.loopzero.example https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
+    Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://checkout.stripe.com https://*.stripe.com https://auth-dev.getloopscale.com https://cloud-dev.getloopscale.com; form-action 'self' https://auth-dev.getloopscale.com https://accounts.google.com https://github.com; base-uri 'self'; object-src 'none'; frame-ancestors 'none'"
     Strict-Transport-Security "max-age=31536000; includeSubDomains"
   }
 
@@ -479,7 +479,7 @@ app-dev.loopzero.example {
 
 func TestCheck_BlockNotFound(t *testing.T) {
 	dir := makeCaddyfile(t, `# no app-dev block here
-cloud-dev.loopzero.example {
+cloud-dev.getloopscale.com {
   reverse_proxy localhost:3002
 }
 `)
@@ -497,7 +497,7 @@ func TestCheck_SiblingBlockNotEvaluated(t *testing.T) {
 	// (cloud-dev) must not trigger the app-dev `assert_no_vite_dev_reverse_proxy`
 	// assertion. The canonical block-bound extractor isolates the app-dev block.
 	twoBlocks := canonicalAppDevBlock + `
-cloud-dev.loopzero.example {
+cloud-dev.getloopscale.com {
   reverse_proxy @ws localhost:5173
 }
 `
@@ -529,7 +529,7 @@ func containsViolation(violations []string, substr string) bool {
 func TestCheck_RegressionDetected_AuthDevRateLimitBlockMissing(t *testing.T) {
 	// auth-dev block exists but the rate_limit { ... } container is absent.
 	missingRateLimit := canonicalGlobalConfigBlock + `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   header {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
@@ -544,7 +544,7 @@ app-dev.loopzero.example {
   handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
 }
 
-auth-dev.loopzero.example {
+auth-dev.getloopscale.com {
   header Strict-Transport-Security "max-age=31536000"
   reverse_proxy localhost:14433
 }
@@ -565,7 +565,7 @@ auth-dev.loopzero.example {
 func TestCheck_RegressionDetected_AuthDevRateLimitZoneMissing(t *testing.T) {
 	// rate_limit block exists but the register_throttle zone is absent.
 	missingZone := canonicalGlobalConfigBlock + `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   header {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
@@ -580,7 +580,7 @@ app-dev.loopzero.example {
   handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
 }
 
-auth-dev.loopzero.example {
+auth-dev.getloopscale.com {
   header Strict-Transport-Security "max-age=31536000"
   rate_limit {
     zone login_throttle { match { path /self-service/login/methods/* }; key {http.request.header.cf-connecting-ip}; window 1m; events 10 }
@@ -609,7 +609,7 @@ func TestCheck_RegressionDetected_RegisterRouteMissing(t *testing.T) {
 	// auth-dev block exists with full rate_limit + handles, but the
 	// /self-service/registration/methods/password handle is absent.
 	missingRegisterHandle := canonicalGlobalConfigBlock + `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   header {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
@@ -624,7 +624,7 @@ app-dev.loopzero.example {
   handle { root * /dist; encode gzip; file_server; try_files {path} /index.html }
 }
 
-auth-dev.loopzero.example {
+auth-dev.getloopscale.com {
   header Strict-Transport-Security "max-age=31536000"
   rate_limit {
     zone login_throttle { match { path /self-service/login/methods/* }; key {http.request.header.cf-connecting-ip}; window 1m; events 10 }
@@ -651,10 +651,10 @@ auth-dev.loopzero.example {
 func TestCheck_RegressionDetected_TrustedProxiesMissing(t *testing.T) {
 	// Global config block exists but no trusted_proxies static.
 	missingTP := `{
-  email admin@loopzero.example
+  email admin@getloopscale.com
 }
 ` + `
-app-dev.loopzero.example {
+app-dev.getloopscale.com {
   header {
     X-Frame-Options "DENY"
     X-Content-Type-Options "nosniff"
@@ -687,7 +687,7 @@ app-dev.loopzero.example {
 // the bypass; the new block-scoped count closes it.
 func TestCheck_RegressionDetected_EmptyTrustedProxiesWithCIDRCommentsBypass(t *testing.T) {
 	bypass := `{
-  email admin@loopzero.example
+  email admin@getloopscale.com
   servers {
     # CF ranges as of 2026-06-26 (comment-only, no real entries):
     # 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22
@@ -715,7 +715,7 @@ func TestCheck_RegressionDetected_EmptyTrustedProxiesWithCIDRCommentsBypass(t *t
 // IPv6 CIDRs must FAIL. The IPv6-bypass closure is non-optional.
 func TestCheck_RegressionDetected_TrustedProxiesMissingIPv6Bypass(t *testing.T) {
 	missingIPv6 := `{
-  email admin@loopzero.example
+  email admin@getloopscale.com
   servers {
     trusted_proxies static \
       173.245.48.0/20 \

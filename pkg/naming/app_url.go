@@ -43,7 +43,7 @@ func AppHostname(tenantID, projectID, appName, envName, baseDomain string) strin
 // without parsing the result (canonical pattern matching PreviewURL).
 //
 // publicDomain is the operator-configured wildcard root (e.g.
-// `prod-dev.loopzero.example` for the dev-public env). Callers in StatusHandler
+// `prod-dev.getloopscale.app` for the dev-public env). Callers in StatusHandler
 // resolve it from PublicDomain with fallback to BaseDomain — that resolution
 // stays at the call site because it is a service-wiring concern, not a
 // naming concern (mirrors PreviewURL's `PreviewPublicDomain` resolution at

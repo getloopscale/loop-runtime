@@ -331,7 +331,7 @@ drill_skill_check_invariants() {
 
   # Invariant 5: DNS resolves via CF nameservers
   local domain ns_check
-  domain="${DRILL_BASE_DOMAIN:-loopzero-drill.example}"
+  domain="${DRILL_BASE_DOMAIN:-drill.getloopscale.com}"
   ns_check=$(dig +short "$domain" NS 2>/dev/null | head -1 || echo "")
   if [[ "$ns_check" != *.ns.cloudflare.com. ]]; then
     drill_skill_emit_finding "S1" "Invariant #5 WARN: NS not CF for $domain ($ns_check)"

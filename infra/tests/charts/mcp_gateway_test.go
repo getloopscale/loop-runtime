@@ -108,11 +108,11 @@ func TestEveryCoreEnvironmentInstallsTheMCPGateway(t *testing.T) {
 func TestDevPublicMCPGatewayTakesItsIdentityFromTheEnvironment(t *testing.T) {
 	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "dev-public", "mcp-gateway", helmfileCoreEnv...)
 
-	if got := values["issuer"]; got != "https://auth-dev.loopzero.example/" {
-		t.Errorf("issuer = %v, want Hydra's dev-public issuer https://auth-dev.loopzero.example/", got)
+	if got := values["issuer"]; got != "https://auth-dev.getloopscale.com/" {
+		t.Errorf("issuer = %v, want Hydra's dev-public issuer https://auth-dev.getloopscale.com/", got)
 	}
-	if got := values["publicOrigin"]; got != "https://app-dev.loopzero.example" {
-		t.Errorf("publicOrigin = %v, want https://app-dev.loopzero.example", got)
+	if got := values["publicOrigin"]; got != "https://app-dev.getloopscale.com" {
+		t.Errorf("publicOrigin = %v, want https://app-dev.getloopscale.com", got)
 	}
 }
 

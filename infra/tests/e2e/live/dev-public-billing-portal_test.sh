@@ -10,24 +10,24 @@
 #
 # Flow:
 #   1. POST /self-service/login/browser → flow id
-#   2. POST flow.action with admin@loopzero.example password → cookie set
+#   2. POST flow.action with admin@getloopscale.com password → cookie set
 #   3. POST cloud-dev/v1/auth/session/token → JWT
 #   4. GET cloud-dev/v1/billing/portal with Bearer JWT → expects
 #      billing.stripe.com/p/session/* URL
 #
 # Env overrides (defaults to dev-public):
-#   KRATOS_PUBLIC      default https://auth-dev.loopzero.example
-#   CLOUD_HOST         default https://cloud-dev.loopzero.example
-#   TEST_USER          default admin@loopzero.example
+#   KRATOS_PUBLIC      default https://auth-dev.getloopscale.com
+#   CLOUD_HOST         default https://cloud-dev.getloopscale.com
+#   TEST_USER          default admin@getloopscale.com
 #   TEST_PASSWORD      default loopzero-dev-password
 #
 # Exit: 0 if Stripe portal URL returned; 1 otherwise (with diagnostic).
 
 set -euo pipefail
 
-KRATOS_PUBLIC="${KRATOS_PUBLIC:-https://auth-dev.loopzero.example}"
-CLOUD_HOST="${CLOUD_HOST:-https://app-dev.loopzero.example}"
-TEST_USER="${TEST_USER:-admin@loopzero.example}"
+KRATOS_PUBLIC="${KRATOS_PUBLIC:-https://auth-dev.getloopscale.com}"
+CLOUD_HOST="${CLOUD_HOST:-https://app-dev.getloopscale.com}"
+TEST_USER="${TEST_USER:-admin@getloopscale.com}"
 TEST_PASSWORD="${TEST_PASSWORD:-loopzero-dev-password}"
 
 PASS=0
