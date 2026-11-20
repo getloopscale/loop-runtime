@@ -85,7 +85,7 @@ func TestCheck_GoworkOffPrefixStillCounts(t *testing.T) {
 
 func TestCheck_ExemptionCoversItsModule(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd a && go test ./...\n", "a", "b")
-	cfg.Exemptions = []Exemption{{Module: "b", Reason: "zero *_test.go on disk", Sunset: "2026-11-11"}}
+	cfg.Exemptions = []Exemption{{Module: "b", Reason: "zero *_test.go on disk", Sunset: "2099-12-31"}}
 	out, err := violationOf(Check(cfg))
 	if err != nil {
 		t.Fatalf("err = %v", err)
@@ -99,7 +99,7 @@ func TestCheck_ExemptionCoversItsModule(t *testing.T) {
 // records the outcome of a decision while erasing the decision.
 func TestCheck_ExemptionWithoutReasonIsAnError(t *testing.T) {
 	cfg := tree(t, "cmds:\n  - cd a && go test ./...\n", "a", "b")
-	cfg.Exemptions = []Exemption{{Module: "b", Reason: "  ", Sunset: "2026-11-11"}}
+	cfg.Exemptions = []Exemption{{Module: "b", Reason: "  ", Sunset: "2099-12-31"}}
 	if _, err := violationOf(Check(cfg)); !errors.Is(err, ErrExemptionWithoutReason) {
 		t.Fatalf("err = %v; want ErrExemptionWithoutReason", err)
 	}
@@ -245,7 +245,7 @@ func TestCheck_ExemptionSunsetIsEnforced(t *testing.T) {
 		t.Errorf("err = %v; want ErrExemptionExpired", err)
 	}
 	c = base()
-	c.Exemptions = []Exemption{{Module: "b", Reason: "no tests", Sunset: "2026-11-11"}}
+	c.Exemptions = []Exemption{{Module: "b", Reason: "no tests", Sunset: "2099-12-31"}}
 	if _, err := violationOf(Check(c)); err != nil {
 		t.Errorf("err = %v; an unexpired exemption with a reason must pass", err)
 	}

@@ -78,6 +78,7 @@ tasks:
       - cd operators && go test ./... -short
       - cd operators/api && go test ./... -short
       - cd api && go test ./... -short
+      - cd infra/scripts && go test ./... -short
       # `helm/` (29 files) ran in no task at all — the same defect as
       # B-088, one level below the module. `scripts/` (11) and `config/` (5)
       # did not run either AND were RED, which is why they were left out:

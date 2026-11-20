@@ -150,7 +150,7 @@ skip_step() {
 # opens what its seeds need, exports it, and closes it on exit. A value the operator
 # already set is left alone, and no port-forward is opened for it.
 PORT_FORWARD_PIDS=()
-# shellcheck disable=SC2317  # invoked by the EXIT trap below, not called directly
+# shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap below, not called directly
 close_port_forwards() {
   local p
   for p in "${PORT_FORWARD_PIDS[@]}"; do kill "$p" 2>/dev/null || true; done

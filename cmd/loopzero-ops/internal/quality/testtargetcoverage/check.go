@@ -102,15 +102,11 @@ type Exemption struct {
 
 // DefaultExemptions are the modules that have no tests by design. Each carries
 // the measurement that justifies it, so a reader can check rather than trust.
-var DefaultExemptions = []Exemption{
-	{
-		Module: "infra/scripts",
-		Sunset: "2026-11-11",
-		Reason: "zero *_test.go files on disk (measured 2026-08-13); it is a thin Go wrapper over " +
-			"operator scripts. A target running `go test` over a module with no tests reports a " +
-			"green that means nothing.",
-	},
-}
+//
+// It is empty. The one entry it held, `infra/scripts`, claimed zero *_test.go files
+// (measured 2026-08-13). Re-measured at its sunset: the module has four, so the claim
+// no longer holds and the module has to be covered by a test target like any other.
+var DefaultExemptions = []Exemption{}
 
 // Outcome reports what was compared.
 type Outcome struct {

@@ -152,7 +152,7 @@ func TestPackageExemptionRequiresAReason(t *testing.T) {
 
 	// Without a reason: refused.
 	withoutReason := base
-	withoutReason.Exemptions = []Exemption{{Module: "m", Packages: []string{"e2e"}, Sunset: "2026-11-11"}}
+	withoutReason.Exemptions = []Exemption{{Module: "m", Packages: []string{"e2e"}, Sunset: "2099-12-31"}}
 	if _, err := violationOf(Check(withoutReason)); !errors.Is(err, ErrExemptionWithoutReason) {
 		t.Fatalf("a package exemption without a reason must be refused; err=%v", err)
 	}
@@ -160,7 +160,7 @@ func TestPackageExemptionRequiresAReason(t *testing.T) {
 	// With a reason: passes.
 	withReason := base
 	withReason.Exemptions = []Exemption{{
-		Module: "m", Packages: []string{"e2e"}, Sunset: "2026-11-11",
+		Module: "m", Packages: []string{"e2e"}, Sunset: "2099-12-31",
 		Reason: "requires a running cluster; runs through the e2e target, not the unit suite",
 	}}
 	if _, err := violationOf(Check(withReason)); err != nil {
