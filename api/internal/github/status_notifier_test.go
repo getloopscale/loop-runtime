@@ -55,7 +55,7 @@ func statusCapture(t *testing.T) (*AppClient, *map[string]string) {
 func TestOnBuildSucceededLinksToTheDeployedAppsRealURL(t *testing.T) {
 	// Arrange: the project's one served app is called "checkout", not "api".
 	client, got := statusCapture(t)
-	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{apps: []string{"checkout"}}, "getloopscale.com", slog.Default())
+	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{apps: []string{"checkout"}}, "getloopscale.app", slog.Default())
 
 	// Act
 	n.OnBuildSucceeded(context.Background(), "tn-1", "shop", "build-1", "production")
@@ -68,7 +68,7 @@ func TestOnBuildSucceededLinksToTheDeployedAppsRealURL(t *testing.T) {
 
 func TestOnBuildSucceededDoesNotGuessAURLForSeveralApps(t *testing.T) {
 	client, got := statusCapture(t)
-	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{apps: []string{"web", "admin"}}, "getloopscale.com", slog.Default())
+	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{apps: []string{"web", "admin"}}, "getloopscale.app", slog.Default())
 
 	n.OnBuildSucceeded(context.Background(), "tn-1", "shop", "build-1", "production")
 
