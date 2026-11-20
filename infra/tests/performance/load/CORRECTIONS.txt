@@ -121,7 +121,7 @@ Load Test Corrections & Learnings — 2026-04-09
 - Definitive fix: Add nodeAffinity or podAffinity in loopzero-forge
   Workflow spec to pin all steps to the same node. Or switch to
   ReadWriteMany storage (NFS/DO Spaces FUSE mount).
-  loopzero-forge is external: github.com/getloopscale/loopzero-forge
+  loopzero-forge is external: github.com/getloopscale/argo-workflows-go
 - **STATUS 2026-05-13:** PARTIALLY ✓ — `api/internal/argo/workflow_builder.go:262-288` adds `podAffinity` rule at LoopZero's renderer layer. Symptom resolved in production. Cross-repo RFC drafted at `concepts/operations/rfc-2026-05-13-loopzero-forge-node-affinity.md` for upstream loopzero-forge default. ADR D4 in plan documents the boundary. T3.1.
 
 ### J. loopzero-packs-runner v0.1.0 → v0.2.0 (bash → Go binary)

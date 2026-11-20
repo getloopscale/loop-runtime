@@ -238,7 +238,7 @@ jobs:
       #
       # UPDATED 2026-08-07: the import path does NOT stay on `getloopscale` any more. Commit
       # 696fe5c62 (2026-08-06) rewrote api/go.mod and pkg/go.mod to
-      # `github.com/getloopscale/loopzero-contracts v0.4.0`, reversing the premise above — but
+      # `github.com/getloopscale/contracts v0.6.0`, reversing the premise above — but
       # this workflow stayed on `getloopscale` and stopped finding the version, failing with
       # "pkg/go.mod does not declare loopzero-contracts". The last green run was 2026-07-31;
       # the whole pipeline was blocked from the migration onwards.
@@ -254,7 +254,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${GOMOD_SSH_KEY:-}" ]; then
-            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/loopzero-contracts (private). Register the private half of the read-only deploy key."
+            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/contracts (private). Register the private half of the read-only deploy key."
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -294,8 +294,8 @@ jobs:
         id: contracts
         run: |
           set -euo pipefail
-          pkg_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/pkg/go.mod | head -1)
-          api_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/api/go.mod | head -1)
+          pkg_v=$(awk '/getloopscale\/contracts/ {print $2}' loopzero/pkg/go.mod | head -1)
+          api_v=$(awk '/getloopscale\/contracts/ {print $2}' loopzero/api/go.mod | head -1)
           if [ -z "$pkg_v" ]; then
             echo "::error::loopzero/pkg/go.mod does not declare loopzero-contracts — the gate has no version to exercise."
             exit 1
@@ -435,7 +435,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${GOMOD_SSH_KEY:-}" ]; then
-            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/loopzero-contracts (private)."
+            echo "::error::GOMOD_SSH_KEY is empty — api/go.mod requires github.com/getloopscale/contracts (private)."
             exit 1
           fi
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -454,7 +454,7 @@ jobs:
         id: contracts
         run: |
           set -euo pipefail
-          api_v=$(awk '/getloopscale\/loopzero-contracts/ {print $2}' loopzero/api/go.mod | head -1)
+          api_v=$(awk '/getloopscale\/contracts/ {print $2}' loopzero/api/go.mod | head -1)
           if [ -z "$api_v" ]; then
             echo "::error::loopzero/api/go.mod does not declare loopzero-contracts."
             exit 1

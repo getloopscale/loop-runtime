@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero-contracts/serviceauth"
+	"github.com/getloopscale/contracts/serviceauth"
 )
 
 // signedHeaders is a test helper that mints the three new headers for a

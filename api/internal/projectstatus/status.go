@@ -13,7 +13,7 @@
 package projectstatus
 
 import (
-	"github.com/getloopscale/loopzero-contracts/plan"
+	"github.com/getloopscale/contracts/plan"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 

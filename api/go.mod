@@ -1,6 +1,6 @@
 module github.com/getloopscale/loopzero/api
 
-go 1.26.1
+go 1.26.11
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
@@ -16,7 +16,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/getloopscale/loopzero/pkg v0.0.0
-	github.com/getloopscale/loopzero-forge v0.6.0
+	github.com/getloopscale/argo-workflows-go v0.8.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0
@@ -83,7 +83,7 @@ require (
 	github.com/prometheus/procfs v0.19.2 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
-	github.com/getloopscale/loopzero-contracts v0.4.0
+	github.com/getloopscale/contracts v0.6.0
 	github.com/getloopscale/loopzero/operators/api v0.0.0
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect

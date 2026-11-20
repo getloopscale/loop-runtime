@@ -37,7 +37,7 @@ if not os.path.exists(GOMOD_TOKEN_PATH):
     fail(
         "missing " + GOMOD_TOKEN_PATH + " — required for loopzero-api build " +
         "(private loopzero-contracts module). Generate a GitHub PAT with " +
-        "`Contents: read` on getloopscale/loopzero-contracts and save it: " +
+        "`Contents: read` on getloopscale/contracts and save it: " +
         "`echo \"ghp_xxx\" > " + GOMOD_TOKEN_PATH + " && chmod 600 " +
         GOMOD_TOKEN_PATH + "`"
     )
@@ -167,7 +167,7 @@ docker_build(
     # same stale-helper-post-architecture-refactor class as PR #88.
     only=["api/", "pkg/", "go.work", "go.work.sum", "operators/api/", "operators/go.mod", "operators/go.sum", "infra/tests/go.mod", "infra/tests/go.sum", "infra/scripts/"],
     # gomod_token: BuildKit secret mount required by api/Dockerfile step 8/11
-    # to fetch the PRIVATE github.com/getloopscale/loopzero-contracts@v0.4.0 module
+    # to fetch the PRIVATE github.com/getloopscale/contracts@v0.6.0 module
     # (M5 decomposition). Without secret=..., Docker build fails with
     # `could not read Username for 'https://github.com'`. Cleanroom catch
     # 2026-06-19 — same stale-helper-post-architecture-refactor class as #91.

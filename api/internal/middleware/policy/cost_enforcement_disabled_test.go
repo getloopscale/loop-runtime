@@ -10,7 +10,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	planpkg "github.com/getloopscale/contracts/plan"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 )
 

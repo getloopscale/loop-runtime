@@ -98,10 +98,10 @@ func TestAcyclicGraph_CleanLayout_Passes(t *testing.T) {
 		"package jwt\nimport _ \"github.com/golang-jwt/jwt/v5\"\n")
 	// engine imports loopzero-contracts (downward — allowed).
 	writeGo(t, engine, "api/internal/x.go",
-		"package internal\nimport _ \"github.com/getloopscale/loopzero-contracts/jwt\"\n")
+		"package internal\nimport _ \"github.com/getloopscale/contracts/jwt\"\n")
 	// loopzero-cloud imports loopzero-contracts (downward — allowed).
 	writeGo(t, filepath.Join(parent, "loopzero-cloud"), "internal/auth/x.go",
-		"package auth\nimport _ \"github.com/getloopscale/loopzero-contracts/serviceauth\"\n")
+		"package auth\nimport _ \"github.com/getloopscale/contracts/serviceauth\"\n")
 
 	out, err := Check(Config{RepoRoot: engine})
 	if err != nil {
@@ -120,7 +120,7 @@ func TestAcyclicGraph_CleanLayout_Passes(t *testing.T) {
 func TestAcyclicGraph_AbsentSiblings_Skip(t *testing.T) {
 	engine := layout(t)
 	writeGo(t, engine, "pkg/x.go",
-		"package pkg\nimport _ \"github.com/getloopscale/loopzero-contracts/plan\"\n")
+		"package pkg\nimport _ \"github.com/getloopscale/contracts/plan\"\n")
 
 	out, err := Check(Config{RepoRoot: engine})
 	if err != nil {

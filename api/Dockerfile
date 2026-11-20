@@ -5,7 +5,7 @@ ENV GOWORK=off
 ENV GOPRIVATE=github.com/getloopscale/*
 
 # loopzero-contracts is a PINNED published module (M5 version-pin cutover — api/go.mod
-# requires github.com/getloopscale/loopzero-contracts v0.4.0, NO replace). The private module
+# requires github.com/getloopscale/contracts v0.6.0, NO replace). The private module
 #
 # FIXED 2026-08-08: this file authenticated for `getloopscale/` while api/go.mod
 # started requesting `getloopscale/` in commit f813b367 (2026-08-06). The URL rewrite did not
@@ -50,11 +50,11 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
         echo "  GitHub answers an unauthenticated request for a PRIVATE repo with Repository-not-found —" >&2; \
         echo "  the SAME message as for a repo that does not exist. That is why the error sends you looking" >&2; \
         echo "  for a repository that EXISTS, and why this build failed 10 times in a row without the cause showing." >&2; \
-        echo "  ACTION: GOMOD_TOKEN needs a PAT with Contents:read on getloopscale/loopzero-contracts" >&2; \
+        echo "  ACTION: GOMOD_TOKEN needs a PAT with Contents:read on getloopscale/contracts" >&2; \
         echo "  (the module did NOT migrate together with this repository)." >&2; \
       else \
         echo "  The token is present and non-empty, so this is NOT a missing credential." >&2; \
-        echo "  Check Contents:read on getloopscale/loopzero-contracts and whether the PAT has expired." >&2; \
+        echo "  Check Contents:read on getloopscale/contracts and whether the PAT has expired." >&2; \
       fi; \
       exit 1; \
     }; }

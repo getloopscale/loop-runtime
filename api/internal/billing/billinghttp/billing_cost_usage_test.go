@@ -13,7 +13,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/routestest"
 
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	planpkg "github.com/getloopscale/contracts/plan"
 )
 
 // fakeCostSource implements enforcement.CostStore for unit tests of

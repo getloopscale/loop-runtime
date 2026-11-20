@@ -72,8 +72,8 @@ func TestCheck_ResolvesThePathAgainstReality(t *testing.T) {
 		},
 		{
 			name: "wrong org — the defect measured in B-053",
-			// One word apart: getloopscale versus getloopscale. The linker accepts it and injects nothing.
-			dockerfile: "RUN go build -ldflags \"-X github.com/getloopscale/loopzero/api/internal/routes/version.versionTag=v1\"\n",
+			// One word apart: getloopscale versus getloopscaledev. The linker accepts it and injects nothing.
+			dockerfile: "RUN go build -ldflags \"-X github.com/getloopscaledev/loopzero/api/internal/routes/version.versionTag=v1\"\n",
 			pkgDir:     "internal/routes/version", pkgSrc: pkgWithSymbols,
 			wantPass: false, wantIn: "no module",
 		},

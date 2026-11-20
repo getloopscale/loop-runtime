@@ -14,7 +14,7 @@
 // # WHY A GATE AND NOT A FIX
 //
 // This defect shipped twice in two days from a single root cause. Commit 696fe5c62 (2026-08-06)
-// rewrote api/go.mod and pkg/go.mod from `getloopscale` to `getloopscale`. The places that
+// rewrote api/go.mod and pkg/go.mod from `getloopscaledev` to `getloopscale`. The places that
 // authenticate did not follow:
 //
 //   - .github/workflows/ci.yml — found 2026-08-07, blocked every PR
@@ -57,9 +57,9 @@ var goModFiles = []string{
 
 var (
 	// A private module requirement in go.mod: `github.com/<org>/<repo> v1.2.3`
-	reRequire = regexp.MustCompile(`github\.com/(loopzero[a-z]+)/[A-Za-z0-9_.-]+\s+v[0-9]`)
+	reRequire = regexp.MustCompile(`github\.com/(getloopscale[a-z]*)/[A-Za-z0-9_.-]+\s+v[0-9]`)
 	// Any org named on a line that configures auth (GOPRIVATE or a git url rewrite).
-	reAnyOrg = regexp.MustCompile(`github\.com[:/](loopzero[a-z]+)/`)
+	reAnyOrg = regexp.MustCompile(`github\.com[:/](getloopscale[a-z]*)/`)
 )
 
 // Finding is one gate violation.

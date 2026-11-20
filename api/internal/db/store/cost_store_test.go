@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	planpkg "github.com/getloopscale/contracts/plan"
 )
 
 // fakeLimitsStore satisfies enforcement.LimitsStore for PlanReader tests.

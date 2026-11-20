@@ -7,7 +7,7 @@ package circuitbreaker_test
 // concrete *circuitbreaker.Breaker keeps satisfying the consumer-defined
 // jwt.Breaker interface (DIP). This assertion lives HERE, where both types are
 // visible, because the jwt package was extracted to the standalone
-// github.com/getloopscale/loopzero-contracts module and MUST NOT import the
+// github.com/getloopscale/contracts module and MUST NOT import the
 // engine-internal circuitbreaker package (that would re-couple the contracts
 // base to the engine). jwt's own side of the Breaker contract is proven in
 // loopzero-contracts/jwt with a fake double; circuitbreaker's tripping behavior is
@@ -15,7 +15,7 @@ package circuitbreaker_test
 // breaker fits the extracted contract.
 
 import (
-	"github.com/getloopscale/loopzero-contracts/jwt"
+	"github.com/getloopscale/contracts/jwt"
 	"github.com/getloopscale/loopzero/pkg/circuitbreaker"
 )
 

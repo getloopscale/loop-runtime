@@ -42,7 +42,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/httpio"
 	"github.com/getloopscale/loopzero/api/internal/plantier"
 
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	planpkg "github.com/getloopscale/contracts/plan"
 	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
 	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
 	"github.com/getloopscale/loopzero/pkg/enforcement"

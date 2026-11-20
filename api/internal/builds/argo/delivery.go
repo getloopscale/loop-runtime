@@ -8,8 +8,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
-	forge "github.com/getloopscale/loopzero-forge"
-	"github.com/getloopscale/loopzero-forge/model"
+	forge "github.com/getloopscale/argo-workflows-go"
+	"github.com/getloopscale/argo-workflows-go/model"
 )
 
 // uploadAssetsTemplate generates a container template that uploads static build
