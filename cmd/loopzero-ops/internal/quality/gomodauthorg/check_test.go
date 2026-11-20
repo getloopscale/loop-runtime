@@ -23,13 +23,13 @@ func write(t *testing.T, root, rel, body string) {
 
 // TestDetectsDivergentOrg reproduces the exact defect that broke the loopzero-api image build on
 // merge to develop (2026-08-08): go.mod moved to getloopscale, the Dockerfile kept authenticating
-// to getloopscale.
+// to getloopscaledev.
 func TestDetectsDivergentOrg(t *testing.T) {
 	root := t.TempDir()
-	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/loopzero-contracts v0.4.0\n")
+	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/contracts v0.4.0\n")
 	write(t, root, "api/Dockerfile", `FROM golang
-ENV GOPRIVATE=github.com/getloopscale/*
-RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
+ENV GOPRIVATE=github.com/getloopscaledev/*
+RUN git config --global url."git@github.com:getloopscaledev/".insteadOf "https://github.com/getloopscaledev/"
 `)
 
 	rep, err := Check(root)
@@ -38,7 +38,7 @@ RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://gi
 	}
 	if rep.OK() {
 		t.Fatal("expected a finding: go.mod requires getloopscale but the Dockerfile authenticates " +
-			"to getloopscale — this is the defect that shipped twice")
+			"to getloopscaledev — this is the defect that shipped twice")
 	}
 	if !strings.Contains(rep.Findings[0].Message, "getloopscale") {
 		t.Errorf("message should name the required org, got %q", rep.Findings[0].Message)
@@ -47,9 +47,9 @@ RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://gi
 
 func TestAcceptsWhenOrgsAgree(t *testing.T) {
 	root := t.TempDir()
-	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/loopzero-contracts v0.4.0\n")
+	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/contracts v0.4.0\n")
 	write(t, root, "api/Dockerfile", `FROM golang
-ENV GOPRIVATE=github.com/getloopscale/*,github.com/getloopscale/*
+ENV GOPRIVATE=github.com/getloopscale/*,github.com/getloopscaledev/*
 RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
 `)
 
@@ -63,9 +63,9 @@ RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://gi
 // to delete the record of why something changed — the opposite of what the repo wants.
 func TestHistoricalCommentIsNotAFinding(t *testing.T) {
 	root := t.TempDir()
-	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/loopzero-contracts v0.4.0\n")
+	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/contracts v0.4.0\n")
 	write(t, root, "api/Dockerfile", `FROM golang
-# FIXED: it used to authenticate to github.com/getloopscale/ and the build broke.
+# FIXED: it used to authenticate to github.com/getloopscaledev/ and the build broke.
 ENV GOPRIVATE=github.com/getloopscale/*
 RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
 `)
@@ -79,7 +79,7 @@ RUN git config --global url."git@github.com:getloopscale/".insteadOf "https://gi
 // A file that configures no module auth at all is not this gate's business.
 func TestFileWithoutAuthIsIgnored(t *testing.T) {
 	root := t.TempDir()
-	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/loopzero-contracts v0.4.0\n")
+	write(t, root, "api/go.mod", "module x\n\nrequire github.com/getloopscale/contracts v0.4.0\n")
 	write(t, root, "api/Dockerfile", "FROM golang\nRUN echo hello\n")
 
 	rep, _ := Check(root)

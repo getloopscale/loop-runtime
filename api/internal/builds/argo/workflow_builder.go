@@ -9,8 +9,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
-	forge "github.com/getloopscale/loopzero-forge"
-	"github.com/getloopscale/loopzero-forge/model"
+	forge "github.com/getloopscale/argo-workflows-go"
+	"github.com/getloopscale/argo-workflows-go/model"
 
 	"github.com/getloopscale/loopzero/pkg/naming"
 )
@@ -357,7 +357,7 @@ func (b *WorkflowBuilder) newWorkflowCR(spec deploycontracts.WorkflowSpec, templ
 			RunAsGroup: forge.Ptr(rootlessUID),
 		},
 		// PVC multi-attach is handled upstream as of loopzero-forge v0.4.0
-		// (issue getloopscale/loopzero-forge#11): Workflow.Build() injects the
+		// (issue getloopscale/argo-workflows-go#11): Workflow.Build() injects the
 		// canonical podAffinity term automatically when
 		// VolumeClaimTemplates is non-empty (as above), so all DAG steps
 		// of the workflow are co-located on the same node and the RWO

@@ -8,7 +8,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
-	forge "github.com/getloopscale/loopzero-forge"
+	forge "github.com/getloopscale/argo-workflows-go"
 )
 
 // ---------------------------------------------------------------------------

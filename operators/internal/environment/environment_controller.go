@@ -155,7 +155,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// conflict and silently dropped the condition (the t31 flake). If a SECOND
 	// status writer is ever introduced this invariant must be revisited — see
 	// `CLAUDE.md` § Single-status-writer invariant, which is the contract itself and not a
-	// summary of one. The design rule this used to cite was deleted in `9a4a29755`; its
+	// summary of one. The design rule this used to cite was deleted in `852ade70f`; its
 	// name is left out deliberately, because writing a dead path into the note explaining
 	// that the path is dead is how the citation survives its own correction.
 	base := env.DeepCopy()

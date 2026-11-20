@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	forge "github.com/getloopscale/loopzero-forge"
+	forge "github.com/getloopscale/argo-workflows-go"
 )
 
 // B7 (CHG-2026-04-22-001): when the registry is insecure (local dev k3d),

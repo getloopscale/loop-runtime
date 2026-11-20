@@ -49,7 +49,7 @@ var ErrViolations = errors.New("dev-public.yaml canonical shape violated")
 
 var (
 	localhostRE    = regexp.MustCompile(`localhost:4455|http://localhost|127\.0\.0\.1`)
-	legacyURLRE    = regexp.MustCompile(`https://(auth|app|cloud)\.loopzero\.dev`)
+	legacyURLRE    = regexp.MustCompile(`https://(auth|app|cloud)\.loopzero\.example`)
 	devSuffixEnvRE = regexp.MustCompile(`LOOPZERO_(GITHUB|GOOGLE)_CLIENT_(ID|SECRET)_DEV`)
 )
 

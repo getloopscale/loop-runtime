@@ -21,7 +21,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
-	forge "github.com/getloopscale/loopzero-forge"
+	forge "github.com/getloopscale/argo-workflows-go"
 )
 
 // Canonical base images — C3: digest-pinned (resolved 2026-06-15 via

@@ -51,7 +51,7 @@ func trimHistogramSuffix(name string) string {
 }
 
 // findRepoRoot walks upward from start looking for the repository root
-// (identified by `.git` AND `CHANGELOG.md`).
+// (identified by `.git` AND `go.work`).
 //
 // B-178: `.git` is checked for EXISTENCE, not for being a directory. It is a
 // directory only in an ordinary clone. In a linked worktree — what
@@ -62,7 +62,7 @@ func trimHistogramSuffix(name string) string {
 // only in the environment people actually use is a guard people learn to
 // ignore, which is worse than not having it.
 //
-// The `CHANGELOG.md` half is what keeps the relaxed check honest: a stray
+// The `go.work` half is what keeps the relaxed check honest: a stray
 // `.git` file somewhere above would otherwise be enough to stop the walk.
 //
 // Split out of repoRoot so the discovery can be tested against both shapes
@@ -74,9 +74,9 @@ func findRepoRoot(start string) (string, error) {
 	dir := start
 	for i := 0; i < 8; i++ {
 		gitPath := filepath.Join(dir, ".git")
-		changelogPath := filepath.Join(dir, "CHANGELOG.md")
+		workPath := filepath.Join(dir, "go.work")
 		if _, err := os.Stat(gitPath); err == nil {
-			if _, err := os.Stat(changelogPath); err == nil {
+			if _, err := os.Stat(workPath); err == nil {
 				return dir, nil
 			}
 		}

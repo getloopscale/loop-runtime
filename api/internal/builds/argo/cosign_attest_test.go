@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	forge "github.com/getloopscale/loopzero-forge"
+	forge "github.com/getloopscale/argo-workflows-go"
 
 	"github.com/getloopscale/loopzero/pkg/naming"
 )

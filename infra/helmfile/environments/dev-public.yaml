@@ -67,16 +67,16 @@ platformImages:
   registry: "776217504929.dkr.ecr.us-east-1.amazonaws.com/"
   tags:
     # getloopscale/loopzero
-    loopzero-api: "32e5643c313876f6eacff91648b5f2c257a95a6f"
-    loopzero-tenant-operator: "32e5643c313876f6eacff91648b5f2c257a95a6f"
-    loopzero-app-operator: "32e5643c313876f6eacff91648b5f2c257a95a6f"
-    loopzero-preview-operator: "32e5643c313876f6eacff91648b5f2c257a95a6f"
-    loopzero-platform-operator: "32e5643c313876f6eacff91648b5f2c257a95a6f"
+    loopzero-api: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loopzero-tenant-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loopzero-app-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loopzero-preview-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loopzero-platform-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
     # Built from pinned upstream source; they pass the vulnerability gate since #441.
-    loopzero-minio: "32e5643c313876f6eacff91648b5f2c257a95a6f"
-    loopzero-clone-runner: "32e5643c313876f6eacff91648b5f2c257a95a6f"
-    loopzero-syft-scanner: "32e5643c313876f6eacff91648b5f2c257a95a6f"
-    loopzero-cosign-signer: "32e5643c313876f6eacff91648b5f2c257a95a6f"
+    loopzero-minio: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loopzero-clone-runner: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loopzero-syft-scanner: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loopzero-cosign-signer: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
     # getloopscale/loopzero-cloud
     loopzero-cloud: "03ff7b193dd60e1075052cbdb2c38bc96106bfd7"
     # The dashboard bundle the edge serves at app-dev (extracted by dev-public:caddy, #462).

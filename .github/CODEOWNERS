@@ -1,26 +1,8 @@
 # LoopZero CODEOWNERS
 # See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
-# Default — all PRs require maintainer review
-* @paulosergio-jnr
-
-# API (Go)
-/api/ @paulosergio-jnr
-
-# Operators (Go + kubebuilder)
-/operators/ @paulosergio-jnr
-
-# Shared libraries (Go, zero external deps)
-/pkg/ @paulosergio-jnr
-
-# Infrastructure (Pulumi, Helm, k3d, Tilt)
-/infra/ @paulosergio-jnr
+# Default: every pull request requires maintainer review
+* @paulohenriquevn
 
 # CI/CD pipelines
-/.github/ @paulosergio-jnr
-
-# Governance and project docs (require maintainer review)
-/GOVERNANCE.md @paulosergio-jnr
-/MAINTAINERS.md @paulosergio-jnr
-/SECURITY.md @paulosergio-jnr
-/RELEASES.md @paulosergio-jnr
+/.github/ @paulohenriquevn

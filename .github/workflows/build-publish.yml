@@ -54,7 +54,7 @@ on:
       # Empty = no ECR push: the other repositories of the org call this workflow too, and
       # nothing here may assume an AWS role on their behalf. Both come from the CALLER's
       # repository variables, so the account id is never fixed in text.
-      ecr_registry:    { required: false, type: string,  default: "" }      # e.g. 776217504929.dkr.ecr.us-east-1.amazonaws.com
+      ecr_registry:    { required: false, type: string,  default: "" }      # e.g. <account-id>.dkr.ecr.us-east-1.amazonaws.com
       aws_role_arn:    { required: false, type: string,  default: "" }      # role assumed through GitHub OIDC to push to ECR
     secrets:
       # Read-only deploy key for loopzero-contracts — the PREFERRED route since 2026-07-31. It
@@ -352,7 +352,7 @@ jobs:
         env:
           IMAGE_REF: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
           # A certificate issued inside a reusable workflow names the REUSABLE in its SAN
-          # (this file, in getloopscale/engine) and the CALLER in its source-repository claim, so
+          # (this file, in getloopscale/loopzero) and the CALLER in its source-repository claim, so
           # each half is pinned to the right thing (#460). The SAN alone would accept a
           # signature any org repository produced by calling this workflow; the caller alone
           # would accept one from any workflow of the caller. Together they are the
@@ -362,7 +362,7 @@ jobs:
           CALLER_REPO: ${{ github.repository }}
         run: |
           cosign verify "${IMAGE_REF}" \
-            --certificate-identity-regexp "^https://github\.com/${OWNER}/engine/\.github/workflows/build-publish\.yml@" \
+            --certificate-identity-regexp "^https://github\.com/${OWNER}/loopzero/\.github/workflows/build-publish\.yml@" \
             --certificate-github-workflow-repository "${CALLER_REPO}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
@@ -385,6 +385,6 @@ jobs:
           CALLER_REPO: ${{ github.repository }}
         run: |
           cosign verify "${ECR_REF}" \
-            --certificate-identity-regexp "^https://github\.com/${OWNER}/engine/\.github/workflows/build-publish\.yml@" \
+            --certificate-identity-regexp "^https://github\.com/${OWNER}/loopzero/\.github/workflows/build-publish\.yml@" \
             --certificate-github-workflow-repository "${CALLER_REPO}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com

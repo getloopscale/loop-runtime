@@ -27,7 +27,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	planpkg "github.com/getloopscale/contracts/plan"
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"

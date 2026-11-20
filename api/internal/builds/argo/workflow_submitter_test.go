@@ -11,8 +11,8 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
-	forge "github.com/getloopscale/loopzero-forge"
-	forgemodel "github.com/getloopscale/loopzero-forge/model"
+	forge "github.com/getloopscale/argo-workflows-go"
+	forgemodel "github.com/getloopscale/argo-workflows-go/model"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"

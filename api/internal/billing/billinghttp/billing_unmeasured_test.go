@@ -11,7 +11,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/routestest"
 
-	planpkg "github.com/getloopscale/loopzero-contracts/plan"
+	planpkg "github.com/getloopscale/contracts/plan"
 )
 
 // getBillingBody performs the request and returns the RAW body, once.

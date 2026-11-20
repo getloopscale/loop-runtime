@@ -9,7 +9,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
-	forge "github.com/getloopscale/loopzero-forge"
+	forge "github.com/getloopscale/argo-workflows-go"
 )
 
 func testInfraParams() InfraParams {
@@ -156,7 +156,7 @@ func TestWorkflowBuilder_Build_HasSharedPVCVolume(t *testing.T) {
 }
 
 // PVC multi-attach fix — formerly a per-consumer wrap, now handled
-// upstream as of loopzero-forge v0.4.0 (issue getloopscale/loopzero-forge#11).
+// upstream as of loopzero-forge v0.4.0 (issue getloopscale/argo-workflows-go#11).
 // The builder no longer sets Affinity directly; instead it leaves it
 // nil and relies on Workflow.Build() to inject the canonical
 // podAffinity term automatically because VolumeClaimTemplates is set.

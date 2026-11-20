@@ -66,7 +66,7 @@ var requiredPaths = []string{
 	"/package.json",
 }
 
-var blockOpenRe = regexp.MustCompile(`(?m)^app-dev\.loopzero\.dev\s*\{`)
+var blockOpenRe = regexp.MustCompile(`(?m)^app-dev\.loopzero\.example\s*\{`)
 
 // Check enforces the loopzero-cloud#141 defense-in-depth invariants against
 // the app-dev host block of infra/local/Caddyfile.

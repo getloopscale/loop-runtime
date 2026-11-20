@@ -6,7 +6,7 @@ symlink, which `helm package` resolves into the published archive.
 
 This chart used to carry its own copies of ten of those files. They drifted in
 both directions: sixteen alerts on metrics nothing emits survived here after the
-L2 copy removed them (a889fd091), a rule read `loopzero_reconciler_errors_total`
+L2 copy removed them (85778ef50), a rule read `loopzero_reconciler_errors_total`
 while the operators export `loopzero_operator_reconcile_errors_total`, and none of
 the runbook annotations reached this side. One set of files, two install paths.
 

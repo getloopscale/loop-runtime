@@ -171,7 +171,7 @@ func TestValidator_CaseInsensitive(t *testing.T) {
 	}
 
 	// Platform domain should be caught case-insensitively
-	if err := v.Validate("ANYTHING.DEV.LOOPZERO.DEV"); err == nil {
+	if err := v.Validate("ANYTHING.DEV.LOOPZERO.EXAMPLE"); err == nil {
 		t.Error("expected case-insensitive platform domain to be rejected")
 	}
 }
