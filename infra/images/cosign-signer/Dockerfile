@@ -35,8 +35,8 @@ github.com/sigstore/fulcio@v1.8.6 \
 github.com/sigstore/rekor@v1.5.2 \
 go.opentelemetry.io/otel/sdk@v1.44.0 \
 go.opentelemetry.io/otel@v1.44.0 \
-golang.org/x/crypto@v0.55.0 \
-golang.org/x/mod@v0.40.0 \
+golang.org/x/crypto@v0.58.0 \
+golang.org/x/mod@v0.41.0 \
 golang.org/x/net@v0.62.0 \
 google.golang.org/grpc@v1.83.2"
 

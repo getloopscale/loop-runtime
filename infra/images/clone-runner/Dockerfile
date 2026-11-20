@@ -26,7 +26,7 @@ ARG MC_COMMIT=7394ce0dd2a80935aded936b09fa12cbb3cb8096
 ARG MC_DEP_FIXES="\
 github.com/klauspost/compress@v1.18.7 \
 github.com/prometheus/prometheus@v0.311.3 \
-golang.org/x/crypto@v0.55.0 \
+golang.org/x/crypto@v0.58.0 \
 golang.org/x/net@v0.62.0 \
 google.golang.org/grpc@v1.83.2"
 
