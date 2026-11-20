@@ -22,7 +22,7 @@ func init() {
 // infra/tests/check-caddyfile-app-dev-no-csp_test.sh) per plan
 // caddyfile-csp-vite-dev-vs-prod-bundle v1.1 T1.1.
 //
-// Closes the 2026-06-26 LIVE regression on app-dev.loopzero.example/device-verify
+// Closes the 2026-06-26 LIVE regression on app-dev.getloopscale.com/device-verify
 // where the operator-local-edge Caddyfile inherited prod-strict CSP from
 // #44/#45/#46 that broke the Vite-dev upstream. ADR D1+D2+D3 invariants
 // asserted via Go regex/string matching on the app-dev block; sibling blocks

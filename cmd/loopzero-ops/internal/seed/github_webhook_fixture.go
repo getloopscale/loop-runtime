@@ -45,7 +45,7 @@ func (s *GitHubWebhookFixtureSeed) Name() string { return "github-webhook-fixtur
 const (
 	ghFixtureDefaultOwner      = "getloopscale"
 	ghFixtureDefaultRepo       = "loopzerokit-example"
-	ghFixtureDefaultWebhookURL = "https://app-dev.loopzero.example/api/v1/webhooks/github"
+	ghFixtureDefaultWebhookURL = "https://app-dev.getloopscale.com/api/v1/webhooks/github"
 
 	ghFixtureRepoOwnerEnv  = "LOOPZERO_FIXTURE_REPO_OWNER"
 	ghFixtureRepoNameEnv   = "LOOPZERO_FIXTURE_REPO_NAME"

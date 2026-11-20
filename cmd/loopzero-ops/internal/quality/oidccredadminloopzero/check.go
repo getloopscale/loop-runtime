@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package oidccredadminloopzero enforces the canonical dev credential — admin@loopzero.example
+// Package oidccredadminloopzero enforces the canonical dev credential — admin@getloopscale.com
 // / loopzero-dev-password (LIVE-validated 2026-06-16; the sponsor, translated: "we will ALWAYS use it
 // in tests"). Rejects the fabricated paulo@loopzero.test / LoopZeroDev2026! which does
 // NOT exist in dev-public (Kratos 401).
@@ -48,7 +48,7 @@ func (o Outcome) Verdict() verdict.Verdict {
 var ErrNothingScanned = errors.New("no scan dir exists — the gate read nothing")
 
 // ErrViolations means a fabricated credential was found.
-var ErrViolations = errors.New("fabricated paulo@loopzero.test/LoopZeroDev2026! credentials detected — canonical is admin@loopzero.example/loopzero-dev-password")
+var ErrViolations = errors.New("fabricated paulo@loopzero.test/LoopZeroDev2026! credentials detected — canonical is admin@getloopscale.com/loopzero-dev-password")
 
 func Check(cfg Config) (Outcome, error) {
 	root := cfg.RepoRoot

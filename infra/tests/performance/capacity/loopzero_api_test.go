@@ -23,7 +23,7 @@ import (
 //
 // Run:
 //
-//	LOOPZERO_CAPACITY=1 LOOPZERO_API_URL=https://api.dev.loopzero.example \
+//	LOOPZERO_CAPACITY=1 LOOPZERO_API_URL=https://api.dev.getloopscale.com \
 //	LOOPZERO_SERVICE_AUTH=... \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityLoopZeroAPI -v \
 //	  -args -rps=50 -duration=60s -workers=20

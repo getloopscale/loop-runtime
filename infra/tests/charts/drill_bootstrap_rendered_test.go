@@ -53,7 +53,7 @@ func TestDrillLoopZeroAPIConfigIsRenderedNotPatched(t *testing.T) {
 		"GITEA_URL":      giteaInternalURL,
 		"GITEA_ORG":      "loopzero",
 		"ARGOCD_URL":     "http://argocd-server.argocd.svc.cluster.local:80",
-		"BASE_DOMAIN":    "loopzero-drill.example",
+		"BASE_DOMAIN":    "drill.getloopscale.com",
 		"REGISTRY_URL":   "registry.digitalocean.com/loopzero-system",
 		"SOURCE_BUCKET":  drillSourceBucket,
 		"MINIO_ENDPOINT": "https://sfo3.digitaloceanspaces.com",

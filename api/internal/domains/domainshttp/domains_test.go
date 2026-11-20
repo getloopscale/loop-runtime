@@ -96,7 +96,7 @@ func (f *fakeDomainValidator) Validate(_ string) error {
 
 func TestDomains_Create_HappyPath_V1(t *testing.T) {
 	store := &fakeDomainStore{}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
@@ -125,7 +125,7 @@ func TestDomains_Create_HappyPath_V1(t *testing.T) {
 }
 
 func TestDomains_Create_MissingFields(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	body := `{"domain":"example.com"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
@@ -142,7 +142,7 @@ func TestDomains_Create_MissingFields(t *testing.T) {
 func TestDomains_Create_InvalidDomainFormat(t *testing.T) {
 	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{
 		err: errors.New("invalid domain format"),
-	}, "apps.dev.loopzero.example")
+	}, "apps.dev.getloopscale.app")
 
 	body := `{"domain":"not a domain","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
@@ -160,7 +160,7 @@ func TestDomains_Create_AlreadyExists(t *testing.T) {
 	store := &fakeDomainStore{
 		createErr: ports.ErrDomainExists,
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
@@ -176,7 +176,7 @@ func TestDomains_Create_AlreadyExists(t *testing.T) {
 
 func TestDomains_Create_QuotaExceeded(t *testing.T) {
 	store := &fakeDomainStore{count: 25}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
@@ -197,7 +197,7 @@ func TestDomains_List_HappyPath(t *testing.T) {
 		},
 		total: 1,
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -227,7 +227,7 @@ func TestDomains_Get_Found(t *testing.T) {
 			TenantID: "tn-test-123",
 		},
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -243,7 +243,7 @@ func TestDomains_Get_Found(t *testing.T) {
 
 func TestDomains_Get_NotFound(t *testing.T) {
 	store := &fakeDomainStore{domain: nil}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/nonexistent.com", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -266,7 +266,7 @@ func TestDomains_Verify_TXTMatch(t *testing.T) {
 		},
 	}
 	verifier := &fakeDomainVerifier{verified: true}
-	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -297,7 +297,7 @@ func TestDomains_Verify_TXTNotFound(t *testing.T) {
 		},
 	}
 	verifier := &fakeDomainVerifier{verified: false}
-	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -321,7 +321,7 @@ func TestDomains_Verify_TXTNotFound(t *testing.T) {
 
 func TestDomains_Verify_DomainNotFound(t *testing.T) {
 	store := &fakeDomainStore{domain: nil}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/nonexistent.com/verify", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -344,7 +344,7 @@ func TestDomains_Verify_AlreadyVerified(t *testing.T) {
 			VerifiedAt: &now,
 		},
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -366,7 +366,7 @@ func TestDomains_Delete_HappyPath(t *testing.T) {
 			TenantID: "tn-test-123",
 		},
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/domains/example.com", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -427,7 +427,7 @@ func TestDomains_Delete_AuthorizationAndStateMatrix(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			h := NewDomainHandler(c.store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+			h := NewDomainHandler(c.store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 			req := httptest.NewRequest(http.MethodDelete, "/api/v1/domains/example.com", nil)
 			if c.setupAuth != nil {
 				req = c.setupAuth(req)
@@ -446,7 +446,7 @@ func TestDomains_Delete_AuthorizationAndStateMatrix(t *testing.T) {
 // TestDomains_Delete_AuthorizationAndStateMatrix/Unauthenticated (Phase 3 v28).
 
 func TestDomains_List_Unauthenticated(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains", nil)
 	w := httptest.NewRecorder()
@@ -459,7 +459,7 @@ func TestDomains_List_Unauthenticated(t *testing.T) {
 }
 
 func TestDomains_Get_Unauthenticated(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com", nil)
 	req = routestest.WithChiParam(req, "domain", "example.com")
@@ -473,7 +473,7 @@ func TestDomains_Get_Unauthenticated(t *testing.T) {
 }
 
 func TestDomains_Create_Unauthenticated(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body))
@@ -487,7 +487,7 @@ func TestDomains_Create_Unauthenticated(t *testing.T) {
 }
 
 func TestDomains_Create_InvalidJSON(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString("not-json"))
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -501,7 +501,7 @@ func TestDomains_Create_InvalidJSON(t *testing.T) {
 }
 
 func TestDomains_Verify_Unauthenticated(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
 	req = routestest.WithChiParam(req, "domain", "example.com")
@@ -525,7 +525,7 @@ func TestDomains_Get_CFManagedDomain(t *testing.T) {
 			CFNameservers: []string{"ns1.cloudflare.com", "ns2.cloudflare.com"},
 		},
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -559,7 +559,7 @@ func TestDomains_Get_PendingVerificationShowsToken(t *testing.T) {
 			VerificationToken: "REDACTED_SECRET_055",
 		},
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext()) // owner
@@ -589,7 +589,7 @@ func TestDomains_List_WithPagination(t *testing.T) {
 		domains: []CustomDomain{},
 		total:   0,
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains?limit=10&offset=5&project=my-api", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -622,7 +622,7 @@ func TestDomains_Verify_DNSLookupError(t *testing.T) {
 		},
 	}
 	verifier := &fakeDomainVerifier{err: errors.New("dns lookup failed")}
-	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, verifier, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -646,7 +646,7 @@ func TestDomains_Verify_DNSLookupError(t *testing.T) {
 
 func TestDomains_Verify_DeprecatedWhenCFZone(t *testing.T) {
 	store := &fakeDomainStore{}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 	h.cfZone = &fakeCFZoneManager{}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domains/example.com/verify", nil)
@@ -706,7 +706,7 @@ func TestDomains_DNS_ListRecords_NotCFManaged(t *testing.T) {
 			// No CFZoneID — not CF managed
 		},
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 	h.cfZone = &fakeCFZoneManager{}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com/dns-records", nil)
@@ -736,7 +736,7 @@ func TestDomains_DNS_ListRecords_CFManaged(t *testing.T) {
 			{ID: "r2", Type: "MX", Name: "example.com", Content: "mx.example.com"},
 		},
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 	h.cfZone = cfZone
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com/dns-records", nil)
@@ -752,7 +752,7 @@ func TestDomains_DNS_ListRecords_CFManaged(t *testing.T) {
 }
 
 func TestDomains_DNS_ListRecords_Unauthenticated(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com/dns-records", nil)
 	req = routestest.WithChiParam(req, "domain", "example.com")
@@ -768,7 +768,7 @@ func TestDomains_DNS_ListRecords_Unauthenticated(t *testing.T) {
 // A store failure is not "domain not found": the CLI would tell the user
 // their domain does not exist while the database is down.
 func TestDomains_DNS_ListRecords_StoreFailureIs500(t *testing.T) {
-	h := NewDomainHandler(&fakeDomainStore{getErr: errors.New("connection refused")}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(&fakeDomainStore{getErr: errors.New("connection refused")}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 	h.cfZone = &fakeCFZoneManager{}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains/example.com/dns-records", nil)
@@ -792,7 +792,7 @@ func TestDomains_Create_V2_CFZone_CountsAZoneItCouldNotRollBack(t *testing.T) {
 		createErr:     errors.New("record rejected"),
 		deleteZoneErr: errors.New("provider timeout"),
 	}
-	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(&fakeDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 	h.cfZone = cfZone
 	failures := metrics.DomainZoneCleanupFailuresTotal.WithLabelValues("delete_zone")
 	before := testutil.ToFloat64(failures)
@@ -824,7 +824,7 @@ func TestDomains_Create_V2_CFZone_HappyPath(t *testing.T) {
 		},
 		records: []CFDNSRecord{},
 	}
-	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.loopzero.example")
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
 	h.cfZone = cfZone
 
 	body := `{"domain":"example.com","project":"my-api","app":"web","environment":"production"}`

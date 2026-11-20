@@ -52,7 +52,7 @@ func TestCRDPathOrDefault_DefaultsToTheOperatorsCRDBases(t *testing.T) {
 }
 
 func TestBaseDomainOrDefault_DefaultsToTheDevDomain(t *testing.T) {
-	if got := baseDomainOrDefault(""); got != "dev.loopzero.example" {
+	if got := baseDomainOrDefault(""); got != "dev.getloopscale.com" {
 		t.Fatalf("baseDomainOrDefault(\"\") = %q", got)
 	}
 	if got := baseDomainOrDefault("example.test"); got != "example.test" {

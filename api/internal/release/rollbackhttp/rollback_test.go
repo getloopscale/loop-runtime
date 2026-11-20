@@ -52,10 +52,10 @@ func TestRollback_HappyPath(t *testing.T) {
 			RolledBackReleaseID:  "rel-old",
 			ReactivatedReleaseID: "rel-prev",
 			Environment:          "production",
-			URL:                  "https://my-api-production.dev.loopzero.example",
+			URL:                  "https://my-api-production.dev.getloopscale.com",
 		},
 	}
-	h := NewRollbackHandler(projects, svc, "dev.loopzero.example")
+	h := NewRollbackHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(body))
@@ -81,7 +81,7 @@ func TestRollback_HappyPath(t *testing.T) {
 func TestRollback_ProjectNotFound(t *testing.T) {
 	projects := &fakeRollbackProjectStore{} // nil project
 	svc := &fakeRollbackService{}
-	h := NewRollbackHandler(projects, svc, "dev.loopzero.example")
+	h := NewRollbackHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/nonexistent/rollback", bytes.NewBufferString(body))
@@ -101,7 +101,7 @@ func TestRollback_MissingEnvironment(t *testing.T) {
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakeRollbackService{}
-	h := NewRollbackHandler(projects, svc, "dev.loopzero.example")
+	h := NewRollbackHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(body))
@@ -123,7 +123,7 @@ func TestRollback_NoActiveRelease(t *testing.T) {
 	svc := &fakeRollbackService{
 		err: loopzeroerrors.ErrNoActiveRelease,
 	}
-	h := NewRollbackHandler(projects, svc, "dev.loopzero.example")
+	h := NewRollbackHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(body))
@@ -139,7 +139,7 @@ func TestRollback_NoActiveRelease(t *testing.T) {
 }
 
 func TestRollback_Unauthenticated(t *testing.T) {
-	h := NewRollbackHandler(&fakeRollbackProjectStore{}, &fakeRollbackService{}, "dev.loopzero.example")
+	h := NewRollbackHandler(&fakeRollbackProjectStore{}, &fakeRollbackService{}, "dev.getloopscale.com")
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(body))
@@ -160,7 +160,7 @@ func TestRollback_LockTimeout(t *testing.T) {
 	svc := &fakeRollbackService{
 		err: loopzeroerrors.ErrLockTimeout,
 	}
-	h := NewRollbackHandler(projects, svc, "dev.loopzero.example")
+	h := NewRollbackHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(body))

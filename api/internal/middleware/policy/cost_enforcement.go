@@ -152,7 +152,7 @@ func writeCostExceeded(w http.ResponseWriter, ex *planpkg.ExceededError, logger 
 		"current":     ex.Current,
 		"period":      ex.Period,
 		"plan":        string(ex.Plan),
-		"upgrade_url": "https://loopzero.example/pricing",
+		"upgrade_url": "https://getloopscale.com/pricing",
 	}
 	if err := json.NewEncoder(w).Encode(body); err != nil && logger != nil {
 		logger.Warn("cost enforcer: write response failed", "error", err)

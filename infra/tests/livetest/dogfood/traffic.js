@@ -16,7 +16,7 @@
 //   k6 run --duration 4h \
 //          --vus 50 \
 //          --out experimental-prometheus-rw \
-//          -e API_URL=https://api.drill.loopzero-drill.example \
+//          -e API_URL=https://api.drill.drill.getloopscale.com \
 //          -e API_TOKEN="$(cat ~/.loopzero/drill-credentials.json | jq -r .token)" \
 //          infra/tests/livetest/dogfood/traffic.js
 //

@@ -21,7 +21,7 @@ import (
 // infra/scripts/local/seed-admin-loopzero-dev.sh.
 //
 // Canonical Kratos session seed for the dev/dev-public canonical user
-// admin@loopzero.example. End-to-end 4-phase chain:
+// admin@getloopscale.com. End-to-end 4-phase chain:
 //
 //  1. Ensure Kratos identity via admin API (create if absent).
 //  2. Provision the identity's tenant through the engine — POST
@@ -45,10 +45,10 @@ func (s *AdminLoopzeroDevSeed) Name() string         { return "admin-loopzero-de
 
 // Defaults mirror bash constants line-by-line.
 const (
-	adminDefaultEmail        = "admin@loopzero.example"
+	adminDefaultEmail        = "admin@getloopscale.com"
 	adminDefaultDisplayName  = "LoopZero Admin"
-	adminDefaultPublicKratos = "https://auth-dev.loopzero.example"
-	adminDefaultPublicCloud  = "https://app-dev.loopzero.example"
+	adminDefaultPublicKratos = "https://auth-dev.getloopscale.com"
+	adminDefaultPublicCloud  = "https://app-dev.getloopscale.com"
 	// SEED_PASSWORD kept in a constant so the same value is used across seeds.
 	adminSeedPassword = "LoopZero-Seed-Admin-Pw-2026-06-08-a8s7df9as7df"
 
@@ -164,7 +164,7 @@ func loadAdminConfig(h Host) AdminLoopzeroDevConfig {
 }
 
 // identityHandle derives the username and tenant slug of a seeded identity
-// from its email's local part (admin@loopzero.example → "admin"), so two seeded
+// from its email's local part (admin@getloopscale.com → "admin"), so two seeded
 // identities never ask for the same unique username or slug.
 func identityHandle(email string) string {
 	local, _, _ := strings.Cut(strings.ToLower(email), "@")

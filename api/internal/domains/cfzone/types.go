@@ -9,7 +9,7 @@
 // Architecture (validated 2026-04-08 with aquim.ai):
 //   - loopzero domain add empresa.com → CF API creates zone → returns nameservers
 //   - User changes nameservers at registrar
-//   - CF activates zone → CNAME @ → cname.dev.loopzero.example (proxied, flattened)
+//   - CF activates zone → CNAME @ → cname.dev.getloopscale.com (proxied, flattened)
 //   - Traffic: CF edge (WAF/DDoS/TLS) → CF Tunnel → Traefik → Pod
 package cfzone
 

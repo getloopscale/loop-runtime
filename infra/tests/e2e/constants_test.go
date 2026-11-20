@@ -131,7 +131,7 @@ const (
 	e2eBaseDomainLocal = "loopzero.local"
 
 	// e2eBaseDomainDrill is the drill DOKS base domain (CF wildcard A record).
-	e2eBaseDomainDrill = "loopzero-drill.example"
+	e2eBaseDomainDrill = "drill.getloopscale.com"
 
 	// mgmtKubeContext is the kubectl context for the management cluster.
 	mgmtKubeContext = "k3d-loopzero-core"

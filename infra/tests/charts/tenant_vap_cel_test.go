@@ -174,7 +174,7 @@ func TestTenantVAP_ExemptsSystemController(t *testing.T) {
 func TestTenantVAP_AppliesToRegularUser(t *testing.T) {
 	_, _, exclude := loadTenantVAP(t)
 	vars := map[string]any{"request": map[string]any{"userInfo": map[string]any{
-		"username": "operator@loopzero.example",
+		"username": "operator@getloopscale.com",
 		"groups":   []any{"system:authenticated"},
 	}}}
 	if !evalCEL(t, exclude, vars) {

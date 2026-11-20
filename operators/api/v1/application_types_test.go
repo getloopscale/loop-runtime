@@ -54,7 +54,7 @@ func TestLoopZeroApplication_SpecFields(t *testing.T) {
 			Project:     "web",
 			Environment: "production",
 			ServiceName: "web-svc",
-			Hostname:    "web.acme.dev.loopzero.example",
+			Hostname:    "web.acme.dev.getloopscale.com",
 			Replicas:    2,
 			ServicePort: 8080,
 		},
@@ -72,8 +72,8 @@ func TestLoopZeroApplication_SpecFields(t *testing.T) {
 	if app.Spec.ServiceName != "web-svc" {
 		t.Errorf("expected ServiceName %q, got %q", "web-svc", app.Spec.ServiceName)
 	}
-	if app.Spec.Hostname != "web.acme.dev.loopzero.example" {
-		t.Errorf("expected Hostname %q, got %q", "web.acme.dev.loopzero.example", app.Spec.Hostname)
+	if app.Spec.Hostname != "web.acme.dev.getloopscale.com" {
+		t.Errorf("expected Hostname %q, got %q", "web.acme.dev.getloopscale.com", app.Spec.Hostname)
 	}
 	if app.Spec.Replicas != 2 {
 		t.Errorf("expected Replicas %d, got %d", 2, app.Spec.Replicas)
@@ -110,7 +110,7 @@ func TestLoopZeroApplication_StatusFields(t *testing.T) {
 			Phase:              ApplicationPhaseReachable,
 			EndpointsReady:     true,
 			Reachable:          true,
-			URL:                "https://web.acme.dev.loopzero.example",
+			URL:                "https://web.acme.dev.getloopscale.com",
 			ObservedGeneration: 3,
 		},
 	}
@@ -124,8 +124,8 @@ func TestLoopZeroApplication_StatusFields(t *testing.T) {
 	if !app.Status.Reachable {
 		t.Error("expected Reachable to be true")
 	}
-	if app.Status.URL != "https://web.acme.dev.loopzero.example" {
-		t.Errorf("expected URL %q, got %q", "https://web.acme.dev.loopzero.example", app.Status.URL)
+	if app.Status.URL != "https://web.acme.dev.getloopscale.com" {
+		t.Errorf("expected URL %q, got %q", "https://web.acme.dev.getloopscale.com", app.Status.URL)
 	}
 	if app.Status.ObservedGeneration != 3 {
 		t.Errorf("expected ObservedGeneration %d, got %d", 3, app.Status.ObservedGeneration)

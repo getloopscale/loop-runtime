@@ -96,7 +96,7 @@ func TestCloudBootstrapInstall_RoutesTheDashboardHostWithEdgeTLSAndNoCertificate
 	out := renderBootstrap(t, nil)
 	routes := chartrender.SplitYAMLByKind(out, "IngressRoute")
 	require.Len(t, routes, 1)
-	require.Contains(t, routes[0], "Host(`app.dev.loopzero.example`)")
+	require.Contains(t, routes[0], "Host(`app.dev.getloopscale.com`)")
 	var route struct {
 		Spec struct {
 			TLS map[string]interface{} `json:"tls"`

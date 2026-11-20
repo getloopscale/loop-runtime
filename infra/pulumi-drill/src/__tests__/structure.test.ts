@@ -229,7 +229,7 @@ describe("loopzero-drill — CF Zone (EC-03 fix)", () => {
 
   it("CF Zone uses configured drill domain (not prod)", () => {
     expect(src).toMatch(/zone:\s*domain/);
-    // domain comes from config and Pulumi.drill.yaml asserts loopzero-drill.example
+    // domain comes from config and Pulumi.drill.yaml asserts drill.getloopscale.com
   });
 });
 

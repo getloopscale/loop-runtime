@@ -85,7 +85,7 @@ type Config struct {
 	// 2026-06-15-code-review-49-findings-remediation). nil-safe — when
 	// nil, ProjectHandler/ScaleHandler fall back to PlanTierStarter
 	// silently (the historical behavior). QA Run-3 #123 closure
-	// requires this to be wired so admin@loopzero.example (team tier) is
+	// requires this to be wired so admin@getloopscale.com (team tier) is
 	// served correctly.
 	PlanTierStore pkgdomain.PlanTierStore
 	// TenantCellResolver reads tenants.cell_id so the Tenant CR the project handler

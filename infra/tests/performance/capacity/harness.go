@@ -22,7 +22,7 @@
 //
 // Usage:
 //
-//	LOOPZERO_API_URL=https://api.dev.loopzero.example \
+//	LOOPZERO_API_URL=https://api.dev.getloopscale.com \
 //	LOOPZERO_SERVICE_AUTH=... \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityGitea \
 //	  -args -rps=100 -duration=30s -out=/tmp/capacity-bench/gitea-$(date +%s).json

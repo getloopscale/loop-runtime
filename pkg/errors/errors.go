@@ -427,7 +427,7 @@ func NewProjectsExceedPlan(plan string, limit, current int, accountID string) *L
 	return &LoopZeroError{
 		Code: "PROJECTS_EXCEED_PLAN",
 		Message: fmt.Sprintf(
-			"Account '%s' has %d projects — the %s plan allows up to %d. Upgrade at https://loopzero.example/pricing or delete a project.",
+			"Account '%s' has %d projects — the %s plan allows up to %d. Upgrade at https://getloopscale.com/pricing or delete a project.",
 			accountID, current, displayPlanName(plan), limit,
 		),
 	}
@@ -440,7 +440,7 @@ func NewReplicasExceedPlan(plan string, limit, requested int, appName string) *L
 	return &LoopZeroError{
 		Code: "REPLICAS_EXCEED_PLAN",
 		Message: fmt.Sprintf(
-			"App '%s' requested %d replicas — the %s plan allows up to %d per service. Upgrade at https://loopzero.example/pricing or lower the replica count.",
+			"App '%s' requested %d replicas — the %s plan allows up to %d per service. Upgrade at https://getloopscale.com/pricing or lower the replica count.",
 			appName, requested, displayPlanName(plan), limit,
 		),
 	}
@@ -586,7 +586,7 @@ func NewPlanUpgradeRequired(required, current, feature string) *LoopZeroError {
 	return &LoopZeroError{
 		Code: "PLAN_UPGRADE_REQUIRED",
 		Message: fmt.Sprintf(
-			"%s requires the %s plan or higher (your current plan is %s). Upgrade at https://loopzero.example/pricing.",
+			"%s requires the %s plan or higher (your current plan is %s). Upgrade at https://getloopscale.com/pricing.",
 			feature, displayPlanName(required), displayPlanName(current),
 		),
 	}

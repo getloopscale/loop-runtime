@@ -42,9 +42,9 @@ done
 
 case "$ENV_NAME" in
   dev-public)
-    AUTH_HOST="https://auth-dev.loopzero.example"
-    APP_HOST="https://app-dev.loopzero.example"
-    CLOUD_HOST="https://cloud-dev.loopzero.example"
+    AUTH_HOST="https://auth-dev.getloopscale.com"
+    APP_HOST="https://app-dev.getloopscale.com"
+    CLOUD_HOST="https://cloud-dev.getloopscale.com"
     ;;
   *)
     printf 'unsupported env=%s (only dev-public for now)\n' "$ENV_NAME" >&2
@@ -109,7 +109,7 @@ soft_chaos() {
   # B-025 (2026-08-19): the three without a suffix left the Caddyfile. `cloud-dev` stays: it has
   # its own block and is the development pair that keeps serving.
   local hosts=(
-    "auth-dev.loopzero.example" "app-dev.loopzero.example" "cloud-dev.loopzero.example"
+    "auth-dev.getloopscale.com" "app-dev.getloopscale.com" "cloud-dev.getloopscale.com"
   )
   local fails=0
   for h in "${hosts[@]}"; do

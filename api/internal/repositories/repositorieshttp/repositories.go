@@ -385,7 +385,7 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 		if errors.As(err, &fnf) {
 			httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 				"code":    "MISSING_LOOPZERO_YAML",
-				"message": github.DeployDescriptorPath + " not found on branch \"" + branch + "\". Add it at the repository root, declaring the apps to deploy under `apps:`, and commit it. Docs: https://docs.loopzero.example/config/loopzero-yaml",
+				"message": github.DeployDescriptorPath + " not found on branch \"" + branch + "\". Add it at the repository root, declaring the apps to deploy under `apps:`, and commit it. Docs: https://docs.getloopscale.com/config/loopzero-yaml",
 			})
 			return false
 		}
@@ -402,7 +402,7 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 	if _, err := github.ParseDeployDescriptor(content); err != nil {
 		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_LOOPZERO_YAML",
-			"message": err.Error() + " Docs: https://docs.loopzero.example/config/loopzero-yaml",
+			"message": err.Error() + " Docs: https://docs.getloopscale.com/config/loopzero-yaml",
 		})
 		return false
 	}

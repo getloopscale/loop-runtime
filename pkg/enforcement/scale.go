@@ -128,7 +128,7 @@ func AssertHPATargetBounds(cpuTarget, memoryTarget int) error {
 const (
 	// DefaultPodCostPerHour is the conservative per-pod hourly cost used when
 	// no per-cluster rate has been wired. Matches the public pricing page at
-	// https://loopzero.example/pricing as of plan v1.1 sign-off. The dashboard's
+	// https://getloopscale.com/pricing as of plan v1.1 sign-off. The dashboard's
 	// cost preview must reconcile to what the server returns (ADR D1, EC-2).
 	DefaultPodCostPerHour float64 = 0.05
 

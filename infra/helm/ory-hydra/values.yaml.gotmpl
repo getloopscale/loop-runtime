@@ -50,7 +50,7 @@ hydra:
         # the SAME public FQDN as issuer — otherwise Hydra emits
         # verification_uri with the cluster-internal host even when issuer
         # is correct (LIVE failure caught 2026-06-05 against
-        # https://cloud-dev.loopzero.example/v1/auth/device/authorize).
+        # https://cloud-dev.getloopscale.com/v1/auth/device/authorize).
         public: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444{{ end }}/"
       # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 — KNOWN GAP:
       # login/consent/logout URLs point at localhost:4455 (the k3d port-forward
@@ -61,11 +61,11 @@ hydra:
       # grant (machine-to-machine, no browser), this gap is IRRELEVANT.
       # For a customer-facing OAuth flow: create an IngressRoute for the Kratos UI +
       # override these URLs in values-hydra-{drill,prod}.yaml.gotmpl with a public
-      # HTTPS FQDN (e.g., https://auth.loopzero-drill.example/login). Fix
+      # HTTPS FQDN (e.g., https://auth.drill.getloopscale.com/login). Fix
       # documented as a follow-up gap (does not block dogfood-drill).
       # Plan J-05 iter 4 amendment (2026-06-05) — login/consent URLs MUST
-      # point at the cloud consent handler (cloud-dev.loopzero.example/auth/*),
-      # NOT the dashboard Kratos UI (app-dev.loopzero.example/login). Hydra
+      # point at the cloud consent handler (cloud-dev.getloopscale.com/auth/*),
+      # NOT the dashboard Kratos UI (app-dev.getloopscale.com/login). Hydra
       # redirects OAuth clients to these URLs WITH a challenge in the query;
       # only the consent handler knows how to process login_challenge/
       # consent_challenge by calling Hydra admin AcceptLogin / AcceptConsent.

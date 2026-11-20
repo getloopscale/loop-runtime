@@ -166,7 +166,7 @@ type Config struct {
 	// (legacy behavior). Set to the Caddy/CF wildcard root in environments
 	// where previews are exposed via an edge proxy distinct from the
 	// internal IngressRoute SNI domain (e.g., dev-public:
-	// `preview-dev.loopzero.example` while BaseDomain stays `loopzero.local`).
+	// `preview-dev.getloopscale.app` while BaseDomain stays `loopzero.local`).
 	//
 	// URL convention: <tenant>-<project>-<entryApp>-preview-pr-N.<PreviewPublicDomain>
 	// where <entryApp> is the first server/frontend app in loopzero.yaml — this
@@ -180,7 +180,7 @@ type Config struct {
 	// 2026-06-12-dashboard-journey-j25-live-url-discoverability).
 	// Set to the Caddy/CF wildcard root in environments where apps are
 	// exposed via an edge proxy distinct from the internal IngressRoute
-	// SNI domain (e.g., dev-public: `prod-dev.loopzero.example` while
+	// SNI domain (e.g., dev-public: `prod-dev.getloopscale.app` while
 	// BaseDomain stays `loopzero.local`).
 	//
 	// URL convention: <tenant>-<project>-<entryApp>-<env>.<PublicDomain>

@@ -20,7 +20,7 @@ func init() {
 		//
 		// 33 alerts without runbook_url. Worth knowing before "just add the
 		// annotation": the URLs the conformant alerts already carry are 404 —
-		// https://docs.loopzero.example/runbooks/vault-auth-failure-spike returns 404
+		// https://docs.getloopscale.com/runbooks/vault-auth-failure-spike returns 404
 		// while the site root returns 200. The gate checks that the string is
 		// present, not that a runbook exists, so adding 33 more dead links would
 		// buy a green gate and nothing else. An on-call operator following a 404 at
@@ -32,7 +32,7 @@ func init() {
 		//     proven without a network: a path in this repository that does not exist on
 		//     disk, and a GitHub URL in an org other than the canonical one (`getloopscale`,
 		//     taken from the module path in the go.mod files). What it cannot assert —
-		//     whether `docs.loopzero.example/runbooks/x` is live — is COUNTED as unverifiable
+		//     whether `docs.getloopscale.com/runbooks/x` is live — is COUNTED as unverifiable
 		//     instead of silenced.
 		//
 		//  2. "33 alerts" was the number for ONE directory. B-164 closed that scope: the

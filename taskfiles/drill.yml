@@ -172,7 +172,7 @@ tasks:
         chmod 600 "$DRILL_KC"
         cd - > /dev/null
         # API URL is per drill domain (Pulumi sets up DNS post-bootstrap)
-        API_URL="https://api.loopzero-drill.example"
+        API_URL="https://api.drill.getloopscale.com"
 
         echo ""
         echo "=== Phase 3: Populate per-cluster kubeconfigs (L2-unlock T2.1 D2) ==="

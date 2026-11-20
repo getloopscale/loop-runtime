@@ -19,7 +19,7 @@ func writeFile(t *testing.T, path, body string) {
 
 func TestCheck_Clean_PASS(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "infra/tests/e2e/a.sh"), "curl -u admin@loopzero.example:loopzero-dev-password\n")
+	writeFile(t, filepath.Join(root, "infra/tests/e2e/a.sh"), "curl -u admin@getloopscale.com:loopzero-dev-password\n")
 	if _, err := violationOf(Check(Config{RepoRoot: root})); err != nil {
 		t.Fatalf("expected clean, got %v", err)
 	}

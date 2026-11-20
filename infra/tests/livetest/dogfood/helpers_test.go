@@ -20,13 +20,13 @@ import (
 
 func TestDefaultEnv_SetsCanonicalURLs(t *testing.T) {
 	env := DefaultEnv()
-	if env.CloudBaseURL != "https://cloud-dev.loopzero.example" {
+	if env.CloudBaseURL != "https://cloud-dev.getloopscale.com" {
 		t.Errorf("CloudBaseURL = %q", env.CloudBaseURL)
 	}
-	if env.AppBaseURL != "https://app-dev.loopzero.example" {
+	if env.AppBaseURL != "https://app-dev.getloopscale.com" {
 		t.Errorf("AppBaseURL = %q", env.AppBaseURL)
 	}
-	if env.AuthBaseURL != "https://auth-dev.loopzero.example" {
+	if env.AuthBaseURL != "https://auth-dev.getloopscale.com" {
 		t.Errorf("AuthBaseURL = %q", env.AuthBaseURL)
 	}
 	if env.HTTPClient.Timeout != 30*time.Second {

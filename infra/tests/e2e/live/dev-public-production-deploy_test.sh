@@ -11,7 +11,7 @@
 # Chain steps:
 #   1. Preflight  — gh auth + kubectl context + dev-public reachability
 #   2. Reset      — reset-for-e2e.sh applied (DB + Kratos identities)
-#   3. Seed       — admin@loopzero.example session via seed-admin-loopzero-dev.sh
+#   3. Seed       — admin@getloopscale.com session via seed-admin-loopzero-dev.sh
 #   4. Project    — POST /api/v1/projects {name: sample} (T4.1 auto-creates production env)
 #   5. Connect    — connect-canonical-fixture.sh wires the canonical loopzerokit-example repo
 #   6. Push       — gh api PUT /repos/.../contents/<path> synthesizes a real commit
@@ -45,8 +45,8 @@ DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
 PROJECT_NAME="${PROJECT_NAME:-sample}"
 ENV_NAME="${ENV_NAME:-production}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
-PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.loopzero.example}"
-PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
+PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.getloopscale.com}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.getloopscale.com}"
 CONTEXT_MGMT="${CONTEXT_MGMT:-k3d-loopzero-core}"
 CONTEXT_WORKLOAD="${CONTEXT_WORKLOAD:-k3d-loopzero-cell-0}"
 
@@ -150,7 +150,7 @@ reset_state() {
 # --- Seed admin session (step 3) -------------------------------------------
 
 seed_session() {
-  log "step 3/13 — seed-admin-loopzero-dev.sh (admin@loopzero.example session mint)"
+  log "step 3/13 — seed-admin-loopzero-dev.sh (admin@getloopscale.com session mint)"
   bash infra/scripts/local/seed-admin-loopzero-dev.sh 2>&1 | tail -5 >&2
 
   if [ ! -f "$SESSION_FILE" ]; then
@@ -266,10 +266,10 @@ assert_m2_chain() {
   # Container selector `-c postgresql` required: pod has 2 containers
   # (postgresql + metrics) and default selection is unstable.
   tenant="$(kubectl --context="$CONTEXT_MGMT" -n loopzero-system exec postgresql-0 -c postgresql -- \
-    bash -c 'PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -t -A -c "SELECT active_tenant_id FROM users WHERE email='\''admin@loopzero.example'\'' LIMIT 1"' 2>/dev/null \
+    bash -c 'PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -t -A -c "SELECT active_tenant_id FROM users WHERE email='\''admin@getloopscale.com'\'' LIMIT 1"' 2>/dev/null \
     | tr -d '[:space:]')"
   if [ -z "$tenant" ]; then
-    log "FAIL could not resolve tenant_id for admin@loopzero.example"
+    log "FAIL could not resolve tenant_id for admin@getloopscale.com"
     return 1
   fi
   local m2_ns="loopzero-${tenant}-${PROJECT_NAME}-${ENV_NAME}"

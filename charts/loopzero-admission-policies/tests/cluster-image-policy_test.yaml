@@ -34,7 +34,7 @@ tests:
       - notContains:
           path: spec.images
           content:
-            glob: "harbor.dev.loopzero.example/loopzero-platform/**"
+            glob: "harbor.dev.getloopscale.com/loopzero-platform/**"
       - lengthEqual:
           path: spec.images
           count: 1

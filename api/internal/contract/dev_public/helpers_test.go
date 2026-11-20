@@ -104,7 +104,7 @@ func mintTestJWT(t *testing.T, tenantID string) string {
 		"sub":       "00000000-0000-0000-0000-000000000001",
 		"aud":       []string{"loopzero-cloud"},
 		"tenant_id": tenantID,
-		"email":     "test@loopzero.example",
+		"email":     "test@getloopscale.com",
 		"name":      "M11 Phase A Test User",
 		"iat":       time.Now().Unix(),
 		"exp":       time.Now().Add(24 * time.Hour).Unix(),

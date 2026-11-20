@@ -103,7 +103,7 @@ const drillTags = [
 ];
 
 // =============================================================================
-// 1. CF Zone (separate from production loopzero.example)
+// 1. CF Zone (separate from production getloopscale.com)
 // =============================================================================
 // EC-03 fix: NO protect flag on this resource. Previously the protect option
 // blocked `pulumi destroy --stack drill` (validated 2026-05-16 — commit

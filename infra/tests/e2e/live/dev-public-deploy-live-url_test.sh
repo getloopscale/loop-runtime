@@ -18,7 +18,7 @@
 set -euo pipefail
 
 PLAN_SLUG="m37-tenant-cr-project-sync-canonical-fix"
-CLOUD_BASE="${LOOPZERO_CLOUD_URL:?LOOPZERO_CLOUD_URL must be set (e.g. https://app-dev.loopzero.example)}"
+CLOUD_BASE="${LOOPZERO_CLOUD_URL:?LOOPZERO_CLOUD_URL must be set (e.g. https://app-dev.getloopscale.com)}"
 MGMT_CTX="${LOOPZERO_MGMT_KUBECONTEXT:-k3d-loopzero-core}"
 JWT_PATH="${LOOPZERO_SESSION_JWT_PATH:-$HOME/.loopzero/local-dogfood-session-jwt.txt}"
 WAIT_BUDGET_SECONDS="${LOOPZERO_DEPLOY_LIVE_URL_WAIT_BUDGET:-1800}"  # 30min CLI ceiling

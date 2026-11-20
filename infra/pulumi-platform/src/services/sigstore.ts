@@ -114,7 +114,7 @@ export interface SigstoreArgs {
   enabled?: boolean;
   /**
    * Hostname of the Fulcio CA service. Self-hosted convention:
-   * `fulcio.<domain>` (e.g., `fulcio.loopzero.example`). The Helm chart
+   * `fulcio.<domain>` (e.g., `fulcio.getloopscale.com`). The Helm chart
    * mints a cert-manager Certificate for this hostname; cert-manager
    * MUST be installed first (needs: relationship).
    */

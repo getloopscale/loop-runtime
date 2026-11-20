@@ -85,7 +85,7 @@ if echo "$CT" | grep -qi "application/problem+json"; then
     fi
   done
   TYPE_URI=$(echo "$BODY" | grep -oE '"type":"[^"]+"' | head -1 | sed 's/"type":"//;s/"$//')
-  if echo "$TYPE_URI" | grep -q "^https://loopzero.example/errors/"; then
+  if echo "$TYPE_URI" | grep -q "^https://getloopscale.com/errors/"; then
     result PASS "type URI canonical: $TYPE_URI"
   else
     result FAIL "type URI not canonical: $TYPE_URI"

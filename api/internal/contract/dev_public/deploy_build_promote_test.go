@@ -149,7 +149,7 @@ func (s *deployState) handleReleaseGet(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"id":     "rel-1234567890abcdef",
 		"status": "ACTIVE",
-		"url":    "https://tn-243c747b30c41e51-sample-app-production.prod-dev.loopzero.example",
+		"url":    "https://tn-243c747b30c41e51-sample-app-production.prod-dev.getloopscale.app",
 	})
 }
 
@@ -166,7 +166,7 @@ func (s *deployState) handlePromote(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"new_release": relID,
-		"url":         "https://tn-243c747b30c41e51-sample-app-production.prod-dev.loopzero.example",
+		"url":         "https://tn-243c747b30c41e51-sample-app-production.prod-dev.getloopscale.app",
 		"env":         "production",
 	})
 }
@@ -274,8 +274,8 @@ func TestDevPublic_DeployBuildPromote_DeployLiveURL(t *testing.T) {
 	require.NoError(t, err)
 	defer rel.Body.Close()
 	rb, _ := io.ReadAll(rel.Body)
-	require.Contains(t, string(rb), "prod-dev.loopzero.example",
-		"Live URL MUST cite canonical prod-dev.loopzero.example per #37")
+	require.Contains(t, string(rb), "prod-dev.getloopscale.app",
+		"Live URL MUST cite canonical prod-dev.getloopscale.app per #37")
 	require.Contains(t, string(rb), "tn-243c747b30c41e51",
 		"Live URL MUST include tenant prefix per canonical naming.AppURL")
 }
@@ -362,7 +362,7 @@ func TestDevPublic_DeployBuildPromote_LiveURLDiscoverability(t *testing.T) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"url": "https://tn-243c747b30c41e51-sample-app-production.prod-dev.loopzero.example",
+			"url": "https://tn-243c747b30c41e51-sample-app-production.prod-dev.getloopscale.app",
 			"active_release": map[string]any{
 				"build_id": "build-abc-def",
 				"status":   "ACTIVE",
@@ -403,8 +403,8 @@ func TestDevPublic_DeployBuildPromote_PromoteCanonicalURL(t *testing.T) {
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
-	require.Contains(t, string(body), "prod-dev.loopzero.example",
-		"promote URL MUST cite canonical prod-dev.loopzero.example per #159 (NOT loopzero.local)")
+	require.Contains(t, string(body), "prod-dev.getloopscale.app",
+		"promote URL MUST cite canonical prod-dev.getloopscale.app per #159 (NOT loopzero.local)")
 	require.Contains(t, string(body), "tn-",
 		"promote URL MUST include tenant prefix per canonical naming.AppURL per #159")
 	require.Regexp(t, `rel-[0-9a-f]{16}`, string(body),
@@ -452,7 +452,7 @@ func TestDevPublic_DeployBuildPromote_PromoteNoOp(t *testing.T) {
 	require.True(t, relIDPattern.MatchString(parsed.NewRelease),
 		"promote MUST return canonical rel-<16hex> per #120 (NOT rel-rel-<repeat> double prefix)")
 	require.NotContains(t, parsed.URL, "loopzero.local",
-		"promote URL MUST cite prod-dev.loopzero.example per #120 (NOT loopzero.local)")
+		"promote URL MUST cite prod-dev.getloopscale.app per #120 (NOT loopzero.local)")
 }
 
 // TestDevPublic_DeployBuildPromote_CliLogsListbuildsInference migrated from #160.

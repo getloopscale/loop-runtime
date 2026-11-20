@@ -9,7 +9,7 @@ sources:
   - https://github.com/getloopscale/loopzero
 maintainers:
   - name: LoopZero Team
-    url: https://loopzero.example
+    url: https://getloopscale.com
 dependencies:
   - name: loopzero-common
     version: ">=0.1.0 <1.0.0"

@@ -174,7 +174,7 @@ func newTestProvisioner(
 		logging.NewLogger("test"),
 		domains.DomainProvisionerConfig{
 			Interval:    1 * time.Second,
-			BaseDomain:  "dev.loopzero.example",
+			BaseDomain:  "dev.getloopscale.com",
 			RegistryURL: "registry.example.com",
 		},
 	)

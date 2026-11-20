@@ -5,13 +5,13 @@
 # instead of relying on chart-default template inference.
 #
 # Per-env contract:
-#   - prod hosts: auth / app / cloud . loopzero.example (NO -dev suffix)
+#   - prod hosts: auth / app / cloud . getloopscale.com (NO -dev suffix)
 #   - issuer/public point at auth (Hydra's own FQDN)
 #   - device.verification + device.success point at app (dashboard UI)
 #   - login/consent point at cloud (cloud consent handler)
 #
 # Regression guard (T3.1 negative grep): this overlay MUST NEVER contain
-# any *-dev.loopzero.example hostname — those leak dev hostnames into prod and
+# any *-dev.getloopscale.com hostname — those leak dev hostnames into prod and
 # break OAuth2 redirect-uri validation at the IdP boundary.
 #
 # Validated by: infra/tests/helm/ory-hydra-canonical-urls_test.sh (T3.1).
@@ -20,14 +20,14 @@ hydra:
   config:
     urls:
       self:
-        issuer: "https://auth.loopzero.example/"
-        public: "https://auth.loopzero.example/"
+        issuer: "https://auth.getloopscale.com/"
+        public: "https://auth.getloopscale.com/"
 
       device:
-        verification: "https://app.loopzero.example/device-verify"
-        success: "https://app.loopzero.example/device-success"
+        verification: "https://app.getloopscale.com/device-verify"
+        success: "https://app.getloopscale.com/device-success"
 
-      login: "https://cloud.loopzero.example/auth/login"
-      consent: "https://cloud.loopzero.example/auth/consent"
-      logout: "https://app.loopzero.example/logout"
-      error: "https://app.loopzero.example/auth/error"
+      login: "https://cloud.getloopscale.com/auth/login"
+      consent: "https://cloud.getloopscale.com/auth/consent"
+      logout: "https://app.getloopscale.com/logout"
+      error: "https://app.getloopscale.com/auth/error"

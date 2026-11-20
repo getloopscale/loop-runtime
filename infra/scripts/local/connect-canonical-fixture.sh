@@ -4,11 +4,11 @@
 # T2.1 of plan 2026-06-08-pre-release-test-rigor v1.2 — connects the canonical
 # fixture GitHub repo (`getloopscale/loopzerokit-example`, per 2026-06-16 sponsor
 # mandate; supersedes legacy `loopzero-repotest`) to the canonical LoopZero project
-# `sample` in admin@loopzero.example's tenant. Idempotent + handles orphan
+# `sample` in admin@getloopscale.com's tenant. Idempotent + handles orphan
 # installations.
 #
 # Preconditions:
-#   - T0.2 ran (admin@loopzero.example seeded with session at
+#   - T0.2 ran (admin@getloopscale.com seeded with session at
 #     ~/.loopzero/admin-loopzero-dev-session.txt)
 #   - `gh auth status` exits 0 with write permission on getloopscale/loopzerokit-example
 #   - LoopZero CLI built (`loopzero` in PATH OR LOOPZERO_BIN env var pointing at binary)
@@ -45,7 +45,7 @@ REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
 PROJECT_NAME="${PROJECT_NAME:-sample}"
 SESSION_FILE="${SESSION_FILE:-$HOME/.loopzero/admin-loopzero-dev-session.txt}"
-PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.getloopscale.com}"
 # Canonical 2026-06-20 (issue #108): post-M2 decomposition, the LoopZero CLI
 # lives in sibling repo loopzero-cli/bin/loopzero at the workspace root. The master
 # orchestrator seed-post-cleanroom-all.sh invokes Step 11 without exporting
@@ -97,7 +97,7 @@ preflight_gh() {
 
 preflight_session() {
   if [ ! -f "$SESSION_FILE" ] ; then
-    log "ERROR: admin@loopzero.example session file missing at $SESSION_FILE"
+    log "ERROR: admin@getloopscale.com session file missing at $SESSION_FILE"
     log "       Run: loopzero-ops seed admin-loopzero-dev --verify"
     return 1
   fi
@@ -245,7 +245,7 @@ ensure_project() {
   jwt_code="$(curl -sS -o /tmp/connect-fixture-jwt.json -w '%{http_code}' -X POST \
     --max-time 10 \
     -b "ory_kratos_session=${kratos_cookie}" \
-    -H "Origin: https://app-dev.loopzero.example" \
+    -H "Origin: https://app-dev.getloopscale.com" \
     "${PUBLIC_CLOUD_URL}/v1/auth/session/token" 2>/dev/null || true)"
   if [ "$jwt_code" != "200" ] ; then
     log "ERROR: /v1/auth/session/token HTTP ${jwt_code} body=$(head -c 200 /tmp/connect-fixture-jwt.json)"
@@ -305,7 +305,7 @@ except Exception:
   # /v1/auth/session/token exchange above). The stale $token reference was
   # from an earlier refactor — `set -u` correctly traps as unbound.
   # LOOPZERO_URL canonical for dev-public: ${PUBLIC_CLOUD_URL}/engine — the
-  # Caddy edge routes cloud-dev.loopzero.example/* → loopzero-cloud:13002, which
+  # Caddy edge routes cloud-dev.getloopscale.com/* → loopzero-cloud:13002, which
   # in turn proxies /engine/* → loopzero-api engine. The CLI's default
   # localhost:8080 is for production-like topology (Traefik direct).
   # Per j05-aprendizado-cli-loopzero-url-subshell-env-propagation memory.
@@ -356,7 +356,7 @@ except Exception:
   engine_jwt_code="$(curl -sS -o /tmp/connect-fixture-engine-jwt.json -w '%{http_code}' -X POST \
     --max-time 10 \
     -b "ory_kratos_session=${kratos_cookie}" \
-    -H "Origin: https://app-dev.loopzero.example" \
+    -H "Origin: https://app-dev.getloopscale.com" \
     "${PUBLIC_CLOUD_URL}/v1/auth/session/token" 2>/dev/null || true)"
   if [ "$engine_jwt_code" != "200" ]; then
     log "ERROR ensure_repo_linked: engine JWT exchange HTTP $engine_jwt_code"

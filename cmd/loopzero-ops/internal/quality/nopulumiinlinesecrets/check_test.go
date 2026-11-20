@@ -60,7 +60,7 @@ func TestCheck_InlineSecretInStack_FAIL(t *testing.T) {
 func TestCheck_NonSecretYAMLEntry_PASS(t *testing.T) {
 	tmp := t.TempDir()
 	writeStack(t, tmp, "Pulumi.dev.yaml", `config:
-  loopzero:base-domain: dev.loopzero.example
+  loopzero:base-domain: dev.getloopscale.com
   loopzero:region: sfo3
 `)
 	out, err := Check(Config{RepoRoot: tmp})

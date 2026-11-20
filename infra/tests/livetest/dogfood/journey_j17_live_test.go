@@ -13,7 +13,7 @@
 // LIVE pre-conditions:
 //   - dev-public infra UP (task setup with LOOPZERO_HELMFILE_ENV=dev-public)
 //   - JWT seeded at ~/.loopzero/local-dogfood-token.txt
-//   - cloud-dev.loopzero.example reachable
+//   - cloud-dev.getloopscale.com reachable
 
 package dogfood
 

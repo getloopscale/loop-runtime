@@ -13,14 +13,14 @@ import (
 func init() {
 	register(Gate{
 		Name:    "no-cloud-dev-default",
-		Summary: "T1.1 hermetic guard of plan m1-commit-canonical-30-fixes: no test/seed script in archive/canonical-tests-v1/scripts/local/, infra/tests/e2e/, or infra/scripts/local/ may declare a default env-var value pointing at cloud-dev.loopzero.example (Caddy 301 redirect trap post commit ee77b8da 2026-06-22). EC-1 absorption: /api/v1/webhooks/github handler is single exception (Caddyfile 142-156). M-Migrate2 2026-07-10 M16 T2.3 Wave 1 replaces infra/tests/check-no-cloud-dev-default_test.sh.",
+		Summary: "T1.1 hermetic guard of plan m1-commit-canonical-30-fixes: no test/seed script in archive/canonical-tests-v1/scripts/local/, infra/tests/e2e/, or infra/scripts/local/ may declare a default env-var value pointing at cloud-dev.getloopscale.com (Caddy 301 redirect trap post commit ee77b8da 2026-06-22). EC-1 absorption: /api/v1/webhooks/github handler is single exception (Caddyfile 142-156). M-Migrate2 2026-07-10 M16 T2.3 Wave 1 replaces infra/tests/check-no-cloud-dev-default_test.sh.",
 		Setup:   setupNoCloudDevDefault,
 	})
 }
 
 // setupNoCloudDevDefault enforces T1.1 of plan m1-commit-canonical-30-fixes —
 // no test/seed script may declare a default env-var value pointing at
-// `cloud-dev.loopzero.example` (Caddy 301 redirect trap). Webhook handler is
+// `cloud-dev.getloopscale.com` (Caddy 301 redirect trap). Webhook handler is
 // the single exception (EC-1 absorption).
 // Migrated from infra/tests/check-no-cloud-dev-default_test.sh
 // (M-Migrate2 2026-07-10 M16 T2.3 Wave 1).
@@ -35,10 +35,10 @@ func setupNoCloudDevDefault(_ *flag.FlagSet) Check {
 			for _, f := range outcome.Failures {
 				inv.Stderr.Printf("  %s\n", f)
 			}
-			inv.Stderr.Println("Fix: replace `${VAR:-https://cloud-dev.loopzero.example/...}` with the canonical hostname (app-dev/auth-dev/api-dev.loopzero.example per surface).")
+			inv.Stderr.Println("Fix: replace `${VAR:-https://cloud-dev.getloopscale.com/...}` with the canonical hostname (app-dev/auth-dev/api-dev.getloopscale.com per surface).")
 			return outcome, nil
 		}
-		inv.Stdout.Println("no-cloud-dev-default: PASS — no cloud-dev.loopzero.example default env-vars in test/seed scripts (webhook handler exception allowed)")
+		inv.Stdout.Println("no-cloud-dev-default: PASS — no cloud-dev.getloopscale.com default env-vars in test/seed scripts (webhook handler exception allowed)")
 		return outcome, nil
 	}
 }

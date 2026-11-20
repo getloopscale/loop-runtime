@@ -162,7 +162,7 @@ func TestAPIBootstrapInstall_RoutesTheAPIHostThroughTheEdgeLimitsWithACertificat
 	out := renderBootstrap(t, nil)
 	routes := chartrender.SplitYAMLByKind(out, "IngressRoute")
 	require.Len(t, routes, 1)
-	require.Contains(t, routes[0], "Host(`api.dev.loopzero.example`)")
+	require.Contains(t, routes[0], "Host(`api.dev.getloopscale.com`)")
 	var route struct {
 		Spec struct {
 			Routes []struct {

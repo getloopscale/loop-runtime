@@ -59,7 +59,7 @@ type RequirementPolicy interface {
 // silence means an open port nobody reviewed; here, it means an environment that
 // did not promise to charge.
 var capabilitiesByEnv = map[string][]Capability{
-	// dev-public serves app-dev.loopzero.example — the public dashboard, with plan and
+	// dev-public serves app-dev.getloopscale.com — the public dashboard, with plan and
 	// price on screen.
 	"dev-public": {CapabilityBilling},
 }

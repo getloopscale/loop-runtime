@@ -30,7 +30,7 @@ func (s *DataPlaneEdgeSeed) Name() string      { return "data-plane-edge" }
 
 const (
 	dataPlaneEdgeURLEnv     = "LOOPZERO_EDGE_URL"
-	dataPlaneEdgeDefaultURL = "https://app-dev.loopzero.example"
+	dataPlaneEdgeDefaultURL = "https://app-dev.getloopscale.com"
 	// forwardAuthDenialMessage is loopzero-cloud's ForwardAuthHandler answer to a call with
 	// no valid key (loopzero-cloud internal/routes/forward_auth.go). The services word their
 	// own 401 differently, which is what tells the two apart.

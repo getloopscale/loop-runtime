@@ -224,7 +224,7 @@ func requireSeedEnv(t *testing.T) SeedConfig {
 
 	apiURL := os.Getenv("LOOPZERO_API_URL")
 	if apiURL == "" {
-		apiURL = "https://api.dev.loopzero.example"
+		apiURL = "https://api.dev.getloopscale.com"
 	}
 
 	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")

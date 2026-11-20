@@ -30,7 +30,7 @@ type Plan struct {
 // BuildPlan derives the plan for the given application hosts.
 //
 // Identity routes are probed on authHost AND on every probed host whose name
-// starts with "auth": auth.loopzero.example served a live Kratos on a production
+// starts with "auth": auth.getloopscale.com served a live Kratos on a production
 // hostname, and the sweep knew the host existed without applying any identity
 // assertion to it (measured: discovery 404, root 404, /userinfo 404).
 func BuildPlan(inventory string, hosts []string, authHost string) (Plan, error) {

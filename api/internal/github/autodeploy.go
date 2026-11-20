@@ -421,14 +421,14 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	authorEmail := author + "@users.noreply.github.com"
 	if authorName == "" {
 		authorName = "LoopZero Platform"
-		authorEmail = "noreply@loopzero.example"
+		authorEmail = "noreply@getloopscale.com"
 	}
 	// Create git repo and bundle using GitRunner (with context for cancellation).
 	git := gitclient.NewGitRunner("", gitclient.WithEnv(
 		"GIT_AUTHOR_NAME="+authorName,
 		"GIT_AUTHOR_EMAIL="+authorEmail,
 		"GIT_COMMITTER_NAME=LoopZero Platform",
-		"GIT_COMMITTER_EMAIL=noreply@loopzero.example",
+		"GIT_COMMITTER_EMAIL=noreply@getloopscale.com",
 	))
 
 	if err := git.Run(ctx, repoDir, "init"); err != nil {

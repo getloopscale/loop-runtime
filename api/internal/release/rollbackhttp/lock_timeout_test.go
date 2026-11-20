@@ -28,7 +28,7 @@ import (
 func TestRollback_WrappedLockTimeoutIs409LockTimeout(t *testing.T) {
 	projects := &fakeRollbackProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}}
 	svc := &fakeRollbackService{err: fmt.Errorf("rollback: %w", loopzeroerrors.ErrLockTimeout)}
-	h := NewRollbackHandler(projects, svc, "dev.loopzero.example")
+	h := NewRollbackHandler(projects, svc, "dev.getloopscale.com")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(`{"environment":"production"}`))
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -47,7 +47,7 @@ func TestRollback_WrappedLockTimeoutIs409LockTimeout(t *testing.T) {
 func TestRollback_ErrorMentioningLockTimeoutIsNotOne(t *testing.T) {
 	projects := &fakeRollbackProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}}
 	svc := &fakeRollbackService{err: errors.New("upstream said: lock timeout")}
-	h := NewRollbackHandler(projects, svc, "dev.loopzero.example")
+	h := NewRollbackHandler(projects, svc, "dev.getloopscale.com")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(`{"environment":"production"}`))
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -62,7 +62,7 @@ func TestRollback_ErrorMentioningLockTimeoutIsNotOne(t *testing.T) {
 }
 
 func TestRollback_MissingProjectName(t *testing.T) {
-	h := NewRollbackHandler(&fakeRollbackProjectStore{}, &fakeRollbackService{}, "dev.loopzero.example")
+	h := NewRollbackHandler(&fakeRollbackProjectStore{}, &fakeRollbackService{}, "dev.getloopscale.com")
 
 	body := `{"environment":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects//rollback", bytes.NewBufferString(body))
@@ -80,7 +80,7 @@ func TestRollback_InvalidBody(t *testing.T) {
 	h := NewRollbackHandler(
 		&fakeRollbackProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}},
 		&fakeRollbackService{},
-		"dev.loopzero.example",
+		"dev.getloopscale.com",
 	)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString("not-json"))
@@ -99,7 +99,7 @@ func TestRollback_InternalError(t *testing.T) {
 	h := NewRollbackHandler(
 		&fakeRollbackProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}},
 		&fakeRollbackService{err: errors.New("database exploded")},
-		"dev.loopzero.example",
+		"dev.getloopscale.com",
 	)
 
 	body := `{"environment":"production"}`

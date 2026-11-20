@@ -13,7 +13,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: admin@loopzero.example
+    email: admin@getloopscale.com
     privateKeySecretRef:
       name: letsencrypt-staging-account-key
     solvers:
@@ -24,11 +24,11 @@ spec:
             name: cloudflare-api-token-secret
       selector:
         dnsZones:
-        - loopzero.example
+        - getloopscale.com
         # Plan 2026-05-19-drill-skills-rigor-restoration Bug A fix:
         # drill zone explicitly added — previous omission meant staging
         # ClusterIssuer was useless against drill stack via DNS-01 solver.
-        - loopzero-drill.example
+        - drill.getloopscale.com
     - http01:
         ingress:
           class: traefik

@@ -85,7 +85,7 @@ tasks:
       sustained 50 VUs. Override K6_DURATION + K6_VUS for dry-runs.
 
       Required env vars:
-        API_URL — engine URL (e.g., https://api.drill.loopzero-drill.example)
+        API_URL — engine URL (e.g., https://api.drill.drill.getloopscale.com)
         API_TOKEN — bearer JWT
         TENANT_ID — soak tenant identifier
     cmds:

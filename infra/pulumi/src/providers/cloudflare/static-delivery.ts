@@ -15,11 +15,11 @@ import * as path from "path";
 export interface StaticDeliveryConfig {
   /** Cloudflare account ID */
   readonly accountId: string;
-  /** Cloudflare zone ID for the domain (e.g., loopzero.example) */
+  /** Cloudflare zone ID for the domain (e.g., getloopscale.com) */
   readonly zoneId: string;
   /** Environment name (dev, staging, prod) — used to namespace CF resources */
   readonly environment: string;
-  /** Base domain for app hostnames (e.g., "dev.loopzero.example") */
+  /** Base domain for app hostnames (e.g., "dev.getloopscale.com") */
   readonly baseDomain: string;
   /** DO Spaces endpoint for static assets (e.g., "https://loopzero-static-assets.sfo3.digitaloceanspaces.com") */
   readonly s3Endpoint: pulumi.Input<string>;

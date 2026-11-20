@@ -24,9 +24,9 @@ import (
 
 // Env captures common per-journey environment configuration.
 type Env struct {
-	CloudBaseURL string // https://cloud-dev.loopzero.example
-	AppBaseURL   string // https://app-dev.loopzero.example
-	AuthBaseURL  string // https://auth-dev.loopzero.example
+	CloudBaseURL string // https://cloud-dev.getloopscale.com
+	AppBaseURL   string // https://app-dev.getloopscale.com
+	AuthBaseURL  string // https://auth-dev.getloopscale.com
 	JWTPath      string // ~/.loopzero/local-dogfood-token.txt
 	HTTPClient   *http.Client
 }
@@ -35,9 +35,9 @@ type Env struct {
 func DefaultEnv() Env {
 	homeJWT := os.Getenv("HOME") + "/.loopzero/local-dogfood-token.txt"
 	return Env{
-		CloudBaseURL: "https://cloud-dev.loopzero.example",
-		AppBaseURL:   "https://app-dev.loopzero.example",
-		AuthBaseURL:  "https://auth-dev.loopzero.example",
+		CloudBaseURL: "https://cloud-dev.getloopscale.com",
+		AppBaseURL:   "https://app-dev.getloopscale.com",
+		AuthBaseURL:  "https://auth-dev.getloopscale.com",
 		JWTPath:      homeJWT,
 		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
 	}

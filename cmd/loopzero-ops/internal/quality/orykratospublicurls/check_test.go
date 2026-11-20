@@ -70,13 +70,13 @@ func TestCheck_GoldenRenderPasses(t *testing.T) {
 			return []byte("ui_url: http://localhost:4455/login\n"), nil
 		}
 		return []byte(strings.Join([]string{
-			`base_url: "https://auth.loopzero.example/"`,
+			`base_url: "https://auth.getloopscale.com/"`,
 			"enabled: true",
 			"allow_credentials: true",
-			"domain: loopzero.example",
+			"domain: getloopscale.com",
 			"allowed_return_urls:",
-			"ui_url: https://app.loopzero.example/register",
-			"ui_url: https://app.loopzero.example/login",
+			"ui_url: https://app.getloopscale.com/register",
+			"ui_url: https://app.getloopscale.com/login",
 		}, "\n")), nil
 	}
 

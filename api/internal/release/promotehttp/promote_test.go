@@ -56,10 +56,10 @@ func TestPromote_HappyPath(t *testing.T) {
 			NewReleaseID:    "rel-new-1",
 			FromEnv:         "staging",
 			ToEnv:           "production",
-			URL:             "https://my-api-production.dev.loopzero.example",
+			URL:             "https://my-api-production.dev.getloopscale.com",
 		},
 	}
-	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"from":"staging","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
@@ -96,7 +96,7 @@ func TestPromote_HappyPath(t *testing.T) {
 func TestPromote_ProjectNotFound(t *testing.T) {
 	projects := &fakePromoteProjectStore{} // nil project
 	svc := &fakePromoteService{}
-	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"from":"staging","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/nonexistent/promote", bytes.NewBufferString(body))
@@ -116,7 +116,7 @@ func TestPromote_MissingFromEnv(t *testing.T) {
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{}
-	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
@@ -136,7 +136,7 @@ func TestPromote_MissingToEnv(t *testing.T) {
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{}
-	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"from":"staging"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
@@ -158,7 +158,7 @@ func TestPromote_SameEnvironment(t *testing.T) {
 	svc := &fakePromoteService{
 		err: loopzeroerrors.ErrSameEnvironment,
 	}
-	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"from":"staging","to":"staging"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
@@ -180,7 +180,7 @@ func TestPromote_NoActiveRelease(t *testing.T) {
 	svc := &fakePromoteService{
 		err: loopzeroerrors.ErrNoActiveRelease,
 	}
-	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"from":"staging","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
@@ -196,7 +196,7 @@ func TestPromote_NoActiveRelease(t *testing.T) {
 }
 
 func TestPromote_Unauthenticated(t *testing.T) {
-	h := NewPromoteHandler(&fakePromoteProjectStore{}, &fakePromoteService{}, "dev.loopzero.example")
+	h := NewPromoteHandler(&fakePromoteProjectStore{}, &fakePromoteService{}, "dev.getloopscale.com")
 
 	body := `{"from":"staging","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
@@ -217,7 +217,7 @@ func TestPromote_LockTimeout(t *testing.T) {
 	svc := &fakePromoteService{
 		err: loopzeroerrors.ErrLockTimeout,
 	}
-	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"from":"staging","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
@@ -252,7 +252,7 @@ func TestPromote_SameEnvironment_SurfacesCode(t *testing.T) {
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{err: loopzeroerrors.ErrSameEnvironment}
-	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"from":"staging","to":"staging"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/promote", bytes.NewBufferString(body))
@@ -289,7 +289,7 @@ func TestPromote_RegressionV10BodyShape(t *testing.T) {
 			PromotionID: "should-not-reach",
 		},
 	}
-	h := NewPromoteHandler(projects, svc, "dev.loopzero.example")
+	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
 	cases := []struct {
 		name    string
@@ -375,7 +375,7 @@ func TestPromote_EnsuresTargetEnvironment_BeforeService(t *testing.T) {
 		},
 	}
 	ensurer := &fakePromoteEnsurer{}
-	h := NewPromoteHandler(projects, svc, "prod-dev.loopzero.example").WithEnvironmentEnsurer(ensurer)
+	h := NewPromoteHandler(projects, svc, "prod-dev.getloopscale.app").WithEnvironmentEnsurer(ensurer)
 
 	body := `{"from":"preview","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/loopzerokit-example/promote", bytes.NewBufferString(body))
@@ -413,7 +413,7 @@ func TestPromote_EnsureEnvironment_Failure_ShortCircuits(t *testing.T) {
 		result: &PromoteOutput{PromotionID: "should-not-reach"},
 	}
 	ensurer := &fakePromoteEnsurer{err: loopzeroerrors.NewLoopZeroError("ENV_PROVISION_TIMEOUT", "operator did not reconcile in time")}
-	h := NewPromoteHandler(projects, svc, "prod-dev.loopzero.example").WithEnvironmentEnsurer(ensurer)
+	h := NewPromoteHandler(projects, svc, "prod-dev.getloopscale.app").WithEnvironmentEnsurer(ensurer)
 
 	body := `{"from":"preview","to":"production"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/loopzerokit-example/promote", bytes.NewBufferString(body))

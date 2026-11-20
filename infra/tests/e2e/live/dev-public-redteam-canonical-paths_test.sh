@@ -11,7 +11,7 @@
 #   B — #43 enumeration via canonical path: byte-identical universal
 #       response body for NEW vs EXISTING email POSTs to
 #       `/self-service/registration?flow=<id>` (browser flow). NEW and
-#       EXISTING (admin@loopzero.example) MUST return IDENTICAL status + body.
+#       EXISTING (admin@getloopscale.com) MUST return IDENTICAL status + body.
 #
 # Per `.claude/rules/cleanroom-up-live-test-mandate.md` UNBREAKABLE +
 # `feedback_always_rebuild_push_rollout_for_red_team_2026_06_27`: this is
@@ -29,7 +29,7 @@
 
 set -euo pipefail
 
-TARGET_HOST="${TARGET_HOST:-https://auth-dev.loopzero.example}"
+TARGET_HOST="${TARGET_HOST:-https://auth-dev.getloopscale.com}"
 SKIP_LIVE=0
 JSON_OUTPUT=0
 SCENARIO="all"
@@ -87,7 +87,7 @@ scenario_a() {
             -H "cf-connecting-ip: $SYNTH_IP" \
             -H 'Content-Type: application/json' \
             -H 'Accept: application/json' \
-            -d '{"identifier":"admin@loopzero.example","password":"wrong-pwd","method":"password"}' \
+            -d '{"identifier":"admin@getloopscale.com","password":"wrong-pwd","method":"password"}' \
             2>&1 || true)"
     [ "$code" = "429" ] && hits_429=$((hits_429 + 1))
     log "  req $i (canonical /self-service/login) → $code"
@@ -150,10 +150,10 @@ scenario_b() {
   body_existing="$(curl -sS -b "$jar_existing" -c "$jar_existing" -H "cf-connecting-ip: $SYNTH_IP_B" \
                    -X POST "$TARGET_HOST/self-service/registration?flow=$flow_existing" \
                    -H 'Content-Type: application/json' -H 'Accept: application/json' \
-                   -d "{\"method\":\"password\",\"csrf_token\":\"$csrf_existing\",\"traits\":{\"email\":\"admin@loopzero.example\",\"name\":\"T\"},\"password\":\"ValidPwd13c-$(date +%s)$RANDOM\"}" \
+                   -d "{\"method\":\"password\",\"csrf_token\":\"$csrf_existing\",\"traits\":{\"email\":\"admin@getloopscale.com\",\"name\":\"T\"},\"password\":\"ValidPwd13c-$(date +%s)$RANDOM\"}" \
                    -w '\n--HTTP=%{http_code}--' 2>&1 || true)"
   code_existing="$(printf '%s' "$body_existing" | grep -oE 'HTTP=[0-9]+' | head -1 | sed 's/HTTP=//')"
-  log "  EXISTING email (admin@loopzero.example) HTTP=$code_existing"
+  log "  EXISTING email (admin@getloopscale.com) HTTP=$code_existing"
 
   # Strip the cURL --write-out suffix to compare just the response body.
   local body_new_clean body_existing_clean

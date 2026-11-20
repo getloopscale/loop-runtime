@@ -5,8 +5,8 @@
 # loopzero-api-tls was stuck in "DoesNotExist" for 93min during LIVE Phase 4 (discovered
 # via dogfood-drill when curl detected the self-signed `TRAEFIK DEFAULT CERT`).
 #
-# Includes dnsZones for both loopzero.example (prod) AND loopzero-drill.example (drill)
-# — drift caught: previous letsencrypt-staging.yaml only listed loopzero.example,
+# Includes dnsZones for both getloopscale.com (prod) AND drill.getloopscale.com (drill)
+# — drift caught: previous letsencrypt-staging.yaml only listed getloopscale.com,
 # making it useless against drill stack.
 #
 # Issuer trusted by browsers — use only in prod/drill, not in CI experiments
@@ -25,7 +25,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@loopzero.example
+    email: admin@getloopscale.com
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:
@@ -36,8 +36,8 @@ spec:
             name: cloudflare-api-token-secret
       selector:
         dnsZones:
-        - loopzero.example
-        - loopzero-drill.example
+        - getloopscale.com
+        - drill.getloopscale.com
     - http01:
         ingress:
           class: traefik

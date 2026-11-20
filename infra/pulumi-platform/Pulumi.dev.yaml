@@ -1,8 +1,8 @@
 config:
   loopzero-platform:environment: dev
-  loopzero-platform:domain: dev.loopzero.example
+  loopzero-platform:domain: dev.getloopscale.com
   loopzero-platform:region: sfo3
-  loopzero-platform:dnsZone: loopzero.example
+  loopzero-platform:dnsZone: getloopscale.com
   # Cloudflare
   loopzero-platform:cfAccountId: "362767409c4de7fda7990c10103efdd9"
   loopzero-platform:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"

@@ -42,8 +42,8 @@ func TestEdgeRouteIsNotWiredWithoutAToken(t *testing.T) {
 func TestEdgeRouteResolvesUnderTheConfiguredPublicDomain(t *testing.T) {
 	cfg := config.Config{
 		BaseDomain:          "loopzero.local",
-		PublicDomain:        "prod-dev.loopzero.example",
-		PreviewPublicDomain: "preview-dev.loopzero.example",
+		PublicDomain:        "prod-dev.getloopscale.app",
+		PreviewPublicDomain: "preview-dev.getloopscale.app",
 		EdgeRouteToken:      "tok",
 	}
 	h, r := edgeRouteHandler(cfg,
@@ -57,7 +57,7 @@ func TestEdgeRouteResolvesUnderTheConfiguredPublicDomain(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodGet, "/internal/edge/route", nil)
 	req.Header.Set("Authorization", "Bearer tok")
-	req.Header.Set("X-Forwarded-Host", "tn-a-p-web-production.prod-dev.loopzero.example")
+	req.Header.Set("X-Forwarded-Host", "tn-a-p-web-production.prod-dev.getloopscale.app")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || rec.Header().Get("X-LoopZero-Cell") != "cell-1" {

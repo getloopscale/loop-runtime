@@ -31,7 +31,7 @@
 
 set -euo pipefail
 
-TARGET_HOST="${TARGET_HOST:-https://auth-dev.loopzero.example}"
+TARGET_HOST="${TARGET_HOST:-https://auth-dev.getloopscale.com}"
 SKIP_LIVE=0
 JSON_OUTPUT=0
 SCENARIO="all"

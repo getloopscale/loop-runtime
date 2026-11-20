@@ -13,12 +13,12 @@ import (
 // Hosts returns, in declaration order and without repeats, every host the
 // exposure inventory declares.
 //
-// Measured 2026-08-18: app.loopzero.example, cloud.loopzero.example and auth.loopzero.example
+// Measured 2026-08-18: app.getloopscale.com, cloud.getloopscale.com and auth.getloopscale.com
 // — the names WITHOUT the `-dev` suffix — had their own Caddyfile blocks and
 // inventory rows, and none of them had ever been probed: Targets filters by one
 // host and the probe defaulted to app-dev/auth-dev. Measured live, they were
 // production hostnames serving development instances (401 on
-// cloud.loopzero.example/v1/billing, 200 on auth.loopzero.example/health/ready).
+// cloud.getloopscale.com/v1/billing, 200 on auth.getloopscale.com/health/ready).
 //
 // Listing from the inventory rather than naming those three keeps the fourth
 // future host from going invisible for the same reason.

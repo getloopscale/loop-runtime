@@ -7,16 +7,16 @@
 #      HTTP 303 with Location header pointing at accounts.google.com OR
 #      github.com (NOT localhost or pod hostname)
 #   3. The redirect_uri query param sent to the OAuth provider equals
-#      https://auth-dev.loopzero.example/self-service/methods/oidc/callback/{provider}
+#      https://auth-dev.getloopscale.com/self-service/methods/oidc/callback/{provider}
 #
-# This is a LIVE test (touches https://auth-dev.loopzero.example). Run after
+# This is a LIVE test (touches https://auth-dev.getloopscale.com). Run after
 # `task dev-public:bootstrap` + `LOOPZERO_HELMFILE_ENV=dev-public task setup`.
 
 set -euo pipefail
 
-KRATOS_PUBLIC="${KRATOS_PUBLIC:-https://auth-dev.loopzero.example}"
-DASHBOARD="${DASHBOARD:-https://app-dev.loopzero.example}"
-EXPECTED_CALLBACK_BASE="${EXPECTED_CALLBACK_BASE:-https://auth-dev.loopzero.example}"
+KRATOS_PUBLIC="${KRATOS_PUBLIC:-https://auth-dev.getloopscale.com}"
+DASHBOARD="${DASHBOARD:-https://app-dev.getloopscale.com}"
+EXPECTED_CALLBACK_BASE="${EXPECTED_CALLBACK_BASE:-https://auth-dev.getloopscale.com}"
 
 PASS=0
 FAIL=0

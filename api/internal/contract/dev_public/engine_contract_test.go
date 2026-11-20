@@ -304,7 +304,7 @@ func TestDevPublic_EngineContract_PreviewFlow(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"previews": []map[string]any{
-				{"id": "prev-1", "url": "https://tn-abc-def-app-preview.preview-dev.loopzero.example"},
+				{"id": "prev-1", "url": "https://tn-abc-def-app-preview.preview-dev.getloopscale.app"},
 			},
 		})
 	})
@@ -319,8 +319,8 @@ func TestDevPublic_EngineContract_PreviewFlow(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode,
 		"preview-environments list MUST return 200 per J-23 #65 RBAC fix")
 	body, _ := io.ReadAll(resp.Body)
-	require.Contains(t, string(body), "preview-dev.loopzero.example",
-		"preview URL MUST cite canonical preview-dev.loopzero.example per J-23 #68 wildcard")
+	require.Contains(t, string(body), "preview-dev.getloopscale.app",
+		"preview URL MUST cite canonical preview-dev.getloopscale.app per J-23 #68 wildcard")
 }
 
 // TestDevPublic_EngineContract_ProductionDeploy migrated from M2 J-23 #37 canonical chain.
@@ -374,14 +374,14 @@ func TestDevPublic_EngineContract_AuthEmailDelivery(t *testing.T) {
 
 	// Unknown address → mute (200 same as known).
 	resp1, err := http.Post(srv.URL+"/self-service/recovery", "application/json",
-		strings.NewReader(`{"email":"unknown-user-xyz@loopzero.example"}`))
+		strings.NewReader(`{"email":"unknown-user-xyz@getloopscale.com"}`))
 	require.NoError(t, err)
 	defer resp1.Body.Close()
 	body1, _ := io.ReadAll(resp1.Body)
 
 	// Known address → same response shape.
 	resp2, err := http.Post(srv.URL+"/self-service/recovery", "application/json",
-		strings.NewReader(`{"email":"admin@loopzero.example"}`))
+		strings.NewReader(`{"email":"admin@getloopscale.com"}`))
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 	body2, _ := io.ReadAll(resp2.Body)

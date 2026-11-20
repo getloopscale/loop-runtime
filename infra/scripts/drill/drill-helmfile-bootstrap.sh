@@ -760,7 +760,7 @@ fi
 # The build-cluster Secrets below still need the Spaces key pair and the domain.
 SPACES_KEY="$LOOPZERO_SPACES_KEY"
 SPACES_SECRET="$LOOPZERO_SPACES_SECRET"
-DRILL_BASE_DOMAIN="${DRILL_BASE_DOMAIN:-loopzero-drill.example}"
+DRILL_BASE_DOMAIN="${DRILL_BASE_DOMAIN:-drill.getloopscale.com}"
 
 # Bug #56 LIVE FIX (caught 2026-05-18 iter 44): generate-secrets.sh creates
 # SYNTHETIC in-cluster kubeconfigs assuming single-cluster topology. Drill
@@ -801,7 +801,7 @@ DO_TOKEN_VAL=$(awk -F= '/^DIGITALOCEAN_TOKEN=/{print $2}' .env 2>/dev/null || ec
 KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl -n argo create secret docker-registry loopzero-registry-pull \
   --docker-server=registry.digitalocean.com \
   --docker-username="$DO_TOKEN_VAL" --docker-password="$DO_TOKEN_VAL" \
-  --docker-email=drill@loopzero.example \
+  --docker-email=drill@getloopscale.com \
   --dry-run=client -o yaml | KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl apply -f - >/dev/null
 for SA in loopzero-build-sa default; do
   KUBECONFIG="$DRILL_KUBECONFIG_DIR/build.yaml" kubectl -n argo patch serviceaccount "$SA" \
@@ -863,7 +863,7 @@ fi
 #
 # Plan 2026-05-19-drill-skills-rigor-restoration Bug A fix:
 # Previous code only applied to runtime clusters — MGMT was MISSING. loopzero-api
-# Certificate (api.loopzero-drill.example) lives in mgmt cluster loopzero-system ns;
+# Certificate (api.drill.getloopscale.com) lives in mgmt cluster loopzero-system ns;
 # without ClusterIssuer there, cert stuck "DoesNotExist" 93min during LIVE
 # Phase 4 (TRAEFIK DEFAULT CERT self-signed detected via curl). Loop now
 # includes mgmt explicitly. Also unified secret name to `cloudflare-api-token-secret`
@@ -889,7 +889,7 @@ metadata:
   name: letsencrypt-prod
 spec:
   acme:
-    email: ops@loopzero.example
+    email: ops@getloopscale.com
     server: https://acme-v02.api.letsencrypt.org/directory
     privateKeySecretRef:
       name: letsencrypt-prod-account
@@ -910,7 +910,7 @@ else
 fi
 
 # Bug #82 LIVE FIX (caught 2026-05-18 iter 53): CF zone needs wildcard A
-# record `*.loopzero-drill.example` → runtime cluster Traefik LB IP so tenant
+# record `*.drill.getloopscale.com` → runtime cluster Traefik LB IP so tenant
 # apps resolve publicly + cert-manager DNS-01 works.
 log "Bug #82 fix: CF wildcard A record → runtime cluster Traefik LB..."
 if [[ -n "$CF_TOKEN_VAL" ]]; then
@@ -937,8 +937,8 @@ if [[ -n "$CF_TOKEN_VAL" ]]; then
       log "  ✓ CF wildcard A *.$DRILL_BASE_DOMAIN → $RUNTIME_LB_IP"
 
       # Bug #21 LIVE FIX (caught 2026-05-19 dogfood-drill iter 7):
-      # api.loopzero-drill.example pre-existing A record (stale from prior drill
-      # iters) takes DNS precedence over wildcard *.loopzero-drill.example. The
+      # api.drill.getloopscale.com pre-existing A record (stale from prior drill
+      # iters) takes DNS precedence over wildcard *.drill.getloopscale.com. The
       # wildcard points to runtime LB (tenant workloads), but API requests
       # must reach MGMT LB. Without this fix, dogfood-drill journeys all
       # return HTTP 000 (curl can't connect to stale IP).
@@ -986,7 +986,7 @@ kubectl -n loopzero-system rollout status deployment/loopzero-api --timeout=180s
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/drill-jwt-gate.sh"
 log "T2.2 gate: verifying JWT auth wiring end-to-end..."
 if ! verify_jwt_auth_e2e \
-    "${API_URL:-https://api.loopzero-drill.example}" \
+    "${API_URL:-https://api.drill.getloopscale.com}" \
     "$(dirname "${BASH_SOURCE[0]}")/drill-mint-jwt.sh" \
     "curl" \
     "${SEED_TENANT_ID:-tn-e2etest}"; then

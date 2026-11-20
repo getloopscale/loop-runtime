@@ -218,7 +218,7 @@ func TestBuildManifestApps_MissingDigest_FailsLoud(t *testing.T) {
 // --- BuildAppRelease tests ---
 
 func TestBuildAppRelease_ServerApp(t *testing.T) {
-	rel := BuildAppRelease("registry.example.com", "tn-1", "my-app", "api", "sha123", "production", "dev.loopzero.example", "server", "container")
+	rel := BuildAppRelease("registry.example.com", "tn-1", "my-app", "api", "sha123", "production", "dev.getloopscale.com", "server", "container")
 	if rel.Name != "api" {
 		t.Errorf("expected name 'api', got %q", rel.Name)
 	}
@@ -231,7 +231,7 @@ func TestBuildAppRelease_ServerApp(t *testing.T) {
 }
 
 func TestBuildAppRelease_WorkerApp_NoURL(t *testing.T) {
-	rel := BuildAppRelease("registry.example.com", "tn-1", "my-app", "worker", "sha123", "production", "dev.loopzero.example", "worker", "container")
+	rel := BuildAppRelease("registry.example.com", "tn-1", "my-app", "worker", "sha123", "production", "dev.getloopscale.com", "worker", "container")
 	if rel.URL != "" {
 		t.Errorf("expected empty URL for worker app, got %q", rel.URL)
 	}

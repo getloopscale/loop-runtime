@@ -9,8 +9,8 @@
 # by the developer when running helmfile manually.
 
 # Domain
-domain: dev.loopzero.example
-dnsZone: loopzero.example
+domain: dev.getloopscale.com
+dnsZone: getloopscale.com
 
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
 # Opt-in flag: when true, core.helmfile installs ESO operator +

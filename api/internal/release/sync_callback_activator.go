@@ -39,7 +39,7 @@ type SyncCallbackActivator struct {
 	deployEventStore store.DeployEventStore
 	baseDomain       string
 	// publicDomain is the operator-configured wildcard root mirrored from
-	// LOOPZERO_PUBLIC_DOMAIN (e.g. `prod-dev.loopzero.example`). When set, the
+	// LOOPZERO_PUBLIC_DOMAIN (e.g. `prod-dev.getloopscale.app`). When set, the
 	// deploy.completed SSE event URL uses this domain instead of the legacy
 	// baseDomain (`loopzero.local`) — closes loopzero-cloud#61 so the URL `loopzero deploy`
 	// announces is the SAME publicly-resolvable URL `loopzero status` returns.

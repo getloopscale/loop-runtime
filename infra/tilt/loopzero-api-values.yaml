@@ -39,7 +39,7 @@ config:
   githubAppId: "3319955"
   workloadIngressUrl: "http://172.18.0.12:80"
   baseDomain: "loopzero.local"
-  loopzeroPublicDomain: "prod-dev.loopzero.example"
+  loopzeroPublicDomain: "prod-dev.getloopscale.app"
   jwksUrl: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
   jwtIssuer: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
   loopzeroClusterIssuer: "loopzero-ca-issuer"

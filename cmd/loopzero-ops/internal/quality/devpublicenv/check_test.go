@@ -25,16 +25,16 @@ func writeFixture(t *testing.T, body string) string {
 }
 
 const canonical = `# dev-public.yaml canonical shape
-publicAuthUrl: "https://auth-dev.loopzero.example"
-publicCloudUrl: "https://app-dev.loopzero.example"
-uiBaseUrl: "https://app-dev.loopzero.example"
-dashboardOrigin: "https://app-dev.loopzero.example"
-cookieDomain: "loopzero.example"
+publicAuthUrl: "https://auth-dev.getloopscale.com"
+publicCloudUrl: "https://app-dev.getloopscale.com"
+uiBaseUrl: "https://app-dev.getloopscale.com"
+dashboardOrigin: "https://app-dev.getloopscale.com"
+cookieDomain: "getloopscale.com"
 corsAllowedOrigins:
-  - "https://app-dev.loopzero.example"
+  - "https://app-dev.getloopscale.com"
 allowedReturnUrls:
-  - "https://app-dev.loopzero.example"
-  - "https://app-dev.loopzero.example/"
+  - "https://app-dev.getloopscale.com"
+  - "https://app-dev.getloopscale.com/"
 stripe:
   webhookSecretRef: loopzero-stripe-webhook-dev
 `
@@ -65,7 +65,7 @@ func TestCheck_LocalhostLeakFails(t *testing.T) {
 }
 
 func TestCheck_LegacyNonDevURLFails(t *testing.T) {
-	body := canonical + "\nlegacyRedirectUrl: https://app.loopzero.example\n"
+	body := canonical + "\nlegacyRedirectUrl: https://app.getloopscale.com\n"
 	root := writeFixture(t, body)
 	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
@@ -83,7 +83,7 @@ func TestCheck_DevSuffixEnvVarFails(t *testing.T) {
 }
 
 func TestCheck_MissingCookieDomainFails(t *testing.T) {
-	body := strings.Replace(canonical, `cookieDomain: "loopzero.example"`, `cookieDomain: "localhost"`, 1)
+	body := strings.Replace(canonical, `cookieDomain: "getloopscale.com"`, `cookieDomain: "localhost"`, 1)
 	root := writeFixture(t, body)
 	_, err := violationOf(Check(Config{RepoRoot: root}))
 	if !errors.Is(err, ErrViolations) {
@@ -117,7 +117,7 @@ func TestCheck_RealRepoPasses(t *testing.T) {
 // fix, and thereby authorizing in auth an origin that DOES NOT RESPOND. An authorized
 // origin that nobody controls is worse than one origin fewer.
 func TestCheck_CloudDevReappearingFails(t *testing.T) {
-	root := writeFixture(t, canonical+"\n  - \"https://cloud-dev.loopzero.example\"\n")
+	root := writeFixture(t, canonical+"\n  - \"https://cloud-dev.getloopscale.com\"\n")
 	if _, err := violationOf(Check(Config{RepoRoot: root})); !errors.Is(err, ErrViolations) {
 		t.Fatalf("expected ErrViolations when reintroducing cloud-dev into an origin list, got %v", err)
 	}

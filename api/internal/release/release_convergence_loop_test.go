@@ -220,7 +220,7 @@ func TestReleaseConvergenceLoop_NoPending_NoAction(t *testing.T) {
 		&fakeConvergenceSyncClient{},
 		&fakeConvergenceLocker{},
 		&fakeConvergenceEventStore{},
-		"dev.loopzero.example",
+		"dev.getloopscale.com",
 		"",
 		slog.Default(),
 		ReleaseConvergenceLoopConfig{Interval: time.Second, SyncTimeout: time.Minute},
@@ -253,7 +253,7 @@ func TestReleaseConvergenceLoop_PendingRelease_SyncedAndHealthy_Activates(t *tes
 
 	loop := NewReleaseConvergenceLoop(
 		rs, ets, syncClient, &fakeConvergenceLocker{}, es,
-		"dev.loopzero.example", "", slog.Default(),
+		"dev.getloopscale.com", "", slog.Default(),
 		ReleaseConvergenceLoopConfig{Interval: time.Second, SyncTimeout: 5 * time.Minute, MaxConcurrent: 1},
 	)
 
@@ -292,7 +292,7 @@ func TestReleaseConvergenceLoop_PendingRelease_TimedOut_FailsRelease(t *testing.
 
 	loop := NewReleaseConvergenceLoop(
 		rs, newFakeConvergenceEnvTargetStore(), syncClient, &fakeConvergenceLocker{}, es,
-		"dev.loopzero.example", "", slog.Default(),
+		"dev.getloopscale.com", "", slog.Default(),
 		ReleaseConvergenceLoopConfig{Interval: time.Second, SyncTimeout: 3 * time.Minute, MaxConcurrent: 1},
 	)
 
@@ -336,7 +336,7 @@ func TestReleaseConvergenceLoop_PendingRelease_NotReady_Retries(t *testing.T) {
 	loop := NewReleaseConvergenceLoop(
 		rs, newFakeConvergenceEnvTargetStore(), syncClient, &fakeConvergenceLocker{},
 		&fakeConvergenceEventStore{},
-		"dev.loopzero.example", "", slog.Default(),
+		"dev.getloopscale.com", "", slog.Default(),
 		ReleaseConvergenceLoopConfig{Interval: time.Second, SyncTimeout: 5 * time.Minute, MaxConcurrent: 1},
 	)
 
@@ -357,7 +357,7 @@ func TestReleaseConvergenceLoop_DefaultConfig(t *testing.T) {
 		&fakeConvergenceSyncClient{},
 		&fakeConvergenceLocker{},
 		&fakeConvergenceEventStore{},
-		"dev.loopzero.example",
+		"dev.getloopscale.com",
 		"",
 		slog.Default(),
 		ReleaseConvergenceLoopConfig{}, // all zeros
@@ -393,7 +393,7 @@ func TestReleaseConvergenceLoop_HealthCheck_ActiveUnhealthy_EmitsMetric(t *testi
 	loop := NewReleaseConvergenceLoop(
 		rs, newFakeConvergenceEnvTargetStore(), syncClient, &fakeConvergenceLocker{},
 		&fakeConvergenceEventStore{},
-		"dev.loopzero.example", "", slog.Default(),
+		"dev.getloopscale.com", "", slog.Default(),
 		ReleaseConvergenceLoopConfig{Interval: time.Second, HealthInterval: time.Second},
 	)
 
@@ -458,7 +458,7 @@ func TestRetriggerSync_L21_TerminatesAfterTwoConsecutiveLockStuck(t *testing.T) 
 		client,
 		&fakeConvergenceLocker{},
 		&fakeConvergenceEventStore{},
-		"dev.loopzero.example", "", slog.Default(),
+		"dev.getloopscale.com", "", slog.Default(),
 		ReleaseConvergenceLoopConfig{},
 	)
 
@@ -489,7 +489,7 @@ func TestRetriggerSync_L21_DoesNotTerminateOnNonLockErrors(t *testing.T) {
 		client,
 		&fakeConvergenceLocker{},
 		&fakeConvergenceEventStore{},
-		"dev.loopzero.example", "", slog.Default(),
+		"dev.getloopscale.com", "", slog.Default(),
 		ReleaseConvergenceLoopConfig{},
 	)
 
@@ -578,7 +578,7 @@ func TestL22_ForceReconcileFiresAfterMaxRetriggersExhausted(t *testing.T) {
 	loop := NewReleaseConvergenceLoop(
 		rs, newFakeConvergenceEnvTargetStore(), client, &fakeConvergenceLocker{},
 		&fakeConvergenceEventStore{},
-		"dev.loopzero.example", "", slog.Default(),
+		"dev.getloopscale.com", "", slog.Default(),
 		ReleaseConvergenceLoopConfig{},
 	)
 
@@ -623,7 +623,7 @@ func TestL22_ForceReconcileDoesNotFireBeforeRetriggersExhausted(t *testing.T) {
 	loop := NewReleaseConvergenceLoop(
 		rs, newFakeConvergenceEnvTargetStore(), client, &fakeConvergenceLocker{},
 		&fakeConvergenceEventStore{},
-		"dev.loopzero.example", "", slog.Default(),
+		"dev.getloopscale.com", "", slog.Default(),
 		ReleaseConvergenceLoopConfig{},
 	)
 
@@ -676,7 +676,7 @@ func TestReleaseConvergenceLoop_SyncedButUnhealthy_TimedOut_FailsLoud(t *testing
 
 	loop := NewReleaseConvergenceLoop(
 		rs, newFakeConvergenceEnvTargetStore(), syncClient, &fakeConvergenceLocker{}, es,
-		"dev.loopzero.example", "", slog.Default(), cfg,
+		"dev.getloopscale.com", "", slog.Default(), cfg,
 	)
 
 	// verifyRelease runs the per-release path synchronously (no goroutine), so no poll needed.
@@ -714,7 +714,7 @@ func TestReleaseConvergenceLoop_SyncedButUnhealthy_TimedOut_FailsLoud(t *testing
 	loop2 := NewReleaseConvergenceLoop(
 		rs2, newFakeConvergenceEnvTargetStore(),
 		&fakeConvergenceSyncClient{synced: true, healthy: false}, &fakeConvergenceLocker{},
-		&fakeConvergenceEventStore{}, "dev.loopzero.example", "", slog.Default(), cfg,
+		&fakeConvergenceEventStore{}, "dev.getloopscale.com", "", slog.Default(), cfg,
 	)
 	loop2.verifyRelease(context.Background(), &rs2.pending[0])
 
@@ -751,7 +751,7 @@ func BenchmarkReleaseConvergenceLoop_FailLoudTick(b *testing.B) {
 		loop := NewReleaseConvergenceLoop(
 			rs, newFakeConvergenceEnvTargetStore(),
 			&fakeConvergenceSyncClient{synced: true, healthy: false}, &fakeConvergenceLocker{},
-			&fakeConvergenceEventStore{}, "dev.loopzero.example", "", quiet, cfg,
+			&fakeConvergenceEventStore{}, "dev.getloopscale.com", "", quiet, cfg,
 		)
 		target := &rs.pending[0]
 		b.StartTimer()

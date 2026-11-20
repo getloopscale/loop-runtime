@@ -38,7 +38,7 @@ set -euo pipefail
 
 PLAN_SLUG="billing-stripe-price-ids-seed-canonical"
 ISSUE_REF="loopzero/loopzero#155"
-PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.loopzero.example}"
+PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.getloopscale.com}"
 CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
 SESSION_JWT_FILE="${SESSION_JWT_FILE:-}"
 SKIP_LIVE=0
@@ -53,7 +53,7 @@ LIVE regression-protector for loopzero/loopzero#155 (billing checkout 'pro' 503
 BILLING_NOT_CONFIGURED — Stripe price IDs unset in dev pod).
 
 Environment:
-  PUBLIC_CLOUD_URL  default https://app-dev.loopzero.example
+  PUBLIC_CLOUD_URL  default https://app-dev.getloopscale.com
   CORE_CONTEXT      default k3d-loopzero-core
   SESSION_JWT_FILE  default ~/.loopzero/local-dogfood-session-jwt.txt (or canonical)
 

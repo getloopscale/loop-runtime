@@ -165,7 +165,7 @@ func TestTraversalDoesNotReachFileOutsideRoot(t *testing.T) {
 // honest — and the number is what makes someone check.
 func TestExternalURLCountsAsUnverifiableInsteadOfSilence(t *testing.T) {
 	root := t.TempDir()
-	writeRule(t, root, "prometheusrule-test.yaml", ruleWith("https://docs.loopzero.example/runbooks/something"))
+	writeRule(t, root, "prometheusrule-test.yaml", ruleWith("https://docs.getloopscale.com/runbooks/something"))
 
 	out := Check(Config{Root: root})
 	if len(out.DeadLinks) != 0 {

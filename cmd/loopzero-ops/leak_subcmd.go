@@ -47,7 +47,7 @@ WHAT IT DOES NOT PROVE:
 
 FLAGS (live):
   --host        probe only this application host (default: every declared host)
-  --auth-host   identity host              (default: auth-dev.loopzero.example)
+  --auth-host   identity host              (default: auth-dev.getloopscale.com)
   --inventory   declared inventory         (default: infra/quality/proxy-exposure.txt)
   --json        machine-readable output
 
@@ -117,7 +117,7 @@ func parseLiveFlags(args []string, stderr io.Writer) (liveOptions, error) {
 	fs := flag.NewFlagSet("leak live", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	host := fs.String("host", "", "probe only this application host")
-	authHost := fs.String("auth-host", "auth-dev.loopzero.example", "identity host")
+	authHost := fs.String("auth-host", "auth-dev.getloopscale.com", "identity host")
 	inventory := fs.String("inventory", "infra/quality/proxy-exposure.txt", "declared inventory")
 	asJSON := fs.Bool("json", false, "machine-readable output")
 	if err := fs.Parse(args); err != nil {

@@ -13,7 +13,7 @@
 #
 # Captures RTO/RPO timeline as evidence per EC-NEW-10.
 # Isolated by SEPARATE Pulumi project (pulumi-drill) + SEPARATE CF Zone
-# (loopzero-drill.example) + SEPARATE DO project (loopzero-drill) — see D9 conditions.
+# (drill.getloopscale.com) + SEPARATE DO project (loopzero-drill) — see D9 conditions.
 #
 # Usage:
 #   ./dr-drill.sh [--stage STAGE] [--skip-teardown]
@@ -102,9 +102,9 @@ preflight() {
     exit 2
   fi
 
-  # Verify CF API token is scoped to loopzero-drill.example only
+  # Verify CF API token is scoped to drill.getloopscale.com only
   echo "  Pulumi stack: $CURRENT_STACK ✓"
-  echo "  Domain scope: loopzero-drill.example (separate from prod loopzero.example) ✓"
+  echo "  Domain scope: drill.getloopscale.com (separate from prod getloopscale.com) ✓"
   echo "  DO project:   loopzero-drill (separate from prod) ✓"
 
   mkdir -p "$EVIDENCE_DIR"
@@ -153,7 +153,7 @@ stage_disaster() {
   echo "===== Stage: disaster ($(timestamp)) ====="
   echo ""
   echo "DESTRUCTIVE: This will destroy ALL drill resources."
-  echo "Domain: loopzero-drill.example"
+  echo "Domain: drill.getloopscale.com"
   echo "DO project: loopzero-drill"
   echo ""
   echo "Verifying we're in drill stack (last chance to abort)..."
@@ -210,7 +210,7 @@ stage_verify() {
   echo "verify_start=$(timestamp)" >> "$EVIDENCE_DIR/timeline.env"
 
   # Probe fixture app URL
-  FIXTURE_URL="https://drill-fixture-production.loopzero-drill.example"
+  FIXTURE_URL="https://drill-fixture-production.drill.getloopscale.com"
   for i in 1 2 3 4 5; do
     if curl -fsSL -o /dev/null -w "%{http_code}" "$FIXTURE_URL" | grep -q "^200$"; then
       echo "  ✓ Fixture app reachable: $FIXTURE_URL"

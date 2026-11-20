@@ -40,7 +40,7 @@ func TestProjects_Create_CapExceeded_Returns422(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "PROJECTS_EXCEED_PLAN") {
 		t.Errorf("response missing the typed code: %s", w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "loopzero.example/pricing") {
+	if !strings.Contains(w.Body.String(), "getloopscale.com/pricing") {
 		t.Errorf("response missing the upgrade URL (EC-4): %s", w.Body.String())
 	}
 }

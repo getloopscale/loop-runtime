@@ -8,7 +8,7 @@
 #
 # Exits 0 if all 18/18 PASS. Exits 1 on any regression detected.
 set -euo pipefail
-DOMAIN="${1:-${LOOPZERO_DOMAIN:-dev.loopzero.example}}"
+DOMAIN="${1:-${LOOPZERO_DOMAIN:-dev.getloopscale.com}}"
 
 # Issue #117 (generalizing #115) — pin the target cluster BY CONSTRUCTION.
 # These checks assert platform invariants on MGMT. Reading them from whatever

@@ -152,8 +152,8 @@ func rejectReserved(_ *Validator, d string) error {
 }
 
 // rejectPlatformZone — SEC-001: blocks the platform domain, its parent zone,
-// and every subdomain of both. With BaseDomain="dev.loopzero.example" the blocked
-// trees are dev.loopzero.example and loopzero.example.
+// and every subdomain of both. With BaseDomain="dev.getloopscale.com" the blocked
+// trees are dev.getloopscale.com and getloopscale.com.
 func rejectPlatformZone(v *Validator, d string) error {
 	if v.BaseDomain == "" {
 		return nil

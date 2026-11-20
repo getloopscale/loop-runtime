@@ -44,7 +44,7 @@ type DomainHealthStore interface {
 // MEET-2026-04-05-033: Background health checker.
 type DomainHealthChecker struct {
 	store       DomainHealthStore
-	cnameTarget string // e.g., "cname.dev.loopzero.example"
+	cnameTarget string // e.g., "cname.dev.getloopscale.com"
 	graceDays   int    // CNAME failure grace period (default: 14)
 	staleDays   int    // pending cleanup threshold (default: 7)
 	logger      *slog.Logger
@@ -55,7 +55,7 @@ type DomainHealthChecker struct {
 // DomainHealthCheckerConfig holds configuration.
 type DomainHealthCheckerConfig struct {
 	Interval    time.Duration // Default: 5m
-	CNAMETarget string        // e.g., "cname.dev.loopzero.example"
+	CNAMETarget string        // e.g., "cname.dev.getloopscale.com"
 	GraceDays   int           // CNAME failure grace (default: 14, configurable via DOMAIN_CNAME_GRACE_DAYS)
 	StaleDays   int           // Pending cleanup threshold (default: 7)
 	// CellID scopes the checker to a single cell (roadmap 03). Empty means every
@@ -239,10 +239,10 @@ func (h *DomainHealthChecker) verifyCNAME(ctx context.Context, domain string) bo
 	if err != nil {
 		return false
 	}
-	// CNAME returns with trailing dot (e.g., "cname.dev.loopzero.example.")
+	// CNAME returns with trailing dot (e.g., "cname.dev.getloopscale.com.")
 	cname = strings.TrimSuffix(cname, ".")
 	// SEC-006 fix: require dot-boundary to prevent partial suffix matches
-	// (e.g., "evil-cname.dev.loopzero.example" must NOT match "cname.dev.loopzero.example")
+	// (e.g., "evil-cname.dev.getloopscale.com" must NOT match "cname.dev.getloopscale.com")
 	return cname == h.cnameTarget
 }
 

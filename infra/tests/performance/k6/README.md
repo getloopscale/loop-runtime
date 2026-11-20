@@ -28,7 +28,7 @@ brew install k6   # or: go install go.k6.io/k6@latest
 task test:load:l1
 
 # Run API benchmark locally
-export K6_API_URL=https://api.dev.loopzero.example
+export K6_API_URL=https://api.dev.getloopscale.com
 export K6_SVC_AUTH=dev-service-auth-secret-default
 k6 run scripts/api-endpoints.js
 

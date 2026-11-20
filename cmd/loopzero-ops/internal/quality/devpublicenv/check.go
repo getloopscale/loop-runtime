@@ -1,8 +1,8 @@
 // Package devpublicenv is a hermetic structural test for
 // infra/helmfile/environments/dev-public.yaml.
 //
-// Validates the file has the canonical shape: dev URLs (-dev.loopzero.example),
-// shared cookie domain (loopzero.example), CORS + allowedReturnUrls cover both
+// Validates the file has the canonical shape: dev URLs (-dev.getloopscale.com),
+// shared cookie domain (getloopscale.com), CORS + allowedReturnUrls cover both
 // -dev hosts, no localhost URLs, no legacy non-dev URLs, D5 OAuth reuse
 // pattern (no _DEV env var override).
 //
@@ -49,7 +49,7 @@ var ErrViolations = errors.New("dev-public.yaml canonical shape violated")
 
 var (
 	localhostRE    = regexp.MustCompile(`localhost:4455|http://localhost|127\.0\.0\.1`)
-	legacyURLRE    = regexp.MustCompile(`https://(auth|app|cloud)\.loopzero\.example`)
+	legacyURLRE    = regexp.MustCompile(`https://(auth|app|cloud)\.getloopscale\.com`)
 	devSuffixEnvRE = regexp.MustCompile(`LOOPZERO_(GITHUB|GOOGLE)_CLIENT_(ID|SECRET)_DEV`)
 )
 
@@ -89,21 +89,21 @@ func Check(cfg Config) (Outcome, error) {
 	// it were verified to be covered: the GitHub webhook is already registered
 	// against `app-dev` (cmd/loopzero-ops/internal/seed/github_webhook_fixture.go:44) and
 	// `app-dev` already has the same direct bypass to loopzero-api, so nothing depended on it.
-	assertContains("publicAuthUrl points to auth-dev", `publicAuthUrl: "https://auth-dev.loopzero.example"`)
-	assertContains("publicCloudUrl points to app-dev", `publicCloudUrl: "https://app-dev.loopzero.example"`)
-	assertContains("uiBaseUrl points to app-dev", `uiBaseUrl: "https://app-dev.loopzero.example"`)
-	assertContains("dashboardOrigin points to app-dev", `dashboardOrigin: "https://app-dev.loopzero.example"`)
-	assertContains("cookieDomain is eTLD+1", `cookieDomain: "loopzero.example"`)
+	assertContains("publicAuthUrl points to auth-dev", `publicAuthUrl: "https://auth-dev.getloopscale.com"`)
+	assertContains("publicCloudUrl points to app-dev", `publicCloudUrl: "https://app-dev.getloopscale.com"`)
+	assertContains("uiBaseUrl points to app-dev", `uiBaseUrl: "https://app-dev.getloopscale.com"`)
+	assertContains("dashboardOrigin points to app-dev", `dashboardOrigin: "https://app-dev.getloopscale.com"`)
+	assertContains("cookieDomain is eTLD+1", `cookieDomain: "getloopscale.com"`)
 
 	// CORS + allowedReturnUrls
-	assertContains("corsAllowedOrigins includes app-dev", `  - "https://app-dev.loopzero.example"`)
-	assertContains("allowedReturnUrls includes app-dev trailing slash", `  - "https://app-dev.loopzero.example/"`)
+	assertContains("corsAllowedOrigins includes app-dev", `  - "https://app-dev.getloopscale.com"`)
+	assertContains("allowedReturnUrls includes app-dev trailing slash", `  - "https://app-dev.getloopscale.com/"`)
 
 	// And the inverse, which is what stops the host from coming back by inertia: authorizing
 	// in CORS or in a return URL a host that no longer exists is auth surface granted to
 	// nobody.
-	if strings.Contains(text, "cloud-dev.loopzero.example") {
-		failures = append(failures, "PRESENT: cloud-dev.loopzero.example — the host was removed on 2026-08-10; "+
+	if strings.Contains(text, "cloud-dev.getloopscale.com") {
+		failures = append(failures, "PRESENT: cloud-dev.getloopscale.com — the host was removed on 2026-08-10; "+
 			"keeping it in CORS/allowedReturnUrls authorizes an origin that does not respond")
 	}
 
@@ -114,7 +114,7 @@ func Check(cfg Config) (Outcome, error) {
 
 	// No legacy non-dev URL leak
 	if legacyURLRE.MatchString(text) {
-		failures = append(failures, "FORBIDDEN: dev-public.yaml contains legacy *.loopzero.example URL(s) — expected -dev suffix everywhere")
+		failures = append(failures, "FORBIDDEN: dev-public.yaml contains legacy *.getloopscale.com URL(s) — expected -dev suffix everywhere")
 	}
 
 	// D5: no _DEV env var override

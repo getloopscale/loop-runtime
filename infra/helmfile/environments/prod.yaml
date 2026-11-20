@@ -3,8 +3,8 @@
 #
 # HA replicas, ACME production TLS, secrets injected from external store.
 
-domain: loopzero.example
-dnsZone: loopzero.example
+domain: getloopscale.com
+dnsZone: getloopscale.com
 
 # Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
 # Prod placeholder per T8.2 acceptance criteria: enable ONLY after
@@ -105,23 +105,23 @@ velero:
   s3Url: https://sfo3.digitaloceanspaces.com
 
 # Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder (prod DOKS)
-uiBaseUrl: "https://app.loopzero.example"
-dashboardOrigin: "https://cloud.loopzero.example"
+uiBaseUrl: "https://app.getloopscale.com"
+dashboardOrigin: "https://cloud.getloopscale.com"
 
 # T2.2 of plan 2026-05-29-dashboard-public-integration-canonicalization.
 # Public-facing Kratos hostname + session cookie scope + CORS origins +
 # allowed return URLs for the prod dashboard flow.
-publicAuthUrl: "https://auth.loopzero.example"
-publicCloudUrl: "https://cloud.loopzero.example"
-cookieDomain: "loopzero.example"
+publicAuthUrl: "https://auth.getloopscale.com"
+publicCloudUrl: "https://cloud.getloopscale.com"
+cookieDomain: "getloopscale.com"
 corsAllowedOrigins:
-  - "https://app.loopzero.example"
-  - "https://cloud.loopzero.example"
+  - "https://app.getloopscale.com"
+  - "https://cloud.getloopscale.com"
 allowedReturnUrls:
-  - "https://app.loopzero.example"
-  - "https://app.loopzero.example/"
-  - "https://cloud.loopzero.example"
-  - "https://cloud.loopzero.example/"
+  - "https://app.getloopscale.com"
+  - "https://app.getloopscale.com/"
+  - "https://cloud.getloopscale.com"
+  - "https://cloud.getloopscale.com/"
 dashboardRoute:
   login: /login
   register: /register

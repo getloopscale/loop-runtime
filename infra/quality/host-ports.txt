@@ -41,14 +41,14 @@
 # Kratos and Hydra got a NodePort bridge on 2026-08-10 so the edge reaches them
 # without `kubectl port-forward`. The bridge is for the HOST, not the internet:
 # `auth-dev` serves both over HTTPS, and the raw port is the same service WITHOUT TLS.
-14433 | edge  | public Kratos — the edge serves it at https://auth-dev.loopzero.example
+14433 | edge  | public Kratos — the edge serves it at https://auth-dev.getloopscale.com
 14444 | edge  | public Hydra — same
 3000  | edge  | NodePort behind Caddy
-3002  | edge  | loopzero-cloud — the edge serves it at https://app-dev.loopzero.example
+3002  | edge  | loopzero-cloud — the edge serves it at https://app-dev.getloopscale.com
 13001 | edge  | loopzero-api — reached through loopzero-cloud, never directly
 8092  | edge  | compose Traefik (loopzero-workspace) — the edge stopped using it in #470; closed until the compose stack is retired
-18081 | edge  | loopzero-memory NodePort (core cluster) — the edge serves it at https://app-dev.loopzero.example/v1/memory/ behind forward_auth
-18082 | edge  | loopzero-rag NodePort (core cluster) — the edge serves it at https://app-dev.loopzero.example/v1/rag/ behind forward_auth
+18081 | edge  | loopzero-memory NodePort (core cluster) — the edge serves it at https://app-dev.getloopscale.com/v1/memory/ behind forward_auth
+18082 | edge  | loopzero-rag NodePort (core cluster) — the edge serves it at https://app-dev.getloopscale.com/v1/rag/ behind forward_auth
 8443  | edge  | TLS ingress
 8444  | edge  | TLS ingress
 
