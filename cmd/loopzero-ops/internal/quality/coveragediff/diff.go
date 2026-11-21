@@ -115,7 +115,7 @@ func IsSourceFile(path string) bool {
 // Returns ("", 0, false) on malformed input.
 func parseDiffLine(entry string) (string, int, bool) {
 	// Use LAST colon to split — file paths can contain colons in
-	// loopzerory (though unusual on POSIX).
+	// theory (though unusual on POSIX).
 	idx := strings.LastIndexByte(entry, ':')
 	if idx <= 0 || idx == len(entry)-1 {
 		return "", 0, false
