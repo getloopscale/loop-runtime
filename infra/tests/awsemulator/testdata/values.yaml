@@ -1,0 +1,30 @@
+# charts/loopzero-api on the AWS emulator: one replica on an RDS database, no Argo, ArgoCD,
+# Gitea, MinIO or other cell. The image is set on the command line.
+replicaCount: 1
+priorityClassName: ""
+service:
+  type: NodePort
+config:
+  loopzeroEnv: development
+  loopzeroDisableLegacyLoops: "true"
+  buildKubeContext: build
+secrets:
+  create: false
+  existingSecret: loopzero-api-env
+kubeconfig:
+  build:
+    existingConfigMap: loopzero-api-build-kubeconfig
+# /api/v1/health/ready also checks ArgoCD and Gitea, which are not installed here, and
+# would keep the pod unready. The test reads the deep check itself.
+readinessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: http
+  periodSeconds: 10
+# The default policy admits PostgreSQL only from pods in the namespace; this database is
+# an RDS endpoint outside the cluster.
+networkPolicy:
+  enabled: false
+metrics:
+  serviceMonitor:
+    enabled: false

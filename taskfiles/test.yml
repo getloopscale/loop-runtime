@@ -1206,6 +1206,15 @@ tasks:
     cmds:
       - go test -tags=live ./infra/tests/livetest/dogfood/... -count=1 -timeout 1h -v
 
+  awsemulator:
+    desc: |
+      loopzero-api on EKS, RDS and an ALB in the AWS emulator (build tag `awsemulator`).
+      Needs the cluster the emulator's harness leaves with KEEP_CLUSTER=1: source its
+      environment.sh, load the image into the kind cluster, and set LOOPZERO_API_IMAGE.
+      The aws-emulator-e2e workflow runs the same command.
+    cmds:
+      - cd infra/tests && GOWORK=off go test -tags=awsemulator -count=1 -v -timeout 40m ./awsemulator/
+
   chaos:v2:hermetic:
     desc: |
       T3.3 v2 chaos helper unit tests (hermetic). Validates Manifest + ChaosResult
