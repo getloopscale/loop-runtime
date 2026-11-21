@@ -1,0 +1,20 @@
+# Runs the migrations with the migrate binary and the files the loopzero-api image carries.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: database-migrations
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: {{ .Image }}
+          imagePullPolicy: Never
+          env:
+            - name: MIGRATE_DSN
+              valueFrom:
+                secretKeyRef: {name: database-admin, key: MIGRATE_DSN}
+          command: [migrate]
+          args: [-path, /migrations, -database, $(MIGRATE_DSN), up]

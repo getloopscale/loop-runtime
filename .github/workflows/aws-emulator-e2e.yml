@@ -1,0 +1,128 @@
+# loopzero-api on the AWS emulator: in a pod of an EKS cluster, on an RDS for PostgreSQL
+# instance, behind an ALB that the AWS Load Balancer Controller makes from an Ingress.
+#
+# The emulator is a public release of github.com/paulohenriquevn/aws-emulator, pinned below
+# with its SHA-256. Its own harness (fork/kubernetes/run.sh, same tag) creates the EKS cluster
+# as a kind cluster whose nodes are EC2 instances, installs the controller, and leaves
+# everything up (KEEP_CLUSTER=1) with an environment.sh for this job. The test then creates the
+# RDS instance, runs the roles script and the migrations from pods, installs charts/loopzero-api
+# with the image built here, and checks the deep health check through the ALB. It is
+# infra/tests/awsemulator (build tag awsemulator).
+#
+# WHAT IT DOES NOT COVER. Argo Workflows, ArgoCD, Gitea, MinIO and the other cells are not
+# installed: a deploy does not run here. Only the database and the load balancer path are
+# under test.
+#
+# TRIGGERS. It takes about half an hour, so it runs on a push only when what it exercises
+# changes: the chart, the CRDs, the migrations, the image's Dockerfile, or the test itself.
+name: aws-emulator-e2e
+
+on:
+  push:
+    branches: [workspace, develop, main]
+    paths:
+      - .github/workflows/aws-emulator-e2e.yml
+      - infra/tests/awsemulator/**
+      - charts/loopzero-api/**
+      - charts/loopzero-crds/**
+      - charts/loopzero-common/**
+      - api/Dockerfile
+      - api/internal/db/migrations/**
+      - infra/scripts/production/provision-db-roles.sql
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-emulator-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EMULATOR_REPOSITORY: paulohenriquevn/aws-emulator
+  EMULATOR_VERSION: v0.2.0
+  # sha256 of aws-emulator-fork-linux-x64 in that release.
+  EMULATOR_SHA256: 300901753741d0f47ac2632a62d8b0f081b02f4a3983f0a6ef60d7fd3f35865a
+
+jobs:
+  loopzero-api:
+    name: loopzero-api on EKS, RDS and an ALB in the AWS emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
+        with:
+          persist-credentials: false
+
+      - name: Fetch the emulator and its harness
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/emulator"
+          gh release download "$EMULATOR_VERSION" --repo "$EMULATOR_REPOSITORY" \
+            --pattern aws-emulator-fork-linux-x64 --dir "$RUNNER_TEMP/emulator"
+          echo "$EMULATOR_SHA256  $RUNNER_TEMP/emulator/aws-emulator-fork-linux-x64" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/emulator/aws-emulator-fork-linux-x64"
+          git clone --quiet --depth 1 --branch "$EMULATOR_VERSION" \
+            "https://github.com/$EMULATOR_REPOSITORY.git" "$RUNNER_TEMP/emulator/source"
+
+      - name: Install kind
+        run: |
+          set -euo pipefail
+          curl -sSfLo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.31.0/kind-linux-amd64
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
+          kind version
+          kubectl version --client
+          helm version
+          aws --version
+
+      - name: EKS cluster and load balancer controller in the emulator
+        env:
+          KUBERNETES_WORK: ${{ runner.temp }}/kubernetes
+          KEEP_CLUSTER: "1"
+        run: |
+          set -euo pipefail
+          helm repo add eks https://aws.github.io/eks-charts
+          helm repo update
+          "$RUNNER_TEMP/emulator/source/fork/kubernetes/run.sh" \
+            "$RUNNER_TEMP/emulator/aws-emulator-fork-linux-x64" load-balancer
+
+      # The same Dockerfile and the same deploy key as build-publish.yml; the image stays
+      # local and goes into the kind cluster only.
+      - name: Build the loopzero-api image
+        env:
+          GOMOD_SSH_KEY: ${{ secrets.GOMOD_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          docker buildx build -f api/Dockerfile --secret id=gomod_ssh_key,env=GOMOD_SSH_KEY \
+            --build-arg LOOPZERO_VERSION=e2e --build-arg "LOOPZERO_COMMIT=$GITHUB_SHA" \
+            -t localhost/loopzero-api:e2e --load .
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0 (SHA-pin; issue #233)
+        with:
+          go-version-file: infra/tests/go.mod
+          cache-dependency-path: infra/tests/go.sum
+
+      - name: loopzero-api on RDS, through the ALB
+        env:
+          GOWORK: "off"
+          LOOPZERO_API_IMAGE: localhost/loopzero-api:e2e
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "$RUNNER_TEMP/kubernetes/environment.sh"
+          kind load docker-image "$LOOPZERO_API_IMAGE" --name "$KIND_CLUSTER"
+          cd infra/tests
+          go test -tags=awsemulator -count=1 -v -timeout 40m ./awsemulator/
+
+      - name: Keep the emulator logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pin)
+        with:
+          name: aws-emulator-logs
+          path: |
+            ${{ runner.temp }}/kubernetes/*.log
+            ${{ runner.temp }}/kubernetes/diagnostics/
+          if-no-files-found: ignore
