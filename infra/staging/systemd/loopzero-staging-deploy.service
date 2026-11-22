@@ -14,5 +14,7 @@ Environment=PATH=/usr/local/bin:/usr/local/go/bin:/usr/bin:/bin
 # Anything else that syncs the clusters takes the same lock, so two syncs never overlap; a
 # deploy that finds it taken is skipped and the timer tries again.
 ExecStart=/usr/bin/flock --nonblock /run/loopzero-staging-platform.lock /usr/local/lib/loopzero-staging/deploy.sh
-# A full platform sync takes about ten minutes on this host.
-TimeoutStartSec=45min
+# A full platform sync takes about ten minutes on this host, and the validation that
+# follows it (infra/staging/validate.sh) builds and runs the dogfood suite, whose go test
+# timeout is 30 minutes.
+TimeoutStartSec=60min

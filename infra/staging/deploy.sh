@@ -19,6 +19,9 @@
 #      keep the pins in git.
 #   4. Runs `task staging:platform` at that commit with those pins, and reports
 #      staging/deploy success or failure on the commit.
+#   5. After a successful deploy, validates the commit with infra/staging/validate.sh of
+#      its own checkout, which reports staging/validate. A failed validation fails the
+#      run; the commit stays handled, so it is not validated again.
 #
 # Everything outside the host is reached through variables, so a test can stand in for
 # GitHub, the registry and the platform task.
@@ -39,6 +42,8 @@ RUN_GRACE_SECONDS="${DEPLOY_RUN_GRACE_SECONDS:-900}"
 # The images getloopscale/console publishes; their pins stay the ones in git.
 CONSOLE_IMAGES="loopzero-cloud loopzero-dashboard"
 STATUS_URL_BASE="${DEPLOY_STATUS_URL_BASE:-https://staging.getloopscale.com}"
+# The validation of a deployed commit, given its SHA. Empty: the checkout's validate.sh.
+VALIDATE_CMD="${DEPLOY_VALIDATE_CMD:-}"
 
 CHECKOUT="$STATE_DIR/checkout"
 LOGS="$STATE_DIR/logs"
@@ -141,6 +146,14 @@ if (cd "$CHECKOUT" && STAGING_STATE_VALUES="$STATE_DIR/state-values.json" $PLATF
   echo "$sha" >"$STATE_DIR/handled"
   status "$sha" success "deployed $short"
   log "$short deployed"
+  if [[ -z "$VALIDATE_CMD" ]]; then
+    if [[ ! -f "$CHECKOUT/infra/staging/validate.sh" ]]; then
+      log "$short has no infra/staging/validate.sh; not validated"
+      exit 0
+    fi
+    VALIDATE_CMD="bash $CHECKOUT/infra/staging/validate.sh"
+  fi
+  $VALIDATE_CMD "$sha" || fail "$short: the validation exited $?; see $LOGS/$sha.validate.log"
 else
   code=$?
   echo "$sha" >"$STATE_DIR/handled"

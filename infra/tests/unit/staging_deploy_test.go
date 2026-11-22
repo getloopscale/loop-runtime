@@ -81,6 +81,10 @@ type deployHarness struct {
 	state    string
 	calls    string // file the fake platform appends the state values of every call to
 	exitCode string
+	// validated is the file the fake validation appends the commit of every call to, and
+	// validateExit the code it exits with.
+	validated    string
+	validateExit string
 }
 
 const stagingPins = `platformImages:
@@ -116,7 +120,8 @@ func newDeployHarness(t *testing.T) *deployHarness {
 		t.Fatal(err)
 	}
 	run(t, remote, "git", "init", "--quiet", "--initial-branch=develop")
-	h := &deployHarness{t: t, remote: remote, state: filepath.Join(root, "state"), calls: filepath.Join(root, "calls"), exitCode: "0"}
+	h := &deployHarness{t: t, remote: remote, state: filepath.Join(root, "state"), calls: filepath.Join(root, "calls"), exitCode: "0",
+		validated: filepath.Join(root, "validated"), validateExit: "0"}
 	h.commit(stagingPins)
 	h.github = &fakeGitHub{published: map[string]bool{}, committed: time.Now()}
 	h.server = httptest.NewServer(h.github)
@@ -153,8 +158,14 @@ func (h *deployHarness) deploy() (string, error) {
 	if err := os.WriteFile(platform, []byte(script), 0o755); err != nil {
 		h.t.Fatal(err)
 	}
+	validate := filepath.Join(h.t.TempDir(), "validate")
+	validateScript := fmt.Sprintf("#!/usr/bin/env bash\necho \"$1\" >> %q\nexit %s\n", h.validated, h.validateExit)
+	if err := os.WriteFile(validate, []byte(validateScript), 0o755); err != nil {
+		h.t.Fatal(err)
+	}
 	cmd := exec.Command("bash", filepath.Join(repoRoot(), "infra/staging/deploy.sh"))
 	cmd.Env = append(os.Environ(),
+		"DEPLOY_VALIDATE_CMD="+validate,
 		"DEPLOY_REMOTE="+h.remote,
 		"DEPLOY_GITHUB_API="+h.server.URL,
 		"DEPLOY_REGISTRY="+h.server.URL,
@@ -215,6 +226,69 @@ func TestStagingDeployPinsTheImagesTheCommitPublishedAndKeepsTheOthers(t *testin
 	}
 	if got := strings.Join(h.github.contexts(), ","); got != "staging/deploy=pending,staging/deploy=success" {
 		t.Errorf("statuses %s, want pending then success", got)
+	}
+}
+
+// validatedCommits is the commit of every validation the deploys ran, oldest first.
+func (h *deployHarness) validatedCommits() []string {
+	h.t.Helper()
+	data, err := os.ReadFile(h.validated)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return strings.Fields(string(data))
+}
+
+func TestStagingDeployValidatesTheCommitItDeployed(t *testing.T) {
+	h := newDeployHarness(t)
+	sha := h.commit(stagingPins + "# change\n")
+	h.artifactsRun("completed", "success")
+
+	if out, err := h.deploy(); err != nil {
+		t.Fatalf("deploy failed: %v\n%s", err, out)
+	}
+
+	if got := h.validatedCommits(); len(got) != 1 || got[0] != sha {
+		t.Errorf("validated %v, want the deployed commit %s once", got, sha)
+	}
+}
+
+func TestStagingDeployDoesNotValidateACommitThatFailedToDeploy(t *testing.T) {
+	h := newDeployHarness(t)
+	h.commit(stagingPins + "# change\n")
+	h.artifactsRun("completed", "success")
+	h.exitCode = "3"
+
+	_, _ = h.deploy()
+
+	if got := h.validatedCommits(); len(got) != 0 {
+		t.Errorf("validated %v after a failed platform run", got)
+	}
+}
+
+func TestStagingDeployFailsWhenTheValidationFails(t *testing.T) {
+	h := newDeployHarness(t)
+	h.commit(stagingPins + "# change\n")
+	h.artifactsRun("completed", "success")
+	h.validateExit = "1"
+
+	out, err := h.deploy()
+
+	if err == nil {
+		t.Fatalf("a failed validation exited 0\n%s", out)
+	}
+	if got := strings.Join(h.github.contexts(), ","); got != "staging/deploy=pending,staging/deploy=success" {
+		t.Errorf("statuses %s: the deploy itself succeeded, the validation reports its own", got)
+	}
+	// The commit stays handled: a failed validation is not retried every five minutes.
+	if out, err := h.deploy(); err != nil {
+		t.Fatalf("second run failed: %v\n%s", err, out)
+	}
+	if got := h.validatedCommits(); len(got) != 1 {
+		t.Errorf("validated %d times, want once", len(got))
 	}
 }
 

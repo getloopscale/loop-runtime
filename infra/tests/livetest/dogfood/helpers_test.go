@@ -34,6 +34,59 @@ func TestDefaultEnv_SetsCanonicalURLs(t *testing.T) {
 	}
 }
 
+func TestDefaultEnv_TargetsTheEnvironmentTheVariablesName(t *testing.T) {
+	t.Setenv("LOOPZERO_DOGFOOD_CLOUD_URL", "https://cloud.staging.example")
+	t.Setenv("LOOPZERO_DOGFOOD_APP_URL", "https://app.staging.example")
+	t.Setenv("LOOPZERO_DOGFOOD_AUTH_URL", "https://auth.staging.example")
+	t.Setenv("LOOPZERO_DOGFOOD_DEEP_HEALTH_URL", "https://api.staging.example/api/v1/health/deep")
+	t.Setenv("LOOPZERO_DOGFOOD_JWT_PATH", "/var/lib/staging/jwt")
+
+	env := DefaultEnv()
+
+	want := Env{
+		CloudBaseURL:  "https://cloud.staging.example",
+		AppBaseURL:    "https://app.staging.example",
+		AuthBaseURL:   "https://auth.staging.example",
+		DeepHealthURL: "https://api.staging.example/api/v1/health/deep",
+		JWTPath:       "/var/lib/staging/jwt",
+	}
+	got := env
+	got.HTTPClient = nil
+	if got != want {
+		t.Errorf("DefaultEnv() = %+v, want %+v", got, want)
+	}
+}
+
+func TestDefaultEnv_KeepsTheDevPublicDeepHealthWhenNoVariableIsSet(t *testing.T) {
+	env := DefaultEnv()
+	if env.DeepHealthURL != "https://cloud-dev.getloopscale.com/health/deep" {
+		t.Errorf("DeepHealthURL = %q", env.DeepHealthURL)
+	}
+}
+
+func TestHealthcheckCloud_ProbesTheDeepHealthURL(t *testing.T) {
+	var probed string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		probed = r.URL.Path
+		if r.URL.Path != "/api/v1/health/deep" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	env := Env{CloudBaseURL: "http://unused.invalid", DeepHealthURL: srv.URL + "/api/v1/health/deep", HTTPClient: srv.Client()}
+
+	err := HealthcheckCloud(context.Background(), env)
+
+	if probed != "/api/v1/health/deep" {
+		t.Fatalf("probed %q, want the deep health URL", probed)
+	}
+	if err == nil || !strings.Contains(err.Error(), "503") {
+		t.Errorf("a 503 deep health returned %v, want an error naming HTTP 503", err)
+	}
+}
+
 func TestLoadJWT_Reads0600Token(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "token.txt")
