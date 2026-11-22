@@ -1,3 +1,41 @@
-# loopzero-cloud is not installed on staging (profile.loopzeroCloud: false); see
-# environments/staging.yaml.
+# staging overlay for charts/loopzero-cloud, layered on charts/loopzero-cloud/values-bootstrap.yaml.
+#
+# Installed when environments/staging.yaml turns profile.loopzeroCloud on, together with
+# loopzero-dashboard and the app host route of the public-routes release. Its images are
+# private on GHCR: the nodes pull them with the `ghcr-pull` Secret (the aws-secrets-manager
+# release writes it from Secrets Manager, aws.imagePullSecret). A production environment
+# pulls from ECR with the node role and lists no pull Secret.
+{{- if .Values.profile.loopzeroCloud }}
+global:
+  registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" }}
+
+image:
+  repository: loopzero-cloud
+  tag: {{ required "platformImages.tags.loopzero-cloud is not set: pin the image CI published" (index .Values.platformImages.tags "loopzero-cloud") | quote }}
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ghcr-pull
+
+config:
+  loopzeroEnv: "production"
+  appPublicUrl: {{ .Values.uiBaseUrl | quote }}
+  authCookieDomain: {{ .Values.cookieDomain | quote }}
+  kratosInternalUrl: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
+  # The issuer Hydra emits (values/staging/ory-hydra.yaml.gotmpl).
+  jwtIssuer: {{ printf "%s/" (.Values.publicAuthUrl | trimSuffix "/") | quote }}
+
+# The cloud host: the whole control plane API. The app host is the public-routes release.
+ingressRoute:
+  enabled: true
+  host: {{ .Values.dashboardOrigin | trimPrefix "https://" | quote }}
+  middlewares:
+    - name: rate-limit
+      namespace: traefik
+    - name: body-limit
+      namespace: traefik
+  # TLS terminates at the edge (Caddy on staging); see values/staging/loopzero-api.yaml.gotmpl.
+  certIssuer: CFManaged
+{{- else }}
 {}
+{{- end }}

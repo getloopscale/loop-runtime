@@ -36,3 +36,12 @@ cache:
   host: ""
   port: 6379
   authTokenSecret: ""
+
+# A registry pull credential (templates/image-pull-secret.yaml), written into each of
+# `namespaces` as the Secret `name`. Off while secretsManagerKey is empty. Staging only:
+# production pulls from ECR with the node role.
+imagePullSecret:
+  name: ghcr-pull
+  registry: ghcr.io
+  secretsManagerKey: ""
+  namespaces: []

@@ -1,0 +1,45 @@
+# Traefik entry points and the middlewares every route gets (the shared ones of
+# infra/helm/traefik/middlewares.yaml, applied by the environment's install task).
+entryPoints:
+  - websecure
+middlewares:
+  - name: rate-limit
+    namespace: traefik
+  - name: body-limit
+    namespace: traefik
+
+# CFManaged: TLS terminates at the edge in front of the load balancer, so no Certificate
+# is requested and Traefik serves its default one. Any other value names the
+# cert-manager ClusterIssuer that issues one Certificate per host.
+certIssuer: CFManaged
+
+# Login. Hydra's public paths (OAuth2, discovery, userinfo, verifiable credentials) go to
+# Hydra, every other path to Kratos' public API. Neither service's admin API is routed.
+identity:
+  enabled: false
+  host: ""
+  namespace: loopzero-auth
+  hydra:
+    service: ory-hydra-public
+    port: 4444
+  kratos:
+    service: ory-kratos-public
+    port: 80
+
+# The console on the app host: the dashboard bundle, with the browser-facing APIs it
+# calls on the same origin. Turned on with loopzero-cloud. While it is off, Kratos
+# registration is not routed at all: it must go through the loopzero-cloud handler that
+# gives existing and new emails the same response (account enumeration).
+console:
+  enabled: false
+  host: ""
+  namespace: loopzero-system
+  dashboard:
+    service: loopzero-dashboard
+    port: 8080
+  cloud:
+    service: loopzero-cloud
+    port: 13002
+  api:
+    service: loopzero-api
+    port: 3001
