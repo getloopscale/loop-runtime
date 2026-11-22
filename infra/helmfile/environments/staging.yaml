@@ -84,10 +84,10 @@ platformImages:
     loopzero-clone-runner: "develop-7a34191"
     loopzero-syft-scanner: "develop-7a34191"
     loopzero-cosign-signer: "develop-7a34191"
-    # getloopscale/loopzero-cloud publishes these two; empty until the first image is on
-    # GHCR. Required once profile.loopzeroCloud is on.
-    loopzero-cloud: ""
-    loopzero-dashboard: ""
+    # getloopscale/console publishes these two (private on GHCR, pulled with
+    # aws.imagePullSecret). Required while profile.loopzeroCloud is on.
+    loopzero-cloud: "develop-12936b3"
+    loopzero-dashboard: "develop-12936b3"
 
 registries:
   docrPrefix: "ghcr.io/getloopscale/"
@@ -173,7 +173,7 @@ profile:
   # Turning it on installs loopzero-cloud and loopzero-dashboard and routes the app and
   # cloud hosts. It needs the two image tags above and the Secrets Manager secret
   # aws.imagePullSecret names.
-  loopzeroCloud: false          # install the control plane (loopzero-cloud), unless clusterRole is standalone
+  loopzeroCloud: true           # install the control plane (loopzero-cloud), unless clusterRole is standalone
   smokeTest: false              # run the post-install smoke-test release
   localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
   inClusterObjectStore: false   # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
