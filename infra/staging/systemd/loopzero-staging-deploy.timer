@@ -1,0 +1,11 @@
+# Looks for a new head of develop every five minutes.
+[Unit]
+Description=Look for a new head of develop to deploy to staging
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=5min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

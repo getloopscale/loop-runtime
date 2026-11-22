@@ -44,6 +44,8 @@ vars:
   TERRAGRUNT_VERSION: v1.0.8
   # Caddy is the public edge, in place of CloudFront and ACM.
   CADDY_VERSION: v2.10.0
+  # infra/staging/deploy.sh reads the image pins of the staging environment with it.
+  YQ_VERSION: v4.54.1
   # The emulator listens on the gateway of its own Docker network; each VPC Terraform
   # creates gets a Docker network with the VPC's CIDR, which falls in 10.0.0.0/8.
   EMULATOR_SUBNET: 172.29.0.0/16
@@ -128,6 +130,16 @@ tasks:
           curl -fsSLo "$tmp/terragrunt.sums" "$base/SHA256SUMS"
           echo "$(awk '$2 == "terragrunt_linux_amd64" {print $1}' "$tmp/terragrunt.sums")  $tmp/terragrunt" | sha256sum --check --quiet
           install_binary "$tmp/terragrunt" terragrunt
+        fi
+        if ! yq --version 2>/dev/null | grep -q "version {{.YQ_VERSION}}$"; then
+          base=https://github.com/mikefarah/yq/releases/download/{{.YQ_VERSION}}
+          curl -fsSLo "$tmp/yq" "$base/yq_linux_amd64"
+          curl -fsSLo "$tmp/yq.sums" "$base/checksums"
+          curl -fsSLo "$tmp/yq.order" "$base/checksums_hashes_order"
+          # checksums has one line per file: the name, then one hash per line of the order file.
+          column=$(( $(grep -nx 'SHA-256' "$tmp/yq.order" | cut -d: -f1) + 1 ))
+          echo "$(awk -v c="$column" '$1 == "yq_linux_amd64" {print $c}' "$tmp/yq.sums")  $tmp/yq" | sha256sum --check --quiet
+          install_binary "$tmp/yq" yq
         fi
         if ! command -v aws >/dev/null; then
           curl -fsSLo "$tmp/awscli.zip" https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
@@ -269,10 +281,12 @@ tasks:
           kubectl --context "$ctx" label nodes -l node-role.kubernetes.io/control-plane \
             node.kubernetes.io/exclude-from-external-load-balancers=true --overwrite >/dev/null
         done
-        helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging sync
-        helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e staging sync
+        # infra/staging/deploy.sh pins the images of the commit it deploys through
+        # STAGING_STATE_VALUES, a values file layered over the staging environment.
+        helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
+        helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         for cell in cell-0 cell-1; do
-          LOOPZERO_CELL_CONTEXT=$cell helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e staging sync
+          LOOPZERO_CELL_CONTEXT=$cell helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         done
         # The middlewares the routes name (traefik-rate-limit, traefik-body-limit), which
         # are not a release: infra:install:cell applies the same file after its sync.
@@ -343,6 +357,26 @@ tasks:
       - kubectl --context core -n loopzero-system rollout status deployment/loopzero-api --timeout=10m
       - kubectl --context core -n loopzero-system get externalsecret loopzero-db-credentials
       - kubectl --context core -n loopzero-system exec deploy/loopzero-api -- wget -qO- http://127.0.0.1:3001/api/v1/health/ready
+
+  deploy:
+    desc: Install the timer that deploys every new head of develop (infra/staging/deploy.sh)
+    # The pull model: nothing on GitHub reaches this host. The timer reads develop, and
+    # reports back as the staging/deploy commit status with a token kept only here.
+    cmds:
+      - |
+        set -euo pipefail
+        token=/etc/loopzero-staging/github-status-token
+        if [ ! -s "$token" ]; then
+          echo "no status token at $token: create a fine-grained token on getloopscale/loopzero with Commit statuses read and write, and write it there (mode 0600)" >&2
+          exit 1
+        fi
+        chmod 600 "$token"
+        install -d -m 0755 /usr/local/lib/loopzero-staging
+        install -m 0755 infra/staging/deploy.sh /usr/local/lib/loopzero-staging/deploy.sh
+        install -m 0644 infra/staging/systemd/loopzero-staging-deploy.service infra/staging/systemd/loopzero-staging-deploy.timer /etc/systemd/system/
+        systemctl daemon-reload
+        systemctl enable --now loopzero-staging-deploy.timer
+        systemctl list-timers loopzero-staging-deploy.timer --no-pager
 
   edge:
     desc: Serve the public hostnames on this host's public address, through the core ALB
