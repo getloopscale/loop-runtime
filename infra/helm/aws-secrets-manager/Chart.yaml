@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: aws-secrets-manager
+description: |
+  The ClusterSecretStore that reads AWS Secrets Manager through the External Secrets
+  controller's IRSA role, and on the core cluster the ExternalSecrets the platform reads
+  its credentials from: the RDS master secret, the ElastiCache AUTH token, and the
+  platform secret infra-live creates for the values the platform generates itself.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

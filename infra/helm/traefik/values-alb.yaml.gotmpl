@@ -1,0 +1,38 @@
+# Traefik behind an Application Load Balancer (profile.awsLoadBalancerController).
+#
+# The AWS Load Balancer Controller turns the Ingress below into an internet-facing ALB
+# whose targets are the Traefik pods (target-type ip), so Traefik needs no cloud load
+# balancer of its own and its Service stays ClusterIP. The ALB forwards to Traefik's
+# websecure entry point, where the IngressRoutes and their certificates already live;
+# the ALB's own TLS listener and its ACM certificate belong to the public edge, which
+# this environment does not define yet.
+service:
+  type: ClusterIP
+
+extraObjects:
+  - apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: traefik-edge
+      namespace: traefik
+      annotations:
+        alb.ingress.kubernetes.io/scheme: internet-facing
+        alb.ingress.kubernetes.io/target-type: ip
+        alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+        alb.ingress.kubernetes.io/backend-protocol: HTTPS
+        alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
+        alb.ingress.kubernetes.io/healthcheck-path: /ping
+        alb.ingress.kubernetes.io/success-codes: "200-499"
+    spec:
+      ingressClassName: alb
+      rules:
+        - host: {{ printf "*.%s" .Values.domain | quote }}
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: traefik
+                    port:
+                      name: websecure

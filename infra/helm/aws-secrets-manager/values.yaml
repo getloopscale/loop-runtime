@@ -1,0 +1,38 @@
+# The AWS region the secrets live in.
+region: ""
+
+# The ClusterSecretStore every ExternalSecret below reads through. It carries no
+# credentials: the External Secrets controller authenticates with its own IRSA role
+# (the `eks.amazonaws.com/role-arn` annotation on its ServiceAccount).
+store:
+  name: aws-secrets-manager
+
+refreshInterval: 1h
+
+# Render the core cluster's ExternalSecrets. The other clusters get the store only.
+coreSecrets: false
+
+# security/secrets in infra-live: one JSON object with the values the platform generates
+# for itself. infra/helmfile/scripts/seed-aws-platform-secret.sh fills in missing keys.
+platformSecret: ""
+
+# data/rds. masterSecret is the secret RDS manages for the master user
+# (manage_master_user_password), JSON with `username` and `password`.
+database:
+  host: ""
+  port: 5432
+  name: loopzero
+  masterSecret: ""
+  # RDS forces TLS (rds.force_ssl); `require` encrypts without pinning the RDS CA.
+  sslmode: require
+  # The databases the identity services and Gitea keep their state in, on the same
+  # instance. database-bootstrap creates them.
+  kratosDatabase: kratos
+  hydraDatabase: hydra
+  giteaDatabase: gitea
+
+# data/valkey. authTokenSecret holds the AUTH token as a plain string.
+cache:
+  host: ""
+  port: 6379
+  authTokenSecret: ""

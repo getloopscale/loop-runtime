@@ -1,0 +1,339 @@
+# The staging environment: production's AWS infrastructure, at a smaller scale, on the AWS
+# emulator on one Linux host.
+#
+# The emulator (github.com/paulohenriquevn/aws-emulator, a pinned release) serves the AWS
+# APIs as a systemd service, and its EKS provisioner runs every EKS cluster the emulator
+# holds as a kind cluster, with the cluster's node group instances as its nodes. The same
+# Terraform that builds production (infra-modules, infra-live) is applied against the
+# emulator, and the platform is installed on the clusters it creates.
+#
+# The emulator keeps its state in memory, so a restart empties it: `staging:up` rebuilds
+# the environment from nothing, and a reboot or a crash is recovered the same way.
+#
+#   task staging:host      once per host, as root: packages, tools, kernel limits, services
+#   task staging:up        rebuild the infrastructure and the platform from nothing
+#   task staging:down      stop the emulator and remove everything it ran
+#   task staging:status    what is running
+#
+# The host layout is in infra/staging/README.md.
+
+version: '3'
+
+vars:
+  STAGING_ROOT: /var/lib/loopzero-staging
+  # The emulator's home and port, where its CLI configuration, keys and CA are written.
+  EMULATOR_HOME: /var/lib/aws-emulator
+  EMULATOR_PORT: 9597
+  # The infra-live staging environment applied against the emulator.
+  IAC_DIR: /opt/staging-iac/infra-live/staging/us-east-1/staging
+  # The emulator release the environment runs, and the SHA-256 of its Linux binary.
+  EMULATOR_REPOSITORY: paulohenriquevn/aws-emulator
+  # The emulator release the environment runs, and the SHA-256 of its two Linux binaries.
+  EMULATOR_VERSION: v0.3.0
+  EMULATOR_SHA256: EMULATOR_SHA256_PENDING
+  PROVISIONER_SHA256: PROVISIONER_SHA256_PENDING
+  EMULATOR_DIR: /opt/aws-emulator/{{.EMULATOR_VERSION}}
+  # Tool versions. kind and helm are the ones the emulator's own CI runs its harness with.
+  KIND_VERSION: v0.31.0
+  KUBECTL_VERSION: v1.35.0
+  HELM_VERSION: v3.22.1
+  HELMFILE_VERSION: v1.8.4
+  # The versions infra-live's CI plans and applies with.
+  TERRAFORM_VERSION: 1.14.6
+  TERRAGRUNT_VERSION: v1.0.8
+  # Caddy is the public edge, in place of CloudFront and ACM.
+  CADDY_VERSION: v2.10.0
+  # The emulator listens on the gateway of its own Docker network; each VPC Terraform
+  # creates gets a Docker network with the VPC's CIDR, which falls in 10.0.0.0/8.
+  EMULATOR_SUBNET: 172.29.0.0/16
+  VPC_SUPERNET: 10.0.0.0/8
+
+tasks:
+  host:
+    desc: Prepare this host for staging (run as root, idempotent)
+    preconditions:
+      - sh: test "$(id -u)" -eq 0
+        msg: staging:host installs packages and system units, so it runs as root
+    cmds:
+      - task: host:packages
+      - task: host:tools
+      - task: host:kernel
+      - task: host:firewall
+      - task: host:emulator
+      - task: host:units
+
+  host:packages:
+    internal: true
+    cmds:
+      - apt-get update -qq
+      - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git jq curl openssl unzip ca-certificates tcpdump postgresql-client python3 >/dev/null
+      - docker version --format '{{"{{"}}.Server.Version{{"}}"}}'
+
+  host:tools:
+    internal: true
+    cmds:
+      - |
+        set -euo pipefail
+        install_binary() { install -m 0755 "$1" "/usr/local/bin/$2"; }
+        tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+        if [ "$(kind version -q 2>/dev/null || true)" != "{{.KIND_VERSION}}" ]; then
+          curl -fsSLo "$tmp/kind" "https://github.com/kubernetes-sigs/kind/releases/download/{{.KIND_VERSION}}/kind-linux-amd64"
+          install_binary "$tmp/kind" kind
+        fi
+        if ! kubectl version --client 2>/dev/null | grep -q "{{.KUBECTL_VERSION}}"; then
+          curl -fsSLo "$tmp/kubectl" "https://dl.k8s.io/release/{{.KUBECTL_VERSION}}/bin/linux/amd64/kubectl"
+          curl -fsSLo "$tmp/kubectl.sha256" "https://dl.k8s.io/release/{{.KUBECTL_VERSION}}/bin/linux/amd64/kubectl.sha256"
+          echo "$(cat "$tmp/kubectl.sha256")  $tmp/kubectl" | sha256sum --check --quiet
+          install_binary "$tmp/kubectl" kubectl
+        fi
+        if ! helm version --short 2>/dev/null | grep -q "^{{.HELM_VERSION}}"; then
+          curl -fsSLo "$tmp/helm.tgz" "https://get.helm.sh/helm-{{.HELM_VERSION}}-linux-amd64.tar.gz"
+          curl -fsSLo "$tmp/helm.tgz.sha256sum" "https://get.helm.sh/helm-{{.HELM_VERSION}}-linux-amd64.tar.gz.sha256sum"
+          (cd "$tmp" && sed "s#helm-{{.HELM_VERSION}}-linux-amd64.tar.gz#helm.tgz#" helm.tgz.sha256sum | sha256sum --check --quiet)
+          tar -xzf "$tmp/helm.tgz" -C "$tmp" && install_binary "$tmp/linux-amd64/helm" helm
+        fi
+        if ! helmfile version 2>/dev/null | grep -q "{{.HELMFILE_VERSION}}"; then
+          version={{.HELMFILE_VERSION}}
+          curl -fsSLo "$tmp/helmfile.tgz" "https://github.com/helmfile/helmfile/releases/download/$version/helmfile_${version#v}_linux_amd64.tar.gz"
+          tar -xzf "$tmp/helmfile.tgz" -C "$tmp" helmfile && install_binary "$tmp/helmfile" helmfile
+        fi
+        if ! caddy version 2>/dev/null | grep -q "^{{.CADDY_VERSION}}"; then
+          version={{.CADDY_VERSION}}
+          base=https://github.com/caddyserver/caddy/releases/download/$version
+          curl -fsSLo "$tmp/caddy.tgz" "$base/caddy_${version#v}_linux_amd64.tar.gz"
+          curl -fsSLo "$tmp/caddy.sums" "$base/caddy_${version#v}_checksums.txt"
+          echo "$(awk -v f="caddy_${version#v}_linux_amd64.tar.gz" '$2 == f {print $1}' "$tmp/caddy.sums")  $tmp/caddy.tgz" | sha512sum --check --quiet
+          tar -xzf "$tmp/caddy.tgz" -C "$tmp" caddy && install_binary "$tmp/caddy" caddy
+        fi
+        if ! terraform version 2>/dev/null | grep -q "^Terraform v{{.TERRAFORM_VERSION}}$"; then
+          base=https://releases.hashicorp.com/terraform/{{.TERRAFORM_VERSION}}
+          curl -fsSLo "$tmp/terraform.zip" "$base/terraform_{{.TERRAFORM_VERSION}}_linux_amd64.zip"
+          curl -fsSLo "$tmp/terraform.sums" "$base/terraform_{{.TERRAFORM_VERSION}}_SHA256SUMS"
+          echo "$(awk '$2 == "terraform_{{.TERRAFORM_VERSION}}_linux_amd64.zip" {print $1}' "$tmp/terraform.sums")  $tmp/terraform.zip" | sha256sum --check --quiet
+          unzip -oq "$tmp/terraform.zip" terraform -d "$tmp" && install_binary "$tmp/terraform" terraform
+        fi
+        if ! terragrunt --version 2>/dev/null | grep -q "{{.TERRAGRUNT_VERSION}}$"; then
+          base=https://github.com/gruntwork-io/terragrunt/releases/download/{{.TERRAGRUNT_VERSION}}
+          curl -fsSLo "$tmp/terragrunt" "$base/terragrunt_linux_amd64"
+          curl -fsSLo "$tmp/terragrunt.sums" "$base/SHA256SUMS"
+          echo "$(awk '$2 == "terragrunt_linux_amd64" {print $1}' "$tmp/terragrunt.sums")  $tmp/terragrunt" | sha256sum --check --quiet
+          install_binary "$tmp/terragrunt" terragrunt
+        fi
+        if ! command -v aws >/dev/null; then
+          curl -fsSLo "$tmp/awscli.zip" https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+          unzip -q "$tmp/awscli.zip" -d "$tmp" && "$tmp/aws/install"
+        fi
+      - kind version
+      - kubectl version --client
+      - helm version --short
+      - helmfile version
+      - aws --version
+      - terraform version
+      - terragrunt --version
+      - caddy version
+
+  host:kernel:
+    internal: true
+    desc: The inotify limits a multi-node kind cluster with the whole platform needs
+    cmds:
+      - |
+        cat >/etc/sysctl.d/90-loopzero-staging.conf <<'EOF'
+        # kind runs every node's kubelet and every pod on this kernel; the defaults (128
+        # instances) make pods fail with "too many open files".
+        fs.inotify.max_user_instances = 8192
+        fs.inotify.max_user_watches = 1048576
+        EOF
+      - sysctl --quiet --system
+
+  host:firewall:
+    internal: true
+    desc: Only SSH and the public edge from the internet; the kind nodes may reach the host
+    cmds:
+      # Docker publishes container ports through its own chains, so ufw does not cover
+      # them; it does cover traffic INTO the host. The kind nodes reach the emulator and
+      # the database containers on the network gateway, which is the host, and the default
+      # deny dropped exactly that (measured 2026-11-21: every harness check failed with
+      # `[UFW BLOCK] SRC=172.29.0.4 DST=172.29.0.1 DPT=9597`).
+      - ufw default deny incoming >/dev/null
+      - ufw default allow outgoing >/dev/null
+      - ufw allow 22/tcp >/dev/null
+      - ufw allow 80/tcp >/dev/null
+      - ufw allow 443/tcp >/dev/null
+      - ufw allow in from {{.EMULATOR_SUBNET}} comment 'containers to the emulator on the host' >/dev/null
+      # The VPCs' networks: nodes reach the emulator, and API servers the token webhook.
+      - ufw allow in from {{.VPC_SUPERNET}} comment 'VPC networks to the emulator and its EKS provisioner' >/dev/null
+      - ufw --force enable >/dev/null
+      - ufw status numbered
+
+  host:emulator:
+    internal: true
+    desc: The pinned emulator release, both binaries checked against their SHA-256
+    status:
+      - echo "{{.EMULATOR_SHA256}}  {{.EMULATOR_DIR}}/aws-emulator-fork-linux-x64" | sha256sum --check --quiet
+      - echo "{{.PROVISIONER_SHA256}}  {{.EMULATOR_DIR}}/eks-provisioner-linux-x64" | sha256sum --check --quiet
+      - test "$(readlink /opt/aws-emulator/current)" = "{{.EMULATOR_DIR}}"
+    cmds:
+      - mkdir -p {{.EMULATOR_DIR}}
+      - curl -fsSLo {{.EMULATOR_DIR}}/aws-emulator-fork-linux-x64 https://github.com/{{.EMULATOR_REPOSITORY}}/releases/download/{{.EMULATOR_VERSION}}/aws-emulator-fork-linux-x64
+      - echo "{{.EMULATOR_SHA256}}  {{.EMULATOR_DIR}}/aws-emulator-fork-linux-x64" | sha256sum --check
+      - curl -fsSLo {{.EMULATOR_DIR}}/eks-provisioner-linux-x64 https://github.com/{{.EMULATOR_REPOSITORY}}/releases/download/{{.EMULATOR_VERSION}}/eks-provisioner-linux-x64
+      - echo "{{.PROVISIONER_SHA256}}  {{.EMULATOR_DIR}}/eks-provisioner-linux-x64" | sha256sum --check
+      - chmod 0755 {{.EMULATOR_DIR}}/aws-emulator-fork-linux-x64 {{.EMULATOR_DIR}}/eks-provisioner-linux-x64
+      - ln -sfn {{.EMULATOR_DIR}} /opt/aws-emulator/current
+
+  host:units:
+    internal: true
+    desc: The emulator and its EKS provisioner as systemd services
+    cmds:
+      - install -m 0644 {{.ROOT_DIR}}/infra/staging/systemd/aws-emulator.service {{.ROOT_DIR}}/infra/staging/systemd/aws-emulator-eks.service {{.ROOT_DIR}}/infra/staging/systemd/aws-emulator-localhost.socket {{.ROOT_DIR}}/infra/staging/systemd/aws-emulator-localhost.service /etc/systemd/system/
+      - systemctl daemon-reload
+      - systemctl enable --now aws-emulator.service aws-emulator-eks.service aws-emulator-localhost.socket
+
+  up:
+    desc: Rebuild the infrastructure and the platform from nothing
+    cmds:
+      - task: down
+      - task: emulator
+      - task: infrastructure
+      - task: platform
+
+  emulator:
+    desc: Start the emulator and its EKS provisioner, empty
+    cmds:
+      - systemctl start aws-emulator.service aws-emulator-eks.service
+      - |
+        for _ in $(seq 60); do
+          systemctl is-active --quiet aws-emulator-eks.service && exit 0
+          sleep 1
+        done
+        journalctl -u aws-emulator -u aws-emulator-eks -n 50 --no-pager >&2
+        exit 1
+
+  infrastructure:
+    desc: Apply the staging environment of infra-live against the emulator
+    cmds:
+      - echo "the infra-live staging environment is not wired yet" >&2; exit 1
+
+  platform:
+    desc: Install the platform on the staging clusters
+    # The same helmfiles and the same `staging` environment a production AWS environment
+    # would sync, fed with the outputs of the infra-live units that were applied. Secrets
+    # come from the emulator's Secrets Manager through External Secrets; nothing here
+    # writes a credential into a cluster except the in-cluster wiring of
+    # bootstrap-aws-clusters.sh.
+    env:
+      KUBECONFIG: '{{.STAGING_ROOT}}/kubeconfig'
+      AWS_CONFIG_FILE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/config'
+      AWS_SHARED_CREDENTIALS_FILE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/emulator_credentials'
+      AWS_CA_BUNDLE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/ca.pem'
+      AWS_ENDPOINT_URL: 'https://localhost:{{.EMULATOR_PORT}}'
+      AWS_REGION: us-east-1
+      # Each helmfile's own kubeContext reads these, so no invocation passes --kube-context.
+      LOOPZERO_CORE_CONTEXT: core
+      LOOPZERO_BUILD_CONTEXT: build
+    cmds:
+      - task: platform:kubeconfig
+      - |
+        set -euo pipefail
+        eval "$(task staging:platform:outputs)"
+        bash infra/helmfile/scripts/seed-aws-platform-secret.sh loopzero/staging/platform
+        bash infra/helmfile/scripts/bootstrap-aws-clusters.sh pre-core
+        # The ServiceMonitor, PodMonitor and PrometheusRule CRDs every cluster's charts
+        # create objects of, from the same manifests infra:install:monitoring-crds applies.
+        # That task is not called: its contexts are the Taskfile's global k3d ones, which a
+        # caller cannot override, and a called task does not inherit KUBECONFIG.
+        crds=https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd
+        for ctx in core build cell-0 cell-1; do
+          kubectl --context "$ctx" create namespace monitoring --dry-run=client -o yaml | kubectl --context "$ctx" apply -f - >/dev/null
+          kubectl --context "$ctx" apply --server-side \
+            -f "$crds/monitoring.coreos.com_servicemonitors.yaml" \
+            -f "$crds/monitoring.coreos.com_prometheusrules.yaml" \
+            -f "$crds/monitoring.coreos.com_podmonitors.yaml"
+        done
+        helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging sync
+        helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e staging sync
+        for cell in cell-0 cell-1; do
+          LOOPZERO_CELL_CONTEXT=$cell helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e staging sync
+        done
+        bash infra/helmfile/scripts/bootstrap-aws-clusters.sh post-core
+      - task: platform:verify
+
+  platform:kubeconfig:
+    internal: true
+    desc: One kubeconfig, one context per EKS cluster, named after the cluster's role
+    env:
+      AWS_CONFIG_FILE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/config'
+      AWS_SHARED_CREDENTIALS_FILE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/emulator_credentials'
+      AWS_CA_BUNDLE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/ca.pem'
+      AWS_ENDPOINT_URL: 'https://localhost:{{.EMULATOR_PORT}}'
+      AWS_REGION: us-east-1
+    cmds:
+      - mkdir -p {{.STAGING_ROOT}}
+      - |
+        set -euo pipefail
+        for cluster in core build cell-0 cell-1; do
+          aws eks update-kubeconfig --name "loopzero-staging-$cluster" --alias "$cluster" \
+            --kubeconfig {{.STAGING_ROOT}}/kubeconfig >/dev/null
+        done
+        chmod 600 {{.STAGING_ROOT}}/kubeconfig
+
+  platform:outputs:
+    desc: The infra-live outputs the staging environment reads, as shell exports
+    env:
+      HOME: /root
+      AWS_EMULATOR_ENDPOINT: 'https://localhost:{{.EMULATOR_PORT}}'
+      AWS_EMULATOR_PORT: '{{.EMULATOR_PORT}}'
+      AWS_EMULATOR_HOME: '{{.EMULATOR_HOME}}'
+      # root.hcl names the emulator's keys in the provider; nothing else may be read.
+      AWS_CONFIG_FILE: /dev/null
+      AWS_SHARED_CREDENTIALS_FILE: /dev/null
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+        out() { (cd "{{.IAC_DIR}}/$1" && terragrunt output -raw "$2" 2>/dev/null); }
+        printf 'export LOOPZERO_DB_HOST="%s"\n' "$(out data/rds address)"
+        printf 'export LOOPZERO_DB_PORT="%s"\n' "$(out data/rds port)"
+        printf 'export LOOPZERO_DB_NAME="%s"\n' "$(out data/rds db_name)"
+        printf 'export LOOPZERO_DB_MASTER_SECRET="%s"\n' "$(out data/rds master_user_secret_arn)"
+        printf 'export LOOPZERO_CACHE_HOST="%s"\n' "$(out data/valkey primary_endpoint_address)"
+        printf 'export LOOPZERO_CACHE_PORT="%s"\n' "$(out data/valkey port)"
+        printf 'export LOOPZERO_CACHE_AUTH_SECRET="%s"\n' "$(out data/valkey auth_token_secret_arn)"
+        printf 'export LOOPZERO_VPC_ID="%s"\n' "$(out networking/vpc vpc_id)"
+
+  platform:verify:
+    internal: true
+    desc: loopzero-api Ready on core, connected to RDS, its health endpoint answering
+    env:
+      KUBECONFIG: '{{.STAGING_ROOT}}/kubeconfig'
+      AWS_CONFIG_FILE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/config'
+      AWS_SHARED_CREDENTIALS_FILE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/emulator_credentials'
+      AWS_CA_BUNDLE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/ca.pem'
+      AWS_ENDPOINT_URL: 'https://localhost:{{.EMULATOR_PORT}}'
+      AWS_REGION: us-east-1
+    cmds:
+      # The API exits at boot while no ClusterCredential is connected, so the pod that
+      # started before post-core ran is replaced rather than waited for.
+      - kubectl --context core -n loopzero-system rollout restart deployment/loopzero-api
+      - kubectl --context core -n loopzero-system rollout status deployment/loopzero-api --timeout=10m
+      - kubectl --context core -n loopzero-system get externalsecret loopzero-db-credentials
+      - kubectl --context core -n loopzero-system exec deploy/loopzero-api -- wget -qO- http://127.0.0.1:3001/api/v1/health/ready
+
+  down:
+    desc: Stop the emulator and remove the clusters, networks and containers it ran
+    cmds:
+      - systemctl stop aws-emulator-eks.service aws-emulator.service
+      - |
+        set -euo pipefail
+        for cluster in $(kind get clusters | grep '^eks-' || true); do kind delete cluster --name "$cluster"; done
+        containers=$(docker ps -aq --filter label=aws-emulator.service)
+        if [ -n "$containers" ]; then docker rm -f $containers >/dev/null; fi
+        for network in $(docker network ls -q --filter label=aws-emulator.vpc-id); do docker network rm "$network" >/dev/null; done
+        rm -rf /var/lib/aws-emulator /var/lib/aws-emulator-eks
+
+  status:
+    desc: What the staging environment is running
+    cmds:
+      - systemctl is-active aws-emulator.service aws-emulator-eks.service || true
+      - kind get clusters
+      - docker network ls --filter label=aws-emulator.vpc-id --format '{{"{{"}}.Name{{"}}"}}'

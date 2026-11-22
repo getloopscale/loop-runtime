@@ -1,0 +1,113 @@
+{{- /* SPDX-License-Identifier: Apache-2.0 */ -}}
+{{- /*
+One Job per release revision, so every sync re-asserts the database state and the
+helmfile's waitForJobs holds the releases that need the schema until it is there. Both
+steps are idempotent: CREATE DATABASE only for a missing one, the roles SQL re-asserts
+each role's posture, and `migrate up` applies only what schema_migrations lacks (it exits
+0 on "no change").
+
+The pod waits in CreateContainerConfigError until External Secrets has written the
+credentials Secret; that is the ordering, not a failure.
+*/ -}}
+{{- $rolesSql := required "database-bootstrap: rolesSql is required (infra/scripts/production/provision-db-roles.sql)" .Values.rolesSql }}
+{{- $migrateImage := required "database-bootstrap: images.migrate is required (the loopzero-api image)" .Values.images.migrate }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-sql
+  namespace: {{ .Release.Namespace }}
+data:
+  provision-db-roles.sql: |
+{{ $rolesSql | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-{{ .Release.Revision }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: database-bootstrap
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  backoffLimit: {{ .Values.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: database-bootstrap
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: sql
+          configMap:
+            name: {{ .Release.Name }}-sql
+      initContainers:
+        # Databases first, then the roles: migrations 000062 and 000068 grant to
+        # loopzero_api and loopzero_worker only if those roles already exist.
+        - name: databases-and-roles
+          image: {{ .Values.images.psql }}
+          securityContext:
+            runAsUser: 70
+            runAsGroup: 70
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: OWNER_URI
+              valueFrom: { secretKeyRef: { name: {{ .Values.credentialsSecret }}, key: uri } }
+            - name: API_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.credentialsSecret }}, key: api-password } }
+            - name: WORKER_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.credentialsSecret }}, key: worker-password } }
+            - name: CLOUD_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.credentialsSecret }}, key: cloud-password } }
+            - name: DATABASES
+              value: {{ join " " .Values.databases | quote }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              for db in $DATABASES; do
+                if [ -z "$(psql "$OWNER_URI" -v ON_ERROR_STOP=1 -tAc "SELECT 1 FROM pg_database WHERE datname = '$db'")" ]; then
+                  psql "$OWNER_URI" -v ON_ERROR_STOP=1 -qc "CREATE DATABASE \"$db\""
+                  echo "database $db created"
+                else
+                  echo "database $db present"
+                fi
+              done
+              psql "$OWNER_URI" -q \
+                -v api_password="$API_PASSWORD" -v worker_password="$WORKER_PASSWORD" -v cloud_password="$CLOUD_PASSWORD" \
+                -f /sql/provision-db-roles.sql
+              echo "roles loopzero_api, loopzero_worker and loopzero_cloud provisioned"
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      containers:
+        - name: migrate
+          image: {{ $migrateImage }}
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: OWNER_URI
+              valueFrom: { secretKeyRef: { name: {{ .Values.credentialsSecret }}, key: uri } }
+          command: ["/bin/sh", "-c"]
+          args:
+            - exec migrate -path /migrations -database "${OWNER_URI}&x-migrations-table=schema_migrations" up
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

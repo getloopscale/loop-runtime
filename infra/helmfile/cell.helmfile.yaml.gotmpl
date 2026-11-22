@@ -67,6 +67,9 @@ repositories:
   # already used by mgmt helmfile for Argo Workflows.
   - name: argo
     url: https://argoproj.github.io/argo-helm
+  # The AWS Load Balancer Controller (profile.awsLoadBalancerController).
+  - name: eks
+    url: https://aws.github.io/eks-charts
 
 # Pre-sync setup (called by the CLI orchestrator BEFORE this helmfile runs):
 #   bash infra/helmfile/scripts/generate-runtime-secrets.sh <env> <cluster-id>
@@ -109,6 +112,9 @@ releases:
       - cert-manager/cert-manager
     values:
       - ../helm/traefik/values.yaml
+{{- if .Values.profile.awsLoadBalancerController }}
+      - ../helm/traefik/values-alb.yaml.gotmpl
+{{- end }}
 
   # Wave -1: Secrets and metrics
   - name: external-secrets
@@ -117,6 +123,52 @@ releases:
     version: 0.14.3
     values:
       - ../helm/external-secrets/values.yaml
+{{- if or .Values.profile.awsSecretsManager .Values.profile.awsLoadBalancerController }}
+{{- /* The cell this sync targets, as infra-live names its IRSA roles (`<namePrefix>-cell-<N>-<workload>`). */}}
+{{- $cell := requiredEnv "LOOPZERO_CELL_CONTEXT" | regexFind "cell-[0-9]+$" | required "LOOPZERO_CELL_CONTEXT must end in cell-<N> to name the cell's IRSA roles" }}
+{{- $rolePrefix := printf "arn:aws:iam::%s:role/%s-%s" .Values.aws.accountId .Values.aws.namePrefix $cell }}
+{{- if .Values.profile.awsSecretsManager }}
+      # IRSA: infra-live's `identity/<cell>-external-secrets` trusts external-secrets:external-secrets.
+      - serviceAccount:
+          name: external-secrets
+          annotations:
+            eks.amazonaws.com/role-arn: {{ printf "%s-external-secrets" $rolePrefix | quote }}
+{{- with .Values | get "emulator.endpoint" "" }}
+        # Staging only (environments/staging.yaml `emulator:`): aws-sdk-go v1 ignores
+        # AWS_ENDPOINT_URL and reads one endpoint variable per service.
+        extraEnv:
+          - name: AWS_SECRETSMANAGER_ENDPOINT
+            value: {{ . | quote }}
+          - name: AWS_STS_ENDPOINT
+            value: {{ . | quote }}
+{{- end }}
+
+  # The store tenant and platform ExternalSecrets on this cell read through.
+  - name: aws-secrets-manager
+    namespace: external-secrets
+    chart: ../helm/aws-secrets-manager
+    needs:
+      - external-secrets/external-secrets
+    values:
+      - region: {{ .Values.aws.region | quote }}
+{{- end }}
+{{- if .Values.profile.awsLoadBalancerController }}
+
+  # The AWS Load Balancer Controller, with infra-live's `identity/<cell>-lb-controller` role.
+  - name: aws-load-balancer-controller
+    namespace: kube-system
+    chart: eks/aws-load-balancer-controller
+    version: 3.6.3
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/aws-load-balancer-controller/values.yaml.gotmpl
+      - clusterName: {{ printf "%s-%s" .Values.aws.namePrefix $cell | quote }}
+        serviceAccount:
+          annotations:
+            eks.amazonaws.com/role-arn: {{ printf "%s-lb-controller" $rolePrefix | quote }}
+{{- end }}
+{{- end }}
 
   # The ESO secret-fetch broker: a webhook ClusterSecretStore through which ExternalSecrets
   # in tenant namespaces ask loopzero-api for a tenant secret, sending the bearer token the

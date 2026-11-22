@@ -31,7 +31,10 @@ helmDefaults:
   # The flag STILL wins when passed (measured: it overrides silently, with no
   # error). What turns a divergence into a failure is the
   # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
-  kubeContext: k3d-loopzero-core
+  #
+  # LOOPZERO_CORE_CONTEXT names it where the core cluster is not the k3d one (staging's
+  # EKS context is `core`), the way LOOPZERO_BUILD_CONTEXT does for the build plane.
+  kubeContext: {{ env "LOOPZERO_CORE_CONTEXT" | default "k3d-loopzero-core" }}
   wait: true
   waitForJobs: true
   timeout: 600
@@ -90,6 +93,9 @@ repositories:
   - name: agentgateway
     url: cr.agentgateway.dev/charts
     oci: true
+  # The AWS Load Balancer Controller (profile.awsLoadBalancerController).
+  - name: eks
+    url: https://aws.github.io/eks-charts
 
 # ---------------------------------------------------------------------------
 # Pre-sync secret generation (called by the CLI orchestrator BEFORE this
@@ -204,6 +210,9 @@ releases:
       - cert-manager/cert-manager
     values:
       - ../helm/traefik/values.yaml
+{{- if .Values.profile.awsLoadBalancerController }}
+      - ../helm/traefik/values-alb.yaml.gotmpl
+{{- end }}
 
   - name: nfs-server-provisioner
     namespace: nfs-system
@@ -286,6 +295,10 @@ releases:
       # B22: gitea backend uses Postgres. In standalone, must wait for in-cluster PG.
       - loopzero-system/postgresql
 {{- end }}
+{{- if .Values.profile.awsSecretsManager }}
+      # Its database on RDS, and the Secret with its database and Valkey credentials.
+      - loopzero-system/database-bootstrap
+{{- end }}
     values:
       - ../helm/gitea/values.yaml
       # Layered values per env (Plan v1.2 T2.2 — auto-resolve eliminates inline drill conditional).
@@ -307,6 +320,8 @@ releases:
     namespace: loopzero-system
     chart: minio/minio
     version: 5.4.0
+    # An environment whose buckets are managed S3 runs no MinIO.
+    installed: {{ .Values.profile.inClusterObjectStore }}
     values:
       - ../helm/minio/values.yaml
       # B25 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Distributed mode (4 pods × 4
@@ -384,6 +399,30 @@ releases:
     values:
       - ../helm/velero/values.yaml
       - ../helm/velero/values-schedules.yaml
+{{- if .Values.profile.awsSecretsManager }}
+      # IRSA: the server's ServiceAccount carries the velero role infra-live creates
+      # (`identity/core-velero`, trusting velero-system:velero), so no key Secret exists.
+      - velero:
+          credentials:
+            useSecret: false
+          serviceAccount:
+            server:
+              name: velero
+              annotations:
+                eks.amazonaws.com/role-arn: {{ printf "arn:aws:iam::%s:role/%s-core-velero" .Values.aws.accountId .Values.aws.namePrefix | quote }}
+          # AWS S3 itself: no s3Url, so the SDK resolves the regional endpoint (or the
+          # one AWS_ENDPOINT_URL names). The list replaces the chart's whole.
+          configuration:
+            backupStorageLocation:
+              - name: default
+                provider: aws
+                bucket: {{ .Values.velero.bucket | quote }}
+                default: true
+                config:
+                  region: {{ .Values.velero.region | quote }}
+                  s3ForcePathStyle: "true"
+{{- end }}
+{{- if not .Values.profile.awsSecretsManager }}
     set:
       - name: velero.configuration.backupStorageLocation[0].bucket
         value: {{ .Values.velero.bucket | quote }}
@@ -391,6 +430,7 @@ releases:
         value: {{ .Values.velero.region | quote }}
       - name: velero.configuration.backupStorageLocation[0].config.s3Url
         value: {{ .Values.velero.s3Url | quote }}
+{{- end }}
 
   # Wave 0: Platform services
   - name: argocd
@@ -479,6 +519,10 @@ releases:
 {{- if .Values.inClusterPostgres }}
     needs:
       - loopzero-system/postgresql
+{{- else if .Values.profile.awsSecretsManager }}
+    # Its database exists and its credentials Secret is written.
+    needs:
+      - loopzero-system/database-bootstrap
 {{- end }}
     values:
       - ../helm/ory-kratos/values.yaml.gotmpl
@@ -531,7 +575,13 @@ releases:
     needs:
       - argocd/argocd
       - loopzero-system/gitea
+{{- if .Values.profile.inClusterObjectStore }}
       - loopzero-system/minio
+{{- end }}
+{{- if .Values.profile.awsSecretsManager }}
+      # The schema at the latest migration and the loopzero_api role it connects as.
+      - loopzero-system/database-bootstrap
+{{- end }}
       - loopzero-auth/ory-kratos
     values:
       - ../../charts/loopzero-api/values-bootstrap.yaml
@@ -729,6 +779,74 @@ releases:
     version: 0.14.3
     values:
       - ../helm/external-secrets/values.yaml
+{{- if .Values.profile.awsSecretsManager }}
+      # IRSA: infra-live's `identity/core-external-secrets` trusts external-secrets:external-secrets.
+      - serviceAccount:
+          name: external-secrets
+          annotations:
+            eks.amazonaws.com/role-arn: {{ printf "arn:aws:iam::%s:role/%s-core-external-secrets" .Values.aws.accountId .Values.aws.namePrefix | quote }}
+{{- with .Values | get "emulator.endpoint" "" }}
+        # Staging only (environments/staging.yaml `emulator:`): aws-sdk-go v1 ignores
+        # AWS_ENDPOINT_URL and reads one endpoint variable per service.
+        extraEnv:
+          - name: AWS_SECRETSMANAGER_ENDPOINT
+            value: {{ . | quote }}
+          - name: AWS_STS_ENDPOINT
+            value: {{ . | quote }}
+{{- end }}
+{{- end }}
+{{- if .Values.profile.awsSecretsManager }}
+
+  # AWS Secrets Manager through the External Secrets controller's IRSA role: the store
+  # and the core credentials (RDS master secret, Valkey AUTH token, platform secret).
+  - name: aws-secrets-manager
+    namespace: external-secrets
+    chart: ../helm/aws-secrets-manager
+    needs:
+      - external-secrets/external-secrets
+    values:
+      - region: {{ .Values.aws.region | quote }}
+        coreSecrets: true
+        platformSecret: {{ .Values.aws.platformSecret | quote }}
+        database:
+          host: {{ env "LOOPZERO_DB_HOST" | quote }}
+          port: {{ env "LOOPZERO_DB_PORT" | default "5432" }}
+          name: {{ env "LOOPZERO_DB_NAME" | default "loopzero" | quote }}
+          masterSecret: {{ env "LOOPZERO_DB_MASTER_SECRET" | quote }}
+        cache:
+          host: {{ env "LOOPZERO_CACHE_HOST" | quote }}
+          port: {{ env "LOOPZERO_CACHE_PORT" | default "6379" }}
+          authTokenSecret: {{ env "LOOPZERO_CACHE_AUTH_SECRET" | quote }}
+
+  # The managed database brought to what loopzero-api boots against: identity and Gitea
+  # databases, the non-owner roles, the schema at the latest migration.
+  - name: database-bootstrap
+    namespace: loopzero-system
+    chart: ../helm/database-bootstrap
+    needs:
+      - external-secrets/aws-secrets-manager
+    values:
+      - rolesSql: {{ readFile "../scripts/production/provision-db-roles.sql" | toJson }}
+        images:
+          migrate: "{{ .Values.platformImages.registry }}loopzero-api:{{ index .Values.platformImages.tags "loopzero-api" }}"
+{{- end }}
+{{- if .Values.profile.awsLoadBalancerController }}
+
+  # The AWS Load Balancer Controller, with the IRSA role infra-live creates per cluster
+  # (`identity/<cluster>-lb-controller`, trusting kube-system:aws-load-balancer-controller).
+  - name: aws-load-balancer-controller
+    namespace: kube-system
+    chart: eks/aws-load-balancer-controller
+    version: 3.6.3
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/aws-load-balancer-controller/values.yaml.gotmpl
+      - clusterName: {{ printf "%s-core" .Values.aws.namePrefix | quote }}
+        serviceAccount:
+          annotations:
+            eks.amazonaws.com/role-arn: {{ printf "arn:aws:iam::%s:role/%s-core-lb-controller" .Values.aws.accountId .Values.aws.namePrefix | quote }}
+{{- end }}
 
   - name: chaos-mesh
     namespace: chaos-mesh
