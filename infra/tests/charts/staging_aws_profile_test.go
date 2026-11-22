@@ -158,3 +158,49 @@ func TestStagingVeleroBackupLocationIsAWSS3(t *testing.T) {
 		t.Errorf("config.region = %v, want us-east-1", got)
 	}
 }
+
+// The ALB in front of Traefik registers the node group's instances on Traefik's NodePort.
+// An ip target is a pod address the controller can register only when the pod has a VPC
+// network interface (the Amazon VPC CNI); with any other CNI the controller never
+// registers a target ("cannot resolve pod ENI for pods") and the ALB has nothing to send
+// traffic to. Instance targets need a NodePort (or LoadBalancer) Service.
+func TestStagingEdgeIngressRegistersInstanceTargets(t *testing.T) {
+	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "staging", "traefik", stagingOutputs...)
+	if got := dig(values, "service", "type"); got != "NodePort" {
+		t.Errorf("traefik service.type = %v, want NodePort for instance targets", got)
+	}
+	objects, _ := values["extraObjects"].([]any)
+	var edge map[string]any
+	for _, object := range objects {
+		if o, ok := object.(map[string]any); ok && o["kind"] == "Ingress" && dig(o, "metadata", "name") == "traefik-edge" {
+			edge = o
+		}
+	}
+	if edge == nil {
+		t.Fatal("traefik renders no Ingress traefik-edge")
+	}
+	annotations, _ := dig(edge, "metadata", "annotations").(map[string]any)
+	if got := annotations["alb.ingress.kubernetes.io/target-type"]; got != "instance" {
+		t.Errorf("traefik-edge target-type = %v, want instance", got)
+	}
+}
+
+// Public TLS terminates at the edge in front of the ALB (CloudFront and ACM, Caddy on
+// staging), and an ALB does not validate a target's certificate. The API's route asks for
+// no cert-manager Certificate: there is no ACME issuer in the cluster, and a route whose
+// TLS Secret never appears is dropped by Traefik ("secret ... does not exist"), which
+// leaves the host answering 404.
+func TestStagingAPIRouteLeavesTLSToTheEdge(t *testing.T) {
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-api", "charts/loopzero-api", stagingOutputs...)
+	if cert := renderedObject(t, rendered, "Certificate", "loopzero-api-tls"); cert != nil {
+		t.Errorf("loopzero-api renders Certificate loopzero-api-tls (issuer %v); the edge holds the public certificate",
+			dig(cert, "spec", "issuerRef", "name"))
+	}
+	route := renderedObject(t, rendered, "IngressRoute", "loopzero-api")
+	if route == nil {
+		t.Fatal("loopzero-api renders no IngressRoute")
+	}
+	if secret := dig(route, "spec", "tls", "secretName"); secret != nil {
+		t.Errorf("loopzero-api IngressRoute tls.secretName = %v, want none", secret)
+	}
+}

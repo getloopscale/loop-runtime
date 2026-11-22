@@ -1,0 +1,34 @@
+# The public edge of staging, in place of CloudFront and ACM: TLS for the public hostnames
+# with Let's Encrypt certificates, and every request passed on to the core cluster's ALB.
+#
+# `task staging:edge` writes the environment this file reads (/etc/loopzero-edge/edge.env):
+#
+#   EDGE_BIND_ADDRESS   the host's public address; nothing else is listened on
+#   EDGE_HOSTS          the public hostnames, comma separated; one certificate each
+#   EDGE_ALB_DNS_NAME   the DNSName of the ALB the traefik-edge Ingress created
+#   EDGE_ORIGIN         the emulator's endpoint, where that ALB is served
+#   EDGE_ORIGIN_CA      the emulator's CA, which signs the endpoint's certificate
+#
+# How a request reaches the right backend. The emulator serves an ALB at its own endpoint
+# for a request whose Host is the ALB's DNSName, so Host is rewritten to that name. The
+# hostname the viewer asked for travels in X-Forwarded-Host, and the emulator's ALB hands
+# it to the target as Host. Traefik therefore receives the viewer's Host, the same as
+# behind CloudFront in production, where the origin request policy forwards the viewer's
+# Host and the ALB passes it through unchanged. The IngressRoutes match on it.
+{
+	default_bind {$EDGE_BIND_ADDRESS}
+	email ops@getloopscale.com
+	# Only the hostnames below get a certificate. No on-demand TLS: the wildcard DNS
+	# record resolves every name under the zone here, and none of the others is public.
+}
+
+{$EDGE_HOSTS} {
+	reverse_proxy {$EDGE_ORIGIN} {
+		header_up Host {$EDGE_ALB_DNS_NAME}
+		# Caddy sets this by default; it is written out because the routing depends on it.
+		header_up X-Forwarded-Host {host}
+		transport http {
+			tls_trust_pool file {$EDGE_ORIGIN_CA}
+		}
+	}
+}

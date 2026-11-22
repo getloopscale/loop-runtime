@@ -12,6 +12,7 @@
 #
 #   task staging:host      once per host, as root: packages, tools, kernel limits, services
 #   task staging:up        rebuild the infrastructure and the platform from nothing
+#   task staging:edge      serve the public hostnames through the core ALB (Caddy, Let's Encrypt)
 #   task staging:down      stop the emulator and remove everything it ran
 #   task staging:status    what is running
 #
@@ -47,6 +48,14 @@ vars:
   # creates gets a Docker network with the VPC's CIDR, which falls in 10.0.0.0/8.
   EMULATOR_SUBNET: 172.29.0.0/16
   VPC_SUPERNET: 10.0.0.0/8
+  EMULATOR_ADDRESS: 172.29.0.1
+  # The public edge (`staging:edge`): the hostnames it serves, one Let's Encrypt
+  # certificate each, and the cluster whose ALB it passes requests to. Only the hostnames
+  # with a route are public: the UI (app., cloud.) and login (auth.) join this list when
+  # staging installs them behind Traefik. Grafana, ArgoCD and Gitea never do.
+  EDGE_HOSTS: api.staging.getloopscale.com
+  EDGE_CLUSTER: loopzero-staging-core
+  EDGE_HEALTH_URL: https://api.staging.getloopscale.com/api/v1/health/ready
 
 tasks:
   host:
@@ -196,6 +205,7 @@ tasks:
       - task: emulator
       - task: infrastructure
       - task: platform
+      - task: edge
 
   emulator:
     desc: Start the emulator and its EKS provisioner, empty
@@ -249,11 +259,25 @@ tasks:
             -f "$crds/monitoring.coreos.com_servicemonitors.yaml" \
             -f "$crds/monitoring.coreos.com_prometheusrules.yaml" \
             -f "$crds/monitoring.coreos.com_podmonitors.yaml"
+          # Staging only: the emulator's EKS cluster is a kind cluster, whose control-plane
+          # node is a Kubernetes node (an EKS control plane is not) and is no EC2 instance
+          # (its providerID is kind://). The AWS Load Balancer Controller registers every
+          # node as an instance target unless the node carries this label, and fails the
+          # whole target group on that one ("providerID kind://... is invalid for EC2
+          # instances"). On EKS no node matches the selector.
+          kubectl --context "$ctx" label nodes -l node-role.kubernetes.io/control-plane \
+            node.kubernetes.io/exclude-from-external-load-balancers=true --overwrite >/dev/null
         done
         helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging sync
         helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e staging sync
         for cell in cell-0 cell-1; do
           LOOPZERO_CELL_CONTEXT=$cell helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e staging sync
+        done
+        # The middlewares the routes name (traefik-rate-limit, traefik-body-limit), which
+        # are not a release: infra:install:cell applies the same file after its sync.
+        # Traefik disables a route whose middleware does not exist.
+        for ctx in core cell-0 cell-1; do
+          kubectl --context "$ctx" apply -f infra/helm/traefik/middlewares.yaml
         done
         bash infra/helmfile/scripts/bootstrap-aws-clusters.sh post-core
       - task: platform:verify
@@ -318,6 +342,76 @@ tasks:
       - kubectl --context core -n loopzero-system rollout status deployment/loopzero-api --timeout=10m
       - kubectl --context core -n loopzero-system get externalsecret loopzero-db-credentials
       - kubectl --context core -n loopzero-system exec deploy/loopzero-api -- wget -qO- http://127.0.0.1:3001/api/v1/health/ready
+
+  edge:
+    desc: Serve the public hostnames on this host's public address, through the core ALB
+    # Caddy stands in for CloudFront and ACM (infra/staging/edge/Caddyfile). The ALB's name
+    # and the emulator's CA change with every rebuild, so they are read here, not written
+    # in the configuration.
+    env:
+      AWS_CONFIG_FILE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/config'
+      AWS_SHARED_CREDENTIALS_FILE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/emulator_credentials'
+      AWS_CA_BUNDLE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/ca.pem'
+      AWS_ENDPOINT_URL: 'https://localhost:{{.EMULATOR_PORT}}'
+      AWS_REGION: us-east-1
+    cmds:
+      - |
+        set -euo pipefail
+        # The ALB the AWS Load Balancer Controller made for the traefik-edge Ingress of
+        # the core cluster, found by the tags it gives every load balancer it owns.
+        arns=$(aws elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerArn' --output text)
+        alb_arn=$(aws elbv2 describe-tags --resource-arns $arns --output json | jq -r \
+          '.TagDescriptions[] | select(any(.Tags[]; .Key == "ingress.k8s.aws/stack" and .Value == "traefik/traefik-edge"))
+            | select(any(.Tags[]; .Key == "elbv2.k8s.aws/cluster" and .Value == "{{.EDGE_CLUSTER}}")) | .ResourceArn')
+        if [ "$(printf '%s\n' "$alb_arn" | grep -c .)" -ne 1 ]; then
+          echo "want exactly one ALB tagged ingress.k8s.aws/stack=traefik/traefik-edge on {{.EDGE_CLUSTER}}, found: ${alb_arn:-none}" >&2
+          exit 1
+        fi
+        alb_dns=$(aws elbv2 describe-load-balancers --load-balancer-arns "$alb_arn" --query 'LoadBalancers[0].DNSName' --output text)
+        # The address the default route leaves from is the public one; every public
+        # hostname must resolve to it, or Let's Encrypt cannot validate the name.
+        public=$(ip -4 route get 1.1.1.1 | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')
+        for host in $(echo "{{.EDGE_HOSTS}}" | tr ',' ' '); do
+          resolved=$(getent ahostsv4 "$host" | awk 'NR == 1 {print $1}')
+          if [ "$resolved" != "$public" ]; then
+            echo "$host resolves to ${resolved:-nothing}, not to this host's public address $public" >&2
+            exit 1
+          fi
+        done
+        install -d -m 0755 /etc/loopzero-edge
+        install -m 0644 "$AWS_CA_BUNDLE" /etc/loopzero-edge/emulator-ca.pem
+        install -m 0644 infra/staging/edge/Caddyfile /etc/loopzero-edge/Caddyfile
+        cat >/etc/loopzero-edge/edge.env <<EOF
+        EDGE_BIND_ADDRESS=$public
+        EDGE_HOSTS={{.EDGE_HOSTS}}
+        EDGE_ALB_DNS_NAME=$alb_dns
+        EDGE_ORIGIN=https://{{.EMULATOR_ADDRESS}}:{{.EMULATOR_PORT}}
+        EDGE_ORIGIN_CA=/etc/loopzero-edge/emulator-ca.pem
+        EOF
+        env $(cat /etc/loopzero-edge/edge.env) caddy validate --config /etc/loopzero-edge/Caddyfile --adapter caddyfile >/dev/null
+        install -m 0644 infra/staging/systemd/loopzero-edge.service /etc/systemd/system/
+        systemctl daemon-reload
+        systemctl enable loopzero-edge.service >/dev/null
+        systemctl restart loopzero-edge.service
+        echo "edge: {{.EDGE_HOSTS}} on $public -> $alb_dns"
+      - task: edge:verify
+
+  edge:verify:
+    internal: true
+    desc: Every public hostname answers with a certificate this host trusts; the API is healthy
+    cmds:
+      - |
+        set -euo pipefail
+        # The first request for a name waits for its certificate to be issued. curl
+        # without --insecure fails on a certificate the system does not trust.
+        for host in $(echo "{{.EDGE_HOSTS}}" | tr ',' ' '); do
+          for _ in $(seq 30); do
+            curl -sS -o /dev/null --max-time 10 "https://$host/" 2>/dev/null && break
+            sleep 5
+          done
+          curl -sS -o /dev/null -w "edge: https://$host/ -> %{http_code}, certificate verified\n" --max-time 10 "https://$host/"
+        done
+        curl -fsS --max-time 10 "{{.EDGE_HEALTH_URL}}"; echo
 
   down:
     desc: Stop the emulator and remove the clusters, networks and containers it ran
