@@ -1,0 +1,18 @@
+# Deploys the head of develop to staging (infra/staging/deploy.sh). Started by
+# loopzero-staging-deploy.timer; a run that finds nothing new exits at once.
+[Unit]
+Description=Deploy the head of develop to staging
+After=network-online.target aws-emulator.service aws-emulator-eks.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# root, as `task staging:platform` is: it reads the emulator's credentials and CA under
+# /var/lib/aws-emulator and the clusters' kubeconfig under /var/lib/loopzero-staging.
+Environment=HOME=/root
+Environment=PATH=/usr/local/bin:/usr/local/go/bin:/usr/bin:/bin
+# Anything else that syncs the clusters takes the same lock, so two syncs never overlap; a
+# deploy that finds it taken is skipped and the timer tries again.
+ExecStart=/usr/bin/flock --nonblock /run/loopzero-staging-platform.lock /usr/local/lib/loopzero-staging/deploy.sh
+# A full platform sync takes about ten minutes on this host.
+TimeoutStartSec=45min
