@@ -228,6 +228,8 @@ tasks:
       AWS_CA_BUNDLE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/ca.pem'
       AWS_ENDPOINT_URL: 'https://localhost:{{.EMULATOR_PORT}}'
       AWS_REGION: us-east-1
+      # Each helmfile's own kubeContext reads these, so no invocation passes --kube-context.
+      LOOPZERO_CORE_CONTEXT: core
       LOOPZERO_BUILD_CONTEXT: build
     cmds:
       - task: platform:kubeconfig
@@ -248,10 +250,10 @@ tasks:
             -f "$crds/monitoring.coreos.com_prometheusrules.yaml" \
             -f "$crds/monitoring.coreos.com_podmonitors.yaml"
         done
-        helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging --kube-context core sync
-        helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e staging --kube-context build sync
+        helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging sync
+        helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e staging sync
         for cell in cell-0 cell-1; do
-          LOOPZERO_CELL_CONTEXT=$cell helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e staging --kube-context $cell sync
+          LOOPZERO_CELL_CONTEXT=$cell helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e staging sync
         done
         bash infra/helmfile/scripts/bootstrap-aws-clusters.sh post-core
       - task: platform:verify

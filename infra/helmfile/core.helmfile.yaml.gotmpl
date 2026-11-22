@@ -31,7 +31,10 @@ helmDefaults:
   # The flag STILL wins when passed (measured: it overrides silently, with no
   # error). What turns a divergence into a failure is the
   # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
-  kubeContext: k3d-loopzero-core
+  #
+  # LOOPZERO_CORE_CONTEXT names it where the core cluster is not the k3d one (staging's
+  # EKS context is `core`), the way LOOPZERO_BUILD_CONTEXT does for the build plane.
+  kubeContext: {{ env "LOOPZERO_CORE_CONTEXT" | default "k3d-loopzero-core" }}
   wait: true
   waitForJobs: true
   timeout: 600
