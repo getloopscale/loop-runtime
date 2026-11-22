@@ -1,0 +1,30 @@
+# The Secret aws-secrets-manager writes from the RDS master secret and the platform
+# secret: `uri` (the owner) and the api/worker/cloud role passwords.
+credentialsSecret: loopzero-db-credentials
+
+# Databases created next to the platform's own, owned by the master user.
+databases:
+  - kratos
+  - hydra
+  - gitea
+
+# The SQL that creates the non-owner roles (infra/scripts/production/provision-db-roles.sql),
+# handed in by the helmfile so there is one copy of it. Required.
+rolesSql: ""
+
+# psql runs the role and database steps; the loopzero-api image carries golang-migrate and
+# the migrations of the release it serves (/migrations).
+images:
+  psql: postgres:16.10-alpine3.22
+  migrate: ""
+
+backoffLimit: 6
+activeDeadlineSeconds: 900
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

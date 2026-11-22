@@ -1,0 +1,44 @@
+# staging overlay for charts/loopzero-api, layered on charts/loopzero-api/values-bootstrap.yaml.
+#
+# Credentials arrive from Secrets Manager: loopzero-db-credentials, loopzero-api-internal,
+# loopzero-service-auth and loopzero-edge-route-token are ExternalSecrets of the
+# aws-secrets-manager release. The ServiceAccount carries the IRSA role infra-live creates
+# for it (`identity/core-loopzero-api`, trusting loopzero-system:loopzero-api).
+global:
+  registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" }}
+
+image:
+  repository: loopzero-api
+  tag: {{ required "platformImages.tags.loopzero-api is not set" (index .Values.platformImages.tags "loopzero-api") | quote }}
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: {{ printf "arn:aws:iam::%s:role/%s-core-loopzero-api" .Values.aws.accountId .Values.aws.namePrefix | quote }}
+
+ingressRoute:
+  host: {{ printf "api.%s" .Values.domain | quote }}
+
+config:
+  # Not `production`: in production mode the API refuses to start without static object
+  # store keys (validateProductionCredentials, MINIO_ACCESS_KEY), and its object store
+  # client (api/internal/objectstore) signs with static keys only, so it cannot use the
+  # IRSA role above. Until it takes the AWS credential chain, an AWS environment cannot
+  # run it in production mode.
+  loopzeroEnv: "staging"
+  baseDomain: {{ .Values.domain | quote }}
+  corsAllowedOrigin: {{ .Values.dashboardOrigin | quote }}
+  # The S3 regional endpoint; the bucket is environments/staging.yaml sourceBucket.
+  minioEndpoint: {{ printf "https://s3.%s.amazonaws.com" .Values.aws.region | quote }}
+  loopzeroCosignImage: "{{ .Values.platformImages.registry }}loopzero-cosign-signer:{{ index .Values.platformImages.tags "loopzero-cosign-signer" }}"
+  loopzeroSyftImage: "{{ .Values.platformImages.registry }}loopzero-syft-scanner:{{ index .Values.platformImages.tags "loopzero-syft-scanner" }}"
+  # The issuer Hydra emits (values/staging/ory-hydra.yaml.gotmpl), fetched in-cluster.
+  jwtIssuer: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+  jwksUrl: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
+  # The contexts of loopzero-cluster-kubeconfigs, written by the bootstrap: core is the
+  # in-cluster one, build and cell-0 are scoped ServiceAccount kubeconfigs.
+  mgmtKubeContext: "in-cluster"
+  buildKubeContext: "build"
+  runtimeKubeContext: "cell-0"

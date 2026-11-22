@@ -1,0 +1,22 @@
+# Runs the Kubernetes control plane and the nodes of every EKS cluster the emulator holds,
+# in kind, and answers their API servers' token reviews.
+[Unit]
+Description=EKS provisioner for the AWS emulator
+BindsTo=aws-emulator.service
+After=aws-emulator.service
+
+[Service]
+Type=simple
+Environment=AWS_ENDPOINT_URL=https://172.29.0.1:9597
+Environment=AWS_CA_BUNDLE=/var/lib/aws-emulator/.aws/emulator/9597/ca.pem
+Environment=AWS_SHARED_CREDENTIALS_FILE=/var/lib/aws-emulator/.aws/emulator/9597/emulator_credentials
+Environment=AWS_CONFIG_FILE=/var/lib/aws-emulator/.aws/emulator/9597/config
+Environment=AWS_REGION=us-east-1
+Environment=AWS_EC2_METADATA_DISABLED=true
+ExecStartPre=/bin/sh -c 'for i in $(seq 60); do curl -sf --cacert "$AWS_CA_BUNDLE" "$AWS_ENDPOINT_URL/__admin/health" >/dev/null && exit 0; sleep 1; done; echo "the emulator did not answer at $AWS_ENDPOINT_URL" >&2; exit 1'
+ExecStart=/opt/aws-emulator/current/eks-provisioner-linux-x64 --regions us-east-1 --state-dir /var/lib/aws-emulator-eks --listen :9598 --sts-aliases localhost:9597
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=aws-emulator.service

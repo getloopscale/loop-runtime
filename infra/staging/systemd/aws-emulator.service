@@ -1,0 +1,27 @@
+# The AWS emulator that serves staging's AWS APIs. Its state is in memory: a restart
+# empties every account, so the environment is rebuilt with `task staging:up` after one.
+[Unit]
+Description=AWS emulator serving the staging AWS APIs
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=HOME=/var/lib/aws-emulator
+Environment=RUST_LOG=info,access=debug
+# An EKS cluster stays CREATING until aws-emulator-eks.service runs its control plane.
+Environment=EMULATOR_EKS_CONTROL_PLANE=external
+Environment=EMULATOR_IAM_ENFORCE=on
+Environment=EMULATOR_RDS_BACKEND=docker
+Environment=EMULATOR_ELASTICACHE_BACKEND=docker
+Environment=EMULATOR_ELB_LISTENER_SOCKETS=off
+Environment=EMULATOR_BIND_ADDRESS=172.29.0.1
+# The emulator listens on the gateway of its own Docker network, which must exist first.
+ExecStartPre=/bin/sh -c 'docker network inspect aws-emulator >/dev/null 2>&1 || docker network create aws-emulator --driver bridge --subnet 172.29.0.0/16 --gateway 172.29.0.1 >/dev/null'
+ExecStart=/opt/aws-emulator/current/aws-emulator-fork-linux-x64 -b 172.29.0.1 -p 9597 --telemetry off
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

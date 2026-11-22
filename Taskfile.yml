@@ -50,6 +50,8 @@ includes:
     optional: false
   quality:
     taskfile: ./taskfiles/quality.yml
+  staging:
+    taskfile: ./taskfiles/staging.yml
 
 vars:
   CORE_CONTEXT: k3d-loopzero-core

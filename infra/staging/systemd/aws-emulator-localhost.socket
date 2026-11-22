@@ -1,0 +1,12 @@
+# The emulator on localhost:9597 for clients on this host. S3 Control prefixes the endpoint's
+# host with the account id, and only a name under localhost (the emulator's certificate names
+# localhost and 000000000000.localhost) both resolves and verifies; 000000000000.172.29.0.1
+# does neither. TLS passes through untouched.
+[Unit]
+Description=The AWS emulator on localhost for clients on this host
+
+[Socket]
+ListenStream=127.0.0.1:9597
+
+[Install]
+WantedBy=sockets.target

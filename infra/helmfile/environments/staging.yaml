@@ -1,0 +1,160 @@
+# Helmfile environment: staging
+#
+# Production's AWS topology at a smaller scale. getloopscale/infra-live `staging` applies
+# the same Terraform units production uses to the AWS emulator
+# (github.com/paulohenriquevn/aws-emulator): four EKS clusters (core, build, cell-0,
+# cell-1), RDS PostgreSQL 16, ElastiCache Valkey with TLS and an AUTH token, S3 buckets
+# encrypted with KMS, Secrets Manager, and one IRSA role per workload that calls AWS.
+#
+# What a production AWS environment changes here is its names (`aws.namePrefix`,
+# `aws.accountId`, the hostnames) and the outputs of its own infra-live units, which
+# `task staging:platform` reads with `terragrunt output` and exports before every sync:
+#
+#   LOOPZERO_DB_HOST, LOOPZERO_DB_PORT, LOOPZERO_DB_NAME   data/rds address, port, db_name
+#   LOOPZERO_DB_MASTER_SECRET                              data/rds master_user_secret_arn
+#   LOOPZERO_CACHE_HOST, LOOPZERO_CACHE_PORT               data/valkey primary_endpoint_address, port
+#   LOOPZERO_CACHE_AUTH_SECRET                             data/valkey auth_token_secret_arn
+#   LOOPZERO_VPC_ID                                        networking/vpc vpc_id
+#
+# Nothing in the charts knows about the emulator. The emulator's EKS layer does what EKS
+# does for a pod whose ServiceAccount carries `eks.amazonaws.com/role-arn`: it injects the
+# web identity token, AWS_ROLE_ARN, AWS_ENDPOINT_URL and the emulator's CA. The settings a
+# tool cannot take from AWS_ENDPOINT_URL are under `emulator:` below, and only there.
+
+domain: staging.getloopscale.com
+dnsZone: staging.getloopscale.com
+
+vaultEnabled: false
+
+clusterRole: staging
+clusterTopology: multi-cluster
+
+replicas:
+  api: 1
+  controller: 1
+  argocd: 1
+  gitea: 1
+
+resources:
+  default:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+certIssuer:
+  kind: ClusterIssuer
+  name: letsencrypt-prod
+
+# The AWS account and the names infra-live gives every resource of this environment:
+# `<namePrefix>-<cluster>` for the EKS clusters, `<namePrefix>-<cluster>-<workload>` for
+# the IRSA roles, `<namePrefix>-<purpose>-<accountId>` for the buckets.
+aws:
+  accountId: "000000000000"
+  region: us-east-1
+  namePrefix: loopzero-staging
+  # security/secrets: the secret holding what the platform generates for itself (database
+  # role passwords, internal call secrets, identity cookie keys), as one JSON object.
+  # `infra/helmfile/scripts/seed-aws-platform-secret.sh` fills in the keys it lacks.
+  platformSecret: loopzero/staging/platform
+
+# Platform images. The emulator's ECR answers the registry API for reads but refuses
+# blob uploads (POST /v2/<repo>/blobs/uploads/ -> 405, measured 2026-11-22 against
+# v0.3.0), so nothing can be pushed to it and the nodes pull from GHCR, the published
+# fallback, pinned by the develop commit CI built from. A production environment names
+# its ECR registry here (`<account>.dkr.ecr.<region>.amazonaws.com/`).
+platformImages:
+  registry: "ghcr.io/getloopscale/"
+  tags:
+    loopzero-api: "develop-7a34191"
+    loopzero-tenant-operator: "develop-7a34191"
+    loopzero-app-operator: "develop-7a34191"
+    loopzero-preview-operator: "develop-7a34191"
+    loopzero-platform-operator: "develop-7a34191"
+    loopzero-minio: "develop-7a34191"
+    loopzero-clone-runner: "develop-7a34191"
+    loopzero-syft-scanner: "develop-7a34191"
+    loopzero-cosign-signer: "develop-7a34191"
+
+registries:
+  docrPrefix: "ghcr.io/getloopscale/"
+
+loki:
+  maxGlobalStreamsPerUser: 50000
+  pushUrl: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+
+policyMode: enforce
+noRuntimeImageMutations: true
+noRuntimeImageMutationsAction: Deny
+noRuntimeImageMutationsFailurePolicy: Fail
+
+# RDS, not an in-cluster PostgreSQL.
+inClusterPostgres: false
+
+# The cluster's default StorageClass (gp2 on EKS).
+underlyingStorageClass: ""
+
+# The name of the cluster's default StorageClass, for the charts that must name a class
+# (the argo-events EventBus passes "" through, which disables provisioning). EKS names
+# it gp2; staging only: the emulator's EKS clusters name it `standard`.
+defaultStorageClass: standard
+
+cell0Id: cell-0
+cell1Id: cell-1
+cells:
+  - id: cell-0
+  - id: cell-1
+dynamicRouter: true
+
+# storage/s3: source bundles are staged in the builds bucket.
+sourceBucket: loopzero-staging-builds-000000000000
+
+# storage/s3 velero-backups. No s3Url: the AWS SDK resolves the S3 endpoint.
+velero:
+  bucket: loopzero-staging-velero-backups-000000000000
+  region: us-east-1
+  s3Url: ""
+
+uiBaseUrl: "https://app.staging.getloopscale.com"
+dashboardOrigin: "https://cloud.staging.getloopscale.com"
+publicAuthUrl: "https://auth.staging.getloopscale.com"
+publicCloudUrl: "https://cloud.staging.getloopscale.com"
+cookieDomain: "staging.getloopscale.com"
+corsAllowedOrigins:
+  - "https://app.staging.getloopscale.com"
+  - "https://cloud.staging.getloopscale.com"
+allowedReturnUrls:
+  - "https://app.staging.getloopscale.com"
+  - "https://app.staging.getloopscale.com/"
+  - "https://cloud.staging.getloopscale.com"
+  - "https://cloud.staging.getloopscale.com/"
+dashboardRoute:
+  login: /login
+  register: /register
+  recovery: /recovery
+  verification: /verification
+  settings: /settings
+  error: /login
+
+# Staging only: what the emulator needs that AWS_ENDPOINT_URL does not carry. External
+# Secrets 0.14 calls AWS through aws-sdk-go v1, which reads per-service endpoint variables
+# (AWS_SECRETSMANAGER_ENDPOINT, AWS_STS_ENDPOINT) and ignores AWS_ENDPOINT_URL. A
+# production environment has no `emulator:` block.
+emulator:
+  endpoint: "https://172.29.0.1:9597"
+
+profile:
+  highAvailability: false       # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
+  managedRedis: true            # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
+  kedaHttpAddon: false          # install the KEDA HTTP add-on on the cells
+  staticAssets: false           # install the static-assets server on the cells
+  loopzeroCloud: false          # install the control plane (loopzero-cloud), unless clusterRole is standalone
+  smokeTest: false              # run the post-install smoke-test release
+  localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
+  inClusterObjectStore: false   # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
+  awsSecretsManager: true       # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
+  awsLoadBalancerController: true  # install the AWS Load Balancer Controller and publish the edge through an ALB
+  localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
+  secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public

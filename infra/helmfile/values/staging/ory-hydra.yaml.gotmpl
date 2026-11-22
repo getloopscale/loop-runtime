@@ -1,0 +1,12 @@
+# staging overlay for ory-hydra: DSN and secrets from the ory-hydra-credentials Secret
+# aws-secrets-manager writes (database `hydra` on RDS, keys from the platform secret).
+# The issuer is the in-cluster one loopzero-api validates tokens against until the
+# public edge (auth.staging.getloopscale.com) exists.
+secret:
+  enabled: false
+  nameOverride: ory-hydra-credentials
+hydra:
+  config:
+    urls:
+      self:
+        issuer: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"

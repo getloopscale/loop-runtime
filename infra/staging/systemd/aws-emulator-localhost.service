@@ -1,0 +1,7 @@
+[Unit]
+Description=Forward localhost:9597 to the AWS emulator
+Requires=aws-emulator-localhost.socket
+After=aws-emulator-localhost.socket aws-emulator.service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 172.29.0.1:9597

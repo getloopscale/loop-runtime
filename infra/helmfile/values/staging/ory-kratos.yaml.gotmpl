@@ -1,0 +1,10 @@
+# staging overlay for ory-kratos: DSN and secrets from the ory-kratos-credentials Secret
+# aws-secrets-manager writes (database `kratos` on RDS, keys from the platform secret).
+secret:
+  enabled: false
+  nameOverride: ory-kratos-credentials
+kratos:
+  config:
+    session:
+      cookie:
+        domain: {{ .Values.cookieDomain | quote }}
