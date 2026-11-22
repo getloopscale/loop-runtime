@@ -234,9 +234,16 @@ func (m *TenantCRManager) RemoveEnvironment(ctx context.Context, tenantID, proje
 //
 // M2 v1.2 (2026-06-07): each entry carries the project field; legacy entries
 // (production) have empty project per ADR D2.
+//
+// A tenant with no Tenant CR has no environments: the CR is created with the
+// tenant's first project (EnsureTenant), so a tenant provisioned at sign-up
+// lists as empty (#17). Every other read failure is returned.
 func (m *TenantCRManager) ListEnvironments(ctx context.Context, tenantID string) ([]ports.EnvironmentEntry, error) {
 	var t apiv1.Tenant
 	if err := m.Client.Get(ctx, tenantKey(tenantID), &t); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return []ports.EnvironmentEntry{}, nil
+		}
 		return nil, fmt.Errorf("k8s: get tenant CR %q for ListEnvironments: %w", tenantID, err)
 	}
 

@@ -10,8 +10,10 @@ import (
 	"sync"
 	"testing"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/getloopscale/loopzero/api/internal/k8s"
 	"github.com/getloopscale/loopzero/api/internal/ports"
@@ -520,5 +522,40 @@ func TestEnsureTenant_DoesNotMoveAnExistingTenant(t *testing.T) {
 	}
 	if got.Spec.Plan != "pro" {
 		t.Errorf("spec.plan = %q, want pro (the update still applies)", got.Spec.Plan)
+	}
+}
+
+// A tenant provisioned at sign-up has database rows but no Tenant CR: the CR is
+// created with its first project. Its environment list is empty, not an error.
+func TestTenantCRManager_ListEnvironments_TenantWithoutCRHasNoEnvironments(t *testing.T) {
+	mgr := newTenantMgr(t)
+
+	envs, err := mgr.ListEnvironments(context.Background(), "tn-without-project")
+	if err != nil {
+		t.Fatalf("ListEnvironments for a tenant with no Tenant CR: want no error, got %v", err)
+	}
+	if envs == nil || len(envs) != 0 {
+		t.Fatalf("want an empty, non-nil list, got %#v", envs)
+	}
+}
+
+// Only the missing CR means "no environments". Any other read failure (RBAC,
+// an unreachable API server) must still reach the caller.
+func TestTenantCRManager_ListEnvironments_OtherReadFailuresStillFail(t *testing.T) {
+	scheme, err := k8s.NewScheme()
+	if err != nil {
+		t.Fatalf("NewScheme: %v", err)
+	}
+	readErr := k8serrors.NewForbidden(tenantsGroupResource, "tn-forbidden", errors.New("rbac denied"))
+	c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+		Get: func(context.Context, client.WithWatch, client.ObjectKey, client.Object, ...client.GetOption) error {
+			return readErr
+		},
+	}).Build()
+	mgr := &TenantCRManager{Client: c}
+
+	envs, err := mgr.ListEnvironments(context.Background(), "tn-forbidden")
+	if !errors.Is(err, readErr) {
+		t.Fatalf("want the read error to propagate, got envs=%#v err=%v", envs, err)
 	}
 }
