@@ -26,6 +26,11 @@ vars:
   EMULATOR_HOME: /var/lib/aws-emulator
   EMULATOR_PORT: 9597
   # The infra-live staging environment applied against the emulator.
+  # infra-live and infra-modules side by side, as infra-live's local sources expect them.
+  # Both are private: the host reads them with one read-only deploy key each, named by the
+  # github-infra-live and github-infra-modules aliases of /root/.ssh/config.
+  IAC_ROOT: /opt/staging-iac
+  IAC_BRANCH: develop
   IAC_DIR: /opt/staging-iac/infra-live/staging/us-east-1/staging
   # The emulator release the environment runs, and the SHA-256 of its Linux binary.
   EMULATOR_REPOSITORY: paulohenriquevn/aws-emulator
@@ -234,8 +239,39 @@ tasks:
 
   infrastructure:
     desc: Apply the staging environment of infra-live against the emulator
+    env:
+      HOME: /root
+      AWS_EMULATOR_ENDPOINT: 'https://localhost:{{.EMULATOR_PORT}}'
+      AWS_EMULATOR_PORT: '{{.EMULATOR_PORT}}'
+      AWS_EMULATOR_HOME: '{{.EMULATOR_HOME}}'
     cmds:
-      - echo "the infra-live staging environment is not wired yet" >&2; exit 1
+      - |
+        set -euo pipefail
+        for repo in infra-live infra-modules; do
+          dir="{{.IAC_ROOT}}/$repo"
+          if [ ! -d "$dir/.git" ]; then
+            rm -rf "$dir"
+            git clone --quiet "git@github-$repo:getloopscale/$repo.git" "$dir"
+          fi
+          git -C "$dir" fetch --quiet origin {{.IAC_BRANCH}}
+          git -C "$dir" switch --quiet --detach FETCH_HEAD
+          echo "$repo at $(git -C "$dir" rev-parse --short HEAD)"
+        done
+        # The emulator's state starts empty after `down`, the Terraform state bucket with
+        # it, so no unit may keep a backend initialised against the previous one.
+        find "{{.IAC_ROOT}}/infra-live/staging" -type d -name .terragrunt-cache -prune -exec rm -rf {} +
+        emulator={{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}
+        bucket=loopscale-tfstate-000000000000-us-east-1
+        export_emulator() {
+          AWS_CONFIG_FILE=$emulator/config AWS_SHARED_CREDENTIALS_FILE=$emulator/emulator_credentials \
+            AWS_CA_BUNDLE=$emulator/ca.pem AWS_ENDPOINT_URL=$AWS_EMULATOR_ENDPOINT AWS_REGION=us-east-1 "$@"
+        }
+        export_emulator aws s3api head-bucket --bucket "$bucket" 2>/dev/null \
+          || export_emulator aws s3api create-bucket --bucket "$bucket" >/dev/null
+        # root.hcl names the emulator's keys in the provider; nothing else may be read.
+        cd "{{.IAC_ROOT}}/infra-live/staging"
+        AWS_CONFIG_FILE=/dev/null AWS_SHARED_CREDENTIALS_FILE=/dev/null \
+          terragrunt run --all --non-interactive -- apply -input=false -auto-approve
 
   platform:
     desc: Install the platform on the staging clusters
@@ -260,6 +296,20 @@ tasks:
         set -euo pipefail
         eval "$(task staging:platform:outputs)"
         bash infra/helmfile/scripts/seed-aws-platform-secret.sh loopzero/staging/platform
+        # Secrets no script can generate, kept on the host only (mode 0600), and written
+        # into the emulator's Secrets Manager again after every rebuild empties it.
+        #   ghcr-pull.json: {"username", "password"}, a classic token with read:packages for
+        #   the console's private images (aws.imagePullSecret).
+        for name in ghcr-pull; do
+          kept=/etc/loopzero-staging/$name.json
+          [ -f "$kept" ] || { echo "warning: no $kept, loopzero/staging/$name is not seeded" >&2; continue; }
+          if aws secretsmanager describe-secret --secret-id "loopzero/staging/$name" >/dev/null 2>&1; then
+            aws secretsmanager put-secret-value --secret-id "loopzero/staging/$name" --secret-string "file://$kept" >/dev/null
+          else
+            aws secretsmanager create-secret --name "loopzero/staging/$name" --kms-key-id alias/loopzero-staging \
+              --secret-string "file://$kept" >/dev/null
+          fi
+        done
         bash infra/helmfile/scripts/bootstrap-aws-clusters.sh pre-core
         # The ServiceMonitor, PodMonitor and PrometheusRule CRDs every cluster's charts
         # create objects of, from the same manifests infra:install:monitoring-crds applies.
@@ -377,6 +427,27 @@ tasks:
         systemctl daemon-reload
         systemctl enable --now loopzero-staging-deploy.timer
         systemctl list-timers loopzero-staging-deploy.timer --no-pager
+
+  nightly:
+    desc: Install the nightly rebuild and the hourly disk check, both alarming through GitHub issues
+    # infra/staging/rebuild.sh rebuilds staging at 06:00 UTC; infra/staging/alarm.sh opens
+    # a staging-alarm issue when it fails or when / is more than 80% full. The token is
+    # the deploy's, which needs Issues read and write too.
+    cmds:
+      - |
+        set -euo pipefail
+        token=/etc/loopzero-staging/github-status-token
+        if [ ! -s "$token" ]; then
+          echo "no token at $token: see the deploy task" >&2
+          exit 1
+        fi
+        install -d -m 0755 /usr/local/lib/loopzero-staging
+        install -m 0755 infra/staging/rebuild.sh infra/staging/alarm.sh /usr/local/lib/loopzero-staging/
+        install -m 0644 infra/staging/systemd/loopzero-staging-rebuild.service infra/staging/systemd/loopzero-staging-rebuild.timer \
+          infra/staging/systemd/loopzero-staging-disk.service infra/staging/systemd/loopzero-staging-disk.timer /etc/systemd/system/
+        systemctl daemon-reload
+        systemctl enable --now loopzero-staging-rebuild.timer loopzero-staging-disk.timer
+        systemctl list-timers 'loopzero-staging-*' --no-pager
 
   edge:
     desc: Serve the public hostnames on this host's public address, through the core ALB
