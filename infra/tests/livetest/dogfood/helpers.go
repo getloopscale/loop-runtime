@@ -24,23 +24,47 @@ import (
 
 // Env captures common per-journey environment configuration.
 type Env struct {
-	CloudBaseURL string // https://cloud-dev.getloopscale.com
-	AppBaseURL   string // https://app-dev.getloopscale.com
-	AuthBaseURL  string // https://auth-dev.getloopscale.com
-	JWTPath      string // ~/.loopzero/local-dogfood-token.txt
-	HTTPClient   *http.Client
+	CloudBaseURL  string // https://cloud-dev.getloopscale.com
+	AppBaseURL    string // https://app-dev.getloopscale.com
+	AuthBaseURL   string // https://auth-dev.getloopscale.com
+	DeepHealthURL string // https://cloud-dev.getloopscale.com/health/deep
+	JWTPath       string // ~/.loopzero/local-dogfood-token.txt
+	HTTPClient    *http.Client
 }
 
-// DefaultEnv returns the canonical dev-public env with a 30s HTTP timeout.
+// The variables that point the suite at another environment than dev-public, such as
+// staging (infra/staging/validate.sh). Each one left unset keeps the dev-public value.
+const (
+	CloudURLEnv      = "LOOPZERO_DOGFOOD_CLOUD_URL"
+	AppURLEnv        = "LOOPZERO_DOGFOOD_APP_URL"
+	AuthURLEnv       = "LOOPZERO_DOGFOOD_AUTH_URL"
+	DeepHealthURLEnv = "LOOPZERO_DOGFOOD_DEEP_HEALTH_URL"
+	JWTPathEnv       = "LOOPZERO_DOGFOOD_JWT_PATH"
+)
+
+// DefaultEnv returns the environment the variables above name, dev-public for each one
+// that is unset, with a 30s HTTP timeout.
+//
+// The deep health is a URL of its own because it is not served by loopzero-cloud
+// everywhere: on staging the deep health is loopzero-api's /api/v1/health/deep, and
+// loopzero-cloud answers 404 on /health/deep.
 func DefaultEnv() Env {
-	homeJWT := os.Getenv("HOME") + "/.loopzero/local-dogfood-token.txt"
+	cloud := envOr(CloudURLEnv, "https://cloud-dev.getloopscale.com")
 	return Env{
-		CloudBaseURL: "https://cloud-dev.getloopscale.com",
-		AppBaseURL:   "https://app-dev.getloopscale.com",
-		AuthBaseURL:  "https://auth-dev.getloopscale.com",
-		JWTPath:      homeJWT,
-		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
+		CloudBaseURL:  cloud,
+		AppBaseURL:    envOr(AppURLEnv, "https://app-dev.getloopscale.com"),
+		AuthBaseURL:   envOr(AuthURLEnv, "https://auth-dev.getloopscale.com"),
+		DeepHealthURL: envOr(DeepHealthURLEnv, cloud+"/health/deep"),
+		JWTPath:       envOr(JWTPathEnv, os.Getenv("HOME")+"/.loopzero/local-dogfood-token.txt"),
+		HTTPClient:    &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+func envOr(name, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
 }
 
 // LoadJWT reads the JWT seeded by infra/scripts/local/seed-admin-loopzero-dev.sh.
@@ -91,15 +115,15 @@ func CurlJSON(ctx context.Context, env Env, method, url, jwt string, bodyJSON []
 	return resp.StatusCode, out, nil
 }
 
-// HealthcheckCloud asserts cloud-dev /health/deep returns 200.
+// HealthcheckCloud asserts the deep health (Env.DeepHealthURL) returns 200.
 // Replaces the per-script preflight functions in v1 dogfood wrappers.
 func HealthcheckCloud(ctx context.Context, env Env) error {
-	status, _, err := CurlJSON(ctx, env, "GET", env.CloudBaseURL+"/health/deep", "", nil)
+	status, _, err := CurlJSON(ctx, env, "GET", env.DeepHealthURL, "", nil)
 	if err != nil {
-		return fmt.Errorf("healthcheck cloud: %w", err)
+		return fmt.Errorf("deep health: %w", err)
 	}
 	if status != 200 {
-		return fmt.Errorf("healthcheck cloud /health/deep: HTTP %d (want 200)", status)
+		return fmt.Errorf("deep health %s: HTTP %d (want 200)", env.DeepHealthURL, status)
 	}
 	return nil
 }

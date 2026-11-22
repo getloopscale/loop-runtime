@@ -35,12 +35,16 @@ var _ = Describe("J-14 Audit Log — query + filter", Label("live", "dogfood", "
 	AfterEach(func() { cancel() })
 
 	Context("Scenario A — audit log default page", func() {
-		It("GET /api/v1/audit-log returns 200 with events array + pagination", func() {
+		It("GET /engine/api/v1/audit returns 200 with entries + pagination", func() {
+			// The audit log is loopzero-api's GET /api/v1/audit (entries, total, limit,
+			// offset), reached through loopzero-cloud's /engine proxy. loopzero-cloud
+			// serves no /api/v1/audit-log, so the path this spec used answered 404.
 			status, body, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/api/v1/audit-log?limit=10", jwt, nil)
+				env.CloudBaseURL+"/engine/api/v1/audit?limit=10", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
-			Expect(body).To(HaveKey("events"))
+			Expect(body).To(HaveKey("entries"))
+			Expect(body).To(HaveKey("total"))
 		})
 	})
 
