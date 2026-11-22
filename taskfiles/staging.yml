@@ -51,9 +51,10 @@ vars:
   EMULATOR_ADDRESS: 172.29.0.1
   # The public edge (`staging:edge`): the hostnames it serves, one Let's Encrypt
   # certificate each, and the cluster whose ALB it passes requests to. Only the hostnames
-  # with a route are public: the UI (app., cloud.) and login (auth.) join this list when
-  # staging installs them behind Traefik. Grafana, ArgoCD and Gitea never do.
-  EDGE_HOSTS: api.staging.getloopscale.com
+  # with a route are public: the API, login (auth., the public-routes release) and the
+  # console (app. and cloud., routed once profile.loopzeroCloud is on; until then Traefik
+  # answers them 404). Grafana, ArgoCD and Gitea never are.
+  EDGE_HOSTS: api.staging.getloopscale.com,auth.staging.getloopscale.com,app.staging.getloopscale.com,cloud.staging.getloopscale.com
   EDGE_CLUSTER: loopzero-staging-core
   EDGE_HEALTH_URL: https://api.staging.getloopscale.com/api/v1/health/ready
 
@@ -378,17 +379,21 @@ tasks:
             exit 1
           fi
         done
+        # Caddy opens one site block for `{$EDGE_HOSTS}` and takes ", " between site
+        # addresses, not a bare comma.
+        hosts=$(echo "{{.EDGE_HOSTS}}" | sed 's/,/, /g')
         install -d -m 0755 /etc/loopzero-edge
         install -m 0644 "$AWS_CA_BUNDLE" /etc/loopzero-edge/emulator-ca.pem
         install -m 0644 infra/staging/edge/Caddyfile /etc/loopzero-edge/Caddyfile
         cat >/etc/loopzero-edge/edge.env <<EOF
         EDGE_BIND_ADDRESS=$public
-        EDGE_HOSTS={{.EDGE_HOSTS}}
+        EDGE_HOSTS="$hosts"
         EDGE_ALB_DNS_NAME=$alb_dns
         EDGE_ORIGIN=https://{{.EMULATOR_ADDRESS}}:{{.EMULATOR_PORT}}
         EDGE_ORIGIN_CA=/etc/loopzero-edge/emulator-ca.pem
         EOF
-        env $(cat /etc/loopzero-edge/edge.env) caddy validate --config /etc/loopzero-edge/Caddyfile --adapter caddyfile >/dev/null
+        # Read as systemd's EnvironmentFile reads it: the quoted host list stays one value.
+        (set -a; . /etc/loopzero-edge/edge.env; caddy validate --config /etc/loopzero-edge/Caddyfile --adapter caddyfile >/dev/null)
         install -m 0644 infra/staging/systemd/loopzero-edge.service /etc/systemd/system/
         systemctl daemon-reload
         systemctl enable loopzero-edge.service >/dev/null

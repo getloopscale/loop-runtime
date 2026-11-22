@@ -59,6 +59,12 @@ aws:
   # role passwords, internal call secrets, identity cookie keys), as one JSON object.
   # `infra/helmfile/scripts/seed-aws-platform-secret.sh` fills in the keys it lacks.
   platformSecret: loopzero/staging/platform
+  # Staging only: the registry login for the private GHCR images (loopzero-cloud,
+  # loopzero-dashboard), a JSON object {"username": ..., "password": <token with
+  # read:packages>}. The aws-secrets-manager release writes it into loopzero-system as the
+  # kubernetes.io/dockerconfigjson Secret `ghcr-pull`. A production environment pulls
+  # from ECR with the node role and has no such secret.
+  imagePullSecret: loopzero/staging/ghcr-pull
 
 # Platform images. The emulator's ECR answers the registry API for reads but refuses
 # blob uploads (POST /v2/<repo>/blobs/uploads/ -> 405, measured 2026-11-22 against
@@ -68,7 +74,8 @@ aws:
 platformImages:
   registry: "ghcr.io/getloopscale/"
   tags:
-    loopzero-api: "develop-7a34191"
+    # The first build that signs S3 requests with the IRSA role (#9).
+    loopzero-api: "develop-eff9359"
     loopzero-tenant-operator: "develop-7a34191"
     loopzero-app-operator: "develop-7a34191"
     loopzero-preview-operator: "develop-7a34191"
@@ -77,6 +84,10 @@ platformImages:
     loopzero-clone-runner: "develop-7a34191"
     loopzero-syft-scanner: "develop-7a34191"
     loopzero-cosign-signer: "develop-7a34191"
+    # getloopscale/loopzero-cloud publishes these two; empty until the first image is on
+    # GHCR. Required once profile.loopzeroCloud is on.
+    loopzero-cloud: ""
+    loopzero-dashboard: ""
 
 registries:
   docrPrefix: "ghcr.io/getloopscale/"
@@ -130,6 +141,15 @@ allowedReturnUrls:
   - "https://app.staging.getloopscale.com/"
   - "https://cloud.staging.getloopscale.com"
   - "https://cloud.staging.getloopscale.com/"
+# Login and the console through Traefik: the public-routes release serves the auth host
+# (Hydra and Kratos public APIs) and, with profile.loopzeroCloud, the app host; the cloud
+# host is loopzero-cloud's own route. taskfiles/staging.yml EDGE_HOSTS lists the same
+# hostnames for the edge.
+publicRoutes:
+  enabled: true
+  # TLS terminates at the edge (Caddy), as for the API route.
+  certIssuer: CFManaged
+
 dashboardRoute:
   login: /login
   register: /register
@@ -150,6 +170,9 @@ profile:
   managedRedis: true            # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: false          # install the KEDA HTTP add-on on the cells
   staticAssets: false           # install the static-assets server on the cells
+  # Turning it on installs loopzero-cloud and loopzero-dashboard and routes the app and
+  # cloud hosts. It needs the two image tags above and the Secrets Manager secret
+  # aws.imagePullSecret names.
   loopzeroCloud: false          # install the control plane (loopzero-cloud), unless clusterRole is standalone
   smokeTest: false              # run the post-install smoke-test release
   localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it

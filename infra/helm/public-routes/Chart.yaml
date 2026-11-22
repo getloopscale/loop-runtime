@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: public-routes
+description: |
+  Traefik IngressRoutes for the public hostnames that are not one chart's own: login
+  (Kratos and Hydra on the auth host) and the console (the dashboard and its same-origin
+  proxies on the app host). Used where the edge passes every hostname to one Traefik
+  (an ALB in front of the core cluster), not where a host-level Caddy routes by path.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

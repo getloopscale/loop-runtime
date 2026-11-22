@@ -4,7 +4,7 @@
 # `task staging:edge` writes the environment this file reads (/etc/loopzero-edge/edge.env):
 #
 #   EDGE_BIND_ADDRESS   the host's public address; nothing else is listened on
-#   EDGE_HOSTS          the public hostnames, comma separated; one certificate each
+#   EDGE_HOSTS          the public hostnames, separated by ", "; one certificate each
 #   EDGE_ALB_DNS_NAME   the DNSName of the ALB the traefik-edge Ingress created
 #   EDGE_ORIGIN         the emulator's endpoint, where that ALB is served
 #   EDGE_ORIGIN_CA      the emulator's CA, which signs the endpoint's certificate

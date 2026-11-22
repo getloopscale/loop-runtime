@@ -746,6 +746,53 @@ releases:
           billingReturnUrl: {{ .Values.uiBaseUrl | trimSuffix "/" | quote }}
 {{- end }}
 
+  # The console bundle (nginx), behind the app host route of public-routes. Only where
+  # Traefik serves the public hostnames (publicRoutes.enabled): dev-public's Caddy serves
+  # the bundle from the image's files instead.
+  - name: loopzero-dashboard
+    labels:
+      profile: dashboard-only
+    namespace: loopzero-system
+    chart: ../../charts/loopzero-dashboard
+    installed: {{ and .Values.profile.loopzeroCloud (.Values | get "publicRoutes.enabled" false) }}
+    wait: false
+    values:
+{{- if and .Values.profile.loopzeroCloud (.Values | get "publicRoutes.enabled" false) }}
+      - global:
+          registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" | quote }}
+{{- if .Values | get "aws.imagePullSecret" "" }}
+          # Written by the aws-secrets-manager release (staging only).
+          imagePullSecrets:
+            - name: ghcr-pull
+{{- end }}
+        image:
+          repository: loopzero-dashboard
+          tag: {{ required "platformImages.tags.loopzero-dashboard is not set: pin the image CI published" (index .Values.platformImages.tags "loopzero-dashboard") | quote }}
+        config:
+          # The SPA calls its own origin; public-routes proxies the APIs on the app host.
+          viteApiUrl: ""
+          viteCloudUrl: ""
+          baseDomain: {{ .Values.domain | quote }}
+{{- end }}
+
+  # Traefik IngressRoutes for the public hostnames no chart owns: login on the auth host
+  # (Kratos and Hydra) and, with loopzero-cloud, the console on the app host. Where the
+  # edge passes every hostname to Traefik (staging's ALB); see infra/helm/public-routes.
+  - name: public-routes
+    namespace: loopzero-system
+    chart: ../helm/public-routes
+    installed: {{ .Values | get "publicRoutes.enabled" false }}
+    needs:
+      - traefik/traefik
+    values:
+      - certIssuer: {{ .Values | get "publicRoutes.certIssuer" "CFManaged" | quote }}
+        identity:
+          enabled: true
+          host: {{ .Values | get "publicAuthUrl" "" | trimPrefix "https://" | trimSuffix "/" | quote }}
+        console:
+          enabled: {{ .Values.profile.loopzeroCloud }}
+          host: {{ .Values | get "uiBaseUrl" "" | trimPrefix "https://" | trimSuffix "/" | quote }}
+
   # The data plane (#446): memory, RAG and lens, one release each of one chart, every
   # service with its own Postgres. dev-public ran them as compose containers started from
   # directories that no longer exist; this is their versioned definition. Secrets come from
@@ -817,6 +864,12 @@ releases:
           host: {{ env "LOOPZERO_CACHE_HOST" | quote }}
           port: {{ env "LOOPZERO_CACHE_PORT" | default "6379" }}
           authTokenSecret: {{ env "LOOPZERO_CACHE_AUTH_SECRET" | quote }}
+{{- with .Values | get "aws.imagePullSecret" "" }}
+        # Staging only: the registry login the nodes pull the private GHCR images with.
+        imagePullSecret:
+          secretsManagerKey: {{ . | quote }}
+          namespaces: [loopzero-system]
+{{- end }}
 
   # The managed database brought to what loopzero-api boots against: identity and Gitea
   # databases, the non-owner roles, the schema at the latest migration.

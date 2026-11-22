@@ -27,20 +27,19 @@ ingressRoute:
   certIssuer: CFManaged
 
 config:
-  # Not `production`: in production mode the API refuses to start without static object
-  # store keys (validateProductionCredentials, MINIO_ACCESS_KEY), and its object store
-  # client (api/internal/objectstore) signs with static keys only, so it cannot use the
-  # IRSA role above. Until it takes the AWS credential chain, an AWS environment cannot
-  # run it in production mode.
-  loopzeroEnv: "staging"
+  loopzeroEnv: "production"
   baseDomain: {{ .Values.domain | quote }}
   corsAllowedOrigin: {{ .Values.dashboardOrigin | quote }}
-  # The S3 regional endpoint; the bucket is environments/staging.yaml sourceBucket.
-  minioEndpoint: {{ printf "https://s3.%s.amazonaws.com" .Values.aws.region | quote }}
+  # Empty: with no static key and the IRSA role above, the API signs with the AWS
+  # credential chain and takes the S3 endpoint from AWS_ENDPOINT_URL (the emulator, which
+  # the EKS layer injects) or the region. The bucket is environments/staging.yaml
+  # sourceBucket, which the role is granted.
+  minioEndpoint: ""
   loopzeroCosignImage: "{{ .Values.platformImages.registry }}loopzero-cosign-signer:{{ index .Values.platformImages.tags "loopzero-cosign-signer" }}"
   loopzeroSyftImage: "{{ .Values.platformImages.registry }}loopzero-syft-scanner:{{ index .Values.platformImages.tags "loopzero-syft-scanner" }}"
-  # The issuer Hydra emits (values/staging/ory-hydra.yaml.gotmpl), fetched in-cluster.
-  jwtIssuer: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+  # The issuer Hydra emits (values/staging/ory-hydra.yaml.gotmpl); its keys are fetched
+  # in-cluster.
+  jwtIssuer: {{ printf "%s/" (.Values.publicAuthUrl | trimSuffix "/") | quote }}
   jwksUrl: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/.well-known/jwks.json"
   # The contexts of loopzero-cluster-kubeconfigs, written by the bootstrap: core is the
   # in-cluster one, build and cell-0 are scoped ServiceAccount kubeconfigs.
