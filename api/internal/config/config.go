@@ -236,13 +236,16 @@ type Config struct {
 	DataPlanePollerInterval      time.Duration
 
 	// Credentials (read from env vars or K8s secrets)
-	GiteaToken          string
-	ArgocdToken         string
-	MinIOAccessKey      string
-	MinIOSecretKey      string
-	ArgoCallbackSecret  string
-	BootstrapSecret     string // SEC-003: shared secret for POST /internal/bootstrap
-	SecretEncryptionKey string // SEC-001: 32-byte hex-encoded AES-256 key for secret encryption at rest
+	GiteaToken     string
+	ArgocdToken    string
+	MinIOAccessKey string
+	MinIOSecretKey string
+	// ObjectStoreAWSCredentials is true when the pod has an IRSA role and no
+	// static object store key: the store signs with the AWS credential chain.
+	ObjectStoreAWSCredentials bool
+	ArgoCallbackSecret        string
+	BootstrapSecret           string // SEC-003: shared secret for POST /internal/bootstrap
+	SecretEncryptionKey       string // SEC-001: 32-byte hex-encoded AES-256 key for secret encryption at rest
 
 	// T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 —
 	// OpenBao transit encryption credentials. When OpenBaoTransitEnabled is
@@ -429,6 +432,9 @@ func Load() Config {
 	defaultKubeconfig := home + "/.kube/config"
 
 	l := &envLoader{}
+	// An IRSA role means AWS S3 is the object store unless one is configured:
+	// no in-cluster MinIO default endpoint and no dev default key.
+	awsRole := hasAWSWebIdentity()
 	cfg := Config{
 		// Server
 		Port:        envOr("PORT", "3001"),
@@ -485,7 +491,7 @@ func Load() Config {
 		// dogfood discovered this when the API silently swallowed the
 		// upload error and returned 200 to the CLI, then the build
 		// pipeline failed downstream because the bundle was missing.
-		MinIOEndpoint:             envOr("MINIO_ENDPOINT", "http://minio.loopzero-system.svc.cluster.local:9000"),
+		MinIOEndpoint:             envOr("MINIO_ENDPOINT", objectStoreDefault(awsRole, "http://minio.loopzero-system.svc.cluster.local:9000")),
 		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
 		SourceBucket:              envOr("SOURCE_BUCKET", "loopzero-builds"),
 		RegistryURL:               envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
@@ -518,8 +524,8 @@ func Load() Config {
 		// Credentials
 		GiteaToken:          os.Getenv("GITEA_TOKEN"),
 		ArgocdToken:         os.Getenv("ARGOCD_TOKEN"),
-		MinIOAccessKey:      envOr("MINIO_ACCESS_KEY", devDefaultMinIOAccessKey),
-		MinIOSecretKey:      envOr("MINIO_SECRET_KEY", devDefaultMinIOSecretKey),
+		MinIOAccessKey:      envOr("MINIO_ACCESS_KEY", objectStoreDefault(awsRole, devDefaultMinIOAccessKey)),
+		MinIOSecretKey:      envOr("MINIO_SECRET_KEY", objectStoreDefault(awsRole, devDefaultMinIOSecretKey)),
 		ArgoCallbackSecret:  envOr("LOOPZERO_ARGO_CALLBACK_SECRET", devDefaultArgoCallbackSecret),
 		BootstrapSecret:     envOr("LOOPZERO_BOOTSTRAP_SECRET", devDefaultBootstrapSecret),
 		SecretEncryptionKey: os.Getenv("LOOPZERO_SECRET_ENCRYPTION_KEY"), // SEC-001: empty = no encryption (dev only)
@@ -627,8 +633,25 @@ func Load() Config {
 					"set MAX_CONCURRENT_BUILDS_PER_TENANT and remove MAX_BUILDS_PER_TENANT", n, cfg.MaxConcurrentBuildsPerTenant))
 		}
 	}
+	cfg.ObjectStoreAWSCredentials = awsRole && cfg.MinIOAccessKey == "" && cfg.MinIOSecretKey == ""
 	cfg.loadErrors = l.errs
 	return cfg
+}
+
+// hasAWSWebIdentity reports whether the process runs with an IRSA role: EKS
+// injects AWS_ROLE_ARN and the projected token file into the pod of a
+// ServiceAccount annotated with eks.amazonaws.com/role-arn.
+func hasAWSWebIdentity() bool {
+	return os.Getenv("AWS_ROLE_ARN") != "" && os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE") != ""
+}
+
+// objectStoreDefault is the in-cluster object store default, or nothing when
+// the pod has an IRSA role and the object store is AWS S3.
+func objectStoreDefault(awsRole bool, inCluster string) string {
+	if awsRole {
+		return ""
+	}
+	return inCluster
 }
 
 // Validate logs warnings about insecure defaults and returns an error for
@@ -842,6 +865,9 @@ func (c Config) validateProductionCredentials() error {
 	if !c.IsProduction() {
 		return nil
 	}
+	if err := c.validateObjectStoreCredentials(); err != nil {
+		return err
+	}
 	if c.MinIOAccessKey == devDefaultMinIOAccessKey {
 		return fmt.Errorf("MINIO_ACCESS_KEY using default dev credentials in production — override via MINIO_ACCESS_KEY env var")
 	}
@@ -853,6 +879,21 @@ func (c Config) validateProductionCredentials() error {
 	}
 	if c.ArgoCallbackSecret == devDefaultArgoCallbackSecret {
 		return fmt.Errorf("LOOPZERO_ARGO_CALLBACK_SECRET using default dev value in production — override via LOOPZERO_ARGO_CALLBACK_SECRET env var")
+	}
+	return nil
+}
+
+// validateObjectStoreCredentials requires, in production, one way to sign
+// object store requests: a complete static key pair, or none and the AWS
+// credential chain of an IRSA role.
+func (c Config) validateObjectStoreCredentials() error {
+	switch {
+	case c.MinIOAccessKey != "" && c.MinIOSecretKey == "":
+		return fmt.Errorf("MINIO_ACCESS_KEY is set without MINIO_SECRET_KEY: set both, or neither to sign with the pod's IRSA role")
+	case c.MinIOAccessKey == "" && c.MinIOSecretKey != "":
+		return fmt.Errorf("MINIO_SECRET_KEY is set without MINIO_ACCESS_KEY: set both, or neither to sign with the pod's IRSA role")
+	case c.MinIOAccessKey == "" && !c.ObjectStoreAWSCredentials:
+		return fmt.Errorf("the object store has no credentials in production: set MINIO_ACCESS_KEY and MINIO_SECRET_KEY, or run the API with an IRSA role (AWS_ROLE_ARN and AWS_WEB_IDENTITY_TOKEN_FILE)")
 	}
 	return nil
 }
