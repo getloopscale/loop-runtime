@@ -20,6 +20,11 @@ serviceAccount:
 
 ingressRoute:
   host: {{ printf "api.%s" .Values.domain | quote }}
+  # Public TLS terminates at the edge in front of the ALB (CloudFront and ACM in
+  # production, Caddy on staging), and the ALB does not validate the certificate Traefik
+  # presents, so the route asks cert-manager for none and Traefik serves its default one.
+  # The value is named after Cloudflare, the first edge that worked this way.
+  certIssuer: CFManaged
 
 config:
   # Not `production`: in production mode the API refuses to start without static object
