@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopZero Authors
 
 // Package objectstore is the platform's one entry point to S3-compatible
-// object storage (MinIO in-cluster, DigitalOcean Spaces in production).
+// object storage (MinIO in-cluster, DigitalOcean Spaces, Amazon S3).
 //
 // Request signing is delegated to minio-go, the maintained client the
 // operators module already uses against the same stores: AWS Signature V4 is an
@@ -32,7 +32,7 @@ import (
 
 const (
 	// signingRegion is the SigV4 region both MinIO and DigitalOcean Spaces
-	// accept for path-style requests.
+	// accept for path-style requests, and the AWS region when none is set.
 	signingRegion = "us-east-1"
 	// uploadTimeout bounds one upload end to end.
 	uploadTimeout = 60 * time.Second
@@ -43,24 +43,33 @@ const (
 )
 
 // S3Store uploads objects and signs download URLs against one S3-compatible
-// endpoint, addressing objects path-style: {endpoint}/{bucket}/{key}.
+// endpoint. A static-key store addresses objects path-style,
+// {endpoint}/{bucket}/{key}; an AWS store does so on any host but amazonaws.com.
 type S3Store struct {
 	client *minio.Client
 }
 
 // NewS3Store builds a store for endpoint, which may be a full URL
 // ("https://nyc3.digitaloceanspaces.com") or a bare host[:port]; a bare host
-// is treated as plain HTTP, as in-cluster MinIO is.
+// is treated as plain HTTP, as in-cluster MinIO is. It signs with the static
+// key pair; NewAWSS3Store signs with the AWS credential chain instead.
 func NewS3Store(endpoint, accessKey, secretKey string) (*S3Store, error) {
+	if accessKey == "" || secretKey == "" {
+		return nil, fmt.Errorf("objectstore: a static key needs both an access key and a secret key")
+	}
+	return newS3Store(endpoint, signingRegion, minio.BucketLookupPath, miniocreds.NewStaticV4(accessKey, secretKey, ""))
+}
+
+func newS3Store(endpoint, region string, lookup minio.BucketLookupType, creds *miniocreds.Credentials) (*S3Store, error) {
 	host, secure, err := parseEndpoint(endpoint)
 	if err != nil {
 		return nil, err
 	}
 	client, err := minio.New(host, &minio.Options{
-		Creds:        miniocreds.NewStaticV4(accessKey, secretKey, ""),
+		Creds:        creds,
 		Secure:       secure,
-		Region:       signingRegion,
-		BucketLookup: minio.BucketLookupPath,
+		Region:       region,
+		BucketLookup: lookup,
 		Transport:    otelhttp.NewTransport(http.DefaultTransport),
 	})
 	if err != nil {

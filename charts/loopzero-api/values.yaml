@@ -62,6 +62,9 @@ config:
   mgmtKubeContext: "k3d-loopzero-core"
   buildKubeContext: "k3d-loopzero-build"
   runtimeKubeContext: "k3d-loopzero-cell-0"
+  # Empty on AWS: with no static key (secrets.minioAccessKey) and an IRSA role on the
+  # ServiceAccount, the API signs with the AWS credential chain and resolves the S3
+  # endpoint from AWS_ENDPOINT_URL_S3, AWS_ENDPOINT_URL or the region.
   minioEndpoint: "minio.loopzero-system.svc.cluster.local:9000"
   minioCrossClusterEndpoint: ""
   sourceBucket: "loopzero-builds"
