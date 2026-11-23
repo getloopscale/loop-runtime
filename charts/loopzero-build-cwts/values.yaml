@@ -8,6 +8,19 @@ images:
 # Must match SOURCE_BUCKET env var in loopzero-api and the bucket created by Pulumi.
 sourceBucket: "loopzero-builds"
 
+# S3 bucket for the dependency cache (cache-restore, cache-save). Empty keeps it in
+# sourceBucket. On AWS the build role reads the builds bucket only, so the cache goes to
+# a bucket it can write (the artifacts bucket).
+cacheBucket: ""
+
+# How the clone and cache steps authenticate to the object store.
+#   secret: keys from the Secret minio.existingSecret (MinIO, local k3d).
+#   irsa:   the IRSA role of the workflow ServiceAccount (AWS S3). EKS injects
+#           AWS_ROLE_ARN and AWS_WEB_IDENTITY_TOKEN_FILE, and mc exchanges the token
+#           for credentials at STS.
+objectStorage:
+  credentials: secret
+
 # The Argo Workflows controller, server and workflow defaults (parallelism, probes,
 # podGC, volumeClaimGC) are configured where that chart is installed:
 # infra/helm/argo-workflows/values.yaml. This chart only ships the

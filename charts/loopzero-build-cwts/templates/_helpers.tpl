@@ -8,11 +8,31 @@ loopzero-build-cwts.mcAlias — configure the `loopzero` mc alias for MinIO.
 MOD-6: --insecure is a Helm value, never hardcoded.
 */}}
 {{- define "loopzero-build-cwts.mcAlias" -}}
+{{- if eq (.Values.objectStorage.credentials | default "secret") "irsa" }}
+# mc exchanges the pod's IRSA token for credentials at STS (its MC_*_<alias> variables).
+export MC_STS_ENDPOINT_loopzero="${AWS_ENDPOINT_URL_STS:-https://sts.${AWS_REGION}.amazonaws.com}"
+export MC_WEB_IDENTITY_TOKEN_FILE_loopzero="${AWS_WEB_IDENTITY_TOKEN_FILE:?no IRSA token: the workflow ServiceAccount has no eks.amazonaws.com/role-arn}"
+export MC_ROLE_ARN_loopzero="${AWS_ROLE_ARN:?no IRSA role: the workflow ServiceAccount has no eks.amazonaws.com/role-arn}"
+mc alias set loopzero "${AWS_ENDPOINT_URL_S3:-${AWS_ENDPOINT_URL:-https://s3.${AWS_REGION}.amazonaws.com}}" "" "" \
+{{- else }}
 mc alias set loopzero "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
+{{- end }}
 {{- if .Values.minio.insecure }}
   --insecure \
 {{- end }}
   --api S3v4 >/dev/null 2>&1
+{{- end }}
+
+{{/*
+loopzero-build-cwts.secretEnv — the envFrom of a step, when the object store keys come
+from a Secret. An IRSA step reads none.
+*/}}
+{{- define "loopzero-build-cwts.secretEnv" -}}
+{{- if ne (.Values.objectStorage.credentials | default "secret") "irsa" }}
+envFrom:
+  - secretRef:
+      name: {{ .Values.minio.existingSecret | default "loopzero-minio-credentials" }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -49,5 +69,5 @@ if [ -n "$SUFFIX" ]; then
 else
   CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}"
 fi
-CACHE_PATH="loopzero/{{ .Values.sourceBucket }}/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
+CACHE_PATH="loopzero/{{ .Values.cacheBucket | default .Values.sourceBucket }}/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
 {{- end }}

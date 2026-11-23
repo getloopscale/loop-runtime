@@ -68,6 +68,8 @@ config:
   minioEndpoint: "minio.loopzero-system.svc.cluster.local:9000"
   minioCrossClusterEndpoint: ""
   sourceBucket: "loopzero-builds"
+  # Where builds upload static apps and SBOMs. Empty selects loopzero-static-assets.
+  staticAssetsBucket: ""
   registryUrl: ""
   registryInsecure: "false"
   workloadIngressUrl: ""

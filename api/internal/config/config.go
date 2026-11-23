@@ -131,8 +131,11 @@ type Config struct {
 	MinIOEndpoint             string
 	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
 	SourceBucket              string // S3 bucket for source bundles (default: "loopzero-builds")
-	RegistryURL               string
-	RegistryInsecure          bool // true for local dev registries without TLS
+	// StaticAssetsBucket holds static apps and SBOMs (STATIC_ASSETS_BUCKET); empty
+	// selects the build pipeline's default, loopzero-static-assets.
+	StaticAssetsBucket string
+	RegistryURL        string
+	RegistryInsecure   bool // true for local dev registries without TLS
 
 	// Cosign keyless signing config (M2 T8.0 of plan 2026-05-27-M07-to-3-85 — v1.1 EC-3 wire env var).
 	// CosignKeyless=false (default): keyed mode via cosign-signing-key Secret.
@@ -498,6 +501,7 @@ func Load() Config {
 		MinIOEndpoint:             envOr("MINIO_ENDPOINT", objectStoreDefault(awsRole, "http://minio.loopzero-system.svc.cluster.local:9000")),
 		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
 		SourceBucket:              envOr("SOURCE_BUCKET", "loopzero-builds"),
+		StaticAssetsBucket:        os.Getenv("STATIC_ASSETS_BUCKET"),
 		RegistryURL:               os.Getenv("REGISTRY_URL"),
 		RegistryInsecure:          os.Getenv("REGISTRY_INSECURE") == "true",
 

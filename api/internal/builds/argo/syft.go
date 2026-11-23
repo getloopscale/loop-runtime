@@ -52,7 +52,7 @@ const (
 // ContinueOn{Failed: true}. SBOM failure must NOT block the deploy.
 func syftScanTemplate(
 	tenantID, projectID, commitSHA, appName, imageTag string,
-	insecureRegistry bool, scannerImage string,
+	insecureRegistry bool, scannerImage string, store objectStore,
 ) *forge.Script {
 	metadataFile := metadataFileFor(appName)
 	sbomLocalPath := fmt.Sprintf("%s/sbom-%s.cdx.json", sbomLocalDir, appName)
@@ -129,10 +129,10 @@ echo "SBOM generated and uploaded successfully"
 		insecureEnv,                      // 3: syft env vars for insecure registry (Plan T6.1)
 		imageTag,                         // 4: scan target
 		sbomFormatCDXJSON, sbomLocalPath, // 5,6: format + local path
-		sbomLocalPath,               // 7: existence check path
-		sbomLocalPath,               // 8: count source path
-		s3BucketStaticAssets, s3Key, // 9,10: bucket + key (echo)
-		sbomLocalPath, s3BucketStaticAssets, s3Key, // 11,12,13: aws s3 cp
+		sbomLocalPath,                     // 7: existence check path
+		sbomLocalPath,                     // 8: count source path
+		store.staticAssetsBucket(), s3Key, // 9,10: bucket + key (echo)
+		sbomLocalPath, store.staticAssetsBucket(), s3Key, // 11,12,13: aws s3 cp
 		s3Key, outS3KeyPath, // 14,15: write s3 key output
 		sbomFormatCDXJSON, outFormatPath, // 16,17: write format output
 		outComponentCountPath, // 18: write count output
@@ -157,16 +157,7 @@ echo "SBOM generated and uploaded successfully"
 				ValueFrom: &model.ValueFrom{Path: outComponentCountPath},
 			},
 		},
-		Env: []forge.EnvBuilder{
-			// MinIO (local dev) credentials. In prod, AWS_ACCESS_KEY/SECRET
-			// for DO Spaces are also injected via the same Secret.
-			forge.SecretEnv{Name: "AWS_ACCESS_KEY_ID", SecretName: secretMinIOCreds, SecretKey: "AWS_ACCESS_KEY_ID"},         //nolint:gosec // G101 false positive: env var KEY name, not credential value
-			forge.SecretEnv{Name: "AWS_SECRET_ACCESS_KEY", SecretName: secretMinIOCreds, SecretKey: "AWS_SECRET_ACCESS_KEY"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
-			forge.SecretEnv{Name: "AWS_DEFAULT_REGION", SecretName: secretMinIOCreds, SecretKey: "AWS_DEFAULT_REGION"},       //nolint:gosec // G101 false positive: env var KEY name, not credential value
-			forge.SecretEnv{Name: "AWS_ENDPOINT_URL", SecretName: secretMinIOCreds, SecretKey: "AWS_ENDPOINT_URL"},           //nolint:gosec // G101 false positive: env var KEY name, not credential value
-			// Docker config — syft needs this to read from private registries.
-			forge.Env{Name: "DOCKER_CONFIG", Value: buildkitRegistryMount},
-		},
+		Env: syftEnv(store),
 		VolumeMounts: []forge.VolumeBuilder{
 			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: volumeWorkspace, MountPath: workspaceMountPath}},
 			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
@@ -190,4 +181,21 @@ echo "SBOM generated and uploaded successfully"
 			RunAsNonRoot: forge.Ptr(true),
 		},
 	}
+}
+
+// syftEnv is the SBOM step's environment. With IRSA the aws CLI signs as the pod's
+// role and reads its region and endpoint from what EKS injects; otherwise the
+// credentials, region and endpoint come from the MinIO Secret.
+func syftEnv(store objectStore) []forge.EnvBuilder {
+	// Docker config: syft reads private registries with it.
+	env := []forge.EnvBuilder{forge.Env{Name: "DOCKER_CONFIG", Value: buildkitRegistryMount}}
+	if store.IRSA {
+		return env
+	}
+	return append([]forge.EnvBuilder{
+		forge.SecretEnv{Name: "AWS_ACCESS_KEY_ID", SecretName: secretMinIOCreds, SecretKey: "AWS_ACCESS_KEY_ID"},         //nolint:gosec // G101 false positive: env var KEY name, not credential value
+		forge.SecretEnv{Name: "AWS_SECRET_ACCESS_KEY", SecretName: secretMinIOCreds, SecretKey: "AWS_SECRET_ACCESS_KEY"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
+		forge.SecretEnv{Name: "AWS_DEFAULT_REGION", SecretName: secretMinIOCreds, SecretKey: "AWS_DEFAULT_REGION"},       //nolint:gosec // G101 false positive: env var KEY name, not credential value
+		forge.SecretEnv{Name: "AWS_ENDPOINT_URL", SecretName: secretMinIOCreds, SecretKey: "AWS_ENDPOINT_URL"},           //nolint:gosec // G101 false positive: env var KEY name, not credential value
+	}, env...)
 }

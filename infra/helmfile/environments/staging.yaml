@@ -144,6 +144,9 @@ dynamicRouter: true
 
 # storage/s3: source bundles are staged in the builds bucket.
 sourceBucket: loopzero-staging-builds-000000000000
+# storage/s3: build dependency caches and SBOMs go to buckets the build role can write.
+artifactsBucket: loopzero-staging-artifacts-000000000000
+staticAssetsBucket: loopzero-staging-static-assets-000000000000
 
 # storage/s3 velero-backups. No s3Url: the AWS SDK resolves the S3 endpoint.
 velero:

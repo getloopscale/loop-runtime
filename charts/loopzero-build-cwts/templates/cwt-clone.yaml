@@ -30,9 +30,7 @@ spec:
         env:
           - name: HOME
             value: /tmp
-        envFrom:
-          - secretRef:
-              name: {{ .Values.minio.existingSecret | default "loopzero-minio-credentials" }}
+        {{- include "loopzero-build-cwts.secretEnv" . | trim | nindent 8 }}
         command:
           - sh
           - -c
@@ -55,7 +53,7 @@ spec:
             BUNDLE_PATH="{{ "{{inputs.parameters.tenant-id}}" }}/source/{{ "{{inputs.parameters.build-id}}" }}.bundle"
             echo "Downloading source bundle: ${BUNDLE_PATH}"
 
-            {{- include "loopzero-build-cwts.mcAlias" . | nindent 12 }}
+            {{- include "loopzero-build-cwts.mcAlias" . | trim | nindent 12 }}
 
             mc cp \
               {{- if .Values.minio.insecure }}
