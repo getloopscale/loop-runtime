@@ -124,6 +124,36 @@ func TestMonitoringAddressesExportsEveryRemoteClusterMetricsALB(t *testing.T) {
 	}
 }
 
+// The platform task evals the output in Task's own shell interpreter, which kept the
+// backslashes `printf %q` puts before each comma: the core Prometheus then scraped
+// `<DNSName>\/federate` for build and cell-0 and got 404 (deploy of a49a25d). The line is
+// plain, double-quoted, with nothing for an interpreter to unescape.
+func TestMonitoringAddressesPrintsTheNamesWithoutEscapes(t *testing.T) {
+	f := newFakeCluster(t, fakeIngressKubectl)
+	f.publish("build", "prometheus-federation", buildALB)
+	f.publish("cell-0", "prometheus-federation", cell0ALB)
+	f.publish("cell-1", "prometheus-federation", cell1ALB)
+	f.publish("build", "loki-internal", lokiALB)
+
+	metrics, stderr, err := f.run("monitoring-addresses.sh", "metrics")
+	if err != nil {
+		t.Fatalf("monitoring-addresses.sh metrics: %v\n%s", err, stderr)
+	}
+	loki, stderr, err := f.run("monitoring-addresses.sh", "loki")
+	if err != nil {
+		t.Fatalf("monitoring-addresses.sh loki: %v\n%s", err, stderr)
+	}
+
+	wantMetrics := `export LOOPZERO_METRICS_ALB_DNS_NAMES="build=` + buildALB + `,cell-0=` + cell0ALB + `,cell-1=` + cell1ALB + "\"\n"
+	if metrics != wantMetrics {
+		t.Errorf("metrics output = %q, want %q", metrics, wantMetrics)
+	}
+	wantLoki := `export LOOPZERO_LOKI_ALB_DNS_NAME="` + lokiALB + "\"\n"
+	if loki != wantLoki {
+		t.Errorf("loki output = %q, want %q", loki, wantLoki)
+	}
+}
+
 // Before the syncs of a rebuild no Ingress has an ALB yet: without --wait the script
 // exports nothing and succeeds, so the first core sync renders without the addresses.
 func TestMonitoringAddressesExportsNothingWhileAnALBIsMissing(t *testing.T) {

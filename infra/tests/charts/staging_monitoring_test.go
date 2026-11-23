@@ -5,6 +5,9 @@ package charts
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"text/template"
@@ -290,5 +293,92 @@ func TestStagingLoadBalancerControllerKeepsItsWebhookCertificate(t *testing.T) {
 				t.Errorf("keepTLSSecret = %v without cert-manager, want true", got)
 			}
 		})
+	}
+}
+
+func promtailJobs(t *testing.T, helmfile, env string, extraEnv []string) map[string]map[string]any {
+	t.Helper()
+	values := helmfileValues(t, helmfile, env, "promtail", extraEnv...)
+	snippet, _ := dig(values, "config", "snippets", "scrapeConfigs").(string)
+	var jobs []map[string]any
+	if err := yaml.Unmarshal([]byte(snippet), &jobs); err != nil {
+		t.Fatalf("decode the scrapeConfigs snippet: %v", err)
+	}
+	byName := map[string]map[string]any{}
+	for _, j := range jobs {
+		byName[j["job_name"].(string)] = j
+	}
+	return byName
+}
+
+// The other jobs select workload pods (Argo workflows, tenants, loopzero components),
+// which an idle cell or build cluster does not run: on 2026-11-23 the Promtail of build,
+// cell-0 and cell-1 pushed through the ALB with 0 active targets. Each cluster's platform
+// pods (ingress, controllers, monitoring) are collected too, without the pods the other
+// jobs already tail.
+func TestStagingPromtailCollectsEachClustersPlatformPods(t *testing.T) {
+	cases := []struct{ helmfile, cluster string }{
+		{"core.helmfile.yaml.gotmpl", "core"},
+		{"build.helmfile.yaml.gotmpl", "build"},
+		{"cell.helmfile.yaml.gotmpl", "cell-0"},
+	}
+	for _, c := range cases {
+		t.Run(c.cluster, func(t *testing.T) {
+			job := promtailJobs(t, c.helmfile, "staging", stagingMonitoringOutputs())["platform-pods"]
+			if job == nil {
+				t.Fatal("no platform-pods job")
+			}
+			names, _ := dig(job, "kubernetes_sd_configs", 0, "namespaces", "names").([]any)
+			for _, want := range []string{"kube-system", "monitoring", "traefik"} {
+				found := false
+				for _, n := range names {
+					found = found || n == want
+				}
+				if !found {
+					t.Errorf("platform-pods does not discover namespace %s (names %v)", want, names)
+				}
+			}
+			dropped := map[string]bool{}
+			relabels, _ := job["relabel_configs"].([]any)
+			for _, r := range relabels {
+				if dig(r, "action") == "drop" {
+					sources, _ := dig(r, "source_labels").([]any)
+					for _, s := range sources {
+						dropped[s.(string)] = true
+					}
+				}
+			}
+			for _, label := range []string{
+				"__meta_kubernetes_pod_label_workflows_argoproj_io_workflow",
+				"__meta_kubernetes_pod_label_loopzero_io_component",
+			} {
+				if !dropped[label] {
+					t.Errorf("platform-pods does not drop pods by %s, which another job already tails", label)
+				}
+			}
+		})
+	}
+}
+
+func TestDevPromtailHasNoPlatformPodsJob(t *testing.T) {
+	if promtailJobs(t, "build.helmfile.yaml.gotmpl", "dev", nil)["platform-pods"] != nil {
+		t.Error("dev renders a platform-pods job; it is staging's")
+	}
+}
+
+// A DNSName that carries anything but DNS name characters (a backslash an interpreter
+// left in, a quote) fails the core render instead of ending up in a scrape path.
+func TestStagingCorePrometheusRefusesAMalformedALBName(t *testing.T) {
+	cmd := exec.Command("helmfile", "-f", "infra/helmfile/core.helmfile.yaml.gotmpl", "-e", "staging",
+		"--selector", "name=prometheus", "--skip-deps", "--output-file-template", filepath.Join(t.TempDir(), "{{ .Release.Name }}.yaml"), "write-values")
+	cmd.Dir = repoRoot(t)
+	cmd.Env = append(os.Environ(), stagingOutputs...)
+	cmd.Env = append(cmd.Env, `LOOPZERO_METRICS_ALB_DNS_NAMES=build=`+stagingBuildALB+`\,cell-0=`+stagingCell0ALB+`\,cell-1=`+stagingCell1ALB)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("the core prometheus rendered with backslashes in LOOPZERO_METRICS_ALB_DNS_NAMES")
+	}
+	if !strings.Contains(string(out), "is not <cluster>=<DNSName>") {
+		t.Errorf("render failed without naming the malformed pair:\n%s", truncate(string(out), 800))
 	}
 }

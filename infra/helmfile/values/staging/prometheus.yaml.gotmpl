@@ -14,7 +14,7 @@
 {{- $byCluster := dict }}
 {{- range $pair := without (splitList "," $names) "" }}
 {{- $parts := splitList "=" $pair }}
-{{- if or (ne (len $parts) 2) (eq (index $parts 0) "") (eq (index $parts 1) "") }}
+{{- if or (ne (len $parts) 2) (not (regexMatch "^[a-z0-9-]+$" (index $parts 0))) (not (regexMatch "^[A-Za-z0-9.-]+(:[0-9]+)?$" (index $parts 1))) }}
 {{- fail (printf "LOOPZERO_METRICS_ALB_DNS_NAMES: %q is not <cluster>=<DNSName>" $pair) }}
 {{- end }}
 {{- $_ := set $byCluster (index $parts 0) (index $parts 1) }}
