@@ -216,7 +216,9 @@ kratos:
           method: POST
           headers:
             Content-Type: "application/json"
+{{- if not (.Values | get "aws.resendSecret" "") }}
             Authorization: "Bearer {{ env "LOOPZERO_RESEND_API_KEY" | default "REPLACE_VIA_LOOPZERO_RESEND_API_KEY" }}"
+{{- end }}
           # Jsonnet template: ctx.recipient, ctx.subject, ctx.html_body (lowercase snake_case)
           body: "base64://ZnVuY3Rpb24oY3R4KSB7CiAgZnJvbTogIlRoZW8gPG5vcmVwbHlAdXNldGhlby5kZXY+IiwKICB0bzogW2N0eC5yZWNpcGllbnRdLAogIHN1YmplY3Q6IGN0eC5zdWJqZWN0LAogIGh0bWw6IGN0eC5odG1sX2JvZHksCn0="
 

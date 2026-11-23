@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -85,5 +86,23 @@ func TestTheVerifyRestartSucceedsRightAfterAnotherRestart(t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("the verify restart failed right after the seed's: %v\n%s", err, out)
+	}
+}
+
+// The credentials third parties issue are kept on the host, outside the emulator a
+// rebuild starts from scratch, and seeded into Secrets Manager on every platform sync.
+func TestStagingSeedsTheThirdPartyCredentialsFromTheHost(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "taskfiles", "staging.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loop := regexp.MustCompile(`for name in ([a-z -]+); do\s+kept=/etc/loopzero-staging/\$name\.json`).FindStringSubmatch(string(data))
+	if loop == nil {
+		t.Fatal("taskfiles/staging.yml seeds no secret from /etc/loopzero-staging")
+	}
+	for _, want := range []string{"ghcr-pull", "resend", "stripe"} {
+		if !strings.Contains(" "+loop[1]+" ", " "+want+" ") {
+			t.Errorf("the host seed loop covers %q, not %s", loop[1], want)
+		}
 	}
 }

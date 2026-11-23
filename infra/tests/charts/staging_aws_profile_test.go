@@ -4,7 +4,9 @@
 package charts
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -248,5 +250,74 @@ func TestStagingCloudSessionSecretComesFromSecretsManager(t *testing.T) {
 	}
 	if !mounted {
 		t.Error("the loopzero-cloud Deployment does not mount loopzero-cloud-secrets as a required envFrom source")
+	}
+}
+
+// externalSecretRefs maps each secretKey of an ExternalSecret onto "<key>#<property>".
+func externalSecretRefs(t *testing.T, es map[string]any) map[string]string {
+	t.Helper()
+	refs := map[string]string{}
+	data, _ := dig(es, "spec", "data").([]any)
+	for _, d := range data {
+		entry, _ := d.(map[string]any)
+		ref, _ := entry["remoteRef"].(map[string]any)
+		key, _ := entry["secretKey"].(string)
+		refs[key] = fmt.Sprintf("%v#%v", ref["key"], ref["property"])
+	}
+	return refs
+}
+
+// The third-party credentials staging cannot generate (Resend's key, Stripe's test keys)
+// live in secrets of their own, seeded from files on the host that outlive a rebuild of
+// the emulator. Kratos's courier reads the Resend key as a config override from the
+// Secret External Secrets writes, so it never passes through Helm.
+func TestStagingResendKeyReachesTheCourierFromItsOwnSecret(t *testing.T) {
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "aws-secrets-manager", "infra/helm/aws-secrets-manager", stagingOutputs...)
+	es := renderedObject(t, rendered, "ExternalSecret", "ory-kratos-resend")
+	if es == nil {
+		t.Fatal("no ExternalSecret ory-kratos-resend")
+	}
+	if got := externalSecretRefs(t, es)["apiKey"]; got != "loopzero/staging/resend#api-key" {
+		t.Errorf("ory-kratos-resend reads the key from %q, want loopzero/staging/resend#api-key", got)
+	}
+	override, _ := dig(es, "spec", "target", "template", "data", "COURIER_HTTP_REQUEST_CONFIG_AUTH_CONFIG_VALUE").(string)
+	if !strings.HasPrefix(override, "Bearer ") || !strings.Contains(override, ".apiKey") {
+		t.Errorf("COURIER_HTTP_REQUEST_CONFIG_AUTH_CONFIG_VALUE = %q, want the bearer of the Resend key", override)
+	}
+
+	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "staging", "ory-kratos", stagingOutputs...)
+	request, _ := dig(values, "kratos", "config", "courier", "http", "request_config").(map[string]any)
+	if header := dig(request, "headers", "Authorization"); header != nil {
+		t.Errorf("the courier config still renders an Authorization header: %v", header)
+	}
+	if dig(request, "auth", "type") != "api_key" || dig(request, "auth", "config", "name") != "Authorization" || dig(request, "auth", "config", "in") != "header" {
+		t.Errorf("the courier authenticates with %v, want an api_key in the Authorization header", request["auth"])
+	}
+	body, _ := request["body"].(string)
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(body, "base64://"))
+	if err != nil || !strings.Contains(string(decoded), "@getloopscale.com>") {
+		t.Errorf("the courier's sender is not an address on getloopscale.com: %q (%v)", decoded, err)
+	}
+}
+
+// loopzero-cloud runs in production mode on staging, which refuses to start without its
+// Stripe keys; staging's are test-mode keys, from their own secret.
+func TestStagingCloudRunsInProductionModeWithStripeTestKeys(t *testing.T) {
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "aws-secrets-manager", "infra/helm/aws-secrets-manager", stagingOutputs...)
+	es := renderedObject(t, rendered, "ExternalSecret", "loopzero-cloud-secrets")
+	if es == nil {
+		t.Fatal("no ExternalSecret loopzero-cloud-secrets")
+	}
+	refs := externalSecretRefs(t, es)
+	for key, want := range map[string]string{"STRIPE_API_KEY": "loopzero/staging/stripe#api-key", "STRIPE_WEBHOOK_SECRET": "loopzero/staging/stripe#webhook-secret"} {
+		if refs[key] != want {
+			t.Errorf("loopzero-cloud-secrets maps %s from %q, want %s", key, refs[key], want)
+		}
+	}
+
+	cloud := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-cloud", "charts/loopzero-cloud", stagingOutputs...)
+	config := renderedObject(t, cloud, "ConfigMap", "loopzero-cloud")
+	if got := dig(config, "data", "LOOPZERO_ENV"); got != "prod" {
+		t.Errorf("LOOPZERO_ENV = %v, want prod (the console's production mode)", got)
 	}
 }

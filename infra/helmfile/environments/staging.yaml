@@ -65,6 +65,12 @@ aws:
   # kubernetes.io/dockerconfigjson Secret `ghcr-pull`. A production environment pulls
   # from ECR with the node role and has no such secret.
   imagePullSecret: loopzero/staging/ghcr-pull
+  # The credentials third parties issue, kept on the staging host in
+  # /etc/loopzero-staging/<name>.json and seeded into these secrets by `task
+  # staging:platform`: Resend's key ({"api-key"}) for Kratos's courier, and Stripe's
+  # test-mode keys ({"api-key", "webhook-secret"}) for loopzero-cloud.
+  resendSecret: loopzero/staging/resend
+  stripeSecret: loopzero/staging/stripe
 
 # Platform images. The emulator's ECR answers the registry API for reads but refuses
 # blob uploads (POST /v2/<repo>/blobs/uploads/ -> 405, measured 2026-11-22 against
