@@ -112,7 +112,7 @@
       },
       "targets": [
         {
-          "expr": "count(kube_pod_info{namespace=~\"loopzero-.*\"}) by (cluster)",
+          "expr": "label_replace(count(kube_pod_info{namespace=~\"loopzero-.*\"}) by (cluster), \"cluster\", \"core\", \"cluster\", \"\")",
           "legendFormat": "{{ cluster }}"
         }
       ],
@@ -140,7 +140,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(argocd_app_reconcile_duration_seconds_bucket[5m])) by (le, cluster))",
+          "expr": "label_replace(histogram_quantile(0.95, sum(rate(argocd_app_reconcile_duration_seconds_bucket[5m])) by (le, cluster)), \"cluster\", \"core\", \"cluster\", \"\")",
           "legendFormat": "{{ cluster }}"
         }
       ],
@@ -168,7 +168,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(argocd_app_sync_total{phase=\"Error\"}[5m])) by (cluster)",
+          "expr": "label_replace(sum(rate(argocd_app_sync_total{phase=\"Error\"}[5m])) by (cluster), \"cluster\", \"core\", \"cluster\", \"\")",
           "legendFormat": "{{ cluster }}"
         }
       ],
