@@ -27,5 +27,5 @@ data:
   # nginx-security-headers.conf), mounted at /etc/nginx/conf.d/csp-origins.conf.
   # Origins are space-separated URLs, validated by values.schema.json.
   csp-origins.conf: |
-    map $host $csp_connect_origins { default {{ join " " (.Values.config.cspConnectOrigins | default list) | quote }}; }
-    map $host $csp_form_origins { default {{ join " " (.Values.config.cspFormOrigins | default list) | quote }}; }
+    map "" $csp_connect_origins { default {{ join " " (.Values.config.cspConnectOrigins | default list) | quote }}; }
+    map "" $csp_form_origins { default {{ join " " (.Values.config.cspFormOrigins | default list) | quote }}; }
