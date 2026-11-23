@@ -455,10 +455,11 @@ tasks:
         systemctl list-timers loopzero-staging-deploy.timer --no-pager
 
   nightly:
-    desc: Install the nightly rebuild and the hourly disk check, both alarming through GitHub issues
+    desc: Install the nightly rebuild, the hourly disk check and the daily token check, all alarming through GitHub issues
     # infra/staging/rebuild.sh rebuilds staging at 06:00 UTC; infra/staging/alarm.sh opens
-    # a staging-alarm issue when it fails or when / is more than 80% full. The token is
-    # the deploy's, which needs Issues read and write too.
+    # a staging-alarm issue when it fails, when / is more than 80% full, or when a GitHub
+    # token the host keeps (the status token, ghcr-pull.json) expires within 14 days or is
+    # rejected. The token is the deploy's, which needs Issues read and write too.
     cmds:
       - |
         set -euo pipefail
@@ -470,9 +471,10 @@ tasks:
         install -d -m 0755 /usr/local/lib/loopzero-staging
         install -m 0755 infra/staging/rebuild.sh infra/staging/alarm.sh /usr/local/lib/loopzero-staging/
         install -m 0644 infra/staging/systemd/loopzero-staging-rebuild.service infra/staging/systemd/loopzero-staging-rebuild.timer \
-          infra/staging/systemd/loopzero-staging-disk.service infra/staging/systemd/loopzero-staging-disk.timer /etc/systemd/system/
+          infra/staging/systemd/loopzero-staging-disk.service infra/staging/systemd/loopzero-staging-disk.timer \
+          infra/staging/systemd/loopzero-staging-tokens.service infra/staging/systemd/loopzero-staging-tokens.timer /etc/systemd/system/
         systemctl daemon-reload
-        systemctl enable --now loopzero-staging-rebuild.timer loopzero-staging-disk.timer
+        systemctl enable --now loopzero-staging-rebuild.timer loopzero-staging-disk.timer loopzero-staging-tokens.timer
         systemctl list-timers 'loopzero-staging-*' --no-pager
 
   edge:

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // infra/staging/alarm.sh and infra/staging/rebuild.sh run against a GitHub issues API
@@ -31,6 +32,9 @@ type fakeIssue struct {
 type fakeIssues struct {
 	mu     sync.Mutex
 	issues []*fakeIssue
+	// expiries maps a token to the github-authentication-token-expiration header GitHub
+	// answers it with; a token missing from the map is rejected with 401.
+	expiries map[string]string
 }
 
 func (f *fakeIssues) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +46,14 @@ func (f *fakeIssues) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(body, &payload)
 	rest := strings.TrimPrefix(r.URL.Path, base)
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/rate_limit":
+		expiry, ok := f.expiries[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		if !ok {
+			http.Error(w, `{"message": "Bad credentials"}`, http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("github-authentication-token-expiration", expiry)
+		_, _ = w.Write([]byte("{}"))
 	case r.Method == http.MethodGet && r.URL.Path == base:
 		out := []map[string]any{}
 		for _, issue := range f.issues {
@@ -218,5 +230,92 @@ func TestAGoodRebuildMakesTheDeployHandleTheHeadAgain(t *testing.T) {
 	}
 	if len(issues.issues) != 0 {
 		t.Errorf("a good rebuild opened %+v", issues.issues)
+	}
+}
+
+// tokenFiles writes the two tokens check-tokens watches, the status token as a plain file
+// and the GHCR pull token inside its {"username", "password"} file, and points the alarm
+// at them.
+func tokenFiles(t *testing.T, server *httptest.Server, statusToken, pullToken string) []string {
+	t.Helper()
+	dir := t.TempDir()
+	status := filepath.Join(dir, "github-status-token")
+	pull := filepath.Join(dir, "ghcr-pull.json")
+	if err := os.WriteFile(status, []byte(statusToken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pull, []byte(`{"username": "someone", "password": "`+pullToken+`"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return append(os.Environ(), "DEPLOY_GITHUB_API="+server.URL, "DEPLOY_STATUS_TOKEN_FILE="+status,
+		"ALARM_TOKEN_FILES="+status+" "+pull)
+}
+
+func expiryIn(days int) string {
+	return time.Now().UTC().Add(time.Duration(days) * 24 * time.Hour).Format("2006-01-02 15:04:05 UTC")
+}
+
+func TestATokenCloseToItsExpiryRaisesTheTokenAlarm(t *testing.T) {
+	issues := &fakeIssues{expiries: map[string]string{"status-secret": expiryIn(60), "pull-secret": expiryIn(5)}}
+	server := httptest.NewServer(issues)
+	defer server.Close()
+
+	runAlarm(t, tokenFiles(t, server, "status-secret", "pull-secret"), "check-tokens")
+
+	if len(issues.issues) != 1 || issues.issues[0].Title != "staging alarm: token-expiry" {
+		t.Fatalf("a token 5 days from expiry raised %+v", issues.issues)
+	}
+	report := issues.issues[0].Comments[0]
+	if !strings.Contains(report, "ghcr-pull.json") || strings.Contains(report, "github-status-token") {
+		t.Errorf("the alarm does not name only the expiring token's file: %q", report)
+	}
+	if strings.Contains(report, "pull-secret") {
+		t.Errorf("the alarm leaks the token value: %q", report)
+	}
+}
+
+func TestATokenGitHubRejectsRaisesTheTokenAlarm(t *testing.T) {
+	issues := &fakeIssues{expiries: map[string]string{"status-secret": expiryIn(60)}}
+	server := httptest.NewServer(issues)
+	defer server.Close()
+
+	runAlarm(t, tokenFiles(t, server, "status-secret", "revoked-secret"), "check-tokens")
+
+	if len(issues.issues) != 1 || !strings.Contains(issues.issues[0].Comments[0], "rejected") {
+		t.Fatalf("a rejected token raised %+v", issues.issues)
+	}
+}
+
+func TestTokensFarFromExpiryClearTheTokenAlarm(t *testing.T) {
+	issues := &fakeIssues{expiries: map[string]string{"status-secret": expiryIn(60), "pull-secret": expiryIn(5)}}
+	server := httptest.NewServer(issues)
+	defer server.Close()
+	runAlarm(t, tokenFiles(t, server, "status-secret", "pull-secret"), "check-tokens")
+
+	issues.expiries["pull-secret"] = expiryIn(90)
+	runAlarm(t, tokenFiles(t, server, "status-secret", "pull-secret"), "check-tokens")
+
+	if len(issues.issues) != 1 || issues.issues[0].State != "closed" {
+		t.Fatalf("renewed tokens left %+v", issues.issues)
+	}
+}
+
+func TestTheTokenCheckIsInstalledAndRunsEveryDay(t *testing.T) {
+	read := func(path string) string {
+		data, err := os.ReadFile(filepath.Join(repoRoot(), path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+	if service := read("infra/staging/systemd/loopzero-staging-tokens.service"); !strings.Contains(service, "ExecStart=/usr/local/lib/loopzero-staging/alarm.sh check-tokens") {
+		t.Errorf("loopzero-staging-tokens.service does not run alarm.sh check-tokens:\n%s", service)
+	}
+	if timer := read("infra/staging/systemd/loopzero-staging-tokens.timer"); !strings.Contains(timer, "OnCalendar=daily") || !strings.Contains(timer, "Persistent=true") {
+		t.Errorf("loopzero-staging-tokens.timer does not run once a day, catching up after downtime:\n%s", timer)
+	}
+	task := read("taskfiles/staging.yml")
+	if !strings.Contains(task, "infra/staging/systemd/loopzero-staging-tokens.timer") || !strings.Contains(task, "loopzero-staging-disk.timer loopzero-staging-tokens.timer") {
+		t.Errorf("staging:nightly does not install and enable loopzero-staging-tokens.timer")
 	}
 }
