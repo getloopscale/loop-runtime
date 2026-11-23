@@ -27,8 +27,8 @@ func TestLoopZeroDashboardMountsTheCSPOriginsOfItsEnvironment(t *testing.T) {
 	config := renderedObject(t, out, "ConfigMap", "loopzero-dashboard-config")
 	origins, _ := dig(config, "data", "csp-origins.conf").(string)
 	for _, want := range []string{
-		`map $host $csp_connect_origins { default "https://auth.example.com https://cloud.example.com"; }`,
-		`map $host $csp_form_origins { default "https://auth.example.com"; }`,
+		`map "" $csp_connect_origins { default "https://auth.example.com https://cloud.example.com"; }`,
+		`map "" $csp_form_origins { default "https://auth.example.com"; }`,
 	} {
 		if !strings.Contains(origins, want) {
 			t.Errorf("csp-origins.conf lacks %q:\n%s", want, origins)
@@ -62,8 +62,8 @@ func TestLoopZeroDashboardCSPOriginsDefaultToSameOrigin(t *testing.T) {
 	out := renderChart(t, uniqueChart(t, "loopzero-dashboard"), "loopzero-dashboard", nil)
 	origins, _ := dig(renderedObject(t, out, "ConfigMap", "loopzero-dashboard-config"), "data", "csp-origins.conf").(string)
 	for _, want := range []string{
-		`map $host $csp_connect_origins { default ""; }`,
-		`map $host $csp_form_origins { default ""; }`,
+		`map "" $csp_connect_origins { default ""; }`,
+		`map "" $csp_form_origins { default ""; }`,
 	} {
 		if !strings.Contains(origins, want) {
 			t.Errorf("csp-origins.conf lacks %q:\n%s", want, origins)
