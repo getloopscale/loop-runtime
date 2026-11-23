@@ -1,0 +1,32 @@
+{{- /* SPDX-License-Identifier: Apache-2.0 */ -}}
+{{- /*
+The key pair the build signs tenant images with, as the Secret argo/cosign-signing-key the
+build's signing step mounts. Off unless buildSigningKey.secretsManagerKey is set, which only
+the build cluster's release does.
+
+The Secrets Manager secret is the JSON object infra/helmfile/scripts/seed-aws-cosign-key.sh
+creates: {"cosign.key", "cosign.pub", "cosign.password"}.
+*/ -}}
+{{- with .Values.buildSigningKey }}
+{{- if .secretsManagerKey }}
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: cosign-signing-key
+  namespace: {{ .namespace }}
+spec:
+  refreshInterval: {{ $.Values.refreshInterval }}
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ $.Values.store.name }}
+  target:
+    name: cosign-signing-key
+    creationPolicy: Owner
+  data:
+{{- range $key := list "cosign.key" "cosign.pub" "cosign.password" }}
+    - secretKey: {{ $key }}
+      remoteRef: { key: {{ $.Values.buildSigningKey.secretsManagerKey | quote }}, property: {{ $key }} }
+{{- end }}
+{{- end }}
+{{- end }}

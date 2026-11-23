@@ -46,6 +46,13 @@ imagePullSecret:
   secretsManagerKey: ""
   namespaces: []
 
+# The build's cosign signing key (templates/build-signing-key.yaml), written into
+# `namespace` of the build cluster as the Secret cosign-signing-key. Off while
+# secretsManagerKey is empty; only the build cluster's release sets it.
+buildSigningKey:
+  namespace: argo
+  secretsManagerKey: ""
+
 # Third-party credentials staging cannot generate, each a Secrets Manager secret of its own
 # (a JSON object). Empty: the key Resend issues is read from the platform secret
 # (`resend-api-key`), and loopzero-cloud gets no Stripe keys.
