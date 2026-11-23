@@ -5,8 +5,6 @@ package charts
 
 import (
 	"bytes"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -369,16 +367,15 @@ func TestDevPromtailHasNoPlatformPodsJob(t *testing.T) {
 // A DNSName that carries anything but DNS name characters (a backslash an interpreter
 // left in, a quote) fails the core render instead of ending up in a scrape path.
 func TestStagingCorePrometheusRefusesAMalformedALBName(t *testing.T) {
-	cmd := exec.Command("helmfile", "-f", "infra/helmfile/core.helmfile.yaml.gotmpl", "-e", "staging",
-		"--selector", "name=prometheus", "--skip-deps", "--output-file-template", filepath.Join(t.TempDir(), "{{ .Release.Name }}.yaml"), "write-values")
-	cmd.Dir = repoRoot(t)
-	cmd.Env = append(os.Environ(), stagingOutputs...)
-	cmd.Env = append(cmd.Env, `LOOPZERO_METRICS_ALB_DNS_NAMES=build=`+stagingBuildALB+`\,cell-0=`+stagingCell0ALB+`\,cell-1=`+stagingCell1ALB)
-	out, err := cmd.CombinedOutput()
+	env := append(append([]string{}, stagingOutputs...),
+		`LOOPZERO_METRICS_ALB_DNS_NAMES=build=`+stagingBuildALB+`\,cell-0=`+stagingCell0ALB+`\,cell-1=`+stagingCell1ALB)
+	_, stderr, err := helmfileRunResult(t, env, "-f", "infra/helmfile/core.helmfile.yaml.gotmpl", "-e", "staging",
+		"--selector", "name=prometheus", "--output-file-template", filepath.Join(t.TempDir(), "{{ .Release.Name }}.yaml"), "write-values")
+	out := stderr
 	if err == nil {
 		t.Fatal("the core prometheus rendered with backslashes in LOOPZERO_METRICS_ALB_DNS_NAMES")
 	}
-	if !strings.Contains(string(out), "is not <cluster>=<DNSName>") {
-		t.Errorf("render failed without naming the malformed pair:\n%s", truncate(string(out), 800))
+	if !strings.Contains(out, "is not <cluster>=<DNSName>") {
+		t.Errorf("render failed without naming the malformed pair:\n%s", truncate(out, 800))
 	}
 }
