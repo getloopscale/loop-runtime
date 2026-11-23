@@ -18,12 +18,38 @@
 #     pushes to the in-cluster Service;
 #   - every other Promtail (the cells) pushes to the port the build serverlb
 #     publishes on the host, reached as host.k3d.internal.
+# Where the AWS Load Balancer Controller runs (profile.awsLoadBalancerController, the AWS
+# environments), the build cluster's Loki is published through an internal ALB (the
+# loki-internal Ingress of build.helmfile) and every stream carries the cluster it came
+# from (the release label `cluster`):
+#   - the build Promtail pushes to the in-cluster Service: its sync is the one that
+#     creates the ALB, so the ALB's name is not known yet when it renders;
+#   - every other Promtail (core, the cells) pushes to the ALB, whose DNSName
+#     `task staging:platform` reads from the Ingress status after the build sync and
+#     exports as LOOPZERO_LOKI_ALB_DNS_NAME. On the emulator (`emulator.endpoint`) an ALB
+#     is reached at the emulator's endpoint with its DNSName in the path
+#     (/_aws/elasticloadbalancing/<DNSName>/...), the addressing its ALBs serve without a
+#     socket of their own; on AWS the DNSName resolves in the VPC.
 # Elsewhere (prod, drill, the single-cluster k3d envs) pushUrl names the Loki every
 # Promtail uses.
 {{- $lokiNodePort := .Environment.Values | getOrNil "crossCluster.lokiNodePort" }}
+{{- $colocated := eq (index .Release.Labels "lokiPush") "colocated" }}
 config:
   clients:
-{{- if and $lokiNodePort (eq (index .Release.Labels "lokiPush") "colocated") }}
+{{- if .Environment.Values.profile.awsLoadBalancerController }}
+{{- if $colocated }}
+    - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+{{- else }}
+{{- $lokiALB := requiredEnv "LOOPZERO_LOKI_ALB_DNS_NAME" }}
+{{- with .Environment.Values | getOrNil "emulator.endpoint" }}
+    - url: {{ printf "%s/_aws/elasticloadbalancing/%s/loki/api/v1/push" . $lokiALB }}
+{{- else }}
+    - url: {{ printf "http://%s/loki/api/v1/push" $lokiALB }}
+{{- end }}
+{{- end }}
+      external_labels:
+        cluster: {{ index .Release.Labels "cluster" | required "the promtail release names its cluster in the release label `cluster`" }}
+{{- else if and $lokiNodePort $colocated }}
     - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
 {{- else if $lokiNodePort }}
     - url: http://host.k3d.internal:{{ $lokiNodePort }}/loki/api/v1/push

@@ -140,6 +140,32 @@ extraScrapeConfigs: |
   # `loopzero-ops seed networking-cross-cluster-coredns` (M15 W3).
   # Same cross-cluster mechanism the Loki scrape uses (memory
   # `j17-aprendizado-coredns-cross-cluster-build-lb`).
+  {{- /*
+    The chart evaluates this string with `tpl`. An environment that declares
+    `federation:` (the AWS environments, values/<env>/prometheus.yaml.gotmpl) federates
+    each remote cluster's Prometheus through its internal ALB instead, one job per
+    cluster, and renders no k3d job; `federation.clusters` is empty on the first core
+    sync of a rebuild, before the remote ALBs exist. Builtins only, so the render tests
+    can evaluate it with text/template.
+  */}}
+  {{- with .Values.federation }}
+  {{- range .clusters }}
+  - job_name: {{ .name }}-federation
+    honor_labels: true
+    scheme: {{ .scheme }}
+    metrics_path: {{ .metricsPath }}
+    params:
+      'match[]':
+        - '{job=~".+"}'
+    static_configs:
+      - targets:
+          - {{ .address }}
+        labels:
+          cluster: {{ .name }}
+    scrape_interval: 30s
+    scrape_timeout: 25s
+  {{- end }}
+  {{- else }}
   - job_name: cell-0-cluster-kube-state-metrics
     static_configs:
       - targets:
@@ -149,3 +175,4 @@ extraScrapeConfigs: |
     metrics_path: /metrics
     scrape_interval: 30s
     scrape_timeout: 10s
+  {{- end }}

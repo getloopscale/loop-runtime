@@ -39,6 +39,9 @@ repositories:
     url: https://charts.external-secrets.io
   - name: eks
     url: https://aws.github.io/eks-charts
+  # The federation Prometheus (profile.awsLoadBalancerController).
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
 
 # ---------------------------------------------------------------------------
 # Pre-sync setup (called by the CLI orchestrator BEFORE this helmfile runs):
@@ -170,10 +173,19 @@ releases:
     namespace: monitoring
     chart: grafana/loki
     version: 6.24.0
+{{- if .Values.profile.awsLoadBalancerController }}
+    # The controller's webhook validates the loki-internal Ingress (values-alb.yaml).
+    needs:
+      - kube-system/aws-load-balancer-controller
+{{- end }}
     values:
       - ../helm/loki/values.yaml
 {{- if .Values.profile.awsSecretsManager }}
       - ../helm/loki/values-s3.yaml.gotmpl
+{{- end }}
+{{- if .Values.profile.awsLoadBalancerController }}
+      # Published to the other clusters' Promtail through an internal ALB.
+      - ../helm/loki/values-alb.yaml
 {{- end }}
 {{- with .Values | get "crossCluster.lokiNodePort" nil }}
       # The cross-cluster query bridge: loopzero-api on the core cluster reads Loki at
@@ -218,6 +230,10 @@ releases:
     # Secret to the same URL after every sync.
     labels:
       lokiPush: colocated
+{{- if .Values.profile.awsLoadBalancerController }}
+      # The cluster every stream is labelled with.
+      cluster: build
+{{- end }}
     needs:
       - monitoring/loki
     values:
@@ -254,6 +270,20 @@ releases:
       - region: {{ .Values.aws.region | quote }}
 {{- end }}
 {{- if .Values.profile.awsLoadBalancerController }}
+
+  # This cluster's metrics for the core Prometheus, which federates them through the
+  # internal ALB of ../helm/monitoring/values-prometheus-federation.yaml. The build
+  # cluster runs no kube-state-metrics of its own, so the chart's is installed.
+  - name: prometheus-federation
+    namespace: monitoring
+    chart: prometheus-community/prometheus
+    version: 25.27.0
+    needs:
+      - kube-system/aws-load-balancer-controller
+    values:
+      - ../helm/monitoring/values-prometheus-federation.yaml
+      - kube-state-metrics:
+          enabled: true
 
   # The AWS Load Balancer Controller, with infra-live's `identity/build-lb-controller` role.
   - name: aws-load-balancer-controller

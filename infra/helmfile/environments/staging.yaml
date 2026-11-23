@@ -92,9 +92,12 @@ platformImages:
 registries:
   docrPrefix: "ghcr.io/getloopscale/"
 
+# No pushUrl: the build cluster's Loki is published through an internal ALB
+# (profile.awsLoadBalancerController), whose DNSName `task staging:platform` reads after
+# the build sync and hands to the Promtail of core and the cells
+# (infra/helm/promtail/values.yaml.gotmpl).
 loki:
   maxGlobalStreamsPerUser: 50000
-  pushUrl: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
 
 policyMode: enforce
 noRuntimeImageMutations: true
@@ -178,6 +181,6 @@ profile:
   localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
   inClusterObjectStore: false   # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
   awsSecretsManager: true       # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
-  awsLoadBalancerController: true  # install the AWS Load Balancer Controller and publish the edge through an ALB
+  awsLoadBalancerController: true  # install the AWS Load Balancer Controller and publish the edge through an ALB; the build Loki and each remote cluster's federation Prometheus through internal ALBs
   localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
   secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public
