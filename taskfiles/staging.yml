@@ -402,8 +402,12 @@ tasks:
       AWS_REGION: us-east-1
     cmds:
       # The API exits at boot while no ClusterCredential is connected, so the pod that
-      # started before post-core ran is replaced rather than waited for.
-      - kubectl --context core -n loopzero-system rollout restart deployment/loopzero-api
+      # started before post-core ran is replaced rather than waited for. The stamp is to
+      # the nanosecond: `kubectl rollout restart` stamps the second, and refuses a restart
+      # in the same second as the one the argocd-token seed has just made.
+      - >-
+        kubectl --context core -n loopzero-system patch deployment/loopzero-api --type merge
+        -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"kubectl.kubernetes.io/restartedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)\"}}}}}"
       - kubectl --context core -n loopzero-system rollout status deployment/loopzero-api --timeout=10m
       - kubectl --context core -n loopzero-system get externalsecret loopzero-db-credentials
       - kubectl --context core -n loopzero-system exec deploy/loopzero-api -- wget -qO- http://127.0.0.1:3001/api/v1/health/ready
