@@ -145,11 +145,12 @@ seed_token() {
   echo "validation identity seeded; token written to $LOOPZERO_DOGFOOD_JWT_PATH"
 }
 
-# run_suite: the journeys of JOURNEYS. -ginkgo.fail-on-empty fails a filter that selects
+# run_suite: the journeys of JOURNEYS, with -v so a passing run logs its summary too.
+# -ginkgo.fail-on-empty fails a filter that selects
 # no spec, so a renamed label cannot turn the run into a green one with nothing run.
 run_suite() {
   cd infra/tests || return 1
-  GOWORK=off go test -tags=live -count=1 -timeout 30m ./livetest/dogfood/ -run TestDogfoodLive \
+  GOWORK=off go test -v -tags=live -count=1 -timeout 30m ./livetest/dogfood/ -run TestDogfoodLive \
     -args -ginkgo.label-filter="$JOURNEYS" -ginkgo.fail-on-empty -ginkgo.v -ginkgo.no-color
 }
 
