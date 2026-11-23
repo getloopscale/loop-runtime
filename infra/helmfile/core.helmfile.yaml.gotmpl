@@ -468,6 +468,19 @@ releases:
     values:
       - ../helm/monitoring/values-grafana.yaml
 
+  # The repository's Grafana dashboards, one ConfigMap each (labelled grafana_dashboard=1),
+  # which Grafana's dashboard sidecar loads (values-grafana.yaml). The chart's
+  # PrometheusRules stay off: this Prometheus reads its rules from values-prometheus.yaml,
+  # not from Prometheus Operator objects.
+  - name: loopzero-monitoring
+    namespace: monitoring
+    chart: ../../charts/loopzero-monitoring
+    needs:
+      - monitoring/grafana
+    values:
+      - prometheusRules:
+          enabled: false
+
   # Plan T7.2 (2026-05-22 v1.3) — OpenCost cost attribution per tenant.
   # Adopts external opencost-charts upstream via LoopZero wrapper at
   # infra/helm/opencost/. Per Anti-Pattern #8: NO Go gate reimplementation;
