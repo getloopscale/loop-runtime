@@ -167,6 +167,20 @@ releases:
         serviceAccount:
           annotations:
             eks.amazonaws.com/role-arn: {{ printf "%s-lb-controller" $rolePrefix | quote }}
+
+  # This cell's metrics for the core Prometheus, which federates them through the
+  # internal ALB of ../helm/monitoring/values-prometheus-federation.yaml. The cell's own
+  # kube-state-metrics release below is scraped through its prometheus.io/scrape Service.
+  - name: prometheus-federation
+    namespace: monitoring
+    chart: prometheus-community/prometheus
+    version: 25.27.0
+    needs:
+      - kube-system/aws-load-balancer-controller
+    values:
+      - ../helm/monitoring/values-prometheus-federation.yaml
+      - kube-state-metrics:
+          enabled: false
 {{- end }}
 {{- end }}
 
@@ -314,6 +328,11 @@ releases:
     namespace: monitoring
     chart: grafana/promtail
     version: 6.16.6
+{{- if .Values.profile.awsLoadBalancerController }}
+    # Read by ../helm/promtail/values.yaml.gotmpl: the cluster every stream is labelled with.
+    labels:
+      cluster: {{ requiredEnv "LOOPZERO_CELL_CONTEXT" | regexFind "cell-[0-9]+$" | required "LOOPZERO_CELL_CONTEXT must end in cell-<N> to label the cell's logs" }}
+{{- end }}
     values:
       - ../helm/promtail/values.yaml.gotmpl
 

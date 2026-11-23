@@ -899,6 +899,19 @@ releases:
         serviceAccount:
           annotations:
             eks.amazonaws.com/role-arn: {{ printf "arn:aws:iam::%s:role/%s-core-lb-controller" .Values.aws.accountId .Values.aws.namePrefix | quote }}
+
+  # This cluster's logs, pushed to the build cluster's Loki through its internal ALB
+  # (../helm/promtail/values.yaml.gotmpl). The ALB's name is known only once the build
+  # cluster is synced, so `task staging:platform` leaves this release out of the first
+  # core sync and syncs it after the build cluster and the cells.
+  - name: promtail
+    namespace: monitoring
+    chart: grafana/promtail
+    version: 6.16.6
+    labels:
+      cluster: core
+    values:
+      - ../helm/promtail/values.yaml.gotmpl
 {{- end }}
 
   - name: chaos-mesh
