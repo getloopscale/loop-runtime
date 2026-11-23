@@ -309,7 +309,13 @@ func TestStagingCloudRunsInProductionModeWithStripeTestKeys(t *testing.T) {
 		t.Fatal("no ExternalSecret loopzero-cloud-secrets")
 	}
 	refs := externalSecretRefs(t, es)
-	for key, want := range map[string]string{"STRIPE_API_KEY": "loopzero/staging/stripe#api-key", "STRIPE_WEBHOOK_SECRET": "loopzero/staging/stripe#webhook-secret"} {
+	for key, want := range map[string]string{
+		"STRIPE_API_KEY":        "loopzero/staging/stripe#api-key",
+		"STRIPE_WEBHOOK_SECRET": "loopzero/staging/stripe#webhook-secret",
+		"STRIPE_PRICE_STARTER":  "loopzero/staging/stripe#price-starter",
+		"STRIPE_PRICE_PRO":      "loopzero/staging/stripe#price-pro",
+		"STRIPE_PRICE_TEAM":     "loopzero/staging/stripe#price-team",
+	} {
 		if refs[key] != want {
 			t.Errorf("loopzero-cloud-secrets maps %s from %q, want %s", key, refs[key], want)
 		}

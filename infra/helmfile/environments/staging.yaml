@@ -68,7 +68,8 @@ aws:
   # The credentials third parties issue, kept on the staging host in
   # /etc/loopzero-staging/<name>.json and seeded into these secrets by `task
   # staging:platform`: Resend's key ({"api-key"}) for Kratos's courier, and Stripe's
-  # test-mode keys ({"api-key", "webhook-secret"}) for loopzero-cloud.
+  # test-mode keys and plan prices ({"api-key", "webhook-secret", "price-starter",
+  # "price-pro", "price-team"}) for loopzero-cloud.
   resendSecret: loopzero/staging/resend
   stripeSecret: loopzero/staging/stripe
 
