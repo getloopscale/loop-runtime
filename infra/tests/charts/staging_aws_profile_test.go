@@ -327,3 +327,20 @@ func TestStagingCloudRunsInProductionModeWithStripeTestKeys(t *testing.T) {
 		t.Errorf("LOOPZERO_ENV = %v, want prod (the console's production mode)", got)
 	}
 }
+
+// The control plane's traces reach the collector the core helmfile installs, which hands
+// them to Tempo. Unset, loopzero-cloud dialled the console's default address
+// (otel-collector.theo-system), which no cluster resolves, every five seconds.
+func TestStagingControlPlaneTracesReachTheCollector(t *testing.T) {
+	const collector = "otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317"
+	for _, release := range []struct{ name, chart string }{
+		{"loopzero-api", "charts/loopzero-api"},
+		{"loopzero-cloud", "charts/loopzero-cloud"},
+	} {
+		rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", release.name, release.chart, stagingOutputs...)
+		config := renderedObject(t, rendered, "ConfigMap", release.name)
+		if got := dig(config, "data", "OTEL_EXPORTER_OTLP_ENDPOINT"); got != collector {
+			t.Errorf("%s: OTEL_EXPORTER_OTLP_ENDPOINT = %v, want %s", release.name, got, collector)
+		}
+	}
+}

@@ -257,6 +257,10 @@
           "pattern": "^$|^https?://[^\\s]+$",
           "description": "Where Stripe checkout returns the browser (BILLING_RETURN_URL). Rendered only when set."
         },
+        "otelExporterOtlpEndpoint": {
+          "type": "string",
+          "description": "The OTLP gRPC collector traces are exported to, host:port (OTEL_EXPORTER_OTLP_ENDPOINT). Empty: the console's built-in default."
+        },
         "memoryBaseUrl": {
           "type": "string",
           "pattern": "^$|^https?://[^\\s]+$",

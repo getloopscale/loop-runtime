@@ -117,6 +117,8 @@ repositories:
        drill or heal patching it into the running objects. */}}
 {{- $giteaNamespace := "loopzero-system" }}
 {{- $giteaURL := printf "http://gitea-http.%s.svc.cluster.local:3000" $giteaNamespace }}
+{{- /* The OTLP gRPC address of the otel-collector release, where the control plane sends its traces. */ -}}
+{{- $otelCollector := "otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317" }}
 releases:
   # Wave -3: CRDs and observability foundations (no dependencies)
   - name: cert-manager
@@ -587,6 +589,8 @@ releases:
       - ../../charts/loopzero-api/values-bootstrap.yaml
       - config:
           giteaUrl: {{ $giteaURL | quote }}
+          # The otel-collector release below, which exports to Tempo.
+          otelExporterOtlpEndpoint: {{ $otelCollector | quote }}
           # One bucket name for the whole install: loopzero-build-cwts (build.helmfile)
           # clones from the same environment value.
           sourceBucket: {{ .Values | get "sourceBucket" "loopzero-builds" | quote }}
@@ -739,6 +743,8 @@ releases:
       # v1.1 EC-07: if-hasKey pattern (not | default) because empty string is
       # NOT treated as zero-value in Go templates.
       - config:
+          # The otel-collector release, which exports to Tempo.
+          otelExporterOtlpEndpoint: {{ $otelCollector | quote }}
 {{- if hasKey .Values "publicAuthUrl" }}
           kratosPublicUrl: {{ .Values.publicAuthUrl | trimSuffix "/" | quote }}
 {{- end }}
