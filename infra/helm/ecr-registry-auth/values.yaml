@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# The registry host the build pushes to (<account>.dkr.ecr.<region>.amazonaws.com). Required.
+registryHost: ""
+region: us-east-1
+# The IAM role allowed to push tenant images (infra-live identity/<cluster>-registry-push).
+# Required.
+roleArn: ""
+# The Secret the build workflow mounts as DOCKER_CONFIG.
+secretName: buildkit-registry-config
+# Twice within the token's 12 hours, so one failed run leaves a valid token.
+schedule: "0 */5 * * *"
+images:
+  # Any image with the AWS CLI v2, python3 and a shell; the platform's syft-scanner has them.
+  awsCli: ""
+  kubectl: registry.k8s.io/kubectl:v1.35.0@sha256:0bb95b2a450875fc8ceaea2f9987a99fe27c228846e2e00b93b65ebb0d59034e

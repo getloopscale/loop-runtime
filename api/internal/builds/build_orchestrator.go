@@ -166,10 +166,8 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	if syncTimeout == 0 {
 		syncTimeout = defaultArgocdSyncTimeout
 	}
+	// config.Validate guarantees a registry: the k3d default exists only in development.
 	registryURL := deps.RegistryURL
-	if registryURL == "" {
-		registryURL = "k3d-loopzero-registry:5000" // local dev default
-	}
 	return &BuildOrchestrator{
 		buildStore:          deps.BuildStore,
 		releaseStore:        deps.ReleaseStore,

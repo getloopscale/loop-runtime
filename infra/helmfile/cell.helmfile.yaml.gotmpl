@@ -295,6 +295,12 @@ releases:
       - alerts:
           enabled: false
 {{- end }}
+{{- with .Values | get "tenantRegistry" dict }}
+      # Tenant pods run what the builds pushed, and only that: the tenant registry prefix is
+      # the one accepted registry.
+      - registries:
+          docrPrefix: {{ printf "%s/%s/" .host .repositoryPrefix | quote }}
+{{- end }}
     set:
       - name: clusterImagePolicy.mode
         value: "{{ .Values.policyMode }}"

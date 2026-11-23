@@ -103,6 +103,15 @@ platformImages:
 registries:
   docrPrefix: "ghcr.io/getloopscale/"
 
+# Where builds push tenant app images and the cells pull them from. infra-live's
+# registry/ecr creates `<repositoryPrefix>/<tenant>/<project>-<app>` on the build's first
+# push, and identity/build-registry-push is the role allowed to push there. On AWS the host
+# is `<account>.dkr.ecr.<region>.amazonaws.com`. Staging only: the emulator's address as
+# pods reach it; its ECR names repositories `localhost:9597/...`, which from a pod is the pod.
+tenantRegistry:
+  host: "172.29.0.1:9597"
+  repositoryPrefix: loopzero-tenants
+
 # No pushUrl: the build cluster's Loki is published through an internal ALB
 # (profile.awsLoadBalancerController), whose DNSName `task staging:platform` reads after
 # the build sync and hands to the Promtail of core and the cells
