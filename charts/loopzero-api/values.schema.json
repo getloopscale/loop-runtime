@@ -361,6 +361,10 @@
         "loopzeroCosignImage": {
           "type": "string"
         },
+        "buildWorkspaceStorageClass": {
+          "type": "string",
+          "description": "StorageClass of the build workspace PVC; empty selects the build cluster's default class."
+        },
         "loopzeroSyftImage": {
           "type": "string"
         },
@@ -602,7 +606,7 @@
         },
         "interval": {
           "type": "string",
-          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|\u00b5s|ms|s|m|h))+$"
         }
       }
     },
