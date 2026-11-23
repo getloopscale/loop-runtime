@@ -38,6 +38,18 @@ import (
 // which it needed instead of inheriting whatever the shell exported.
 func helmfileRun(t *testing.T, extraEnv []string, args ...string) string {
 	t.Helper()
+	out, stderr, err := helmfileRunResult(t, extraEnv, args...)
+	if err != nil {
+		_, howToRead := ClassifyRenderFailure(stderr)
+		t.Fatalf("helmfile %s failed: %v\n%s\n\n%s", strings.Join(args, " "), err, truncate(stderr, 1500), howToRead)
+	}
+	return out
+}
+
+// helmfileRunResult runs helmfile like helmfileRun and hands back the failure instead
+// of failing the test, for a test whose point is that the render refuses its input.
+func helmfileRunResult(t *testing.T, extraEnv []string, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
 	full := append([]string{}, args[:len(args)-1]...)
 	full = append(full, "--skip-deps", args[len(args)-1])
 	cmd := exec.Command("helmfile", full...)
@@ -45,14 +57,10 @@ func helmfileRun(t *testing.T, extraEnv []string, args ...string) string {
 	cmd.Env = append(os.Environ(), extraEnv...)
 	// Manifests only: helmfile narrates ("Templating release=...") on stderr, and
 	// that narration is not a YAML document.
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
 	out, err := cmd.Output()
-	if err != nil {
-		_, howToRead := ClassifyRenderFailure(stderr.String())
-		t.Fatalf("helmfile %s failed: %v\n%s\n\n%s", strings.Join(full, " "), err, truncate(stderr.String(), 1500), howToRead)
-	}
-	return string(out)
+	return string(out), errBuf.String(), err
 }
 
 // helmfileTemplate renders one release of a LOCAL chart. localChart is the
