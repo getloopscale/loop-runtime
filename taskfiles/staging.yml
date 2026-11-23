@@ -238,6 +238,10 @@ tasks:
   emulator:
     desc: Start the emulator and its EKS provisioner, empty
     cmds:
+      # `down` just stopped the emulator, so a new EMULATOR_VERSION or unit reaches the
+      # host here: the nightly rebuild runs `up`, never staging:host.
+      - task: host:emulator
+      - task: host:units
       - systemctl start aws-emulator.service aws-emulator-eks.service
       - |
         for _ in $(seq 60); do
