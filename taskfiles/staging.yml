@@ -301,6 +301,9 @@ tasks:
       LOOPZERO_CORE_CONTEXT: core
       LOOPZERO_BUILD_CONTEXT: build
     cmds:
+      # The every-commit deploy runs this task alone, so the tools it calls install here;
+      # host:tools only downloads what is missing or at another version.
+      - task: host:tools
       - task: platform:kubeconfig
       - |
         set -euo pipefail
