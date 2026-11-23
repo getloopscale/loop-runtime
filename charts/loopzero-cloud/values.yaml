@@ -81,6 +81,9 @@ config:
   jwtIssuer: ""
   # Where Stripe checkout returns the browser (BILLING_RETURN_URL).
   billingReturnUrl: ""
+  # The OTLP gRPC collector traces are exported to, host:port (OTEL_EXPORTER_OTLP_ENDPOINT).
+  # Unset, the console dials its built-in default.
+  otelExporterOtlpEndpoint: ""
   # Data-plane base URLs. Each one unset leaves its dashboard surface off
   # (THEMORY_BASE_URL, RAG_BASE_URL, LENS_BASE_URL, TRAEFIK_MCP_BASE_URL). The memory,
   # RAG and lens ones also register the edge's forward-auth for /v1/{memory,rag,lens}/*.
