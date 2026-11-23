@@ -45,3 +45,11 @@ imagePullSecret:
   registry: ghcr.io
   secretsManagerKey: ""
   namespaces: []
+
+# Third-party credentials staging cannot generate, each a Secrets Manager secret of its own
+# (a JSON object). Empty: the key Resend issues is read from the platform secret
+# (`resend-api-key`), and loopzero-cloud gets no Stripe keys.
+#   resendSecret: {"api-key": "re_..."}
+#   stripeSecret: {"api-key": "sk_test_...", "webhook-secret": "whsec_..."}
+resendSecret: ""
+stripeSecret: ""

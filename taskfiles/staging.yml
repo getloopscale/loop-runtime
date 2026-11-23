@@ -300,7 +300,11 @@ tasks:
         # into the emulator's Secrets Manager again after every rebuild empties it.
         #   ghcr-pull.json: {"username", "password"}, a classic token with read:packages for
         #   the console's private images (aws.imagePullSecret).
-        for name in ghcr-pull; do
+        #   resend.json: {"api-key"}, the Resend key Kratos's courier sends with
+        #   (aws.resendSecret).
+        #   stripe.json: {"api-key", "webhook-secret"}, Stripe test-mode keys for
+        #   loopzero-cloud (aws.stripeSecret).
+        for name in ghcr-pull resend stripe; do
           kept=/etc/loopzero-staging/$name.json
           [ -f "$kept" ] || { echo "warning: no $kept, loopzero/staging/$name is not seeded" >&2; continue; }
           if aws secretsmanager describe-secret --secret-id "loopzero/staging/$name" >/dev/null 2>&1; then
