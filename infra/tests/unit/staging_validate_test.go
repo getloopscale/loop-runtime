@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -202,5 +203,24 @@ func TestStagingDeployUnitLeavesTimeForTheValidation(t *testing.T) {
 	// go test timeout, so the unit allows an hour.
 	if !strings.Contains(string(data), "TimeoutStartSec=60min") {
 		t.Errorf("loopzero-staging-deploy.service does not allow 60 minutes for a deploy and its validation")
+	}
+}
+
+// go test prints a passing package's output only with -v, so without it a green validate
+// log holds no Ginkgo summary, and nothing on the host says how many journeys ran.
+func TestTheValidateSuiteLogsItsSummaryWhenItPasses(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "infra/staging/validate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	start := strings.Index(text, "run_suite() {")
+	end := strings.Index(text[start:], "\n}")
+	if start < 0 || end < 0 {
+		t.Fatal("no run_suite in infra/staging/validate.sh")
+	}
+	body := text[start : start+end]
+	if !regexp.MustCompile(`go test (\S+ )*-v( |$)`).MatchString(body) {
+		t.Errorf("run_suite runs go test without -v:\n%s", body)
 	}
 }
