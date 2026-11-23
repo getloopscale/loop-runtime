@@ -5,6 +5,9 @@ package charts
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"text/template"
@@ -360,5 +363,22 @@ func TestStagingPromtailCollectsEachClustersPlatformPods(t *testing.T) {
 func TestDevPromtailHasNoPlatformPodsJob(t *testing.T) {
 	if promtailJobs(t, "build.helmfile.yaml.gotmpl", "dev", nil)["platform-pods"] != nil {
 		t.Error("dev renders a platform-pods job; it is staging's")
+	}
+}
+
+// A DNSName that carries anything but DNS name characters (a backslash an interpreter
+// left in, a quote) fails the core render instead of ending up in a scrape path.
+func TestStagingCorePrometheusRefusesAMalformedALBName(t *testing.T) {
+	cmd := exec.Command("helmfile", "-f", "infra/helmfile/core.helmfile.yaml.gotmpl", "-e", "staging",
+		"--selector", "name=prometheus", "--skip-deps", "--output-file-template", filepath.Join(t.TempDir(), "{{ .Release.Name }}.yaml"), "write-values")
+	cmd.Dir = repoRoot(t)
+	cmd.Env = append(os.Environ(), stagingOutputs...)
+	cmd.Env = append(cmd.Env, `LOOPZERO_METRICS_ALB_DNS_NAMES=build=`+stagingBuildALB+`\,cell-0=`+stagingCell0ALB+`\,cell-1=`+stagingCell1ALB)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("the core prometheus rendered with backslashes in LOOPZERO_METRICS_ALB_DNS_NAMES")
+	}
+	if !strings.Contains(string(out), "is not <cluster>=<DNSName>") {
+		t.Errorf("render failed without naming the malformed pair:\n%s", truncate(string(out), 800))
 	}
 }

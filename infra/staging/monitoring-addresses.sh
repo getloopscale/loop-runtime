@@ -16,6 +16,10 @@
 #             (monitoring/prometheus-federation), read after the cells, for the core
 #             Prometheus.
 #
+# Each value is printed double-quoted and unescaped: `published` admits only DNS name
+# characters, and Task's shell interpreter keeps the backslashes `printf %q` would put
+# before a comma, which ended up inside the scrape paths (deploy of a49a25d).
+#
 # Without --wait it prints what the clusters already publish (a previous deploy's ALBs)
 # and nothing when one name is missing, which is the state of a rebuild before the syncs.
 # With --wait it waits up to <seconds> for every name and fails, naming the Ingress,
@@ -84,7 +88,7 @@ read_name() {
 case "$WHAT" in
   loki)
     read_name "$BUILD_CONTEXT" loki-internal
-    printf 'export LOOPZERO_LOKI_ALB_DNS_NAME=%q\n' "$name"
+    printf 'export LOOPZERO_LOKI_ALB_DNS_NAME="%s"\n' "$name"
     ;;
   metrics)
     pairs=()
@@ -92,7 +96,7 @@ case "$WHAT" in
       read_name "$ctx" prometheus-federation
       pairs+=("$ctx=$name")
     done
-    printf 'export LOOPZERO_METRICS_ALB_DNS_NAMES=%q\n' "$(IFS=,; echo "${pairs[*]}")"
+    printf 'export LOOPZERO_METRICS_ALB_DNS_NAMES="%s"\n' "$(IFS=,; echo "${pairs[*]}")"
     ;;
   *)
     echo "usage: $0 <loki|metrics> [--wait <seconds>]" >&2
