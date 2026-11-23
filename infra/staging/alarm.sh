@@ -10,6 +10,7 @@
 #   alarm.sh raise <alarm> <summary> [details-file]
 #   alarm.sh clear <alarm> <summary>
 #   alarm.sh check-disk     raises or clears "disk" against DISK_LIMIT_PERCENT of /
+#   alarm.sh check-tokens   raises or clears "token-expiry" for the host's GitHub tokens
 #
 # The token is the host's status token, with Issues read and write added.
 set -euo pipefail
@@ -19,6 +20,10 @@ GITHUB_API="${DEPLOY_GITHUB_API:-https://api.github.com}"
 TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loopzero-staging/github-status-token}"
 DISK_PATH="${ALARM_DISK_PATH:-/}"
 DISK_LIMIT_PERCENT="${ALARM_DISK_LIMIT_PERCENT:-80}"
+# The GitHub tokens the host keeps: a file holds the token itself, or a JSON file holds it
+# as "password" (ghcr-pull.json). GitHub caps their lifetime, so one of them always expires.
+TOKEN_FILES="${ALARM_TOKEN_FILES:-$TOKEN_FILE /etc/loopzero-staging/ghcr-pull.json}"
+TOKEN_WARN_DAYS="${ALARM_TOKEN_WARN_DAYS:-14}"
 LABEL=staging-alarm
 HOST="$(hostname)"
 
@@ -84,9 +89,50 @@ check_disk() {
   fi
 }
 
+# token_problem <file>: why the token in <file> needs renewing, or nothing. GitHub names a
+# token's expiry in the github-authentication-token-expiration header of any API answer.
+token_problem() {
+  local file=$1 token headers expiry left_days
+  if [[ "$file" == *.json ]]; then
+    token=$(jq -r '.password // empty' "$file")
+  else
+    token=$(<"$file")
+  fi
+  [[ -n "$token" ]] || { printf '`%s` holds no token.' "$file"; return; }
+  if ! headers=$(curl -fsS --max-time 30 -o /dev/null -D - -H "Authorization: Bearer $token" \
+      -H "X-GitHub-Api-Version: 2022-11-28" "$GITHUB_API/rate_limit"); then
+    printf 'GitHub rejected the token in `%s`.' "$file"
+    return
+  fi
+  expiry=$(printf '%s' "$headers" | tr -d '\r' | sed -n 's/^github-authentication-token-expiration: *//Ip' | head -n 1)
+  [[ -n "$expiry" ]] || return 0
+  left_days=$(( ($(date -u -d "$expiry" +%s) - $(date -u +%s)) / 86400 ))
+  if (( left_days <= TOKEN_WARN_DAYS )); then
+    printf 'The token in `%s` expires on %s, in %d days.' "$file" "$expiry" "$left_days"
+  fi
+}
+
+check_tokens() {
+  local file problem problems=""
+  for file in $TOKEN_FILES; do
+    if [[ ! -r "$file" ]]; then
+      problems+="- \`$file\` is missing."$'\n'
+      continue
+    fi
+    problem=$(token_problem "$file")
+    [[ -z "$problem" ]] || problems+="- $problem"$'\n'
+  done
+  if [[ -n "$problems" ]]; then
+    raise token-expiry "$(printf 'Renew these GitHub tokens (where each is used and its scopes: taskfiles/staging.yml):\n\n%s' "$problems")"
+  else
+    clear_alarm token-expiry "every GitHub token is valid for more than ${TOKEN_WARN_DAYS} days."
+  fi
+}
+
 case "${1:-}" in
   raise) [[ $# -ge 3 ]] || fail "usage: alarm.sh raise <alarm> <summary> [details-file]"; raise "$2" "$3" "${4:-}" ;;
   clear) [[ $# -ge 3 ]] || fail "usage: alarm.sh clear <alarm> <summary>"; clear_alarm "$2" "$3" ;;
   check-disk) check_disk ;;
-  *) fail "usage: alarm.sh raise|clear|check-disk ..." ;;
+  check-tokens) check_tokens ;;
+  *) fail "usage: alarm.sh raise|clear|check-disk|check-tokens ..." ;;
 esac

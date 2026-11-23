@@ -1,0 +1,10 @@
+# Raises the "token-expiry" alarm when a GitHub token the host keeps expires within 14 days
+# or GitHub rejects it, and clears it once they are renewed (infra/staging/alarm.sh).
+[Unit]
+Description=Check the expiry of the staging host's GitHub tokens
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/loopzero-staging/alarm.sh check-tokens
