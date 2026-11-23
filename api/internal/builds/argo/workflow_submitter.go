@@ -49,6 +49,10 @@ var workflowGVR = WorkflowGVR
 
 // WorkflowSubmitterConfig holds configuration for connecting to the build cluster.
 type WorkflowSubmitterConfig struct {
+	// ObjectStoreIRSA and StaticAssetsBucket: see InfraParams.
+	ObjectStoreIRSA    bool
+	StaticAssetsBucket string
+
 	// CosignImage and SyftImage override the signer and SBOM scanner images;
 	// empty means the built-in ones.
 	CosignImage string
@@ -121,20 +125,7 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 		return nil, fmt.Errorf("argo: dynamic client: %w", err)
 	}
 
-	builder := NewWorkflowBuilder(InfraParams{
-		RegistryURL:           cfg.RegistryURL,
-		RegistryInsecure:      cfg.RegistryInsecure,
-		BaseDomain:            cfg.BaseDomain,
-		WorkspaceStorageClass: cfg.WorkspaceStorageClass,
-		CosignKeyless:         cfg.CosignKeyless,
-		CosignFulcioURL:       cfg.CosignFulcioURL,
-		CosignRekorURL:        cfg.CosignRekorURL,
-		CosignAttestEnabled:   cfg.CosignAttestEnabled,
-		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
-		CosignImage:           cfg.CosignImage,
-		SyftImage:             cfg.SyftImage,
-		Env:                   cfg.Env, // T1.1 of plan 2026-06-01-p1-security-hardening (sec-010)
-	})
+	builder := NewWorkflowBuilder(cfg.infraParams())
 
 	return &WorkflowSubmitter{
 		client:  client,
@@ -420,4 +411,24 @@ func extractStepOutputs(wfObject map[string]interface{}) map[string]map[string]s
 		return nil
 	}
 	return out
+}
+
+// infraParams is the part of the configuration every workflow the builder makes uses.
+func (cfg WorkflowSubmitterConfig) infraParams() InfraParams {
+	return InfraParams{
+		ObjectStoreIRSA:       cfg.ObjectStoreIRSA,
+		StaticAssetsBucket:    cfg.StaticAssetsBucket,
+		RegistryURL:           cfg.RegistryURL,
+		RegistryInsecure:      cfg.RegistryInsecure,
+		BaseDomain:            cfg.BaseDomain,
+		WorkspaceStorageClass: cfg.WorkspaceStorageClass,
+		CosignKeyless:         cfg.CosignKeyless,
+		CosignFulcioURL:       cfg.CosignFulcioURL,
+		CosignRekorURL:        cfg.CosignRekorURL,
+		CosignAttestEnabled:   cfg.CosignAttestEnabled,
+		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT, // T1.2 CR-1 fix
+		CosignImage:           cfg.CosignImage,
+		SyftImage:             cfg.SyftImage,
+		Env:                   cfg.Env, // T1.1 of plan 2026-06-01-p1-security-hardening (sec-010)
+	}
 }

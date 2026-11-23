@@ -802,3 +802,10 @@ func TestValidate_RequiresARegistryOutsideDevelopment(t *testing.T) {
 		t.Errorf("a registry with a repository prefix: validateRegistryURLs() = %v, want nil", err)
 	}
 }
+
+func TestLoad_ReadsTheStaticAssetsBucket(t *testing.T) {
+	t.Setenv("STATIC_ASSETS_BUCKET", "loopzero-staging-static-assets-000000000000")
+	if got := Load().StaticAssetsBucket; got != "loopzero-staging-static-assets-000000000000" {
+		t.Errorf("StaticAssetsBucket = %q, want the STATIC_ASSETS_BUCKET value", got)
+	}
+}

@@ -31,6 +31,18 @@ func (b *WorkflowBuilder) uploadAssetsTemplate(spec deploycontracts.WorkflowSpec
 	s3Dest := fmt.Sprintf("%s/%s/%s/%s/",
 		spec.TenantID, spec.ProjectID, plan.AppName, spec.BuildID)
 
+	store := b.infraParams.objectStore()
+	bucket := store.staticAssetsBucket()
+	// MINIO_ENDPOINT comes from the MinIO Secret. With IRSA the aws CLI reads the
+	// endpoint EKS injects (AWS_ENDPOINT_URL), or AWS's own when there is none.
+	endpointFlag := ` --endpoint-url "$MINIO_ENDPOINT"`
+	var envFrom []model.EnvFromSource
+	if store.IRSA {
+		endpointFlag = ""
+	} else {
+		envFrom = []model.EnvFromSource{{SecretRef: &model.SecretEnvSource{Name: secretMinIOCreds}}}
+	}
+
 	// Script: find output dir, generate manifest, upload via aws s3 sync
 	script := fmt.Sprintf(`set -e
 cd /workspace/%s
@@ -75,9 +87,9 @@ cat "$OUTPUT_DIR/asset-manifest.json"
 
 # Upload to S3 via aws cli (MINIO_ENDPOINT used as S3 endpoint)
 echo "Uploading to s3://%s/%s"
-aws s3 sync "$OUTPUT_DIR/" "s3://%s/%s" --endpoint-url "$MINIO_ENDPOINT" --acl public-read --no-progress
+aws s3 sync "$OUTPUT_DIR/" "s3://%s/%s"%s --acl public-read --no-progress
 echo "Upload complete"
-`, appPath, s3BucketStaticAssets, s3Dest, s3BucketStaticAssets, s3Dest)
+`, appPath, bucket, s3Dest, bucket, s3Dest, endpointFlag)
 
 	return &forge.Script{
 		Name:    fmt.Sprintf("deliver-artifact-%s", plan.AppName),
@@ -87,9 +99,7 @@ echo "Upload complete"
 		Env: []forge.EnvBuilder{
 			forge.Env{Name: "HOME", Value: "/tmp"},
 		},
-		EnvFrom: []model.EnvFromSource{
-			{SecretRef: &model.SecretEnvSource{Name: secretMinIOCreds}},
-		},
+		EnvFrom: envFrom,
 		VolumeMounts: []forge.VolumeBuilder{
 			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: volumeWorkspace, MountPath: workspaceMountPath}},
 		},

@@ -46,22 +46,7 @@ import (
 // configuration carries (per-environment Fulcio audience, cosign
 // keyless/attestation).
 func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*orchestrationbreaker.CircuitBreakerWorkflowSubmitter, error) {
-	raw, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-		Kubeconfig:            cfg.BuildKubeconfig,
-		Context:               cfg.BuildKubeContext,
-		RegistryURL:           cfg.RegistryURL,
-		RegistryInsecure:      cfg.RegistryInsecure,
-		BaseDomain:            cfg.BaseDomain,
-		CosignKeyless:         cfg.CosignKeyless,
-		CosignAttestEnabled:   cfg.CosignAttestEnabled,
-		CosignFulcioURL:       cfg.CosignFulcioURL,
-		CosignRekorURL:        cfg.CosignRekorURL,
-		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT,
-		CosignImage:           cfg.CosignImage,
-		WorkspaceStorageClass: cfg.BuildWorkspaceStorageClass,
-		SyftImage:             cfg.SyftImage,
-		Env:                   cfg.Env, // sec-010: per-environment Fulcio audience
-	})
+	raw, err := argo.NewWorkflowSubmitter(workflowSubmitterConfig(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("workflow submitter: %w", err)
 	}
@@ -157,4 +142,26 @@ func newArgoCDTokenProvider(cfg config.Config, logger *slog.Logger) argocd.Token
 	provider.Start(context.Background())
 	logger.Info("argocd token provider: KubeMintingTokenProvider active (self-healing)", "argocd_url", cfg.ArgocdURL)
 	return provider
+}
+
+// workflowSubmitterConfig is the build cluster submitter's share of the configuration.
+func workflowSubmitterConfig(cfg config.Config) argo.WorkflowSubmitterConfig {
+	return argo.WorkflowSubmitterConfig{
+		ObjectStoreIRSA:       cfg.ObjectStoreAWSCredentials,
+		StaticAssetsBucket:    cfg.StaticAssetsBucket,
+		Kubeconfig:            cfg.BuildKubeconfig,
+		Context:               cfg.BuildKubeContext,
+		RegistryURL:           cfg.RegistryURL,
+		RegistryInsecure:      cfg.RegistryInsecure,
+		BaseDomain:            cfg.BaseDomain,
+		CosignKeyless:         cfg.CosignKeyless,
+		CosignAttestEnabled:   cfg.CosignAttestEnabled,
+		CosignFulcioURL:       cfg.CosignFulcioURL,
+		CosignRekorURL:        cfg.CosignRekorURL,
+		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT,
+		CosignImage:           cfg.CosignImage,
+		WorkspaceStorageClass: cfg.BuildWorkspaceStorageClass,
+		SyftImage:             cfg.SyftImage,
+		Env:                   cfg.Env, // sec-010: per-environment Fulcio audience
+	}
 }

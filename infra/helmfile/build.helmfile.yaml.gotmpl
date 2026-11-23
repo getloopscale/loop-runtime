@@ -84,6 +84,15 @@ releases:
       # The bucket loopzero-api stages source bundles in (core.helmfile passes the
       # same environment value to loopzero-api's config.sourceBucket).
       - sourceBucket: {{ .Values | get "sourceBucket" "loopzero-builds" | quote }}
+{{- if .Values.profile.awsSecretsManager }}
+        # AWS S3 as the IRSA role of loopzero-build-sa (identity/build-workflows), which
+        # reads the builds bucket and writes the artifacts bucket, over verified TLS.
+        objectStorage:
+          credentials: irsa
+        cacheBucket: {{ .Values.artifactsBucket | quote }}
+        minio:
+          insecure: false
+{{- end }}
 {{- if .Values | get "platformImages.registry" "" }}
         # Pinned by the commit CI built it from, from the environment's platform
         # registry (#435) — the same rule as every other platform image.

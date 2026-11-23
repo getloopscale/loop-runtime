@@ -43,9 +43,7 @@ spec:
         env:
           - name: HOME
             value: /tmp
-        envFrom:
-          - secretRef:
-              name: {{ .Values.minio.existingSecret | default "loopzero-minio-credentials" }}
+        {{- include "loopzero-build-cwts.secretEnv" . | trim | nindent 8 }}
         command:
           - sh
           - -c
@@ -55,7 +53,7 @@ spec:
 
             # Configure mc alias for MinIO
             # MOD-6 fix: --insecure flag parametrized via Helm values (not hardcoded).
-            {{- include "loopzero-build-cwts.mcAlias" . | nindent 12 }}
+            {{- include "loopzero-build-cwts.mcAlias" . | trim | nindent 12 }}
 
             # Cache key: the same derivation cache-restore uses (loopzero-build-cwts.cacheKey).
             {{- include "loopzero-build-cwts.cacheKey" . | nindent 12 }}

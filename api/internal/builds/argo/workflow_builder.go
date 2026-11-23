@@ -35,9 +35,16 @@ import (
 // Note: MinIO credentials are injected via K8s Secret (envFrom) in the CWT,
 // not as workflow parameters. See loopzero-minio-credentials secret in build cluster.
 type InfraParams struct {
-	RegistryURL      string
-	RegistryInsecure bool   // true for local dev registries without TLS
-	BaseDomain       string // Base domain for app hostnames (e.g., "loopzero.local")
+	// ObjectStoreIRSA: build steps reach S3 as the IRSA role of the workflow
+	// ServiceAccount (the AWS profile), so none reads the loopzero-minio-credentials
+	// Secret, which only the MinIO profiles have.
+	ObjectStoreIRSA bool
+	// StaticAssetsBucket is where static apps and SBOMs are uploaded (config
+	// STATIC_ASSETS_BUCKET). Empty selects loopzero-static-assets.
+	StaticAssetsBucket string
+	RegistryURL        string
+	RegistryInsecure   bool   // true for local dev registries without TLS
+	BaseDomain         string // Base domain for app hostnames (e.g., "loopzero.local")
 	// WorkspaceStorageClass is the StorageClass of the build's workspace PVC
 	// (config LOOPZERO_BUILD_WORKSPACE_STORAGE_CLASS). Empty selects the build
 	// cluster's default class, which is what an EKS cluster needs.
@@ -99,6 +106,27 @@ type InfraParams struct {
 //   - The builder glues them together in a DAG with correct dependencies
 type WorkflowBuilder struct {
 	infraParams InfraParams
+}
+
+// objectStore is how the build steps that upload to S3 sign their requests and which
+// bucket they write.
+type objectStore struct {
+	// IRSA: the workflow ServiceAccount's IRSA role, injected into the pod by EKS.
+	// Otherwise the keys and endpoint come from the loopzero-minio-credentials Secret.
+	IRSA bool
+	// StaticAssetsBucket holds static apps and SBOMs. Empty selects s3BucketStaticAssets.
+	StaticAssetsBucket string
+}
+
+func (o objectStore) staticAssetsBucket() string {
+	if o.StaticAssetsBucket == "" {
+		return s3BucketStaticAssets
+	}
+	return o.StaticAssetsBucket
+}
+
+func (p InfraParams) objectStore() objectStore {
+	return objectStore{IRSA: p.ObjectStoreIRSA, StaticAssetsBucket: p.StaticAssetsBucket}
 }
 
 // NewWorkflowBuilder creates a WorkflowBuilder with the given infrastructure parameters.
@@ -271,7 +299,8 @@ func (b *WorkflowBuilder) appDeliveryTemplates(spec deploycontracts.WorkflowSpec
 			SignerImage:      b.infraParams.CosignImage,
 		}),
 		syftScanTemplate(spec.TenantID, spec.ProjectID, spec.CommitSHA,
-			appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure, b.infraParams.SyftImage),
+			appPlan.AppName, appPlan.ImageTag, b.infraParams.RegistryInsecure, b.infraParams.SyftImage,
+			b.infraParams.objectStore()),
 	}
 	// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
 	if b.infraParams.CosignAttestEnabled {

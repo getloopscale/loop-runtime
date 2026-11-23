@@ -292,6 +292,9 @@
         "sourceBucket": {
           "type": "string"
         },
+        "staticAssetsBucket": {
+          "type": "string"
+        },
         "registryUrl": {
           "type": "string"
         },

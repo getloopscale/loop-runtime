@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -448,5 +449,66 @@ func TestStagingBuildRegistryCredentialIsAnECRTokenRefreshedByTheBuildCluster(t 
 	}
 	if renderedObject(t, rendered, "Job", "loopzero-registry-auth-initial") == nil {
 		t.Error("no Job loopzero-registry-auth-initial: the first build would wait for the first schedule")
+	}
+}
+
+// Staging has no MinIO and no loopzero-minio-credentials Secret: the clone and cache
+// steps of every build reach S3 as the IRSA role of loopzero-build-sa. The first tenant
+// build on staging waited on that missing Secret (CreateContainerConfigError) until it
+// was cancelled. The role reads the builds bucket only, so the dependency cache goes to
+// the artifacts bucket.
+func TestStagingBuildStepsReachS3AsTheBuildWorkflowsRole(t *testing.T) {
+	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", "staging", "loopzero-build-cwts", "charts/loopzero-build-cwts", stagingOutputs...)
+	for _, cwt := range []string{"loopzero-clone", "loopzero-cache-restore", "loopzero-cache-save"} {
+		t.Run(cwt, func(t *testing.T) {
+			obj := renderedObject(t, rendered, "ClusterWorkflowTemplate", cwt)
+			if obj == nil {
+				t.Fatalf("no ClusterWorkflowTemplate %s", cwt)
+			}
+			templates, _ := dig(obj, "spec", "templates").([]any)
+			if len(templates) == 0 {
+				t.Fatalf("%s has no templates", cwt)
+			}
+			for _, tmpl := range templates {
+				container := dig(tmpl, "container")
+				if refs := dig(container, "envFrom"); refs != nil {
+					t.Errorf("%s reads a Secret through envFrom %v; staging has none", cwt, refs)
+				}
+				script := strings.Join(func() []string {
+					var out []string
+					for _, part := range []any{dig(container, "command"), dig(container, "args")} {
+						list, _ := part.([]any)
+						for _, s := range list {
+							out = append(out, fmt.Sprint(s))
+						}
+					}
+					return out
+				}(), "\n")
+				for _, want := range []string{"MC_WEB_IDENTITY_TOKEN_FILE_loopzero", "MC_ROLE_ARN_loopzero", "MC_STS_ENDPOINT_loopzero"} {
+					if !strings.Contains(script, want) {
+						t.Errorf("%s does not set %s: mc would sign with no credentials", cwt, want)
+					}
+				}
+				if regexp.MustCompile(`(?m)^\s*--insecure\b`).MatchString(script) {
+					t.Errorf("%s passes --insecure to mc; staging's S3 has a verifiable certificate", cwt)
+				}
+				if cwt != "loopzero-clone" && !strings.Contains(script, "loopzero/loopzero-staging-artifacts-000000000000/") {
+					t.Errorf("%s does not keep the cache in the artifacts bucket, the one the build role can write", cwt)
+				}
+			}
+		})
+	}
+}
+
+// The SBOM and static app steps upload to the staging static assets bucket; the
+// pipeline's default name, loopzero-static-assets, is no bucket on staging.
+func TestStagingAPINamesTheStaticAssetsBucket(t *testing.T) {
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-api", "charts/loopzero-api", stagingOutputs...)
+	cm := renderedObject(t, rendered, "ConfigMap", "loopzero-api")
+	if cm == nil {
+		t.Fatal("no ConfigMap loopzero-api")
+	}
+	if got := dig(cm, "data", "STATIC_ASSETS_BUCKET"); got != "loopzero-staging-static-assets-000000000000" {
+		t.Errorf("STATIC_ASSETS_BUCKET = %v, want loopzero-staging-static-assets-000000000000", got)
 	}
 }
