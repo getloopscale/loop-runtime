@@ -86,8 +86,8 @@ platformImages:
     loopzero-cosign-signer: "develop-7a34191"
     # getloopscale/console publishes these two (private on GHCR, pulled with
     # aws.imagePullSecret). Required while profile.loopzeroCloud is on.
-    loopzero-cloud: "develop-12936b3"
-    loopzero-dashboard: "develop-12936b3"
+    loopzero-cloud: "develop-e12f574"
+    loopzero-dashboard: "develop-e12f574"
 
 registries:
   docrPrefix: "ghcr.io/getloopscale/"
