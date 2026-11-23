@@ -295,8 +295,8 @@ func TestStagingResendKeyReachesTheCourierFromItsOwnSecret(t *testing.T) {
 	}
 	body, _ := request["body"].(string)
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(body, "base64://"))
-	if err != nil || !strings.Contains(string(decoded), "@getloopscale.com>") {
-		t.Errorf("the courier's sender is not an address on getloopscale.com: %q (%v)", decoded, err)
+	if err != nil || !strings.Contains(string(decoded), `from: "LoopScale <noreply@getloopscale.com>"`) {
+		t.Errorf("the courier does not send as LoopScale <noreply@getloopscale.com>: %q (%v)", decoded, err)
 	}
 }
 
