@@ -51,6 +51,9 @@ vars:
   CADDY_VERSION: v2.10.0
   # infra/staging/deploy.sh reads the image pins of the staging environment with it.
   YQ_VERSION: v4.54.1
+  # seed-aws-cosign-key.sh generates the build's signing key pair with it; the version the
+  # loopzero-cosign-signer image signs with.
+  COSIGN_VERSION: v2.6.5
   # The emulator listens on the gateway of its own Docker network; each VPC Terraform
   # creates gets a Docker network with the VPC's CIDR, which falls in 10.0.0.0/8.
   EMULATOR_SUBNET: 172.29.0.0/16
@@ -145,6 +148,13 @@ tasks:
           column=$(( $(grep -nx 'SHA-256' "$tmp/yq.order" | cut -d: -f1) + 1 ))
           echo "$(awk -v c="$column" '$1 == "yq_linux_amd64" {print $c}' "$tmp/yq.sums")  $tmp/yq" | sha256sum --check --quiet
           install_binary "$tmp/yq" yq
+        fi
+        if ! cosign version 2>/dev/null | grep -q "GitVersion: *{{.COSIGN_VERSION}}$"; then
+          base=https://github.com/sigstore/cosign/releases/download/{{.COSIGN_VERSION}}
+          curl -fsSLo "$tmp/cosign" "$base/cosign-linux-amd64"
+          curl -fsSLo "$tmp/cosign.sums" "$base/cosign_checksums.txt"
+          echo "$(awk '$2 == "cosign-linux-amd64" {print $1}' "$tmp/cosign.sums")  $tmp/cosign" | sha256sum --check --quiet
+          install_binary "$tmp/cosign" cosign
         fi
         if ! command -v aws >/dev/null; then
           curl -fsSLo "$tmp/awscli.zip" https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
@@ -296,6 +306,7 @@ tasks:
         set -euo pipefail
         eval "$(task staging:platform:outputs)"
         bash infra/helmfile/scripts/seed-aws-platform-secret.sh loopzero/staging/platform
+        bash infra/helmfile/scripts/seed-aws-cosign-key.sh loopzero/staging/cosign-signing-key
         # Secrets no script can generate, kept on the host only (mode 0600), and written
         # into the emulator's Secrets Manager again after every rebuild empties it.
         #   ghcr-pull.json: {"username", "password"}, a classic token with read:packages for

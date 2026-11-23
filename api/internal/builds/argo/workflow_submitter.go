@@ -52,7 +52,9 @@ type WorkflowSubmitterConfig struct {
 	// CosignImage and SyftImage override the signer and SBOM scanner images;
 	// empty means the built-in ones.
 	CosignImage string
-	SyftImage   string
+	// WorkspaceStorageClass is the build workspace PVC's StorageClass; empty = cluster default.
+	WorkspaceStorageClass string
+	SyftImage             string
 
 	Kubeconfig string // Path to kubeconfig file
 	Context    string // Kube context (e.g., "k3d-loopzero-build")
@@ -123,6 +125,7 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 		RegistryURL:           cfg.RegistryURL,
 		RegistryInsecure:      cfg.RegistryInsecure,
 		BaseDomain:            cfg.BaseDomain,
+		WorkspaceStorageClass: cfg.WorkspaceStorageClass,
 		CosignKeyless:         cfg.CosignKeyless,
 		CosignFulcioURL:       cfg.CosignFulcioURL,
 		CosignRekorURL:        cfg.CosignRekorURL,

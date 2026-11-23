@@ -268,6 +268,8 @@ releases:
       - external-secrets/external-secrets
     values:
       - region: {{ .Values.aws.region | quote }}
+        buildSigningKey:
+          secretsManagerKey: {{ .Values.aws | get "signingKeySecret" "" | quote }}
 {{- end }}
 {{- if .Values.profile.awsLoadBalancerController }}
 

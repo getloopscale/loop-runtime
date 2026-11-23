@@ -38,6 +38,10 @@ type InfraParams struct {
 	RegistryURL      string
 	RegistryInsecure bool   // true for local dev registries without TLS
 	BaseDomain       string // Base domain for app hostnames (e.g., "loopzero.local")
+	// WorkspaceStorageClass is the StorageClass of the build's workspace PVC
+	// (config LOOPZERO_BUILD_WORKSPACE_STORAGE_CLASS). Empty selects the build
+	// cluster's default class, which is what an EKS cluster needs.
+	WorkspaceStorageClass string
 	// CosignImage and SyftImage override the signer and SBOM scanner images
 	// (config LOOPZERO_COSIGN_IMAGE / LOOPZERO_SYFT_IMAGE; local k3d points them at
 	// its registry). Empty means the built-in imageCosignSigner/imageSyftScanner.
@@ -335,17 +339,16 @@ func (b *WorkflowBuilder) newWorkflowCR(spec deploycontracts.WorkflowSpec, templ
 		// VolumeClaimTemplates create the PVC when the Workflow starts; it is shared
 		// across all pods and cleaned up when the Workflow is garbage collected (TTL).
 		//
-		// Bug #21/#40 fix (scale-50k-plan): use local-path-provisioner (Rancher) instead
-		// of DO Block Storage. DO CSI rate-limits volume creation to ~3/min and hits
-		// HTTP 429 at concurrency >15. local-path creates hostPath volumes instantly
-		// without cloud API calls. The podAffinity rule below co-locates all DAG pods
-		// on the same node, so hostPath sharing just works. Requires
-		// local-path-provisioner deployed on the build cluster.
+		// The class comes from configuration; empty means the cluster default. A
+		// cluster that wants local-path (k3d, or a node-local burst setup where the
+		// cloud CSI rate-limits volume creation) sets it explicitly. The podAffinity
+		// forge injects co-locates every DAG pod on one node, so a node-local volume
+		// is shared too.
 		VolumeClaimTemplates: []forge.PVCVolume{
 			{
 				BaseVolume:       forge.BaseVolume{Name: volumeWorkspace},
 				Size:             workspacePVCSize,
-				StorageClassName: "local-path",
+				StorageClassName: b.infraParams.WorkspaceStorageClass,
 			},
 		},
 		Volumes: volumes,

@@ -1309,3 +1309,27 @@ func TestWorkflowBuilder_Build_RejectsEmptyPlanApps(t *testing.T) {
 		t.Fatal("expected Build() to error when spec.Plan.Apps is empty, got nil")
 	}
 }
+
+// The workspace PVC takes the build cluster's default StorageClass unless one is configured:
+// an EKS build cluster has no `local-path`, and a hardcoded class left every build Pending (#51).
+func TestWorkflowBuilder_Build_WorkspaceUsesTheClusterDefaultStorageClass(t *testing.T) {
+	wf, err := NewWorkflowBuilder(testInfraParams()).Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if got := wf.VolumeClaimTemplates[0].StorageClassName; got != "" {
+		t.Errorf("workspace StorageClassName = %q, want empty (the cluster default)", got)
+	}
+}
+
+func TestWorkflowBuilder_Build_WorkspaceUsesTheConfiguredStorageClass(t *testing.T) {
+	params := testInfraParams()
+	params.WorkspaceStorageClass = "gp3"
+	wf, err := NewWorkflowBuilder(params).Build(testSpec())
+	if err != nil {
+		t.Fatalf("Build() error: %v", err)
+	}
+	if got := wf.VolumeClaimTemplates[0].StorageClassName; got != "gp3" {
+		t.Errorf("workspace StorageClassName = %q, want gp3", got)
+	}
+}

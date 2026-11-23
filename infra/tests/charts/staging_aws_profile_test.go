@@ -359,3 +359,23 @@ func TestStagingApiReadsLokiThroughTheBuildClusterALB(t *testing.T) {
 		t.Errorf("LOKI_URL = %v, want %s", got, want)
 	}
 }
+
+// The build signs tenant images with the key in Secret argo/cosign-signing-key. On the AWS
+// path External Secrets writes it into the build cluster from the secret
+// seed-aws-cosign-key.sh creates; without it the signing step cannot start (#53).
+func TestStagingBuildSigningKeyComesFromSecretsManager(t *testing.T) {
+	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", "staging", "aws-secrets-manager", "infra/helm/aws-secrets-manager", stagingOutputs...)
+	es := renderedObject(t, rendered, "ExternalSecret", "cosign-signing-key")
+	if es == nil {
+		t.Fatal("no ExternalSecret cosign-signing-key")
+	}
+	if ns := dig(es, "metadata", "namespace"); ns != "argo" {
+		t.Errorf("cosign-signing-key is written into %v, want argo", ns)
+	}
+	refs := externalSecretRefs(t, es)
+	for _, key := range []string{"cosign.key", "cosign.pub", "cosign.password"} {
+		if got := refs[key]; got != "loopzero/staging/cosign-signing-key#"+key {
+			t.Errorf("%s reads %q, want loopzero/staging/cosign-signing-key#%s", key, got, key)
+		}
+	}
+}

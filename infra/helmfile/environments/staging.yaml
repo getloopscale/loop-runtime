@@ -59,6 +59,10 @@ aws:
   # role passwords, internal call secrets, identity cookie keys), as one JSON object.
   # `infra/helmfile/scripts/seed-aws-platform-secret.sh` fills in the keys it lacks.
   platformSecret: loopzero/staging/platform
+  # The key pair the build signs tenant images with ({"cosign.key", "cosign.pub",
+  # "cosign.password"}), created once by `infra/helmfile/scripts/seed-aws-cosign-key.sh`
+  # and written into the build cluster as argo/cosign-signing-key.
+  signingKeySecret: loopzero/staging/cosign-signing-key
   # Staging only: the registry login for the private GHCR images (loopzero-cloud,
   # loopzero-dashboard), a JSON object {"username": ..., "password": <token with
   # read:packages>}. The aws-secrets-manager release writes it into loopzero-system as the

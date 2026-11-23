@@ -105,7 +105,9 @@ post_core() {
     KUBECTL_CONTEXT="$CORE_CONTEXT" LOOPZERO_NS="$NS" INGRESS_DOMAIN="${LOOPZERO_INGRESS_DOMAIN:-}" \
       MANAGED_BY=bootstrap-aws-clusters TLS_INSECURE=false \
       bash "$SCRIPT_DIR/lib/clustercredential-create.sh" "$cell" "$cell" "$cell_kc"
-    KUBECTL_CONTEXT="$CORE_CONTEXT" "$SCRIPT_DIR/lib/argocd-register.sh" "$cell" "$cell_kc"
+    # The clustercredential controller registers the cell in Argo CD from that CR (Secret
+    # cluster-<cell>) and keeps it current on rotation. argocd-register.sh would add a second
+    # cluster with the same name, and Argo CD then resolves no Application destination.
     if [[ -z "$first_cell" ]]; then
       first_cell="$cell"
       core -n "$NS" create configmap loopzero-cell-0-kubeconfig --from-file=config="$cell_kc" \
