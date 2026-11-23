@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# The first token, at install and on every upgrade, so a build does not wait for the
+# CronJob's first schedule. A failure fails the release.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loopzero-registry-auth-initial
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+{{ include "ecr-registry-auth.pod" . | indent 6 }}

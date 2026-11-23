@@ -379,3 +379,74 @@ func TestStagingBuildSigningKeyComesFromSecretsManager(t *testing.T) {
 		}
 	}
 }
+
+// Builds push tenant app images under the ECR prefix infra-live's registry/ecr creates
+// repositories for on the first push, at the address the pods reach the registry by.
+func TestStagingBuildsPushTenantImagesToTheECRPrefix(t *testing.T) {
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-api", "charts/loopzero-api", stagingOutputs...)
+	cm := renderedObject(t, rendered, "ConfigMap", "loopzero-api")
+	if cm == nil {
+		t.Fatal("loopzero-api renders no ConfigMap loopzero-api")
+	}
+	if got := dig(cm, "data", "REGISTRY_URL"); got != "172.29.0.1:9597/loopzero-tenants" {
+		t.Errorf("REGISTRY_URL = %v, want 172.29.0.1:9597/loopzero-tenants", got)
+	}
+}
+
+// The cells admit tenant pods whose images come from the tenant registry prefix, and no
+// longer from the DigitalOcean registry the policy named before ECR.
+func TestStagingCellsAdmitTenantImagesFromTheECRPrefix(t *testing.T) {
+	rendered := helmfileTemplate(t, "cell.helmfile.yaml.gotmpl", "staging", "admission-policies", "charts/loopzero-admission-policies", stagingOutputs...)
+	vap := renderedObject(t, rendered, "ValidatingAdmissionPolicy", "loopzero-restrict-image-registries")
+	if vap == nil {
+		t.Fatal("no ValidatingAdmissionPolicy loopzero-restrict-image-registries")
+	}
+	expr, _ := dig(vap, "spec", "validations", 0, "expression").(string)
+	if !strings.Contains(expr, `c.image.startsWith("172.29.0.1:9597/loopzero-tenants/")`) {
+		t.Errorf("container rule %q does not admit 172.29.0.1:9597/loopzero-tenants/", expr)
+	}
+	if strings.Contains(expr, "registry.digitalocean.com") {
+		t.Errorf("container rule %q still admits the DigitalOcean registry", expr)
+	}
+}
+
+// The build pushes with argo/buildkit-registry-config, an ECR authorization token that a
+// CronJob on the build cluster refreshes under the role infra-live grants push to
+// (identity/build-registry-push). The token lasts 12 hours.
+func TestStagingBuildRegistryCredentialIsAnECRTokenRefreshedByTheBuildCluster(t *testing.T) {
+	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", "staging", "ecr-registry-auth", "infra/helm/ecr-registry-auth", stagingOutputs...)
+	sa := renderedObject(t, rendered, "ServiceAccount", "loopzero-registry-auth")
+	if sa == nil {
+		t.Fatal("no ServiceAccount loopzero-registry-auth")
+	}
+	if ns := dig(sa, "metadata", "namespace"); ns != "argo" {
+		t.Errorf("ServiceAccount namespace = %v, want argo", ns)
+	}
+	annotations, _ := dig(sa, "metadata", "annotations").(map[string]any)
+	if got := annotations["eks.amazonaws.com/role-arn"]; got != "arn:aws:iam::000000000000:role/loopzero-staging-build-registry-push" {
+		t.Errorf("role-arn = %v, want the build-registry-push role", got)
+	}
+	cron := renderedObject(t, rendered, "CronJob", "loopzero-registry-auth")
+	if cron == nil {
+		t.Fatal("no CronJob loopzero-registry-auth")
+	}
+	if got := dig(cron, "spec", "jobTemplate", "spec", "template", "spec", "serviceAccountName"); got != "loopzero-registry-auth" {
+		t.Errorf("CronJob runs as %v, want loopzero-registry-auth", got)
+	}
+	env := map[string]any{}
+	for _, c := range []string{"initContainers", "containers"} {
+		list, _ := dig(cron, "spec", "jobTemplate", "spec", "template", "spec", c).([]any)
+		for _, container := range list {
+			vars, _ := dig(container, "env").([]any)
+			for _, v := range vars {
+				env[fmt.Sprint(dig(v, "name"))] = dig(v, "value")
+			}
+		}
+	}
+	if env["REGISTRY_HOST"] != "172.29.0.1:9597" || env["SECRET_NAME"] != "buildkit-registry-config" {
+		t.Errorf("CronJob env REGISTRY_HOST=%v SECRET_NAME=%v, want 172.29.0.1:9597 and buildkit-registry-config", env["REGISTRY_HOST"], env["SECRET_NAME"])
+	}
+	if renderedObject(t, rendered, "Job", "loopzero-registry-auth-initial") == nil {
+		t.Error("no Job loopzero-registry-auth-initial: the first build would wait for the first schedule")
+	}
+}

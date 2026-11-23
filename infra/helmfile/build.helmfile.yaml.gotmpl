@@ -270,6 +270,20 @@ releases:
       - region: {{ .Values.aws.region | quote }}
         buildSigningKey:
           secretsManagerKey: {{ .Values.aws | get "signingKeySecret" "" | quote }}
+{{- with .Values | get "tenantRegistry" dict }}
+
+  # The credential the build pushes tenant images with: an ECR token for the tenant
+  # registry under infra-live's identity/build-registry-push role, refreshed by a CronJob.
+  - name: ecr-registry-auth
+    namespace: argo
+    chart: ../helm/ecr-registry-auth
+    values:
+      - registryHost: {{ .host | quote }}
+        region: {{ $.Values.aws.region | quote }}
+        roleArn: {{ printf "arn:aws:iam::%s:role/%s-build-registry-push" $.Values.aws.accountId $.Values.aws.namePrefix | quote }}
+        images:
+          awsCli: "{{ $.Values.platformImages.registry }}loopzero-syft-scanner:{{ index $.Values.platformImages.tags "loopzero-syft-scanner" }}"
+{{- end }}
 {{- end }}
 {{- if .Values.profile.awsLoadBalancerController }}
 

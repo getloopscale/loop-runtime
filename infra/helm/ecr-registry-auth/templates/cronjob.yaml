@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: loopzero-registry-auth
+  namespace: {{ .Release.Namespace }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+{{ include "ecr-registry-auth.pod" . | indent 10 }}

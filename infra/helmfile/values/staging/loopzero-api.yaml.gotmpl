@@ -28,6 +28,8 @@ ingressRoute:
 
 config:
   loopzeroEnv: "production"
+  # environments/staging.yaml tenantRegistry: builds push tenant images there.
+  registryUrl: {{ printf "%s/%s" .Values.tenantRegistry.host .Values.tenantRegistry.repositoryPrefix | quote }}
   # The build cluster's Loki, through its internal ALB (monitoring/loki-internal), which
   # the emulator serves at its endpoint with the ALB's DNSName in the path. `task
   # staging:platform` exports the DNSName (infra/staging/monitoring-addresses.sh loki);
