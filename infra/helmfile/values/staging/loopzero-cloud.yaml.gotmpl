@@ -17,6 +17,10 @@ image:
 imagePullSecrets:
   - name: ghcr-pull
 
+# SESSION_TOKEN_SECRET and the cloud API's other secrets, written by the
+# aws-secrets-manager release from the platform secret in Secrets Manager.
+existingSecret: loopzero-cloud-secrets
+
 config:
   loopzeroEnv: "production"
   appPublicUrl: {{ .Values.uiBaseUrl | quote }}

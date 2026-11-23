@@ -204,3 +204,49 @@ func TestStagingAPIRouteLeavesTLSToTheEdge(t *testing.T) {
 		t.Errorf("loopzero-api IngressRoute tls.secretName = %v, want none", secret)
 	}
 }
+
+// loopzero-cloud signs its session tokens with SESSION_TOKEN_SECRET. Without one it makes
+// up a random secret per pod, and every token dies with the pod that issued it (#523 of
+// getloopscale/console). Staging reads it from the platform secret, through External
+// Secrets, into the Secret the chart mounts as existingSecret.
+func TestStagingCloudSessionSecretComesFromSecretsManager(t *testing.T) {
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "aws-secrets-manager", "infra/helm/aws-secrets-manager", stagingOutputs...)
+	es := renderedObject(t, rendered, "ExternalSecret", "loopzero-cloud-secrets")
+	if es == nil {
+		t.Fatal("no ExternalSecret loopzero-cloud-secrets")
+	}
+	if ns, _ := dig(es, "metadata", "namespace").(string); ns != "loopzero-system" {
+		t.Errorf("loopzero-cloud-secrets is in namespace %q, want loopzero-system", ns)
+	}
+	found := false
+	data, _ := dig(es, "spec", "data").([]any)
+	for _, d := range data {
+		entry, _ := d.(map[string]any)
+		ref, _ := entry["remoteRef"].(map[string]any)
+		if entry["secretKey"] == "SESSION_TOKEN_SECRET" && ref["key"] == "loopzero/staging/platform" && ref["property"] == "session-token-secret" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("loopzero-cloud-secrets does not map session-token-secret of loopzero/staging/platform onto SESSION_TOKEN_SECRET: %v", data)
+	}
+
+	cloud := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-cloud", "charts/loopzero-cloud", stagingOutputs...)
+	deployment := renderedObject(t, cloud, "Deployment", "loopzero-cloud")
+	if deployment == nil {
+		t.Fatal("no Deployment loopzero-cloud")
+	}
+	containers, _ := dig(deployment, "spec", "template", "spec", "containers").([]any)
+	mounted := false
+	for _, c := range containers {
+		sources, _ := dig(c, "envFrom").([]any)
+		for _, s := range sources {
+			if dig(s, "secretRef", "name") == "loopzero-cloud-secrets" && dig(s, "secretRef", "optional") != true {
+				mounted = true
+			}
+		}
+	}
+	if !mounted {
+		t.Error("the loopzero-cloud Deployment does not mount loopzero-cloud-secrets as a required envFrom source")
+	}
+}
