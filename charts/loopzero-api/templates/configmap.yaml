@@ -65,6 +65,7 @@ data:
   LOOPZERO_FULCIO_URL: {{ .Values.config.loopzeroFulcioUrl | quote }}
   LOOPZERO_REKOR_URL: {{ .Values.config.loopzeroRekorUrl | quote }}
   LOOPZERO_COSIGN_IMAGE: {{ .Values.config.loopzeroCosignImage | quote }}
+  LOOPZERO_BUILD_WORKSPACE_STORAGE_CLASS: {{ .Values.config.buildWorkspaceStorageClass | default "" | quote }}
   LOOPZERO_SYFT_IMAGE: {{ .Values.config.loopzeroSyftImage | quote }}
   OPENBAO_TRANSIT_ENABLED: {{ .Values.config.openbaoTransitEnabled | quote }}
   OPENBAO_VAULT_ADDR: {{ .Values.config.openbaoVaultAddr | quote }}

@@ -58,6 +58,7 @@ func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*orchestratio
 		CosignRekorURL:        cfg.CosignRekorURL,
 		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT,
 		CosignImage:           cfg.CosignImage,
+		WorkspaceStorageClass: cfg.BuildWorkspaceStorageClass,
 		SyftImage:             cfg.SyftImage,
 		Env:                   cfg.Env, // sec-010: per-environment Fulcio audience
 	})

@@ -91,6 +91,8 @@ config:
   loopzeroFulcioUrl: ""
   loopzeroRekorUrl: ""
   loopzeroCosignImage: ""
+  # StorageClass of the build workspace PVC; empty = the build cluster default (#51).
+  buildWorkspaceStorageClass: ""
   loopzeroSyftImage: ""
   openbaoTransitEnabled: "false"
   openbaoVaultAddr: ""
