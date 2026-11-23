@@ -498,7 +498,7 @@ func Load() Config {
 		MinIOEndpoint:             envOr("MINIO_ENDPOINT", objectStoreDefault(awsRole, "http://minio.loopzero-system.svc.cluster.local:9000")),
 		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
 		SourceBucket:              envOr("SOURCE_BUCKET", "loopzero-builds"),
-		RegistryURL:               envOr("REGISTRY_URL", "k3d-loopzero-registry:5000"),
+		RegistryURL:               os.Getenv("REGISTRY_URL"),
 		RegistryInsecure:          os.Getenv("REGISTRY_INSECURE") == "true",
 
 		// Cosign keyless config (M2 T8.0, v1.1 EC-3 of plan 2026-05-27-M07-to-3-85)
@@ -638,6 +638,11 @@ func Load() Config {
 		}
 	}
 	cfg.ObjectStoreAWSCredentials = awsRole && cfg.MinIOAccessKey == "" && cfg.MinIOSecretKey == ""
+	// The local k3d registry exists only in development; elsewhere an unset REGISTRY_URL
+	// is an error in Validate, not a push to a host that does not exist.
+	if cfg.RegistryURL == "" && cfg.Env == "development" {
+		cfg.RegistryURL = "k3d-loopzero-registry:5000"
+	}
 	cfg.loadErrors = l.errs
 	return cfg
 }
@@ -791,8 +796,11 @@ func (c Config) validateEnvBlocklistMode() error {
 }
 
 func (c Config) validateRegistryURLs() error {
+	if c.RegistryURL == "" && c.Env != "development" {
+		return fmt.Errorf("REGISTRY_URL is required in %s: the registry builds push tenant images to, host[:port][/prefix]", c.Env)
+	}
 	if strings.ContainsAny(c.RegistryURL, "\"\\\r\n") {
-		return fmt.Errorf("REGISTRY_URL=%q contains a quote, backslash or line break; it must be host[:port]", c.RegistryURL)
+		return fmt.Errorf("REGISTRY_URL=%q contains a quote, backslash or line break; it must be host[:port][/prefix]", c.RegistryURL)
 	}
 	return nil
 }

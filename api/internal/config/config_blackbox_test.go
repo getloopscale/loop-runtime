@@ -263,6 +263,7 @@ func TestConfig_Validate_RegistryInsecure_BlockedInProduction(t *testing.T) {
 	// Arrange: production + REGISTRY_INSECURE=true → must return error
 	t.Setenv("LOOPZERO_ENV", "production")
 	t.Setenv("REGISTRY_INSECURE", "true")
+	t.Setenv("REGISTRY_URL", "registry.example.com/loopzero-tenants")
 	// SEC-001: encryption key required in production — set a valid 32-byte hex key
 	t.Setenv("LOOPZERO_SECRET_ENCRYPTION_KEY", "REDACTED_SECRET_010")
 

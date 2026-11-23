@@ -379,16 +379,20 @@ func TestBuildOrchestrator_RetryReleaseActivation_WrongState(t *testing.T) {
 	}
 }
 
-func TestNewBuildOrchestrator_DefaultsRegistryURL(t *testing.T) {
+// The orchestrator keeps the configured registry as given: the local k3d default belongs to
+// config.Load in development, and nowhere else may a build silently push to it.
+func TestNewBuildOrchestrator_KeepsTheConfiguredRegistryURL(t *testing.T) {
+	const registry = "123456789012.dkr.ecr.us-east-1.amazonaws.com/loopzero-tenants"
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore:   newFakeBuildStoreOrch(),
 		ReleaseStore: newFakeReleaseStoreContainer(),
 		Locker:       &fakeLockerContainer{},
 		Workflow:     &fakeWorkflowSubmitterOrch{},
 		EventStore:   &fakeEventStoreContainer{},
+		RegistryURL:  registry,
 	})
-	if orch.registryURL != "k3d-loopzero-registry:5000" {
-		t.Errorf("expected default registry URL, got: %s", orch.registryURL)
+	if orch.registryURL != registry {
+		t.Errorf("registryURL = %q, want %q", orch.registryURL, registry)
 	}
 }
 

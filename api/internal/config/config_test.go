@@ -332,6 +332,7 @@ func TestValidate_RejectsInsecureSkipSCT_InProd_WithoutTUF(t *testing.T) {
 	t.Setenv("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY", "true")
 	t.Setenv("LOOPZERO_COSIGN_TUF_ROOT_PINNED", "false")
 	t.Setenv("LOOPZERO_SECRET_ENCRYPTION_KEY", "test-key")
+	t.Setenv("REGISTRY_URL", "registry.example.com/loopzero-tenants")
 	cfg := Load()
 	err := cfg.Validate()
 	if err == nil {
@@ -394,7 +395,7 @@ func TestValidate_AcceptsCanonicalDevelopment(t *testing.T) {
 }
 
 func TestValidate_AcceptsCanonicalStaging(t *testing.T) {
-	cfg := Config{Env: "staging", ClusterIssuer: "test-issuer"}
+	cfg := Config{Env: "staging", ClusterIssuer: "test-issuer", RegistryURL: "registry.example.com/loopzero-tenants"}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected nil for canonical staging, got %v", err)
 	}
@@ -585,6 +586,7 @@ func minProdConfig(t *testing.T) Config {
 		DatabaseURL:         "postgres://loopzero:pass@db:5432/loopzero?sslmode=require",
 		MinIOAccessKey:      "non-default-minio-access",
 		MinIOSecretKey:      "non-default-minio-secret",
+		RegistryURL:         "123456789012.dkr.ecr.us-east-1.amazonaws.com/loopzero-tenants",
 	}
 }
 
@@ -771,5 +773,32 @@ func TestValidate_RejectsARegistryURLThatBreaksBuildkitConfig(t *testing.T) {
 		if err == nil || !contains(err.Error(), "REGISTRY_URL") {
 			t.Errorf("REGISTRY_URL=%q: Validate() = %v, want an error naming REGISTRY_URL", bad, err)
 		}
+	}
+}
+
+// The local registry is a development default only. Outside development an unset
+// REGISTRY_URL stops startup: falling back to k3d-loopzero-registry:5000 made every build
+// push to a host that does not exist there.
+func TestLoad_DefaultsTheRegistryOnlyInDevelopment(t *testing.T) {
+	t.Setenv("REGISTRY_URL", "")
+	t.Setenv("LOOPZERO_ENV", "development")
+	if got := Load().RegistryURL; got != "k3d-loopzero-registry:5000" {
+		t.Errorf("development: RegistryURL = %q, want the local registry", got)
+	}
+	t.Setenv("LOOPZERO_ENV", "staging")
+	if got := Load().RegistryURL; got != "" {
+		t.Errorf("staging: RegistryURL = %q, want empty", got)
+	}
+}
+
+func TestValidate_RequiresARegistryOutsideDevelopment(t *testing.T) {
+	for _, env := range []string{"staging", "production"} {
+		err := Config{Env: env}.validateRegistryURLs()
+		if err == nil || !contains(err.Error(), "REGISTRY_URL") {
+			t.Errorf("%s with no REGISTRY_URL: validateRegistryURLs() = %v, want an error naming REGISTRY_URL", env, err)
+		}
+	}
+	if err := (Config{Env: "staging", RegistryURL: "123456789012.dkr.ecr.us-east-1.amazonaws.com/loopzero-tenants"}).validateRegistryURLs(); err != nil {
+		t.Errorf("a registry with a repository prefix: validateRegistryURLs() = %v, want nil", err)
 	}
 }
