@@ -302,7 +302,8 @@ tasks:
         #   the console's private images (aws.imagePullSecret).
         #   resend.json: {"api-key"}, the Resend key Kratos's courier sends with
         #   (aws.resendSecret).
-        #   stripe.json: {"api-key", "webhook-secret"}, Stripe test-mode keys for
+        #   stripe.json: {"api-key", "webhook-secret", "price-starter", "price-pro",
+        #   "price-team"}, Stripe test-mode keys and plan prices for
         #   loopzero-cloud (aws.stripeSecret).
         for name in ghcr-pull resend stripe; do
           kept=/etc/loopzero-staging/$name.json
