@@ -28,6 +28,13 @@ ingressRoute:
 
 config:
   loopzeroEnv: "production"
+  # The build cluster's Loki, through its internal ALB (monitoring/loki-internal), which
+  # the emulator serves at its endpoint with the ALB's DNSName in the path. `task
+  # staging:platform` exports the DNSName (infra/staging/monitoring-addresses.sh loki);
+  # before the build sync of a rebuild there is none and the chart's default stands.
+{{- with env "LOOPZERO_LOKI_ALB_DNS_NAME" }}
+  lokiUrl: {{ printf "%s/_aws/elasticloadbalancing/%s" $.Values.emulator.endpoint . | quote }}
+{{- end }}
   baseDomain: {{ .Values.domain | quote }}
   corsAllowedOrigin: {{ .Values.dashboardOrigin | quote }}
   # Empty: with no static key and the IRSA role above, the API signs with the AWS

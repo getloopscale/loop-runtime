@@ -344,3 +344,18 @@ func TestStagingControlPlaneTracesReachTheCollector(t *testing.T) {
 		}
 	}
 }
+
+// loopzero-api runs on core and reads the build cluster's Loki, which staging publishes
+// through an internal ALB the emulator serves at its endpoint with the ALB's DNSName in
+// the path. Before the ALB exists (a rebuild's first core sync) the chart's default
+// stands, and the core sync after the build one renders the ALB address.
+func TestStagingApiReadsLokiThroughTheBuildClusterALB(t *testing.T) {
+	const alb = "internal-k8s-monitoring-lokiinte-0123456789.us-east-1.elb.amazonaws.com"
+	env := append(append([]string{}, stagingOutputs...), "LOOPZERO_LOKI_ALB_DNS_NAME="+alb)
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-api", "charts/loopzero-api", env...)
+	config := renderedObject(t, rendered, "ConfigMap", "loopzero-api")
+	want := "https://172.29.0.1:9597/_aws/elasticloadbalancing/" + alb
+	if got := dig(config, "data", "LOKI_URL"); got != want {
+		t.Errorf("LOKI_URL = %v, want %s", got, want)
+	}
+}
