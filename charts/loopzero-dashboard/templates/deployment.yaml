@@ -17,10 +17,12 @@ spec:
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
       annotations:
+        # A changed __config.js or csp-origins.conf rolls the pods.
+        {{- include "loopzero-common.checksumAnnotationsConfigOnly" . | nindent 8 }}
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
     spec:
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName | quote }}
@@ -96,6 +98,11 @@ spec:
               mountPath: /usr/share/nginx/html/__config.js
               subPath: __config.js
               readOnly: true
+            # The origins the Content-Security-Policy allows besides 'self'.
+            - name: html-config
+              mountPath: /etc/nginx/conf.d/csp-origins.conf
+              subPath: csp-origins.conf
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
@@ -109,3 +116,5 @@ spec:
             items:
               - key: __config.js
                 path: __config.js
+              - key: csp-origins.conf
+                path: csp-origins.conf

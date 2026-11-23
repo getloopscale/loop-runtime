@@ -23,3 +23,9 @@ data:
       cloudUrl: {{ .Values.config.viteCloudUrl | default "" | quote }},
       baseDomain: {{ .Values.config.baseDomain | default "" | quote }},
     };
+  # The origins the image's Content-Security-Policy adds to 'self' (getloopscale/console
+  # nginx-security-headers.conf), mounted at /etc/nginx/conf.d/csp-origins.conf.
+  # Origins are space-separated URLs, validated by values.schema.json.
+  csp-origins.conf: |
+    map $host $csp_connect_origins { default {{ join " " (.Values.config.cspConnectOrigins | default list) | quote }}; }
+    map $host $csp_form_origins { default {{ join " " (.Values.config.cspFormOrigins | default list) | quote }}; }

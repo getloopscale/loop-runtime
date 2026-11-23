@@ -779,6 +779,19 @@ releases:
           viteApiUrl: ""
           viteCloudUrl: ""
           baseDomain: {{ .Values.domain | quote }}
+          # The Kratos public host the auth flows read and the forms post to, and the
+          # control plane's, which the Content-Security-Policy allows besides 'self'.
+          cspConnectOrigins:
+{{- with .Values | get "publicAuthUrl" "" }}
+            - {{ . | trimSuffix "/" | quote }}
+{{- end }}
+{{- with .Values | get "dashboardOrigin" "" }}
+            - {{ . | trimSuffix "/" | quote }}
+{{- end }}
+          cspFormOrigins:
+{{- with .Values | get "publicAuthUrl" "" }}
+            - {{ . | trimSuffix "/" | quote }}
+{{- end }}
 {{- end }}
 
   # Traefik IngressRoutes for the public hostnames no chart owns: login on the auth host
