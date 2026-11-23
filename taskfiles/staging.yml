@@ -346,6 +346,8 @@ tasks:
         # deploy published is read first, so the core Prometheus keeps federating during
         # the syncs; a rebuild has none yet.
         eval "$(bash infra/staging/monitoring-addresses.sh metrics)"
+        # loopzero-api reads the build cluster's Loki through the same ALB as Promtail.
+        eval "$(bash infra/staging/monitoring-addresses.sh loki)"
         # infra/staging/deploy.sh pins the images of the commit it deploys through
         # STAGING_STATE_VALUES, a values file layered over the staging environment.
         # core's Promtail needs the Loki ALB, which the build sync creates: it is synced last.
@@ -356,7 +358,8 @@ tasks:
           LOOPZERO_CELL_CONTEXT=$cell helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         done
         eval "$(bash infra/staging/monitoring-addresses.sh metrics --wait 600)"
-        helmfile --selector name=promtail --selector name=prometheus -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
+        # loopzero-api again, for a rebuild: its first core sync ran before the Loki ALB existed.
+        helmfile --selector name=promtail --selector name=prometheus --selector name=loopzero-api -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         # The middlewares the routes name (traefik-rate-limit, traefik-body-limit), which
         # are not a release: infra:install:cell applies the same file after its sync.
         # Traefik disables a route whose middleware does not exist.

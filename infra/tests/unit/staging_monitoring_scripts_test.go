@@ -271,8 +271,8 @@ func TestRestartUninjectedPodsFailsWhenThePodsCannotBeListed(t *testing.T) {
 	}
 }
 
-// The platform task runs both scripts, and syncs the core Promtail and Prometheus again
-// once the remote clusters publish their ALBs.
+// The platform task runs both scripts, and syncs the core Promtail, Prometheus and
+// loopzero-api again once the remote clusters publish their ALBs.
 func TestStagingPlatformSyncsCoreMonitoringAfterTheRemoteClusters(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(), "taskfiles", "staging.yml"))
 	if err != nil {
@@ -286,7 +286,7 @@ func TestStagingPlatformSyncsCoreMonitoringAfterTheRemoteClusters(t *testing.T) 
 		"monitoring-addresses.sh loki --wait",
 		"infra/helmfile/cell.helmfile.yaml.gotmpl",
 		"monitoring-addresses.sh metrics --wait",
-		"helmfile --selector name=promtail --selector name=prometheus -f infra/helmfile/core.helmfile.yaml.gotmpl",
+		"helmfile --selector name=promtail --selector name=prometheus --selector name=loopzero-api -f infra/helmfile/core.helmfile.yaml.gotmpl",
 	}
 	at := 0
 	for _, step := range order {

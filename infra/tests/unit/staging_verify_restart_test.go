@@ -106,3 +106,23 @@ func TestStagingSeedsTheThirdPartyCredentialsFromTheHost(t *testing.T) {
 		}
 	}
 }
+
+// loopzero-api's Loki address is the build cluster's ALB, read from the Ingress status: a
+// deploy reads the previous one before the core sync, and the core sync that runs after
+// the build one (with Promtail and Prometheus) re-renders loopzero-api with it, which is
+// what a rebuild, whose first core sync has no ALB yet, relies on.
+func TestStagingSyncsTheApiAgainOnceTheLokiALBIsKnown(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "taskfiles", "staging.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	firstCore := strings.Index(text, "helmfile --selector 'name!=promtail' -f infra/helmfile/core.helmfile.yaml.gotmpl")
+	earlyLoki := strings.Index(text, `eval "$(bash infra/staging/monitoring-addresses.sh loki)"`)
+	if firstCore < 0 || earlyLoki < 0 || earlyLoki > firstCore {
+		t.Errorf("the previous deploy's Loki ALB is not read before the first core sync (loki read at %d, core sync at %d)", earlyLoki, firstCore)
+	}
+	if !regexp.MustCompile(`helmfile( --selector name=[a-z-]+)*? --selector name=loopzero-api( --selector name=[a-z-]+)* -f infra/helmfile/core\.helmfile\.yaml\.gotmpl`).MatchString(text) {
+		t.Error("no core sync after the build one re-renders loopzero-api")
+	}
+}
