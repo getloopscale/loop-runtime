@@ -18,6 +18,14 @@ serviceAccount:
 # rewrites them is not needed.
 enableServiceMutatorWebhook: false
 
+# Without cert-manager the chart generates the webhook's CA and serving certificate, and
+# by default a new pair on every upgrade. The running controller keeps serving the old
+# certificate until it reloads the Secret, so for that minute the API server refuses
+# every Ingress the same sync creates (`failed calling webhook "vingress.elbv2.k8s.aws"
+# ... x509: certificate signed by unknown authority`). Reusing the Secret keeps the pair
+# the controller already serves.
+keepTLSSecret: true
+
 resources:
   requests:
     cpu: 50m

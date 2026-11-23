@@ -272,3 +272,23 @@ func TestDevCorePrometheusKeepsTheK3dCellTarget(t *testing.T) {
 	}
 	t.Error("dev renders no cell-0-cluster-kube-state-metrics job")
 }
+
+// Without cert-manager the AWS Load Balancer Controller chart generates a new webhook CA
+// and certificate on every upgrade unless keepTLSSecret is set, and the running
+// controller serves the old certificate until it reloads the Secret. An Ingress the same
+// sync creates in that window is refused (`failed calling webhook "vingress.elbv2.k8s.aws"
+// ... x509: certificate signed by unknown authority`), which failed the staging deploy of
+// c8309c0 at the loki-internal Ingress.
+func TestStagingLoadBalancerControllerKeepsItsWebhookCertificate(t *testing.T) {
+	for _, helmfile := range []string{"core.helmfile.yaml.gotmpl", "build.helmfile.yaml.gotmpl", "cell.helmfile.yaml.gotmpl"} {
+		t.Run(helmfile, func(t *testing.T) {
+			values := helmfileValues(t, helmfile, "staging", "aws-load-balancer-controller", stagingOutputs...)
+			if values["enableCertManager"] == true {
+				return
+			}
+			if got := values["keepTLSSecret"]; got != true {
+				t.Errorf("keepTLSSecret = %v without cert-manager, want true", got)
+			}
+		})
+	}
+}
