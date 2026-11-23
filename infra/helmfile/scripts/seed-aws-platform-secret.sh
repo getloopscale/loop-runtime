@@ -40,6 +40,7 @@ wanted = {
     "api-secret-encryption-key": "hex32",
     "service-auth-secret": "hex32",
     "edge-route-token": "hex32",
+    "session-token-secret": "hex32",
     "kratos-secret-default": "alnum32",
     "kratos-secret-cookie": "alnum32",
     "kratos-secret-cipher": "alnum32",
