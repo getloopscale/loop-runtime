@@ -82,6 +82,76 @@ func (q *Queries) GetBuildAppAttestationsForTenant(ctx context.Context, db DBTX,
 	return items, nil
 }
 
+const listSignedAppImagesForCommit = `-- name: ListSignedAppImagesForCommit :many
+SELECT DISTINCT ON (raa.app_name)
+       raa.app_name,
+       raa.image_digest,
+       raa.image_signature,
+       raa.signed_at,
+       raa.sbom_s3_key,
+       raa.sbom_format,
+       raa.sbom_component_count
+FROM release_app_attestations raa
+INNER JOIN releases r ON r.id = raa.release_id AND r.tenant_id = raa.tenant_id
+INNER JOIN builds b ON b.id = r.build_id AND b.tenant_id = r.tenant_id
+WHERE raa.tenant_id = $1
+  AND b.project_id = $2
+  AND b.commit_sha = $3
+  AND raa.image_signature IS NOT NULL
+  AND raa.signed_at IS NOT NULL
+ORDER BY raa.app_name, raa.created_at DESC
+`
+
+type ListSignedAppImagesForCommitParams struct {
+	TenantID  string  `json:"tenant_id"`
+	ProjectID string  `json:"project_id"`
+	CommitSha *string `json:"commit_sha"`
+}
+
+type ListSignedAppImagesForCommitRow struct {
+	AppName            string             `json:"app_name"`
+	ImageDigest        string             `json:"image_digest"`
+	ImageSignature     *string            `json:"image_signature"`
+	SignedAt           pgtype.Timestamptz `json:"signed_at"`
+	SbomS3Key          *string            `json:"sbom_s3_key"`
+	SbomFormat         *string            `json:"sbom_format"`
+	SbomComponentCount *int32             `json:"sbom_component_count"`
+}
+
+// Returns, per app, the newest signed image any earlier build of the given
+// tenant, project and commit pushed. The image tag is the commit SHA and
+// tenant repositories have immutable tags, so a new build of that commit
+// reuses these images instead of pushing a rebuild the registry refuses.
+// Only rows with a signature and a signing time qualify: an unsigned image is
+// never reused.
+func (q *Queries) ListSignedAppImagesForCommit(ctx context.Context, db DBTX, arg ListSignedAppImagesForCommitParams) ([]ListSignedAppImagesForCommitRow, error) {
+	rows, err := db.Query(ctx, listSignedAppImagesForCommit, arg.TenantID, arg.ProjectID, arg.CommitSha)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSignedAppImagesForCommitRow
+	for rows.Next() {
+		var i ListSignedAppImagesForCommitRow
+		if err := rows.Scan(
+			&i.AppName,
+			&i.ImageDigest,
+			&i.ImageSignature,
+			&i.SignedAt,
+			&i.SbomS3Key,
+			&i.SbomFormat,
+			&i.SbomComponentCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateAppSBOM = `-- name: UpdateAppSBOM :execrows
 UPDATE release_app_attestations
 SET sbom_s3_key = $1,

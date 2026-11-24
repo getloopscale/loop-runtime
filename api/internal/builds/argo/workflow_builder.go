@@ -188,8 +188,10 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 	// Group apps by `ResolveStrategyForApp`: a monorepo with node and python
 	// cannot run one's Dockerfile generation over the other. (This used to
 	// describe a `UserDockerfileStrategy` group for `build: dockerfile` apps;
-	// that type and path were removed in T2.2, B-157.)
-	groups := groupApps(spec.Plan.Apps, func(p deploycontracts.AppBuildPlan) (string, deploycontracts.AppSpec) {
+	// that type and path were removed in T2.2, B-157.) Only the apps that need
+	// an image are grouped: a language whose apps all reuse an image runs no
+	// language step.
+	groups := groupApps(appsToBuild(spec.Plan.Apps), func(p deploycontracts.AppBuildPlan) (string, deploycontracts.AppSpec) {
 		app := appSpecFromPlan(p)
 		return ResolveStrategyForApp(app).Name(), app
 	})
@@ -203,6 +205,18 @@ func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workf
 		return nil, err
 	}
 	return b.newWorkflowCR(spec, templates, onExitName, primaryLanguage(groups), volumes), nil
+}
+
+// appsToBuild returns the apps of the plan that need an image built, that is
+// every app without a reused image.
+func appsToBuild(apps []deploycontracts.AppBuildPlan) []deploycontracts.AppBuildPlan {
+	out := make([]deploycontracts.AppBuildPlan, 0, len(apps))
+	for _, p := range apps {
+		if p.ReusedDigest == "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // appSpecFromPlan is the one conversion from a resolved AppBuildPlan to the
@@ -244,8 +258,10 @@ func (b *WorkflowBuilder) workflowTemplates(spec deploycontracts.WorkflowSpec, g
 		templates = append(templates, onExitDAG)
 		onExitName = onExitDAGName
 	}
+	// totalApps stays the whole plan: it decides the Dockerfile path
+	// (Dockerfile vs Dockerfile.<app>), which CreateBuildPlan resolved from it.
 	templates = append(templates, languageTemplates(groups, len(spec.Plan.Apps))...)
-	for _, appPlan := range spec.Plan.Apps {
+	for _, appPlan := range appsToBuild(spec.Plan.Apps) {
 		delivery, err := b.appDeliveryTemplates(spec, appPlan)
 		if err != nil {
 			return nil, "", err
@@ -420,8 +436,9 @@ func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups
 		tasks = append(tasks, languageTasks(spec, g)...)
 	}
 	// T1.3 (CR-2): Build() guarantees spec.Plan has apps, so this is the one
-	// emission path for per-app tasks, keyed by appPlan.DeliveryModel.
-	for _, appPlan := range spec.Plan.Apps {
+	// emission path for per-app tasks, keyed by appPlan.DeliveryModel. An app
+	// with a reused image gets no task: its signed image is already pushed.
+	for _, appPlan := range appsToBuild(spec.Plan.Apps) {
 		tasks = append(tasks, b.appDeliveryTasks(spec, groups, appPlan)...)
 	}
 

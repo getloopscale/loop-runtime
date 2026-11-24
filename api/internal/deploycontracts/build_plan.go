@@ -37,6 +37,12 @@ type AppBuildPlan struct {
 	Start         string // T0.2b: declared services.json start command (canonical Dockerfile CMD)
 	Secrets       []string
 	DeliveryModel string // "container" or "static" (MEET-009). Resolved from AppUnit.Rendering.
+
+	// ReusedDigest is the digest of the signed image an earlier build of the
+	// same commit already pushed for this app. When set, the workflow emits no
+	// image build, signing, SBOM or attestation for the app: its tag is
+	// immutable, so a rebuild could not be pushed.
+	ReusedDigest string
 }
 
 // CreateBuildPlan resolves AppUnit[] into concrete build instructions.

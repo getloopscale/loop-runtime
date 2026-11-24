@@ -51,6 +51,9 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 
 	// Phase 1 (INSIDE lock): reserve build slot as QUEUED
 	var buildID string
+	// reusedImages holds, per app, the signed image an earlier build of this
+	// commit already pushed; those apps are not rebuilt.
+	var reusedImages map[string]db.ReusedImage
 
 	err := o.locker.WithLock(ctx, req.TenantID, req.ProjectID, req.Environment, func(tx db.DBTX) error {
 		// Step 2: concurrent build check INSIDE the lock (Rule 6)
@@ -109,6 +112,15 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 			ensureSpan.End()
 		}
 
+		// Step 2.6: find the images earlier builds of this commit already built
+		// and signed. The tag is the commit SHA and tenant repositories have
+		// immutable tags, so rebuilding such an image cannot be pushed; the
+		// build reuses it instead.
+		reusedImages, err = o.findSignedImages(ctx, tx, req)
+		if err != nil {
+			return wrapSubmitBuildError(StageFindSignedImages, err)
+		}
+
 		// Step 3: create Build (QUEUED)
 		build := &db.Build{
 			TenantID:      req.TenantID,
@@ -138,6 +150,9 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 				Runtime:   a.Runtime, // T0.1 (F-dom-2 wiring): persist services.json runtime
 				Secrets:   a.Secrets,
 				Replicas:  a.Replicas,
+			}
+			if img, ok := reusedImages[a.Name]; ok {
+				spec.ReusedImage = &img
 			}
 			if a.Autoscaling != nil {
 				spec.Autoscaling = &db.BuildAppAutoscaling{
@@ -180,6 +195,11 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 		units = append(units, unit)
 	}
 	plan := deploycontracts.CreateBuildPlan(units, req.TenantID, req.ProjectID, req.CommitSHA, o.registryURL)
+	for i := range plan.Apps {
+		if img, ok := reusedImages[plan.Apps[i].AppName]; ok {
+			plan.Apps[i].ReusedDigest = img.Digest
+		}
+	}
 
 	wfSpec := deploycontracts.WorkflowSpec{
 		BuildID:       buildID,
@@ -266,6 +286,20 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 		BuildID:   buildID,
 		StreamURL: streamURL,
 	}, nil
+}
+
+// findSignedImages returns the signed images earlier builds of the request's
+// commit already pushed, keyed by app name. It returns none when no finder is
+// wired or the request names no commit.
+func (o *BuildOrchestrator) findSignedImages(ctx context.Context, tx db.DBTX, req deploycontracts.SubmitBuildRequest) (map[string]db.ReusedImage, error) {
+	if o.signedImages == nil || req.CommitSHA == "" {
+		return nil, nil
+	}
+	images, err := o.signedImages.FindSignedImages(ctx, tx, req.TenantID, req.ProjectID, req.CommitSHA)
+	if err != nil {
+		return nil, fmt.Errorf("find signed images of commit %s: %w", req.CommitSHA, err)
+	}
+	return images, nil
 }
 
 // enforceScaling rejects requests that set both `replicas` and `autoscaling`

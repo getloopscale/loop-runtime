@@ -76,6 +76,11 @@ type AppRelease struct {
 	// Backed by nullable releases.image_attestation_rekor_url DB column
 	// (migration 000019 — forward-only per pre-release governance).
 	ImageAttestationRekorURL string `json:"image_attestation_rekor_url,omitempty"`
+
+	// ImageReused is true when this build did not build or sign the image: it
+	// deploys the signed image an earlier build of the same commit produced,
+	// and the attestation fields above are copied from that build.
+	ImageReused bool `json:"image_reused,omitempty"`
 }
 
 // WorkflowSpec contains everything needed to submit a build workflow.

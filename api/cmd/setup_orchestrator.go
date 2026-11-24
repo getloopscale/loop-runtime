@@ -223,6 +223,9 @@ func setupOrchestrator(
 		// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox emit on the
 		// build-completed FAILED path.
 		DeployEventStore: store.NewDeployEventStoreSqlc(),
+		// A second build of a commit reuses the images an earlier build of it
+		// signed: the commit-SHA tag is immutable, so a rebuild cannot be pushed.
+		SignedImages: store.NewAppAttestationStoreSqlc(dbAdapter),
 	})
 
 	buildOrchestrator := &buildsadapter.BuildOrchestratorAdapter{

@@ -89,3 +89,28 @@ SET sbom_s3_key = $1,
     sbom_format = $2,
     sbom_component_count = $3
 WHERE release_id = $4 AND app_name = $5;
+
+-- name: ListSignedAppImagesForCommit :many
+-- Returns, per app, the newest signed image any earlier build of the given
+-- tenant, project and commit pushed. The image tag is the commit SHA and
+-- tenant repositories have immutable tags, so a new build of that commit
+-- reuses these images instead of pushing a rebuild the registry refuses.
+-- Only rows with a signature and a signing time qualify: an unsigned image is
+-- never reused.
+SELECT DISTINCT ON (raa.app_name)
+       raa.app_name,
+       raa.image_digest,
+       raa.image_signature,
+       raa.signed_at,
+       raa.sbom_s3_key,
+       raa.sbom_format,
+       raa.sbom_component_count
+FROM release_app_attestations raa
+INNER JOIN releases r ON r.id = raa.release_id AND r.tenant_id = raa.tenant_id
+INNER JOIN builds b ON b.id = r.build_id AND b.tenant_id = r.tenant_id
+WHERE raa.tenant_id = $1
+  AND b.project_id = $2
+  AND b.commit_sha = $3
+  AND raa.image_signature IS NOT NULL
+  AND raa.signed_at IS NOT NULL
+ORDER BY raa.app_name, raa.created_at DESC;
