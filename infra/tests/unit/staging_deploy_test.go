@@ -142,9 +142,15 @@ func (h *deployHarness) commit(environment string) string {
 }
 
 func (h *deployHarness) artifactsRun(status, conclusion string) {
+	h.artifactsRunAttempt(status, conclusion, 1)
+}
+
+// artifactsRunAttempt is the commit's artifacts run at its attempt-th attempt: a re-run
+// keeps the run's id and raises run_attempt, as GitHub reports it.
+func (h *deployHarness) artifactsRunAttempt(status, conclusion string, attempt int) {
 	h.github.mu.Lock()
 	defer h.github.mu.Unlock()
-	h.github.runs = []map[string]any{{"id": 7, "name": "artifacts", "status": status, "conclusion": conclusion, "created_at": time.Now().UTC().Format(time.RFC3339)}}
+	h.github.runs = []map[string]any{{"id": 7, "run_attempt": attempt, "name": "artifacts", "status": status, "conclusion": conclusion, "created_at": time.Now().UTC().Format(time.RFC3339)}}
 }
 
 func (h *deployHarness) deploy() (string, error) {
@@ -345,6 +351,30 @@ func TestStagingDeployDoesNotDeployACommitWhoseImagesFailedToBuild(t *testing.T)
 	}
 	if got := strings.Join(h.github.contexts(), ","); got != "staging/deploy=failure" {
 		t.Errorf("statuses %s, want one failure", got)
+	}
+}
+
+// A failed artifacts run is often a transient registry error, fixed by re-running the
+// failed job. The re-run must reach staging; the failure itself is reported once.
+func TestStagingDeployDeploysACommitWhoseFailedImageBuildWasRerun(t *testing.T) {
+	h := newDeployHarness(t)
+	h.commit(stagingPins + "# change\n")
+	h.artifactsRunAttempt("completed", "failure", 1)
+	for range 2 {
+		if out, err := h.deploy(); err != nil {
+			t.Fatalf("deploy failed: %v\n%s", err, out)
+		}
+	}
+	if got := strings.Join(h.github.contexts(), ","); got != "staging/deploy=failure" {
+		t.Fatalf("statuses %s after two runs over one failed build, want one failure", got)
+	}
+
+	h.artifactsRunAttempt("completed", "success", 2)
+	if out, err := h.deploy(); err != nil {
+		t.Fatalf("deploy after the re-run failed: %v\n%s", err, out)
+	}
+	if calls := h.deployedTags(); len(calls) != 1 {
+		t.Errorf("the platform ran %d times after the build was re-run, want 1", len(calls))
 	}
 }
 
