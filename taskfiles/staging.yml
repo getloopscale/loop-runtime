@@ -35,9 +35,9 @@ vars:
   # The emulator release the environment runs, and the SHA-256 of its Linux binary.
   EMULATOR_REPOSITORY: paulohenriquevn/aws-emulator
   # The emulator release the environment runs, and the SHA-256 of its two Linux binaries.
-  EMULATOR_VERSION: v0.4.3-rc.3
-  EMULATOR_SHA256: 5fab1106b95bcf006bb3c71c1417a371c4d29ebfc2841acc431fbdc823336012
-  PROVISIONER_SHA256: 6a19fea86bf52149fa5ad5d2efaed66ab115ceef6cbeb0b4fb2255980d06bb10
+  EMULATOR_VERSION: v0.4.3-rc.4
+  EMULATOR_SHA256: a4ce33bdeb5282e24c8652ebf4317f76000f193dfd85666b825d8bdfd3ea9ab9
+  PROVISIONER_SHA256: 744f3d5106ad18414df524c66e384bdf5a6cfae73642f2739f072d9ac19e4461
   EMULATOR_DIR: /opt/aws-emulator/{{.EMULATOR_VERSION}}
   # Tool versions. kind and helm are the ones the emulator's own CI runs its harness with.
   KIND_VERSION: v0.31.0
