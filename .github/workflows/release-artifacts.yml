@@ -204,6 +204,15 @@ jobs:
             helm dependency update "$c"
             helm package "$c" -d /tmp/charts
           done
+          # Every merge pushes every chart, so a transient GHCR error (run 45447262098: `failed
+          # to perform "Tag" on destination: ...: not found`) is retried before the run fails.
           for tgz in /tmp/charts/*.tgz; do
-            helm push "$tgz" "oci://ghcr.io/${NS}/charts"
+            for attempt in 1 2 3; do
+              helm push "$tgz" "oci://ghcr.io/${NS}/charts" && break
+              if [ "$attempt" = 3 ]; then
+                echo "::error::pushing $(basename "$tgz") failed 3 times"
+                exit 1
+              fi
+              sleep $((attempt * 10))
+            done
           done
