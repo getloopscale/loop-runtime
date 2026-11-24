@@ -365,6 +365,9 @@ type Config struct {
 	// EdgeRouteToken is the bearer the edge presents to /internal/edge/route
 	// (LOOPZERO_EDGE_ROUTE_TOKEN); empty disables the route.
 	EdgeRouteToken string
+	// EdgeKVSARN is the CloudFront KeyValueStore the edge's CloudFront Function reads
+	// the host to cell routes from (LOOPZERO_EDGE_KVS_ARN); empty publishes none there.
+	EdgeKVSARN string
 	// TrustedProxyCIDRs lists the proxies whose X-Forwarded-For the pre-auth
 	// IP rate limit honours (LOOPZERO_TRUSTED_PROXY_CIDRS, comma-separated).
 	TrustedProxyCIDRs string
@@ -614,6 +617,7 @@ func Load() Config {
 		BrokerToken:         os.Getenv("LOOPZERO_BROKER_TOKEN"),
 		BrokerTokens:        os.Getenv("LOOPZERO_BROKER_TOKENS"),
 		EdgeRouteToken:      os.Getenv("LOOPZERO_EDGE_ROUTE_TOKEN"),
+		EdgeKVSARN:          os.Getenv("LOOPZERO_EDGE_KVS_ARN"),
 		TrustedProxyCIDRs:   os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS"),
 		BillingUpgradeURL:   os.Getenv("BILLING_UPGRADE_URL"),
 
