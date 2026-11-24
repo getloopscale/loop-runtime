@@ -117,8 +117,12 @@ func TestTheWildcardCertificateIsRequestedOverDNSAndRestartsCaddyWhenItChanges(t
 	}
 	calls, _ := os.ReadFile(log)
 	call := strings.TrimSpace(string(calls))
+	// lego 5 defines these flags on its run command, not globally: they follow `run`.
+	if !strings.HasPrefix(call, "lego run --") {
+		t.Errorf("lego call %q does not put its flags after run", call)
+	}
 	for _, want := range []string{"--dns hostinger", "--domains *.apps.example.com", "--accept-tos", "--email ops@example.com",
-		"--path " + dir, "--deploy-hook systemctl try-restart loopzero-edge.service", " run"} {
+		"--path " + dir, "--deploy-hook systemctl try-restart loopzero-edge.service"} {
 		if !strings.Contains(call, want) {
 			t.Errorf("lego call %q lacks %q", call, want)
 		}
