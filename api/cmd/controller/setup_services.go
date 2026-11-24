@@ -87,7 +87,6 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		GitOps:            gitopsPusher,
 		RegistryURL:       cfg.RegistryURL,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
-		BaseDomain:        cfg.BaseDomain,
 		Delivery:          delivery,
 	})
 

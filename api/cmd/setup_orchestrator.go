@@ -206,8 +206,6 @@ func setupOrchestrator(
 		Delivery:          delivery,
 		RegistryURL:       cfg.RegistryURL,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
-		KVClient:          workflows.KVClient,
-		BaseDomain:        cfg.BaseDomain,
 		PlanCap:           planCap,
 		ScalingResolver:   scalingResolver, // B40
 		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit

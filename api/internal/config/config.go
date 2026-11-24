@@ -131,8 +131,9 @@ type Config struct {
 	MinIOEndpoint             string
 	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
 	SourceBucket              string // S3 bucket for source bundles (default: "loopzero-builds")
-	// StaticAssetsBucket holds static apps and SBOMs (STATIC_ASSETS_BUCKET); empty
-	// selects the build pipeline's default, loopzero-static-assets.
+	// StaticAssetsBucket holds the build SBOMs (STATIC_ASSETS_BUCKET, named for the
+	// static app delivery that was removed); empty selects the build pipeline's
+	// default, loopzero-static-assets.
 	StaticAssetsBucket string
 	RegistryURL        string
 	RegistryInsecure   bool // true for local dev registries without TLS
@@ -309,7 +310,7 @@ type Config struct {
 	// Loki (build log aggregation)
 	LokiURL string
 
-	// Cloudflare (static frontend delivery via CF Worker + KV + Zone Management)
+	// Cloudflare (edge route KV + Zone Management)
 	CFAPIToken       string // Cloudflare API token
 	CFAccountID      string // Cloudflare account ID
 	CFKVNamespaceID  string // KV namespace ID for routing table
@@ -594,7 +595,7 @@ func Load() Config {
 		// Loki (build log aggregation)
 		LokiURL: envOr("LOKI_URL", "http://loki.monitoring:3100"),
 
-		// Cloudflare (static frontend delivery)
+		// Cloudflare (edge route KV + Zone Management)
 		CFAPIToken:       os.Getenv("CF_API_TOKEN"),
 		CFAccountID:      os.Getenv("CF_ACCOUNT_ID"),
 		CFKVNamespaceID:  os.Getenv("CF_KV_NAMESPACE_ID"),

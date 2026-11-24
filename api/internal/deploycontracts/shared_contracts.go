@@ -28,7 +28,7 @@ type AppSpec struct {
 	Build       string              `json:"build,omitempty"`       // v2: "dockerfile", "buildpack", "custom"
 	Start       string              `json:"start,omitempty"`       // T0.2: declared services.json start command (canonical Dockerfile CMD)
 	Dockerfile  string              `json:"dockerfile,omitempty"`  // v2: Dockerfile path relative to app path
-	Rendering   string              `json:"rendering,omitempty"`   // v2: "static" or "server" (MEET-009)
+	Rendering   string              `json:"rendering,omitempty"`   // "server" or empty; NormalizeApp refuses anything else
 	Secrets     []string            `json:"secrets,omitempty"`     // declared secret names from loopzero.yaml
 	Replicas    int                 `json:"replicas,omitempty"`    // desired replica count (default: 1)
 	Autoscaling *AppAutoscalingSpec `json:"autoscaling,omitempty"` // HPA configuration
@@ -48,7 +48,7 @@ type AppRelease struct {
 	ImageDigest string `json:"image_digest"` // legacy: this is actually the image TAG (e.g., registry/org/app:commit), NOT the cryptographic digest. See ImageDigestSHA256 below for the real sha256.
 	URL         string `json:"url"`
 	Type        string `json:"type,omitempty"`      // "server", "worker", "frontend"
-	Rendering   string `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Rendering   string `json:"rendering,omitempty"` // copied from the stored app spec; every app is a container
 	DurationMs  int    `json:"duration_ms"`
 
 	// CHG-2026-04-25-ATTESTATION-WIRE: supply-chain attestation fields

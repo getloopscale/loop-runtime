@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-
 	forge "github.com/getloopscale/argo-workflows-go"
 )
 
@@ -250,7 +248,6 @@ func TestWorkflowBuilder_SBOMTaskContinueOnFailed(t *testing.T) {
 	}
 }
 
-// Static apps don't go through the SBOM pipeline.
 // TestSyftScanTemplate_MemoryLimitsAccommodateNodeJSScans confirms the
 // SBOM step carries enough memory to scan a typical loopzerokit Node.js
 // image. LIVE-caught 2026-06-18 against build-25d1977102ec378b:
@@ -270,36 +267,5 @@ func TestSyftScanTemplate_MemoryLimitsAccommodateNodeJSScans(t *testing.T) {
 	}
 	if got := c.Resources.Requests.Memory; got != "512Mi" {
 		t.Errorf("syft memory request = %q; want 512Mi", got)
-	}
-}
-
-func TestWorkflowBuilder_StaticAppHasNoSBOMStep(t *testing.T) {
-	spec := deploycontracts.WorkflowSpec{
-		BuildID:       "build-static",
-		TenantID:      "tn-1",
-		ProjectID:     "proj-1",
-		Environment:   "production",
-		CommitSHA:     "abc1234",
-		CorrelationID: "corr-static",
-		Plan: &deploycontracts.BuildPlan{
-			Apps: []deploycontracts.AppBuildPlan{
-				{
-					AppName:          "site",
-					AppType:          "static",
-					AppPath:          "site",
-					LanguageStrategy: "node",
-					DeliveryModel:    "static",
-				},
-			},
-		},
-	}
-	builder := NewWorkflowBuilder(testInfraParams())
-	wf, err := builder.Build(spec)
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	dag := findDAG(t, wf, "build-pipeline")
-	if findTaskOpt(dag, "sbom-site") != nil {
-		t.Error("static apps must NOT have sbom-{app} task")
 	}
 }

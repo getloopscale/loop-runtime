@@ -78,7 +78,7 @@ type BuildAppAutoscaling struct {
 type BuildAppSpec struct {
 	Name      string `json:"name"`
 	Type      string `json:"type"`
-	Rendering string `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Rendering string `json:"rendering,omitempty"` // "server" or empty; older rows may say "static", which is no longer delivered
 	Port      int    `json:"port"`
 	// T0.2 (plan simplify-deploy-loopzerokit-only v2.0): persist the declared
 	// services.json start command + app path + build mode. Removing loopzero-packs

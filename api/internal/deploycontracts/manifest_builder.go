@@ -87,7 +87,6 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 		mi := manifests.AppManifestInput{
 			Name:          app.Name,
 			Type:          app.Type,
-			Rendering:     app.Rendering,
 			Port:          app.Port,
 			ImageRef:      imageRef,
 			Secrets:       app.Secrets,

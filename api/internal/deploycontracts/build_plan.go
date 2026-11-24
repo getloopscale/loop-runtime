@@ -31,12 +31,11 @@ type AppBuildPlan struct {
 	Build            string            // "dockerfile", "buildpack", "custom"
 
 	// Original AppUnit fields needed downstream (manifests, ArgoCD, Dockerfile generation)
-	AppType       string // "server", "worker", "frontend"
-	AppPath       string // original app path from loopzero.yaml (e.g., "apps/api", ".")
-	Port          int
-	Start         string // T0.2b: declared services.json start command (canonical Dockerfile CMD)
-	Secrets       []string
-	DeliveryModel string // "container" or "static" (MEET-009). Resolved from AppUnit.Rendering.
+	AppType string // "server", "worker", "frontend"
+	AppPath string // original app path from loopzero.yaml (e.g., "apps/api", ".")
+	Port    int
+	Start   string // T0.2b: declared services.json start command (canonical Dockerfile CMD)
+	Secrets []string
 
 	// ReusedDigest is the digest of the signed image an earlier build of the
 	// same commit already pushed for this app. When set, the workflow emits no
@@ -99,14 +98,6 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 		}
 		strategy := resolveLanguageStrategy(unit.Runtime)
 
-		// T3.3 (simplify-deploy-loopzerokit-only): static-frontend delivery removed —
-		// every app is container delivery (AppUnit.Rendering is always "server").
-		// The "static" branch here was dead (F-wire-2). DeliveryModel is retained
-		// (always "container") for downstream-struct compatibility.
-		deliveryModel := "container"
-		slog.Info("build plan: resolved delivery model",
-			"app", unit.Name, "delivery_model", deliveryModel)
-
 		plans = append(plans, AppBuildPlan{
 			AppName:          unit.Name,
 			ImageTag:         imageTag,
@@ -122,7 +113,6 @@ func CreateBuildPlan(units []AppUnit, tenantID, projectID, commitSHA, registryUR
 			Port:             unit.Port,
 			Start:            unit.Start, // T0.2b: thread declared start to the build plan
 			Secrets:          unit.Secrets,
-			DeliveryModel:    deliveryModel,
 		})
 	}
 

@@ -39,8 +39,9 @@ type InfraParams struct {
 	// ServiceAccount (the AWS profile), so none reads the loopzero-minio-credentials
 	// Secret, which only the MinIO profiles have.
 	ObjectStoreIRSA bool
-	// StaticAssetsBucket is where static apps and SBOMs are uploaded (config
-	// STATIC_ASSETS_BUCKET). Empty selects loopzero-static-assets.
+	// StaticAssetsBucket is where SBOMs are uploaded (config STATIC_ASSETS_BUCKET,
+	// named for the static app delivery that was removed). Empty selects
+	// loopzero-static-assets.
 	StaticAssetsBucket string
 	RegistryURL        string
 	RegistryInsecure   bool   // true for local dev registries without TLS
@@ -114,7 +115,7 @@ type objectStore struct {
 	// IRSA: the workflow ServiceAccount's IRSA role, injected into the pod by EKS.
 	// Otherwise the keys and endpoint come from the loopzero-minio-credentials Secret.
 	IRSA bool
-	// StaticAssetsBucket holds static apps and SBOMs. Empty selects s3BucketStaticAssets.
+	// StaticAssetsBucket holds SBOMs. Empty selects s3BucketStaticAssets.
 	StaticAssetsBucket string
 }
 
@@ -179,8 +180,8 @@ func groupApps[T any](items []T, extract func(T) (string, deploycontracts.AppSpe
 // spec.Apps fallback was deleted — production callers always construct a
 // BuildPlan via deploycontracts.CreateBuildPlan before submitting (see
 // build_orchestrator_submit.go). Accepting a nil Plan would silently re-enable
-// an unmaintained code path that bypasses appPlan.DeliveryModel branching
-// (static vs container), build args, and resolved image tags.
+// an unmaintained code path that bypasses the plan's build args and resolved
+// image tags.
 func (b *WorkflowBuilder) Build(spec deploycontracts.WorkflowSpec) (*forge.Workflow, error) {
 	if spec.Plan == nil || len(spec.Plan.Apps) == 0 {
 		return nil, fmt.Errorf("argo: WorkflowSpec.Plan must be non-nil with at least one app (legacy spec.Apps fallback deleted in T1.3 CR-2)")
@@ -290,14 +291,11 @@ func languageTemplates(groups []languageGroup, totalApps int) []forge.Templatabl
 	return templates
 }
 
-// appDeliveryTemplates emits one app's delivery templates: an upload for a
-// static app; for a container app, the BuildKit build, the cosign signature,
-// the SBOM (non-fatal at the DAG level, see appDeliveryTasks), the SLSA
-// attestation when enabled.
+// appDeliveryTemplates emits one app's delivery templates: the BuildKit build,
+// the cosign signature, the SBOM (non-fatal at the DAG level, see
+// appDeliveryTasks) and the SLSA attestation when enabled. Every app is
+// delivered as a container image.
 func (b *WorkflowBuilder) appDeliveryTemplates(spec deploycontracts.WorkflowSpec, appPlan deploycontracts.AppBuildPlan) ([]forge.Templatable, error) {
-	if appPlan.DeliveryModel == "static" {
-		return []forge.Templatable{b.uploadAssetsTemplate(spec, appPlan)}, nil
-	}
 	buildkit, err := b.buildkitTemplateFromPlan(spec, appPlan)
 	if err != nil {
 		return nil, err
@@ -419,8 +417,7 @@ func (b *WorkflowBuilder) newWorkflowCR(spec deploycontracts.WorkflowSpec, templ
 // REVIEW-AP-3: the DAG supports mixed-language monorepos. Each language group
 // gets its own steps (suffixed -node, -python, ...), chained clone ->
 // restore-cache -> validate -> install -> build/scan -> dockerfile, then the
-// per-app delivery tasks hang off their group's dockerfile (containers) or
-// build (static) step.
+// per-app delivery tasks hang off their group's dockerfile step.
 func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups []languageGroup) (*forge.DAG, error) {
 	// The CWT downloads source from MinIO (production) or clones from Gitea
 	// (local dev): build-id is the commit SHA for the MinIO path, project-id
@@ -436,8 +433,8 @@ func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups
 		tasks = append(tasks, languageTasks(spec, g)...)
 	}
 	// T1.3 (CR-2): Build() guarantees spec.Plan has apps, so this is the one
-	// emission path for per-app tasks, keyed by appPlan.DeliveryModel. An app
-	// with a reused image gets no task: its signed image is already pushed.
+	// emission path for per-app tasks. An app with a reused image gets no
+	// task: its signed image is already pushed.
 	for _, appPlan := range appsToBuild(spec.Plan.Apps) {
 		tasks = append(tasks, b.appDeliveryTasks(spec, groups, appPlan)...)
 	}
@@ -489,14 +486,9 @@ func languageTasks(spec deploycontracts.WorkflowSpec, g languageGroup) []*forge.
 }
 
 // appDeliveryTasks wires one app's delivery tasks after its language group's
-// steps: deliver-artifact for a static app; for a container app build-image,
-// sign-image, the SBOM and the attestation when enabled.
+// steps: build-image, sign-image, the SBOM and the attestation when enabled.
 func (b *WorkflowBuilder) appDeliveryTasks(spec deploycontracts.WorkflowSpec, groups []languageGroup, appPlan deploycontracts.AppBuildPlan) []*forge.Task {
 	suffix := suffixForStrategy(groups, ResolveStrategyForApp(appSpecFromPlan(appPlan)).Name())
-	if appPlan.DeliveryModel == "static" {
-		taskName := fmt.Sprintf("deliver-artifact-%s", appPlan.AppName)
-		return []*forge.Task{inlineTask(taskName, taskName, []string{"build-apps" + suffix})}
-	}
 
 	buildTaskName := naming.BuildImageStepName(appPlan.AppName)
 	signTaskName := naming.SignStepName(appPlan.AppName)

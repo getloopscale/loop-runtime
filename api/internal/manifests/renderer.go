@@ -128,15 +128,13 @@ const (
 
 // AppManifestInput contains everything needed to generate manifests for a single app.
 type AppManifestInput struct {
-	Name      string            // e.g., "api", "worker", "dashboard"
-	Type      string            // "server", "worker", "frontend"
-	Rendering string            // "static" or "server" (MEET-009). Static → S3 proxy, no pod.
-	Port      int               // Container port (server/frontend only)
-	ImageRef  string            // Full image reference (container apps only)
-	S3Prefix  string            // S3 path prefix for static assets (static apps only)
-	Secrets   []string          // Secret names from loopzero.yaml (injected via envFrom)
-	Env       map[string]string // Environment variables
-	Replicas  int               // Desired replica count (default: 1 when 0)
+	Name     string            // e.g., "api", "worker", "dashboard"
+	Type     string            // "server", "worker", "frontend"
+	Port     int               // Container port (server/frontend only)
+	ImageRef string            // Full image reference
+	Secrets  []string          // Secret names from loopzero.yaml (injected via envFrom)
+	Env      map[string]string // Environment variables
+	Replicas int               // Desired replica count (default: 1 when 0)
 
 	// Autoscaling configures HPA generation. When non-nil, an HPA is rendered
 	// alongside the Deployment and the Deployment replicas are set to MinReplicas.
@@ -149,15 +147,13 @@ type AppManifestInput struct {
 
 // RenderInput contains everything needed to generate manifests for a full deployment.
 type RenderInput struct {
-	TenantID     string
-	ProjectID    string
-	Environment  string
-	BuildID      string
-	ReleaseID    string
-	BaseDomain   string
-	S3Endpoint   string // DO Spaces endpoint for static proxy (e.g., "sfo3.digitaloceanspaces.com")
-	S3BucketName string // Static assets bucket (e.g., "loopzero-static-assets")
-	Apps         []AppManifestInput
+	TenantID    string
+	ProjectID   string
+	Environment string
+	BuildID     string
+	ReleaseID   string
+	BaseDomain  string
+	Apps        []AppManifestInput
 
 	// Configurable defaults (arch-cp-006). Zero values fall back to built-in defaults.
 	// B14 (MEET-2026-04-23-058): ClusterIssuerName is REQUIRED — no fallback.

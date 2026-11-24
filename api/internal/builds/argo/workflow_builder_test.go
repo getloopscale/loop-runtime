@@ -983,10 +983,9 @@ func TestWorkflowBuilder_BuildKit_MultiApp_IndependentContainers(t *testing.T) {
 func TestWorkflowBuilder_BuildKit_MetadataFilePath(t *testing.T) {
 	builder := NewWorkflowBuilder(testInfraParams())
 	spec := testSpec()
-	// T1.3 (CR-2): The Plan-driven path enforces NormalizeApp rules; static
-	// frontends route to "deliver-artifact-{app}" (S3 upload), not
-	// "build-image-{app}". The assertion here is about per-app metadata file
-	// paths in build-image containers, so both apps must be container-delivered.
+	// T1.3 (CR-2): The Plan-driven path enforces NormalizeApp rules. The
+	// assertion here is about per-app metadata file paths in build-image
+	// containers, one per app.
 	spec.Apps = []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000, Runtime: "node"},
 		{Name: "web", Type: "server", Port: 4000, Runtime: "node"},

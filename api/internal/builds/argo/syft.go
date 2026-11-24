@@ -84,8 +84,8 @@ func syftScanTemplate(
 	// 4. Upload to S3 (MinIO/DO Spaces) using aws-cli already in image.
 	// 5. Write Argo workflow output files.
 	//
-	// Bucket: loopzero-static-assets (s3BucketStaticAssets) — same bucket
-	// as static apps; SBOMs use the sbom/ prefix to avoid collision.
+	// Bucket: loopzero-static-assets (s3BucketStaticAssets) by default, or the
+	// configured StaticAssetsBucket; SBOMs live under the sbom/ prefix.
 	//
 	// AWS_ENDPOINT_URL is set via env (workflow level) for MinIO local
 	// dev; in prod the default DO Spaces endpoint is used.

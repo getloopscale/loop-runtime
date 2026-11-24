@@ -42,8 +42,8 @@ func emitCosignSignAudits(ctx context.Context, audit ports.AuditLogger, build *b
 	}
 
 	for _, app := range apps {
-		// Skip apps without supply-chain data — could be a legacy build
-		// (pre-Sprint-6) or a non-container artifact (static frontend).
+		// Skip apps without supply-chain data, such as a legacy build
+		// (pre-Sprint-6) whose workflow declared no attestation outputs.
 		if app.ImageDigestSHA256 == "" || app.ImageSignature == "" {
 			continue
 		}
