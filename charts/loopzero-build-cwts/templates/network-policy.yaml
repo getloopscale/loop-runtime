@@ -106,3 +106,7 @@ spec:
           port: 6962   # CTLog HTTP
         - protocol: TCP
           port: 2112   # Sigstore metrics
+{{- with .Values.networkPolicy.extraEgress }}
+    # Environment-specific destinations (networkPolicy.extraEgress).
+{{ toYaml . | indent 4 }}
+{{- end }}

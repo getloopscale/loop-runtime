@@ -54,3 +54,8 @@ minio:
   # CWTs consume by reference (envFrom secretRef). Must provide the keys in SECRETS.md.
   # Default preserves legacy behavior. See SECRETS.md + examples/eso-minio.yaml.
   existingSecret: "loopzero-minio-credentials"
+
+# Egress rules appended to build-pod-egress, the default-deny policy of the build pods,
+# for a destination only one environment has (staging's AWS emulator port).
+networkPolicy:
+  extraEgress: []
