@@ -40,6 +40,18 @@ spec:
       services:
         - name: {{ .api.service }}
           port: {{ .api.port }}
+    # The streams of loopzero-cloud (Server-Sent Events) skip the buffering middleware,
+    # which would hold each one until it ends (charts/loopzero-common ingressRoute).
+    - match: Host(`{{ $host }}`) && (PathPrefix(`/v1/`) || PathPrefix(`/engine/`)) && PathRegexp(`/stream$`)
+      kind: Rule
+      priority: 250
+      {{- with $.Values.streamMiddlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ .cloud.service }}
+          port: {{ .cloud.port }}
     # loopzero-cloud: the browser API, the OAuth2 login and consent handlers, the engine proxy.
     - match: Host(`{{ $host }}`) && (PathPrefix(`/v1/`) || PathPrefix(`/engine/`) || Path(`/auth/login`) || Path(`/auth/login/complete`) || Path(`/auth/consent`) || Path(`/auth/device`))
       kind: Rule

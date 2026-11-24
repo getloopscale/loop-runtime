@@ -243,4 +243,9 @@ ingressRoute:
       namespace: traefik
     - name: body-limit
       namespace: traefik
+  # GET .../stream (Server-Sent Events) without body-limit, whose buffering holds the
+  # response until it ends.
+  streamMiddlewares:
+    - name: rate-limit
+      namespace: traefik
   certIssuer: letsencrypt-prod
