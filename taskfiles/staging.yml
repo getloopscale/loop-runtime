@@ -49,6 +49,7 @@ vars:
   TERRAGRUNT_VERSION: v1.0.8
   # Caddy is the public edge, in place of CloudFront and ACM.
   CADDY_VERSION: v2.10.0
+  LEGO_VERSION: v5.6.0
   # infra/staging/deploy.sh reads the image pins of the staging environment with it.
   YQ_VERSION: v4.54.1
   # seed-aws-cosign-key.sh generates the build's signing key pair with it; the version the
@@ -127,6 +128,14 @@ tasks:
           echo "$(awk -v f="caddy_${version#v}_linux_amd64.tar.gz" '$2 == f {print $1}' "$tmp/caddy.sums")  $tmp/caddy.tgz" | sha512sum --check --quiet
           tar -xzf "$tmp/caddy.tgz" -C "$tmp" caddy && install_binary "$tmp/caddy" caddy
         fi
+        version={{.LEGO_VERSION}}
+        if ! lego --version 2>/dev/null | grep -q "^lego version ${version#v} "; then
+          base=https://github.com/go-acme/lego/releases/download/$version
+          curl -fsSLo "$tmp/lego.tgz" "$base/lego_${version}_linux_amd64.tar.gz"
+          curl -fsSLo "$tmp/lego.sums" "$base/lego_${version#v}_checksums.txt"
+          echo "$(awk -v f="lego_${version}_linux_amd64.tar.gz" '$2 == f {print $1}' "$tmp/lego.sums")  $tmp/lego.tgz" | sha256sum --check --quiet
+          tar -xzf "$tmp/lego.tgz" -C "$tmp" lego && install_binary "$tmp/lego" lego
+        fi
         if ! terraform version 2>/dev/null | grep -q "^Terraform v{{.TERRAFORM_VERSION}}$"; then
           base=https://releases.hashicorp.com/terraform/{{.TERRAFORM_VERSION}}
           curl -fsSLo "$tmp/terraform.zip" "$base/terraform_{{.TERRAFORM_VERSION}}_linux_amd64.zip"
@@ -170,6 +179,7 @@ tasks:
       - terraform version
       - terragrunt --version
       - caddy version
+      - lego --version
 
   host:kernel:
     internal: true

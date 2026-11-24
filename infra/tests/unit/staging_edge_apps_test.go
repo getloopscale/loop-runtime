@@ -181,3 +181,13 @@ func TestTheEdgeUnitHandsCaddyTheWildcardCertificateAsACredential(t *testing.T) 
 		t.Error("loopzero-edge-certificate.timer has no schedule")
 	}
 }
+
+func TestTheHostInstallsAPinnedAndCheckedLego(t *testing.T) {
+	tasks := readRepoFile(t, "taskfiles", "staging.yml")
+	if !regexp.MustCompile(`(?m)^  LEGO_VERSION: v\d+\.\d+\.\d+$`).MatchString(tasks) {
+		t.Error("taskfiles/staging.yml pins no LEGO_VERSION")
+	}
+	if !strings.Contains(tasks, `lego_${version#v}_checksums.txt`) || !strings.Contains(tasks, `install_binary "$tmp/lego" lego`) {
+		t.Error("the host task does not install lego from its release after checking the checksum")
+	}
+}
