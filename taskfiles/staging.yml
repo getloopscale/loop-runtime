@@ -66,6 +66,8 @@ vars:
   # answers them 404). Grafana, ArgoCD and Gitea never are.
   EDGE_HOSTS: api.staging.getloopscale.com,auth.staging.getloopscale.com,app.staging.getloopscale.com,cloud.staging.getloopscale.com
   EDGE_CLUSTER: loopzero-staging-core
+  EDGE_APPS_DOMAIN: apps.staging.getloopscale.com
+  EDGE_APPS_KVS: loopzero-staging-app-routes
   EDGE_HEALTH_URL: https://api.staging.getloopscale.com/api/v1/health/ready
 
 tasks:
@@ -531,6 +533,22 @@ tasks:
             exit 1
           fi
         done
+        # Tenant apps: every name under the apps domain must resolve here too.
+        probe="edge-probe.{{.EDGE_APPS_DOMAIN}}"
+        resolved=$(getent ahostsv4 "$probe" | awk 'NR == 1 {print $1}')
+        if [ "$resolved" != "$public" ]; then
+          echo "$probe resolves to ${resolved:-nothing}, not to this host's public address $public" >&2
+          exit 1
+        fi
+        # Their wildcard certificate (kept across rebuilds; lego renews it only when due), and
+        # the cells' ALBs as the origins the app router's function sends them to.
+        install -d -m 0755 /usr/local/lib/loopzero-staging
+        install -m 0755 infra/staging/edge/apps-certificate.sh infra/staging/edge/apps-origins.sh /usr/local/lib/loopzero-staging/
+        EDGE_APPS_DOMAIN={{.EDGE_APPS_DOMAIN}} EDGE_LEGO_DIR=/var/lib/loopzero-edge-certificate \
+          EDGE_DNS_TOKEN_FILE=/etc/loopzero-edge/hostinger-api-token EDGE_CERT_EMAIL=ops@getloopscale.com \
+          /usr/local/lib/loopzero-staging/apps-certificate.sh
+        kvs_arn=$(aws cloudfront describe-key-value-store --name {{.EDGE_APPS_KVS}} --query KeyValueStore.ARN --output text)
+        EDGE_KVS_ARN="$kvs_arn" EDGE_CLUSTER_PREFIX=loopzero-staging- /usr/local/lib/loopzero-staging/apps-origins.sh
         # Caddy opens one site block for `{$EDGE_HOSTS}` and takes ", " between site
         # addresses, not a bare comma.
         hosts=$(echo "{{.EDGE_HOSTS}}" | sed 's/,/, /g')
@@ -543,12 +561,21 @@ tasks:
         EDGE_ALB_DNS_NAME=$alb_dns
         EDGE_ORIGIN=https://{{.EMULATOR_ADDRESS}}:{{.EMULATOR_PORT}}
         EDGE_ORIGIN_CA=/etc/loopzero-edge/emulator-ca.pem
+        EDGE_APPS_DOMAIN={{.EDGE_APPS_DOMAIN}}
         EOF
         # Read as systemd's EnvironmentFile reads it: the quoted host list stays one value.
-        (set -a; . /etc/loopzero-edge/edge.env; caddy validate --config /etc/loopzero-edge/Caddyfile --adapter caddyfile >/dev/null)
-        install -m 0644 infra/staging/systemd/loopzero-edge.service /etc/systemd/system/
+        # Outside systemd there is no credentials directory, so the certificate is laid out as
+        # the unit's LoadCredential= lines lay it out.
+        creds=$(mktemp -d)
+        trap 'rm -rf "$creds"' EXIT
+        ln -s /var/lib/loopzero-edge-certificate/certificates/_.{{.EDGE_APPS_DOMAIN}}.crt "$creds/apps.crt"
+        ln -s /var/lib/loopzero-edge-certificate/certificates/_.{{.EDGE_APPS_DOMAIN}}.key "$creds/apps.key"
+        (set -a; . /etc/loopzero-edge/edge.env; CREDENTIALS_DIRECTORY="$creds" caddy validate --config /etc/loopzero-edge/Caddyfile --adapter caddyfile >/dev/null)
+        install -m 0644 infra/staging/systemd/loopzero-edge.service infra/staging/systemd/loopzero-edge-certificate.service \
+          infra/staging/systemd/loopzero-edge-certificate.timer /etc/systemd/system/
         systemctl daemon-reload
         systemctl enable loopzero-edge.service >/dev/null
+        systemctl enable --now loopzero-edge-certificate.timer >/dev/null
         systemctl restart loopzero-edge.service
         echo "edge: {{.EDGE_HOSTS}} on $public -> $alb_dns"
       - task: edge:verify

@@ -8,6 +8,7 @@
 #   EDGE_ALB_DNS_NAME   the DNSName of the ALB the traefik-edge Ingress created
 #   EDGE_ORIGIN         the emulator's endpoint, where that ALB is served
 #   EDGE_ORIGIN_CA      the emulator's CA, which signs the endpoint's certificate
+#   EDGE_APPS_DOMAIN    the domain tenant apps are served under
 #
 # How a request reaches the right backend. The emulator serves an ALB at its own endpoint
 # for a request whose Host is the ALB's DNSName, so Host is rewritten to that name. The
@@ -29,6 +30,22 @@
 		header_up X-Forwarded-Host {host}
 		transport http {
 			tls_trust_pool file {$EDGE_ORIGIN_CA}
+		}
+	}
+}
+
+# Tenant apps. One wildcard certificate covers them (infra/staging/edge/apps-certificate.sh); it
+# reaches Caddy as a systemd credential, since lego's files belong to root. The Host stays the
+# viewer's: the emulator gives the request to the app-router distribution, whose wildcard alias
+# claims it, and its function picks the cell and the Host the cell's IngressRoutes match.
+*.{$EDGE_APPS_DOMAIN} {
+	tls {$CREDENTIALS_DIRECTORY}/apps.crt {$CREDENTIALS_DIRECTORY}/apps.key
+	reverse_proxy {$EDGE_ORIGIN} {
+		header_up Host {host}
+		transport http {
+			tls_trust_pool file {$EDGE_ORIGIN_CA}
+			# The viewer's host is not a name the emulator's certificate covers.
+			tls_server_name localhost
 		}
 	}
 }
