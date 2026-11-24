@@ -57,7 +57,7 @@ type AppInput struct {
 	Runtime   string   `json:"runtime,omitempty"`   // services.json runtime: "python" | "node" — the build-strategy key (T1, F-dom-2)
 	Build     string   `json:"build,omitempty"`     // "dockerfile", "buildpack", "custom"
 	Start     string   `json:"start,omitempty"`     // T0.2: declared services.json start command (canonical Dockerfile CMD)
-	Rendering string   `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Rendering string   `json:"rendering,omitempty"` // "server" or empty; NormalizeApp refuses anything else
 	Secrets   []string `json:"secrets,omitempty"`
 	// B15: scaling config — either Replicas OR Autoscaling (never both).
 	// Orchestrator enforces plan caps and mutual exclusion.

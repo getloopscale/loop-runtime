@@ -20,14 +20,6 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
-// StaticRoutingClient writes routing entries for static frontends (CF Workers KV).
-// The key is the flat subdomain (e.g., "tn-loopzero-e2e-project-web-production"),
-// the value is a JSON object with buildId and s3Prefix.
-// Nil is valid -- it means CF KV is not configured (local dev).
-type StaticRoutingClient interface {
-	Put(ctx context.Context, subdomain string, entry interface{}) error
-}
-
 // SyncClient abstracts ArgoCD sync operations (DIP).
 //
 // Sprint B T1.1 (plan 2026-06-01-p2-interface-contracts-robustness, ADR D1):
@@ -84,10 +76,8 @@ type BuildOrchestratorDeps struct {
 	// the composition root and shared with the rollback orchestrator, so both
 	// write through the same outbox and read manifests with the same reader.
 	Delivery          deploycontracts.DeliveryActivator
-	RegistryURL       string              // Container registry URL for BuildPlan image tag resolution
-	ArgocdSyncTimeout time.Duration       // 0 = default 120s
-	KVClient          StaticRoutingClient // CF KV client for static frontend routing (nil = disabled)
-	BaseDomain        string              // Base domain for app hostnames
+	RegistryURL       string        // Container registry URL for BuildPlan image tag resolution
+	ArgocdSyncTimeout time.Duration // 0 = default 120s
 	// B15: plan-cap enforcement for per-service replica count. nil = disabled.
 	PlanCap PlanCapChecker
 	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
@@ -134,7 +124,7 @@ type DeployTimelineSpawner func(ctx context.Context, deployID string)
 //   - build_orchestrator.go: constructor, types, interfaces, FindReleaseForBuild
 //   - build_orchestrator_submit.go: SubmitBuild, failQueuedBuild
 //   - build_orchestrator_cancel.go: CancelBuild
-//   - build_orchestrator_complete.go: OnBuildCompleted, writeStaticRoutingEntries
+//   - build_orchestrator_complete.go: OnBuildCompleted
 //   - build_orchestrator_retry.go: RetryReleaseActivation
 //
 // Release activation methods live in release_activator.go.
@@ -153,8 +143,6 @@ type BuildOrchestrator struct {
 	delivery            deploycontracts.DeliveryActivator // MEET-009: polymorphic release activation
 	registryURL         string                            // Container registry URL for BuildPlan image tag resolution
 	argocdSyncTimeout   time.Duration
-	kvClient            StaticRoutingClient // CF KV client for static frontend routing
-	baseDomain          string
 	planCap             PlanCapChecker          // B15: nil = enforcement disabled
 	kedaEnabled         bool                    // gates scale-to-zero (min=0)
 	scalingResolver     scaling.ScalingResolver // B40: nil = yaml-only (backward-compat)
@@ -193,8 +181,6 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		delivery:            deps.Delivery,
 		registryURL:         registryURL,
 		argocdSyncTimeout:   syncTimeout,
-		kvClient:            deps.KVClient,
-		baseDomain:          deps.BaseDomain,
 		planCap:             deps.PlanCap, // B15: optional plan-cap enforcement
 		kedaEnabled:         deps.KEDAEnabled,
 		scalingResolver:     deps.ScalingResolver,     // B40: nil-safe (resolveScaling handles)

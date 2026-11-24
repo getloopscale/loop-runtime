@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/cfkv"
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/events"
@@ -128,12 +127,6 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	// Phase 2: Release activation via the DeliveryActivator wired at the
 	// composition root (MEET-2026-03-26-009). Each sub-phase acquires and
 	// releases its own lock.
-	// Write CF KV routing entries for static apps BEFORE activation (Sprint 10).
-	// The assets are already in S3 at this point (uploaded by Argo Workflow).
-	// Writing KV early ensures the CF Worker serves the new version immediately,
-	// even if the ArgoCD sync (container delivery) takes longer or fails.
-	o.writeStaticRoutingEntries(ctx, build, result)
-
 	activationErr := o.activate(ctx, build, result)
 
 	if activationErr != nil {
@@ -155,45 +148,4 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}
 
 	return nil
-}
-
-// writeStaticRoutingEntries writes CF KV entries for static apps in the build.
-// This enables the Cloudflare Worker to serve static assets from DO Spaces
-// without any cluster involvement (Sprint 10).
-func (o *BuildOrchestrator) writeStaticRoutingEntries(ctx context.Context, build *db.Build, result deploycontracts.BuildCallbackRequest) {
-	if o.kvClient == nil {
-		return // CF KV not configured (local dev or not enabled)
-	}
-
-	for _, app := range result.Apps {
-		// Only write KV for static apps
-		if app.Rendering != "static" {
-			continue
-		}
-
-		// ARCH-004 fix: Use cfkv.Subdomain() instead of inline generation to avoid
-		// divergence with the canonical function (missing TrimRight for trailing hyphens).
-		subdomain := cfkv.Subdomain(build.TenantID, build.ProjectID, app.Name, build.Environment)
-
-		entry := map[string]string{
-			"buildId":  build.ID,
-			"s3Prefix": fmt.Sprintf("/%s/%s/%s/%s", build.TenantID, build.ProjectID, app.Name, build.ID),
-		}
-
-		if err := o.kvClient.Put(ctx, subdomain, entry); err != nil {
-			slog.Error("static routing: failed to write KV entry",
-				"subdomain", subdomain,
-				"build_id", build.ID,
-				"error", err,
-			)
-			// Non-fatal: assets are still accessible via nginx-s3-gateway in cluster
-			continue
-		}
-
-		slog.Info("static routing: KV entry written",
-			"subdomain", subdomain,
-			"build_id", build.ID,
-			"url", fmt.Sprintf("https://%s.%s", subdomain, o.baseDomain),
-		)
-	}
 }

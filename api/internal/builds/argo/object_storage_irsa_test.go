@@ -49,7 +49,7 @@ func TestWorkflowBuilder_IRSAObjectStoreReadsNoMinIOSecret(t *testing.T) {
 				t.Errorf("the workflow points aws at $MINIO_ENDPOINT, which only the MinIO Secret sets")
 			}
 			if !strings.Contains(wf, "s3://loopzero-staging-static-assets-000000000000/") {
-				t.Errorf("the workflow does not upload to the configured static assets bucket")
+				t.Errorf("the workflow does not upload to the configured StaticAssetsBucket")
 			}
 		})
 	}
@@ -71,25 +71,12 @@ func TestWorkflowBuilder_SecretObjectStoreKeepsTheMinIOSecret(t *testing.T) {
 	}
 }
 
-// renderers render what the build cluster receives for a container app (the whole
-// workflow, with its SBOM step) and for a static app (its upload step).
+// renderers render what the build cluster receives: the whole workflow of a
+// server app, with its SBOM step.
 func renderers() map[string]func(*testing.T, InfraParams) string {
 	return map[string]func(*testing.T, InfraParams) string{
 		"server app": func(t *testing.T, params InfraParams) string {
 			return workflowJSON(t, params, testSpec())
-		},
-		"static app": func(t *testing.T, params InfraParams) string {
-			spec := testSpec()
-			plan := deploycontracts.AppBuildPlan{AppName: "site", AppPath: ".", DeliveryModel: "static"}
-			tpl, err := NewWorkflowBuilder(params).uploadAssetsTemplate(spec, plan).BuildTemplate()
-			if err != nil {
-				t.Fatalf("BuildTemplate: %v", err)
-			}
-			out, err := json.Marshal(tpl)
-			if err != nil {
-				t.Fatalf("Marshal: %v", err)
-			}
-			return string(out)
 		},
 	}
 }

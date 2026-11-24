@@ -7,35 +7,6 @@ import (
 	"testing"
 )
 
-// TestCreateBuildPlan_StaticDeliveryModel removed (simplify-deploy-loopzerokit-only
-// T3.3/F-wire-2): static-frontend delivery was deleted, so DeliveryModel is
-// always "container". The `frontend` type + `static` rendering it exercised no
-// longer exist in the contract. TestCreateBuildPlan_ContainerDeliveryModel below
-// covers the only remaining delivery model.
-
-func TestCreateBuildPlan_ContainerDeliveryModel(t *testing.T) {
-	units := []AppUnit{
-		{
-			Name:      "api",
-			Type:      "server",
-			Port:      3000,
-			Path:      "apps/api",
-			Runtime:   "node",
-			Build:     "buildpack",
-			Rendering: "server",
-		},
-	}
-
-	plan := CreateBuildPlan(units, "tn-1", "my-app", "sha123", "registry.example.com")
-
-	if len(plan.Apps) != 1 {
-		t.Fatalf("expected 1 app, got %d", len(plan.Apps))
-	}
-	if plan.Apps[0].DeliveryModel != "container" {
-		t.Errorf("expected delivery model 'container', got %q", plan.Apps[0].DeliveryModel)
-	}
-}
-
 // TestCreateBuildPlan_UserDockerfileIgnored_D4_Subpath locks the D4 invariant
 // for a monorepo subpath app: even with Build="dockerfile" + a user Dockerfile
 // + a non-root Path, the resolved DockerfilePath is the platform-canonical
