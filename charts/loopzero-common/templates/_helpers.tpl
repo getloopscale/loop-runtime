@@ -501,7 +501,14 @@ the Helmfile bootstrap does run Traefik, and turns this on.
     host: ""                 # required when enabled
     entryPoints: [websecure]
     middlewares: []          # [{name, namespace}]
+    streamMiddlewares: []    # optional; see below
     certIssuer: CFManaged    # a ClusterIssuer name, or CFManaged
+
+`streamMiddlewares`, when set, adds a route for the host's GET `.../stream`
+endpoints (Server-Sent Events) with those middlewares instead. Leave out any
+buffering middleware (body-limit): Traefik's buffering holds the whole response
+until it ends, so an open stream sends nothing, and Traefik v3.0 cannot buffer
+only the request.
 
 `CFManaged` means TLS terminates at the Cloudflare edge: the route carries an
 empty tls block and no cert-manager Certificate is emitted. Any other value is
@@ -528,6 +535,17 @@ spec:
   entryPoints:
     {{- toYaml ($ir.entryPoints | default (list "websecure")) | nindent 4 }}
   routes:
+    {{- if hasKey $ir "streamMiddlewares" }}
+    - match: Host(`{{ $ir.host }}`) && PathRegexp(`/stream$`)
+      kind: Rule
+      {{- with $ir.streamMiddlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ $name }}
+          port: {{ .Values.service.port }}
+    {{- end }}
     - match: Host(`{{ $ir.host }}`)
       kind: Rule
       {{- with $ir.middlewares }}

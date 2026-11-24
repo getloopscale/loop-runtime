@@ -468,6 +468,30 @@
             }
           }
         },
+        "streamMiddlewares": {
+          "description": "Middlewares of the route for GET .../stream endpoints (Server-Sent Events). Set it without any buffering middleware such as body-limit, which holds the response until it ends. Unset, no such route is rendered.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "namespace"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+                "maxLength": 253
+              },
+              "namespace": {
+                "type": "string",
+                "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+                "maxLength": 253
+              }
+            }
+          }
+        },
         "certIssuer": {
           "type": "string",
           "minLength": 1,

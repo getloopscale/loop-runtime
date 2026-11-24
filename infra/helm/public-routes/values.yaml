@@ -7,6 +7,11 @@ middlewares:
     namespace: traefik
   - name: body-limit
     namespace: traefik
+# The middlewares of the stream routes (GET .../stream, Server-Sent Events): the same
+# ones without body-limit, whose buffering would hold a stream until it ends.
+streamMiddlewares:
+  - name: rate-limit
+    namespace: traefik
 
 # CFManaged: TLS terminates at the edge in front of the load balancer, so no Certificate
 # is requested and Traefik serves its default one. Any other value names the
