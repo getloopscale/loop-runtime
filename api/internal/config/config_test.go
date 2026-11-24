@@ -809,3 +809,11 @@ func TestLoad_ReadsTheStaticAssetsBucket(t *testing.T) {
 		t.Errorf("StaticAssetsBucket = %q, want the STATIC_ASSETS_BUCKET value", got)
 	}
 }
+
+func TestLoad_ReadsTheEdgeKeyValueStoreARN(t *testing.T) {
+	arn := "arn:aws:cloudfront::000000000000:key-value-store/2b5a3c1e-0000-4000-8000-000000000001"
+	t.Setenv("LOOPZERO_EDGE_KVS_ARN", arn)
+	if got := Load().EdgeKVSARN; got != arn {
+		t.Errorf("EdgeKVSARN = %q, want the LOOPZERO_EDGE_KVS_ARN value", got)
+	}
+}

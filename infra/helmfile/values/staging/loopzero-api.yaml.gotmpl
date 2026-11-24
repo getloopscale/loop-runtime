@@ -38,6 +38,9 @@ config:
   lokiUrl: {{ printf "%s/_aws/elasticloadbalancing/%s" $.Values.emulator.endpoint . | quote }}
 {{- end }}
   baseDomain: {{ .Values.domain | quote }}
+  # The CloudFront KeyValueStore the API publishes the host to cell routes of tenant apps
+  # to (infra-live edge/app-routes), exported by `task staging:platform:outputs` (#68).
+  edgeKvsArn: {{ requiredEnv "LOOPZERO_EDGE_KVS_ARN" | quote }}
   corsAllowedOrigin: {{ .Values.dashboardOrigin | quote }}
   # Empty: with no static key and the IRSA role above, the API signs with the AWS
   # credential chain and takes the S3 endpoint from AWS_ENDPOINT_URL (the emulator, which

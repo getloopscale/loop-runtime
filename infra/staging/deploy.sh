@@ -11,7 +11,8 @@
 #   1. Reads the head of develop. Nothing to do when that commit was already handled.
 #   2. Waits for the `artifacts` workflow of the commit, which publishes
 #      :develop-<sha7> for every engine image the commit changed. A failed build is
-#      reported as staging/deploy failure and the commit is not deployed.
+#      reported as staging/deploy failure, once, and the commit is not deployed until
+#      the run is re-run: the failed attempt is remembered, not the commit.
 #   3. Pins each engine image to the newest develop build: the image the commit
 #      published, or else the tag the previous deploy ran. The first deploy starts
 #      from the tags platformImages.tags pins in the staging environment. The console
@@ -94,8 +95,13 @@ else
   case "$(jq -r '.status' <<<"$run")/$(jq -r '.conclusion' <<<"$run")" in
     completed/success) ;;
     completed/*)
+      attempt="$sha $(jq -r '"\(.id)/\(.run_attempt // 1)"' <<<"$run")"
+      if [[ -f "$STATE_DIR/failed-build" && "$(<"$STATE_DIR/failed-build")" == "$attempt" ]]; then
+        log "$short: the artifacts run still failed; re-run it to deploy"
+        exit 0
+      fi
       status "$sha" failure "artifacts $(jq -r '.conclusion' <<<"$run"): not deployed"
-      echo "$sha" >"$STATE_DIR/handled"
+      echo "$attempt" >"$STATE_DIR/failed-build"
       log "$short: the artifacts run did not succeed; not deployed"
       exit 0 ;;
     *)

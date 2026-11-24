@@ -429,6 +429,7 @@ tasks:
         printf 'export LOOPZERO_CACHE_PORT="%s"\n' "$(out data/valkey port)"
         printf 'export LOOPZERO_CACHE_AUTH_SECRET="%s"\n' "$(out data/valkey auth_token_secret_arn)"
         printf 'export LOOPZERO_VPC_ID="%s"\n' "$(out networking/vpc vpc_id)"
+        printf 'export LOOPZERO_EDGE_KVS_ARN="%s"\n' "$(out edge/app-routes arn)"
 
   platform:verify:
     internal: true

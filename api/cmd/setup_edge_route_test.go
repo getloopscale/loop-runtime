@@ -82,3 +82,19 @@ func TestEdgeRouterRunsForThePublisherWithoutServingTheRoute(t *testing.T) {
 		t.Error("the lookup route was served without a token")
 	}
 }
+
+// On AWS the edge reads the routes from a CloudFront KeyValueStore: with its ARN set, the
+// router gets a publisher even without the Cloudflare credentials.
+func TestTheEdgeKeyValueStoreGetsAPublisher(t *testing.T) {
+	t.Setenv("AWS_REGION", "us-east-1")
+	cfg := config.Config{EdgeKVSARN: "arn:aws:cloudfront::000000000000:key-value-store/2b5a3c1e-0000-4000-8000-000000000001"}
+	if edgeRoutePublisher(context.Background(), cfg, quietLogger()) == nil {
+		t.Fatal("no publisher for a configured key value store")
+	}
+}
+
+func TestNoEdgeStoreMeansNoPublisher(t *testing.T) {
+	if p := edgeRoutePublisher(context.Background(), config.Config{}, quietLogger()); p != nil {
+		t.Fatalf("publisher %v with no edge store configured", p)
+	}
+}
