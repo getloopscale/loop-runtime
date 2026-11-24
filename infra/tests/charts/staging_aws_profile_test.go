@@ -512,3 +512,25 @@ func TestStagingAPINamesTheStaticAssetsBucket(t *testing.T) {
 		t.Errorf("STATIC_ASSETS_BUCKET = %v, want loopzero-staging-static-assets-000000000000", got)
 	}
 }
+
+// Staging's S3, STS and ECR are the emulator at 172.29.0.1:9597, a port the build pods'
+// default-deny egress did not open: the first IRSA clone timed out dialling it. Only
+// that host and port open; production has no emulator block and keeps 443.
+func TestStagingBuildPodsReachTheEmulator(t *testing.T) {
+	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", "staging", "loopzero-build-cwts", "charts/loopzero-build-cwts", stagingOutputs...)
+	np := renderedObject(t, rendered, "NetworkPolicy", "build-pod-egress")
+	if np == nil {
+		t.Fatal("no NetworkPolicy build-pod-egress")
+	}
+	rules, _ := dig(np, "spec", "egress").([]any)
+	for _, rule := range rules {
+		to, _ := dig(rule, "to").([]any)
+		ports, _ := dig(rule, "ports").([]any)
+		if len(to) == 1 && len(ports) == 1 &&
+			dig(to[0], "ipBlock", "cidr") == "172.29.0.1/32" &&
+			fmt.Sprint(dig(ports[0], "port")) == "9597" && dig(ports[0], "protocol") == "TCP" {
+			return
+		}
+	}
+	t.Errorf("build-pod-egress has no rule for TCP 9597 to 172.29.0.1/32:\n%v", rules)
+}

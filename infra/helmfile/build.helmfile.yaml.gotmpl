@@ -93,6 +93,18 @@ releases:
         minio:
           insecure: false
 {{- end }}
+{{- with .Values | get "emulator.endpoint" "" }}
+{{- $emulator := splitList ":" (urlParse .).host }}
+        # Staging only: S3, STS and ECR answer on the emulator's host and port, not 443.
+        networkPolicy:
+          extraEgress:
+            - to:
+                - ipBlock:
+                    cidr: {{ printf "%s/32" (index $emulator 0) | quote }}
+              ports:
+                - protocol: TCP
+                  port: {{ index $emulator 1 }}
+{{- end }}
 {{- if .Values | get "platformImages.registry" "" }}
         # Pinned by the commit CI built it from, from the environment's platform
         # registry (#435) — the same rule as every other platform image.
