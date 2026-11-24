@@ -13,7 +13,10 @@ Environment=HOME=/root
 Environment=PATH=/usr/local/bin:/usr/local/go/bin:/usr/bin:/bin
 # Anything else that syncs the clusters takes the same lock, so two syncs never overlap; a
 # deploy that finds it taken is skipped and the timer tries again.
-ExecStart=/usr/bin/flock --nonblock /run/loopzero-staging-platform.lock /usr/local/lib/loopzero-staging/deploy.sh
+# A held lock means a rebuild is running and there is nothing to deploy now: flock exits 75
+# (EX_TEMPFAIL) for it, which counts as success, so a real failure stays the only 1.
+SuccessExitStatus=75
+ExecStart=/usr/bin/flock --nonblock --conflict-exit-code 75 /run/loopzero-staging-platform.lock /usr/local/lib/loopzero-staging/deploy.sh
 # A full platform sync takes about ten minutes on this host, and the validation that
 # follows it (infra/staging/validate.sh) builds and runs the dogfood suite, whose go test
 # timeout is 30 minutes.
