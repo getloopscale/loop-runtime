@@ -30,7 +30,8 @@ import (
 // fakeBuildStoreOrch implements db.BuildStore with in-memory state.
 type fakeBuildStoreOrch struct {
 	builds      map[string]*db.Build
-	activeBuild bool // controls HasActiveBuild return
+	appsSpec    map[string][]db.BuildAppSpec // SetAppsSpec writes, GetBuildApps reads
+	activeBuild bool                         // controls HasActiveBuild return
 	createErr   error
 	getErr      error
 	updateErr   error
@@ -153,11 +154,15 @@ func (f *fakeBuildStoreOrch) FindActiveBuilds(ctx context.Context, _ string) ([]
 }
 
 func (f *fakeBuildStoreOrch) SetAppsSpec(ctx context.Context, tx db.DBTX, id string, apps []db.BuildAppSpec) error {
+	if f.appsSpec == nil {
+		f.appsSpec = make(map[string][]db.BuildAppSpec)
+	}
+	f.appsSpec[id] = apps
 	return nil
 }
 
 func (f *fakeBuildStoreOrch) GetBuildApps(ctx context.Context, buildID string) ([]db.BuildAppSpec, error) {
-	return nil, nil
+	return f.appsSpec[buildID], nil
 }
 
 func (f *fakeBuildStoreOrch) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]db.Build, int, error) {

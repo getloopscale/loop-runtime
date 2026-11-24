@@ -133,6 +133,9 @@ func (r *BuildReconcileLoop) retryReleaseActivation(ctx context.Context, build *
 	// previously rendering manifests with empty digests; with the
 	// supply-chain VAP active that produces pods Forbidden at admission.
 	// Re-fetching status is cheap (Argo Workflow CR read) and idempotent.
+	// Apps whose image was reused ran no image step: the stored reuse fills
+	// them first, and the enrichment leaves them alone.
+	applyReusedImages(buildApps, apps)
 	if r.workflow != nil && build.WorkflowID != "" {
 		if status, sErr := r.workflow.GetStatus(ctx, "argo", build.WorkflowID); sErr == nil && status != nil {
 			enrichAppReleasesWithAttestation(buildApps, status)

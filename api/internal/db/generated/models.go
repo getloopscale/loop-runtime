@@ -249,6 +249,23 @@ type LensSavedView struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type LoopzeroApiKey struct {
+	ID          string             `json:"id"`
+	Subject     string             `json:"subject"`
+	TenantID    string             `json:"tenant_id"`
+	KeyName     string             `json:"key_name"`
+	KeyHash     string             `json:"key_hash"`
+	KeyPrefix   string             `json:"key_prefix"`
+	Scopes      []byte             `json:"scopes"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
+	BffMinted   bool               `json:"bff_minted"`
+	RotatedFrom *string            `json:"rotated_from"`
+	AccountID   string             `json:"account_id"`
+}
+
 type MemoryExport struct {
 	ID           string             `json:"id"`
 	Subject      string             `json:"subject"`
@@ -493,23 +510,6 @@ type TenantsPendingDeletion struct {
 	AttemptCount int32              `json:"attempt_count"`
 	LastError    *string            `json:"last_error"`
 	LastErrorAt  pgtype.Timestamptz `json:"last_error_at"`
-}
-
-type LoopZeroApiKey struct {
-	ID          string             `json:"id"`
-	Subject     string             `json:"subject"`
-	TenantID    string             `json:"tenant_id"`
-	KeyName     string             `json:"key_name"`
-	KeyHash     string             `json:"key_hash"`
-	KeyPrefix   string             `json:"key_prefix"`
-	Scopes      []byte             `json:"scopes"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
-	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
-	BffMinted   bool               `json:"bff_minted"`
-	RotatedFrom *string            `json:"rotated_from"`
-	AccountID   string             `json:"account_id"`
 }
 
 type UsageRecord struct {

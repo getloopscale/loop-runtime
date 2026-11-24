@@ -92,6 +92,25 @@ type BuildAppSpec struct {
 	Secrets     []string             `json:"secrets,omitempty"`
 	Replicas    int                  `json:"replicas,omitempty"`
 	Autoscaling *BuildAppAutoscaling `json:"autoscaling,omitempty"`
+	// ReusedImage is set when an earlier build already built and signed this
+	// app's image for the same commit. The workflow then skips the app's image
+	// build, signing and SBOM, and the reconcile loop delivers this image.
+	ReusedImage *ReusedImage `json:"reused_image,omitempty"`
+}
+
+// ReusedImage is the signed image an earlier build produced for one app at a
+// given commit. Image tags are the commit SHA and the tenant repositories have
+// immutable tags, so a second build of the same commit cannot push the image
+// again: BuildKit's rebuild yields a different index digest (the provenance
+// attestation changes) and the registry refuses the manifest. The build uses
+// this image instead.
+type ReusedImage struct {
+	Digest             string    `json:"digest"`
+	Signature          string    `json:"signature"`
+	SignedAt           time.Time `json:"signed_at"`
+	SBOMS3Key          string    `json:"sbom_s3_key,omitempty"`
+	SBOMFormat         string    `json:"sbom_format,omitempty"`
+	SBOMComponentCount int       `json:"sbom_component_count,omitempty"`
 }
 
 // BuildStore defines the interface for build persistence operations.

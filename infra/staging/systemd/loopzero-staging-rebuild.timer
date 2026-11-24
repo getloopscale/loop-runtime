@@ -1,4 +1,4 @@
-# Every night at 03:00 in Brasília (06:00 UTC), when nobody is expected on staging.
+# Every night at 03:00 in Brasilia (06:00 UTC), when nobody is expected on staging.
 [Unit]
 Description=Rebuild staging every night
 

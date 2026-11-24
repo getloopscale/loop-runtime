@@ -47,6 +47,11 @@ func emitCosignSignAudits(ctx context.Context, audit ports.AuditLogger, build *b
 		if app.ImageDigestSHA256 == "" || app.ImageSignature == "" {
 			continue
 		}
+		// A reused image was signed by the earlier build that produced it,
+		// which emitted its audit entry then; this build signed nothing.
+		if app.ImageReused {
+			continue
+		}
 
 		signedAt := time.Now().UTC().Format(time.RFC3339)
 		if app.ImageSignedAt != nil && !app.ImageSignedAt.IsZero() {

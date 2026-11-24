@@ -213,6 +213,51 @@ func (s *AppAttestationStoreSqlc) GetBuildAppAttestations(
 	return out, nil
 }
 
+// FindSignedImages returns, per app name, the newest signed image an earlier
+// build of the tenant's project pushed for commitSHA. Apps that never had a
+// signed image at that commit are absent. tx may be nil to use the pool; the
+// build orchestrator passes its environment-lock transaction. It satisfies
+// builds.SignedImageFinder.
+func (s *AppAttestationStoreSqlc) FindSignedImages(
+	ctx context.Context, tx db.DBTX, tenantID, projectID, commitSHA string,
+) (map[string]db.ReusedImage, error) {
+	if tenantID == "" || projectID == "" || commitSHA == "" {
+		return nil, loopzeroerrors.ErrMissingField.Wrap("app_attestation_store: tenant_id, project_id and commit_sha are required")
+	}
+	rows, err := s.q.ListSignedAppImagesForCommit(ctx, s.gen(tx), generated.ListSignedAppImagesForCommitParams{
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		CommitSha: &commitSHA,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("app_attestation_store: list signed images of commit %s: %w", commitSHA, err)
+	}
+	images := make(map[string]db.ReusedImage, len(rows))
+	for _, r := range rows {
+		// The query admits only rows with both; the guard keeps a NULL from
+		// ever turning into an unsigned reuse.
+		if r.ImageSignature == nil || !r.SignedAt.Valid {
+			continue
+		}
+		img := db.ReusedImage{
+			Digest:    r.ImageDigest,
+			Signature: *r.ImageSignature,
+			SignedAt:  r.SignedAt.Time.UTC(),
+		}
+		if r.SbomS3Key != nil {
+			img.SBOMS3Key = *r.SbomS3Key
+		}
+		if r.SbomFormat != nil {
+			img.SBOMFormat = *r.SbomFormat
+		}
+		if r.SbomComponentCount != nil {
+			img.SBOMComponentCount = int(*r.SbomComponentCount)
+		}
+		images[r.AppName] = img
+	}
+	return images, nil
+}
+
 // UpdateAppSBOM persists SBOM metadata for a (release, app) row. Used
 // by build_reconcile_complete after extracting workflow output for the
 // syft step. Caller authenticates via release ownership upstream —

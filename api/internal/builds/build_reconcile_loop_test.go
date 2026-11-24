@@ -219,6 +219,7 @@ type fakeCompletionHandlerRL struct {
 	onBuildCompletedCalls int
 	retryErr              error
 	retryCalls            int
+	retryResult           deploycontracts.BuildCallbackRequest
 	findReleaseResult     *db.Release
 	findReleaseErr        error
 	// findReleaseScope is the database scope the loop handed the orchestrator.
@@ -232,10 +233,11 @@ func (f *fakeCompletionHandlerRL) OnBuildCompleted(_ context.Context, _ string, 
 	return f.onBuildCompletedErr
 }
 
-func (f *fakeCompletionHandlerRL) RetryReleaseActivation(_ context.Context, _ *db.Build, _ deploycontracts.BuildCallbackRequest) error {
+func (f *fakeCompletionHandlerRL) RetryReleaseActivation(_ context.Context, _ *db.Build, result deploycontracts.BuildCallbackRequest) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.retryCalls++
+	f.retryResult = result
 	return f.retryErr
 }
 

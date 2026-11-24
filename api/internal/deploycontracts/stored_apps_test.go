@@ -16,12 +16,19 @@ import (
 // this test fills every field of db.BuildAppSpec by reflection and requires the
 // same-named AppSpec field to come back non-zero. A field added to the stored
 // shape and forgotten here fails this test instead of a preview build.
+//
+// derivedAtSubmit lists the stored fields that are not part of what the user
+// submitted: SubmitBuild derives them, so a rebuilt AppSpec must not carry
+// them. ReusedImage is looked up again on every submission; carrying a stored
+// one back would skip that lookup with a possibly stale image.
 func TestAppSpecFromStored_CarriesEveryPersistedField(t *testing.T) {
+	derivedAtSubmit := map[string]bool{"ReusedImage": true}
 	stored := db.BuildAppSpec{
 		Name: "api", Type: "server", Rendering: "server", Port: 8080,
 		Start: "node server.js", Path: "apps/api", Build: "dockerfile", Runtime: "node",
 		Secrets: []string{"DB_URL"}, Replicas: 2,
 		Autoscaling: &db.BuildAppAutoscaling{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 70},
+		ReusedImage: &db.ReusedImage{Digest: "sha256:01", Signature: "sig"},
 	}
 	sv := reflect.ValueOf(stored)
 	for i := 0; i < sv.NumField(); i++ {
@@ -34,6 +41,9 @@ func TestAppSpecFromStored_CarriesEveryPersistedField(t *testing.T) {
 	got := reflect.ValueOf(AppSpecFromStored(stored))
 	for i := 0; i < sv.NumField(); i++ {
 		name := sv.Type().Field(i).Name
+		if derivedAtSubmit[name] {
+			continue
+		}
 		f := got.FieldByName(name)
 		if !f.IsValid() {
 			t.Errorf("AppSpec has no field %s; a persisted field has nowhere to go", name)

@@ -60,6 +60,13 @@ type PlanCapChecker interface {
 	CheckReplicasValue(ctx context.Context, tenantID string, requested int) (allowed bool, plan string, limit int, err error)
 }
 
+// SignedImageFinder returns, per app name, the signed image an earlier build
+// of the same tenant, project and commit already pushed. Apps without one are
+// absent from the map. tx is the environment-lock transaction of the submit.
+type SignedImageFinder interface {
+	FindSignedImages(ctx context.Context, tx db.DBTX, tenantID, projectID, commitSHA string) (map[string]db.ReusedImage, error)
+}
+
 // BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.
 type BuildOrchestratorDeps struct {
 	BuildStore     db.BuildStore
@@ -109,6 +116,10 @@ type BuildOrchestratorDeps struct {
 	// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox writer for the
 	// build-completed FAILED path. May be nil (emit skipped).
 	DeployEventStore store.DeployEventStore
+	// SignedImages finds the images earlier builds of the same commit already
+	// built and signed, so SubmitBuild reuses them instead of rebuilding an
+	// immutable tag. Nil disables reuse: every app is built.
+	SignedImages SignedImageFinder
 }
 
 // DeployTimelineSpawner is the canonical callback the orchestrator
@@ -152,6 +163,7 @@ type BuildOrchestrator struct {
 	// J-16 slice 3 (MEET-2026-07-04-001): stages deploy.failed on the outbox
 	// when the build workflow reports FAILED. Nil-safe (emit skipped).
 	deployEventStore store.DeployEventStore
+	signedImages     SignedImageFinder // nil = every app is built
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -189,6 +201,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		auditLogger:         deps.AuditLogger,         // T1.2 mitigation #3: nil = no-op
 		deployTimelineSpawn: deps.DeployTimelineSpawn, // plan T5.1: nil = no-op
 		deployEventStore:    deps.DeployEventStore,    // J-16 slice 3: nil = no emit
+		signedImages:        deps.SignedImages,
 	}
 }
 

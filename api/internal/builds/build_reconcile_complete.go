@@ -60,7 +60,10 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	// follows the deterministic pattern "sign-image-{appName}" /
 	// "build-image-{appName}", established in argo/cosign.go and
 	// argo/buildkit.go. We use API insert time (not workflow finish time)
-	// for SignedAt because pod clocks are not authoritative.
+	// for SignedAt because pod clocks are not authoritative. Apps whose
+	// image was reused ran no image step; their fields come from the
+	// stored reuse.
+	applyReusedImages(buildApps, apps)
 	enrichAppReleasesWithAttestation(buildApps, status)
 
 	// F-010: shared manifest building function (includes custom domains).
@@ -221,6 +224,9 @@ func enrichAppReleasesWithAttestation(apps []deploycontracts.AppRelease, status 
 		return
 	}
 	for i, app := range apps {
+		if app.ImageReused {
+			continue // no image step ran for it; applyReusedImages filled it
+		}
 		signStep := naming.SignStepName(app.Name)
 		buildStep := naming.BuildImageStepName(app.Name)
 		sbomStep := naming.SBOMStepName(app.Name)
@@ -287,6 +293,32 @@ func enrichAppReleasesWithAttestation(apps []deploycontracts.AppRelease, status 
 		// operator follow-up). The counters below are derived from the
 		// existing outputs map and give immediate SLO signal.
 		emitSigstoreObservations(status, app.Name, rekorURL)
+	}
+}
+
+// applyReusedImages copies the stored reused image (digest, signature,
+// signing time, SBOM) onto each app release whose build reused an image, and
+// marks it reused. specs is the build's stored apps spec.
+func applyReusedImages(apps []deploycontracts.AppRelease, specs []db.BuildAppSpec) {
+	reused := make(map[string]*db.ReusedImage, len(specs))
+	for _, spec := range specs {
+		if spec.ReusedImage != nil {
+			reused[spec.Name] = spec.ReusedImage
+		}
+	}
+	for i := range apps {
+		img, ok := reused[apps[i].Name]
+		if !ok {
+			continue
+		}
+		signedAt := img.SignedAt
+		apps[i].ImageReused = true
+		apps[i].ImageDigestSHA256 = img.Digest
+		apps[i].ImageSignature = img.Signature
+		apps[i].ImageSignedAt = &signedAt
+		apps[i].SBOMS3Key = img.SBOMS3Key
+		apps[i].SBOMFormat = img.SBOMFormat
+		apps[i].SBOMComponentCount = img.SBOMComponentCount
 	}
 }
 

@@ -55,6 +55,7 @@ type SubmitBuildStage string
 const (
 	StageCheckActiveBuilds SubmitBuildStage = "check_active_builds"
 	StageResolveScaling    SubmitBuildStage = "resolve_scaling"
+	StageFindSignedImages  SubmitBuildStage = "find_signed_images"
 	StageEnsureProject     SubmitBuildStage = "ensure_project"
 	StageCreateBuild       SubmitBuildStage = "create_build"
 	StageSetAppsSpec       SubmitBuildStage = "set_apps_spec"
@@ -67,6 +68,7 @@ const (
 var stageToReason = map[SubmitBuildStage]SubmitBuildErrorReason{
 	StageCheckActiveBuilds: ReasonBuildSubmitDBWriteFailed,
 	StageResolveScaling:    ReasonBuildSubmitDBWriteFailed,
+	StageFindSignedImages:  ReasonBuildSubmitDBWriteFailed,
 	StageEnsureProject:     ReasonBuildSubmitProjectEnsureFailed,
 	StageCreateBuild:       ReasonBuildSubmitDBWriteFailed,
 	StageSetAppsSpec:       ReasonBuildSubmitDBWriteFailed,
