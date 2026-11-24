@@ -25,6 +25,19 @@ var stagingOutputs = []string{
 	"LOOPZERO_CACHE_AUTH_SECRET=arn:aws:secretsmanager:us-east-1:000000000000:secret:loopzero-staging/valkey-auth-token-test",
 	"LOOPZERO_VPC_ID=vpc-test",
 	"LOOPZERO_CELL_CONTEXT=cell-0",
+	"LOOPZERO_EDGE_KVS_ARN=" + stagingEdgeKVSArn,
+}
+
+const stagingEdgeKVSArn = "arn:aws:cloudfront::000000000000:key-value-store/edge-routes-test"
+
+// loopzero-api publishes each app's public route to the edge's key value store, the
+// app-routes output staging exports before the core sync.
+func TestStagingApiPublishesRoutesToTheEdgeKeyValueStore(t *testing.T) {
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-api", "charts/loopzero-api", stagingOutputs...)
+	config := renderedObject(t, rendered, "ConfigMap", "loopzero-api")
+	if got := dig(config, "data", "LOOPZERO_EDGE_KVS_ARN"); got != stagingEdgeKVSArn {
+		t.Errorf("LOOPZERO_EDGE_KVS_ARN = %v, want %s", got, stagingEdgeKVSArn)
+	}
 }
 
 func stagingInstalledReleases(t *testing.T, helmfile string) map[string]bool {
