@@ -1,0 +1,11 @@
+# Twice a day, as Let's Encrypt recommends for automated renewal; lego renews only when due.
+[Unit]
+Description=Renew the wildcard certificate of staging's tenant apps when it is due
+
+[Timer]
+OnCalendar=*-*-* 04,16:17:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

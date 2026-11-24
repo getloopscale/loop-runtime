@@ -16,6 +16,11 @@ Environment=HOME=/var/lib/loopzero-edge
 Environment=XDG_DATA_HOME=/var/lib/loopzero-edge
 Environment=XDG_CONFIG_HOME=/var/lib/loopzero-edge
 EnvironmentFile=/etc/loopzero-edge/edge.env
+# The tenant apps' wildcard certificate, which lego keeps readable by root only
+# (infra/staging/edge/apps-certificate.sh). A credential is read when the unit starts, so a
+# renewal restarts the unit.
+LoadCredential=apps.crt:/var/lib/loopzero-edge-certificate/certificates/_.apps.staging.getloopscale.com.crt
+LoadCredential=apps.key:/var/lib/loopzero-edge-certificate/certificates/_.apps.staging.getloopscale.com.key
 ExecStart=/usr/local/bin/caddy run --config /etc/loopzero-edge/Caddyfile --adapter caddyfile
 ExecReload=/usr/local/bin/caddy reload --config /etc/loopzero-edge/Caddyfile --adapter caddyfile --force
 AmbientCapabilities=CAP_NET_BIND_SERVICE

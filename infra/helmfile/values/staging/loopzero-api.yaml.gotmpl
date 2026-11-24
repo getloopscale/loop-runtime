@@ -37,6 +37,8 @@ config:
 {{- with env "LOOPZERO_LOKI_ALB_DNS_NAME" }}
   lokiUrl: {{ printf "%s/_aws/elasticloadbalancing/%s" $.Values.emulator.endpoint . | quote }}
 {{- end }}
+  # Tenant apps are public under the wildcard Caddy and the app-router distribution serve (#68).
+  loopzeroPublicDomain: "apps.staging.getloopscale.com"
   baseDomain: {{ .Values.domain | quote }}
   # The CloudFront KeyValueStore the API publishes the host to cell routes of tenant apps
   # to (infra-live edge/app-routes), exported by `task staging:platform:outputs` (#68).
