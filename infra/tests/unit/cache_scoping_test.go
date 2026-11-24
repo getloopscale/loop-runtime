@@ -27,17 +27,26 @@ package unit
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
 
-func TestCacheScoping_TenantOperatorScopesTenantAndEnvironment(t *testing.T) {
-	path := filepath.Join(repoRoot(), "operators", "cmd", "tenant-operator", "main.go")
+var whitespaceRun = regexp.MustCompile(`\s+`)
+
+// sourceClauses reads a Go file with every run of whitespace made one space, so a clause
+// is found however gofmt aligns the declarations around it.
+func sourceClauses(t *testing.T, path string) string {
+	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("tenant-operator main.go missing: %v", err)
+		t.Fatalf("%s missing: %v", path, err)
 	}
-	text := string(data)
+	return whitespaceRun.ReplaceAllString(string(data), " ")
+}
+
+func TestCacheScoping_TenantOperatorScopesTenantAndEnvironment(t *testing.T) {
+	text := sourceClauses(t, filepath.Join(repoRoot(), "operators", "cmd", "tenant-operator", "main.go"))
 
 	for _, must := range []string{
 		"platformCRDNamespaces",
@@ -49,19 +58,14 @@ func TestCacheScoping_TenantOperatorScopesTenantAndEnvironment(t *testing.T) {
 		"&loopzerov1.Environment{}",
 		"&corev1.Secret{}:      secretScope",
 	} {
-		if !strings.Contains(text, must) {
+		if !strings.Contains(text, whitespaceRun.ReplaceAllString(must, " ")) {
 			t.Errorf("tenant-operator main.go missing C16/I-1 cache scoping clause: %s", must)
 		}
 	}
 }
 
 func TestCacheScoping_PlatformOperatorScopesPlatformCRDs(t *testing.T) {
-	path := filepath.Join(repoRoot(), "operators", "cmd", "platform-operator", "main.go")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("platform-operator main.go missing: %v", err)
-	}
-	text := string(data)
+	text := sourceClauses(t, filepath.Join(repoRoot(), "operators", "cmd", "platform-operator", "main.go"))
 
 	for _, must := range []string{
 		"platformCRDNamespaces",
@@ -72,7 +76,7 @@ func TestCacheScoping_PlatformOperatorScopesPlatformCRDs(t *testing.T) {
 		"&loopzerov1.GitRepositoryBinding{}",
 		"&loopzerov1.ClusterCredential{}",
 	} {
-		if !strings.Contains(text, must) {
+		if !strings.Contains(text, whitespaceRun.ReplaceAllString(must, " ")) {
 			t.Errorf("platform-operator main.go missing C16/I-1 cache scoping clause: %s", must)
 		}
 	}
