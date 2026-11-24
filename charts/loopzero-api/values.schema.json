@@ -340,6 +340,9 @@
         "cfKvNamespaceId": {
           "type": "string"
         },
+        "edgeKvsArn": {
+          "type": "string"
+        },
         "cfZoneManagement": {
           "type": "string"
         },

@@ -15,6 +15,7 @@
 #   LOOPZERO_CACHE_HOST, LOOPZERO_CACHE_PORT               data/valkey primary_endpoint_address, port
 #   LOOPZERO_CACHE_AUTH_SECRET                             data/valkey auth_token_secret_arn
 #   LOOPZERO_VPC_ID                                        networking/vpc vpc_id
+#   LOOPZERO_EDGE_KVS_ARN                                  edge/app-routes arn
 #
 # Nothing in the charts knows about the emulator. The emulator's EKS layer does what EKS
 # does for a pod whose ServiceAccount carries `eks.amazonaws.com/role-arn`: it injects the

@@ -58,6 +58,7 @@ data:
   BILLING_UPGRADE_URL: {{ .Values.config.billingUpgradeUrl | quote }}
   CF_ACCOUNT_ID: {{ .Values.config.cfAccountId | quote }}
   CF_KV_NAMESPACE_ID: {{ .Values.config.cfKvNamespaceId | quote }}
+  LOOPZERO_EDGE_KVS_ARN: {{ .Values.config.edgeKvsArn | quote }}
   CF_ZONE_MANAGEMENT: {{ .Values.config.cfZoneManagement | quote }}
   LOOPZERO_COSIGN_KEYLESS: {{ .Values.config.loopzeroCosignKeyless | quote }}
   LOOPZERO_COSIGN_ATTEST_ENABLED: {{ .Values.config.loopzeroCosignAttestEnabled | quote }}

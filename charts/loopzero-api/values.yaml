@@ -75,6 +75,9 @@ config:
   workloadIngressUrl: ""
   loopzeroPreviewPublicDomain: ""
   loopzeroPublicDomain: ""
+  # CloudFront KeyValueStore ARN the edge reads the host to cell routes from. Empty
+  # publishes none there (the Cloudflare KV, when configured, is used instead).
+  edgeKvsArn: ""
   loopzeroClusterIssuer: "letsencrypt-prod"
   loopzeroPrometheusAddress: ""
   lokiUrl: "http://loki.monitoring:3100"
