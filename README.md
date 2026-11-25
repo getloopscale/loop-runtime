@@ -21,24 +21,24 @@ git push
   -> the client receives the URL over server-sent events
 ```
 
-A `loopzero.yaml` lists the apps of a project:
+A `loopzero.yaml` at the repository root lists the apps a push deploys. Each app needs a
+`runtime` (`node` or `python`) and the `start` command that runs it; the platform writes
+the Dockerfile:
 
 ```yaml
-version: 1
 project: my-saas
 
 apps:
   api:
     path: api
-    framework: custom
-    type: server
-    build: dockerfile
+    runtime: python
+    start: python -m app
+    port: 8000
 
   web:
     path: web
-    framework: node
-    type: server
-    build: buildpack
+    runtime: node
+    start: node server.js
     port: 3000
 ```
 
