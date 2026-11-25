@@ -125,7 +125,7 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 //     app within the project. When omitted, returns logs from ALL
 //     apps in the namespace (legacy behavior). The app label is
 //     promoted by promtail's loopzero-pods scrape job from the pod's
-//     loopzero.io/app label.
+//     loopzero.io/app-name label.
 func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {

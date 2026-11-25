@@ -3,7 +3,7 @@
 //
 // Beta Logs Gate (audit M08) — regression suite for the promtail
 // scrape config. Asserts that:
-//   1. Tenant runtime pods are scraped (loopzero.io/managed-by=environment-controller)
+//   1. Tenant runtime pods are scraped (the pod's own loopzero.io/tenant label)
 //   2. LoopZero control-plane pods are scraped (loopzero.io/component label)
 //   3. JSON correlation_id is promoted to a Loki label
 //   4. Argo Workflow scrape is preserved
@@ -29,8 +29,12 @@ describe('Promtail scrape config (Beta Logs Gate)', () => {
     // being scraped. The new loopzero-pods job has two membership
     // filters that OR'd via __tmp_keep idiom.
     expect(src).toContain('job_name: loopzero-pods');
-    expect(src).toContain('__meta_kubernetes_namespace_label_loopzero_io_managed_by');
-    expect(src).toContain('environment-controller');
+    // The pod's own label: pod service discovery gives no namespace label, so a
+    // rule on `__meta_kubernetes_namespace_label_*` drops every tenant pod
+    // (getloopscale/loopzero#110). The behaviour is asserted over the rendered
+    // job in infra/tests/charts/promtail_tenant_pods_test.go.
+    expect(src).not.toContain('__meta_kubernetes_namespace_label_');
+    expect(src).toContain('source_labels: [__meta_kubernetes_pod_label_loopzero_io_tenant]');
     expect(src).toContain('__meta_kubernetes_pod_label_loopzero_io_component');
   });
 
@@ -60,6 +64,7 @@ describe('Promtail scrape config (Beta Logs Gate)', () => {
     // exact 60% gap the audit flagged.
     expect(src).toContain('target_label: app');
     expect(src).toContain('target_label: loopzero_tenant');
+    expect(src).toContain('target_label: loopzero_project');
     expect(src).toContain('target_label: loopzero_environment');
     expect(src).toContain('target_label: loopzero_component');
   });

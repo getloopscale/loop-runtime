@@ -148,12 +148,16 @@ config:
       # log queries against Loki returned empty even when pods were
       # producing logs.
       #
-      # The selector here is the OR of two label families:
-      #   - `loopzero.io/managed-by=environment-controller` — set on
-      #     tenant runtime namespaces by the EnvironmentController
-      #     when a tenant environment is provisioned.
-      #   - `loopzero.io/component` set — covers loopzero-api, loopzero-cloud,
-      #     and the 4 split operators (each chart sets this label).
+      # The selector here is the OR of two label families, both the pod's own:
+      #   - `loopzero.io/tenant` set: the pods of a tenant app, which the
+      #     manifest renderer labels with tenant, project, app-name and
+      #     environment.
+      #   - `loopzero.io/component` set: loopzero-api, loopzero-cloud and
+      #     the 4 split operators (each chart sets this label).
+      # The tenant side used to read the namespace's
+      # `loopzero.io/managed-by` label. Pod service discovery gives no
+      # namespace label, so every tenant pod was dropped
+      # (getloopscale/loopzero#110).
       # ────────────────────────────────────────────────────────────
       - job_name: loopzero-pods
         kubernetes_sd_configs:
@@ -173,8 +177,8 @@ config:
           # loopzero-* control-plane component. The "regex" form here is
           # the Prometheus union-of-selectors idiom — both labels are
           # OR'd via `__tmp_keep` intermediate.
-          - source_labels: [__meta_kubernetes_namespace_label_loopzero_io_managed_by]
-            regex: "environment-controller"
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_tenant]
+            regex: ".+"
             action: replace
             target_label: __tmp_loopzero_tenant
             replacement: "1"
@@ -191,22 +195,33 @@ config:
             target_label: __path__
             separator: /
             replacement: /var/log/pods/*$1/$2/*.log
-          # Promote namespace + labels to Loki labels for `{namespace=...}` queries
+          # Promote namespace + labels to Loki labels for `{namespace=...}` queries.
+          # Each regex captures: the default replacement is `$1`, and a regex
+          # without a group replaces with nothing, which sets no label.
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_container_name]
             target_label: container
+          # `app` is the name loopzero-api filters a project's runtime logs by
+          # (`{namespace=..., app=...}`, api/internal/logs/loki/client.go): the
+          # tenant app's name, or a platform component's loopzero.io/app.
           - source_labels: [__meta_kubernetes_pod_label_loopzero_io_app]
-            regex: ".+"
+            regex: "(.+)"
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_app_name]
+            regex: "(.+)"
             target_label: app
           - source_labels: [__meta_kubernetes_pod_label_loopzero_io_tenant]
-            regex: ".+"
+            regex: "(.+)"
             target_label: loopzero_tenant
+          - source_labels: [__meta_kubernetes_pod_label_loopzero_io_project]
+            regex: "(.+)"
+            target_label: loopzero_project
           - source_labels: [__meta_kubernetes_pod_label_loopzero_io_environment]
-            regex: ".+"
+            regex: "(.+)"
             target_label: loopzero_environment
           - source_labels: [__meta_kubernetes_pod_label_loopzero_io_component]
-            regex: ".+"
+            regex: "(.+)"
             target_label: loopzero_component
 
       # ────────────────────────────────────────────────────────────────
@@ -240,7 +255,7 @@ config:
           - source_labels: [__meta_kubernetes_pod_container_name]
             target_label: container
           - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
-            regex: ".+"
+            regex: "(.+)"
             target_label: app
           # Fixed component label so Grafana dashboards can filter
           - target_label: loopzero_component
@@ -286,7 +301,7 @@ config:
           - source_labels: [__meta_kubernetes_pod_container_name]
             target_label: container
           - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
-            regex: ".+"
+            regex: "(.+)"
             target_label: app
 {{- end }}
 
