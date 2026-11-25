@@ -60,7 +60,7 @@ func NewDBScalingResolver(store ScalingConfigReader) (ScalingResolver, error) {
 // Branches per row state:
 //   - ScaleToZero=true       → KEDA path (Replicas=0, Autoscaling={Min,Max})
 //   - MinReplicas==MaxReplicas → fixed (Replicas=Min, Autoscaling=nil)
-//   - MinReplicas<MaxReplicas  → HPA (Replicas=Min as baseline, Autoscaling={Min,Max,CPU})
+//   - MinReplicas<MaxReplicas  → HPA (Replicas=0, Autoscaling={Min,Max,CPU,Memory})
 func (r *dbScalingResolver) Resolve(
 	ctx context.Context,
 	tenantID, projectID, environment string,
@@ -104,8 +104,9 @@ func applyScalingRow(app deploycontracts.AppSpec, row *store.ScalingConfig) depl
 		app.Replicas = int(row.MinReplicas)
 		app.Autoscaling = nil
 	default:
-		// HPA: Deployment.spec.replicas=Min as baseline, HPA scales to Max.
-		app.Replicas = int(row.MinReplicas)
+		// HPA. Replicas stays 0: a spec carries a fixed count or a range, never
+		// both, and the renderer takes the baseline from the range's minimum.
+		app.Replicas = 0
 		app.Autoscaling = &deploycontracts.AppAutoscalingSpec{
 			MinReplicas:  int(row.MinReplicas),
 			MaxReplicas:  int(row.MaxReplicas),
