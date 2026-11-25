@@ -367,11 +367,14 @@ func (o *RollbackOrchestrator) activateTarget(work context.Context, run rollback
 // release passes through ROLLBACK_FAILED inside one transaction.
 //
 // It changes nothing when the release is no longer ROLLING_BACK: something
-// else, a deploy for one, already moved the environment on.
+// else, a deploy for one, already moved the environment on. When it does keep
+// the release, it also delivers that release's manifests again
+// (restoreKeptRelease).
 func (o *RollbackOrchestrator) keepCurrentActive(work context.Context, run rollbackRun, cause error) {
 	ctx, cancel := context.WithTimeout(work, rollbackStateTimeout)
 	defer cancel()
 	req := run.req
+	kept := false
 	err := o.deps.Locker.WithLock(ctx, req.TenantID, req.ProjectID, req.Environment, func(tx db.DBTX) error {
 		fresh, err := o.deps.Releases.GetByIDForTenant(ctx, req.TenantID, run.current.ID)
 		if err != nil {
@@ -380,6 +383,7 @@ func (o *RollbackOrchestrator) keepCurrentActive(work context.Context, run rollb
 		if fresh == nil || fresh.Status != string(statemachine.RPhRollingBack) {
 			return nil
 		}
+		kept = true
 		if _, err := o.deps.Releases.UpdateStatus(ctx, tx, run.current.ID, string(statemachine.RPEventRollbackFailed)); err != nil {
 			return fmt.Errorf("transition to ROLLBACK_FAILED: %w", err)
 		}
@@ -401,6 +405,37 @@ func (o *RollbackOrchestrator) keepCurrentActive(work context.Context, run rollb
 	}
 	run.logger.Error("rollback failed; the previous release stays active",
 		"current_release", run.current.ID, "target_release", run.target.ID, "error", cause)
+	if kept {
+		o.restoreKeptRelease(work, run)
+	}
+}
+
+// restoreKeptRelease delivers the manifests of the release kept active again,
+// after a rollback that was abandoned.
+//
+// The rollback pushed the target's manifests before it was abandoned. Left
+// there, the cluster converges on the target at its next sync while the API
+// reports the other release, which is the disagreement found on staging (#121).
+// The delivery is the one a rollback uses, aimed at the release kept active;
+// its sync is not awaited, and the saved scale follows it as it follows a
+// rollback, because a release's own manifests carry its build's replica count.
+//
+// It runs only when this rollback put the release back to ACTIVE. When
+// something else moved the environment on, a deploy for one, the manifests in
+// the repository are that deploy's.
+func (o *RollbackOrchestrator) restoreKeptRelease(work context.Context, run rollbackRun) {
+	ctx, cancel := context.WithTimeout(work, rollbackDeliveryStartTimeout)
+	defer cancel()
+	restore := run.delivery
+	restore.TargetRelease = rollbackTargetFrom(run.current)
+	if err := o.deps.Delivery.Rollback(ctx, restore); err != nil {
+		run.logger.Error("rollback abandoned, and the manifests of the release kept active could not be delivered again; the cluster may run the rollback target while the API reports the release kept active, until the next deploy",
+			"current_release", run.current.ID, "target_release", run.target.ID, "error", err)
+		return
+	}
+	run.logger.Info("rollback abandoned; the manifests of the release kept active were delivered again",
+		"current_release", run.current.ID, "target_release", run.target.ID)
+	o.deliverSavedScale(ctx, run.logger, run.req)
 }
 
 // rollbackFailureReason is the cause as the delivery reported it, without the

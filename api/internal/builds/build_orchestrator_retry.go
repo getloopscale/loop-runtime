@@ -31,6 +31,9 @@ func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *d
 
 	activationErr := o.activate(ctx, build, result)
 	if activationErr != nil {
+		if o.failOnUndeliveredSecrets(ctx, build, activationErr) {
+			return activationErr
+		}
 		slog.Warn("retry release activation: Phase 2 failed, will retry on next tick",
 			"build_id", build.ID, "error", activationErr)
 		o.emitActivationFailure(ctx, build.ID, activationErr)

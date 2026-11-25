@@ -6,7 +6,6 @@ package release
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -305,21 +304,11 @@ func (r *ReleaseConvergenceLoop) handleSyncTimeout(ctx context.Context, release 
 // health filter never match, so a healthy release stayed SYNC_FAILED. An
 // unparseable spec list is logged and yields no filter (global health).
 func (r *ReleaseConvergenceLoop) deployedAppNames(release *db.Release) []string {
-	if release.Apps == nil {
-		return nil
-	}
-	var apps []db.BuildAppSpec
-	if err := json.Unmarshal(release.Apps, &apps); err != nil {
+	names, err := workloadNames(release)
+	if err != nil {
 		r.logger.Error("release convergence: failed to parse app specs (skipping health filter)",
 			"release_id", release.ID, "error", err)
 		return nil
-	}
-	var names []string
-	for _, app := range apps {
-		if app.Rendering == "static" {
-			continue
-		}
-		names = append(names, fmt.Sprintf("%s-%s", release.ProjectID, app.Name))
 	}
 	return names
 }

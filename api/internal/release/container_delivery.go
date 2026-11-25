@@ -52,6 +52,9 @@ type ContainerDeliveryActivator struct {
 	// J-16 slice 3: transactional-outbox writer. When set, ActivationKernel.Activate
 	// stages a deploy.succeeded event on the activation tx. Nil-safe (skipped).
 	deployEventStore store.DeployEventStore
+	// secrets confirms the environment's secrets are in the cluster before a
+	// deploy delivers its Rollout. Nil skips the confirmation.
+	secrets deploycontracts.EnvironmentSecrets
 }
 
 // ContainerDeliveryDeps holds dependencies for ContainerDeliveryActivator.
@@ -73,6 +76,10 @@ type ContainerDeliveryDeps struct {
 	// J-16 slice 3: transactional-outbox writer for deploy.succeeded events.
 	// May be nil (outbox emit skipped).
 	DeployEventStore store.DeployEventStore
+	// Secrets confirms the environment's secrets are in the cluster before a
+	// deploy delivers its Rollout (#119). Nil skips the confirmation: a
+	// rollout may then start pods before a changed secret reaches the cluster.
+	Secrets deploycontracts.EnvironmentSecrets
 }
 
 // NewContainerDeliveryActivator creates a new ContainerDeliveryActivator.
@@ -92,12 +99,22 @@ func NewContainerDeliveryActivator(deps ContainerDeliveryDeps) *ContainerDeliver
 		argocdSyncTimeout:   syncTimeout,
 		appAttestationStore: deps.AppAttestationStore,
 		deployEventStore:    deps.DeployEventStore,
+		secrets:             deps.Secrets,
 	}
 }
 
 // Activate runs the 5-phase container release activation.
 // Phases A-E are semantically identical to the pre-refactoring activateRelease.
 func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build deploycontracts.ActivationBuild, result deploycontracts.BuildCallbackRequest) error {
+	// Before anything is recorded or pushed: the Rollout this delivers starts
+	// pods, and a pod reads its secrets once. Rollback and a live scale do
+	// not restart pods for a secret, so only this path waits (#119).
+	if c.secrets != nil {
+		if err := c.secrets.AwaitDelivered(ctx, build.TenantID, build.ProjectID, build.Environment); err != nil {
+			return fmt.Errorf("activate release: %w", err)
+		}
+	}
+
 	// Phase A (Lock): Create release record (READY)
 	release, err := c.phaseACreateRelease(ctx, build, result)
 	if err != nil {
@@ -214,29 +231,43 @@ func (c *ContainerDeliveryActivator) Rollback(ctx context.Context, req deploycon
 //
 // The wait runs under the orchestrator's own deadline, not the request's: a
 // rollout through canary steps takes longer than a request lives (#118).
+//
+// Confirmed means the Application is synced and the workloads of the target
+// release's apps are healthy.
 func (c *ContainerDeliveryActivator) AwaitRollback(ctx context.Context, req deploycontracts.RollbackDeliveryRequest) error {
 	argoAppName, nameErr := naming.ArgoAppName(req.TenantID, req.ProjectID, req.Environment)
 	if nameErr != nil {
 		return fmt.Errorf("argocd application name: %w", nameErr)
 	}
-	if waitErr := c.sync.WaitForSync(ctx, argoAppName, c.argocdSyncTimeout, nil); waitErr != nil {
+	if waitErr := c.sync.WaitForSync(ctx, argoAppName, c.argocdSyncTimeout, rollbackTargetApps(req)); waitErr != nil {
 		return fmt.Errorf("container rollback: sync wait failed: %w", waitErr)
 	}
 	return nil
 }
 
 // RollbackConverged reports whether the environment's Application is synced
-// and healthy on the manifests the rollback pushed.
+// and the workloads of the target release's apps are healthy.
 func (c *ContainerDeliveryActivator) RollbackConverged(ctx context.Context, req deploycontracts.RollbackDeliveryRequest) (bool, error) {
 	argoAppName, nameErr := naming.ArgoAppName(req.TenantID, req.ProjectID, req.Environment)
 	if nameErr != nil {
 		return false, fmt.Errorf("argocd application name: %w", nameErr)
 	}
-	synced, healthy, err := c.sync.GetAppStatus(ctx, argoAppName, nil)
+	synced, healthy, err := c.sync.GetAppStatus(ctx, argoAppName, rollbackTargetApps(req))
 	if err != nil {
 		return false, fmt.Errorf("container rollback: read application status: %w", err)
 	}
 	return synced && healthy, nil
+}
+
+// rollbackTargetApps is the workloads whose health confirms a rollback: those
+// of the target release, the signal a deploy is confirmed by. The health of
+// the whole Application also counts resources the rollback does not touch,
+// and one of them that never becomes ready failed every rollback (#121).
+func rollbackTargetApps(req deploycontracts.RollbackDeliveryRequest) []string {
+	if req.TargetRelease == nil {
+		return nil
+	}
+	return req.TargetRelease.Apps
 }
 
 // ---------------------------------------------------------------------------

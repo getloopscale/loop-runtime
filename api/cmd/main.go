@@ -175,7 +175,8 @@ func main() {
 			logger.Error("failed to setup workflows", "error", err)
 			os.Exit(1)
 		}
-		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, projectCap, envEnsurer)
+		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, projectCap, envEnsurer,
+			deployEnvironmentSecrets(k8sDeps, logger))
 		ghDeps = setupGitHub(dbAdapter, bgAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, shutdownCtx, logger)
 	}
 

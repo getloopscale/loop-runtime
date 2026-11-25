@@ -70,3 +70,27 @@ func emulatorEnvBytes(t *testing.T, name string) int64 {
 	t.Fatalf("aws-emulator.service sets no %s", name)
 	return 0
 }
+
+// The emulated S3 keeps objects in the emulator's memory and, by default, refuses a
+// bucket past 1,000 objects or 64 MiB. Loki writes its chunks there, and reached that
+// within hours, after which its writes were refused. The ceilings are sized to the
+// host, and the total stays above what one bucket may hold.
+func TestTheStagingEmulatorHoldsLokisChunksInS3(t *testing.T) {
+	floors := map[string]int64{
+		"EMULATOR_S3_MAX_OBJECTS_PER_BUCKET":      100_000,
+		"EMULATOR_S3_MAX_OBJECT_BYTES_PER_BUCKET": 2 << 30,
+		"EMULATOR_S3_MAX_OBJECTS_TOTAL":           250_000,
+		"EMULATOR_S3_MAX_OBJECT_BYTES_TOTAL":      4 << 30,
+	}
+	got := make(map[string]int64, len(floors))
+	for name, floor := range floors {
+		got[name] = emulatorEnvBytes(t, name)
+		if got[name] < floor {
+			t.Errorf("%s=%d, want at least %d", name, got[name], floor)
+		}
+	}
+	if got["EMULATOR_S3_MAX_OBJECTS_TOTAL"] < got["EMULATOR_S3_MAX_OBJECTS_PER_BUCKET"] ||
+		got["EMULATOR_S3_MAX_OBJECT_BYTES_TOTAL"] < got["EMULATOR_S3_MAX_OBJECT_BYTES_PER_BUCKET"] {
+		t.Errorf("the totals are below what one bucket may hold: %v", got)
+	}
+}
