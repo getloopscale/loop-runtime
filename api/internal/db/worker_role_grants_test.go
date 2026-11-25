@@ -50,6 +50,10 @@ var requestPoolOnly = map[string]string{
 		"stores (cmd/setup_server.go newEnvironmentHandler and wirePreviews, cmd/setup_github.go " +
 		"preview service); backgroundloops.Deps carries no preview slot store and the controller " +
 		"builds none",
+	"rollbacks": "written and read only through the RollbackStoreSqlc that cmd/setup_orchestrator.go " +
+		"builds over the request pool, for the rollback orchestrator and the handler that lists " +
+		"rollbacks; a rollback is closed by the request's own context, which carries the tenant, " +
+		"and neither backgroundloops.Deps nor the controller builds this store",
 }
 
 // A statement the engine runs, and where it was found.

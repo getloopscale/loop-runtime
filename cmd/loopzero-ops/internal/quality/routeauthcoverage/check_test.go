@@ -259,7 +259,9 @@ func TestCheck_RealTreeStillPasses(t *testing.T) {
 	// 2026-11-25: 44 direct + 29 chained. Two routes of the GitHub integration joined
 	// the Auth group: GET /integrations/github/installations (direct) and
 	// POST /integrations/github/installations/claim (rate limited, so chained).
-	if out.PassCount != 73 {
-		t.Errorf("expected the 73 routes the AST enumerator sees (44 direct + 29 in the `r.With(...)` shape, measured 2026-11-25); got %d — if this changed on purpose, update the number and say why", out.PassCount)
+	// 2026-11-25, later the same day: 45 direct. GET /api/v1/projects/{name}/rollbacks
+	// lists the recorded rollbacks of a project.
+	if out.PassCount != 74 {
+		t.Errorf("expected the 74 routes the AST enumerator sees (45 direct + 29 in the `r.With(...)` shape, measured 2026-11-25); got %d — if this changed on purpose, update the number and say why", out.PassCount)
 	}
 }

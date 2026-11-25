@@ -575,8 +575,24 @@ paths:
         The cells finish the rollout afterwards; the project status shows the target as the
         active release when it completed, and the release rolled back from when it failed.
       responses:
-        "202": {description: "rollback started (status in_progress)"}
+        "202": {description: "rollback started (status in_progress); rollback_id names its record"}
         "409": {description: no previous release}
+
+  /api/v1/projects/{name}/rollbacks:
+    parameters: [$ref: "#/components/parameters/ProjectName"]
+    get:
+      tags: [projects]
+      summary: List the rollbacks of a project
+      description: >-
+        One entry per rollback, newest first: its id, environment, the release and build it
+        left (from) and aimed at (to), who asked, when, and its status. The status is
+        in_progress, succeeded, failed (failure_reason says why; the release it left stayed
+        active) or interrupted (the API stopped before the rollback was confirmed).
+      parameters:
+      - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        "200": {description: "the rollbacks, under the key rollbacks"}
+        "400": {description: invalid limit}
 
   /api/v1/projects/{name}/scale:
     parameters: [$ref: "#/components/parameters/ProjectName"]

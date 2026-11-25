@@ -13,6 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loopzero/pkg/id"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -55,6 +56,9 @@ type RollbackOrchestratorDeps struct {
 	// when it is unset — the same rule promotion and activation apply.
 	PublicDomain string
 	Logger       *slog.Logger
+	// Log keeps the record of each rollback: who asked, from which release to
+	// which, and how it ended. Nil records nothing.
+	Log RollbackLog
 	// CompletionTimeout bounds the completion of a rollback after its sync was
 	// triggered: the wait for the sync and the state change that follows. It
 	// runs apart from the request, which a rollout through canary steps
@@ -72,6 +76,17 @@ const (
 	// rollbackStateTimeout bounds one state change made apart from the request.
 	rollbackStateTimeout = 30 * time.Second
 )
+
+// RollbackLog is where a rollback is recorded as an operation of its own, so
+// that one that failed is as visible as one that succeeded.
+type RollbackLog interface {
+	// Start records the rollback as in progress, on the transaction that moves
+	// the active release to ROLLING_BACK.
+	Start(ctx context.Context, tx db.DBTX, r *db.Rollback) error
+	// Finish closes it as db.RollbackSucceeded or db.RollbackFailed. Only the
+	// first close of a record counts.
+	Finish(ctx context.Context, tenantID, id, status, failureReason string) error
+}
 
 // SavedScaleDeliverer makes an environment's running workloads match its saved
 // scaling configuration, and reports whether it delivered anything.
@@ -95,8 +110,11 @@ type RollbackRequest struct {
 type RollbackResult struct {
 	ReactivatedRelease *db.Release // release that was reactivated (target)
 	RolledBackRelease  *db.Release // release that was rolled back (was ACTIVE)
-	Environment        string
-	URL                string
+	// RollbackID names the record of this rollback. Empty when no RollbackLog
+	// is wired.
+	RollbackID  string
+	Environment string
+	URL         string
 }
 
 // errRollbackDeliveryNotWired is returned when the orchestrator was constructed
@@ -157,7 +175,7 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		"correlation_id", req.CorrelationID,
 	)
 
-	currentRelease, targetRelease, err := o.beginRollback(ctx, req)
+	currentRelease, targetRelease, rollbackID, err := o.beginRollback(ctx, req)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -174,7 +192,7 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 	// WithoutCancel keeps the trace and drops the caller's cancellation.
 	work := context.WithoutCancel(ctx)
 	run := rollbackRun{
-		req: req, current: currentRelease, target: targetRelease, logger: logger,
+		id: rollbackID, req: req, current: currentRelease, target: targetRelease, logger: logger,
 		delivery: deploycontracts.RollbackDeliveryRequest{
 			TenantID:      req.TenantID,
 			ProjectID:     req.ProjectID,
@@ -208,6 +226,7 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 	return &RollbackResult{
 		ReactivatedRelease: targetRelease,
 		RolledBackRelease:  currentRelease,
+		RollbackID:         rollbackID,
 		Environment:        req.Environment,
 		URL:                url,
 	}, nil
@@ -216,6 +235,8 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 // rollbackRun is one rollback in flight: what was asked, the release being
 // rolled back from and the one being reactivated.
 type rollbackRun struct {
+	// id names the record of this rollback; empty when none is kept.
+	id       string
 	req      RollbackRequest
 	current  *db.Release
 	target   *db.Release
@@ -223,9 +244,9 @@ type rollbackRun struct {
 	logger   *slog.Logger
 }
 
-// beginRollback resolves the target and moves the current ACTIVE release to
-// ROLLING_BACK, inside the environment lock.
-func (o *RollbackOrchestrator) beginRollback(ctx context.Context, req RollbackRequest) (current, target *db.Release, err error) {
+// beginRollback resolves the target, moves the current ACTIVE release to
+// ROLLING_BACK and records the rollback, inside the environment lock.
+func (o *RollbackOrchestrator) beginRollback(ctx context.Context, req RollbackRequest) (current, target *db.Release, rollbackID string, err error) {
 	err = o.deps.Locker.WithLock(ctx, req.TenantID, req.ProjectID, req.Environment, func(tx db.DBTX) error {
 		active, err := o.deps.Releases.GetActiveByEnvTx(ctx, tx, req.TenantID, req.ProjectID, req.Environment)
 		if err != nil {
@@ -262,12 +283,39 @@ func (o *RollbackOrchestrator) beginRollback(ctx context.Context, req RollbackRe
 		if _, err := o.deps.Releases.UpdateStatus(ctx, tx, current.ID, string(statemachine.RPEventRollbackStarted)); err != nil {
 			return fmt.Errorf("rollback: transition to ROLLING_BACK: %w", err)
 		}
+		if o.deps.Log == nil {
+			return nil
+		}
+		rollbackID = id.GenerateRollbackID()
+		if err := o.deps.Log.Start(ctx, tx, &db.Rollback{
+			ID:       rollbackID,
+			TenantID: req.TenantID, ProjectID: req.ProjectID, Environment: req.Environment,
+			FromReleaseID: current.ID, FromBuildID: current.BuildID,
+			ToReleaseID: target.ID, ToBuildID: target.BuildID,
+			CreatedBy: req.UserID, CorrelationID: req.CorrelationID,
+		}); err != nil {
+			return fmt.Errorf("rollback: %w", err)
+		}
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
-	return current, target, nil
+	return current, target, rollbackID, nil
+}
+
+// closeRecord writes the outcome of the rollback on its record. A failure to
+// write it is logged and changes nothing else: the releases are already
+// settled, and the record then stays in progress.
+func (o *RollbackOrchestrator) closeRecord(work context.Context, run rollbackRun, status, failureReason string) {
+	if o.deps.Log == nil || run.id == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(work, rollbackStateTimeout)
+	defer cancel()
+	if err := o.deps.Log.Finish(ctx, run.req.TenantID, run.id, status, failureReason); err != nil {
+		run.logger.Error("rollback: the outcome could not be recorded", "rollback_id", run.id, "status", status, "error", err)
+	}
 }
 
 // complete waits for the sync of a started rollback and settles the release
@@ -294,6 +342,7 @@ func (o *RollbackOrchestrator) complete(work context.Context, run rollbackRun) {
 		return
 	}
 
+	o.closeRecord(work, run, db.RollbackSucceeded, "")
 	run.logger.Info("rollback completed",
 		"rolled_back_release", run.current.ID,
 		"reactivated_release", run.target.ID,
@@ -374,6 +423,7 @@ func (o *RollbackOrchestrator) activateTarget(work context.Context, run rollback
 // the release, it also delivers that release's manifests again
 // (restoreKeptRelease).
 func (o *RollbackOrchestrator) keepCurrentActive(work context.Context, run rollbackRun, cause error) {
+	o.closeRecord(work, run, db.RollbackFailed, rollbackFailureReason(cause))
 	ctx, cancel := context.WithTimeout(work, rollbackStateTimeout)
 	defer cancel()
 	req := run.req

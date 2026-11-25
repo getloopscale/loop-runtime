@@ -281,7 +281,9 @@ func setupOrchestrator(
 	// Re-delivery goes through the shared container delivery activator, which
 	// waits for sync confirmation (bounded by cfg.ArgocdSyncTimeout) before the
 	// orchestrator flips release state — the LIVE sponsor mandate of 2026-06-18.
+	rollbackLog := store.NewRollbackStoreSqlc(dbAdapter)
 	rollbackDeps := release.RollbackOrchestratorDeps{
+		Log:          rollbackLog,
 		Releases:     stores.ReleaseStore,
 		EnvTargets:   stores.EnvTargetStore,
 		Locker:       stores.Locker,
@@ -319,7 +321,8 @@ func setupOrchestrator(
 	rollbackService := &releaseadapter.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &store.PostgresProjectStore{DB: dbAdapter}
 	rollbackHandler := rollbackhttp.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
-		WithReleaseLookup(&releaseadapter.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
+		WithReleaseLookup(&releaseadapter.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore}).
+		WithHistory(&releaseadapter.RollbackHistoryAdapter{Store: rollbackLog})
 
 	// Promotion orchestrator — coordinates release promotion across environments
 	promotionOrch := release.NewPromotionOrchestrator(release.PromotionOrchestratorDeps{

@@ -790,6 +790,28 @@ CREATE TABLE public.releases (
 
 ALTER TABLE ONLY public.releases FORCE ROW LEVEL SECURITY;
 
+-- Name: rollbacks; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.rollbacks (
+    id text NOT NULL,
+    tenant_id text NOT NULL,
+    project_id text NOT NULL,
+    environment text NOT NULL,
+    from_release_id text NOT NULL,
+    from_build_id text NOT NULL,
+    to_release_id text NOT NULL,
+    to_build_id text NOT NULL,
+    status text DEFAULT 'IN_PROGRESS'::text NOT NULL,
+    failure_reason text DEFAULT ''::text NOT NULL,
+    created_by text NOT NULL,
+    correlation_id text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT rollbacks_status_check CHECK ((status = ANY (ARRAY['IN_PROGRESS'::text, 'SUCCEEDED'::text, 'FAILED'::text])))
+);
+
+ALTER TABLE ONLY public.rollbacks FORCE ROW LEVEL SECURITY;
+
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.schema_migrations (
@@ -1266,6 +1288,11 @@ ALTER TABLE ONLY public.release_app_attestations
 ALTER TABLE ONLY public.releases
     ADD CONSTRAINT releases_pkey PRIMARY KEY (id);
 
+-- Name: rollbacks rollbacks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.rollbacks
+    ADD CONSTRAINT rollbacks_pkey PRIMARY KEY (id);
+
 -- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.schema_migrations
@@ -1585,6 +1612,10 @@ CREATE INDEX idx_releases_processing_since ON public.releases USING btree (proce
 -- Name: idx_releases_status_active; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_releases_status_active ON public.releases USING btree (status) WHERE (status <> 'ARCHIVED'::text);
+
+-- Name: idx_rollbacks_project; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_rollbacks_project ON public.rollbacks USING btree (tenant_id, project_id, created_at DESC);
 
 -- Name: idx_secrets_lookup; Type: INDEX; Schema: public; Owner: -
 
@@ -1907,6 +1938,11 @@ ALTER TABLE ONLY public.release_app_attestations
 
 ALTER TABLE ONLY public.releases
     ADD CONSTRAINT releases_build_id_fkey FOREIGN KEY (build_id) REFERENCES public.builds(id) ON DELETE RESTRICT;
+
+-- Name: rollbacks rollbacks_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.rollbacks
+    ADD CONSTRAINT rollbacks_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
 -- Name: subscriptions subscriptions_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
@@ -2303,6 +2339,14 @@ CREATE POLICY releases_tenant_isolation ON public.releases USING ((tenant_id = c
 -- Name: releases releases_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
 CREATE POLICY releases_worker_cross_tenant ON public.releases TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: rollbacks; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.rollbacks ENABLE ROW LEVEL SECURITY;
+
+-- Name: rollbacks rollbacks_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY rollbacks_tenant_isolation ON public.rollbacks USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
 
 -- Name: secrets; Type: ROW SECURITY; Schema: public; Owner: -
 
