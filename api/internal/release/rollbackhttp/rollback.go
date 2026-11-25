@@ -62,7 +62,7 @@ type RollbackProjectStore interface {
 // Plan: deploy-timeline-canonical-5-phases LIVE follow-up — closes
 // the dashboard rollback 400 caught against the LIVE Vercel UX flow.
 type RollbackReleaseLookup interface {
-	GetLatestReleaseForBuild(ctx context.Context, tenantID, buildID string) (releaseID string, err error)
+	GetReleaseForBuild(ctx context.Context, tenantID, projectID, environment, buildID string) (releaseID string, err error)
 }
 
 // rollbackRequest is the JSON body for POST /api/v1/projects/{name}/rollback.
@@ -155,7 +155,7 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("rollback by build_id not configured"))
 			return
 		}
-		relID, lookupErr := h.releases.GetLatestReleaseForBuild(ctx, uc.TenantID, req.BuildID)
+		relID, lookupErr := h.releases.GetReleaseForBuild(ctx, uc.TenantID, name, env, req.BuildID)
 		if lookupErr != nil {
 			slog.Error("rollback: build_id lookup failed", "build_id", req.BuildID, "err", lookupErr)
 			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)

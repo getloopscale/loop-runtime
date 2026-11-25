@@ -15,13 +15,13 @@ import (
 // what the adapter calls, and an adapter that is only given a tenant-scoped read
 // cannot reach the unscoped one.
 
-type latestReleaseByBuild interface {
-	GetLatestByBuildID(ctx context.Context, buildID string) (*db.Release, error)
+type releasesOfEnvironment interface {
+	ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int) ([]db.Release, error)
 }
 
 // Compile-time proof the production stores still provide every read.
 var (
 	_ interface {
-		latestReleaseByBuild
+		releasesOfEnvironment
 	} = db.ReleaseStore(nil)
 )
