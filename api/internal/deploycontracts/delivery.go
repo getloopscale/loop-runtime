@@ -106,6 +106,12 @@ type RollbackTarget struct {
 	// GitCommit is the GitOps commit the manifests are read back from. Empty
 	// means the release never reached the mirror and cannot be rolled back to.
 	GitCommit string
+	// Apps names the workloads of the release's apps, as ArgoCD lists them
+	// (`<project>-<app>`). The sync of a rollback is confirmed by the health
+	// of these, not of the whole Application: another resource that never
+	// becomes ready must not fail a rollback the cluster completed (#121).
+	// Empty falls back to the Application's own health.
+	Apps []string
 }
 
 // RollbackDeliveryRequest contains the delivery-specific inputs for rollback.

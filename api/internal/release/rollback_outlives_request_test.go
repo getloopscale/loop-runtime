@@ -37,7 +37,12 @@ type slowSyncDelivery struct {
 	startCtxErr error
 	awaitCtxErr error
 	starts      int
-	awaitOnce   sync.Once
+	// delivered lists, in order, the release each delivery re-delivered.
+	delivered []string
+	// restoreErr fails every delivery after the first: the restore of the
+	// release kept active.
+	restoreErr error
+	awaitOnce  sync.Once
 }
 
 func newSlowSyncDelivery() *slowSyncDelivery {
@@ -48,12 +53,22 @@ func (d *slowSyncDelivery) Activate(context.Context, deploycontracts.ActivationB
 	return nil
 }
 
-func (d *slowSyncDelivery) Rollback(ctx context.Context, _ deploycontracts.RollbackDeliveryRequest) error {
+func (d *slowSyncDelivery) Rollback(ctx context.Context, req deploycontracts.RollbackDeliveryRequest) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.starts++
+	d.delivered = append(d.delivered, req.TargetRelease.ID)
+	if d.starts > 1 {
+		return d.restoreErr
+	}
 	d.startCtxErr = ctx.Err()
 	return d.startErr
+}
+
+func (d *slowSyncDelivery) deliveries() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]string(nil), d.delivered...)
 }
 
 func (d *slowSyncDelivery) AwaitRollback(ctx context.Context, _ deploycontracts.RollbackDeliveryRequest) error {
