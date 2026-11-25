@@ -398,6 +398,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The SBOM component count of a build is the length of the CycloneDX `components` array. It counted every `{` after the field, so nested hashes, licenses and properties inflated it (75947 for an image with 20398 components) (#99)
 - The SBOM download link of a build points into `STATIC_ASSETS_BUCKET`, where the build uploads the SBOM, instead of `SOURCE_BUCKET`, so the download no longer answers 404 (#98)
 - A failed push deploy marks its commit `failure` on GitHub. Build failures stopped calling the build-failed callback when they moved to one finalization path, so the commit stayed `pending` (#91)
 - The commit status of a push deploy links the app on `LOOPZERO_PUBLIC_DOMAIN`, where it answers, instead of `BASE_DOMAIN` (#92)

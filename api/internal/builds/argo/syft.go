@@ -108,10 +108,10 @@ if [ ! -s %s ]; then
   exit 1
 fi
 
-# Component count (CycloneDX: top-level "components" array).
-# Robust to absence: default to 0 if the field is missing or non-array.
-COMPONENT_COUNT=$(awk -F'"components"' 'NR>1 || /"components"/' %s 2>/dev/null \
-  | tr -cd '{' | wc -c)
+# Component count: length of the top-level CycloneDX "components" array.
+# python3 ships with aws-cli in the scanner image; jq does not. 0 when the
+# field is missing, is not an array, or the file does not parse.
+COMPONENT_COUNT=$(python3 -c 'import json,sys; c=json.load(open(sys.argv[1])).get("components"); print(len(c) if isinstance(c, list) else 0)' %s 2>/dev/null || echo 0)
 if [ -z "$COMPONENT_COUNT" ]; then COMPONENT_COUNT=0; fi
 
 # Upload to S3 (bucket: %s). Path: %s
