@@ -398,6 +398,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `GET /environments` reports the commit the user deployed as `last_deploy_sha`, the active release's build commit, instead of the commit of the GitOps repository (#101)
 - A build step that fails before running prints its error message as written. The message sat in a double-quoted `echo`, so backticks and `$(...)` in it, including a `runtime` from `loopzero.yaml`, ran as shell commands (`/bin/sh: start: not found`) (#100)
 - The SBOM component count of a build is the length of the CycloneDX `components` array. It counted every `{` after the field, so nested hashes, licenses and properties inflated it (75947 for an image with 20398 components) (#99)
 - The SBOM download link of a build points into `STATIC_ASSETS_BUCKET`, where the build uploads the SBOM, instead of `SOURCE_BUCKET`, so the download no longer answers 404 (#98)

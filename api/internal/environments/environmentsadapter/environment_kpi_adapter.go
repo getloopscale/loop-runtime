@@ -16,7 +16,7 @@ import (
 var _ environmentshttp.EnvKPILookup = (*EnvKPILookup)(nil)
 
 // EnvKPILookup fills the dashboard's per-environment KPI row (last deploy
-// time and commit) from the most recent ACTIVE release of each environment,
+// time and source commit) from the most recent ACTIVE release of each environment,
 // in one query (ListLatestActiveReleasePerEnv).
 type EnvKPILookup struct {
 	DB db.DBTX
@@ -34,8 +34,13 @@ func (l *EnvKPILookup) LatestActivePerEnv(ctx context.Context, tenantID string) 
 func envKPIsFromRows(rows []generated.ListLatestActiveReleasePerEnvRow) map[string]environmentshttp.EnvKPI {
 	out := make(map[string]environmentshttp.EnvKPI, len(rows))
 	for _, r := range rows {
+		// The source commit is what the user deployed; releases.git_commit is the
+		// GitOps repository commit, kept only for a release whose build is gone.
 		sha := ""
-		if r.GitCommit != nil {
+		switch {
+		case r.SourceCommit != nil && *r.SourceCommit != "":
+			sha = *r.SourceCommit
+		case r.GitCommit != nil:
 			sha = *r.GitCommit
 		}
 		out[r.Environment] = environmentshttp.EnvKPI{
