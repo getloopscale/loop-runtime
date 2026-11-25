@@ -124,12 +124,7 @@ func setupGitHub(
 	}
 	var autoDeployer *github.AutoDeployer
 	if ghAppClient != nil && buildSub != nil {
-		autoDeployer = github.NewAutoDeployer(github.AutoDeployConfig{
-			AppClient:      ghAppClient,
-			ObjectStore:    stores.ObjUploader,
-			BuildSubmitter: buildSub,
-			Logger:         logger,
-		})
+		autoDeployer = github.NewAutoDeployer(autoDeployConfig(cfg, ghAppClient, stores.ObjUploader, buildSub, logger))
 		// Wire connect-then-deploy onto the RepositoryHandler so POST
 		// /api/v1/projects/{name}/connect dispatches an immediate HEAD
 		// deploy after a successful link.
@@ -227,4 +222,16 @@ func setupGitHub(
 // (queries/repositories.sql), and the handlers enforce ownership.
 func newRepositoryStore(crossTenant db.DBTX) *store.PostgresRepositoryStore {
 	return &store.PostgresRepositoryStore{DB: crossTenant}
+}
+
+// autoDeployConfig is the push deploy's configuration. It uploads source bundles to
+// cfg.SourceBucket, the bucket a CLI upload uses, instead of the auto-deployer's default.
+func autoDeployConfig(cfg config.Config, app *github.AppClient, objects github.ObjectUploader, builds github.BuildSubmitter, logger *slog.Logger) github.AutoDeployConfig {
+	return github.AutoDeployConfig{
+		AppClient:      app,
+		ObjectStore:    objects,
+		BuildSubmitter: builds,
+		SourceBucket:   cfg.SourceBucket,
+		Logger:         logger,
+	}
 }
