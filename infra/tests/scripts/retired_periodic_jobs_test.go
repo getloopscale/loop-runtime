@@ -114,7 +114,7 @@ func TestRetiredPeriodicJobsDoc_TaskRefsResolve(t *testing.T) {
 	root := repoRootFromTests(t)
 	// The document went with the 2026-09-11 consolidation; what this asserts is what it
 	// SAYS about task names, which history holds exactly.
-	body := []byte(readDocument(t, "19b8c6eaa~1", docRelPath))
+	body := []byte(readDocument(t, docRelPath))
 	known := allTaskNames(t, root)
 
 	seen := map[string]bool{}
