@@ -335,7 +335,9 @@ tasks:
         #   stripe.json: {"api-key", "webhook-secret", "price-starter", "price-pro",
         #   "price-team"}, Stripe test-mode keys and plan prices for
         #   loopzero-cloud (aws.stripeSecret).
-        for name in ghcr-pull resend stripe; do
+        #   github-app.json: {"app-id", "private-key", "webhook-secret"}, the staging
+        #   GitHub App loopzero-api deploys from (aws.githubAppSecret).
+        for name in ghcr-pull resend stripe github-app; do
           kept=/etc/loopzero-staging/$name.json
           [ -f "$kept" ] || { echo "warning: no $kept, loopzero/staging/$name is not seeded" >&2; continue; }
           if aws secretsmanager describe-secret --secret-id "loopzero/staging/$name" >/dev/null 2>&1; then

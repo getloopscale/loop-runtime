@@ -791,8 +791,8 @@ releases:
         config:
           # The SPA calls its own origin; public-routes proxies the APIs on the app host.
           viteApiUrl: ""
-          viteCloudUrl: ""
-          baseDomain: {{ .Values.domain | quote }}
+          # Hydra's public origin: the CLI's device flow redirects the browser there.
+          viteOauthUrl: {{ .Values | get "publicAuthUrl" "" | trimSuffix "/" | quote }}
           # The Kratos public host the auth flows read and the forms post to, and the
           # control plane's, which the Content-Security-Policy allows besides 'self'.
           cspConnectOrigins:
@@ -899,6 +899,7 @@ releases:
           authTokenSecret: {{ env "LOOPZERO_CACHE_AUTH_SECRET" | quote }}
         resendSecret: {{ .Values | get "aws.resendSecret" "" | quote }}
         stripeSecret: {{ .Values | get "aws.stripeSecret" "" | quote }}
+        githubAppSecret: {{ .Values | get "aws.githubAppSecret" "" | quote }}
 {{- with .Values | get "aws.imagePullSecret" "" }}
         # Staging only: the registry login the nodes pull the private GHCR images with.
         imagePullSecret:

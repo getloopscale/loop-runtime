@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -546,4 +547,58 @@ func TestStagingBuildPodsReachTheEmulator(t *testing.T) {
 		}
 	}
 	t.Errorf("build-pod-egress has no rule for TCP 9597 to 172.29.0.1/32:\n%v", rules)
+}
+
+// Staging's GitHub App (id, private key, webhook secret) lives in a secret of its own,
+// seeded from the host like Resend's and Stripe's, and reaches loopzero-api as the
+// optional loopzero-api-github source its values-bootstrap declares. The console's
+// install button sends the browser to that App's slug.
+func TestStagingGitHubAppReachesTheAPIFromItsOwnSecret(t *testing.T) {
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "aws-secrets-manager", "infra/helm/aws-secrets-manager", stagingOutputs...)
+	es := renderedObject(t, rendered, "ExternalSecret", "loopzero-api-github")
+	if es == nil {
+		t.Fatal("no ExternalSecret loopzero-api-github")
+	}
+	if ns, _ := dig(es, "metadata", "namespace").(string); ns != "loopzero-system" {
+		t.Errorf("loopzero-api-github is in namespace %q, want loopzero-system", ns)
+	}
+	refs := externalSecretRefs(t, es)
+	for key, want := range map[string]string{
+		"GITHUB_APP_ID":          "loopzero/staging/github-app#app-id",
+		"GITHUB_APP_PRIVATE_KEY": "loopzero/staging/github-app#private-key",
+		"GITHUB_WEBHOOK_SECRET":  "loopzero/staging/github-app#webhook-secret",
+	} {
+		if refs[key] != want {
+			t.Errorf("loopzero-api-github maps %s from %q, want %s", key, refs[key], want)
+		}
+	}
+
+	cloud := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-cloud", "charts/loopzero-cloud", stagingOutputs...)
+	config := renderedObject(t, cloud, "ConfigMap", "loopzero-cloud")
+	if got := dig(config, "data", "GITHUB_APP_SLUG"); got != "loopscale-staging" {
+		t.Errorf("GITHUB_APP_SLUG = %v, want loopscale-staging", got)
+	}
+
+	taskfile, err := os.ReadFile("../../../taskfiles/staging.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`for name in [^;\n]*\bgithub-app\b`).Match(taskfile) {
+		t.Error("staging:platform does not seed loopzero/staging/github-app from the host")
+	}
+}
+
+// Without githubAppSecret the chart renders no loopzero-api-github, and the API keeps
+// its repository features off instead of reading an empty secret.
+func TestNoGitHubAppSecretRendersNoGitHubExternalSecret(t *testing.T) {
+	out := renderChart(t, uniqueChart(t, "aws-secrets-manager"), "aws-secrets-manager", nil, writeValues(t, `
+region: us-east-1
+coreSecrets: true
+platformSecret: loopzero/test/platform
+database: {host: db, masterSecret: m}
+cache: {host: c, authTokenSecret: a}
+`))
+	if strings.Contains(out, "name: loopzero-api-github") {
+		t.Error("loopzero-api-github rendered without githubAppSecret")
+	}
 }

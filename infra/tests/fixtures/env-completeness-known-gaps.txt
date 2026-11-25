@@ -39,7 +39,6 @@ orphan|LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY|loopzero-cloud generates via ge
 phantom|AWS_ACCESS_KEY_ID|loopzero-build-cwts/SECRETS.md row; MinIO/S3 build-time auth used at runtime by Argo Workflows clone step; follow-up: add to master table § build-cwts
 phantom|AWS_SECRET_ACCESS_KEY|same as AWS_ACCESS_KEY_ID — build runtime SECRET
 phantom|VITE_API_URL|loopzero-dashboard/CONFIG.md row (camelCase viteApiUrl); runtime config injected into __config.js; follow-up: add to master table § dashboard
-phantom|VITE_CLOUD_URL|same as VITE_API_URL — dashboard runtime config
 phantom|LOOPZERO_DATA_PLANE_POLLER_ENABLED|loopzero-api/CONFIG.md row (moved from loopzero-app-operator 2026-09-25, docs/decisions.md) — readiness-poller feature flag, dashboard badge #128; follow-up: add to master table § loopzero-api
 phantom|LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL|same family — Prometheus base URL the api's readiness poller queries; follow-up: add to master table § loopzero-api
 phantom|LOOPZERO_DATA_PLANE_POLLER_INTERVAL|same family — readiness poller cadence, default 30s; follow-up: add to master table § loopzero-api

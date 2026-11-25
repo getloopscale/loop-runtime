@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `aws-secrets-manager` takes `githubAppSecret`, a Secrets Manager secret with the GitHub App's `app-id`, `private-key` and `webhook-secret`, and writes it into `loopzero-system` as `loopzero-api-github`. Staging reads `loopzero/staging/github-app`, seeded from the host, and sends the console's install button to the `loopscale-staging` App (#68)
 - An app's public URL is served by a CloudFront distribution whose viewer-request function reads the host's cell from a CloudFront KeyValueStore. The API writes the routes there when `LOOPZERO_EDGE_KVS_ARN` is set (#68)
 - loopzero-memory's MCP server is reachable at `<public origin>/mcp/memory` behind the MCP gateway, with a Hydra token issued for that URL and carrying the caller's team. A data-plane service can now run a second serving process (its own port, probe, settings and in-cluster address) beside its API (#470)
 - The core cluster runs one MCP gateway for every MCP server: a server joins it through `mcp.servers` and is reached at `<public origin>/mcp/<name>` only with a Hydra-issued token whose audience is that URL. A client without one gets a 401 that points it at the discovery documents (RFC 9728), and the token reaches the server so it can validate it too (#470)
@@ -397,6 +398,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The dashboard reads the runtime config the chart renders. `__config.js` wrote `window.__LOOPZERO_CONFIG__`, which the dashboard never read, and it now writes `window.__THEO_CONFIG__` with `API_URL`, `AUTH_URL`, `ACCOUNTS_URL` and `OAUTH_URL`. `viteCloudUrl` and `baseDomain` are removed (#83)
 - Server-Sent Events (`.../stream`, the CLI's deploy log) reach the client as they happen. The edge's body-limit middleware held each stream until it ended, so one longer than 60 s failed with 504 (#79)
 - A seed that restarts a workload (loopzero-api, loopzero-cloud, CoreDNS) waits until the old pod is gone; it used to report the rollout settled while the old pod was still the one answering and the new one was not ready (#470)
 

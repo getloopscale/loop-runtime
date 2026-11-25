@@ -56,10 +56,6 @@ spec:
           env:
             - name: VITE_API_URL
               value: {{ .Values.config.viteApiUrl | quote }}
-            {{- if .Values.config.viteCloudUrl }}
-            - name: VITE_CLOUD_URL
-              value: {{ .Values.config.viteCloudUrl | quote }}
-            {{- end }}
           {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
