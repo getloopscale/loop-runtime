@@ -55,6 +55,7 @@ func (a StatusScaleAdapter) DesiredScale(ctx context.Context, tenantID, projectI
 		switch {
 		case app.Autoscaling != nil:
 			scale.Min, scale.Max = app.Autoscaling.MinReplicas, app.Autoscaling.MaxReplicas
+			scale.TargetCPU, scale.TargetMemory = app.Autoscaling.TargetCPU, app.Autoscaling.TargetMemory
 		case saved:
 			scale.Min, scale.Max = scale.Replicas, scale.Replicas
 		}

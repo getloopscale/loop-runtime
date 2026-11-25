@@ -38,7 +38,7 @@ func TestStatusScaleAdapter_ReportsTheSavedConfigAndElseWhatTheBuildRendered(t *
 	adapter := StatusScaleAdapter{
 		Builds: fakeBuildApps{apps: []db.BuildAppSpec{
 			{Name: "web", Replicas: 1},
-			{Name: "api", Autoscaling: &db.BuildAppAutoscaling{MinReplicas: 2, MaxReplicas: 5}},
+			{Name: "api", Autoscaling: &db.BuildAppAutoscaling{MinReplicas: 2, MaxReplicas: 5, TargetCPU: 70, TargetMemory: 60}},
 			{Name: "worker"},
 			{Name: "cron", Replicas: 1},
 		}},
@@ -55,7 +55,7 @@ func TestStatusScaleAdapter_ReportsTheSavedConfigAndElseWhatTheBuildRendered(t *
 	}
 	want := []statushttp.StatusAppScale{
 		{App: "web", Replicas: 4, Min: 4, Max: 4, Saved: true},
-		{App: "api", Replicas: 2, Min: 2, Max: 5},
+		{App: "api", Replicas: 2, Min: 2, Max: 5, TargetCPU: 70, TargetMemory: 60},
 		// No replicas declared: the Rollout is rendered with the default.
 		{App: "worker", Replicas: 2},
 		// Saved scale to zero: the workload is rendered with no replica.
