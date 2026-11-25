@@ -28,6 +28,10 @@ dnsZone: staging.getloopscale.com
 vaultEnabled: false
 
 clusterRole: staging
+
+# EKS ships no metrics server. Without one an HPA reads no CPU or memory, and an
+# autoscaled tenant app stays at its minimum.
+installMetricsServer: true
 clusterTopology: multi-cluster
 
 replicas:
