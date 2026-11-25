@@ -28,6 +28,9 @@ type StatusAppScale struct {
 	// the scale is fixed by a saved configuration. Both are zero for a fixed
 	// scale that came from the build.
 	Min, Max int
+	// TargetCPU and TargetMemory are the utilization targets of an autoscaled
+	// app, in percent. Zero when the app has no such target.
+	TargetCPU, TargetMemory int
 	// Saved is true when the scale comes from the saved scale configuration
 	// and false when it is what the build rendered.
 	Saved bool
@@ -135,6 +138,8 @@ func scalingOfApps(apps []StatusAppScale) *scalingStatusResponse {
 		Replicas:     app.Replicas,
 		Min:          app.Min,
 		Max:          app.Max,
+		TargetCPU:    app.TargetCPU,
+		TargetMemory: app.TargetMemory,
 		ScaledToZero: app.Min == 0 && app.Max > 0,
 	}
 }

@@ -482,3 +482,47 @@ func keysOf(m map[string]string) []string {
 	}
 	return keys
 }
+
+func TestHPAStatus_ReadsTheMetricsAndWhetherTheHPACanScale(t *testing.T) {
+	var calls []string
+	kubectl := func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if args[1] == "cell-0" {
+			return "", fmt.Errorf(`Error from server (NotFound): horizontalpodautoscalers "x" not found`)
+		}
+		return "cpu memory|True|ValidMetricFound", nil
+	}
+
+	got, err := HPAStatus(context.Background(), kubectl, []string{"cell-0", "cell-1"}, "ns-1", "staging-validate-app")
+
+	if err != nil {
+		t.Fatalf("HPAStatus: %v", err)
+	}
+	if strings.Join(got.Metrics, ",") != "cpu,memory" || !got.ScalingActive || got.Reason != "ValidMetricFound" || got.Cell != "cell-1" {
+		t.Errorf("HPAStatus = %+v, want cpu and memory, active, on cell-1", got)
+	}
+	if !strings.Contains(calls[len(calls)-1], "get horizontalpodautoscalers.autoscaling staging-validate-app") {
+		t.Errorf("kubectl ran with %q", calls[len(calls)-1])
+	}
+}
+
+func TestHPAStatus_ReportsAnHPAThatReadsNoMetric(t *testing.T) {
+	// What the cells answered before they had a metrics server.
+	kubectl := func(context.Context, ...string) (string, error) {
+		return "cpu|False|FailedGetResourceMetric", nil
+	}
+
+	got, err := HPAStatus(context.Background(), kubectl, []string{"cell-0"}, "ns-1", "app")
+
+	if err != nil || got.ScalingActive || got.Reason != "FailedGetResourceMetric" {
+		t.Errorf("HPAStatus = %+v, %v; want inactive with the reason", got, err)
+	}
+}
+
+func TestHPAStatus_FailsWhenNoCellHasTheHPA(t *testing.T) {
+	kubectl := func(context.Context, ...string) (string, error) { return "", errors.New("not found") }
+
+	if _, err := HPAStatus(context.Background(), kubectl, []string{"cell-0"}, "ns-1", "app"); err == nil {
+		t.Fatal("no error although no cell has the HPA")
+	}
+}

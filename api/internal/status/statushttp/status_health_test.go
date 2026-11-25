@@ -225,3 +225,30 @@ func TestStatus_Get_ScalingFallsBackToTheBuildWhenTheScaleReadFails(t *testing.T
 		t.Errorf("scaling = %v, want the build's 1..3", scaling)
 	}
 }
+
+func TestStatus_Get_ScalingCarriesTheAutoscalingTargets(t *testing.T) {
+	h := deployedHandler("production", time.Now())
+	h.SetScaleReader(&fakeStatusScale{apps: []StatusAppScale{
+		{App: "web", Replicas: 1, Min: 1, Max: 3, TargetCPU: 70, TargetMemory: 60, Saved: true},
+	}})
+
+	scaling, _ := getStatus(t, h, "production")["scaling"].(map[string]any)
+
+	if scaling["target_cpu"] != float64(70) || scaling["target_memory"] != float64(60) {
+		t.Errorf("scaling = %v, want target_cpu 70 and target_memory 60", scaling)
+	}
+}
+
+func TestStatus_Get_ScalingOmitsTargetsOfAFixedScale(t *testing.T) {
+	h := deployedHandler("production", time.Now())
+	h.SetScaleReader(&fakeStatusScale{apps: []StatusAppScale{{App: "web", Replicas: 4, Min: 4, Max: 4, Saved: true}}})
+
+	scaling, _ := getStatus(t, h, "production")["scaling"].(map[string]any)
+
+	if _, sent := scaling["target_cpu"]; sent {
+		t.Errorf("scaling = %v, want no target_cpu for a fixed count", scaling)
+	}
+	if _, sent := scaling["target_memory"]; sent {
+		t.Errorf("scaling = %v, want no target_memory for a fixed count", scaling)
+	}
+}

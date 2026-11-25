@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `GET /api/v1/projects/{name}/status` reports the utilization targets of an autoscaled app as `scaling.target_cpu` and `scaling.target_memory`, in percent. Both are omitted for a fixed scale (#139).
 - Each rollback is recorded as an operation of its own: who asked, the release and build it left and aimed at, and how it ended. `GET /api/v1/projects/{name}/rollbacks` lists them, newest first, with the status `in_progress`, `succeeded`, `failed` (with `failure_reason`) or `interrupted`. The 202 of `POST /api/v1/projects/{name}/rollback` carries the record's id as `rollback_id`. Migration `000070_rollbacks` adds the table (#128).
 - The `loopzero-cloud` chart takes `config.githubAppClientId`, the OAuth client id of the GitHub App, and passes it to the console as `GITHUB_APP_CLIENT_ID`. Each environment reads it from `LOOPZERO_GITHUB_APP_CLIENT_ID` of the helmfile run; empty leaves the console's repository connect flow off (#117).
 - `GET /api/v1/integrations/github/installations` lists the GitHub App installations bound to the caller's team, each with `id`, `account_login` and `account_type`

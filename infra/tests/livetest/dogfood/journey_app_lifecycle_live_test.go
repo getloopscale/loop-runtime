@@ -265,4 +265,30 @@ var _ = Describe("App lifecycle", Ordered, Label("live", "dogfood", "app-lifecyc
 			return latest >= 1, fmt.Sprintf("the latest ready count is %v", latest)
 		}))
 	})
+
+	It("step 6: autoscales on CPU and memory the cell can read", func() {
+		Expect(target.TenantID).ToNot(BeEmpty(), "step 6 needs the project of step 1")
+		namespace := TenantNamespace(target.TenantID, target.Name, ProbeEnvironment)
+		hpa := target.Name + "-" + ProbeApp
+		// Back to one fixed replica, so the next run starts from the same scale.
+		DeferCleanup(func() {
+			restore, cancelRestore := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancelRestore()
+			if err := engine.Scale(restore, target.Name, ProbeEnvironment, ProbeApp, 1); err != nil {
+				GinkgoWriter.Printf("cleanup: could not scale %s back to 1 fixed replica: %v\n", target.Name, err)
+			}
+		})
+		must("step 6: save a range of 1 to 2 replicas", engine.Autoscale(ctx, target.Name, ProbeEnvironment, ProbeApp, 1, 2, 80, 80))
+		// The HPA has to exist, carry both metrics, and read them: without a
+		// metrics API on the cell it reports FailedGetResourceMetric for good.
+		must("", WaitFor(ctx, fmt.Sprintf("step 6: the HPA %s/%s scales on cpu and memory and reads them", namespace, hpa), metricsTimeout, pollInterval, func(ctx context.Context) (bool, string) {
+			state, err := HPAStatus(ctx, HostKubectl, CellContexts(), namespace, hpa)
+			if err != nil {
+				return false, err.Error()
+			}
+			metrics := strings.Join(state.Metrics, ",")
+			return metrics == "cpu,memory" && state.ScalingActive,
+				fmt.Sprintf("metrics %q, ScalingActive=%v (%s) on %s", metrics, state.ScalingActive, state.Reason, state.Cell)
+		}))
+	})
 })

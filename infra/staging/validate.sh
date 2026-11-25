@@ -57,8 +57,9 @@ export LOOPZERO_DOGFOOD_JWT_PATH="$STATE_DIR/validate/jwt"
 #   j18 status: the deep health, and the engine health through the proxy
 #   app-lifecycle: deploys a real app (fixtures/env-probe) to the project staging-validate
 #     of the validation tenant, then checks two secrets after a redeploy of the same
-#     image, a scale against the Rollout on its cell, the runtime log stream and the
-#     ready-replicas metric. It needs kubectl and the cell contexts (run_suite).
+#     image, a scale against the Rollout on its cell, the runtime log stream, the
+#     ready-replicas metric, and an autoscaling range whose HPA reads CPU and memory.
+#     It needs kubectl and the cell contexts (run_suite).
 # Left out, because staging does not run what they need:
 #   j06 j08 j09 j17 j19 j20 j21 j23 j25: read the canonical `sample` project, which the
 #     dev seed connects to a fixture GitHub repository; staging has no GitHub App, no

@@ -157,9 +157,13 @@ type activeReleaseResponse struct {
 
 // scalingStatusResponse is the scaling info in the status response.
 type scalingStatusResponse struct {
-	Replicas     int  `json:"replicas"`
-	Min          int  `json:"min"`
-	Max          int  `json:"max"`
+	Replicas int `json:"replicas"`
+	Min      int `json:"min"`
+	Max      int `json:"max"`
+	// TargetCPU and TargetMemory are omitted for a fixed scale and for an
+	// autoscaled app that has no such target.
+	TargetCPU    int  `json:"target_cpu,omitempty"`
+	TargetMemory int  `json:"target_memory,omitempty"`
 	ScaledToZero bool `json:"scaled_to_zero"`
 }
 
