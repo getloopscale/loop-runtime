@@ -73,6 +73,9 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		GitReader:         gitopsPusher,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
 		DeployEventStore:  store.NewDeployEventStoreSqlc(), // J-16 slice 3: deploy.succeeded outbox
+		// No Secrets: this binary has no client for a runtime cluster, so a
+		// deploy it activates does not wait for its secrets to reach the
+		// cluster (#119). The API server's delivery does.
 	})
 
 	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{

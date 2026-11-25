@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,6 +44,10 @@ type SecretK8sManager struct {
 	// manager can reach: runtimeDynamic serves runtimeCellID only.
 	tenantCells   TenantCellLookup
 	runtimeCellID string
+	// deliveryTimeout and deliveryPoll bound AwaitDelivered; zero means the
+	// defaults.
+	deliveryTimeout time.Duration
+	deliveryPoll    time.Duration
 }
 
 // TenantCellLookup reads the cell a tenant was placed on (tenants.cell_id).

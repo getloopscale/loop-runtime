@@ -130,6 +130,9 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	activationErr := o.activate(ctx, build, result)
 
 	if activationErr != nil {
+		if o.failOnUndeliveredSecrets(ctx, build, activationErr) {
+			return nil
+		}
 		// BRC-002 fix: if the delivery activator already handled the failure
 		// (emitted SSE event, transitioned release state), skip our own emit
 		// to prevent duplicate deploy.sync_failed events in the CLI stream.

@@ -96,7 +96,7 @@ func (f *fakeBuildStoreOrch) UpdateStatus(_ context.Context, _ db.DBTX, id, even
 		switch statemachine.Event(event) {
 		case statemachine.BuildStarted:
 			b.Status = string(statemachine.BuildRunning)
-		case statemachine.BuildFailedEvent:
+		case statemachine.BuildFailedEvent, statemachine.BuildReleaseFailedEvent:
 			b.Status = string(statemachine.BuildFailed)
 		case statemachine.BuildSucceededEvent:
 			b.Status = string(statemachine.BuildReleasing)

@@ -34,6 +34,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/logs/loki"
 	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
@@ -136,6 +137,23 @@ type OrchestratorDeps struct {
 
 // setupOrchestrator creates the build orchestrator, logs, rollback, status,
 // build list handlers, project deleter, and ArgoCD callback handler.
+// deployEnvironmentSecrets gives the delivery the confirmation that an
+// environment's secrets are in its cluster, from the syncer that writes them.
+// It returns a nil interface when the syncer is not wired, and a deploy then
+// does not wait: its pods may start before a changed secret arrives (#119).
+func deployEnvironmentSecrets(k8sDeps *K8sDeps, logger *slog.Logger) deploycontracts.EnvironmentSecrets {
+	if k8sDeps == nil || k8sDeps.SecretK8sSync == nil {
+		logger.Warn("secret K8s sync is not wired: a deploy does not wait for its secrets to reach the cluster")
+		return nil
+	}
+	confirmation, ok := k8sDeps.SecretK8sSync.(deploycontracts.EnvironmentSecrets)
+	if !ok {
+		logger.Warn("the secret K8s sync cannot confirm delivery: a deploy does not wait for its secrets to reach the cluster")
+		return nil
+	}
+	return confirmation
+}
+
 func setupOrchestrator(
 	dbAdapter *db.PgxAdapter,
 	stores *StoreDeps,
@@ -145,6 +163,7 @@ func setupOrchestrator(
 	logger *slog.Logger,
 	projectCap projectCapEnforcement,
 	envEnsurer *environments.EnvironmentEnsurer,
+	deploySecrets deploycontracts.EnvironmentSecrets,
 ) *OrchestratorDeps {
 	// The orchestrator builds its OWN project store for the deploy-time
 	// EnsureProject path (`loopzero deploy <new-name>`). It is wired through the same
@@ -191,6 +210,7 @@ func setupOrchestrator(
 		AppAttestationStore: store.NewAppAttestationStoreSqlc(dbAdapter),
 		// J-16 slice 3: deploy.succeeded outbox.
 		DeployEventStore: store.NewDeployEventStoreSqlc(),
+		Secrets:          deploySecrets,
 	})
 
 	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{
