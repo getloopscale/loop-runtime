@@ -96,6 +96,27 @@ func assertAbsent(t *testing.T, body map[string]any, fields ...string) {
 	}
 }
 
+// After a rollback the active release is an old one: last_deploy_at is when it
+// became active again.
+func TestStatus_Get_LastDeployIsWhenTheReleaseBecameActive(t *testing.T) {
+	createdAt := time.Date(2026, 11, 25, 18, 17, 0, 0, time.UTC)
+	rolledBackAt := time.Date(2026, 11, 25, 22, 3, 0, 0, time.UTC)
+	h := NewStatusHandler(
+		&fakeStatusProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}},
+		&fakeStatusBuildStore{builds: []StatusBuild{{ID: "bld-1", Environment: "production", Status: "SUCCEEDED", CreatedAt: createdAt}}},
+		&fakeStatusReleaseStore{release: &StatusRelease{
+			ID: "rel-1", BuildID: "bld-1", Status: "ACTIVE", CreatedAt: createdAt, DeployedAt: rolledBackAt,
+		}},
+		"dev.getloopscale.com", "", "",
+	)
+
+	body := getStatus(t, h, "production")
+
+	if body["last_deploy_at"] != "2026-11-25T22:03:00Z" {
+		t.Errorf("last_deploy_at = %v, want the end of the rollback", body["last_deploy_at"])
+	}
+}
+
 func TestStatus_Get_SendsTheHealthOfTheRequestedEnvironment(t *testing.T) {
 	deployedAt := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
 	h := deployedHandler("staging", deployedAt)

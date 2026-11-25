@@ -7,6 +7,8 @@ package generated
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const finishRollback = `-- name: FinishRollback :execrows
@@ -81,6 +83,26 @@ func (q *Queries) InsertRollback(ctx context.Context, db DBTX, arg InsertRollbac
 		arg.CorrelationID,
 	)
 	return err
+}
+
+const lastRollbackTo = `-- name: LastRollbackTo :one
+SELECT max(finished_at)::timestamptz AS finished_at
+FROM rollbacks
+WHERE tenant_id = $1 AND to_release_id = $2 AND status = 'SUCCEEDED'
+`
+
+type LastRollbackToParams struct {
+	TenantID    string `json:"tenant_id"`
+	ToReleaseID string `json:"to_release_id"`
+}
+
+// When the last rollback that ended on this release finished, which is when
+// the release became active again. NULL when no rollback ended on it.
+func (q *Queries) LastRollbackTo(ctx context.Context, db DBTX, arg LastRollbackToParams) (pgtype.Timestamptz, error) {
+	row := db.QueryRow(ctx, lastRollbackTo, arg.TenantID, arg.ToReleaseID)
+	var finished_at pgtype.Timestamptz
+	err := row.Scan(&finished_at)
+	return finished_at, err
 }
 
 const listRollbacksByProject = `-- name: ListRollbacksByProject :many

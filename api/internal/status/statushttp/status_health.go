@@ -76,7 +76,11 @@ func deployStatusOf(releaseStatus string) *string {
 // a failure is logged and never fails the status answer.
 func (h *StatusHandler) fillHealth(ctx context.Context, resp *statusResponse, tenantID, project, env string, release *StatusRelease) []StatusAppScale {
 	resp.DeployStatus = deployStatusOf(release.Status)
-	deployedAt := release.CreatedAt.UTC().Format(time.RFC3339)
+	became := release.DeployedAt
+	if became.IsZero() {
+		became = release.CreatedAt
+	}
+	deployedAt := became.UTC().Format(time.RFC3339)
 	resp.LastDeployAt = &deployedAt
 
 	ctx, cancel := context.WithTimeout(ctx, healthQueryTimeout)

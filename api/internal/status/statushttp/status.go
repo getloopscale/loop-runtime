@@ -70,6 +70,9 @@ type StatusRelease struct {
 	Status    string
 	GitCommit string
 	CreatedAt time.Time
+	// DeployedAt is when the release became active: its creation, or the end
+	// of the rollback that reactivated it. Zero reads as CreatedAt.
+	DeployedAt time.Time
 	// EntryApp is the name of the apps_spec's first server/frontend app, used
 	// to emit the canonical public URL (`<tenant>-<project>-<entryApp>-<env>.<publicDomain>`).
 	// Empty when the release has no rendered apps (rare). Populated by the

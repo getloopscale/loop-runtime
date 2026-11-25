@@ -26,3 +26,10 @@ SELECT * FROM rollbacks
 WHERE tenant_id = $1 AND project_id = $2
 ORDER BY created_at DESC
 LIMIT $3;
+
+-- name: LastRollbackTo :one
+-- When the last rollback that ended on this release finished, which is when
+-- the release became active again. NULL when no rollback ended on it.
+SELECT max(finished_at)::timestamptz AS finished_at
+FROM rollbacks
+WHERE tenant_id = $1 AND to_release_id = $2 AND status = 'SUCCEEDED';

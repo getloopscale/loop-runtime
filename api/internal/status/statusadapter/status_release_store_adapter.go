@@ -6,7 +6,10 @@ package statusadapter
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"time"
 
+	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
 
 	"github.com/getloopscale/loopzero/pkg/naming"
@@ -15,6 +18,34 @@ import (
 // StatusReleaseStoreAdapter implements routes.StatusReleaseStore using db.ReleaseStore.
 type StatusReleaseStoreAdapter struct {
 	Store activeReleaseByEnv
+	// Rollbacks tells when a rollback reactivated a release. Nil reads every
+	// release as deployed when it was created.
+	Rollbacks rollbackTimes
+}
+
+// rollbackTimes is the one rollback read the status makes.
+type rollbackTimes interface {
+	// LastRollbackTo is when the last successful rollback to the release
+	// ended, nil when none did.
+	LastRollbackTo(ctx context.Context, tenantID, releaseID string) (*time.Time, error)
+}
+
+// deployedAt is when the release became active. A failed rollback read falls
+// back to the creation time: the status answer does not fail over it.
+func (a *StatusReleaseStoreAdapter) deployedAt(ctx context.Context, tenantID string, release *db.Release) time.Time {
+	if a.Rollbacks == nil {
+		return release.CreatedAt
+	}
+	finishedAt, err := a.Rollbacks.LastRollbackTo(ctx, tenantID, release.ID)
+	if err != nil {
+		slog.Warn("status: could not read the rollbacks to the active release; reporting its creation time",
+			"tenant_id", tenantID, "release_id", release.ID, "error", err.Error())
+		return release.CreatedAt
+	}
+	if finishedAt == nil || finishedAt.Before(release.CreatedAt) {
+		return release.CreatedAt
+	}
+	return *finishedAt
 }
 
 func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID, projectID, env string) (*statushttp.StatusRelease, error) {
@@ -34,12 +65,13 @@ func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID
 	// releases (no server/frontend) leave EntryApp empty — StatusHandler then
 	// omits status.url and the dashboard renders "URL pending" badge (ADR D3).
 	return &statushttp.StatusRelease{
-		ID:        release.ID,
-		BuildID:   release.BuildID,
-		Status:    release.Status,
-		GitCommit: release.GitCommit,
-		CreatedAt: release.CreatedAt,
-		EntryApp:  resolveEntryApp(release.Apps),
+		ID:         release.ID,
+		BuildID:    release.BuildID,
+		Status:     release.Status,
+		GitCommit:  release.GitCommit,
+		CreatedAt:  release.CreatedAt,
+		DeployedAt: a.deployedAt(ctx, tenantID, release),
+		EntryApp:   resolveEntryApp(release.Apps),
 	}, nil
 }
 

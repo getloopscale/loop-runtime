@@ -187,13 +187,19 @@ ORDER BY created_at ASC
 LIMIT 100;
 
 -- name: ListLatestActiveReleasePerEnv :many
--- The most recent ACTIVE release per environment across all of a tenant's
--- projects: the dashboard's per-environment last-deploy KPI. git_commit is the
+-- The most recent ACTIVE release of each (project, environment) of a tenant:
+-- the dashboard's per-environment last-deploy KPI. Two projects share
+-- environment names, so the project is part of the key. deployed_at is when
+-- the release became active: the end of the last rollback that ended on it,
+-- or its creation when no rollback did. git_commit is the
 -- GitOps repository commit; source_commit is the commit the user deployed (the
 -- release's build), NULL when that build is gone.
-SELECT DISTINCT ON (r.environment) r.environment, r.git_commit,
-       b.commit_sha AS source_commit, r.created_at
+SELECT DISTINCT ON (r.project_id, r.environment) r.project_id, r.environment, r.git_commit,
+       b.commit_sha AS source_commit,
+       COALESCE((SELECT max(rb.finished_at) FROM rollbacks rb
+                 WHERE rb.tenant_id = $1 AND rb.to_release_id = r.id AND rb.status = 'SUCCEEDED'),
+                r.created_at)::timestamptz AS deployed_at
 FROM releases r
 LEFT JOIN builds b ON b.id = r.build_id AND b.tenant_id = r.tenant_id
 WHERE r.tenant_id = $1 AND r.status = 'ACTIVE'
-ORDER BY r.environment, r.created_at DESC;
+ORDER BY r.project_id, r.environment, r.created_at DESC;
