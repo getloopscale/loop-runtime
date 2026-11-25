@@ -212,3 +212,13 @@ profile:
   awsLoadBalancerController: true  # install the AWS Load Balancer Controller and publish the edge through an ALB; the build Loki and each remote cluster's federation Prometheus through internal ALBs
   localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
   secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public
+
+# The secrets plane (secrets.helmfile, on the `secrets` cluster): OpenBao, whose transit
+# engine encrypts tenant secrets (ADR 2026-11-25 tenant secrets on OpenBao). One Raft
+# voter; production runs three. clientCidr is the VPC (infra-live networking/vpc), where
+# the core cluster's loopzero-api reaches the NodePort from.
+openbaoEnabled: true
+openbao:
+  replicas: 1
+  nodePort: 30200
+  clientCidr: "10.40.0.0/16"

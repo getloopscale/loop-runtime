@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Staging encrypts tenant secrets with OpenBao transit, on a dedicated `secrets` EKS cluster unsealed by the `awskms` seal; `infra/staging/openbao.sh` installs it and wires loopzero-api after every rebuild (#103).
+- `vault-bootstrap-dev.sh` takes `AUTO_UNSEAL_MODE=awskms`, which initialises the vault with recovery keys and skips the Shamir unseal (#103).
 - `aws-secrets-manager` takes `githubAppSecret`, a Secrets Manager secret with the GitHub App's `app-id`, `private-key` and `webhook-secret`, and writes it into `loopzero-system` as `loopzero-api-github`. Staging reads `loopzero/staging/github-app`, seeded from the host, and sends the console's install button to the `loopscale-staging` App (#68)
 - An app's public URL is served by a CloudFront distribution whose viewer-request function reads the host's cell from a CloudFront KeyValueStore. The API writes the routes there when `LOOPZERO_EDGE_KVS_ARN` is set (#68)
 - loopzero-memory's MCP server is reachable at `<public origin>/mcp/memory` behind the MCP gateway, with a Hydra token issued for that URL and carrying the caller's team. A data-plane service can now run a second serving process (its own port, probe, settings and in-cluster address) beside its API (#470)
@@ -398,6 +400,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The Status page queries the Prometheus the API pod reaches (`LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL`) before `LOOPZERO_PROMETHEUS_ADDRESS`, which canary analyses on the cells use; staging names its core Prometheus (#102).
 - `POST /projects/{name}/scale` answers 404 `APP_NOT_FOUND`, naming the apps the project has, for an app the active release of the environment does not declare. It used to answer 200 `changed: true` and write a scaling config no workload reads (#97)
 - `GET /environments` reports the commit the user deployed as `last_deploy_sha`, the active release's build commit, instead of the commit of the GitOps repository (#101)
 - A build step that fails before running prints its error message as written. The message sat in a double-quoted `echo`, so backticks and `$(...)` in it, including a `runtime` from `loopzero.yaml`, ran as shell commands (`/bin/sh: start: not found`) (#100)

@@ -379,3 +379,16 @@ func TestStagingCorePrometheusRefusesAMalformedALBName(t *testing.T) {
 		t.Errorf("render failed without naming the malformed pair:\n%s", truncate(out, 800))
 	}
 }
+
+// The Status page and the readiness badges query the core Prometheus, which federates
+// the cells; the staging API named none and the Status page answered
+// prometheus_not_configured (getloopscale/loopzero#102).
+func TestStagingAPIQueriesTheCorePrometheus(t *testing.T) {
+	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-api", stagingOutputs...)
+	if got := dig(values, "dataPlanePoller", "enabled"); got != true {
+		t.Errorf("dataPlanePoller.enabled = %v, want true", got)
+	}
+	if got := dig(values, "dataPlanePoller", "prometheusUrl"); got != "http://prometheus-server.monitoring.svc.cluster.local:80" {
+		t.Errorf("dataPlanePoller.prometheusUrl = %v, want the core Prometheus", got)
+	}
+}

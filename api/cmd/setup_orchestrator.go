@@ -294,15 +294,14 @@ func setupOrchestrator(
 	statusReleaseStore := &statusadapter.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
 	statusHandler := statushttp.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
 
-	// T1.2 J-18 — Prometheus query_range proxy for the Status page KPI strip +
-	// SignalDetailSheet histograms. When LOOPZERO_PROMETHEUS_ADDRESS is set, wire the
-	// concrete HTTP client (mirrors the loki.NewClient wiring above); otherwise
-	// ship nil so the handler returns 503 prometheus_not_configured honestly
-	// (plan v1.1 ADR D2 — degraded UI is the canonical disabled state). Hermetic
+	// Prometheus query_range proxy for the Status page KPI strip and the
+	// SignalDetailSheet histograms, on the Prometheus the API pod reaches
+	// (metricsPrometheusURL). With none, the handler gets nil and answers 503
+	// prometheus_not_configured: the degraded UI is the disabled state. Hermetic
 	// Go tests inject httptest-backed fakes.
 	var promClient projectmetricshttp.PrometheusQueryClient
-	if cfg.PrometheusAddress != "" {
-		promClient = projectmetricshttp.NewPrometheusClient(cfg.PrometheusAddress, nil)
+	if url := metricsPrometheusURL(cfg); url != "" {
+		promClient = projectmetricshttp.NewPrometheusClient(url, nil)
 	}
 	metricsProxyHandler := projectmetricshttp.NewMetricsProxyHandler(projectStore, promClient)
 
@@ -442,4 +441,16 @@ func setupOrchestrator(
 		ProjectDeleter:      projectDeleter,
 		ArgoCallbackHandler: argoCallbackHandler,
 	}
+}
+
+// metricsPrometheusURL is the Prometheus the Status page's metrics are queried on. The
+// API sends those queries itself, so it prefers the Prometheus the API pod reaches
+// (LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL) over LOOPZERO_PROMETHEUS_ADDRESS, which is
+// written into canary analyses that run on the cells and may name a host only they
+// resolve.
+func metricsPrometheusURL(cfg config.Config) string {
+	if cfg.DataPlanePollerPrometheusURL != "" {
+		return cfg.DataPlanePollerPrometheusURL
+	}
+	return cfg.PrometheusAddress
 }
