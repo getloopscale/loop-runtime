@@ -162,7 +162,8 @@ type k8sEnvFromSource struct {
 }
 
 type k8sSecretRef struct {
-	Name string `json:"name"`
+	Name     string `json:"name"`
+	Optional *bool  `json:"optional,omitempty"`
 }
 
 type k8sProbe struct {
