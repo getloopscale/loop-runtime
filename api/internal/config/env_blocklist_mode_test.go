@@ -39,3 +39,16 @@ func TestLoadCarriesTheGitHubAPIBaseOverride(t *testing.T) {
 		t.Errorf("GitHubAPIBaseURL = %q", got)
 	}
 }
+
+// The GitHub web root is where the App's user authorization lives. A GitHub
+// Enterprise Server install, and a test, point it elsewhere.
+func TestLoad_GitHubWebBaseURLDefaultsToGitHubAndFollowsTheEnvironment(t *testing.T) {
+	t.Setenv("GITHUB_WEB_BASE_URL", "")
+	if got := Load().GitHubWebBaseURL; got != "https://github.com" {
+		t.Errorf("GitHubWebBaseURL = %q, want https://github.com by default", got)
+	}
+	t.Setenv("GITHUB_WEB_BASE_URL", "https://github.acme.corp")
+	if got := Load().GitHubWebBaseURL; got != "https://github.acme.corp" {
+		t.Errorf("GitHubWebBaseURL = %q, want the configured root", got)
+	}
+}

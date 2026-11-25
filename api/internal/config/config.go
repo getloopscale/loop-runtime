@@ -65,6 +65,11 @@ type Config struct {
 	// Enterprise Server install points it at its appliance.
 	GitHubAPIBaseURL string
 
+	// GitHubWebBaseURL is the GitHub web root (GITHUB_WEB_BASE_URL), where the
+	// App's user authorization exchanges its code. A GitHub Enterprise Server
+	// install points it at its appliance.
+	GitHubWebBaseURL string
+
 	// CosignImage and SyftImage override the build's signer and SBOM scanner
 	// images (LOOPZERO_COSIGN_IMAGE / LOOPZERO_SYFT_IMAGE); empty = built-in images.
 	CosignImage string
@@ -454,6 +459,7 @@ func Load() Config {
 		TracingEnabled:             envBool("LOOPZERO_TRACING_ENABLED", true),
 		OTelEndpoint:               os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		GitHubAPIBaseURL:           envOr("GITHUB_API_BASE_URL", "https://api.github.com"),
+		GitHubWebBaseURL:           envOr("GITHUB_WEB_BASE_URL", "https://github.com"),
 		CosignImage:                os.Getenv("LOOPZERO_COSIGN_IMAGE"),
 		BuildWorkspaceStorageClass: os.Getenv("LOOPZERO_BUILD_WORKSPACE_STORAGE_CLASS"),
 		SyftImage:                  os.Getenv("LOOPZERO_SYFT_IMAGE"),
