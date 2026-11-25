@@ -20,8 +20,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/getloopscale/loopzero/api/internal/httpio"
 	"github.com/getloopscale/loopzero/api/internal/plantier"
@@ -87,9 +90,18 @@ type ScaleReplicasChecker interface {
 	CheckReplicasValue(ctx context.Context, tenantID string, requested int) (allowed bool, plan string, limit int, err error)
 }
 
+// ScaleAppLookup lists the apps a project has in an environment: the apps its
+// ACTIVE release declares. projectName is the project's name, which is what
+// releases store as project_id. No names (nil, nil) means the environment has no
+// active release, so there is nothing to check the app against.
+type ScaleAppLookup interface {
+	DeployedAppNames(ctx context.Context, tenantID, projectName, env string) ([]string, error)
+}
+
 // ScaleHandler provides the HTTP handler for scaling operations.
 type ScaleHandler struct {
 	projects        ScaleProjectStore
+	appLookup       ScaleAppLookup // optional — nil skips the declared-app check
 	apply           ScaleApplyFunc // optional — when nil, falls back to stub-202 (legacy)
 	kedaEnabled     bool
 	planTierStore   pkgdomain.PlanTierStore // J-20 T1.1 — resolves tenant's canonical plan
@@ -139,6 +151,13 @@ func (h *ScaleHandler) SetPlanTierStore(s pkgdomain.PlanTierStore) {
 // truth.
 func (h *ScaleHandler) SetReplicasChecker(c ScaleReplicasChecker) {
 	h.replicasChecker = c
+}
+
+// SetAppLookup wires the lookup that refuses a scale of an app the project does
+// not have. Without it, any app name is accepted: the config is written and no
+// workload ever reads it.
+func (h *ScaleHandler) SetAppLookup(l ScaleAppLookup) {
+	h.appLookup = l
 }
 
 // EnsureProductionWired panics if the handler was constructed without a
@@ -264,6 +283,10 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
 		return
 	}
+	if aerr := h.checkDeclaredApp(r.Context(), uc.TenantID, name, &req); aerr != nil {
+		httpio.WriteLoopZeroError(w, aerr)
+		return
+	}
 
 	decision := h.buildScaleResult(&req, hasFixed, planTier, uc.TenantID, name, uc.UserID)
 
@@ -275,6 +298,27 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.applyAndLog(w, r, &decision)
+}
+
+// checkDeclaredApp refuses an app the environment's active release does not
+// declare, naming the apps it does. A config for an unknown app scales nothing
+// and still answers 200, which hides a typo or a client's wrong default.
+func (h *ScaleHandler) checkDeclaredApp(ctx context.Context, tenantID, projectName string, req *scaleRequest) *loopzeroerrors.LoopZeroError {
+	if h.appLookup == nil {
+		return nil
+	}
+	names, err := h.appLookup.DeployedAppNames(ctx, tenantID, projectName, req.Environment)
+	if err != nil {
+		slog.Error("scale: the project's apps cannot be read; refusing the request",
+			"tenant_id", tenantID, "project", projectName, "environment", req.Environment, "error", err)
+		return loopzeroerrors.ErrInternalError
+	}
+	if len(names) == 0 || slices.Contains(names, req.App) {
+		return nil
+	}
+	return loopzeroerrors.NewLoopZeroError("APP_NOT_FOUND", fmt.Sprintf(
+		"app '%s' not found in project '%s' (%s); its apps are: %s",
+		req.App, projectName, req.Environment, strings.Join(names, ", ")))
 }
 
 // parseScaleRequest decodes the request body and validates its shape. It

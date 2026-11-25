@@ -587,6 +587,7 @@ paths:
       responses:
         "200": {description: scaled}
         "402": {description: plan upgrade required}
+        "404": {description: "project not found (PROJECT_NOT_FOUND), or an app the active release of the environment does not declare (APP_NOT_FOUND)"}
 
   /api/v1/projects/{project}/previews:
     parameters:

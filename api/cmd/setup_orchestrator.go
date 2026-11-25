@@ -347,6 +347,9 @@ func setupOrchestrator(
 		return changed, err
 	}
 	scaleHandler := scalinghttp.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
+	// Refuse a scale of an app the environment's active release does not declare:
+	// such a config scales nothing, yet the request answered 200.
+	scaleHandler.SetAppLookup(scaling.ReleaseAppLookup{Releases: stores.ReleaseStore})
 	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
 	// plan-cap checker the build path uses so the scale endpoint can
 	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
