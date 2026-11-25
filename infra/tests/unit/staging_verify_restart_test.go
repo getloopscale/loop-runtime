@@ -126,3 +126,54 @@ func TestStagingSyncsTheApiAgainOnceTheLokiALBIsKnown(t *testing.T) {
 		t.Error("no core sync after the build one re-renders loopzero-api")
 	}
 }
+
+// The cells' broker store calls core's secret-fetch ALB, whose DNSName exists once the
+// core sync has made it: the platform task reads it after the core sync and before the
+// cells render.
+func TestStagingReadsTheCoreAPIALBBetweenTheCoreAndCellSyncs(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "taskfiles", "staging.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	firstCore := strings.Index(text, "helmfile --selector 'name!=promtail' -f infra/helmfile/core.helmfile.yaml.gotmpl")
+	read := strings.Index(text, `eval "$(bash infra/staging/monitoring-addresses.sh core-api --wait `)
+	cells := strings.Index(text, "helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl")
+	if firstCore < 0 || read < 0 || cells < 0 || !(firstCore < read && read < cells) {
+		t.Errorf("the core API's ALB is not read between the core sync and the cells (core %d, read %d, cells %d)", firstCore, read, cells)
+	}
+}
+
+// The per-cell broker tokens are seeded once loopzero-api is verified Ready (the seed
+// restarts it and waits for it to settle), in the platform task itself, so a rebuild
+// and every redeploy write them.
+func TestStagingSeedsTheBrokerTokensAfterTheAPIIsVerified(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "taskfiles", "staging.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var taskfile struct {
+		Tasks map[string]struct {
+			Cmds []any `yaml:"cmds"`
+		} `yaml:"tasks"`
+	}
+	if err := yaml.Unmarshal(data, &taskfile); err != nil {
+		t.Fatalf("parse taskfiles/staging.yml: %v", err)
+	}
+	verify, seed := -1, -1
+	for i, cmd := range taskfile.Tasks["platform"].Cmds {
+		switch c := cmd.(type) {
+		case map[string]any:
+			if c["task"] == "platform:verify" {
+				verify = i
+			}
+		case string:
+			if strings.Contains(c, "bootstrap-aws-clusters.sh broker-tokens") {
+				seed = i
+			}
+		}
+	}
+	if verify < 0 || seed < 0 || seed < verify {
+		t.Errorf("staging:platform does not seed the broker tokens after platform:verify (verify step %d, seed step %d)", verify, seed)
+	}
+}

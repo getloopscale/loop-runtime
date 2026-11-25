@@ -225,6 +225,18 @@ ingressRoute:
   # the host), or CFManaged when TLS terminates at the Cloudflare edge.
   certIssuer: CFManaged
 
+# The internal Application Load Balancer the cells' External Secrets reach the
+# secret-fetch broker through (templates/secret-fetch-load-balancer.yaml): an Ingress
+# for the AWS Load Balancer Controller that forwards /internal/v1/secret-fetch alone. Off:
+# a published chart does not assume an AWS Load Balancer Controller.
+secretFetchLoadBalancer:
+  enabled: false
+  # The ACM certificate of the HTTPS 443 listener. Required unless plaintextListener.
+  certificateArn: ""
+  # An HTTP 80 listener instead, for an ALB reached only through a TLS hop of its own
+  # (staging's AWS emulator). Never on a network the bearer token could be read from.
+  plaintextListener: false
+
 reloader:
   enabled: false
 

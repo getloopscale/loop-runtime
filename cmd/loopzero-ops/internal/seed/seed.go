@@ -116,6 +116,19 @@ type Deps struct {
 	// cmd/loopzero-ops suite, and that cost kept the gate tests off the push path
 	// (B-101, and item 2 of B-088).
 	RolloutSettleTimeout time.Duration
+	// CellContextPrefix is what a cell's kube context is named, before its cell id.
+	// Nil keeps the k3d convention (`k3d-loopzero-<cell>`); an environment whose
+	// kubeconfig names each context after the cell id (staging's EKS clusters) sets it
+	// to "". The composition root reads it from LOOPZERO_CELL_CONTEXT_PREFIX.
+	CellContextPrefix *string
+}
+
+// cellContext is the kube context of cellID under CellContextPrefix.
+func (d Deps) cellContext(cellID string) string {
+	if d.CellContextPrefix == nil {
+		return brokerCellContext(cellID)
+	}
+	return *d.CellContextPrefix + cellID
 }
 
 // settleTimeout resolves the effective wait: an injected value wins, and zero

@@ -436,11 +436,21 @@ func buildAppContainer(ri renderScope, app AppManifestInput, port int) k8sContai
 		}
 	}
 
-	if len(app.Secrets) > 0 {
-		secretRefName := naming.UserSecretName(ri.TenantID, ri.ProjectID, ri.Environment, app.Name)
-		container.EnvFrom = []k8sEnvFromSource{
-			{SecretRef: k8sSecretRef{Name: secretRefName}},
-		}
+	// The Secrets secret sync writes from `loopscale secret set`: the environment's,
+	// for a secret set without an app, then the app's, so the app's value wins on a
+	// shared key. Both are mounted whether or not the app's configuration declares a
+	// secret, because a secret set for the app is delivered either way; mounting only
+	// declared ones left every undeclared secret out of the process. An app that
+	// declares secrets requires its Secret, and the pod waits for it; otherwise both
+	// are optional, so an app with no secret starts.
+	optional := true
+	appSecretOptional := len(app.Secrets) == 0
+	container.EnvFrom = []k8sEnvFromSource{
+		{SecretRef: k8sSecretRef{Name: naming.UserSecretName(ri.TenantID, ri.ProjectID, ri.Environment, ""), Optional: &optional}},
+		{SecretRef: k8sSecretRef{Name: naming.UserSecretName(ri.TenantID, ri.ProjectID, ri.Environment, app.Name)}},
+	}
+	if appSecretOptional {
+		container.EnvFrom[1].SecretRef.Optional = &optional
 	}
 
 	return container

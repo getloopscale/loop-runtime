@@ -55,7 +55,8 @@ const (
 var clusterCredentialGVK = schema.GroupVersionKind{Group: "loopzero.io", Version: "v1", Kind: "ClusterCredential"}
 
 // brokerCellContext is the kube context of a cell's k3d cluster: infra/k3d names the
-// cluster loopzero-<cellID>, and k3d prefixes its contexts with k3d-.
+// cluster loopzero-<cellID>, and k3d prefixes its contexts with k3d-. It is the default
+// of Deps.CellContextPrefix.
 func brokerCellContext(cellID string) string { return "k3d-loopzero-" + cellID }
 
 func (s *BrokerSeed) Run(d Deps) Result {
@@ -74,7 +75,7 @@ func (s *BrokerSeed) Run(d Deps) Result {
 		return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 1 apply core Secret: %v", err)}
 	}
 	for _, cell := range cells {
-		cellCli, err := d.ClientFor(brokerCellContext(cell))
+		cellCli, err := d.ClientFor(d.cellContext(cell))
 		if err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("Layer 2 resolve %s: %v", cell, err)}
 		}
@@ -114,7 +115,7 @@ func (s *BrokerSeed) Verify(d Deps) Result {
 		if want == "" {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("core Secret has no broker token for %s", cell)}
 		}
-		cellCli, err := d.ClientFor(brokerCellContext(cell))
+		cellCli, err := d.ClientFor(d.cellContext(cell))
 		if err != nil {
 			return Result{Verdict: FAIL, Reason: fmt.Sprintf("resolve %s: %v", cell, err)}
 		}

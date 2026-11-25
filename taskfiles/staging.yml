@@ -390,6 +390,9 @@ tasks:
         helmfile --selector 'name!=promtail' -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         eval "$(bash infra/staging/monitoring-addresses.sh loki --wait 600)"
+        # The cells' broker store calls loopzero-api's secret-fetch endpoint through core's
+        # internal ALB, which the core sync above made.
+        eval "$(bash infra/staging/monitoring-addresses.sh core-api --wait 600)"
         for cell in cell-0 cell-1; do
           LOOPZERO_CELL_CONTEXT=$cell helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         done
@@ -404,6 +407,10 @@ tasks:
         done
         bash infra/helmfile/scripts/bootstrap-aws-clusters.sh post-core
       - task: platform:verify
+      # One secret-fetch broker token per cell, for loopzero-api and each cell's broker
+      # store. After platform:verify: the seed restarts the API and waits for it to be
+      # Ready. Tokens already issued are kept, so a redeploy does not rotate them.
+      - bash infra/helmfile/scripts/bootstrap-aws-clusters.sh broker-tokens
 
   platform:kubeconfig:
     internal: true

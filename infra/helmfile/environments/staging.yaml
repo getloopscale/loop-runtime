@@ -103,7 +103,7 @@ platformImages:
     # getloopscale/console publishes these two (private on GHCR, pulled with
     # aws.imagePullSecret). Required while profile.loopzeroCloud is on.
     loopzero-cloud: "develop-e12f574"
-    loopzero-dashboard: "develop-8575ccb"
+    loopzero-dashboard: "develop-95bfb98"
 
 registries:
   docrPrefix: "ghcr.io/getloopscale/"
@@ -211,7 +211,7 @@ profile:
   awsSecretsManager: true       # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
   awsLoadBalancerController: true  # install the AWS Load Balancer Controller and publish the edge through an ALB; the build Loki and each remote cluster's federation Prometheus through internal ALBs
   localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
-  secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public
+  secretFetchBroker: true       # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public. Here the cells reach core's internal secret-fetch ALB through the emulator (LOOPZERO_CORE_API_ALB_DNS_NAME)
 
 # The secrets plane (secrets.helmfile, on the `secrets` cluster): OpenBao, whose transit
 # engine encrypts tenant secrets (ADR 2026-11-25 tenant secrets on OpenBao). One Raft

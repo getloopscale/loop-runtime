@@ -166,3 +166,36 @@ func TestBrokerSeed_VerifyRefusesACellWhoseTokenDoesNotMatch(t *testing.T) {
 		t.Errorf("Verify = %s (%s), want FAIL naming cell-1", got.Verdict, got.Reason)
 	}
 }
+
+// On an environment whose kubeconfig names each cell's context after the cell id
+// (staging's EKS clusters: cell-0, cell-1), the seed writes each cell's token through
+// that context instead of the k3d one, which does not exist there.
+func TestBrokerSeed_WritesThroughTheCellContextsTheEnvironmentNames(t *testing.T) {
+	mgmt := fake.NewClientBuilder().WithScheme(cellScheme(t)).WithObjects(
+		makeLoopZeroAPIDeploymentWithEnv(nil), clusterCredential("cell-0", "cell-0"),
+	).Build()
+	cell0 := fake.NewClientBuilder().WithScheme(newScheme(t)).Build()
+	noPrefix := ""
+	deps := Deps{
+		RolloutSettleTimeout: time.Millisecond,
+		Ctx:                  context.Background(),
+		Kube:                 NewKubeClient(mgmt),
+		CtrlClient:           mgmt,
+		CellContextPrefix:    &noPrefix,
+		ClientCtor: func(ctx string) (KubeClient, error) {
+			if ctx != "cell-0" {
+				t.Fatalf("seed asked for context %q, want cell-0", ctx)
+			}
+			return NewKubeClient(cell0), nil
+		},
+	}
+
+	if got := NewBrokerSeed().Run(deps); got.Verdict != PASS {
+		t.Fatalf("Verdict = %s (%s)", got.Verdict, got.Reason)
+	}
+
+	sec, err := NewKubeClient(cell0).GetSecret(deps.Ctx, brokerESONamespace, brokerSecretName)
+	if err != nil || len(sec.Data[brokerTokenKey]) == 0 {
+		t.Fatalf("cell-0 holds no broker token (err=%v)", err)
+	}
+}

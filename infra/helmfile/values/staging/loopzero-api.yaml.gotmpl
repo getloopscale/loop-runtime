@@ -75,3 +75,15 @@ config:
 dataPlanePoller:
   enabled: true
   prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local:80"
+
+# The internal ALB the cells' External Secrets call the secret-fetch broker through
+# (cell.helmfile release loopzero-broker). It forwards /internal/v1/secret-fetch alone.
+# Staging only: an HTTP 80 listener, where production serves HTTPS 443 with an ACM
+# certificate (values/prod/loopzero-api.yaml.gotmpl). The emulator's ALB has no socket a
+# pod can reach; the cells call it through the emulator's HTTPS endpoint
+# (`<emulator.endpoint>/_aws/elasticloadbalancing/<DNSName>`), whose certificate their
+# External Secrets verify, so the bearer token crosses the network inside TLS and only
+# the emulator's hop to the target on the same host is plain HTTP.
+secretFetchLoadBalancer:
+  enabled: {{ .Values.profile.secretFetchBroker }}
+  plaintextListener: true

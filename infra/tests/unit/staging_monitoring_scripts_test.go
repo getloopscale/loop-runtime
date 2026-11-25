@@ -16,12 +16,14 @@ import (
 // their Ingress status, and infra/staging/restart-uninjected-pods.sh replaces the pods
 // the emulator's EKS layer never wired to the emulator.
 
-// fakeIngressKubectl answers `kubectl --context <ctx> -n monitoring get ingress <name> -o
-// jsonpath=...` with the file $FAKE_STATE/<ctx>/<name>, empty when there is none. A file
+// fakeIngressKubectl answers `kubectl --context <ctx> -n <namespace> get ingress <name> -o
+// jsonpath=...` with the file $FAKE_STATE/<ctx>/<name>, empty when there is none, and
+// appends each call's arguments to $FAKE_STATE/calls. A file
 // <name>.after holding N makes the first N reads answer empty, as an Ingress whose load
 // balancer is still being created does.
 const fakeIngressKubectl = `#!/usr/bin/env bash
 set -euo pipefail
+echo "$*" >>"$FAKE_STATE/calls"
 ctx=""; name=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -104,6 +106,27 @@ func TestMonitoringAddressesExportsTheLokiALB(t *testing.T) {
 	}
 	if got := exported(t, out, "LOOPZERO_LOKI_ALB_DNS_NAME"); got != lokiALB {
 		t.Errorf("LOOPZERO_LOKI_ALB_DNS_NAME = %q, want %q", got, lokiALB)
+	}
+}
+
+// The cells' External Secrets call core's secret-fetch broker through the internal ALB of
+// Ingress loopzero-system/loopzero-api-secret-fetch, read after the core sync.
+func TestMonitoringAddressesExportsTheCoreAPISecretFetchALB(t *testing.T) {
+	const coreAPIALB = "internal-k8s-loopzero-loopzero-4444444444.us-east-1.elb.amazonaws.com"
+	f := newFakeCluster(t, fakeIngressKubectl)
+	f.publish("core", "loopzero-api-secret-fetch", coreAPIALB)
+
+	out, stderr, err := f.run("monitoring-addresses.sh", "core-api", "--wait", "5")
+
+	if err != nil {
+		t.Fatalf("monitoring-addresses.sh core-api: %v\n%s", err, stderr)
+	}
+	if got := exported(t, out, "LOOPZERO_CORE_API_ALB_DNS_NAME"); got != coreAPIALB {
+		t.Errorf("LOOPZERO_CORE_API_ALB_DNS_NAME = %q, want %q", got, coreAPIALB)
+	}
+	calls, _ := os.ReadFile(filepath.Join(f.state, "calls"))
+	if !strings.Contains(string(calls), "--context core -n loopzero-system get ingress loopzero-api-secret-fetch") {
+		t.Errorf("the core API's Ingress was not read from core's loopzero-system namespace: %s", calls)
 	}
 }
 

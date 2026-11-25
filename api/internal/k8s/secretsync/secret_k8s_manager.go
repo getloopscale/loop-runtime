@@ -222,7 +222,7 @@ func externalSecretObject(ref ports.SecretRef, namespace string) *unstructured.U
 					// endpoint with a Bearer token; loopzero-api validates the
 					// auth, enforces tenant↔cell binding (EC-07), decrypts
 					// the vault:v1: ciphertext via OpenBao transit, and
-					// returns plaintext_b64. ESO base64-decodes into the
+					// returns plaintext_b64, which decodingStrategy Base64 below decodes into the
 					// materialized K8s Secret. LIVE-validated 2026-06-10
 					// J-22 walkthrough (ClusterSecretStore Ready=True +
 					// in-cluster probe HTTP 200 + plaintext round-trip).
@@ -262,6 +262,10 @@ func externalSecretObject(ref ports.SecretRef, namespace string) *unstructured.U
 							// chi routing.
 							"key":      tenantID,
 							"property": fmt.Sprintf("%s.%s.%s", name, projectID, env),
+							// The broker answers plaintext_b64, and the webhook provider
+							// writes what the result jsonPath selects as is: without this
+							// the app's Secret held the base64 text, not the value.
+							"decodingStrategy": "Base64",
 						},
 					},
 				},
