@@ -162,6 +162,26 @@
     "config": {
       "type": "object",
       "properties": {
+        "viteApiUrl": {
+          "type": "string",
+          "pattern": "^$|^https?://[^\"'`;<>\\\\ $(){}]+$",
+          "description": "API_URL: base URL of the API the SPA calls; empty is same-origin."
+        },
+        "viteAuthUrl": {
+          "type": "string",
+          "pattern": "^$|^https?://[^\"'`;<>\\\\ $(){}]+$",
+          "description": "AUTH_URL: base URL of Kratos; empty falls back to API_URL."
+        },
+        "viteAccountsUrl": {
+          "type": "string",
+          "pattern": "^$|^https?://[^\"'`;<>\\\\ $(){}]+$",
+          "description": "ACCOUNTS_URL: base URL recovery starts on; empty is same-origin."
+        },
+        "viteOauthUrl": {
+          "type": "string",
+          "pattern": "^$|^https?://[^\"'`;<>\\\\ $(){}]+$",
+          "description": "OAUTH_URL: the OAuth2 server's public origin (Hydra), where the CLI device flow redirects."
+        },
         "cspConnectOrigins": {
           "type": "array",
           "items": {

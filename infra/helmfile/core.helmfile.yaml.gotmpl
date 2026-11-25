@@ -791,8 +791,8 @@ releases:
         config:
           # The SPA calls its own origin; public-routes proxies the APIs on the app host.
           viteApiUrl: ""
-          viteCloudUrl: ""
-          baseDomain: {{ .Values.domain | quote }}
+          # Hydra's public origin: the CLI's device flow redirects the browser there.
+          viteOauthUrl: {{ .Values | get "publicAuthUrl" "" | trimSuffix "/" | quote }}
           # The Kratos public host the auth flows read and the forms post to, and the
           # control plane's, which the Content-Security-Policy allows besides 'self'.
           cspConnectOrigins:

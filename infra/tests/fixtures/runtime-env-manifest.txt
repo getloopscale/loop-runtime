@@ -2,7 +2,7 @@
 # Maintained by hand: the master table it was generated from is no longer in the
 # repository. Add a row when a chart starts rendering a variable.
 # Format: VAR|plane|req|chart-section
-# Row count: 202
+# Row count: 205
 #
 API_CROSS_CLUSTER_URL|CONFIG|N|loopzero-api
 APP_PUBLIC_URL|CONFIG|N|loopzero-cloud
@@ -204,5 +204,8 @@ STRIPE_WEBHOOK_SECRET|SECRET|Y|loopzero-cloud
 TENANT_NAMESPACE|CONFIG|N|loopzero-api
 THEMORY_API_KEY|SECRET|when-base-set|loopzero-cloud
 THEMORY_BASE_URL|CONFIG|N|loopzero-cloud
+VITE_ACCOUNTS_URL|CONFIG|N|loopzero-dashboard
+VITE_AUTH_URL|CONFIG|N|loopzero-dashboard
+VITE_OAUTH_URL|CONFIG|N|loopzero-dashboard
 WORKLOAD_CLUSTER_URL|CONFIG|N|loopzero-{app,platform,preview,tenant}-operator
 WORKLOAD_INGRESS_URL|CONFIG|N|loopzero-api

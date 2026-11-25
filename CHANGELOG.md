@@ -397,6 +397,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The dashboard reads the runtime config the chart renders. `__config.js` wrote `window.__LOOPZERO_CONFIG__`, which the dashboard never read, and it now writes `window.__THEO_CONFIG__` with `API_URL`, `AUTH_URL`, `ACCOUNTS_URL` and `OAUTH_URL`. `viteCloudUrl` and `baseDomain` are removed (#83)
 - Server-Sent Events (`.../stream`, the CLI's deploy log) reach the client as they happen. The edge's body-limit middleware held each stream until it ended, so one longer than 60 s failed with 504 (#79)
 - A seed that restarts a workload (loopzero-api, loopzero-cloud, CoreDNS) waits until the old pod is gone; it used to report the rollout settled while the old pod was still the one answering and the new one was not ready (#470)
 

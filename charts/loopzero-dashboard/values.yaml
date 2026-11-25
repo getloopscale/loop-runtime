@@ -24,12 +24,15 @@ service:
   port: 8080
 
 config:
-  # VITE_* env vars injected at runtime via docker-entrypoint.sh
+  # Rendered into __config.js (window.__THEO_CONFIG__), mounted at
+  # /usr/share/nginx/html/__config.js and read by the SPA at page load. Empty is same-origin.
+  # The API (API_URL) and Kratos (AUTH_URL; empty falls back to the API's) the SPA calls,
+  # the host recovery starts on (ACCOUNTS_URL), and the OAuth2 server's public origin
+  # (OAUTH_URL, Hydra), where the CLI's device flow redirects the browser.
   viteApiUrl: ""
-  viteCloudUrl: ""
-  # CHG-2026-04-25-E2E (Gap 7): rendered into __config.js ConfigMap and
-  # mounted at /usr/share/nginx/html/__config.js. SPA reads it at page load.
-  baseDomain: ""
+  viteAuthUrl: ""
+  viteAccountsUrl: ""
+  viteOauthUrl: ""
   # The origins the image's Content-Security-Policy allows besides 'self', rendered into
   # csp-origins.conf: connect-src (the Kratos public host the auth flows read, the
   # control plane's) and form-action (the Kratos public host the forms post to).
