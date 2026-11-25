@@ -386,6 +386,9 @@ releases:
       - traefik/traefik
     values:
       - ../helm/cluster-issuer/values.yaml
+      # An environment without ACME (certIssuer.selfSigned) gets its issuer name as a
+      # self-signed issuer, so the Certificates of tenant apps are issued (#122).
+      - selfSignedAliases: {{ if (.Values | get "certIssuer.selfSigned" false) }}[{{ .Values.certIssuer.name | quote }}]{{ else }}[]{{ end }}
 
   - name: rbac
     namespace: loopzero-system

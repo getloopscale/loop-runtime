@@ -5,6 +5,7 @@ package release
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -56,8 +57,28 @@ type PromotionSyncClient interface {
 	TriggerSync(ctx context.Context, appName string) error
 }
 
+// AppExposure names one app of a release in one environment.
+type AppExposure struct {
+	TenantID    string
+	Project     string
+	Environment string
+	AppName     string
+	ServicePort int32
+}
+
+// PromotionAppExposer makes an app reachable in an environment: it ensures the
+// application resource on the management cluster, from which the app operator
+// keeps the route the edge reads. The deploy path does the same for the apps
+// of a build (builds.ApplicationCREnsurer).
+type PromotionAppExposer interface {
+	ExposeApp(ctx context.Context, in AppExposure) error
+}
+
 // PromotionOrchestratorDeps contains all dependencies for the promotion orchestrator.
 type PromotionOrchestratorDeps struct {
+	// Apps exposes the promoted apps in the target environment. Nil skips it,
+	// for installs without a management cluster client.
+	Apps       PromotionAppExposer
 	Releases   PromotionReleaseStore
 	EnvTargets PromotionEnvTargetStore
 	GitReader  PromotionGitOpsReader
@@ -307,6 +328,8 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 		// Do not fail the promotion — the convergence loop will pick it up
 	}
 
+	o.exposeApps(ctx, logger, req, newRelease)
+
 	// 2026-06-30 (closes Red Team loopzero-cloud#120 sub-finding 3 — #61 regression
 	// on promote path): prefer PublicDomain over BaseDomain so the response URL
 	// is the canonical user-facing Live URL ("prod-dev.getloopscale.app") not the
@@ -512,5 +535,37 @@ func rewriteHostInMatch(node interface{}, oldHostSuffix, newHostSuffix string) {
 		for _, child := range v {
 			rewriteHostInMatch(child, oldHostSuffix, newHostSuffix)
 		}
+	}
+}
+
+// exposeApps makes every app of the promoted release reachable in the target
+// environment. The manifests alone run the workload; the public route comes
+// from the application resource a deploy ensures and a promote did not, so a
+// promoted environment answered 404 on its own host (#124).
+//
+// A failure is logged and does not fail the promote: the release is delivered
+// by then, and the next promote or deploy to the environment ensures it again.
+func (o *PromotionOrchestrator) exposeApps(ctx context.Context, logger *slog.Logger, req PromotionRequest, rel *db.Release) {
+	if o.deps.Apps == nil || rel == nil || rel.Apps == nil {
+		return
+	}
+	var apps []db.BuildAppSpec
+	if err := json.Unmarshal(rel.Apps, &apps); err != nil {
+		logger.Error("promote: the release's app list could not be read, so its apps were not exposed in the target environment",
+			"release_id", rel.ID, "to_env", req.ToEnv, "error", err)
+		return
+	}
+	for _, app := range apps {
+		port := int32(app.Port)
+		if port == 0 {
+			port = 80
+		}
+		in := AppExposure{TenantID: req.TenantID, Project: req.ProjectID, Environment: req.ToEnv, AppName: app.Name, ServicePort: port}
+		if err := o.deps.Apps.ExposeApp(ctx, in); err != nil {
+			logger.Error("promote: the app could not be exposed in the target environment; it runs without a public route",
+				"release_id", rel.ID, "app", app.Name, "to_env", req.ToEnv, "error", err)
+			continue
+		}
+		logger.Info("promote: app exposed in the target environment", "app", app.Name, "to_env", req.ToEnv)
 	}
 }

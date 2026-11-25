@@ -7,6 +7,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +19,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/archive"
 	"github.com/getloopscale/loopzero/api/internal/gitclient"
 
+	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -44,7 +46,20 @@ type AutoDeployConfig struct {
 	BuildSubmitter BuildSubmitter
 	SourceBucket   string // S3 bucket for source bundles (default: "loopzero-builds")
 	Logger         *slog.Logger
+	// BusyRetryEvery and BusyWait bound how a push waits for an environment
+	// that is deploying: one submit attempt per BusyRetryEvery, for at most
+	// BusyWait. Zero takes the defaults (15 seconds, 20 minutes).
+	BusyRetryEvery time.Duration
+	BusyWait       time.Duration
+	// BranchHead reads the commit at the head of the pushed branch. Nil reads
+	// it from GitHub through AppClient.
+	BranchHead func(ctx context.Context, req PushRequest) (string, error)
 }
+
+const (
+	defaultBusyRetryEvery = 15 * time.Second
+	defaultBusyWait       = 20 * time.Minute
+)
 
 // SourcePusher pushes source bundles (DIP — subset of source.SourceStore).
 type SourcePusher interface {
@@ -177,7 +192,7 @@ func (d *AutoDeployer) submitBuild(ctx context.Context, log *slog.Logger, req Pu
 		log.Info("auto-deploy: build submitter not configured (webhook-only mode)")
 		return nil
 	}
-	if err := d.cfg.BuildSubmitter.SubmitBuildFromWebhook(ctx, WebhookBuildRequest{
+	build := WebhookBuildRequest{
 		TenantID:       req.TenantID,
 		ProjectName:    req.ProjectName,
 		Environment:    autoDeployEnvironment,
@@ -188,11 +203,63 @@ func (d *AutoDeployer) submitBuild(ctx context.Context, log *slog.Logger, req Pu
 		CommitMessage:  req.CommitMessage,
 		SenderLogin:    req.SenderLogin,
 		LoopZeroYaml:   loopzeroYaml,
-	}); err != nil {
-		return fmt.Errorf("auto-deploy: submit build: %w", err)
 	}
-	log.Info("auto-deploy: build submitted successfully")
-	return nil
+	retryEvery, wait := d.cfg.BusyRetryEvery, d.cfg.BusyWait
+	if retryEvery <= 0 {
+		retryEvery = defaultBusyRetryEvery
+	}
+	if wait <= 0 {
+		wait = defaultBusyWait
+	}
+	deadline := time.Now().Add(wait)
+
+	// An environment takes one deploy at a time. A push that lands during one
+	// was refused once and never built (#125); it now waits for the
+	// environment, and gives way when the branch moved on, because the newer
+	// push has a handler of its own and only the newest commit must be built.
+	for {
+		err := d.cfg.BuildSubmitter.SubmitBuildFromWebhook(ctx, build)
+		if err == nil {
+			log.Info("auto-deploy: build submitted successfully")
+			return nil
+		}
+		if !errors.Is(err, loopzeroerrors.ErrDeployInProgress) {
+			return fmt.Errorf("auto-deploy: submit build: %w", err)
+		}
+		if !time.Now().Before(deadline) {
+			return fmt.Errorf("auto-deploy: the environment was still deploying after %s, so commit %s was not built: %w", wait, req.CommitSHA, err)
+		}
+		log.Info("auto-deploy: the environment is deploying; the push waits", "retry_in", retryEvery.String())
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("auto-deploy: stopped while commit %s waited for the environment: %w", req.CommitSHA, ctx.Err())
+		case <-time.After(retryEvery):
+		}
+		head, headErr := d.branchHead(ctx, req)
+		if headErr != nil {
+			log.Warn("auto-deploy: could not read the branch head while waiting; the push keeps waiting", "error", headErr)
+			continue
+		}
+		if head != req.CommitSHA {
+			log.Info("auto-deploy: a newer commit was pushed while this one waited; skipping it", "head", head)
+			return nil
+		}
+	}
+}
+
+func (d *AutoDeployer) branchHead(ctx context.Context, req PushRequest) (string, error) {
+	if d.cfg.BranchHead != nil {
+		return d.cfg.BranchHead(ctx, req)
+	}
+	owner, repo, err := splitRepoFullName(req.RepoFullName)
+	if err != nil {
+		return "", err
+	}
+	head, err := d.cfg.AppClient.GetHeadCommit(ctx, req.InstallationID, owner, repo, req.Branch)
+	if err != nil {
+		return "", err
+	}
+	return head.SHA, nil
 }
 
 // markCommitPending sets the commit status to pending. It is a fire-and-forget

@@ -176,7 +176,7 @@ func main() {
 			os.Exit(1)
 		}
 		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, projectCap, envEnsurer,
-			deployEnvironmentSecrets(k8sDeps, logger))
+			deployEnvironmentSecrets(k8sDeps, logger), promotionAppExposer(k8sDeps))
 		ghDeps = setupGitHub(dbAdapter, bgAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, shutdownCtx, logger)
 	}
 

@@ -7,7 +7,10 @@
   "properties": {
     "issuerKind": {
       "type": "string",
-      "enum": ["selfsigned", "acme"],
+      "enum": [
+        "selfsigned",
+        "acme"
+      ],
       "description": "Issuer kind: selfsigned (local dev) | acme (Let's Encrypt prod/drill). No other values supported."
     },
     "acme": {
@@ -37,13 +40,33 @@
       "type": "string",
       "minLength": 1,
       "description": "Name of the always-created LoopZero CA issuer for local fallback (loopzero-ca-issuer). Used by services that lack ACME-reachable DNS."
+    },
+    "selfSignedAliases": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Names of extra self-signed ClusterIssuers. For environments that cannot complete an ACME challenge and still name the production issuer."
     }
   },
-  "required": ["issuerKind"],
+  "required": [
+    "issuerKind"
+  ],
   "allOf": [
     {
-      "if": { "properties": { "issuerKind": { "const": "acme" } } },
-      "then": { "required": ["acme"] }
+      "if": {
+        "properties": {
+          "issuerKind": {
+            "const": "acme"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "acme"
+        ]
+      }
     }
   ],
   "additionalProperties": true
