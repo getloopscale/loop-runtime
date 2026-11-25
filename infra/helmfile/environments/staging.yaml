@@ -89,8 +89,8 @@ aws:
 platformImages:
   registry: "ghcr.io/getloopscale/"
   tags:
-    # The first build that signs S3 requests with the IRSA role (#9).
-    loopzero-api: "develop-eff9359"
+    # The first build that uploads push deploys to SOURCE_BUCKET (#87).
+    loopzero-api: "develop-af79b4a"
     loopzero-tenant-operator: "develop-7a34191"
     loopzero-app-operator: "develop-7a34191"
     loopzero-preview-operator: "develop-7a34191"
