@@ -343,7 +343,7 @@ func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain s
 	// announced by `loopzero deploy` is the SAME URL `loopzero status` returns
 	// AND publicly resolvable. Empty publicDomain → fall back to baseDomain
 	// (preserves the pre-#61 behavior for envs without a public wildcard).
-	domain := userFacingDomain(publicDomain, baseDomain)
+	domain := UserFacingDomain(publicDomain, baseDomain)
 	apps := make([]ActivationAppInfo, 0, len(specs))
 	for _, s := range specs {
 		url := ""

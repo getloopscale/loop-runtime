@@ -235,7 +235,7 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 	)
 
 	url := entryAppURL(req.TenantID, targetRelease.ProjectID, req.Environment, targetRelease.Apps,
-		userFacingDomain(o.deps.PublicDomain, req.BaseDomain))
+		UserFacingDomain(o.deps.PublicDomain, req.BaseDomain))
 
 	return &RollbackResult{
 		ReactivatedRelease: targetRelease,

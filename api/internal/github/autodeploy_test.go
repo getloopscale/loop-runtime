@@ -60,7 +60,8 @@ func TestExtractLoopZeroYaml_ValidTarball(t *testing.T) {
 	yamlContent := `project: my-app
 apps:
   api:
-    language: go
+    runtime: node
+    start: node server.js
 `
 	tarball := makeTarGz(t, map[string]string{
 		"owner-repo-abc123/loopzero.yaml": yamlContent,
@@ -136,7 +137,8 @@ func TestExtractLoopZeroYaml_NestedPath(t *testing.T) {
 		"getloopscale-loopzerokit-example-abc123/loopzero.yaml": `project: nested-project
 apps:
   web:
-    language: node
+    runtime: node
+    start: node server.js
 `,
 	})
 
@@ -194,7 +196,8 @@ func TestExtractLoopZeroYaml_EmptyProject(t *testing.T) {
 	tarball := makeTarGz(t, map[string]string{
 		"prefix/loopzero.yaml": `apps:
   api:
-    language: go
+    runtime: node
+    start: node server.js
 `,
 	})
 
@@ -219,11 +222,14 @@ func TestExtractLoopZeroYaml_MultipleApps(t *testing.T) {
 		"prefix/loopzero.yaml": `project: multi
 apps:
   api:
-    language: go
+    runtime: node
+    start: node server.js
   web:
-    language: node
+    runtime: node
+    start: node server.js
   worker:
-    language: python
+    runtime: python
+    start: python app.py
 `,
 	})
 
@@ -315,7 +321,8 @@ func TestHandlePush_HappyPath(t *testing.T) {
 	server := newGitHubTarballServer(t, `project: my-app
 apps:
   api:
-    language: go
+    runtime: node
+    start: node server.js
 `)
 	defer server.Close()
 
@@ -471,7 +478,8 @@ func TestHandlePush_BuildSubmitFailure(t *testing.T) {
 	server := newGitHubTarballServer(t, `project: my-app
 apps:
   api:
-    language: go
+    runtime: node
+    start: node server.js
 `)
 	defer server.Close()
 
@@ -507,7 +515,8 @@ func TestHandlePush_CancelQueuedNonFatal(t *testing.T) {
 	server := newGitHubTarballServer(t, `project: my-app
 apps:
   api:
-    language: go
+    runtime: node
+    start: node server.js
 `)
 	defer server.Close()
 
@@ -567,7 +576,8 @@ func TestHandlePush_DefaultBucket(t *testing.T) {
 	server := newGitHubTarballServer(t, `project: my-app
 apps:
   api:
-    language: go
+    runtime: node
+    start: node server.js
 `)
 	defer server.Close()
 
@@ -603,7 +613,8 @@ func TestHandlePush_S3UploadFailure(t *testing.T) {
 	server := newGitHubTarballServer(t, `project: my-app
 apps:
   api:
-    language: go
+    runtime: node
+    start: node server.js
 `)
 	defer server.Close()
 

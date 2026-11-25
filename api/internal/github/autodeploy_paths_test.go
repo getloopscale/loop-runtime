@@ -27,7 +27,7 @@ func newTestDeployer(t *testing.T, loopzeroYaml string, cfg AutoDeployConfig) *A
 	return NewAutoDeployer(cfg)
 }
 
-const minimalLoopZeroYaml = "project: my-app\napps:\n  api:\n    language: go\n"
+const minimalLoopZeroYaml = "project: my-app\napps:\n  api:\n    runtime: node\n    start: node server.js\n"
 
 func TestHandlePush_WithoutABuildSubmitterStillUploadsTheBundle(t *testing.T) {
 	uploader := &fakeObjectUploader{}

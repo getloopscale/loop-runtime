@@ -424,7 +424,7 @@ func TestRepositories_Connect_InvalidYaml_400(t *testing.T) {
 	}
 }
 
-const deployableLoopZeroYaml = "project: my-app\napps:\n  api:\n    type: server\n"
+const deployableLoopZeroYaml = "project: my-app\napps:\n  api:\n    type: server\n    runtime: node\n    start: node server.js\n"
 
 // Connect refuses the descriptor a push could not deploy: a loopzero.yaml that
 // declares no app used to link fine and then build nothing on every push.
