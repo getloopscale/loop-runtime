@@ -120,10 +120,17 @@ type objectStore struct {
 }
 
 func (o objectStore) staticAssetsBucket() string {
-	if o.StaticAssetsBucket == "" {
+	return SBOMBucket(o.StaticAssetsBucket)
+}
+
+// SBOMBucket is the bucket the build uploads SBOMs to, given the configured
+// STATIC_ASSETS_BUCKET. Empty selects s3BucketStaticAssets. The API presigns SBOM
+// downloads with it so the link names the bucket the object was written to.
+func SBOMBucket(configured string) string {
+	if configured == "" {
 		return s3BucketStaticAssets
 	}
-	return o.StaticAssetsBucket
+	return configured
 }
 
 func (p InfraParams) objectStore() objectStore {

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/getloopscale/loopzero/api/internal/builds/admission"
+	"github.com/getloopscale/loopzero/api/internal/builds/argo"
 	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
 	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentsadapter"
@@ -129,7 +130,7 @@ func baseServerConfig(w serverWiring) server.Config {
 		BuildSBOMHandler: buildshttp.NewBuildSBOMHandler(
 			&buildsadapter.AppSBOMStore{Inner: store.NewAppAttestationStoreSqlc(w.dbAdapter)},
 			toSBOMURLGenerator(w.stores),
-			cfg.SourceBucket,
+			sbomBucket(cfg),
 			w.logger,
 		),
 		EnvironmentHandler: newEnvironmentHandler(w),
@@ -443,6 +444,12 @@ func wirePlacement(sc *server.Config, w serverWiring) {
 	if checker, ok := w.cellRouter.(healthhttp.CellDiscoveryChecker); ok {
 		sc.CellDiscovery = checker
 	}
+}
+
+// sbomBucket is where the SBOM download link points: the bucket the build
+// uploads SBOMs to, not the source bucket.
+func sbomBucket(cfg config.Config) string {
+	return argo.SBOMBucket(cfg.StaticAssetsBucket)
 }
 
 // toSBOMURLGenerator returns a SBOMURLGenerator if the configured

@@ -398,6 +398,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The SBOM download link of a build points into `STATIC_ASSETS_BUCKET`, where the build uploads the SBOM, instead of `SOURCE_BUCKET`, so the download no longer answers 404 (#98)
 - A failed push deploy marks its commit `failure` on GitHub. Build failures stopped calling the build-failed callback when they moved to one finalization path, so the commit stayed `pending` (#91)
 - The commit status of a push deploy links the app on `LOOPZERO_PUBLIC_DOMAIN`, where it answers, instead of `BASE_DOMAIN` (#92)
 - Connecting a repository refuses a `loopzero.yaml` app without `runtime: node|python` or without `start`, naming the app and the field. Such a repository used to connect, and then every push failed in the build (#93)
