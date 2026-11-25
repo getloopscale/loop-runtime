@@ -263,6 +263,31 @@ type secretBulkResponse struct {
 // plan enforcement.
 const secretBulkMaxKeys = 100
 
+// secretValueMaxBytes is the largest value one secret may hold: 64 KiB.
+//
+// A secret reaches the app as one key of a Kubernetes Secret, which holds 1 MiB
+// in all, and the secret store's client reads at most 1 MiB of answer. Above
+// either, the write failed deep in the store and read as an outage (#123). The
+// handlers refuse the value themselves, and say the limit.
+const secretValueMaxBytes = 64 * 1024
+
+const secretValueTooLargeCode = "SECRET_VALUE_TOO_LARGE"
+
+func secretValueTooLargeMessage(name string) string {
+	return fmt.Sprintf("The value of %s is larger than 64 KiB, the most one secret can hold. Store large files elsewhere and keep a reference to them in the secret.", name)
+}
+
+// publicSecretError is what a client may show for a failed write: the message
+// of the typed error in the chain, or a generic sentence. The wrapped causes
+// (package prefixes, the store's path, the tenant key name) go to the log.
+func publicSecretError(err error) string {
+	var typed *loopzeroerrors.LoopZeroError
+	if errors.As(err, &typed) {
+		return typed.Message
+	}
+	return "The secret could not be saved. Retry, and if it persists contact support."
+}
+
 // Bulk handles POST /api/v1/secrets/bulk?project={name}.
 //
 // Per plan T1.1, response shape MUST be {results: [{name, status,
@@ -490,6 +515,8 @@ func (a *bulkEnvAggregates) fail(env, status string, err error) {
 type bulkEntryState struct {
 	entry secretBulkEntry
 	valid bool
+	// tooLarge: the value is above secretValueMaxBytes and was never written.
+	tooLarge bool
 	aggs  bulkEnvAggregates
 }
 
@@ -529,6 +556,10 @@ func (h *SecretHandler) bulkProcess(ctx context.Context, uc *auth.UserContext, p
 		if !st.valid {
 			continue
 		}
+		if len(entry.Value) > secretValueMaxBytes {
+			st.tooLarge = true
+			continue
+		}
 		for _, env := range entry.Envs {
 			if _, seen := groups[env]; !seen {
 				envOrder = append(envOrder, env)
@@ -565,6 +596,9 @@ func (h *SecretHandler) persistEnvGroup(ctx context.Context, tenantID, project, 
 				// The store keeps the transit cause in its error chain, so a
 				// policy denial (permanent) still reads as "denied" and a
 				// timeout (transient) as "failed" — B-072.
+				slog.Error("secret bulk: the store refused a write",
+					"tenant", tenantID, "project", project, "env", env,
+					"secret_name", wr.state.entry.Name, "error", err)
 				wr.state.aggs.fail(env, transitFailureStatus(err), err)
 				continue
 			}
@@ -626,6 +660,12 @@ func (h *SecretHandler) bulkEntryResult(ctx context.Context, uc *auth.UserContex
 		result.ErrorCode = "INVALID_KEY"
 		return result
 	}
+	if st.tooLarge {
+		result.Status = "failed"
+		result.Error = secretValueTooLargeMessage(st.entry.Name)
+		result.ErrorCode = secretValueTooLargeCode
+		return result
+	}
 	h.bulkAggregateStatus(&result, st.entry, st.aggs)
 	result.SyncStatusPerEnv = st.aggs.syncStatusPerEnv
 
@@ -651,7 +691,7 @@ func (h *SecretHandler) bulkAggregateStatus(result *secretBulkResult, entry secr
 	if aggs.storeFailures == len(entry.Envs) {
 		result.Status = "failed"
 		if aggs.firstErr != nil {
-			result.Error = aggs.firstErr.Error()
+			result.Error = publicSecretError(aggs.firstErr)
 		}
 		result.ErrorCode = "STORE_SET_FAILED"
 	} else if aggs.storeFailures > 0 {
@@ -661,7 +701,7 @@ func (h *SecretHandler) bulkAggregateStatus(result *secretBulkResult, entry secr
 		// surfaces the first store failure for diagnostics.
 		result.Status = "created"
 		if aggs.firstErr != nil {
-			result.Error = aggs.firstErr.Error()
+			result.Error = publicSecretError(aggs.firstErr)
 		}
 		result.ErrorCode = "STORE_SET_PARTIAL"
 	}
@@ -749,6 +789,13 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// Validate required fields
 	if req.Value == "" {
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("value is required"))
+		return
+	}
+	if len(req.Value) > secretValueMaxBytes {
+		httpio.WriteJSON(w, http.StatusRequestEntityTooLarge, map[string]string{
+			"code":    secretValueTooLargeCode,
+			"message": secretValueTooLargeMessage(req.Name),
+		})
 		return
 	}
 	if req.Environment == "" {
