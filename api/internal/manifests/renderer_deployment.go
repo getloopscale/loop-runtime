@@ -7,6 +7,28 @@ import (
 	"fmt"
 )
 
+// podBuildIDAnnotation stamps the pod template with the build it was rendered
+// for.
+//
+// A workload controller starts new pods only when the pod template changes. A
+// redeploy of the same commit delivers the same image digest, so without the
+// stamp it changed nothing: no pod restarted, and a secret set since the last
+// deploy (read through envFrom at process start) never reached the app.
+//
+// The build id, and not the release id: a release's manifests are rendered
+// again when a custom domain or the scale changes, with the same build, and
+// those renders must not restart the app.
+const podBuildIDAnnotation = "loopzero.io/build-id"
+
+// podTemplateMeta is the metadata of an app's pod template.
+func podTemplateMeta(ri renderScope, labels map[string]string) k8sPodMeta {
+	meta := k8sPodMeta{Labels: labels}
+	if ri.BuildID != "" {
+		meta.Annotations = map[string]string{podBuildIDAnnotation: ri.BuildID}
+	}
+	return meta
+}
+
 // buildDeployment creates a Deployment resource for an app.
 func buildDeployment(ri renderScope, app AppManifestInput, port int) k8sDeployment {
 	ns := ri.ns
@@ -49,7 +71,7 @@ func buildDeployment(ri renderScope, app AppManifestInput, port int) k8sDeployme
 			},
 			Selector: k8sLabelSelector{MatchLabels: selectorLabels},
 			Template: k8sPodTemplateSpec{
-				Metadata: k8sPodMeta{Labels: labels},
+				Metadata: podTemplateMeta(ri, labels),
 				Spec:     podSpec,
 			},
 		},

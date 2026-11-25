@@ -8,7 +8,6 @@ import (
 	"errors"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -32,7 +31,7 @@ func (failingCellLookup) GetTenantCellID(context.Context, string) (string, error
 // so before touching either cluster.
 func newPlacedManager(lookup TenantCellLookup) (*SecretK8sManager, *fake.Clientset, *dynamicfake.FakeDynamicClient) {
 	mgmt := fake.NewClientset()
-	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	dyn := newRuntimeFake()
 	return &SecretK8sManager{
 		mgmtClient: mgmt, runtimeDynamic: dyn, mgmtNamespace: "loopzero-system",
 		tenantCells: lookup, runtimeCellID: "cell-0",

@@ -71,7 +71,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 		return &SecretK8sManager{mgmtClient: mgmt, runtimeDynamic: dyn, mgmtNamespace: mgmtNS, tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
 	}
 	newDyn := func() *dynamicfake.FakeDynamicClient {
-		return dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+		return newRuntimeFake()
 	}
 
 	t.Run("mgmt secret write fails", func(t *testing.T) {
