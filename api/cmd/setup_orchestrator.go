@@ -320,6 +320,22 @@ func setupOrchestrator(
 	statusBuildStore := &statusadapter.StatusBuildStoreAdapter{Store: stores.BuildStore}
 	statusReleaseStore := &statusadapter.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
 	statusHandler := statushttp.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
+	// Desired replicas and the scaling block follow the saved scale
+	// configuration: a scale changes the running app without a build (#116).
+	statusHandler.SetScaleReader(statusadapter.StatusScaleAdapter{
+		Builds: stores.BuildStore,
+		Stored: scaling.StoredScaling{Configs: scalingStore},
+	})
+	// Ready replicas and the 5xx share come from the series the cells record
+	// per tenant app. Without a Prometheus the fields are omitted.
+	if url := metricsPrometheusURL(cfg); url != "" {
+		statusMetrics, metricsErr := statusadapter.NewPrometheusStatusMetrics(url)
+		if metricsErr != nil {
+			logger.Warn("status: Prometheus client not built; replicas_ready and traffic_5xx_pct_1h are omitted", "error", metricsErr)
+		} else {
+			statusHandler.SetMetricsSource(statusMetrics)
+		}
+	}
 
 	// Prometheus query_range proxy for the Status page KPI strip and the
 	// SignalDetailSheet histograms, on the Prometheus the API pod reaches

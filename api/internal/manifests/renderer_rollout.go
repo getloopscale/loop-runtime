@@ -534,3 +534,9 @@ func replicasForApp(app AppManifestInput) int {
 	}
 	return replicas
 }
+
+// RenderedReplicas is the replica count app's workload is rendered with, for
+// callers that report the scale of a deployed app without rendering it.
+func RenderedReplicas(app AppManifestInput) int {
+	return replicasForApp(app)
+}
