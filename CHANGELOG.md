@@ -403,6 +403,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A rollback by `build_id` takes the release of that build in the environment being rolled back. After a promote it took the release of the other environment and failed with `INVALID_TRANSITION`. A `to_release_id` of another project or environment is answered with `RELEASE_NOT_FOUND` (#130).
 - The deploy timeline stream (`GET /api/v1/deploys/{id}/timeline`) reaches the console as it is written. It went through the buffering middleware, so the build page showed every phase of a finished deploy as pending (#127).
 - A push that arrives while the environment is deploying is built when the environment is free. It was refused once with `DEPLOY_IN_PROGRESS` and never built. The push waits up to 20 minutes and is skipped when a newer commit reached the branch in the meantime (#125).
 - A promote exposes the apps of the promoted release in the target environment, so the environment answers on its public host. The workload ran, and the host answered 404 (#124).

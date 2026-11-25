@@ -25,7 +25,7 @@ type fakeReleaseLookup struct {
 	err       error
 }
 
-func (f *fakeReleaseLookup) GetLatestReleaseForBuild(ctx context.Context, tenantID, buildID string) (string, error) {
+func (f *fakeReleaseLookup) GetReleaseForBuild(ctx context.Context, tenantID, _, _, buildID string) (string, error) {
 	if f.err != nil {
 		return "", f.err
 	}

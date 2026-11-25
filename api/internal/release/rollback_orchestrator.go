@@ -241,7 +241,10 @@ func (o *RollbackOrchestrator) beginRollback(ctx context.Context, req RollbackRe
 			if err != nil {
 				return fmt.Errorf("rollback: get target release: %w", err)
 			}
-			if found == nil {
+			// A release of another environment or project is not a target
+			// here, whatever state it is in: answering as if it did not
+			// exist also keeps its existence from the caller.
+			if found == nil || found.ProjectID != req.ProjectID || found.Environment != req.Environment {
 				return loopzeroerrors.ErrReleaseNotFound
 			}
 			target = found
