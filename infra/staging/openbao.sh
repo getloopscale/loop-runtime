@@ -10,7 +10,9 @@
 #
 #   1. secrets.helmfile (env staging) on the secrets cluster: cert-manager, the issuer,
 #      the TLS certificate and OpenBao, which unseals itself with the KMS key
-#      OPENBAO_AWS_KMS_KEY_ID (infra-live security/kms-openbao-unseal).
+#      OPENBAO_AWS_KMS_KEY_ID (infra-live security/kms-openbao-unseal), authenticated by
+#      the access key OPENBAO_SEAL_ACCESS_KEY_ID / OPENBAO_SEAL_SECRET_ACCESS_KEY
+#      (identity/secrets-openbao-seal-user) through secrets-system/openbao-aws-creds.
 #   2. A fresh vault (every rebuild) is initialised by vault-bootstrap-dev.sh with
 #      recovery keys; the init file (root token, recovery keys) stays on the host, mode
 #      0600, at OPENBAO_INIT_FILE. The script also runs the openbao-init job, creates the
@@ -30,6 +32,8 @@ INIT_FILE="${OPENBAO_INIT_FILE:-/var/lib/loopzero-staging/openbao-init.json}"
 NODE_PORT="${OPENBAO_NODE_PORT:-30200}"
 : "${OPENBAO_AWS_KMS_KEY_ID:?the awskms seal key (infra-live security/kms-openbao-unseal key_arn)}"
 export OPENBAO_AWS_KMS_KEY_ID
+: "${OPENBAO_SEAL_ACCESS_KEY_ID:?access key id of the seal user (infra-live identity/secrets-openbao-seal-user)}"
+: "${OPENBAO_SEAL_SECRET_ACCESS_KEY:?secret access key of the seal user}"
 
 log() { printf 'staging-openbao: %s\n' "$*" >&2; }
 # The helmfile declares the k3d context; staging names its clusters by role, so the
@@ -43,6 +47,12 @@ bao_status() {
 hf --selector name=cert-manager sync
 hf --selector name=cluster-issuer sync
 hf --selector name=openbao-cert sync
+# Staging only: the seal's access key (secrets.helmfile, emulator block), read by the
+# OpenBao pods at start.
+kubectl --context "$SECRETS_CONTEXT" -n secrets-system create secret generic openbao-aws-creds \
+  --from-literal=access_key_id="$OPENBAO_SEAL_ACCESS_KEY_ID" \
+  --from-literal=secret_access_key="$OPENBAO_SEAL_SECRET_ACCESS_KEY" \
+  --dry-run=client -o yaml | kubectl --context "$SECRETS_CONTEXT" apply -f - >/dev/null
 kubectl --context "$SECRETS_CONTEXT" -n secrets-system wait --for=condition=Ready certificate/openbao --timeout=180s
 hf --selector name=openbao sync
 

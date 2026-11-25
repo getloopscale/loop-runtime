@@ -373,7 +373,8 @@ tasks:
         bash infra/staging/restart-uninjected-pods.sh core build cell-0 cell-1 secrets
         # OpenBao on the secrets cluster before the core sync: loopzero-api encrypts
         # tenant secrets with its transit engine and reads the AppRole this writes.
-        bash infra/staging/openbao.sh
+        # The seal user's access key goes to that script alone, not into this shell.
+        (eval "$(task staging:platform:openbao-seal-key)"; bash infra/staging/openbao.sh)
         # The monitoring of the four clusters goes through internal ALBs whose DNSNames
         # exist only once the sync that creates each Ingress is done: the build cluster's
         # Loki (for the Promtail of core and the cells) and the federation Prometheus of
@@ -448,6 +449,23 @@ tasks:
         printf 'export LOOPZERO_VPC_ID="%s"\n' "$(out networking/vpc vpc_id)"
         printf 'export LOOPZERO_EDGE_KVS_ARN="%s"\n' "$(out edge/app-routes arn)"
         printf 'export OPENBAO_AWS_KMS_KEY_ID="%s"\n' "$(out security/kms-openbao-unseal key_arn)"
+
+  platform:openbao-seal-key:
+    desc: The access key OpenBao's seal authenticates with on the emulator, as shell exports
+    env:
+      HOME: /root
+      AWS_EMULATOR_ENDPOINT: 'https://localhost:{{.EMULATOR_PORT}}'
+      AWS_EMULATOR_PORT: '{{.EMULATOR_PORT}}'
+      AWS_EMULATOR_HOME: '{{.EMULATOR_HOME}}'
+      AWS_CONFIG_FILE: /dev/null
+      AWS_SHARED_CREDENTIALS_FILE: /dev/null
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+        cd "{{.IAC_DIR}}/identity/secrets-openbao-seal-user"
+        printf 'export OPENBAO_SEAL_ACCESS_KEY_ID="%s"\n' "$(terragrunt output -raw access_key_id 2>/dev/null)"
+        printf 'export OPENBAO_SEAL_SECRET_ACCESS_KEY="%s"\n' "$(terragrunt output -raw secret_access_key 2>/dev/null)"
 
   platform:verify:
     internal: true

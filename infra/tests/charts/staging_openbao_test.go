@@ -42,6 +42,16 @@ func TestStagingOpenBaoUnsealsWithTheKMSKeyUnderItsOwnRole(t *testing.T) {
 	if got := dig(values, "server", "service", "nodePort"); got != float64(30200) && got != 30200 {
 		t.Errorf("server.service.nodePort = %v (%T), want 30200, the port core's openbao Service targets", got, got)
 	}
+	creds, _ := dig(values, "server", "extraSecretEnvironmentVars").([]any)
+	names := map[any]any{}
+	for _, c := range creds {
+		if m, ok := c.(map[string]any); ok && m["secretName"] == "openbao-aws-creds" {
+			names[m["envName"]] = m["secretKey"]
+		}
+	}
+	if names["AWS_ACCESS_KEY_ID"] != "access_key_id" || names["AWS_SECRET_ACCESS_KEY"] != "secret_access_key" {
+		t.Errorf("on the emulator the seal does not read its access key from openbao-aws-creds: %v", creds)
+	}
 	if got := dig(values, "server", "ha", "disruptionBudget", "enabled"); got != false {
 		t.Errorf("a one-voter staging OpenBao has a disruption budget (%v), which blocks every drain of its node", got)
 	}
