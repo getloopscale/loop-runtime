@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/pkg/naming"
@@ -86,10 +85,25 @@ const inFlightLookback = 5
 // the repository already holds manifests the running release did not render:
 // Deliver returns ErrDeployInFlight and pushes nothing.
 func (s *ReleaseScaler) Deliver(ctx context.Context, tenantID, project, env string) (bool, error) {
+	return s.deliver(ctx, tenantID, project, env, false)
+}
+
+// DeliverSaved is Deliver for a caller that has just put other manifests in
+// the GitOps repository, as a rollback does with the ones of an older release:
+// they carry the replica count of their day, and this puts the saved config
+// back. With no config saved for any app of the running release it pushes
+// nothing and reports false, because those manifests already hold.
+func (s *ReleaseScaler) DeliverSaved(ctx context.Context, tenantID, project, env string) (bool, error) {
+	return s.deliver(ctx, tenantID, project, env, true)
+}
+
+func (s *ReleaseScaler) deliver(ctx context.Context, tenantID, project, env string, onlyIfSaved bool) (bool, error) {
 	var push *deploycontracts.GitOpsPushOpts
 	err := s.Locker.WithLock(ctx, tenantID, project, env, func(db.DBTX) error {
-		opts, renderErr := s.renderRunningRelease(ctx, tenantID, project, env)
-		push = opts
+		opts, saved, renderErr := s.renderRunningRelease(ctx, tenantID, project, env)
+		if renderErr == nil && (saved || !onlyIfSaved) {
+			push = opts
+		}
 		return renderErr
 	})
 	if err != nil {
@@ -119,38 +133,42 @@ func (s *ReleaseScaler) Deliver(ctx context.Context, tenantID, project, env stri
 }
 
 // renderRunningRelease renders the manifests of the environment's running
-// release with the stored scaling config. It returns nil when nothing runs.
-func (s *ReleaseScaler) renderRunningRelease(ctx context.Context, tenantID, project, env string) (*deploycontracts.GitOpsPushOpts, error) {
+// release with the stored scaling config, and reports whether any of its apps
+// has one. It returns nil when nothing runs.
+func (s *ReleaseScaler) renderRunningRelease(ctx context.Context, tenantID, project, env string) (*deploycontracts.GitOpsPushOpts, bool, error) {
 	release, err := s.Releases.GetActiveByEnv(ctx, tenantID, project, env)
 	if err != nil {
-		return nil, fmt.Errorf("scaling: read running release of %s/%s: %w", project, env, err)
+		return nil, false, fmt.Errorf("scaling: read running release of %s/%s: %w", project, env, err)
 	}
 	if release == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	if err := s.refuseDeployInFlight(ctx, release); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	build, err := s.Builds.GetByID(ctx, release.BuildID)
 	if err != nil {
-		return nil, fmt.Errorf("scaling: read build %s: %w", release.BuildID, err)
+		return nil, false, fmt.Errorf("scaling: read build %s: %w", release.BuildID, err)
 	}
 	if build == nil {
-		return nil, fmt.Errorf("scaling: build %s of release %s not found", release.BuildID, release.ID)
+		return nil, false, fmt.Errorf("scaling: build %s of release %s not found", release.BuildID, release.ID)
 	}
 	apps, err := s.Builds.GetBuildApps(ctx, release.BuildID)
 	if err != nil {
-		return nil, fmt.Errorf("scaling: read apps of build %s: %w", release.BuildID, err)
+		return nil, false, fmt.Errorf("scaling: read apps of build %s: %w", release.BuildID, err)
 	}
+	stored, anySaved := StoredScaling{Configs: s.Configs}, false
 	for i := range apps {
-		if apps[i], err = s.withStoredScaling(ctx, tenantID, project, env, apps[i]); err != nil {
-			return nil, err
+		var saved bool
+		if apps[i], saved, err = stored.ApplyToApp(ctx, tenantID, project, env, apps[i]); err != nil {
+			return nil, false, err
 		}
+		anySaved = anySaved || saved
 	}
 	digests, err := releaseImageDigests(release, apps)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	manifestApps, err := deploycontracts.BuildManifestApps(ctx, deploycontracts.BuildManifestAppsInput{
@@ -164,7 +182,7 @@ func (s *ReleaseScaler) renderRunningRelease(ctx context.Context, tenantID, proj
 		DomainStore: s.Domains,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("scaling: %w", err)
+		return nil, false, fmt.Errorf("scaling: %w", err)
 	}
 	rendered, err := manifests.Render(manifests.RenderInput{
 		TenantID:            tenantID,
@@ -180,7 +198,7 @@ func (s *ReleaseScaler) renderRunningRelease(ctx context.Context, tenantID, proj
 		LeanResources:       s.Render.LeanResources,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("scaling: render manifests of release %s: %w", release.ID, err)
+		return nil, false, fmt.Errorf("scaling: render manifests of release %s: %w", release.ID, err)
 	}
 	return &deploycontracts.GitOpsPushOpts{
 		TenantID:      tenantID,
@@ -190,7 +208,7 @@ func (s *ReleaseScaler) renderRunningRelease(ctx context.Context, tenantID, proj
 		BuildID:       release.BuildID,
 		ReleaseID:     release.ID,
 		CorrelationID: release.CorrelationID,
-	}, nil
+	}, anySaved, nil
 }
 
 // refuseDeployInFlight returns ErrDeployInFlight when a release other than the
@@ -210,29 +228,6 @@ func (s *ReleaseScaler) refuseDeployInFlight(ctx context.Context, running *db.Re
 		}
 	}
 	return nil
-}
-
-// withStoredScaling overlays the stored config on the scaling the app was
-// deployed with, by the rule a deploy applies (applyScalingRow).
-func (s *ReleaseScaler) withStoredScaling(ctx context.Context, tenantID, project, env string, app db.BuildAppSpec) (db.BuildAppSpec, error) {
-	row, err := s.Configs.GetByApp(ctx, tenantID, project, env, app.Name)
-	if errors.Is(err, store.ErrScalingConfigNotFound) {
-		return app, nil
-	}
-	if err != nil {
-		return app, fmt.Errorf("scaling: read config of app %q: %w", app.Name, err)
-	}
-	scaled := applyScalingRow(deploycontracts.AppSpecFromStored(app), row)
-	app.Replicas = scaled.Replicas
-	app.Autoscaling = nil
-	if scaled.Autoscaling != nil {
-		app.Autoscaling = &db.BuildAppAutoscaling{
-			MinReplicas: scaled.Autoscaling.MinReplicas,
-			MaxReplicas: scaled.Autoscaling.MaxReplicas,
-			TargetCPU:   scaled.Autoscaling.TargetCPU,
-		}
-	}
-	return app, nil
 }
 
 // releaseImageDigests maps each app to the image digest the release delivered.

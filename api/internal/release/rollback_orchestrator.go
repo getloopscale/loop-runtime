@@ -41,11 +41,21 @@ type RollbackOrchestratorDeps struct {
 	// before Phase 5 flips any release state. Required — it is the same
 	// activator the build path uses, wired at the composition root.
 	Delivery deploycontracts.DeliveryActivator
+	// SavedScale delivers the environment's saved scaling configuration to the
+	// reactivated release (scaling.ReleaseScaler). Optional: without it the
+	// environment keeps the replica count of the rolled back manifests.
+	SavedScale SavedScaleDeliverer
 	// PublicDomain is the operator's public wildcard (LOOPZERO_PUBLIC_DOMAIN). The
 	// rollback URL is composed on it, falling back to the request's BaseDomain
 	// when it is unset — the same rule promotion and activation apply.
 	PublicDomain string
 	Logger       *slog.Logger
+}
+
+// SavedScaleDeliverer makes an environment's running workloads match its saved
+// scaling configuration, and reports whether it delivered anything.
+type SavedScaleDeliverer interface {
+	DeliverSaved(ctx context.Context, tenantID, project, env string) (bool, error)
 }
 
 // RollbackRequest contains the inputs for a rollback operation.
@@ -234,6 +244,8 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		"reactivated_release", targetRelease.ID,
 	)
 
+	o.deliverSavedScale(ctx, logger, req)
+
 	url := entryAppURL(req.TenantID, targetRelease.ProjectID, req.Environment, targetRelease.Apps,
 		UserFacingDomain(o.deps.PublicDomain, req.BaseDomain))
 
@@ -243,6 +255,26 @@ func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest
 		Environment:        req.Environment,
 		URL:                url,
 	}, nil
+}
+
+// deliverSavedScale puts the environment's saved scaling configuration back
+// over the rolled back manifests, which carry the replica count of the older
+// release. It runs after the target is ACTIVE, because the scaler renders the
+// active release. A failure does not fail the rollback: the older release is
+// serving, and a repeated scale request delivers the config again.
+func (o *RollbackOrchestrator) deliverSavedScale(ctx context.Context, logger *slog.Logger, req RollbackRequest) {
+	if o.deps.SavedScale == nil {
+		return
+	}
+	delivered, err := o.deps.SavedScale.DeliverSaved(ctx, req.TenantID, req.ProjectID, req.Environment)
+	if err != nil {
+		logger.Error("rollback: saved scaling config not delivered; the environment runs the replica count of the rolled back release",
+			"error", err)
+		return
+	}
+	if delivered {
+		logger.Info("rollback: saved scaling config delivered")
+	}
 }
 
 // failRollback transitions the current release to ROLLBACK_FAILED state.
