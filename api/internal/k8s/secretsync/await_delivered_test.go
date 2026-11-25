@@ -262,3 +262,23 @@ func TestAwaitDelivered_ATenantOnACellThisInstanceDoesNotServeDoesNotWait(t *tes
 		t.Errorf("touched a cluster that does not host the tenant: %v", dyn.Actions())
 	}
 }
+
+// Setting or deleting a secret changes no field External Secrets watches, so
+// the value used to wait for the next refresh interval. Every write of the
+// ExternalSecret asks for a sync.
+func TestWritingASecretAsksExternalSecretsForASyncEachTime(t *testing.T) {
+	dyn := newRuntimeFake()
+	m := managerOn(dyn)
+	tokens := map[string]bool{}
+	for _, name := range []string{"API_KEY", "API_KEY", "DB_URL"} {
+		if err := m.CreateSecret(context.Background(), shopSecret("api", name), "v"); err != nil {
+			t.Fatalf("CreateSecret %s: %v", name, err)
+		}
+		es := externalSecretsIn(t, dyn)[naming.UserSecretName(shopTenant, shopProject, shopEnv, "api")]
+		token := es.GetAnnotations()[forceSyncAnnotation]
+		if token == "" || tokens[token] {
+			t.Fatalf("write of %s left force-sync = %q, want a value no earlier write used", name, token)
+		}
+		tokens[token] = true
+	}
+}

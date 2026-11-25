@@ -262,6 +262,11 @@ func externalSecretObject(ref ports.SecretRef, namespace string, names []string)
 				"name":      target,
 				"namespace": namespace,
 				"labels":    esLabelsAny,
+				// A changed value changes nothing in this object, and the
+				// operator would deliver it only at the next refresh
+				// interval. A new annotation value makes every write ask
+				// for a sync now.
+				"annotations": map[string]interface{}{forceSyncAnnotation: forceSyncToken()},
 			},
 			"spec": map[string]interface{}{
 				"refreshInterval": "30s",
