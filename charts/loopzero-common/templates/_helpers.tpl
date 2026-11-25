@@ -536,7 +536,7 @@ spec:
     {{- toYaml ($ir.entryPoints | default (list "websecure")) | nindent 4 }}
   routes:
     {{- if hasKey $ir "streamMiddlewares" }}
-    - match: Host(`{{ $ir.host }}`) && PathRegexp(`/stream$`)
+    - match: Host(`{{ $ir.host }}`) && PathRegexp(`/(stream|timeline)$`)
       kind: Rule
       {{- with $ir.streamMiddlewares }}
       middlewares:
