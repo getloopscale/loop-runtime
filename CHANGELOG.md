@@ -405,6 +405,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `last_deploy_at` in the project status and `last_deploy` in the environments list are the time the active release became active. After a rollback they showed the creation time of the release rolled back to, hours before the change (#145).
 - `GET /api/v1/environments` reports `last_deploy` and `last_deploy_sha` per project and environment. Two projects with an environment of the same name both showed the most recent deploy of either (#144).
 - A build of an app with a saved autoscaling range is accepted. The scaling resolver produced a spec with both a replica count and a range, and the scaling gate refused every such build with `SCALING_AMBIGUOUS`, redeploys included (#142).
 - Autoscaling scales again on staging: the environment installs the metrics server, which EKS does not ship, so an HPA reads CPU and memory where it used to report `cpu: <unknown>` and stay at its minimum (#138).

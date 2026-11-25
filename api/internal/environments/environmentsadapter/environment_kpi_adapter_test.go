@@ -17,7 +17,7 @@ func TestEnvKPIsReportTheLastDeployPerEnvironmentInUTC(t *testing.T) {
 	sha := "abc123"
 	at := time.Date(2026, 9, 1, 12, 0, 0, 0, time.FixedZone("BRT", -3*3600))
 	rows := []generated.ListLatestActiveReleasePerEnvRow{
-		{ProjectID: "web", Environment: "production", GitCommit: &sha, CreatedAt: pgtype.Timestamptz{Time: at, Valid: true}},
+		{ProjectID: "web", Environment: "production", GitCommit: &sha, DeployedAt: pgtype.Timestamptz{Time: at, Valid: true}},
 	}
 
 	got := envKPIsFromRows(rows)
@@ -30,7 +30,7 @@ func TestEnvKPIsReportTheLastDeployPerEnvironmentInUTC(t *testing.T) {
 
 func TestEnvKPIsReportAnEmptyShaForAReleaseWithoutACommit(t *testing.T) {
 	rows := []generated.ListLatestActiveReleasePerEnvRow{
-		{ProjectID: "web", Environment: "staging", CreatedAt: pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true}},
+		{ProjectID: "web", Environment: "staging", DeployedAt: pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true}},
 	}
 
 	if got := envKPIsFromRows(rows)[environmentshttp.EnvRef{Project: "web", Name: "staging"}].LastDeploySha; got != "" {
@@ -46,7 +46,7 @@ func TestEnvKPIsReportTheSourceCommitOfTheActiveRelease(t *testing.T) {
 	rows := []generated.ListLatestActiveReleasePerEnvRow{
 		{
 			ProjectID: "web", Environment: "production", GitCommit: &gitopsCommit, SourceCommit: &sourceCommit,
-			CreatedAt: pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true},
+			DeployedAt: pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true},
 		},
 	}
 
@@ -60,7 +60,7 @@ func TestEnvKPIsReportTheSourceCommitOfTheActiveRelease(t *testing.T) {
 func TestEnvKPIsFallBackToTheReleaseCommitWithoutASourceCommit(t *testing.T) {
 	gitopsCommit := "e0f47de8f57e55ee7fbdbbc91b526834819ae55f"
 	rows := []generated.ListLatestActiveReleasePerEnvRow{
-		{ProjectID: "web", Environment: "production", GitCommit: &gitopsCommit, CreatedAt: pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true}},
+		{ProjectID: "web", Environment: "production", GitCommit: &gitopsCommit, DeployedAt: pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true}},
 	}
 
 	if got := envKPIsFromRows(rows)[environmentshttp.EnvRef{Project: "web", Name: "production"}].LastDeploySha; got != gitopsCommit {
@@ -73,8 +73,8 @@ func TestEnvKPIsKeepProjectsApart(t *testing.T) {
 	at := pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true}
 	web, worker := "aaa", "bbb"
 	rows := []generated.ListLatestActiveReleasePerEnvRow{
-		{ProjectID: "web", Environment: "production", SourceCommit: &web, CreatedAt: at},
-		{ProjectID: "worker", Environment: "production", SourceCommit: &worker, CreatedAt: at},
+		{ProjectID: "web", Environment: "production", SourceCommit: &web, DeployedAt: at},
+		{ProjectID: "worker", Environment: "production", SourceCommit: &worker, DeployedAt: at},
 	}
 
 	got := envKPIsFromRows(rows)

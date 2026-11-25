@@ -353,7 +353,7 @@ func setupOrchestrator(
 
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
 	statusBuildStore := &statusadapter.StatusBuildStoreAdapter{Store: stores.BuildStore}
-	statusReleaseStore := &statusadapter.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
+	statusReleaseStore := &statusadapter.StatusReleaseStoreAdapter{Store: stores.ReleaseStore, Rollbacks: rollbackLog}
 	statusHandler := statushttp.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
 	// Desired replicas and the scaling block follow the saved scale
 	// configuration: a scale changes the running app without a build (#116).

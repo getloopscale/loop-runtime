@@ -605,7 +605,10 @@ func (q *Queries) InsertRelease(ctx context.Context, db DBTX, arg InsertReleaseP
 
 const listLatestActiveReleasePerEnv = `-- name: ListLatestActiveReleasePerEnv :many
 SELECT DISTINCT ON (r.project_id, r.environment) r.project_id, r.environment, r.git_commit,
-       b.commit_sha AS source_commit, r.created_at
+       b.commit_sha AS source_commit,
+       COALESCE((SELECT max(rb.finished_at) FROM rollbacks rb
+                 WHERE rb.tenant_id = $1 AND rb.to_release_id = r.id AND rb.status = 'SUCCEEDED'),
+                r.created_at)::timestamptz AS deployed_at
 FROM releases r
 LEFT JOIN builds b ON b.id = r.build_id AND b.tenant_id = r.tenant_id
 WHERE r.tenant_id = $1 AND r.status = 'ACTIVE'
@@ -617,12 +620,14 @@ type ListLatestActiveReleasePerEnvRow struct {
 	Environment  string             `json:"environment"`
 	GitCommit    *string            `json:"git_commit"`
 	SourceCommit *string            `json:"source_commit"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	DeployedAt   pgtype.Timestamptz `json:"deployed_at"`
 }
 
 // The most recent ACTIVE release of each (project, environment) of a tenant:
 // the dashboard's per-environment last-deploy KPI. Two projects share
-// environment names, so the project is part of the key. git_commit is the
+// environment names, so the project is part of the key. deployed_at is when
+// the release became active: the end of the last rollback that ended on it,
+// or its creation when no rollback did. git_commit is the
 // GitOps repository commit; source_commit is the commit the user deployed (the
 // release's build), NULL when that build is gone.
 func (q *Queries) ListLatestActiveReleasePerEnv(ctx context.Context, db DBTX, tenantID string) ([]ListLatestActiveReleasePerEnvRow, error) {
@@ -639,7 +644,7 @@ func (q *Queries) ListLatestActiveReleasePerEnv(ctx context.Context, db DBTX, te
 			&i.Environment,
 			&i.GitCommit,
 			&i.SourceCommit,
-			&i.CreatedAt,
+			&i.DeployedAt,
 		); err != nil {
 			return nil, err
 		}

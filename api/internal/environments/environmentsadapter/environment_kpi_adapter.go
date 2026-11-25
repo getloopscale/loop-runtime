@@ -44,7 +44,7 @@ func envKPIsFromRows(rows []generated.ListLatestActiveReleasePerEnvRow) map[envi
 			sha = *r.GitCommit
 		}
 		out[environmentshttp.EnvRef{Project: r.ProjectID, Name: r.Environment}] = environmentshttp.EnvKPI{
-			LastDeploy:    r.CreatedAt.Time.UTC().Format(time.RFC3339),
+			LastDeploy:    r.DeployedAt.Time.UTC().Format(time.RFC3339),
 			LastDeploySha: sha,
 		}
 	}

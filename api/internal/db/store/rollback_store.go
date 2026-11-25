@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/generated"
@@ -59,6 +60,23 @@ func (s *RollbackStoreSqlc) Finish(ctx context.Context, tenantID, id, status, fa
 		return fmt.Errorf("close rollback %s as %s: %w", id, status, err)
 	}
 	return nil
+}
+
+// LastRollbackTo is when the last successful rollback to the release ended,
+// nil when none did.
+func (s *RollbackStoreSqlc) LastRollbackTo(ctx context.Context, tenantID, releaseID string) (*time.Time, error) {
+	finishedAt, err := s.q.LastRollbackTo(ctx, db.Generated(s.pool), generated.LastRollbackToParams{
+		TenantID:    tenantID,
+		ToReleaseID: releaseID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read the last rollback to %s: %w", releaseID, err)
+	}
+	if !finishedAt.Valid {
+		return nil, nil
+	}
+	at := finishedAt.Time
+	return &at, nil
 }
 
 // ListByProject returns the project's rollbacks, newest first.
