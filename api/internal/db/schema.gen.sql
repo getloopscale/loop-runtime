@@ -440,7 +440,9 @@ CREATE TABLE public.github_installations (
     account_type text DEFAULT 'User'::text NOT NULL,
     tenant_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    verified_at timestamp with time zone,
+    verified_by text
 );
 
 ALTER TABLE ONLY public.github_installations FORCE ROW LEVEL SECURITY;

@@ -54,6 +54,18 @@ type GitHubInstallation struct {
 	TenantID     *string   `json:"tenant_id,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// VerifiedAt is when GitHub confirmed that a user of the tenant can access
+	// the installation, and VerifiedBy that user. Nil on a row the installation
+	// webhook created, and on a binding older than the confirmation.
+	VerifiedAt *time.Time `json:"verified_at,omitempty"`
+	VerifiedBy *string    `json:"verified_by,omitempty"`
+}
+
+// VerifiedFor reports whether the installation is bound to tenantID with the
+// binding confirmed on GitHub. It is the one rule that lets a tenant use an
+// installation.
+func (i *GitHubInstallation) VerifiedFor(tenantID string) bool {
+	return i != nil && tenantID != "" && i.TenantID != nil && *i.TenantID == tenantID && i.VerifiedAt != nil
 }
 
 // PostgresRepositoryStore implements repository persistence (project

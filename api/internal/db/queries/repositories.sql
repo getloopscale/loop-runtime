@@ -29,8 +29,10 @@
 -- name: UpsertGitHubInstallation :exec
 -- Idempotent upsert: ON CONFLICT (id) DO UPDATE preserves the
 -- existing account_login when the incoming value is empty (webhook
--- sometimes lacks the full payload). tenant_id is COALESCED so a
--- prior tenant binding survives a webhook with NULL tenant.
+-- sometimes lacks the full payload). An existing tenant binding always
+-- survives: this statement fills tenant_id only on a row that has none, and
+-- never sets verified_at. Binding an installation to a tenant is
+-- ClaimGitHubInstallation's job.
 INSERT INTO github_installations (
   id, account_login, account_type, tenant_id, created_at, updated_at
 ) VALUES (
@@ -38,7 +40,7 @@ INSERT INTO github_installations (
 )
 ON CONFLICT (id) DO UPDATE SET
   account_login = CASE WHEN EXCLUDED.account_login = '' THEN github_installations.account_login ELSE EXCLUDED.account_login END,
-  tenant_id = COALESCE(EXCLUDED.tenant_id, github_installations.tenant_id),
+  tenant_id = COALESCE(github_installations.tenant_id, EXCLUDED.tenant_id),
   updated_at = NOW();
 
 -- tenantpredicate:exempt
@@ -46,9 +48,44 @@ ON CONFLICT (id) DO UPDATE SET
 -- Lookup by installation id (GitHub-side principal). Cross-tenant
 -- because the installation itself decides which tenant binding to
 -- surface.
-SELECT id, account_login, account_type, tenant_id, created_at, updated_at
+SELECT id, account_login, account_type, tenant_id, created_at, updated_at,
+       verified_at, verified_by
 FROM github_installations
 WHERE id = $1;
+
+-- tenantpredicate:exempt
+-- name: ClaimGitHubInstallation :one
+-- Binds an installation to a tenant after GitHub confirmed that the user
+-- (verified_by) can access it, and records when. One statement, so two
+-- tenants claiming the same installation cannot both win: the row is written
+-- when the installation is unbound or already belongs to this tenant, and
+-- left alone, returning no row, when it belongs to another one.
+INSERT INTO github_installations (
+  id, account_login, account_type, tenant_id, verified_at, verified_by,
+  created_at, updated_at
+) VALUES (
+  $1, $2, $3, $4, NOW(), $5, NOW(), NOW()
+)
+ON CONFLICT (id) DO UPDATE SET
+  account_login = CASE WHEN EXCLUDED.account_login = '' THEN github_installations.account_login ELSE EXCLUDED.account_login END,
+  account_type = EXCLUDED.account_type,
+  tenant_id = EXCLUDED.tenant_id,
+  verified_at = NOW(),
+  verified_by = EXCLUDED.verified_by,
+  updated_at = NOW()
+WHERE github_installations.tenant_id IS NULL
+   OR github_installations.tenant_id = EXCLUDED.tenant_id
+RETURNING id;
+
+-- name: ListVerifiedGitHubInstallationsByTenant :many
+-- The installations a tenant may use: bound to it, with the binding confirmed
+-- on GitHub.
+SELECT id, account_login, account_type, tenant_id, created_at, updated_at,
+       verified_at, verified_by
+FROM github_installations
+WHERE tenant_id = $1
+  AND verified_at IS NOT NULL
+ORDER BY id;
 
 -- tenantpredicate:exempt
 -- name: DeleteGitHubInstallation :exec

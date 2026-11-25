@@ -168,6 +168,8 @@ type GithubInstallation struct {
 	TenantID     *string            `json:"tenant_id"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	VerifiedAt   pgtype.Timestamptz `json:"verified_at"`
+	VerifiedBy   *string            `json:"verified_by"`
 }
 
 type GithubWebhookDelivery struct {
