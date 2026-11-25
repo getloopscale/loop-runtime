@@ -13,6 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/api/internal/events"
+	"github.com/getloopscale/loopzero/api/internal/release"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 )
 
@@ -68,11 +69,14 @@ func (f buildFinalizer) succeed(ctx context.Context, build *db.Build) error {
 }
 
 // fail drives a build to its terminal failure state, persists the reason and
-// stages deploy.failed in the same transaction, then — only once that commits
-// and only if this call made the transition — emits build.failed. It reports
-// whether it transitioned the build; a build already terminal is left alone.
+// stages deploy.failed in the same transaction, then (only once that commits
+// and only if this call made the transition) emits build.failed and calls the
+// build-failed callback, which marks a push deploy's commit "failure" on GitHub.
+// It reports whether it transitioned the build; a build already terminal is
+// left alone.
 func (f buildFinalizer) fail(ctx context.Context, build *db.Build, failure buildFailure) (bool, error) {
 	transitioned := false
+	var failed *db.Build
 	err := f.locker.WithLock(ctx, build.TenantID, build.ProjectID, build.Environment, func(tx db.DBTX) error {
 		current, err := f.builds.GetByID(ctx, build.ID)
 		if err != nil {
@@ -105,6 +109,7 @@ func (f buildFinalizer) fail(ctx context.Context, build *db.Build, failure build
 			}
 		}
 		transitioned = true
+		failed = current
 		return nil
 	})
 	if err != nil {
@@ -112,6 +117,7 @@ func (f buildFinalizer) fail(ctx context.Context, build *db.Build, failure build
 	}
 	if transitioned {
 		f.emitBuildFailed(ctx, build.ID, failure.reason)
+		release.NotifyBuildFailed(ctx, failed.TenantID, failed.ProjectID, failed.CommitSHA, failed.ID)
 	}
 	return transitioned, nil
 }
