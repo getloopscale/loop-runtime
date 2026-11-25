@@ -89,8 +89,9 @@ aws:
 platformImages:
   registry: "ghcr.io/getloopscale/"
   tags:
-    # The first build that uploads push deploys to SOURCE_BUCKET (#87).
-    loopzero-api: "develop-af79b4a"
+    # The first build that marks a failed push deploy on GitHub and refuses an app
+    # the build cannot make (#91, #92, #93).
+    loopzero-api: "develop-913d75c"
     loopzero-tenant-operator: "develop-7a34191"
     loopzero-app-operator: "develop-7a34191"
     loopzero-preview-operator: "develop-7a34191"
@@ -102,7 +103,7 @@ platformImages:
     # getloopscale/console publishes these two (private on GHCR, pulled with
     # aws.imagePullSecret). Required while profile.loopzeroCloud is on.
     loopzero-cloud: "develop-e12f574"
-    loopzero-dashboard: "develop-c392662"
+    loopzero-dashboard: "develop-8575ccb"
 
 registries:
   docrPrefix: "ghcr.io/getloopscale/"
