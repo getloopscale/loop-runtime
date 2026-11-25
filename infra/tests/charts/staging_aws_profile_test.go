@@ -27,6 +27,9 @@ var stagingOutputs = []string{
 	"LOOPZERO_VPC_ID=vpc-test",
 	"LOOPZERO_CELL_CONTEXT=cell-0",
 	"LOOPZERO_EDGE_KVS_ARN=" + stagingEdgeKVSArn,
+	// Not an infra-live output: core's secret-fetch ALB, which the task reads from its
+	// Ingress after the core sync and before the cells (secret_fetch_broker_test.go).
+	"LOOPZERO_CORE_API_ALB_DNS_NAME=" + stagingCoreAPIALB,
 }
 
 const stagingEdgeKVSArn = "arn:aws:cloudfront::000000000000:key-value-store/edge-routes-test"

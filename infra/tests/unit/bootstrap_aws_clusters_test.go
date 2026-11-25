@@ -106,3 +106,50 @@ func writeExec(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+// The broker-tokens phase seeds one secret-fetch broker token per cell (`loopzero-ops
+// seed broker`) through the contexts this script names after the cell ids, not through
+// the k3d ones the seed defaults to.
+func TestBrokerTokensAreSeededThroughContextsNamedAfterTheCells(t *testing.T) {
+	root := t.TempDir()
+	scripts := filepath.Join(root, "infra", "helmfile", "scripts")
+	if err := os.MkdirAll(scripts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "cmd", "loopzero-ops"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src, err := os.ReadFile(filepath.Join(repoRoot(), "infra", "helmfile", "scripts", "bootstrap-aws-clusters.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeExec(t, filepath.Join(scripts, "bootstrap-aws-clusters.sh"), string(src))
+	calls := filepath.Join(root, "calls.log")
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// go build -o <bin> .: leaves a loopzero-ops that records its arguments and whether
+	// LOOPZERO_CELL_CONTEXT_PREFIX was set, and to what.
+	opsRecorder := `#!/usr/bin/env bash
+echo "loopzero-ops prefix=${LOOPZERO_CELL_CONTEXT_PREFIX-unset} core=${CORE_CONTEXT-unset} $*" >>` + calls + `
+`
+	opsFile := filepath.Join(root, "ops-recorder")
+	if err := os.WriteFile(opsFile, []byte(opsRecorder), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeExec(t, filepath.Join(bin, "go"), "#!/usr/bin/env bash\nwhile [[ $# -gt 0 ]]; do if [[ $1 == -o ]]; then cp "+opsFile+" \"$2\"; chmod +x \"$2\"; fi; shift; done\n")
+
+	cmd := exec.Command("bash", filepath.Join(scripts, "bootstrap-aws-clusters.sh"), "broker-tokens")
+	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("bootstrap-aws-clusters.sh broker-tokens: %v\n%s", err, out)
+	}
+	data, err := os.ReadFile(calls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(data)); got != "loopzero-ops prefix= core=core seed broker" {
+		t.Errorf("broker-tokens ran %q, want `seed broker` with LOOPZERO_CELL_CONTEXT_PREFIX set empty and CORE_CONTEXT=core", got)
+	}
+}

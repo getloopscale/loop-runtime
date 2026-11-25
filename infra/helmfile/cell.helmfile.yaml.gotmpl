@@ -205,12 +205,31 @@ releases:
     needs:
       - external-secrets/external-secrets
 {{- if .Values.profile.secretFetchBroker }}
+{{- /* Where the cells reach core's secret-fetch broker. dev-public names it
+       (crossCluster.coreApi, the k3d host). On AWS it is core's internal ALB, which
+       forwards /internal/v1/secret-fetch alone (charts/loopzero-api,
+       secretFetchLoadBalancer):
+         - on the emulator (`emulator.endpoint`) the ALB is reached at the emulator's HTTPS
+           endpoint with its DNSName in the path, which `task staging:platform` reads from
+           core's Ingress after the core sync (LOOPZERO_CORE_API_ALB_DNS_NAME,
+           infra/staging/monitoring-addresses.sh core-api);
+         - elsewhere it is the https:// name the ALB's ACM certificate carries, which the
+           environment exports as LOOPZERO_CORE_API_INTERNAL_URL.
+       Either missing fails the render: a store with no address serves no secret. */}}
+{{- $coreApi := .Values | getOrNil "crossCluster.coreApi" }}
+{{- if not $coreApi }}
+{{- with .Values | getOrNil "emulator.endpoint" }}
+{{- $coreApi = printf "%s/_aws/elasticloadbalancing/%s" . (env "LOOPZERO_CORE_API_ALB_DNS_NAME" | required "LOOPZERO_CORE_API_ALB_DNS_NAME is not set: the DNSName of core's secret-fetch ALB (Ingress loopzero-system/loopzero-api-secret-fetch), which the cells' broker store calls") }}
+{{- else }}
+{{- $coreApi = env "LOOPZERO_CORE_API_INTERNAL_URL" | required "LOOPZERO_CORE_API_INTERNAL_URL is not set: the https:// address of core's internal secret-fetch ALB, under the name its ACM certificate carries, which the cells' broker store calls" }}
+{{- end }}
+{{- end }}
     values:
       - envName: {{ .Environment.Name }}
         externalSecrets: []
         broker:
           enabled: true
-          apiURL: {{ .Values.crossCluster.coreApi | quote }}
+          apiURL: {{ $coreApi | quote }}
           # The cell this sync targets, from the same LOOPZERO_CELL_CONTEXT that pins the
           # context above (k3d-loopzero-cell-<N> -> cell-<N>). A context that does not end in
           # a cell id fails the render instead of binding every cell to cell-0.

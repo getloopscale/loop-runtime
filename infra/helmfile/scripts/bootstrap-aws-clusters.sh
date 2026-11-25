@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# bootstrap-aws-clusters.sh <pre-core|post-core>
+# bootstrap-aws-clusters.sh <pre-core|post-core|broker-tokens>
 #
 # The in-cluster wiring of an environment whose infrastructure is AWS (profile
 # awsSecretsManager): everything the platform needs that is NOT an AWS credential, which
@@ -13,6 +13,12 @@
 #               build and the cells with, the ClusterCredentials loopzero-api discovers
 #               the cells from, the ArgoCD cluster registrations, and the Gitea and
 #               ArgoCD tokens (`loopzero-ops seed`).
+#   broker-tokens once loopzero-api is Ready: one secret-fetch broker token per cell
+#               (`loopzero-ops seed broker`), in core's loopzero-system/loopzero-broker-token
+#               for the API and in each cell's external-secrets/loopzero-broker-token for
+#               its broker store. Tokens already issued are kept. The seed restarts
+#               loopzero-api and waits for it to settle, which is why it runs apart from
+#               post-core, before which the API cannot be Ready.
 #
 # Contexts (one kubeconfig, one context per cluster):
 #   CORE_CONTEXT    the core cluster (default: core)
@@ -23,7 +29,7 @@
 # Idempotent: generated values are kept across runs, and every object is applied.
 set -euo pipefail
 
-PHASE="${1:?usage: $0 <pre-core|post-core>}"
+PHASE="${1:?usage: $0 <pre-core|post-core|broker-tokens>}"
 CORE_CONTEXT="${CORE_CONTEXT:-core}"
 BUILD_CONTEXT="${BUILD_CONTEXT:-build}"
 CELL_CONTEXTS="${CELL_CONTEXTS:-cell-0 cell-1}"
@@ -148,8 +154,16 @@ EOF
   loopzero_ops seed argocd-gitea-creds
 }
 
+# The seed finds the cells in core's ClusterCredentials and reaches each one through the
+# context named after its id, as CELL_CONTEXTS names them here; an empty prefix replaces
+# the seed's k3d default (k3d-loopzero-<cell>).
+broker_tokens() {
+  LOOPZERO_CELL_CONTEXT_PREFIX="" loopzero_ops seed broker
+}
+
 case "$PHASE" in
   pre-core) pre_core ;;
   post-core) post_core ;;
-  *) log "unknown phase: $PHASE (pre-core|post-core)"; exit 1 ;;
+  broker-tokens) broker_tokens ;;
+  *) log "unknown phase: $PHASE (pre-core|post-core|broker-tokens)"; exit 1 ;;
 esac

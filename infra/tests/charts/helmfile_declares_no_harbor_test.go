@@ -46,7 +46,8 @@ func TestNoPlatformHelmfileDeclaresAHarborRelease(t *testing.T) {
 		for _, helmfile := range platformHelmfiles {
 			t.Run(env+"/"+helmfile, func(t *testing.T) {
 				t.Parallel()
-				out := helmfileRun(t, []string{"LOOPZERO_DB_PASSWORD=unused", "LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0"},
+				out := helmfileRun(t, []string{"LOOPZERO_DB_PASSWORD=unused", "LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0",
+					"LOOPZERO_CORE_API_ALB_DNS_NAME=unused", "LOOPZERO_CORE_API_INTERNAL_URL=https://unused"},
 					"-f", "infra/helmfile/"+helmfile, "-e", env, "list", "--output=json")
 				var releases []listedRelease
 				if err := json.Unmarshal([]byte(out), &releases); err != nil {
