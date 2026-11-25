@@ -1,0 +1,101 @@
+# Cases for `promtool test rules`, run by TestTenantAppRecordingRulesPassPromtool against
+# the recording rules the cell's Prometheus mounts (rules.yml is written next to this
+# file by the test). The series are shaped like the ones cell-0 of staging held on
+# 2026-11-25: kube-state-metrics scraped with honor_labels, so `namespace`, `pod` and
+# `service` name the object, and Traefik naming a backend
+# `<namespace>-<Service>-<port>@kubernetescrd`.
+rule_files:
+  - rules.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      # Two pods of app `web`, one ready.
+      - series: 'kube_pod_labels{namespace="loopzero-tn-acme-shop-production",pod="shop-web-7c9-a",uid="1",job="kubernetes-service-endpoints",service="kube-state-metrics",label_loopzero_io_tenant="tn-acme",label_loopzero_io_project="shop",label_loopzero_io_app_name="web",label_loopzero_io_environment="production"}'
+        values: '1x10'
+      - series: 'kube_pod_labels{namespace="loopzero-tn-acme-shop-production",pod="shop-web-7c9-b",uid="2",job="kubernetes-service-endpoints",service="kube-state-metrics",label_loopzero_io_tenant="tn-acme",label_loopzero_io_project="shop",label_loopzero_io_app_name="web",label_loopzero_io_environment="production"}'
+        values: '1x10'
+      - series: 'kube_pod_status_ready{condition="true",namespace="loopzero-tn-acme-shop-production",pod="shop-web-7c9-a",uid="1",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '1x10'
+      - series: 'kube_pod_status_ready{condition="false",namespace="loopzero-tn-acme-shop-production",pod="shop-web-7c9-a",uid="1",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '0x10'
+      - series: 'kube_pod_status_ready{condition="true",namespace="loopzero-tn-acme-shop-production",pod="shop-web-7c9-b",uid="2",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '0x10'
+      - series: 'kube_pod_status_ready{condition="false",namespace="loopzero-tn-acme-shop-production",pod="shop-web-7c9-b",uid="2",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '1x10'
+      # The same project's preview environment, one ready pod.
+      - series: 'kube_pod_labels{namespace="loopzero-tn-acme-shop-preview",pod="shop-web-5d4-a",uid="3",job="kubernetes-service-endpoints",service="kube-state-metrics",label_loopzero_io_tenant="tn-acme",label_loopzero_io_project="shop",label_loopzero_io_app_name="web",label_loopzero_io_environment="preview"}'
+        values: '1x10'
+      - series: 'kube_pod_status_ready{condition="true",namespace="loopzero-tn-acme-shop-preview",pod="shop-web-5d4-a",uid="3",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '1x10'
+      # A platform pod: kube-state-metrics exports its labels series with no loopzero.io label.
+      - series: 'kube_pod_labels{namespace="traefik",pod="traefik-77d-a",uid="4",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '1x10'
+      - series: 'kube_pod_status_ready{condition="true",namespace="traefik",pod="traefik-77d-a",uid="4",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '1x10'
+      # The app's stable and canary Services, and a platform Service.
+      - series: 'kube_service_labels{namespace="loopzero-tn-acme-shop-production",service="shop-web-stable",uid="5",job="kubernetes-service-endpoints",label_loopzero_io_tenant="tn-acme",label_loopzero_io_project="shop",label_loopzero_io_app_name="web",label_loopzero_io_environment="production"}'
+        values: '1x10'
+      - series: 'kube_service_labels{namespace="loopzero-tn-acme-shop-production",service="shop-web-canary",uid="6",job="kubernetes-service-endpoints",label_loopzero_io_tenant="tn-acme",label_loopzero_io_project="shop",label_loopzero_io_app_name="web",label_loopzero_io_environment="production"}'
+        values: '1x10'
+      - series: 'kube_service_labels{namespace="loopzero-system",service="loopzero-api",uid="7",job="kubernetes-service-endpoints"}'
+        values: '1x10'
+      # Requests, per ingress replica. Stable: 1/s of 200 on each of two replicas and
+      # 0.1/s of 503. Canary: 0.5/s of 200. A platform backend: 5/s.
+      - series: 'traefik_service_requests_total{service="loopzero-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+60x10'
+      - series: 'traefik_service_requests_total{service="loopzero-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-b",job="kubernetes-pods"}'
+        values: '0+60x10'
+      - series: 'traefik_service_requests_total{service="loopzero-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="503",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+6x10'
+      - series: 'traefik_service_requests_total{service="loopzero-tn-acme-shop-production-shop-web-canary-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+30x10'
+      - series: 'traefik_service_requests_total{service="loopzero-system-loopzero-api-8080@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+300x10'
+      # Durations of the stable Service on one replica: 1/s, 0.9/s within 100 ms.
+      - series: 'traefik_service_request_duration_seconds_bucket{le="0.1",service="loopzero-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+54x10'
+      - series: 'traefik_service_request_duration_seconds_bucket{le="0.3",service="loopzero-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+60x10'
+      - series: 'traefik_service_request_duration_seconds_bucket{le="+Inf",service="loopzero-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+60x10'
+      - series: 'traefik_service_request_duration_seconds_bucket{le="+Inf",service="loopzero-tn-acme-shop-production-shop-web-canary-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+30x10'
+    promql_expr_test:
+      - expr: loopzero_app:kube_pod_status_ready:sum
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loopzero_app:kube_pod_status_ready:sum{tenant_id="tn-acme",project="shop",app="web",environment="production"}'
+            value: 1
+          - labels: 'loopzero_app:kube_pod_status_ready:sum{tenant_id="tn-acme",project="shop",app="web",environment="preview"}'
+            value: 1
+      - expr: loopzero_app:traefik_service_requests:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loopzero_app:traefik_service_requests:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production"}'
+            value: 2.6
+      - expr: loopzero_app_status_class:traefik_service_requests:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loopzero_app_status_class:traefik_service_requests:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production",status_class="2xx"}'
+            value: 2.5
+          - labels: 'loopzero_app_status_class:traefik_service_requests:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production",status_class="5xx"}'
+            value: 0.1
+      - expr: loopzero_app_le:traefik_service_request_duration_seconds_bucket:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loopzero_app_le:traefik_service_request_duration_seconds_bucket:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production",le="0.1"}'
+            value: 0.9
+          - labels: 'loopzero_app_le:traefik_service_request_duration_seconds_bucket:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production",le="0.3"}'
+            value: 1
+          - labels: 'loopzero_app_le:traefik_service_request_duration_seconds_bucket:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production",le="+Inf"}'
+            value: 1.5
+      # The queries the API sends for the project (metrics_proxy.go).
+      - expr: sum(loopzero_app:kube_pod_status_ready:sum{tenant_id="tn-acme",project="shop"})
+        eval_time: 10m
+        exp_samples:
+          - value: 2
+      - expr: (sum(loopzero_app_status_class:traefik_service_requests:rate5m{status_class="5xx",tenant_id="tn-acme",project="shop"}) or vector(0)) / sum(loopzero_app:traefik_service_requests:rate5m{tenant_id="tn-acme",project="shop"}) * 100
+        eval_time: 10m
+        exp_samples:
+          - value: 3.8461538461538463

@@ -37,9 +37,9 @@ func servePrometheus(t *testing.T, status int, body string) (*PrometheusReplicas
 }
 
 const readinessVector = `{"status":"success","data":{"resultType":"vector","result":[
- {"metric":{"namespace":"loopzero-tn-acme-shop-production","label_loopzero_io_tenant":"tn-acme","label_loopzero_io_project":"shop","label_loopzero_io_environment":"production"},"value":[1758800000,"2"]},
- {"metric":{"namespace":"loopzero-tn-acme-blog-production","label_loopzero_io_tenant":"tn-acme","label_loopzero_io_project":"blog","label_loopzero_io_environment":"production"},"value":[1758800000,"0"]},
- {"metric":{"namespace":"loopzero-tn-acme-x-production","label_loopzero_io_tenant":"tn-acme"},"value":[1758800000,"5"]}
+ {"metric":{"tenant_id":"tn-acme","project":"shop","environment":"production"},"value":[1758800000,"2"]},
+ {"metric":{"tenant_id":"tn-acme","project":"blog","environment":"production"},"value":[1758800000,"0"]},
+ {"metric":{"tenant_id":"tn-acme"},"value":[1758800000,"5"]}
 ]}}`
 
 func TestPrometheusReplicasReadySource_ReadsOneSamplePerLabelledEnvironment(t *testing.T) {
@@ -59,6 +59,16 @@ func TestPrometheusReplicasReadySource_ReadsOneSamplePerLabelledEnvironment(t *t
 	}
 	if len(samples) != len(want) || samples[0] != want[0] || samples[1] != want[1] {
 		t.Errorf("samples = %+v, want %+v (the unlabelled workload skipped)", samples, want)
+	}
+}
+
+// Tenant workloads are Argo Rollouts and kube-state-metrics exports no ReplicaSet
+// labels, so the poller reads the ready replicas each cell records per app and
+// folds a project's apps into its environment (getloopscale/loopzero#107).
+func TestReplicasReadyQuery_SumsTheRecordedSeriesPerEnvironment(t *testing.T) {
+	const want = `sum by (tenant_id, project, environment) (loopzero_app:kube_pod_status_ready:sum)`
+	if ReplicasReadyQuery != want {
+		t.Errorf("ReplicasReadyQuery =\n %s\nwant\n %s", ReplicasReadyQuery, want)
 	}
 }
 

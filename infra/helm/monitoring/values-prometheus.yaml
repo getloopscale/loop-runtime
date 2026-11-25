@@ -157,6 +157,9 @@ extraScrapeConfigs: |
     params:
       'match[]':
         - '{job=~".+"}'
+        # The series a cell records per tenant app (values-tenant-app-recording-rules.yaml).
+        # A recorded series has no job label, so the selector above leaves it behind.
+        - '{__name__=~"loopzero_app[a-z_]*:.+"}'
     static_configs:
       - targets:
           - {{ .address }}
