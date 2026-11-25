@@ -79,8 +79,9 @@ func newPushHandler(shutdownCtx context.Context, repos linkedRepoLookup, deploye
 		}
 		go func() {
 			// Cancelled on server shutdown; bounded so a slow GitHub/S3 call
-			// cannot hang forever.
-			deployCtx, cancel := context.WithTimeout(shutdownCtx, 5*time.Minute)
+			// cannot hang forever. The bound covers the 20 minutes a push may
+			// wait for an environment that is deploying.
+			deployCtx, cancel := context.WithTimeout(shutdownCtx, 25*time.Minute)
 			defer cancel()
 			if err := deployer.HandlePush(deployCtx, github.PushRequest{
 				RepoFullName: event.Repository.FullName, Branch: event.Branch(), CommitSHA: event.After,
