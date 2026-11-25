@@ -195,7 +195,20 @@ func buildSeedDeps(dryRun bool) (seed.Deps, error) {
 		// nowhere else: that is what stops each seed from reading the environment
 		// on its own and answering the same question a different way.
 		Policy: seed.PolicyFromEnvironment(),
+		// LOOPZERO_CELL_CONTEXT_PREFIX names the cells' kube contexts, set even when
+		// empty: staging's kubeconfig names each one after the cell id. Unset keeps
+		// the k3d names.
+		CellContextPrefix: cellContextPrefixFromEnvironment(),
 	}, nil
+}
+
+// cellContextPrefixFromEnvironment is LOOPZERO_CELL_CONTEXT_PREFIX when it is set, empty
+// included, and nil when it is not.
+func cellContextPrefixFromEnvironment() *string {
+	if v, ok := os.LookupEnv("LOOPZERO_CELL_CONTEXT_PREFIX"); ok {
+		return &v
+	}
+	return nil
 }
 
 // buildKubeClient resolves a controller-runtime client for the given kubeconfig
