@@ -95,7 +95,7 @@ func setupGitHub(
 	// installation-token mint.
 	var integrationsHandler *integrationshttp.IntegrationsGitHubHandler
 	if ghAppClient != nil {
-		statusNotifier := github.NewStatusNotifier(ghAppClient, &repositoriesadapter.RepoLookupAdapter{Store: repoStore}, &buildsadapter.BuildLookupAdapter{Store: stores.BuildStore}, cfg.BaseDomain, logger)
+		statusNotifier := github.NewStatusNotifier(ghAppClient, &repositoriesadapter.RepoLookupAdapter{Store: repoStore}, &buildsadapter.BuildLookupAdapter{Store: stores.BuildStore}, commitStatusDomain(cfg), logger)
 		if statusNotifier != nil {
 			release.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
 			release.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
@@ -234,4 +234,11 @@ func autoDeployConfig(cfg config.Config, app *github.AppClient, objects github.O
 		SourceBucket:   cfg.SourceBucket,
 		Logger:         logger,
 	}
+}
+
+// commitStatusDomain is the domain the commit status's app link is composed on:
+// the public domain users reach the app on, the base domain only where no public
+// one is configured.
+func commitStatusDomain(cfg config.Config) string {
+	return release.UserFacingDomain(cfg.PublicDomain, cfg.BaseDomain)
 }

@@ -5,12 +5,12 @@ package release
 
 import "github.com/getloopscale/loopzero/pkg/naming"
 
-// userFacingDomain is the domain a URL shown to the user is composed on: the
+// UserFacingDomain is the domain a URL shown to the user is composed on: the
 // operator's public wildcard when one is configured, the base domain otherwise.
 // The base-domain fallback keeps local development (no LOOPZERO_PUBLIC_DOMAIN)
 // working; a configured public domain always wins, because the base domain is
 // the internal cluster placeholder and does not resolve for the user (#61).
-func userFacingDomain(publicDomain, baseDomain string) string {
+func UserFacingDomain(publicDomain, baseDomain string) string {
 	if publicDomain != "" {
 		return publicDomain
 	}

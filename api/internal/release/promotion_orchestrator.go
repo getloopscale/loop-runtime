@@ -328,7 +328,7 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 	// then renders "URL pending"). Pre-fix: promote reported success + URL
 	// that 404s; post-fix: promote emits the same URL that serves.
 	url := entryAppURL(req.TenantID, req.ProjectName, req.ToEnv, newRelease.Apps,
-		userFacingDomain(o.deps.PublicDomain, o.deps.BaseDomain))
+		UserFacingDomain(o.deps.PublicDomain, o.deps.BaseDomain))
 
 	logger.Info("promotion completed",
 		"promotion_id", promotionID,
