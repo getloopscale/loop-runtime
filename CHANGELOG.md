@@ -400,6 +400,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The Status page queries the Prometheus the API pod reaches (`LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL`) before `LOOPZERO_PROMETHEUS_ADDRESS`, which canary analyses on the cells use; staging names its core Prometheus (#102).
 - `POST /projects/{name}/scale` answers 404 `APP_NOT_FOUND`, naming the apps the project has, for an app the active release of the environment does not declare. It used to answer 200 `changed: true` and write a scaling config no workload reads (#97)
 - `GET /environments` reports the commit the user deployed as `last_deploy_sha`, the active release's build commit, instead of the commit of the GitOps repository (#101)
 - A build step that fails before running prints its error message as written. The message sat in a double-quoted `echo`, so backticks and `$(...)` in it, including a `runtime` from `loopzero.yaml`, ran as shell commands (`/bin/sh: start: not found`) (#100)

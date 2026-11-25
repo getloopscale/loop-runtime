@@ -67,3 +67,11 @@ config:
   mgmtKubeContext: "in-cluster"
   buildKubeContext: "build"
   runtimeKubeContext: "cell-0"
+
+# The Status page's metrics and the readiness badges come from the core Prometheus,
+# which federates the build cluster and the cells (monitoring/prometheus-server). The
+# API queries it from core; LOOPZERO_PROMETHEUS_ADDRESS stays empty because canary
+# analysis runs on the cells, where that name does not resolve (#102).
+dataPlanePoller:
+  enabled: true
+  prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local:80"
