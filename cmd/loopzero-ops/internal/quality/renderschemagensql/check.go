@@ -247,10 +247,17 @@ func resolveHostPort(cid string) (string, error) {
 	return line[i+1:], nil
 }
 
+// pgReadyArgs is the readiness probe of the container. It asks over TCP: the
+// image's init phase runs a temporary server on the unix socket alone and then
+// restarts it, so a socket probe answers before the server migrate connects to.
+func pgReadyArgs(cid string) []string {
+	return []string{"exec", cid, "pg_isready", "-h", "127.0.0.1", "-U", dbUser, "-d", dbName}
+}
+
 // waitPGReady polls `docker exec cid pg_isready` up to budget seconds.
 func waitPGReady(cid string, budgetSec int) error {
 	for i := 0; i < budgetSec; i++ {
-		cmd := exec.Command("docker", "exec", cid, "pg_isready", "-U", dbUser, "-d", dbName)
+		cmd := exec.Command("docker", pgReadyArgs(cid)...)
 		if err := cmd.Run(); err == nil {
 			return nil
 		}
