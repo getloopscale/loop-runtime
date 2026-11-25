@@ -33,6 +33,10 @@ config:
   # The staging GitHub App the install button sends the browser to
   # (github.com/apps/<slug>/installations/new); aws.githubAppSecret holds its keys.
   githubAppSlug: "loopscale-staging"
+  # The OAuth client id of that App, public. staging:platform reads it from the host's
+  # github-app.json; GitHub returns the browser to
+  # <appPublicUrl>/v1/integrations/github/callback.
+  githubAppClientId: {{ env "LOOPZERO_GITHUB_APP_CLIENT_ID" | quote }}
 
 # The cloud host: the whole control plane API. The app host is the public-routes release.
 ingressRoute:

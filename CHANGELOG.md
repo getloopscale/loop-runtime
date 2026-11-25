@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The `loopzero-cloud` chart takes `config.githubAppClientId`, the OAuth client id of the GitHub App, and passes it to the console as `GITHUB_APP_CLIENT_ID`. Each environment reads it from `LOOPZERO_GITHUB_APP_CLIENT_ID` of the helmfile run; empty leaves the console's repository connect flow off (#117).
 - `GET /api/v1/integrations/github/installations` lists the GitHub App installations bound to the caller's team, each with `id`, `account_login` and `account_type`
 - Staging encrypts tenant secrets with OpenBao transit, on a dedicated `secrets` EKS cluster unsealed by the `awskms` seal; `infra/staging/openbao.sh` installs it and wires loopzero-api after every rebuild (#103).
 - `vault-bootstrap-dev.sh` takes `AUTO_UNSEAL_MODE=awskms`, which initialises the vault with recovery keys and skips the Shamir unseal (#103).

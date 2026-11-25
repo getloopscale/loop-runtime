@@ -42,6 +42,9 @@ config:
   #   - authCookieDomain: explicit Domain= on the state cookie so it survives the GitHub
   #     redirect across subdomains; getloopscale.com is the apex shared by app-dev/cloud-dev/auth-dev.
   githubAppSlug: "loopzero-platform"
+  # The OAuth client id of this environment's GitHub App, public. It exists per
+  # environment only, so the helmfile run supplies it; unset, the connect flow is off.
+  githubAppClientId: {{ env "LOOPZERO_GITHUB_APP_CLIENT_ID" | quote }}
   appPublicUrl: "https://app-dev.getloopscale.com"
   authCookieDomain: "getloopscale.com"
 

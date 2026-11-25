@@ -348,6 +348,14 @@ tasks:
               --secret-string "file://$kept" >/dev/null
           fi
         done
+        # The App's OAuth client id is public, and loopzero-cloud takes it as plain
+        # configuration (values/staging/loopzero-cloud.yaml.gotmpl). Nothing else is read
+        # from the file here; without the file the console's connect flow stays off.
+        LOOPZERO_GITHUB_APP_CLIENT_ID=""
+        if [ -f /etc/loopzero-staging/github-app.json ]; then
+          LOOPZERO_GITHUB_APP_CLIENT_ID="$(jq -r '."client-id" // ""' /etc/loopzero-staging/github-app.json)"
+        fi
+        export LOOPZERO_GITHUB_APP_CLIENT_ID
         bash infra/helmfile/scripts/bootstrap-aws-clusters.sh pre-core
         # The ServiceMonitor, PodMonitor and PrometheusRule CRDs every cluster's charts
         # create objects of, from the same manifests infra:install:monitoring-crds applies.
