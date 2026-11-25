@@ -95,9 +95,10 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 		}
 		if app.Autoscaling != nil {
 			mi.Autoscaling = &manifests.AutoscalingConfig{
-				MinReplicas: app.Autoscaling.MinReplicas,
-				MaxReplicas: app.Autoscaling.MaxReplicas,
-				TargetCPU:   app.Autoscaling.TargetCPU,
+				MinReplicas:  app.Autoscaling.MinReplicas,
+				MaxReplicas:  app.Autoscaling.MaxReplicas,
+				TargetCPU:    app.Autoscaling.TargetCPU,
+				TargetMemory: app.Autoscaling.TargetMemory,
 			}
 		}
 		result = append(result, mi)

@@ -94,9 +94,10 @@ func applyScalingRow(app deploycontracts.AppSpec, row *store.ScalingConfig) depl
 		// KEDA scale-to-zero (D4): Deployment.spec.replicas=0, ScaledObject manages.
 		app.Replicas = 0
 		app.Autoscaling = &deploycontracts.AppAutoscalingSpec{
-			MinReplicas: int(row.MinReplicas),
-			MaxReplicas: int(row.MaxReplicas),
-			TargetCPU:   resolveCPUTarget(row.TargetCPUPct),
+			MinReplicas:  int(row.MinReplicas),
+			MaxReplicas:  int(row.MaxReplicas),
+			TargetCPU:    resolveTarget(row.TargetCPUPct),
+			TargetMemory: resolveTarget(row.TargetMemoryPct),
 		}
 	case row.MinReplicas == row.MaxReplicas:
 		// Fixed replicas: HPA not needed.
@@ -106,15 +107,19 @@ func applyScalingRow(app deploycontracts.AppSpec, row *store.ScalingConfig) depl
 		// HPA: Deployment.spec.replicas=Min as baseline, HPA scales to Max.
 		app.Replicas = int(row.MinReplicas)
 		app.Autoscaling = &deploycontracts.AppAutoscalingSpec{
-			MinReplicas: int(row.MinReplicas),
-			MaxReplicas: int(row.MaxReplicas),
-			TargetCPU:   resolveCPUTarget(row.TargetCPUPct),
+			MinReplicas:  int(row.MinReplicas),
+			MaxReplicas:  int(row.MaxReplicas),
+			TargetCPU:    resolveTarget(row.TargetCPUPct),
+			TargetMemory: resolveTarget(row.TargetMemoryPct),
 		}
 	}
 	return app
 }
 
-func resolveCPUTarget(pct *int32) int {
+// resolveTarget is a saved utilization target as the renderer reads it: 0 when
+// none is saved, which the renderer takes as its default for CPU and as no
+// metric for memory.
+func resolveTarget(pct *int32) int {
 	if pct == nil {
 		return 0
 	}

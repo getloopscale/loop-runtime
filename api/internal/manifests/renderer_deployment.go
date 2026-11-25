@@ -107,6 +107,10 @@ func buildHPA(ri renderScope, app AppManifestInput) k8sHPA {
 		scaleAPIVersion = "argoproj.io/v1alpha1"
 		scaleKind = "Rollout"
 	}
+	metrics := []k8sMetricSpec{utilizationMetric("cpu", targetCPU)}
+	if as.TargetMemory > 0 {
+		metrics = append(metrics, utilizationMetric("memory", as.TargetMemory))
+	}
 	return k8sHPA{
 		APIVersion: "autoscaling/v2",
 		Kind:       "HorizontalPodAutoscaler",
@@ -123,18 +127,19 @@ func buildHPA(ri renderScope, app AppManifestInput) k8sHPA {
 			},
 			MinReplicas: minR,
 			MaxReplicas: maxR,
-			Metrics: []k8sMetricSpec{
-				{
-					Type: "Resource",
-					Resource: k8sMetricTarget{
-						Name: "cpu",
-						Target: k8sMetricTargetSpec{
-							Type:               "Utilization",
-							AverageUtilization: targetCPU,
-						},
-					},
-				},
-			},
+			Metrics:     metrics,
+		},
+	}
+}
+
+// utilizationMetric is an HPA resource metric that targets an average
+// utilization, in percent of the pods' request for that resource.
+func utilizationMetric(resource string, percent int) k8sMetricSpec {
+	return k8sMetricSpec{
+		Type: "Resource",
+		Resource: k8sMetricTarget{
+			Name:   resource,
+			Target: k8sMetricTargetSpec{Type: "Utilization", AverageUtilization: percent},
 		},
 	}
 }
@@ -179,6 +184,11 @@ func buildScaledObject(ri renderScope, app AppManifestInput) kedaScaledObject {
 		annotations["scaledobject.keda.sh/transfer-hpa-ownership"] = "true"
 	}
 
+	triggers := []kedaTrigger{utilizationTrigger("cpu", targetCPU)}
+	if as.TargetMemory > 0 {
+		triggers = append(triggers, utilizationTrigger("memory", as.TargetMemory))
+	}
+
 	return kedaScaledObject{
 		APIVersion: "keda.sh/v1alpha1",
 		Kind:       "ScaledObject",
@@ -194,16 +204,17 @@ func buildScaledObject(ri renderScope, app AppManifestInput) kedaScaledObject {
 			MaxReplicaCount: maxR,
 			CooldownPeriod:  cooldown,
 			PollingInterval: 30,
-			Triggers: []kedaTrigger{
-				{
-					Type: "cpu",
-					Metadata: map[string]string{
-						"type":  "Utilization",
-						"value": fmt.Sprintf("%d", targetCPU),
-					},
-				},
-			},
+			Triggers:        triggers,
 		},
+	}
+}
+
+// utilizationTrigger is a KEDA resource trigger on an average utilization, in
+// percent of the pods' request for that resource.
+func utilizationTrigger(resource string, percent int) kedaTrigger {
+	return kedaTrigger{
+		Type:     resource,
+		Metadata: map[string]string{"type": "Utilization", "value": fmt.Sprintf("%d", percent)},
 	}
 }
 

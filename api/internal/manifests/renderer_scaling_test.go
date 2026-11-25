@@ -703,3 +703,60 @@ func TestRenderDeployment_ScaleToZero_CustomDomains(t *testing.T) {
 		t.Errorf("HTTPScaledObject missing custom domain %q", customHost)
 	}
 }
+
+// hpaTargets maps each resource metric of the HPA to its utilization target.
+func hpaTargets(hpa k8sHPA) map[string]int {
+	targets := map[string]int{}
+	for _, m := range hpa.Spec.Metrics {
+		targets[m.Resource.Name] = m.Resource.Target.AverageUtilization
+	}
+	return targets
+}
+
+func TestRenderDeployment_HPA_MemoryTargetBecomesASecondMetric(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{{
+		Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123",
+		Autoscaling: &AutoscalingConfig{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 75, TargetMemory: 60},
+	}}
+
+	result, _ := Render(input)
+
+	got := hpaTargets(parseHPA(t, result))
+	if len(got) != 2 || got["cpu"] != 75 || got["memory"] != 60 {
+		t.Errorf("HPA metrics = %v, want cpu 75 and memory 60", got)
+	}
+}
+
+func TestRenderDeployment_HPA_NoMemoryTargetKeepsCPUAlone(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{{
+		Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123",
+		Autoscaling: &AutoscalingConfig{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 75},
+	}}
+
+	result, _ := Render(input)
+
+	got := hpaTargets(parseHPA(t, result))
+	if len(got) != 1 || got["cpu"] != 75 {
+		t.Errorf("HPA metrics = %v, want cpu 75 alone", got)
+	}
+}
+
+func TestRenderDeployment_ScaleToZero_MemoryTargetBecomesASecondTrigger(t *testing.T) {
+	input := baseInput()
+	input.Apps = []AppManifestInput{{
+		Name: "api", Type: "server", Port: 8080, ImageRef: "reg:5000/acme/webapp:abc123",
+		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 3, TargetCPU: 75, TargetMemory: 60},
+	}}
+
+	result, _ := Render(input)
+
+	got := map[string]string{}
+	for _, trigger := range parseScaledObject(t, result).Spec.Triggers {
+		got[trigger.Type] = trigger.Metadata["value"]
+	}
+	if len(got) != 2 || got["cpu"] != "75" || got["memory"] != "60" {
+		t.Errorf("ScaledObject triggers = %v, want cpu 75 and memory 60", got)
+	}
+}

@@ -39,7 +39,8 @@ type AppAutoscalingSpec struct {
 	MinReplicas    int `json:"min,omitempty"`
 	MaxReplicas    int `json:"max,omitempty"`
 	TargetCPU      int `json:"target_cpu,omitempty"`
-	CooldownPeriod int `json:"cooldown,omitempty"` // Seconds before scale-to-zero (default: 300)
+	TargetMemory   int `json:"target_memory,omitempty"` // Memory utilization target; 0 scales on CPU alone
+	CooldownPeriod int `json:"cooldown,omitempty"`      // Seconds before scale-to-zero (default: 300)
 }
 
 // AppRelease describes a built app with its image digest and URL.

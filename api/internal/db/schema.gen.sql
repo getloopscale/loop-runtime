@@ -224,10 +224,12 @@ CREATE TABLE public.app_scaling_config (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by text DEFAULT ''::text NOT NULL,
     config_hash text DEFAULT ''::text NOT NULL,
+    target_memory_pct integer,
     CONSTRAINT app_scaling_config_check CHECK ((max_replicas >= min_replicas)),
     CONSTRAINT app_scaling_config_environment_syntax_check CHECK ((environment ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'::text)),
     CONSTRAINT app_scaling_config_min_replicas_check CHECK ((min_replicas >= 0)),
     CONSTRAINT app_scaling_config_target_cpu_pct_check CHECK (((target_cpu_pct IS NULL) OR ((target_cpu_pct >= 1) AND (target_cpu_pct <= 100)))),
+    CONSTRAINT app_scaling_config_target_memory_pct_check CHECK (((target_memory_pct IS NULL) OR ((target_memory_pct >= 1) AND (target_memory_pct <= 100)))),
     CONSTRAINT chk_scale_to_zero_requires_min_zero CHECK (((NOT scale_to_zero) OR (min_replicas = 0)))
 );
 

@@ -26,9 +26,10 @@ func AppSpecFromStored(s db.BuildAppSpec) AppSpec {
 	}
 	if s.Autoscaling != nil {
 		app.Autoscaling = &AppAutoscalingSpec{
-			MinReplicas: s.Autoscaling.MinReplicas,
-			MaxReplicas: s.Autoscaling.MaxReplicas,
-			TargetCPU:   s.Autoscaling.TargetCPU,
+			MinReplicas:  s.Autoscaling.MinReplicas,
+			MaxReplicas:  s.Autoscaling.MaxReplicas,
+			TargetCPU:    s.Autoscaling.TargetCPU,
+			TargetMemory: s.Autoscaling.TargetMemory,
 		}
 	}
 	return app

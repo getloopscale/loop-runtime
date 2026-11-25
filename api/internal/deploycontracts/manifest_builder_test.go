@@ -246,3 +246,26 @@ func TestBuildAppRelease_URLIsTheCanonicalAppURLEvenWhenTheHostIsTruncated(t *te
 		t.Errorf("URL = %q, want the host the IngressRoute serves %q", rel.URL, want)
 	}
 }
+
+func TestBuildManifestApps_CarriesTheAutoscalingTargets(t *testing.T) {
+	apps, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
+		RegistryURL: "registry.example.com",
+		TenantID:    "tn-1",
+		ProjectID:   "my-app",
+		Environment: "production",
+		CommitSHA:   "abc123",
+		Apps: []db.BuildAppSpec{{
+			Name: "api", Type: "server", Port: 3000,
+			Autoscaling: &db.BuildAppAutoscaling{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 70, TargetMemory: 60},
+		}},
+		AppDigests: map[string]string{"api": digestFor("api")},
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	a := apps[0].Autoscaling
+	if a == nil || a.MinReplicas != 1 || a.MaxReplicas != 3 || a.TargetCPU != 70 || a.TargetMemory != 60 {
+		t.Errorf("autoscaling = %+v, want min 1, max 3, cpu 70, memory 60", a)
+	}
+}
