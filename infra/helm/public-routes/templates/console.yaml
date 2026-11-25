@@ -42,7 +42,7 @@ spec:
           port: {{ .api.port }}
     # The streams of loopzero-cloud (Server-Sent Events) skip the buffering middleware,
     # which would hold each one until it ends (charts/loopzero-common ingressRoute).
-    - match: Host(`{{ $host }}`) && (PathPrefix(`/v1/`) || PathPrefix(`/engine/`)) && PathRegexp(`/stream$`)
+    - match: Host(`{{ $host }}`) && (PathPrefix(`/v1/`) || PathPrefix(`/engine/`)) && PathRegexp(`/(stream|timeline)$`)
       kind: Rule
       priority: 250
       {{- with $.Values.streamMiddlewares }}

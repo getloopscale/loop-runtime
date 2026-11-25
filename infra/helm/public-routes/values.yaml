@@ -7,7 +7,7 @@ middlewares:
     namespace: traefik
   - name: body-limit
     namespace: traefik
-# The middlewares of the stream routes (GET .../stream, Server-Sent Events): the same
+# The middlewares of the stream routes (GET .../stream and .../timeline, Server-Sent Events): the same
 # ones without body-limit, whose buffering would hold a stream until it ends.
 streamMiddlewares:
   - name: rate-limit

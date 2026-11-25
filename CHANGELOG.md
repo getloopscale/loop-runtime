@@ -403,6 +403,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The deploy timeline stream (`GET /api/v1/deploys/{id}/timeline`) reaches the console as it is written. It went through the buffering middleware, so the build page showed every phase of a finished deploy as pending (#127).
 - A push that arrives while the environment is deploying is built when the environment is free. It was refused once with `DEPLOY_IN_PROGRESS` and never built. The push waits up to 20 minutes and is skipped when a newer commit reached the branch in the meantime (#125).
 - A promote exposes the apps of the promoted release in the target environment, so the environment answers on its public host. The workload ran, and the host answered 404 (#124).
 - A secret value larger than 64 KiB is refused with `SECRET_VALUE_TOO_LARGE` (413 on `POST /api/v1/secrets`, a per-key failure on the bulk route) before the secret store is called. It reached the store and came back as `SECRETS_BACKEND_UNAVAILABLE`. The per-key error of the bulk route carries the public message only; the wrapped cause goes to the log (#123).

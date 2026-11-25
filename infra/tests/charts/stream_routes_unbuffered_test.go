@@ -20,7 +20,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const streamMatch = "PathRegexp(`/stream$`)"
+const streamMatch = "PathRegexp(`/(stream|timeline)$`)"
 
 type renderedRoute struct {
 	Match       string `json:"match"`
