@@ -74,11 +74,22 @@ type DeliveryActivator interface {
 	Activate(ctx context.Context, build ActivationBuild, result BuildCallbackRequest) error
 
 	// Rollback re-delivers a previous release's manifests (read back from the
-	// GitOps history), triggers the sync and returns only once the sync is
-	// confirmed, so the caller may flip release state afterwards.
+	// GitOps history) and triggers the sync. It returns once the sync is
+	// triggered, not once it is confirmed: a release rolls its pods through
+	// canary steps, which outlives the request that asked for the rollback.
 	// State machine transitions (ACTIVE→ROLLED_BACK, SUPERSEDED→ACTIVE) are handled
 	// by the RollbackOrchestrator, NOT by this method.
 	Rollback(ctx context.Context, req RollbackDeliveryRequest) error
+
+	// AwaitRollback waits until the sync of a rollback started with Rollback
+	// is confirmed, so the caller may flip release state afterwards. The
+	// caller gives it a context that does not end with an HTTP request.
+	AwaitRollback(ctx context.Context, req RollbackDeliveryRequest) error
+
+	// RollbackConverged reports, without waiting, whether the environment runs
+	// the manifests of the rollback: synced and healthy. It settles a rollback
+	// whose AwaitRollback failed.
+	RollbackConverged(ctx context.Context, req RollbackDeliveryRequest) (bool, error)
 }
 
 // RollbackTarget is the release being reactivated, reduced to what delivery

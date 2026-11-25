@@ -65,16 +65,21 @@ func TestRollback_HappyPath(t *testing.T) {
 
 	h.Create(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d body=%s", w.Code, w.Body.String())
+	// 202: the manifests are pushed and the sync is triggered, and the cells
+	// are still rolling. The release state settles after the answer (#118).
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d body=%s", w.Code, w.Body.String())
 	}
 
 	var resp rollbackResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.Status != "completed" {
-		t.Fatalf("want status completed, got %s", resp.Status)
+	if resp.Status != "in_progress" {
+		t.Fatalf("want status in_progress, got %s", resp.Status)
+	}
+	if resp.RolledBackRelease == "" || resp.ReactivatedRelease == "" || resp.Environment == "" {
+		t.Errorf("body = %s, want the two releases and the environment", w.Body.String())
 	}
 }
 

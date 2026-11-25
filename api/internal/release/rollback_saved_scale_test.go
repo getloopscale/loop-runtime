@@ -59,6 +59,7 @@ func TestRollback_DeliversTheSavedScaleOnceTheTargetIsActive(t *testing.T) {
 	orch, scale := rollbackWithSavedScale(nil)
 
 	_, err := orch.Rollback(context.Background(), RollbackRequest{TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"})
+	orch.Wait()
 
 	if err != nil {
 		t.Fatalf("Rollback: %v", err)
@@ -75,6 +76,7 @@ func TestRollback_SucceedsWhenTheSavedScaleIsNotDelivered(t *testing.T) {
 	orch, scale := rollbackWithSavedScale(errors.New("gitops down"))
 
 	result, err := orch.Rollback(context.Background(), RollbackRequest{TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"})
+	orch.Wait()
 
 	if err != nil || result == nil {
 		t.Fatalf("Rollback = %v, %v; want the rollback to stand: the older release is serving", result, err)

@@ -84,6 +84,9 @@ type rollbackRequest struct {
 }
 
 // rollbackResponse is the JSON response for a successful rollback.
+// rollbackStatusInProgress is the status of an accepted rollback.
+const rollbackStatusInProgress = "in_progress"
+
 type rollbackResponse struct {
 	Status             string `json:"status"`
 	RolledBackRelease  string `json:"rolled_back_release"`
@@ -213,13 +216,19 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 202: the target's manifests are pushed and the sync is triggered. The
+	// cells roll the pods through canary steps for longer than a request
+	// lives, so the release state settles afterwards (#118). A client learns
+	// the outcome from GET /projects/{name}/status: active_release is
+	// reactivated_release once the rollback completed, and stays
+	// rolled_back_release when it failed.
 	resp := rollbackResponse{
-		Status:             "completed",
+		Status:             rollbackStatusInProgress,
 		RolledBackRelease:  result.RolledBackReleaseID,
 		ReactivatedRelease: result.ReactivatedReleaseID,
 		Environment:        result.Environment,
 		URL:                result.URL,
 	}
 
-	httpio.WriteJSON(w, http.StatusOK, resp)
+	httpio.WriteJSON(w, http.StatusAccepted, resp)
 }

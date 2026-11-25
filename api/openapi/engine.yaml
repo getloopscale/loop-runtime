@@ -570,8 +570,12 @@ paths:
     post:
       tags: [projects]
       summary: Roll back to the previous release
+      description: >-
+        Answers once the target release's manifests are pushed and the sync is triggered.
+        The cells finish the rollout afterwards; the project status shows the target as the
+        active release when it completed, and the release rolled back from when it failed.
       responses:
-        "200": {description: rolled back}
+        "202": {description: "rollback started (status in_progress)"}
         "409": {description: no previous release}
 
   /api/v1/projects/{name}/scale:

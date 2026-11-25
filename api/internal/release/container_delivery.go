@@ -165,6 +165,7 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build deployc
 
 // Rollback delivers a previous release's manifests to the runtime.
 // Fetches old manifests from Gitea git history, pushes them, and triggers ArgoCD sync.
+// It does not wait for the sync: AwaitRollback does.
 // State machine transitions are handled by the RollbackOrchestrator, not here.
 func (c *ContainerDeliveryActivator) Rollback(ctx context.Context, req deploycontracts.RollbackDeliveryRequest) error {
 	if req.TargetRelease.GitCommit == "" {
@@ -201,17 +202,41 @@ func (c *ContainerDeliveryActivator) Rollback(ctx context.Context, req deploycon
 	if syncErr := c.sync.TriggerSync(ctx, argoAppName); syncErr != nil {
 		return fmt.Errorf("container rollback: sync trigger failed: %w", syncErr)
 	}
-	// LIVE-caught 2026-06-18 sponsor mandate: DB safety invariant —
-	// wait for sync confirmation before letting the orchestrator's
-	// Phase 5 flip release state. Without this wait the rollback
-	// would return success while the deployment infrastructure was
-	// still applying manifests + pods could still serve the old
-	// (rolled-back) code.
+	return nil
+}
+
+// AwaitRollback waits for the sync of a rollback's manifests to be confirmed.
+//
+// LIVE-caught 2026-06-18 sponsor mandate: DB safety invariant — the
+// orchestrator flips release state only after this returns nil. Without the
+// wait the rollback would be recorded while the deployment infrastructure was
+// still applying manifests and pods could still serve the rolled back code.
+//
+// The wait runs under the orchestrator's own deadline, not the request's: a
+// rollout through canary steps takes longer than a request lives (#118).
+func (c *ContainerDeliveryActivator) AwaitRollback(ctx context.Context, req deploycontracts.RollbackDeliveryRequest) error {
+	argoAppName, nameErr := naming.ArgoAppName(req.TenantID, req.ProjectID, req.Environment)
+	if nameErr != nil {
+		return fmt.Errorf("argocd application name: %w", nameErr)
+	}
 	if waitErr := c.sync.WaitForSync(ctx, argoAppName, c.argocdSyncTimeout, nil); waitErr != nil {
 		return fmt.Errorf("container rollback: sync wait failed: %w", waitErr)
 	}
-
 	return nil
+}
+
+// RollbackConverged reports whether the environment's Application is synced
+// and healthy on the manifests the rollback pushed.
+func (c *ContainerDeliveryActivator) RollbackConverged(ctx context.Context, req deploycontracts.RollbackDeliveryRequest) (bool, error) {
+	argoAppName, nameErr := naming.ArgoAppName(req.TenantID, req.ProjectID, req.Environment)
+	if nameErr != nil {
+		return false, fmt.Errorf("argocd application name: %w", nameErr)
+	}
+	synced, healthy, err := c.sync.GetAppStatus(ctx, argoAppName, nil)
+	if err != nil {
+		return false, fmt.Errorf("container rollback: read application status: %w", err)
+	}
+	return synced && healthy, nil
 }
 
 // ---------------------------------------------------------------------------

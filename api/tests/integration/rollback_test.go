@@ -56,6 +56,14 @@ func (fakeRollbackDelivery) Rollback(context.Context, deploycontracts.RollbackDe
 	return nil
 }
 
+func (fakeRollbackDelivery) AwaitRollback(context.Context, deploycontracts.RollbackDeliveryRequest) error {
+	return nil
+}
+
+func (fakeRollbackDelivery) RollbackConverged(context.Context, deploycontracts.RollbackDeliveryRequest) (bool, error) {
+	return true, nil
+}
+
 // --- Rollback-specific test data ---
 
 // seedRollbackData creates the baseline data for rollback tests: tenant, user, project,
@@ -185,6 +193,7 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 		CorrelationID: "corr-rollback-test",
 		UserID:        "user-test",
 	})
+	orch.Wait() // the release state settles after the answer
 
 	// Assert: no error
 	if err != nil {
@@ -309,6 +318,7 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 				CorrelationID: fmt.Sprintf("corr-concurrent-%d", idx),
 				UserID:        "user-test",
 			})
+			orch.Wait()
 
 			results[idx] = rollbackResult{result: res, err: err}
 		}(i)

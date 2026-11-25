@@ -99,8 +99,8 @@ func TestRollback_BuildIDSugar_ResolvesToReleaseID(t *testing.T) {
 		t.Fatalf("POST: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d; want 202", resp.StatusCode)
 	}
 	if captured.ToReleaseID != "rel-canon-42" {
 		t.Errorf("ToReleaseID = %q; want rel-canon-42 (resolved from build_id)", captured.ToReleaseID)
@@ -179,8 +179,8 @@ func TestRollback_CanonicalToReleaseID_StillWorks(t *testing.T) {
 		t.Fatalf("POST: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d; want 202", resp.StatusCode)
 	}
 	if captured.ToReleaseID != "rel-canon-direct" {
 		t.Errorf("ToReleaseID = %q; want rel-canon-direct", captured.ToReleaseID)

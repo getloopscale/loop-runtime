@@ -78,6 +78,10 @@ func (f *fakeRollbackReleaseStore) UpdateStatus(_ context.Context, _ db.DBTX, id
 	return &db.Release{ID: id, Status: string(newState)}, nil
 }
 
+func (f *fakeRollbackReleaseStore) AppendSideEffect(context.Context, db.DBTX, string, map[string]any) error {
+	return nil
+}
+
 type fakeRollbackEnvTargetStore struct{}
 
 func (f *fakeRollbackEnvTargetStore) SetDesired(_ context.Context, _ db.DBTX, _, _, _, _, _, _ string) error {
@@ -102,9 +106,17 @@ func (f *fakeRollbackDelivery) Rollback(context.Context, deploycontracts.Rollbac
 	return f.rollbackErr
 }
 
+func (f *fakeRollbackDelivery) AwaitRollback(context.Context, deploycontracts.RollbackDeliveryRequest) error {
+	return nil
+}
+
+func (f *fakeRollbackDelivery) RollbackConverged(context.Context, deploycontracts.RollbackDeliveryRequest) (bool, error) {
+	return true, nil
+}
+
 // --- Tests ---
 
-func TestRollbackOrchestrator_SyncFailureReturnsError(t *testing.T) {
+func TestRollbackOrchestrator_DeliveryFailureReturnsErrorAndKeepsTheActiveRelease(t *testing.T) {
 	// Arrange: rollback with ArgoCD sync failure (MEET-2026-03-27-012 Phase 1.4)
 	activeRel := &db.Release{
 		ID: "rel-active", TenantID: "acme", ProjectID: "my-app",
@@ -148,14 +160,19 @@ func TestRollbackOrchestrator_SyncFailureReturnsError(t *testing.T) {
 
 	// Act
 	_, err := orch.Rollback(context.Background(), req)
+	orch.Wait()
 
-	// Assert: rollback MUST return error when sync fails (not swallow it)
+	// Assert: a delivery that could not be started is reported, not swallowed.
 	if err == nil {
-		t.Fatal("expected rollback to return error when ArgoCD sync fails, got nil")
+		t.Fatal("expected rollback to return error when the delivery fails, got nil")
 	}
-	// The active release should be in ROLLBACK_FAILED state
-	if releaseStore.statuses["rel-active"] != "ROLLBACK_FAILED" {
-		t.Errorf("expected active release in ROLLBACK_FAILED, got %q", releaseStore.statuses["rel-active"])
+	// The environment keeps its active release (#118): a failed rollback used
+	// to leave it ROLLBACK_FAILED, and the environment with none.
+	if releaseStore.statuses["rel-active"] != "ACTIVE" {
+		t.Errorf("expected the release rolled back from to be ACTIVE again, got %q", releaseStore.statuses["rel-active"])
+	}
+	if releaseStore.statuses["rel-target"] != "SUPERSEDED" {
+		t.Errorf("expected the target left SUPERSEDED, got %q", releaseStore.statuses["rel-target"])
 	}
 }
 
@@ -203,6 +220,7 @@ func TestRollbackOrchestrator_SyncSuccessCompletes(t *testing.T) {
 
 	// Act
 	result, err := orch.Rollback(context.Background(), req)
+	orch.Wait()
 
 	// Assert: rollback succeeds
 	if err != nil {
