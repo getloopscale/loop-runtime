@@ -61,3 +61,8 @@ buildSigningKey:
 #                  "price-starter": "price_...", "price-pro": "price_...", "price-team": "price_..."}
 resendSecret: ""
 stripeSecret: ""
+# The GitHub App loopzero-api deploys from, {"app-id": "123", "private-key": "-----BEGIN
+# RSA PRIVATE KEY-----...", "webhook-secret": "..."}, written into loopzero-system as the
+# Secret loopzero-api-github. Empty: no such Secret, and the API keeps its repository
+# features off.
+githubAppSecret: ""

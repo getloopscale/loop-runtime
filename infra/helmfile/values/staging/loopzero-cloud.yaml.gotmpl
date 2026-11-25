@@ -30,6 +30,9 @@ config:
   kratosInternalUrl: "http://ory-kratos-public.loopzero-auth.svc.cluster.local:80"
   # The issuer Hydra emits (values/staging/ory-hydra.yaml.gotmpl).
   jwtIssuer: {{ printf "%s/" (.Values.publicAuthUrl | trimSuffix "/") | quote }}
+  # The staging GitHub App the install button sends the browser to
+  # (github.com/apps/<slug>/installations/new); aws.githubAppSecret holds its keys.
+  githubAppSlug: "loopscale-staging"
 
 # The cloud host: the whole control plane API. The app host is the public-routes release.
 ingressRoute:

@@ -899,6 +899,7 @@ releases:
           authTokenSecret: {{ env "LOOPZERO_CACHE_AUTH_SECRET" | quote }}
         resendSecret: {{ .Values | get "aws.resendSecret" "" | quote }}
         stripeSecret: {{ .Values | get "aws.stripeSecret" "" | quote }}
+        githubAppSecret: {{ .Values | get "aws.githubAppSecret" "" | quote }}
 {{- with .Values | get "aws.imagePullSecret" "" }}
         # Staging only: the registry login the nodes pull the private GHCR images with.
         imagePullSecret:
