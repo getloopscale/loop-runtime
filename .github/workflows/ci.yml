@@ -364,6 +364,32 @@ jobs:
             echo "::endgroup::"
           done
 
+      # The chart and unit tests of infra/tests render every chart with helm (on the runner
+      # image) and the staging Helmfile with helmfile (installed here). No workflow ran them,
+      # and 17 had broken without anyone seeing (#80).
+      - name: helmfile (pinned, SHA-256 verified)
+        env:
+          HELMFILE_VERSION: 1.5.1
+          HELMFILE_SHA256: 4c0c92f711aaf95b953065a0a76c6adfd4f7fb9f8c7065db5c94d32a0caf288f
+        run: |
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/helmfile"
+          archive="helmfile_${HELMFILE_VERSION}_linux_amd64.tar.gz"
+          mkdir -p "${dir}"
+          curl -fsSL --retry 3 -o "${dir}/${archive}" \
+            "https://github.com/helmfile/helmfile/releases/download/v${HELMFILE_VERSION}/${archive}"
+          echo "${HELMFILE_SHA256}  ${dir}/${archive}" | sha256sum -c -
+          tar -xzf "${dir}/${archive}" -C "${dir}" helmfile
+          sudo install -m 0755 "${dir}/helmfile" /usr/local/bin/helmfile
+          helmfile --version
+          helm version --short
+
+      - name: Test the charts and the infra unit tests
+        run: |
+          set -euo pipefail
+          cd loopzero/infra/tests
+          go test ./charts/ ./unit/ -count=1
+
   # ---------------------------------------------------------------------------
   # Tenant isolation — the gate that did not exist.
   #

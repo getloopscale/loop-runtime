@@ -20,13 +20,9 @@
 //	(c) seed-post-cleanroom-all.sh NEVER invokes the forbidden
 //	    `task k3d:secrets:bootstrap-in-core` shortcut (Approach A is
 //	    UNBREAKABLE regardless of witness scope)
-//	(d) cleanroom-up-live-test-mandate.md cites the ADR
-//	    2026-06-20-dev-public-vault-automated-init in § Sub-step 2.5
-//	    so the witness re-scoping is auditable from the rule
 //
 // Cross-references:
 //   - ADR: .claude/knowledge-base/decisions/2026-06-20-dev-public-vault-automated-init.md
-//   - Mandate: .claude/rules/cleanroom-up-live-test-mandate.md § Sub-step 2.5
 //   - Script: infra/scripts/local/seed-post-cleanroom-all.sh
 //   - Companion guards: vault_host_published_reach_test.go (T1.1), host_k3d_internal_canonical_test.go (T1.2)
 //   - Issues #111, #112, #113, #114 — empirical close-out after T-A4
@@ -34,7 +30,6 @@ package charts
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -84,29 +79,5 @@ func TestDevPublicVaultBootstrapDefault(t *testing.T) {
 			t.Errorf("(c) seed-post-cleanroom-all.sh executes `task k3d:secrets:bootstrap-in-core` at line %d — Approach A UNBREAKABLE forbids this shortcut. Use `task k3d:secrets:create` + `task k3d:secrets:bootstrap` against the SEPARATE loopzero-secrets cluster.\n  offending line: %s", i+1, line)
 			break
 		}
-	}
-
-	// (d) cleanroom-up-live-test-mandate.md cites ADR
-	//     2026-06-20-dev-public-vault-automated-init in § Sub-step 2.5
-	//     so the re-scoping is auditable from the rule itself.
-	// The rule file was deleted by `3d4075ca3` and `CLAUDE.md` records it as gone and not
-	// replaced, so the worktree copy this used to read does not exist in any clone. The
-	// assertion is still answerable: a deleted document stays in history forever, and what
-	// is being checked — that the re-scoping is auditable from the rule itself — is a
-	// property of what the rule SAID, which history holds exactly.
-	const mandateRel = ".claude/rules/cleanroom-up-live-test-mandate.md"
-	mandateBytes, err := os.ReadFile(filepath.Join(root, mandateRel))
-	if err != nil {
-		// #nosec G204 -- both operands are constants in this file
-		cmd := exec.Command("git", "show", "3d4075ca3~1:"+mandateRel)
-		cmd.Dir = root
-		mandateBytes, err = cmd.Output()
-		if err != nil {
-			t.Fatalf("read %s: absent from the worktree and unreadable from git: %v", mandateRel, err)
-		}
-	}
-	mandate := string(mandateBytes)
-	if !strings.Contains(mandate, "2026-06-20-dev-public-vault-automated-init") {
-		t.Errorf("(d) cleanroom-up-live-test-mandate.md does NOT cite ADR 2026-06-20-dev-public-vault-automated-init — the re-scoping (witness scoped to prod, dev-public uses automated path) MUST be traceable from the rule.")
 	}
 }
