@@ -154,6 +154,16 @@ func deployEnvironmentSecrets(k8sDeps *K8sDeps, logger *slog.Logger) deploycontr
 	return confirmation
 }
 
+// promotionAppExposer is how a promote makes its apps reachable in the target
+// environment. Without a management cluster client there is nothing to ensure,
+// and the orchestrator takes nil.
+func promotionAppExposer(k8sDeps *K8sDeps) release.PromotionAppExposer {
+	if k8sDeps == nil || k8sDeps.AppCRMgr == nil {
+		return nil
+	}
+	return &buildsadapter.PromotionAppExposer{Ensurer: k8sDeps.AppCRMgr}
+}
+
 func setupOrchestrator(
 	dbAdapter *db.PgxAdapter,
 	stores *StoreDeps,
@@ -164,6 +174,7 @@ func setupOrchestrator(
 	projectCap projectCapEnforcement,
 	envEnsurer *environments.EnvironmentEnsurer,
 	deploySecrets deploycontracts.EnvironmentSecrets,
+	promotedApps release.PromotionAppExposer,
 ) *OrchestratorDeps {
 	// The orchestrator builds its OWN project store for the deploy-time
 	// EnsureProject path (`loopzero deploy <new-name>`). It is wired through the same
@@ -326,6 +337,7 @@ func setupOrchestrator(
 		// to BaseDomain inside the orchestrator (back-compat for local
 		// Tilt dev where LOOPZERO_PUBLIC_DOMAIN is unset). Mirrors the canonical
 		// pattern already applied to ReleaseConvergenceLoop + SyncCallbackActivator.
+		Apps:         promotedApps,
 		PublicDomain: cfg.PublicDomain,
 		Logger:       logger,
 	})
