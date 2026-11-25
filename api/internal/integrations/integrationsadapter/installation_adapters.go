@@ -30,7 +30,60 @@ func (a *InstallationLookupAdapter) GetInstallation(ctx context.Context, install
 	return &integrationshttp.InstallationRecord{
 		ID:       inst.ID,
 		TenantID: inst.TenantID,
+		Verified: inst.VerifiedAt != nil,
 	}, nil
+}
+
+// InstallationClaimAdapter satisfies integrationshttp.InstallationClaimStore
+// with the installation rows of the repository store.
+type InstallationClaimAdapter struct {
+	Store *store.PostgresRepositoryStore
+}
+
+// ClaimInstallation implements integrationshttp.InstallationClaimStore.
+func (a *InstallationClaimAdapter) ClaimInstallation(ctx context.Context, inst integrationshttp.Installation, tenantID, userID string) (bool, error) {
+	return a.Store.ClaimInstallation(ctx, inst.ID, inst.AccountLogin, inst.AccountType, tenantID, userID)
+}
+
+// ListVerifiedInstallations implements integrationshttp.InstallationClaimStore.
+func (a *InstallationClaimAdapter) ListVerifiedInstallations(ctx context.Context, tenantID string) ([]integrationshttp.Installation, error) {
+	rows, err := a.Store.ListVerifiedInstallations(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]integrationshttp.Installation, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, integrationshttp.Installation{ID: row.ID, AccountLogin: row.AccountLogin, AccountType: row.AccountType})
+	}
+	return out, nil
+}
+
+// userInstallations is the GitHub call behind a claim (*gh.UserAccessClient).
+type userInstallations interface {
+	InstallationsForCode(ctx context.Context, code string) ([]gh.UserInstallation, error)
+}
+
+// UserInstallationSourceAdapter satisfies integrationshttp.UserInstallationSource
+// with the App's user authorization on GitHub.
+type UserInstallationSourceAdapter struct {
+	Client userInstallations
+}
+
+// InstallationsForCode implements integrationshttp.UserInstallationSource. A
+// code GitHub refuses becomes integrationshttp.ErrOAuthCodeRejected.
+func (a *UserInstallationSourceAdapter) InstallationsForCode(ctx context.Context, code string) ([]integrationshttp.Installation, error) {
+	found, err := a.Client.InstallationsForCode(ctx, code)
+	if errors.Is(err, gh.ErrOAuthCodeRejected) {
+		return nil, fmt.Errorf("%w", integrationshttp.ErrOAuthCodeRejected)
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]integrationshttp.Installation, 0, len(found))
+	for _, inst := range found {
+		out = append(out, integrationshttp.Installation{ID: inst.ID, AccountLogin: inst.AccountLogin, AccountType: inst.AccountType})
+	}
+	return out, nil
 }
 
 // InstallationRepoListerAdapter bridges github.AppClient →
@@ -68,4 +121,6 @@ func (a *InstallationRepoListerAdapter) ListInstallationRepositories(ctx context
 var (
 	_ integrationshttp.InstallationLookup     = (*InstallationLookupAdapter)(nil)
 	_ integrationshttp.InstallationRepoLister = (*InstallationRepoListerAdapter)(nil)
+	_ integrationshttp.InstallationClaimStore = (*InstallationClaimAdapter)(nil)
+	_ integrationshttp.UserInstallationSource = (*UserInstallationSourceAdapter)(nil)
 )

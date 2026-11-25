@@ -70,6 +70,12 @@ config:
   # Operator overrides per env. The cloud binary reads them via
   # cloud/internal/config/config.go.
   githubAppSlug: "loopzero-platform"
+  # OAuth client id of the GitHub App (GITHUB_APP_CLIENT_ID): the connect flow sends
+  # the browser to GitHub's user authorization page with it. It is public, not a secret;
+  # the client secret is configuration of loopzero-api only. Empty leaves the flow off.
+  # GitHub returns the browser to <appPublicUrl>/v1/integrations/github/callback, which
+  # must be a callback URL of the App.
+  githubAppClientId: ""
   appPublicUrl: "http://localhost:3000"
   authCookieDomain: ""
   # Cluster-internal Kratos URL for server-side calls (session whoami, cookie

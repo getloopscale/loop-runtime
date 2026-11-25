@@ -163,6 +163,11 @@ type fakeSyncContainer struct {
 	triggered  bool
 	waitErr    error
 	waited     bool
+	// With statusSet, GetAppStatus answers synced and healthy as given; with
+	// statusErr it fails. Otherwise it answers synced and healthy.
+	synced, healthy bool
+	statusErr       error
+	statusSet       bool
 }
 
 func (f *fakeSyncContainer) TriggerSync(_ context.Context, _ string) error {
@@ -187,6 +192,12 @@ func (f *fakeSyncContainer) TerminateOperation(_ context.Context, _ string) erro
 	return nil
 }
 func (f *fakeSyncContainer) GetAppStatus(_ context.Context, _ string, _ []string) (bool, bool, error) {
+	if f.statusErr != nil {
+		return false, false, f.statusErr
+	}
+	if f.statusSet {
+		return f.synced, f.healthy, nil
+	}
 	return true, true, nil
 }
 
@@ -751,42 +762,84 @@ func TestContainerSyncPolicy_TerminatesOnlyBeforeTheFinalStuckAttempt(t *testing
 	}
 }
 
-// The DB safety invariant of rollback (LIVE sponsor mandate 2026-06-18): the
-// orchestrator flips release state only after delivery returns, so delivery
-// must not return before the sync is confirmed.
-func TestContainerDelivery_Rollback_WaitsForSyncConfirmation(t *testing.T) {
-	sync := &fakeSyncContainer{}
-	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
+var rollbackDeliveryRequest = deploycontracts.RollbackDeliveryRequest{
+	TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
+	TargetRelease: &deploycontracts.RollbackTarget{ID: "rel-old", GitCommit: "old"},
+}
+
+func rollbackActivator(sync *fakeSyncContainer) *ContainerDeliveryActivator {
+	return NewContainerDeliveryActivator(ContainerDeliveryDeps{
 		Sync: sync, GitOps: &fakeGitOpsContainer{commitSHA: "sha"},
 		GitReader: &fakeGitReaderContainer{manifests: []byte("m")}, Locker: &fakeLockerContainer{},
 	})
+}
 
-	err := activator.Rollback(context.Background(), deploycontracts.RollbackDeliveryRequest{
-		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
-		TargetRelease: &deploycontracts.RollbackTarget{ID: "rel-old", GitCommit: "old"},
-	})
+// A rollout through canary steps outlives the request that asked for the
+// rollback (#118), so starting the delivery does not wait for the sync.
+func TestContainerDelivery_Rollback_TriggersTheSyncAndDoesNotWaitForIt(t *testing.T) {
+	sync := &fakeSyncContainer{waitErr: fmt.Errorf("argo sync timeout")}
+
+	err := rollbackActivator(sync).Rollback(context.Background(), rollbackDeliveryRequest)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !sync.triggered {
+		t.Error("the rollback delivery did not trigger the sync")
+	}
+	if sync.waited {
+		t.Error("the rollback delivery waited for the sync, which ties it to the request")
+	}
+}
+
+// The DB safety invariant of rollback (LIVE sponsor mandate 2026-06-18): the
+// orchestrator flips release state only after AwaitRollback returns nil, so it
+// must not return nil before the sync is confirmed.
+func TestContainerDelivery_AwaitRollback_WaitsForSyncConfirmation(t *testing.T) {
+	sync := &fakeSyncContainer{}
+
+	err := rollbackActivator(sync).AwaitRollback(context.Background(), rollbackDeliveryRequest)
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !sync.waited {
-		t.Error("rollback delivery returned without waiting for sync confirmation")
+		t.Error("AwaitRollback returned without waiting for sync confirmation")
 	}
 }
 
-func TestContainerDelivery_Rollback_SyncWaitFailureFailsTheDelivery(t *testing.T) {
+func TestContainerDelivery_AwaitRollback_FailsWhenTheSyncIsNotConfirmed(t *testing.T) {
 	sync := &fakeSyncContainer{waitErr: fmt.Errorf("argo sync timeout")}
-	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
-		Sync: sync, GitOps: &fakeGitOpsContainer{commitSHA: "sha"},
-		GitReader: &fakeGitReaderContainer{manifests: []byte("m")}, Locker: &fakeLockerContainer{},
-	})
 
-	err := activator.Rollback(context.Background(), deploycontracts.RollbackDeliveryRequest{
-		TenantID: "tn-1", ProjectID: "proj-1", Environment: "production",
-		TargetRelease: &deploycontracts.RollbackTarget{ID: "rel-old", GitCommit: "old"},
-	})
+	if err := rollbackActivator(sync).AwaitRollback(context.Background(), rollbackDeliveryRequest); err == nil {
+		t.Fatal("a sync that never confirmed must fail AwaitRollback")
+	}
+}
 
-	if err == nil {
-		t.Fatal("a sync that never confirmed must fail the rollback delivery")
+func TestContainerDelivery_RollbackConverged_NeedsSyncedAndHealthy(t *testing.T) {
+	for name, tc := range map[string]struct {
+		synced, healthy, want bool
+	}{
+		"synced and healthy":   {true, true, true},
+		"synced, not healthy":  {true, false, false},
+		"healthy, out of sync": {false, true, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			sync := &fakeSyncContainer{statusSet: true, synced: tc.synced, healthy: tc.healthy}
+
+			got, err := rollbackActivator(sync).RollbackConverged(context.Background(), rollbackDeliveryRequest)
+
+			if err != nil || got != tc.want {
+				t.Fatalf("RollbackConverged = %v, %v; want %v", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestContainerDelivery_RollbackConverged_ReportsAStatusItCannotRead(t *testing.T) {
+	sync := &fakeSyncContainer{statusErr: fmt.Errorf("argocd: connection refused")}
+
+	if got, err := rollbackActivator(sync).RollbackConverged(context.Background(), rollbackDeliveryRequest); err == nil || got {
+		t.Fatalf("RollbackConverged = %v, %v; want false and the error", got, err)
 	}
 }

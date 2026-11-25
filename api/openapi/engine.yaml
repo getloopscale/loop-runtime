@@ -570,8 +570,12 @@ paths:
     post:
       tags: [projects]
       summary: Roll back to the previous release
+      description: >-
+        Answers once the target release's manifests are pushed and the sync is triggered.
+        The cells finish the rollout afterwards; the project status shows the target as the
+        active release when it completed, and the release rolled back from when it failed.
       responses:
-        "200": {description: rolled back}
+        "202": {description: "rollback started (status in_progress)"}
         "409": {description: no previous release}
 
   /api/v1/projects/{name}/scale:
@@ -668,6 +672,51 @@ paths:
           content:
             text/event-stream:
               schema: {type: string}
+  /api/v1/integrations/github/installations:
+    get:
+      tags: [integrations]
+      summary: List the GitHub App installations verified for the caller's tenant
+      responses:
+        "200":
+          description: installations bound to the tenant after GitHub confirmed a user's access
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitHubInstallationList"
+  /api/v1/integrations/github/installations/claim:
+    post:
+      tags: [integrations]
+      summary: Bind to the tenant the installations GitHub confirms the user can access
+      description: >-
+        Exchanges the one-time code of the GitHub App's user authorization and binds to the
+        caller's tenant the installations of this App that the GitHub user can access. An
+        installation that belongs to another tenant is left alone. Requires the admin role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: The code GitHub returned to the authorization callback.
+      responses:
+        "200":
+          description: the installations now verified for the tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitHubInstallationList"
+        "400":
+          description: INVALID_REQUEST (no code) or GITHUB_CODE_REJECTED (expired or already used)
+        "403":
+          description: INSUFFICIENT_ROLE
+        "502":
+          description: GITHUB_UNAVAILABLE; nothing was bound
+        "503":
+          description: GITHUB_OAUTH_NOT_CONFIGURED
   /api/v1/integrations/github/installations/{id}/repositories:
     parameters:
     - {name: id, in: path, required: true, schema: {type: string}}
@@ -869,6 +918,19 @@ components:
       description: invalid request
 
   schemas:
+    GitHubInstallationList:
+      type: object
+      required: [installations]
+      properties:
+        installations:
+          type: array
+          items:
+            type: object
+            required: [id, account_login, account_type]
+            properties:
+              id: {type: integer, format: int64}
+              account_login: {type: string}
+              account_type: {type: string, description: User or Organization}
     Health:
       type: object
       additionalProperties: true

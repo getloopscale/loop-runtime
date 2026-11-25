@@ -179,7 +179,9 @@ var protectedFamilies = []protectedFamily{
 		"POST /api/v1/projects/{name}/connect", "DELETE /api/v1/projects/{name}/connect",
 		"GET /api/v1/projects/{name}/connect"}},
 	{surfaces.IntegrationsGitHub, func(c *Config) { c.IntegrationsGitHubHandler = nil }, []string{
-		"GET /api/v1/integrations/github/installations/{id}/repositories"}},
+		"GET /api/v1/integrations/github/installations/{id}/repositories",
+		"GET /api/v1/integrations/github/installations",
+		"POST /api/v1/integrations/github/installations/claim"}},
 	{surfaces.Previews, func(c *Config) { c.PreviewHandler = nil }, []string{
 		"GET /api/v1/projects/{project}/previews", "GET /api/v1/projects/{project}/previews/{id}",
 		"DELETE /api/v1/projects/{project}/previews/{id}", "POST /api/v1/projects/{project}/previews"}},

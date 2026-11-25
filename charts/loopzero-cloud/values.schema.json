@@ -236,6 +236,9 @@
         "githubAppSlug": {
           "type": "string"
         },
+        "githubAppClientId": {
+          "type": "string"
+        },
         "appPublicUrl": {
           "type": "string"
         },

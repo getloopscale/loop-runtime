@@ -250,14 +250,41 @@ func setupOrchestrator(
 	// Re-delivery goes through the shared container delivery activator, which
 	// waits for sync confirmation (bounded by cfg.ArgocdSyncTimeout) before the
 	// orchestrator flips release state — the LIVE sponsor mandate of 2026-06-18.
-	rollbackOrch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
+	rollbackDeps := release.RollbackOrchestratorDeps{
 		Releases:     stores.ReleaseStore,
 		EnvTargets:   stores.EnvTargetStore,
 		Locker:       stores.Locker,
 		Delivery:     delivery,
 		PublicDomain: cfg.PublicDomain,
 		Logger:       logger,
-	})
+	}
+	// A stored scaling config reaches the running Rollout through the GitOps
+	// repository and an ArgoCD sync, the path a deploy uses (#113). Nil when
+	// this boot has no GitOps pusher or sync client.
+	var releaseScaler *scaling.ReleaseScaler
+	if workflows.GitOpsPusher != nil && workflows.SyncClient != nil {
+		releaseScaler = &scaling.ReleaseScaler{
+			Releases: stores.ReleaseStore,
+			Builds:   stores.BuildStore,
+			Configs:  scalingStore,
+			Domains:  stores.DomainStore,
+			Locker:   stores.Locker,
+			GitOps:   workflows.GitOpsPusher,
+			Sync:     workflows.SyncClient,
+			Render: scaling.RenderSettings{
+				RegistryURL:         cfg.RegistryURL,
+				BaseDomain:          cfg.BaseDomain,
+				ClusterIssuer:       cfg.ClusterIssuer,
+				PrometheusAddress:   cfg.PrometheusAddress,
+				ProgressiveDelivery: cfg.ProgressiveDelivery,
+				LeanResources:       cfg.LeanResources,
+			},
+		}
+		// The rolled back manifests carry the replica count of the older
+		// release; the saved config goes back over them (#116).
+		rollbackDeps.SavedScale = releaseScaler
+	}
+	rollbackOrch := release.NewRollbackOrchestrator(rollbackDeps)
 	rollbackService := &releaseadapter.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &store.PostgresProjectStore{DB: dbAdapter}
 	rollbackHandler := rollbackhttp.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
@@ -293,6 +320,22 @@ func setupOrchestrator(
 	statusBuildStore := &statusadapter.StatusBuildStoreAdapter{Store: stores.BuildStore}
 	statusReleaseStore := &statusadapter.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
 	statusHandler := statushttp.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
+	// Desired replicas and the scaling block follow the saved scale
+	// configuration: a scale changes the running app without a build (#116).
+	statusHandler.SetScaleReader(statusadapter.StatusScaleAdapter{
+		Builds: stores.BuildStore,
+		Stored: scaling.StoredScaling{Configs: scalingStore},
+	})
+	// Ready replicas and the 5xx share come from the series the cells record
+	// per tenant app. Without a Prometheus the fields are omitted.
+	if url := metricsPrometheusURL(cfg); url != "" {
+		statusMetrics, metricsErr := statusadapter.NewPrometheusStatusMetrics(url)
+		if metricsErr != nil {
+			logger.Warn("status: Prometheus client not built; replicas_ready and traffic_5xx_pct_1h are omitted", "error", metricsErr)
+		} else {
+			statusHandler.SetMetricsSource(statusMetrics)
+		}
+	}
 
 	// Prometheus query_range proxy for the Status page KPI strip and the
 	// SignalDetailSheet histograms, on the Prometheus the API pod reaches
@@ -349,27 +392,10 @@ func setupOrchestrator(
 	// Refuse a scale of an app the environment's active release does not declare:
 	// such a config scales nothing, yet the request answered 200.
 	scaleHandler.SetAppLookup(scaling.ReleaseAppLookup{Releases: stores.ReleaseStore})
-	// A stored config reaches the running Rollout through the GitOps repository
-	// and an ArgoCD sync, the path a deploy uses. Without this only the next
-	// deploy read it, and the endpoint answered "applied" for nothing (#113).
-	if workflows.GitOpsPusher != nil && workflows.SyncClient != nil {
-		scaleHandler.SetDeliverer(&scaling.ReleaseScaler{
-			Releases: stores.ReleaseStore,
-			Builds:   stores.BuildStore,
-			Configs:  scalingStore,
-			Domains:  stores.DomainStore,
-			Locker:   stores.Locker,
-			GitOps:   workflows.GitOpsPusher,
-			Sync:     workflows.SyncClient,
-			Render: scaling.RenderSettings{
-				RegistryURL:         cfg.RegistryURL,
-				BaseDomain:          cfg.BaseDomain,
-				ClusterIssuer:       cfg.ClusterIssuer,
-				PrometheusAddress:   cfg.PrometheusAddress,
-				ProgressiveDelivery: cfg.ProgressiveDelivery,
-				LeanResources:       cfg.LeanResources,
-			},
-		})
+	// Without a deliverer only the next deploy reads a stored config, and the
+	// endpoint answers "saved" (#113).
+	if releaseScaler != nil {
+		scaleHandler.SetDeliverer(releaseScaler)
 	} else {
 		logger.Warn("scale: no GitOps pusher or sync client in this boot; a scale is stored and applied by the next deploy")
 	}

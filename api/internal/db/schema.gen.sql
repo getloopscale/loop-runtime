@@ -440,7 +440,9 @@ CREATE TABLE public.github_installations (
     account_type text DEFAULT 'User'::text NOT NULL,
     tenant_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    verified_at timestamp with time zone,
+    verified_by text
 );
 
 ALTER TABLE ONLY public.github_installations FORCE ROW LEVEL SECURITY;
@@ -556,6 +558,29 @@ CREATE TABLE public.lens_saved_views (
 );
 
 ALTER TABLE ONLY public.lens_saved_views FORCE ROW LEVEL SECURITY;
+
+-- Name: loopzero_api_keys; Type: TABLE; Schema: public; Owner: -
+
+CREATE TABLE public.loopzero_api_keys (
+    id text NOT NULL,
+    subject text NOT NULL,
+    tenant_id text NOT NULL,
+    key_name text NOT NULL,
+    key_hash text NOT NULL,
+    key_prefix text NOT NULL,
+    scopes jsonb NOT NULL,
+    expires_at timestamp with time zone,
+    last_used_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    revoked_at timestamp with time zone,
+    bff_minted boolean DEFAULT false NOT NULL,
+    rotated_from text,
+    account_id text NOT NULL,
+    CONSTRAINT loopzero_api_keys_key_name_check CHECK (((length(key_name) >= 1) AND (length(key_name) <= 64))),
+    CONSTRAINT loopzero_api_keys_scopes_check CHECK ((jsonb_typeof(scopes) = 'array'::text))
+);
+
+ALTER TABLE ONLY public.loopzero_api_keys FORCE ROW LEVEL SECURITY;
 
 -- Name: memory_exports; Type: TABLE; Schema: public; Owner: -
 
@@ -908,29 +933,6 @@ CREATE TABLE public.tenants_pending_deletion (
 
 ALTER TABLE ONLY public.tenants_pending_deletion FORCE ROW LEVEL SECURITY;
 
--- Name: loopzero_api_keys; Type: TABLE; Schema: public; Owner: -
-
-CREATE TABLE public.loopzero_api_keys (
-    id text NOT NULL,
-    subject text NOT NULL,
-    tenant_id text NOT NULL,
-    key_name text NOT NULL,
-    key_hash text NOT NULL,
-    key_prefix text NOT NULL,
-    scopes jsonb NOT NULL,
-    expires_at timestamp with time zone,
-    last_used_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    revoked_at timestamp with time zone,
-    bff_minted boolean DEFAULT false NOT NULL,
-    rotated_from text,
-    account_id text NOT NULL,
-    CONSTRAINT loopzero_api_keys_key_name_check CHECK (((length(key_name) >= 1) AND (length(key_name) <= 64))),
-    CONSTRAINT loopzero_api_keys_scopes_check CHECK ((jsonb_typeof(scopes) = 'array'::text))
-);
-
-ALTER TABLE ONLY public.loopzero_api_keys FORCE ROW LEVEL SECURITY;
-
 -- Name: usage_records; Type: TABLE; Schema: public; Owner: -
 
 CREATE TABLE public.usage_records (
@@ -1184,6 +1186,11 @@ ALTER TABLE ONLY public.lens_fired_alerts
 ALTER TABLE ONLY public.lens_saved_views
     ADD CONSTRAINT lens_saved_views_pkey PRIMARY KEY (id);
 
+-- Name: loopzero_api_keys loopzero_api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.loopzero_api_keys
+    ADD CONSTRAINT loopzero_api_keys_pkey PRIMARY KEY (id);
+
 -- Name: memory_exports memory_exports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.memory_exports
@@ -1318,11 +1325,6 @@ ALTER TABLE ONLY public.tenants_pending_deletion
 
 ALTER TABLE ONLY public.tenants
     ADD CONSTRAINT tenants_pkey PRIMARY KEY (id);
-
--- Name: loopzero_api_keys loopzero_api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
-
-ALTER TABLE ONLY public.loopzero_api_keys
-    ADD CONSTRAINT loopzero_api_keys_pkey PRIMARY KEY (id);
 
 -- Name: usage_records usage_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
@@ -1468,6 +1470,22 @@ CREATE INDEX idx_lens_fired_alerts_rule_time ON public.lens_fired_alerts USING b
 
 CREATE INDEX idx_lens_saved_views_owner ON public.lens_saved_views USING btree (tenant_id, subject);
 
+-- Name: idx_loopzero_api_keys_account_id; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_loopzero_api_keys_account_id ON public.loopzero_api_keys USING btree (account_id);
+
+-- Name: idx_loopzero_api_keys_bff_minted_expires; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_loopzero_api_keys_bff_minted_expires ON public.loopzero_api_keys USING btree (bff_minted, expires_at) WHERE (bff_minted = true);
+
+-- Name: idx_loopzero_api_keys_key_hash; Type: INDEX; Schema: public; Owner: -
+
+CREATE UNIQUE INDEX idx_loopzero_api_keys_key_hash ON public.loopzero_api_keys USING btree (key_hash);
+
+-- Name: idx_loopzero_api_keys_tenant; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_loopzero_api_keys_tenant ON public.loopzero_api_keys USING btree (tenant_id, subject) WHERE (revoked_at IS NULL);
+
 -- Name: idx_memory_exports_owner_active; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_memory_exports_owner_active ON public.memory_exports USING btree (tenant_id, subject, created_at DESC);
@@ -1607,22 +1625,6 @@ CREATE INDEX idx_tenants_cell_id ON public.tenants USING btree (cell_id);
 -- Name: idx_tenants_slug; Type: INDEX; Schema: public; Owner: -
 
 CREATE UNIQUE INDEX idx_tenants_slug ON public.tenants USING btree (slug);
-
--- Name: idx_loopzero_api_keys_account_id; Type: INDEX; Schema: public; Owner: -
-
-CREATE INDEX idx_loopzero_api_keys_account_id ON public.loopzero_api_keys USING btree (account_id);
-
--- Name: idx_loopzero_api_keys_bff_minted_expires; Type: INDEX; Schema: public; Owner: -
-
-CREATE INDEX idx_loopzero_api_keys_bff_minted_expires ON public.loopzero_api_keys USING btree (bff_minted, expires_at) WHERE (bff_minted = true);
-
--- Name: idx_loopzero_api_keys_key_hash; Type: INDEX; Schema: public; Owner: -
-
-CREATE UNIQUE INDEX idx_loopzero_api_keys_key_hash ON public.loopzero_api_keys USING btree (key_hash);
-
--- Name: idx_loopzero_api_keys_tenant; Type: INDEX; Schema: public; Owner: -
-
-CREATE INDEX idx_loopzero_api_keys_tenant ON public.loopzero_api_keys USING btree (tenant_id, subject) WHERE (revoked_at IS NULL);
 
 -- Name: idx_tombstones_anonymization; Type: INDEX; Schema: public; Owner: -
 
@@ -1826,6 +1828,21 @@ ALTER TABLE ONLY public.lens_fired_alerts
 ALTER TABLE ONLY public.lens_saved_views
     ADD CONSTRAINT lens_saved_views_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
+-- Name: loopzero_api_keys loopzero_api_keys_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.loopzero_api_keys
+    ADD CONSTRAINT loopzero_api_keys_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+
+-- Name: loopzero_api_keys loopzero_api_keys_rotated_from_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.loopzero_api_keys
+    ADD CONSTRAINT loopzero_api_keys_rotated_from_fkey FOREIGN KEY (rotated_from) REFERENCES public.loopzero_api_keys(id) ON DELETE SET NULL;
+
+-- Name: loopzero_api_keys loopzero_api_keys_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+ALTER TABLE ONLY public.loopzero_api_keys
+    ADD CONSTRAINT loopzero_api_keys_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+
 -- Name: memory_exports memory_exports_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
 ALTER TABLE ONLY public.memory_exports
@@ -1925,21 +1942,6 @@ ALTER TABLE ONLY public.tenants
 
 ALTER TABLE ONLY public.tenants_pending_deletion
     ADD CONSTRAINT tenants_pending_deletion_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
-
--- Name: loopzero_api_keys loopzero_api_keys_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
-
-ALTER TABLE ONLY public.loopzero_api_keys
-    ADD CONSTRAINT loopzero_api_keys_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
-
--- Name: loopzero_api_keys loopzero_api_keys_rotated_from_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
-
-ALTER TABLE ONLY public.loopzero_api_keys
-    ADD CONSTRAINT loopzero_api_keys_rotated_from_fkey FOREIGN KEY (rotated_from) REFERENCES public.loopzero_api_keys(id) ON DELETE SET NULL;
-
--- Name: loopzero_api_keys loopzero_api_keys_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
-
-ALTER TABLE ONLY public.loopzero_api_keys
-    ADD CONSTRAINT loopzero_api_keys_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
 -- Name: usage_records usage_records_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
@@ -2141,6 +2143,22 @@ CREATE POLICY lens_saved_views_tenant_isolation ON public.lens_saved_views USING
 -- Name: lens_saved_views lens_saved_views_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
 CREATE POLICY lens_saved_views_worker_cross_tenant ON public.lens_saved_views TO loopzero_worker USING (true) WITH CHECK (true);
+
+-- Name: loopzero_api_keys; Type: ROW SECURITY; Schema: public; Owner: -
+
+ALTER TABLE public.loopzero_api_keys ENABLE ROW LEVEL SECURITY;
+
+-- Name: loopzero_api_keys loopzero_api_keys_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY loopzero_api_keys_cloud_cross_tenant ON public.loopzero_api_keys TO loopzero_cloud USING (true) WITH CHECK (true);
+
+-- Name: loopzero_api_keys loopzero_api_keys_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY loopzero_api_keys_tenant_isolation ON public.loopzero_api_keys USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+
+-- Name: loopzero_api_keys loopzero_api_keys_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+
+CREATE POLICY loopzero_api_keys_worker_cross_tenant ON public.loopzero_api_keys TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: memory_exports; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2381,22 +2399,6 @@ CREATE POLICY tenants_self_isolation ON public.tenants USING ((id = current_sett
 -- Name: tenants tenants_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
 CREATE POLICY tenants_worker_cross_tenant ON public.tenants TO loopzero_worker USING (true) WITH CHECK (true);
-
--- Name: loopzero_api_keys; Type: ROW SECURITY; Schema: public; Owner: -
-
-ALTER TABLE public.loopzero_api_keys ENABLE ROW LEVEL SECURITY;
-
--- Name: loopzero_api_keys loopzero_api_keys_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
-
-CREATE POLICY loopzero_api_keys_cloud_cross_tenant ON public.loopzero_api_keys TO loopzero_cloud USING (true) WITH CHECK (true);
-
--- Name: loopzero_api_keys loopzero_api_keys_tenant_isolation; Type: POLICY; Schema: public; Owner: -
-
-CREATE POLICY loopzero_api_keys_tenant_isolation ON public.loopzero_api_keys USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
-
--- Name: loopzero_api_keys loopzero_api_keys_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
-
-CREATE POLICY loopzero_api_keys_worker_cross_tenant ON public.loopzero_api_keys TO loopzero_worker USING (true) WITH CHECK (true);
 
 -- Name: usage_records; Type: ROW SECURITY; Schema: public; Owner: -
 

@@ -95,6 +95,8 @@ type StatusHandler struct {
 	baseDomain     string
 	publicDomain   string                  // operator-configured public wildcard for status.url (FAANG canonical J-25; mirrors PreviewPublicDomain)
 	grafanaBaseURL string                  // T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1 — Grafana deep-link root (e.g. https://grafana.loopzero.local). Empty disables metrics_range_url emission.
+	metrics        StatusMetricsSource     // optional: source of replicas_ready and traffic_5xx_pct_1h
+	scale          StatusScaleReader       // optional: source of replicas_desired and of the scaling block
 	planTierStore  pkgdomain.PlanTierStore // #142 / #123 canonical — resolves tenant tier for dashboard pre-Apply slider ceiling (qa-dogfood-cleanup-2026-06-21). When nil, plan_tier echoes "starter" (matches pre-#142 fallback in ProjectHandler.Create + ScaleHandler.resolveTier).
 }
 
@@ -213,6 +215,17 @@ type statusResponse struct {
 	// canonically — the prior /v1/billing seed depended on Known Gap
 	// #116 cloud BFF billing read-side, which is 404).
 	PlanTier string `json:"plan_tier,omitempty"`
+
+	// The health fields the console reads (ProjectStatusDetail in its
+	// dashboard/src/lib/api/types.ts). Each is a pointer: a field with no
+	// source, or whose read failed, is omitted, because the console tells a
+	// missing value from a measured zero. alerts_active is not sent: nothing
+	// in the platform counts firing alerts per project.
+	ReplicasReady   *int     `json:"replicas_ready,omitempty"`
+	ReplicasDesired *int     `json:"replicas_desired,omitempty"`
+	DeployStatus    *string  `json:"deploy_status,omitempty"`
+	Traffic5xxPct1h *float64 `json:"traffic_5xx_pct_1h,omitempty"`
+	LastDeployAt    *string  `json:"last_deploy_at,omitempty"`
 }
 
 // Get handles GET /api/v1/projects/{name}/status?env={env}.
@@ -273,7 +286,19 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		resp.SyncStatus = "synced"
 	}
 
-	if resp.LastBuild != nil {
+	// The apps of the running release, with the saved scale configuration
+	// applied. Nil when nothing runs, or when the scale could not be read.
+	var runningApps []StatusAppScale
+	if release != nil {
+		runningApps = h.fillHealth(r.Context(), &resp, uc.TenantID, name, env, release)
+	}
+
+	// A scale changes the running app without a build, so the last build's
+	// scaling is the fallback, not the source (#116).
+	switch {
+	case runningApps != nil:
+		resp.Scaling = scalingOfApps(runningApps)
+	case resp.LastBuild != nil:
 		resp.Scaling = findScalingForEnv(builds, env)
 	}
 

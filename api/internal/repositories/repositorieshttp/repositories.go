@@ -49,10 +49,11 @@ type RepositoryStore interface {
 	UnlinkRepository(ctx context.Context, tenantID, projectName string) error
 	GetByProject(ctx context.Context, tenantID, projectName string) (*ProjectRepository, error)
 	GetByRepo(ctx context.Context, repoFullName string) (*ProjectRepository, error)
-	SaveInstallation(ctx context.Context, id int64, accountLogin, accountType string, tenantID *string) error
-	// InstallationTenant returns the tenant a GitHub installation is bound
-	// to, or "" when it is unclaimed or unknown.
-	InstallationTenant(ctx context.Context, installationID int64) (string, error)
+	// InstallationVerifiedFor reports whether a GitHub installation is bound
+	// to tenantID with the binding confirmed on GitHub. It is false for an
+	// installation that is unknown, unbound, bound without that confirmation
+	// or bound to another tenant.
+	InstallationVerifiedFor(ctx context.Context, installationID int64, tenantID string) (bool, error)
 }
 
 // RepoIntrospector abstracts the GitHub API calls the Connect handler makes
@@ -153,28 +154,21 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		return // checkRepoLinkConflict wrote the response
 	}
 
-	// An installation bound to another tenant is not rebound: the upsert
-	// below would COALESCE this caller's tenant over the existing binding.
-	// 403, as the repository picker answers for the same installation.
-	owner, err := h.store.InstallationTenant(ctx, req.InstallationID)
+	// The installation id comes from the request, so it is checked against the
+	// binding GitHub confirmed (POST .../integrations/github/installations/claim).
+	// Connect never writes that binding. 403, as the repository picker answers
+	// for the same installation.
+	verified, err := h.store.InstallationVerifiedFor(ctx, req.InstallationID, uc.TenantID)
 	if err != nil {
 		slog.ErrorContext(ctx, "installation lookup failed", "error", err, "installation_id", req.InstallationID)
 		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
-	if owner != "" && owner != uc.TenantID {
+	if !verified {
 		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
 			"code":    "FORBIDDEN",
 			"message": "You do not have access to this installation.",
 		})
-		return
-	}
-
-	// Bind the installation to this tenant (first connect) or keep it.
-	tenantID := uc.TenantID
-	if err := h.store.SaveInstallation(ctx, req.InstallationID, "", "User", &tenantID); err != nil {
-		slog.ErrorContext(ctx, "save installation failed", "error", err)
-		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
 

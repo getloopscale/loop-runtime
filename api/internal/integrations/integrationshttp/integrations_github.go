@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopZero Authors
 
-// Package integrationshttp serves /api/v1/integrations/github: the dashboard's view
-// of which GitHub App installations a tenant has, and the revocation state of
-// each.
+// Package integrationshttp serves /api/v1/integrations/github: which GitHub App
+// installations a tenant has, how it comes to have one (the claim, after the
+// user authorizes on GitHub), and the repositories of each.
 //
 // Eleventh family to leave the flat `routes` package (B-080, slice-33), extracted
 // alongside `bootstrap`.
@@ -45,6 +45,15 @@ type InstallationRepository struct {
 type InstallationRecord struct {
 	ID       int64
 	TenantID *string
+	// Verified is true when GitHub confirmed that a user of TenantID can
+	// access the installation.
+	Verified bool
+}
+
+// verifiedFor reports whether the installation is bound to tenantID with the
+// binding confirmed on GitHub.
+func (r *InstallationRecord) verifiedFor(tenantID string) bool {
+	return r != nil && tenantID != "" && r.Verified && r.TenantID != nil && *r.TenantID == tenantID
 }
 
 // ErrInstallationRevoked is returned by InstallationRepoLister when GitHub
@@ -77,6 +86,8 @@ type InstallationLookup interface {
 type IntegrationsGitHubHandler struct {
 	lister InstallationRepoLister
 	store  InstallationLookup
+	access UserInstallationSource // nil: the App's OAuth client is not configured
+	claims InstallationClaimStore
 	clock  func() time.Time
 
 	cacheMu sync.Mutex
@@ -129,11 +140,11 @@ func (h *IntegrationsGitHubHandler) ListRepositories(w http.ResponseWriter, r *h
 		return
 	}
 
-	// Tenant boundary: a tenant may only list repositories of installations
-	// that have already been linked to their tenant (or whose ownership
-	// row is still NULL, i.e. fresh-from-callback before the first
-	// connect). Cross-tenant requests get 403, not 404, so we don't
-	// leak the existence of someone else's installation.
+	// Tenant boundary: a tenant lists the repositories of an installation
+	// only when GitHub confirmed that one of its users can access it (the
+	// claim endpoint). An installation with no row, with no tenant, bound
+	// without that confirmation or bound to another tenant gets the same 403,
+	// so the answer does not say which installations exist.
 	inst, err := h.store.GetInstallation(ctx, installationID)
 	if err != nil {
 		slog.ErrorContext(ctx, "installation lookup failed", "error", err, "installation_id", installationID)
@@ -143,7 +154,7 @@ func (h *IntegrationsGitHubHandler) ListRepositories(w http.ResponseWriter, r *h
 		})
 		return
 	}
-	if inst != nil && inst.TenantID != nil && *inst.TenantID != uc.TenantID {
+	if !inst.verifiedFor(uc.TenantID) {
 		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
 			"code":    "FORBIDDEN",
 			"message": "You do not have access to this installation.",
@@ -153,7 +164,7 @@ func (h *IntegrationsGitHubHandler) ListRepositories(w http.ResponseWriter, r *h
 
 	// Cache lookup (60s TTL). The cache key includes only installationID
 	// because the upstream response is identical for any tenant -- the
-	// tenant gate above already filtered cross-tenant calls.
+	// tenant gate above runs on every request, before the cache.
 	if repos, ok := h.cacheGet(installationID); ok {
 		httpio.WriteJSON(w, http.StatusOK, map[string]any{"repositories": repos})
 		return

@@ -255,7 +255,11 @@ func TestCheck_RealTreeStillPasses(t *testing.T) {
 	// If this number falls back near 42, the chained shape became invisible again.
 	//
 	// 2026-09-29: 43 direct — GET /internal/edge/route joined the internal routes (#447).
-	if out.PassCount != 71 {
-		t.Errorf("expected the 71 routes the AST enumerator sees (43 direct + 28 in the `r.With(...)` shape, measured 2026-09-29); got %d — if this changed on purpose, update the number and say why", out.PassCount)
+	//
+	// 2026-11-25: 44 direct + 29 chained. Two routes of the GitHub integration joined
+	// the Auth group: GET /integrations/github/installations (direct) and
+	// POST /integrations/github/installations/claim (rate limited, so chained).
+	if out.PassCount != 73 {
+		t.Errorf("expected the 73 routes the AST enumerator sees (44 direct + 29 in the `r.With(...)` shape, measured 2026-11-25); got %d — if this changed on purpose, update the number and say why", out.PassCount)
 	}
 }

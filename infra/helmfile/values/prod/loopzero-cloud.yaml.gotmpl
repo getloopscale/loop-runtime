@@ -23,6 +23,9 @@ imagePullSecrets:
 
 config:
   githubAppSlug: "loopzero-platform"
+  # The OAuth client id of this environment's GitHub App, public. It exists per
+  # environment only, so the helmfile run supplies it; unset, the connect flow is off.
+  githubAppClientId: {{ env "LOOPZERO_GITHUB_APP_CLIENT_ID" | quote }}
   appPublicUrl: "https://app.getloopscale.com"
   authCookieDomain: "getloopscale.com"
   kratosInternalUrl: "http://kratos.loopzero-auth.svc.cluster.local:4433"

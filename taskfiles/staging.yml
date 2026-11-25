@@ -335,8 +335,9 @@ tasks:
         #   stripe.json: {"api-key", "webhook-secret", "price-starter", "price-pro",
         #   "price-team"}, Stripe test-mode keys and plan prices for
         #   loopzero-cloud (aws.stripeSecret).
-        #   github-app.json: {"app-id", "private-key", "webhook-secret"}, the staging
-        #   GitHub App loopzero-api deploys from (aws.githubAppSecret).
+        #   github-app.json: {"app-id", "private-key", "webhook-secret", "client-id",
+        #   "client-secret"}, the staging GitHub App loopzero-api deploys from
+        #   (aws.githubAppSecret).
         for name in ghcr-pull resend stripe github-app; do
           kept=/etc/loopzero-staging/$name.json
           [ -f "$kept" ] || { echo "warning: no $kept, loopzero/staging/$name is not seeded" >&2; continue; }
@@ -347,6 +348,14 @@ tasks:
               --secret-string "file://$kept" >/dev/null
           fi
         done
+        # The App's OAuth client id is public, and loopzero-cloud takes it as plain
+        # configuration (values/staging/loopzero-cloud.yaml.gotmpl). Nothing else is read
+        # from the file here; without the file the console's connect flow stays off.
+        LOOPZERO_GITHUB_APP_CLIENT_ID=""
+        if [ -f /etc/loopzero-staging/github-app.json ]; then
+          LOOPZERO_GITHUB_APP_CLIENT_ID="$(jq -r '."client-id" // ""' /etc/loopzero-staging/github-app.json)"
+        fi
+        export LOOPZERO_GITHUB_APP_CLIENT_ID
         bash infra/helmfile/scripts/bootstrap-aws-clusters.sh pre-core
         # The ServiceMonitor, PodMonitor and PrometheusRule CRDs every cluster's charts
         # create objects of, from the same manifests infra:install:monitoring-crds applies.

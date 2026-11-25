@@ -9,6 +9,52 @@ import (
 	"context"
 )
 
+const claimGitHubInstallation = `-- name: ClaimGitHubInstallation :one
+INSERT INTO github_installations (
+  id, account_login, account_type, tenant_id, verified_at, verified_by,
+  created_at, updated_at
+) VALUES (
+  $1, $2, $3, $4, NOW(), $5, NOW(), NOW()
+)
+ON CONFLICT (id) DO UPDATE SET
+  account_login = CASE WHEN EXCLUDED.account_login = '' THEN github_installations.account_login ELSE EXCLUDED.account_login END,
+  account_type = EXCLUDED.account_type,
+  tenant_id = EXCLUDED.tenant_id,
+  verified_at = NOW(),
+  verified_by = EXCLUDED.verified_by,
+  updated_at = NOW()
+WHERE github_installations.tenant_id IS NULL
+   OR github_installations.tenant_id = EXCLUDED.tenant_id
+RETURNING id
+`
+
+type ClaimGitHubInstallationParams struct {
+	ID           int64   `json:"id"`
+	AccountLogin string  `json:"account_login"`
+	AccountType  string  `json:"account_type"`
+	TenantID     *string `json:"tenant_id"`
+	VerifiedBy   *string `json:"verified_by"`
+}
+
+// tenantpredicate:exempt
+// Binds an installation to a tenant after GitHub confirmed that the user
+// (verified_by) can access it, and records when. One statement, so two
+// tenants claiming the same installation cannot both win: the row is written
+// when the installation is unbound or already belongs to this tenant, and
+// left alone, returning no row, when it belongs to another one.
+func (q *Queries) ClaimGitHubInstallation(ctx context.Context, db DBTX, arg ClaimGitHubInstallationParams) (int64, error) {
+	row := db.QueryRow(ctx, claimGitHubInstallation,
+		arg.ID,
+		arg.AccountLogin,
+		arg.AccountType,
+		arg.TenantID,
+		arg.VerifiedBy,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 const deleteGitHubInstallation = `-- name: DeleteGitHubInstallation :exec
 DELETE FROM github_installations WHERE id = $1
 `
@@ -22,7 +68,8 @@ func (q *Queries) DeleteGitHubInstallation(ctx context.Context, db DBTX, id int6
 }
 
 const getGitHubInstallation = `-- name: GetGitHubInstallation :one
-SELECT id, account_login, account_type, tenant_id, created_at, updated_at
+SELECT id, account_login, account_type, tenant_id, created_at, updated_at,
+       verified_at, verified_by
 FROM github_installations
 WHERE id = $1
 `
@@ -41,6 +88,8 @@ func (q *Queries) GetGitHubInstallation(ctx context.Context, db DBTX, id int64) 
 		&i.TenantID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.VerifiedAt,
+		&i.VerifiedBy,
 	)
 	return i, err
 }
@@ -160,6 +209,46 @@ func (q *Queries) LinkProjectRepository(ctx context.Context, db DBTX, arg LinkPr
 	return err
 }
 
+const listVerifiedGitHubInstallationsByTenant = `-- name: ListVerifiedGitHubInstallationsByTenant :many
+SELECT id, account_login, account_type, tenant_id, created_at, updated_at,
+       verified_at, verified_by
+FROM github_installations
+WHERE tenant_id = $1
+  AND verified_at IS NOT NULL
+ORDER BY id
+`
+
+// The installations a tenant may use: bound to it, with the binding confirmed
+// on GitHub.
+func (q *Queries) ListVerifiedGitHubInstallationsByTenant(ctx context.Context, db DBTX, tenantID *string) ([]GithubInstallation, error) {
+	rows, err := db.Query(ctx, listVerifiedGitHubInstallationsByTenant, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GithubInstallation
+	for rows.Next() {
+		var i GithubInstallation
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountLogin,
+			&i.AccountType,
+			&i.TenantID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.VerifiedAt,
+			&i.VerifiedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const unlinkProjectRepository = `-- name: UnlinkProjectRepository :execrows
 DELETE FROM project_repositories
 WHERE tenant_id = $1 AND project_name = $2
@@ -191,7 +280,7 @@ INSERT INTO github_installations (
 )
 ON CONFLICT (id) DO UPDATE SET
   account_login = CASE WHEN EXCLUDED.account_login = '' THEN github_installations.account_login ELSE EXCLUDED.account_login END,
-  tenant_id = COALESCE(EXCLUDED.tenant_id, github_installations.tenant_id),
+  tenant_id = COALESCE(github_installations.tenant_id, EXCLUDED.tenant_id),
   updated_at = NOW()
 `
 
@@ -231,8 +320,10 @@ type UpsertGitHubInstallationParams struct {
 // tenantpredicate:exempt
 // Idempotent upsert: ON CONFLICT (id) DO UPDATE preserves the
 // existing account_login when the incoming value is empty (webhook
-// sometimes lacks the full payload). tenant_id is COALESCED so a
-// prior tenant binding survives a webhook with NULL tenant.
+// sometimes lacks the full payload). An existing tenant binding always
+// survives: this statement fills tenant_id only on a row that has none, and
+// never sets verified_at. Binding an installation to a tenant is
+// ClaimGitHubInstallation's job.
 func (q *Queries) UpsertGitHubInstallation(ctx context.Context, db DBTX, arg UpsertGitHubInstallationParams) error {
 	_, err := db.Exec(ctx, upsertGitHubInstallation,
 		arg.ID,

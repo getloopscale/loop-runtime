@@ -74,6 +74,34 @@ type DomainProvisioner struct {
 	leanResources  bool   // Config.LeanResources (T-08)
 	interval       time.Duration
 	cfZone         CFZoneStatusChecker // nil = v1 only, non-nil = v2 CF Zone polling
+	savedScaling   SavedScaling        // nil = render the build's scaling
+}
+
+// SavedScaling overlays the saved scaling configuration of an environment on
+// the apps a build declared (scaling.StoredScaling).
+type SavedScaling interface {
+	Apply(ctx context.Context, tenantID, project, env string, apps []db.BuildAppSpec) ([]db.BuildAppSpec, error)
+}
+
+// WithSavedScaling makes every render carry the saved scaling configuration.
+// The provisioner renders the running release again to add or remove a host;
+// with the build's apps alone it would write the build's replica count to the
+// GitOps repository and undo a scale made since the deploy.
+func (p *DomainProvisioner) WithSavedScaling(s SavedScaling) *DomainProvisioner {
+	p.savedScaling = s
+	return p
+}
+
+// withSavedScaling returns apps with the saved scaling configuration applied.
+func (p *DomainProvisioner) withSavedScaling(ctx context.Context, d ports.CustomDomain, apps []db.BuildAppSpec) ([]db.BuildAppSpec, error) {
+	if p.savedScaling == nil {
+		return apps, nil
+	}
+	scaled, err := p.savedScaling.Apply(ctx, d.TenantID, d.ProjectName, d.Environment, apps)
+	if err != nil {
+		return nil, fmt.Errorf("saved scaling lookup failed: %w", err)
+	}
+	return scaled, nil
 }
 
 // DomainProvisionerConfig holds configuration for the domain provisioner.
@@ -334,6 +362,9 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 		if err != nil {
 			return fmt.Errorf("build apps lookup failed: %w", err)
 		}
+		if apps, err = p.withSavedScaling(ctx, d, apps); err != nil {
+			return err
+		}
 
 		// CHG-2026-04-29-DOGFOOD iter 8 — the manifest builder now requires a
 		// per-app digest (the supply-chain VAP rejects tag refs). In the domain
@@ -487,6 +518,9 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDoma
 		apps, err := p.buildStore.GetBuildApps(ctx, release.BuildID)
 		if err != nil {
 			return fmt.Errorf("build apps lookup failed: %w", err)
+		}
+		if apps, err = p.withSavedScaling(ctx, d, apps); err != nil {
+			return err
 		}
 
 		// CHG-2026-04-29-DOGFOOD iter 8 — the manifest builder now requires a

@@ -38,14 +38,15 @@ func routerAs(t *testing.T, role string) http.Handler {
 // one place (auth.RequireRole at registration) instead of an inline check per
 // handler with its own error shape.
 var roleGatedRoutes = map[string]string{
-	"POST /api/v1/projects/{name}/connect":    "admin",
-	"DELETE /api/v1/projects/{name}/connect":  "admin",
-	"POST /api/v1/domains":                    "admin",
-	"DELETE /api/v1/domains/{domain}":         "admin",
-	"GET /api/v1/audit":                       "admin",
-	"POST /api/v1/teams/members":              "admin",
-	"DELETE /api/v1/teams/members/{username}": "admin",
-	"PATCH /api/v1/teams/members/{username}":  "owner",
+	"POST /api/v1/projects/{name}/connect":                 "admin",
+	"DELETE /api/v1/projects/{name}/connect":               "admin",
+	"POST /api/v1/integrations/github/installations/claim": "admin",
+	"POST /api/v1/domains":                                 "admin",
+	"DELETE /api/v1/domains/{domain}":                      "admin",
+	"GET /api/v1/audit":                                    "admin",
+	"POST /api/v1/teams/members":                           "admin",
+	"DELETE /api/v1/teams/members/{username}":              "admin",
+	"PATCH /api/v1/teams/members/{username}":               "owner",
 }
 
 func TestRoleGates_RefuseARoleBelowTheMinimum(t *testing.T) {

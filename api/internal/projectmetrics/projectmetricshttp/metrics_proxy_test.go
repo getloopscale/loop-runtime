@@ -166,7 +166,7 @@ func TestMetricsProxy_Get(t *testing.T) {
 	t.Run("empty histogram returns 200 with collecting status", func(t *testing.T) {
 		// Arrange: project < 24h old simulated by Prometheus returning empty
 		// result. Handler must return 200 OK with status=collecting + hint —
-		// UI consumer renders "Coletando dados..." NOT empty chart.
+		// The console renders the hint in place of an empty chart.
 		projects := &fakeProjectStore{
 			project: &ports.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
 		}
@@ -189,8 +189,8 @@ func TestMetricsProxy_Get(t *testing.T) {
 		if resp["status"] != "collecting" {
 			t.Errorf("expected status=collecting, got %q", resp["status"])
 		}
-		if resp["collecting_hint"] != "Coletando dados..." {
-			t.Errorf("expected collecting_hint='Coletando dados...', got %q", resp["collecting_hint"])
+		if resp["collecting_hint"] != "Collecting data..." {
+			t.Errorf("collecting_hint = %q, want the English \"Collecting data...\"", resp["collecting_hint"])
 		}
 		// Data must be empty array (not null)
 		if data, ok := resp["data"].([]interface{}); !ok || len(data) != 0 {

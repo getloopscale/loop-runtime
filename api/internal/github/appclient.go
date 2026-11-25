@@ -49,6 +49,9 @@ type cachedToken struct {
 	ExpiresAt time.Time
 }
 
+// AppID is the id of the GitHub App this client authenticates as.
+func (c *AppClient) AppID() int64 { return c.appID }
+
 // NewAppClient creates a GitHub App client from App ID and PEM-encoded private key.
 // Returns nil if credentials are missing (acceptable in local dev).
 // apiBaseURL is the GitHub REST root (config.GitHubAPIBaseURL); a GitHub

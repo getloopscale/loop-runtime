@@ -305,3 +305,37 @@ func TestScalerFailsWhenTheSyncIsRefused(t *testing.T) {
 		t.Fatalf("Deliver = %v, %v; want false and the sync error: ArgoCD does not sync on its own", delivered, err)
 	}
 }
+
+// A rollback pushes the manifests of an older release from the GitOps history,
+// with the replica count of its day. DeliverSaved puts the saved config back,
+// and leaves a rollback of an environment that was never scaled as it is.
+func TestScalerDeliverSavedDeliversOnlyWhenAConfigIsSaved(t *testing.T) {
+	t.Run("a saved config is delivered", func(t *testing.T) {
+		scaler, gitops, sync := runningShop(&store.ScalingConfig{MinReplicas: 3, MaxReplicas: 3})
+
+		delivered, err := scaler.DeliverSaved(context.Background(), "tn-1", "shop", "production")
+
+		if err != nil || !delivered {
+			t.Fatalf("DeliverSaved = %v, %v; want true, nil", delivered, err)
+		}
+		if len(gitops.pushes) != 1 || len(sync.apps) != 1 {
+			t.Fatalf("pushes = %d, syncs = %d; want 1 and 1", len(gitops.pushes), len(sync.apps))
+		}
+		if got := rolloutIn(t, gitops.pushes[0].Manifests, "shop-api").Spec.Replicas; got != 3 {
+			t.Errorf("Rollout shop-api replicas = %d, want the saved 3", got)
+		}
+	})
+
+	t.Run("without a saved config nothing is pushed", func(t *testing.T) {
+		scaler, gitops, sync := runningShop(nil)
+
+		delivered, err := scaler.DeliverSaved(context.Background(), "tn-1", "shop", "production")
+
+		if err != nil || delivered {
+			t.Fatalf("DeliverSaved = %v, %v; want false, nil", delivered, err)
+		}
+		if len(gitops.pushes) != 0 || len(sync.apps) != 0 {
+			t.Errorf("pushes = %d, syncs = %d; want none: the rolled back manifests already hold", len(gitops.pushes), len(sync.apps))
+		}
+	})
+}
