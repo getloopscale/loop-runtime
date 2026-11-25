@@ -157,7 +157,7 @@ func buildRollout(ri renderScope, app AppManifestInput, port int) k8sRollout {
 			RevisionHistoryLimit: 5,
 			Selector:             k8sLabelSelector{MatchLabels: selectorLabels},
 			Template: k8sPodTemplateSpec{
-				Metadata: k8sPodMeta{Labels: labels},
+				Metadata: podTemplateMeta(ri, labels),
 				Spec:     podSpec,
 			},
 			Strategy: k8sRolloutStrategy{Canary: canary},

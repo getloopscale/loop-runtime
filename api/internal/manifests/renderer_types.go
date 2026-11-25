@@ -52,7 +52,8 @@ type k8sPodTemplateSpec struct {
 }
 
 type k8sPodMeta struct {
-	Labels map[string]string `json:"labels"`
+	Labels      map[string]string `json:"labels"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 type k8sPodSpec struct {
