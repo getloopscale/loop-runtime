@@ -55,6 +55,10 @@ export LOOPZERO_DOGFOOD_JWT_PATH="$STATE_DIR/validate/jwt"
 #   j14 audit log: the engine's audit entries
 #   j15 profile: Kratos whoami answers
 #   j18 status: the deep health, and the engine health through the proxy
+#   app-lifecycle: deploys a real app (fixtures/env-probe) to the project staging-validate
+#     of the validation tenant, then checks two secrets after a redeploy of the same
+#     image, a scale against the Rollout on its cell, the runtime log stream and the
+#     ready-replicas metric. It needs kubectl and the cell contexts (run_suite).
 # Left out, because staging does not run what they need:
 #   j06 j08 j09 j17 j19 j20 j21 j23 j25: read the canonical `sample` project, which the
 #     dev seed connects to a fixture GitHub repository; staging has no GitHub App, no
@@ -63,7 +67,10 @@ export LOOPZERO_DOGFOOD_JWT_PATH="$STATE_DIR/validate/jwt"
 #   j26 storage: loopzero-cloud runs with storage disabled (no /v1/storage)
 #   dp-memory dp-rag dp-lens: the data-plane products are not deployed on staging
 # A scenario that is still a sketch calls Skip; Ginkgo reports it as skipped, not passed.
-JOURNEYS="${VALIDATE_JOURNEYS:-j01 || j02 || j04 || j05 || j07 || j10 || j11 || j14 || j15 || j18 || j22}"
+JOURNEYS="${VALIDATE_JOURNEYS:-j01 || j02 || j04 || j05 || j07 || j10 || j11 || j14 || j15 || j18 || j22 || app-lifecycle}"
+# The kubectl contexts of the cells: the app lifecycle journey reads the app's Rollout
+# from the one that runs it.
+CELL_CONTEXTS="${VALIDATE_CELL_CONTEXTS:-cell-0 cell-1}"
 
 sha="${1:-}"
 [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "usage: $0 <sha of the deployed commit>" >&2; exit 2; }
@@ -146,11 +153,14 @@ seed_token() {
 }
 
 # run_suite: the journeys of JOURNEYS, with -v so a passing run logs its summary too.
+# The app lifecycle journey bounds itself to 25 minutes (journeyBudget in its spec),
+# inside the 30 minutes go test gives the suite.
 # -ginkgo.fail-on-empty fails a filter that selects
 # no spec, so a renamed label cannot turn the run into a green one with nothing run.
 run_suite() {
+  kube_env
   cd infra/tests || return 1
-  GOWORK=off go test -v -tags=live -count=1 -timeout 30m ./livetest/dogfood/ -run TestDogfoodLive \
+  LOOPZERO_DOGFOOD_CELL_CONTEXTS="$CELL_CONTEXTS" GOWORK=off go test -v -tags=live -count=1 -timeout 30m ./livetest/dogfood/ -run TestDogfoodLive \
     -args -ginkgo.label-filter="$JOURNEYS" -ginkgo.fail-on-empty -ginkgo.v -ginkgo.no-color
 }
 

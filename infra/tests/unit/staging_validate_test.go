@@ -224,3 +224,93 @@ func TestTheValidateSuiteLogsItsSummaryWhenItPasses(t *testing.T) {
 		t.Errorf("run_suite runs go test without -v:\n%s", body)
 	}
 }
+
+// validateScript is infra/staging/validate.sh, and runSuiteBody its run_suite function.
+func validateScript(t *testing.T) (script, runSuiteBody string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "infra/staging/validate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script = string(data)
+	start := strings.Index(script, "run_suite() {")
+	if start < 0 {
+		t.Fatal("no run_suite in infra/staging/validate.sh")
+	}
+	end := strings.Index(script[start:], "\n}")
+	if end < 0 {
+		t.Fatal("run_suite in infra/staging/validate.sh has no end")
+	}
+	return script, script[start : start+end]
+}
+
+// The journeys used to read lists and health only: none deployed an app, so staging
+// went green while secrets, scaling, runtime logs and metrics were broken (#86). The
+// app lifecycle journey deploys one, and it runs only if JOURNEYS selects its label and
+// a spec carries that label.
+func TestStagingValidateSelectsTheAppLifecycleJourney(t *testing.T) {
+	script, _ := validateScript(t)
+	journeys := regexp.MustCompile(`(?m)^JOURNEYS="\$\{VALIDATE_JOURNEYS:-([^}]*)\}"`).FindStringSubmatch(script)
+	if journeys == nil {
+		t.Fatal("infra/staging/validate.sh declares no default JOURNEYS")
+	}
+	selected := false
+	for _, label := range strings.Split(journeys[1], "||") {
+		if strings.TrimSpace(label) == "app-lifecycle" {
+			selected = true
+		}
+	}
+	if !selected {
+		t.Errorf("JOURNEYS is %q: it does not select app-lifecycle, so no journey deploys an app", journeys[1])
+	}
+
+	spec, err := os.ReadFile(filepath.Join(repoRoot(), "infra/tests/livetest/dogfood/journey_app_lifecycle_live_test.go"))
+	if err != nil {
+		t.Fatalf("no spec for the app lifecycle journey: %v", err)
+	}
+	if !regexp.MustCompile(`Label\([^)]*"app-lifecycle"`).Match(spec) {
+		t.Error("journey_app_lifecycle_live_test.go carries no app-lifecycle label: the filter would select nothing of it")
+	}
+	if !strings.HasPrefix(string(spec), "// SPDX") || !strings.Contains(string(spec), "//go:build live") {
+		t.Error("journey_app_lifecycle_live_test.go is not gated by the live build tag")
+	}
+	if regexp.MustCompile(`\bSkip\(`).Match(spec) {
+		t.Error("the app lifecycle journey calls Skip: a step that cannot run must fail, not pass as skipped")
+	}
+}
+
+// The journey reads the app's Rollout from the cell that runs it, so the suite needs
+// kubectl's environment and the names of the cell contexts.
+func TestStagingValidateGivesTheSuiteTheCells(t *testing.T) {
+	_, body := validateScript(t)
+	if !regexp.MustCompile(`(?m)^\s*kube_env\b`).MatchString(body) {
+		t.Errorf("run_suite does not call kube_env, so the suite's kubectl cannot reach the cells:\n%s", body)
+	}
+	if !regexp.MustCompile(`LOOPZERO_DOGFOOD_CELL_CONTEXTS=`).MatchString(body) {
+		t.Errorf("run_suite does not name the cell contexts in LOOPZERO_DOGFOOD_CELL_CONTEXTS:\n%s", body)
+	}
+}
+
+// A build and two rollouts through canary steps take minutes. The suite's go test
+// timeout has to hold the journey, and the deploy unit has to hold the suite.
+func TestStagingValidateLeavesTimeForTheAppLifecycleJourney(t *testing.T) {
+	_, body := validateScript(t)
+	timeout := regexp.MustCompile(`-timeout (\d+)m`).FindStringSubmatch(body)
+	if timeout == nil {
+		t.Fatalf("run_suite sets no go test -timeout:\n%s", body)
+	}
+	spec, err := os.ReadFile(filepath.Join(repoRoot(), "infra/tests/livetest/dogfood/journey_app_lifecycle_live_test.go"))
+	if err != nil {
+		t.Fatalf("no spec for the app lifecycle journey: %v", err)
+	}
+	budget := regexp.MustCompile(`journeyBudget\s*=\s*(\d+) \* time\.Minute`).FindSubmatch(spec)
+	if budget == nil {
+		t.Fatal("journey_app_lifecycle_live_test.go declares no journeyBudget in minutes")
+	}
+	var suiteMinutes, journeyMinutes int
+	fmt.Sscanf(timeout[1], "%d", &suiteMinutes)
+	fmt.Sscanf(string(budget[1]), "%d", &journeyMinutes)
+	if journeyMinutes+3 > suiteMinutes {
+		t.Errorf("the journey may take %d minutes and go test stops the suite at %d: it would be killed without saying which step stopped", journeyMinutes, suiteMinutes)
+	}
+}

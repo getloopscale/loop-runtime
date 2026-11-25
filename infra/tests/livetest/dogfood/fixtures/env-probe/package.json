@@ -1,0 +1,9 @@
+{
+  "name": "env-probe",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fixture of the staging validate: says whether an environment variable is set and logs each request.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

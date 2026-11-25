@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "project": "staging-validate",
+  "services": [
+    {
+      "name": "app",
+      "runtime": "node",
+      "type": "server",
+      "port": 3000,
+      "proxy": "/api",
+      "dev": "node server.js",
+      "start": "node server.js",
+      "healthcheck": "/health",
+      "cors": false,
+      "passSetCookie": false
+    }
+  ]
+}
