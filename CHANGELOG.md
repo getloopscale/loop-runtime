@@ -405,6 +405,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A build of an app with a saved autoscaling range is accepted. The scaling resolver produced a spec with both a replica count and a range, and the scaling gate refused every such build with `SCALING_AMBIGUOUS`, redeploys included (#142).
 - Autoscaling scales again on staging: the environment installs the metrics server, which EKS does not ship, so an HPA reads CPU and memory where it used to report `cpu: <unknown>` and stay at its minimum (#138).
 - The memory target of `POST /api/v1/projects/{name}/scale` reaches the cluster. It is saved in `app_scaling_config.target_memory_pct` and rendered as a second resource metric of the HPA, or a second trigger of the KEDA ScaledObject; it used to be dropped before the database (#139).
 - The deploy timeline ends the Deploy phase as failed, with the reason, when the sync of the release fails. The phase stayed in progress next to a release in `SYNC_FAILED` (#128).

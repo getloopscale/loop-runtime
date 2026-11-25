@@ -117,6 +117,9 @@ func TestResolve_DBRowOverridesYAML_HPA(t *testing.T) {
 	if out[0].Autoscaling == nil {
 		t.Fatalf("expected Autoscaling != nil for HPA, got nil")
 	}
+	if out[0].Replicas != 0 {
+		t.Errorf("expected Replicas=0 next to a range (the yaml had 1), got %d", out[0].Replicas)
+	}
 	if out[0].Autoscaling.MinReplicas != 2 {
 		t.Errorf("expected Min=2, got %d", out[0].Autoscaling.MinReplicas)
 	}
