@@ -17,7 +17,7 @@ import (
 func TestExternalSecretDecodesTheBrokersBase64Answer(t *testing.T) {
 	ref := ports.SecretRef{TenantID: "tn-a", Project: "shop", Environment: "production", App: "api", Name: "DB_URL"}
 
-	es := externalSecretObject(ref, "loopzero-tn-a-shop-production")
+	es := externalSecretObject(ref, "loopzero-tn-a-shop-production", []string{ref.Name})
 
 	data, _, _ := unstructured.NestedSlice(es.Object, "spec", "data")
 	if len(data) != 1 {
