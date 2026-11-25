@@ -411,6 +411,14 @@ func (e *Engine) Scale(ctx context.Context, project, environment, app string, re
 	return e.json(ctx, http.MethodPost, path, idempotencyKey(), body, nil)
 }
 
+// Autoscale saves an autoscaling range for an app, with CPU and memory
+// utilization targets in percent.
+func (e *Engine) Autoscale(ctx context.Context, project, environment, app string, minReplicas, maxReplicas, cpu, memory int) error {
+	path := "/api/v1/projects/" + url.PathEscape(project) + "/scale"
+	body := map[string]any{"environment": environment, "app": app, "min": minReplicas, "max": maxReplicas, "cpu": cpu, "memory": memory}
+	return e.json(ctx, http.MethodPost, path, idempotencyKey(), body, nil)
+}
+
 // MetricSeries is the answer of the metrics endpoint for one signal.
 type MetricSeries struct {
 	Status string `json:"status"`
@@ -556,6 +564,48 @@ func RolloutReplicas(ctx context.Context, kubectl Kubectl, cells []string, names
 		return replicas, candidate, nil
 	}
 	return 0, "", fmt.Errorf("no cell has the Rollout %s/%s: %s", namespace, name, strings.Join(failures, "; "))
+}
+
+// HPAState is what an HPA says about the metrics it scales on.
+type HPAState struct {
+	// Metrics are the resource metrics of the spec, such as cpu and memory.
+	Metrics []string
+	// ScalingActive is the HPA's own condition: true once it computes a
+	// replica count from its metrics.
+	ScalingActive bool
+	// Reason is the reason of that condition, such as ValidMetricFound or
+	// FailedGetResourceMetric.
+	Reason string
+	Cell   string
+}
+
+// HPAStatus reads an HPA from the first cell that has it.
+func HPAStatus(ctx context.Context, kubectl Kubectl, cells []string, namespace, name string) (HPAState, error) {
+	if len(cells) == 0 {
+		return HPAState{}, fmt.Errorf("no cell context to read the HPA from: set %s to the kubectl contexts of the cells", CellContextsEnv)
+	}
+	const condition = `{.status.conditions[?(@.type=="ScalingActive")]`
+	jsonpath := "jsonpath={.spec.metrics[*].resource.name}|" + condition + ".status}|" + condition + ".reason}"
+	var failures []string
+	for _, candidate := range cells {
+		out, err := kubectl(ctx, "--context", candidate, "-n", namespace, "get", "horizontalpodautoscalers.autoscaling", name, "-o", jsonpath)
+		if err != nil {
+			failures = append(failures, candidate+": "+err.Error())
+			continue
+		}
+		fields := strings.Split(strings.TrimSpace(out), "|")
+		if len(fields) != 3 {
+			failures = append(failures, fmt.Sprintf("%s: unexpected answer %q", candidate, out))
+			continue
+		}
+		return HPAState{
+			Metrics:       strings.Fields(fields[0]),
+			ScalingActive: fields[1] == "True",
+			Reason:        fields[2],
+			Cell:          candidate,
+		}, nil
+	}
+	return HPAState{}, fmt.Errorf("no cell has the HPA %s/%s: %s", namespace, name, strings.Join(failures, "; "))
 }
 
 func idempotencyKey() map[string]string {
