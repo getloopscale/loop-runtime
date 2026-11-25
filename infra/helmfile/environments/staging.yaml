@@ -77,8 +77,9 @@ aws:
   # "price-pro", "price-team"}) for loopzero-cloud.
   resendSecret: loopzero/staging/resend
   stripeSecret: loopzero/staging/stripe
-  # The staging GitHub App ({"app-id", "private-key", "webhook-secret"}), the one the
-  # console installs on a repository and whose push deliveries deploy it.
+  # The staging GitHub App ({"app-id", "private-key", "webhook-secret", "client-id",
+  # "client-secret"}), the one the console installs on a repository and whose push
+  # deliveries deploy it.
   githubAppSecret: loopzero/staging/github-app
 
 # Platform images. The emulator's ECR answers the registry API for reads but refuses

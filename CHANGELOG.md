@@ -104,6 +104,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The API reads the GitHub App's OAuth client from `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`, and the GitHub web root from `GITHUB_WEB_BASE_URL` (default `https://github.com`). Without the client id and secret the claim endpoint answers 503 `GITHUB_OAUTH_NOT_CONFIGURED` and no repository can be connected. On the AWS profile the `loopzero-api-github` ExternalSecret maps them from the `client-id` and `client-secret` keys of `aws.githubAppSecret`, so that secret needs both keys before the upgrade
 - A deploy of a commit that already has a signed image reuses that image instead of building it again (#71)
 - On dev-public, `/v1/memory/*`, `/v1/rag/*` and `/v1/lens/*` at app-dev.loopzero.example are authorised by the core cluster's loopzero-cloud — the same accounts the dashboard and `loopzero login` use — and served by the core cluster's data plane, instead of passing through an unversioned compose stack with its own user database; the edge also refuses `/internal/*` outright (#470)
 

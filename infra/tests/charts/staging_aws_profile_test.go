@@ -570,6 +570,10 @@ func TestStagingGitHubAppReachesTheAPIFromItsOwnSecret(t *testing.T) {
 		"GITHUB_APP_ID":          "loopzero/staging/github-app#app-id",
 		"GITHUB_APP_PRIVATE_KEY": "loopzero/staging/github-app#private-key",
 		"GITHUB_WEBHOOK_SECRET":  "loopzero/staging/github-app#webhook-secret",
+		// The App's OAuth client: the API asks GitHub which installations a
+		// user can access before it binds one to a tenant.
+		"GITHUB_APP_CLIENT_ID":     "loopzero/staging/github-app#client-id",
+		"GITHUB_APP_CLIENT_SECRET": "loopzero/staging/github-app#client-secret",
 	} {
 		if refs[key] != want {
 			t.Errorf("loopzero-api-github maps %s from %q, want %s", key, refs[key], want)
