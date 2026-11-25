@@ -300,6 +300,7 @@ func TestScale_RealPersistence_Applied(t *testing.T) {
 		return true, nil
 	}
 	h := NewScaleHandler(projects, apply, true)
+	h.SetDeliverer(&fakeScaleDeliverer{delivered: true})
 
 	body := `{"environment":"production","app":"api","replicas":3}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/scale", bytes.NewBufferString(body))
@@ -334,6 +335,7 @@ func TestScale_RealPersistence_NoChange(t *testing.T) {
 		return false, nil
 	}
 	h := NewScaleHandler(projects, apply, true)
+	h.SetDeliverer(&fakeScaleDeliverer{delivered: true})
 
 	body := `{"environment":"production","app":"api","replicas":3}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/scale", bytes.NewBufferString(body))

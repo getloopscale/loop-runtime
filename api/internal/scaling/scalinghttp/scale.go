@@ -29,6 +29,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/httpio"
 	"github.com/getloopscale/loopzero/api/internal/plantier"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/api/internal/scaling"
 
 	"github.com/go-chi/chi/v5"
 
@@ -98,6 +99,12 @@ type ScaleAppLookup interface {
 	DeployedAppNames(ctx context.Context, tenantID, projectName, env string) ([]string, error)
 }
 
+// ScaleDeliverer carries the stored scaling config of an environment to its
+// running workloads. It reports false when nothing runs there yet.
+type ScaleDeliverer interface {
+	Deliver(ctx context.Context, tenantID, projectName, env string) (delivered bool, err error)
+}
+
 // ScaleHandler provides the HTTP handler for scaling operations.
 type ScaleHandler struct {
 	projects        ScaleProjectStore
@@ -107,6 +114,7 @@ type ScaleHandler struct {
 	planTierStore   pkgdomain.PlanTierStore // J-20 T1.1 — resolves tenant's canonical plan
 	podCostPerHour  float64                 // J-20 T1.1 EC-2 — server-authoritative cost rate
 	replicasChecker ScaleReplicasChecker    // Red Team #101 — max-replica plan cap; nil disables
+	deliverer       ScaleDeliverer          // optional: nil stores the config for the next deploy
 	// Issue #137 — set by WaiveReplicaCapEnforcement so EnsureProductionWired
 	// can tell "deliberately without a cap" from "somebody dropped the wiring".
 	capEnforcementWaived bool
@@ -158,6 +166,12 @@ func (h *ScaleHandler) SetReplicasChecker(c ScaleReplicasChecker) {
 // workload ever reads it.
 func (h *ScaleHandler) SetAppLookup(l ScaleAppLookup) {
 	h.appLookup = l
+}
+
+// SetDeliverer wires what applies a stored config to the running workloads.
+// Without it the config is only stored and the next deploy reads it.
+func (h *ScaleHandler) SetDeliverer(d ScaleDeliverer) {
+	h.deliverer = d
 }
 
 // EnsureProductionWired panics if the handler was constructed without a
@@ -600,10 +614,20 @@ func buildAutoscaling(req *scaleRequest) *scaleAutoscaling {
 	return as
 }
 
-// applyAndLog invokes the apply closure (EC-5: wraps withEnvironmentLock
-// around the Upsert via pg_advisory_xact_lock per Concurrency Model),
-// maps errors to LoopZeroError, sets the final status, and writes the audit
-// slog entry for the metrics pipeline.
+// applyAndLog stores the config through the apply closure (EC-5: it wraps
+// withEnvironmentLock around the Upsert via pg_advisory_xact_lock per
+// Concurrency Model), delivers it to the running workloads, sets the final
+// status and writes the audit slog entry for the metrics pipeline.
+//
+// The status says what happened to the workloads, not to the row:
+//   - "applied": the config changed and was delivered to the running app;
+//   - "no_change": the stored config already matched, and it was delivered
+//     again, which repairs an earlier delivery that failed;
+//   - "saved": nothing runs in the environment yet (or this API has nothing to
+//     deliver with), so the next deploy is what reads the config.
+//
+// A delivery that fails is an error, never "applied": the config stays stored
+// and the same request can be sent again.
 func (h *ScaleHandler) applyAndLog(w http.ResponseWriter, r *http.Request, d *scaleDecision) {
 	changed, err := h.apply(r.Context(), d.cfg)
 	if err != nil {
@@ -615,9 +639,17 @@ func (h *ScaleHandler) applyAndLog(w http.ResponseWriter, r *http.Request, d *sc
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
 	}
-	if changed {
+	delivered, derr := h.deliver(r.Context(), d)
+	if derr != nil {
+		httpio.WriteLoopZeroError(w, derr)
+		return
+	}
+	switch {
+	case !delivered:
+		d.resp.Status = "saved"
+	case changed:
 		d.resp.Status = "applied"
-	} else {
+	default:
 		d.resp.Status = "no_change"
 	}
 	slog.Info("scale.applied",
@@ -630,8 +662,31 @@ func (h *ScaleHandler) applyAndLog(w http.ResponseWriter, r *http.Request, d *sc
 		"scale_to_zero", d.scaleToZero,
 		"monthly_cost_usd", d.resp.MonthlyCostUSD,
 		"changed", changed,
+		"delivered", delivered,
 	)
 	httpio.WriteJSON(w, http.StatusOK, d.resp)
+}
+
+// deliver carries the stored config to the running workloads and reports
+// whether there were any. It returns the error to answer with when the config
+// was stored and could not be delivered.
+func (h *ScaleHandler) deliver(ctx context.Context, d *scaleDecision) (bool, *loopzeroerrors.LoopZeroError) {
+	if h.deliverer == nil {
+		return false, nil
+	}
+	delivered, err := h.deliverer.Deliver(ctx, d.cfg.TenantID, d.cfg.ProjectID, d.cfg.Environment)
+	if err == nil {
+		return delivered, nil
+	}
+	slog.Error("scale: config stored but not delivered to the running app",
+		"tenant_id", d.cfg.TenantID, "project", d.cfg.ProjectID, "environment", d.cfg.Environment,
+		"app", d.cfg.AppName, "error", err)
+	if errors.Is(err, scaling.ErrDeployInFlight) {
+		return false, loopzeroerrors.NewLoopZeroError(loopzeroerrors.ErrDeployInProgress.Code,
+			"the scale was saved, but a deploy of this environment is in progress, so it was not applied; send the request again when the deploy finishes")
+	}
+	return false, loopzeroerrors.NewLoopZeroError(loopzeroerrors.ErrPlatformDegraded.Code,
+		"the scale was saved but could not be applied to the running app; send the request again")
 }
 
 // valueOr returns *p, or fallback when p is nil.

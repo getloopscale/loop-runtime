@@ -349,6 +349,30 @@ func setupOrchestrator(
 	// Refuse a scale of an app the environment's active release does not declare:
 	// such a config scales nothing, yet the request answered 200.
 	scaleHandler.SetAppLookup(scaling.ReleaseAppLookup{Releases: stores.ReleaseStore})
+	// A stored config reaches the running Rollout through the GitOps repository
+	// and an ArgoCD sync, the path a deploy uses. Without this only the next
+	// deploy read it, and the endpoint answered "applied" for nothing (#113).
+	if workflows.GitOpsPusher != nil && workflows.SyncClient != nil {
+		scaleHandler.SetDeliverer(&scaling.ReleaseScaler{
+			Releases: stores.ReleaseStore,
+			Builds:   stores.BuildStore,
+			Configs:  scalingStore,
+			Domains:  stores.DomainStore,
+			Locker:   stores.Locker,
+			GitOps:   workflows.GitOpsPusher,
+			Sync:     workflows.SyncClient,
+			Render: scaling.RenderSettings{
+				RegistryURL:         cfg.RegistryURL,
+				BaseDomain:          cfg.BaseDomain,
+				ClusterIssuer:       cfg.ClusterIssuer,
+				PrometheusAddress:   cfg.PrometheusAddress,
+				ProgressiveDelivery: cfg.ProgressiveDelivery,
+				LeanResources:       cfg.LeanResources,
+			},
+		})
+	} else {
+		logger.Warn("scale: no GitOps pusher or sync client in this boot; a scale is stored and applied by the next deploy")
+	}
 	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
 	// plan-cap checker the build path uses so the scale endpoint can
 	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
