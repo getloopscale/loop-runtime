@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `GET /api/v1/integrations/github/installations` lists the GitHub App installations bound to the caller's team, each with `id`, `account_login` and `account_type`
 - Staging encrypts tenant secrets with OpenBao transit, on a dedicated `secrets` EKS cluster unsealed by the `awskms` seal; `infra/staging/openbao.sh` installs it and wires loopzero-api after every rebuild (#103).
 - `vault-bootstrap-dev.sh` takes `AUTO_UNSEAL_MODE=awskms`, which initialises the vault with recovery keys and skips the Shamir unseal (#103).
 - `aws-secrets-manager` takes `githubAppSecret`, a Secrets Manager secret with the GitHub App's `app-id`, `private-key` and `webhook-secret`, and writes it into `loopzero-system` as `loopzero-api-github`. Staging reads `loopzero/staging/github-app`, seeded from the host, and sends the console's install button to the `loopscale-staging` App (#68)
@@ -1038,6 +1039,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- A GitHub App installation is bound to a team only after GitHub confirms that the signed-in user can access it. `POST /api/v1/integrations/github/installations/claim` takes the code of the App's user authorization, asks GitHub which installations of the App that user can access, and binds those to the caller's team; it needs the admin role and writes an audit row. `GET /api/v1/integrations/github/installations/{id}/repositories` and `POST /api/v1/projects/{name}/connect` answer 403 for an installation that was not bound this way. A team that connected a repository before this release authorizes on GitHub once before it lists or connects another one; repositories already connected keep deploying on push
 - All nine published images pass the Trivy gate again: they are built on Go 1.26.11 with a refreshed Alpine 3.23 base (`musl`, `zlib`), and carry `golang.org/x/net` 0.62.0, `github.com/go-jose/go-jose/v4` 4.1.6 and `github.com/klauspost/compress` 1.18.7. The SBOM scanner moves to Syft 1.57.2, which brings `containerd` 2.4.2.
 - The Pulumi programs resolve `brace-expansion` 5.0.12 and `undici` 6.29.0, past two stack-exhaustion flaws in the first (CVE-2026-102276, CVE-2026-102278) and a denial of service through an unrequested WebSocket subprotocol in the second (CVE-2026-19534), published after the lockfiles were last resolved (#467).
 - Images published to Amazon ECR — the registry production pulls from — are signed and verified there too. Only the GitHub Container Registry copy was signed, so nothing could prove where an ECR image came from. The signature is an OCI referrer, which the repositories' immutable tags and lifecycle rules leave alone (#461).

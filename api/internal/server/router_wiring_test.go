@@ -339,6 +339,9 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 
 		// Plan J-09 T2.1: dashboard repo picker source.
 		{"GET", "/api/v1/integrations/github/installations/12345/repositories", true, false},
+		// Installations verified for the tenant, and the claim that verifies them.
+		{"GET", "/api/v1/integrations/github/installations", true, false},
+		{"POST", "/api/v1/integrations/github/installations/claim", true, false},
 
 		// Audit
 		{"GET", "/api/v1/audit", true, false},

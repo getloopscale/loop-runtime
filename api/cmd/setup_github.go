@@ -101,11 +101,18 @@ func setupGitHub(
 			release.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
 			logger.Info("github: commit status callbacks registered (global)")
 		}
+		// An installation is bound to a tenant by the claim endpoint, after
+		// GitHub confirms through the App's user authorization that the user
+		// can access it. Listing repositories and connecting one require that
+		// binding.
 		integrationsHandler = integrationshttp.NewIntegrationsGitHubHandler(
 			&integrationsadapter.InstallationRepoListerAdapter{Client: ghAppClient},
 			&integrationsadapter.InstallationLookupAdapter{Store: repoStore},
+		).WithInstallationClaims(
+			newUserInstallationSource(ghAppClient.AppID(), cfg, logger),
+			&integrationsadapter.InstallationClaimAdapter{Store: repoStore},
 		)
-		logger.Info("github: integrations handler registered", "endpoint", "/api/v1/integrations/github/installations/{id}/repositories")
+		logger.Info("github: integrations handler registered", "endpoint", "/api/v1/integrations/github/installations")
 	}
 
 	// Auto-deployer — handles push → download source → upload S3 → submit build.
@@ -210,6 +217,27 @@ func setupGitHub(
 		AppClient:           ghAppClient,
 		IntegrationsHandler: integrationsHandler,
 	}
+}
+
+// newUserInstallationSource builds the GitHub side of the installation claim
+// from the App's OAuth client credentials (GITHUB_APP_CLIENT_ID and
+// GITHUB_APP_CLIENT_SECRET, which arrive in the same Secret as the App's id
+// and private key). It returns nil when either is missing: the claim endpoint
+// then answers 503, and no installation can be bound until they are set.
+func newUserInstallationSource(appID int64, cfg config.Config, logger *slog.Logger) integrationshttp.UserInstallationSource {
+	client, err := github.NewUserAccessClient(github.UserAccessConfig{
+		AppID:        appID,
+		ClientID:     os.Getenv("GITHUB_APP_CLIENT_ID"),
+		ClientSecret: os.Getenv("GITHUB_APP_CLIENT_SECRET"),
+		WebBaseURL:   cfg.GitHubWebBaseURL,
+		APIBaseURL:   cfg.GitHubAPIBaseURL,
+	})
+	if err != nil {
+		logger.Warn("github: GITHUB_APP_CLIENT_ID or GITHUB_APP_CLIENT_SECRET not set; installations cannot be claimed and no repository can be connected",
+			"error", err)
+		return nil
+	}
+	return &integrationsadapter.UserInstallationSourceAdapter{Client: client}
 }
 
 // newRepositoryStore builds the store of GitHub installations and repository

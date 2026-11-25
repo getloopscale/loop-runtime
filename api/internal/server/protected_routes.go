@@ -440,8 +440,8 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 	r.With(gatedBy("admin", ch.limited(audited("domain.removed", "domain")))...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
 }
 
-// registerRepositoryRoutes: GitHub App connection (auto-deploy) and the
-// dashboard's repository picker (J-09 T2.1).
+// registerRepositoryRoutes: GitHub App connection (auto-deploy), the
+// installations a tenant has and the dashboard's repository picker (J-09 T2.1).
 func registerRepositoryRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Repositories, cfg.RepositoryHandler != nil,
 		"no GitHub dependencies — comes from `ghDeps` (setup_server.go), which needs GitHub App credentials and, before them, the database") {
@@ -452,6 +452,10 @@ func registerRepositoryRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.IntegrationsGitHub, cfg.IntegrationsGitHubHandler != nil,
 		"no GitHub dependencies — same `ghDeps` chain") {
 		r.Get("/api/v1/integrations/github/installations/{id}/repositories", cfg.IntegrationsGitHubHandler.ListRepositories)
+		r.Get("/api/v1/integrations/github/installations", cfg.IntegrationsGitHubHandler.ListInstallations)
+		// Binds installations to the caller's tenant after GitHub confirms the
+		// user's access: an admin action with an audit row, like connect.
+		r.With(gatedBy("admin", ch.limited(audited("github_installation.claimed", "github_installation")))...).Post("/api/v1/integrations/github/installations/claim", cfg.IntegrationsGitHubHandler.ClaimInstallations)
 	}
 }
 

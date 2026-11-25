@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,21 +28,24 @@ type fakeRepoStore struct {
 	repoByName   *ProjectRepository
 	linkErr      error
 	unlinkErr    error
-	saveInstErr  error
 	getByRepoErr error
 	getByProjErr error
 	// Plan J-09 T3.2 — capture autoDeploy passed by handler so tests can assert
 	// the request → store mapping (otherwise we couldn't tell true-by-default
 	// from true-by-handler-default).
 	lastLinkAutoDeploy *bool
-	// installationTenant is the tenant the installation is bound to ("" =
-	// unclaimed or unknown); saveInstCalls counts binding writes.
-	installationTenant string
-	saveInstCalls      int
+	// installationNotVerified makes the installation one the caller's tenant
+	// may not use; verifiedErr fails the check. checkedInstallation and
+	// checkedTenant record what the handler asked about.
+	installationNotVerified bool
+	verifiedErr             error
+	checkedInstallation     int64
+	checkedTenant           string
 }
 
-func (f *fakeRepoStore) InstallationTenant(_ context.Context, _ int64) (string, error) {
-	return f.installationTenant, nil
+func (f *fakeRepoStore) InstallationVerifiedFor(_ context.Context, installationID int64, tenantID string) (bool, error) {
+	f.checkedInstallation, f.checkedTenant = installationID, tenantID
+	return !f.installationNotVerified, f.verifiedErr
 }
 
 func (f *fakeRepoStore) LinkRepository(_ context.Context, _, _, _ string, _ int64, _ string, autoDeploy bool) error {
@@ -62,18 +66,14 @@ func (f *fakeRepoStore) GetByRepo(_ context.Context, _ string) (*ProjectReposito
 	return f.repo, f.getByRepoErr
 }
 
-func (f *fakeRepoStore) SaveInstallation(_ context.Context, _ int64, _, _ string, _ *string) error {
-	f.saveInstCalls++
-	return f.saveInstErr
-}
-
-// An installation already bound to another tenant must not be rebound by a
-// Connect: the upsert COALESCEs the caller's tenant over the existing one,
-// so without this check any owner could take over another team's GitHub
-// installation and its repositories.
-func TestRepositories_Connect_RefusesAnInstallationBoundToAnotherTenant(t *testing.T) {
-	store := &fakeRepoStore{installationTenant: "tn-someone-else"}
-	h := NewRepositoryHandler(store)
+// A repository is connected only through an installation that GitHub confirmed
+// a user of the caller's tenant can access. The installation id comes from the
+// request, so every other installation is refused with the answer the
+// repository picker gives, and nothing is linked.
+func TestRepositories_Connect_RefusesAnInstallationNotVerifiedForTheCaller(t *testing.T) {
+	store := &fakeRepoStore{installationNotVerified: true}
+	deployer := recordingDeployer{ctxErr: make(chan error, 1)}
+	h := NewRepositoryHandler(store).WithAutoDeployer(deployer, context.Background()).WithIntrospector(&fakeIntrospector{})
 
 	body, _ := json.Marshal(map[string]any{"repo": "acme/web", "installation_id": 42})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/shop/connect", bytes.NewReader(body))
@@ -85,8 +85,38 @@ func TestRepositories_Connect_RefusesAnInstallationBoundToAnotherTenant(t *testi
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
 	}
-	if store.saveInstCalls != 0 {
-		t.Fatalf("the installation binding was rewritten (%d writes)", store.saveInstCalls)
+	want := `{"code":"FORBIDDEN","message":"You do not have access to this installation."}`
+	if got := strings.TrimSpace(w.Body.String()); got != want {
+		t.Errorf("body = %s\n want = %s", got, want)
+	}
+	if store.checkedInstallation != 42 || store.checkedTenant != routestest.DefaultUserContext().TenantID {
+		t.Errorf("checked installation %d for tenant %q, want 42 for the caller's tenant", store.checkedInstallation, store.checkedTenant)
+	}
+	if store.lastLinkAutoDeploy != nil {
+		t.Error("the repository was linked through an installation the caller may not use")
+	}
+	select {
+	case <-deployer.ctxErr:
+		t.Error("a deploy was started through an installation the caller may not use")
+	default:
+	}
+}
+
+func TestRepositories_Connect_AFailedOwnershipCheckLinksNothing(t *testing.T) {
+	store := &fakeRepoStore{verifiedErr: errors.New("db down")}
+	h := NewRepositoryHandler(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/shop/connect", bytes.NewBufferString(`{"repo":"acme/web","installation_id":42}`))
+	req = routestest.WithChiParam(routestest.WithAuth(req, routestest.DefaultUserContext()), "name", "shop")
+	w := httptest.NewRecorder()
+
+	h.Connect(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d body=%s", w.Code, w.Body.String())
+	}
+	if store.lastLinkAutoDeploy != nil {
+		t.Error("the repository was linked although the ownership check failed")
 	}
 }
 

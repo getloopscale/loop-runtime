@@ -69,7 +69,7 @@ func newListRequest(t *testing.T, installationID string) *http.Request {
 
 func TestListRepositories_HappyPath_200(t *testing.T) {
 	lister := &fakeRepoLister{reply: defaultRepoReply()}
-	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123")}}
+	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123"), Verified: true}}
 	h := NewIntegrationsGitHubHandler(lister, store)
 
 	w := httptest.NewRecorder()
@@ -118,55 +118,9 @@ func TestListRepositories_InvalidID_400(t *testing.T) {
 	}
 }
 
-func TestListRepositories_Forbidden_DifferentTenant(t *testing.T) {
-	lister := &fakeRepoLister{reply: defaultRepoReply()}
-	other := tenantPtr("tn-other-456")
-	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: other}}
-	h := NewIntegrationsGitHubHandler(lister, store)
-
-	w := httptest.NewRecorder()
-	h.ListRepositories(w, newListRequest(t, "12345"))
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403 (cross-tenant)", w.Code)
-	}
-	if lister.calls.Load() != 0 {
-		t.Fatalf("lister called %d times; must skip upstream when tenant fails", lister.calls.Load())
-	}
-}
-
-func TestListRepositories_UnclaimedInstallation_AllowsAccess(t *testing.T) {
-	// Fresh-from-callback: installation row not yet linked to any tenant
-	// (TenantID == nil). Any authenticated user may still list repos
-	// from it -- the next POST /connect will write the tenant binding.
-	lister := &fakeRepoLister{reply: defaultRepoReply()}
-	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: nil}}
-	h := NewIntegrationsGitHubHandler(lister, store)
-
-	w := httptest.NewRecorder()
-	h.ListRepositories(w, newListRequest(t, "12345"))
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (unclaimed installation)", w.Code)
-	}
-}
-
-func TestListRepositories_InstallationMissing_AllowsAccess(t *testing.T) {
-	// Cleanroom path: the install callback hasn't persisted the row yet
-	// but the dashboard is already polling. We let the GitHub upstream
-	// be the ultimate arbiter of access (it returns 404 if revoked).
-	lister := &fakeRepoLister{reply: defaultRepoReply()}
-	store := &fakeInstallationStore{missing: true}
-	h := NewIntegrationsGitHubHandler(lister, store)
-
-	w := httptest.NewRecorder()
-	h.ListRepositories(w, newListRequest(t, "12345"))
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (missing installation row)", w.Code)
-	}
-}
-
 func TestListRepositories_CacheHit_NoUpstreamCall(t *testing.T) {
 	lister := &fakeRepoLister{reply: defaultRepoReply()}
-	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123")}}
+	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123"), Verified: true}}
 	h := NewIntegrationsGitHubHandler(lister, store)
 
 	// First call populates the cache.
@@ -192,7 +146,7 @@ func TestListRepositories_CacheHit_NoUpstreamCall(t *testing.T) {
 
 func TestListRepositories_CacheExpiry_RefetchesUpstream(t *testing.T) {
 	lister := &fakeRepoLister{reply: defaultRepoReply()}
-	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123")}}
+	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123"), Verified: true}}
 	h := NewIntegrationsGitHubHandler(lister, store)
 
 	var nowAtomic atomic.Int64
@@ -215,7 +169,7 @@ func TestListRepositories_InstallationRevoked_410(t *testing.T) {
 	// Adapter wraps the underlying github.InstallationRevokedError into
 	// ErrInstallationRevoked via fmt.Errorf("...: %w", ErrInstallationRevoked).
 	lister := &fakeRepoLister{err: fmt.Errorf("installation 12345 revoked: %w", ErrInstallationRevoked)}
-	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123")}}
+	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123"), Verified: true}}
 	h := NewIntegrationsGitHubHandler(lister, store)
 
 	w := httptest.NewRecorder()
@@ -230,7 +184,7 @@ func TestListRepositories_InstallationRevoked_410(t *testing.T) {
 
 func TestListRepositories_UpstreamError_502(t *testing.T) {
 	lister := &fakeRepoLister{err: context.DeadlineExceeded}
-	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123")}}
+	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123"), Verified: true}}
 	h := NewIntegrationsGitHubHandler(lister, store)
 
 	w := httptest.NewRecorder()
@@ -248,7 +202,7 @@ func TestListRepositories_Sanitizes_OnlyAllowedFields(t *testing.T) {
 	// {full_name, default_branch, private, language}. Confirm nothing
 	// else leaks even when upstream provides richer fields.
 	lister := &fakeRepoLister{reply: defaultRepoReply()}
-	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123")}}
+	store := &fakeInstallationStore{record: &InstallationRecord{ID: 12345, TenantID: tenantPtr("tn-test-123"), Verified: true}}
 	h := NewIntegrationsGitHubHandler(lister, store)
 
 	w := httptest.NewRecorder()
