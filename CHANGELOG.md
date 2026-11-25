@@ -398,6 +398,11 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `POST /projects/{name}/scale` answers 404 `APP_NOT_FOUND`, naming the apps the project has, for an app the active release of the environment does not declare. It used to answer 200 `changed: true` and write a scaling config no workload reads (#97)
+- `GET /environments` reports the commit the user deployed as `last_deploy_sha`, the active release's build commit, instead of the commit of the GitOps repository (#101)
+- A build step that fails before running prints its error message as written. The message sat in a double-quoted `echo`, so backticks and `$(...)` in it, including a `runtime` from `loopzero.yaml`, ran as shell commands (`/bin/sh: start: not found`) (#100)
+- The SBOM component count of a build is the length of the CycloneDX `components` array. It counted every `{` after the field, so nested hashes, licenses and properties inflated it (75947 for an image with 20398 components) (#99)
+- The SBOM download link of a build points into `STATIC_ASSETS_BUCKET`, where the build uploads the SBOM, instead of `SOURCE_BUCKET`, so the download no longer answers 404 (#98)
 - A failed push deploy marks its commit `failure` on GitHub. Build failures stopped calling the build-failed callback when they moved to one finalization path, so the commit stayed `pending` (#91)
 - The commit status of a push deploy links the app on `LOOPZERO_PUBLIC_DOMAIN`, where it answers, instead of `BASE_DOMAIN` (#92)
 - Connecting a repository refuses a `loopzero.yaml` app without `runtime: node|python` or without `start`, naming the app and the field. Such a repository used to connect, and then every push failed in the build (#93)

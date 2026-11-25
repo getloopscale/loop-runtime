@@ -160,8 +160,7 @@ func canonicalDockerfileStepOrFail(runtime string, apps []deploycontracts.AppSpe
 	c, err := canonicalDockerfileStep(runtime, apps, totalApps)
 	if err != nil {
 		msg := "loopzero: canonical Dockerfile generation failed: " + err.Error()
-		return buildContainer("generate-dockerfile", imageAlpine, forge.ResourcesTiny(),
-			fmt.Sprintf("echo %q >&2\nexit 1", msg))
+		return buildContainer("generate-dockerfile", imageAlpine, forge.ResourcesTiny(), failScript(msg))
 	}
 	return c
 }

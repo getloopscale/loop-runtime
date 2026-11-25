@@ -20,6 +20,7 @@ var apiStatusByCode = map[string]int{
 	"USER_NOT_FOUND":        http.StatusNotFound, // teams/teamshttp
 	"MEMBER_NOT_FOUND":      http.StatusNotFound, // teams/teamshttp
 	"TEAM_MEMBER_NOT_FOUND": http.StatusNotFound, // teams/teamshttp (remove)
+	"APP_NOT_FOUND":         http.StatusNotFound, // scaling/scalinghttp — app the project does not declare
 	"INVALID_ENVIRONMENT":   http.StatusBadRequest,
 	"INVALID_CALLBACK":      http.StatusBadRequest, // builds — build completion callback
 	"MULTIPART_FIELD_ORDER": http.StatusBadRequest, // source/sourcehttp — services_json must precede bundle

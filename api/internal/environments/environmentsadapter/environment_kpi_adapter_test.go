@@ -36,3 +36,33 @@ func TestEnvKPIsReportAnEmptyShaForAReleaseWithoutACommit(t *testing.T) {
 		t.Fatalf("LastDeploySha = %q, want empty for a NULL git_commit", got)
 	}
 }
+
+// releases.git_commit is the commit of the GitOps repository; the user deployed the
+// build's commit. The KPI showed the GitOps one.
+func TestEnvKPIsReportTheSourceCommitOfTheActiveRelease(t *testing.T) {
+	gitopsCommit := "e0f47de8f57e55ee7fbdbbc91b526834819ae55f"
+	sourceCommit := "15fec6419dfb54982308b095ca2239a693a00d39"
+	rows := []generated.ListLatestActiveReleasePerEnvRow{
+		{
+			Environment: "production", GitCommit: &gitopsCommit, SourceCommit: &sourceCommit,
+			CreatedAt: pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true},
+		},
+	}
+
+	if got := envKPIsFromRows(rows)["production"].LastDeploySha; got != sourceCommit {
+		t.Fatalf("LastDeploySha = %q, want the source commit %q", got, sourceCommit)
+	}
+}
+
+// A release whose build was pruned has no source commit left; the release's own
+// commit is still better than nothing.
+func TestEnvKPIsFallBackToTheReleaseCommitWithoutASourceCommit(t *testing.T) {
+	gitopsCommit := "e0f47de8f57e55ee7fbdbbc91b526834819ae55f"
+	rows := []generated.ListLatestActiveReleasePerEnvRow{
+		{Environment: "production", GitCommit: &gitopsCommit, CreatedAt: pgtype.Timestamptz{Time: time.Unix(0, 0), Valid: true}},
+	}
+
+	if got := envKPIsFromRows(rows)["production"].LastDeploySha; got != gitopsCommit {
+		t.Fatalf("LastDeploySha = %q, want the release commit %q", got, gitopsCommit)
+	}
+}

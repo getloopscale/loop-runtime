@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/getloopscale/loopzero/api/internal/builds/shellgen"
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 
 	forge "github.com/getloopscale/argo-workflows-go"
@@ -128,7 +129,15 @@ func (s *unsupportedStrategy) failStep(name string) *forge.Container {
 	} else {
 		msg = fmt.Sprintf("loopzero: runtime %q is not supported — LoopZeroCloud deploys the fixed LoopZeroKit stack (python, node)", s.runtime)
 	}
-	return buildContainer(name, imageAlpine, forge.ResourcesTiny(), fmt.Sprintf("echo %q >&2\nexit 1", msg))
+	return buildContainer(name, imageAlpine, forge.ResourcesTiny(), failScript(msg))
+}
+
+// failScript is the body of a fail-closed step: it prints msg to stderr and exits
+// 1. msg is single-quoted, so nothing in it (backticks, $(...), variables) is
+// interpreted by the shell. Error text often carries user input, such as the
+// runtime from loopzero.yaml, and markdown-style backticks.
+func failScript(msg string) string {
+	return "echo " + shellgen.ShellQuote(msg) + " >&2\nexit 1"
 }
 
 func (s *unsupportedStrategy) ValidateStep(_ []deploycontracts.AppSpec) *forge.Container {
