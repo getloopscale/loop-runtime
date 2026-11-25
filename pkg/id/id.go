@@ -56,6 +56,11 @@ func GenerateAppAttestationID() string {
 	return fmt.Sprintf("%s%s", AppAttestationIDPrefix, randomHex(8))
 }
 
+// GenerateRollbackID creates a new rollback ID with the format rb-<16 hex chars>.
+func GenerateRollbackID() string {
+	return "rb-" + randomHex(8)
+}
+
 // IsValidBuildID reports whether s matches the canonical build ID format
 // "build-{16 lowercase hex chars}". Use this instead of strings.HasPrefix
 // when validating IDs from untrusted sources (HTTP requests, DB rows from

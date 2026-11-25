@@ -56,6 +56,7 @@ var TenantOwnedTables = []string{
 	"cost_counters",
 	"subscriptions", // T2.2 #3 add (PostgresBootstrapStore + billing flows; PRIMARY KEY tenant_id, single-row-per-tenant)
 	"users",         // tenant-scoped via owner_id / active_tenant_id
+	"rollbacks",
 }
 
 // TenantSelfTable is the table that IS the tenant identity. Queries on

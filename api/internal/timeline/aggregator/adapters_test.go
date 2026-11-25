@@ -140,6 +140,7 @@ func TestReleaseStateProjection_HappyPathLadder(t *testing.T) {
 		{"DEPLOY_COMPLETED", "deploy", "completed", false},
 		{"LIVE_IN_PROGRESS", "live", "in_progress", false},
 		{"LIVE_COMPLETED", "live", "completed", true},
+		{"DEPLOY_FAILED", "deploy", "failed", true},
 	}
 	for _, tc := range cases {
 		phase, status, terminal := releaseStateProjection(tc.state)

@@ -99,6 +99,9 @@ var ladderProjections = map[string]stateProjection{
 	"LIVE_COMPLETED":     {"live", "completed", true},
 	"BUILD_FAILED":       {"build", "failed", true},
 	"BUILD_CANCELLED":    {"build", "canceled", true},
+	// The sync of the release failed: the deploy phase ends as failed, with
+	// the reason of the failure on the row.
+	"DEPLOY_FAILED": {"deploy", "failed", true},
 }
 
 // releaseProjections covers every state of the release state machine, keyed

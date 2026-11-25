@@ -365,6 +365,9 @@ func registerReleaseRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Rollback, cfg.RollbackHandler != nil,
 		"no database — comes from `orchDeps`. Without it there is no way to revert a release") {
 		r.With(ch.limited(audited("rollback.executed", "release"))...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
+		// Each rollback as an operation of its own: who, from and to which
+		// release, and how it ended.
+		r.Get("/api/v1/projects/{name}/rollbacks", cfg.RollbackHandler.List)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Promote, cfg.PromoteHandler != nil,
 		"no database — comes from `orchDeps`") {

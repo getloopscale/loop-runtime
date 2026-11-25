@@ -517,7 +517,7 @@ type bulkEntryState struct {
 	valid bool
 	// tooLarge: the value is above secretValueMaxBytes and was never written.
 	tooLarge bool
-	aggs  bulkEnvAggregates
+	aggs     bulkEnvAggregates
 }
 
 // bulkWrite is one (entry, env) row waiting to be persisted. value is the

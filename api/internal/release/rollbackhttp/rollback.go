@@ -44,8 +44,10 @@ type RollbackInput struct {
 type RollbackOutput struct {
 	RolledBackReleaseID  string
 	ReactivatedReleaseID string
-	Environment          string
-	URL                  string
+	// RollbackID names the record of the rollback in the project's history.
+	RollbackID  string
+	Environment string
+	URL         string
 }
 
 // RollbackProjectStore abstracts project lookup for rollback (DIP).
@@ -89,6 +91,7 @@ const rollbackStatusInProgress = "in_progress"
 
 type rollbackResponse struct {
 	Status             string `json:"status"`
+	RollbackID         string `json:"rollback_id"`
 	RolledBackRelease  string `json:"rolled_back_release"`
 	ReactivatedRelease string `json:"reactivated_release"`
 	Environment        string `json:"environment"`
@@ -100,6 +103,7 @@ type RollbackHandler struct {
 	projects   RollbackProjectStore
 	service    RollbackService
 	releases   RollbackReleaseLookup // nil-safe: when nil, build_id sugar is rejected
+	history    *RollbackHistoryHandler
 	baseDomain string
 }
 
@@ -117,6 +121,21 @@ func NewRollbackHandler(projects RollbackProjectStore, service RollbackService, 
 func (h *RollbackHandler) WithReleaseLookup(rl RollbackReleaseLookup) *RollbackHandler {
 	h.releases = rl
 	return h
+}
+
+// WithHistory wires the recorded rollbacks that List serves.
+func (h *RollbackHandler) WithHistory(history RollbackHistory) *RollbackHandler {
+	h.history = NewRollbackHistoryHandler(history)
+	return h
+}
+
+// List handles GET /api/v1/projects/{name}/rollbacks.
+func (h *RollbackHandler) List(w http.ResponseWriter, r *http.Request) {
+	if h.history == nil {
+		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("rollback history not configured"))
+		return
+	}
+	h.history.List(w, r)
 }
 
 // Create handles POST /api/v1/projects/{name}/rollback.
@@ -224,6 +243,7 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// rolled_back_release when it failed.
 	resp := rollbackResponse{
 		Status:             rollbackStatusInProgress,
+		RollbackID:         result.RollbackID,
 		RolledBackRelease:  result.RolledBackReleaseID,
 		ReactivatedRelease: result.ReactivatedReleaseID,
 		Environment:        result.Environment,

@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"sync"
 	"time"
@@ -57,7 +58,7 @@ func makeDeployTimelineSpawn(eventStore *store.PostgresEventStore) builds.Deploy
 type sseTimelineQuerier struct {
 	eventStore *store.PostgresEventStore
 	mu         sync.Mutex
-	pending    []string
+	pending    []timelineTransition
 	seen       map[string]bool
 	afterID    int64
 }
@@ -113,8 +114,47 @@ func eventTypeToCanonicalTransitions(eventType string) []string {
 	case "deploy.completed":
 		// Live URL responds 200. Canonical terminal.
 		return []string{"LIVE_COMPLETED"}
+	case "deploy.sync_failed":
+		// The sync did not confirm the release. Without this the deploy
+		// phase stayed in progress for good, next to a release in
+		// SYNC_FAILED. The sync can fail before deploy.verifying announced
+		// the deploy phase, so the phase is opened first; a state already
+		// emitted is skipped by the querier.
+		return []string{"ACTIVE", "DEPLOY_IN_PROGRESS", "DEPLOY_FAILED"}
 	}
 	return nil
+}
+
+// timelineTransition is one state waiting to be handed to the aggregator, with
+// the reason a failure carries.
+type timelineTransition struct {
+	state, reason string
+}
+
+// timelineFailureReason reads the reason of the event behind a failed state.
+// Other states carry none, and data that is not the expected object gives "".
+func timelineFailureReason(state string, data []byte) string {
+	if state != "DEPLOY_FAILED" {
+		return ""
+	}
+	var payload struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return ""
+	}
+	return payload.Reason
+}
+
+// next hands out the oldest pending transition as a release status row.
+func (r *sseTimelineQuerier) next() *aggregator.ReleaseStatusRow {
+	transition := r.pending[0]
+	r.pending = r.pending[1:]
+	return &aggregator.ReleaseStatusRow{
+		State:     transition.state,
+		Reason:    transition.reason,
+		UpdatedAt: time.Now().UTC(),
+	}
 }
 
 func (r *sseTimelineQuerier) QueryReleaseStatus(ctx context.Context, deployID string) (*aggregator.ReleaseStatusRow, error) {
@@ -127,12 +167,7 @@ func (r *sseTimelineQuerier) QueryReleaseStatus(ctx context.Context, deployID st
 	// Drain any pending transition first so the FSM walks one rung per
 	// poll tick (matches the strict in-order FSM contract).
 	if len(r.pending) > 0 {
-		next := r.pending[0]
-		r.pending = r.pending[1:]
-		return &aggregator.ReleaseStatusRow{
-			State:     next,
-			UpdatedAt: time.Now().UTC(),
-		}, nil
+		return r.next(), nil
 	}
 
 	// No pending → poll sse_events for new events since the last seen
@@ -151,17 +186,12 @@ func (r *sseTimelineQuerier) QueryReleaseStatus(ctx context.Context, deployID st
 		for _, st := range eventTypeToCanonicalTransitions(ev.EventType) {
 			if !r.seen[st] {
 				r.seen[st] = true
-				r.pending = append(r.pending, st)
+				r.pending = append(r.pending, timelineTransition{state: st, reason: timelineFailureReason(st, ev.Data)})
 			}
 		}
 	}
 	if len(r.pending) > 0 {
-		next := r.pending[0]
-		r.pending = r.pending[1:]
-		return &aggregator.ReleaseStatusRow{
-			State:     next,
-			UpdatedAt: time.Now().UTC(),
-		}, nil
+		return r.next(), nil
 	}
 	return nil, nil
 }

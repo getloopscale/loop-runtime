@@ -419,6 +419,23 @@ type ReleaseAppAttestation struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Rollback struct {
+	ID            string             `json:"id"`
+	TenantID      string             `json:"tenant_id"`
+	ProjectID     string             `json:"project_id"`
+	Environment   string             `json:"environment"`
+	FromReleaseID string             `json:"from_release_id"`
+	FromBuildID   string             `json:"from_build_id"`
+	ToReleaseID   string             `json:"to_release_id"`
+	ToBuildID     string             `json:"to_build_id"`
+	Status        string             `json:"status"`
+	FailureReason string             `json:"failure_reason"`
+	CreatedBy     string             `json:"created_by"`
+	CorrelationID string             `json:"correlation_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	FinishedAt    pgtype.Timestamptz `json:"finished_at"`
+}
+
 type SchemaMigration struct {
 	Version int64 `json:"version"`
 	Dirty   bool  `json:"dirty"`

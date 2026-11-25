@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Each rollback is recorded as an operation of its own: who asked, the release and build it left and aimed at, and how it ended. `GET /api/v1/projects/{name}/rollbacks` lists them, newest first, with the status `in_progress`, `succeeded`, `failed` (with `failure_reason`) or `interrupted`. The 202 of `POST /api/v1/projects/{name}/rollback` carries the record's id as `rollback_id`. Migration `000070_rollbacks` adds the table (#128).
 - The `loopzero-cloud` chart takes `config.githubAppClientId`, the OAuth client id of the GitHub App, and passes it to the console as `GITHUB_APP_CLIENT_ID`. Each environment reads it from `LOOPZERO_GITHUB_APP_CLIENT_ID` of the helmfile run; empty leaves the console's repository connect flow off (#117).
 - `GET /api/v1/integrations/github/installations` lists the GitHub App installations bound to the caller's team, each with `id`, `account_login` and `account_type`
 - Staging encrypts tenant secrets with OpenBao transit, on a dedicated `secrets` EKS cluster unsealed by the `awskms` seal; `infra/staging/openbao.sh` installs it and wires loopzero-api after every rebuild (#103).
@@ -403,6 +404,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The deploy timeline ends the Deploy phase as failed, with the reason, when the sync of the release fails. The phase stayed in progress next to a release in `SYNC_FAILED` (#128).
 - A rollback by `build_id` takes the release of that build in the environment being rolled back. After a promote it took the release of the other environment and failed with `INVALID_TRANSITION`. A `to_release_id` of another project or environment is answered with `RELEASE_NOT_FOUND` (#130).
 - The deploy timeline stream (`GET /api/v1/deploys/{id}/timeline`) reaches the console as it is written. It went through the buffering middleware, so the build page showed every phase of a finished deploy as pending (#127).
 - A push that arrives while the environment is deploying is built when the environment is free. It was refused once with `DEPLOY_IN_PROGRESS` and never built. The push waits up to 20 minutes and is skipped when a newer commit reached the branch in the meantime (#125).

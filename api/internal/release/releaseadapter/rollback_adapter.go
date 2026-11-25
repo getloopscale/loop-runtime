@@ -33,6 +33,7 @@ func (a *RollbackServiceAdapter) Rollback(ctx context.Context, req rollbackhttp.
 	return &rollbackhttp.RollbackOutput{
 		RolledBackReleaseID:  result.RolledBackRelease.ID,
 		ReactivatedReleaseID: result.ReactivatedRelease.ID,
+		RollbackID:           result.RollbackID,
 		Environment:          result.Environment,
 		URL:                  result.URL,
 	}, nil

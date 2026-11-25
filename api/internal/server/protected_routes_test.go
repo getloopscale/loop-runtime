@@ -159,7 +159,7 @@ var protectedFamilies = []protectedFamily{
 	{surfaces.BuildStats, func(c *Config) { c.BuildStatsHandler = nil }, []string{
 		"GET /api/v1/builds/stats"}},
 	{surfaces.Rollback, func(c *Config) { c.RollbackHandler = nil }, []string{
-		"POST /api/v1/projects/{name}/rollback"}},
+		"POST /api/v1/projects/{name}/rollback", "GET /api/v1/projects/{name}/rollbacks"}},
 	{surfaces.Promote, func(c *Config) { c.PromoteHandler = nil }, []string{
 		"POST /api/v1/projects/{name}/promote"}},
 	{surfaces.Teams, func(c *Config) { c.TeamHandler = nil }, []string{
