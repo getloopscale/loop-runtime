@@ -213,26 +213,26 @@ func TestEnvs_Delete_CannotDeleteProduction(t *testing.T) {
 // --- J-10 v1.1 LIVE catch 2026-06-07: KPI enrichment tests ---
 
 type fakeKPILookup struct {
-	out map[string]EnvKPI
+	out map[EnvRef]EnvKPI
 	err error
 }
 
-func (f *fakeKPILookup) LatestActivePerEnv(_ context.Context, _ string) (map[string]EnvKPI, error) {
+func (f *fakeKPILookup) LatestActivePerEnv(_ context.Context, _ string) (map[EnvRef]EnvKPI, error) {
 	return f.out, f.err
 }
 
 func TestEnvs_List_KPIEnrichment_PopulatesFields(t *testing.T) {
 	mgr := &fakeEnvMgr{
 		envs: []EnvironmentEntry{
-			{Name: "production", Status: "active"},
-			{Name: "staging", Status: "active"},
-			{Name: "dev", Status: "active"}, // no release yet → fields stay empty
+			{Name: "production", Project: "web", Status: "active"},
+			{Name: "staging", Project: "web", Status: "active"},
+			{Name: "dev", Project: "web", Status: "active"}, // no release yet → fields stay empty
 		},
 	}
 	lookup := &fakeKPILookup{
-		out: map[string]EnvKPI{
-			"production": {LastDeploy: "2026-06-07T10:00:00Z", LastDeploySha: "abc1234567"},
-			"staging":    {LastDeploy: "2026-06-07T09:30:00Z", LastDeploySha: "def8901234"},
+		out: map[EnvRef]EnvKPI{
+			{Project: "web", Name: "production"}: {LastDeploy: "2026-06-07T10:00:00Z", LastDeploySha: "abc1234567"},
+			{Project: "web", Name: "staging"}:    {LastDeploy: "2026-06-07T09:30:00Z", LastDeploySha: "def8901234"},
 		},
 	}
 	h := NewEnvironmentHandler(mgr).WithKPILookup(lookup)
@@ -276,6 +276,47 @@ func TestEnvs_List_KPIEnrichment_PopulatesFields(t *testing.T) {
 	if byName["dev"].LastDeploy != "" || byName["dev"].LastDeploySha != "" {
 		t.Errorf("dev: should have empty KPI (no ACTIVE release), got last_deploy=%q sha=%q",
 			byName["dev"].LastDeploy, byName["dev"].LastDeploySha)
+	}
+}
+
+// Two projects share the environment name production and only one has deployed.
+// The other must not borrow its last deploy.
+func TestEnvs_List_KPIEnrichment_DoesNotCrossProjects(t *testing.T) {
+	mgr := &fakeEnvMgr{
+		envs: []EnvironmentEntry{
+			{Name: "production", Project: "web", Status: "active"},
+			{Name: "production", Project: "worker", Status: "active"},
+		},
+	}
+	lookup := &fakeKPILookup{
+		out: map[EnvRef]EnvKPI{
+			{Project: "web", Name: "production"}: {LastDeploy: "2026-06-07T10:00:00Z", LastDeploySha: "abc1234567"},
+		},
+	}
+	h := NewEnvironmentHandler(mgr).WithKPILookup(lookup)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil)
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+	h.List(w, req)
+
+	var resp struct {
+		Environments []EnvironmentEntry `json:"environments"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for _, e := range resp.Environments {
+		switch e.Project {
+		case "web":
+			if e.LastDeploy != "2026-06-07T10:00:00Z" {
+				t.Errorf("web/production: last_deploy = %q, want its own deploy", e.LastDeploy)
+			}
+		case "worker":
+			if e.LastDeploy != "" || e.LastDeploySha != "" {
+				t.Errorf("worker/production never deployed, got last_deploy=%q sha=%q", e.LastDeploy, e.LastDeploySha)
+			}
+		}
 	}
 }
 

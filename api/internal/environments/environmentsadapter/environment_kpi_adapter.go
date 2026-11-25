@@ -22,8 +22,8 @@ type EnvKPILookup struct {
 	DB db.DBTX
 }
 
-// LatestActivePerEnv returns the last-deploy KPI keyed by environment name.
-func (l *EnvKPILookup) LatestActivePerEnv(ctx context.Context, tenantID string) (map[string]environmentshttp.EnvKPI, error) {
+// LatestActivePerEnv returns the last-deploy KPI keyed by project and environment.
+func (l *EnvKPILookup) LatestActivePerEnv(ctx context.Context, tenantID string) (map[environmentshttp.EnvRef]environmentshttp.EnvKPI, error) {
 	rows, err := generated.New().ListLatestActiveReleasePerEnv(ctx, db.Generated(l.DB), tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("environment KPI lookup: %w", err)
@@ -31,8 +31,8 @@ func (l *EnvKPILookup) LatestActivePerEnv(ctx context.Context, tenantID string) 
 	return envKPIsFromRows(rows), nil
 }
 
-func envKPIsFromRows(rows []generated.ListLatestActiveReleasePerEnvRow) map[string]environmentshttp.EnvKPI {
-	out := make(map[string]environmentshttp.EnvKPI, len(rows))
+func envKPIsFromRows(rows []generated.ListLatestActiveReleasePerEnvRow) map[environmentshttp.EnvRef]environmentshttp.EnvKPI {
+	out := make(map[environmentshttp.EnvRef]environmentshttp.EnvKPI, len(rows))
 	for _, r := range rows {
 		// The source commit is what the user deployed; releases.git_commit is the
 		// GitOps repository commit, kept only for a release whose build is gone.
@@ -43,7 +43,7 @@ func envKPIsFromRows(rows []generated.ListLatestActiveReleasePerEnvRow) map[stri
 		case r.GitCommit != nil:
 			sha = *r.GitCommit
 		}
-		out[r.Environment] = environmentshttp.EnvKPI{
+		out[environmentshttp.EnvRef{Project: r.ProjectID, Name: r.Environment}] = environmentshttp.EnvKPI{
 			LastDeploy:    r.CreatedAt.Time.UTC().Format(time.RFC3339),
 			LastDeploySha: sha,
 		}

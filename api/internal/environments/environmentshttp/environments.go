@@ -85,10 +85,17 @@ type EnvironmentManager interface {
 // releases table. Implementations resolve "the latest ACTIVE release per
 // environment for a tenant". J-10 v1.1 LIVE catch 2026-06-07.
 //
-// LatestActivePerEnv returns a map keyed by environment name. Missing
+// LatestActivePerEnv returns a map keyed by project and environment. Missing
 // entries mean "no ACTIVE release yet" — the dashboard renders honest "—".
 type EnvKPILookup interface {
-	LatestActivePerEnv(ctx context.Context, tenantID string) (map[string]EnvKPI, error)
+	LatestActivePerEnv(ctx context.Context, tenantID string) (map[EnvRef]EnvKPI, error)
+}
+
+// EnvRef names one environment of one project. Projects share environment
+// names, so the name alone does not identify an environment.
+type EnvRef struct {
+	Project string
+	Name    string
 }
 
 // EnvKPI is the subset of release data the dashboard renders. Kept minimal
@@ -313,7 +320,7 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 			)
 		} else {
 			for i := range envs {
-				if k, ok := kpi[envs[i].Name]; ok {
+				if k, ok := kpi[EnvRef{Project: envs[i].Project, Name: envs[i].Name}]; ok {
 					envs[i].LastDeploy = k.LastDeploy
 					envs[i].LastDeploySha = k.LastDeploySha
 				}
