@@ -179,6 +179,9 @@ releases:
       - kube-system/aws-load-balancer-controller
     values:
       - ../helm/monitoring/values-prometheus-federation.yaml
+      # Ready replicas and request rate per tenant app, which core federates and
+      # loopzero-api reads for the project Status tab.
+      - ../helm/monitoring/values-tenant-app-recording-rules.yaml
       - kube-state-metrics:
           enabled: false
 {{- end }}

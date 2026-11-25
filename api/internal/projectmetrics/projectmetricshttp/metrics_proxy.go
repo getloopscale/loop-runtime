@@ -196,9 +196,24 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, resp)
 }
 
+// The series a cell's Prometheus records per tenant app and the core Prometheus
+// federates (infra/helm/monitoring/values-tenant-app-recording-rules.yaml). Each
+// carries tenant_id, project, app and environment. A tenant app is an Argo
+// Rollout that LoopScale does not instrument, so its replicas come from pod
+// readiness and its traffic from the cell's ingress (getloopscale/loopzero#107).
+const (
+	appReadyReplicasSeries         = "loopzero_app:kube_pod_status_ready:sum"
+	appRequestRateSeries           = "loopzero_app:traefik_service_requests:rate5m"
+	appRequestRateByClassSeries    = "loopzero_app_status_class:traefik_service_requests:rate5m"
+	appRequestDurationBucketSeries = "loopzero_app_le:traefik_service_request_duration_seconds_bucket:rate5m"
+)
+
 // buildPromQL injects mandatory tenant_id + project labels into the Prometheus
 // query template for the requested signal. EC-2 absorption: labels come from
 // session ctx, NOT URL. Defense against cross-tenant data leak.
+//
+// The tenant app signals aggregate to one series: a project has one series per
+// app, environment and cell, and the client reads the first series of a result.
 //
 // Unknown signal names fall through to a safe `up{...}` query — the UI never
 // triggers this path (consumers use PromQueryKeys from statusResponse), but
@@ -209,17 +224,20 @@ func buildPromQL(signal, tenantID, projectName string) string {
 	case "uptime_24h":
 		return fmt.Sprintf("avg_over_time(up{%s}[24h])", labels)
 	case "replicas_ready":
-		return fmt.Sprintf("kube_deployment_status_replicas_ready{%s}", labels)
+		return fmt.Sprintf("sum(%s{%s})", appReadyReplicasSeries, labels)
 	case "p95_latency":
-		return fmt.Sprintf("histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{%s}[5m]))", labels)
+		return fmt.Sprintf("histogram_quantile(0.95, sum by (le) (%s{%s}))", appRequestDurationBucketSeries, labels)
 	case "error_rate":
 		// loopzero#170: error_rate is displayed as a PERCENTAGE by the dashboard
 		// (SignalGrid fmtPercent). It must be the ratio of 5xx to total requests
-		// ×100, NOT a raw 5xx req/s rate. Division by zero (no traffic) yields an
-		// empty/NaN series → the handler maps that to "collecting".
-		return fmt.Sprintf(`sum(rate(http_requests_total{status=~"5..",%s}[5m])) / sum(rate(http_requests_total{%s}[5m])) * 100`, labels, labels)
+		// ×100, NOT a raw 5xx req/s rate. An app that answered no 5xx has no 5xx
+		// series, so the numerator falls back to 0 and the app reads 0%. With no
+		// traffic the denominator is empty or zero, the result is empty or NaN,
+		// and the handler maps that to "collecting".
+		return fmt.Sprintf(`(sum(%s{status_class="5xx",%s}) or vector(0)) / sum(%s{%s}) * 100`,
+			appRequestRateByClassSeries, labels, appRequestRateSeries, labels)
 	case "rps":
-		return fmt.Sprintf("rate(http_requests_total{%s}[1m])", labels)
+		return fmt.Sprintf("sum(%s{%s})", appRequestRateSeries, labels)
 	case "status_terminal":
 		return fmt.Sprintf("loopzero_release_status_terminal{%s}", labels)
 	case "alerts_active":

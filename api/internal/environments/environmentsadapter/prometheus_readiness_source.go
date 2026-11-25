@@ -16,15 +16,18 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/environments"
 )
 
-// ReplicasReadyQuery sums ready replicas per (tenant, project, environment),
-// reading the loopzero.io labels the manifest renderer puts on every workload.
+// ReplicasReadyQuery sums ready replicas per (tenant, project, environment)
+// over the series each cell's Prometheus records per tenant app and the core
+// Prometheus federates
+// (infra/helm/monitoring/values-tenant-app-recording-rules.yaml).
 //
-// It joins on ReplicaSets, not Deployments: tenant workloads run as Argo
-// Rollouts, which own ReplicaSets the way a Deployment does, so
-// kube_deployment_labels is empty for them (LIVE-caught 2026-07-04). The sum
-// folds a Rollout's older ReplicaSets, idle at zero ready, into the tuple.
-// The namespace filter keeps the scan to tenant namespaces.
-const ReplicasReadyQuery = `sum by (namespace, label_loopzero_io_tenant, label_loopzero_io_project, label_loopzero_io_environment) (kube_replicaset_status_ready_replicas{namespace=~"loopzero-tn-.*"} * on(namespace, replicaset) group_left(label_loopzero_io_tenant, label_loopzero_io_project, label_loopzero_io_environment) kube_replicaset_labels{namespace=~"loopzero-tn-.*"})`
+// Tenant workloads run as Argo Rollouts, so no Deployment series describes
+// them, and kube-state-metrics exports no ReplicaSet labels to join on. The
+// recorded series counts ready pods by the loopzero.io labels the manifest
+// renderer puts on them, renamed to tenant_id, project, app and environment
+// (getloopscale/loopzero#107). The sum folds a project's apps, and the cells
+// that serve it, into the tuple.
+const ReplicasReadyQuery = `sum by (tenant_id, project, environment) (loopzero_app:kube_pod_status_ready:sum)`
 
 // PrometheusReplicasReadySource observes data-plane readiness through one
 // instant Prometheus query per poll.
@@ -46,7 +49,7 @@ func NewPrometheusReplicasReadySource(address string) (*PrometheusReplicasReadyS
 }
 
 // ReplicasReady implements environments.ReplicasReadySource. A sample without
-// all three loopzero.io labels is a workload the platform did not render and is
+// all three labels is a workload the platform did not render and is
 // skipped, as is a non-finite or negative value, which no replica count is.
 func (s *PrometheusReplicasReadySource) ReplicasReady(ctx context.Context) ([]environments.ReplicasReadySample, error) {
 	value, _, err := s.api.Query(ctx, ReplicasReadyQuery, time.Now())
@@ -60,9 +63,9 @@ func (s *PrometheusReplicasReadySource) ReplicasReady(ctx context.Context) ([]en
 	samples := make([]environments.ReplicasReadySample, 0, len(vector))
 	for _, sample := range vector {
 		target := environments.EnvironmentTargetKey{
-			TenantID:    string(sample.Metric["label_loopzero_io_tenant"]),
-			ProjectID:   string(sample.Metric["label_loopzero_io_project"]),
-			Environment: string(sample.Metric["label_loopzero_io_environment"]),
+			TenantID:    string(sample.Metric["tenant_id"]),
+			ProjectID:   string(sample.Metric["project"]),
+			Environment: string(sample.Metric["environment"]),
 		}
 		ready := float64(sample.Value)
 		if target.TenantID == "" || target.ProjectID == "" || target.Environment == "" ||
