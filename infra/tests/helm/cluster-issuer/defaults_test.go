@@ -72,3 +72,33 @@ func TestClusterIssuer_HasIssuerType(t *testing.T) {
 				"(%v); got %d", c.Metadata.Name, validTypes, found)
 	}
 }
+
+// An environment that cannot complete an ACME challenge (staging runs on an
+// emulated AWS) still names the issuer production names. The chart then emits
+// a self-signed issuer under that name, so app Certificates are issued.
+func TestClusterIssuer_SelfSignedAliasesCarryTheNamesGiven(t *testing.T) {
+	t.Parallel()
+	cp, err := chartrender.ChartPath(chartName)
+	require.NoError(t, err)
+	opts, err := chartrender.NewOptions(cp, "")
+	require.NoError(t, err)
+	opts.SetValues = map[string]string{"selfSignedAliases[0]": "letsencrypt-prod"}
+	out := chartrender.RenderTemplate(t, opts, cp, releaseName, nil)
+
+	specs := map[string]map[string]interface{}{}
+	for _, d := range chartrender.SplitYAMLByKind(out, "ClusterIssuer") {
+		var c clusterIssuerDoc
+		require.NoError(t, yaml.Unmarshal([]byte(d), &c))
+		specs[c.Metadata.Name] = c.Spec
+	}
+	require.Contains(t, specs, "letsencrypt-prod")
+	require.Contains(t, specs["letsencrypt-prod"], "selfSigned")
+	require.Contains(t, specs, "loopzero-ca-issuer", "the chart's own issuer is still emitted")
+}
+
+func TestClusterIssuer_NoAliasByDefault(t *testing.T) {
+	t.Parallel()
+	for _, c := range render(t) {
+		require.NotEqual(t, "letsencrypt-prod", c.Metadata.Name)
+	}
+}

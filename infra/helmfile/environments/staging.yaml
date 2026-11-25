@@ -45,9 +45,12 @@ resources:
       cpu: 500m
       memory: 512Mi
 
+# The name production uses. The emulated AWS cannot complete an ACME challenge, so the
+# cells create it as a self-signed issuer (#122).
 certIssuer:
   kind: ClusterIssuer
   name: letsencrypt-prod
+  selfSigned: true
 
 # The AWS account and the names infra-live gives every resource of this environment:
 # `<namePrefix>-<cluster>` for the EKS clusters, `<namePrefix>-<cluster>-<workload>` for
