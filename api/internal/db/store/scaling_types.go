@@ -37,25 +37,29 @@ func newInvalidArgument(msg string) *loopzeroerrors.LoopZeroError {
 // stub-202 path where `loopzero scale` returned acknowledged but did
 // nothing persistent.
 type ScalingConfig struct {
-	ID           string    `json:"id"`
-	TenantID     string    `json:"tenant_id"`
-	ProjectID    string    `json:"project_id"`
-	Environment  string    `json:"environment"`
-	AppName      string    `json:"app_name"`
-	MinReplicas  int32     `json:"min_replicas"`
-	MaxReplicas  int32     `json:"max_replicas"`
-	TargetCPUPct *int32    `json:"target_cpu_pct,omitempty"`
-	ScaleToZero  bool      `json:"scale_to_zero"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	UpdatedBy    string    `json:"updated_by"`
-	ConfigHash   string    `json:"config_hash"`
+	ID           string `json:"id"`
+	TenantID     string `json:"tenant_id"`
+	ProjectID    string `json:"project_id"`
+	Environment  string `json:"environment"`
+	AppName      string `json:"app_name"`
+	MinReplicas  int32  `json:"min_replicas"`
+	MaxReplicas  int32  `json:"max_replicas"`
+	TargetCPUPct *int32 `json:"target_cpu_pct,omitempty"`
+	// TargetMemoryPct is the memory utilization target of the HPA. Nil scales on CPU alone.
+	TargetMemoryPct *int32    `json:"target_memory_pct,omitempty"`
+	ScaleToZero     bool      `json:"scale_to_zero"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	UpdatedBy       string    `json:"updated_by"`
+	ConfigHash      string    `json:"config_hash"`
 }
 
 // CanonicalHash computes a stable hash of the config body fields
 // used by the API handler to short-circuit unchanged requests with
 // `applied: false`.
 //
-// Format: "min={min}|max={max}|cpu={cpu_or_NIL}|s2z={true|false}".
+// Format: "min={min}|max={max}|cpu={cpu_or_NIL}|s2z={true|false}", followed by
+// "|mem={mem}" when a memory target is set. A config without one keeps the hash
+// it had before the memory target existed.
 func (c *ScalingConfig) CanonicalHash() string {
 	cpu := "NIL"
 	if c.TargetCPUPct != nil {
@@ -63,6 +67,9 @@ func (c *ScalingConfig) CanonicalHash() string {
 	}
 	body := fmt.Sprintf("min=%d|max=%d|cpu=%s|s2z=%t",
 		c.MinReplicas, c.MaxReplicas, cpu, c.ScaleToZero)
+	if c.TargetMemoryPct != nil {
+		body += fmt.Sprintf("|mem=%d", *c.TargetMemoryPct)
+	}
 	sum := sha256.Sum256([]byte(body))
 	return hex.EncodeToString(sum[:])
 }
@@ -83,6 +90,13 @@ func (c *ScalingConfig) Validate() error {
 		if v < 1 || v > 100 {
 			return newInvalidArgument(
 				fmt.Sprintf("target_cpu_pct (%d) must be between 1 and 100", v))
+		}
+	}
+	if c.TargetMemoryPct != nil {
+		v := *c.TargetMemoryPct
+		if v < 1 || v > 100 {
+			return newInvalidArgument(
+				fmt.Sprintf("target_memory_pct (%d) must be between 1 and 100", v))
 		}
 	}
 	if c.ScaleToZero && c.MinReplicas != 0 {

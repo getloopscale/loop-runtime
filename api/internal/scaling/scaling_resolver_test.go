@@ -254,3 +254,27 @@ func mustResolver(t *testing.T, store ScalingConfigReader) ScalingResolver {
 	}
 	return r
 }
+
+func TestResolve_DBRowCarriesTheMemoryTarget(t *testing.T) {
+	store := &fakeScalingStore{
+		get: func(_ context.Context, _, _, _, _ string) (*store.ScalingConfig, error) {
+			return &store.ScalingConfig{
+				MinReplicas:     1,
+				MaxReplicas:     3,
+				TargetCPUPct:    i32ptr(80),
+				TargetMemoryPct: i32ptr(65),
+			}, nil
+		},
+	}
+	r := mustResolver(t, store)
+
+	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production",
+		[]deploycontracts.AppSpec{makeAppSpec("api", 1)})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out[0].Autoscaling == nil || out[0].Autoscaling.TargetMemory != 65 {
+		t.Errorf("autoscaling = %+v, want TargetMemory 65", out[0].Autoscaling)
+	}
+}

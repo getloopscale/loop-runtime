@@ -75,3 +75,20 @@ func TestStoredScaling_Apply_ReportsAReadFailure(t *testing.T) {
 		t.Fatal("a config that cannot be read must not be rendered as if none were saved")
 	}
 }
+
+func TestStoredScaling_ApplyToApp_CarriesTheSavedTargets(t *testing.T) {
+	cpu, memory := int32(70), int32(60)
+	stored := StoredScaling{Configs: configsByApp{"web": {
+		MinReplicas: 1, MaxReplicas: 3, TargetCPUPct: &cpu, TargetMemoryPct: &memory,
+	}}}
+
+	app, saved, err := stored.ApplyToApp(context.Background(), "tn-acme", "shop", "production",
+		db.BuildAppSpec{Name: "web", Replicas: 1})
+
+	if err != nil || !saved {
+		t.Fatalf("ApplyToApp: saved=%v err=%v", saved, err)
+	}
+	if a := app.Autoscaling; a == nil || a.TargetCPU != 70 || a.TargetMemory != 60 {
+		t.Errorf("autoscaling = %+v, want cpu 70 and memory 60", a)
+	}
+}

@@ -27,7 +27,7 @@ func TestAppSpecFromStored_CarriesEveryPersistedField(t *testing.T) {
 		Name: "api", Type: "server", Rendering: "server", Port: 8080,
 		Start: "node server.js", Path: "apps/api", Build: "dockerfile", Runtime: "node",
 		Secrets: []string{"DB_URL"}, Replicas: 2,
-		Autoscaling: &db.BuildAppAutoscaling{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 70},
+		Autoscaling: &db.BuildAppAutoscaling{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 70, TargetMemory: 60},
 		ReusedImage: &db.ReusedImage{Digest: "sha256:01", Signature: "sig"},
 	}
 	sv := reflect.ValueOf(stored)
@@ -53,8 +53,8 @@ func TestAppSpecFromStored_CarriesEveryPersistedField(t *testing.T) {
 			t.Errorf("AppSpecFromStored dropped %s", name)
 		}
 	}
-	if a := AppSpecFromStored(stored).Autoscaling; a.MinReplicas != 1 || a.MaxReplicas != 3 || a.TargetCPU != 70 {
-		t.Errorf("autoscaling = %+v, want {1 3 70}", *a)
+	if a := AppSpecFromStored(stored).Autoscaling; a.MinReplicas != 1 || a.MaxReplicas != 3 || a.TargetCPU != 70 || a.TargetMemory != 60 {
+		t.Errorf("autoscaling = %+v, want min 1, max 3, cpu 70, memory 60", *a)
 	}
 }
 

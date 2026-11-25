@@ -83,3 +83,14 @@ func TestCheck_MissingToolWarns(t *testing.T) {
 		t.Fatalf("expected Warn=true when tools absent, got %+v", outcome)
 	}
 }
+
+// The postgres image runs its init scripts against a temporary server that
+// listens on the unix socket alone and is then restarted. A readiness probe on
+// the socket answers during that phase, and the migration that follows connects
+// over TCP to a server about to go away.
+func TestReadinessProbeAsksOverTCP(t *testing.T) {
+	args := strings.Join(pgReadyArgs("cid-1"), " ")
+	if !strings.Contains(args, "-h 127.0.0.1") {
+		t.Errorf("pg_isready args = %q, want the TCP host so the init-phase server does not count as ready", args)
+	}
+}

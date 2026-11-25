@@ -116,6 +116,7 @@ type AutoscalingConfig struct {
 	MinReplicas    int // Minimum replicas (default: 1, 0 = scale-to-zero via KEDA)
 	MaxReplicas    int // Maximum replicas (default: 3)
 	TargetCPU      int // Target CPU utilization percentage (default: 80)
+	TargetMemory   int // Target memory utilization percentage (0: the HPA scales on CPU alone)
 	CooldownPeriod int // Seconds before scale-to-zero (default: 300, only when MinReplicas = 0)
 }
 

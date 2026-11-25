@@ -13,7 +13,7 @@
 -- ErrScalingConfigNotFound (legacy sentinel).
 SELECT id, tenant_id, project_id, environment, app_name,
        min_replicas, max_replicas, target_cpu_pct, scale_to_zero,
-       updated_at, updated_by, config_hash
+       updated_at, updated_by, config_hash, target_memory_pct
 FROM app_scaling_config
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND app_name = $4;
 
@@ -25,15 +25,16 @@ WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND app_name = $4;
 INSERT INTO app_scaling_config (
   tenant_id, project_id, environment, app_name,
   min_replicas, max_replicas, target_cpu_pct, scale_to_zero,
-  updated_by, config_hash
+  updated_by, config_hash, target_memory_pct
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 ON CONFLICT (tenant_id, project_id, environment, app_name)
 DO UPDATE SET
   min_replicas = EXCLUDED.min_replicas,
   max_replicas = EXCLUDED.max_replicas,
   target_cpu_pct = EXCLUDED.target_cpu_pct,
+  target_memory_pct = EXCLUDED.target_memory_pct,
   scale_to_zero = EXCLUDED.scale_to_zero,
   updated_at = NOW(),
   updated_by = EXCLUDED.updated_by,
@@ -45,7 +46,7 @@ RETURNING id, updated_at;
 -- ordered by app_name for consistent output.
 SELECT id, tenant_id, project_id, environment, app_name,
        min_replicas, max_replicas, target_cpu_pct, scale_to_zero,
-       updated_at, updated_by, config_hash
+       updated_at, updated_by, config_hash, target_memory_pct
 FROM app_scaling_config
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
 ORDER BY app_name;

@@ -70,6 +70,8 @@ type BuildAppAutoscaling struct {
 	MinReplicas int `json:"min,omitempty"`
 	MaxReplicas int `json:"max,omitempty"`
 	TargetCPU   int `json:"target_cpu,omitempty"`
+	// TargetMemory is the memory utilization target; 0 scales on CPU alone.
+	TargetMemory int `json:"target_memory,omitempty"`
 }
 
 // BuildAppSpec is a single app spec stored at build submission time.

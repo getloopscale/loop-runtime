@@ -404,15 +404,16 @@ func setupOrchestrator(
 		var changed bool
 		err := stores.Locker.WithLock(ctx, in.TenantID, in.ProjectID, in.Environment, func(tx db.DBTX) error {
 			c := &store.ScalingConfig{
-				TenantID:     in.TenantID,
-				ProjectID:    in.ProjectID,
-				Environment:  in.Environment,
-				AppName:      in.AppName,
-				MinReplicas:  in.MinReplicas,
-				MaxReplicas:  in.MaxReplicas,
-				TargetCPUPct: in.TargetCPUPct,
-				ScaleToZero:  in.ScaleToZero,
-				UpdatedBy:    in.UpdatedBy,
+				TenantID:        in.TenantID,
+				ProjectID:       in.ProjectID,
+				Environment:     in.Environment,
+				AppName:         in.AppName,
+				MinReplicas:     in.MinReplicas,
+				MaxReplicas:     in.MaxReplicas,
+				TargetCPUPct:    in.TargetCPUPct,
+				TargetMemoryPct: in.TargetMemoryPct,
+				ScaleToZero:     in.ScaleToZero,
+				UpdatedBy:       in.UpdatedBy,
 			}
 			_, ch, upErr := scalingStore.Upsert(ctx, tx, c)
 			if upErr != nil {

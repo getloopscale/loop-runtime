@@ -18,18 +18,19 @@ type Account struct {
 }
 
 type AppScalingConfig struct {
-	ID           pgtype.UUID        `json:"id"`
-	TenantID     string             `json:"tenant_id"`
-	ProjectID    string             `json:"project_id"`
-	Environment  string             `json:"environment"`
-	AppName      string             `json:"app_name"`
-	MinReplicas  int32              `json:"min_replicas"`
-	MaxReplicas  int32              `json:"max_replicas"`
-	TargetCpuPct *int32             `json:"target_cpu_pct"`
-	ScaleToZero  bool               `json:"scale_to_zero"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	UpdatedBy    string             `json:"updated_by"`
-	ConfigHash   string             `json:"config_hash"`
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        string             `json:"tenant_id"`
+	ProjectID       string             `json:"project_id"`
+	Environment     string             `json:"environment"`
+	AppName         string             `json:"app_name"`
+	MinReplicas     int32              `json:"min_replicas"`
+	MaxReplicas     int32              `json:"max_replicas"`
+	TargetCpuPct    *int32             `json:"target_cpu_pct"`
+	ScaleToZero     bool               `json:"scale_to_zero"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy       string             `json:"updated_by"`
+	ConfigHash      string             `json:"config_hash"`
+	TargetMemoryPct *int32             `json:"target_memory_pct"`
 }
 
 type AuditLog struct {

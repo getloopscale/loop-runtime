@@ -165,3 +165,26 @@ func TestScalingConfig_CanonicalHash_NilCPUDoesNotCollide(t *testing.T) {
 		t.Fatal("expected nil-CPU and 70-CPU to hash differently")
 	}
 }
+
+func TestScalingConfig_CanonicalHash_DiffersWhenTheMemoryTargetChanges(t *testing.T) {
+	cpu, low, high := int32(80), int32(60), int32(70)
+	a := ScalingConfig{MinReplicas: 1, MaxReplicas: 5, TargetCPUPct: &cpu, TargetMemoryPct: &low}
+	b := ScalingConfig{MinReplicas: 1, MaxReplicas: 5, TargetCPUPct: &cpu, TargetMemoryPct: &high}
+	none := ScalingConfig{MinReplicas: 1, MaxReplicas: 5, TargetCPUPct: &cpu}
+	if a.CanonicalHash() == b.CanonicalHash() {
+		t.Error("memory 60 and memory 70 hash the same, so the second request would answer no change")
+	}
+	if a.CanonicalHash() == none.CanonicalHash() {
+		t.Error("memory 60 and no memory target hash the same")
+	}
+}
+
+func TestScalingConfig_Validate_RejectsTargetMemoryOutOfRange(t *testing.T) {
+	for _, pct := range []int32{0, 101} {
+		memory := pct
+		c := ScalingConfig{Environment: "production", MinReplicas: 1, MaxReplicas: 3, TargetMemoryPct: &memory}
+		if err := c.Validate(); err == nil {
+			t.Errorf("target_memory_pct %d was accepted", pct)
+		}
+	}
+}

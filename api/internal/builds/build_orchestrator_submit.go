@@ -156,9 +156,10 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 			}
 			if a.Autoscaling != nil {
 				spec.Autoscaling = &db.BuildAppAutoscaling{
-					MinReplicas: a.Autoscaling.MinReplicas,
-					MaxReplicas: a.Autoscaling.MaxReplicas,
-					TargetCPU:   a.Autoscaling.TargetCPU,
+					MinReplicas:  a.Autoscaling.MinReplicas,
+					MaxReplicas:  a.Autoscaling.MaxReplicas,
+					TargetCPU:    a.Autoscaling.TargetCPU,
+					TargetMemory: a.Autoscaling.TargetMemory,
 				}
 			}
 			appsSpec = append(appsSpec, spec)

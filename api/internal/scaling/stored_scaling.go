@@ -50,9 +50,10 @@ func (s StoredScaling) ApplyToApp(ctx context.Context, tenantID, project, env st
 	app.Autoscaling = nil
 	if scaled.Autoscaling != nil {
 		app.Autoscaling = &db.BuildAppAutoscaling{
-			MinReplicas: scaled.Autoscaling.MinReplicas,
-			MaxReplicas: scaled.Autoscaling.MaxReplicas,
-			TargetCPU:   scaled.Autoscaling.TargetCPU,
+			MinReplicas:  scaled.Autoscaling.MinReplicas,
+			MaxReplicas:  scaled.Autoscaling.MaxReplicas,
+			TargetCPU:    scaled.Autoscaling.TargetCPU,
+			TargetMemory: scaled.Autoscaling.TargetMemory,
 		}
 	}
 	return app, true, nil
