@@ -353,7 +353,7 @@ tasks:
         # That task is not called: its contexts are the Taskfile's global k3d ones, which a
         # caller cannot override, and a called task does not inherit KUBECONFIG.
         crds=https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/example/prometheus-operator-crd
-        for ctx in core build cell-0 cell-1; do
+        for ctx in core build cell-0 cell-1 secrets; do
           kubectl --context "$ctx" create namespace monitoring --dry-run=client -o yaml | kubectl --context "$ctx" apply -f - >/dev/null
           kubectl --context "$ctx" apply --server-side \
             -f "$crds/monitoring.coreos.com_servicemonitors.yaml" \
@@ -370,7 +370,10 @@ tasks:
         done
         # Staging only: a pod with an IRSA role that the emulator's EKS layer never wired to
         # the emulator calls the real AWS and fails; nothing replaces it by itself.
-        bash infra/staging/restart-uninjected-pods.sh core build cell-0 cell-1
+        bash infra/staging/restart-uninjected-pods.sh core build cell-0 cell-1 secrets
+        # OpenBao on the secrets cluster before the core sync: loopzero-api encrypts
+        # tenant secrets with its transit engine and reads the AppRole this writes.
+        bash infra/staging/openbao.sh
         # The monitoring of the four clusters goes through internal ALBs whose DNSNames
         # exist only once the sync that creates each Ingress is done: the build cluster's
         # Loki (for the Promtail of core and the cells) and the federation Prometheus of
@@ -414,7 +417,7 @@ tasks:
       - mkdir -p {{.STAGING_ROOT}}
       - |
         set -euo pipefail
-        for cluster in core build cell-0 cell-1; do
+        for cluster in core build cell-0 cell-1 secrets; do
           aws eks update-kubeconfig --name "loopzero-staging-$cluster" --alias "$cluster" \
             --kubeconfig {{.STAGING_ROOT}}/kubeconfig >/dev/null
         done
@@ -444,6 +447,7 @@ tasks:
         printf 'export LOOPZERO_CACHE_AUTH_SECRET="%s"\n' "$(out data/valkey auth_token_secret_arn)"
         printf 'export LOOPZERO_VPC_ID="%s"\n' "$(out networking/vpc vpc_id)"
         printf 'export LOOPZERO_EDGE_KVS_ARN="%s"\n' "$(out edge/app-routes arn)"
+        printf 'export OPENBAO_AWS_KMS_KEY_ID="%s"\n' "$(out security/kms-openbao-unseal key_arn)"
 
   platform:verify:
     internal: true

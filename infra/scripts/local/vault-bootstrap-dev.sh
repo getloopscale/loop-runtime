@@ -182,6 +182,11 @@ log "Step 2: bao operator init (idempotent)"
 # key emitted by `operator init -recovery-shares` is still useful for
 # break-glass but operator-time, not Cleanroom-time. EC-7: Transit
 # ephemeral; EC-8: no seal-migration — Cleanroom always fresh-init.
+# AUTO_UNSEAL_MODE=awskms (staging and production, seal "awskms" in secrets.helmfile):
+# the vault unseals itself with the cloud KMS key, so init issues recovery keys instead
+# of unseal shares, and the init file keeps the root token and those recovery keys.
+INIT_SHARES="-key-shares=5 -key-threshold=3"
+[[ "$AUTO_UNSEAL_MODE" == "awskms" ]] && INIT_SHARES="-recovery-shares=5 -recovery-threshold=3"
 if [[ "$AUTO_UNSEAL_MODE" != "transit" ]]; then
   BAO_STATUS_JSON=$(bao status -format=json 2>/dev/null || true)
   INIT_STATUS=$(echo "$BAO_STATUS_JSON" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print(d.get('initialized', False))" 2>/dev/null || echo "False")
@@ -195,7 +200,8 @@ if [[ "$AUTO_UNSEAL_MODE" != "transit" ]]; then
       mv "$UNSEAL_FILE" "$ARCHIVE"
     fi
     if [[ "$DRY_RUN" -eq 0 ]]; then
-      INIT_OUT=$(bao operator init -key-shares=5 -key-threshold=3 -format=json)
+      # shellcheck disable=SC2086 # INIT_SHARES is two flags
+      INIT_OUT=$(bao operator init $INIT_SHARES -format=json)
       echo "$INIT_OUT" > "$UNSEAL_FILE"
       chmod 0600 "$UNSEAL_FILE"
       log "Init complete. Shards + root_token saved to $UNSEAL_FILE (mode 0600)"
@@ -219,8 +225,8 @@ fi
 log "Step 3: bao operator unseal × 3 (idempotent)"
 # T2.1: under AUTO_UNSEAL_MODE=transit, the Transit backend auto-unseals
 # main OpenBao at startup — no manual unseal required (blueprint D2).
-if [[ "$AUTO_UNSEAL_MODE" == "transit" ]]; then
-  log "Skip Step 3 (Shamir unseal) — AUTO_UNSEAL_MODE=transit; auto-unsealed at pod startup"
+if [[ "$AUTO_UNSEAL_MODE" == "transit" || "$AUTO_UNSEAL_MODE" == "awskms" ]]; then
+  log "Skip Step 3 (Shamir unseal): AUTO_UNSEAL_MODE=$AUTO_UNSEAL_MODE unseals at pod startup"
 else
 BAO_STATUS_JSON=$(bao status -format=json 2>/dev/null || true)
 SEALED=$(echo "$BAO_STATUS_JSON" | python3 -c "import sys,json; d=json.loads(sys.stdin.read() or '{}'); print(d.get('sealed', True))" 2>/dev/null || echo "True")

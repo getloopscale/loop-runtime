@@ -84,6 +84,7 @@ assembled, or when the decision gate has not been recorded.
 | Multi-cluster Kubernetes auth | one auth backend per cell cluster |
 | AWS resources | the KMS key, its `protect: true` guard, and the backup bucket |
 | Local secrets cluster | `task k3d:secrets:create` + `k3d:secrets:bootstrap`. Installing OpenBao into core is a **topology violation**: the `k3d:secrets:bootstrap-in-core` task was removed on 2026-08-12 (B-047) and the `openbao-bootstrap-in-core-task` gate fails on its existence, or on the same effect under another name. |
+| Staging secrets cluster | `task staging:platform` runs `infra/staging/openbao.sh`: OpenBao on the `secrets` EKS cluster, unsealed by the `awskms` seal, initialised with recovery keys after each rebuild (init file on the host, `/var/lib/loopzero-staging/openbao-init.json`, mode 0600). Why a dedicated cluster: `docs/decisions/2026-11-25-tenant-secrets-on-openbao.md`. |
 | Secret migration | moving existing secrets under Transit |
 
 ## Service-auth secret rotation (manual, ~3 min, zero downtime)

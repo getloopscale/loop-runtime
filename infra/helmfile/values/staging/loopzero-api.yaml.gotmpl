@@ -28,6 +28,13 @@ ingressRoute:
 
 config:
   loopzeroEnv: "production"
+  # Tenant secrets are encrypted by OpenBao's transit engine on the secrets cluster (ADR
+  # 2026-11-25 tenant secrets on OpenBao). The name resolves on core to the selector-less
+  # Service infra/staging/openbao.sh points at the secrets cluster's NodePort, so the
+  # certificate's name holds. The AppRole and the SPKI pin arrive through the Secrets
+  # values-bootstrap.yaml names (loopzero-openbao-approle, openbao-spki-pin).
+  openbaoTransitEnabled: "true"
+  openbaoVaultAddr: "https://openbao.secrets-system.svc.cluster.local:8200"
   # environments/staging.yaml tenantRegistry: builds push tenant images there.
   registryUrl: {{ printf "%s/%s" .Values.tenantRegistry.host .Values.tenantRegistry.repositoryPrefix | quote }}
   # The build cluster's Loki, through its internal ALB (monitoring/loki-internal), which
