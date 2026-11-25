@@ -6,6 +6,8 @@ package github
 import (
 	"bytes"
 	"fmt"
+	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -54,5 +56,33 @@ func ParseDeployDescriptor(content []byte) (*LoopZeroYamlMinimal, error) {
 	if len(descriptor.Apps) == 0 {
 		return nil, &InvalidDeployDescriptorError{Reason: "declares no apps. Add at least one app under `apps:`."}
 	}
+	if err := checkAppsAreBuildable(descriptor.Apps); err != nil {
+		return nil, err
+	}
 	return &descriptor, nil
+}
+
+// checkAppsAreBuildable refuses an app the build cannot make. Every app is built
+// from the canonical Dockerfile, which needs a runtime of the fixed stack and a
+// start command; without them the push is accepted and the build fails later
+// with an error that names neither field.
+func checkAppsAreBuildable(apps map[string]map[string]interface{}) error {
+	names := make([]string, 0, len(apps))
+	for name := range apps {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		app := apps[name]
+		runtime, _ := app["runtime"].(string)
+		if runtime != "node" && runtime != "python" {
+			return &InvalidDeployDescriptorError{Reason: fmt.Sprintf(
+				"app %q needs `runtime: node` or `runtime: python` (got %q).", name, runtime)}
+		}
+		if start, _ := app["start"].(string); strings.TrimSpace(start) == "" {
+			return &InvalidDeployDescriptorError{Reason: fmt.Sprintf(
+				"app %q needs `start`, the command that runs it (for example `start: node server.js`).", name)}
+		}
+	}
+	return nil
 }

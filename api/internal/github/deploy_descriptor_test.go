@@ -6,6 +6,7 @@ package github
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -101,5 +102,41 @@ func TestPrepareSourceBundle_DescriptorWithoutAppsReturnsNoDescriptor(t *testing
 	}
 	if uploader.uploadedKey != "tenant-1/source/sha4.bundle" {
 		t.Errorf("the bundle must still be staged; uploaded key = %q", uploader.uploadedKey)
+	}
+}
+
+// Every app is built by the canonical Dockerfile, which needs a runtime on the
+// fixed stack (node or python) and a start command. A descriptor without them
+// was connected, and then every push failed in the build: `framework: node`
+// (the CLI's theo.yaml field) built as runtime "unsupported", and an app with
+// no `start` failed generating its Dockerfile. Both builds reported "missing
+// image digest", which names neither field.
+func TestParseDeployDescriptor_RefusesAppsTheBuildCannotMake(t *testing.T) {
+	cases := map[string]struct{ content, mentions string }{
+		"no runtime":          {"apps:\n  web:\n    framework: node\n    start: node server.js\n", "runtime"},
+		"unsupported runtime": {"apps:\n  web:\n    runtime: go\n    start: ./server\n", "runtime"},
+		"no start command":    {"apps:\n  web:\n    runtime: node\n", "start"},
+		"one bad app of two":  {"apps:\n  api:\n    runtime: python\n    start: python app.py\n  web:\n    runtime: node\n", "web"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			d, err := ParseDeployDescriptor([]byte(tc.content))
+
+			var invalid *InvalidDeployDescriptorError
+			if !errors.As(err, &invalid) {
+				t.Fatalf("ParseDeployDescriptor = (%+v, %v), want *InvalidDeployDescriptorError", d, err)
+			}
+			if !strings.Contains(invalid.Error(), tc.mentions) {
+				t.Errorf("refusal %q does not name %q", invalid.Error(), tc.mentions)
+			}
+		})
+	}
+}
+
+func TestParseDeployDescriptor_AcceptsNodeAndPythonAppsWithAStartCommand(t *testing.T) {
+	content := "apps:\n  web:\n    runtime: node\n    start: node server.js\n  api:\n    runtime: python\n    start: python app.py\n"
+
+	if _, err := ParseDeployDescriptor([]byte(content)); err != nil {
+		t.Fatalf("ParseDeployDescriptor: %v", err)
 	}
 }
