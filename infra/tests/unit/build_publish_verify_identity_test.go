@@ -37,7 +37,7 @@ func verifyStep(t *testing.T) string {
 
 func TestBuildPublishVerifyPinsTheReusableInTheCertificateIdentity(t *testing.T) {
 	step := verifyStep(t)
-	if !strings.Contains(step, `--certificate-identity-regexp "^https://github\.com/${OWNER}/loopzero/\.github/workflows/build-publish\.yml@"`) {
+	if !strings.Contains(step, `--certificate-identity-regexp "^https://github\.com/${OWNER}/loop-runtime/\.github/workflows/build-publish\.yml@"`) {
 		t.Errorf("the verify step does not pin the reusable's own path in the SAN:\n%s", step)
 	}
 	if strings.Contains(step, "${IDENTITY_REPO}/\\.github") {
@@ -91,7 +91,7 @@ func TestBuildPublishVerifiesTheECRCopyWithTheSameIdentity(t *testing.T) {
 	step := buildPublishStepText(t, "Verify the ECR copy's signature")
 	for _, want := range []string{
 		"inputs.sign && inputs.verify && inputs.ecr_registry != ''",
-		`--certificate-identity-regexp "^https://github\.com/${OWNER}/loopzero/\.github/workflows/build-publish\.yml@"`,
+		`--certificate-identity-regexp "^https://github\.com/${OWNER}/loop-runtime/\.github/workflows/build-publish\.yml@"`,
 		`--certificate-github-workflow-repository "${CALLER_REPO}"`,
 	} {
 		if !strings.Contains(step, want) {
