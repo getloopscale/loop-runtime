@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,6 +24,9 @@ type DomainHealthStore interface {
 	// or "" for single-cell / backward-compatible behavior.
 	FindPendingForAutoVerify(ctx context.Context, cellID string) ([]ports.CustomDomain, error)
 	FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]ports.CustomDomain, error)
+	// FindServing returns the domains that are routed today: active, and
+	// degraded during the CNAME grace period.
+	FindServing(ctx context.Context) ([]ports.CustomDomain, error)
 	FindStalePending(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error)
 	FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error)
 	FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]ports.CustomDomain, error)
@@ -50,6 +54,15 @@ type DomainHealthChecker struct {
 	logger      *slog.Logger
 	interval    time.Duration
 	cellID      string // roadmap 03: cell scope for FindPendingForAutoVerify
+	// deployedApps is nil where the checker has no release data; the check for
+	// a removed app is skipped then.
+	deployedApps DeployedAppsReader
+}
+
+// WithDeployedApps lets the checker fail a domain whose app is no longer part
+// of the environment's running release.
+func (h *DomainHealthChecker) WithDeployedApps(apps DeployedAppsReader) {
+	h.deployedApps = apps
 }
 
 // DomainHealthCheckerConfig holds configuration.
@@ -131,6 +144,49 @@ func (h *DomainHealthChecker) runChecks(ctx context.Context) {
 	h.cleanupStalePending(ctx)
 	h.checkProvisioningTimeout(ctx) // F-006
 	h.checkTLSExpiry(ctx)           // F-005
+	h.failDomainsOfRemovedApps(ctx)
+}
+
+// failDomainsOfRemovedApps moves a routed domain to failed when the running
+// release of its environment no longer has the app the domain points to. A
+// deploy that replaces the app stops rendering the domain's route, so the host
+// answers 404 from then on while the row still says active.
+func (h *DomainHealthChecker) failDomainsOfRemovedApps(ctx context.Context) {
+	if h.deployedApps == nil {
+		return
+	}
+	domains, err := h.store.FindServing(ctx)
+	if err != nil {
+		h.logger.Error("domain health: find serving domains failed", "error", err)
+		metrics.DomainHealthCheckerErrors.WithLabelValues("app_removed").Inc()
+		return
+	}
+	for _, d := range domains {
+		if ctx.Err() != nil {
+			return
+		}
+		apps, found, err := h.deployedApps.DeployedApps(ctx, d.TenantID, d.ProjectName, d.Environment)
+		if err != nil {
+			h.logger.Error("domain health: deployed apps lookup failed", "error", err, "domain", d.Domain)
+			metrics.DomainHealthCheckerErrors.WithLabelValues("app_removed").Inc()
+			continue
+		}
+		// No running release: there is nothing to compare the domain against.
+		if !found || slices.Contains(apps, d.AppName) {
+			continue
+		}
+		failed, err := nextDomainStatus(d.Domain, d.Status, statemachine.DomainAppRemoved)
+		if err != nil {
+			h.logger.Warn("domain health: removed-app check skipped, status moved on", "error", err, "domain", d.Domain)
+			continue
+		}
+		if err := h.store.UpdateFailure(ctx, d.Domain, failed, appNotDeployedReason(d.AppName, d.Environment)); err != nil {
+			h.logger.Error("domain health: removed-app transition failed", "error", err, "domain", d.Domain)
+			continue
+		}
+		h.logger.Warn("domain health: domain failed, its app is no longer deployed",
+			"domain", d.Domain, "app", d.AppName, "environment", d.Environment)
+	}
 }
 
 // autoVerifyPending checks pending domains for TXT record (convenience feature).

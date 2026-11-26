@@ -10,6 +10,10 @@
 # the rebuild the deploy timer is made to handle the head of develop again, which
 # deploys it and reports its statuses on the new environment. A failed rebuild raises
 # the "rebuild" alarm (infra/staging/alarm.sh); a good one clears it.
+#
+# A good rebuild is followed by the restore drill of the platform's PostgreSQL
+# (infra/staging/restore-drill.sh of the rebuilt checkout), which reports its own status
+# and alarm. A failed drill fails this run, after everything above has been done.
 set -euo pipefail
 
 REMOTE="${DEPLOY_REMOTE:-https://github.com/getloopscale/loopzero.git}"
@@ -17,6 +21,8 @@ BRANCH="${DEPLOY_BRANCH:-develop}"
 STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loopzero-staging/deploy}"
 UP_CMD="${REBUILD_UP_CMD:-task staging:up}"
 ALARM="${REBUILD_ALARM_CMD:-/usr/local/lib/loopzero-staging/alarm.sh}"
+# The restore drill, given the rebuilt commit. Empty: the checkout's restore-drill.sh.
+RESTORE_DRILL_CMD="${REBUILD_RESTORE_DRILL_CMD:-}"
 
 CHECKOUT="$STATE_DIR/checkout"
 LOGS="$STATE_DIR/logs"
@@ -46,3 +52,12 @@ else
   log "error: the rebuild at ${sha:0:7} exited $code; see $rebuild_log"
   exit "$code"
 fi
+
+if [[ -z "$RESTORE_DRILL_CMD" ]]; then
+  if [[ ! -f "$CHECKOUT/infra/staging/restore-drill.sh" ]]; then
+    log "${sha:0:7} has no infra/staging/restore-drill.sh; no restore drill"
+    exit 0
+  fi
+  RESTORE_DRILL_CMD="bash $CHECKOUT/infra/staging/restore-drill.sh"
+fi
+$RESTORE_DRILL_CMD "$sha"

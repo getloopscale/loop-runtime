@@ -8,11 +8,18 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/drill/cost"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/drill/postgresrestore"
+	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
 )
 
 const drillHelpText = `loopzero-ops drill — pure-logic helpers for the drill/DR orchestrators
@@ -24,6 +31,12 @@ SUBCOMMANDS:
   cost --start <ISO> --end <ISO>    Compute drill run cost + render markdown report
                                     (replaces the arithmetic half of dr/cost-report.sh;
                                     the --auto Pulumi-state read stays in bash)
+  postgres-restore [--cluster <name>] [--namespace <ns>] [--context <ctx>] [--timeout <d>]
+                                    Prove the platform's PostgreSQL recovers from its
+                                    backups: write a marker, wait for its WAL to be
+                                    archived, recover a temporary cluster from the bucket,
+                                    compare, and delete the temporary cluster. Prints a
+                                    JSON report; exits 1 when the recovery fails.
 `
 
 func runDrill(args []string) int {
@@ -37,6 +50,8 @@ func runDrill(args []string) int {
 		return 0
 	case "cost":
 		return runDrillCost(args[1:])
+	case "postgres-restore":
+		return runDrillPostgresRestore(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown drill subcommand: %s\n\n%s", args[0], drillHelpText)
 		return 1
@@ -72,5 +87,41 @@ func runDrillCost(args []string) int {
 		return 0
 	}
 	fmt.Print(md)
+	return 0
+}
+
+// runDrillPostgresRestore recovers a temporary cluster from the backups of a running one
+// (internal/drill/postgresrestore) and reports what came back.
+func runDrillPostgresRestore(args []string) int {
+	fs := flag.NewFlagSet("drill postgres-restore", flag.ContinueOnError)
+	cluster := fs.String("cluster", "platform-postgres", "CloudNativePG cluster to recover from")
+	namespace := fs.String("namespace", "loopzero-data-plane", "namespace of the cluster")
+	kubeContext := fs.String("context", "", "kubeconfig context (default: the current one)")
+	timeout := fs.Duration("timeout", 10*time.Minute, "bound of each wait: WAL archive, and recovery")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	platform := postgresrestore.Kubectl{
+		Runner: shellrun.NewDefault(), Context: *kubeContext, Namespace: *namespace, Cluster: *cluster,
+	}
+	report, err := postgresrestore.Run(ctx, platform, postgresrestore.Options{
+		Timeout: *timeout, Poll: 5 * time.Second,
+		RunID: time.Now().UTC().Format("20060102T150405.000000000Z"),
+	})
+	out, encodeErr := json.MarshalIndent(report, "", "  ")
+	if encodeErr != nil {
+		fmt.Fprintf(os.Stderr, "drill postgres-restore: encode the report: %v\n", encodeErr)
+		return 1
+	}
+	fmt.Println(string(out))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "drill postgres-restore: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(os.Stderr, "[drill postgres-restore] %s recovered in %s (WAL archived in %s)\n",
+		*cluster, report.RecoveryTime.Round(time.Second), report.ArchiveWait.Round(time.Second))
 	return 0
 }

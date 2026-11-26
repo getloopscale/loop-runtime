@@ -32,9 +32,11 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/secrets"
 	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
 
@@ -276,6 +278,19 @@ const secretValueMaxBytes = 64 * 1024
 
 const secretValueTooLargeCode = "SECRET_VALUE_TOO_LARGE"
 
+const secretNameReservedCode = "SECRET_NAME_RESERVED"
+
+// secretNameReserved reports whether the platform sets a variable of this name
+// on the app's container itself. Such a secret would be saved and never reach
+// the app, so the handlers refuse it.
+func secretNameReserved(name string) bool {
+	return slices.Contains(manifests.PlatformEnvNames(), name)
+}
+
+func secretNameReservedMessage(name string) string {
+	return fmt.Sprintf("%s is set by the platform from the port the app declares, so a secret of that name would never reach the app. Use another name.", name)
+}
+
 func secretValueTooLargeMessage(name string) string {
 	return fmt.Sprintf("The value of %s is larger than 64 KiB, the most one secret can hold. Store large files elsewhere and keep a reference to them in the secret.", name)
 }
@@ -490,7 +505,7 @@ func (h *SecretHandler) assertSecretPlanLimit(
 func bulkNamesByEnv(secrets []secretBulkEntry) map[string][]string {
 	byEnv := map[string][]string{}
 	for _, e := range secrets {
-		if !secretNameRegex.MatchString(e.Name) {
+		if !secretNameRegex.MatchString(e.Name) || secretNameReserved(e.Name) {
 			continue
 		}
 		for _, env := range e.Envs {
@@ -542,6 +557,8 @@ type bulkEntryState struct {
 	valid bool
 	// tooLarge: the value is above secretValueMaxBytes and was never written.
 	tooLarge bool
+	// reserved: the platform sets a variable of this name; nothing was written.
+	reserved bool
 	aggs     bulkEnvAggregates
 }
 
@@ -579,6 +596,10 @@ func (h *SecretHandler) bulkProcess(ctx context.Context, uc *auth.UserContext, p
 		}
 		states[i] = st
 		if !st.valid {
+			continue
+		}
+		if secretNameReserved(entry.Name) {
+			st.reserved = true
 			continue
 		}
 		if len(entry.Value) > secretValueMaxBytes {
@@ -683,6 +704,12 @@ func (h *SecretHandler) bulkEntryResult(ctx context.Context, uc *auth.UserContex
 		result.Status = "failed"
 		result.Error = "INVALID_KEY"
 		result.ErrorCode = "INVALID_KEY"
+		return result
+	}
+	if st.reserved {
+		result.Status = "failed"
+		result.Error = secretNameReservedMessage(st.entry.Name)
+		result.ErrorCode = secretNameReservedCode
 		return result
 	}
 	if st.tooLarge {
@@ -807,6 +834,14 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_SECRET_NAME",
 			"message": "Secret name must be uppercase with underscores (e.g., DATABASE_URL). Got: '" + req.Name + "'.",
+		})
+		return
+	}
+
+	if secretNameReserved(req.Name) {
+		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"code":    secretNameReservedCode,
+			"message": secretNameReservedMessage(req.Name),
 		})
 		return
 	}

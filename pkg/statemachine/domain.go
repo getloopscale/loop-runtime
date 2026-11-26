@@ -41,6 +41,7 @@ const (
 	DomainRetry            Event = "DomainRetry"            // Retry after failure
 	DomainRemove           Event = "DomainRemove"           // User requests removal
 	DomainProvisionTimeout Event = "DomainProvisionTimeout" // Stuck > 1 hour
+	DomainAppRemoved       Event = "DomainAppRemoved"       // The running release no longer has the domain's app
 )
 
 // IsDomainTerminal returns true for terminal domain states.
@@ -101,6 +102,8 @@ func NewDomainMachine() *Machine {
 			// --- v1: Degraded (CNAME lost, grace period) ---
 			{From: DomainDegraded, Event: DomainCNAMERecovered, To: DomainActive},
 			{From: DomainDegraded, Event: DomainCNAMELost, To: DomainFailed},
+			{From: DomainActive, Event: DomainAppRemoved, To: DomainFailed},
+			{From: DomainDegraded, Event: DomainAppRemoved, To: DomainFailed},
 			{From: DomainDegraded, Event: DomainRemove, To: DomainRemoving},
 
 			// --- Shared: Failed recovery ---

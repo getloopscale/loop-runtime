@@ -45,6 +45,7 @@ const (
 	DPEventRetry            = DomainPhaseEvent(DomainRetry)
 	DPEventRemove           = DomainPhaseEvent(DomainRemove)
 	DPEventProvisionTimeout = DomainPhaseEvent(DomainProvisionTimeout)
+	DPEventAppRemoved       = DomainPhaseEvent(DomainAppRemoved)
 )
 
 // IsDomainPhaseTerminal returns true if the phase is terminal.

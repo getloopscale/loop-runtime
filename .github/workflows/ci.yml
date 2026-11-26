@@ -155,12 +155,13 @@ on:
   # PRIVATE sibling `loopzero-contracts`. The other six — including `cmd/loopzero-ops`, which
   # carries the gates — build with `GOWORK=off` and need no secret at all. That is what
   # makes a real gate for a fork possible: see `public-checks`.
+  #
+  # No path filter here, unlike `push:` above. Branch protection requires `CI gate`, and a
+  # workflow skipped by a path filter reports no status at all, so a pull request that
+  # changed only documentation stayed blocked on a check that could never arrive (#183).
+  # Such a pull request now pays for one full run.
   pull_request:
     branches: [develop, main]
-    paths-ignore:
-      - '.claude/**'
-      - '**/*.md'
-      - 'docs/**'
 
   # Without this, a repository using a merge queue waits forever for a check that never
   # reports on the queue's temporary branch, and there is no failure anywhere to read. It
