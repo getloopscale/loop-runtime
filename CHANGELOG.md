@@ -412,6 +412,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A custom domain that passed verification is provisioned again. The store handed the claim statement its two statuses in the wrong order, so the provisioner selected domains in `provisioning` and wrote `verified`: a verified domain stayed `verified` with no certificate and no route (#169).
 - `POST /api/v1/domains` enforces the plan's `custom_domains_per_env`: a domain past the limit of its environment is refused with 402 `PLAN_LIMIT_EXCEEDED`, naming the limit, the usage and `upgrade_url`. A Starter tenant, whose plan includes none, could register one (#166).
 - Staging installs Traefik after the AWS Load Balancer Controller on the core and on the cells. Installed side by side, Traefik's ALB Ingress could reach the controller's webhook before the pod served, and the sync stopped with `failed calling webhook "vingress.elbv2.k8s.aws"`.
 - A push to a connected repository respects the plan's builds per month, as the deploy route does. Over the limit nothing is built, and the commit gets a `loopzero/deploy` failure status with the limit, the usage and the advice to upgrade (#159).

@@ -294,9 +294,11 @@ func verifiedClaimTarget() statemachine.State {
 func (s *PostgresDomainStore) claimByStatus(ctx context.Context, fromStatus, toStatus string) ([]ports.CustomDomain, error) {
 	bridge := s.bridge()
 	q := generated.New()
+	// sqlc numbers the fields by placeholder: Status is $1, the status the rows
+	// hold, and Status_2 is $2, the status they move to.
 	rows, err := q.ClaimCustomDomainsByStatus(ctx, bridge, generated.ClaimCustomDomainsByStatusParams{
-		Status:   toStatus,
-		Status_2: fromStatus,
+		Status:   fromStatus,
+		Status_2: toStatus,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("domain store: claim %s→%s: %w", fromStatus, toStatus, err)
