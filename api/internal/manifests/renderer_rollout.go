@@ -401,7 +401,7 @@ func buildAppContainer(ri renderScope, app AppManifestInput, port int) k8sContai
 			{ContainerPort: port, Protocol: "TCP"},
 		}
 		container.Env = append(container.Env, k8sEnvVar{
-			Name: "PORT", Value: fmt.Sprintf("%d", port),
+			Name: PortEnvName, Value: fmt.Sprintf("%d", port),
 		})
 		container.StartupProbe = &k8sProbe{
 			HTTPGet:          k8sHTTPGet{Path: "/health", Port: port},
@@ -539,4 +539,15 @@ func replicasForApp(app AppManifestInput) int {
 // callers that report the scale of a deployed app without rendering it.
 func RenderedReplicas(app AppManifestInput) int {
 	return replicasForApp(app)
+}
+
+// PortEnvName is the variable the platform sets on an app's container to the
+// port the app declared.
+const PortEnvName = "PORT"
+
+// PlatformEnvNames lists the variables the platform sets on an app's container
+// itself. A value set there wins over one loaded from a Secret, so a tenant
+// secret of the same name would never reach the app.
+func PlatformEnvNames() []string {
+	return []string{PortEnvName}
 }
