@@ -409,6 +409,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Creating an environment writes its GitOps path before the environment itself. Written afterwards, the path arrived after the Argo CD Application had read a missing directory, and the Application stayed in `ComparisonError` for about three minutes (#134).
 - Creating an environment writes its directory to the tenant's GitOps repository, so its Argo CD Application compares clean before the first release. The Application reported `ComparisonError`, "app path does not exist", until something was deployed (#134).
 - The plan cap on environments counts every permanent environment a tenant has. It counted only the ones that had received a deploy, so `POST /api/v1/environments` never answered 402 for environments created and left empty (#153).
 - A push to a connected repository whose `loopzero.yaml` is invalid or missing sets the commit's `loopzero/deploy` status to `failure`, with the reason the file was refused. The push was dropped with a line in the API log and nothing on GitHub (#151).
