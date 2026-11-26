@@ -203,3 +203,15 @@ FROM releases r
 LEFT JOIN builds b ON b.id = r.build_id AND b.tenant_id = r.tenant_id
 WHERE r.tenant_id = $1 AND r.status = 'ACTIVE'
 ORDER BY r.project_id, r.environment, r.created_at DESC;
+
+-- name: ListLatestReleaseStatusByBuild :many
+-- The status of the latest release each of the given builds has in its own
+-- environment. A release that a promotion created elsewhere from the same
+-- build is left out by the join on environment: it says nothing about how the
+-- deploy of the build itself did. A build with no release has no row.
+SELECT DISTINCT ON (r.build_id) r.build_id, r.status
+FROM releases r
+JOIN builds b ON b.id = r.build_id AND b.environment = r.environment
+WHERE r.tenant_id = sqlc.arg(tenant_id)
+  AND r.build_id = ANY(sqlc.arg(build_ids)::text[])
+ORDER BY r.build_id, r.created_at DESC;
