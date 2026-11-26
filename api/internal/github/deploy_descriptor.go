@@ -21,11 +21,11 @@ import (
 // neither accepts the other's.
 const DeployDescriptorPath = "loopscale.yaml"
 
-// DeployDescriptorPaths lists every name the descriptor has had, in the order
-// they are looked up. The names after the first are the ones earlier releases
-// of the API and of the CLI wrote; a repository that still carries one keeps
-// deploying. When a repository has more than one, the first in this list wins.
-var DeployDescriptorPaths = []string{DeployDescriptorPath, "loopzero.yaml", "theo.yaml"}
+// DeployDescriptorPaths lists the names the descriptor is looked up under, in
+// order. The second is the one earlier releases of the API wrote; a repository
+// that still carries it keeps deploying. When a repository has both, the first
+// in this list wins.
+var DeployDescriptorPaths = []string{DeployDescriptorPath, "loopzero.yaml"}
 
 // InvalidDeployDescriptorError says why a descriptor cannot be deployed. The
 // message is written for the person who owns the repository.

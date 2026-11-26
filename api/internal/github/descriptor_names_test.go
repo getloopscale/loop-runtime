@@ -15,11 +15,11 @@ func descriptorFor(project string) string {
 	return strings.Replace(deployableDescriptor, "%s", project, 1)
 }
 
-// The CLI wrote theo.yaml and the push deploy read loopzero.yaml, so a project
-// the CLI deployed could not be connected (getloopscale/loop-runtime#89). Every name
-// a published CLI or an earlier API has used stays deployable.
+// The CLI and the push deploy once read different file names, so a project the
+// CLI deployed could not be connected (getloopscale/loop-runtime#89). Both names
+// the API reads stay deployable.
 func TestExtractDescriptor_ReadsEveryKnownName(t *testing.T) {
-	for _, name := range []string{"loopscale.yaml", "loopzero.yaml", "theo.yaml"} {
+	for _, name := range []string{"loopscale.yaml", "loopzero.yaml"} {
 		t.Run(name, func(t *testing.T) {
 			tarball := makeTarGz(t, map[string]string{
 				"owner-repo-abc123/" + name:   descriptorFor("hello"),
@@ -36,13 +36,13 @@ func TestExtractDescriptor_ReadsEveryKnownName(t *testing.T) {
 	}
 }
 
-func TestExtractDescriptor_PrefersLoopscaleThenLoopzeroThenTheo(t *testing.T) {
+func TestExtractDescriptor_PrefersLoopscaleOverLoopzero(t *testing.T) {
 	cases := []struct {
 		files map[string]string
 		want  string
 	}{
-		{map[string]string{"r/theo.yaml": descriptorFor("from-theo"), "r/loopzero.yaml": descriptorFor("from-loopruntime"), "r/loopscale.yaml": descriptorFor("from-loopscale")}, "from-loopscale"},
-		{map[string]string{"r/theo.yaml": descriptorFor("from-theo"), "r/loopzero.yaml": descriptorFor("from-loopruntime")}, "from-loopruntime"},
+		{map[string]string{"r/loopzero.yaml": descriptorFor("from-loopzero"), "r/loopscale.yaml": descriptorFor("from-loopscale")}, "from-loopscale"},
+		{map[string]string{"r/loopzero.yaml": descriptorFor("from-loopzero")}, "from-loopzero"},
 	}
 	for _, tc := range cases {
 		// The tar order is the map's, so run it several times: the choice must not depend on it.
@@ -59,13 +59,13 @@ func TestExtractDescriptor_PrefersLoopscaleThenLoopzeroThenTheo(t *testing.T) {
 }
 
 func TestExtractDescriptor_ErrorNamesTheFileThatWasRead(t *testing.T) {
-	_, err := extractLoopRuntimeYaml(makeTarGz(t, map[string]string{"r/theo.yaml": "project: hello\n"}))
+	_, err := extractLoopRuntimeYaml(makeTarGz(t, map[string]string{"r/loopzero.yaml": "project: hello\n"}))
 	var invalid *InvalidDeployDescriptorError
 	if !errors.As(err, &invalid) {
 		t.Fatalf("want InvalidDeployDescriptorError, got %v", err)
 	}
-	if !strings.HasPrefix(err.Error(), "theo.yaml ") {
-		t.Errorf("error = %q, want it to start with theo.yaml", err.Error())
+	if !strings.HasPrefix(err.Error(), "loopzero.yaml ") {
+		t.Errorf("error = %q, want it to start with loopzero.yaml", err.Error())
 	}
 }
 
@@ -80,5 +80,13 @@ func TestExtractDescriptor_IgnoresADescriptorBelowTheRoot(t *testing.T) {
 	_, err := extractLoopRuntimeYaml(makeTarGz(t, map[string]string{"r/sub/loopscale.yaml": descriptorFor("nested")}))
 	if err == nil {
 		t.Error("a descriptor in a subdirectory was read as the repository's")
+	}
+}
+
+// A descriptor under a name the API does not read is the same as no descriptor.
+func TestExtractDescriptor_IgnoresAnUnknownName(t *testing.T) {
+	_, err := extractLoopRuntimeYaml(makeTarGz(t, map[string]string{"r/platform.yaml": descriptorFor("hello")}))
+	if err == nil {
+		t.Fatal("want an error: only loopscale.yaml and loopzero.yaml are descriptors")
 	}
 }

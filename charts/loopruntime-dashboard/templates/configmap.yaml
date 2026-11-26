@@ -20,7 +20,7 @@ data:
     // Do not edit in-cluster: changes will be overwritten on next chart upgrade.
     // The object and keys the SPA reads (getloopscale/console dashboard/src/lib/http/config.ts,
     // the same ones its docker-entrypoint.sh writes). Empty means same-origin.
-    window.__THEO_CONFIG__ = {
+    window.__LOOPSCALE_CONFIG__ = {
       API_URL: {{ .Values.config.viteApiUrl | default "" | quote }},
       AUTH_URL: {{ .Values.config.viteAuthUrl | default "" | quote }},
       ACCOUNTS_URL: {{ .Values.config.viteAccountsUrl | default "" | quote }},

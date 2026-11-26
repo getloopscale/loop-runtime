@@ -3,7 +3,7 @@
 
 package charts
 
-// The dashboard SPA reads its runtime config from window.__THEO_CONFIG__
+// The dashboard SPA reads its runtime config from window.__LOOPSCALE_CONFIG__
 // (getloopscale/console dashboard/src/lib/http/config.ts), with the keys API_URL,
 // AUTH_URL, ACCOUNTS_URL and OAUTH_URL. The chart wrote window.__LOOPRUNTIME_CONFIG__
 // with other keys, so nothing it set reached the SPA, and the CLI's device flow was
@@ -37,8 +37,8 @@ config:
   viteAccountsUrl: "https://accounts.example.test"
   viteOauthUrl: "https://auth.example.test"
 `)
-	if !strings.Contains(js, "window.__THEO_CONFIG__ = {") {
-		t.Fatalf("__config.js does not set window.__THEO_CONFIG__:\n%s", js)
+	if !strings.Contains(js, "window.__LOOPSCALE_CONFIG__ = {") {
+		t.Fatalf("__config.js does not set window.__LOOPSCALE_CONFIG__:\n%s", js)
 	}
 	for _, want := range []string{
 		`API_URL: "https://api.example.test"`,

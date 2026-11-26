@@ -108,7 +108,7 @@ func TestPrepareSourceBundle_DescriptorWithoutAppsReturnsNoDescriptor(t *testing
 // Every app is built by the canonical Dockerfile, which needs a runtime on the
 // fixed stack (node or python) and a start command. A descriptor without them
 // was connected, and then every push failed in the build: `framework: node`
-// (the CLI's theo.yaml field) built as runtime "unsupported", and an app with
+// (a field older CLI releases wrote) built as runtime "unsupported", and an app with
 // no `start` failed generating its Dockerfile. Both builds reported "missing
 // image digest", which names neither field.
 func TestParseDeployDescriptor_RefusesAppsTheBuildCannotMake(t *testing.T) {

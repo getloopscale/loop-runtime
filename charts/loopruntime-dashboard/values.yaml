@@ -24,7 +24,7 @@ service:
   port: 8080
 
 config:
-  # Rendered into __config.js (window.__THEO_CONFIG__), mounted at
+  # Rendered into __config.js (window.__LOOPSCALE_CONFIG__), mounted at
   # /usr/share/nginx/html/__config.js and read by the SPA at page load. Empty is same-origin.
   # The API (API_URL) and Kratos (AUTH_URL; empty falls back to the API's) the SPA calls,
   # the host recovery starts on (ACCOUNTS_URL), and the OAuth2 server's public origin

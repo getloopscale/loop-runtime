@@ -570,11 +570,11 @@ func TestRepositories_Connect_DeployIsBoundToTheServerLifetime(t *testing.T) {
 	}
 }
 
-// A repository the CLI set up carries theo.yaml, and one connected before the
-// rename carries loopzero.yaml. Connect accepts both, and loopscale.yaml
+// A repository connected before the descriptor was renamed carries
+// loopzero.yaml. Connect accepts it and loopscale.yaml
 // (getloopscale/loop-runtime#89).
 func TestRepositories_Connect_AcceptsEveryDescriptorName(t *testing.T) {
-	for _, name := range []string{"loopscale.yaml", "loopzero.yaml", "theo.yaml"} {
+	for _, name := range []string{"loopscale.yaml", "loopzero.yaml"} {
 		t.Run(name, func(t *testing.T) {
 			intro := &fakeIntrospector{files: map[string]string{name: deployableLoopRuntimeYaml}}
 			h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
@@ -590,7 +590,7 @@ func TestRepositories_Connect_AcceptsEveryDescriptorName(t *testing.T) {
 }
 
 func TestRepositories_Connect_InvalidDescriptorNamesTheFileItRead(t *testing.T) {
-	intro := &fakeIntrospector{files: map[string]string{"theo.yaml": "project: hello\n"}}
+	intro := &fakeIntrospector{files: map[string]string{"loopzero.yaml": "project: hello\n"}}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
 	w := httptest.NewRecorder()
@@ -599,7 +599,7 @@ func TestRepositories_Connect_InvalidDescriptorNamesTheFileItRead(t *testing.T) 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", w.Code)
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("theo.yaml declares no apps")) {
-		t.Errorf("want the refusal to name theo.yaml, got %s", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte("loopzero.yaml declares no apps")) {
+		t.Errorf("want the refusal to name loopzero.yaml, got %s", w.Body.String())
 	}
 }

@@ -347,8 +347,8 @@ func TestStagingCloudRunsInProductionModeWithStripeTestKeys(t *testing.T) {
 }
 
 // The control plane's traces reach the collector the core helmfile installs, which hands
-// them to Tempo. Unset, loopruntime-cloud dialled the console's default address
-// (otel-collector.theo-system), which no cluster resolves, every five seconds.
+// them to Tempo. Unset, loopruntime-cloud dialled the console's default address,
+// which no cluster resolves, every five seconds.
 func TestStagingControlPlaneTracesReachTheCollector(t *testing.T) {
 	const collector = "otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317"
 	for _, release := range []struct{ name, chart string }{

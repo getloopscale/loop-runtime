@@ -21,7 +21,7 @@ Keys are documented in UPPER_SNAKE env form (the canonical install surface); eac
 ## Runtime mechanism
 
 These values are rendered at `helm install` time into the `__config.js` ConfigMap and
-mounted into the nginx-served SPA. The browser reads `window.__THEO_CONFIG__` at page load
+mounted into the nginx-served SPA. The browser reads `window.__LOOPSCALE_CONFIG__` at page load
 to discover where the API, Kratos and Hydra live. Changing a value requires a chart upgrade
 (the ConfigMap is regenerated); opt-in Reloader is not applicable to a static SPA bundle.
 

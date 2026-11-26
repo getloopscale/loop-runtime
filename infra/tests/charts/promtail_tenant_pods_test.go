@@ -76,10 +76,10 @@ func loopruntimePodsRelabels(t *testing.T, helmfile, env string, extraEnv []stri
 // decide on, so every tenant pod was dropped and Runtime logs stayed empty
 // (getloopscale/loop-runtime#110).
 var tenantPodDiscovered = map[string]string{
-	"__meta_kubernetes_namespace":                            "loopruntime-tn-acme-shop-production",
-	"__meta_kubernetes_pod_uid":                              "0e1d",
-	"__meta_kubernetes_pod_container_name":                   "web",
-	"__meta_kubernetes_pod_label_app":                        "shop-web",
+	"__meta_kubernetes_namespace":                                      "loopruntime-tn-acme-shop-production",
+	"__meta_kubernetes_pod_uid":                                        "0e1d",
+	"__meta_kubernetes_pod_container_name":                             "web",
+	"__meta_kubernetes_pod_label_app":                                  "shop-web",
 	"__meta_kubernetes_pod_label_runtime_getloopscale_com_tenant":      "tn-acme",
 	"__meta_kubernetes_pod_label_runtime_getloopscale_com_project":     "shop",
 	"__meta_kubernetes_pod_label_runtime_getloopscale_com_app_name":    "web",
@@ -124,9 +124,9 @@ func TestPromtailKeepsATenantPodByItsOwnLabels(t *testing.T) {
 
 func TestPromtailKeepsAPlatformComponentPod(t *testing.T) {
 	labels, kept := relabel(t, loopruntimePodsRelabels(t, "cell.helmfile.yaml.gotmpl", "staging", stagingMonitoringOutputs()), map[string]string{
-		"__meta_kubernetes_namespace":                          "loopruntime-system",
-		"__meta_kubernetes_pod_uid":                            "77aa",
-		"__meta_kubernetes_pod_container_name":                 "manager",
+		"__meta_kubernetes_namespace":                                    "loopruntime-system",
+		"__meta_kubernetes_pod_uid":                                      "77aa",
+		"__meta_kubernetes_pod_container_name":                           "manager",
 		"__meta_kubernetes_pod_label_runtime_getloopscale_com_component": "app-operator",
 		"__meta_kubernetes_pod_label_runtime_getloopscale_com_app":       "app-operator",
 	})
