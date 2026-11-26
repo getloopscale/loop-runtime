@@ -112,6 +112,8 @@ platformImages:
     # aws.imagePullSecret). Required while profile.loopzeroCloud is on.
     loopzero-cloud: "develop-9adbf29"
     loopzero-dashboard: "develop-a31f979"
+    # getloopscale/looptrace publishes this one, public on GHCR.
+    looptrace: "develop-1f7060f"
 
 # The platform's own PostgreSQL, on CloudNativePG, for the data-plane services: one
 # Cluster on the core cluster and one database per service. RDS stays the control plane's
@@ -122,17 +124,18 @@ platformPostgres:
   image: "ghcr.io/cloudnative-pg/postgresql:16.14-minimal-trixie@sha256:9d1ace6dcb1e0cec5791f6ffa760ca78a45bdc42fecfe4700b9c498cfdfe5e4e"
   instances: 1
   storage: 5Gi
-  # One entry per service that keeps its data here. looptrace's goes in with its release
-  # (dataPlane.services below): the release writes the Secret its role's password is read
-  # from, so the two are turned on together.
-  #   - { name: looptrace, owner: looptrace, passwordSecret: looptrace-postgres-role }
-  databases: []
+  # One entry per service that keeps its data here. A service's entry goes in with its
+  # release (dataPlane.services below): the release writes the Secret the role's password
+  # is read from.
+  databases:
+    - name: looptrace
+      owner: looptrace
+      passwordSecret: looptrace-postgres-role
 
-# The data-plane services staging runs: none yet. `looptrace` (values/staging/
-# looptrace.yaml.gotmpl) is added here, with platformImages.tags.looptrace and its database
-# above, once getloopscale/looptrace publishes its first image.
+# The data-plane services staging runs. looptrace only: memory and RAG are not deployed.
 dataPlane:
-  services: []
+  services:
+    - looptrace
 
 registries:
   docrPrefix: "ghcr.io/getloopscale/"

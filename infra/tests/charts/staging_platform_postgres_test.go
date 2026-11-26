@@ -77,3 +77,35 @@ func TestOtherEnvironments_DoNotInstallPlatformPostgres(t *testing.T) {
 		}
 	}
 }
+
+// looptrace is the one data-plane service staging runs. Its release and its database are
+// turned on together: the release writes the Secret the database role's password is read
+// from, and the service connects as that role.
+func TestStaging_RunsLooptraceOnThePlatformPostgres(t *testing.T) {
+	if !releaseInEnvironment(t, "staging", "looptrace").Installed {
+		t.Fatal("staging does not install the looptrace release")
+	}
+
+	service := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "looptrace",
+		"infra/helm/data-plane-service", stagingOutputs...)
+	deployment := renderedObject(t, service, "Deployment", "looptrace")
+	if deployment == nil {
+		t.Fatal("the looptrace release renders no Deployment")
+	}
+	if len(renderedObjectsOfKind(t, service, "StatefulSet")) != 0 {
+		t.Error("the looptrace release runs a PostgreSQL of its own; staging keeps its data on platform-postgres")
+	}
+	if renderedObject(t, service, "ExternalSecret", "looptrace-postgres-role") == nil {
+		t.Error("the looptrace release does not write the Secret its database role reads")
+	}
+
+	database := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "platform-postgres",
+		"infra/helm/platform-postgres", stagingOutputs...)
+	db := renderedObject(t, database, "Database", "platform-postgres-looptrace")
+	if db == nil {
+		t.Fatal("platform-postgres renders no Database for looptrace")
+	}
+	if got := dig(db, "spec", "owner"); got != "looptrace" {
+		t.Errorf("the looptrace database is owned by %v, want looptrace", got)
+	}
+}

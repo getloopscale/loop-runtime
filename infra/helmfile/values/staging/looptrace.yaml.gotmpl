@@ -29,11 +29,6 @@ externalSecret:
     postgres-password: looptrace-db-password
     admin-bootstrap-token: looptrace-admin-bootstrap-token
   postgresRoleSecret: looptrace-postgres-role
-  # getloopscale/looptrace is private on GHCR; same login as loopzero-cloud's.
-  imagePull:
-    secretName: ghcr-pull
-    remoteKey: {{ required "aws.imagePullSecret is not set" .Values.aws.imagePullSecret | quote }}
-    registry: ghcr.io
 
 postgres:
   # The init container that waits for the database; the service's database is external.
