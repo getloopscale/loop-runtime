@@ -55,7 +55,7 @@ func TestReleaseReaperReason_UnknownEvent(t *testing.T) {
 	if !strings.Contains(strings.ToLower(reason), "timeout") {
 		t.Errorf("expected generic timeout fallback, got %q", reason)
 	}
-	if !strings.Contains(strings.ToLower(reason), "loopruntime") {
+	if !strings.Contains(strings.ToLower(reason), "loopscale") {
 		t.Errorf("fallback must still suggest a loopscale command, got %q", reason)
 	}
 }
