@@ -139,7 +139,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	// switched to the summary variant so the dashboard /projects table
 	// renders M2-accurate "Live envs" count + status-derived StatusDot
 	// without an N+1 client-side fanout. Response is wire-format
-	// additive — legacy consumers (CLI `loopruntime project list`) ignore the
+	// additive — legacy consumers (CLI `loopscale project list`) ignore the
 	// extra fields per Rule 5.
 	projects, err := h.store.ListByTenantWithSummary(ctx, uc.TenantID)
 	if err != nil {

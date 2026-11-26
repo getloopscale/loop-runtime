@@ -49,7 +49,7 @@ type RealDeployHarness struct {
 
 // fixtureApp captures one app entry from the fixture's loopzero.yaml so the
 // harness can build a faithful POST /v1/builds payload that matches what
-// the LoopRuntime API would receive from a real `loopruntime deploy` command.
+// the LoopRuntime API would receive from a real `loopscale deploy` command.
 //
 // CHG-002b 2026-04-27: previously the harness hardcoded apps=[{api,node,3000}]
 // which silently dropped 3 of 4 apps when the fixture was dogfood-monorepo.
@@ -572,7 +572,7 @@ func (h *RealDeployHarness) buildsFor(t TenantIdentity) BuildAPI {
 func (h *RealDeployHarness) SubmitBuild(ctx context.Context, t TenantIdentity, commitSHA string) (string, time.Duration, error) {
 	start := time.Now()
 	// CHG-002b 2026-04-27: build apps array from parsed loopzero.yaml so the
-	// payload mirrors what `loopruntime deploy` would send. Previously hardcoded
+	// payload mirrors what `loopscale deploy` would send. Previously hardcoded
 	// to [{api,node,3000}] and silently dropped 3 of 4 apps for
 	// dogfood-monorepo, breaking L3-realistic.
 	payload := map[string]any{

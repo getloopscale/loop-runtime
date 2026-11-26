@@ -390,7 +390,7 @@ func TestProjectDeleter_UsesProjectNameForGitOps(t *testing.T) {
 }
 
 // CHG-2026-04-29-DOGFOOD-REAL-E2E iter 13 — cascade-cancel regression test.
-// Without ReleaseStore.CancelAllByEnv, a re-deploy after `loopruntime project delete`
+// Without ReleaseStore.CancelAllByEnv, a re-deploy after `loopscale project delete`
 // finds the prior ACTIVE release row via GetActiveByEnv and uses its stale
 // git commit when promoting. This test asserts the cascade fires for every
 // environment passed to Delete.

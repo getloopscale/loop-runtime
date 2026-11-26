@@ -11,7 +11,7 @@
 // We do NOT install a GitHub App into the test repo — that requires
 // org-level admin and is out of scope. Instead we validate:
 //   - `loopruntime connect --help` exits 0 + emits structured help (CLI contract).
-//   - The JSON contract from `loopruntime project inspect --json` includes the
+//   - The JSON contract from `loopscale project inspect --json` includes the
 //     repository field shape, even when not connected.
 package e2e
 
@@ -65,7 +65,7 @@ var _ = Describe("Journey: Connect", Ordered, Label("journey"), func() {
 		stdout, stderr, exitCode := runLoopRuntime("project", "list", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime project list should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale project list should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"project list stdout": stdout,

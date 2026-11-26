@@ -157,7 +157,7 @@ spec:
           annotations:
             summary: "App pod {{ $labels.pod }} in {{ $labels.namespace }} stuck in CrashLoopBackOff"
             description: "Pod has been crash-looping for 5+ minutes. Resources consumed without serving traffic."
-            runbook: "Check app logs via `loopruntime logs`. If image is broken, rollback via `loopruntime rollback`."
+            runbook: "Check app logs via `loopscale logs`. If image is broken, rollback via `loopscale rollback`."
 
         # Image pull failure for 5+ minutes
         - alert: LoopRuntimeAppImagePullFailed
@@ -223,7 +223,7 @@ spec:
           annotations:
             summary: "Deployment {{ $labels.deployment }} in {{ $labels.namespace }} failed to progress"
             description: "Deployment hit progressDeadlineSeconds (210s). New pods could not become ready."
-            runbook: "Check pod events and logs. Likely causes: image crash, failing health check, insufficient resources. Use `loopruntime rollback` to revert."
+            runbook: "Check pod events and logs. Likely causes: image crash, failing health check, insufficient resources. Use `loopscale rollback` to revert."
 
     - name: loopruntime.workload.critical
       rules:

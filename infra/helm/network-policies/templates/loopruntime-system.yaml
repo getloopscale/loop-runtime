@@ -97,7 +97,7 @@ spec:
         - port: 4445
           protocol: TCP
     # Loki (monitoring namespace) — loopruntime logs queries build pipeline stdout/stderr.
-    # Without this rule, `loopruntime logs --build <id>` returns "No logs available" with
+    # Without this rule, `loopscale logs --build <id>` returns "No logs available" with
     # API log: "loki query failed: connection refused". Found during E2E 2026-04-23.
     - to:
         - namespaceSelector:

@@ -190,7 +190,7 @@ fi
 # (config.runtimeKubeContext in charts/loopruntime-api/values-bootstrap.yaml).
 # B34 fix doc says the kubeconfig "ships with a single context named
 # in-cluster", but F-11 (2026-05-07) regenerated it with name=runtime —
-# silent drift that broke `loopruntime secret set` (SecretK8sManager construct
+# silent drift that broke `loopscale secret set` (SecretK8sManager construct
 # fails with `context "in-cluster" does not exist` → manager nil → ESO
 # sync skipped → pod CreateContainerConfigError).
 # Aligning the context name with mgmt + build (also in-cluster) restores

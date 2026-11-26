@@ -28,7 +28,7 @@ type LogQueryOpts struct {
 	// SinceSeconds restricts the query to entries newer than now()-SinceSeconds.
 	// Zero or negative means "no time-window restriction" — the Loki client
 	// applies its own default (last 1h). Beta Logs Gate Criterion 7: gives
-	// the operator a "--since 24h|7d|30d" knob on `loopruntime logs`.
+	// the operator a "--since 24h|7d|30d" knob on `loopscale logs`.
 	SinceSeconds int64
 	// Debug toggles the LogQL filter that hides non-user-facing log
 	// lines. Plan J-17 Layer 3 (2026-06-06): user view (Debug=false)

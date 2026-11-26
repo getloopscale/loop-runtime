@@ -439,7 +439,7 @@ func collectOtherEnvsWithReleases(builds []StatusBuild, queriedEnv string) []env
 //
 // Red Team loopruntime-cloud#85 closure: the user-facing `git_commit` field
 // is the APP commit (`build.commit_sha` — what the user pushed and
-// `loopruntime deploy` printed in stdout), NOT the internal gitops repo
+// `loopscale deploy` printed in stdout), NOT the internal gitops repo
 // commit (which is what `releases.git_commit` actually stores for
 // SyncCallbackActivator integrity per MEET-2026-03-31-024 BUG-03). When
 // the active release's build_id matches a build in the result set, we

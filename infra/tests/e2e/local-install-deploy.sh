@@ -255,7 +255,7 @@ log "  ✓ CLI user bound to tenant 'tn-e2e'"
 
 # loopruntime login
 LOOPRUNTIME_URL="$API_URL" loopruntime login --token "$TOKEN" 2>&1 | grep -q "Authenticated" \
-  || fail "loopruntime login failed" 3
+  || fail "loopscale login failed" 3
 log "  ✓ loopruntime login OK"
 
 # ──────────────────────────────────────────────────────────────────────
@@ -273,7 +273,7 @@ git add . && git commit -q -m "init"
 # ArgoCD Application CR. Without this, the deploy submits a build but
 # the gitops sync target never exists and the release stays PENDING.
 #
-# We POST directly (not `loopruntime init`) so we don't overwrite the fixture's
+# We POST directly (not `loopscale init`) so we don't overwrite the fixture's
 # loopzero.yaml — the fixture defines the apps explicitly (api on port 3000).
 PROJECT_RESP="$(curl -sf -X POST -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
@@ -314,7 +314,7 @@ if timeout "$DEPLOY_TIMEOUT_SEC" sh -c "cd '$WORK' && LOOPRUNTIME_URL='$API_URL'
 else
   log "  ✗ Deploy failed or timed out — last 30 lines:"
   tail -30 "$DEPLOY_LOG"
-  fail "loopruntime deploy did not reach ACTIVE in ${DEPLOY_TIMEOUT_SEC}s" 4
+  fail "loopscale deploy did not reach ACTIVE in ${DEPLOY_TIMEOUT_SEC}s" 4
 fi
 
 # ──────────────────────────────────────────────────────────────────────
@@ -359,7 +359,7 @@ fi
 log "── Phase 6: attestation assertion"
 
 # Find the most recent build_id for this tenant from the API. We don't
-# have it from `loopruntime deploy` output reliably, so we query the API.
+# have it from `loopscale deploy` output reliably, so we query the API.
 BUILD_ID="$(curl -sf -H "Authorization: Bearer $TOKEN" \
   "$API_URL/api/v1/projects/e2e-project/builds?limit=1" 2>/dev/null \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['builds'][0].get('build_id') or d['builds'][0].get('id') or '' if d.get('builds') else '')" 2>/dev/null || true)"

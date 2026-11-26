@@ -6,7 +6,7 @@
 -- Background: pkg/statemachine/release.go declares both states (line
 -- 27-28: `ReleaseRollingBack`, `ReleaseRolledBack`) as part of the
 -- canonical Release state machine. Production code transitions to
--- ROLLING_BACK on `loopruntime rollback` (services/rollback_orchestrator.go)
+-- ROLLING_BACK on `loopscale rollback` (services/rollback_orchestrator.go)
 -- and to ROLLED_BACK after the new sync activates. The CHECK constraint
 -- introduced in migration 000001 (and rewritten in 000008 for ARCHIVED)
 -- never included these two states, so every rollback attempt fails

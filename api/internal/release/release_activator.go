@@ -360,13 +360,13 @@ func (k ActivationKernel) emitCompleted(ctx context.Context, release *db.Release
 // F-03 fix: computes URL for server/frontend apps so deploy.completed SSE event includes it.
 //
 // Plan release-blockers-2026-06-25-set v1.1 #61 (2026-06-26):
-// Closes loopruntime-cloud#61 ("loopruntime deploy announces .loopruntime.local URL not publicly
+// Closes loopruntime-cloud#61 ("loopscale deploy announces .loopruntime.local URL not publicly
 // resolvable"). The deploy.completed SSE event URL composition is now the
 // SAME canonical that status.go uses — operator-configured LOOPRUNTIME_PUBLIC_DOMAIN
 // (e.g. `prod-dev.getloopscale.app`) preferred when set; falls back to BASE_DOMAIN
 // (legacy default `loopruntime.local`) only when no public override is wired. This
 // mirrors the existing `StatusHandler.publicDomain` fallback ladder so
-// `loopruntime deploy` and `loopruntime status` emit byte-identical URLs (no more
+// `loopscale deploy` and `loopscale status` emit byte-identical URLs (no more
 // "deploy says .loopruntime.local, status says .prod-dev.getloopscale.app" mismatch).
 func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain string) []ActivationAppInfo {
 	var specs []db.BuildAppSpec
@@ -377,7 +377,7 @@ func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain s
 		}
 	}
 	// Canonical: prefer the operator-configured public domain so the URL
-	// announced by `loopruntime deploy` is the SAME URL `loopruntime status` returns
+	// announced by `loopscale deploy` is the SAME URL `loopscale status` returns
 	// AND publicly resolvable. Empty publicDomain → fall back to baseDomain
 	// (preserves the pre-#61 behavior for envs without a public wildcard).
 	domain := UserFacingDomain(publicDomain, baseDomain)

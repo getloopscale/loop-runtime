@@ -1,5 +1,5 @@
 -- CHG-2026-05-03-SCALE-REAL — Plan T2.1.
--- Persist per-app scaling configuration so `loopruntime scale` becomes real (no longer 202 stub).
+-- Persist per-app scaling configuration so `loopscale scale` becomes real (no longer 202 stub).
 -- Replaces "edit loopzero.yaml + redeploy" workflow for replica + autoscaling changes.
 --
 -- Forward-only migration (LoopRuntime convention). No .down.sql.

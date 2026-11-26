@@ -87,7 +87,7 @@ spec:
             loopruntime_component: secrets
           annotations:
             runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#loopruntimesecretesosyncskipped"
-            summary: "loopruntime secret set silently no-ops (ESO sync disabled)"
+            summary: "loopscale secret set silently no-ops (ESO sync disabled)"
             description: |
               loopruntime_secret_externalsecret_total{result="skip"} > 0 means the
               SecretK8sManager was nil at boot (CELL_0_KUBECONFIG mount

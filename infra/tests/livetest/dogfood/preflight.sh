@@ -472,7 +472,7 @@ check_eso_cluster_secret_store() {
 # -----------------------------------------------------------------------------
 # Discovered live (CHG-2026-04-30-INFRA-PARITY): operator finalizers race
 # externally-deleted resources, leaving ns in Terminating with no owner.
-# Subsequent `loopruntime env create` for same name fails ("already exists").
+# Subsequent `loopscale env create` for same name fails ("already exists").
 # Fix: scripts/cleanup-terminating-namespaces.sh (idempotent, allowlist-gated).
 check_no_terminating_namespaces() {
   local id="T0.10"

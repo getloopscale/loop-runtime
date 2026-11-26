@@ -25,8 +25,8 @@ func TestReleaseReaperReason_GitPushTimeout(t *testing.T) {
 	if !strings.Contains(lower, "likely cause") {
 		t.Errorf("expected `Likely cause` phrase, got %q", reason)
 	}
-	if !strings.Contains(lower, "loopruntime deploy") {
-		t.Errorf("expected `loopruntime deploy` retry hint, got %q", reason)
+	if !strings.Contains(lower, "loopscale deploy") {
+		t.Errorf("expected `loopscale deploy` retry hint, got %q", reason)
 	}
 }
 
@@ -45,8 +45,8 @@ func TestReleaseReaperReason_SyncTimeout(t *testing.T) {
 	// Crucial: runtime logs (NOT build logs) is the right command
 	// for a release that's stuck after the manifests were pushed —
 	// the pod is the suspect.
-	if !strings.Contains(lower, "loopruntime logs --runtime") {
-		t.Errorf("expected `loopruntime logs --runtime` hint (pod is the suspect for PENDING-stuck), got %q", reason)
+	if !strings.Contains(lower, "loopscale logs --runtime") {
+		t.Errorf("expected `loopscale logs --runtime` hint (pod is the suspect for PENDING-stuck), got %q", reason)
 	}
 }
 
@@ -56,6 +56,6 @@ func TestReleaseReaperReason_UnknownEvent(t *testing.T) {
 		t.Errorf("expected generic timeout fallback, got %q", reason)
 	}
 	if !strings.Contains(strings.ToLower(reason), "loopruntime") {
-		t.Errorf("fallback must still suggest a loopruntime command, got %q", reason)
+		t.Errorf("fallback must still suggest a loopscale command, got %q", reason)
 	}
 }

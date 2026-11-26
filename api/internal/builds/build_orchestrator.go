@@ -35,7 +35,7 @@ import (
 
 // ProjectEnsurer guarantees a project exists in the projects table.
 // Used by the deploy flow so that deleted-then-redeployed projects
-// reappear in `loopruntime project list`.
+// reappear in `loopscale project list`.
 type ProjectEnsurer interface {
 	EnsureProject(ctx context.Context, tx db.DBTX, tenantID, name, createdBy string) error
 }
@@ -197,7 +197,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 //
 // Per D1: when DB row exists, it overrides yaml; when absent, yaml preserved.
 // Race condition (T2.1 Deep Dive): resolve runs inside the submit transaction.
-// A concurrent `loopruntime scale` Upsert running between resolve start and tx commit
+// A concurrent `loopscale scale` Upsert running between resolve start and tx commit
 // produces a stale BuildAppSpec snapshot — acceptable per eventual consistency
 // (next deploy picks up the newer state). The serializable isolation level
 // guarantees no torn reads within this transaction.

@@ -61,7 +61,7 @@ ports:
     nodeFilters:
       - loadbalancer
   # 30094 exposes loki-cross-cluster so Promtail (build cluster) can ship workflow
-  # pod logs to Loki (mgmt cluster). Without this, `loopruntime logs --build <id>` works
+  # pod logs to Loki (mgmt cluster). Without this, `loopscale logs --build <id>` works
   # only if logs arrive via another path. F1.4 E2E validation 2026-04-23.
   - port: 30094:30094
     nodeFilters:

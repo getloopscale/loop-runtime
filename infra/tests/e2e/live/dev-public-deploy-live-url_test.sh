@@ -2,7 +2,7 @@
 # Plan m37-tenant-cr-project-sync-canonical-fix v1.0 T3.1 — LIVE 4-scenario
 # E2E for `loopruntime-cloud#37` scenario 4 (BUILD → RELEASE → URL chain). The
 # Sprint 8 #37 close shipped the watcher namespace-scoped LIST but missed
-# the per-(project,env) tuple shallow-check gap that prevents `loopruntime deploy`
+# the per-(project,env) tuple shallow-check gap that prevents `loopscale deploy`
 # from extending a tenant's Tenant CR `spec.environments[]` when a NEW
 # project is deployed against an existing tenant.
 #
@@ -56,7 +56,7 @@ LIVE 4-scenario test for loopruntime-cloud#37 scenario 4 (BUILD → RELEASE → 
   B — ArgoCD AppProject \`<tenant>\` gains a \`destinations[].namespace\`
       matching \`loopruntime-<tenant>-<project>-<env>\` within 60s.
   C — Release reaches ACTIVE within $WAIT_BUDGET_SECONDS seconds AND
-      \`release.url\` is non-empty (\`loopruntime status --json\` view).
+      \`release.url\` is non-empty (\`loopscale status --json\` view).
   D — HTTP probe of the Live URL returns 200..399 (workload responds).
 
 Operator HARD STOP per cleanroom-up-live-test-mandate.md.

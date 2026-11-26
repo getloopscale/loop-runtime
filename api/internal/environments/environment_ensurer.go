@@ -181,7 +181,7 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 				"ENV_PROVISION_TIMEOUT",
 				fmt.Sprintf(
 					"Environment %q was created but is not yet ready after %s. "+
-						"Run `loopruntime env list` to check status, then retry `loopruntime deploy`.",
+						"Run `loopscale env list` to check status, then retry `loopscale deploy`.",
 					envName, timeout,
 				))
 

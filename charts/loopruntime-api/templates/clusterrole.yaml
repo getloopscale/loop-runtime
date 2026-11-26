@@ -12,7 +12,7 @@ rules:
   #   - Argo Workflows in the `argo` namespace (build pipeline)
   #   - ClusterCredentials (multi-cluster mode)
   #   - PlatformBootstrap (dev seed)
-  # Without these, `loopruntime deploy` fails at submit-workflow with 403 Forbidden.
+  # Without these, `loopscale deploy` fails at submit-workflow with 403 Forbidden.
   - apiGroups: ["runtime.getloopscale.com"]
     resources: ["*"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

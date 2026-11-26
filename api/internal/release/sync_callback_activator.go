@@ -41,8 +41,8 @@ type SyncCallbackActivator struct {
 	// publicDomain is the operator-configured wildcard root mirrored from
 	// LOOPRUNTIME_PUBLIC_DOMAIN (e.g. `prod-dev.getloopscale.app`). When set, the
 	// deploy.completed SSE event URL uses this domain instead of the legacy
-	// baseDomain (`loopruntime.local`) — closes loopruntime-cloud#61 so the URL `loopruntime deploy`
-	// announces is the SAME publicly-resolvable URL `loopruntime status` returns.
+	// baseDomain (`loopruntime.local`) — closes loopruntime-cloud#61 so the URL `loopscale deploy`
+	// announces is the SAME publicly-resolvable URL `loopscale status` returns.
 	publicDomain string
 	logger       *slog.Logger
 	// appLabelReader resolves tenant and environment from the runtime.getloopscale.com/tenant

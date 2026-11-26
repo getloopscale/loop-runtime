@@ -25,7 +25,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	if h.cfZone != nil {
 		httpio.WriteJSON(w, http.StatusGone, map[string]string{
 			"code":    "DEPRECATED",
-			"message": "TXT verification is deprecated. Domains now use nameserver delegation. Use 'loopruntime domain add' to register a new domain.",
+			"message": "TXT verification is deprecated. Domains now use nameserver delegation. Use 'loopscale domain add' to register a new domain.",
 		})
 		return
 	}
@@ -107,6 +107,6 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		Domain:     d.Domain,
 		Status:     string(next),
 		VerifiedAt: &now,
-		Message:    "Provisioning in progress. Check status with: loopruntime domain status " + d.Domain,
+		Message:    "Provisioning in progress. Check status with: loopscale domain status " + d.Domain,
 	})
 }

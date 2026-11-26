@@ -170,7 +170,7 @@ func (m *TenantCRManager) AddEnvironment(ctx context.Context, tenantID, project,
 // ErrEnvironmentNotFound is returned by RemoveEnvironment when the named
 // environment is not present in the Tenant CR. Callers can map to HTTP 404.
 // AUDIT-12 (CHG-2026-04-23-AUDIT-12): previously this was silently idempotent,
-// causing `loopruntime env delete nonexistent` to return "deleted" misleadingly.
+// causing `loopscale env delete nonexistent` to return "deleted" misleadingly.
 var ErrEnvironmentNotFound = ports.ErrEnvironmentNotFound
 
 // RemoveEnvironment removes an environment entry from the Tenant CR spec.environments[].
@@ -273,7 +273,7 @@ func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, pr
 		return nil, fmt.Errorf("k8s: get tenant CR %q for GetEnvironmentDetail: %w", tenantID, err)
 	}
 
-	// Issue #139 — a project-less lookup (the CLI's `loopruntime env inspect <name>`
+	// Issue #139 — a project-less lookup (the CLI's `loopscale env inspect <name>`
 	// has no --project flag) used to require entry.Project == "", which the
 	// #124 backfill made unsatisfiable. resolveEnvEntry documents the full
 	// order; it returns an error only for the genuinely ambiguous case.

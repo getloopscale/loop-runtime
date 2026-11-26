@@ -63,7 +63,7 @@ var _ = Describe("Journey 04: Scale", Ordered, Label("journey"), func() {
 
 		// Scale returns 0 or reports acknowledged/applied.
 		Expect(exitCode).To(Equal(0),
-			"loopruntime scale --replicas 3 should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale scale --replicas 3 should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"scale stdout": stdout,

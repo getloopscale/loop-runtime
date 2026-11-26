@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopRuntime Authors
 
-// RED test for issue #139: `loopruntime env inspect production` answers
-// "Environment 'production' not found" while `loopruntime env list` shows it active
+// RED test for issue #139: `loopscale env inspect production` answers
+// "Environment 'production' not found" while `loopscale env list` shows it active
 // and a release is serving HTTP 200 from it.
 //
 // This is the MIRROR of issue #142. Both were caused by the #124 backfill
@@ -12,7 +12,7 @@
 //	#142  env list:    `|| e.Project == ""`      matched too MUCH → duplicate
 //	#139  env inspect: `entry.Project == project` matched too LITTLE → not found
 //
-// `loopruntime env inspect <name>` has no `--project` flag, so the API receives
+// `loopscale env inspect <name>` has no `--project` flag, so the API receives
 // `project=""`. Before the backfill that resolved the legacy entry, which was
 // the only one. After the backfill the entry carries
 // `Project: "loopzerokit-example"`, strict equality fails, and the lookup returns

@@ -3,7 +3,7 @@
 //
 // SSE deploy stream test — validates real-time event delivery during deploys.
 //
-// Objective: verify that `loopruntime logs --follow` / build progress SSE
+// Objective: verify that `loopscale logs --follow` / build progress SSE
 // streaming works reliably under concurrent deploy load. Specifically:
 //
 //   1. SSE connections establish quickly (first event within 5s)

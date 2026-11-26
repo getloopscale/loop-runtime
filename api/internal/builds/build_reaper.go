@@ -183,15 +183,15 @@ func reaperStuckPodReason(stuckPodReason string) string {
 func reaperReason(event statemachine.BuildPhaseEvent, cfg BuildReaperConfig) string {
 	switch event {
 	case statemachine.BPEventQueueTimeout:
-		return "Build was QUEUED for more than " + humanBudget(cfg.QueueTimeout) + ". Likely cause: build cluster is at capacity OR a previous build is still using the per-tenant concurrency slot. Next: run `loopruntime status` to see pending builds; consider canceling a stuck build with `loopruntime cancel`."
+		return "Build was QUEUED for more than " + humanBudget(cfg.QueueTimeout) + ". Likely cause: build cluster is at capacity OR a previous build is still using the per-tenant concurrency slot. Next: run `loopscale status` to see pending builds; consider canceling a stuck build with `loopruntime cancel`."
 	case statemachine.BPEventTimeout:
-		return "Build was RUNNING for more than " + humanBudget(cfg.RunningTimeout) + ". Likely cause: image build step is slow (large layers, npm install resolving many packages) OR the build container is hung on a network call. Next: run `loopruntime logs --build <id>` and check the LAST log line — that's the step where the build stalled."
+		return "Build was RUNNING for more than " + humanBudget(cfg.RunningTimeout) + ". Likely cause: image build step is slow (large layers, npm install resolving many packages) OR the build container is hung on a network call. Next: run `loopscale logs --build <id>` and check the LAST log line — that's the step where the build stalled."
 	case statemachine.BPEventReleaseTimeout:
-		return "Build was RELEASING (image built, release activation in flight) for more than " + humanBudget(cfg.ReleasingTimeout) + ". Likely cause: deployment sync is slow OR the workload cluster is unhealthy. Next: run `loopruntime status` to see if the release became active; if not, retry with `loopruntime deploy`."
+		return "Build was RELEASING (image built, release activation in flight) for more than " + humanBudget(cfg.ReleasingTimeout) + ". Likely cause: deployment sync is slow OR the workload cluster is unhealthy. Next: run `loopscale status` to see if the release became active; if not, retry with `loopscale deploy`."
 	case statemachine.BPEventCancelTimeout:
-		return "Cancellation did not complete within " + humanBudget(cfg.CancelTimeout) + ". The build pod may need manual cleanup. Next: run `loopruntime status` to confirm the build moved to CANCELLED; if still CANCELLING, contact support."
+		return "Cancellation did not complete within " + humanBudget(cfg.CancelTimeout) + ". The build pod may need manual cleanup. Next: run `loopscale status` to confirm the build moved to CANCELLED; if still CANCELLING, contact support."
 	default:
-		return "Build reaped due to timeout. Run `loopruntime logs --build <id>` for context."
+		return "Build reaped due to timeout. Run `loopscale logs --build <id>` for context."
 	}
 }
 

@@ -34,7 +34,7 @@ func newInvalidArgument(msg string) *loopruntimeerrors.LoopRuntimeError {
 // in app_scaling_config.
 //
 // Plan T2.1 of `pre-launch-gaps-plan.md`. Replaces the previous
-// stub-202 path where `loopruntime scale` returned acknowledged but did
+// stub-202 path where `loopscale scale` returned acknowledged but did
 // nothing persistent.
 type ScalingConfig struct {
 	ID           string `json:"id"`

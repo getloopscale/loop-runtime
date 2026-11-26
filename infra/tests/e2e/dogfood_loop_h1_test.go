@@ -11,7 +11,7 @@
 //   - `deploy_e2e_test.go` (T4.3 of the parent plan) focuses on the **deploy**
 //     path end-to-end; it assumes tenant/project already exist.
 //   - `dogfood_loop_h1_test.go` (T6.1) focuses on the **user journey** —
-//     it runs `loopruntime login`, executes each step of the happy path as a
+//     it runs `loopscale login`, executes each step of the happy path as a
 //     real operator would, and the test validates that each exit code matches
 //     the intent (Rule 4).
 //
@@ -19,7 +19,7 @@
 // PAT with `read:user` scope or a Hydra OAuth token). CI runs it as a manual
 // trigger (not on PR builds — it needs a real cluster).
 //
-// **Cleanup**: defer `loopruntime project delete` in each test.
+// **Cleanup**: defer `loopscale project delete` in each test.
 package e2e
 
 import (
@@ -113,14 +113,14 @@ func parseJSONLine(t *testing.T, raw string) map[string]any {
 // TestDogfoodLoopH1 — complete real-user journey.
 //
 // Steps:
-//  1. `loopruntime login --token $LOOPRUNTIME_TOKEN` — exit 0
-//  2. `loopruntime whoami --json` — authenticated:true
-//  3. `loopruntime init --yes --name <unique>` in a tmp dir — loopzero.yaml written,
+//  1. `loopscale login --token $LOOPRUNTIME_TOKEN` — exit 0
+//  2. `loopscale whoami --json` — authenticated:true
+//  3. `loopscale init --yes --name <unique>` in a tmp dir — loopzero.yaml written,
 //     exit 0 (preflightAuth passes because the token is valid — F-05 contract)
-//  4. `loopruntime deploy --json` — exit 0, build_id returned, app eventually
+//  4. `loopscale deploy --json` — exit 0, build_id returned, app eventually
 //     reaches HTTP 200 via Traefik (Proof of Life)
-//  5. `loopruntime status --json` — environment ACTIVE
-//  6. `loopruntime project delete <name> --yes --json` — exit 0
+//  5. `loopscale status --json` — environment ACTIVE
+//  6. `loopscale project delete <name> --yes --json` — exit 0
 //  7. Proof of Death: workload pod removed in <60s
 //
 // Each step asserts exit code + parses JSON response + checks specific

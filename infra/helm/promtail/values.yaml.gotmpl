@@ -143,7 +143,7 @@ config:
       # configuration ONLY scraped pods with the
       # `workflows.argoproj.io/workflow` label — i.e. Argo Workflow
       # build pods. Runtime pods in tenant namespaces (the entire
-      # point of `loopruntime logs --runtime`) were silently dropped. This
+      # point of `loopscale logs --runtime`) were silently dropped. This
       # explains the audit's "log streaming 60%" verdict: runtime
       # log queries against Loki returned empty even when pods were
       # producing logs.

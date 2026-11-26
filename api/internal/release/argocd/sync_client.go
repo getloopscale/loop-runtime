@@ -146,7 +146,7 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 // before submitting the sync operation. ArgoCD repo-server caches manifest
 // generation errors (e.g., "app path does not exist") for ~5 minutes per
 // (repo, path, revision). When tenant-controller bootstraps a gitops repo
-// with an empty initial commit before `loopruntime deploy` writes manifests, the
+// with an empty initial commit before `loopscale deploy` writes manifests, the
 // first comparison caches the error. Subsequent syncs reuse the cache and
 // surface as "InvalidSpecError: Application referencing project X which does
 // not exist" — a misleading message that has nothing to do with the AppProject.

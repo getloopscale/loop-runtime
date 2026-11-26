@@ -311,7 +311,7 @@ app-dev.getloopscale.com {
   # Consent + DeviceVerify). The CLI device-flow lands the operator at
   # https://app-dev.getloopscale.com/auth/login?login_challenge=<id>; without this
   # handle the request fell through to the SPA file_server catch-all and React
-  # Router rendered "Page not found" — BLOCKER for `loopruntime login --device-flow`,
+  # Router rendered "Page not found" — BLOCKER for `loopscale login --device-flow`,
   # which was preventing the deploy chain end-to-end (P0 mandate 2026-06-28).
   # Mirror the /v1/* shape (same Host rewrite + same upstream).
   #
@@ -333,13 +333,13 @@ app-dev.getloopscale.com {
   # Plan caddyfile-app-dev-prod-bundle-file-server-canonical v1.4 (2026-06-26
   # — closes loopruntime-cloud#88): /engine/* is the canonical BFF proxy prefix the
   # dashboard (`engineFetch` in `src/lib/api.ts:197` → `cloudFetch(`/engine${path}`)`)
-  # AND the LoopRuntime CLI (`loopruntime whoami` → `GET ${LOOPRUNTIME_URL}/engine/api/v1/auth/whoami`)
+  # AND the LoopRuntime CLI (`loopscale whoami` → `GET ${LOOPRUNTIME_URL}/engine/api/v1/auth/whoami`)
   # both use to reach the engine API via loopruntime-cloud's opaque pass-through
   # (`/engine/*` route in loopruntime-cloud authenticated with Ed25519 service-auth
   # per loopruntime-cloud/CLAUDE.md). Without this handle, every engine call
   # (deploy, whoami, list projects, build status, …) falls through to the
   # SPA catch-all and the consumer JSON.parse's `<!DOCTYPE html>...` →
-  # Red Team #88 LIVE: `loopruntime whoami → "Cannot reach API"` + dashboard
+  # Red Team #88 LIVE: `loopscale whoami → "Cannot reach API"` + dashboard
   # dashboard data screens render blank. Mirror /v1/* shape (Host: cloud-dev
   # so loopruntime-cloud's host-aware middleware treats this as the canonical
   # cross-origin proxy entry).

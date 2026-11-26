@@ -53,7 +53,7 @@
       "date": "2026-07-01",
       "from": 497,
       "to": 500,
-      "reason": "Red Team loopruntime-cloud#160 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-cli-logs-listbuilds-inference_test.sh (3-scenario LIVE \u2014 /builds endpoint contract + CLI source uses listBuilds + version bump gate) + infra/tests/check-dev-public-cli-logs-listbuilds-inference-syntax_test.sh (22-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-cli-logs-listbuilds-inference.sh (aggregator with CLI unit tests). Fix in loopruntime-cli: logs.ts adds listBuilds as PRIMARY inference source (same SoT as `loopruntime build list`) with fallback to getProjectStatus. Per UNBREAKABLE feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
+      "reason": "Red Team loopruntime-cloud#160 closure canonical triplet \u2014 +3 net. New scripts: infra/tests/e2e/dev-public-cli-logs-listbuilds-inference_test.sh (3-scenario LIVE \u2014 /builds endpoint contract + CLI source uses listBuilds + version bump gate) + infra/tests/check-dev-public-cli-logs-listbuilds-inference-syntax_test.sh (22-assertion hermetic guard) + archive/canonical-tests-v1/scripts/local/dogfood-cli-logs-listbuilds-inference.sh (aggregator with CLI unit tests). Fix in loopruntime-cli: logs.ts adds listBuilds as PRIMARY inference source (same SoT as `loopscale build list`) with fallback to getProjectStatus. Per UNBREAKABLE feedback_issue_fix_requires_failing_e2e_test_2026_06_25."
     },
     {
       "date": "2026-07-01",

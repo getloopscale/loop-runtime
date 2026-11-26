@@ -85,7 +85,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 	// T2 amendment 2026-05-13 (finding-2026-05-13-e2e-token-refresh-divergence):
 	// populate per-suite XDG_CONFIG_HOME with a freshly-issued JWT via
-	// `loopruntime login --token`. After this, all CLI subprocesses spawned by
+	// `loopscale login --token`. After this, all CLI subprocesses spawned by
 	// runLoopRuntime* read the token from configStore (matching the production
 	// path) instead of LOOPRUNTIME_TOKEN env injection. The on401 → ensureFreshToken
 	// pipeline now has access to the same configStore the CLI would use in
@@ -110,7 +110,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 		loopruntimeInvocation{env: []string{"XDG_CONFIG_HOME=" + xdgDir}},
 		"login", "--token", token, "--expires-in", "86400", "--json")
 	Expect(loginCode).To(Equal(0),
-		"loopruntime login --token failed (exit %d): %s%s", loginCode, loginOut, loginErrOut)
+		"loopscale login --token failed (exit %d): %s%s", loginCode, loginOut, loginErrOut)
 	// Sanity: configStore file exists at expected path.
 	cfgPath := filepath.Join(xdgDir, "loopruntime", "config.json")
 	if _, statErr := os.Stat(cfgPath); statErr != nil {
@@ -118,8 +118,8 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 		cfgPath = filepath.Join(xdgDir, ".loopruntime", "config.json")
 	}
 	Expect(cfgPath).To(BeAnExistingFile(),
-		fmt.Sprintf("loopruntime login completed but configStore file missing under %s", xdgDir))
-	GinkgoWriter.Printf("loopruntime login wrote config to %s\n", cfgPath)
+		fmt.Sprintf("loopscale login completed but configStore file missing under %s", xdgDir))
+	GinkgoWriter.Printf("loopscale login wrote config to %s\n", cfgPath)
 
 	return nil
 }, func(_ []byte) {

@@ -95,8 +95,8 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 		}
 
 		// Step 2.5: ensure project exists in projects table (idempotent).
-		// After `loopruntime project delete` + redeploy, the build succeeds but the
-		// project doesn't appear in `loopruntime project list` because it was hard-deleted.
+		// After `loopscale project delete` + redeploy, the build succeeds but the
+		// project doesn't appear in `loopscale project list` because it was hard-deleted.
 		if o.projectStore != nil {
 			ensureCtx, ensureSpan := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.project.ensure",
 				trace.WithAttributes(

@@ -34,7 +34,7 @@ ports:
   # address. Without this publication the only path was the IP of the
   # `k3d-loopruntime-build-server-0` container — assigned by DHCP, reshuffled on every
   # `docker restart` / `k3d cluster create`. When it reshuffled, a recorded LOKI_URL
-  # pointed at another cluster IN SILENCE, and the symptom (an empty `loopruntime logs`) read
+  # pointed at another cluster IN SILENCE, and the symptom (an empty `loopscale logs`) read
   # as "Loki is down", never as "wrong cluster".
   #
   # Published, it is reachable through the network gateway (host.k3d.internal) plus

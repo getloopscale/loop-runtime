@@ -58,7 +58,7 @@ describe('Promtail scrape config (Beta Logs Gate)', () => {
   });
 
   it('promotes runtime.getloopscale.com/app + tenant + environment + component as Loki labels', () => {
-    // These are the labels `loopruntime logs --runtime --app <name>` will
+    // These are the labels `loopscale logs --runtime --app <name>` will
     // filter on. Without app/tenant/environment labels, the runtime
     // log endpoint can only scope by namespace (= tenant+env) — the
     // exact 60% gap the audit flagged.

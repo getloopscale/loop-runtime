@@ -875,7 +875,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	auditctx.SetResourceID(ctx, project)
 
 	// T1.1 of deep-review-2026-05-10-remediation-plan: serialize mutations
-	// per (tenant, project, env) so concurrent `loopruntime secret set` + a deploy
+	// per (tenant, project, env) so concurrent `loopscale secret set` + a deploy
 	// capturing config cannot race.
 	var created bool
 	err := h.locker.WithLock(ctx, uc.TenantID, project, req.Environment, func(_ dbtx.DBTX) error {
@@ -940,7 +940,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// dogfood-2026-05-08-fixes T2.3 (F-2): emit "skip" metric when k8sSync is
 	// nil — that path was the silent-failure cause, formerly invisible. Now
 	// `rate(loopruntime_secret_externalsecret_total{result="skip"}[5m]) > 0` alerts
-	// that the API is silently no-opping `loopruntime secret set`.
+	// that the API is silently no-opping `loopscale secret set`.
 	//
 	// B-176: bulkProcessEnvs handles the same condition and must emit the same
 	// series. It did not, and the gap was found by reading the two paths side

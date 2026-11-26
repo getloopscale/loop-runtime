@@ -364,8 +364,8 @@ func TestReleaseAppsToActivationApps_NilApps(t *testing.T) {
 // ("loopruntime.local" — internal, non-resolvable) AND publicDomain
 // ("prod-dev.getloopscale.app" — canonical public wildcard) are set, the URL
 // emitted on deploy.completed MUST use publicDomain — the SAME URL that
-// `loopruntime status` returns. Pre-#61 the function only accepted baseDomain →
-// `loopruntime deploy` announced `.loopruntime.local` while `loopruntime status` returned
+// `loopscale status` returns. Pre-#61 the function only accepted baseDomain →
+// `loopscale deploy` announced `.loopruntime.local` while `loopscale status` returned
 // `.prod-dev.getloopscale.app`. The mismatch is the bug.
 func TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61(t *testing.T) {
 	appsJSON, _ := json.Marshal([]deploycontracts.AppRelease{

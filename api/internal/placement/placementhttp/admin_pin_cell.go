@@ -11,7 +11,7 @@
 //     (X-Service-Auth header, NOT user-bearer-token). Self-service
 //     bypass would let any tenant migrate its own workload across
 //     cells, breaking placement layer's capacity gate semantics.
-//   • The plan's "loopruntime deploy --cell <id>" wording was loose; the
+//   • The plan's "loopscale deploy --cell <id>" wording was loose; the
 //     SHIPPING shape is "loopruntime admin tenants pin --cell <id> --tenant
 //     <id>". Wire-shape change captured here for the CLI to consume.
 //

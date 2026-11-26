@@ -47,7 +47,7 @@ type EnsureProjectParams struct {
 // Idempotent upsert used by the deploy flow to guarantee the project
 // is registered in the projects table. ON CONFLICT (tenant_id, name)
 // DO NOTHING preserves the original row when a redeploy fires after
-// the project was deleted via `loopruntime project delete` and then
+// the project was deleted via `loopscale project delete` and then
 // recreated.
 func (q *Queries) EnsureProject(ctx context.Context, db DBTX, arg EnsureProjectParams) error {
 	_, err := db.Exec(ctx, ensureProject,
@@ -152,7 +152,7 @@ type ListProjectsByTenantRow struct {
 }
 
 // Returns all projects for a tenant, ordered by name (consistent
-// output for `loopruntime project list`).
+// output for `loopscale project list`).
 func (q *Queries) ListProjectsByTenant(ctx context.Context, db DBTX, tenantID string) ([]ListProjectsByTenantRow, error) {
 	rows, err := db.Query(ctx, listProjectsByTenant, tenantID)
 	if err != nil {

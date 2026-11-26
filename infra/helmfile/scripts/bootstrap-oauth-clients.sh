@@ -7,7 +7,7 @@
 # `infra/tests/e2e/local-install-deploy.sh:222` as a fail-loud check
 # ("loopruntime-cli OAuth2 client not registered (Step 6 of install)"). In
 # standalone-multi the step did NOT exist, leaving Hydra empty and breaking
-# `loopruntime login` (device flow → 502 AUTH_SERVICE_ERROR).
+# `loopscale login` (device flow → 502 AUTH_SERVICE_ERROR).
 #
 # Idempotent: GET first, POST if absent, PUT if present. Without
 # touching product code — the whole flow goes through the Hydra admin REST API,
@@ -17,7 +17,7 @@
 # Clients registered:
 #   1. loopruntime-cli — public client (token_endpoint_auth_method=none) with
 #      grant_types: device_code + refresh_token + authorization_code.
-#      Used by the `loopruntime login` device flow + dashboard PKCE.
+#      Used by the `loopscale login` device flow + dashboard PKCE.
 #   2. loopruntime-bootstrap — confidential client with the client_credentials
 #      grant. Used by automation/CI/dogfood loops to obtain a
 #      machine-to-machine token without a browser.

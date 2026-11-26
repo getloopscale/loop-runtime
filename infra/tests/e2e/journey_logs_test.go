@@ -3,7 +3,7 @@
 
 // Journey: Logs (T3.2 of deep-review-remediation-plan)
 //
-// Validates the `loopruntime logs` CLI command against the API. The command
+// Validates the `loopscale logs` CLI command against the API. The command
 // surfaces build logs (Loki-backed in production, in-memory fallback in
 // dev). This journey does NOT exercise the SSE stream — only the
 // snapshot path which is the documented contract for CI scripts.
@@ -55,12 +55,12 @@ var _ = Describe("Journey: Logs", Ordered, Label("journey"), func() {
 		Expect(buildID).NotTo(BeEmpty())
 	})
 
-	It("loopruntime logs --build returns exit 0 with body", func() {
+	It("loopscale logs --build returns exit 0 with body", func() {
 		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "logs",
 			"--build", buildID, "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime logs --build-id should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale logs --build-id should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"logs stdout": stdout,
@@ -73,10 +73,10 @@ var _ = Describe("Journey: Logs", Ordered, Label("journey"), func() {
 		// assert the exit-code + Rule-3 contract here. Production tests
 		// against a Loki-backed stack assert content separately.
 		Expect(strings.TrimSpace(stdout)).NotTo(BeEmpty(),
-			"loopruntime logs should produce non-empty output")
+			"loopscale logs should produce non-empty output")
 	})
 
-	It("loopruntime logs --json schema is stable", func() {
+	It("loopscale logs --json schema is stable", func() {
 		stdout, _, exitCode := runLoopRuntimeInDir(workDir, "logs",
 			"--build", buildID, "--json")
 		if exitCode != 0 {

@@ -225,7 +225,7 @@ func (h *EnvironmentHandler) WithPreviewSlotLookup(lookup PreviewSlotLookup) *En
 //
 // M2 v1.2 (2026-06-07): `Project` is REQUIRED. Empty value → 400
 // INVALID_FIELD. The project is the user-friendly slug (`projects.name`),
-// NOT the UUID (`projects.id`) — same convention as `loopruntime deploy`
+// NOT the UUID (`projects.id`) — same convention as `loopscale deploy`
 // (EC-3 of plan v1.2; the canonical "Project name vs project ID" rule
 // in CLAUDE.md).
 type createEnvironmentRequest struct {

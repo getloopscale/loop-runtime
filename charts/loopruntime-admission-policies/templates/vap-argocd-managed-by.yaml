@@ -26,7 +26,7 @@ spec:
       message: >
         ArgoCD Applications and AppProjects must have the 'runtime.getloopscale.com/managed-by'
         label set by the TenantController. Manual creation is prohibited.
-        Use 'loopruntime init' + 'loopruntime deploy' to provision applications.
+        Use 'loopscale init' + 'loopscale deploy' to provision applications.
       reason: Forbidden
 ---
 apiVersion: admissionregistration.k8s.io/v1

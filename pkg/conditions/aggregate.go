@@ -29,7 +29,7 @@ const (
 
 // AggregateToPhase maps a Condition slice + observedGeneration +
 // currentGeneration to a single Phase. Designed for status reporting
-// surfaces (e.g., `loopruntime status`, ArgoCD health, top-level CR phase
+// surfaces (e.g., `loopscale status`, ArgoCD health, top-level CR phase
 // fields) that want a single string instead of three booleans.
 //
 // Algorithm:

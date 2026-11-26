@@ -286,7 +286,7 @@ var (
 	// ErrInternalError is returned for unexpected server-side failures.
 	ErrInternalError = &LoopRuntimeError{
 		Code:    "INTERNAL_ERROR",
-		Message: "Something went wrong. Try again, or check `loopruntime status` for details. If the problem persists, contact support.",
+		Message: "Something went wrong. Try again, or check `loopscale status` for details. If the problem persists, contact support.",
 	}
 
 	// ErrPayloadTooLarge is returned when the request body exceeds the size limit.
@@ -619,7 +619,7 @@ func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *Loop
 // so loopruntime-cli + dashboards + telemetry can switch on it cleanly.
 var ErrBuildSubmitFailed = &LoopRuntimeError{
 	Code:    "BUILD_SUBMIT_FAILED",
-	Message: "The build could not be triggered. Try again, or check `loopruntime status` for details.",
+	Message: "The build could not be triggered. Try again, or check `loopscale status` for details.",
 }
 
 // NewComposed returns an error with base's code whose message pairs an
@@ -705,7 +705,7 @@ func isUsefulDetail(detail string) bool {
 // secret writes depend on — issue #138.
 //
 // Before this sentinel, a backend that could not encrypt surfaced as the same
-// generic INTERNAL_ERROR as a database outage or any other 5xx. `loopruntime secret
+// generic INTERNAL_ERROR as a database outage or any other 5xx. `loopscale secret
 // set` answered "Something went wrong" and nothing persisted, while `loopruntime
 // secret list` kept working (reads do not encrypt). The issue author had to
 // GUESS the cause from which project happened to work — their report offers a

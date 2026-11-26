@@ -69,7 +69,7 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 			"--env", env, "--app", app, "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime secret set should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale secret set should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"secret set stdout": stdout,
@@ -111,7 +111,7 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 			"--env", env, "--app", app, "--yes", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime secret delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale secret delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"secret delete stdout": stdout,

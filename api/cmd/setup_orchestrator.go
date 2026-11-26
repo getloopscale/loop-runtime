@@ -184,7 +184,7 @@ func setupOrchestrator(
 	promotedApps release.PromotionAppExposer,
 ) *OrchestratorDeps {
 	// The orchestrator builds its OWN project store for the deploy-time
-	// EnsureProject path (`loopruntime deploy <new-name>`). It is wired through the same
+	// EnsureProject path (`loopscale deploy <new-name>`). It is wired through the same
 	// wireProjectCap and the same projectCapEnforcement as the API store, so the
 	// deploy path enforces the identical per-Account cap, counted across the
 	// Account's tenants. A zero projectCap (dev without a pool) leaves both the
@@ -404,7 +404,7 @@ func setupOrchestrator(
 	// CLAUDE.md Rule 6 requires every (tenant, project, environment) mutation
 	// to acquire withEnvironmentLock. Previously, scaleApply called
 	// scalingStore.Upsert(dbAdapter, ...) directly, bypassing the lock.
-	// Two concurrent `loopruntime scale` calls on the same env could TOCTOU-race the
+	// Two concurrent `loopscale scale` calls on the same env could TOCTOU-race the
 	// read-current/write-new sequence inside Upsert. Now wrapped in WithLock
 	// so concurrent attempts serialize via pg_advisory_xact_lock.
 	scaleApply := func(ctx context.Context, in scalinghttp.ScaleConfigInput) (bool, error) {
@@ -503,7 +503,7 @@ func setupOrchestrator(
 	// Push-based activation: ArgoCD notifies when sync completes instead of API polling.
 	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain is the
 	// canonical public wildcard (LOOPRUNTIME_PUBLIC_DOMAIN) — same source
-	// status.go uses — so deploy.completed SSE URL matches `loopruntime status`.
+	// status.go uses — so deploy.completed SSE URL matches `loopscale status`.
 	// Empty PublicDomain → fall back to BaseDomain (preserves pre-#61
 	// behavior for envs without a public override).
 	syncCallbackActivator := release.NewSyncCallbackActivator(

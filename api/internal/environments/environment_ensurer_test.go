@@ -439,7 +439,7 @@ func TestEnsureEnvironment_EmptyProjectPreservesLegacyPath_M2(t *testing.T) {
 //
 //   - Tenant `tn-1` already has `(project=qa-redteam-dogfood, env=preview)` in
 //     spec.environments[].
-//   - Operator runs `loopruntime deploy` for `(project=loopzerokit-example, env=preview)`.
+//   - Operator runs `loopscale deploy` for `(project=loopzerokit-example, env=preview)`.
 //   - Pre-m37 (project-agnostic shallow check): HasEnvironment returned
 //     exists=true on env-name match, EnsureEnvironment returned early,
 //     AddEnvironment never called → Tenant CR stale → AppProject destinations

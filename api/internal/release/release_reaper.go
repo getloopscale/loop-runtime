@@ -139,11 +139,11 @@ func (r *ReleaseReaper) ReapOnce(ctx context.Context) int {
 func releaseReaperReason(event statemachine.ReleasePhaseEvent) string {
 	switch event {
 	case statemachine.RPEventGitPushTimeout:
-		return "Release was READY (deployment manifests prepared but not yet pushed) for more than 5 minutes. Likely cause: repository write is slow OR temporary network issue between API and the deployment repo. Next: run `loopruntime deploy` to retry — the operation is idempotent."
+		return "Release was READY (deployment manifests prepared but not yet pushed) for more than 5 minutes. Likely cause: repository write is slow OR temporary network issue between API and the deployment repo. Next: run `loopscale deploy` to retry — the operation is idempotent."
 	case statemachine.RPEventSyncTimeout:
-		return "Release was PENDING (manifests pushed, waiting for service to become healthy) for more than 10 minutes. Likely cause: your app's /health endpoint is not responding 200 OR the pod is crash-looping. Next: run `loopruntime logs --runtime --env <env> --app <name>` for runtime pod context; if health probe is correct, retry with `loopruntime deploy`."
+		return "Release was PENDING (manifests pushed, waiting for service to become healthy) for more than 10 minutes. Likely cause: your app's /health endpoint is not responding 200 OR the pod is crash-looping. Next: run `loopscale logs --runtime --env <env> --app <name>` for runtime pod context; if health probe is correct, retry with `loopscale deploy`."
 	default:
-		return "Release reaped due to timeout. Run `loopruntime status` and `loopruntime logs --build <id>` for context."
+		return "Release reaped due to timeout. Run `loopscale status` and `loopscale logs --build <id>` for context."
 	}
 }
 

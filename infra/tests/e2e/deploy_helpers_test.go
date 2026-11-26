@@ -19,7 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// deployResult captures the output of a single `loopruntime deploy` invocation.
+// deployResult captures the output of a single `loopscale deploy` invocation.
 // Used by Journey 14 concurrent-deploy specs.
 type deployResult struct {
 	stdout   string
@@ -52,7 +52,7 @@ func initGitRepo(dir string) string {
 	return strings.TrimSpace(string(output))
 }
 
-// runLoopRuntimeDeploy executes `loopruntime deploy` in the given directory with optional
+// runLoopRuntimeDeploy executes `loopscale deploy` in the given directory with optional
 // additional arguments. Returns stdout, stderr, and the exit code.
 // Auth is via configStore (XDG_CONFIG_HOME from BeforeSuite), not env.
 func runLoopRuntimeDeploy(dir string, args ...string) (stdout, stderr string, exitCode int) {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopRuntime Authors
 
-// RED test for issue #142: `loopruntime env list --project <p>` returns each
+// RED test for issue #142: `loopscale env list --project <p>` returns each
 // environment TWICE — `production, preview, production, preview`.
 //
 // The duplicate is manufactured by the `?project=` filter itself. Red Team

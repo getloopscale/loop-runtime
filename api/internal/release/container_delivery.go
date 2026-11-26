@@ -540,7 +540,7 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build d
 			failedData := events.SafeJSONMarshal(map[string]interface{}{
 				"deploy_id": deriveDeployID(release.ID),
 				"status":    "failed",
-				"reason":    "Deploy verification failed. The service did not become healthy after sync. Run `loopruntime logs` to check application errors.",
+				"reason":    "Deploy verification failed. The service did not become healthy after sync. Run `loopscale logs` to check application errors.",
 			})
 			if _, err := c.eventStore.Append(ctx, build.ID, "deploy.sync_failed", failedData); err != nil {
 				return fmt.Errorf("activate release: emit deploy.sync_failed: %w", err)

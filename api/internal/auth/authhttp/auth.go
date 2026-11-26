@@ -136,7 +136,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 	if !isMember {
 		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
 			"NOT_MEMBER",
-			"You are not a member of team \""+req.Name+"\". Run `loopruntime whoami` to see your teams."))
+			"You are not a member of team \""+req.Name+"\". Run `loopscale whoami` to see your teams."))
 		return
 	}
 

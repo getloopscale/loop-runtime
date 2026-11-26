@@ -26,7 +26,7 @@
 //   - 4h duration matches the §6.A.4 gate window — shorter than 4h
 //     and memory leaks / fd leaks / goroutine leaks don't surface.
 //   - Mix of read-heavy + write paths (3:1) mirrors Beta day-trial
-//     traffic (more `loopruntime status` + `loopruntime logs` than `loopruntime deploy`).
+//     traffic (more `loopscale status` + `loopscale logs` than `loopscale deploy`).
 //   - Inter-iteration sleep is `sleep(1)` so each VU pauses ~1s
 //     between iterations — total throughput ~50 req/s = gentle but
 //     non-trivial.

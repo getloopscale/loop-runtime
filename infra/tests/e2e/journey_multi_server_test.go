@@ -76,7 +76,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 		// path generated the manifests.
 		//
 		// 2026-05-09 cleanroom dogfood: this assertion intermittently
-		// failed because `loopruntime deploy` SSE emits `deploy.completed` on
+		// failed because `loopscale deploy` SSE emits `deploy.completed` on
 		// Application Healthy, which fires marginally before the Rollout
 		// resource is created (Application sync creates Rollout async).
 		// Eventually-poll for up to 90s — workload primitive should

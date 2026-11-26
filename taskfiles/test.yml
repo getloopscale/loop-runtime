@@ -801,7 +801,7 @@ tasks:
       does NOT exercise OpenBao encrypt/decrypt, does NOT touch PG.
       Designed for the smoke-test phase of the cutover runbook §
       Step 4.1 (sponsor + Claude side-by-side: confirm the wire is up
-      THEN commit to the destructive `loopruntime deploy` walkthrough).
+      THEN commit to the destructive `loopscale deploy` walkthrough).
 
       The 5 rehearsal probes:
         R1: ESO controller pod Running in external-secrets ns

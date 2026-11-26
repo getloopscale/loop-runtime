@@ -328,7 +328,7 @@ type Config struct {
 	// JWKS endpoint for validating tokens issued by the platform sign-up flow
 	// (https://app.<domain> account registration). Earlier prototypes
 	// referenced GitHub PAT validation; that path was removed — platform
-	// tokens are the only accepted credential for `loopruntime login --token`.
+	// tokens are the only accepted credential for `loopscale login --token`.
 	// Env: JWKS_ENDPOINT (e.g., "http://ory-hydra-public.ory.svc.cluster.local:4444/.well-known/jwks.json")
 	JWKSEndpoint string
 	// JWTIssuer is the expected issuer in JWT tokens (must match Hydra config).

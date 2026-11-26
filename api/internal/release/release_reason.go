@@ -49,14 +49,14 @@ func ExtractReaperReason(release *db.Release) string {
 // the CLI a non-empty actionable message in all failure paths.
 func FormatBuildFailureReason(release *db.Release) string {
 	if release == nil {
-		return "Deploy failed — no release context available. Run `loopruntime logs --build <id>` for details."
+		return "Deploy failed — no release context available. Run `loopscale logs --build <id>` for details."
 	}
 	if reason := ExtractReaperReason(release); reason != "" {
 		return reason
 	}
 	// Fallback when no reaper_reason (e.g., legacy releases pre-reaper or
 	// non-timeout failures). Stays informative — uses release ID + status.
-	return fmt.Sprintf("Release %s failed: %s. Run `loopruntime logs --build <id>` for application context.",
+	return fmt.Sprintf("Release %s failed: %s. Run `loopscale logs --build <id>` for application context.",
 		release.ID, release.Status)
 }
 

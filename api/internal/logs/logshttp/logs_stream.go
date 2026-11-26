@@ -213,7 +213,7 @@ func (h *LogStreamHandler) serve(w http.ResponseWriter, r *http.Request, queryKe
 	case errors.Is(ctx.Err(), context.DeadlineExceeded) && r.Context().Err() == nil:
 		h.logger.Info("log stream: max duration reached", "key", queryKey)
 		// Beta Logs Gate Criterion 6 — say why the stream ended and what to do.
-		_ = stream.Send("", "stream.timeout", []byte(`{"reason":"Stream open for 30 minutes — platform cap to prevent forgotten sessions from holding resources. Rerun `+"`"+`loopruntime logs --build <id> --follow`+"`"+` to resume from the latest position; the stream picks up where this one ended."}`))
+		_ = stream.Send("", "stream.timeout", []byte(`{"reason":"Stream open for 30 minutes — platform cap to prevent forgotten sessions from holding resources. Rerun `+"`"+`loopscale logs --build <id> --follow`+"`"+` to resume from the latest position; the stream picks up where this one ended."}`))
 	}
 }
 

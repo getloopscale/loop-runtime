@@ -64,7 +64,7 @@ var _ = Describe("Journey 07: Custom Domain", Ordered, Label("journey"), func() 
 			"--project", project, "--app", app, "--env", env, "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime domain add should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale domain add should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		// Verify response has expected fields.
 		result, err := parseJSON(stdout)
@@ -109,7 +109,7 @@ var _ = Describe("Journey 07: Custom Domain", Ordered, Label("journey"), func() 
 		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "domain", "remove", testDomain, "--yes", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime domain remove should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale domain remove should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"domain remove stdout": stdout,

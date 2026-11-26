@@ -25,7 +25,7 @@ RETURNING created_at;
 -- Idempotent upsert used by the deploy flow to guarantee the project
 -- is registered in the projects table. ON CONFLICT (tenant_id, name)
 -- DO NOTHING preserves the original row when a redeploy fires after
--- the project was deleted via `loopruntime project delete` and then
+-- the project was deleted via `loopscale project delete` and then
 -- recreated.
 INSERT INTO projects (id, tenant_id, name, created_by)
 VALUES ($1, $2, $3, $4)
@@ -33,7 +33,7 @@ ON CONFLICT (tenant_id, name) DO NOTHING;
 
 -- name: ListProjectsByTenant :many
 -- Returns all projects for a tenant, ordered by name (consistent
--- output for `loopruntime project list`).
+-- output for `loopscale project list`).
 SELECT id, name, tenant_id, created_by, created_at
 FROM projects
 WHERE tenant_id = $1

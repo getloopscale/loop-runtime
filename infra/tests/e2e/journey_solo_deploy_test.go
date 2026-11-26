@@ -100,7 +100,7 @@ var _ = Describe("Journey 01: Solo Deploy", Ordered, Label("journey", "smoke"), 
 		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "project", "delete", project, "--yes", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime project delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale project delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"delete stdout": stdout,

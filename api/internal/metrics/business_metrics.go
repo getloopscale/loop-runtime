@@ -66,7 +66,7 @@ var (
 	// (api/internal/k8s/secretsync) is the guard.
 	//
 	// Alert opportunity: rate(loopruntime_secret_externalsecret_total{result="skip"}[5m]) > 0
-	// indicates the API silently no-ops `loopruntime secret set` calls.
+	// indicates the API silently no-ops `loopscale secret set` calls.
 	SecretExternalSecretTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "loopruntime_secret_externalsecret_total",
 		Help: "ExternalSecret CR create/update outcomes from loopruntime-api workload sync path.",

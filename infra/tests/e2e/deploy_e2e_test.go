@@ -91,7 +91,7 @@ func TestE2EDeployHappyPath(t *testing.T) {
 	out, err = runCmdInDir(t, workspace, "loopruntime", "init", "--non-interactive", "--framework", testFramework)
 	t.Logf("init output: %s", out)
 	if err != nil {
-		t.Fatalf("loopruntime init failed: %v", err)
+		t.Fatalf("loopscale init failed: %v", err)
 	}
 
 	t.Logf("=== Step 5/8: loopruntime deploy ===")
@@ -99,7 +99,7 @@ func TestE2EDeployHappyPath(t *testing.T) {
 	defer cancel()
 	deployOut, deployErr := runDeployWithContext(t, deployCtx, workspace)
 	if deployErr != nil {
-		t.Fatalf("loopruntime deploy failed: %v\nOutput:\n%s", deployErr, deployOut)
+		t.Fatalf("loopscale deploy failed: %v\nOutput:\n%s", deployErr, deployOut)
 	}
 	t.Logf("deploy output (last 1KB):\n%s", lastBytes(deployOut, 1024))
 
@@ -147,7 +147,7 @@ func runCmdInDir(t *testing.T, dir, name string, args ...string) (string, error)
 	return string(out), err
 }
 
-// runDeployWithContext invokes `loopruntime deploy --watch --json` and streams output.
+// runDeployWithContext invokes `loopscale deploy --watch --json` and streams output.
 func runDeployWithContext(t *testing.T, ctx context.Context, workspace string) (string, error) {
 	t.Helper()
 	cmd := exec.CommandContext(ctx, "loopruntime", "deploy", "--watch", "--json")
@@ -225,8 +225,8 @@ func TestE2EDeployStructureExists(t *testing.T) {
 	data, _ := os.ReadFile("deploy_e2e_test.go")
 	s := string(data)
 	required := []string{
-		"loopruntime init",
-		"loopruntime deploy",
+		"loopscale init",
+		"loopscale deploy",
 		"k3d-loopruntime-core",
 		"k3d-loopruntime-build",
 		"k3d-loopruntime-cell-0",

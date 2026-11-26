@@ -37,7 +37,7 @@ import (
 // "no override" and falls back to the default 7-day window).
 //
 // Beta Logs Gate Criterion 7 — the runbook documents this contract so
-// operators can write `loopruntime logs --since 7d` without learning Go's
+// operators can write `loopscale logs --since 7d` without learning Go's
 // idiosyncratic duration syntax (which lacks "d").
 var daySuffixRegex = regexp.MustCompile(`^(\d+)d$`)
 

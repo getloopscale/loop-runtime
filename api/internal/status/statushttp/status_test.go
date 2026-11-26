@@ -443,7 +443,7 @@ func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA(t *testing.T) {
 // environments that DO have a SUCCEEDED build under `other_envs_with_releases`
 // so the CLI / dashboard can render an honest hint instead of an empty void.
 //
-// Before this closure, `loopruntime status` (and the project overview card)
+// Before this closure, `loopscale status` (and the project overview card)
 // defaulted to env=production and rendered "no deployments yet" — even
 // when the user had a successful preview deploy. That misled adopters into
 // thinking nothing had been built, contradicting the BUILD page that listed

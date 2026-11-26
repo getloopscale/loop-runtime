@@ -82,7 +82,7 @@ func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts logs.L
 	//   - Default: last 7 days (matches the chart's default retention,
 	//     and the operator's mental model "show me recent build logs").
 	//   - Beta Logs Gate Criterion 7: opts.SinceSeconds > 0 overrides
-	//     so `loopruntime logs --since 30d` works for older builds (subject
+	//     so `loopscale logs --since 30d` works for older builds (subject
 	//     to the cluster's actual Loki retention).
 	var startNano int64
 	if opts.SinceSeconds > 0 {

@@ -49,8 +49,8 @@ func TestReaperReason_BuildTimeout(t *testing.T) {
 	if !strings.Contains(lower, "likely cause") {
 		t.Errorf("expected `Likely cause` phrase, got %q", reason)
 	}
-	if !strings.Contains(lower, "loopruntime logs") {
-		t.Errorf("expected `loopruntime logs` next-step hint, got %q", reason)
+	if !strings.Contains(lower, "loopscale logs") {
+		t.Errorf("expected `loopscale logs` next-step hint, got %q", reason)
 	}
 }
 
@@ -92,8 +92,8 @@ func TestReaperReason_UnknownEvent(t *testing.T) {
 		t.Errorf("expected generic timeout reason, got %q", reason)
 	}
 	// Even the fallback must still point at a CLI command.
-	if !strings.Contains(strings.ToLower(reason), "loopruntime logs") {
-		t.Errorf("fallback must still suggest `loopruntime logs`, got %q", reason)
+	if !strings.Contains(strings.ToLower(reason), "loopscale logs") {
+		t.Errorf("fallback must still suggest `loopscale logs`, got %q", reason)
 	}
 }
 

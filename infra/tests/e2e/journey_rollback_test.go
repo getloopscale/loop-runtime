@@ -117,7 +117,7 @@ var _ = Describe("Journey 06: Rollback", Ordered, Label("journey"), func() {
 			"--env", env, "--yes", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime rollback should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale rollback should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		Expect(stdout).To(SatisfyAny(
 			ContainSubstring("rolled_back_release"),

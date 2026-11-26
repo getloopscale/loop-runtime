@@ -263,7 +263,7 @@ func kubectlArgs(kubeContext string) []string {
 
 // EnsureTenantCR creates the Tenant CR if absent, OR merges baseline envs
 // (production + staging) into an existing CR without stripping envs added
-// dynamically via the API (`loopruntime deploy --env <jX>` → AddEnvironment).
+// dynamically via the API (`loopscale deploy --env <jX>` → AddEnvironment).
 //
 // Sprint A trio-fix 2026-06-02 (continuation of c892e355): seedE2E is called
 // from every journey's BeforeAll. Pre-fix, this `kubectl apply` overwrote

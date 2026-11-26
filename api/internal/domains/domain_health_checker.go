@@ -346,7 +346,7 @@ func (h *DomainHealthChecker) checkProvisioningTimeout(ctx context.Context) {
 			continue
 		}
 		if err := h.store.UpdateFailure(ctx, d.Domain, failed,
-			"Provisioning timed out after 1 hour. Run `loopruntime deploy` to retry."); err != nil {
+			"Provisioning timed out after 1 hour. Run `loopscale deploy` to retry."); err != nil {
 			h.logger.Error("domain health: provisioning timeout transition failed", "error", err, "domain", d.Domain)
 		} else {
 			h.logger.Warn("domain health: domain provisioning timed out", "domain", d.Domain)

@@ -7,7 +7,7 @@ package secrets
 // test-debt-plan.md v1.1 — regression tests for V9 L20 fix
 // (secret resync on first deploy).
 //
-// L20 bug recap: `loopruntime secret set --env <new>` BEFORE the first deploy
+// L20 bug recap: `loopscale secret set --env <new>` BEFORE the first deploy
 // silently failed the K8s sync at POST /api/v1/secrets time because the
 // workload namespace did not yet exist. Pods later failed to start with
 // CreateContainerConfigError because the K8s Secret was never created on

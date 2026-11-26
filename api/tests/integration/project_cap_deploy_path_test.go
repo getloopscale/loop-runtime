@@ -17,7 +17,7 @@ import (
 
 // M5 T2.1 — the HERMETIC per-Account project cap on the DEPLOY path
 // (EnsureProject), proven against real PostgreSQL. Closes the #106 bypass where
-// `loopruntime deploy <new-name>` created a project past the cap that M4 only enforced
+// `loopscale deploy <new-name>` created a project past the cap that M4 only enforced
 // on POST /api/v1/projects. Reuses the M4 integration harness (projectCapStore / projectCapSeed /
 // projectCapCleanup / violationCount / isCapError) from project_cap_per_account_test.go.
 //

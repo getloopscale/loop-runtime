@@ -231,7 +231,7 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input po
 //
 // M5 (hermetic project-cap, #106): when a ProjectCapChecker is wired and the
 // plan is bounded (cap >= 0), the deploy-time auto-create enforces the SAME
-// per-Account cap as CreateProject — closing the bypass where `loopruntime deploy
+// per-Account cap as CreateProject — closing the bypass where `loopscale deploy
 // <new-name>` created a project past the cap. Unlimited (cap < 0) and the
 // nil-checker dev/test path keep the original unenforced idempotent insert.
 //

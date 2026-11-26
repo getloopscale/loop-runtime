@@ -69,7 +69,7 @@ func deployAndWaitSuccess(dir, env string, timeout time.Duration) (buildID strin
 		"deploy", "--env", env, "--no-wait", "--json")
 
 	Expect(exitCode).To(Equal(0),
-		"loopruntime deploy failed with exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)
+		"loopscale deploy failed with exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)
 
 	// Parse JSON to extract build_id.
 	result = make(map[string]interface{})

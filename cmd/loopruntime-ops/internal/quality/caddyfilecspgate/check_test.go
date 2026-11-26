@@ -346,7 +346,7 @@ func TestCheck_RegressionDetected_TryFilesMissing(t *testing.T) {
 // for Red Team loopruntime-cloud#88 LIVE regression: the canonical handle blocks
 // for the dashboard + CLI API prefixes (/sessions/*, /self-service/*,
 // /v1/*, /engine/*) MUST all be present. Without /engine/*, every CLI
-// `loopruntime whoami` AND every dashboard `engineFetch()` call falls through
+// `loopscale whoami` AND every dashboard `engineFetch()` call falls through
 // to the SPA catch-all and the consumer receives `<!DOCTYPE html>` instead
 // of JSON. Defense-in-depth invariant — the gate enumerates EVERY required
 // API handle so a future canonical-paths refactor cannot silently drop one.

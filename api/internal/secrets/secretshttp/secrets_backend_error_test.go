@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopRuntime Authors
 
-// RED test for issue #138: `loopruntime secret set` answers
+// RED test for issue #138: `loopscale secret set` answers
 // `{"code":"INTERNAL_ERROR","error":"Something went wrong..."}` and nothing
-// persists, while `loopruntime secret list` works.
+// persists, while `loopscale secret list` works.
 //
 // The reported symptom is a 500. The defect this test locks is narrower and
 // more durable: the 500 is UNTYPED. `PostgresSecretStore.Set` encrypts before

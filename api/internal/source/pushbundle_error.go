@@ -97,7 +97,7 @@ func (r PushBundleErrorReason) String() string {
 var reasonSummaries = map[PushBundleErrorReason]string{
 	ReasonSourceBackendUnreachable: "Source backend is unreachable (network or DNS failure)",
 	ReasonRemoteRejectedPush:       "The remote rejected the push",
-	ReasonBundleMalformed:          "The source bundle is malformed. Re-run `loopruntime deploy` from your project root",
+	ReasonBundleMalformed:          "The source bundle is malformed. Re-run `loopscale deploy` from your project root",
 	ReasonBundleTooLarge:           "The source bundle exceeds the size limit. Reduce the size of your source tree",
 	ReasonArchiveReadError:         "Could not read the source archive. Check your project files and try again",
 	ReasonSourceBackendAuthFailure: "Source backend rejected authentication",

@@ -243,7 +243,7 @@ func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID stri
 		// #138 — tag the failure so the HTTP boundary can answer
 		// SECRETS_BACKEND_UNAVAILABLE (503) instead of a generic 500.
 		// Before this, an unreachable backend was indistinguishable from a
-		// database outage and `loopruntime secret set` said only "Something went
+		// database outage and `loopscale secret set` said only "Something went
 		// wrong", leaving the operator to guess which subsystem refused.
 		// The original error stays in the chain for the logs.
 		return nil, fmt.Errorf("secret_store: vault transit encrypt: %w: %w",

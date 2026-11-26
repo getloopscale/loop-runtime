@@ -95,7 +95,7 @@ var _ = Describe("Journey 05: Promote", Ordered, Label("journey"), func() {
 				"--from", "staging", "--to", "production", "--yes", "--json")
 			return exitCode
 		}, promoteTimeout, 5*time.Second).Should(Equal(0),
-			"loopruntime promote should eventually exit 0\nlast stdout: %s\nlast stderr: %s", stdout, stderr)
+			"loopscale promote should eventually exit 0\nlast stdout: %s\nlast stderr: %s", stdout, stderr)
 
 		// Verify promote response has expected fields per
 		// api/internal/routes/promote.go:64 PromotionResponse.NewRelease.

@@ -136,7 +136,7 @@ func (h *TeamHandler) Add(w http.ResponseWriter, r *http.Request) {
 	if user == nil {
 		httpio.WriteLoopRuntimeError(w, &loopruntimeerrors.LoopRuntimeError{
 			Code:    "USER_NOT_FOUND",
-			Message: "user '" + req.Username + "' not found — they must run `loopruntime login` first",
+			Message: "user '" + req.Username + "' not found — they must run `loopscale login` first",
 		})
 		return
 	}

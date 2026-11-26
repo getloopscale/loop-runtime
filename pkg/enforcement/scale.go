@@ -123,7 +123,7 @@ func AssertHPATargetBounds(cpuTarget, memoryTarget int) error {
 }
 
 // Scaling defaults. They are product rules — what a plan buys and what a
-// `loopruntime scale` without explicit targets means — so they live here with the
+// `loopscale scale` without explicit targets means — so they live here with the
 // bounds and the cost formula, not in the HTTP handler that applies them.
 const (
 	// DefaultPodCostPerHour is the conservative per-pod hourly cost used when

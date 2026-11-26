@@ -344,7 +344,7 @@ tasks:
       `k3d cluster create` of a cell: without cert-manager and cluster-issuer,
       ArgoCD sync fails with "Certificate CRD not found" / "Referenced
       ClusterIssuer not found" (D-FF-03); without argo-rollouts every
-      `loopruntime deploy` fails to apply its Rollout (F-21).
+      `loopscale deploy` fails to apply its Rollout (F-21).
 
       One task for every cell, parameterised by CELL_CTX, replacing the
       hand-copied k3d:bootstrap-cell-0 / k3d:bootstrap-cell-1 pair whose

@@ -159,7 +159,7 @@ func newReleaseReaper(cfg config.Config, d Deps, logger *slog.Logger) *release.R
 
 func newConvergenceLoop(cfg config.Config, d Deps, logger *slog.Logger) *release.ReleaseConvergenceLoop {
 	// PublicDomain (LOOPRUNTIME_PUBLIC_DOMAIN) is preferred over BaseDomain for the
-	// deploy.completed URL so it matches `loopruntime status`.
+	// deploy.completed URL so it matches `loopscale status`.
 	loop := release.NewReleaseConvergenceLoop(d.ReleaseStore, d.EnvTargetStore, d.Sync, d.Locker,
 		d.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 		release.ReleaseConvergenceLoopConfig{

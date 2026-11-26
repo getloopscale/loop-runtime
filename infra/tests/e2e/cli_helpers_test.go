@@ -54,7 +54,7 @@ type loopruntimeInvocation struct {
 //
 // T2 amendment 2026-05-13 (finding-2026-05-13-e2e-token-refresh-divergence):
 // auth comes from the per-suite XDG_CONFIG_HOME populated by BeforeSuite via
-// `loopruntime login --token`, NOT from LOOPRUNTIME_TOKEN env injection. The CLI reads the
+// `loopscale login --token`, NOT from LOOPRUNTIME_TOKEN env injection. The CLI reads the
 // token from configStore (production parity per Rule 10). LOOPRUNTIME_TOKEN is
 // therefore hard-stripped by default — if the parent process had it set it
 // would silently override configStore. A spec that deliberately sends a
