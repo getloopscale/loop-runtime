@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
@@ -284,12 +285,83 @@ func (s *WorkflowSubmitter) GetStatus(ctx context.Context, namespace, workflowID
 		phase = "Succeeded"
 	}
 
+	// A finished workflow whose required step failed is a failed build, whatever
+	// phase Argo gave the workflow: see failedRequiredStep.
+	failedStep, failedStepMessage := "", ""
+	if status.FinishedAt != "" {
+		failedStep, failedStepMessage = failedRequiredStep(status)
+	}
+	if failedStep != "" && phase == "Succeeded" {
+		slog.Warn("workflow phase overridden: a required step failed but Argo reported Succeeded",
+			"workflow_id", workflowID, "namespace", namespace, "step", failedStep)
+		phase = "Failed"
+	}
+
 	return &deploycontracts.WorkflowStatus{
-		Phase:          phase,
-		FinishedAt:     status.FinishedAt,
-		Outputs:        extractStepOutputs(wf.Object),
-		StuckPodReason: extractStuckPodReason(status),
+		Phase:             phase,
+		FinishedAt:        status.FinishedAt,
+		Outputs:           extractStepOutputs(wf.Object),
+		StuckPodReason:    extractStuckPodReason(status),
+		FailedStep:        failedStep,
+		FailedStepMessage: failedStepMessage,
 	}, nil
+}
+
+// bestEffortStepPrefix names the steps the build goes on without. The SBOM
+// task runs with continueOn.failed (workflow_builder.go).
+const bestEffortStepPrefix = "sbom-"
+
+// failedRequiredStep returns the first required step that failed on every
+// attempt, with the message of its last attempt, or two empty strings.
+//
+// The workflow's own phase cannot be trusted for this. The only leaf of the
+// build DAG is the SBOM task, which has continueOn.failed, and Argo then ends
+// the workflow Succeeded when an earlier step failed and the rest were
+// omitted. The build went on to render manifests and failed there with
+// "missing image digest", whatever the step and its cause had been.
+func failedRequiredStep(status *forgemodel.WorkflowStatusDetail) (step, message string) {
+	if status == nil {
+		return "", ""
+	}
+	// A step with a retry strategy is a Retry node whose children are the
+	// attempts. Only the Retry node says how the step ended.
+	attempts := make(map[string]bool)
+	for _, node := range status.Nodes {
+		if node.Type == "Retry" {
+			for _, child := range node.Children {
+				attempts[child] = true
+			}
+		}
+	}
+	var failed *forgemodel.NodeStatus
+	for id, node := range status.Nodes {
+		if node.Type != "Retry" && node.Type != "Pod" {
+			continue
+		}
+		if attempts[id] || (node.Phase != "Failed" && node.Phase != "Error") {
+			continue
+		}
+		if strings.HasPrefix(node.DisplayName, bestEffortStepPrefix) {
+			continue
+		}
+		if failed == nil || node.StartedAt < failed.StartedAt ||
+			(node.StartedAt == failed.StartedAt && node.DisplayName < failed.DisplayName) {
+			current := node
+			failed = &current
+		}
+	}
+	if failed == nil {
+		return "", ""
+	}
+	message = failed.Message
+	lastAttempt := ""
+	for _, child := range failed.Children {
+		attempt, ok := status.Nodes[child]
+		if ok && attempt.Message != "" && attempt.StartedAt >= lastAttempt {
+			lastAttempt, message = attempt.StartedAt, attempt.Message
+		}
+	}
+	return failed.DisplayName, message
 }
 
 // extractStuckPodReason walks the workflow's per-node status looking for pod

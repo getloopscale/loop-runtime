@@ -11,6 +11,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/db"
 	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
+	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
@@ -88,11 +89,24 @@ func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build
 				"build_id", build.ID, "workflow_id", build.WorkflowID, "phase", status.Phase)
 			return
 		}
-		r.failBuild(ctx, build, fmt.Sprintf("Build %s", strings.ToLower(status.Phase)))
+		r.failBuild(ctx, build, workflowFailureReason(status))
 	case "Running", "Pending":
 		// Workflow is still active — nothing to do
 	default:
 		r.logger.Warn("reconcile loop: unknown workflow phase",
 			"build_id", build.ID, "workflow_id", build.WorkflowID, "phase", status.Phase)
 	}
+}
+
+// workflowFailureReason is the sentence a build that failed in its workflow is
+// recorded with. It names the step when the workflow tells which one failed.
+// The cause itself is in the step's log: Argo keeps only the exit code.
+func workflowFailureReason(status *deploycontracts.WorkflowStatus) string {
+	if status.FailedStep == "" {
+		return fmt.Sprintf("Build %s", strings.ToLower(status.Phase))
+	}
+	if status.FailedStepMessage == "" {
+		return fmt.Sprintf("Build failed at step %q. The step's log has the cause.", status.FailedStep)
+	}
+	return fmt.Sprintf("Build failed at step %q: %s. The step's log has the cause.", status.FailedStep, status.FailedStepMessage)
 }

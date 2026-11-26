@@ -130,6 +130,13 @@ type WorkflowStatus struct {
 	// Populated by WorkflowSubmitter.GetStatus from `wf.status.nodes[*].message`
 	// which Argo copies from Kubernetes pod containerStatuses.reason.
 	StuckPodReason string
+
+	// FailedStep is the first required step of the build that failed on every
+	// attempt, and FailedStepMessage what Argo recorded for its last attempt.
+	// Both are empty when no required step failed. Phase is "Failed" whenever
+	// FailedStep is set, also when Argo reported the workflow Succeeded.
+	FailedStep        string
+	FailedStepMessage string
 }
 
 // GitOpsPushOpts contains everything needed to push manifests to the GitOps repo.
