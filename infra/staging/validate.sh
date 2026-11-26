@@ -55,11 +55,16 @@ export LOOPZERO_DOGFOOD_SESSION_PATH="$STATE_DIR/validate/session"
 # /engine proxy, and Kratos. Every journey checks the deep health before its scenarios.
 #   j01 login: a seeded session authenticates against an engine route, and choosing
 #     GitHub or Google redirects to the provider with a client id
-#   j02 sign-up: Kratos opens a registration flow
-#   j04 recovery: the authenticated prerequisites of the flow
+#   j02 sign-up: a new account registers with an address at Resend's delivery sink, Kratos
+#     hands its verification mail to the provider, and its first token names a team on
+#     the starter plan
+#   j04 recovery: a known address gets a recovery mail; an unknown one gets the same
+#     answer and no mail
 #   j05 device flow: a device asks for a code, the validation identity approves it in a
 #     second client and the device gets a token the API accepts
-#   j07 projects list, j11 domains, j22 secrets: engine lists
+#   j07 projects list, j22 secrets: engine lists
+#   j11 domains: the list, and a domain with no TXT record stays pending with an answer
+#     that names the record to create
 #   j10 environments: the list has each environment of a project once
 #   j14 audit log: the engine's audit entries, filtered by action and by time
 #   j15 profile: Kratos whoami answers, and the settings flow changes the profile name
@@ -205,8 +210,22 @@ SQL
 # inside the 30 minutes go test gives the suite.
 # -ginkgo.fail-on-empty fails a filter that selects
 # no spec, so a renamed label cannot turn the run into a green one with nothing run.
+#
+# The sign-up and recovery journeys read which mails Kratos handed to the provider. That
+# is on the Kratos admin API, which is never exposed: it is reached through a
+# port-forward that lasts as long as the suite.
 run_suite() {
   kube_env
+  local port
+  port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])') || return 1
+  kubectl --context core -n loopzero-auth port-forward svc/ory-kratos-admin "$port:80" >/dev/null 2>&1 &
+  # shellcheck disable=SC2064 # the pid of this port-forward, in the subshell that runs the step
+  trap "kill $! 2>/dev/null || true" EXIT
+  for _ in $(seq 30); do
+    curl -fsS -o /dev/null "http://127.0.0.1:$port/health/ready" 2>/dev/null && break
+    sleep 1
+  done
+  export LOOPZERO_DOGFOOD_KRATOS_ADMIN_URL="http://127.0.0.1:$port"
   cd infra/tests || return 1
   LOOPZERO_DOGFOOD_CELL_CONTEXTS="$CELL_CONTEXTS" GOWORK=off go test -v -tags=live -count=1 -timeout 30m ./livetest/dogfood/ -run TestDogfoodLive \
     -args -ginkgo.label-filter="$JOURNEYS" -ginkgo.fail-on-empty -ginkgo.v -ginkgo.no-color

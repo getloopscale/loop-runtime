@@ -412,6 +412,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Adding or removing a custom domain reaches the cell at once. The provisioner pushed the manifests and stopped there, and an environment's Application has no automated sync: a domain read `active` with no route and no certificate until the next deploy, and a removed one kept both. The provisioner now starts the sync after each push, and a domain becomes `active` only after it started (#173).
 - A custom domain that passed verification is provisioned again. The store handed the claim statement its two statuses in the wrong order, so the provisioner selected domains in `provisioning` and wrote `verified`: a verified domain stayed `verified` with no certificate and no route (#169).
 - `POST /api/v1/domains` enforces the plan's `custom_domains_per_env`: a domain past the limit of its environment is refused with 402 `PLAN_LIMIT_EXCEEDED`, naming the limit, the usage and `upgrade_url`. A Starter tenant, whose plan includes none, could register one (#166).
 - Staging installs Traefik after the AWS Load Balancer Controller on the core and on the cells. Installed side by side, Traefik's ALB Ingress could reach the controller's webhook before the pod served, and the sync stopped with `failed calling webhook "vingress.elbv2.k8s.aws"`.

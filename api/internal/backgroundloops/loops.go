@@ -190,6 +190,9 @@ func newDomainProvisioner(cfg config.Config, d Deps, logger *slog.Logger) *domai
 	// host, and must write the saved scale, not the build's. On the background
 	// pool: it renders for every tenant.
 	p.WithSavedScaling(scaling.StoredScaling{Configs: store.NewPostgresScalingStore(d.WorkerPool)})
+	if d.Sync != nil {
+		p.WithSync(d.Sync)
+	}
 	if cfg.CFZoneManagement && d.CFZone != nil {
 		p.WithCFZone(&domainsadapter.CFZoneStatusAdapter{Client: d.CFZone})
 	}

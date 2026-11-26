@@ -11,6 +11,7 @@ package dogfood
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -45,11 +46,43 @@ var _ = Describe("J-11 Domains", Label("live", "dogfood", "j11"), func() {
 		})
 	})
 
-	Context("Scenario B — verify + status polling", func() {
-		It("POST /engine/api/v1/domains/{domain}/verify transitions status", func() {
-			// The verify flow + NS-instruction polling mutates external DNS
-			// state (CF Zone). Deferred to a T3.2 follow-up commit.
-			Skip("domain verify/polling spec — implementation in T3.2 follow-up commit")
+	Context("Scenario B — verify reports what DNS says", func() {
+		It("a domain with no TXT record stays pending and the answer names the record to create", func() {
+			_, err := NewEngine(env, jwt).EnsureProject(ctx, ProbeProject)
+			Expect(err).ToNot(HaveOccurred())
+
+			// A fresh name under the test zone has no TXT record, so the lookup is
+			// real and its answer is "not found". The engine refuses reserved names
+			// such as example.com.
+			domain := fmt.Sprintf("journey-%d.%s", time.Now().UnixNano(), envOr("LOOPZERO_DOGFOOD_TEST_DOMAIN", "theokit.dev"))
+			engine := NewEngine(env, jwt)
+			call := func(ctx context.Context, method, path string, in any) map[string]any {
+				out := map[string]any{}
+				Expect(engine.json(ctx, method, path, idempotencyKey(), in, &out)).To(Succeed())
+				return out
+			}
+
+			created := call(ctx, "POST", "/api/v1/domains", map[string]string{
+				"domain": domain, "project": ProbeProject, "app": "app", "environment": "production",
+			})
+			DeferCleanup(func() {
+				cleanup, cancel := context.WithTimeout(context.Background(), time.Minute)
+				defer cancel()
+				call(cleanup, "DELETE", "/api/v1/domains/"+domain, nil)
+			})
+			Expect(created["status"]).To(Equal("pending_verification"))
+			verification, _ := created["verification"].(map[string]any)
+			record := "_loopzero-verify." + domain
+			Expect(verification["txt_name"]).To(Equal(record))
+			Expect(verification["txt_value"]).To(HavePrefix("loopzero-verify="))
+			Expect(created["cname_target"]).ToNot(BeEmpty())
+
+			verified := call(ctx, "POST", "/api/v1/domains/"+domain+"/verify", nil)
+			Expect(verified["status"]).To(Equal("pending_verification"))
+			Expect(verified["verification_error"]).To(ContainSubstring(record))
+
+			read := call(ctx, "GET", "/api/v1/domains/"+domain, nil)
+			Expect(read["status"]).To(Equal("pending_verification"), "a failed verification moved the domain")
 		})
 	})
 })
