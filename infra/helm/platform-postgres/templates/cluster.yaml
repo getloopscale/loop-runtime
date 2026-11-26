@@ -13,6 +13,9 @@ spec:
   # A budget over one instance allows no disruption at all, so no node holding it could be
   # drained. With standbys the operator switches over first and the budget protects them.
   enablePDB: {{ gt (int .Values.instances) 1 }}
+  # A change of CPU or memory resizes the running pod, and restarts it only when the
+  # node cannot fit the new size. Needs Kubernetes 1.33.
+  resourcesUpdateStrategy: inPlace
   {{- if gt (int .Values.instances) 1 }}
   # Promote a standby before the primary restarts, so an update costs a switchover and
   # not the primary's downtime.
@@ -62,6 +65,10 @@ spec:
       method: any
       number: 1
       dataDurability: {{ .Values.synchronous.dataDurability }}
+      # The spread above is a preference, so two instances can share a failure domain.
+      # The standby that acknowledges a commit is taken from another one.
+      nodeFailureDomainKeys:
+        - {{ .Values.spread.topologyKey | quote }}
     {{- end }}
   {{- with .Values.databases }}
   # Each service connects as its own role. The operator creates the role and keeps its

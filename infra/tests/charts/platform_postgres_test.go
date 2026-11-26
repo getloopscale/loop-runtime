@@ -136,3 +136,19 @@ func TestPlatformPostgres_AdmitsOnlyItsClientsTheOperatorAndTheScraper(t *testin
 		t.Errorf("policyTypes = %v, want only Ingress: the pods reach the API server and the backup store", types)
 	}
 }
+
+// Zone spread is a preference, so two instances can still land in one zone. The quorum
+// then has to pick its standby from another zone, or one outage takes the primary and
+// the only copy of its last commits.
+func TestPlatformPostgres_SynchronousStandbyIsInAnotherZone(t *testing.T) {
+	keys, _ := dig(platformCluster(t, "instances: 3\n"), "spec", "postgresql", "synchronous", "nodeFailureDomainKeys").([]any)
+	if len(keys) != 1 || keys[0] != "topology.kubernetes.io/zone" {
+		t.Errorf("synchronous.nodeFailureDomainKeys = %v, want the zone label", keys)
+	}
+}
+
+func TestPlatformPostgres_ResizesWithoutRestartingTheInstance(t *testing.T) {
+	if got := dig(platformCluster(t, ""), "spec", "resourcesUpdateStrategy"); got != "inPlace" {
+		t.Errorf("resourcesUpdateStrategy = %v, want inPlace: a change of CPU or memory would restart the only instance", got)
+	}
+}

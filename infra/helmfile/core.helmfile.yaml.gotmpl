@@ -96,9 +96,6 @@ repositories:
   # The AWS Load Balancer Controller (profile.awsLoadBalancerController).
   - name: eks
     url: https://aws.github.io/eks-charts
-  # CloudNativePG, the operator behind the platform's own PostgreSQL (platformPostgres).
-  - name: cnpg
-    url: https://cloudnative-pg.github.io/charts
 
 # ---------------------------------------------------------------------------
 # Pre-sync secret generation (called by the CLI orchestrator BEFORE this
@@ -837,10 +834,12 @@ releases:
   # The platform's own PostgreSQL for data-plane services (platformPostgres): the
   # CloudNativePG operator, and one Cluster with a database and a login role per service.
   # The managed database of the environment (RDS) stays the control plane's.
+  # The operator comes from the manifest of its release, vendored in ../helm/cloudnative-pg:
+  # 1.31.0-rc1 has no upstream chart. The release keeps the name and namespace the upstream
+  # chart had, so an environment that ran it upgrades in place and keeps its CRDs.
   - name: cloudnative-pg
     namespace: cnpg-system
-    chart: cnpg/cloudnative-pg
-    version: 0.29.2
+    chart: ../helm/cloudnative-pg
     installed: {{ .Values | get "platformPostgres.enabled" false }}
 
   - name: platform-postgres
