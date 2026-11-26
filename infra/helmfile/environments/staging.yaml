@@ -99,15 +99,15 @@ platformImages:
   tags:
     # The first build that marks a failed push deploy on GitHub and refuses an app
     # the build cannot make (#91, #92, #93).
-    loop-runtime-api: "develop-913d75c"
-    loop-runtime-tenant-operator: "develop-7a34191"
-    loop-runtime-app-operator: "develop-7a34191"
-    loop-runtime-preview-operator: "develop-7a34191"
-    loop-runtime-platform-operator: "develop-7a34191"
-    loop-runtime-minio: "develop-7a34191"
-    loop-runtime-clone-runner: "develop-7a34191"
-    loop-runtime-syft-scanner: "develop-7a34191"
-    loop-runtime-cosign-signer: "develop-7a34191"
+    loop-runtime-api: "develop-3e93755"
+    loop-runtime-tenant-operator: "develop-3e93755"
+    loop-runtime-app-operator: "develop-3e93755"
+    loop-runtime-preview-operator: "develop-3e93755"
+    loop-runtime-platform-operator: "develop-3e93755"
+    loop-runtime-minio: "develop-3e93755"
+    loop-runtime-clone-runner: "develop-3e93755"
+    loop-runtime-syft-scanner: "develop-3e93755"
+    loop-runtime-cosign-signer: "develop-3e93755"
     # getloopscale/loop-console publishes these two (private on GHCR, pulled with
     # aws.imagePullSecret). Required while profile.loopRuntimeCloud is on.
     loop-console: "develop-8d41c35"
