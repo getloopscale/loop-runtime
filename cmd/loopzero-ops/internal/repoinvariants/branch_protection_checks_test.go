@@ -86,3 +86,76 @@ func TestBranchProtectionRequiresOnlyChecksAWorkflowReports(t *testing.T) {
 		}
 	}
 }
+
+type workflowWithTriggers struct {
+	On   map[string]yaml.Node `yaml:"on"`
+	Jobs map[string]struct {
+		Name string `yaml:"name"`
+	} `yaml:"jobs"`
+}
+
+// pathFilteredPullRequestChecks returns, per check name, the workflow file whose
+// `pull_request` trigger carries a `paths` or `paths-ignore` filter.
+func pathFilteredPullRequestChecks(t *testing.T) map[string]string {
+	t.Helper()
+	files, err := filepath.Glob(filepath.Join(qtestutil.MustRepoRoot(), ".github/workflows/*.yml"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no workflows found: %v", err)
+	}
+	filtered := map[string]string{}
+	for _, f := range files {
+		body, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		var wf workflowWithTriggers
+		if err := yaml.Unmarshal(body, &wf); err != nil {
+			// `on:` written as a string or a list has no filter to read.
+			continue
+		}
+		trigger, ok := wf.On["pull_request"]
+		if !ok {
+			continue
+		}
+		var filters map[string]yaml.Node
+		if err := trigger.Decode(&filters); err != nil {
+			continue
+		}
+		_, hasPaths := filters["paths"]
+		_, hasPathsIgnore := filters["paths-ignore"]
+		if !hasPaths && !hasPathsIgnore {
+			continue
+		}
+		for key, job := range wf.Jobs {
+			name := job.Name
+			if name == "" {
+				name = key
+			}
+			filtered[name] = filepath.Base(f)
+		}
+	}
+	return filtered
+}
+
+// A workflow skipped by a path filter reports no status at all, and a required
+// check with no status blocks the merge. A pull request that changed only
+// documentation could never be merged into develop for that reason.
+func TestRequiredChecksAreReportedOnEveryPullRequest(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join(qtestutil.MustRepoRoot(), ".github/branch-protection-config.yml"))
+	if err != nil {
+		t.Fatalf("read branch-protection-config.yml: %v", err)
+	}
+	var cfg branchProtectionConfig
+	if err := yaml.Unmarshal(body, &cfg); err != nil {
+		t.Fatalf("parse branch-protection-config.yml: %v", err)
+	}
+	filtered := pathFilteredPullRequestChecks(t)
+	for branch, rules := range cfg.Branches {
+		for _, check := range rules.RequiredStatusChecks {
+			if file, ok := filtered[check]; ok {
+				t.Errorf("branch %s requires %q, and %s skips pull requests by path: "+
+					"a pull request the filter excludes never gets the check and cannot merge", branch, check, file)
+			}
+		}
+	}
+}
