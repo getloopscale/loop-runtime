@@ -101,3 +101,47 @@ func TestStaging_RunsLooptraceOnThePlatformPostgres(t *testing.T) {
 		t.Errorf("the looptrace database is owned by %v, want looptrace", got)
 	}
 }
+
+// Staging backs the platform's PostgreSQL up to the bucket and as the role infra-live
+// declares for it (storage/s3 postgres-backups, identity/core-platform-postgres). The
+// names are built from the environment's own, as every bucket and role is.
+func TestStaging_PlatformPostgresBacksUpToItsBucketAsItsRole(t *testing.T) {
+	out := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "platform-postgres",
+		"infra/helm/platform-postgres", helmfileCoreEnv...)
+
+	store := renderedObject(t, out, "ObjectStore", "platform-postgres")
+	if store == nil {
+		t.Fatal("staging renders no ObjectStore for platform-postgres")
+	}
+	if got := dig(store, "spec", "configuration", "destinationPath"); got != "s3://loopzero-staging-postgres-backups-000000000000/" {
+		t.Errorf("destinationPath = %v", got)
+	}
+	cluster := renderedObject(t, out, "Cluster", "platform-postgres")
+	role := dig(cluster, "spec", "serviceAccountTemplate", "metadata", "annotations", "eks.amazonaws.com/role-arn")
+	if role != "arn:aws:iam::000000000000:role/loopzero-staging-core-platform-postgres" {
+		t.Errorf("the instances assume %v", role)
+	}
+	if renderedObject(t, out, "ScheduledBackup", "platform-postgres") == nil {
+		t.Error("staging renders no ScheduledBackup for platform-postgres")
+	}
+}
+
+// The plugin serves the operator over mutual TLS with certificates cert-manager issues,
+// and has to be in the operator's namespace.
+func TestStaging_InstallsTheBarmanCloudPluginBesideTheOperator(t *testing.T) {
+	row := releaseInEnvironment(t, "staging", "plugin-barman-cloud")
+	if !row.Installed {
+		t.Error("staging does not install the plugin-barman-cloud release")
+	}
+	if row.Namespace != "cnpg-system" {
+		t.Errorf("plugin-barman-cloud is in %q, want cnpg-system, the operator's namespace", row.Namespace)
+	}
+	if !regexp.MustCompile(`^\d+\.\d+\.\d+$`).MatchString(row.Version) {
+		t.Errorf("the plugin-barman-cloud chart version is %q, want an exact version", row.Version)
+	}
+	for _, env := range []string{"dev", "dev-public", "prod", "standalone"} {
+		if releaseInEnvironment(t, env, "plugin-barman-cloud").Installed {
+			t.Errorf("%s installs plugin-barman-cloud; only staging turns platformPostgres on", env)
+		}
+	}
+}

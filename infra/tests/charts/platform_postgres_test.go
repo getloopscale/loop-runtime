@@ -152,3 +152,141 @@ func TestPlatformPostgres_ResizesWithoutRestartingTheInstance(t *testing.T) {
 		t.Errorf("resourcesUpdateStrategy = %v, want inPlace: a change of CPU or memory would restart the only instance", got)
 	}
 }
+
+const platformPostgresBackupValues = `
+backup:
+  bucket: loopzero-test-postgres-backups
+  roleArn: arn:aws:iam::000000000000:role/loopzero-test-core-platform-postgres
+`
+
+func TestPlatformPostgres_WithoutABucketRendersNoBackup(t *testing.T) {
+	out := renderPlatformPostgres(t, "")
+	for _, kind := range []string{"ObjectStore", "ScheduledBackup"} {
+		if len(renderedObjectsOfKind(t, out, kind)) != 0 {
+			t.Errorf("a %s rendered with no backup.bucket", kind)
+		}
+	}
+	if dig(platformCluster(t, ""), "spec", "plugins") != nil {
+		t.Error("the Cluster names a plugin with no backup.bucket")
+	}
+}
+
+// The base backups and the WAL archive go to the bucket through the Barman Cloud plugin,
+// which replaces the operator's own barmanObjectStore (removed in CloudNativePG 1.32).
+func TestPlatformPostgres_ArchivesWALAndBacksUpToTheBucket(t *testing.T) {
+	out := renderPlatformPostgres(t, platformPostgresBackupValues)
+
+	store := renderedObject(t, out, "ObjectStore", "platform-postgres")
+	if store == nil {
+		t.Fatal("the chart renders no ObjectStore")
+	}
+	if got := dig(store, "spec", "configuration", "destinationPath"); got != "s3://loopzero-test-postgres-backups/" {
+		t.Errorf("destinationPath = %v", got)
+	}
+	if got := dig(store, "spec", "retentionPolicy"); got != "30d" {
+		t.Errorf("retentionPolicy = %v, want the default 30d", got)
+	}
+
+	cluster := renderedObject(t, out, "Cluster", "platform-postgres")
+	plugins, _ := dig(cluster, "spec", "plugins").([]any)
+	if len(plugins) != 1 {
+		t.Fatalf("the Cluster names %d plugins, want 1", len(plugins))
+	}
+	plugin, _ := plugins[0].(map[string]any)
+	if plugin["name"] != "barman-cloud.cloudnative-pg.io" || plugin["isWALArchiver"] != true {
+		t.Errorf("plugin = %v, want the Barman Cloud plugin as the WAL archiver", plugin)
+	}
+	if got := dig(plugin, "parameters", "barmanObjectName"); got != "platform-postgres" {
+		t.Errorf("the plugin reads the ObjectStore %v, want platform-postgres", got)
+	}
+
+	backup := renderedObject(t, out, "ScheduledBackup", "platform-postgres")
+	if backup == nil {
+		t.Fatal("the chart renders no ScheduledBackup")
+	}
+	if got := dig(backup, "spec", "method"); got != "plugin" {
+		t.Errorf("ScheduledBackup method = %v, want plugin", got)
+	}
+	if got := dig(backup, "spec", "pluginConfiguration", "name"); got != "barman-cloud.cloudnative-pg.io" {
+		t.Errorf("ScheduledBackup plugin = %v", got)
+	}
+	// Six fields, seconds first: five would be read as a different schedule.
+	if schedule, _ := dig(backup, "spec", "schedule").(string); len(strings.Fields(schedule)) != 6 {
+		t.Errorf("schedule %q does not have the six fields the operator reads", schedule)
+	}
+	if got := dig(backup, "spec", "immediate"); got != true {
+		t.Errorf("immediate = %v: a new cluster would have no base backup until the first schedule", got)
+	}
+}
+
+// No key is stored anywhere: the instances assume the role their service account names.
+func TestPlatformPostgres_ReachesTheBucketAsItsRoleWithoutAKey(t *testing.T) {
+	out := renderPlatformPostgres(t, platformPostgresBackupValues)
+
+	cluster := renderedObject(t, out, "Cluster", "platform-postgres")
+	annotations, _ := dig(cluster, "spec", "serviceAccountTemplate", "metadata", "annotations").(map[string]any)
+	if got := annotations["eks.amazonaws.com/role-arn"]; got != "arn:aws:iam::000000000000:role/loopzero-test-core-platform-postgres" {
+		t.Errorf("the instances' service account assumes %v", got)
+	}
+	store := renderedObject(t, out, "ObjectStore", "platform-postgres")
+	credentials, _ := dig(store, "spec", "configuration", "s3Credentials").(map[string]any)
+	if len(credentials) != 1 || credentials["inheritFromIAMRole"] != true {
+		t.Errorf("s3Credentials = %v, want only inheritFromIAMRole", credentials)
+	}
+}
+
+func TestPlatformPostgres_ABucketWithoutARoleIsRefused(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "values.yaml")
+	if err := os.WriteFile(f, []byte(platformPostgresBase+"backup:\n  bucket: some-bucket\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := renderChartE(t, uniqueChart(t, "platform-postgres"), "platform-postgres", nil, f)
+	if err == nil || !strings.Contains(err.Error(), "backup.roleArn") {
+		t.Errorf("render with a bucket and no role: err = %v, want one naming backup.roleArn", err)
+	}
+}
+
+// Recovery builds the cluster from a server's backups in the bucket, up to a moment when
+// one is given. The recovered cluster archives under another name: writing WAL over the
+// archive it was recovered from would destroy the only way back.
+func TestPlatformPostgres_RecoversFromTheBucket(t *testing.T) {
+	cluster := platformCluster(t, platformPostgresBackupValues+`  serverName: platform-postgres-2
+recovery:
+  serverName: platform-postgres
+  targetTime: "2026-11-26T12:00:00Z"
+`)
+	if dig(cluster, "spec", "bootstrap", "initdb") != nil {
+		t.Error("a recovered cluster still bootstraps with initdb")
+	}
+	if got := dig(cluster, "spec", "bootstrap", "recovery", "source"); got != "recovery" {
+		t.Errorf("bootstrap.recovery.source = %v", got)
+	}
+	if got := dig(cluster, "spec", "bootstrap", "recovery", "recoveryTarget", "targetTime"); got != "2026-11-26T12:00:00Z" {
+		t.Errorf("recoveryTarget.targetTime = %v", got)
+	}
+	external, _ := dig(cluster, "spec", "externalClusters").([]any)
+	if len(external) != 1 {
+		t.Fatalf("externalClusters has %d entries, want 1", len(external))
+	}
+	source, _ := external[0].(map[string]any)
+	if got := dig(source, "plugin", "parameters", "serverName"); got != "platform-postgres" {
+		t.Errorf("the cluster recovers from server %v, want platform-postgres", got)
+	}
+	plugins, _ := dig(cluster, "spec", "plugins").([]any)
+	own, _ := plugins[0].(map[string]any)
+	if got := dig(own, "parameters", "serverName"); got != "platform-postgres-2" {
+		t.Errorf("the recovered cluster archives as %v, want platform-postgres-2", got)
+	}
+}
+
+func TestPlatformPostgres_RecoveryOverItsOwnArchiveIsRefused(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "values.yaml")
+	values := platformPostgresBase + platformPostgresBackupValues + "recovery:\n  serverName: platform-postgres\n"
+	if err := os.WriteFile(f, []byte(values), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := renderChartE(t, uniqueChart(t, "platform-postgres"), "platform-postgres", nil, f)
+	if err == nil || !strings.Contains(err.Error(), "backup.serverName") {
+		t.Errorf("recovery from the server the cluster archives as: err = %v, want one naming backup.serverName", err)
+	}
+}

@@ -47,6 +47,28 @@ network:
   clientPodLabels:
     app.kubernetes.io/part-of: loopzero-data-plane
 
+# Base backups and the WAL archive, in S3, through the Barman Cloud plugin (a release of
+# its own in the operator's namespace). Empty bucket: no archive and no backup.
+backup:
+  bucket: ""
+  # The IAM role the instances assume to reach the bucket (IRSA). It trusts the service
+  # account <namespace>:<release name>. Required with a bucket.
+  roleArn: ""
+  # The folder of this cluster in the bucket. Empty: the release name.
+  serverName: ""
+  # How long a base backup is kept, <n>d, <n>w or <n>m: the window a recovery can reach.
+  retention: 30d
+  # When a base backup is taken, as six cron fields with seconds first, in UTC.
+  schedule: "0 0 3 * * *"
+
+# Build the cluster from backups in the bucket in place of an empty one. serverName is the
+# folder to recover from, and backup.serverName must then name another: the recovered
+# cluster starts a new archive. targetTime (RFC 3339) stops the replay at that moment;
+# empty replays every archived WAL. Read only when the cluster is created.
+recovery:
+  serverName: ""
+  targetTime: ""
+
 # One entry per service: a database `name`, owned by the login role `owner`, whose password
 # is the Secret `passwordSecret` (type kubernetes.io/basic-auth, keys username and password).
 # The Secret is not created here: the release that deploys the service owns it, so one
