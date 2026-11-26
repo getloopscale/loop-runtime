@@ -283,6 +283,9 @@ config:
                 - argo-events
                 - argocd
                 - keda
+                # The data-plane services, their PostgreSQL and its operator.
+                - loopzero-data-plane
+                - cnpg-system
         pipeline_stages:
           - cri: {}
         relabel_configs:

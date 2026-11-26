@@ -179,3 +179,33 @@ extraScrapeConfigs: |
     scrape_interval: 30s
     scrape_timeout: 10s
   {{- end }}
+  {{- /*
+    The platform's own PostgreSQL (infra/helm/platform-postgres), in the environments
+    that run it. Every instance of every CloudNativePG cluster in the namespace, on its
+    `metrics` port (9187); prometheusrule-platform-postgres.yaml reads this job.
+  */}}
+  {{- with .Values.platformPostgres }}
+  - job_name: platform-postgres
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - {{ .namespace }}
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
+        regex: .+
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: metrics
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
+        target_label: cluster_name
+      - source_labels: [__meta_kubernetes_pod_label_cnpg_io_instanceRole]
+        target_label: role
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+    scrape_interval: 30s
+    scrape_timeout: 10s
+  {{- end }}

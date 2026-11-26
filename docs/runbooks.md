@@ -272,6 +272,47 @@ successful backup for >12h) · `LoopZeroVeleroBackupFailing` (any failure in 6h)
 **A backup that has never been restored is a hypothesis.** Prove a restore rather than
 trusting the success metric.
 
+## Platform PostgreSQL alerts
+
+The platform's own PostgreSQL is the CloudNativePG cluster `platform-postgres` in
+`loopzero-data-plane` on the core cluster. It holds the databases of the data-plane services.
+Start every one of these with the cluster's own view:
+
+```bash
+kubectl -n loopzero-data-plane get cluster platform-postgres -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason} {.message}{"\n"}{end}'
+kubectl -n loopzero-data-plane get pods,backup -l cnpg.io/cluster=platform-postgres
+```
+
+- `LoopZeroPlatformPostgresDown`: an instance is not running or not scraped. Read the pod's
+  events and the `postgres` container's log. With one instance there is no failover: the
+  operator restarts it on the same volume.
+- `LoopZeroPlatformPostgresWALArchiveFailing` and `LoopZeroPlatformPostgresWALArchiveBacklog`:
+  WAL is not reaching the bucket. Read the `plugin-barman-cloud` container's log of the
+  primary. The usual causes are the IAM role (the service account's
+  `eks.amazonaws.com/role-arn`, and the role's trust of `loopzero-data-plane:platform-postgres`)
+  and the bucket. Until it is fixed the WAL volume fills and recovery cannot go past the
+  last archived segment.
+- `LoopZeroPlatformPostgresBackupStale` and `LoopZeroPlatformPostgresBackupFailed`: read
+  `.status.error` of the latest `Backup`. Ask for one by hand with a `Backup` of
+  `method: plugin` once the cause is fixed. A cluster that only just had backups turned on
+  fails its first one, asked for before the instance restarted with the plugin; the next
+  one succeeds.
+- `LoopZeroPlatformPostgresVolumeFilling`: raise `platformPostgres.storage` or `walStorage` in
+  the environment and deploy; the operator expands the volume when the StorageClass allows
+  it. A WAL volume fills when the archive is failing: fix that first.
+- `LoopZeroPlatformPostgresReplicaLagging`: a standby is behind. Look for a long transaction
+  on the standby or a slow volume; a standby that never catches up is recreated by deleting
+  its pod and volume claims.
+- `LoopZeroPlatformPostgresSyncReplicaMissing`: fewer standbys than the quorum requires, so
+  commits wait. Bring the standby back. Lowering `synchronous.dataDurability` to `preferred`
+  resumes writes and gives up the guarantee that no acknowledged commit is lost.
+- `LoopZeroPlatformPostgresTransactionIDAgeHigh`: vacuum is not freezing rows. Look for a
+  transaction open for days (`pg_stat_activity`), an abandoned replication slot
+  (`pg_replication_slots`) or a prepared transaction, then run `VACUUM (FREEZE)` on the
+  database.
+- `LoopZeroPlatformPostgresConnectionsNearLimit`: read `pg_stat_activity` grouped by
+  `usename` and `state` to find the service holding connections.
+
 ## VAP delete guardrail
 
 Protects platform resources on the core cluster from deletion.

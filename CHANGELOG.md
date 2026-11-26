@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The core Prometheus scrapes the platform's PostgreSQL and staging loads ten alerts for it (instance down, WAL archive, base backups, volume, replication, transaction ID age, connections), each with a runbook entry. Promtail ships the logs of `loopzero-data-plane` and `cnpg-system` to Loki (#182).
 - The platform's PostgreSQL archives its WAL and takes scheduled base backups to S3 through the Barman Cloud plugin, as an IAM role and with no stored key (`platformPostgres.backup`). The `platform-postgres` chart can build a cluster from those backups, up to a given moment (`recovery`). Staging keeps a week of them (#180).
 - Staging runs the platform's own PostgreSQL for data-plane services on CloudNativePG: the `cloudnative-pg` operator and one `Cluster` in `loopzero-data-plane`, turned on by `platformPostgres` in an environment. Each entry of `platformPostgres.databases` becomes a database owned by a login role of its own. RDS stays the control plane's database (#161).
 - Staging runs looptrace, the trace store behind the console's observability screens, as a data-plane service reachable only inside the cluster. Its data lives in the `looptrace` database of the platform's PostgreSQL, and its Secrets come from the platform secret in Secrets Manager (#168).
@@ -416,6 +417,7 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+- `POST /api/v1/projects/{name}/connect` checks that the caller may use the installation before it looks at whether the repository is already connected. A caller without that right now gets 403 in both cases.
 - A deploy timeline no longer stays open for good when the API restarts while the deploy is in flight. The leader looks every minute for builds whose events imply timeline states that nobody wrote, and finishes them. A timeline phase event is now written once per build, so the resumed aggregator and one that is still alive cannot write it twice (#171).
 
 - The staging deploy follows the pin in git for looptrace, an image another repository builds. It kept the previous deploy's tag, so a moved pin never rolled out (#178) (#177).

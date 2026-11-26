@@ -194,6 +194,28 @@ func TestRepositories_Connect_MissingRepo(t *testing.T) {
 	}
 }
 
+// A caller that may not use the installation gets the same 403 whether or not
+// someone else connected the repository, so the answer does not say which
+// repositories are connected.
+func TestRepositories_Connect_RefusesAnUnverifiedInstallationBeforeSayingTheRepoIsLinked(t *testing.T) {
+	store := &fakeRepoStore{
+		installationNotVerified: true,
+		repo:                    &ProjectRepository{TenantID: "tn-other-tenant", ProjectName: "other-project"},
+	}
+	h := NewRepositoryHandler(store)
+
+	body := `{"repo":"owner/my-repo","installation_id":12345}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
+	req = routestest.WithChiParam(routestest.WithAuth(req, routestest.DefaultUserContext()), "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Connect(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
 func TestRepositories_Connect_AlreadyLinkedToOtherProject(t *testing.T) {
 	store := &fakeRepoStore{
 		repo: &ProjectRepository{
