@@ -12,6 +12,7 @@ import (
 
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 type staticEdgeRoutes []placement.EdgeRoute
@@ -96,5 +97,35 @@ func TestTheEdgeKeyValueStoreGetsAPublisher(t *testing.T) {
 func TestNoEdgeStoreMeansNoPublisher(t *testing.T) {
 	if p := edgeRoutePublisher(context.Background(), config.Config{}, quietLogger()); p != nil {
 		t.Fatalf("publisher %v with no edge store configured", p)
+	}
+}
+
+type staticDomainHosts []ports.DomainHost
+
+func (s staticDomainHosts) ListActiveHosts(context.Context) ([]ports.DomainHost, error) {
+	return s, nil
+}
+
+// An active custom domain is a route of its tenant: the edge resolves the host to
+// the tenant's cell, and an edge that issues certificates on demand may ask for it.
+func TestEdgeRouteResolvesAnActiveCustomDomain(t *testing.T) {
+	cfg := config.Config{BaseDomain: "loopzero.local", PublicDomain: "prod-dev.getloopscale.app", EdgeRouteToken: "tok"}
+	source := placement.EdgeRouteSources{
+		staticEdgeRoutes{{Hostname: "tn-a-p-web-production.loopzero.local", TenantID: "tn-a"}},
+		customDomainRoutes{hosts: staticDomainHosts{{Domain: "shop.customer.com", TenantID: "tn-a"}}},
+	}
+	h, r := edgeRouteHandler(cfg, source, staticTenantCells{"tn-a": "cell-1"}, nil, quietLogger())
+	if h == nil || r == nil {
+		t.Fatal("not wired with a token")
+	}
+	if err := r.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/internal/edge/route?domain=shop.customer.com", nil)
+	req.Header.Set("Authorization", "Bearer tok")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Header().Get("X-LoopZero-Cell") != "cell-1" {
+		t.Errorf("status=%d cell=%q; want 200 and cell-1", rec.Code, rec.Header().Get("X-LoopZero-Cell"))
 	}
 }

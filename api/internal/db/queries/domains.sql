@@ -206,6 +206,16 @@ ORDER BY created_at ASC
 LIMIT 50;
 
 -- tenantpredicate:exempt
+-- name: ListActiveCustomDomainHosts :many
+-- Every host the edge may route, with the tenant whose cell serves it. Read by
+-- the edge route index, which spans tenants. No LIMIT: a host left out of the
+-- index is a host the edge refuses.
+SELECT domain, tenant_id
+FROM custom_domains
+WHERE status = 'active'
+ORDER BY domain ASC;
+
+-- tenantpredicate:exempt
 -- name: FindPendingCustomDomainsForAutoVerify :many
 -- Cell-scoped via JOIN to tenants table (multi-cell isolation per
 -- roadmap 03). Empty cellID is handled by the wrapper (defaults to

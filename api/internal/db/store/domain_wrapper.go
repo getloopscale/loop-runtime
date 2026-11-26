@@ -419,6 +419,20 @@ func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, pro
 	return results, nil
 }
 
+// ListActiveHosts returns every active custom domain with its tenant. It spans
+// tenants, so the store must be on a cross-tenant pool.
+func (s *PostgresDomainStore) ListActiveHosts(ctx context.Context) ([]ports.DomainHost, error) {
+	rows, err := generated.New().ListActiveCustomDomainHosts(ctx, s.bridge())
+	if err != nil {
+		return nil, fmt.Errorf("domain store: list active hosts: %w", err)
+	}
+	hosts := make([]ports.DomainHost, 0, len(rows))
+	for _, r := range rows {
+		hosts = append(hosts, ports.DomainHost{Domain: r.Domain, TenantID: r.TenantID})
+	}
+	return hosts, nil
+}
+
 func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) ([]ports.CustomDomain, error) {
 	bridge := s.bridge()
 	q := generated.New()
