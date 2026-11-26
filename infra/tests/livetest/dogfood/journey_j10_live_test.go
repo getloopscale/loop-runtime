@@ -47,10 +47,35 @@ var _ = Describe("J-10 Environments", Label("live", "dogfood", "j10"), func() {
 
 	Context("Scenario B — no duplicate environments (J-10 regression #142)", func() {
 		It("environments are not duplicated per project", func() {
-			// The M2 refactor closed a backfill bug where production/preview
-			// appeared 2x. Asserting de-dup requires parsing the array shape
-			// per project — deferred to a T3.2 follow-up commit.
-			Skip("dedup assertion — implementation in T3.2 follow-up commit")
+			// The validation tenant needs a project for the list to say anything.
+			target, err := NewEngine(env, jwt).EnsureProject(ctx, ProbeProject)
+			Expect(err).ToNot(HaveOccurred())
+
+			status, body, err := CurlJSON(ctx, env, "GET",
+				env.CloudBaseURL+"/engine/api/v1/environments", jwt, nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(status).To(Equal(200))
+			entries, ok := body["environments"].([]any)
+			Expect(ok).To(BeTrue(), "the answer has no environments array: %v", body)
+
+			seen := map[string]int{}
+			ofTarget := []string{}
+			for _, raw := range entries {
+				entry, _ := raw.(map[string]any)
+				project, _ := entry["project"].(string)
+				name, _ := entry["name"].(string)
+				Expect(name).ToNot(BeEmpty(), "an environment has no name: %v", entry)
+				seen[project+"/"+name]++
+				if project == target.Name {
+					ofTarget = append(ofTarget, name)
+				}
+			}
+			for key, count := range seen {
+				Expect(count).To(Equal(1), "environment %s is listed %d times", key, count)
+			}
+			// Every project is born with the two permanent environments.
+			Expect(ofTarget).To(ContainElements("production", "preview"),
+				"project %s lists environments %v", target.Name, ofTarget)
 		})
 	})
 })
