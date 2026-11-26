@@ -96,6 +96,10 @@ repositories:
   # The AWS Load Balancer Controller (profile.awsLoadBalancerController).
   - name: eks
     url: https://aws.github.io/eks-charts
+  # CloudNativePG's charts: the Barman Cloud plugin that backs the platform's own
+  # PostgreSQL up (platformPostgres). The operator itself is ../helm/cloudnative-pg.
+  - name: cnpg
+    url: https://cloudnative-pg.github.io/charts
 
 # ---------------------------------------------------------------------------
 # Pre-sync secret generation (called by the CLI orchestrator BEFORE this
@@ -842,12 +846,25 @@ releases:
     chart: ../helm/cloudnative-pg
     installed: {{ .Values | get "platformPostgres.enabled" false }}
 
+  # The plugin the operator archives WAL and takes base backups through. It has to be in
+  # the operator's namespace, and serves it over mutual TLS with certificates cert-manager
+  # issues. Chart 0.9.0 is plugin v0.16.0.
+  - name: plugin-barman-cloud
+    namespace: cnpg-system
+    chart: cnpg/plugin-barman-cloud
+    version: 0.9.0
+    installed: {{ .Values | get "platformPostgres.enabled" false }}
+    needs:
+      - cert-manager/cert-manager
+      - cnpg-system/cloudnative-pg
+
   - name: platform-postgres
     namespace: loopzero-data-plane
     chart: ../helm/platform-postgres
     installed: {{ .Values | get "platformPostgres.enabled" false }}
     needs:
       - cnpg-system/cloudnative-pg
+      - cnpg-system/plugin-barman-cloud
     values:
       - image: {{ .Values | get "platformPostgres.image" "" | quote }}
         instances: {{ .Values | get "platformPostgres.instances" 1 }}
@@ -861,6 +878,17 @@ releases:
           cpu: {{ .Values | get "platformPostgres.cpu" "500m" | quote }}
           memory: {{ .Values | get "platformPostgres.memory" "512Mi" | quote }}
         parameters: {{ .Values | get "platformPostgres.parameters" dict | toJson }}
+        {{- $backup := .Values | get "platformPostgres.backup" dict }}
+        {{- $backupPurpose := $backup | get "bucketPurpose" "" }}
+        # The bucket and the role are infra-live's (storage/s3, identity/core-platform-postgres),
+        # named from the environment's prefix and account as every bucket and role is.
+        backup:
+          bucket: {{ ternary (printf "%s-%s-%s" (.Values | get "aws.namePrefix" "") $backupPurpose (.Values | get "aws.accountId" "")) "" (ne $backupPurpose "") | quote }}
+          roleArn: {{ ternary (printf "arn:aws:iam::%s:role/%s-core-platform-postgres" (.Values | get "aws.accountId" "") (.Values | get "aws.namePrefix" "")) "" (ne $backupPurpose "") | quote }}
+          serverName: {{ $backup | get "serverName" "" | quote }}
+          retention: {{ $backup | get "retention" "30d" | quote }}
+          schedule: {{ $backup | get "schedule" "0 0 3 * * *" | quote }}
+        recovery: {{ .Values | get "platformPostgres.recovery" (dict "serverName" "" "targetTime" "") | toJson }}
         databases: {{ .Values | get "platformPostgres.databases" list | toJson }}
 
   # The data plane (#446): memory, RAG and lens, one release each of one chart, every

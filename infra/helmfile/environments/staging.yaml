@@ -136,6 +136,13 @@ platformPostgres:
   # One entry per service that keeps its data here. A service's entry goes in with its
   # release (dataPlane.services below): the release writes the Secret the role's password
   # is read from.
+  # Base backups and the WAL archive go to <namePrefix>-postgres-backups-<accountId>, as
+  # the role <namePrefix>-core-platform-postgres (infra-live storage/s3 and
+  # identity/core-platform-postgres). A week of history: the nightly rebuild empties the
+  # bucket with the rest of the emulator. Production keeps the chart's 30 days.
+  backup:
+    bucketPurpose: postgres-backups
+    retention: 7d
   databases:
     - name: looptrace
       owner: looptrace
