@@ -112,6 +112,9 @@ to [Semantic Versioning](https://semver.org/).
 - `.squad/domain-routing.txt` — the project's domain routing table, derived from disk:
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
+### Removed
+- A repository's deploy descriptor is no longer read from `theo.yaml`. Rename the file to `loopscale.yaml`.
+
 ### Changed
 - The engine is named loop-runtime everywhere, because LoopZero is the name of the agent framework. Inside the code the name is spelled `loopruntime`, with no hyphen. What an operator has to change:
   - Images, charts and the ops binary: `loopzero-api` is `loopruntime-api`, and so on for every `loopzero-*` name.
@@ -121,7 +124,8 @@ to [Semantic Versioning](https://semver.org/).
   - HTTP headers: `X-LoopZero-*` is `X-LoopRuntime-*`.
   - Metrics: the `loopzero_` prefix is `loopruntime_`, and labels derived from the group read `label_runtime_getloopscale_com_*`.
   - PostgreSQL: databases and roles named `loopzero*` are `loopruntime*`.
-  The deploy descriptor a repository may carry keeps its names: `loopscale.yaml`, then `loopzero.yaml`, then `theo.yaml`.
+  The deploy descriptor a repository may carry is `loopscale.yaml`, then `loopzero.yaml`.
+- The dashboard chart writes its runtime configuration to `window.__LOOPSCALE_CONFIG__`. A dashboard image older than this one reads the previous global and finds nothing.
 - The repository is `getloopscale/loop-runtime`, and the Go modules are `github.com/getloopscale/loop-runtime/...`. The name LoopZero belongs to the agent framework. The staging scripts, the reusable `build-publish.yml` workflow and every link point at the new address. Image names, namespaces, the `LOOPZERO_` variables and the `loopzero.io` API group are unchanged in this step.
 
 - The platform's PostgreSQL on staging runs PostgreSQL 19.0 (`ghcr.io/cloudnative-pg/postgresql:19.0-minimal-trixie`), up from 16.14 (#177).
