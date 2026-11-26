@@ -111,7 +111,7 @@ platformImages:
     # getloopscale/console publishes these two (private on GHCR, pulled with
     # aws.imagePullSecret). Required while profile.loopzeroCloud is on.
     loopzero-cloud: "develop-9adbf29"
-    loopzero-dashboard: "develop-3c0fc04"
+    loopzero-dashboard: "develop-9a2fb8e"
 
 # The platform's own PostgreSQL, on CloudNativePG, for the data-plane services: one
 # Cluster on the core cluster and one database per service. RDS stays the control plane's
