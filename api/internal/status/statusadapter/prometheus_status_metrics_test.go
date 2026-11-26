@@ -47,7 +47,7 @@ const stagingMatcher = `tenant_id="tn-acme",project="shop",environment="staging"
 func TestPrometheusStatusMetrics_ReadyReplicas_SumsTheRecordedSeriesOfTheEnvironment(t *testing.T) {
 	src, query := servePrometheus(t, http.StatusOK, vectorOf("2"))
 
-	ready, err := src.ReadyReplicas(context.Background(), "tn-acme", "shop", "staging")
+	ready, err := src.ReadyReplicas(context.Background(), "tn-acme", "shop", "staging", nil)
 
 	if err != nil || ready == nil || *ready != 2 {
 		t.Fatalf("ready = %v, err = %v, want 2", ready, err)
@@ -60,7 +60,7 @@ func TestPrometheusStatusMetrics_ReadyReplicas_SumsTheRecordedSeriesOfTheEnviron
 func TestPrometheusStatusMetrics_ReadyReplicas_ZeroIsAMeasuredValue(t *testing.T) {
 	src, _ := servePrometheus(t, http.StatusOK, vectorOf("0"))
 
-	ready, err := src.ReadyReplicas(context.Background(), "tn-acme", "shop", "staging")
+	ready, err := src.ReadyReplicas(context.Background(), "tn-acme", "shop", "staging", nil)
 
 	if err != nil || ready == nil || *ready != 0 {
 		t.Fatalf("ready = %v, err = %v, want a measured 0", ready, err)
@@ -70,7 +70,7 @@ func TestPrometheusStatusMetrics_ReadyReplicas_ZeroIsAMeasuredValue(t *testing.T
 func TestPrometheusStatusMetrics_ReadyReplicas_NoSeriesIsNoValue(t *testing.T) {
 	src, _ := servePrometheus(t, http.StatusOK, emptyVector)
 
-	ready, err := src.ReadyReplicas(context.Background(), "tn-acme", "shop", "staging")
+	ready, err := src.ReadyReplicas(context.Background(), "tn-acme", "shop", "staging", nil)
 
 	if err != nil || ready != nil {
 		t.Fatalf("ready = %v, err = %v, want no value and no error", ready, err)
@@ -80,7 +80,7 @@ func TestPrometheusStatusMetrics_ReadyReplicas_NoSeriesIsNoValue(t *testing.T) {
 func TestPrometheusStatusMetrics_ReadyReplicas_ReportsAPrometheusFailure(t *testing.T) {
 	src, _ := servePrometheus(t, http.StatusServiceUnavailable, `{"status":"error","error":"down"}`)
 
-	if _, err := src.ReadyReplicas(context.Background(), "tn-acme", "shop", "staging"); err == nil {
+	if _, err := src.ReadyReplicas(context.Background(), "tn-acme", "shop", "staging", nil); err == nil {
 		t.Fatal("a failed query must be reported, not read as no replicas")
 	}
 }
@@ -119,5 +119,20 @@ func TestPrometheusStatusMetrics_ServerErrorPercent_NoTrafficIsNoValue(t *testin
 				t.Fatalf("pct = %v, err = %v, want no value and no error", pct, err)
 			}
 		})
+	}
+}
+
+// An app that left the environment keeps its last sample in the federated
+// series for minutes. Counting only the apps of the active release leaves it out.
+func TestPrometheusStatusMetrics_ReadyReplicas_CountsOnlyTheNamedApps(t *testing.T) {
+	src, query := servePrometheus(t, http.StatusOK, vectorOf("1"))
+
+	ready, err := src.ReadyReplicas(context.Background(), "tn-acme", "shop", "staging", []string{"app", "worker.v2"})
+
+	if err != nil || ready == nil || *ready != 1 {
+		t.Fatalf("ready = %v, err = %v, want 1", ready, err)
+	}
+	if want := `sum(loopzero_app:kube_pod_status_ready:sum{` + stagingMatcher + `,app=~"app|worker\\.v2"})`; *query != want {
+		t.Errorf("query = %s\n want = %s", *query, want)
 	}
 }

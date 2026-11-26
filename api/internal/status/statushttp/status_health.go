@@ -12,8 +12,9 @@ import (
 // StatusMetricsSource reads the live numbers of one environment of a project.
 // A nil value with a nil error means no series exists yet.
 type StatusMetricsSource interface {
-	// ReadyReplicas is the number of ready pods over the environment's apps.
-	ReadyReplicas(ctx context.Context, tenantID, project, environment string) (*int, error)
+	// ReadyReplicas is the number of ready pods over the named apps of the
+	// environment, or over every app there when apps is empty.
+	ReadyReplicas(ctx context.Context, tenantID, project, environment string, apps []string) (*int, error)
 	// ServerErrorPercent is the share of requests answered 5xx over window,
 	// from 0 to 100. Without traffic there is no share.
 	ServerErrorPercent(ctx context.Context, tenantID, project, environment string, window time.Duration) (*float64, error)
@@ -103,7 +104,13 @@ func (h *StatusHandler) fillHealth(ctx context.Context, resp *statusResponse, te
 	}
 
 	if h.metrics != nil {
-		ready, err := h.metrics.ReadyReplicas(ctx, tenantID, project, env)
+		// The apps of the active release: one a deploy or a rollback removed
+		// keeps its last sample in Prometheus for minutes and must not count.
+		released := make([]string, 0, len(apps))
+		for _, app := range apps {
+			released = append(released, app.App)
+		}
+		ready, err := h.metrics.ReadyReplicas(ctx, tenantID, project, env, released)
 		if err != nil {
 			log.WarnContext(ctx, "status: ready replicas not read; replicas_ready omitted", "error", err)
 		} else {

@@ -405,6 +405,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A build whose step failed is recorded as failed at that step, for example `Build failed at step "install-deps": main: Error (exit code 1)`. Every such build used to report "missing image digest", because Argo ended the workflow Succeeded and the failure surfaced only when the manifests were rendered (#94).
+- `replicas_ready` in the project status counts the apps of the active release. An app that a deploy or a rollback removed was still summed for about 6 minutes, so the Scale and Status screens showed more replicas than were running (#137).
 - A pending release that a newer deploy of the same environment replaced is cancelled with the reason "Superseded by a newer deploy of this environment". It used to retrigger syncs, terminate the newer deploy's Argo CD operation and fail after the sync timeout as "service did not become healthy" (#148).
 - A push deploy that fails after its build sets the commit status on GitHub to `failure` with the reason, and one a newer deploy replaced to `error`. The status used to stay `pending` (#148).
 - `last_deploy_at` in the project status and `last_deploy` in the environments list are the time the active release became active. After a rollback they showed the creation time of the release rolled back to, hours before the change (#145).
