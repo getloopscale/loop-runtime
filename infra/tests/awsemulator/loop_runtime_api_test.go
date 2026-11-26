@@ -41,8 +41,8 @@ import (
 const (
 	namespace = "loop-runtime-system"
 	database  = "loop_runtime"
-	// The master user runs the migrations, and migration 000023 requires it to be named loop-runtime.
-	masterUser = "loop-runtime"
+	// The master user runs the migrations, and migration 000023 requires it to be named loop_runtime.
+	masterUser = "loop_runtime"
 	psqlImage  = "postgres:16.11-alpine"
 )
 
