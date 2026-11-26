@@ -12,6 +12,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/builds/argo"
 	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
 	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loopzero/api/internal/environments"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentsadapter"
 	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
 	"github.com/getloopscale/loopzero/api/internal/placement/placementadapter"
@@ -185,7 +186,10 @@ func wireDatabaseDeps(sc *server.Config, w serverWiring) {
 	sc.DB = w.dbDeps.DBHealth
 	sc.Guards.PlanLimiter = w.dbDeps.PlanLimiter
 	if w.dbDeps.PlanLimiter != nil {
-		sc.Guards.PlanUsage = store.NewPostgresPlanUsageStore(w.dbDeps.DBAdapter.Pool)
+		sc.Guards.PlanUsage = planUsage{
+			PostgresPlanUsageStore: store.NewPostgresPlanUsageStore(w.dbDeps.DBAdapter.Pool),
+			environments:           environments.PlanUsageFromEnvironments(w.k8sDeps.TenantCRMgr),
+		}
 	}
 	// The project store doubles as the secrets cross-tenant binding checker:
 	// a cross-tenant attempt and a nonexistent project answer the same 404
@@ -472,4 +476,15 @@ func tenantCellResolver(s *store.PostgresCellStore) projectshttp.TenantCellResol
 		return nil
 	}
 	return s
+}
+
+// planUsage counts builds and seats in the database and environments in the
+// tenant's environment list, where an environment exists from its creation.
+type planUsage struct {
+	*store.PostgresPlanUsageStore
+	environments environments.PlanUsage
+}
+
+func (u planUsage) PermanentEnvironments(ctx context.Context, tenantID string) (int, error) {
+	return u.environments.PermanentEnvironments(ctx, tenantID)
 }

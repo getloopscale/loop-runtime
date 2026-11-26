@@ -405,6 +405,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The plan cap on environments counts every permanent environment a tenant has. It counted only the ones that had received a deploy, so `POST /api/v1/environments` never answered 402 for environments created and left empty (#153).
 - A push to a connected repository whose `loopzero.yaml` is invalid or missing sets the commit's `loopzero/deploy` status to `failure`, with the reason the file was refused. The push was dropped with a line in the API log and nothing on GitHub (#151).
 - A build whose step failed is recorded as failed at that step, for example `Build failed at step "install-deps": main: Error (exit code 1)`. Every such build used to report "missing image digest", because Argo ended the workflow Succeeded and the failure surfaced only when the manifests were rendered (#94).
 - `replicas_ready` in the project status counts the apps of the active release. An app that a deploy or a rollback removed was still summed for about 6 minutes, so the Scale and Status screens showed more replicas than were running (#137).
