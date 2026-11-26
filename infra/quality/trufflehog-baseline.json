@@ -270,6 +270,51 @@
       "id": "a355c3dccfdc0e90",
       "detector": "Docker",
       "first_seen_in": "operators/internal/tenant/registry_auth_merge_test.go"
+    },
+    {
+      "id": "12fa27a282f69469",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "2c04e7f15d139729",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "975262c43b537e28",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "ea78375f9f53bf9f",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "e3491f69de8b1b7e",
+      "detector": "Postgres",
+      "first_seen_in": "api/tests/integration/project_cap_per_account_test.go"
+    },
+    {
+      "id": "5d62a881b1baec40",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_external_postgres_test.go"
+    },
+    {
+      "id": "10a748ae4ff7acbb",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
+    },
+    {
+      "id": "382254fe539b0941",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
+    },
+    {
+      "id": "7d47e9a2137f1682",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/controller-deployment.yaml"
     }
   ]
 }
