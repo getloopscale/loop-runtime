@@ -107,6 +107,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `GET /api/v1/builds/{id}/sbom` gives each app a `download_path`, a path of this API, where it gave `download_url`, a presigned URL to the object store. The new `GET /api/v1/builds/{id}/sbom/{app}/download` streams the CycloneDX file as an attachment. A presigned URL carries the storage endpoint, which on staging no browser reaches (#104).
 - The deploy descriptor of a repository is `loopscale.yaml`. A push deploy and the repository connect read `loopscale.yaml`, then `loopzero.yaml`, then `theo.yaml`, and use the first one the repository root has, so a repository set up by an earlier CLI keeps deploying. A refusal names the file that was read. The connect answers `MISSING_DEPLOY_DESCRIPTOR` and `INVALID_DEPLOY_DESCRIPTOR` where it answered `MISSING_LOOPZERO_YAML` and `INVALID_LOOPZERO_YAML` (#89).
 - The API reads the GitHub App's OAuth client from `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`, and the GitHub web root from `GITHUB_WEB_BASE_URL` (default `https://github.com`). Without the client id and secret the claim endpoint answers 503 `GITHUB_OAUTH_NOT_CONFIGURED` and no repository can be connected. On the AWS profile the `loopzero-api-github` ExternalSecret maps them from the `client-id` and `client-secret` keys of `aws.githubAppSecret`, so that secret needs both keys before the upgrade
 - A deploy of a commit that already has a signed image reuses that image instead of building it again (#71)

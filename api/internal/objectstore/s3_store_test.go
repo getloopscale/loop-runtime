@@ -196,3 +196,70 @@ func TestUploadStreamsAReaderOfUnknownLength(t *testing.T) {
 		t.Errorf("parts = %q, want one part carrying the payload", parts)
 	}
 }
+
+// The SBOM download reads the object through the API, in place of handing the
+// browser a presigned URL to the storage endpoint (getloopscale/loopzero#104).
+func TestOpenReturnsTheObjectContent(t *testing.T) {
+	const content = `{"bomFormat":"CycloneDX"}`
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Length", "25")
+		w.Header().Set("ETag", `"abc"`)
+		w.Header().Set("Last-Modified", "Wed, 25 Nov 2026 10:00:00 GMT")
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(content))
+		}
+	}))
+	defer srv.Close()
+	s, err := NewS3Store(srv.URL, "ak", "sk")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := s.Open(context.Background(), "builds", "sbom/tn-1/api.cdx.json")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = body.Close() }()
+	got, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != content {
+		t.Errorf("content = %q", got)
+	}
+	if gotPath != "/builds/sbom/tn-1/api.cdx.json" {
+		t.Errorf("path = %q", gotPath)
+	}
+}
+
+func TestOpenFailsForAMissingObjectBeforeAnyByteIsRead(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message></Error>`))
+	}))
+	defer srv.Close()
+	s, err := NewS3Store(srv.URL, "ak", "sk")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Open(context.Background(), "builds", "missing.json"); err == nil {
+		t.Error("expected an error for a missing object")
+	}
+}
+
+func TestOpenRejectsEmptyInputs(t *testing.T) {
+	s, err := NewS3Store("http://127.0.0.1:1", "ak", "sk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Open(context.Background(), "", "k"); err == nil {
+		t.Error("expected an error for an empty bucket")
+	}
+	if _, err := s.Open(context.Background(), "b", ""); err == nil {
+		t.Error("expected an error for an empty key")
+	}
+}
