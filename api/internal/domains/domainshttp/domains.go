@@ -84,7 +84,8 @@ type DomainHandler struct {
 	verifier    DomainVerifier
 	validator   DomainValidator
 	cnameTarget string
-	cfZone      CFZoneManager // nil = v1 mode (TXT verification), non-nil = v2 (CF Zone)
+	cfZone      CFZoneManager     // nil = v1 mode (TXT verification), non-nil = v2 (CF Zone)
+	planLimits  DomainPlanLimiter // nil only where no plan is enforced (no database: dev and tests)
 }
 
 // NewDomainHandler creates a new DomainHandler.
