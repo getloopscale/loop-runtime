@@ -26,6 +26,7 @@ type validateHarness struct {
 	server    *httptest.Server
 	state     string
 	tokenExit string
+	planExit  string
 	suiteExit string
 	suiteOut  string
 }
@@ -37,7 +38,7 @@ func newValidateHarness(t *testing.T) *validateHarness {
 			t.Fatalf("infra/staging/validate.sh needs %s on PATH: %v", tool, err)
 		}
 	}
-	h := &validateHarness{t: t, state: filepath.Join(t.TempDir(), "state"), tokenExit: "0", suiteExit: "0"}
+	h := &validateHarness{t: t, state: filepath.Join(t.TempDir(), "state"), tokenExit: "0", planExit: "0", suiteExit: "0"}
 	h.github = &fakeGitHub{published: map[string]bool{}, committed: time.Now()}
 	h.server = httptest.NewServer(h.github)
 	t.Cleanup(h.server.Close)
@@ -62,6 +63,7 @@ func (h *validateHarness) validate(args ...string) (string, error) {
 	// The fake token command writes the token where the suite is told to read it; the
 	// fake suite records the variables it ran with.
 	tokenCmd := h.script("token", fmt.Sprintf("echo seeded-token > \"$LOOPZERO_DOGFOOD_JWT_PATH\"\nexit %s\n", h.tokenExit))
+	planCmd := h.script("plan", fmt.Sprintf("echo \"plan set for the tenant of $(cat \"$LOOPZERO_DOGFOOD_JWT_PATH\")\"\nexit %s\n", h.planExit))
 	suiteCmd := h.script("suite", fmt.Sprintf("echo \"jwt=$(cat \"$LOOPZERO_DOGFOOD_JWT_PATH\") deep=$LOOPZERO_DOGFOOD_DEEP_HEALTH_URL cloud=$LOOPZERO_DOGFOOD_CLOUD_URL\"\nprintf '%%s' %q\nexit %s\n", h.suiteOut, h.suiteExit))
 	cmd := exec.Command("bash", append([]string{filepath.Join(repoRoot(), "infra/staging/validate.sh")}, args...)...)
 	cmd.Env = append(os.Environ(),
@@ -70,6 +72,7 @@ func (h *validateHarness) validate(args ...string) (string, error) {
 		"DEPLOY_STATUS_TOKEN_FILE="+token,
 		"VALIDATE_CHECKOUT="+h.t.TempDir(),
 		"VALIDATE_TOKEN_CMD="+tokenCmd,
+		"VALIDATE_PLAN_CMD="+planCmd,
 		"VALIDATE_SUITE_CMD="+suiteCmd,
 	)
 	out, err := cmd.CombinedOutput()
@@ -154,6 +157,41 @@ func TestStagingValidateReportsFailureWhenTheIdentityCannotBeSeeded(t *testing.T
 	}
 	if got := strings.Join(h.github.contexts(), ","); got != "staging/validate=pending,staging/validate=failure" {
 		t.Errorf("statuses %s, want pending then failure", got)
+	}
+}
+
+// A tenant starts on Starter, whose 50 builds a month the journeys use up in a day of
+// deploys. From then on every build was refused with HTTP 402 and the validation of a
+// healthy staging failed, so the run puts its tenant on a larger plan first.
+func TestStagingValidateSetsThePlanOfItsTenantBeforeTheJourneys(t *testing.T) {
+	h := newValidateHarness(t)
+
+	out, err := h.validate(validatedSHA)
+
+	if err != nil {
+		t.Fatalf("validate failed: %v\n%s", err, out)
+	}
+	log := h.log()
+	plan, suite := strings.Index(log, "plan set for the tenant of seeded-token"), strings.Index(log, "jwt=seeded-token")
+	if plan < 0 || suite < 0 || plan > suite {
+		t.Errorf("the plan step must run with the seeded token and before the suite; log:\n%s", log)
+	}
+}
+
+func TestStagingValidateReportsFailureWhenThePlanCannotBeSet(t *testing.T) {
+	h := newValidateHarness(t)
+	h.planExit = "1"
+
+	out, err := h.validate(validatedSHA)
+
+	if err == nil {
+		t.Fatalf("a failed plan step exited 0\n%s", out)
+	}
+	if got := strings.Join(h.github.contexts(), ","); got != "staging/validate=pending,staging/validate=failure" {
+		t.Errorf("statuses %s, want pending then failure", got)
+	}
+	if strings.Contains(h.log(), "jwt=seeded-token") {
+		t.Errorf("the suite ran on a tenant whose plan was not set; log:\n%s", h.log())
 	}
 }
 
