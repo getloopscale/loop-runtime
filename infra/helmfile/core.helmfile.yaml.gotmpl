@@ -903,6 +903,12 @@ releases:
     chart: ../helm/data-plane-service
     installed: {{ has $svc ($.Values | get "dataPlane.services" list) }}
     wait: false
+{{- if and (eq $svc "looptrace") $.Values.profile.awsSecretsManager }}
+    # Its Secrets are ExternalSecret objects: the CRDs and the store must exist first,
+    # or a cluster built from nothing fails here whenever this release gets there first.
+    needs:
+      - external-secrets/aws-secrets-manager
+{{- end }}
     values:
       - values/{{ $.Environment.Name }}/{{ $svc }}.yaml.gotmpl
 {{- end }}
