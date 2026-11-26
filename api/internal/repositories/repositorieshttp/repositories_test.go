@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
-	"github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // --- Fake RepositoryStore ---
@@ -572,7 +572,7 @@ func TestRepositories_Connect_DeployIsBoundToTheServerLifetime(t *testing.T) {
 
 // A repository the CLI set up carries theo.yaml, and one connected before the
 // rename carries loopzero.yaml. Connect accepts both, and loopscale.yaml
-// (getloopscale/loopzero#89).
+// (getloopscale/loop-runtime#89).
 func TestRepositories_Connect_AcceptsEveryDescriptorName(t *testing.T) {
 	for _, name := range []string{"loopscale.yaml", "loopzero.yaml", "theo.yaml"} {
 		t.Run(name, func(t *testing.T) {

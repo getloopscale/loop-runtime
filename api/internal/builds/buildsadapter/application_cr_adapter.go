@@ -6,9 +6,9 @@ package buildsadapter
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
-	"github.com/getloopscale/loopzero/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/workload"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
 )
 
 // ApplicationCRAdapter bridges workload.ApplicationCRManager to build.ApplicationCREnsurer.

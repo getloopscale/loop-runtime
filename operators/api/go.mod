@@ -1,4 +1,4 @@
-module github.com/getloopscale/loopzero/operators/api
+module github.com/getloopscale/loop-runtime/operators/api
 
 go 1.26.1
 

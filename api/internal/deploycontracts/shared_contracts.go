@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // shared_contracts.go — M9 Step 6 P1: the cross-context shared DTOs + narrow

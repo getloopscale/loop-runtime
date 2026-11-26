@@ -25,7 +25,7 @@
 //
 // Cross-references:
 //   - Script: infra/helmfile/scripts/generate-secrets.sh
-//   - Issue: getloopscale/loopzero#115
+//   - Issue: getloopscale/loop-runtime#115
 //   - Sister guards: dogfood_all_repo_root_test.go,
 //     live_proof_env_file_test.go, loopzero_bin_workspace_discovery_test.go
 //     (same post-2026-06-20 hermetic-Go-guard pattern)

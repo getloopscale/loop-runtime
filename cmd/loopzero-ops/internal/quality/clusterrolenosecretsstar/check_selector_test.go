@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // clusterRoleDecl matches a ClusterRole DECLARATION: `kind: ClusterRole` at
@@ -65,7 +65,7 @@ func liveClusterRoleFiles(t *testing.T, root string) []string {
 // measurement is the opposite of the invisible skip that same rule forbids — the debt
 // shows up in every run, and the issue below is where it is tracked.
 //
-// Tracked at: https://github.com/getloopscale/loopzero/issues/362
+// Tracked at: https://github.com/getloopscale/loop-runtime/issues/362
 // The defect: the gate selects by file BASENAME rather than by the `kind:` of the declarations,
 // so it audits five of the nine ClusterRoles and reports on all nine.
 //
@@ -76,7 +76,7 @@ func liveClusterRoleFiles(t *testing.T, root string) []string {
 func skipUnlessSelectorAuditArmed(t *testing.T) {
 	t.Helper()
 	if os.Getenv("LOOPZERO_RUN_SELECTOR_AUDIT") == "" {
-		// https://github.com/getloopscale/loopzero/issues/362
+		// https://github.com/getloopscale/loop-runtime/issues/362
 		t.Skip("known debt: the gate selects by file basename rather than by the kind: of " +
 			"the declarations — nine ClusterRoles exist under charts/ and infra/helm/, and " +
 			"the gate opens the five that happen to live in a clusterrole.yaml. " +

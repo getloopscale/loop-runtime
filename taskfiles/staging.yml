@@ -519,7 +519,7 @@ tasks:
         set -euo pipefail
         token=/etc/loopzero-staging/github-status-token
         if [ ! -s "$token" ]; then
-          echo "no status token at $token: create a fine-grained token on getloopscale/loopzero with Commit statuses read and write, and write it there (mode 0600)" >&2
+          echo "no status token at $token: create a fine-grained token on getloopscale/loop-runtime with Commit statuses read and write, and write it there (mode 0600)" >&2
           exit 1
         fi
         chmod 600 "$token"

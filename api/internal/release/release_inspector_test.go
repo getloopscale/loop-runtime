@@ -7,14 +7,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // T4.4 of plan 2026-05-28-meet-001-engineering-closure-plan.md.

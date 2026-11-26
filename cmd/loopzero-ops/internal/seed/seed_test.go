@@ -6,7 +6,7 @@ package seed
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exitcode"
 )
 
 func TestVerdict_String(t *testing.T) {

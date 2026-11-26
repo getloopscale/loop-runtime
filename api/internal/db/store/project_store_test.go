@@ -4,11 +4,11 @@
 package store_test
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 )
 
 // project_store_test.go — RESHAPED in T2.1 #4 of plan

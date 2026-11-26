@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // planOf answers the custom_domains_per_env limit of one plan and records

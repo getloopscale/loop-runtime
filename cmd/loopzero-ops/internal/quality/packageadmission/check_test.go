@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/packageadmission"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/packageadmission"
 )
 
 // tree writes files under api/internal/k8s/<relative path> and returns the repo root.

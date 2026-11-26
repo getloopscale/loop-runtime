@@ -6,7 +6,7 @@ package moduleselfcontained
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // What `go build` printed in the fork-safe CI job, which receives no credential for the

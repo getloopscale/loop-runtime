@@ -8,8 +8,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 var errStoreDown = errors.New("connection refused")

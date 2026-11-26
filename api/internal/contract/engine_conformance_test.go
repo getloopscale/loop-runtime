@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/version/versionhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/version/versionhttp"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"

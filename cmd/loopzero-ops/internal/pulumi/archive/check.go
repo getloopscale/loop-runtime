@@ -33,8 +33,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/shellrun"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // PulumiVersionPinned — bash PULUMI_VERSION_PINNED.

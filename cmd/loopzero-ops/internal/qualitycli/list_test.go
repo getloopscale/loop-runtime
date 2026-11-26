@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/cliout"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // liveTaskfile is the repository's own taskfiles/quality.yml.

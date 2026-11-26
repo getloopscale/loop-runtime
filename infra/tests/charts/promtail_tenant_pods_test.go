@@ -74,7 +74,7 @@ func loopzeroPodsRelabels(t *testing.T, helmfile, env string, extraEnv []string)
 // What pod service discovery gives for a pod of a tenant app: the pod's own labels and
 // its namespace's name. It gives no label of the namespace, which is what the job used to
 // decide on, so every tenant pod was dropped and Runtime logs stayed empty
-// (getloopscale/loopzero#110).
+// (getloopscale/loop-runtime#110).
 var tenantPodDiscovered = map[string]string{
 	"__meta_kubernetes_namespace":                         "loopzero-tn-acme-shop-production",
 	"__meta_kubernetes_pod_uid":                           "0e1d",

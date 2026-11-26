@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	pkgconditions "github.com/getloopscale/loopzero/pkg/conditions"
+	pkgconditions "github.com/getloopscale/loop-runtime/pkg/conditions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

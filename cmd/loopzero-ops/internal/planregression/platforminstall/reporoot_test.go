@@ -3,7 +3,7 @@
 
 package platforminstall
 
-import "github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+import "github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 
 // repoRoot is the location-independent monorepo root (M9 Step 4 externalization;
 // replaces the former hardcoded "../../../" offset that broke on relocation).

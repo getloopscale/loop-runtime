@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func sink(t *testing.T, files map[string]string) Config {
@@ -32,7 +32,7 @@ func sink(t *testing.T, files map[string]string) Config {
 
 const twoFrozen = `package deploycontracts
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 type Port interface {
 	WithLock(fn func(tx db.DBTX) error) error
@@ -64,7 +64,7 @@ func TestCheck_ANewSymbolFails(t *testing.T) {
 func TestCheck_SwappingOneSymbolForAnotherFails(t *testing.T) {
 	swapped := `package deploycontracts
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 type Port interface {
 	WithLock(fn func(tx db.DBTX) error) error
@@ -85,7 +85,7 @@ type Port interface {
 func TestCheck_ARemovedSymbolIsReportedNotFailed(t *testing.T) {
 	fewer := `package deploycontracts
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 type Port interface {
 	WithLock(fn func(tx db.DBTX) error) error
@@ -124,7 +124,7 @@ func TestCheck_TestFilesAreNotTheSurface(t *testing.T) {
 		"a.go": twoFrozen,
 		"a_test.go": `package deploycontracts
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 var _ = db.Release{}
 `,
@@ -157,7 +157,7 @@ func TestCheck_RealTree(t *testing.T) {
 func TestCheck_AliasedImportIsStillCaught(t *testing.T) {
 	body := `package deploycontracts
 
-import persistence "github.com/getloopscale/loopzero/api/internal/db"
+import persistence "github.com/getloopscale/loop-runtime/api/internal/db"
 
 type Sneaky struct{ R *persistence.Release }
 `
@@ -197,7 +197,7 @@ type Fine struct{ X db.Release }
 func TestCheck_DotImportIsAHardFinding(t *testing.T) {
 	body := `package deploycontracts
 
-import . "github.com/getloopscale/loopzero/api/internal/db"
+import . "github.com/getloopscale/loop-runtime/api/internal/db"
 
 type Sneaky struct{ R *Release }
 `
@@ -212,8 +212,8 @@ func TestCheck_DuplicateImportUnderTwoNamesIsCaught(t *testing.T) {
 	body := `package deploycontracts
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/db"
-	dbx "github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	dbx "github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 type Port interface {
@@ -236,7 +236,7 @@ type Port interface {
 func TestCheck_LocalVariableShadowingTheImportIsNotALeak(t *testing.T) {
 	body := `package deploycontracts
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 type logger struct{}
 
@@ -267,7 +267,7 @@ type Port interface {
 func TestCheck_DbStoreIsWatchedToo(t *testing.T) {
 	body := `package deploycontracts
 
-import "github.com/getloopscale/loopzero/api/internal/db/store"
+import "github.com/getloopscale/loop-runtime/api/internal/db/store"
 
 type Port interface{ Repo() *store.ReleaseStore }
 `
@@ -285,8 +285,8 @@ func TestCheck_BlankImportIsNotACrossing(t *testing.T) {
 	body := `package deploycontracts
 
 import (
-	_ "github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/db"
+	_ "github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 type Port interface {
@@ -312,7 +312,7 @@ type Port interface {
 func TestCheck_AliasPathIsKeyedUnderTheCanonicalPrefix(t *testing.T) {
 	body := `package deploycontracts
 
-import "github.com/getloopscale/loopzero/api/internal/db/dbtx"
+import "github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
 
 type Port interface{ WithLock(fn func(tx dbtx.DBTX) error) error }
 `

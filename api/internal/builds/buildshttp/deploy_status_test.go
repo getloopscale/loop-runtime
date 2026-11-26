@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 func TestDeployStatusOf(t *testing.T) {
@@ -71,7 +71,7 @@ func listBuilds(t *testing.T, h *BuildListHandler) (int, []map[string]any) {
 
 // A build whose image was built and whose deploy then failed was listed as
 // Succeeded, with nothing in the response to say otherwise
-// (getloopscale/loopzero#135).
+// (getloopscale/loop-runtime#135).
 func TestBuildList_CarriesTheOutcomeOfEachBuildsDeploy(t *testing.T) {
 	now := time.Now()
 	store := &fakeBuildListStore{total: 4, builds: []BuildListItem{

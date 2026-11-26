@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/kubeconformschema"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/kubeconformschema"
 )
 
 const kubeconformSchemasHelpText = `loopzero-ops kubeconform-schemas — derive strict kubeconform schemas from CRDs

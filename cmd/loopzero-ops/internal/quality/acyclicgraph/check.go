@@ -26,7 +26,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config tells Check where the engine repo root is. Sibling repos are resolved
@@ -69,10 +69,10 @@ func Check(cfg Config) (*Outcome, error) {
 			name: "loopzero-contracts",
 			dir:  filepath.Join(parent, "loopzero-contracts"),
 			// The most-stable base imports nothing from any consumer. The engine
-			// is github.com/getloopscale/loopzero/* (trailing slash → engine only, never
+			// is github.com/getloopscale/loop-runtime/* (trailing slash → engine only, never
 			// matches loopzero-contracts); the leaf consumers are loopzero-cloud + loopzero-cli.
 			forbidden: []string{
-				"github.com/getloopscale/loopzero/",
+				"github.com/getloopscale/loop-runtime/",
 				"github.com/getloopscale/loopzero-cloud",
 				"github.com/getloopscale/loopzero-cli",
 			},
@@ -91,9 +91,9 @@ func Check(cfg Config) (*Outcome, error) {
 			dir:  filepath.Join(parent, "loopzero-cloud"),
 			// The cloud never imports engine-internal packages (only loopzero-contracts).
 			forbidden: []string{
-				"github.com/getloopscale/loopzero/pkg",
-				"github.com/getloopscale/loopzero/api",
-				"github.com/getloopscale/loopzero/operators",
+				"github.com/getloopscale/loop-runtime/pkg",
+				"github.com/getloopscale/loop-runtime/api",
+				"github.com/getloopscale/loop-runtime/operators",
 				"github.com/getloopscale/loopzero-cli",
 			},
 		},
@@ -105,9 +105,9 @@ func Check(cfg Config) (*Outcome, error) {
 			name: "operators-api",
 			dir:  filepath.Join(cfg.RepoRoot, "operators", "api"),
 			forbidden: []string{
-				"github.com/getloopscale/loopzero/operators/internal",
-				"github.com/getloopscale/loopzero/api",
-				"github.com/getloopscale/loopzero/pkg",
+				"github.com/getloopscale/loop-runtime/operators/internal",
+				"github.com/getloopscale/loop-runtime/api",
+				"github.com/getloopscale/loop-runtime/pkg",
 				"github.com/getloopscale/loopzero-cloud",
 				"github.com/getloopscale/loopzero-cli",
 			},

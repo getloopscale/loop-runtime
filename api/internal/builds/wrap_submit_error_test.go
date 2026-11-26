@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Sprint 6 plan T2.1 — pure-function unit tests for wrapSubmitBuildError

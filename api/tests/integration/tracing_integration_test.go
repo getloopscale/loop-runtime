@@ -15,7 +15,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	observability "github.com/getloopscale/loopzero/api/internal/middleware/observability"
+	observability "github.com/getloopscale/loop-runtime/api/internal/middleware/observability"
 )
 
 // setupTestTracer configures an in-memory span exporter for tests.

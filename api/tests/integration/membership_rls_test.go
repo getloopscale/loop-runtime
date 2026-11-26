@@ -8,8 +8,8 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 )
 
 // Authentication resolves which teams a user belongs to BEFORE any team is

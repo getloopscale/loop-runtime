@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 var _ = Describe("Cell routing", Ordered, func() {

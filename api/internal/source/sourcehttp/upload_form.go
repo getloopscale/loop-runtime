@@ -12,9 +12,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/getloopscale/loopzero/api/internal/source"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 )
 
 // Wire field names of POST /api/v1/source/upload

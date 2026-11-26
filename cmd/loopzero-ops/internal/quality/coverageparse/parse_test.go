@@ -31,9 +31,9 @@ func TestPkgFromFile_BareFile_Empty(t *testing.T) {
 
 func TestParseGoProfile_SinglePackage(t *testing.T) {
 	input := `mode: atomic
-github.com/getloopscale/loopzero/pkg/foo/bar.go:10.0,15.10 5 3
-github.com/getloopscale/loopzero/pkg/foo/baz.go:20.0,30.10 10 10
-github.com/getloopscale/loopzero/pkg/foo/baz.go:32.0,40.10 8 0
+github.com/getloopscale/loop-runtime/pkg/foo/bar.go:10.0,15.10 5 3
+github.com/getloopscale/loop-runtime/pkg/foo/baz.go:20.0,30.10 10 10
+github.com/getloopscale/loop-runtime/pkg/foo/baz.go:32.0,40.10 8 0
 `
 	pkgs, err := ParseGoProfile(strings.NewReader(input))
 	require.NoError(t, err)
@@ -41,7 +41,7 @@ github.com/getloopscale/loopzero/pkg/foo/baz.go:32.0,40.10 8 0
 	// File bar.go: 5 stmts, 5 covered (count>0 → all 5 covered)
 	// File baz.go: 18 stmts, 10 covered
 	// Package total: 23 stmts, 15 covered = 65.2%
-	assert.Equal(t, "github.com/getloopscale/loopzero/pkg/foo", pkgs[0].Package)
+	assert.Equal(t, "github.com/getloopscale/loop-runtime/pkg/foo", pkgs[0].Package)
 	assert.Equal(t, 65.2, pkgs[0].Coverage)
 }
 

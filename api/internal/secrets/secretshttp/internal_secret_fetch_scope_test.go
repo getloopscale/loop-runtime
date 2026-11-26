@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 // The broker is a system entry point: ESO authenticates as a cell's service

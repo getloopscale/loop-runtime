@@ -4,8 +4,8 @@
 package qualitycli
 
 import (
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/subpackagefence"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/subpackagefence"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // reportSubpackageFence prints a subpackagefence outcome for one gate. What the

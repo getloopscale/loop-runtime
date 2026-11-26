@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
+	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 type fakeStore struct {

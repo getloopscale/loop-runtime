@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // rollbackLogFake keeps the rollback records in memory, closing each one once

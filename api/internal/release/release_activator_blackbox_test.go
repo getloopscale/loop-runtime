@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	releasesvc "github.com/getloopscale/loopzero/api/internal/release"
+	releasesvc "github.com/getloopscale/loop-runtime/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 )
 
 // fakeDeployEventStore is a no-op AppendDeployEvent stub. The kernel calls it

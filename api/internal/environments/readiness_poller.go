@@ -10,7 +10,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // EnvironmentTargetKey identifies one (tenant, project, environment) — the

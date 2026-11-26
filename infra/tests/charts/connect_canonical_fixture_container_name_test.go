@@ -41,7 +41,7 @@ import (
 	appsV1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/yaml"
 
-	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/getloopscale/loop-runtime/infra/tests/helm/chartrender"
 )
 
 var (

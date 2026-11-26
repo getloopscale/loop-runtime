@@ -19,10 +19,10 @@ import (
 )
 
 // infra/staging/deploy.sh is run against a GitHub and a registry served by the test, a
-// local git repository standing in for getloopscale/loopzero, and a platform command
+// local git repository standing in for getloopscale/loop-runtime, and a platform command
 // that records the values it was given instead of running helmfile.
 
-const deployRepo = "getloopscale/loopzero"
+const deployRepo = "getloopscale/loop-runtime"
 
 type fakeGitHub struct {
 	mu        sync.Mutex

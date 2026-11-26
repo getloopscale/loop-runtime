@@ -6,7 +6,7 @@ package preview
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // PreviewCreator is the optional service used by the preview Create handler;

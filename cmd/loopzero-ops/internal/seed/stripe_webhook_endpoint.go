@@ -14,7 +14,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/credshape"
 )
 
 // StripeWebhookEndpointSeed is the Go port of

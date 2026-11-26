@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // ExtractReaperReason pulls the rich reaper_reason text from a release's

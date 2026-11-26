@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/infra/scripts/seed"
+	"github.com/getloopscale/loop-runtime/infra/scripts/seed"
 )
 
 // A journey that builds the two-segment "loopzero-<tenant>-<env>" name inspects a

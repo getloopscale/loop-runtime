@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/credshape"
 )
 
 // StripeAPIKeysSeed is the Go port of

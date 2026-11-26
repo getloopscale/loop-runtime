@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtest"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtest"
 )
 
 // errRow is a Row whose Scan fails with err.

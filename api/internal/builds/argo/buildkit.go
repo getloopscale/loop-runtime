@@ -15,13 +15,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
 	forge "github.com/getloopscale/argo-workflows-go"
 	"github.com/getloopscale/argo-workflows-go/model"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/shellgen"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/shellgen"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // buildkitParams holds the resolved parameters for a BuildKit build container.

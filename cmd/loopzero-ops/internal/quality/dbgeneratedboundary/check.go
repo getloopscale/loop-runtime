@@ -42,8 +42,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/featurefence"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate.
@@ -73,7 +73,7 @@ type Outcome struct {
 // Verdict is Pass when the check passed and Fail otherwise.
 func (o Outcome) Verdict() verdict.Verdict { return verdict.FromPass(o.Pass) }
 
-const generatedImportPath = "github.com/getloopscale/loopzero/api/internal/db/generated"
+const generatedImportPath = "github.com/getloopscale/loop-runtime/api/internal/db/generated"
 
 // forbiddenDirs are the outer layers that must NOT import the generated
 // package. Every HTTP package of the feature layout (docs/decisions.md,
@@ -88,7 +88,7 @@ var forbiddenDirs = []string{
 
 // handWrittenDBPath is the hand-written persistence package — db.Build,
 // db.Release, db.DBTX — as distinct from the sqlc-generated one above.
-const handWrittenDBPath = "github.com/getloopscale/loopzero/api/internal/db"
+const handWrittenDBPath = "github.com/getloopscale/loop-runtime/api/internal/db"
 
 // dirsForbiddenFromHandWrittenDB is DELIBERATELY narrower than forbiddenDirs.
 //

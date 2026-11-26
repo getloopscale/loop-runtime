@@ -10,7 +10,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainshttp"
 )
 
 // txtResolver is the one DNS call DNSTXTVerifier makes; *net.Resolver has it.

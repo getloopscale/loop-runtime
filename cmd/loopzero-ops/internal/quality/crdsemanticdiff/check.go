@@ -24,10 +24,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/helmrender"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/helmrender"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/scanresult"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
 

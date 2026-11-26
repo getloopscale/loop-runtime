@@ -6,7 +6,7 @@ package backgroundloops
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
 )
 
 // A build's object store settings come from the API's own: with an IRSA role and no

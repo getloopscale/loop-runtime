@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/getloopscale/loopzero/api/internal/bootstrap/bootstraphttp"
+	"github.com/getloopscale/loop-runtime/api/internal/bootstrap/bootstraphttp"
 )
 
 // InMemoryStore is an in-memory bootstrap.BootstrapStore for tests.

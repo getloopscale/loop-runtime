@@ -16,7 +16,7 @@ import (
 // measurement is the opposite of the invisible skip that same rule forbids — the debt
 // shows up in every run, and the issue below is where it is tracked.
 //
-// Tracked at: https://github.com/getloopscale/loopzero/issues/364
+// Tracked at: https://github.com/getloopscale/loop-runtime/issues/364
 // The defect: the gate reads WHETHER an approval marker exists, not WHICH file it names, so one
 // approval authorises deleting any other test in the same commit.
 //
@@ -27,7 +27,7 @@ import (
 func skipUnlessMarkerScopeArmed(t *testing.T) {
 	t.Helper()
 	if os.Getenv("LOOPZERO_RUN_MARKER_SCOPE") == "" {
-		// https://github.com/getloopscale/loopzero/issues/364
+		// https://github.com/getloopscale/loop-runtime/issues/364
 		t.Skip("known debt: the test-deletion gate reads whether an approval marker exists, " +
 			"not which file it names — so one approval authorises deleting any other test " +
 			"in the same commit. Run with LOOPZERO_RUN_MARKER_SCOPE=1 to see the measurement.")

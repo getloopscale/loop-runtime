@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
 )
 
 // tenantScoper sets the Row Level Security variable `app.tenant_id` on every

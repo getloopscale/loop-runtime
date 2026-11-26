@@ -66,8 +66,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // CutoverDay is the openbao-adoption v1.3 T+0 reference (UTC).
@@ -116,9 +116,9 @@ type Hit struct {
 // module on 2026-09-06, returns 943 packages. The first-party ones belong to
 // four modules, and only three of those live under this repository root:
 //
-//	github.com/getloopscale/loopzero/api            85 pkgs  ->  api/
-//	github.com/getloopscale/loopzero/pkg            10 pkgs  ->  pkg/
-//	github.com/getloopscale/loopzero/operators/api   1 pkg   ->  operators/api/
+//	github.com/getloopscale/loop-runtime/api            85 pkgs  ->  api/
+//	github.com/getloopscale/loop-runtime/pkg            10 pkgs  ->  pkg/
+//	github.com/getloopscale/loop-runtime/operators/api   1 pkg   ->  operators/api/
 //	github.com/getloopscale/contracts       3 pkgs  ->  outside this repo, see GAP
 //
 // The root used to be `api` alone, and the reason first written for it was

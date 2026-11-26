@@ -6,7 +6,7 @@ package httpio
 import (
 	"net/http"
 
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 )
 
 // apiStatusByCode is the HTTP status of every error code the api defines

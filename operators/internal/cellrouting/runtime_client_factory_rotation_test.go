@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // kubeconfigFor builds a syntactically valid kubeconfig. The server is never

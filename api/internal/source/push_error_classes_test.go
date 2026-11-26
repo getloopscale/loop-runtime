@@ -9,8 +9,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/gitclient"
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/api/internal/gitclient"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 func reasonOf(t *testing.T, err error) PushBundleErrorReason {

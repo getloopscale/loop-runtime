@@ -9,17 +9,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	"github.com/getloopscale/loopzero/api/internal/projects/projectshttp"
-	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
-	"github.com/getloopscale/loopzero/api/internal/source/sourcehttp"
-	"github.com/getloopscale/loopzero/api/internal/sse"
-	"github.com/getloopscale/loopzero/api/internal/surfaces"
-	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
-	"github.com/getloopscale/loopzero/api/internal/timeline/timelinehttp"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	mwaudit "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	mwauth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	"github.com/getloopscale/loop-runtime/api/internal/projects/projectshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/source/sourcehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/surfaces"
+	"github.com/getloopscale/loop-runtime/api/internal/tenants/tenantshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline/timelinehttp"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // middleware is one link of an HTTP middleware chain.

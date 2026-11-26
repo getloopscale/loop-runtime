@@ -56,7 +56,7 @@ spec:
               Warn window this is the signal used to decide whether the exemption list is
               complete: if the caught identity is a legitimate platform component, the list is
               wrong and the flip to Deny must NOT happen until it is fixed.
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/main/docs/runbooks.md"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/main/docs/runbooks.md"
 
         # Post-flip rule: an actual denial is a page. Someone or something is hitting a
         # guardrail that, under BYOC, stands between a mistake and a customer's infrastructure.
@@ -77,5 +77,5 @@ spec:
               or one of their definitions was refused. Either a real mistake was just
               prevented, or a legitimate teardown path is missing from the exemption list and
               is now blocked.
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/main/docs/runbooks.md"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/main/docs/runbooks.md"
 {{- end }}

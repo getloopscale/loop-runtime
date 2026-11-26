@@ -14,7 +14,7 @@ package projectstatus
 
 import (
 	"github.com/getloopscale/contracts/plan"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // ProjectStatus is the dashboard-facing deploy-status enum. M1.2/M1.3: the

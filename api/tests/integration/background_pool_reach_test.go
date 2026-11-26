@@ -11,7 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	loopzerodb "github.com/getloopscale/loopzero/api/internal/db"
+	loopzerodb "github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // Background loops sweep ACROSS tenants by definition — a retention pruner, a
@@ -45,7 +45,7 @@ func dsnOrSkip(t *testing.T, env string) string {
 		}
 		// Skipping on a machine without a database is the right decision; in CI,
 		// LOOPZERO_RLS_AUDIT_REQUIRE=1 turns this into a failure. Same tension tracked in:
-		// https://github.com/getloopscale/loopzero/issues/289
+		// https://github.com/getloopscale/loop-runtime/issues/289
 		t.Skipf("%s is unset (set LOOPZERO_RLS_AUDIT_REQUIRE=1 to make this a failure)", env)
 	}
 	return dsn
@@ -113,7 +113,7 @@ func TestBackgroundPoolReach_OwnerRefused(t *testing.T) {
 		// Nothing to assert: this test targets the OWNER's refusal, and this DSN is not
 		// the owner. This is not the same tension as #289 (an audit that skips by
 		// default) — here the test's condition simply does not exist in this database.
-		// https://github.com/getloopscale/loopzero/issues/289
+		// https://github.com/getloopscale/loop-runtime/issues/289
 		t.Skipf("DATABASE_URL is not the owner (%s) — nothing to assert here", posture)
 	}
 

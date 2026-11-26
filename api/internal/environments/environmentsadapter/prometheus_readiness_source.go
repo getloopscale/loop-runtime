@@ -13,7 +13,7 @@ import (
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 
-	"github.com/getloopscale/loopzero/api/internal/environments"
+	"github.com/getloopscale/loop-runtime/api/internal/environments"
 )
 
 // ReplicasReadyQuery sums ready replicas per (tenant, project, environment)
@@ -25,7 +25,7 @@ import (
 // them, and kube-state-metrics exports no ReplicaSet labels to join on. The
 // recorded series counts ready pods by the loopzero.io labels the manifest
 // renderer puts on them, renamed to tenant_id, project, app and environment
-// (getloopscale/loopzero#107). The sum folds a project's apps, and the cells
+// (getloopscale/loop-runtime#107). The sum folds a project's apps, and the cells
 // that serve it, into the tuple.
 const ReplicasReadyQuery = `sum by (tenant_id, project, environment) (loopzero_app:kube_pod_status_ready:sum)`
 

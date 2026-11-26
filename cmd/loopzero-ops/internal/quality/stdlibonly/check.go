@@ -38,7 +38,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrExternalImport means the package imports something outside the standard library.

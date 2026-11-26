@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 func TestStatus_KnownCodeUsesRegistry(t *testing.T) {

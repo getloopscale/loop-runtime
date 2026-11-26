@@ -6,7 +6,7 @@ package leak_test
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/leak"
 )
 
 // A 502 at the edge does not say WHO is down: the engine path crosses the

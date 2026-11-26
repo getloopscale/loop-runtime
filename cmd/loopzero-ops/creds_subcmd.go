@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/seed"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/credshape"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/seed"
 )
 
 const credsHelpText = `loopzero-ops creds — the operator's credentials file as shell exports

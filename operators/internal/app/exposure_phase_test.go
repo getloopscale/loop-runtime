@@ -6,7 +6,7 @@ package app
 import (
 	"testing"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // The ExposedRoute phase is reached only along transitions the ExposedRoute

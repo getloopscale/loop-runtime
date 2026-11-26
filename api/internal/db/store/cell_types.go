@@ -6,7 +6,7 @@ package store
 import (
 	"errors"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // cell_types.go — public struct + sentinel errors for the cell-

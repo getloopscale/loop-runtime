@@ -28,9 +28,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
 	"github.com/go-chi/chi/v5"
 )

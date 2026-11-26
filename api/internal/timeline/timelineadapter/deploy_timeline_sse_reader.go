@@ -6,8 +6,8 @@ package timelineadapter
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/sse"
-	"github.com/getloopscale/loopzero/api/internal/timeline/aggregator"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline/aggregator"
 )
 
 // DeployTimelineSSEReader adapts sse.EventStore.GetAfter to the

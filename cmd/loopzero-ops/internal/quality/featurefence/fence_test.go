@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/subpackagefence"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/subpackagefence"
 )
 
 func writeGo(t *testing.T, root, rel, body string) {

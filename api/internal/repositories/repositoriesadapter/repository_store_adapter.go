@@ -6,8 +6,8 @@ package repositoriesadapter
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositorieshttp"
 )
 
 // RepoStoreAdapter bridges store.PostgresRepositoryStore → repositories.RepositoryStore.

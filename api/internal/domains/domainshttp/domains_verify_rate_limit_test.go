@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
 )
 
 // T3.1 of plan m3-verify-rate-limit-middleware (v1.1 SHIPPABLE 90.4).

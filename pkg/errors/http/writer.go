@@ -8,7 +8,7 @@ import (
 	stderrors "errors"
 	"net/http"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // ProblemTypeBase is the URI prefix for RFC 9457 "type" fields.

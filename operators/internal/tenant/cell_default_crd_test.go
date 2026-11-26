@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 // cellIDDefault captures the kubebuilder default rendered for a `cellID:`

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/infra/scripts/seed"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/infra/scripts/seed"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 	. "github.com/onsi/gomega"
 )
 

@@ -33,12 +33,12 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/argo"
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/gitops"
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
-	"github.com/getloopscale/loopzero/api/internal/release/argocd"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/argo"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/gitops"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/orchestrationbreaker"
+	"github.com/getloopscale/loop-runtime/api/internal/release/argocd"
 )
 
 // NewWorkflowSubmitter builds the circuit-breaker-wrapped Argo Workflows

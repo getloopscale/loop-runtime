@@ -37,7 +37,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 )
 
 // AdminEvictInput is the body for POST /api/v1/admin/tenants/evict.

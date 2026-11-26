@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 func setup(t *testing.T, files map[string]string) string {

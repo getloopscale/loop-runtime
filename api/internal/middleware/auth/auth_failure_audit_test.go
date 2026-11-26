@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/clientip"
 	"io"
 	"log/slog"
 	"net/http"

@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exitcode"
 )
 
 // Writer writes to an underlying io.Writer and remembers the first error.

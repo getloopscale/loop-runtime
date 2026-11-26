@@ -282,7 +282,7 @@ func TestReleases_PreFlightCheck_DetectsExistingViolations(t *testing.T) {
 	// superuser the integration job already provides.
 	superURL := os.Getenv("LOOPZERO_RLS_AUDIT_SUPERUSER_URL")
 	if superURL == "" {
-		t.Skip("needs LOOPZERO_RLS_AUDIT_SUPERUSER_URL to drop the index and seed rows under RLS — https://github.com/getloopscale/loopzero/issues/387")
+		t.Skip("needs LOOPZERO_RLS_AUDIT_SUPERUSER_URL to drop the index and seed rows under RLS — https://github.com/getloopscale/loop-runtime/issues/387")
 	}
 	pool := releasesPoolAt(t, superURL)
 	requireReleasesUniqueIndex(t, pool)

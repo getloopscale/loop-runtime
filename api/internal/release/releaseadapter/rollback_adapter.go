@@ -3,9 +3,9 @@ package releaseadapter
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/rollbackhttp"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 )
 
 // RollbackServiceAdapter bridges the rollback orchestrator to the route handler interface.

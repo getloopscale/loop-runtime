@@ -4,7 +4,7 @@
 package seed
 
 import (
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 
 	"context"
 	"crypto/hmac"

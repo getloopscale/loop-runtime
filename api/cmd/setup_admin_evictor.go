@@ -6,16 +6,16 @@ package main
 import (
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/placement/placementadapter"
-	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/placement/placementadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/placement/placementhttp"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/tenancy"
 )
 
 // buildAdminEvictor constructs the admin evictor with DB + (when possible)

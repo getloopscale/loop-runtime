@@ -3,7 +3,7 @@
 
 package constants
 
-import "github.com/getloopscale/loopzero/pkg/gitearepo"
+import "github.com/getloopscale/loop-runtime/pkg/gitearepo"
 
 // --- Secret Names ---
 // These are the well-known names of Kubernetes Secrets created by controllers.

@@ -28,7 +28,7 @@ package envparity_test
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/getloopscale/loop-runtime/infra/tests/helm/chartrender"
 )
 
 // parityCharts are the charts whose per-env render is intentionally identical

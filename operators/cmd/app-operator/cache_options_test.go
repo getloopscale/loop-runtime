@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/operatortest"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/operatortest"
 )
 
 // The app-operator reads one kind of Secret on this cluster: a cell's

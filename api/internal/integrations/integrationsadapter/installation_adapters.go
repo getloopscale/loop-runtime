@@ -8,9 +8,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	gh "github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	gh "github.com/getloopscale/loop-runtime/api/internal/github"
+	"github.com/getloopscale/loop-runtime/api/internal/integrations/integrationshttp"
 )
 
 // InstallationLookupAdapter bridges store.PostgresRepositoryStore →

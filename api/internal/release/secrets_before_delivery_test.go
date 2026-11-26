@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
 // A pod reads envFrom once, when it starts. A deploy that follows a secret

@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/health/healthhttp"
 )
 
 type fakeHealthChecker struct {

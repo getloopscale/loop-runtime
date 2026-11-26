@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
 // LimitRangeContainerDefaults bundles the 4 strings (default + request, CPU +

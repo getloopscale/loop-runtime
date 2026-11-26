@@ -24,7 +24,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Env holds the token env vars the check reads. Injected for hermetic testing

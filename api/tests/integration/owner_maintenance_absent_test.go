@@ -80,7 +80,7 @@ func openAnyRole(t *testing.T) (context.Context, *sql.DB) {
 	// decision in CI: an isolation control that reports green without being exercised is the
 	// very failure this test exists to detect. CI sets LOOPZERO_RLS_AUDIT_REQUIRE=1, so there it
 	// becomes a failure. The tension is tracked in:
-	// https://github.com/getloopscale/loopzero/issues/289
+	// https://github.com/getloopscale/loop-runtime/issues/289
 	t.Skip("no reachable database DSN (set LOOPZERO_RLS_AUDIT_REQUIRE=1 to make this a failure)")
 	return nil, nil
 }

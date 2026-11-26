@@ -23,7 +23,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/seed"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/seed"
 )
 
 const seedHelpText = `loopzero-ops seed — Go replacements for the canonical post-Cleanroom seeds (M15)

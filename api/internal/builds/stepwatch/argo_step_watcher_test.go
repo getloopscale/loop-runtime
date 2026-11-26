@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
 )
 
 // fakeSource emits a scripted sequence of ArgoNodeEvents synchronously.

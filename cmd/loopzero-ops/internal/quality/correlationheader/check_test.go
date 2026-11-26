@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 func writeFile(t *testing.T, root, rel, content string) {
@@ -93,7 +93,7 @@ func TestCheck_AllowsHelperReceiver(t *testing.T) {
 
 import (
 	"net/http"
-	"github.com/getloopscale/loopzero/api/internal/correlation"
+	"github.com/getloopscale/loop-runtime/api/internal/correlation"
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {

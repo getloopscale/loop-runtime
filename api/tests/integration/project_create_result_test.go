@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // POST /api/v1/projects answers with the store's result as-is, and the store returned

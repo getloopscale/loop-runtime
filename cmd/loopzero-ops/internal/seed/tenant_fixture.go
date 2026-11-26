@@ -21,8 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/credshape"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 // TenantFixtureSeed is the Go port of

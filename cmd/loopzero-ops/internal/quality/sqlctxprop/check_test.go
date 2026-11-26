@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func store(t *testing.T, files map[string]string) string {
@@ -33,8 +33,8 @@ const header = `package store
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 `
 
@@ -105,7 +105,7 @@ func (s *S) Activate(ctx context.Context, tx db.DBTX, id string) error {
 func TestFileNotImportingGeneratedIsNotScanned(t *testing.T) {
 	root := store(t, map[string]string{
 		"s.go":     header + "\nfunc (s *S) X(ctx context.Context, tx db.DBTX) error { _, err := s.q.Y(ctx, s.gen(tx)); return err }\n",
-		"plain.go": "package store\n\nimport \"github.com/getloopscale/loopzero/api/internal/db\"\n\nfunc (s *S) Z(tx db.DBTX) { s.gen(nil) }\n",
+		"plain.go": "package store\n\nimport \"github.com/getloopscale/loop-runtime/api/internal/db\"\n\nfunc (s *S) Z(tx db.DBTX) { s.gen(nil) }\n",
 	})
 
 	out, err := Check(Config{RepoRoot: root})

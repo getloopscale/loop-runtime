@@ -12,7 +12,7 @@ import (
 
 	forge "github.com/getloopscale/argo-workflows-go"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 func TestCosignAttestTemplate_Renders(t *testing.T) {

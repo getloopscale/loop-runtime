@@ -8,7 +8,7 @@ import (
 
 	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // buildService creates a Service resource for an app.

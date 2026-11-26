@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
 )
 
 // TestSetResourceIDIsReadableFromTheSameSlot — a handler that declares its

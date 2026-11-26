@@ -6,7 +6,7 @@ package store
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // Eviction deletes across nine tables. If a late step fails, the earlier ones

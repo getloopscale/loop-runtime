@@ -35,7 +35,7 @@ FROM mirror.gcr.io/library/alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039
 ARG SYFT_TAG=v1.57.2
 ARG SYFT_COMMIT=1a72047fd46c72e0a12ee77e24b23d2316753d08
 
-LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero" \
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime" \
       org.opencontainers.image.title="loopzero-syft-scanner" \
       org.opencontainers.image.description="syft SBOM scanner for LoopZero build pipeline, built from anchore/syft@${SYFT_COMMIT}" \
       io.loopzero.syft.release="${SYFT_TAG}" \

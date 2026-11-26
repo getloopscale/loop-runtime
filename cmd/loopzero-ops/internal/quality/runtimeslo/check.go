@@ -16,7 +16,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Limits are the SLO thresholds in seconds.

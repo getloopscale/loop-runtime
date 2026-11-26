@@ -48,8 +48,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // marker is the exemption key. It is assembled rather than written with its

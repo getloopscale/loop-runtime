@@ -20,7 +20,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // DefaultRulesDir holds the PrometheusRule manifests, relative to repo root.
@@ -221,7 +221,7 @@ func scanDirectory(root, relDir, dir string, entries []os.DirEntry, excepted map
 }
 
 // canonicalRepo is this repository's NAME, taken from the `go.mod` module path
-// (`github.com/getloopscale/loopzero/...`) rather than from the git remote, which varies
+// (`github.com/getloopscale/loop-runtime/...`) rather than from the git remote, which varies
 // by checkout and by ssh alias.
 //
 // The comparison is by REPOSITORY, not by organisation: the same repository is
@@ -234,7 +234,7 @@ func scanDirectory(root, relDir, dir string, entries []os.DirEntry, excepted map
 // the file names they SEEMED to have were guessed, and the guesses were probed and
 // returned Not Found. The real names were different and resolve. Probing what was
 // assumed instead of what the file says is evidence fabrication with an extra step.
-const canonicalRepo = "loopzero"
+const canonicalRepo = "loop-runtime"
 
 var runbookURLRe = regexp.MustCompile(`runbook_url:\s*"([^"]+)"`)
 var blobRe = regexp.MustCompile(`^https://github\.com/([^/]+)/([^/]+)/blob/[^/]+/(.+)$`)

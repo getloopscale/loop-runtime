@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exposure"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exposure"
 )
 
 // Hosts returns, in declaration order and without repeats, every host the

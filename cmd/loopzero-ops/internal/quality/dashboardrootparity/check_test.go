@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/dashboardrootparity"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/dashboardrootparity"
 )
 
 // tree writes a minimal Caddyfile and runbook.

@@ -3,7 +3,7 @@
 
 package store
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 // membership_types.go — public struct for the user → tenant_members
 // membership lookup that survives the T2.1 (Batch A #8a) deletion

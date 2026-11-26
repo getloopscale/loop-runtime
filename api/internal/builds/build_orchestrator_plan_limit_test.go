@@ -13,9 +13,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 )
 
 // fakePlanCapChecker lets tests drive plan-cap decisions without a real DB.

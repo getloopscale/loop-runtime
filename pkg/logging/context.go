@@ -7,7 +7,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
 )
 
 // TraceExtractor extracts trace_id and span_id from a context.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/server"
+	"github.com/getloopscale/loop-runtime/api/internal/server"
 )
 
 // TestWebhookRoute_IsAbsentWhenTheHandlerIsNil pins the causal chain that

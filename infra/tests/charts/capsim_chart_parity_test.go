@@ -33,11 +33,11 @@ func TestCapsim_ResourceRequestsMatchTheCharts(t *testing.T) {
 		// The model file was NOT committed alongside this test in commit
 		// ce8af703b ("feat(infra): declare bundle retention on the production
 		// bucket"). Skip until the model is added or the test is deleted —
-		// tracked as B-224 + https://github.com/getloopscale/loopzero/issues/355.
+		// tracked as B-224 + https://github.com/getloopscale/loop-runtime/issues/355.
 		// A Skip is honest here (there is no subject to read); a Fatalf
 		// blocks every push forever on a self-inflicted missing-artefact
 		// defect and defeats the delivery-gate signal for unrelated changes.
-		t.Skipf("skipping: model file missing (%v). See B-224 / https://github.com/getloopscale/loopzero/issues/355", err)
+		t.Skipf("skipping: model file missing (%v). See B-224 / https://github.com/getloopscale/loop-runtime/issues/355", err)
 	}
 	model := string(capsim)
 

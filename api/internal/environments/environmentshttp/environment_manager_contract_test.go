@@ -6,7 +6,7 @@ package environmentshttp
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/tenancy"
 )
 
 // The handler's EnvironmentManager port is satisfied in production by the

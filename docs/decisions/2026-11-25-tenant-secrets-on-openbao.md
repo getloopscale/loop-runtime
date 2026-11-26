@@ -8,7 +8,7 @@ loopzero-api encrypts every tenant secret (environment variables a customer sets
 app) with OpenBao's transit engine, one key per tenant, so that deleting a tenant's key
 makes its secrets unreadable. Without a transit client the API refuses every secret write
 (`SECRETS_BACKEND_UNAVAILABLE`), which is what staging did until this decision
-(getloopscale/loopzero#103).
+(getloopscale/loop-runtime#103).
 
 The question was where the encryption keys live in LoopScale's production, sized for the
 target of 50,000 customers with two to three apps each, about 125,000 apps. LoopScale will

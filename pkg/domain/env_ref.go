@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // EnvRef is the canonical Value Object identifying an environment within LoopZero.

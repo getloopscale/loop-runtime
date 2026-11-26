@@ -7,10 +7,10 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/environments"
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentsadapter"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/environments"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // newEnvironmentEnsurer builds the one EnvironmentEnsurer that deploy

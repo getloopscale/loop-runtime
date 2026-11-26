@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // domainMachine is the one definition of the custom-domain lifecycle

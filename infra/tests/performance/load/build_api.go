@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // BuildAPI is the one client of the LoopZero build contract the load scenarios

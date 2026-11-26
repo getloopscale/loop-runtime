@@ -60,7 +60,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrSinkLeakGrew means a persistence symbol crossed the sink's boundary that
@@ -96,17 +96,17 @@ const sinkDir = "api/internal/deploycontracts"
 // green precisely when someone routes around it.
 
 var watchedImportPaths = map[string]string{
-	"github.com/getloopscale/loopzero/api/internal/db":      "db",
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx": "db", // alias of the above — the SAME types
+	"github.com/getloopscale/loop-runtime/api/internal/db":      "db",
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx": "db", // alias of the above — the SAME types
 	// db/store is persistence too, and was a blind spot of BOTH gates:
 	// dbgeneratedboundary fences only db/generated (and db in server/routes).
-	"github.com/getloopscale/loopzero/api/internal/db/store": "store",
+	"github.com/getloopscale/loop-runtime/api/internal/db/store": "store",
 	// Application-layer packages. ADR D2 of slice-4 promised the manifests import
 	// was frozen and the first implementation did not watch them at all — three
 	// public references crossed with the gate green.
-	"github.com/getloopscale/loopzero/api/internal/manifests":   "manifests",
-	"github.com/getloopscale/loopzero/api/internal/builds/argo": "argo",
-	"github.com/getloopscale/loopzero/api/internal/gitops":      "gitops",
+	"github.com/getloopscale/loop-runtime/api/internal/manifests":   "manifests",
+	"github.com/getloopscale/loop-runtime/api/internal/builds/argo": "argo",
+	"github.com/getloopscale/loop-runtime/api/internal/gitops":      "gitops",
 }
 
 // ErrUnqualifiedImport means a watched package is dot-imported, which makes every

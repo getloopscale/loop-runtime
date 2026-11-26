@@ -6,7 +6,7 @@ package placement
 import (
 	"context"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
 	"log/slog"
 	"sync"
 	"sync/atomic"

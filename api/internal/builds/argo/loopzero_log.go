@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/events"
+	"github.com/getloopscale/loop-runtime/api/internal/events"
 )
 
 // Plan J-17 Layer 2 (2026-06-06) — pipeline emits structured logs

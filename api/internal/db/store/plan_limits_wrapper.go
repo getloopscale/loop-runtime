@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // PlanLimitsStore is the SQL adapter of enforcement.LimitsStore: it reads a

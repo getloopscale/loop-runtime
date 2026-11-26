@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 

@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 type fakeActiveReleaseReader struct {

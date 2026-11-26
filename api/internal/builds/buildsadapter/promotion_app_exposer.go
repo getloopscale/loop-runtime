@@ -6,8 +6,8 @@ package buildsadapter
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 )
 
 // PromotionAppExposer exposes a promoted app through the port the deploy path

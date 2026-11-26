@@ -382,7 +382,7 @@ func TestStagingCorePrometheusRefusesAMalformedALBName(t *testing.T) {
 
 // The Status page and the readiness badges query the core Prometheus, which federates
 // the cells; the staging API named none and the Status page answered
-// prometheus_not_configured (getloopscale/loopzero#102).
+// prometheus_not_configured (getloopscale/loop-runtime#102).
 func TestStagingAPIQueriesTheCorePrometheus(t *testing.T) {
 	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-api", stagingOutputs...)
 	if got := dig(values, "dataPlanePoller", "enabled"); got != true {

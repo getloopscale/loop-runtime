@@ -3,7 +3,7 @@
 
 package deploycontracts
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 // AppSpecFromStored rebuilds the AppSpec a build was submitted with from the
 // app spec that build persisted. It is the one mapping from the stored shape

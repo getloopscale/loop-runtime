@@ -22,15 +22,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/httpclient"
-	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
-	"github.com/getloopscale/loopzero/operators/internal/platform"
-	"github.com/getloopscale/loopzero/operators/internal/tracing"
-	"github.com/getloopscale/loopzero/pkg/healthcheck"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/httpclient"
+	"github.com/getloopscale/loop-runtime/operators/internal/operatorboot"
+	"github.com/getloopscale/loop-runtime/operators/internal/platform"
+	"github.com/getloopscale/loop-runtime/operators/internal/tracing"
+	"github.com/getloopscale/loop-runtime/pkg/healthcheck"
 
-	_ "github.com/getloopscale/loopzero/operators/internal/metrics"
+	_ "github.com/getloopscale/loop-runtime/operators/internal/metrics"
 )
 
 var scheme = runtime.NewScheme()

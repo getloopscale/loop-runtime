@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // ReleaseStatusRow is the source-side projection of api/internal/db

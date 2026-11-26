@@ -17,13 +17,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // T1.2 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1.
@@ -198,7 +198,7 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 // federates (infra/helm/monitoring/values-tenant-app-recording-rules.yaml). Each
 // carries tenant_id, project, app and environment. A tenant app is an Argo
 // Rollout that LoopScale does not instrument, so its replicas come from pod
-// readiness and its traffic from the cell's ingress (getloopscale/loopzero#107).
+// readiness and its traffic from the cell's ingress (getloopscale/loop-runtime#107).
 const (
 	appReadyReplicasSeries         = "loopzero_app:kube_pod_status_ready:sum"
 	appRequestRateSeries           = "loopzero_app:traefik_service_requests:rate5m"

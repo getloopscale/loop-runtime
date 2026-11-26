@@ -6,7 +6,7 @@ package builds
 import (
 	"errors"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // wrapSubmitBuildError lifts an untyped error returned by a stage of

@@ -21,11 +21,11 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // tenantNamespace is the canonical namespace for all Tenant + Environment CRs.

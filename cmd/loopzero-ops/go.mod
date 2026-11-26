@@ -1,12 +1,12 @@
-module github.com/getloopscale/loopzero/cmd/loopzero-ops
+module github.com/getloopscale/loop-runtime/cmd/loopzero-ops
 
 go 1.26.1
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/stretchr/testify v1.11.1
-	github.com/getloopscale/loopzero/infra/scripts v0.0.0
-	github.com/getloopscale/loopzero/pkg v0.0.0
+	github.com/getloopscale/loop-runtime/infra/scripts v0.0.0
+	github.com/getloopscale/loop-runtime/pkg v0.0.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.2
 	k8s.io/apimachinery v0.35.2
@@ -82,6 +82,6 @@ require (
 )
 
 replace (
-	github.com/getloopscale/loopzero/infra/scripts => ../../infra/scripts
-	github.com/getloopscale/loopzero/pkg => ../../pkg
+	github.com/getloopscale/loop-runtime/infra/scripts => ../../infra/scripts
+	github.com/getloopscale/loop-runtime/pkg => ../../pkg
 )

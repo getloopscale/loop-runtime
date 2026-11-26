@@ -7,9 +7,9 @@ import (
 	"context"
 	"testing"
 
-	loopzerodb "github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	loopzerodb "github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
 )
 
 // The idempotency key is chosen by the CLIENT — it arrives in the

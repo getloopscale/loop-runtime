@@ -8,17 +8,17 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/clientip"
 	"log/slog"
 	"os"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
 	loopzerojwt "github.com/getloopscale/contracts/jwt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 // AuthDeps holds authentication and authorization components.

@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // buildRollout creates an Argo Rollouts Rollout resource for an app.

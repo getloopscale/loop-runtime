@@ -13,8 +13,8 @@
 // Go profile format (one statement-range per data line after header):
 //
 //	mode: atomic
-//	github.com/getloopscale/loopzero/pkg/foo/bar.go:10.15,20.2 5 3
-//	github.com/getloopscale/loopzero/pkg/foo/bar.go:25.3,28.4 2 0
+//	github.com/getloopscale/loop-runtime/pkg/foo/bar.go:10.15,20.2 5 3
+//	github.com/getloopscale/loop-runtime/pkg/foo/bar.go:25.3,28.4 2 0
 //
 // Per-package coverage = sum(stmts where count>0) / sum(stmts).
 //
@@ -38,7 +38,7 @@ import (
 	"strconv"
 	"strings"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // PackageCoverage is one package's measured coverage percentage.

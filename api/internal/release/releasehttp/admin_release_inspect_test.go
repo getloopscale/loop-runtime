@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/release"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
 	"github.com/go-chi/chi/v5"
 )

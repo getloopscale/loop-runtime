@@ -6,7 +6,7 @@ package preview
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
 // CHG-2026-04-29-DOGFOOD-FB — Helper tests for PreviewReconciler.ingressNS().

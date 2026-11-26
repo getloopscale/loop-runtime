@@ -26,7 +26,7 @@
 # GitHub, the token and the suite.
 set -euo pipefail
 
-REPO="${DEPLOY_REPO:-getloopscale/loopzero}"
+REPO="${DEPLOY_REPO:-getloopscale/loop-runtime}"
 GITHUB_API="${DEPLOY_GITHUB_API:-https://api.github.com}"
 STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loopzero-staging/deploy}"
 TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loopzero-staging/github-status-token}"

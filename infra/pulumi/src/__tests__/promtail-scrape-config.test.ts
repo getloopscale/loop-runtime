@@ -31,7 +31,7 @@ describe('Promtail scrape config (Beta Logs Gate)', () => {
     expect(src).toContain('job_name: loopzero-pods');
     // The pod's own label: pod service discovery gives no namespace label, so a
     // rule on `__meta_kubernetes_namespace_label_*` drops every tenant pod
-    // (getloopscale/loopzero#110). The behaviour is asserted over the rendered
+    // (getloopscale/loop-runtime#110). The behaviour is asserted over the rendered
     // job in infra/tests/charts/promtail_tenant_pods_test.go.
     expect(src).not.toContain('__meta_kubernetes_namespace_label_');
     expect(src).toContain('source_labels: [__meta_kubernetes_pod_label_loopzero_io_tenant]');

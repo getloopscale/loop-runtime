@@ -3,7 +3,7 @@
 
 package store
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 // team_types.go — public struct for the team membership domain that
 // survives the T2.1 (Batch A #5) deletion of the legacy

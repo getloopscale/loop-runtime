@@ -8,7 +8,7 @@ import (
 
 	"github.com/gruntwork-io/terratest/modules/helm"
 
-	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/getloopscale/loop-runtime/infra/tests/helm/chartrender"
 )
 
 // defaultRelease is the name `helm template <chart>` uses when none is given.

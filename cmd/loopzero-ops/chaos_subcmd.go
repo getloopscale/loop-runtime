@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/chaos/slo"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/chaos/slo"
 )
 
 const chaosHelpText = `loopzero-ops chaos — pure-logic helpers for the chaos resilience runner

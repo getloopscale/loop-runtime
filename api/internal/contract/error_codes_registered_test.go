@@ -11,12 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 
 	// The api registers the codes it owns from httpio's init; every route
 	// package imports httpio, so production always has them. Importing it
 	// here makes the test see the same registry the server answers from.
-	_ "github.com/getloopscale/loopzero/api/internal/httpio"
+	_ "github.com/getloopscale/loop-runtime/api/internal/httpio"
 )
 
 // A LoopZeroError code with no registered HTTP status is answered as 500 by the

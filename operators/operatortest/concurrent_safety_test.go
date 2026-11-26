@@ -15,7 +15,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loop-runtime/operators/internal/argocd"
 )
 
 func TestFakeGitProvisioner_ConcurrentAccess(t *testing.T) {

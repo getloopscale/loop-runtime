@@ -8,7 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
 // allFourConditions returns conditions for the 4 tenant-scoped required types, all True.

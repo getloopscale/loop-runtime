@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skipshape"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/skipshape"
 )
 
 // siteWithPos carries the token position until the FileSet turns it into a line,

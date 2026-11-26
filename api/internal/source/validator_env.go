@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // Plan v1.2 T1.3 (cutover-deep-review-hardening): reserved environment

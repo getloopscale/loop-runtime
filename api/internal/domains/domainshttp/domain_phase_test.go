@@ -6,7 +6,7 @@ package domainshttp
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 func TestRemovalPhase_AsksTheMachineWithoutPanicking(t *testing.T) {

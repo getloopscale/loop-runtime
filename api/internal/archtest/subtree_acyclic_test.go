@@ -27,7 +27,7 @@ import (
 	"testing"
 )
 
-const modulePath = "github.com/getloopscale/loopzero/api"
+const modulePath = "github.com/getloopscale/loop-runtime/api"
 
 // internalRoot is api/internal, resolved from this file's directory.
 func internalRoot(t *testing.T) string {
@@ -39,7 +39,7 @@ func internalRoot(t *testing.T) string {
 	return filepath.Dir(wd)
 }
 
-// subtreeOf maps "github.com/getloopscale/loopzero/api/internal/builds/argo" to
+// subtreeOf maps "github.com/getloopscale/loop-runtime/api/internal/builds/argo" to
 // "builds". It returns "" for anything outside api/internal.
 func subtreeOf(importPath string) string {
 	prefix := modulePath + "/internal/"

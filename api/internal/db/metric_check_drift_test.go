@@ -9,7 +9,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // TestMetricCheckConstraint_MatchesContractsConstants — T1.2 of plan

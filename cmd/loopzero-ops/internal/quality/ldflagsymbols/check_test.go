@@ -54,7 +54,7 @@ var (
 // injection silently stops working. Resolving the path against the go.mod and the
 // symbol against the AST is what makes the assertion depend on what EXISTS.
 func TestCheck_ResolvesThePathAgainstReality(t *testing.T) {
-	const mod = "github.com/getloopscale/loopzero/api"
+	const mod = "github.com/getloopscale/loop-runtime/api"
 
 	cases := []struct {
 		name       string

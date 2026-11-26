@@ -16,7 +16,7 @@ func descriptorFor(project string) string {
 }
 
 // The CLI wrote theo.yaml and the push deploy read loopzero.yaml, so a project
-// the CLI deployed could not be connected (getloopscale/loopzero#89). Every name
+// the CLI deployed could not be connected (getloopscale/loop-runtime#89). Every name
 // a published CLI or an earlier API has used stays deployable.
 func TestExtractDescriptor_ReadsEveryKnownName(t *testing.T) {
 	for _, name := range []string{"loopscale.yaml", "loopzero.yaml", "theo.yaml"} {

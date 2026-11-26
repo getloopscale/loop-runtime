@@ -39,7 +39,7 @@ func tree(t *testing.T, files map[string]string) string {
 func routerWith(inside, outside string) string {
 	return `package server
 
-import "github.com/getloopscale/loopzero/api/internal/middleware"
+import "github.com/getloopscale/loop-runtime/api/internal/middleware"
 
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()

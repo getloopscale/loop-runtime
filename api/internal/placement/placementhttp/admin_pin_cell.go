@@ -28,10 +28,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/correlation"
-	audit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	"github.com/getloopscale/loop-runtime/api/internal/correlation"
+	audit "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
 )
 
 // AdminPinCellInput is the body for POST /api/v1/admin/tenants/pin.

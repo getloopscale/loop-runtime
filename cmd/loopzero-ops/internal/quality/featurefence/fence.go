@@ -37,12 +37,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/subpackagefence"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/subpackagefence"
 )
 
 const (
 	internalDir     = "api/internal"
-	internalPkgPath = "github.com/getloopscale/loopzero/api/internal"
+	internalPkgPath = "github.com/getloopscale/loop-runtime/api/internal"
 
 	httpSuffix    = "http"
 	adapterSuffix = "adapter"

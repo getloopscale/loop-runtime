@@ -12,7 +12,7 @@
 // and nothing anywhere says the injection did nothing.
 //
 // Measured (B-053): `api/Dockerfile:82-84` injected into
-// `github.com/getloopscale/loopzero/api/internal/routes.versionTag`, with TWO compounded
+// `github.com/getloopscale/loop-runtime/api/internal/routes.versionTag`, with TWO compounded
 // errors — the org is `getloopscale`, and the package moved to
 // `internal/routes/version` during the B-041/B-080 decomposition. Live on
 // 2026-08-16 the engine answered `{"version":"dev","built_at":"unknown"}`, and the
@@ -44,7 +44,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config parameterises one run.

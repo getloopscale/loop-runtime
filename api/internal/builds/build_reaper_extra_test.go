@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // Beta Logs Gate Criterion 6 — timeout reasons must include:

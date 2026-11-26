@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/domain"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 )
 
 // PlanLimitCheck names the metric an operation is limited by and how the

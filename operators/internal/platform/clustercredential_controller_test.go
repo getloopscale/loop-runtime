@@ -20,8 +20,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
 // buildKubeconfigBytes creates a serialized kubeconfig pointing at the given server
@@ -469,7 +469,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 	})
 
 	Context("TLS insecure mode (issue #67)", func() {
-		// Regression for github.com/getloopscale/loopzero#67: when a CR declares
+		// Regression for github.com/getloopscale/loop-runtime#67: when a CR declares
 		// spec.tls.insecure=true (the supported way to bypass TLS verification
 		// for development clusters with self-signed certs), the rendered
 		// ArgoCD cluster Secret MUST have config.tlsClientConfig.insecure=true.

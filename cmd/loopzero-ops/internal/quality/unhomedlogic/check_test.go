@@ -6,7 +6,7 @@ package unhomedlogic
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/shellscript"
 )
 
 // fixtureAllowlist mimics the shell-scripts-allowlist.md table structure.

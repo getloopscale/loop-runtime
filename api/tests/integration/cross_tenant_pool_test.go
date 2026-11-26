@@ -28,7 +28,7 @@ func setupCrossTenantTestDB(t *testing.T) *pgxpool.Pool {
 		cancel()
 		// Machine without a database. In CI the integration job provisions one, so this
 		// path does not run there; the "skip by default" tension is in:
-		// https://github.com/getloopscale/loopzero/issues/289
+		// https://github.com/getloopscale/loop-runtime/issues/289
 		t.Skipf("skipping: cannot connect to PostgreSQL: %v", err)
 	}
 
@@ -38,7 +38,7 @@ func setupCrossTenantTestDB(t *testing.T) *pgxpool.Pool {
 		cancel()
 		pool.Close()
 		// Database without the isolation migrations — the fixture has nothing to exercise.
-		// https://github.com/getloopscale/loopzero/issues/289
+		// https://github.com/getloopscale/loop-runtime/issues/289
 		t.Skipf("skipping: isolation migrations not applied (RLS off on builds)")
 	}
 

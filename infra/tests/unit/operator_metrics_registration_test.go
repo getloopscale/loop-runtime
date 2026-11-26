@@ -41,7 +41,7 @@ func TestOperatorMetricsRegistration_AllSplitBinariesBlankImportMetrics(t *testi
 
 	// Any import registers the collectors (package init); a binary that also
 	// USES the package imports it by name instead of blank.
-	expected := `"github.com/getloopscale/loopzero/operators/internal/metrics"`
+	expected := `"github.com/getloopscale/loop-runtime/operators/internal/metrics"`
 
 	for _, b := range binaries {
 		path := filepath.Join(cmdDir, b, "main.go")

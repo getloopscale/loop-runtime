@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/cliout"
 )
 
 // fakeEdge serves every path with status and returns a leakEnv pointed at it.

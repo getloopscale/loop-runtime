@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/adapterports"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/adapterports"
 )
 
 func adaptersTree(t *testing.T, files map[string]string) string {

@@ -8,8 +8,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/cliout"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exitcode"
 )
 
 const helpHeader = `loopzero-ops quality — quality gate orchestrator

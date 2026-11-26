@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/skipshape"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/skipshape"
 )
 
 // scan walks the tree one PACKAGE DIRECTORY at a time. Per-directory rather

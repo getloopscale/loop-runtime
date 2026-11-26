@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/operatortest"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/operatortest"
 )
 
 // The chart grants this operator Secret read in the platform namespace only,

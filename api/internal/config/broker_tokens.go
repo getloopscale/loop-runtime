@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 // BrokerCellTokens returns the secret-fetch broker's bearer per cell: the cell a request

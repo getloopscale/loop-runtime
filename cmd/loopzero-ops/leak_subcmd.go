@@ -21,8 +21,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/cliout"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/leak"
 )
 
 const leakHelpText = `loopzero-ops leak — LIVE probe of the public surface

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/scrub"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/scrub"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // memoryStore is a hermetic in-memory EventSink for testing aggregator
