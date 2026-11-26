@@ -150,10 +150,6 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		return // parseConnectRequest wrote the response
 	}
 
-	if !h.checkRepoLinkConflict(ctx, w, req.Repo, uc.TenantID, projectName) {
-		return // checkRepoLinkConflict wrote the response
-	}
-
 	// The installation id comes from the request, so it is checked against the
 	// binding GitHub confirmed (POST .../integrations/github/installations/claim).
 	// Connect never writes that binding. 403, as the repository picker answers
@@ -170,6 +166,12 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 			"message": "You do not have access to this installation.",
 		})
 		return
+	}
+
+	// Only now, for a caller that may use the installation: a caller that may
+	// not must not learn from a 409 which repositories are connected.
+	if !h.checkRepoLinkConflict(ctx, w, req.Repo, uc.TenantID, projectName) {
+		return // checkRepoLinkConflict wrote the response
 	}
 
 	// Plan J-09 T3.2: default auto_deploy=true when caller omits field (back-compat).
