@@ -38,6 +38,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/logs/loki"
 	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
+
+	"github.com/getloopscale/loopzero/api/internal/gitops"
 )
 
 // planLimiterCapAdapter bridges *enforcement.PlanLimiter to the
@@ -133,6 +135,11 @@ type OrchestratorDeps struct {
 	BuildStatsHandler   *buildshttp.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
 	ProjectDeleter      projects.Deleter
 	ArgoCallbackHandler *argocdhttp.ArgoCallbackHandler
+	// ReleaseStatuses reads the deploy outcome of builds; nil when the release
+	// store cannot answer it.
+	ReleaseStatuses buildshttp.ReleaseStatusLookup
+	// GitOpsPusher is nil in a boot that has no GitOps repository.
+	GitOpsPusher *gitops.GiteaGitOpsPusher
 }
 
 // setupOrchestrator creates the build orchestrator, logs, rollback, status,
@@ -464,6 +471,12 @@ func setupOrchestrator(
 		&buildsadapter.BuildListStoreAdapter{Store: stores.BuildStore},
 		projectStore,
 	)
+	releaseStatuses, _ := stores.ReleaseStore.(buildshttp.ReleaseStatusLookup)
+	if releaseStatuses != nil {
+		buildListHandler = buildListHandler.WithReleaseStatuses(releaseStatuses)
+	} else {
+		logger.Warn("the release store cannot report deploy outcomes: builds are served without deploy_status")
+	}
 
 	// J-06 D2: the Overview deploys-aggregate needs the concrete sqlc store
 	// (BuildStatsByDay is not on the db.BuildStore interface — ISP). A fresh
@@ -512,6 +525,8 @@ func setupOrchestrator(
 	argoCallbackHandler := argocdhttp.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
 	return &OrchestratorDeps{
+		GitOpsPusher:        workflows.GitOpsPusher,
+		ReleaseStatuses:     releaseStatuses,
 		Orchestrator:        orch,
 		BuildOrchestrator:   buildOrchestrator,
 		LogsHandler:         logsHandler,

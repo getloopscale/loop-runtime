@@ -261,7 +261,9 @@ func TestCheck_RealTreeStillPasses(t *testing.T) {
 	// POST /integrations/github/installations/claim (rate limited, so chained).
 	// 2026-11-25, later the same day: 45 direct. GET /api/v1/projects/{name}/rollbacks
 	// lists the recorded rollbacks of a project.
-	if out.PassCount != 74 {
-		t.Errorf("expected the 74 routes the AST enumerator sees (45 direct + 29 in the `r.With(...)` shape, measured 2026-11-25); got %d — if this changed on purpose, update the number and say why", out.PassCount)
+	// 2026-11-26: 46 direct. GET /api/v1/builds/{id}/sbom/{app}/download serves the SBOM
+	// file that a presigned storage URL served before.
+	if out.PassCount != 75 {
+		t.Errorf("expected the 75 routes the AST enumerator sees (46 direct + 29 in the `r.With(...)` shape, measured 2026-11-26); got %d — if this changed on purpose, update the number and say why", out.PassCount)
 	}
 }

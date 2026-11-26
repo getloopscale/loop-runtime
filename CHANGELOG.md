@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `GET /api/v1/builds/{id}` and `GET /api/v1/projects/{name}/builds` report how the deploy of each build did as `deploy_status`: `in_progress`, `succeeded`, `failed`, `superseded`, `rolling_back`, `rolled_back`, `rollback_failed`, `cancelled` or `archived`. It comes from the latest release the build has in its own environment and is absent for a build with none. `status` still says how the build ended, so a build whose image was built and whose rollout failed reads `SUCCEEDED` with `deploy_status: failed` (#135).
 - `GET /api/v1/projects/{name}/status` reports the utilization targets of an autoscaled app as `scaling.target_cpu` and `scaling.target_memory`, in percent. Both are omitted for a fixed scale (#139).
 - Each rollback is recorded as an operation of its own: who asked, the release and build it left and aimed at, and how it ended. `GET /api/v1/projects/{name}/rollbacks` lists them, newest first, with the status `in_progress`, `succeeded`, `failed` (with `failure_reason`) or `interrupted`. The 202 of `POST /api/v1/projects/{name}/rollback` carries the record's id as `rollback_id`. Migration `000070_rollbacks` adds the table (#128).
 - The `loopzero-cloud` chart takes `config.githubAppClientId`, the OAuth client id of the GitHub App, and passes it to the console as `GITHUB_APP_CLIENT_ID`. Each environment reads it from `LOOPZERO_GITHUB_APP_CLIENT_ID` of the helmfile run; empty leaves the console's repository connect flow off (#117).
@@ -107,6 +108,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The 402 that `POST /api/v1/secrets/bulk` answers when a plan allows no more secrets says what to do about it and carries `upgrade_url`, like the 402 of the other routes: `Plan limit reached: Starter allows 50 secrets per environment, and this change would bring production to 51. Upgrade your plan to continue.` It read `plan "starter" allows 50 secrets per environment; "production" would reach 51`.
+- `GET /api/v1/builds/{id}/sbom` gives each app a `download_path`, a path of this API, where it gave `download_url`, a presigned URL to the object store. The new `GET /api/v1/builds/{id}/sbom/{app}/download` streams the CycloneDX file as an attachment. A presigned URL carries the storage endpoint, which on staging no browser reaches (#104).
 - The deploy descriptor of a repository is `loopscale.yaml`. A push deploy and the repository connect read `loopscale.yaml`, then `loopzero.yaml`, then `theo.yaml`, and use the first one the repository root has, so a repository set up by an earlier CLI keeps deploying. A refusal names the file that was read. The connect answers `MISSING_DEPLOY_DESCRIPTOR` and `INVALID_DEPLOY_DESCRIPTOR` where it answered `MISSING_LOOPZERO_YAML` and `INVALID_LOOPZERO_YAML` (#89).
 - The API reads the GitHub App's OAuth client from `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`, and the GitHub web root from `GITHUB_WEB_BASE_URL` (default `https://github.com`). Without the client id and secret the claim endpoint answers 503 `GITHUB_OAUTH_NOT_CONFIGURED` and no repository can be connected. On the AWS profile the `loopzero-api-github` ExternalSecret maps them from the `client-id` and `client-secret` keys of `aws.githubAppSecret`, so that secret needs both keys before the upgrade
 - A deploy of a commit that already has a signed image reuses that image instead of building it again (#71)
@@ -406,6 +409,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Creating an environment writes its directory to the tenant's GitOps repository, so its Argo CD Application compares clean before the first release. The Application reported `ComparisonError`, "app path does not exist", until something was deployed (#134).
 - The plan cap on environments counts every permanent environment a tenant has. It counted only the ones that had received a deploy, so `POST /api/v1/environments` never answered 402 for environments created and left empty (#153).
 - A push to a connected repository whose `loopzero.yaml` is invalid or missing sets the commit's `loopzero/deploy` status to `failure`, with the reason the file was refused. The push was dropped with a line in the API log and nothing on GitHub (#151).
 - A build whose step failed is recorded as failed at that step, for example `Build failed at step "install-deps": main: Error (exit code 1)`. Every such build used to report "missing image digest", because Argo ended the workflow Succeeded and the failure surfaced only when the manifests were rendered (#94).

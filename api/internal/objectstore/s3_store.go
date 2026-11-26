@@ -165,3 +165,23 @@ func (s *S3Store) Presign(ctx context.Context, bucket, key string, ttl time.Dura
 	}
 	return u.String(), nil
 }
+
+// Open returns the content of an object. The caller closes it.
+//
+// GetObject is lazy: it answers before any request is sent. The Stat makes a
+// missing object, or a store that cannot be reached, an error here, before the
+// caller has started writing a response.
+func (s *S3Store) Open(ctx context.Context, bucket, key string) (io.ReadCloser, error) {
+	if bucket == "" || key == "" {
+		return nil, fmt.Errorf("objectstore: bucket and key are required")
+	}
+	object, err := s.client.GetObject(ctx, bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("objectstore: open %s/%s: %w", bucket, key, err)
+	}
+	if _, err := object.Stat(); err != nil {
+		_ = object.Close()
+		return nil, fmt.Errorf("objectstore: open %s/%s: %w", bucket, key, err)
+	}
+	return object, nil
+}

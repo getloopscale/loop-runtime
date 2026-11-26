@@ -355,6 +355,26 @@ func TestSecretBulk_PlanLimit_402(t *testing.T) {
 	if !bytes.Contains(w.Body.Bytes(), []byte(`"plan":"free"`)) {
 		t.Errorf("body should include plan=free: %s", w.Body.String())
 	}
+	// The person reads this in the console and in the CLI: it has to say what
+	// was refused and what to do about it.
+	var refusal struct {
+		Message    string `json:"message"`
+		UpgradeURL string `json:"upgrade_url"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &refusal); err != nil {
+		t.Fatalf("decode the 402 body: %v", err)
+	}
+	for _, want := range []string{"secrets per environment", "production", "Upgrade your plan"} {
+		if !strings.Contains(refusal.Message, want) {
+			t.Errorf("message %q does not say %q", refusal.Message, want)
+		}
+	}
+	if strings.Contains(refusal.Message, `"`) {
+		t.Errorf("message %q quotes identifiers like a log line", refusal.Message)
+	}
+	if refusal.UpgradeURL != "/billing" {
+		t.Errorf("upgrade_url = %q, want /billing", refusal.UpgradeURL)
+	}
 	if store.setCalls != 0 {
 		t.Errorf("store.Set MUST NOT be invoked when plan denies; got %d", store.setCalls)
 	}

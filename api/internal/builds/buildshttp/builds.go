@@ -134,6 +134,9 @@ type BuildStatusResponse struct {
 	DurationSeconds *int           `json:"duration_seconds,omitempty"`
 	ErrorMessage    string         `json:"error,omitempty"`
 	Apps            []BuildAppInfo `json:"apps,omitempty"`
+	// DeployStatus is how the deploy of this build did (see DeployStatusOf).
+	// Absent for a build that has no release in its environment.
+	DeployStatus string `json:"deploy_status,omitempty"`
 }
 
 // AdmissionChecker is the minimal contract the build handler needs from
@@ -170,6 +173,8 @@ type BuildHandler struct {
 	cellResolver CellResolver       // MEET-053: resolves tenant → cell_id per-request
 	envEnsurer   EnvironmentEnsurer // Plan T2.2 D5: auto-create env on first deploy --env <novo>
 	secretResync SecretResyncer     // V9 L20: resync PG secrets to workload K8s post-envEnsurer
+	// releases is optional: nil leaves deploy_status out.
+	releases ReleaseStatusLookup
 }
 
 // EnvironmentEnsurer ensures the requested environment exists (auto-create
@@ -461,6 +466,15 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		mapBuildError(w, r, err)
 		return
+	}
+	if h.releases != nil && resp != nil {
+		statuses, err := h.releases.LatestReleaseStatuses(ctx, uc.TenantID, []string{buildID})
+		if err != nil {
+			h.logger.Error("deploy status lookup failed", "build_id", buildID, "tenant_id", uc.TenantID, "error", err)
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			return
+		}
+		resp.DeployStatus = DeployStatusOf(statuses[buildID])
 	}
 
 	httpio.WriteJSON(w, http.StatusOK, resp)

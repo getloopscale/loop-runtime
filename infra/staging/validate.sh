@@ -14,9 +14,10 @@
 #      lives in Kratos, which a rebuild of staging empties, so it is seeded on every run;
 #      its password is random and never written down, and the session and the token stay
 #      under the state directory, mode 0600.
-#   3. Runs the dogfood suite (infra/tests/livetest/dogfood) against the public staging
+#   3. Puts the validation tenant on the plan of VALIDATE_PLAN (set_plan below).
+#   4. Runs the dogfood suite (infra/tests/livetest/dogfood) against the public staging
 #      hostnames, with the journeys of JOURNEYS below.
-#   4. Posts staging/validate success or failure. Any exit before that, an error in a step
+#   5. Posts staging/validate success or failure. Any exit before that, an error in a step
 #      included, posts failure: a run never leaves the status pending.
 #
 # The log of a run is $STATE_DIR/logs/<sha>.validate.log.
@@ -33,8 +34,10 @@ STATUS_URL_BASE="${DEPLOY_STATUS_URL_BASE:-https://staging.getloopscale.com}"
 CHECKOUT="${VALIDATE_CHECKOUT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 KUBECONFIG_FILE="${VALIDATE_KUBECONFIG:-/var/lib/loopzero-staging/kubeconfig}"
 EMULATOR_DIR="${VALIDATE_EMULATOR_DIR:-/var/lib/aws-emulator/.aws/emulator/9597}"
-# The commands of steps 2 and 3, replaced by a test. Each runs from the checkout's root.
+# The commands of steps 2, 3 and 4, replaced by a test. Each runs from the checkout's root.
 TOKEN_CMD="${VALIDATE_TOKEN_CMD:-seed_token}"
+PLAN_CMD="${VALIDATE_PLAN_CMD:-set_plan}"
+PLAN="${VALIDATE_PLAN:-pro}"
 SUITE_CMD="${VALIDATE_SUITE_CMD:-run_suite}"
 
 # The staging hostnames the suite is pointed at (infra/tests/livetest/dogfood/helpers.go).
@@ -153,6 +156,44 @@ seed_token() {
   echo "validation identity seeded; token written to $LOOPZERO_DOGFOOD_JWT_PATH"
 }
 
+# set_plan: puts the validation tenant on $PLAN. A tenant starts on Starter, whose 50
+# builds a month the journeys use up in a day of deploys; after that every build is
+# refused with HTTP 402 and the app lifecycle journey fails on a healthy staging.
+#
+# No API changes a plan without a payment, so the subscription is written to the database
+# the way the dev seed writes it (loopzero-ops seed tenant-fixture). The address of the
+# worker role comes from the cluster and reaches psql in the environment, never on a
+# command line.
+set_plan() {
+  kube_env
+  local tenant uri row
+  local -a conn
+  tenant=$(jq -Rr 'split(".")[1] | gsub("-"; "+") | gsub("_"; "/") | @base64d | fromjson | .tenant_id // empty' \
+    "$LOOPZERO_DOGFOOD_JWT_PATH") || return 1
+  [[ -n "$tenant" ]] || { echo "the validation token names no tenant" >&2; return 1; }
+  uri=$(kubectl --context core -n loopzero-system get secret loopzero-db-credentials \
+    -o jsonpath='{.data.worker-uri}' | base64 -d) || return 1
+  [[ -n "$uri" ]] || { echo "the secret loopzero-db-credentials has no worker-uri" >&2; return 1; }
+  mapfile -t conn < <(DB_URI="$uri" python3 -c '
+import os
+from urllib.parse import parse_qs, unquote, urlsplit
+u = urlsplit(os.environ["DB_URI"])
+mode = parse_qs(u.query).get("sslmode", ["prefer"])[0]
+for part in (u.hostname, u.port or 5432, unquote(u.username or ""), unquote(u.password or ""), u.path.lstrip("/"), mode):
+    print(part)') || return 1
+  [[ ${#conn[@]} -eq 6 ]] || { echo "could not read the database address" >&2; return 1; }
+  row=$(PGHOST="${conn[0]}" PGPORT="${conn[1]}" PGUSER="${conn[2]}" PGPASSWORD="${conn[3]}" PGDATABASE="${conn[4]}" \
+    PGSSLMODE="${conn[5]}" PGCONNECT_TIMEOUT=10 psql --no-psqlrc -At -v ON_ERROR_STOP=1 -v tenant="$tenant" -v plan="$PLAN" <<'SQL'
+INSERT INTO subscriptions (id, tenant_id, account_id, plan, status)
+SELECT 'sub-validate-' || id, id, account_id, :'plan', 'active' FROM tenants WHERE id = :'tenant'
+ON CONFLICT (account_id) DO UPDATE SET plan = EXCLUDED.plan, status = 'active', updated_at = now()
+RETURNING plan;
+SQL
+  ) || return 1
+  [[ "${row%%$'\n'*}" == "$PLAN" ]] || { echo "tenant $tenant is not in the database; its plan was not set" >&2; return 1; }
+  echo "validation tenant $tenant is on the $PLAN plan"
+}
+
 # run_suite: the journeys of JOURNEYS, with -v so a passing run logs its summary too.
 # The app lifecycle journey bounds itself to 25 minutes (journeyBudget in its spec),
 # inside the 30 minutes go test gives the suite.
@@ -175,6 +216,12 @@ if ! (cd "$CHECKOUT" && $TOKEN_CMD) >>"$log_file" 2>&1; then
   reported=yes
   status failure "could not seed the validation identity for $short; see its validate log on the staging host"
   fail "$short: the validation identity could not be seeded; see $log_file"
+fi
+
+if ! (cd "$CHECKOUT" && $PLAN_CMD) >>"$log_file" 2>&1; then
+  reported=yes
+  status failure "could not set the plan of the validation tenant for $short; see its validate log on the staging host"
+  fail "$short: the plan of the validation tenant could not be set; see $log_file"
 fi
 
 if (cd "$CHECKOUT" && $SUITE_CMD) >>"$log_file" 2>&1; then

@@ -141,7 +141,7 @@ var protectedFamilies = []protectedFamily{
 	{surfaces.BuildAttestation, func(c *Config) { c.BuildAttestationHandler = nil }, []string{
 		"GET /api/v1/builds/{id}/attestation"}},
 	{surfaces.BuildSBOM, func(c *Config) { c.BuildSBOMHandler = nil }, []string{
-		"GET /api/v1/builds/{id}/sbom"}},
+		"GET /api/v1/builds/{id}/sbom", "GET /api/v1/builds/{id}/sbom/{app}/download"}},
 	{surfaces.BuildLogs, func(c *Config) { c.LogsHandler = nil }, []string{
 		"GET /api/v1/builds/{id}/logs"}},
 	{surfaces.LogStream, func(c *Config) { c.LogStreamHandler = nil }, []string{

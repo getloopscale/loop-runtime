@@ -25,6 +25,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/pkg/domain"
 
 	"fmt"
 	"log/slog"
@@ -404,6 +405,10 @@ func (h *SecretHandler) assertSecretProjectBinding(
 	return false
 }
 
+// planUpgradePath is where the console sends a person to change plan; the
+// plan gate of the other routes answers with the same path by default.
+const planUpgradePath = "/billing"
+
 // assertSecretPlanLimit implements the J-22 T1.3 plan-limit gate. For every
 // environment the batch touches it counts the secrets the environment already
 // holds plus the ones the batch would ADD (an existing name is an update, not
@@ -449,12 +454,15 @@ func (h *SecretHandler) assertSecretPlanLimit(
 		}
 		httpio.WriteJSON(w, http.StatusPaymentRequired, map[string]any{
 			"code": "PLAN_LIMIT_EXCEEDED",
-			"message": fmt.Sprintf("plan %q allows %d secrets per environment; %q would reach %d",
-				res.Plan, res.Limit, env, requested),
-			"current": len(existing),
-			"limit":   "secrets",
-			"max":     res.Limit,
-			"plan":    res.Plan,
+			// Read by a person in the console and in the CLI: what was
+			// refused, and what to do about it.
+			"message": fmt.Sprintf("Plan limit reached: %s allows %d secrets per environment, and this change would bring %s to %d. Upgrade your plan to continue.",
+				domain.PlanTier(res.Plan).DisplayName(), res.Limit, env, requested),
+			"current":     len(existing),
+			"limit":       "secrets",
+			"max":         res.Limit,
+			"plan":        res.Plan,
+			"upgrade_url": planUpgradePath,
 		})
 		return false
 	}

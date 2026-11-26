@@ -298,6 +298,7 @@ func registerBuildReadRoutes(r chi.Router, cfg Config, _ routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.BuildSBOM, cfg.BuildSBOMHandler != nil,
 		"no database — same chain as the build family (main.go)") {
 		r.Get("/api/v1/builds/{id}/sbom", cfg.BuildSBOMHandler.Get)
+		r.Get("/api/v1/builds/{id}/sbom/{app}/download", cfg.BuildSBOMHandler.Download)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.BuildLogs, cfg.LogsHandler != nil,
 		"no database — comes from `orchDeps` (setup_server.go), which requires `dbAdapter`") {

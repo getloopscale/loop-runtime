@@ -222,3 +222,34 @@ func (p *GiteaGitOpsPusher) GetManifestsAtCommit(ctx context.Context, tenantID, 
 
 	return buf.Bytes(), nil
 }
+
+// EnsureEnvironmentPath makes sure the directory the Argo CD Application of
+// (project, environment) reads exists on the tenant repo. An Application whose
+// path is missing reports ComparisonError until the first release writes it, so
+// an environment is given the directory when it is created.
+//
+// A directory that already exists is left as it is, whatever it holds: a
+// placeholder is never written next to manifests.
+func (p *GiteaGitOpsPusher) EnsureEnvironmentPath(ctx context.Context, tenantID, projectID, environment string) error {
+	ws, cleanup, err := p.openWorkspace(ctx, tenantID, "prepare")
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	relPath := filepath.Join(environment, projectID)
+	if _, err := os.Stat(filepath.Join(ws.dir, relPath)); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("gitops prepare: stat %s: %w", relPath, err)
+	}
+	gitkeep := filepath.Join(relPath, ".gitkeep")
+	if err := ws.writeFile(gitkeep, ""); err != nil {
+		return err
+	}
+	if err := ws.git.Run(ctx, ws.dir, "add", gitkeep); err != nil {
+		return fmt.Errorf("gitops prepare: git add .gitkeep: %w", err)
+	}
+	_, err = ws.commitAndPush(ctx, fmt.Sprintf("Prepare %s in %s", projectID, environment))
+	return err
+}

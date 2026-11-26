@@ -59,6 +59,8 @@ type BuildListHandler struct {
 	// constructed via NewBuildListHandler — the gate is a T2.2 addition
 	// only relevant for the new /build-envs endpoint).
 	projects ports.ProjectStore
+	// releases is optional: nil leaves deploy_status out.
+	releases ReleaseStatusLookup
 }
 
 // NewBuildListHandler creates a new BuildListHandler (legacy constructor —
@@ -133,6 +135,21 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A list without deploy outcomes would read as builds that were never
+	// deployed, so a failed lookup fails the request.
+	releaseStatuses := map[string]string{}
+	if h.releases != nil && len(builds) > 0 {
+		ids := make([]string, len(builds))
+		for i, b := range builds {
+			ids[i] = b.ID
+		}
+		releaseStatuses, err = h.releases.LatestReleaseStatuses(ctx, uc.TenantID, ids)
+		if err != nil {
+			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			return
+		}
+	}
+
 	resp := buildListResponse{
 		Builds: make([]BuildStatusResponse, 0, len(builds)),
 		Total:  total,
@@ -153,7 +170,8 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 			// snapshot. Adapter parses apps_spec JSONB into b.Apps; here we
 			// just forward the slice through. omitempty drops the key when
 			// the build's apps_spec was empty/missing.
-			Apps: b.Apps,
+			Apps:         b.Apps,
+			DeployStatus: DeployStatusOf(releaseStatuses[b.ID]),
 		}
 		if b.StartedAt != nil {
 			item.StartedAt = b.StartedAt.UTC().Format(time.RFC3339)

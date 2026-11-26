@@ -127,10 +127,10 @@ func baseServerConfig(w serverWiring) server.Config {
 		),
 		// Per-app SBOM endpoint over the release_app_attestations sidecar. With
 		// no object uploader (no S3 in dev) it serves metadata without a
-		// download_url.
+		// download.
 		BuildSBOMHandler: buildshttp.NewBuildSBOMHandler(
 			&buildsadapter.AppSBOMStore{Inner: store.NewAppAttestationStoreSqlc(w.dbAdapter)},
-			toSBOMURLGenerator(w.stores),
+			toSBOMObjectReader(w.stores),
 			sbomBucket(cfg),
 			w.logger,
 		),
@@ -173,6 +173,9 @@ func newEnvironmentHandler(w serverWiring) *environmentshttp.EnvironmentHandler 
 	}
 	if w.dbDeps != nil {
 		h = h.WithProjectLookup(&environmentsadapter.EnvProjectLookupAdapter{Store: w.dbDeps.ProjectStore})
+	}
+	if w.orchDeps != nil && w.orchDeps.GitOpsPusher != nil {
+		h = h.WithGitOpsPathPreparer(w.orchDeps.GitOpsPusher)
 	}
 	return h
 }
@@ -456,15 +459,15 @@ func sbomBucket(cfg config.Config) string {
 	return argo.SBOMBucket(cfg.StaticAssetsBucket)
 }
 
-// toSBOMURLGenerator returns a SBOMURLGenerator if the configured
-// uploader supports presigning, else nil. When nil, the SBOM endpoint
-// returns metadata-only (no download_url).
-func toSBOMURLGenerator(stores *StoreDeps) buildshttp.SBOMURLGenerator {
+// toSBOMObjectReader returns the configured object store when it can read
+// objects back, else nil. With nil the SBOM endpoint serves metadata and no
+// download.
+func toSBOMObjectReader(stores *StoreDeps) buildshttp.SBOMObjectReader {
 	if stores == nil {
 		return nil
 	}
-	if g, ok := stores.ObjUploader.(buildshttp.SBOMURLGenerator); ok {
-		return g
+	if r, ok := stores.ObjUploader.(buildshttp.SBOMObjectReader); ok {
+		return r
 	}
 	return nil
 }

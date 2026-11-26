@@ -609,3 +609,29 @@ func generatedRowToRelease(row generated.Release) *db.Release {
 	}
 	return r
 }
+
+// LatestReleaseStatuses returns, for each of the given builds that has a
+// release in its own environment, the status of the latest one. A build with
+// no such release is absent from the map.
+func (s *ReleaseStoreSqlc) LatestReleaseStatuses(ctx context.Context, tenantID string, buildIDs []string) (map[string]string, error) {
+	return s.latestReleaseStatuses(ctx, nil, tenantID, buildIDs)
+}
+
+// latestReleaseStatuses runs on tx when one is given, and on the pool otherwise.
+func (s *ReleaseStoreSqlc) latestReleaseStatuses(ctx context.Context, tx db.DBTX, tenantID string, buildIDs []string) (map[string]string, error) {
+	statuses := make(map[string]string, len(buildIDs))
+	if len(buildIDs) == 0 {
+		return statuses, nil
+	}
+	rows, err := s.q.ListLatestReleaseStatusByBuild(ctx, s.gen(tx), generated.ListLatestReleaseStatusByBuildParams{
+		TenantID: tenantID,
+		BuildIds: buildIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sqlc: latest release status by build: %w", err)
+	}
+	for _, row := range rows {
+		statuses[row.BuildID] = row.Status
+	}
+	return statuses, nil
+}

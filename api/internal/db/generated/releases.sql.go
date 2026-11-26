@@ -656,6 +656,49 @@ func (q *Queries) ListLatestActiveReleasePerEnv(ctx context.Context, db DBTX, te
 	return items, nil
 }
 
+const listLatestReleaseStatusByBuild = `-- name: ListLatestReleaseStatusByBuild :many
+SELECT DISTINCT ON (r.build_id) r.build_id, r.status
+FROM releases r
+JOIN builds b ON b.id = r.build_id AND b.environment = r.environment
+WHERE r.tenant_id = $1
+  AND r.build_id = ANY($2::text[])
+ORDER BY r.build_id, r.created_at DESC
+`
+
+type ListLatestReleaseStatusByBuildParams struct {
+	TenantID string   `json:"tenant_id"`
+	BuildIds []string `json:"build_ids"`
+}
+
+type ListLatestReleaseStatusByBuildRow struct {
+	BuildID string `json:"build_id"`
+	Status  string `json:"status"`
+}
+
+// The status of the latest release each of the given builds has in its own
+// environment. A release that a promotion created elsewhere from the same
+// build is left out by the join on environment: it says nothing about how the
+// deploy of the build itself did. A build with no release has no row.
+func (q *Queries) ListLatestReleaseStatusByBuild(ctx context.Context, db DBTX, arg ListLatestReleaseStatusByBuildParams) ([]ListLatestReleaseStatusByBuildRow, error) {
+	rows, err := db.Query(ctx, listLatestReleaseStatusByBuild, arg.TenantID, arg.BuildIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLatestReleaseStatusByBuildRow
+	for rows.Next() {
+		var i ListLatestReleaseStatusByBuildRow
+		if err := rows.Scan(&i.BuildID, &i.Status); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReleaseStatusesByEnv = `-- name: ListReleaseStatusesByEnv :many
 SELECT DISTINCT status FROM releases
 WHERE tenant_id = $1

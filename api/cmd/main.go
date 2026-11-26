@@ -299,6 +299,9 @@ func setupBuildHandler(
 		return nil
 	}
 	buildHandler := buildshttp.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
+	if orchDeps.ReleaseStatuses != nil {
+		buildHandler = buildHandler.WithReleaseStatuses(orchDeps.ReleaseStatuses)
+	}
 	if crossTenant == nil {
 		return buildHandler
 	}
