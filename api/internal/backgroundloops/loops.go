@@ -200,11 +200,13 @@ func newDomainProvisioner(cfg config.Config, d Deps, logger *slog.Logger) *domai
 }
 
 func newDomainHealthChecker(cfg config.Config, d Deps, logger *slog.Logger) *domains.DomainHealthChecker {
-	return domains.NewDomainHealthChecker(d.DomainStore, logger, domains.DomainHealthCheckerConfig{
+	checker := domains.NewDomainHealthChecker(d.DomainStore, logger, domains.DomainHealthCheckerConfig{
 		CNAMETarget: CNAMETarget(cfg),
 		GraceDays:   14,
 		StaleDays:   7,
 	})
+	checker.WithDeployedApps(domains.ReleaseDeployedApps{Releases: d.ReleaseStore, Builds: d.BuildStore})
+	return checker
 }
 
 // NewReadinessSource builds the data-plane observation the readiness poller

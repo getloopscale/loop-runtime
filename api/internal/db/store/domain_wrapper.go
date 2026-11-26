@@ -339,6 +339,20 @@ func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, stale
 	return results, nil
 }
 
+// FindServing returns the domains that are routed today: active, and degraded
+// during the CNAME grace period.
+func (s *PostgresDomainStore) FindServing(ctx context.Context) ([]ports.CustomDomain, error) {
+	active, err := s.findByStatus(ctx, "active")
+	if err != nil {
+		return nil, err
+	}
+	degraded, err := s.findByStatus(ctx, "degraded")
+	if err != nil {
+		return nil, err
+	}
+	return append(active, degraded...), nil
+}
+
 func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error) {
 	cutoff := time.Now().UTC().Add(-maxAge)
 	bridge := s.bridge()

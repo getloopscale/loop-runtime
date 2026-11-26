@@ -5,8 +5,10 @@ package domains
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -43,6 +45,10 @@ type CFZoneStatusChecker interface {
 	TriggerActivationCheck(ctx context.Context, zoneID string) error
 	DeleteZone(ctx context.Context, zoneID string) error
 }
+
+// errAppNotDeployed: the running release does not have the app the domain
+// points to.
+var errAppNotDeployed = errors.New("the domain's app is not part of the running release")
 
 // DomainReleaseReader fetches the active release for an environment.
 type DomainReleaseReader interface {
@@ -393,6 +399,11 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 		if err != nil {
 			return fmt.Errorf("build apps lookup failed: %w", err)
 		}
+		// A release without the domain's app renders no route for the domain.
+		// Marking it active then would leave the host answering 404.
+		if !slices.ContainsFunc(apps, func(a db.BuildAppSpec) bool { return a.Name == d.AppName }) {
+			return errAppNotDeployed
+		}
 		if apps, err = p.withSavedScaling(ctx, d, apps); err != nil {
 			return err
 		}
@@ -465,7 +476,11 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 			log.Error("domain provisioner: failure transition not in the domain machine", "error", smErr)
 			return
 		}
-		if err2 := p.store.UpdateFailure(ctx, d.Domain, failed, fmt.Sprintf("Provisioning failed: %v", lockErr)); err2 != nil {
+		reason := fmt.Sprintf("Provisioning failed: %v", lockErr)
+		if errors.Is(lockErr, errAppNotDeployed) {
+			reason = appNotDeployedReason(d.AppName, d.Environment)
+		}
+		if err2 := p.store.UpdateFailure(ctx, d.Domain, failed, reason); err2 != nil {
 			log.Error("domain provisioner: failed to record failure", "error", err2)
 		}
 		return

@@ -418,6 +418,8 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+- Custom domains: a domain whose app is no longer part of the environment's running release moves to `failed`, with a reason that names the app and says to add the domain to an app that is deployed. It stayed `active` and answered 404 after a deploy replaced the app, and the provisioner marked a domain `active` for an app the release did not have (#184).
+- Secrets: a secret named `PORT` is refused with `SECRET_NAME_RESERVED`, by `POST /api/v1/secrets` and per entry by the bulk upload. The platform sets `PORT` on the app's container from the port the app declares, so the secret was saved and never reached the app (#185).
 - `POST /api/v1/projects/{name}/connect` checks that the caller may use the installation before it looks at whether the repository is already connected. A caller without that right now gets 403 in both cases.
 - A deploy timeline no longer stays open for good when the API restarts while the deploy is in flight. The leader looks every minute for builds whose events imply timeline states that nobody wrote, and finishes them. A timeline phase event is now written once per build, so the resumed aggregator and one that is still alive cannot write it twice (#171).
 

@@ -42,6 +42,9 @@ func (f *fakeDomainHealthStore) FindPendingForAutoVerify(_ context.Context, _ st
 func (f *fakeDomainHealthStore) FindActiveForCNAMECheck(_ context.Context, _ time.Time) ([]ports.CustomDomain, error) {
 	return f.activeDomains, nil
 }
+func (f *fakeDomainHealthStore) FindServing(_ context.Context) ([]ports.CustomDomain, error) {
+	return f.activeDomains, nil
+}
 func (f *fakeDomainHealthStore) FindStalePending(_ context.Context, _ time.Duration) ([]ports.CustomDomain, error) {
 	return f.stalePending, nil
 }

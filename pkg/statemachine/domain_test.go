@@ -61,6 +61,19 @@ func TestDomainMachine_TransitionSequences(t *testing.T) {
 			from:  DomainProvisioning,
 			steps: []step{{DomainProvisionTimeout, DomainFailed}},
 		},
+		{
+			name:  "AppRemoved_WhileActive",
+			from:  DomainActive,
+			steps: []step{{DomainAppRemoved, DomainFailed}},
+		},
+		{
+			name: "AppRemoved_DuringGrace",
+			from: DomainActive,
+			steps: []step{
+				{DomainDegrade, DomainDegraded},
+				{DomainAppRemoved, DomainFailed},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
