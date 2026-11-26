@@ -20,6 +20,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/preview"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
 
 	"github.com/getloopscale/loopzero/api/internal/config"
 	"github.com/getloopscale/loopzero/api/internal/db"
@@ -29,6 +30,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositoriesadapter"
 	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loopzero/pkg/enforcement"
 )
 
 // GitHubDeps holds GitHub App integration components.
@@ -57,6 +59,7 @@ func setupGitHub(
 	orch *builds.BuildOrchestrator,
 	k8sDeps *K8sDeps,
 	cfg config.Config,
+	buildQuota github.BuildQuota,
 	shutdownCtx context.Context,
 	logger *slog.Logger,
 ) *GitHubDeps {
@@ -134,7 +137,7 @@ func setupGitHub(
 	}
 	var autoDeployer *github.AutoDeployer
 	if ghAppClient != nil && buildSub != nil {
-		autoDeployer = github.NewAutoDeployer(autoDeployConfig(cfg, ghAppClient, stores.ObjUploader, buildSub, logger))
+		autoDeployer = github.NewAutoDeployer(autoDeployConfig(cfg, ghAppClient, stores.ObjUploader, buildSub, buildQuota, logger))
 		// Wire connect-then-deploy onto the RepositoryHandler so POST
 		// /api/v1/projects/{name}/connect dispatches an immediate HEAD
 		// deploy after a successful link.
@@ -257,14 +260,43 @@ func newRepositoryStore(crossTenant db.DBTX) *store.PostgresRepositoryStore {
 
 // autoDeployConfig is the push deploy's configuration. It uploads source bundles to
 // cfg.SourceBucket, the bucket a CLI upload uses, instead of the auto-deployer's default.
-func autoDeployConfig(cfg config.Config, app *github.AppClient, objects github.ObjectUploader, builds github.BuildSubmitter, logger *slog.Logger) github.AutoDeployConfig {
+func autoDeployConfig(cfg config.Config, app *github.AppClient, objects github.ObjectUploader, builds github.BuildSubmitter, quota github.BuildQuota, logger *slog.Logger) github.AutoDeployConfig {
 	return github.AutoDeployConfig{
 		AppClient:      app,
 		ObjectStore:    objects,
 		BuildSubmitter: builds,
+		BuildQuota:     quota,
 		SourceBucket:   cfg.SourceBucket,
 		Logger:         logger,
 	}
+}
+
+// pushBuildQuota gates a push on the plan's builds per month with the limiter
+// and the usage count the deploy route's gate reads.
+type pushBuildQuota struct {
+	limiter    *enforcement.PlanLimiter
+	builds     enforcement.UsageCounter
+	upgradeURL string
+}
+
+// newPushBuildQuota returns nil without a limiter: a boot with no database has
+// no plan to enforce, the rule the route's middleware follows.
+func newPushBuildQuota(limiter *enforcement.PlanLimiter, builds enforcement.UsageCounter, upgradeURL string) github.BuildQuota {
+	if limiter == nil || builds == nil {
+		return nil
+	}
+	return pushBuildQuota{limiter: limiter, builds: builds, upgradeURL: upgradeURL}
+}
+
+func (q pushBuildQuota) CheckBuildQuota(ctx context.Context, tenantID string) (github.BuildQuotaResult, error) {
+	result, err := q.limiter.CheckUsage(ctx, tenantID, "builds_per_month", q.builds)
+	if err != nil {
+		return github.BuildQuotaResult{}, err
+	}
+	if result.Allowed {
+		return github.BuildQuotaResult{Allowed: true}, nil
+	}
+	return github.BuildQuotaResult{Message: policy.PlanLimitMessage(result), UpgradeURL: q.upgradeURL}, nil
 }
 
 // commitStatusDomain is the domain the commit status's app link is composed on:

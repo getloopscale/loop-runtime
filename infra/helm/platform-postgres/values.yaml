@@ -1,0 +1,24 @@
+# The PostgreSQL image the operator runs, pinned by an environment (a tag naming one minor
+# release). There is no default: a cluster that forgets it would follow the operator's.
+image: ""
+
+# One primary and instances-1 replicas. A single instance has no failover: staging runs 1.
+instances: 1
+
+storage:
+  size: 5Gi
+  # Empty: the cluster's default StorageClass.
+  storageClass: ""
+
+resources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { memory: 1Gi }
+
+# One entry per service: a database `name`, owned by the login role `owner`, whose password
+# is the Secret `passwordSecret` (type kubernetes.io/basic-auth, keys username and password).
+# The Secret is not created here: the release that deploys the service owns it, so one
+# credential has one writer.
+databases: []
+#  - name: looptrace
+#    owner: looptrace
+#    passwordSecret: looptrace-postgres-role

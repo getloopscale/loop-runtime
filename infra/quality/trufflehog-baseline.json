@@ -207,6 +207,11 @@
       "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
     },
     {
+      "id": "2d7847849e71c3d9",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_external_postgres_test.go"
+    },
+    {
       "id": "02c34a9d8d871290",
       "detector": "Postgres",
       "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"

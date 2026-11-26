@@ -23,6 +23,26 @@ runAsUser: 1000
 # installation (infra/helmfile/scripts/generate-secrets.sh on dev-public).
 existingSecret: ""
 
+# Where secrets live in a store (staging and production: AWS Secrets Manager), External
+# Secrets writes existingSecret instead of an installer script. `store` names the
+# ClusterSecretStore, `remoteKey` one secret in it holding a JSON object, and `keys` maps
+# each key of existingSecret to a property of that object. Empty store: nothing is rendered.
+externalSecret:
+  store: ""
+  remoteKey: ""
+  refreshInterval: 1h
+  keys: {}
+  # With postgres.external: also write this kubernetes.io/basic-auth Secret (username
+  # postgres.user, password keys[postgres-password]) for the database's operator to read.
+  postgresRoleSecret: ""
+  # A private image: write the registry login as this kubernetes.io/dockerconfigjson
+  # Secret, from the store secret `remoteKey` ({"username", "password"}), and have every
+  # pod pull with it. Empty secretName: no pull secret.
+  imagePull:
+    secretName: ""
+    remoteKey: ""
+    registry: ghcr.io
+
 # Plain environment, NAME: value.
 env: {}
 
@@ -43,6 +63,8 @@ resources:
   limits: { memory: 1Gi }
 
 postgres:
+  # Also the image of the init containers that wait for the database and create roles, so
+  # it is required with an external database too.
   image: ""
   database: ""
   user: ""
@@ -54,6 +76,14 @@ postgres:
   # on postgres.uriEnv, for the migrations. loopzero-memory needs this: it refuses to serve
   # requests as a superuser, which row level security does not bind.
   roles: []
+  # A database this chart does not run (staging: the platform's CloudNativePG cluster,
+  # infra/helm/platform-postgres). With a host set, no PostgreSQL is rendered and the
+  # service connects there as postgres.user, whose password is still
+  # existingSecret[postgres-password]. Whoever runs that database creates the database and
+  # the role; dataPath, pgdata, storage, runAsUser and resources below are then unused.
+  external:
+    host: ""
+    port: 5432
   # Where the volume mounts, and PGDATA when the image expects a subdirectory of it.
   dataPath: /var/lib/postgresql/data
   pgdata: ""

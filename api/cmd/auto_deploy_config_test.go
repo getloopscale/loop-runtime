@@ -17,7 +17,7 @@ import (
 func TestAutoDeployUploadsToTheConfiguredSourceBucket(t *testing.T) {
 	cfg := config.Config{SourceBucket: "tenant-sources-example"}
 
-	got := autoDeployConfig(cfg, nil, nil, nil, nil)
+	got := autoDeployConfig(cfg, nil, nil, nil, nil, nil)
 
 	if got.SourceBucket != "tenant-sources-example" {
 		t.Fatalf("SourceBucket = %q, want the configured %q", got.SourceBucket, cfg.SourceBucket)

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: platform-postgres
+description: |
+  The platform's own PostgreSQL for data-plane services: one CloudNativePG Cluster and, per
+  service, a database owned by a login role of its own. The operator is a separate release
+  (cnpg-system/cloudnative-pg); this chart only declares what it reconciles.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

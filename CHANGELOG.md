@@ -14,6 +14,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Staging runs the platform's own PostgreSQL for data-plane services on CloudNativePG: the `cloudnative-pg` operator and one `Cluster` in `loopzero-data-plane`, turned on by `platformPostgres` in an environment. Each entry of `platformPostgres.databases` becomes a database owned by a login role of its own. RDS stays the control plane's database (#161).
+- The `data-plane-service` chart can use a database it does not run: with `postgres.external.host` it renders no PostgreSQL and connects the service there. With `externalSecret.store` it has External Secrets write the service's Secret, the `kubernetes.io/basic-auth` Secret of its database role and a registry login for a private image (#161).
 - `GET /api/v1/builds/{id}` and `GET /api/v1/projects/{name}/builds` report how the deploy of each build did as `deploy_status`: `in_progress`, `succeeded`, `failed`, `superseded`, `rolling_back`, `rolled_back`, `rollback_failed`, `cancelled` or `archived`. It comes from the latest release the build has in its own environment and is absent for a build with none. `status` still says how the build ended, so a build whose image was built and whose rollout failed reads `SUCCEEDED` with `deploy_status: failed` (#135).
 - `GET /api/v1/projects/{name}/status` reports the utilization targets of an autoscaled app as `scaling.target_cpu` and `scaling.target_memory`, in percent. Both are omitted for a fixed scale (#139).
 - Each rollback is recorded as an operation of its own: who asked, the release and build it left and aimed at, and how it ended. `GET /api/v1/projects/{name}/rollbacks` lists them, newest first, with the status `in_progress`, `succeeded`, `failed` (with `failure_reason`) or `interrupted`. The 202 of `POST /api/v1/projects/{name}/rollback` carries the record's id as `rollback_id`. Migration `000070_rollbacks` adds the table (#128).
@@ -409,6 +411,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A push to a connected repository respects the plan's builds per month, as the deploy route does. Over the limit nothing is built, and the commit gets a `loopzero/deploy` failure status with the limit, the usage and the advice to upgrade (#159).
 - Creating an environment writes its GitOps path before the environment itself. Written afterwards, the path arrived after the Argo CD Application had read a missing directory, and the Application stayed in `ComparisonError` for about three minutes (#134).
 - Creating an environment writes its directory to the tenant's GitOps repository, so its Argo CD Application compares clean before the first release. The Application reported `ComparisonError`, "app path does not exist", until something was deployed (#134).
 - The plan cap on environments counts every permanent environment a tenant has. It counted only the ones that had received a deploy, so `POST /api/v1/environments` never answered 402 for environments created and left empty (#153).

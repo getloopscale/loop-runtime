@@ -177,7 +177,8 @@ func main() {
 		}
 		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, projectCap, envEnsurer,
 			deployEnvironmentSecrets(k8sDeps, logger), promotionAppExposer(k8sDeps))
-		ghDeps = setupGitHub(dbAdapter, bgAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, shutdownCtx, logger)
+		buildQuota := newPushBuildQuota(dbDeps.PlanLimiter, store.NewPostgresPlanUsageStore(dbAdapter.Pool).BuildsThisMonth, cfg.BillingUpgradeURL)
+		ghDeps = setupGitHub(dbAdapter, bgAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, buildQuota, shutdownCtx, logger)
 	}
 
 	// Plan J-17 T1.3 — start the Argo step watcher in a background
