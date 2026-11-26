@@ -342,8 +342,8 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 // can render actionable copy (EC-10 + EC-4):
 //   - INVALID_REPO            (400) — repo not "owner/name" format
 //   - BRANCH_NOT_FOUND        (400) — branch missing on GitHub
-//   - MISSING_LOOPZERO_YAML       (400) — file absent at that ref
-//   - INVALID_LOOPZERO_YAML       (400) — refused by github.ParseDeployDescriptor
+//   - MISSING_DEPLOY_DESCRIPTOR   (400) — file absent at that ref
+//   - INVALID_DEPLOY_DESCRIPTOR   (400) — refused by github.ParseDeployDescriptor
 //   - GITHUB_UNAVAILABLE      (502) — GitHub API transport failure
 func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w http.ResponseWriter, req connectRequest, branch string) bool {
 	parts := strings.SplitN(req.Repo, "/", 2)
@@ -373,12 +373,12 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 		return false
 	}
 
-	content, err := h.introspector.GetFileContent(ctx, req.InstallationID, owner, name, branch, github.DeployDescriptorPath)
+	path, content, err := h.fetchDeployDescriptor(ctx, req.InstallationID, owner, name, branch)
 	if err != nil {
 		var fnf *github.FileNotFoundError
 		if errors.As(err, &fnf) {
 			httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
-				"code":    "MISSING_LOOPZERO_YAML",
+				"code":    "MISSING_DEPLOY_DESCRIPTOR",
 				"message": github.DeployDescriptorPath + " not found on branch \"" + branch + "\". Add it at the repository root, declaring the apps to deploy under `apps:`, and commit it. Docs: https://docs.getloopscale.com/config/loopzero-yaml",
 			})
 			return false
@@ -391,11 +391,11 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 		return false
 	}
 
-	// EC-4 / EC-19: the same rule a push applies (github.ParseDeployDescriptor),
+	// EC-4 / EC-19: the same rule a push applies (github.ParseDeployDescriptorFile),
 	// so a repository Connect links is one every push can build.
-	if _, err := github.ParseDeployDescriptor(content); err != nil {
+	if _, err := github.ParseDeployDescriptorFile(path, content); err != nil {
 		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
-			"code":    "INVALID_LOOPZERO_YAML",
+			"code":    "INVALID_DEPLOY_DESCRIPTOR",
 			"message": err.Error() + " Docs: https://docs.getloopscale.com/config/loopzero-yaml",
 		})
 		return false
@@ -456,4 +456,23 @@ func (h *RepositoryHandler) triggerConnectThenDeploy(ctx context.Context, tenant
 	}()
 	slog.InfoContext(ctx, "connect-then-deploy: triggered",
 		"project", projectName, "sha", head.SHA, "branch", branch)
+}
+
+// fetchDeployDescriptor reads the descriptor under the first of its names the
+// branch has, in the order a push looks them up. It answers FileNotFoundError
+// only when the branch has none of them.
+func (h *RepositoryHandler) fetchDeployDescriptor(ctx context.Context, installationID int64, owner, name, branch string) (string, []byte, error) {
+	var notFound error
+	for _, path := range github.DeployDescriptorPaths {
+		content, err := h.introspector.GetFileContent(ctx, installationID, owner, name, branch, path)
+		if err == nil {
+			return path, content, nil
+		}
+		var fnf *github.FileNotFoundError
+		if !errors.As(err, &fnf) {
+			return "", nil, err
+		}
+		notFound = err
+	}
+	return "", nil, notFound
 }

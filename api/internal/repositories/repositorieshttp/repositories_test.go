@@ -361,6 +361,8 @@ type fakeIntrospector struct {
 	branchErr error
 	fileBytes []byte
 	fileErr   error
+	// files, when set, answers by path and FileNotFoundError for the rest.
+	files map[string]string
 	// connect-then-deploy 2026-06-09: HEAD commit metadata for the
 	// Vercel-canonical immediate deploy on link. Nil head + nil headErr
 	// disables the deploy path silently — matches the production behavior
@@ -373,7 +375,14 @@ func (f *fakeIntrospector) BranchExists(_ context.Context, _ int64, _, _, _ stri
 	return f.branchErr
 }
 
-func (f *fakeIntrospector) GetFileContent(_ context.Context, _ int64, _, _, _, _ string) ([]byte, error) {
+func (f *fakeIntrospector) GetFileContent(_ context.Context, _ int64, _, _, _, path string) ([]byte, error) {
+	if f.files != nil {
+		content, ok := f.files[path]
+		if !ok {
+			return nil, &github.FileNotFoundError{Path: path}
+		}
+		return []byte(content), nil
+	}
 	if f.fileErr != nil {
 		return nil, f.fileErr
 	}
@@ -419,8 +428,8 @@ func TestRepositories_Connect_MissingLoopZeroYaml_400(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", w.Code)
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("MISSING_LOOPZERO_YAML")) {
-		t.Errorf("want MISSING_LOOPZERO_YAML, got %s", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte("MISSING_DEPLOY_DESCRIPTOR")) {
+		t.Errorf("want MISSING_DEPLOY_DESCRIPTOR, got %s", w.Body.String())
 	}
 }
 
@@ -434,8 +443,8 @@ func TestRepositories_Connect_EmptyLoopZeroYaml_400(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", w.Code)
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_LOOPZERO_YAML")) {
-		t.Errorf("want INVALID_LOOPZERO_YAML, got %s", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_DEPLOY_DESCRIPTOR")) {
+		t.Errorf("want INVALID_DEPLOY_DESCRIPTOR, got %s", w.Body.String())
 	}
 }
 
@@ -449,8 +458,8 @@ func TestRepositories_Connect_InvalidYaml_400(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_LOOPZERO_YAML")) {
-		t.Errorf("want INVALID_LOOPZERO_YAML, got %s", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_DEPLOY_DESCRIPTOR")) {
+		t.Errorf("want INVALID_DEPLOY_DESCRIPTOR, got %s", w.Body.String())
 	}
 }
 
@@ -468,8 +477,8 @@ func TestRepositories_Connect_LoopZeroYamlWithoutApps_400(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_LOOPZERO_YAML")) {
-		t.Errorf("want INVALID_LOOPZERO_YAML, got %s", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_DEPLOY_DESCRIPTOR")) {
+		t.Errorf("want INVALID_DEPLOY_DESCRIPTOR, got %s", w.Body.String())
 	}
 }
 
@@ -536,5 +545,39 @@ func TestRepositories_Connect_DeployIsBoundToTheServerLifetime(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("connect did not trigger the deploy")
+	}
+}
+
+// A repository the CLI set up carries theo.yaml, and one connected before the
+// rename carries loopzero.yaml. Connect accepts both, and loopscale.yaml
+// (getloopscale/loopzero#89).
+func TestRepositories_Connect_AcceptsEveryDescriptorName(t *testing.T) {
+	for _, name := range []string{"loopscale.yaml", "loopzero.yaml", "theo.yaml"} {
+		t.Run(name, func(t *testing.T) {
+			intro := &fakeIntrospector{files: map[string]string{name: deployableLoopZeroYaml}}
+			h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
+
+			w := httptest.NewRecorder()
+			h.Connect(w, connectReq(`{"repo":"owner/r","installation_id":42}`))
+
+			if w.Code >= 400 {
+				t.Fatalf("%s: status %d body=%s", name, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestRepositories_Connect_InvalidDescriptorNamesTheFileItRead(t *testing.T) {
+	intro := &fakeIntrospector{files: map[string]string{"theo.yaml": "project: hello\n"}}
+	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
+
+	w := httptest.NewRecorder()
+	h.Connect(w, connectReq(`{"repo":"owner/r","installation_id":42}`))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", w.Code)
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("theo.yaml declares no apps")) {
+		t.Errorf("want the refusal to name theo.yaml, got %s", w.Body.String())
 	}
 }

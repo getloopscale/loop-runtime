@@ -5,6 +5,7 @@ package github
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -18,16 +19,39 @@ import (
 // upload seam (docs/loopzerokit-loopzerocloud-seam.md). A repository never carries
 // that file — it is build output — so the two paths read different files and
 // neither accepts the other's.
-const DeployDescriptorPath = "loopzero.yaml"
+const DeployDescriptorPath = "loopscale.yaml"
+
+// DeployDescriptorPaths lists every name the descriptor has had, in the order
+// they are looked up. The names after the first are the ones earlier releases
+// of the API and of the CLI wrote; a repository that still carries one keeps
+// deploying. When a repository has more than one, the first in this list wins.
+var DeployDescriptorPaths = []string{DeployDescriptorPath, "loopzero.yaml", "theo.yaml"}
 
 // InvalidDeployDescriptorError says why a descriptor cannot be deployed. The
 // message is written for the person who owns the repository.
 type InvalidDeployDescriptorError struct {
+	// Path is the file that was read. Empty means DeployDescriptorPath.
+	Path   string
 	Reason string
 }
 
 func (e *InvalidDeployDescriptorError) Error() string {
-	return DeployDescriptorPath + " " + e.Reason
+	path := e.Path
+	if path == "" {
+		path = DeployDescriptorPath
+	}
+	return path + " " + e.Reason
+}
+
+// ParseDeployDescriptorFile applies ParseDeployDescriptor to the content of
+// path, so that a refusal names the file the repository has.
+func ParseDeployDescriptorFile(path string, content []byte) (*LoopZeroYamlMinimal, error) {
+	descriptor, err := ParseDeployDescriptor(content)
+	var invalid *InvalidDeployDescriptorError
+	if errors.As(err, &invalid) {
+		invalid.Path = path
+	}
+	return descriptor, err
 }
 
 // ParseDeployDescriptor is the one rule that decides whether a repository can
