@@ -300,6 +300,61 @@
       "id": "3e38a9c701abf564",
       "detector": "Postgres",
       "first_seen_in": "pkg/pulumi/output/output_test.go"
+    },
+    {
+      "id": "8c0e35a6a1225635",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "cbaef28347d4eea8",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "d5fdaae0b9fd55de",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "e29411e2efc21262",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "d658132910544a9f",
+      "detector": "Postgres",
+      "first_seen_in": "api/tests/integration/project_cap_per_account_test.go"
+    },
+    {
+      "id": "48a270312849094d",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_external_postgres_test.go"
+    },
+    {
+      "id": "22dd168dbbeff5eb",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
+    },
+    {
+      "id": "27d9a0d7152f9e30",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
+    },
+    {
+      "id": "b90d098e9272b026",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/controller-deployment.yaml"
+    },
+    {
+      "id": "8818f09f62d829b7",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
+    },
+    {
+      "id": "c7a09d220f638dbd",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
     }
   ]
 }
