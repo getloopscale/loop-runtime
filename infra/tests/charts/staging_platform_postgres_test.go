@@ -6,7 +6,10 @@ package charts
 import (
 	"encoding/json"
 	"regexp"
+	"strings"
 	"testing"
+
+	"sigs.k8s.io/yaml"
 )
 
 // Staging runs the platform's own PostgreSQL for data-plane services on CloudNativePG:
@@ -144,4 +147,41 @@ func TestStaging_InstallsTheBarmanCloudPluginBesideTheOperator(t *testing.T) {
 			t.Errorf("%s installs plugin-barman-cloud; only staging turns platformPostgres on", env)
 		}
 	}
+}
+
+// The looptrace release writes its Secrets through ExternalSecret objects, which exist
+// only after the External Secrets controller installed its CRDs and the store release
+// created the SecretStore. Without the ordering, helmfile installs the releases in one
+// wave and looptrace fails on a cluster built from nothing whenever it gets there first.
+func TestStaging_InstallsLooptraceAfterTheSecretStore(t *testing.T) {
+	out := helmfileRun(t, append(append([]string{}, helmfileCoreEnv...), stagingOutputs...),
+		"-f", "infra/helmfile/core.helmfile.yaml.gotmpl", "-e", "staging", "build")
+
+	var state struct {
+		Releases []struct {
+			Name  string   `json:"name"`
+			Needs []string `json:"needs"`
+		} `json:"releases"`
+	}
+	for _, doc := range strings.Split(out, "\n---") {
+		if !strings.Contains(doc, "releases:") {
+			continue
+		}
+		if err := yaml.Unmarshal([]byte(doc), &state); err != nil {
+			t.Fatalf("decode helmfile build output: %v\n%s", err, truncate(doc, 500))
+		}
+	}
+	for _, release := range state.Releases {
+		if release.Name != "looptrace" {
+			continue
+		}
+		for _, need := range release.Needs {
+			// helmfile build prefixes a need with the release's kube context.
+			if strings.HasSuffix(need, "external-secrets/aws-secrets-manager") {
+				return
+			}
+		}
+		t.Fatalf("looptrace needs %v, want external-secrets/aws-secrets-manager among them", release.Needs)
+	}
+	t.Fatal("helmfile build -e staging has no looptrace release")
 }
