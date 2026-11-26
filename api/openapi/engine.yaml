@@ -795,6 +795,32 @@ paths:
       responses:
         '200':
           description: get build sbom
+  /api/v1/builds/{id}/sbom/{app}/download:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    - name: app
+      in: path
+      required: true
+      schema:
+        type: string
+    get:
+      tags:
+      - builds
+      summary: Download the SBOM of one app of a build
+      description: >-
+        Streams the CycloneDX file of the app as an attachment. The path is the download_path
+        that GET /api/v1/builds/{id}/sbom reports for the app.
+      responses:
+        '200':
+          description: the SBOM file
+        '404':
+          description: the build has no SBOM for this app
+        '502':
+          description: the SBOM is recorded and the object store did not return it
   /api/v1/builds/stats:
     get:
       tags:
