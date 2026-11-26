@@ -405,6 +405,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A push to a connected repository whose `loopzero.yaml` is invalid or missing sets the commit's `loopzero/deploy` status to `failure`, with the reason the file was refused. The push was dropped with a line in the API log and nothing on GitHub (#151).
 - A build whose step failed is recorded as failed at that step, for example `Build failed at step "install-deps": main: Error (exit code 1)`. Every such build used to report "missing image digest", because Argo ended the workflow Succeeded and the failure surfaced only when the manifests were rendered (#94).
 - `replicas_ready` in the project status counts the apps of the active release. An app that a deploy or a rollback removed was still summed for about 6 minutes, so the Scale and Status screens showed more replicas than were running (#137).
 - A pending release that a newer deploy of the same environment replaced is cancelled with the reason "Superseded by a newer deploy of this environment". It used to retrigger syncs, terminate the newer deploy's Argo CD operation and fail after the sync timeout as "service did not become healthy" (#148).

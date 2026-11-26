@@ -104,6 +104,14 @@ func (n *StatusNotifier) deployURL(ctx context.Context, tenantID, projectName, b
 // a commit status; a longer one is refused and the status is not set.
 const commitStatusDescriptionLimit = 140
 
+// fitCommitStatusDescription cuts a description to what GitHub accepts.
+func fitCommitStatusDescription(description string) string {
+	if len(description) > commitStatusDescriptionLimit {
+		return description[:commitStatusDescriptionLimit-3] + "..."
+	}
+	return description
+}
+
 // OnDeployFailed sets the commit status of a build whose deploy did not go
 // live: "failure" with the reason, or "error" when a newer deploy replaced
 // this one before it finished, which is not a failure of the commit.
@@ -130,9 +138,7 @@ func (n *StatusNotifier) OnDeployFailed(ctx context.Context, tenantID, projectNa
 		state = "error"
 	}
 	description := reason
-	if len(description) > commitStatusDescriptionLimit {
-		description = description[:commitStatusDescriptionLimit-3] + "..."
-	}
+	description = fitCommitStatusDescription(description)
 	if err := n.appClient.SetCommitStatus(ctx, installationID, owner, repo, commitSHA, CommitStatus{
 		State:       state,
 		Description: description,
