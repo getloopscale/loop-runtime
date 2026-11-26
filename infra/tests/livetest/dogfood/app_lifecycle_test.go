@@ -55,7 +55,7 @@ func TestProbeAppBundle_CarriesTheAppAndItsManifest(t *testing.T) {
 
 	entries := bundleEntries(t, bundle)
 
-	for _, name := range []string{"package.json", "package-lock.json", "server.js", ".loopruntime/services.json"} {
+	for _, name := range []string{"package.json", "package-lock.json", "server.js", ".loopzero/services.json"} {
 		if entries[name] == "" {
 			t.Errorf("the bundle has no %s; it has %v", name, keysOf(entries))
 		}
@@ -140,7 +140,7 @@ func TestProbeAppManifest_NamesTheProjectItIsDeployedTo(t *testing.T) {
 		t.Fatalf("ProbeAppBundle: %v", err)
 	}
 
-	for where, raw := range map[string]string{"the upload's manifest": string(manifest), "the bundle's manifest": bundleEntries(t, bundle)[".loopruntime/services.json"]} {
+	for where, raw := range map[string]string{"the upload's manifest": string(manifest), "the bundle's manifest": bundleEntries(t, bundle)[".loopzero/services.json"]} {
 		var parsed struct {
 			Project  string           `json:"project"`
 			Services []map[string]any `json:"services"`

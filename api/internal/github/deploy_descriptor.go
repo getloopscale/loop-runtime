@@ -15,7 +15,7 @@ import (
 
 // DeployDescriptorPath is the file, at the repository root, that makes a
 // GitHub repository deployable by push. It is the GitHub path's descriptor
-// only: a CLI upload carries `.loopruntime/services.json` instead, validated at the
+// only: a CLI upload carries `.loopzero/services.json` instead, validated at the
 // upload seam (docs/loopzerokit-loopzerocloud-seam.md). A repository never carries
 // that file — it is build output — so the two paths read different files and
 // neither accepts the other's.

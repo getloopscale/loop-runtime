@@ -83,7 +83,7 @@ type AppUnit struct {
 
 // Plan B v3.1 T-B.1 (2026-06-05) — `frontendFrameworks` map removed post
 // LoopZeroKit-only cutover. Apps now declare `type` explicitly em
-// `.loopruntime/services.json` (or via the legacy `services_json` form-field path
+// `.loopzero/services.json` (or via the legacy `services_json` form-field path
 // during transition). The framework-string heuristic no longer participates
 // em type inference; absent type defaults to "server" as the safe choice
 // (frontends are CDN-static per ADR D5 + explicit em services manifest).

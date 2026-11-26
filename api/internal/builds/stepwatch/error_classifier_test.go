@@ -96,7 +96,7 @@ func TestSuggestionFor_UnknownClassFallsBack(t *testing.T) {
 
 // Red Team loopruntime-cloud#123 — the LOOPRUNTIME_YAML_INVALID suggestion (the only
 // user-facing string in this map that named a manifest) must guide the
-// customer to the canonical `.loopruntime/services.json`, not the legacy
+// customer to the canonical `.loopzero/services.json`, not the legacy
 // `loopzero.yaml`. ErrorClassLoopRuntimeYAMLInvalid stays as an internal class name
 // (engine-side errors may still mention "loopzero.yaml" during the v2
 // transition; Classify() still matches that substring upstream); the
@@ -106,8 +106,8 @@ func TestSuggestionFor_LoopRuntimeYAMLInvalid_CanonicalManifest_123(t *testing.T
 	if strings.Contains(got, "loopzero.yaml") {
 		t.Fatalf("RED #123: suggestion must NOT reference legacy loopzero.yaml; got %q", got)
 	}
-	if !strings.Contains(got, ".loopruntime/services.json") {
-		t.Fatalf("RED #123: suggestion MUST reference canonical .loopruntime/services.json; got %q", got)
+	if !strings.Contains(got, ".loopzero/services.json") {
+		t.Fatalf("RED #123: suggestion MUST reference canonical .loopzero/services.json; got %q", got)
 	}
 }
 

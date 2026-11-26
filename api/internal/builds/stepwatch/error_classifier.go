@@ -40,11 +40,11 @@ var suggestions = map[ErrorClass]string{
 	ErrorClassRegistryAuth:   "Could not push to image registry. Verify pull secret and registry credentials.",
 	ErrorClassDockerfileLint: "Dockerfile failed validation. See lint output for the specific violation.",
 	// Red Team loopruntime-cloud#123 — guide the customer to the canonical manifest
-	// (loopzerokit v2 emits `.loopruntime/services.json`; the legacy `loopzero.yaml` has
+	// (loopzerokit v2 emits `.loopzero/services.json`; the legacy `loopzero.yaml` has
 	// been retired). The class name stays `LOOPRUNTIME_YAML_INVALID` for engine
 	// compat — Classify() still matches "loopzero.yaml" substrings upstream — but
 	// the user-visible suggestion is honest.
-	ErrorClassLoopRuntimeYAMLInvalid: "Project manifest could not be parsed. Check your `.loopruntime/services.json` and run `loopruntime validate` locally.",
+	ErrorClassLoopRuntimeYAMLInvalid: "Project manifest could not be parsed. Check your `.loopzero/services.json` and run `loopruntime validate` locally.",
 	ErrorClassCancelledByUser:        "Deploy was cancelled. Trigger a new deploy when ready.",
 	ErrorClassWorkflowDeleted:        "Build was interrupted by an operator. Trigger a new deploy.",
 	ErrorClassUnknown:                "Build step failed. See build logs for details.",

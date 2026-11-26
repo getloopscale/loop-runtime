@@ -154,8 +154,8 @@ func TestDevPublic_EngineContract_RedeployEmptySourceMessage(t *testing.T) {
 	rb, _ := io.ReadAll(resp.Body)
 	require.Contains(t, string(rb), "no apps to redeploy",
 		"redeploy-with-empty-source MUST cite 'no apps to redeploy' per #126 canonical")
-	require.NotContains(t, string(rb), ".loopruntime/services.json",
-		"redeploy error MUST NOT cite fresh-deploy .loopruntime/services.json message per #126 code-path-aware differentiation")
+	require.NotContains(t, string(rb), ".loopzero/services.json",
+		"redeploy error MUST NOT cite fresh-deploy .loopzero/services.json message per #126 code-path-aware differentiation")
 }
 
 // TestDevPublic_EngineContract_MemoryExportsRaceDeterministic — Red Team #104.

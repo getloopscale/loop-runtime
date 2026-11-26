@@ -349,7 +349,7 @@ func validateBuildRequest(req createBuildRequest) *loopruntimeerrors.LoopRuntime
 	// T1.3 follow-up (CR-2): an empty apps array would reach the workflow
 	// builder's invariant guard as a 500; it is a caller error.
 	if len(req.Apps) == 0 {
-		detail := "At least one app is required. Check your `.loopruntime/services.json` for a `services:` array."
+		detail := "At least one app is required. Check your `.loopzero/services.json` for a `services:` array."
 		if req.RedeployOf != "" {
 			// Red Team loopruntime-cloud#126 — a redeploy has no local services.json
 			// to edit; name the source build instead.

@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopRuntime Authors
 
 // Package sourcehttp serves the bundle upload endpoint: the LoopZeroKit ↔ LoopRuntimeCloud
-// seam, where the CLI hands over `.loopruntime/services.json` plus the source bundle.
+// seam, where the CLI hands over `.loopzero/services.json` plus the source bundle.
 //
 // The LAST family to leave the flat `routes` package (B-080), and with it the
 // package itself: `api/internal/routes` no longer exists as Go code, only as the

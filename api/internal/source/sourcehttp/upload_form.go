@@ -92,7 +92,7 @@ func readManifestPart(part *multipart.Part, blocklist source.EnvBlocklistMode) (
 	case fieldLegacyYAML:
 		return nil, &uploadRejection{err: loopruntimeerrors.NewLoopRuntimeError(
 			"VALIDATION_FAILED",
-			"E-009: legacy loopruntime_yaml not supported. This API version requires `.loopruntime/services.json` emitted by LoopZeroKit ≥0.5.0. "+
+			"E-009: legacy loopruntime_yaml not supported. This API version requires `.loopzero/services.json` emitted by LoopZeroKit ≥0.5.0. "+
 				"Upgrade LoopZeroKit and re-run `loopzerokit build --target loopruntime-cloud` to regenerate the bundle.",
 		)}
 	default:

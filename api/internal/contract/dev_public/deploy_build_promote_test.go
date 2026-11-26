@@ -89,12 +89,12 @@ func (s *deployState) handleBuildCreate(w http.ResponseWriter, r *http.Request) 
 	}
 	_ = json.Unmarshal(body, &req)
 
-	// #123 canonical error: missing apps → 400 MISSING_FIELD with .loopruntime/services.json message.
+	// #123 canonical error: missing apps → 400 MISSING_FIELD with .loopzero/services.json message.
 	if len(req.Apps) == 0 && req.RedeployOf == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"code":    "MISSING_FIELD",
-			"message": "At least one app is required. Check your `.loopruntime/services.json` for a `services:` array.",
+			"message": "At least one app is required. Check your `.loopzero/services.json` for a `services:` array.",
 		})
 		return
 	}
@@ -185,8 +185,8 @@ func TestDevPublic_DeployBuildPromote_BuildErrorCanonicalManifest(t *testing.T) 
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 	body, _ := io.ReadAll(resp.Body)
-	require.Contains(t, string(body), ".loopruntime/services.json",
-		"canonical manifest error MUST cite `.loopruntime/services.json` per #123 (NOT stale `loopzero.yaml`)")
+	require.Contains(t, string(body), ".loopzero/services.json",
+		"canonical manifest error MUST cite `.loopzero/services.json` per #123 (NOT stale `loopzero.yaml`)")
 	require.Contains(t, string(body), "services:",
 		"canonical manifest error MUST cite `services:` array (NOT stale `apps:`) per #123")
 	require.NotContains(t, string(body), "loopzero.yaml",

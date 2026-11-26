@@ -26,7 +26,7 @@ const servicesJSONV1LegacyProject = "services-bundle"
 //
 // Replaces the legacy `ValidateLoopRuntimeYAML()` for the new wire-level contract.
 // Embeds the JSON Schema 7 artifact (mirror of loopzerokit's
-// `ServicesManifest` interface from `packages/loopruntime/src/services/adapters-bridge/manifest.ts`)
+// `ServicesManifest` interface from `packages/loopzero/src/services/adapters-bridge/manifest.ts`)
 // and uses `santhosh-tekuri/jsonschema/v5` to validate payload shape before
 // translating into the existing `LoopRuntimeYAML` struct shape (so downstream code
 // in `build_reconcile_complete.go` + cascade can consume unchanged during

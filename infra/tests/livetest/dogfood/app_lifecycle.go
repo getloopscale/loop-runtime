@@ -51,7 +51,7 @@ const (
 	CellContextsEnv = "LOOPRUNTIME_DOGFOOD_CELL_CONTEXTS"
 
 	probeFixtureRoot  = "fixtures/env-probe"
-	probeManifestPath = ".loopruntime/services.json"
+	probeManifestPath = ".loopzero/services.json"
 )
 
 // all: so the embed includes .loopruntime, which holds the manifest.
