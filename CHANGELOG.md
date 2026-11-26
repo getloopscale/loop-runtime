@@ -112,9 +112,6 @@ to [Semantic Versioning](https://semver.org/).
 - `.squad/domain-routing.txt` — the project's domain routing table, derived from disk:
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
-### Removed
-- A repository's deploy descriptor is no longer read from `theo.yaml`. Rename the file to `loopscale.yaml`.
-
 ### Changed
 - The engine is named loop-runtime everywhere, because LoopZero is the name of the agent framework. Inside the code the name is spelled `loopruntime`, with no hyphen. What an operator has to change:
   - Images, charts and the ops binary: `loopzero-api` is `loopruntime-api`, and so on for every `loopzero-*` name.
@@ -357,6 +354,7 @@ to [Semantic Versioning](https://semver.org/).
   correct. Names present in exactly one tree are unaffected (#B-002)
 
 ### Removed
+- A repository's deploy descriptor is no longer read from `theo.yaml`. Rename the file to `loopscale.yaml`.
 
 - `render` in `loopzero.yaml` is refused unless it is `server`, and static delivery is gone: every app is served by its container (#78)
 - `task images:push:platform:dev-public` and its pull-secret task: they pushed to and authenticated against a DigitalOcean registry that no longer exists (#435).
