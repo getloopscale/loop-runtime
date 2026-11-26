@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The core Prometheus scrapes the platform's PostgreSQL and staging loads ten alerts for it (instance down, WAL archive, base backups, volume, replication, transaction ID age, connections), each with a runbook entry. Promtail ships the logs of `loopzero-data-plane` and `cnpg-system` to Loki (#182).
 - The platform's PostgreSQL archives its WAL and takes scheduled base backups to S3 through the Barman Cloud plugin, as an IAM role and with no stored key (`platformPostgres.backup`). The `platform-postgres` chart can build a cluster from those backups, up to a given moment (`recovery`). Staging keeps a week of them (#180).
 - Staging runs the platform's own PostgreSQL for data-plane services on CloudNativePG: the `cloudnative-pg` operator and one `Cluster` in `loopzero-data-plane`, turned on by `platformPostgres` in an environment. Each entry of `platformPostgres.databases` becomes a database owned by a login role of its own. RDS stays the control plane's database (#161).
 - Staging runs looptrace, the trace store behind the console's observability screens, as a data-plane service reachable only inside the cluster. Its data lives in the `looptrace` database of the platform's PostgreSQL, and its Secrets come from the platform secret in Secrets Manager (#168).
