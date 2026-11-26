@@ -34,7 +34,11 @@
 # Answers whether a host is a tenant's active custom domain: 200 with the cell that serves
 # it in X-LoopZero-Cell, or the API's refusal. Caddy asks it before it issues a certificate
 # (?domain=<host>), and the custom domain site asks it for every request.
-http://127.0.0.1:{$EDGE_ASK_PORT} {
+#
+# The address names no host. forward_auth passes the viewer's Host on, and a request whose
+# Host no site names gets an empty 200 from Caddy: with a host here, every request to the
+# custom domain site passed as allowed and carried no cell.
+http://:{$EDGE_ASK_PORT} {
 	bind 127.0.0.1
 	# The lookup also knows the platform's own hosts. Those have their sites above and
 	# below; a name under the zone that reaches this one is not public.

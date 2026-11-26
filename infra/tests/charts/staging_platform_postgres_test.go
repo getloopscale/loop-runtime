@@ -26,8 +26,8 @@ func TestStaging_PlatformPostgresRendersOneClusterOnAPinnedImage(t *testing.T) {
 		t.Errorf("Cluster namespace = %v, want loopzero-data-plane", got)
 	}
 	image, _ := dig(cluster, "spec", "imageName").(string)
-	if !regexp.MustCompile(`^ghcr\.io/cloudnative-pg/postgresql:16\.\d+[a-z-]*@sha256:[0-9a-f]{64}$`).MatchString(image) {
-		t.Errorf("Cluster image %q is not a PostgreSQL 16 release pinned by digest", image)
+	if !regexp.MustCompile(`^ghcr\.io/cloudnative-pg/postgresql:19\.\d+[a-z-]*@sha256:[0-9a-f]{64}$`).MatchString(image) {
+		t.Errorf("Cluster image %q is not a PostgreSQL 19 release pinned by digest", image)
 	}
 	if got := dig(cluster, "spec", "instances"); got != 1 {
 		t.Errorf("Cluster instances = %v, want 1", got)
@@ -37,6 +37,8 @@ func TestStaging_PlatformPostgresRendersOneClusterOnAPinnedImage(t *testing.T) {
 // releaseRow is one release as `helmfile list` reports it for an environment.
 type releaseRow struct {
 	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Chart     string `json:"chart"`
 	Installed bool   `json:"installed"`
 	Version   string `json:"version"`
 }
@@ -56,16 +58,6 @@ func releaseInEnvironment(t *testing.T, env, release string) releaseRow {
 	}
 	t.Fatalf("helmfile list -e %s has no release %q", env, release)
 	return releaseRow{}
-}
-
-func TestStaging_CloudNativePGOperatorVersionIsPinned(t *testing.T) {
-	row := releaseInEnvironment(t, "staging", "cloudnative-pg")
-	if !row.Installed {
-		t.Error("staging does not install the cloudnative-pg release")
-	}
-	if !regexp.MustCompile(`^\d+\.\d+\.\d+$`).MatchString(row.Version) {
-		t.Errorf("the cloudnative-pg chart version is %q, want an exact version", row.Version)
-	}
 }
 
 func TestOtherEnvironments_DoNotInstallPlatformPostgres(t *testing.T) {

@@ -252,7 +252,9 @@ func TestCustomDomainsGetACertificateOnlyAfterTheAPIAnswersForThem(t *testing.T)
 	if !regexp.MustCompile(`(?s)on_demand_tls \{\s*ask http://127\.0\.0\.1:\{\$EDGE_ASK_PORT\}/ask\s*\}`).MatchString(caddyfile) {
 		t.Error("the global options do not make on-demand TLS ask the loopback site")
 	}
-	ask := caddySite(t, caddyfile, "http://127.0.0.1:{$EDGE_ASK_PORT}")
+	// No host in the address: forward_auth sends the viewer's Host, and Caddy answers a Host
+	// no site names with an empty 200, which the custom domain site would take as allowed.
+	ask := caddySite(t, caddyfile, "http://:{$EDGE_ASK_PORT}")
 	for what, want := range map[string]string{
 		"binds to loopback only":                      "bind 127.0.0.1",
 		"refuses names under the platform's zone":     `.endsWith(".{$EDGE_PLATFORM_DOMAIN}")`,
