@@ -33,8 +33,10 @@ extraObjects:
     spec:
       ingressClassName: alb
       rules:
-        - host: {{ printf "*.%s" .Values.domain | quote }}
-          http:
+        # No host: Traefik's IngressRoutes decide which hosts exist. A rule with the
+        # platform's wildcard made the ALB itself answer any other host with an empty
+        # 404, so a tenant's custom domain never reached its cell's Traefik.
+        - http:
             paths:
               - path: /
                 pathType: Prefix

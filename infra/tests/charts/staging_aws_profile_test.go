@@ -609,3 +609,29 @@ cache: {host: c, authTokenSecret: a}
 		t.Error("loopzero-api-github rendered without githubAppSecret")
 	}
 }
+
+// A tenant's custom domain reaches its cell under its own name (#174). An ALB rule with a
+// host answers every other host itself, with an empty 404 that never gets to Traefik, so
+// the rule in front of a cell's Traefik names no host. Traefik's IngressRoutes are what
+// decide which hosts exist.
+func TestTheCellLoadBalancerPassesEveryHostToTraefik(t *testing.T) {
+	values := helmfileValues(t, "cell.helmfile.yaml.gotmpl", "staging", "traefik", stagingMonitoringOutputs()...)
+	objects, _ := values["extraObjects"].([]any)
+	var edge map[string]any
+	for _, object := range objects {
+		if o, ok := object.(map[string]any); ok && o["kind"] == "Ingress" && dig(o, "metadata", "name") == "traefik-edge" {
+			edge = o
+		}
+	}
+	if edge == nil {
+		t.Fatal("the cell's traefik renders no Ingress traefik-edge")
+	}
+	rules, _ := dig(edge, "spec", "rules").([]any)
+	if len(rules) != 1 {
+		t.Fatalf("traefik-edge has %d rules, want one", len(rules))
+	}
+	rule, _ := rules[0].(map[string]any)
+	if host, ok := rule["host"]; ok {
+		t.Errorf("traefik-edge rule host = %v: the ALB answers a custom domain 404 before Traefik sees it", host)
+	}
+}
