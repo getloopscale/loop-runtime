@@ -49,14 +49,8 @@ var _ = Describe("J-07 Projects List", Label("live", "dogfood", "j07"), func() {
 		})
 	})
 
-	Context("Scenario B — CreateProjectSheet wizard submit", func() {
-		It("POST /engine/api/v1/projects creates a project", func() {
-			// Sketch — the create-project wizard mutates state; a dedicated
-			// per-run fixture project + teardown is required. Deferred to a
-			// T3.2 follow-up commit (same pattern as j17 SSE/Loki skeletons).
-			Skip("create-project mutation spec — implementation in T3.2 follow-up commit")
-		})
-	})
+	// Creating a project by deploying to it is step 1 of the app lifecycle journey
+	// (journey_app_lifecycle_live_test.go).
 
 	Context("Scenario C — preflight health", func() {
 		It("cloud /health/deep stays 200 throughout", func() {
