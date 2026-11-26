@@ -104,8 +104,8 @@ func TestExtractLoopZeroYaml_MissingFile(t *testing.T) {
 	if cfg != nil {
 		t.Fatal("expected nil config when loopzero.yaml is missing")
 	}
-	if !strings.Contains(err.Error(), "loopzero.yaml not found") {
-		t.Errorf("expected 'loopzero.yaml not found' error, got: %v", err)
+	if !strings.Contains(err.Error(), "loopscale.yaml not found") {
+		t.Errorf("expected 'loopscale.yaml not found' error, got: %v", err)
 	}
 }
 

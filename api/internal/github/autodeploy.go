@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -562,6 +563,9 @@ func extractLoopZeroYaml(r io.Reader) (*LoopZeroYamlMinimal, error) {
 	}
 	defer func() { _ = gz.Close() }()
 
+	// A repository may carry more than one of the names; which one is read must
+	// not depend on the order of the archive.
+	found := make(map[string][]byte, len(DeployDescriptorPaths))
 	tr := tar.NewReader(gz)
 	for {
 		header, err := tr.Next()
@@ -572,16 +576,20 @@ func extractLoopZeroYaml(r io.Reader) (*LoopZeroYamlMinimal, error) {
 			return nil, fmt.Errorf("tar: %w", err)
 		}
 
-		// GitHub tarball: files are under "owner-repo-sha/" prefix
-		name := filepath.Base(header.Name)
-		// Also check one level deep (the loopzero.yaml is at repo root)
+		// GitHub tarball: the repository root is the "owner-repo-sha/" directory.
 		parts := strings.Split(header.Name, "/")
-		if len(parts) == 2 && name == DeployDescriptorPath {
-			data, err := io.ReadAll(tr)
-			if err != nil {
-				return nil, fmt.Errorf("read %s: %w", DeployDescriptorPath, err)
-			}
-			return ParseDeployDescriptor(data)
+		if len(parts) != 2 || !slices.Contains(DeployDescriptorPaths, parts[1]) {
+			continue
+		}
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", parts[1], err)
+		}
+		found[parts[1]] = data
+	}
+	for _, path := range DeployDescriptorPaths {
+		if data, ok := found[path]; ok {
+			return ParseDeployDescriptorFile(path, data)
 		}
 	}
 	return nil, fmt.Errorf("%s not found in tarball", DeployDescriptorPath)

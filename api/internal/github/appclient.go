@@ -277,7 +277,7 @@ func (c *AppClient) BranchExists(ctx context.Context, installationID int64, owne
 }
 
 // FileNotFoundError is returned by GetFileContent when the path is absent
-// on the requested ref. Lets the Connect handler distinguish MISSING_LOOPZERO_YAML
+// on the requested ref. Lets the Connect handler distinguish MISSING_DEPLOY_DESCRIPTOR
 // from any other HTTP error class.
 type FileNotFoundError struct {
 	Owner, Repo, Ref, Path string

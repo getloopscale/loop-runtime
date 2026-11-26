@@ -96,7 +96,7 @@ func TestHandlePush_AMissingDescriptorMarksTheCommitFailed(t *testing.T) {
 	if len(statuses) != 1 || statuses[0].State != "failure" {
 		t.Fatalf("commit statuses = %+v, want one failure", statuses)
 	}
-	if !strings.Contains(statuses[0].Description, "loopzero.yaml") {
-		t.Errorf("description = %q, want it to name loopzero.yaml", statuses[0].Description)
+	if !strings.Contains(statuses[0].Description, "loopscale.yaml") {
+		t.Errorf("description = %q, want it to name loopscale.yaml", statuses[0].Description)
 	}
 }
