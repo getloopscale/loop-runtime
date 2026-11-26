@@ -25,6 +25,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	"github.com/getloopscale/loopzero/pkg/domain"
 
 	"fmt"
@@ -108,6 +109,7 @@ type SecretHandler struct {
 	audit          AuditLogger          // optional — nil disables audit logging
 	locker         SecretEnvLocker      // required — serializes every mutation with deploys (Rule 6)
 	planLimits     SecretPlanLimiter    // nil only where no plan is enforced (no database: dev/test)
+	upgradeURL     string               // where a plan limit refusal points; empty is the console's own path
 	projectChecker SecretProjectChecker // optional — nil disables T1.2 cross-tenant binding (legacy/test path)
 }
 
@@ -409,6 +411,21 @@ func (h *SecretHandler) assertSecretProjectBinding(
 // plan gate of the other routes answers with the same path by default.
 const planUpgradePath = "/billing"
 
+// SetUpgradeURL sets where a plan limit refusal points the person: the address
+// the platform is configured with (BILLING_UPGRADE_URL). Empty keeps the
+// console's own path.
+func (h *SecretHandler) SetUpgradeURL(upgradeURL string) {
+	h.upgradeURL = upgradeURL
+}
+
+// planUpgradeURL is the address a plan limit refusal carries.
+func (h *SecretHandler) planUpgradeURL() string {
+	if h.upgradeURL == "" {
+		return planUpgradePath
+	}
+	return h.upgradeURL
+}
+
 // assertSecretPlanLimit implements the J-22 T1.3 plan-limit gate. For every
 // environment the batch touches it counts the secrets the environment already
 // holds plus the ones the batch would ADD (an existing name is an update, not
@@ -456,13 +473,13 @@ func (h *SecretHandler) assertSecretPlanLimit(
 			"code": "PLAN_LIMIT_EXCEEDED",
 			// Read by a person in the console and in the CLI: what was
 			// refused, and what to do about it.
-			"message": fmt.Sprintf("Plan limit reached: %s allows %d secrets per environment, and this change would bring %s to %d. Upgrade your plan to continue.",
-				domain.PlanTier(res.Plan).DisplayName(), res.Limit, env, requested),
+			"message": fmt.Sprintf("Plan limit reached: %s allows %d secrets per environment, and this change would bring %s to %d. %s",
+				domain.PlanTier(res.Plan).DisplayName(), res.Limit, env, requested, policy.UpgradeAdvice(h.planUpgradeURL())),
 			"current":     len(existing),
 			"limit":       "secrets",
 			"max":         res.Limit,
 			"plan":        res.Plan,
-			"upgrade_url": planUpgradePath,
+			"upgrade_url": h.planUpgradeURL(),
 		})
 		return false
 	}

@@ -165,3 +165,31 @@ func TestCreateAsksNoPlanWhereNoneIsEnforced(t *testing.T) {
 		t.Fatalf("want 201 with no plan limiter, got %d body=%s", w.Code, w.Body.String())
 	}
 }
+
+// The gate of the other routes answers with the address the platform is configured
+// with (BILLING_UPGRADE_URL). This one answered "/billing" whatever was configured,
+// which a person at the CLI cannot open.
+func TestCreateRefusalNamesTheConfiguredUpgradeAddress(t *testing.T) {
+	h := NewDomainHandler(&envDomainStore{}, &fakeDomainVerifier{}, &fakeDomainValidator{}, "apps.dev.getloopscale.app")
+	h.SetPlanLimiter(&planOf{plan: "starter", limit: 0})
+	h.SetUpgradeURL("https://app.example.com/billing")
+	body := `{"domain":"shop.example.com","project":"my-api","app":"web","environment":"production"}`
+	req := routestest.WithAuth(httptest.NewRequest(http.MethodPost, "/api/v1/domains", bytes.NewBufferString(body)), routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Create(w, req)
+
+	var answer struct {
+		Message    string `json:"message"`
+		UpgradeURL string `json:"upgrade_url"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &answer); err != nil {
+		t.Fatalf("decode the refusal: %v", err)
+	}
+	if answer.UpgradeURL != "https://app.example.com/billing" {
+		t.Errorf("upgrade_url = %q, want the configured address", answer.UpgradeURL)
+	}
+	if !strings.Contains(answer.Message, "Upgrade your plan at https://app.example.com/billing to continue.") {
+		t.Errorf("the message %q does not name the upgrade address", answer.Message)
+	}
+}

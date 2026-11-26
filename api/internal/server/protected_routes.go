@@ -260,6 +260,7 @@ func registerSecretRoutes(r chi.Router, cfg Config, ch routeChains) {
 	}
 	if cfg.Guards.PlanLimiter != nil {
 		h.SetPlanLimiter(cfg.Guards.PlanLimiter)
+		h.SetUpgradeURL(cfg.Guards.UpgradeURL)
 	}
 	// T1.2 (j22 transit plan): cross-tenant binding check (EC-03 / CWE-204).
 	if cfg.Secrets.ProjectChecker != nil {
@@ -433,6 +434,7 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 	// The plan caps custom domains per environment (custom_domains_per_env).
 	if cfg.Guards.PlanLimiter != nil {
 		cfg.DomainHandler.SetPlanLimiter(cfg.Guards.PlanLimiter)
+		cfg.DomainHandler.SetUpgradeURL(cfg.Guards.UpgradeURL)
 	}
 	r.Get("/api/v1/domains", cfg.DomainHandler.List)
 	r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)

@@ -412,6 +412,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A plan limit refusal names where the plan is changed. The 402 of `POST /secrets/bulk` and of `POST /domains` answered `upgrade_url: /billing` whatever `BILLING_UPGRADE_URL` held, and no message carried the address. Both now answer the configured address, and every plan refusal ends with it when it is absolute: "Upgrade your plan at https://... to continue." (#176).
 - The edge route index knows active custom domains. It was built from ExposedRoutes alone, one per application under the platform host, so the lookup answered 404 for a custom host and no `route:<host>` reached the edge store. The index now also reads the domain store, and `/internal/edge/route` takes the host from `?domain=`, the form an edge that issues certificates on demand asks with (#174).
 - Adding or removing a custom domain reaches the cell at once. The provisioner pushed the manifests and stopped there, and an environment's Application has no automated sync: a domain read `active` with no route and no certificate until the next deploy, and a removed one kept both. The provisioner now starts the sync after each push, and a domain becomes `active` only after it started (#173).
 - A custom domain that passed verification is provisioned again. The store handed the claim statement its two statuses in the wrong order, so the provisioner selected domains in `provisioning` and wrote `verified`: a verified domain stayed `verified` with no certificate and no route (#169).

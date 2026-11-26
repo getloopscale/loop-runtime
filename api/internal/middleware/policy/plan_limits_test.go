@@ -152,3 +152,27 @@ func TestPlanLimitExceededBody_UsesProductWordingWithoutInternalTerms(t *testing
 		}
 	}
 }
+
+// A refusal read in the CLI has no link to click: the sentence itself names where
+// the plan is changed, when the platform is configured with that address.
+func TestPlanLimitExceededBody_NamesTheUpgradeAddressInTheMessage(t *testing.T) {
+	result := enforcement.LimitResult{Plan: "starter", Metric: "builds_per_month", Limit: 50, Current: 50}
+
+	body := planLimitExceededBody(result, "https://app.example.com/billing")
+	want := "Plan limit reached: Starter allows 50 builds per month (current: 50). Upgrade your plan at https://app.example.com/billing to continue."
+	if body["message"] != want {
+		t.Errorf("message = %q\nwant      %q", body["message"], want)
+	}
+}
+
+func TestUpgradeAdvice_NamesOnlyAnAddressAPersonCanOpen(t *testing.T) {
+	for url, want := range map[string]string{
+		"https://app.example.com/billing": "Upgrade your plan at https://app.example.com/billing to continue.",
+		"/billing":                        "Upgrade your plan to continue.",
+		"":                                "Upgrade your plan to continue.",
+	} {
+		if got := UpgradeAdvice(url); got != want {
+			t.Errorf("UpgradeAdvice(%q) = %q, want %q", url, got, want)
+		}
+	}
+}

@@ -86,6 +86,7 @@ type DomainHandler struct {
 	cnameTarget string
 	cfZone      CFZoneManager     // nil = v1 mode (TXT verification), non-nil = v2 (CF Zone)
 	planLimits  DomainPlanLimiter // nil only where no plan is enforced (no database: dev and tests)
+	upgradeURL  string            // where a plan limit refusal points; empty is the console's own path
 }
 
 // NewDomainHandler creates a new DomainHandler.
