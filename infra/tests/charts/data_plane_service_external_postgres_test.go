@@ -163,3 +163,58 @@ func TestDataPlaneService_NoImagePullSecretByDefault(t *testing.T) {
 		t.Errorf("the Deployment names a pull secret nothing writes:\n%s", dep.raw)
 	}
 }
+
+// The platform's PostgreSQL refuses a plaintext connection, so a service that uses it
+// names the Secret holding the CA that signed its certificate: the chart mounts it and
+// asks the driver to verify the certificate and the host name against it.
+var externalPostgresTLSValues = strings.Replace(externalSecretValues,
+	"    port: 5432\n", "    port: 5432\n    caSecret: platform-postgres-ca\n", 1)
+
+func TestDataPlaneService_ExternalPostgresVerifiesTheServerAgainstItsCA(t *testing.T) {
+	docs := renderDataPlane(t, externalPostgresTLSValues)
+	dep := findDoc(t, docs, "Deployment", "loopzero-memory")
+	w := asWorkload(t, dep)
+
+	var uri string
+	for _, e := range w.Spec.Template.Spec.Containers[0].Env {
+		if e.Name == "LOOPTRACE_PG_URI" {
+			uri = e.Value
+		}
+	}
+	if !strings.HasSuffix(uri, "/looptrace?sslmode=verify-full&sslrootcert=/etc/postgres-ca/ca.crt") {
+		t.Errorf("LOOPTRACE_PG_URI does not verify the server: %q", uri)
+	}
+	for _, want := range []string{
+		"secretName: platform-postgres-ca",
+		"mountPath: /etc/postgres-ca",
+	} {
+		if !strings.Contains(dep.raw, want) {
+			t.Errorf("the Deployment lacks %q", want)
+		}
+	}
+}
+
+func TestDataPlaneService_ExternalPostgresWithoutACAKeepsThePlainURI(t *testing.T) {
+	dep := findDoc(t, renderDataPlane(t, externalSecretValues), "Deployment", "loopzero-memory")
+	if strings.Contains(dep.raw, "sslmode") || strings.Contains(dep.raw, "postgres-ca") {
+		t.Errorf("TLS settings rendered with no postgres.external.caSecret:\n%s", dep.raw)
+	}
+}
+
+// The operator applies a changed password at once only to a Secret carrying this label;
+// without it the role keeps the old password until the operator's cache is refreshed.
+func TestDataPlaneService_PostgresRoleSecretAsksTheOperatorToReload(t *testing.T) {
+	d := findDoc(t, renderDataPlane(t, externalSecretValues), "ExternalSecret", "looptrace-postgres-role")
+	if !strings.Contains(d.raw, `cnpg.io/reload: "true"`) {
+		t.Errorf("the role Secret lacks the cnpg.io/reload label:\n%s", d.raw)
+	}
+}
+
+// A Service named after the product makes Kubernetes inject <NAME>_PORT=tcp://... into
+// every pod of the namespace, which is the variable the product reads its port from.
+func TestDataPlaneService_PodsTakeNoServiceLinks(t *testing.T) {
+	dep := findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopzero-memory")
+	if !strings.Contains(dep.raw, "enableServiceLinks: false") {
+		t.Errorf("the pod takes service links:\n%s", dep.raw)
+	}
+}

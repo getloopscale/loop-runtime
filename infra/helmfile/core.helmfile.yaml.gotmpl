@@ -855,6 +855,13 @@ releases:
         storage:
           size: {{ .Values | get "platformPostgres.storage" "5Gi" | quote }}
           storageClass: {{ .Values | get "underlyingStorageClass" "" | quote }}
+        walStorage:
+          size: {{ .Values | get "platformPostgres.walStorage" "" | quote }}
+          storageClass: {{ .Values | get "underlyingStorageClass" "" | quote }}
+        resources:
+          cpu: {{ .Values | get "platformPostgres.cpu" "500m" | quote }}
+          memory: {{ .Values | get "platformPostgres.memory" "512Mi" | quote }}
+        parameters: {{ .Values | get "platformPostgres.parameters" dict | toJson }}
         databases: {{ .Values | get "platformPostgres.databases" list | toJson }}
 
   # The data plane (#446): memory, RAG and lens, one release each of one chart, every

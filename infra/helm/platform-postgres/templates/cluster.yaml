@@ -10,13 +10,59 @@ metadata:
 spec:
   instances: {{ .Values.instances }}
   imageName: {{ required "platform-postgres: image is required" .Values.image | quote }}
+  # A budget over one instance allows no disruption at all, so no node holding it could be
+  # drained. With standbys the operator switches over first and the budget protects them.
+  enablePDB: {{ gt (int .Values.instances) 1 }}
+  {{- if gt (int .Values.instances) 1 }}
+  # Promote a standby before the primary restarts, so an update costs a switchover and
+  # not the primary's downtime.
+  primaryUpdateMethod: switchover
+  {{- end }}
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: {{ .Values.spread.topologyKey | quote }}
+    podAntiAffinityType: {{ .Values.spread.type }}
+  bootstrap:
+    initdb:
+      # Detects a page the storage corrupted. PostgreSQL 16 leaves it off, and it can
+      # only be chosen when the cluster is created.
+      dataChecksums: true
   storage:
     size: {{ .Values.storage.size }}
     {{- with .Values.storage.storageClass }}
     storageClass: {{ . | quote }}
     {{- end }}
+  {{- with .Values.walStorage.size }}
+  # WAL on its own volume: a full data volume cannot stop WAL from being written, and
+  # the two are sized apart. The operator does not support removing it once set.
+  walStorage:
+    size: {{ . }}
+    {{- with $.Values.walStorage.storageClass }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  # Requests equal to limits put the pod in the Guaranteed class: it is the last to be
+  # evicted and its memory is never overcommitted.
   resources:
-    {{- toYaml .Values.resources | nindent 4 }}
+    requests: { cpu: {{ .Values.resources.cpu | quote }}, memory: {{ .Values.resources.memory | quote }} }
+    limits: { cpu: {{ .Values.resources.cpu | quote }}, memory: {{ .Values.resources.memory | quote }} }
+  postgresql:
+    # The operator ends pg_hba with `host all all all scram-sha-256`, which admits a
+    # plaintext connection. The first matching rule wins and these come before it.
+    pg_hba:
+      - hostssl all all all scram-sha-256
+      - hostnossl all all all reject
+    {{- with .Values.parameters }}
+    parameters:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- if gt (int .Values.instances) 1 }}
+    # A commit is acknowledged once one standby has it, whichever answers first.
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: {{ .Values.synchronous.dataDurability }}
+    {{- end }}
   {{- with .Values.databases }}
   # Each service connects as its own role. The operator creates the role and keeps its
   # password equal to the Secret's, so rotating the Secret rotates the role.
@@ -49,3 +95,43 @@ spec:
   ensure: present
   databaseReclaimPolicy: retain
 {{- end }}
+---
+# Who reaches the cluster's pods: the operator (instance status and SQL), the other
+# instances (replication), the services that keep data here, and the metrics scraper.
+# Egress is left open: the pods reach the API server and the backup store.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    app.kubernetes.io/part-of: loopzero-data-plane
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: {{ .Release.Name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.network.operatorNamespace }}
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ .Release.Name }}
+      ports:
+        - { protocol: TCP, port: 8000 }
+        - { protocol: TCP, port: 5432 }
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.network.clientPodLabels | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.network.metricsNamespace }}
+      ports:
+        - { protocol: TCP, port: 9187 }

@@ -113,7 +113,7 @@ platformImages:
     loopzero-cloud: "develop-5b1003a"
     loopzero-dashboard: "develop-5b1003a"
     # getloopscale/looptrace publishes this one, public on GHCR.
-    looptrace: "develop-1f7060f"
+    looptrace: "develop-e98ec23"
 
 # The platform's own PostgreSQL, on CloudNativePG, for the data-plane services: one
 # Cluster on the core cluster and one database per service. RDS stays the control plane's
@@ -122,8 +122,17 @@ platformImages:
 platformPostgres:
   enabled: true
   image: "ghcr.io/cloudnative-pg/postgresql:16.14-minimal-trixie@sha256:9d1ace6dcb1e0cec5791f6ffa760ca78a45bdc42fecfe4700b9c498cfdfe5e4e"
+  # One instance, in one zone: no standby, so no synchronous commit and no failover. A
+  # production environment sets 3, which spreads them over zones and makes commits wait
+  # for one standby (infra/helm/platform-postgres).
   instances: 1
   storage: 5Gi
+  # WAL on a volume of its own, as production has it.
+  walStorage: 2Gi
+  # Each instance, as request and limit. Idle, the instance used 112Mi and 6m
+  # (measured 2026-11-26 with one database).
+  cpu: 500m
+  memory: 512Mi
   # One entry per service that keeps its data here. A service's entry goes in with its
   # release (dataPlane.services below): the release writes the Secret the role's password
   # is read from.

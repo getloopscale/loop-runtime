@@ -89,9 +89,10 @@
         "external": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["host", "port"],
+          "required": ["host", "port", "caSecret"],
           "properties": {
             "host": { "type": "string" },
+            "caSecret": { "type": "string" },
             "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
           }
         },

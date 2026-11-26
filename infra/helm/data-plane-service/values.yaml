@@ -84,6 +84,10 @@ postgres:
   external:
     host: ""
     port: 5432
+    # The Secret, in this namespace, whose ca.crt signed the server's certificate (the
+    # platform's cluster: <cluster>-ca). Set, the service connects with
+    # sslmode=verify-full against it; empty, the URI carries no TLS setting.
+    caSecret: ""
   # Where the volume mounts, and PGDATA when the image expects a subdirectory of it.
   dataPath: /var/lib/postgresql/data
   pgdata: ""

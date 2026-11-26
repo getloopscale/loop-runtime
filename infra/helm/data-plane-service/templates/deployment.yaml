@@ -25,6 +25,9 @@ spec:
         app.kubernetes.io/component: {{ $component }}
     spec:
       automountServiceAccountToken: false
+      # A Service named after the product would otherwise inject <NAME>_PORT=tcp://...,
+      # the very variable the product reads its port from.
+      enableServiceLinks: false
       {{- with $.Values.externalSecret.imagePull.secretName }}
       imagePullSecrets:
         - name: {{ . }}
@@ -102,6 +105,7 @@ spec:
             {{- toYaml $.Values.resources | nindent 12 }}
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
+            {{- include "dps.postgresCAMount" $ | nindent 12 }}
         {{- end }}
       containers:
         - name: {{ $component }}
@@ -145,6 +149,13 @@ spec:
             {{- toYaml $.Values.resources | nindent 12 }}
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
+            {{- include "dps.postgresCAMount" $ | nindent 12 }}
       volumes:
         - { name: tmp, emptyDir: {} }
+        {{- with $.Values.postgres.external.caSecret }}
+        - name: postgres-ca
+          secret:
+            secretName: {{ . }}
+            items: [{ key: ca.crt, path: ca.crt }]
+        {{- end }}
 {{- end }}
