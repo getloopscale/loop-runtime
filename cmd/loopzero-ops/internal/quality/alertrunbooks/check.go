@@ -234,7 +234,7 @@ func scanDirectory(root, relDir, dir string, entries []os.DirEntry, excepted map
 // the file names they SEEMED to have were guessed, and the guesses were probed and
 // returned Not Found. The real names were different and resolve. Probing what was
 // assumed instead of what the file says is evidence fabrication with an extra step.
-const canonicalRepo = "loopzero"
+const canonicalRepo = "loop-runtime"
 
 var runbookURLRe = regexp.MustCompile(`runbook_url:\s*"([^"]+)"`)
 var blobRe = regexp.MustCompile(`^https://github\.com/([^/]+)/([^/]+)/blob/[^/]+/(.+)$`)

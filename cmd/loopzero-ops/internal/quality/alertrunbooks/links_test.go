@@ -91,7 +91,7 @@ func TestDoesNotFlagOwnRepoPathThatExists(t *testing.T) {
 // says is evidence fabrication with an extra step.
 //
 // The rule that survives the measurement is by REPOSITORY: if the URL points at this repo
-// (`loopzero`), the path is checked on disk, whatever the org; if it points at another repo,
+// (`loop-runtime`), the path is checked on disk, whatever the org; if it points at another repo,
 // the path does not exist in this tree by definition, and asserting it does not exist in
 // THAT one would require the network — so it is counted as unverifiable, not accused.
 func TestDifferentOrgOnSameRepoIsStillCheckedOnDisk(t *testing.T) {
@@ -103,12 +103,12 @@ func TestDifferentOrgOnSameRepoIsStillCheckedOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeRule(t, root, "prometheusrule-test.yaml", ruleWith(
-		"https://github.com/getloopscaledev/loopzero/blob/develop/docs/runbooks/exists.md"))
+		"https://github.com/getloopscaledev/loop-runtime/blob/develop/docs/runbooks/exists.md"))
 
 	out := Check(Config{Root: root})
 	if len(out.DeadLinks) != 0 {
 		t.Errorf("flagged as dead a link whose file EXISTS, only because the org in the path differs. "+
-			"`getloopscaledev/loopzero` redirects to `getloopscale/loop-runtime` — it is the same repository: %+v", out.DeadLinks)
+			"`getloopscaledev/loop-runtime` redirects to `getloopscale/loop-runtime` — it is the same repository: %+v", out.DeadLinks)
 	}
 	if out.UnverifiableLinks != 0 {
 		t.Errorf("counted as unverifiable a link to this same repo, which can be checked on disk")
