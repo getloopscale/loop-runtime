@@ -96,6 +96,9 @@ repositories:
   # The AWS Load Balancer Controller (profile.awsLoadBalancerController).
   - name: eks
     url: https://aws.github.io/eks-charts
+  # CloudNativePG, the operator behind the platform's own PostgreSQL (platformPostgres).
+  - name: cnpg
+    url: https://cloudnative-pg.github.io/charts
 
 # ---------------------------------------------------------------------------
 # Pre-sync secret generation (called by the CLI orchestrator BEFORE this
@@ -826,11 +829,36 @@ releases:
           enabled: {{ .Values.profile.loopzeroCloud }}
           host: {{ .Values | get "uiBaseUrl" "" | trimPrefix "https://" | trimSuffix "/" | quote }}
 
+  # The platform's own PostgreSQL for data-plane services (platformPostgres): the
+  # CloudNativePG operator, and one Cluster with a database and a login role per service.
+  # The managed database of the environment (RDS) stays the control plane's.
+  - name: cloudnative-pg
+    namespace: cnpg-system
+    chart: cnpg/cloudnative-pg
+    version: 0.29.2
+    installed: {{ .Values | get "platformPostgres.enabled" false }}
+
+  - name: platform-postgres
+    namespace: loopzero-data-plane
+    chart: ../helm/platform-postgres
+    installed: {{ .Values | get "platformPostgres.enabled" false }}
+    needs:
+      - cnpg-system/cloudnative-pg
+    values:
+      - image: {{ .Values | get "platformPostgres.image" "" | quote }}
+        instances: {{ .Values | get "platformPostgres.instances" 1 }}
+        storage:
+          size: {{ .Values | get "platformPostgres.storage" "5Gi" | quote }}
+          storageClass: {{ .Values | get "underlyingStorageClass" "" | quote }}
+        databases: {{ .Values | get "platformPostgres.databases" list | toJson }}
+
   # The data plane (#446): memory, RAG and lens, one release each of one chart, every
   # service with its own Postgres. dev-public ran them as compose containers started from
   # directories that no longer exist; this is their versioned definition. Secrets come from
   # generate-secrets.sh (loopzero-data-plane namespace), images from `platformImages`.
-{{- range $svc := list "loopzero-memory" "loopzero-rag" "loopzero-lens" }}
+  # `looptrace` is the lens under its current name: staging runs it on platform-postgres,
+  # with its Secrets written by External Secrets.
+{{- range $svc := list "loopzero-memory" "loopzero-rag" "loopzero-lens" "looptrace" }}
   - name: {{ $svc }}
     namespace: loopzero-data-plane
     chart: ../helm/data-plane-service

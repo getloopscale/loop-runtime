@@ -1,0 +1,51 @@
+{{- /* SPDX-License-Identifier: Apache-2.0 */ -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    app.kubernetes.io/part-of: loopzero-data-plane
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  instances: {{ .Values.instances }}
+  imageName: {{ required "platform-postgres: image is required" .Values.image | quote }}
+  storage:
+    size: {{ .Values.storage.size }}
+    {{- with .Values.storage.storageClass }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+  resources:
+    {{- toYaml .Values.resources | nindent 4 }}
+  {{- with .Values.databases }}
+  # Each service connects as its own role. The operator creates the role and keeps its
+  # password equal to the Secret's, so rotating the Secret rotates the role.
+  managed:
+    roles:
+      {{- range . }}
+      - name: {{ required "platform-postgres: databases[].owner is required" .owner | quote }}
+        ensure: present
+        login: true
+        passwordSecret:
+          name: {{ required "platform-postgres: databases[].passwordSecret is required" .passwordSecret | quote }}
+      {{- end }}
+  {{- end }}
+{{- range .Values.databases }}
+---
+# Retain: deleting this object, or the release, leaves the database and its data in place.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: {{ $.Release.Name }}-{{ .name }}
+  labels:
+    app.kubernetes.io/name: {{ $.Release.Name }}
+    app.kubernetes.io/part-of: loopzero-data-plane
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+spec:
+  cluster:
+    name: {{ $.Release.Name }}
+  name: {{ required "platform-postgres: databases[].name is required" .name | quote }}
+  owner: {{ .owner | quote }}
+  ensure: present
+  databaseReclaimPolicy: retain
+{{- end }}

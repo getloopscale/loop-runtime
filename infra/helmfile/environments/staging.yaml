@@ -113,6 +113,27 @@ platformImages:
     loopzero-cloud: "develop-9adbf29"
     loopzero-dashboard: "develop-3c0fc04"
 
+# The platform's own PostgreSQL, on CloudNativePG, for the data-plane services: one
+# Cluster on the core cluster and one database per service. RDS stays the control plane's
+# database. One instance: staging has no failover to test, and the nightly rebuild
+# recreates the data.
+platformPostgres:
+  enabled: true
+  image: "ghcr.io/cloudnative-pg/postgresql:16.14-minimal-trixie@sha256:9d1ace6dcb1e0cec5791f6ffa760ca78a45bdc42fecfe4700b9c498cfdfe5e4e"
+  instances: 1
+  storage: 5Gi
+  # One entry per service that keeps its data here. looptrace's goes in with its release
+  # (dataPlane.services below): the release writes the Secret its role's password is read
+  # from, so the two are turned on together.
+  #   - { name: looptrace, owner: looptrace, passwordSecret: looptrace-postgres-role }
+  databases: []
+
+# The data-plane services staging runs: none yet. `looptrace` (values/staging/
+# looptrace.yaml.gotmpl) is added here, with platformImages.tags.looptrace and its database
+# above, once getloopscale/looptrace publishes its first image.
+dataPlane:
+  services: []
+
 registries:
   docrPrefix: "ghcr.io/getloopscale/"
 

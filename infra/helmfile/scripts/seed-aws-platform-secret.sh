@@ -46,6 +46,10 @@ wanted = {
     "kratos-secret-cipher": "alnum32",
     "hydra-secret-system": "alnum32",
     "hydra-secret-cookie": "alnum32",
+    # looptrace: its role on platform-postgres, and the token its first platform-admin
+    # key is minted with.
+    "looptrace-db-password": "hex32",
+    "looptrace-admin-bootstrap-token": "hex32",
     # Resend's API key is issued by Resend; the placeholder fails loudly on the first
     # send until the operator puts the real key in the secret.
     "resend-api-key": "placeholder",
