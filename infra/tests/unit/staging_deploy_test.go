@@ -313,6 +313,31 @@ func TestStagingDeployKeepsTheConsolePinsFromGit(t *testing.T) {
 	}
 }
 
+// looptrace is built by getloopscale/looptrace, so no commit of this repository publishes
+// it: the only way its image moves is the pin in git. A deploy that kept the previous
+// deploy's tag for it would never roll a new one out.
+func TestStagingDeployFollowsTheGitPinOfAnImageAnotherRepositoryBuilds(t *testing.T) {
+	h := newDeployHarness(t)
+	h.commit(stagingPins + "    looptrace: \"develop-aaaaaaa\"\n")
+	h.artifactsRun("completed", "success")
+	if out, err := h.deploy(); err != nil {
+		t.Fatalf("first deploy failed: %v\n%s", err, out)
+	}
+	h.commit(stagingPins + "    looptrace: \"develop-bbbbbbb\"\n")
+
+	if out, err := h.deploy(); err != nil {
+		t.Fatalf("second deploy failed: %v\n%s", err, out)
+	}
+
+	calls := h.deployedTags()
+	if len(calls) != 2 {
+		t.Fatalf("the platform ran %d times, want 2", len(calls))
+	}
+	if got := calls[1]["looptrace"]; got != "develop-bbbbbbb" {
+		t.Errorf("looptrace deployed as %q after its pin moved to develop-bbbbbbb", got)
+	}
+}
+
 func TestStagingDeployKeepsThePreviousDeploysTagForAnImageTheCommitDidNotBuild(t *testing.T) {
 	h := newDeployHarness(t)
 	first := h.commit(stagingPins + "# first\n")

@@ -15,9 +15,9 @@
 #      the run is re-run: the failed attempt is remembered, not the commit.
 #   3. Pins each engine image to the newest develop build: the image the commit
 #      published, or else the tag the previous deploy ran. The first deploy starts
-#      from the tags platformImages.tags pins in the staging environment. The console
-#      images (loopzero-cloud, loopzero-dashboard) come from getloopscale/console and
-#      keep the pins in git.
+#      from the tags platformImages.tags pins in the staging environment. The images
+#      other repositories build (loopzero-cloud and loopzero-dashboard from
+#      getloopscale/console, looptrace from getloopscale/looptrace) keep the pins in git.
 #   4. Runs `task staging:platform` at that commit with those pins, and reports
 #      staging/deploy success or failure on the commit.
 #   5. After a successful deploy, validates the commit with infra/staging/validate.sh of
@@ -40,8 +40,9 @@ PLATFORM_CMD="${DEPLOY_PLATFORM_CMD:-task staging:platform}"
 # How long a commit with no artifacts run yet is waited for before it is deployed with
 # the images it already has (a commit whose paths no build watches).
 RUN_GRACE_SECONDS="${DEPLOY_RUN_GRACE_SECONDS:-900}"
-# The images getloopscale/console publishes; their pins stay the ones in git.
-CONSOLE_IMAGES="loopzero-cloud loopzero-dashboard"
+# The images other repositories publish (getloopscale/console, getloopscale/looptrace). No
+# commit here builds them, so their pins are always the ones in git.
+EXTERNAL_IMAGES="loopzero-cloud loopzero-dashboard looptrace"
 STATUS_URL_BASE="${DEPLOY_STATUS_URL_BASE:-https://staging.getloopscale.com}"
 # The validation of a deployed commit, given its SHA. Empty: the checkout's validate.sh.
 VALIDATE_CMD="${DEPLOY_VALIDATE_CMD:-}"
@@ -134,7 +135,7 @@ published() {
 }
 next=$(cat "$pins")
 for image in $(jq -r 'keys[]' "$STATE_DIR/git-pins.json"); do
-  if [[ " $CONSOLE_IMAGES " == *" $image "* ]]; then
+  if [[ " $EXTERNAL_IMAGES " == *" $image "* ]]; then
     next=$(jq --arg image "$image" --slurpfile git "$STATE_DIR/git-pins.json" '.[$image] = $git[0][$image]' <<<"$next")
   elif published "$image" "develop-$short"; then
     log "$image: develop-$short"
