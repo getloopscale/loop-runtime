@@ -430,6 +430,10 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 		"passed in by whoever assembles the server (setupServerConfig, setup_server.go) — nil when the caller did not build it") {
 		return
 	}
+	// The plan caps custom domains per environment (custom_domains_per_env).
+	if cfg.Guards.PlanLimiter != nil {
+		cfg.DomainHandler.SetPlanLimiter(cfg.Guards.PlanLimiter)
+	}
 	r.Get("/api/v1/domains", cfg.DomainHandler.List)
 	r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
 	r.Get("/api/v1/domains/{domain}/dns-records", cfg.DomainHandler.ListDNSRecords)

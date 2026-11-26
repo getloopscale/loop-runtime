@@ -81,6 +81,10 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.allowedByPlan(ctx, w, uc.TenantID, req) {
+		return
+	}
+
 	// v2 (CF Zone Management): create zone + scan DNS + set CNAME
 	if h.cfZone != nil {
 		h.createWithCFZone(w, r, ctx, uc, req)
