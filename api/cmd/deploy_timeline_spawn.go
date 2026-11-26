@@ -13,6 +13,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/builds"
 
 	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 	"github.com/getloopscale/loopzero/api/internal/timeline/aggregator"
 )
 
@@ -56,7 +57,7 @@ func makeDeployTimelineSpawn(eventStore *store.PostgresEventStore) builds.Deploy
 // version stood in for the missing signal with a wall-clock ladder; the event
 // subscription replaced it.
 type sseTimelineQuerier struct {
-	eventStore *store.PostgresEventStore
+	eventStore timelineEventReader
 	mu         sync.Mutex
 	pending    []timelineTransition
 	seen       map[string]bool
@@ -123,6 +124,12 @@ func eventTypeToCanonicalTransitions(eventType string) []string {
 		return []string{"ACTIVE", "DEPLOY_IN_PROGRESS", "DEPLOY_FAILED"}
 	}
 	return nil
+}
+
+// timelineEventReader reads the events of one deploy in the order they were
+// written.
+type timelineEventReader interface {
+	GetAfter(ctx context.Context, buildID string, afterID int64) ([]ports.SSEEvent, error)
 }
 
 // timelineTransition is one state waiting to be handed to the aggregator, with

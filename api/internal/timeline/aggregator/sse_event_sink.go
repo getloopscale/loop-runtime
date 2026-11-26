@@ -34,7 +34,23 @@ func NewSSEEventSink(a SSEAppender) *SSEEventSink {
 	return &SSEEventSink{Appender: a}
 }
 
+// SSEOnceAppender is a store that can write an event only when its stream holds
+// none of that type yet, as one decision.
+type SSEOnceAppender interface {
+	AppendOnce(ctx context.Context, buildID string, eventType string, data json.RawMessage) (id int64, written bool, err error)
+}
+
 // AppendDeployTimelineEvent satisfies the EventSink interface.
+//
+// A phase event is written once per deploy when the store can promise that. Two
+// aggregators walk the same deploy while a restart is being recovered from (the
+// one the submit started and the one that resumed the timeline), and both reach
+// the same phases. A degraded event is an occurrence and may repeat.
 func (s *SSEEventSink) AppendDeployTimelineEvent(ctx context.Context, deployID, eventType string, data json.RawMessage) (int64, error) {
-	return s.Appender.Append(ctx, deployID, eventType, data)
+	once, ok := s.Appender.(SSEOnceAppender)
+	if !ok || eventType == AggregatorDegradedEventType {
+		return s.Appender.Append(ctx, deployID, eventType, data)
+	}
+	id, _, err := once.AppendOnce(ctx, deployID, eventType, data)
+	return id, err
 }

@@ -145,6 +145,17 @@ func startLeaderLoops(
 			l.Start(ctx)
 		}()
 	}
+
+	// Deploy timelines a restart left open are finished here, on the leader, so
+	// one process looks for them however many replicas run.
+	if stores.PgEventStore != nil {
+		resumer := newTimelineResumer(stores.PgEventStore, logger)
+		bgWg.Add(1)
+		go func() {
+			defer bgWg.Done()
+			resumer.Start(ctx)
+		}()
+	}
 }
 
 // waitForBackgroundGoroutines waits up to 30s for background goroutines to stop.

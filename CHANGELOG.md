@@ -416,6 +416,7 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+- A deploy timeline no longer stays open for good when the API restarts while the deploy is in flight. The leader looks every minute for builds whose events imply timeline states that nobody wrote, and finishes them. A timeline phase event is now written once per build, so the resumed aggregator and one that is still alive cannot write it twice (#171).
 
 - The staging deploy follows the pin in git for looptrace, an image another repository builds. It kept the previous deploy's tag, so a moved pin never rolled out (#178) (#177).
 - Staging runs the looptrace image that mints keys as a role subject to row-level security, where `POST /v1/admin/keys` answered `500` (getloopscale/looptrace#7) (#175).
