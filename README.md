@@ -49,7 +49,7 @@ apps:
 | `api/` | The HTTP API in Go: projects, environments, builds, releases, secrets, domains, previews, billing and metering. The OpenAPI description is in `api/openapi/`. |
 | `operators/` | Four Kubernetes operators built with controller-runtime: tenant, app, preview and platform. |
 | `pkg/` | Go libraries shared by the API and the operators: typed errors, logging, naming, conditions, state machines, circuit breaker. |
-| `cmd/loopruntime-ops/` | The operations and quality-gate binary used by the task runner. |
+| `cmd/loop-runtime-ops/` | The operations and quality-gate binary used by the task runner. |
 | `charts/` | Twelve Helm charts for the API, the operators, the CRDs, the dashboard, monitoring and admission policies. |
 | `infra/` | Helmfile releases, bootstrap Helm charts, k3d cluster definitions, Tilt setup and the remaining Pulumi projects. |
 | `policies/`, `rules/` | Admission policies and the rules the quality gates check. |
@@ -79,8 +79,8 @@ You need Go 1.26, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev),
 and kubectl.
 
 The repository is a Go workspace with nine modules and no `go.mod` at the root. One of the
-modules is the sibling repository `loopruntime-contracts`, which `go.work` expects at
-`../loopruntime-contracts`. Clone it next to this one, or the workspace does not build.
+modules is the sibling repository `loop-runtime-contracts`, which `go.work` expects at
+`../loop-runtime-contracts`. Clone it next to this one, or the workspace does not build.
 
 ### Setup
 
@@ -101,7 +101,7 @@ task test                           # unit tests, lint and manifest validation
 cd api               && go test ./...
 cd pkg               && go test ./...
 cd operators         && go test ./...
-cd cmd/loopruntime-ops  && go test ./...
+cd cmd/loop-runtime-ops  && go test ./...
 ```
 
 ## Branches

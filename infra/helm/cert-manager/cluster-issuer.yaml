@@ -2,10 +2,10 @@
 #
 # Architecture:
 #   1. selfsigned-bootstrap: a ClusterIssuer that can issue self-signed certificates
-#   2. loopruntime-ca: a CA Certificate issued by the bootstrap issuer (isCA: true)
-#   3. loopruntime-ca-issuer: a ClusterIssuer that uses loopruntime-ca to issue real certificates
+#   2. loop-runtime-ca: a CA Certificate issued by the bootstrap issuer (isCA: true)
+#   3. loop-runtime-ca-issuer: a ClusterIssuer that uses loop-runtime-ca to issue real certificates
 #
-# For production: replace loopruntime-ca-issuer with an ACME-backed ClusterIssuer
+# For production: replace loop-runtime-ca-issuer with an ACME-backed ClusterIssuer
 # (e.g., Let's Encrypt) and update the tlsStore default certificate.
 ---
 apiVersion: cert-manager.io/v1
@@ -18,12 +18,12 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: loopruntime-ca
+  name: loop-runtime-ca
   namespace: cert-manager
 spec:
   isCA: true
   commonName: LoopRuntime Platform CA
-  secretName: loopruntime-ca-secret
+  secretName: loop-runtime-ca-secret
   duration: 87600h  # 10 years
   renewBefore: 8760h  # 1 year
   privateKey:
@@ -37,7 +37,7 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
-  name: loopruntime-ca-issuer
+  name: loop-runtime-ca-issuer
 spec:
   ca:
-    secretName: loopruntime-ca-secret
+    secretName: loop-runtime-ca-secret

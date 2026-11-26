@@ -40,8 +40,8 @@ func labelsFor(appName, tenant, env string) *fakeLabelReader {
 // The labels are authoritative even where every segment of the name contains a
 // hyphen — the case a positional parse of the name gets wrong.
 func TestLookupTenantEnv_ReadsTheIdentityFromTheLabels(t *testing.T) {
-	const appName = "tn-loopruntime-web-j-rollout-a"
-	reader := labelsFor(appName, "tn-loopruntime", "j-rollout-a")
+	const appName = "tn-loop-runtime-web-j-rollout-a"
+	reader := labelsFor(appName, "tn-loop-runtime", "j-rollout-a")
 	a := newActivatorForLookupTest().WithAppLabelReader(reader)
 
 	tenant, env, err := a.lookupTenantEnv(context.Background(), appName)
@@ -49,8 +49,8 @@ func TestLookupTenantEnv_ReadsTheIdentityFromTheLabels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if tenant != "tn-loopruntime" || env != "j-rollout-a" {
-		t.Errorf("got (%q, %q), want (tn-loopruntime, j-rollout-a)", tenant, env)
+	if tenant != "tn-loop-runtime" || env != "j-rollout-a" {
+		t.Errorf("got (%q, %q), want (tn-loop-runtime, j-rollout-a)", tenant, env)
 	}
 	if reader.calls != 1 {
 		t.Errorf("expected exactly 1 reader call, got %d", reader.calls)

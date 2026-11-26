@@ -1,13 +1,8 @@
 {
-  "note": "Set of ADJUDICATED trufflehog candidates. A candidate outside this set FAILS the gate until someone rewrites it with `loopruntime-ops quality trufflehog-scan --write` — and the diff of that rewrite is the adjudication. `--write` REFUSES while any live finding exists: this list adjudicates \"this is not a secret\", never \"this secret may live here\". `id` is a truncated sha256(detector+raw) — no secret material lives in this file. See B-143.",
+  "note": "Set of ADJUDICATED trufflehog candidates. A candidate outside this set FAILS the gate until someone rewrites it with `loop-runtime-ops quality trufflehog-scan --write` — and the diff of that rewrite is the adjudication. `--write` REFUSES while any live finding exists: this list adjudicates \"this is not a secret\", never \"this secret may live here\". `id` is a truncated sha256(detector+raw) — no secret material lives in this file. See B-143.",
   "entries": [
     {
       "id": "9caeb962635860e1",
-      "detector": "Postgres",
-      "first_seen_in": ""
-    },
-    {
-      "id": "b2f0e728cf5f3eb3",
       "detector": "Postgres",
       "first_seen_in": ""
     },
@@ -22,16 +17,6 @@
       "first_seen_in": ""
     },
     {
-      "id": "2edc404c381aabeb",
-      "detector": "JDBC",
-      "first_seen_in": ".claude/skills/cnpg-audit/okf/ecosystem/external-secrets-integration.md"
-    },
-    {
-      "id": "f54530ae0e617efc",
-      "detector": "PrivateKey",
-      "first_seen_in": ".claude/skills/cnpg-audit/okf/samples/cluster-example-projected-volume.md"
-    },
-    {
       "id": "34570f0c0dd3ac46",
       "detector": "DigitalOceanToken",
       "first_seen_in": "BACKLOG.md"
@@ -42,22 +27,12 @@
       "first_seen_in": "api/internal/config/config_test.go"
     },
     {
-      "id": "0414b2464cc40598",
-      "detector": "Postgres",
-      "first_seen_in": "api/internal/config/config_test.go"
-    },
-    {
-      "id": "3a8187c21c8603f1",
-      "detector": "Postgres",
-      "first_seen_in": "api/internal/config/config_test.go"
-    },
-    {
-      "id": "6203c9985d04df67",
-      "detector": "Postgres",
-      "first_seen_in": "api/internal/config/config_test.go"
-    },
-    {
       "id": "8998bccf46bffd07",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "8c0e35a6a1225635",
       "detector": "Postgres",
       "first_seen_in": "api/internal/config/config_test.go"
     },
@@ -72,7 +47,17 @@
       "first_seen_in": "api/internal/config/config_test.go"
     },
     {
-      "id": "fe865d4199dccc08",
+      "id": "cbaef28347d4eea8",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "d5fdaae0b9fd55de",
+      "detector": "Postgres",
+      "first_seen_in": "api/internal/config/config_test.go"
+    },
+    {
+      "id": "e29411e2efc21262",
       "detector": "Postgres",
       "first_seen_in": "api/internal/config/config_test.go"
     },
@@ -97,24 +82,19 @@
       "first_seen_in": "api/internal/source/gitea_store.go"
     },
     {
-      "id": "dad706e7b2385151",
-      "detector": "URI",
-      "first_seen_in": "api/internal/source/gitea_store.go"
-    },
-    {
       "id": "4363e90908857b20",
       "detector": "Gitlab",
       "first_seen_in": "api/main"
     },
     {
-      "id": "a7f0a2be2e2315e4",
+      "id": "d658132910544a9f",
       "detector": "Postgres",
-      "first_seen_in": "api/tests/integration/project_cap_hermetic_m5_test.go"
+      "first_seen_in": "api/tests/integration/project_cap_deploy_path_test.go"
     },
     {
       "id": "396a7f029c02708a",
       "detector": "Postgres",
-      "first_seen_in": "api/tests/integration/project_cap_m4_test.go"
+      "first_seen_in": "api/tests/integration/project_cap_hermetic_m5_test.go"
     },
     {
       "id": "4df01e360d804595",
@@ -127,24 +107,19 @@
       "first_seen_in": "cli/src/installer/components.ts"
     },
     {
-      "id": "f32b2072e9084d39",
-      "detector": "Postgres",
-      "first_seen_in": "cli/src/installer/components.ts"
-    },
-    {
       "id": "5f1ae974c1352fa1",
       "detector": "Postgres",
       "first_seen_in": "cli/src/installer/profiles/example-values.yaml"
     },
     {
+      "id": "abd38b5e3fb0e34e",
+      "detector": "Postgres",
+      "first_seen_in": "code-review-output/code-review.db"
+    },
+    {
       "id": "126b9cbe3bfbd4fd",
       "detector": "Eraser",
       "first_seen_in": "docs/architecture/eraser-diagrams-index.md"
-    },
-    {
-      "id": "3752c28fa807eb85",
-      "detector": "Postgres",
-      "first_seen_in": "docs/knowledge-base/implementations/dashboard-badge-data-plane-poller/READY_TO_READ_TEAM-2026-07-02.md"
     },
     {
       "id": "49ba200dbd1b4eaa",
@@ -157,14 +132,14 @@
       "first_seen_in": "docs/plans/dogfood-2026-05-08-fixes-plan.md"
     },
     {
-      "id": "6a867b62662cf001",
-      "detector": "Postgres",
-      "first_seen_in": "docs/plans/dogfood-2026-05-08-fixes-plan.md"
-    },
-    {
       "id": "81a963f476bdf6f3",
       "detector": "Docker",
       "first_seen_in": "docs/plans/harbor-gaps-resolution.md"
+    },
+    {
+      "id": "3e38a9c701abf564",
+      "detector": "Postgres",
+      "first_seen_in": "docs/plans/multi-cloud-aws-do-plan.md"
     },
     {
       "id": "f7e813169b5bcf82",
@@ -179,12 +154,7 @@
     {
       "id": "a2178346a1b89310",
       "detector": "Postgres",
-      "first_seen_in": "infra/helmfile/values/dev-public/loopruntime-app-operator.yaml.gotmpl"
-    },
-    {
-      "id": "fbad722999310ac4",
-      "detector": "Postgres",
-      "first_seen_in": "infra/helmfile/values/dev-public/loopruntime-app-operator.yaml.gotmpl"
+      "first_seen_in": "infra/helmfile/values/dev-public/loopzero-app-operator.yaml.gotmpl"
     },
     {
       "id": "5eb14252c7251332",
@@ -197,19 +167,29 @@
       "first_seen_in": "infra/helmfile/values/drill/ory-kratos.yaml.gotmpl"
     },
     {
+      "id": "2d7847849e71c3d9",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_external_postgres_test.go"
+    },
+    {
+      "id": "48a270312849094d",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tests/charts/data_plane_service_external_postgres_test.go"
+    },
+    {
       "id": "1e8e04a1847bd456",
       "detector": "Postgres",
       "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
     },
     {
-      "id": "cb12f39680f62610",
+      "id": "22dd168dbbeff5eb",
       "detector": "Postgres",
       "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
     },
     {
-      "id": "2d7847849e71c3d9",
+      "id": "27d9a0d7152f9e30",
       "detector": "Postgres",
-      "first_seen_in": "infra/tests/charts/data_plane_service_external_postgres_test.go"
+      "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
     },
     {
       "id": "02c34a9d8d871290",
@@ -223,11 +203,6 @@
     },
     {
       "id": "8e400d3556571909",
-      "detector": "Postgres",
-      "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
-    },
-    {
-      "id": "e71b9a79652dff2a",
       "detector": "Postgres",
       "first_seen_in": "infra/tests/scripts/drill-helmfile-bootstrap_test.sh"
     },
@@ -257,91 +232,6 @@
       "first_seen_in": "infra/tests/snapshots/helmfile-drill-phase1.yaml"
     },
     {
-      "id": "58f11604ca8770e1",
-      "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
-    },
-    {
-      "id": "76118ab9f6e7a8b9",
-      "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
-    },
-    {
-      "id": "89e3207386bd09e7",
-      "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
-    },
-    {
-      "id": "8f009e0552c35796",
-      "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
-    },
-    {
-      "id": "a982da9b26fd712f",
-      "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
-    },
-    {
-      "id": "abd38b5e3fb0e34e",
-      "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
-    },
-    {
-      "id": "62283828d0b786e1",
-      "detector": "Docker",
-      "first_seen_in": "operators/internal/controller/tenant_harbor_test.go"
-    },
-    {
-      "id": "a355c3dccfdc0e90",
-      "detector": "Docker",
-      "first_seen_in": "operators/internal/tenant/registry_auth_merge_test.go"
-    },
-    {
-      "id": "3e38a9c701abf564",
-      "detector": "Postgres",
-      "first_seen_in": "pkg/pulumi/output/output_test.go"
-    },
-    {
-      "id": "8c0e35a6a1225635",
-      "detector": "Postgres",
-      "first_seen_in": "api/internal/config/config_test.go"
-    },
-    {
-      "id": "cbaef28347d4eea8",
-      "detector": "Postgres",
-      "first_seen_in": "api/internal/config/config_test.go"
-    },
-    {
-      "id": "d5fdaae0b9fd55de",
-      "detector": "Postgres",
-      "first_seen_in": "api/internal/config/config_test.go"
-    },
-    {
-      "id": "e29411e2efc21262",
-      "detector": "Postgres",
-      "first_seen_in": "api/internal/config/config_test.go"
-    },
-    {
-      "id": "d658132910544a9f",
-      "detector": "Postgres",
-      "first_seen_in": "api/tests/integration/project_cap_per_account_test.go"
-    },
-    {
-      "id": "48a270312849094d",
-      "detector": "Postgres",
-      "first_seen_in": "infra/tests/charts/data_plane_service_external_postgres_test.go"
-    },
-    {
-      "id": "22dd168dbbeff5eb",
-      "detector": "Postgres",
-      "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
-    },
-    {
-      "id": "27d9a0d7152f9e30",
-      "detector": "Postgres",
-      "first_seen_in": "infra/tests/charts/data_plane_service_test.go"
-    },
-    {
       "id": "b90d098e9272b026",
       "detector": "Postgres",
       "first_seen_in": "infra/tilt/controller-deployment.yaml"
@@ -355,6 +245,31 @@
       "id": "c7a09d220f638dbd",
       "detector": "Postgres",
       "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
+    },
+    {
+      "id": "58f11604ca8770e1",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+    },
+    {
+      "id": "89e3207386bd09e7",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+    },
+    {
+      "id": "a982da9b26fd712f",
+      "detector": "Postgres",
+      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+    },
+    {
+      "id": "62283828d0b786e1",
+      "detector": "Docker",
+      "first_seen_in": "operators/internal/controller/tenant_harbor_test.go"
+    },
+    {
+      "id": "a355c3dccfdc0e90",
+      "detector": "Docker",
+      "first_seen_in": "operators/internal/tenant/registry_auth_merge_test.go"
     }
   ]
 }

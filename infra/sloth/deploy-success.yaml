@@ -2,7 +2,7 @@
 # Measures the ratio of successful deploys to total deploy attempts.
 # Target: 99.5% of deploys succeed without manual intervention.
 version: "prometheus/v1"
-service: "loopruntime-deploys"
+service: "loop-runtime-deploys"
 labels:
   owner: "platform-team"
   tier: "product"
@@ -12,15 +12,15 @@ slos:
     description: "Percentage of deploys that reach a healthy URL without manual intervention."
     sli:
       events:
-        error_query: sum(rate(loopruntime_deploys_total{status!="success"}[{{.window}}]))
-        total_query: sum(rate(loopruntime_deploys_total[{{.window}}]))
+        error_query: sum(rate(loop_runtime_deploys_total{status!="success"}[{{.window}}]))
+        total_query: sum(rate(loop_runtime_deploys_total[{{.window}}]))
     alerting:
       name: LoopRuntimeDeploySuccessBudgetBurn
       labels:
         category: deploy
       annotations:
         summary: "Deploy success error budget burn rate is too high."
-        runbook: "Check build pipeline health. Investigate recent deploy failures via loopruntime_deploys_total{status=~'failed|error'}."
+        runbook: "Check build pipeline health. Investigate recent deploy failures via loop_runtime_deploys_total{status=~'failed|error'}."
       page_alert:
         labels:
           severity: critical

@@ -16,13 +16,13 @@ import (
 )
 
 // kubectlStub answers the three questions run-migrations.sh asks on the
-// fallback path: the loopruntime-api pod (absent), the postgresql pod (present), and
+// fallback path: the loop-runtime-api pod (absent), the postgresql pod (present), and
 // `exec`, which it forwards to whatever follows `--` so the psql stub below
 // serves it.
 const kubectlStub = `#!/usr/bin/env bash
 for a in "$@"; do
   case "$a" in
-    app=loopruntime-api) exit 0 ;;
+    app=loop-runtime-api) exit 0 ;;
     app.kubernetes.io/name=postgresql) printf 'postgresql-0'; exit 0 ;;
   esac
 done
@@ -108,7 +108,7 @@ func writeMigrations(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-// runFallback executes run-migrations.sh down its psql fallback (loopruntime-api pod
+// runFallback executes run-migrations.sh down its psql fallback (loop-runtime-api pod
 // absent) against the given migrations dir and initial schema_migrations row.
 func runFallback(t *testing.T, migrationsDir, initialVersion, initialDirty string) migrationRun {
 	t.Helper()
@@ -137,7 +137,7 @@ func runFallback(t *testing.T, migrationsDir, initialVersion, initialDirty strin
 		"PG_PASS=stub-password",
 		"MIGRATIONS_DIR="+migrationsDir,
 		"STATE_DIR="+stateDir,
-		"LOOPRUNTIME_MIGRATIONS_REQUIRE_API=true",
+		"LOOP_RUNTIME_MIGRATIONS_REQUIRE_API=true",
 	)
 	out, err := cmd.CombinedOutput()
 	code := 0

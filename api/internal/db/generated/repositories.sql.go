@@ -187,7 +187,7 @@ type LinkProjectRepositoryParams struct {
 // =========================================================================
 // project_repositories (project ↔ GitHub repo link)
 // =========================================================================
-// Idempotent re-link per `loopruntime connect` CLI contract: ON CONFLICT
+// Idempotent re-link per `loop-runtime connect` CLI contract: ON CONFLICT
 // (repo_full_name) DO UPDATE refreshes tenant/project/installation/
 // branch fields and bumps updated_at. The pre-INSERT lookup in the
 // route handler still rejects cross-tenant or cross-project re-links;
@@ -295,7 +295,7 @@ type UpsertGitHubInstallationParams struct {
 // project_repositories + github_installations tables.
 //
 // T2.1 (Batch A #3) of plan 2026-05-29-sqlc-migration-plan
-// v1.3. Backs `loopruntime connect` (project ↔ GitHub repo linkage) and the
+// v1.3. Backs `loop-runtime connect` (project ↔ GitHub repo linkage) and the
 // GitHub App webhook → installation lifecycle.
 //
 // Tenant predicate model:

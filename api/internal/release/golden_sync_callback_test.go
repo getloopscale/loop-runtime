@@ -186,10 +186,10 @@ func (f *fakeSyncLocker) WithLock(_ context.Context, _, _, _ string, fn func(tx 
 type goldenLabelReader struct{}
 
 func (goldenLabelReader) GetAppLabels(_ context.Context, appName string) (map[string]string, error) {
-	if appName != "tn-loopruntime-web-production" {
+	if appName != "tn-loop-runtime-web-production" {
 		return nil, nil
 	}
-	return map[string]string{naming.LabelTenant: "tn-loopruntime", naming.LabelEnvironment: "production"}, nil
+	return map[string]string{naming.LabelTenant: "tn-loop-runtime", naming.LabelEnvironment: "production"}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -244,12 +244,12 @@ func TestOnSyncCompleted_HappyPath_ActivatesPendingRelease(t *testing.T) {
 
 	// Arrange
 	f := newSyncCallbackFixture()
-	release := makePendingRelease("rel-001", "tn-loopruntime", "myproject", "production", "abc123")
+	release := makePendingRelease("rel-001", "tn-loop-runtime", "myproject", "production", "abc123")
 	f.releaseStore.pending = []db.Release{release}
 	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
-	// Act — ArgoCD reports tn-loopruntime-production as Synced+Healthy with matching revision
-	err := f.activator.OnSyncCompleted("tn-loopruntime-web-production", "abc123")
+	// Act — ArgoCD reports tn-loop-runtime-production as Synced+Healthy with matching revision
+	err := f.activator.OnSyncCompleted("tn-loop-runtime-web-production", "abc123")
 
 	// Assert
 	if err != nil {
@@ -282,14 +282,14 @@ func TestOnSyncCompleted_HappyPath_ActivatesPendingRelease(t *testing.T) {
 func TestOnSyncCompleted_WrongTenant_ReleaseNotActivated(t *testing.T) {
 	t.Parallel()
 
-	// Arrange — release belongs to tn-other, but callback is for tn-loopruntime
+	// Arrange — release belongs to tn-other, but callback is for tn-loop-runtime
 	f := newSyncCallbackFixture()
 	release := makePendingRelease("rel-002", "tn-other", "myproject", "production", "abc123")
 	f.releaseStore.pending = []db.Release{release}
 	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act
-	err := f.activator.OnSyncCompleted("tn-loopruntime-web-production", "abc123")
+	err := f.activator.OnSyncCompleted("tn-loop-runtime-web-production", "abc123")
 
 	// Assert — no error (idempotent), but release stays PENDING
 	if err != nil {
@@ -317,12 +317,12 @@ func TestOnSyncCompleted_RevisionMismatch_ReleaseSkipped(t *testing.T) {
 
 	// Arrange — release expects commit "abc123", callback reports "def456"
 	f := newSyncCallbackFixture()
-	release := makePendingRelease("rel-003", "tn-loopruntime", "myproject", "production", "abc123")
+	release := makePendingRelease("rel-003", "tn-loop-runtime", "myproject", "production", "abc123")
 	f.releaseStore.pending = []db.Release{release}
 	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act
-	err := f.activator.OnSyncCompleted("tn-loopruntime-web-production", "def456")
+	err := f.activator.OnSyncCompleted("tn-loop-runtime-web-production", "def456")
 
 	// Assert — no error, but release stays PENDING due to revision mismatch
 	if err != nil {
@@ -353,7 +353,7 @@ func TestOnSyncCompleted_NoPendingReleases_NoError(t *testing.T) {
 	f.releaseStore.pending = nil
 
 	// Act
-	err := f.activator.OnSyncCompleted("tn-loopruntime-web-production", "abc123")
+	err := f.activator.OnSyncCompleted("tn-loop-runtime-web-production", "abc123")
 
 	// Assert — idempotent: no error, no side effects
 	if err != nil {
@@ -419,12 +419,12 @@ func TestOnSyncCompleted_Idempotent_SecondCallIsNoOp(t *testing.T) {
 
 	// Arrange
 	f := newSyncCallbackFixture()
-	release := makePendingRelease("rel-004", "tn-loopruntime", "myproject", "production", "abc123")
+	release := makePendingRelease("rel-004", "tn-loop-runtime", "myproject", "production", "abc123")
 	f.releaseStore.pending = []db.Release{release}
 	f.releaseStore.statuses[release.ID] = string(statemachine.RPhPending)
 
 	// Act — first call activates the release
-	err := f.activator.OnSyncCompleted("tn-loopruntime-web-production", "abc123")
+	err := f.activator.OnSyncCompleted("tn-loop-runtime-web-production", "abc123")
 	if err != nil {
 		t.Fatalf("first OnSyncCompleted() unexpected error: %v", err)
 	}
@@ -439,7 +439,7 @@ func TestOnSyncCompleted_Idempotent_SecondCallIsNoOp(t *testing.T) {
 	eventsBefore := len(f.eventStore.events)
 
 	// Act — second call should be a no-op (release is no longer PENDING)
-	err = f.activator.OnSyncCompleted("tn-loopruntime-web-production", "abc123")
+	err = f.activator.OnSyncCompleted("tn-loop-runtime-web-production", "abc123")
 
 	// Assert — no error, no additional side effects
 	if err != nil {

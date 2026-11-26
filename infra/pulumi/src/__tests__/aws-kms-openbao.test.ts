@@ -10,9 +10,9 @@ import {
 
 describe("aws-kms-openbao component (F1.1)", () => {
   describe("buildResourceTags", () => {
-    it("returns canonical tag map with Project=loopruntime + Component=openbao", () => {
+    it("returns canonical tag map with Project=loop-runtime + Component=openbao", () => {
       const tags = buildResourceTags("prod");
-      expect(tags.Project).toBe("loopruntime");
+      expect(tags.Project).toBe("loop-runtime");
       expect(tags.Component).toBe("openbao");
       expect(tags.Stack).toBe("prod");
       expect(tags.Purpose).toBe("openbao-auto-unseal");

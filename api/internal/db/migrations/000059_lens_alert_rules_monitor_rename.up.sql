@@ -8,7 +8,7 @@
 -- failure mode, no new coupling.
 --
 -- Leaving `guard_id` and `metric='guard_breach'` behind would split the vocabulary permanently
--- across the loopruntime-lens / loopruntime-cloud boundary, and the next reader could not tell whether a "guard"
+-- across the loop-runtime-lens / loop-console boundary, and the next reader could not tell whether a "guard"
 -- is a different concept from a "monitor". Half a rename is worse than none.
 --
 -- Same lock discipline as 000058: the risk is lock ACQUISITION behind an idle-in-transaction

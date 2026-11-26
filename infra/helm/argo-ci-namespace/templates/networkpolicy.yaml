@@ -37,7 +37,7 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: loopruntime-system
+              kubernetes.io/metadata.name: loop-runtime-system
           podSelector:
             matchLabels:
               app: gitea

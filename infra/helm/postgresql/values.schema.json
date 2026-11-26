@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://loopruntime.platform/schemas/postgresql/values.schema.json",
+  "$id": "https://loop-runtime.platform/schemas/postgresql/values.schema.json",
   "title": "PostgreSQL LoopRuntime wrapper values schema",
   "description": "Plan 2026-05-20 T2.5 ext — fail-fast on PG bootstrap config drift. Catches B19/B21 (Bitnami legacy image rename), B27 (per-component DB creation), B29 (primary.initdb.scripts location post chart 18.x) at lint time instead of pod CrashLoopBackOff time.",
   "type": "object",

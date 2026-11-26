@@ -10,11 +10,11 @@ import "os"
 // cross-tenant worker role admits — the owner lost its maintenance policies in 000064
 // (#387). DATABASE_URL remains the fallback for a database without the role split.
 func fixtureDBURL() string {
-	if u := os.Getenv("LOOPRUNTIME_WORKER_DATABASE_URL"); u != "" {
+	if u := os.Getenv("LOOP_RUNTIME_WORKER_DATABASE_URL"); u != "" {
 		return u
 	}
 	if u := os.Getenv("DATABASE_URL"); u != "" {
 		return u
 	}
-	return "postgres://postgres:postgres@localhost:5432/loopruntime_test?sslmode=disable"
+	return "postgres://postgres:postgres@localhost:5432/loop_runtime_test?sslmode=disable"
 }

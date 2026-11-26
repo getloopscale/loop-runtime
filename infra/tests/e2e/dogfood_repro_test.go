@@ -6,8 +6,8 @@
 // Reproduces the 13 canonical dogfood 2026-04-29 findings as Ginkgo specs.
 // Also folds in the cleanup helper (was cleanup-terminating-namespaces.sh).
 //
-// Hermetic mode (LOOPRUNTIME_E2E=""): all specs Skip() gracefully — compiles and
-// passes in CI without cluster. LIVE mode (LOOPRUNTIME_E2E=1): each finding is
+// Hermetic mode (LOOP_RUNTIME_E2E=""): all specs Skip() gracefully — compiles and
+// passes in CI without cluster. LIVE mode (LOOP_RUNTIME_E2E=1): each finding is
 // probed against dev-public k3d clusters via kubectl/curl/k3d subprocesses.
 //
 // This is the M18 hermetic slice per plan v1.0 ADR-D1 + blueprint SHIPPABLE 99.7.
@@ -71,14 +71,14 @@ func checkPodPhase(ctx context.Context, kubeconfig, namespace, pod string) strin
 	return strings.TrimSpace(out)
 }
 
-// cleanupTerminatingNamespaces removes finalizers from stuck loopruntime-test-*
+// cleanupTerminatingNamespaces removes finalizers from stuck loop-runtime-test-*
 // namespaces (folded from cleanup-terminating-namespaces.sh).
-// Safe: ONLY touches loopruntime-test-*, build-test-*, build-vap-test-*, loopruntime-vap-test-*
-// prefixed namespaces. Production tenant namespaces (loopruntime-{tenant}-*) are NEVER
+// Safe: ONLY touches loop-runtime-test-*, build-test-*, build-vap-test-*, loop-runtime-vap-test-*
+// prefixed namespaces. Production tenant namespaces (loop-runtime-{tenant}-*) are NEVER
 // touched — safelist enforced explicitly.
 func cleanupTerminatingNamespaces(ctx context.Context, kubeconfig string) (int, error) {
 	safePrefixes := []string{
-		"loopruntime-test-", "build-test-", "build-vap-test-", "loopruntime-vap-test-",
+		"loop-runtime-test-", "build-test-", "build-vap-test-", "loop-runtime-vap-test-",
 	}
 	out, _, err := runKubectl(ctx, kubeconfig, "get", "ns",
 		"-o", "jsonpath={range .items[?(@.status.phase=='Terminating')]}{.metadata.name}{'\\n'}{end}")
@@ -112,10 +112,10 @@ func cleanupTerminatingNamespaces(ctx context.Context, kubeconfig string) (int, 
 	return cleaned, nil
 }
 
-// hermeticSkipIfNoLive is called at each spec top: skips if LOOPRUNTIME_E2E is unset.
+// hermeticSkipIfNoLive is called at each spec top: skips if LOOP_RUNTIME_E2E is unset.
 func hermeticSkipIfNoLive() {
-	if os.Getenv("LOOPRUNTIME_E2E") == "" {
-		Skip("hermetic mode — Set LOOPRUNTIME_E2E=1 for LIVE dogfood repro")
+	if os.Getenv("LOOP_RUNTIME_E2E") == "" {
+		Skip("hermetic mode — Set LOOP_RUNTIME_E2E=1 for LIVE dogfood repro")
 	}
 }
 
@@ -132,14 +132,14 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 		// Live mode: resolve kubeconfigs via k3d.
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		out, err := exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loopruntime-core").Output()
+		out, err := exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loop-runtime-core").Output()
 		if err != nil {
-			Skip("k3d loopruntime-core not available: " + err.Error())
+			Skip("k3d loop-runtime-core not available: " + err.Error())
 		}
 		mgmtKube = strings.TrimSpace(string(out))
-		out, err = exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loopruntime-cell-0").Output()
+		out, err = exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loop-runtime-cell-0").Output()
 		if err != nil {
-			Skip("k3d loopruntime-cell-0 not available: " + err.Error())
+			Skip("k3d loop-runtime-cell-0 not available: " + err.Error())
 		}
 		workloadKube = strings.TrimSpace(string(out))
 		_ = mgmtKube
@@ -161,20 +161,20 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 		Expect(code).To(Equal("200"), "API not reachable at localhost:13001 (regression F-01)")
 	})
 
-	It("F-02: loopruntime-api pod Running in loopruntime-system namespace", func() {
+	It("F-02: loop-runtime-api pod Running in loop-runtime-system namespace", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loopruntime-system", "get", "pods",
-			"-l", "app.kubernetes.io/name=loopruntime-api",
+		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loop-runtime-system", "get", "pods",
+			"-l", "app.kubernetes.io/name=loop-runtime-api",
 			"-o", "jsonpath={.items[*].status.phase}")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(out).To(ContainSubstring("Running"), "loopruntime-api not Running (regression F-02)")
+		Expect(out).To(ContainSubstring("Running"), "loop-runtime-api not Running (regression F-02)")
 	})
 
 	It("F-03: Kratos courier StatefulSet available", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loopruntime-auth", "get", "statefulset",
+		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loop-runtime-auth", "get", "statefulset",
 			"ory-kratos-courier",
 			"-o", "jsonpath={.status.readyReplicas}")
 		Expect(err).NotTo(HaveOccurred())
@@ -184,8 +184,8 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 	It("F-04: schema_migrations table populated", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loopruntime-system", "exec", "postgresql-0",
-			"--", "psql", "-U", "loopruntime", "-t", "-c", "SELECT count(*) FROM schema_migrations")
+		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loop-runtime-system", "exec", "postgresql-0",
+			"--", "psql", "-U", "loop_runtime", "-t", "-c", "SELECT count(*) FROM schema_migrations")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(strings.TrimSpace(out)).NotTo(Equal("0"), "schema_migrations empty (regression F-04)")
 	})
@@ -193,37 +193,37 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 	It("F-05: ClusterCredentials for cell-0 connected", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loopruntime-system", "get", "clustercredentials",
+		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loop-runtime-system", "get", "clustercredentials",
 			"cell-0", "-o", "jsonpath={.status.state}")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(strings.TrimSpace(out)).To(Equal("Ready"), "cell-0 not Ready (regression F-05)")
 	})
 
-	It("F-06: loopruntime-cloud dashboard reachable at localhost:9090", func() {
+	It("F-06: loop-console dashboard reachable at localhost:9090", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		code, err := runCurl(ctx, "http://localhost:9090/health", 3)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(code).To(Or(Equal("200"), Equal("404")), "loopruntime-cloud unreachable (regression F-06)")
+		Expect(code).To(Or(Equal("200"), Equal("404")), "loop-console unreachable (regression F-06)")
 	})
 
 	It("F-07: MinIO Ready", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		phase := checkPodPhase(ctx, mgmtKube, "loopruntime-system", "minio-0")
+		phase := checkPodPhase(ctx, mgmtKube, "loop-runtime-system", "minio-0")
 		Expect(phase).To(Equal("Running"), "MinIO not Running (regression F-07)")
 	})
 
-	It("F-08: ESO SecretStore not stuck 401 (loopruntime-cluster-kubeconfigs)", func() {
+	It("F-08: ESO SecretStore not stuck 401 (loop-runtime-cluster-kubeconfigs)", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loopruntime-system", "get", "secretstore",
-			"loopruntime-cluster-kubeconfigs", "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}")
+		out, _, err := runKubectl(ctx, mgmtKube, "-n", "loop-runtime-system", "get", "secretstore",
+			"loop-runtime-cluster-kubeconfigs", "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(strings.TrimSpace(out)).To(Equal("True"), "ESO SecretStore stale (regression F-08)")
 	})
 
-	It("F-09: loopruntime-api canonical JSON responses (no HTML in --json paths)", func() {
+	It("F-09: loop-runtime-api canonical JSON responses (no HTML in --json paths)", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, "curl", "-s", "-H", "Accept: application/json",
@@ -231,7 +231,7 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 		out, _ := cmd.Output()
 		var v any
 		err := json.Unmarshal(out, &v)
-		Expect(err).NotTo(HaveOccurred(), "loopruntime-api returned non-JSON (regression F-09)")
+		Expect(err).NotTo(HaveOccurred(), "loop-runtime-api returned non-JSON (regression F-09)")
 	})
 
 	It("F-10: Gitea root repos endpoint reachable", func() {
@@ -251,7 +251,7 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 		Expect(strings.TrimSpace(out)).To(BeEmpty(), "ArgoCD apps stuck Unknown (regression F-11)")
 	})
 
-	It("F-12: loopruntime-core cluster reachable via k3d kubeconfig", func() {
+	It("F-12: loop-runtime-core cluster reachable via k3d kubeconfig", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		out, exitCode, err := runKubectl(ctx, mgmtKube, "cluster-info")
@@ -273,15 +273,15 @@ var _ = Describe("Dogfood 2026-04-29 findings repro", Label("dogfood-repro", "li
 var _ = Describe("Dogfood cleanup helper (folded from cleanup-terminating-namespaces.sh)",
 	Label("dogfood-cleanup", "live"), func() {
 
-		It("cleans up loopruntime-test-* Terminating namespaces safely", func() {
+		It("cleans up loop-runtime-test-* Terminating namespaces safely", func() {
 			hermeticSkipIfNoLive()
 
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
 
-			out, err := exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loopruntime-cell-0").Output()
+			out, err := exec.CommandContext(ctx, "k3d", "kubeconfig", "write", "loop-runtime-cell-0").Output()
 			if err != nil {
-				Skip("k3d loopruntime-cell-0 not available")
+				Skip("k3d loop-runtime-cell-0 not available")
 			}
 			workloadKube := strings.TrimSpace(string(out))
 

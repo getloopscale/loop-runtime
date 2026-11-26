@@ -24,7 +24,7 @@ import (
 // written in the placement transaction. These tests run it against the
 // migrated schema, wired the way main wires it (on the cross-tenant pool).
 //
-//	DATABASE_URL=<loopruntime_api> LOOPRUNTIME_WORKER_DATABASE_URL=<loopruntime_worker> \
+//	DATABASE_URL=<loop_runtime_api> LOOP_RUNTIME_WORKER_DATABASE_URL=<loop_runtime_worker> \
 //	  go test ./tests/integration/ -run Bootstrap -v
 const bootstrapTestSecret = "bootstrap-test-secret"
 

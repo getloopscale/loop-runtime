@@ -1,4 +1,4 @@
-name: loopruntime-infra
+name: loop-runtime-infra
 runtime: nodejs
 description: >
   LoopRuntime cloud primitives — VPC, K8s clusters, PostgreSQL, Spaces buckets, CDN, Container Registry.

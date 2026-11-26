@@ -21,7 +21,7 @@ func TestJWTOnlyValidator_NilValidators_ReturnsError(t *testing.T) {
 
 func TestJWTOnlyValidator_HMACValidToken(t *testing.T) {
 	secret := "test-secret-32-chars-minimum!!!!"
-	issuer := loopruntimejwt.NewSessionTokenIssuer(secret, "loopruntime-cloud", "loopruntime-cloud", 1*time.Hour)
+	issuer := loopruntimejwt.NewSessionTokenIssuer(secret, "loop-console", "loop-console", 1*time.Hour)
 	v := NewJWTOnlyValidator(nil, issuer)
 
 	// Issue a valid token
@@ -43,7 +43,7 @@ func TestJWTOnlyValidator_HMACValidToken(t *testing.T) {
 }
 
 func TestJWTOnlyValidator_InvalidToken(t *testing.T) {
-	issuer := loopruntimejwt.NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopruntime-cloud", "loopruntime-cloud", 1*time.Hour)
+	issuer := loopruntimejwt.NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loop-console", "loop-console", 1*time.Hour)
 	v := NewJWTOnlyValidator(nil, issuer)
 
 	_, err := v.ValidateToken(context.Background(), "not-a-jwt")
@@ -53,8 +53,8 @@ func TestJWTOnlyValidator_InvalidToken(t *testing.T) {
 }
 
 func TestJWTOnlyValidator_WrongSecret(t *testing.T) {
-	issuerA := loopruntimejwt.NewSessionTokenIssuer("secret-aaaaaaaaaaaaaaaaaaaaaaaaa", "loopruntime-cloud", "loopruntime-cloud", 1*time.Hour)
-	issuerB := loopruntimejwt.NewSessionTokenIssuer("secret-bbbbbbbbbbbbbbbbbbbbbbbbb", "loopruntime-cloud", "loopruntime-cloud", 1*time.Hour)
+	issuerA := loopruntimejwt.NewSessionTokenIssuer("secret-aaaaaaaaaaaaaaaaaaaaaaaaa", "loop-console", "loop-console", 1*time.Hour)
+	issuerB := loopruntimejwt.NewSessionTokenIssuer("secret-bbbbbbbbbbbbbbbbbbbbbbbbb", "loop-console", "loop-console", 1*time.Hour)
 
 	token, _, _ := issuerA.Issue("user-1", "a@test.com", "A", "tn", "acct-a")
 	v := NewJWTOnlyValidator(nil, issuerB)
@@ -71,7 +71,7 @@ func TestJWTOnlyValidator_RSAOnly_RejectsHMAC(t *testing.T) {
 	v := NewJWTOnlyValidator(nil, nil)
 
 	// Issue a valid HMAC token
-	issuer := loopruntimejwt.NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loopruntime-cloud", "loopruntime-cloud", 1*time.Hour)
+	issuer := loopruntimejwt.NewSessionTokenIssuer("test-secret-32-chars-minimum!!!!", "loop-console", "loop-console", 1*time.Hour)
 	token, _, _ := issuer.Issue("user-1", "a@test.com", "A", "tn", "acct-1")
 
 	_, err := v.ValidateToken(context.Background(), token)

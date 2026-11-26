@@ -15,8 +15,8 @@ func TestConstants_SyftScannerImageDefined(t *testing.T) {
 	if imageSyftScanner == "" {
 		t.Fatal("imageSyftScanner constant must be defined")
 	}
-	if !strings.Contains(imageSyftScanner, "loopruntime-syft-scanner") {
-		t.Errorf("imageSyftScanner should reference loopruntime-syft-scanner, got %q", imageSyftScanner)
+	if !strings.Contains(imageSyftScanner, "loop-runtime-syft-scanner") {
+		t.Errorf("imageSyftScanner should reference loop-runtime-syft-scanner, got %q", imageSyftScanner)
 	}
 	if strings.HasSuffix(imageSyftScanner, ":latest") {
 		t.Errorf("imageSyftScanner must not use :latest tag, got %q", imageSyftScanner)

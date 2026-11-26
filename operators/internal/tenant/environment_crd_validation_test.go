@@ -98,7 +98,7 @@ func makeTenantSpec(project string) loopruntimev1.TenantSpec {
 			{Name: "production", Cluster: "workload", Project: project},
 		},
 		GitOps: loopruntimev1.GitOpsSpec{
-			RepoName: "loopruntime-tenant-t11",
+			RepoName: "loop-runtime-tenant-t11",
 			Branch:   "main",
 		},
 		Preview: loopruntimev1.PreviewSpec{MaxEnvironments: 2, TTLHours: 24},

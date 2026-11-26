@@ -151,7 +151,7 @@ func TestMapProjectStatus_SupersededReleaseFallsBackToBuild(t *testing.T) {
 }
 
 // TestMapProjectStatus_RedTeam41_PreviewOnlyProject — Red Team
-// loopruntime-cloud#41 absorption (2026-06-27). A project with 12 successful
+// loop-console#41 absorption (2026-06-27). A project with 12 successful
 // builds, all environment=preview, AND zero active production releases
 // previously rendered "Live" badge with "URL PENDING" hint across 4
 // surfaces. With the latestBuildEnv signal, the canonical aggregator

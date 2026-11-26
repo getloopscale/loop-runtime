@@ -37,7 +37,7 @@ import (
 // fake controller-runtime client needs the scheme to (de)serialize the
 // Tenant type. We do NOT register kubernetes core types here because
 // the tested paths don't touch them.
-func loopruntimeOnlyScheme(t *testing.T) *runtime.Scheme {
+func loopRuntimeOnlyScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	s := runtime.NewScheme()
 	if err := loopruntimev1.AddToScheme(s); err != nil {
@@ -55,11 +55,11 @@ func loopruntimeOnlyScheme(t *testing.T) *runtime.Scheme {
 // deletion timestamps without orchestrating cleanup if there's nothing
 // to clean up.
 func TestReconcileDelete_NoFinalizer_ReturnsClean(t *testing.T) {
-	scheme := loopruntimeOnlyScheme(t)
+	scheme := loopRuntimeOnlyScheme(t)
 	tenant := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "no-finalizer-tenant",
-			Namespace:  "loopruntime-system",
+			Namespace:  "loop-runtime-system",
 			Finalizers: []string{}, // NO tenantFinalizer
 		},
 		// Deletion timestamp set so reconcile-delete would normally run.
@@ -101,7 +101,7 @@ func TestReconcileDelete_RetryCountAnnotation_Persists(t *testing.T) {
 	tenant := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "retry-tenant",
-			Namespace:   "loopruntime-system",
+			Namespace:   "loop-runtime-system",
 			Annotations: nil, // explicit — exercises the nil-map guard
 		},
 	}

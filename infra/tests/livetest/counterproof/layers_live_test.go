@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// T3.4 layers 4-7 hermetic tests. The layers themselves exec out to $LOOPRUNTIME
+// T3.4 layers 4-7 hermetic tests. The layers themselves exec out to $LOOP_RUNTIME
 // CLI + kubectl + HTTP, so hermetic tests focus on input validation +
 // fixture creation. LIVE behavior is exercised by the joint sponsor session, Phase 5.
 
@@ -27,7 +27,7 @@ func TestDefaultLiveConfig_SetsCanonicalDefaults(t *testing.T) {
 	if cfg.BuildTimeout != 15*time.Minute {
 		t.Errorf("BuildTimeout = %v", cfg.BuildTimeout)
 	}
-	if cfg.KubeContext != "k3d-loopruntime-cell-0" {
+	if cfg.KubeContext != "k3d-loop-runtime-cell-0" {
 		t.Errorf("KubeContext = %q", cfg.KubeContext)
 	}
 }
@@ -45,12 +45,12 @@ func TestCreateMinimalFixture_WritesAllFiles(t *testing.T) {
 		}
 	}
 	// Verify loopzero.yaml contains project name
-	loopruntimeYaml, err := os.ReadFile(filepath.Join(dir, "loopzero.yaml"))
+	loopRuntimeYaml, err := os.ReadFile(filepath.Join(dir, "loopzero.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(loopruntimeYaml), "project: test-proj") {
-		t.Errorf("loopzero.yaml does not contain project name: %s", loopruntimeYaml)
+	if !strings.Contains(string(loopRuntimeYaml), "project: test-proj") {
+		t.Errorf("loopzero.yaml does not contain project name: %s", loopRuntimeYaml)
 	}
 }
 

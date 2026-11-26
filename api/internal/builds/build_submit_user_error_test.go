@@ -9,7 +9,7 @@ import (
 )
 
 // The build-trigger message pairs the stage that failed with the verbatim
-// cause; the "Something went wrong" catchall (loopruntime-cloud#34) never returns.
+// cause; the "Something went wrong" catchall (loop-console#34) never returns.
 func TestSubmitBuildError_UserErrorComposesTheReasonSummaryWithTheCause(t *testing.T) {
 	cases := []struct {
 		reason   SubmitBuildErrorReason

@@ -85,7 +85,7 @@ func TestCacheScoping_PlatformOperatorScopesPlatformCRDs(t *testing.T) {
 func TestCacheScoping_AppOperatorDoesNOTScope_WorkloadCRDs(t *testing.T) {
 	// Per ADR-0018 v2 C9: LoopRuntimeApplication / PreviewEnvironment /
 	// ExposedRoute MUST remain cluster-wide because they are deployed
-	// per-tenant in `loopruntime-tenant-{id}` namespaces. Restricting their
+	// per-tenant in `loop-runtime-tenant-{id}` namespaces. Restricting their
 	// cache to a single namespace would BREAK reconciliation. This
 	// test is the negative pin — fails if a future commit accidentally
 	// applies cache scoping to these CRDs in the app or preview

@@ -21,7 +21,7 @@ import (
 //
 //   - v2: the schema requires + DNS-1123-validates the `project` field.
 //   - v1: `project` is absent; fall back to the legacy "services-bundle"
-//     (ADR D10 — preserves Gitea repo lineage loopruntime-source-{tenant}-services-bundle)
+//     (ADR D10 — preserves Gitea repo lineage loop-runtime-source-{tenant}-services-bundle)
 //     and emit a structured deprecation warning.
 func ProjectNameFromManifest(m *ServicesManifest) string {
 	if m == nil {

@@ -1,8 +1,8 @@
 {
   "title": "LoopRuntime — Alerts Overview",
-  "uid": "loopruntime-alerts-overview",
+  "uid": "loop-runtime-alerts-overview",
   "tags": [
-    "loopruntime",
+    "loop-runtime",
     "alerts",
     "operations"
   ],
@@ -26,7 +26,7 @@
       "targetBlank": false,
       "title": "← Home",
       "type": "link",
-      "url": "/d/loopruntime-home/loopruntime-system-home"
+      "url": "/d/loop-runtime-home/loop-runtime-system-home"
     }
   ],
   "panels": [
@@ -320,7 +320,7 @@
       },
       "targets": [
         {
-          "expr": "max(loopruntime_api_leader_status) or vector(0)",
+          "expr": "max(loop_runtime_api_leader_status) or vector(0)",
           "legendFormat": "API",
           "refId": "A"
         }
@@ -640,7 +640,7 @@
       },
       "targets": [
         {
-          "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"loopruntime-system\"}[15m]) > 0",
+          "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"loop-runtime-system\"}[15m]) > 0",
           "legendFormat": "{{pod}}/{{container}}",
           "refId": "A"
         }
@@ -698,12 +698,12 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum(rate(loopruntime_api_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopruntime_api_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         }
@@ -781,12 +781,12 @@
       },
       "targets": [
         {
-          "expr": "sum(increase(loopruntime_builds_total{status=\"succeeded\"}[5m]))",
+          "expr": "sum(increase(loop_runtime_builds_total{status=\"succeeded\"}[5m]))",
           "legendFormat": "Succeeded",
           "refId": "A"
         },
         {
-          "expr": "sum(increase(loopruntime_builds_total{status=\"failed\"}[5m]))",
+          "expr": "sum(increase(loop_runtime_builds_total{status=\"failed\"}[5m]))",
           "legendFormat": "Failed",
           "refId": "B"
         }
@@ -850,12 +850,12 @@
       },
       "targets": [
         {
-          "expr": "sum(loopruntime_postgres_connections_active) / max(loopruntime_postgres_pool_max_conns)",
+          "expr": "sum(loop_runtime_postgres_connections_active) / max(loop_runtime_postgres_pool_max_conns)",
           "legendFormat": "Pool Active %",
           "refId": "A"
         },
         {
-          "expr": "sum(loopruntime_postgres_connections_total) / max(loopruntime_postgres_pool_max_conns)",
+          "expr": "sum(loop_runtime_postgres_connections_total) / max(loop_runtime_postgres_pool_max_conns)",
           "legendFormat": "Pool Total %",
           "refId": "B"
         }

@@ -9,7 +9,7 @@ import (
 )
 
 // Every reason has actionable copy, and the user message keeps the verbatim
-// cause (loopruntime-cloud#33): replacing it with "Verify your project name is
+// cause (loop-console#33): replacing it with "Verify your project name is
 // unused" misled operators whose names were fine.
 func TestPushBundleError_UserErrorComposesTheReasonSummaryWithTheCause(t *testing.T) {
 	cases := []struct {

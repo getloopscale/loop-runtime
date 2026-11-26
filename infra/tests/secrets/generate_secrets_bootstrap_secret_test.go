@@ -34,26 +34,26 @@ func secretLiterals(t *testing.T, secretName string) map[string]string {
 	return got
 }
 
-// Without this Secret loopruntime-api fell back to its built-in development bootstrap secret, so
+// Without this Secret loop-runtime-api fell back to its built-in development bootstrap secret, so
 // /internal/bootstrap was guarded only by the network. The producer contract claimed a
-// Secret named loopruntime-bootstrap-secret that nothing ever created (#453). The value lands in
-// loopruntime-api-internal, the optional envFrom source the chart already reads.
+// Secret named loop-runtime-bootstrap-secret that nothing ever created (#453). The value lands in
+// loop-runtime-api-internal, the optional envFrom source the chart already reads.
 func TestGenerateSecretsGivesTheAPIARandomBootstrapSecret(t *testing.T) {
-	got := secretLiterals(t, "loopruntime-api-internal")
-	v := got["LOOPRUNTIME_BOOTSTRAP_SECRET"]
+	got := secretLiterals(t, "loop-runtime-api-internal")
+	v := got["LOOP_RUNTIME_BOOTSTRAP_SECRET"]
 	if len(v) < 32 {
-		t.Fatalf("loopruntime-api-internal LOOPRUNTIME_BOOTSTRAP_SECRET is missing or short (len %d)", len(v))
+		t.Fatalf("loop-runtime-api-internal LOOP_RUNTIME_BOOTSTRAP_SECRET is missing or short (len %d)", len(v))
 	}
 	// The binary's built-in default (api/internal/config: devDefaultBootstrapSecret).
-	if v == "loopruntime-dev-bootstrap-secret" {
+	if v == "loop-runtime-dev-bootstrap-secret" {
 		t.Errorf("the bootstrap secret is the development default, not a random value")
 	}
 }
 
 // Two installs never share a bootstrap secret.
 func TestGenerateSecretsBootstrapSecretIsNotFixed(t *testing.T) {
-	a := secretLiterals(t, "loopruntime-api-internal")["LOOPRUNTIME_BOOTSTRAP_SECRET"]
-	b := secretLiterals(t, "loopruntime-api-internal")["LOOPRUNTIME_BOOTSTRAP_SECRET"]
+	a := secretLiterals(t, "loop-runtime-api-internal")["LOOP_RUNTIME_BOOTSTRAP_SECRET"]
+	b := secretLiterals(t, "loop-runtime-api-internal")["LOOP_RUNTIME_BOOTSTRAP_SECRET"]
 	if a == "" || a == b {
 		t.Errorf("two cold installs produced the same bootstrap secret")
 	}

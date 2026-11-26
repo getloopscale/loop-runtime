@@ -122,7 +122,7 @@ func TestAuthMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("valid token + N tenants + X-LoopRuntime-Tenant → resolve", func(t *testing.T) {
+	t.Run("valid token + N tenants + X-Loop-Runtime-Tenant → resolve", func(t *testing.T) {
 		validator := &fakeTokenValidator{
 			result: &auth.TokenValidationResult{
 				UserID: "github-lucas", Email: "lucas@acme.dev",
@@ -139,7 +139,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set("Authorization", "Bearer ghp_valid")
-		req.Header.Set("X-LoopRuntime-Tenant", "globex")
+		req.Header.Set("X-Loop-Runtime-Tenant", "globex")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
@@ -154,7 +154,7 @@ func TestAuthMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("valid token + N tenants + no X-LoopRuntime-Tenant → 409 TENANT_REQUIRED", func(t *testing.T) {
+	t.Run("valid token + N tenants + no X-Loop-Runtime-Tenant → 409 TENANT_REQUIRED", func(t *testing.T) {
 		validator := &fakeTokenValidator{
 			result: &auth.TokenValidationResult{
 				UserID: "github-lucas", Email: "lucas@acme.dev",
@@ -211,7 +211,7 @@ func TestAuthMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("X-LoopRuntime-Tenant with non-member tenant → 403", func(t *testing.T) {
+	t.Run("X-Loop-Runtime-Tenant with non-member tenant → 403", func(t *testing.T) {
 		validator := &fakeTokenValidator{
 			result: &auth.TokenValidationResult{
 				UserID: "github-lucas", Email: "lucas@acme.dev",
@@ -228,7 +228,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set("Authorization", "Bearer ghp_valid")
-		req.Header.Set("X-LoopRuntime-Tenant", "unknown-tenant")
+		req.Header.Set("X-Loop-Runtime-Tenant", "unknown-tenant")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 

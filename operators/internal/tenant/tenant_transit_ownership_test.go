@@ -30,7 +30,7 @@ import (
 // The PROVISIONING seam left. An accidental reintroduction — someone
 // "rewiring" the step believing the no-op was an oversight — recreates the
 // divergence that made the operator's fail-fast meaningless: the operator
-// names the key `tenant-<id>` and the `api` names it `loopruntime-tenants-<id>`, so
+// names the key `tenant-<id>` and the `api` names it `loop-runtime-tenants-<id>`, so
 // the operator would guarantee a key nobody uses.
 func TestTransitKeyProvisioning_IsNotAnOperatorReconcileStep(t *testing.T) {
 	r := &TenantReconciler{}
@@ -41,7 +41,7 @@ func TestTransitKeyProvisioning_IsNotAnOperatorReconcileStep(t *testing.T) {
 				"step %q is back in the tenant-controller reconcile list.\n\n"+
 					"Provisioning is api-side (ADR 2026-08-12-tenant-transit-key-ownership, "+
 					"B-042). The operator names the key `tenant-<id>` and the api names it "+
-					"`loopruntime-tenants-<id>` — a step here guarantees a key nobody uses.",
+					"`loop-runtime-tenants-<id>` — a step here guarantees a key nobody uses.",
 				name,
 			)
 		}

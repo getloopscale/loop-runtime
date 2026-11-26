@@ -22,7 +22,7 @@ import (
 const (
 	fieldServicesJSON = "services_json"
 	fieldBundle       = "bundle"
-	fieldLegacyYAML   = "loopruntime_yaml"
+	fieldLegacyYAML   = "loop_runtime_yaml"
 )
 
 // uploadRejection is a request the wire contract refuses. It carries the
@@ -50,7 +50,7 @@ func (f *uploadForm) close() {
 // seam contract in the order it is written down:
 //
 //  1. the FIRST part is services_json (else 400 MULTIPART_FIELD_ORDER; a
-//     legacy loopruntime_yaml part answers the more actionable E-009 instead);
+//     legacy loop_runtime_yaml part answers the more actionable E-009 instead);
 //  2. services_json is at most maxServicesJSONSize (else 413);
 //  3. services_json validates against the schema (else 422) — BEFORE a single
 //     byte of the bundle is read, which is the reason the order exists;
@@ -92,8 +92,8 @@ func readManifestPart(part *multipart.Part, blocklist source.EnvBlocklistMode) (
 	case fieldLegacyYAML:
 		return nil, &uploadRejection{err: loopruntimeerrors.NewLoopRuntimeError(
 			"VALIDATION_FAILED",
-			"E-009: legacy loopruntime_yaml not supported. This API version requires `.loopzero/services.json` emitted by LoopZeroKit ≥0.5.0. "+
-				"Upgrade LoopZeroKit and re-run `loopzerokit build --target loopruntime-cloud` to regenerate the bundle.",
+			"E-009: legacy loop_runtime_yaml not supported. This API version requires `.loopzero/services.json` emitted by LoopZeroKit ≥0.5.0. "+
+				"Upgrade LoopZeroKit and re-run `loopzerokit build --target loop-console` to regenerate the bundle.",
 		)}
 	default:
 		return nil, &uploadRejection{err: &loopruntimeerrors.LoopRuntimeError{
@@ -155,7 +155,7 @@ func spoolBundle(mr *multipart.Reader) (*os.File, *uploadRejection) {
 }
 
 func copyToTempFile(part io.Reader) (*os.File, *uploadRejection) {
-	file, err := os.CreateTemp("", "loopruntime-bundle-*.tar.gz")
+	file, err := os.CreateTemp("", "loop-runtime-bundle-*.tar.gz")
 	if err != nil {
 		slog.Error("source upload: failed to create temp file", "error", err)
 		return nil, &uploadRejection{err: loopruntimeerrors.ErrInternalError}

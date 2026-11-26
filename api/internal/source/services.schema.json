@@ -26,7 +26,7 @@
         "project": {
           "type": "string",
           "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
-          "description": "DNS-1123 subdomain compatible project name. Required from v2. Drives Gitea repo (loopruntime-source-{tenant}-{project}) and ArgoCD App naming."
+          "description": "DNS-1123 subdomain compatible project name. Required from v2. Drives Gitea repo (loop-runtime-source-{tenant}-{project}) and ArgoCD App naming."
         },
         "services": {
           "type": "array",
@@ -83,7 +83,7 @@
         "cors": { "type": "boolean" },
         "env": {
           "type": "object",
-          "description": "Process environment variables passed to the running service. Keys MUST be POSIX-compliant (^[A-Z_][A-Z0-9_]*$); values are bounded to 4096 chars. Total entries capped at 64 to prevent manifest-bomb DoS. Plan v1.2 T1.3 — additional Go-side blocklist rejects reserved keys (PATH, HOME, LD_PRELOAD, LD_LIBRARY_PATH, KUBERNETES_*, LOOPRUNTIME_*).",
+          "description": "Process environment variables passed to the running service. Keys MUST be POSIX-compliant (^[A-Z_][A-Z0-9_]*$); values are bounded to 4096 chars. Total entries capped at 64 to prevent manifest-bomb DoS. Plan v1.2 T1.3 — additional Go-side blocklist rejects reserved keys (PATH, HOME, LD_PRELOAD, LD_LIBRARY_PATH, KUBERNETES_*, LOOP_RUNTIME_*).",
           "maxProperties": 64,
           "patternProperties": {
             "^[A-Z_][A-Z0-9_]*$": {

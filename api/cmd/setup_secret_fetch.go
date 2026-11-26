@@ -201,7 +201,7 @@ func newSecretFetchBroker(cfg config.Config, transit vault.Transit, dbAdapter, c
 		return nil
 	}
 	if len(cellTokens) == 0 {
-		logger.Warn("secret-fetch broker disabled: neither LOOPRUNTIME_BROKER_TOKEN nor LOOPRUNTIME_BROKER_TOKENS is set", "component", "broker")
+		logger.Warn("secret-fetch broker disabled: neither LOOP_RUNTIME_BROKER_TOKEN nor LOOP_RUNTIME_BROKER_TOKENS is set", "component", "broker")
 		return nil
 	}
 	logger.Info("secret-fetch broker serving cells", "component", "broker", "cells", len(cellTokens))

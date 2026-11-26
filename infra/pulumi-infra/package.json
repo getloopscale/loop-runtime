@@ -1,5 +1,5 @@
 {
-  "name": "@loopruntime/pulumi-infra",
+  "name": "@loop-runtime/pulumi-infra",
   "version": "1.0.0",
   "main": "src/index.ts",
   "scripts": {

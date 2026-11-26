@@ -183,7 +183,7 @@ func TestBuildManifestApps_MultipleApps(t *testing.T) {
 
 // CHG-2026-04-29-DOGFOOD iter 8 — supply-chain VAP enforcement: a manifest
 // rendered without an image digest produces pods Forbidden by the
-// `loopruntime-require-image-signature` ValidatingAdmissionPolicy. We must
+// `loop-runtime-require-image-signature` ValidatingAdmissionPolicy. We must
 // fail-loud at manifest build time instead of letting the pipeline run
 // to admission and produce an opaque error there.
 func TestBuildManifestApps_MissingDigest_FailsLoud(t *testing.T) {

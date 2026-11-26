@@ -27,7 +27,7 @@ type Config struct {
 	// admin modes of user routes; AdminServiceSecretPrevious during a
 	// rotation. It is never the proxy secret: the proxy attaches that one to
 	// every forwarded user request, so honouring it here would hand any user
-	// the admin routes (loopruntime-cloud#16).
+	// the admin routes (loop-console#16).
 	AdminServiceSecret         string
 	AdminServiceSecretPrevious string
 

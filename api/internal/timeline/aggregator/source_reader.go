@@ -22,7 +22,7 @@ import (
 type SourceID string
 
 const (
-	// SourceLokiMarkers reads ::loopruntime:: marker log lines via the Loki
+	// SourceLokiMarkers reads ::loop-runtime:: marker log lines via the Loki
 	// HTTP API (workload+build clusters).
 	SourceLokiMarkers SourceID = "loki_markers"
 	// SourceReleaseDB tails the releases table for status transitions

@@ -15,7 +15,7 @@ import (
 )
 
 // Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.1 — typed PushBundle errors.
-// Closes loopruntime-cloud#31: legacy untyped fmt.Errorf chain collapsed every failure
+// Closes loop-console#31: legacy untyped fmt.Errorf chain collapsed every failure
 // mode into the canonical "Ensure your git history is clean and try again."
 // message. Typed reasons let the handler emit specific actionable text per mode.
 
@@ -58,15 +58,15 @@ func TestPushBundleError_ScrubsInternalTerms(t *testing.T) {
 	}{
 		{
 			name:        "gitea hostname scrubbed",
-			rawDetail:   "Post \"https://gitea-http.loopruntime-system.svc.cluster.local:3000/api/v1/repos\": EOF",
+			rawDetail:   "Post \"https://gitea-http.loop-runtime-system.svc.cluster.local:3000/api/v1/repos\": EOF",
 			wantSubs:    []string{"source backend"},
-			wantNotSubs: []string{"gitea-http", ".loopruntime-system", ".svc.cluster.local"},
+			wantNotSubs: []string{"gitea-http", ".loop-runtime-system", ".svc.cluster.local"},
 		},
 		{
 			name:        "minio hostname scrubbed",
-			rawDetail:   "Get \"http://minio.loopruntime-system.svc.cluster.local:9000/bundle\": connection refused",
+			rawDetail:   "Get \"http://minio.loop-runtime-system.svc.cluster.local:9000/bundle\": connection refused",
 			wantSubs:    []string{"object store"},
-			wantNotSubs: []string{"minio.loopruntime-system", ".svc.cluster.local"},
+			wantNotSubs: []string{"minio.loop-runtime-system", ".svc.cluster.local"},
 		},
 		{
 			name:        "svc.cluster.local suffix scrubbed (defense layer)",
@@ -77,9 +77,9 @@ func TestPushBundleError_ScrubsInternalTerms(t *testing.T) {
 		{
 			// Sprint 6 /review CODE-001 — pq driver leak.
 			name:        "pq driver hostname fully scrubbed (CODE-001)",
-			rawDetail:   "pq: could not connect to host postgresql.loopruntime-system.svc.cluster.local",
+			rawDetail:   "pq: could not connect to host postgresql.loop-runtime-system.svc.cluster.local",
 			wantSubs:    []string{"<internal service>"},
-			wantNotSubs: []string{"postgresql.loopruntime-system", ".svc.cluster.local"},
+			wantNotSubs: []string{"postgresql.loop-runtime-system", ".svc.cluster.local"},
 		},
 		{
 			// Sprint 6 /review CODE-001 — generic catch-all for any in-cluster service.
@@ -103,21 +103,21 @@ func TestPushBundleError_ScrubsInternalTerms(t *testing.T) {
 		},
 		{
 			name:        "#35 system:serviceaccount full chain scrubbed",
-			rawDetail:   "system:serviceaccount:loopruntime-system:default cannot list applications",
+			rawDetail:   "system:serviceaccount:loop-runtime-system:default cannot list applications",
 			wantSubs:    []string{"<service identity>"},
-			wantNotSubs: []string{"system:serviceaccount:loopruntime-system:default"},
+			wantNotSubs: []string{"system:serviceaccount:loop-runtime-system:default"},
 		},
 		{
 			name:        "#35 namespace leak scrubbed",
-			rawDetail:   "applications.argoproj.io in namespace \"loopruntime-system\" forbidden",
+			rawDetail:   "applications.argoproj.io in namespace \"loop-runtime-system\" forbidden",
 			wantSubs:    []string{"<orchestrator>", "<scope>"},
-			wantNotSubs: []string{"namespace \"loopruntime-system\""},
+			wantNotSubs: []string{"namespace \"loop-runtime-system\""},
 		},
 		{
-			name:        "#35 /tmp/loopruntime-source path scrubbed",
-			rawDetail:   "git fetch /tmp/loopruntime-source-1147567712/source.bundle HEAD: did not send all necessary objects",
+			name:        "#35 /tmp/loop-runtime-source path scrubbed",
+			rawDetail:   "git fetch /tmp/loop-runtime-source-1147567712/source.bundle HEAD: did not send all necessary objects",
 			wantSubs:    []string{"<server tmp>"},
-			wantNotSubs: []string{"/tmp/loopruntime-source-1147567712"},
+			wantNotSubs: []string{"/tmp/loop-runtime-source-1147567712"},
 		},
 		{
 			name:        "#35 git bundle term scrubbed",
@@ -287,7 +287,7 @@ func TestPushBundle_ReturnsBundleMalformed_whenEmptyBundle(t *testing.T) {
 	store, err := NewGiteaSourceStore(GiteaSourceStoreConfig{
 		BaseURL: "http://127.0.0.1:1",
 		Token:   "tok",
-		OrgName: "loopruntime",
+		OrgName: "loop-runtime",
 	})
 	if err != nil {
 		t.Fatalf("NewGiteaSourceStore: %v", err)
@@ -315,7 +315,7 @@ func TestPushBundle_ReturnsArchiveReadError_whenBundleReaderFails(t *testing.T) 
 	store, err := NewGiteaSourceStore(GiteaSourceStoreConfig{
 		BaseURL: "http://127.0.0.1:1",
 		Token:   "tok",
-		OrgName: "loopruntime",
+		OrgName: "loop-runtime",
 	})
 	if err != nil {
 		t.Fatalf("NewGiteaSourceStore: %v", err)
@@ -343,7 +343,7 @@ func TestPushBundle_ReturnsBundleTooLarge_whenAboveLimit(t *testing.T) {
 	store, err := NewGiteaSourceStore(GiteaSourceStoreConfig{
 		BaseURL: "http://127.0.0.1:1",
 		Token:   "tok",
-		OrgName: "loopruntime",
+		OrgName: "loop-runtime",
 	})
 	if err != nil {
 		t.Fatalf("NewGiteaSourceStore: %v", err)
@@ -374,7 +374,7 @@ func TestPushBundle_ReturnsSourceBackendUnreachable_whenGiteaUnavailable(t *test
 	store, err := NewGiteaSourceStore(GiteaSourceStoreConfig{
 		BaseURL: srv.URL,
 		Token:   "tok",
-		OrgName: "loopruntime",
+		OrgName: "loop-runtime",
 	})
 	if err != nil {
 		t.Fatalf("NewGiteaSourceStore: %v", err)

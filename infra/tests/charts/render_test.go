@@ -18,7 +18,7 @@ const defaultRelease = "release-name"
 
 // Every chart this package renders goes through chartrender. Shelling out to
 // `helm template` directly skipped three things the facade owns: the
-// ErrAmbiguousChart guard for loopruntime-api / loopruntime-cloud, the one-shot `helm dep
+// ErrAmbiguousChart guard for loop-runtime-api / loop-console, the one-shot `helm dep
 // update` (without it a chart with a `dependencies:` block does not render in a
 // fresh clone — 19 tests here failed that way), and one missing-helm policy.
 

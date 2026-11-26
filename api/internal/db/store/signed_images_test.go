@@ -28,12 +28,12 @@ func TestAppAttestationStoreSqlc_FindSignedImages_RejectsEmptyInputs(t *testing.
 }
 
 // TestAppAttestationStoreSqlc_FindSignedImages_RealPG runs the query against a
-// Postgres loaded with schema.gen.sql (LOOPRUNTIME_E2E_DATABASE_URL). It seeds
+// Postgres loaded with schema.gen.sql (LOOP_RUNTIME_E2E_DATABASE_URL). It seeds
 // inside a transaction it rolls back, so it leaves no rows behind.
 func TestAppAttestationStoreSqlc_FindSignedImages_RealPG(t *testing.T) {
-	dsn := os.Getenv("LOOPRUNTIME_E2E_DATABASE_URL")
+	dsn := os.Getenv("LOOP_RUNTIME_E2E_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("LOOPRUNTIME_E2E_DATABASE_URL not set: real-PG query test skipped")
+		t.Skip("LOOP_RUNTIME_E2E_DATABASE_URL not set: real-PG query test skipped")
 	}
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, dsn)

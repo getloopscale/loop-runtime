@@ -104,7 +104,7 @@ func (c *fakeCellQuerier) GetTenantCellID(_ context.Context, tenantID string) (s
 // binding control in routes/internal_secret_fetch.go line 143 calls
 // `deps.TenantBinding.GetTenantCellID(ctx, tenantID)` and compares to
 // `identity.CellID`. If the middleware trusted X-Cell-ID, any holder of
-// LOOPRUNTIME_BROKER_TOKEN could spoof any cell and read every tenant's secrets.
+// LOOP_RUNTIME_BROKER_TOKEN could spoof any cell and read every tenant's secrets.
 // Server-side derivation makes the spoof structurally impossible for the
 // dev-public single-cluster path. A multi-cluster path would use a per-cell
 // TokenReview against the cell's K8s API (separate follow-up plan).

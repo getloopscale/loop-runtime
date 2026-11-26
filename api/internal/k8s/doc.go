@@ -26,7 +26,7 @@
 // tenant_cr_manager.go, application_cr_manager.go and secret_k8s_manager.go alike;
 // "plumbing names no domain" refuses all three, and refuses the next one too.
 //
-// The gate `loopruntime-ops quality package-admission` enforces both halves — no domain
+// The gate `loop-runtime-ops quality package-admission` enforces both halves — no domain
 // vocabulary up here, and every home still populated, so refusing into nowhere does
 // not read as compliance. See docs/architecture.md.
 package k8s

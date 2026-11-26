@@ -21,7 +21,7 @@
 
 set -euo pipefail
 
-CONTEXT="${KUBECONTEXT:-k3d-loopruntime-core}"
+CONTEXT="${KUBECONTEXT:-k3d-loop-runtime-core}"
 
 kubectl --context "$CONTEXT" -n argocd rollout restart deploy/argocd-repo-server
 kubectl --context "$CONTEXT" -n argocd rollout status deploy/argocd-repo-server --timeout=60s

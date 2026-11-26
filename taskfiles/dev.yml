@@ -2,7 +2,7 @@ version: "3"
 
 # taskfiles/dev.yml — developer loop: dev:up, doctor, status, logs, images.
 # Migration target: dev:up, doctor, status, logs:*, images:*, setup, clean*.
-# (CLI extracted to standalone github.com/getloopscale/loopruntime-cli — M2 decomposition.)
+# (CLI extracted to standalone github.com/getloopscale/loop-runtime-cli — M2 decomposition.)
 
 tasks:
   doctor:
@@ -85,7 +85,7 @@ tasks:
 
         echo ""
         echo "=== k3d Clusters ==="
-        for CLUSTER in loopruntime-core loopruntime-build loopruntime-cell-0 loopruntime-cell-1; do
+        for CLUSTER in loop-runtime-core loop-runtime-build loop-runtime-cell-0 loop-runtime-cell-1; do
           if k3d cluster list -o json 2>/dev/null | grep -q "\"name\":\"$CLUSTER\""; then
             echo "  [PASS] $CLUSTER cluster exists"
             PASS=$((PASS+1))
@@ -97,7 +97,7 @@ tasks:
 
         echo ""
         echo "=== Cluster Connectivity ==="
-        for CTX in k3d-loopruntime-core k3d-loopruntime-build k3d-loopruntime-cell-0 k3d-loopruntime-cell-1; do
+        for CTX in k3d-loop-runtime-core k3d-loop-runtime-build k3d-loop-runtime-cell-0 k3d-loop-runtime-cell-1; do
           if kubectl --context "$CTX" cluster-info >/dev/null 2>&1; then
             echo "  [PASS] $CTX reachable"
             PASS=$((PASS+1))
@@ -110,7 +110,7 @@ tasks:
         echo ""
         echo "=== API Tokens ==="
         # ArgoCD token check (optional — not needed until Sprint 2)
-        ARGOCD_TOKEN=$(kubectl --context {{.CORE_CONTEXT}} get secret loopruntime-api-tokens -n loopruntime-system -o jsonpath='{.data.argocd-token}' 2>/dev/null | base64 -d 2>/dev/null)
+        ARGOCD_TOKEN=$(kubectl --context {{.CORE_CONTEXT}} get secret loop-runtime-api-tokens -n loop-runtime-system -o jsonpath='{.data.argocd-token}' 2>/dev/null | base64 -d 2>/dev/null)
         if [ -z "$ARGOCD_TOKEN" ]; then
           echo "  [WARN] ArgoCD token — not provisioned (required from Sprint 2)"
           WARN=$((WARN+1))
@@ -144,7 +144,7 @@ tasks:
           fi
         fi
         # Gitea token check
-        GITEA_TOKEN=$(kubectl --context {{.CORE_CONTEXT}} get secret loopruntime-api-tokens -n loopruntime-system -o jsonpath='{.data.gitea-token}' 2>/dev/null | base64 -d 2>/dev/null)
+        GITEA_TOKEN=$(kubectl --context {{.CORE_CONTEXT}} get secret loop-runtime-api-tokens -n loop-runtime-system -o jsonpath='{.data.gitea-token}' 2>/dev/null | base64 -d 2>/dev/null)
         if [ -n "$GITEA_TOKEN" ]; then
           echo "  [PASS] Gitea token — present (${#GITEA_TOKEN} chars)"
           PASS=$((PASS+1))
@@ -156,7 +156,7 @@ tasks:
         echo ""
         echo "=== Ory Auth Services (mgmt cluster) ==="
         for SVC in ory-kratos-public ory-kratos-admin ory-hydra-public ory-hydra-admin; do
-          NS="loopruntime-auth"
+          NS="loop-runtime-auth"
           if kubectl --context {{.CORE_CONTEXT}} -n "$NS" get svc "$SVC" >/dev/null 2>&1; then
             READY=$(kubectl --context {{.CORE_CONTEXT}} -n "$NS" get endpoints "$SVC" -o jsonpath='{.subsets[0].addresses}' 2>/dev/null)
             if [ -n "$READY" ]; then
@@ -175,7 +175,7 @@ tasks:
         echo ""
         echo "=== Core Services (mgmt cluster) ==="
         for SVC in postgresql gitea-http minio argocd-server; do
-          NS="loopruntime-system"
+          NS="loop-runtime-system"
           if [ "$SVC" = "argocd-server" ]; then NS="argocd"; fi
           # minio and argocd-server are optional until Sprint 2
           IS_OPTIONAL=false
@@ -214,10 +214,10 @@ tasks:
         # rollout status. Catches "operator silently down" — a class of
         # bugs the legacy single-pod monolith hid via aggregate health.
         for OP in tenant-operator app-operator preview-operator platform-operator; do
-          DEPLOY="loopruntime-${OP}"
-          if kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get deploy "$DEPLOY" >/dev/null 2>&1; then
-            READY=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get deploy "$DEPLOY" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
-            DESIRED=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get deploy "$DEPLOY" -o jsonpath='{.spec.replicas}' 2>/dev/null)
+          DEPLOY="loop-runtime-${OP}"
+          if kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get deploy "$DEPLOY" >/dev/null 2>&1; then
+            READY=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get deploy "$DEPLOY" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+            DESIRED=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get deploy "$DEPLOY" -o jsonpath='{.spec.replicas}' 2>/dev/null)
             READY=${READY:-0}
             DESIRED=${DESIRED:-1}
             if [ "$READY" -ge "$DESIRED" ]; then
@@ -229,9 +229,9 @@ tasks:
             fi
           else
             # Tilt deployments use bare names (tenant-operator) instead
-            # of chart-prefixed names (loopruntime-tenant-operator). Try both.
-            if kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get deploy "$OP" >/dev/null 2>&1; then
-              READY=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get deploy "$OP" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+            # of chart-prefixed names (loop-runtime-tenant-operator). Try both.
+            if kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get deploy "$OP" >/dev/null 2>&1; then
+              READY=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get deploy "$OP" -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
               READY=${READY:-0}
               if [ "$READY" -ge 1 ]; then
                 echo "  [PASS] $OP (Tilt) — $READY ready"
@@ -255,14 +255,14 @@ tasks:
         # twice — counting the same ClusterCredential twice and comparing the
         # result against a total of 3 that no longer exists.
         # Single-cell setups (CI, low-RAM dev) can downgrade FAIL → WARN via
-        # LOOPRUNTIME_DOCTOR_ALLOW_SINGLE_CELL=1.
-        ALLOW_SINGLE="${LOOPRUNTIME_DOCTOR_ALLOW_SINGLE_CELL:-0}"
+        # LOOP_RUNTIME_DOCTOR_ALLOW_SINGLE_CELL=1.
+        ALLOW_SINGLE="${LOOP_RUNTIME_DOCTOR_ALLOW_SINGLE_CELL:-0}"
         CELL_COUNT=0
         CELL_TOTAL=0
         for CELL in cell-0 cell-1; do
           CELL_TOTAL=$((CELL_TOTAL+1))
-          if kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get clustercredential "$CELL" >/dev/null 2>&1; then
-            CONNECTED=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get clustercredential "$CELL" -o jsonpath='{.status.connected}' 2>/dev/null)
+          if kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get clustercredential "$CELL" >/dev/null 2>&1; then
+            CONNECTED=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get clustercredential "$CELL" -o jsonpath='{.status.connected}' 2>/dev/null)
             if [ "$CONNECTED" = "true" ]; then
               echo "  [PASS] $CELL — ClusterCredential connected"
               PASS=$((PASS+1))
@@ -273,7 +273,7 @@ tasks:
             fi
           else
             if [ "$ALLOW_SINGLE" = "1" ]; then
-              echo "  [WARN] $CELL — ClusterCredential absent (LOOPRUNTIME_DOCTOR_ALLOW_SINGLE_CELL=1)"
+              echo "  [WARN] $CELL — ClusterCredential absent (LOOP_RUNTIME_DOCTOR_ALLOW_SINGLE_CELL=1)"
               WARN=$((WARN+1))
             else
               echo "  [FAIL] $CELL — ClusterCredential absent. Run: task k3d:bootstrap-cells"
@@ -282,10 +282,10 @@ tasks:
           fi
         done
         echo "  Cells: $CELL_COUNT/$CELL_TOTAL connected"
-        # Verify runtime-2 has loopruntime-platform deployed (cell-1 destination).
+        # Verify runtime-2 has loop-runtime-platform deployed (cell-1 destination).
         if [ "$CELL_COUNT" -ge "$CELL_TOTAL" ] || [ "$ALLOW_SINGLE" != "1" ]; then
-          if kubectl --context k3d-loopruntime-cell-1 get ns argo-rollouts >/dev/null 2>&1 \
-             && kubectl --context k3d-loopruntime-cell-1 get ns traefik >/dev/null 2>&1; then
+          if kubectl --context k3d-loop-runtime-cell-1 get ns argo-rollouts >/dev/null 2>&1 \
+             && kubectl --context k3d-loop-runtime-cell-1 get ns traefik >/dev/null 2>&1; then
             echo "  [PASS] cell-1 platform — argo-rollouts + traefik deployed"
             PASS=$((PASS+1))
           else
@@ -318,8 +318,8 @@ tasks:
         k3d cluster list 2>/dev/null || echo "k3d not available or no clusters"
 
         echo ""
-        echo "=== Pod Status (loopruntime-system) ==="
-        kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get pods -o wide 2>/dev/null \
+        echo "=== Pod Status (loop-runtime-system) ==="
+        kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get pods -o wide 2>/dev/null \
           || echo "Cannot reach mgmt cluster"
 
         echo ""
@@ -349,7 +349,7 @@ tasks:
             || echo "API healthy (but jq not available for pretty output)"
         else
           echo "API not reachable at localhost:{{.API_PORT}}"
-          echo "  Hint: run 'tilt up' or check loopruntime-api pod"
+          echo "  Hint: run 'tilt up' or check loop-runtime-api pod"
         fi
 
         echo ""
@@ -397,11 +397,11 @@ tasks:
         done
 
         # 2. Core pods running
-        smoke "postgresql pod running" kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
+        smoke "postgresql pod running" kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
           wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql --timeout=5s
-        smoke "gitea pod running" kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
+        smoke "gitea pod running" kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
           wait --for=condition=ready pod -l app.kubernetes.io/name=gitea --timeout=5s
-        smoke "minio pod running" kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
+        smoke "minio pod running" kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
           wait --for=condition=ready pod -l app=minio --field-selector=status.phase=Running --timeout=5s
 
         # 3. CRDs installed
@@ -412,8 +412,8 @@ tasks:
         smoke "API /health/deep returns 200" curl -sf http://localhost:{{.API_PORT}}/api/v1/health/deep
 
         # 5. API tokens present
-        smoke "ArgoCD token provisioned" sh -c 'kubectl --context {{.CORE_CONTEXT}} get secret loopruntime-api-tokens -n loopruntime-system -o jsonpath="{.data.argocd-token}" 2>/dev/null | grep -q .'
-        smoke "Gitea token provisioned" sh -c 'kubectl --context {{.CORE_CONTEXT}} get secret loopruntime-api-tokens -n loopruntime-system -o jsonpath="{.data.gitea-token}" 2>/dev/null | grep -q .'
+        smoke "ArgoCD token provisioned" sh -c 'kubectl --context {{.CORE_CONTEXT}} get secret loop-runtime-api-tokens -n loop-runtime-system -o jsonpath="{.data.argocd-token}" 2>/dev/null | grep -q .'
+        smoke "Gitea token provisioned" sh -c 'kubectl --context {{.CORE_CONTEXT}} get secret loop-runtime-api-tokens -n loop-runtime-system -o jsonpath="{.data.gitea-token}" 2>/dev/null | grep -q .'
 
         echo ""
         echo "=== Result: $PASS passed, $FAIL failed ==="
@@ -429,9 +429,9 @@ tasks:
   # ===========================================================================
 
   logs:api:
-    desc: Tail loopruntime-api logs (live)
+    desc: Tail loop-runtime-api logs (live)
     cmds:
-      - kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system logs -f deployment/loopruntime-api --tail=100
+      - kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system logs -f deployment/loop-runtime-api --tail=100
 
   logs:operator:
     desc: 'Tail logs for one operator (use NAME=tenant|app|preview|platform; default tenant)'
@@ -440,25 +440,25 @@ tasks:
     cmds:
       - |
         # ADR-0023 / plan T1.5 + dx-engineer condition #3.
-        # Try chart-prefixed name first (loopruntime-X-operator), fall back to
+        # Try chart-prefixed name first (loop-runtime-X-operator), fall back to
         # bare Tilt name (X-operator).
-        DEPLOY="loopruntime-{{.NAME}}-operator"
-        if ! kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get deploy "$DEPLOY" >/dev/null 2>&1; then
+        DEPLOY="loop-runtime-{{.NAME}}-operator"
+        if ! kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get deploy "$DEPLOY" >/dev/null 2>&1; then
           DEPLOY="{{.NAME}}-operator"
         fi
         echo ">> tailing logs from deploy/$DEPLOY"
-        kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system logs -f "deployment/$DEPLOY" --tail=100
+        kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system logs -f "deployment/$DEPLOY" --tail=100
 
   logs:operators:
     desc: 'Tail logs from ALL 4 operator pods (split-binary topology)'
     cmds:
       - |
         # ADR-0023 / plan T1.5 + dx-engineer condition #1: shared
-        # `app.kubernetes.io/component: loopruntime-operator` label enables this
+        # `app.kubernetes.io/component: loop-runtime-operator` label enables this
         # canonical fan-out command. Caps streams at 4 concurrent (one per
         # binary).
-        kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system logs \
-          -l app.kubernetes.io/component=loopruntime-operator \
+        kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system logs \
+          -l app.kubernetes.io/component=loop-runtime-operator \
           --all-containers --max-log-requests=4 --tail=50 -f
 
   debug:operator:
@@ -473,13 +473,13 @@ tasks:
         # and run with `dlv exec --headless --listen=:2345 --api-version=2 …`).
         # This task assumes that custom image is loaded via Tilt's local_resource
         # debug profile.
-        DEPLOY="loopruntime-{{.NAME}}-operator"
-        if ! kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get deploy "$DEPLOY" >/dev/null 2>&1; then
+        DEPLOY="loop-runtime-{{.NAME}}-operator"
+        if ! kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get deploy "$DEPLOY" >/dev/null 2>&1; then
           DEPLOY="{{.NAME}}-operator"
         fi
         echo ">> port-forward 2345 → deploy/$DEPLOY (dlv headless)"
         echo ">> in another shell: dlv connect localhost:2345"
-        kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system port-forward "deploy/$DEPLOY" 2345:2345
+        kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system port-forward "deploy/$DEPLOY" 2345:2345
 
   logs:builds:
     desc: Show recent build workflow pods and their status
@@ -523,7 +523,7 @@ tasks:
       - |
         echo ""
         echo "=== Step 3/4: Seed E2E data ==="
-        kubectl --context "{{.CORE_CONTEXT}}" port-forward -n loopruntime-system svc/postgresql "{{.PG_PORT}}":5432 &
+        kubectl --context "{{.CORE_CONTEXT}}" port-forward -n loop-runtime-system svc/postgresql "{{.PG_PORT}}":5432 &
         PF_PID=$!
         sleep 2
         DATABASE_URL="postgres://{{.PG_USER}}:{{.PG_PASS}}@{{.PG_HOST}}:{{.PG_PORT}}/{{.PG_DB}}?sslmode=disable" \
@@ -553,10 +553,10 @@ tasks:
       - |
         echo "Cleaning test artifacts..."
         rm -rf {{.REPORT_DIR}} 2>/dev/null || true
-        rm -rf /tmp/loopruntime-e2e-* 2>/dev/null || true
+        rm -rf /tmp/loop-runtime-e2e-* 2>/dev/null || true
 
-        # Kill any leftover PostgreSQL port-forwards (scoped to loopruntime-system)
-        pkill -f "kubectl.*port-forward.*loopruntime-system.*postgresql" 2>/dev/null || true
+        # Kill any leftover PostgreSQL port-forwards (scoped to loop-runtime-system)
+        pkill -f "kubectl.*port-forward.*loop-runtime-system.*postgresql" 2>/dev/null || true
 
         # Clean Go test cache
         go clean -testcache 2>/dev/null || true
@@ -605,9 +605,9 @@ tasks:
         echo ""
         echo "Deleting k3d clusters and registry..."
       - task: clusters:delete
-      - k3d registry delete loopruntime-registry 2>/dev/null || true
+      - k3d registry delete loop-runtime-registry 2>/dev/null || true
       # Finding 2026-05-13 (k3d agent timeout): clean:all preserved orphan
-      # docker volumes labeled app=k3d AND the shared k3d-loopruntime network.
+      # docker volumes labeled app=k3d AND the shared k3d-loop-runtime network.
       # Accumulation across cleanroom loops produced 132GB reclaimable
       # volumes + lingering network state, contributing to IO contention
       # during subsequent `clusters:create`. Rule 0 (local fidedigno) +
@@ -620,8 +620,8 @@ tasks:
           echo "$ORPHANS" | xargs -r docker volume rm -f 2>/dev/null || true
         fi
       - |
-        echo "Removing shared docker network k3d-loopruntime (if empty)..."
-        docker network rm k3d-loopruntime 2>/dev/null || true
+        echo "Removing shared docker network k3d-loop-runtime (if empty)..."
+        docker network rm k3d-loop-runtime 2>/dev/null || true
       - echo "Full teardown complete. Run 'task setup' to start fresh."
 
   clean:deep:
@@ -727,12 +727,12 @@ tasks:
           (cd api && go test ./... -short -v)
           (cd infra/tests && go test ./unit/... -short -v -count=1)
         fi
-      # CLI unit tests + JUnit report moved to the standalone loopruntime-cli repo (M2 — 2026-06-16).
+      # CLI unit tests + JUnit report moved to the standalone loop-runtime-cli repo (M2 — 2026-06-16).
 
   test:report:e2e:
     desc: Run E2E tests with JUnit XML output
     env:
-      LOOPRUNTIME_E2E: "1"
+      LOOP_RUNTIME_E2E: "1"
     cmds:
       - mkdir -p {{.REPORT_DIR}}
       - |
@@ -780,7 +780,7 @@ tasks:
         #!/bin/bash
         while true; do
           sleep 240
-          kubectl --context k3d-loopruntime-core -n argocd rollout restart sts/argocd-application-controller > /dev/null 2>&1
+          kubectl --context k3d-loop-runtime-core -n argocd rollout restart sts/argocd-application-controller > /dev/null 2>&1
           echo "[$(date -Iseconds)] app-controller restart triggered" >> /tmp/argocd-restart-loop.log
         done
         SCRIPT

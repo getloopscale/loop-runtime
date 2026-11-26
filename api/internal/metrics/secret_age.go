@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// SecretAgeCollector periodically updates the loopruntime_service_auth_secret_age_seconds
-// gauge. If a creation timestamp is provided (via LOOPRUNTIME_SERVICE_AUTH_SECRET_CREATED_AT),
+// SecretAgeCollector periodically updates the loop_runtime_service_auth_secret_age_seconds
+// gauge. If a creation timestamp is provided (via LOOP_RUNTIME_SERVICE_AUTH_SECRET_CREATED_AT),
 // the age is computed from that. Otherwise it falls back to the process start time,
 // which is a lower bound on the real secret age but still useful for alerting on
 // long-running processes that never rotated.
@@ -25,7 +25,7 @@ type SecretAgeCollector struct {
 func NewSecretAgeCollector(createdAt time.Time, logger *slog.Logger) *SecretAgeCollector {
 	if createdAt.IsZero() {
 		createdAt = time.Now()
-		logger.Info("LOOPRUNTIME_SERVICE_AUTH_SECRET_CREATED_AT not set — using process start time for secret age metric")
+		logger.Info("LOOP_RUNTIME_SERVICE_AUTH_SECRET_CREATED_AT not set — using process start time for secret age metric")
 	} else {
 		logger.Info("service auth secret age tracking enabled",
 			"created_at", createdAt.Format(time.RFC3339),

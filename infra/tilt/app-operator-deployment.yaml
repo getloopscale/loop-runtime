@@ -5,7 +5,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: app-operator
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -36,8 +36,8 @@ rules:
     resources: ["clustercredentials"]
     verbs: ["get", "list", "watch"]
 
-  # --- Secrets: NOT here — Role app-operator-secrets-loopruntime-system below.
-  # Mirrors charts/loopruntime-app-operator/templates/role-secret-access.yaml.
+  # --- Secrets: NOT here — Role app-operator-secrets-loop-runtime-system below.
+  # Mirrors charts/loop-runtime-app-operator/templates/role-secret-access.yaml.
 
   # --- Services: read-only for routing validation ---
   - apiGroups: [""]
@@ -70,15 +70,15 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: app-operator
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 ---
-# Secret read in loopruntime-system only: cell kubeconfigs. The operator's Secret
+# Secret read in loop-runtime-system only: cell kubeconfigs. The operator's Secret
 # cache watches this namespace alone.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: app-operator-secrets-loopruntime-system
-  namespace: loopruntime-system
+  name: app-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -87,36 +87,36 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: app-operator-secrets-loopruntime-system
-  namespace: loopruntime-system
+  name: app-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: app-operator-secrets-loopruntime-system
+  name: app-operator-secrets-loop-runtime-system
 subjects:
   - kind: ServiceAccount
     name: app-operator
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app-operator
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   labels:
     app: app-operator
-    app.kubernetes.io/component: loopruntime-operator
+    app.kubernetes.io/component: loop-runtime-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: app-operator
-      app.kubernetes.io/component: loopruntime-operator
+      app.kubernetes.io/component: loop-runtime-operator
   template:
     metadata:
       labels:
         app: app-operator
-        app.kubernetes.io/component: loopruntime-operator
+        app.kubernetes.io/component: loop-runtime-operator
     spec:
       serviceAccountName: app-operator
       securityContext:
@@ -125,23 +125,23 @@ spec:
         fsGroup: 1000
       containers:
         - name: operator
-          image: loopruntime-app-operator
+          image: loop-runtime-app-operator
           args:
             - "--leader-elect=false"
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8080"
           env:
             - name: BASE_DOMAIN
-              value: "loopruntime.local"
+              value: "loop-runtime.local"
             # dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6 + EC-5):
             # ApplicationController fast-path Healthy needs a cell-0-cluster
             # client (cell-aware via CellAwareRuntimeClientFactory). Mount the
-            # runtime kubeconfig from loopruntime-cluster-kubeconfigs Secret (same
-            # mount as tenant-operator + loopruntime-api). Without CELL_0_KUBECONFIG
+            # runtime kubeconfig from loop-runtime-cluster-kubeconfigs Secret (same
+            # mount as tenant-operator + loop-runtime-api). Without CELL_0_KUBECONFIG
             # the controller falls back to legacy mode (Application phase
             # only converges via ExposedRoute Reachable).
             - name: CELL_0_KUBECONFIG
-              value: "/etc/loopruntime/runtime/kubeconfig"
+              value: "/etc/loop-runtime/runtime/kubeconfig"
           ports:
             - containerPort: 8081
               name: health
@@ -173,7 +173,7 @@ spec:
               mountPath: /tmp
             # dogfood-2026-05-08-fixes T4.2: mount runtime kubeconfig
             - name: runtime-kubeconfig
-              mountPath: /etc/loopruntime/runtime
+              mountPath: /etc/loop-runtime/runtime
               readOnly: true
           securityContext:
             runAsNonRoot: true
@@ -189,7 +189,7 @@ spec:
           emptyDir: {}
         - name: runtime-kubeconfig
           secret:
-            secretName: loopruntime-cluster-kubeconfigs
+            secretName: loop-runtime-cluster-kubeconfigs
             items:
               - key: cell-0.kubeconfig
                 path: kubeconfig

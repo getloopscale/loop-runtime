@@ -21,7 +21,7 @@ export class Tempo extends pulumi.ComponentResource {
   public readonly release: k8s.helm.v3.Release;
 
   constructor(name: string, args: TempoArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopruntime:platform:Tempo", name, {}, opts);
+    super("loop-runtime:platform:Tempo", name, {}, opts);
 
     this.release = new k8s.helm.v3.Release(
       "tempo",
@@ -74,7 +74,7 @@ export class OtelCollector extends pulumi.ComponentResource {
   public readonly release: k8s.helm.v3.Release;
 
   constructor(name: string, args: OtelCollectorArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopruntime:platform:OtelCollector", name, {}, opts);
+    super("loop-runtime:platform:OtelCollector", name, {}, opts);
 
     this.release = new k8s.helm.v3.Release(
       "otel-collector",

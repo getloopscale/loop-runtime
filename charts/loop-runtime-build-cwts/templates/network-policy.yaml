@@ -1,0 +1,112 @@
+# SEC-009 / CHG-2026-04-25-E2E: Default-deny egress for Argo build pods.
+#
+# DESIGN NOTE: This NetworkPolicy is hardcoded to namespace "argo" because it
+# protects Argo workflow pods (where build steps run), NOT the LoopRuntime control
+# plane in loop-runtime-system. Previous version used `{{ .Release.Namespace }}` which,
+# when this chart is included as a sub-chart of the loop-runtime-platform umbrella
+# (Release.Namespace=loop-runtime-system), placed the policy in the WRONG namespace
+# AND with `podSelector: {}`, applied to the entire loop-runtime-system — blocking
+# loop-runtime-api / loop-runtime-controller from reaching Gitea / PG / ArgoCD / Hydra.
+#
+# Fix: hardcode namespace: argo + select only pods labeled by Argo workflow
+# controller. Control-plane pods in loop-runtime-system get their own NetworkPolicies
+# (per-chart) with appropriate egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: build-pod-egress
+  namespace: argo
+  labels:
+    app.kubernetes.io/name: loop-runtime-build
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: loop-runtime
+spec:
+  # Apply only to pods spawned by Argo workflows (have this label automatically).
+  # Argo workflow controller adds workflows.argoproj.io/workflow=<wf-name>
+  # on every pod it creates. The "Exists" operator selects all such pods.
+  podSelector:
+    matchExpressions:
+      - key: workflows.argoproj.io/workflow
+        operator: Exists
+  policyTypes:
+    - Egress
+  egress:
+    # DNS resolution (required by all pods)
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # MinIO / S3 (source bundles, cache, static assets)
+    # 9000 = native MinIO port (in-cluster)
+    # 443  = TLS to S3 / DOCR / DOSpaces
+    # 30000-32767 = K8s NodePort range, used in cross-cluster local dev
+    #   (build cluster reaches mgmt cluster MinIO via NodePort 32000)
+    #   Discovered LIVE 2026-04-30 NEW-10: workflows pinned by this NP could
+    #   not dial mgmt MinIO NodePort, causing clone-repo "connection refused"
+    #   that no probe pod reproduced (probes lacked the workflows.* label).
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 9000
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 32000
+    # Container registry (BuildKit push, cosign push)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 5000
+    # HTTP/HTTPS for package managers (npm, pip, go mod, apt) and external APIs
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+    # Gitea (gitops-push step uses this; runs as build pod in argo namespace)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 3000
+    # Kubernetes API (some workflow steps may patch CRDs / read configmaps)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 6443
+        - protocol: TCP
+          port: 443
+    # Sigstore — Fulcio, Rekor, CTLog (M07 keyless signing, Ralph iter 4 2026-05-28)
+    # IMPORTANT: target ports (post-DNAT), NOT service ports. kube-router evaluates
+    # NetworkPolicy egress AFTER kube-proxy DNAT translates ClusterIP:80 -> PodIP:5555.
+    # An egress allowing only port 80 (general HTTP rule above) does NOT cover Fulcio
+    # because the actual destination port seen by iptables filter is 5555 (Fulcio
+    # HTTP backend), 5554 (gRPC), 3000 (Rekor), or 6962 (CTLog).
+    # Discovered LIVE via iptables-save inspection during M07 plan v1.5 work.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fulcio-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: rekor-system
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ctlog-system
+      ports:
+        - protocol: TCP
+          port: 5555   # Fulcio HTTP backend
+        - protocol: TCP
+          port: 5554   # Fulcio gRPC
+        - protocol: TCP
+          port: 3000   # Rekor HTTP
+        - protocol: TCP
+          port: 6962   # CTLog HTTP
+        - protocol: TCP
+          port: 2112   # Sigstore metrics
+{{- with .Values.networkPolicy.extraEgress }}
+    # Environment-specific destinations (networkPolicy.extraEgress).
+{{ toYaml . | indent 4 }}
+{{- end }}

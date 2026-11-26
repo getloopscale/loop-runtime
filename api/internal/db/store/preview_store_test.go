@@ -48,7 +48,7 @@ import (
 //     pass-through tests — sqlc compile-time + sqlcsync gate replace.
 //
 // Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves
-// to real-PG-gated tests when pgxmock or LOOPRUNTIME_E2E_DATABASE_URL
+// to real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL
 // harness is wired.
 
 // TestPreviewRecord_ToDomain_PopulatesAllFields is the only stub-free
@@ -57,7 +57,7 @@ import (
 // dependency.
 func TestPreviewRecord_ToDomain_PopulatesAllFields(t *testing.T) {
 	now := time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)
-	url := "https://pr-prev-z.preview.loopruntime.app"
+	url := "https://pr-prev-z.preview.loop-runtime.app"
 	build := "build-99"
 	rec := PreviewRecord{
 		ID:        "prev-z",

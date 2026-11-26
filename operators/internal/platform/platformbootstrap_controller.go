@@ -3,7 +3,7 @@
 
 // Package platform implements the PlatformBootstrap +
 // GitRepositoryBinding + ClusterCredential controllers (operator
-// binary `loopruntime-platform-operator` per ADR-0023). Owns the control-
+// binary `loop-runtime-platform-operator` per ADR-0023). Owns the control-
 // plane reconciliation: bootstraps Gitea + ArgoCD on a fresh
 // cluster, registers per-tenant Git repositories, and manages the
 // multi-cell ClusterCredential CRs that DynamicRouter resolves.
@@ -46,7 +46,7 @@ var platformBootstrapSM = statemachine.NewPlatformBootstrapTypedMachine()
 type ArgoCDBootstrapClient interface {
 	// CheckReachable verifies ArgoCD is reachable (GET /api/version).
 	CheckReachable(ctx context.Context) error
-	// GenerateAPIKey creates a non-expiring apiKey for the loopruntime-api account.
+	// GenerateAPIKey creates a non-expiring apiKey for the loop-runtime-api account.
 	GenerateAPIKey(ctx context.Context, adminPassword string) (string, error)
 }
 
@@ -59,8 +59,8 @@ type ArgoCDBootstrapClient interface {
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=platformbootstraps,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=platformbootstraps/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=platformbootstraps/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,verbs=get;list;watch;update
-// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,resourceNames=platform-tokens,verbs=delete
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch;update
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,resourceNames=platform-tokens,verbs=delete
 // +kubebuilder:rbac:groups="",namespace=argocd,resources=secrets,verbs=get;list;watch;create;update
 type PlatformBootstrapReconciler struct {
 	client.Client

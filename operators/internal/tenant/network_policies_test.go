@@ -119,11 +119,11 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 		})
 
 		It("should create a NetworkPolicy named deny-all in the runtime namespace", func() {
-			expectNetworkPolicyExists("deny-all", fmt.Sprintf("loopruntime-%s-default-project-production", tenantName))
+			expectNetworkPolicyExists("deny-all", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
 		It("should include both Ingress and Egress in deny-all PolicyTypes", func() {
-			withNetworkPolicy("deny-all", fmt.Sprintf("loopruntime-%s-default-project-production", tenantName), func(g Gomega, np *networkingv1.NetworkPolicy) {
+			withNetworkPolicy("deny-all", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName), func(g Gomega, np *networkingv1.NetworkPolicy) {
 				g.Expect(np.Spec.PolicyTypes).To(ContainElements(
 					networkingv1.PolicyTypeIngress,
 					networkingv1.PolicyTypeEgress,
@@ -132,7 +132,7 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 		})
 
 		It("should have no ingress or egress rules in deny-all (empty = block all)", func() {
-			withNetworkPolicy("deny-all", fmt.Sprintf("loopruntime-%s-default-project-production", tenantName), func(g Gomega, np *networkingv1.NetworkPolicy) {
+			withNetworkPolicy("deny-all", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName), func(g Gomega, np *networkingv1.NetworkPolicy) {
 				g.Expect(np.Spec.Ingress).To(BeEmpty(),
 					"deny-all must have no ingress rules — empty list means block all ingress")
 				g.Expect(np.Spec.Egress).To(BeEmpty(),
@@ -166,19 +166,19 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 		})
 
 		It("should create the deny-all NetworkPolicy in the runtime namespace", func() {
-			expectNetworkPolicyExists("deny-all", fmt.Sprintf("loopruntime-%s-default-project-production", tenantName))
+			expectNetworkPolicyExists("deny-all", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
 		It("should create the allow-ingress-traefik NetworkPolicy in the runtime namespace", func() {
-			expectNetworkPolicyExists("allow-ingress-traefik", fmt.Sprintf("loopruntime-%s-default-project-production", tenantName))
+			expectNetworkPolicyExists("allow-ingress-traefik", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
 		It("should create the allow-egress NetworkPolicy in the runtime namespace", func() {
-			expectNetworkPolicyExists("allow-egress", fmt.Sprintf("loopruntime-%s-default-project-production", tenantName))
+			expectNetworkPolicyExists("allow-egress", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
 		It("should create at least 3 NetworkPolicies in total in the runtime namespace", func() {
-			ns := fmt.Sprintf("loopruntime-%s-default-project-production", tenantName)
+			ns := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName)
 			Eventually(func(g Gomega) {
 				var policies networkingv1.NetworkPolicyList
 				g.Expect(k8sClient.List(ctx, &policies, client.InNamespace(ns))).To(Succeed())
@@ -189,7 +189,7 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 
 		It("should not contain any policy with unrestricted internet egress (0.0.0.0/0)", func() {
 			// Same security invariant as build namespace — no runtime policy should open the internet.
-			ns := fmt.Sprintf("loopruntime-%s-default-project-production", tenantName)
+			ns := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName)
 			Eventually(func(g Gomega) {
 				var policies networkingv1.NetworkPolicyList
 				g.Expect(k8sClient.List(ctx, &policies, client.InNamespace(ns))).To(Succeed())
@@ -223,7 +223,7 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			// Wait for deny-all to exist before modifying it.
-			ns := fmt.Sprintf("loopruntime-%s-default-project-production", tenantName)
+			ns := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName)
 			Eventually(func(g Gomega) {
 				var np networkingv1.NetworkPolicy
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -233,7 +233,7 @@ var _ = Describe("Golden: Network Policies", Ordered, func() {
 		})
 
 		It("should restore deny-all PolicyTypes after manual modification", func() {
-			ns := fmt.Sprintf("loopruntime-%s-default-project-production", tenantName)
+			ns := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName)
 
 			// Simulate infrastructure drift: modify the deny-all policy to remove PolicyTypes.
 			var np networkingv1.NetworkPolicy

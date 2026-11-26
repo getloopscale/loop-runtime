@@ -15,7 +15,7 @@ import "fmt"
 // services.json is the single ingestion contract (*ServicesManifest), so the
 // loopzero.yaml types had zero production callers.
 //
-// Sprint 4 (qa-sprint4-cleanup-2026-06-25 T2.2, closes loopruntime-cloud#29 multi-field
+// Sprint 4 (qa-sprint4-cleanup-2026-06-25 T2.2, closes loop-console#29 multi-field
 // error aggregation): the Errors slice now carries ALL field-level violations
 // from the jsonschema Causes tree, not just the first one. Legacy Field/Message
 // remain for backward-compat (they equal Errors[0].Field / Errors[0].Message via

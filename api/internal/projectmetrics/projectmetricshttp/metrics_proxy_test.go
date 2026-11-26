@@ -245,7 +245,7 @@ func TestMetricsProxy_Get(t *testing.T) {
 
 	t.Run("Edge: nil promClient returns 503 prometheus_not_configured", func(t *testing.T) {
 		// Arrange: handler constructed with nil Prometheus client (operator
-		// did not configure LOOPRUNTIME_PROMETHEUS_ADDRESS). Handler must surface
+		// did not configure LOOP_RUNTIME_PROMETHEUS_ADDRESS). Handler must surface
 		// 503 honestly — NOT silently return empty data.
 		projects := &fakeProjectStore{
 			project: &ports.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},

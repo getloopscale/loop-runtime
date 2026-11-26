@@ -5,7 +5,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: platform-operator
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -23,9 +23,9 @@ rules:
     resources: ["clustercredentials/finalizers", "gitrepositorybindings/finalizers", "platformbootstraps/finalizers"]
     verbs: ["update"]
 
-  # --- Secrets: NOT here — Roles platform-operator-secrets-loopruntime-system and
+  # --- Secrets: NOT here — Roles platform-operator-secrets-loop-runtime-system and
   # platform-operator-secrets-argocd below. Mirrors
-  # charts/loopruntime-platform-operator/templates/role-{loopruntime-system,argocd}.yaml.
+  # charts/loop-runtime-platform-operator/templates/role-{loop-runtime-system,argocd}.yaml.
 
   # --- Events: emit Kubernetes events for observability ---
   - apiGroups: [""]
@@ -48,15 +48,15 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: platform-operator
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 ---
-# Secret access in loopruntime-system: kubeconfigs, Gitea admin Secret,
+# Secret access in loop-runtime-system: kubeconfigs, Gitea admin Secret,
 # platform-tokens, Git credentials. Delete only on platform-tokens.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: platform-operator-secrets-loopruntime-system
-  namespace: loopruntime-system
+  name: platform-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -69,16 +69,16 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: platform-operator-secrets-loopruntime-system
-  namespace: loopruntime-system
+  name: platform-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: platform-operator-secrets-loopruntime-system
+  name: platform-operator-secrets-loop-runtime-system
 subjects:
   - kind: ServiceAccount
     name: platform-operator
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 ---
 # Secret access in the ArgoCD namespace: the cluster, repository and
 # repo-creds Secrets the operator writes, and the ArgoCD admin Secret.
@@ -104,27 +104,27 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: platform-operator
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: platform-operator
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   labels:
     app: platform-operator
-    app.kubernetes.io/component: loopruntime-operator
+    app.kubernetes.io/component: loop-runtime-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: platform-operator
-      app.kubernetes.io/component: loopruntime-operator
+      app.kubernetes.io/component: loop-runtime-operator
   template:
     metadata:
       labels:
         app: platform-operator
-        app.kubernetes.io/component: loopruntime-operator
+        app.kubernetes.io/component: loop-runtime-operator
     spec:
       serviceAccountName: platform-operator
       securityContext:
@@ -133,7 +133,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: operator
-          image: loopruntime-platform-operator
+          image: loop-runtime-platform-operator
           args:
             - "--leader-elect=false"
             - "--health-probe-bind-address=:8081"

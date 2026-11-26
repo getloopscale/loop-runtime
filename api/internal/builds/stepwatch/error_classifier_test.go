@@ -94,7 +94,7 @@ func TestSuggestionFor_UnknownClassFallsBack(t *testing.T) {
 	}
 }
 
-// Red Team loopruntime-cloud#123 — the LOOPRUNTIME_YAML_INVALID suggestion (the only
+// Red Team loop-console#123 — the LOOP_RUNTIME_YAML_INVALID suggestion (the only
 // user-facing string in this map that named a manifest) must guide the
 // customer to the canonical `.loopzero/services.json`, not the legacy
 // `loopzero.yaml`. ErrorClassLoopRuntimeYAMLInvalid stays as an internal class name

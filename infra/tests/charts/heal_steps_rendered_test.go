@@ -10,25 +10,25 @@ import (
 	"testing"
 )
 
-const localCloneRunner = "k3d-loopruntime-registry:5000/loopruntime-clone-runner:v0.1.0"
+const localCloneRunner = "k3d-loop-runtime-registry:5000/loop-runtime-clone-runner:v0.1.0"
 
 func cloneRunnerImage(t *testing.T, env string) string {
 	t.Helper()
-	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", env, "loopruntime-build-cwts", "charts/loopruntime-build-cwts")
-	cwt := renderedObject(t, rendered, "ClusterWorkflowTemplate", "loopruntime-clone")
+	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", env, "loop-runtime-build-cwts", "charts/loop-runtime-build-cwts")
+	cwt := renderedObject(t, rendered, "ClusterWorkflowTemplate", "loop-runtime-clone")
 	if cwt == nil {
-		t.Fatalf("no loopruntime-clone ClusterWorkflowTemplate in the %s render", env)
+		t.Fatalf("no loop-runtime-clone ClusterWorkflowTemplate in the %s render", env)
 	}
 	for _, line := range strings.Split(renderYAML(t, cwt), "\n") {
-		if strings.Contains(line, "loopruntime-clone-runner") {
+		if strings.Contains(line, "loop-runtime-clone-runner") {
 			return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "image:"))
 		}
 	}
-	t.Fatalf("loopruntime-clone names no clone-runner image in the %s render", env)
+	t.Fatalf("loop-runtime-clone names no clone-runner image in the %s render", env)
 	return ""
 }
 
-// H9 ran `helm upgrade` of loopruntime-build-cwts with the local runner after every
+// H9 ran `helm upgrade` of loop-runtime-build-cwts with the local runner after every
 // restart; an environment whose cells pull from the local registry, and that
 // declares no platform registry, renders it. dev-public declares one (#435) and
 // renders the ECR runner instead — TestDevPublicCloneRunnerComesFromECR.
@@ -43,11 +43,11 @@ func TestLocalRegistryEnvironmentsCloneWithTheLocalRunner(t *testing.T) {
 }
 
 func TestRegistryBackedEnvironmentsKeepThePublishedRunner(t *testing.T) {
-	if got := cloneRunnerImage(t, "prod"); strings.HasPrefix(got, "k3d-loopruntime-registry") {
+	if got := cloneRunnerImage(t, "prod"); strings.HasPrefix(got, "k3d-loop-runtime-registry") {
 		t.Errorf("prod clone runner = %q, a local-registry image", got)
 	}
 }
 
-// H8 set LOOPRUNTIME_COSIGN_IMAGE/LOOPRUNTIME_SYFT_IMAGE on loopruntime-api to :latest. The dev-public
+// H8 set LOOP_RUNTIME_COSIGN_IMAGE/LOOP_RUNTIME_SYFT_IMAGE on loop-runtime-api to :latest. The dev-public
 // install renders them itself, pinned by commit from ECR (#435):
 // TestDevPublicBuildStepImagesComeFromECR.

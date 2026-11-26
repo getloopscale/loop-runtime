@@ -54,7 +54,7 @@ func (d *AutoDeployer) markCommitOverBuildQuota(log *slog.Logger, req PushReques
 	status := CommitStatus{
 		State:       "failure",
 		Description: fitCommitStatusDescription(result.Message),
-		Context:     "loopruntime/deploy",
+		Context:     "loop-runtime/deploy",
 	}
 	// GitHub accepts only an absolute link.
 	if strings.HasPrefix(result.UpgradeURL, "https://") || strings.HasPrefix(result.UpgradeURL, "http://") {

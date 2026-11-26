@@ -125,7 +125,7 @@ func TestController_LeaderElection_OnlyOneWinner(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			lease, err := acq.Acquire(context.Background(),
-				"loopruntime-controller", "cell-0",
+				"loop-runtime-controller", "cell-0",
 				// Each goroutine has a unique "holder" string so we can
 				// tell them apart, but only one holder gets the row.
 				"pod-"+string(rune('A'+idx)))

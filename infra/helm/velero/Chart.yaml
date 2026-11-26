@@ -10,7 +10,7 @@
 # Deployed by Helmfile L2 in Wave -1 (stateful infra), needs:[cert-manager].
 
 apiVersion: v2
-name: loopruntime-velero
+name: loop-runtime-velero
 description: Velero wrapper for LoopRuntime platform K8s resource backups
 type: application
 version: 0.1.0

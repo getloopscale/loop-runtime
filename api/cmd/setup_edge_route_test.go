@@ -32,7 +32,7 @@ func (s staticTenantCells) GetCell(_ context.Context, tenant string) (string, er
 
 // No token, no route: the lookup is never served unauthenticated.
 func TestEdgeRouteIsNotWiredWithoutAToken(t *testing.T) {
-	h, r := edgeRouteHandler(config.Config{BaseDomain: "loopruntime.local"}, staticEdgeRoutes{}, staticTenantCells{}, nil, quietLogger())
+	h, r := edgeRouteHandler(config.Config{BaseDomain: "loop-runtime.local"}, staticEdgeRoutes{}, staticTenantCells{}, nil, quietLogger())
 	if h != nil || r != nil {
 		t.Errorf("wired without a token: handler=%v router=%v", h, r)
 	}
@@ -42,13 +42,13 @@ func TestEdgeRouteIsNotWiredWithoutAToken(t *testing.T) {
 // cell of the tenant that published it — the whole chain the edge depends on.
 func TestEdgeRouteResolvesUnderTheConfiguredPublicDomain(t *testing.T) {
 	cfg := config.Config{
-		BaseDomain:          "loopruntime.local",
+		BaseDomain:          "loop-runtime.local",
 		PublicDomain:        "prod-dev.getloopscale.app",
 		PreviewPublicDomain: "preview-dev.getloopscale.app",
 		EdgeRouteToken:      "tok",
 	}
 	h, r := edgeRouteHandler(cfg,
-		staticEdgeRoutes{{Hostname: "tn-a-p-web-production.loopruntime.local", TenantID: "tn-a"}},
+		staticEdgeRoutes{{Hostname: "tn-a-p-web-production.loop-runtime.local", TenantID: "tn-a"}},
 		staticTenantCells{"tn-a": "cell-1"}, nil, quietLogger())
 	if h == nil || r == nil {
 		t.Fatal("not wired with a token")
@@ -61,8 +61,8 @@ func TestEdgeRouteResolvesUnderTheConfiguredPublicDomain(t *testing.T) {
 	req.Header.Set("X-Forwarded-Host", "tn-a-p-web-production.prod-dev.getloopscale.app")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || rec.Header().Get("X-LoopRuntime-Cell") != "cell-1" {
-		t.Errorf("status=%d cell=%q", rec.Code, rec.Header().Get("X-LoopRuntime-Cell"))
+	if rec.Code != http.StatusOK || rec.Header().Get("X-Loop-Runtime-Cell") != "cell-1" {
+		t.Errorf("status=%d cell=%q", rec.Code, rec.Header().Get("X-Loop-Runtime-Cell"))
 	}
 }
 
@@ -74,7 +74,7 @@ func (nopPublisher) Publish(context.Context, map[string]string, bool) error { re
 // router to publish host → cell into the Worker's store (#448). The router runs for the
 // publisher alone, and the lookup route stays unregistered without a token.
 func TestEdgeRouterRunsForThePublisherWithoutServingTheRoute(t *testing.T) {
-	h, r := edgeRouteHandler(config.Config{BaseDomain: "loopruntime.local"}, staticEdgeRoutes{}, staticTenantCells{},
+	h, r := edgeRouteHandler(config.Config{BaseDomain: "loop-runtime.local"}, staticEdgeRoutes{}, staticTenantCells{},
 		nopPublisher{}, quietLogger())
 	if r == nil {
 		t.Fatal("no router with a publisher configured")
@@ -109,9 +109,9 @@ func (s staticDomainHosts) ListActiveHosts(context.Context) ([]ports.DomainHost,
 // An active custom domain is a route of its tenant: the edge resolves the host to
 // the tenant's cell, and an edge that issues certificates on demand may ask for it.
 func TestEdgeRouteResolvesAnActiveCustomDomain(t *testing.T) {
-	cfg := config.Config{BaseDomain: "loopruntime.local", PublicDomain: "prod-dev.getloopscale.app", EdgeRouteToken: "tok"}
+	cfg := config.Config{BaseDomain: "loop-runtime.local", PublicDomain: "prod-dev.getloopscale.app", EdgeRouteToken: "tok"}
 	source := placement.EdgeRouteSources{
-		staticEdgeRoutes{{Hostname: "tn-a-p-web-production.loopruntime.local", TenantID: "tn-a"}},
+		staticEdgeRoutes{{Hostname: "tn-a-p-web-production.loop-runtime.local", TenantID: "tn-a"}},
 		customDomainRoutes{hosts: staticDomainHosts{{Domain: "shop.customer.com", TenantID: "tn-a"}}},
 	}
 	h, r := edgeRouteHandler(cfg, source, staticTenantCells{"tn-a": "cell-1"}, nil, quietLogger())
@@ -125,7 +125,7 @@ func TestEdgeRouteResolvesAnActiveCustomDomain(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer tok")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || rec.Header().Get("X-LoopRuntime-Cell") != "cell-1" {
-		t.Errorf("status=%d cell=%q; want 200 and cell-1", rec.Code, rec.Header().Get("X-LoopRuntime-Cell"))
+	if rec.Code != http.StatusOK || rec.Header().Get("X-Loop-Runtime-Cell") != "cell-1" {
+		t.Errorf("status=%d cell=%q; want 200 and cell-1", rec.Code, rec.Header().Get("X-Loop-Runtime-Cell"))
 	}
 }

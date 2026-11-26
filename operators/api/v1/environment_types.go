@@ -49,7 +49,7 @@ type EnvironmentCRSpec struct {
 	Environment string `json:"environment"`
 
 	// Project is the project segment of the canonical namespace formula
-	// `loopruntime-<tenant>-<project>-<env>`. T3.1 of plan
+	// `loop-runtime-<tenant>-<project>-<env>`. T3.1 of plan
 	// 2026-06-09-m2-operator-canonical-fix v1.4: when populated by the
 	// TenantController (from TenantEnvironmentEntry.Project — which T1.1
 	// makes required at the CRD level), EnvironmentController computes the
@@ -87,7 +87,7 @@ type TenantRef struct {
 
 // NamespaceSpec defines the target namespace name.
 type NamespaceSpec struct {
-	// Name is the explicit namespace name (e.g., "loopruntime-loopruntime-production").
+	// Name is the explicit namespace name (e.g., "loop-runtime-loop-runtime-production").
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 }

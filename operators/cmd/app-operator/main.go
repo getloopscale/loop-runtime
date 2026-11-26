@@ -40,7 +40,7 @@ func init() {
 		panic(fmt.Sprintf("failed to register client-go scheme: %v", err))
 	}
 	if err := loopruntimev1.AddToScheme(scheme); err != nil {
-		panic(fmt.Sprintf("failed to register loopruntime/v1 scheme: %v", err))
+		panic(fmt.Sprintf("failed to register loop-runtime/v1 scheme: %v", err))
 	}
 }
 
@@ -67,7 +67,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
 
-	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loopruntime-app-operator")
+	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loop-runtime-app-operator")
 	if tracingErr != nil {
 		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
 	}
@@ -96,7 +96,7 @@ func main() {
 		},
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "loopruntime-app-operator.runtime.getloopscale.com",
+		LeaderElectionID:       "loop-runtime-app-operator.runtime.getloopscale.com",
 		Cache:                  cacheOpts,
 	})
 	if err != nil {
@@ -117,16 +117,16 @@ func main() {
 	// T1.4 of deep-review-remediation-plan (find_arch_007): CELL_0_KUBECONFIG
 	// should be mandatory in production, but flipping the guard before the
 	// Helm chart mounts the Secret would CrashLoopBackOff every pod (EC-4).
-	// LOOPRUNTIME_REQUIRE_CELL_0_KUBECONFIG=true opts into fail-fast; without it a
+	// LOOP_RUNTIME_REQUIRE_CELL_0_KUBECONFIG=true opts into fail-fast; without it a
 	// missing or unusable kubeconfig starts the operator with a factory that
 	// reports ErrRuntimeClusterUnavailable on every lookup, which the
 	// controllers surface as "not ready" rather than guessing a cluster. The
 	// setup log below is the signal of that degraded mode.
-	requireKubeconfig := os.Getenv("LOOPRUNTIME_REQUIRE_CELL_0_KUBECONFIG") == "true"
+	requireKubeconfig := os.Getenv("LOOP_RUNTIME_REQUIRE_CELL_0_KUBECONFIG") == "true"
 	appFactory, factoryErr := runtimeFactory(mgr, os.Getenv("CELL_0_KUBECONFIG"), setupLog)
 	if factoryErr != nil {
 		if requireKubeconfig {
-			setupLog.Error(factoryErr, "runtime cluster access required (LOOPRUNTIME_REQUIRE_CELL_0_KUBECONFIG=true) — refusing to start")
+			setupLog.Error(factoryErr, "runtime cluster access required (LOOP_RUNTIME_REQUIRE_CELL_0_KUBECONFIG=true) — refusing to start")
 			os.Exit(1)
 		}
 		setupLog.Error(factoryErr, "runtime cluster access unavailable — Application fast-path Healthy and TLS certificate checks disabled (degraded)")
@@ -171,7 +171,7 @@ func main() {
 // managerCacheOptions scopes the manager's informers.
 //
 // The only Secret this operator reads on this cluster is a cell's kubeconfig,
-// in loopruntime-system (CellAwareRuntimeClientFactory). The chart grants exactly
+// in loop-runtime-system (CellAwareRuntimeClientFactory). The chart grants exactly
 // that through a namespaced Role, so the Secret informer watches that
 // namespace and nothing else. The workload CRDs stay cluster-wide (ADR-0018
 // C9): they live in per-tenant namespaces.

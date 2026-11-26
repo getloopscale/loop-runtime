@@ -125,7 +125,7 @@ WHERE tenant_id = $1::text AND status = 'active'
 `
 
 // EC-4: plan_tier from the subscriptions BILLING status (NOT tenant lifecycle).
-// Missing/none → caller defaults to 'starter' + loopruntime_metering_missing_plan_total WARN.
+// Missing/none → caller defaults to 'starter' + loop_runtime_metering_missing_plan_total WARN.
 func (q *Queries) GetPlanTierForTenant(ctx context.Context, db DBTX, tenantID string) (string, error) {
 	row := db.QueryRow(ctx, getPlanTierForTenant, tenantID)
 	var plan_tier string

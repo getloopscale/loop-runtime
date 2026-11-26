@@ -17,7 +17,7 @@
 #
 # Routing:
 #   severity=critical → P1 oncall (immediate page)
-#   severity=warning  → triage queue (Slack #loopruntime-alerts)
+#   severity=warning  → triage queue (Slack #loop-runtime-alerts)
 #
 # These rules expect Prometheus to scrape OpenBao's /v1/sys/metrics endpoint
 # (Prometheus-format; configured via openbao server { telemetry { prometheus_retention_time } })
@@ -29,7 +29,7 @@ metadata:
   namespace: monitoring
   labels:
     app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/part-of: loopruntime-platform
+    app.kubernetes.io/part-of: loop-runtime-platform
     runtime.getloopscale.com/related-plan: "openbao-adoption-v1.4-T8.4"
   annotations:
     runtime.getloopscale.com/related-plan-full: "2026-06-02-openbao-adoption v1.4 T8.4"
@@ -84,7 +84,7 @@ spec:
               Triage: identify workload via audit log accessor; verify policy
               attached to its role; check for recent role changes.
 
-        # Alert 3: Vault sealed (engine down) — emergency. All loopruntime-api
+        # Alert 3: Vault sealed (engine down) — emergency. All loop-runtime-api
         # workloads using K8s auth login will fail; cached secrets continue
         # serving but no rotation possible.
         - alert: VaultSealedOrDown
@@ -103,7 +103,7 @@ spec:
             description: |
               vault_core_unsealed=0 (sealed) OR the metrics scrape itself is
               absent (Vault pod down / network partition). Either way, all
-              new Vault operations fail. loopruntime-api keeps no cached copy of
+              new Vault operations fail. loop-runtime-api keeps no cached copy of
               secret values: every secret encrypt/decrypt through Transit
               fails until Vault is back.
               Triage: `kubectl -n secrets-system get pods openbao-0` + check

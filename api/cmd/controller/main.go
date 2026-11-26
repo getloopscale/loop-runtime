@@ -15,7 +15,7 @@
 //     reconciliation, which is a structural bottleneck above ~50 concurrent
 //     requests.
 //   - This binary owns the background loops exclusively. The API sets
-//     LOOPRUNTIME_DISABLE_LEGACY_LOOPS=true and stays stateless.
+//     LOOP_RUNTIME_DISABLE_LEGACY_LOOPS=true and stays stateless.
 //   - Leader election uses the cell-scoped generation counter from
 //     api/internal/leader so a stale leader's state transitions silently
 //     no-op (see ErrFenced semantics in that package).
@@ -74,11 +74,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger := logging.NewLogger("loopruntime-controller").With(
+	logger := logging.NewLogger("loop-runtime-controller").With(
 		"component", "controller",
 		"cell_id", cellID(cfg),
 	)
-	logger.Info("starting loopruntime-controller",
+	logger.Info("starting loop-runtime-controller",
 		"registry_url", cfg.RegistryURL,
 		"base_domain", cfg.BaseDomain,
 		"reconcile_interval", cfg.ReconcileInterval,
@@ -167,7 +167,7 @@ func main() {
 		}
 	}()
 
-	logger.Info("loopruntime-controller ready — background loops running", "loops", len(loops))
+	logger.Info("loop-runtime-controller ready — background loops running", "loops", len(loops))
 
 	// Block until SIGTERM / SIGINT or a fatal heartbeat failure.
 	<-shutdownCtx.Done()
@@ -196,5 +196,5 @@ func main() {
 		logger.Warn("leader release failed", "error", err)
 	}
 	metrics.LeaderStatus.Set(0)
-	logger.Info("loopruntime-controller stopped cleanly")
+	logger.Info("loop-runtime-controller stopped cleanly")
 }

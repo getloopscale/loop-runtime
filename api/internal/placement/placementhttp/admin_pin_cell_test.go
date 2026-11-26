@@ -49,14 +49,14 @@ func doPin(t *testing.T, body any, p CellPinner, settings map[string]string, hea
 	rec := httptest.NewRecorder()
 	// The router mounts this handler behind Authenticator.RequireAdminService; the
 	// test exercises the same chain so the auth gate is covered with it.
-	adminRoute(settings, AdminPinCellHandler(p, nil, settings["LOOPRUNTIME_ADMIN_API"] == "true")).ServeHTTP(rec, req)
+	adminRoute(settings, AdminPinCellHandler(p, nil, settings["LOOP_RUNTIME_ADMIN_API"] == "true")).ServeHTTP(rec, req)
 	return rec
 }
 
 func TestAdminPinCell_FeatureFlagOff_Returns404(t *testing.T) {
-	// LOOPRUNTIME_ADMIN_API not set: even an authenticated operator sees 404.
+	// LOOP_RUNTIME_ADMIN_API not set: even an authenticated operator sees 404.
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, &fakePinner{},
-		map[string]string{"LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"})
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
@@ -65,8 +65,8 @@ func TestAdminPinCell_FeatureFlagOff_Returns404(t *testing.T) {
 
 func TestAdminPinCell_MissingAuth_Returns403(t *testing.T) {
 	env := map[string]string{
-		"LOOPRUNTIME_ADMIN_API":                 "true",
-		"LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret",
+		"LOOP_RUNTIME_ADMIN_API":                 "true",
+		"LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret",
 	}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, &fakePinner{}, env, nil)
 	if rec.Code != http.StatusForbidden {
@@ -76,8 +76,8 @@ func TestAdminPinCell_MissingAuth_Returns403(t *testing.T) {
 
 func TestAdminPinCell_WrongSecret_Returns403(t *testing.T) {
 	env := map[string]string{
-		"LOOPRUNTIME_ADMIN_API":                 "true",
-		"LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret",
+		"LOOP_RUNTIME_ADMIN_API":                 "true",
+		"LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret",
 	}
 	headers := map[string]string{"X-Service-Auth": "wrong"}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, &fakePinner{}, env, headers)
@@ -161,7 +161,7 @@ func TestAdminPinCell_NoOpPin_WritesNoAudit(t *testing.T) {
 }
 
 func TestAdminPinCell_MissingTenantID_Returns400(t *testing.T) {
-	env := map[string]string{"LOOPRUNTIME_ADMIN_API": "true", "LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
+	env := map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	rec := doPin(t, AdminPinCellInput{TenantID: "", CellID: "cell-1"}, &fakePinner{}, env, headers)
 	if rec.Code != http.StatusBadRequest {
@@ -170,7 +170,7 @@ func TestAdminPinCell_MissingTenantID_Returns400(t *testing.T) {
 }
 
 func TestAdminPinCell_BadCellPattern_Returns400(t *testing.T) {
-	env := map[string]string{"LOOPRUNTIME_ADMIN_API": "true", "LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
+	env := map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	for _, bad := range []string{"cell-2_no", "cell-", "Cell-2", "2", "garbage"} {
 		rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: bad}, &fakePinner{}, env, headers)
@@ -181,7 +181,7 @@ func TestAdminPinCell_BadCellPattern_Returns400(t *testing.T) {
 }
 
 func TestAdminPinCell_NilPinner_Returns503(t *testing.T) {
-	env := map[string]string{"LOOPRUNTIME_ADMIN_API": "true", "LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
+	env := map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, nil, env, headers)
 	if rec.Code != http.StatusServiceUnavailable {
@@ -190,7 +190,7 @@ func TestAdminPinCell_NilPinner_Returns503(t *testing.T) {
 }
 
 func TestAdminPinCell_Success_Returns200(t *testing.T) {
-	env := map[string]string{"LOOPRUNTIME_ADMIN_API": "true", "LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
+	env := map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	pinner := &fakePinner{prev: "cell-0"}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
@@ -210,7 +210,7 @@ func TestAdminPinCell_Success_Returns200(t *testing.T) {
 }
 
 func TestAdminPinCell_NoChange_Updated_False(t *testing.T) {
-	env := map[string]string{"LOOPRUNTIME_ADMIN_API": "true", "LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
+	env := map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	pinner := &fakePinner{prev: "cell-1"} // already on cell-1
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
@@ -225,7 +225,7 @@ func TestAdminPinCell_NoChange_Updated_False(t *testing.T) {
 }
 
 func TestAdminPinCell_TenantNotFound_Returns404(t *testing.T) {
-	env := map[string]string{"LOOPRUNTIME_ADMIN_API": "true", "LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
+	env := map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	// T6.1 migration: pinner now returns the sentinel directly so the
 	// handler's errors.Is mapping fires (was string-match before).
@@ -237,7 +237,7 @@ func TestAdminPinCell_TenantNotFound_Returns404(t *testing.T) {
 }
 
 func TestAdminPinCell_CellNotPinnable_Returns409(t *testing.T) {
-	env := map[string]string{"LOOPRUNTIME_ADMIN_API": "true", "LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
+	env := map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	pinner := &fakePinner{err: placement.ErrCellNotPinnable}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
@@ -250,7 +250,7 @@ func TestAdminPinCell_CellNotPinnable_Returns409(t *testing.T) {
 // store's sentinel). The handler used to match build.ErrCellAtCapacity, an
 // error the pin path never returns, so a full cell answered 500.
 func TestAdminPinCell_CellAtCapacity_Returns409(t *testing.T) {
-	env := map[string]string{"LOOPRUNTIME_ADMIN_API": "true", "LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
+	env := map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 	pinner := &fakePinner{err: placement.ErrCellAtTenantCapacity}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, pinner, env, headers)
@@ -262,7 +262,7 @@ func TestAdminPinCell_CellAtCapacity_Returns409(t *testing.T) {
 // ---------------------------------------------------------------------------
 // cell-1-activation-plan T1.4 / ADR C11 — authz on --cell flag in 3 paths.
 //
-// Path 1 (CLI): loopruntime admin tenants pin without LOOPRUNTIME_SERVICE_AUTH → exit 4.
+// Path 1 (CLI): loop-runtime admin tenants pin without LOOP_RUNTIME_SERVICE_AUTH → exit 4.
 //               CLI behavior tested in cli/tests/integration/admin-tenants-pin.test.ts.
 //               Here we cover the matching API-level guarantee.
 // Path 2 (API): curl POST /api/v1/admin/tenants/pin without X-Service-Auth → 403.
@@ -279,8 +279,8 @@ func TestAdminPinCell_AuthzInvariantC11Path1_CLIRequiresServiceAuth(t *testing.T
 	// API contract; the CLI integration test (admin-tenants-pin.test.ts)
 	// pins the exit code mapping.
 	env := map[string]string{
-		"LOOPRUNTIME_ADMIN_API":                 "true",
-		"LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret",
+		"LOOP_RUNTIME_ADMIN_API":                 "true",
+		"LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret",
 	}
 	rec := doPin(t, AdminPinCellInput{TenantID: "tn-x", CellID: "cell-1"}, &fakePinner{}, env, nil)
 	if rec.Code != http.StatusForbidden {
@@ -293,8 +293,8 @@ func TestAdminPinCell_AuthzInvariantC11Path2_APIDirect403(t *testing.T) {
 	// the request shape is otherwise valid (full body, valid IDs, pinner
 	// available).
 	env := map[string]string{
-		"LOOPRUNTIME_ADMIN_API":                 "true",
-		"LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "the-real-secret",
+		"LOOP_RUNTIME_ADMIN_API":                 "true",
+		"LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "the-real-secret",
 	}
 	headers := map[string]string{} // no X-Service-Auth
 	pinner := &fakePinner{prev: "cell-0"}
@@ -414,7 +414,7 @@ func TestAdminPinCell_ErrorMappingViaErrorsIs(t *testing.T) {
 		},
 	}
 
-	env := map[string]string{"LOOPRUNTIME_ADMIN_API": "true", "LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
+	env := map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "secret"}
 	headers := map[string]string{"X-Service-Auth": "secret"}
 
 	for _, tc := range cases {

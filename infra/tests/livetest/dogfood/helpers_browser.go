@@ -19,7 +19,7 @@ import (
 // SessionPathEnv names the file that holds the validation identity's Kratos
 // session, the value of its ory_kratos_session cookie. infra/staging/validate.sh
 // writes it when it seeds the identity.
-const SessionPathEnv = "LOOPRUNTIME_DOGFOOD_SESSION_PATH"
+const SessionPathEnv = "LOOP_RUNTIME_DOGFOOD_SESSION_PATH"
 
 // LoadSession reads the Kratos session the browser journeys sign in with.
 func LoadSession() (string, error) {

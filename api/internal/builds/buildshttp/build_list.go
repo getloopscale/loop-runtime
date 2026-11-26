@@ -105,7 +105,7 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Red Team loopruntime-cloud#92 absorption (2026-06-27): missing-parent-guard.
+	// Red Team loop-console#92 absorption (2026-06-27): missing-parent-guard.
 	// Without this check, GET /projects/<nonexistent>/builds returned 200
 	// with an empty list, so the dashboard's sub-views (Deployments page)
 	// rendered functional UI for a deleted/non-existent project. Same EC-2

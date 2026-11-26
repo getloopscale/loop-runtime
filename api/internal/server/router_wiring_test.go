@@ -356,12 +356,12 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// future refactor that drops the chi r.With wrap (e.g., copy-paste
 	// from pin's inline pattern) could silently leave the route unguarded
 	// while the existing 404/405 wiring smoke above still passes.
-	t.Run("evict route has RequireAdminService middleware (closes loopruntime-cloud#16 regression)", func(t *testing.T) {
+	t.Run("evict route has RequireAdminService middleware (closes loop-console#16 regression)", func(t *testing.T) {
 		// Build a minimal request with NO X-Service-Auth header. If the
 		// middleware is in the chain, the response MUST be 403 (the
 		// middleware rejects missing-header requests). If the middleware
 		// is NOT in the chain, the request reaches the handler which
-		// returns 404 (LOOPRUNTIME_ADMIN_API gate) OR 400 (input validation).
+		// returns 404 (LOOP_RUNTIME_ADMIN_API gate) OR 400 (input validation).
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/evict", nil)
 		// IMPORTANT: do NOT set X-Service-Auth — that's the discriminator.
 		rec := httptest.NewRecorder()

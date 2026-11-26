@@ -53,14 +53,14 @@ type TenantK8sEvictor struct {
 var (
 	argoApplicationsGVR        = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}
 	exposedRoutesGVR           = schema.GroupVersionResource{Group: "runtime.getloopscale.com", Version: "v1", Resource: "exposedroutes"}
-	loopruntimeApplicationsGVR = schema.GroupVersionResource{Group: "runtime.getloopscale.com", Version: "v1", Resource: "loopruntimeapplications"}
+	loopRuntimeApplicationsGVR = schema.GroupVersionResource{Group: "runtime.getloopscale.com", Version: "v1", Resource: "loopruntimeapplications"}
 	environmentsGVR            = schema.GroupVersionResource{Group: "runtime.getloopscale.com", Version: "v1", Resource: "environments"}
 	tenantsGVR                 = schema.GroupVersionResource{Group: "runtime.getloopscale.com", Version: "v1", Resource: "tenants"}
 	argoWorkflowGVR            = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "workflows"}
 )
 
 var mgmtCRTypes = []schema.GroupVersionResource{
-	argoApplicationsGVR, exposedRoutesGVR, loopruntimeApplicationsGVR, environmentsGVR, tenantsGVR,
+	argoApplicationsGVR, exposedRoutesGVR, loopRuntimeApplicationsGVR, environmentsGVR, tenantsGVR,
 }
 
 const (

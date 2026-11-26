@@ -62,7 +62,7 @@ export interface InfraOutputs {
  *
  * DigitalOcean is the only provider this stack has or will have: it is AS-IS
  * legacy retired at AM10, and the AWS re-platform lives in Terraform
- * (../loopruntime-infra-live), not here. Any other name is a configuration error.
+ * (../loop-runtime-infra-live), not here. Any other name is a configuration error.
  */
 export function resolveProvider(provider: CloudProvider): CloudProviderFactory {
   switch (provider) {

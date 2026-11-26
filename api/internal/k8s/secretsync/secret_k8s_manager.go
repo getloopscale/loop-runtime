@@ -84,10 +84,10 @@ var externalSecretGVR = schema.GroupVersionResource{
 // and ExternalSecret CRs on runtime cluster.
 //
 // CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15 follow-up: prefer in-cluster
-// rest config for the mgmt client so loopruntime-api SA RBAC applies (Secret
-// read/write granted via clusterrolebinding/loopruntime-api). The previous
+// rest config for the mgmt client so loop-runtime-api SA RBAC applies (Secret
+// read/write granted via clusterrolebinding/loop-runtime-api). The previous
 // out-of-cluster path used a kubeconfig with kube-system:default SA token
-// which doesn't have those permissions, producing 403 on every loopruntime
+// which doesn't have those permissions, producing 403 on every loop-runtime
 // secret set call.
 func NewSecretK8sManager(mgmtKubeconfig, mgmtContext, runtimeKubeconfig, runtimeContext, runtimeCellID string, tenantCells TenantCellLookup) (*SecretK8sManager, error) {
 	if tenantCells == nil || runtimeCellID == "" {
@@ -164,7 +164,7 @@ func buildSecretLabels(tenantID, projectID, app string) map[string]string {
 	labels := map[string]string{
 		"runtime.getloopscale.com/tenant":     tenantID,
 		"runtime.getloopscale.com/project":    projectID,
-		"runtime.getloopscale.com/managed-by": "loopruntime-api",
+		"runtime.getloopscale.com/managed-by": "loop-runtime-api",
 	}
 	if app != "" {
 		labels["runtime.getloopscale.com/app"] = app
@@ -173,7 +173,7 @@ func buildSecretLabels(tenantID, projectID, app string) map[string]string {
 }
 
 // tenantNamespaceFor resolves the canonical M2 namespace via the
-// EnvRef Value Object (3-segment `loopruntime-<tenant>-<project>-<env>`).
+// EnvRef Value Object (3-segment `loop-runtime-<tenant>-<project>-<env>`).
 //
 // T1.3.d of plan 2026-06-11-code-review-remediation v1.2 migrated this
 // helper from pkg/naming.Namespace to pkg/domain.EnvRef.Namespace()
@@ -204,7 +204,7 @@ func externalSecretEntry(tenantID, projectID, env, name string) map[string]inter
 	return map[string]interface{}{
 		"secretKey": name,
 		"remoteRef": map[string]interface{}{
-			// loopruntime-broker webhook URL substitutes 2 variables into
+			// loop-runtime-broker webhook URL substitutes 2 variables into
 			// the path: `.remoteRef.key` (tenant_id) +
 			// `.remoteRef.property` (composite `secretName.projectID.env`).
 			// T2.1 + ADR D2 of plan 2026-06-10-j22-layer2-code-review-fixes
@@ -272,17 +272,17 @@ func externalSecretObject(ref ports.SecretRef, namespace string, names []string)
 				"refreshInterval": "30s",
 				"secretStoreRef": map[string]interface{}{
 					// Plan v1.2 D3 + plan 2026-06-02-openbao-adoption T4.1:
-					// `loopruntime-broker` is the canonical ESO ClusterSecretStore for
-					// user secrets. provider.webhook calls loopruntime-api's
+					// `loop-runtime-broker` is the canonical ESO ClusterSecretStore for
+					// user secrets. provider.webhook calls loop-runtime-api's
 					// /internal/v1/secret-fetch/{tenant_id}/{secret_name}
-					// endpoint with a Bearer token; loopruntime-api validates the
+					// endpoint with a Bearer token; loop-runtime-api validates the
 					// auth, enforces tenant↔cell binding (EC-07), decrypts
 					// the vault:v1: ciphertext via OpenBao transit, and
 					// returns plaintext_b64, which decodingStrategy Base64 decodes into the
 					// materialized K8s Secret. LIVE-validated 2026-06-10
 					// J-22 walkthrough (ClusterSecretStore Ready=True +
 					// in-cluster probe HTTP 200 + plaintext round-trip).
-					"name": "loopruntime-broker",
+					"name": "loop-runtime-broker",
 					"kind": "ClusterSecretStore",
 				},
 				"target": map[string]interface{}{
@@ -304,7 +304,7 @@ func externalSecretObject(ref ports.SecretRef, namespace string, names []string)
 
 // managedBySelector matches the ExternalSecrets this API wrote, per-secret
 // objects of earlier versions included (buildSecretLabels).
-const managedBySelector = "runtime.getloopscale.com/managed-by=loopruntime-api"
+const managedBySelector = "runtime.getloopscale.com/managed-by=loop-runtime-api"
 
 // reconcileTarget rewrites the ExternalSecret that owns the Secret of ref's
 // scope after change edited the set of secret names it delivers.
@@ -461,14 +461,14 @@ func (m *SecretK8sManager) CreateSecret(ctx context.Context, ref ports.SecretRef
 	}
 
 	// 2. Create/update ExternalSecret CR on runtime cluster.
-	// Canonical M2 namespace: loopruntime-{tenantID}-{projectID}-{env}
+	// Canonical M2 namespace: loop-runtime-{tenantID}-{projectID}-{env}
 	// (3-segment per `pkg/naming.Namespace`). The earlier draft used the
-	// M1 legacy 2-segment `loopruntime-{tenantID}-{env}` which the TenantController
+	// M1 legacy 2-segment `loop-runtime-{tenantID}-{env}` which the TenantController
 	// stopped creating in M2 (plan 2026-06-09-m2-operator-canonical-fix).
 	// LIVE-caught 2026-06-10 J-22 walkthrough: secret POST returned
 	// status=created (PG persist OK with vault:v1: prefix) but
 	// sync_status=failed because the ExternalSecret targeted
-	// `loopruntime-{tenantID}-{env}` which does not exist post-M2 cutover.
+	// `loop-runtime-{tenantID}-{env}` which does not exist post-M2 cutover.
 	// T4.1 + ADR D5: invoke the canonical `naming.Namespace` helper via the
 	// `tenantNamespaceFor(...)` wrapper above. Errors surface (never silent).
 	tenantNS, err := tenantNamespaceFor(tenantID, projectID, env)

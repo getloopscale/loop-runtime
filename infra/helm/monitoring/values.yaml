@@ -29,7 +29,7 @@ prometheus:
           - targets:
               # The build cluster's load balancer, by container name: Docker's DNS
               # resolves it on the k3d network, so no setup step rewrites it (#264).
-              - "k3d-loopruntime-build-serverlb:30090"
+              - "k3d-loop-runtime-build-serverlb:30090"
             labels:
               cluster: build
               component: argo-workflows
@@ -40,7 +40,7 @@ prometheus:
         static_configs:
           - targets:
               # The cell-0 load balancer, by container name (#264).
-              - "k3d-loopruntime-cell-0-serverlb:30091"
+              - "k3d-loop-runtime-cell-0-serverlb:30091"
             labels:
               cluster: workload
               component: traefik
@@ -70,7 +70,7 @@ grafana:
     - name: Tempo
       type: tempo
       uid: tempo
-      url: http://tempo.loopruntime-system:3200
+      url: http://tempo.loop-runtime-system:3200
       access: proxy
       isDefault: false
   sidecar:
@@ -169,7 +169,7 @@ alertmanager:
       - name: default
         slack_configs:
           - api_url_file: '/etc/alertmanager/secrets/alertmanager-slack-webhooks/slack-webhook-url'
-            channel: '#loopruntime-alerts'
+            channel: '#loop-runtime-alerts'
             send_resolved: true
             title: '{{ "{{ .Status | toUpper }}" }}: {{ "{{ .CommonLabels.alertname }}" }}'
             text: >-
@@ -178,7 +178,7 @@ alertmanager:
       - name: critical
         slack_configs:
           - api_url_file: '/etc/alertmanager/secrets/alertmanager-slack-webhooks/slack-critical-webhook-url'
-            channel: '#loopruntime-critical'
+            channel: '#loop-runtime-critical'
             send_resolved: true
             title: ':rotating_light: {{ "{{ .CommonLabels.alertname }}" }}'
             text: >-

@@ -14,7 +14,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// loopruntime-infra outputs (consumed by loopruntime-platform + loopruntime-control-plane + CI)
+// loop-runtime-infra outputs (consumed by loop-runtime-platform + loop-runtime-control-plane + CI)
 // ---------------------------------------------------------------------------
 
 export interface InfraStackOutputs {
@@ -51,7 +51,7 @@ export interface InfraStackOutputs {
 }
 
 // ---------------------------------------------------------------------------
-// loopruntime-platform outputs (consumed by loopruntime-control-plane)
+// loop-runtime-platform outputs (consumed by loop-runtime-control-plane)
 // ---------------------------------------------------------------------------
 
 export interface PlatformStackOutputs {

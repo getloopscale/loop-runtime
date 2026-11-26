@@ -38,7 +38,7 @@ import (
 // deploy-timeline metrics above). The reason belongs in the startup summary,
 // which is read once by a human, not stored once per series forever.
 var SurfaceEnabled = promauto.NewGaugeVec(prometheus.GaugeOpts{
-	Name: "loopruntime_api_surface_enabled",
+	Name: "loop_runtime_api_surface_enabled",
 	Help: "1 when the router registered this HTTP surface, 0 when a missing dependency made it skip it.",
 }, []string{"surface"})
 

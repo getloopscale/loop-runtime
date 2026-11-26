@@ -50,7 +50,7 @@ func environmentBeingDeleted() *loopruntimev1.Environment {
 			TenantRef:   loopruntimev1.TenantRef{Name: "tn-shop"},
 			Environment: "staging",
 			Project:     "shop",
-			Namespace:   loopruntimev1.NamespaceSpec{Name: "loopruntime-tn-shop-shop-staging"},
+			Namespace:   loopruntimev1.NamespaceSpec{Name: "loop-runtime-tn-shop-shop-staging"},
 		},
 		Status: loopruntimev1.EnvironmentCRStatus{Phase: loopruntimev1.EnvironmentPhaseDeleting},
 	}

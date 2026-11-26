@@ -15,12 +15,12 @@ import (
 func TestWorkflowSubmitterConfigCarriesTheObjectStore(t *testing.T) {
 	got := workflowSubmitterConfig(config.Config{
 		ObjectStoreAWSCredentials: true,
-		StaticAssetsBucket:        "loopruntime-staging-static-assets-000000000000",
+		StaticAssetsBucket:        "loop-runtime-staging-static-assets-000000000000",
 	})
 	if !got.ObjectStoreIRSA {
 		t.Error("ObjectStoreIRSA = false, want true for an API that signs S3 with its IRSA role")
 	}
-	if got.StaticAssetsBucket != "loopruntime-staging-static-assets-000000000000" {
+	if got.StaticAssetsBucket != "loop-runtime-staging-static-assets-000000000000" {
 		t.Errorf("StaticAssetsBucket = %q, want the configured bucket", got.StaticAssetsBucket)
 	}
 }

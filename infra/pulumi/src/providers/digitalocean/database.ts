@@ -43,9 +43,9 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       name: "gitea",
     });
 
-    new digitalocean.DatabaseDb(`${spec.name}-loopruntime`, {
+    new digitalocean.DatabaseDb(`${spec.name}-loop-runtime`, {
       clusterId: cluster.id,
-      name: "loopruntime",
+      name: "loop-runtime",
     });
 
     // Ory Kratos (identity management) and Hydra (OAuth2 server) require separate databases.

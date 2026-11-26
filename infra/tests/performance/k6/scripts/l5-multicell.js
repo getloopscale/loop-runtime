@@ -28,7 +28,7 @@ import {
   healthCheck,
   verifyAppLive,
   appURL,
-} from './lib/loopruntime-api.js';
+} from './lib/loop-runtime-api.js';
 import { thresholdsFor } from './lib/thresholds.js';
 import { loadBundleBytes } from '../fixtures/bundle-builder.js';
 
@@ -56,7 +56,7 @@ export const options = {
     },
   },
   thresholds: Object.assign(thresholdsFor('l5'), {
-    'loopruntime_admission_reject_total': ['count<50'],
+    'loop_runtime_admission_reject_total': ['count<50'],
   }),
   summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
 };
@@ -81,7 +81,7 @@ export default function (data) {
   // Tenant ID includes cell for Grafana correlation.
   const tenantID = `k6-l5-c${cellIdx}-tn-${tenantIdx}`;
   const userID = `k6-l5-user-${tenantIdx}`;
-  const email = `k6-l5-${tenantIdx}@loopruntime.test`;
+  const email = `k6-l5-${tenantIdx}@loop-runtime.test`;
   const projectName = `k6-l5-app-${tenantIdx}`;
 
   let commitSHA, buildID;
@@ -129,10 +129,10 @@ export function teardown() {
 
 export function handleSummary(data) {
   const m = data.metrics;
-  const succeeded = (m.loopruntime_build_succeeded || {}).values || {};
-  const verified = (m.loopruntime_app_verified || {}).values || {};
-  const deploy = (m.loopruntime_deploy_duration_ms || {}).values || {};
-  const verify = (m.loopruntime_app_verify_duration_ms || {}).values || {};
+  const succeeded = (m.loop_runtime_build_succeeded || {}).values || {};
+  const verified = (m.loop_runtime_app_verified || {}).values || {};
+  const deploy = (m.loop_runtime_deploy_duration_ms || {}).values || {};
+  const verify = (m.loop_runtime_app_verify_duration_ms || {}).values || {};
 
   const text = `
 ═════════════════════════════════════════════════════════

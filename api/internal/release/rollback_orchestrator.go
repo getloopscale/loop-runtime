@@ -51,7 +51,7 @@ type RollbackOrchestratorDeps struct {
 	// reactivated release (scaling.ReleaseScaler). Optional: without it the
 	// environment keeps the replica count of the rolled back manifests.
 	SavedScale SavedScaleDeliverer
-	// PublicDomain is the operator's public wildcard (LOOPRUNTIME_PUBLIC_DOMAIN). The
+	// PublicDomain is the operator's public wildcard (LOOP_RUNTIME_PUBLIC_DOMAIN). The
 	// rollback URL is composed on it, falling back to the request's BaseDomain
 	// when it is unset — the same rule promotion and activation apply.
 	PublicDomain string
@@ -156,11 +156,11 @@ func (o *RollbackOrchestrator) Wait() { o.completions.Wait() }
 // one active release: the target when the cluster runs it, and the release
 // rolled back from otherwise, with the failure recorded on it.
 func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest) (*RollbackResult, error) {
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.rollback.execute",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.rollback.execute",
 		trace.WithAttributes(
-			attribute.String("loopruntime.tenant", req.TenantID),
-			attribute.String("loopruntime.project", req.ProjectID),
-			attribute.String("loopruntime.environment", req.Environment),
+			attribute.String("loop-runtime.tenant", req.TenantID),
+			attribute.String("loop-runtime.project", req.ProjectID),
+			attribute.String("loop-runtime.environment", req.Environment),
 		))
 	defer span.End()
 

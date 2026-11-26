@@ -26,9 +26,9 @@ describe('Promtail scrape config (Beta Logs Gate)', () => {
 
   it('scrapes LoopRuntime tenant runtime + control-plane pods (Beta gap fix)', () => {
     // The whole point of the Beta gate fix: tenant pods WERE not
-    // being scraped. The new loopruntime-pods job has two membership
+    // being scraped. The new loop-runtime-pods job has two membership
     // filters that OR'd via __tmp_keep idiom.
-    expect(src).toContain('job_name: loopruntime-pods');
+    expect(src).toContain('job_name: loop-runtime-pods');
     // The pod's own label: pod service discovery gives no namespace label, so a
     // rule on `__meta_kubernetes_namespace_label_*` drops every tenant pod
     // (getloopscale/loop-runtime#110). The behaviour is asserted over the rendered
@@ -43,12 +43,12 @@ describe('Promtail scrape config (Beta Logs Gate)', () => {
     // and cross-system grep is gone. The pipeline_stages json + labels
     // sequence is canonical.
     expect(src).toContain('correlation_id: correlation_id');
-    // Both jobs (workflow + loopruntime-pods) must emit the label.
+    // Both jobs (workflow + loop-runtime-pods) must emit the label.
     const correlationLabels = (src.match(/correlation_id:\s*$/gm) || []).length;
     expect(correlationLabels).toBeGreaterThanOrEqual(2);
   });
 
-  it('also extracts level + msg for the loopruntime-pods scrape (operator log hygiene)', () => {
+  it('also extracts level + msg for the loop-runtime-pods scrape (operator log hygiene)', () => {
     // Level is a low-cardinality enum (debug/info/warn/error) — safe
     // as a Loki label. msg is NOT promoted to a label (cardinality
     // would explode). The expressions stage extracts both; only level
@@ -63,10 +63,10 @@ describe('Promtail scrape config (Beta Logs Gate)', () => {
     // log endpoint can only scope by namespace (= tenant+env) — the
     // exact 60% gap the audit flagged.
     expect(src).toContain('target_label: app');
-    expect(src).toContain('target_label: loopruntime_tenant');
-    expect(src).toContain('target_label: loopruntime_project');
-    expect(src).toContain('target_label: loopruntime_environment');
-    expect(src).toContain('target_label: loopruntime_component');
+    expect(src).toContain('target_label: loop_runtime_tenant');
+    expect(src).toContain('target_label: loop_runtime_project');
+    expect(src).toContain('target_label: loop_runtime_environment');
+    expect(src).toContain('target_label: loop_runtime_component');
   });
 
   it('does NOT promote step or pod_name as labels (cardinality cap)', () => {

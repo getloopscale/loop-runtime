@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS memory_webhooks (
 );
 
 -- Partial index covers the list-handler hot path (filtered by tenant + subject,
--- excluding revoked). Mirrors the idx_loopruntime_api_keys_tenant shape from P0.
+-- excluding revoked). Mirrors the idx_loop_runtime_api_keys_tenant shape from P0.
 CREATE INDEX IF NOT EXISTS idx_memory_webhooks_owner
     ON memory_webhooks (tenant_id, subject)
     WHERE revoked_at IS NULL;

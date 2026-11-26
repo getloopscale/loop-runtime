@@ -104,7 +104,7 @@ func recordedByName(reg *surfaces.Registry) map[string]surfaces.Surface {
 // TestSecretFetchSurface_EnabledWhenTheHandlerExists proves the enabled half.
 //
 // `secret_fetch` is the representative because it is the one measured absent in
-// dev-public (the `loopruntime-broker-token` Secret does not exist), and because its
+// dev-public (the `loop-runtime-broker-token` Secret does not exist), and because its
 // dependency is a plain http.Handler — provable without stubbing five interfaces
 // to assert the same property.
 func TestSecretFetchSurface_EnabledWhenTheHandlerExists(t *testing.T) {

@@ -37,30 +37,30 @@ export interface ServiceAuthEd25519Args {
 
   /**
    * Namespace where the cloud proxy runs and consumes the PRIVATE key.
-   * Defaults to "loopruntime-system".
+   * Defaults to "loop-runtime-system".
    */
   readonly cloudNamespace?: string;
 
   /**
    * Namespace where the API engine runs and consumes the PUBLIC key.
-   * Defaults to "loopruntime-system".
+   * Defaults to "loop-runtime-system".
    */
   readonly apiNamespace?: string;
 
   /**
    * Name of the K8s Secret that holds the private key on the cloud side.
-   * Defaults to "loopruntime-service-auth-ed25519".
+   * Defaults to "loop-runtime-service-auth-ed25519".
    */
   readonly privateSecretName?: string;
 
   /**
    * Name of the K8s Secret that holds the public key(s) on the API side.
-   * Defaults to "loopruntime-service-auth-ed25519-pub" (separate from the
+   * Defaults to "loop-runtime-service-auth-ed25519-pub" (separate from the
    * private secret to make defense-in-depth visible at the kubectl level).
    */
   readonly publicConfigMapName?: string;
 
-  /** ESO SecretStore reference name. Defaults to "loopruntime-pulumi-secrets". */
+  /** ESO SecretStore reference name. Defaults to "loop-runtime-pulumi-secrets". */
   readonly secretStoreName?: string;
 
   /** ESO refresh interval. Defaults to "5m". */
@@ -105,11 +105,11 @@ export function createServiceAuthEd25519(
   args: ServiceAuthEd25519Args,
 ): ServiceAuthEd25519Outputs {
   const cfg = new pulumi.Config();
-  const cloudNs = args.cloudNamespace ?? "loopruntime-system";
-  const apiNs = args.apiNamespace ?? "loopruntime-system";
-  const privateSecretName = args.privateSecretName ?? "loopruntime-service-auth-ed25519";
-  const publicSecretName = args.publicConfigMapName ?? "loopruntime-service-auth-ed25519-pub";
-  const storeName = args.secretStoreName ?? "loopruntime-pulumi-secrets";
+  const cloudNs = args.cloudNamespace ?? "loop-runtime-system";
+  const apiNs = args.apiNamespace ?? "loop-runtime-system";
+  const privateSecretName = args.privateSecretName ?? "loop-runtime-service-auth-ed25519";
+  const publicSecretName = args.publicConfigMapName ?? "loop-runtime-service-auth-ed25519-pub";
+  const storeName = args.secretStoreName ?? "loop-runtime-pulumi-secrets";
   const refreshInterval = args.refreshInterval ?? "5m";
 
   const privateKey = cfg.requireSecret("serviceAuthEd25519Private");
@@ -139,7 +139,7 @@ export function createServiceAuthEd25519(
     );
 
   const urn = pulumi.output(
-    `urn:pulumi:${args.stackName}::loopruntime-infra::custom:ServiceAuthEd25519::loopruntime-service-auth-ed25519`,
+    `urn:pulumi:${args.stackName}::loop-runtime-infra::custom:ServiceAuthEd25519::loop-runtime-service-auth-ed25519`,
   );
 
   return {
@@ -165,11 +165,11 @@ export function computeServiceAuthGenerationMarker(privKey: string): string {
  * Two documents separated by `---`:
  *   1. ExternalSecret of the PRIVATE key, in the cloud namespace ONLY.
  *      `secretKey: private` → cloud reads via env var
- *      LOOPRUNTIME_SERVICE_AUTH_ED25519_PRIVATE_KEY.
+ *      LOOP_RUNTIME_SERVICE_AUTH_ED25519_PRIVATE_KEY.
  *   2. ExternalSecret of the PUBLIC keys (current + previous), in the
  *      API namespace. `secretKey: current` + `secretKey: previous` →
- *      API reads via env vars LOOPRUNTIME_SERVICE_AUTH_ED25519_PUBLIC_CURRENT
- *      + LOOPRUNTIME_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS.
+ *      API reads via env vars LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_CURRENT
+ *      + LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS.
  *
  * Defense in depth: the private key ExternalSecret targets ONLY the
  * cloud namespace; the public key ExternalSecret targets ONLY the API

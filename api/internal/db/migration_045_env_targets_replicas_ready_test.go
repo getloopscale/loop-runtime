@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopRuntime Authors
 
 // Migration 000045 regression test — text-level invariants.
-// Closes Red Team loopruntime-cloud#128 hardening class. Live round-trip
+// Closes Red Team loop-console#128 hardening class. Live round-trip
 // invariant lives in api/tests/integration/migration_045_*_test.go
 // (integration companion; requires live PG).
 //

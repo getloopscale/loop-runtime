@@ -2,7 +2,7 @@
 #
 # Per ADR D6 of original chaos-mesh-experiments-plan (superseded by
 # active-execution-plan): kills 30% of pods in any namespace matching
-# `loopruntime-tn-*` (tenant namespaces). Validates that:
+# `loop-runtime-tn-*` (tenant namespaces). Validates that:
 #   1. KEDA scale-to-zero correctly re-scales after partial outage
 #   2. Argo Rollouts canary state survives mid-deploy pod kill
 #   3. Tenant SLO isolation (one tenant's outage doesn't affect peers)
@@ -29,8 +29,8 @@ metadata:
     runtime.getloopscale.com/dod-test: "TestChaos_RandomTenantPodKill"
     runtime.getloopscale.com/slo-query: |
       # No 5xx from peer tenants during chaos window
-      sum(rate(loopruntime_http_requests_total{
-        namespace=~"loopruntime-tn-.*",
+      sum(rate(loop_runtime_http_requests_total{
+        namespace=~"loop-runtime-tn-.*",
         code=~"5.."
       }[1m])) == 0
 spec:
@@ -38,18 +38,18 @@ spec:
   mode: fixed-percent
   value: "30"
   selector:
-    # FIX 2026-05-14: tenant namespaces follow `loopruntime-${TENANT_SLUG}-${ENV}`
-    # pattern per CLAUDE.md Multi-Cell section. Previous `loopruntime-tn-acme` +
-    # `loopruntime-tn-e2etest` didn't match deployed namespaces (e.g.,
-    # `loopruntime-tn-e2etest-production`). Enumerate active tenant ns OR add
+    # FIX 2026-05-14: tenant namespaces follow `loop-runtime-${TENANT_SLUG}-${ENV}`
+    # pattern per CLAUDE.md Multi-Cell section. Previous `loop-runtime-tn-acme` +
+    # `loop-runtime-tn-e2etest` didn't match deployed namespaces (e.g.,
+    # `loop-runtime-tn-e2etest-production`). Enumerate active tenant ns OR add
     # new ns when seeding tenants for chaos suite.
     namespaces:
-      - loopruntime-tn-e2etest-production
-      - loopruntime-e2e-tenant-production
+      - loop-runtime-tn-e2etest-production
+      - loop-runtime-e2e-tenant-production
     # FIX 2026-05-14: label is `app.kubernetes.io/managed-by` (standard
     # K8s recommended label per labels.go), not `runtime.getloopscale.com/managed-by`.
     labelSelectors:
-      "app.kubernetes.io/managed-by": "loopruntime"
+      "app.kubernetes.io/managed-by": "loop-runtime"
   # PodChaos with action=pod-kill is instantaneous — duration governs
   # the observation window for the chaos controller (no re-kill).
   duration: "60s"

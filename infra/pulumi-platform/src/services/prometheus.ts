@@ -22,7 +22,7 @@ export class Prometheus extends pulumi.ComponentResource {
   public readonly ready: pulumi.Output<boolean>;
 
   constructor(name: string, args: PrometheusArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopruntime:platform:Prometheus", name, {}, opts);
+    super("loop-runtime:platform:Prometheus", name, {}, opts);
 
     const extraScrape = args.argoMetricsEndpoint
       ? args.argoMetricsEndpoint.apply((target) => `
@@ -62,11 +62,11 @@ export class Prometheus extends pulumi.ComponentResource {
           serverFiles: {
             "alerting_rules.yml": {
               groups: [{
-                name: "loopruntime-platform",
+                name: "loop-runtime-platform",
                 rules: [
                   {
                     alert: "LoopRuntimeAPIDown",
-                    expr: 'up{job="loopruntime-api"} == 0',
+                    expr: 'up{job="loop-runtime-api"} == 0',
                     for: "1m",
                     labels: { severity: "critical" },
                     annotations: {
@@ -76,7 +76,7 @@ export class Prometheus extends pulumi.ComponentResource {
                   },
                   {
                     alert: "LoopRuntimeDeployFailing",
-                    expr: 'increase(loopruntime_api_request_duration_seconds_count{path="/api/v1/builds",status=~"5.."}[10m]) > 3',
+                    expr: 'increase(loop_runtime_api_request_duration_seconds_count{path="/api/v1/builds",status=~"5.."}[10m]) > 3',
                     for: "2m",
                     labels: { severity: "warning" },
                     annotations: {
@@ -86,7 +86,7 @@ export class Prometheus extends pulumi.ComponentResource {
                   },
                   {
                     alert: "LoopRuntimeHighAPILatency",
-                    expr: 'histogram_quantile(0.95, rate(loopruntime_api_request_duration_seconds_bucket{path!~"/api/v1/health.*|/api/v1/builds/.*/stream"}[5m])) > 2',
+                    expr: 'histogram_quantile(0.95, rate(loop_runtime_api_request_duration_seconds_bucket{path!~"/api/v1/health.*|/api/v1/builds/.*/stream"}[5m])) > 2',
                     for: "5m",
                     labels: { severity: "warning" },
                     annotations: {
@@ -96,7 +96,7 @@ export class Prometheus extends pulumi.ComponentResource {
                   },
                   {
                     alert: "LoopRuntimePodCrashLooping",
-                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopruntime-.*|loopruntime-system"}[15m]) > 0',
+                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loop-runtime-.*|loop-runtime-system"}[15m]) > 0',
                     for: "5m",
                     labels: { severity: "warning" },
                     annotations: {
@@ -106,7 +106,7 @@ export class Prometheus extends pulumi.ComponentResource {
                   },
                   {
                     alert: "LoopRuntimeDBPoolSaturation",
-                    expr: "(loopruntime_postgres_connections_active / loopruntime_postgres_pool_max_conns) > 0.8",
+                    expr: "(loop_runtime_postgres_connections_active / loop_runtime_postgres_pool_max_conns) > 0.8",
                     for: "5m",
                     labels: { severity: "warning" },
                     annotations: {
@@ -128,7 +128,7 @@ export class Prometheus extends pulumi.ComponentResource {
           },
           "kube-state-metrics": { fullnameOverride: "kube-state-metrics" },
           // node-exporter needs hostNetwork/hostPID/hostPath — incompatible with PSA baseline.
-          // Disabled in loopruntime-system namespace. Deploy separately in kube-system if needed.
+          // Disabled in loop-runtime-system namespace. Deploy separately in kube-system if needed.
           "prometheus-node-exporter": { enabled: false },
         },
       },

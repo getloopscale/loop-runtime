@@ -144,10 +144,10 @@ func TestEdgeConfigUsesThePublishedPorts(t *testing.T) {
 
 // TestEdgeDoesNotProxyToAPortForward closes B-010 where it was left open.
 //
-// B-010 switched the loopruntime-cloud transport from `kubectl port-forward` to a published
+// B-010 switched the loop-console transport from `kubectl port-forward` to a published
 // NodePort — but only on the droplet. This repository's canonical Caddyfile kept pointing
 // at `localhost:13002`, the old forwarding port, with the comment
-// "loopruntime-cloud via port-forward" still in the header.
+// "loop-console via port-forward" still in the header.
 //
 // The cost showed up on 2026-08-10: syncing the canonical file over the server
 // REVERTED the fix, and `/engine/*` went back from 401 to 502 — nothing was listening on 13002.
@@ -163,10 +163,10 @@ func TestEdgeDoesNotProxyToAPortForward(t *testing.T) {
 
 	if strings.Contains(cfg, "localhost:13002") {
 		t.Error("the Caddyfile forwards to localhost:13002 — the `kubectl port-forward` port " +
-			"that B-010 retired. Nobody listens on it; the cluster publishes loopruntime-cloud on 3002 " +
+			"that B-010 retired. Nobody listens on it; the cluster publishes loop-console on 3002 " +
 			"through the loadbalancer. Syncing this file over the server reverts the fix.")
 	}
 	if !strings.Contains(cfg, "localhost:3002") {
-		t.Error("the Caddyfile does not forward to localhost:3002, which is loopruntime-cloud's published port")
+		t.Error("the Caddyfile does not forward to localhost:3002, which is loop-console's published port")
 	}
 }

@@ -3,16 +3,16 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-critical-alerts
+  name: loop-runtime-critical-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopruntime.critical
+    - name: loop-runtime.critical
       rules:
         - alert: LoopRuntimeDriftDetected
-          expr: loopruntime_drift_detected == 1
+          expr: loop_runtime_drift_detected == 1
           for: 5m
           labels:
             severity: critical
@@ -29,7 +29,7 @@ spec:
           annotations:
             summary: "Build cluster is unreachable"
             description: "Argo Workflows controller in the build cluster has been down for more than 2 minutes. No new builds can start."
-            runbook: "Check k3d-loopruntime-build cluster health. Verify argo-workflows pods are running. Check network connectivity between clusters."
+            runbook: "Check k3d-loop-runtime-build cluster health. Verify argo-workflows pods are running. Check network connectivity between clusters."
 
         - alert: LoopRuntimePostgresDown
           expr: pg_up == 0
@@ -63,14 +63,14 @@ spec:
 
         # ORPHAN alert removed by velero-backup-dr-plan v1.0 / T3.1.
         # The legacy `LoopRuntimeGiteaBackupStale` rule referenced a metric
-        # (`loopruntime_gitea_last_backup_timestamp`) that was never emitted.
+        # (`loop_runtime_gitea_last_backup_timestamp`) that was never emitted.
         # Replaced by `LoopRuntimeVeleroBackupStale` in
         # infra/helm/monitoring/manifests/prometheusrule-velero.yaml,
         # which covers Gitea AND every other scheduled scope (CRDs,
         # ArgoCD, Secrets, full snapshot) via velero_backup_*.
 
         - alert: LoopRuntimeArgoCDCircuitOpen
-          expr: loopruntime_argocd_circuit_state == 1
+          expr: loop_runtime_argocd_circuit_state == 1
           for: 0m
           labels:
             severity: critical
@@ -87,19 +87,19 @@ spec:
           annotations:
             summary: "Traefik ingress controller is down"
             description: "Traefik has been unreachable for 1+ minutes. ALL platform traffic (dashboard, API, auth, CLI) is blocked."
-            runbook: "Check Traefik pod status in loopruntime-system namespace. Verify PDB (minAvailable: 1). Check node health. Restart deployment if needed."
+            runbook: "Check Traefik pod status in loop-runtime-system namespace. Verify PDB (minAvailable: 1). Check node health. Restart deployment if needed."
 
         # MEET-053 A-05: Cell discovery alert.
         # DynamicRouter with 0 cells = platform-wide outage for all deploy operations.
         - alert: LoopRuntimeCellDiscoveryEmpty
-          expr: loopruntime_cell_discovery_count == 0
+          expr: loop_runtime_cell_discovery_count == 0
           for: 60s
           labels:
             severity: critical
           annotations:
             summary: "Zero cells discovered by DynamicRouter"
             description: "No ClusterCredential CRDs found or all disconnected. All deploy, rollback, and status operations will fail."
-            runbook: "1) Check ClusterCredential CRs: kubectl get clustercredentials -n loopruntime-system. 2) Verify status.connected=true. 3) If missing, check Pulumi bootstrap. 4) Rollback: set LOOPRUNTIME_SINGLE_CELL=true on loopruntime-api deployment."
+            runbook: "1) Check ClusterCredential CRs: kubectl get clustercredentials -n loop-runtime-system. 2) Verify status.connected=true. 3) If missing, check Pulumi bootstrap. 4) Rollback: set LOOP_RUNTIME_SINGLE_CELL=true on loop-runtime-api deployment."
 
         # Cloudflare Tunnel is the sole ingress path for all user traffic.
         # If disconnected, every deployed app and the platform API become unreachable.

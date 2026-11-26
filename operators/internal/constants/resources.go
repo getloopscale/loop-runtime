@@ -12,17 +12,17 @@ import "github.com/getloopscale/loop-runtime/pkg/gitearepo"
 const (
 	// SecretMinIOCredentials is the per-tenant Secret with S3/MinIO credentials.
 	// CWTs reference this via envFrom in Argo Workflow templates.
-	SecretMinIOCredentials = "loopruntime-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
+	SecretMinIOCredentials = "loop-runtime-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 
 	// SecretBuildKitRegistryConfig is the Docker config.json for BuildKit registry auth.
 	SecretBuildKitRegistryConfig = "buildkit-registry-config" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 
 	// SecretPlatformTokens is the platform-wide Secret storing Gitea/ArgoCD tokens.
-	SecretPlatformTokens = "loopruntime-platform-tokens"
+	SecretPlatformTokens = "loop-runtime-platform-tokens"
 
 	// SecretRegistryPull is the registry pull secret kept in
 	// NamespacePlatformSystem and copied into every environment namespace.
-	SecretRegistryPull = "loopruntime-system"
+	SecretRegistryPull = "loop-runtime-system"
 
 	// SecretArgoCDInitialAdmin is the default ArgoCD admin password Secret.
 	SecretArgoCDInitialAdmin = "argocd-initial-admin-secret" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
@@ -47,14 +47,14 @@ const (
 
 const (
 	// SABuildWorkflow is the ServiceAccount used by Argo Workflow pods in build namespaces.
-	SABuildWorkflow = "loopruntime-build-sa"
+	SABuildWorkflow = "loop-runtime-build-sa"
 
 	// SADeployer is the ServiceAccount for ArgoCD-managed deployments in environment namespaces.
-	SADeployer = "loopruntime-deployer"
+	SADeployer = "loop-runtime-deployer"
 
 	// SAApp is the ServiceAccount tenant workloads run as in environment and
 	// preview namespaces; it carries the registry pull secret.
-	SAApp = "loopruntime-app"
+	SAApp = "loop-runtime-app"
 )
 
 // --- ResourceQuota and Role Names ---
@@ -69,13 +69,13 @@ const (
 	RoleBindingArgoExecutor = "argo-workflow-executor"
 	// RoleWorkflowSubmitter allows the workflow-submitter SA (in argo ns) to create/manage
 	// workflows in tenant build namespaces.
-	RoleWorkflowSubmitter        = "loopruntime-workflow-submitter"
-	RoleBindingWorkflowSubmitter = "loopruntime-workflow-submitter"
+	RoleWorkflowSubmitter        = "loop-runtime-workflow-submitter"
+	RoleBindingWorkflowSubmitter = "loop-runtime-workflow-submitter"
 	// SAWorkflowSubmitter is the ServiceAccount name used by the API to submit workflows.
-	SAWorkflowSubmitter = "loopruntime-workflow-submitter"
+	SAWorkflowSubmitter = "loop-runtime-workflow-submitter"
 	NSArgoWorkflows     = "argo"
-	RoleDeployer        = "loopruntime-deployer"
-	RoleBindingDeployer = "loopruntime-deployer"
+	RoleDeployer        = "loop-runtime-deployer"
+	RoleBindingDeployer = "loop-runtime-deployer"
 )
 
 // --- NetworkPolicy Names ---
@@ -109,11 +109,11 @@ func ExposedRouteName(appName string) string {
 const (
 	DefaultGiteaTokenName     = "platform-bootstrap-token"
 	DefaultArgoCDUsername     = "admin"
-	DefaultArgoCDRepoUsername = "loopruntime-platform"
+	DefaultArgoCDRepoUsername = "loop-runtime-platform"
 	// ArgoCDAPIAccount is the dedicated ArgoCD service account for the LoopRuntime API.
 	// Configured in Helm values with capability: apiKey.
 	// RBAC: sync + get on applications (least privilege).
-	ArgoCDAPIAccount = "loopruntime-api"
+	ArgoCDAPIAccount = "loop-runtime-api"
 )
 
 // --- Probe Thresholds ---
@@ -129,9 +129,9 @@ const (
 // Higher values = higher priority. Only Enterprise can preempt others.
 
 const (
-	PriorityClassStarter    = "loopruntime-tenant-starter"
-	PriorityClassGrowth     = "loopruntime-tenant-growth"
-	PriorityClassEnterprise = "loopruntime-tenant-enterprise"
+	PriorityClassStarter    = "loop-runtime-tenant-starter"
+	PriorityClassGrowth     = "loop-runtime-tenant-growth"
+	PriorityClassEnterprise = "loop-runtime-tenant-enterprise"
 
 	PriorityValueStarter    int32 = 100
 	PriorityValueGrowth     int32 = 500
@@ -173,7 +173,7 @@ const (
 	// imported by all four operator binaries -- so writing it that way made three
 	// binaries that never touch the variable appear to read it. That blind spot is
 	// B-190; this comment simply stays out of its way.
-	DefaultGiteaOrg = "loopruntime"
+	DefaultGiteaOrg = "loop-runtime"
 
 	// DefaultArgoCDNamespace is the default namespace where ArgoCD is installed.
 	DefaultArgoCDNamespace = "argocd"

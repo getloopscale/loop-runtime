@@ -2,16 +2,16 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: k6-runner
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   labels:
     app.kubernetes.io/name: k6-runner
-    app.kubernetes.io/part-of: loopruntime
+    app.kubernetes.io/part-of: loop-runtime
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: k6-runner
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
 rules:
   - apiGroups: [""]
     resources: ["configmaps"]
@@ -19,17 +19,17 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get"]
-    resourceNames: ["loopruntime-api-secrets"]
+    resourceNames: ["loop-runtime-api-secrets"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: k6-runner
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
 subjects:
   - kind: ServiceAccount
     name: k6-runner
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

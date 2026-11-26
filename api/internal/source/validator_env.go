@@ -23,7 +23,7 @@ import (
 //   - LD_PRELOAD, LD_LIBRARY_PATH: dynamic linker hijack (Linux glibc)
 //   - DYLD_*: macOS dynamic linker hijack (defensive — runtime is Linux)
 //   - KUBERNETES_*: K8s service-discovery override (downward API conflict)
-//   - LOOPRUNTIME_* (prefix): platform-reserved variables (audit, billing, telemetry)
+//   - LOOP_RUNTIME_* (prefix): platform-reserved variables (audit, billing, telemetry)
 //
 // EC-8 (v1.1 absorbed): the EnvBlocklistMode the caller passes lets ops roll
 // the blocklist out as warn-only first (see EnvBlocklistMode below).
@@ -40,8 +40,8 @@ var reservedEnvKeys = map[string]struct{}{
 // Order is insignificant — matching is OR over the slice.
 //
 // This is today the ONLY copy of the rule. Two others existed — in
-// `services/deploycontracts/build_plan.go` and in `tools/loopruntime-dockerfile-lint` — about
-// SHADOWING what the platform injects (LOOPRUNTIME_/AWS_/DO_/GOOGLE_/KUBERNETES_) in BUILD ARGS.
+// `services/deploycontracts/build_plan.go` and in `tools/loop-runtime-dockerfile-lint` — about
+// SHADOWING what the platform injects (LOOP_RUNTIME_/AWS_/DO_/GOOGLE_/KUBERNETES_) in BUILD ARGS.
 //
 // Both left: the tool on 2026-08-19 (B-157), because the user-supplied Dockerfile path was
 // removed in T2.2; and the `build_plan.go` one the same day (B-094), because it iterated
@@ -58,7 +58,7 @@ var reservedEnvKeys = map[string]struct{}{
 // categories above: LD_PRELOAD and DYLD_* load an attacker's library before the
 // real one; PATH/SHELL redirect what gets executed.
 //
-// The two overlap on LOOPRUNTIME_ and KUBERNETES_ because both threats need them, for
+// The two overlap on LOOP_RUNTIME_ and KUBERNETES_ because both threats need them, for
 // different reasons — KUBERNETES_* overrides service discovery here, and is
 // platform injection there.
 //
@@ -69,12 +69,12 @@ var reservedEnvKeys = map[string]struct{}{
 var runtimeHijackEnvPrefixes = []string{
 	"DYLD_",
 	"KUBERNETES_",
-	"LOOPRUNTIME_",
+	"LOOP_RUNTIME_",
 }
 
 // EnvBlocklistMode is how a services.json env key on the reserved blocklist is
 // handled. The composition root passes config.Config.EnvBlocklistMode (env
-// LOOPRUNTIME_ENV_BLOCKLIST_MODE), which config.Validate already restricts to these
+// LOOP_RUNTIME_ENV_BLOCKLIST_MODE), which config.Validate already restricts to these
 // two values and refuses as warn in production.
 type EnvBlocklistMode string
 
@@ -145,7 +145,7 @@ func validateReservedEnvKeys(manifest *ServicesManifest, mode EnvBlocklistMode, 
 
 	first := violations[0]
 	msg := fmt.Sprintf(
-		"E-010: service %q sets reserved env var %q. Reserved keys: PATH, HOME, USER, SHELL, LD_PRELOAD, LD_LIBRARY_PATH, DYLD_*, KUBERNETES_*, LOOPRUNTIME_*. Rename to an application-scoped key (e.g., APP_%s).",
+		"E-010: service %q sets reserved env var %q. Reserved keys: PATH, HOME, USER, SHELL, LD_PRELOAD, LD_LIBRARY_PATH, DYLD_*, KUBERNETES_*, LOOP_RUNTIME_*. Rename to an application-scoped key (e.g., APP_%s).",
 		first.service, first.key, first.key,
 	)
 

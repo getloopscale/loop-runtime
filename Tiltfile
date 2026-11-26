@@ -13,30 +13,30 @@
 # ---------------------------------------------------------------------------
 load("ext://namespace", "namespace_create")
 
-# Ensure loopruntime-system namespace exists
-namespace_create("loopruntime-system")
+# Ensure loop-runtime-system namespace exists
+namespace_create("loop-runtime-system")
 
 # The dev loop runs against the core cluster. `allow_k8s_contexts` alone never stopped
 # a wrong one — every k3d-* context already counts as local — and Tilt deploys into the
-# CURRENT context: left on k3d-loopruntime-secrets, it put the platform into the secrets
-# cluster (#402). Pin it with `tilt up --context k3d-loopruntime-core`.
-allow_k8s_contexts("k3d-loopruntime-core")
-if k8s_context() != "k3d-loopruntime-core":
-    fail("Tilt must run against k3d-loopruntime-core, not %s — start it with: tilt up --context k3d-loopruntime-core" % k8s_context())
+# CURRENT context: left on k3d-loop-runtime-secrets, it put the platform into the secrets
+# cluster (#402). Pin it with `tilt up --context k3d-loop-runtime-core`.
+allow_k8s_contexts("k3d-loop-runtime-core")
+if k8s_context() != "k3d-loop-runtime-core":
+    fail("Tilt must run against k3d-loop-runtime-core, not %s — start it with: tilt up --context k3d-loop-runtime-core" % k8s_context())
 
 # ---------------------------------------------------------------------------
-# gomod_token — required by api/Dockerfile to fetch private loopruntime-contracts
-# module (M5 decomposition, 2026-06-19). Without this, loopruntime-api build fails
+# gomod_token — required by api/Dockerfile to fetch private loop-runtime-contracts
+# module (M5 decomposition, 2026-06-19). Without this, loop-runtime-api build fails
 # with `could not read Username for 'https://github.com'`. Canonical SoT:
-# `~/.loopruntime/gomod-token.txt` mode 0600 (sibling of admin-cli-client-secret.txt
+# `~/.loop-runtime/gomod-token.txt` mode 0600 (sibling of admin-cli-client-secret.txt
 # + cleanroom-unseal.json). Fail-fast pre-flight so operator gets a clear
 # error BEFORE Tilt spends ~2min on a build that will fail at step 8/11.
 # ---------------------------------------------------------------------------
-GOMOD_TOKEN_PATH = os.getenv("HOME") + "/.loopruntime/gomod-token.txt"
+GOMOD_TOKEN_PATH = os.getenv("HOME") + "/.loop-runtime/gomod-token.txt"
 if not os.path.exists(GOMOD_TOKEN_PATH):
     fail(
-        "missing " + GOMOD_TOKEN_PATH + " — required for loopruntime-api build " +
-        "(private loopruntime-contracts module). Generate a GitHub PAT with " +
+        "missing " + GOMOD_TOKEN_PATH + " — required for loop-runtime-api build " +
+        "(private loop-runtime-contracts module). Generate a GitHub PAT with " +
         "`Contents: read` on getloopscale/contracts and save it: " +
         "`echo \"ghp_xxx\" > " + GOMOD_TOKEN_PATH + " && chmod 600 " +
         GOMOD_TOKEN_PATH + "`"
@@ -53,21 +53,21 @@ if not os.path.exists(GOMOD_TOKEN_PATH):
 # Probe existing Helm releases so Tilt can track readiness without managing lifecycle.
 local_resource(
     "postgresql",
-    cmd="kubectl --context k3d-loopruntime-core -n loopruntime-system rollout status statefulset/postgresql --timeout=60s",
+    cmd="kubectl --context k3d-loop-runtime-core -n loop-runtime-system rollout status statefulset/postgresql --timeout=60s",
     resource_deps=[],
     labels=["infra"],
 )
 
 local_resource(
     "gitea",
-    cmd="kubectl --context k3d-loopruntime-core -n loopruntime-system rollout status deployment/gitea --timeout=60s",
+    cmd="kubectl --context k3d-loop-runtime-core -n loop-runtime-system rollout status deployment/gitea --timeout=60s",
     resource_deps=["postgresql"],
     labels=["infra"],
 )
 
 local_resource(
     "minio",
-    cmd="kubectl --context k3d-loopruntime-core -n loopruntime-system rollout status deployment/minio --timeout=60s",
+    cmd="kubectl --context k3d-loop-runtime-core -n loop-runtime-system rollout status deployment/minio --timeout=60s",
     resource_deps=["postgresql"],
     labels=["infra"],
 )
@@ -117,7 +117,7 @@ k8s_resource(
 # ---------------------------------------------------------------------------
 # Database migrations — run before API starts
 # ---------------------------------------------------------------------------
-# Schema bootstrap: still uses psql loop because loopruntime-api pod (canonical
+# Schema bootstrap: still uses psql loop because loop-runtime-api pod (canonical
 # golang-migrate path) is not up yet at this stage. golang-migrate is
 # applied AFTER the API is up via `task k3d:heal` H17 (which calls
 # infra/scripts/run-migrations.sh) — that backfills schema_migrations
@@ -131,11 +131,11 @@ k8s_resource(
 # `tilt up` session and auto-restarts when postgresql-0 restarts.
 local_resource(
     "pg-port-forward",
-    serve_cmd="kubectl --context k3d-loopruntime-core port-forward -n loopruntime-system svc/postgresql 15432:5432",
+    serve_cmd="kubectl --context k3d-loop-runtime-core port-forward -n loop-runtime-system svc/postgresql 15432:5432",
     resource_deps=["postgresql"],
     auto_init=True,
     allow_parallel=True,
-    labels=["loopruntime"],
+    labels=["loop-runtime"],
 )
 
 # db-migrate runs the canonical migration path, the one `task setup` uses: the
@@ -155,7 +155,7 @@ local_resource(
 # API server — build and deploy
 # ---------------------------------------------------------------------------
 docker_build(
-    "loopruntime-api",
+    "loop-runtime-api",
     context=".",
     dockerfile="api/Dockerfile",
     # M6 Phase 2 (commit 4984365b 2026-06-17) extracted operators/api as a
@@ -175,31 +175,31 @@ docker_build(
 )
 
 # T1.1.c (plan 2026-06-11-code-review-remediation-147-findings v1.2) per ADR D1:
-# Render loopruntime-api ConfigMap+Secret from helm chart BEFORE applying Deployment.
+# Render loop-runtime-api ConfigMap+Secret from helm chart BEFORE applying Deployment.
 # Without this, the Deployment's envFrom: configMapRef/secretRef references resolve to
 # missing resources and Pod fails CrashLoopBackOff. Output written to .tilt-rendered/
 # (gitignored) — re-rendered on every values or template edit.
 #
-# The chart is charts/loopruntime-api — the one loopruntime-api chart Helmfile and ArgoCD install —
-# rendered with infra/tilt/loopruntime-api-values.yaml, and only its ConfigMap and Secret
-# (both named loopruntime-api). `helm dependency build` resolves the local loopruntime-common
+# The chart is charts/loop-runtime-api — the one loop-runtime-api chart Helmfile and ArgoCD install —
+# rendered with infra/tilt/loop-runtime-api-values.yaml, and only its ConfigMap and Secret
+# (both named loop-runtime-api). `helm dependency build` resolves the local loop-runtime-common
 # library, which the chart's templates include; it needs no network.
 # Replaces the rendered file only when its content changed. k8s_yaml below makes that
 # file a Tiltfile dependency, and rewriting it on every load reloaded the Tiltfile,
 # which rewrote it again — "(Tiltfile)" never left in_progress (#403). The render is
 # deterministic, so an unchanged file now stays untouched.
-_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm dependency build charts/loopruntime-api >/dev/null && helm template loopruntime-api charts/loopruntime-api -f infra/tilt/loopruntime-api-values.yaml -s templates/configmap.yaml -s templates/secret.yaml -s templates/clusterrole.yaml -s templates/clusterrolebinding.yaml -n loopruntime-system > .tilt-rendered/loopruntime-api-runtime.yaml.next && { cmp -s .tilt-rendered/loopruntime-api-runtime.yaml.next .tilt-rendered/loopruntime-api-runtime.yaml && rm -f .tilt-rendered/loopruntime-api-runtime.yaml.next || mv .tilt-rendered/loopruntime-api-runtime.yaml.next .tilt-rendered/loopruntime-api-runtime.yaml; }"
+_API_RUNTIME_RENDER = "mkdir -p .tilt-rendered && helm dependency build charts/loop-runtime-api >/dev/null && helm template loop-runtime-api charts/loop-runtime-api -f infra/tilt/loop-runtime-api-values.yaml -s templates/configmap.yaml -s templates/secret.yaml -s templates/clusterrole.yaml -s templates/clusterrolebinding.yaml -n loop-runtime-system > .tilt-rendered/loop-runtime-api-runtime.yaml.next && { cmp -s .tilt-rendered/loop-runtime-api-runtime.yaml.next .tilt-rendered/loop-runtime-api-runtime.yaml && rm -f .tilt-rendered/loop-runtime-api-runtime.yaml.next || mv .tilt-rendered/loop-runtime-api-runtime.yaml.next .tilt-rendered/loop-runtime-api-runtime.yaml; }"
 
 local_resource(
-    "loopruntime-api-runtime",
+    "loop-runtime-api-runtime",
     cmd=_API_RUNTIME_RENDER,
     deps=[
-        "infra/tilt/loopruntime-api-values.yaml",
-        "charts/loopruntime-api/values.yaml",
-        "charts/loopruntime-api/templates/configmap.yaml",
-        "charts/loopruntime-api/templates/secret.yaml",
+        "infra/tilt/loop-runtime-api-values.yaml",
+        "charts/loop-runtime-api/values.yaml",
+        "charts/loop-runtime-api/templates/configmap.yaml",
+        "charts/loop-runtime-api/templates/secret.yaml",
     ],
-    labels=["loopruntime"],
+    labels=["loop-runtime"],
 )
 
 # Renders once while the Tiltfile is LOADING, before the k8s_yaml below.
@@ -210,41 +210,41 @@ local_resource(
 # only runs AFTER the Tiltfile has loaded. The resource depended on the artifact it
 # generates itself. Measured on the app-dev droplet on 2026-08-10, during the full
 # rebuild: `tilt up` aborted with
-# "open .tilt-rendered/loopruntime-api-runtime.yaml: no such file or directory".
+# "open .tilt-rendered/loop-runtime-api-runtime.yaml: no such file or directory".
 #
 # The `local_resource` still exists and is not redundant: it re-renders when the
 # `deps` change, which is the development loop. This `local()` only guarantees the first render.
 local(_API_RUNTIME_RENDER, quiet=True)
 # The chart declares no namespace — a Helm release supplies it — so the raw render
-# would land in `default`, and the loopruntime-api Deployment in loopruntime-system then failed with
-# `configmap "loopruntime-api" not found` (#404). Place every rendered object in loopruntime-system.
-_api_runtime_objects = decode_yaml_stream(read_file(".tilt-rendered/loopruntime-api-runtime.yaml"))
-# loopruntime-api's RBAC comes from the chart too, as in production (#414): the dev loop
+# would land in `default`, and the loop-runtime-api Deployment in loop-runtime-system then failed with
+# `configmap "loop-runtime-api" not found` (#404). Place every rendered object in loop-runtime-system.
+_api_runtime_objects = decode_yaml_stream(read_file(".tilt-rendered/loop-runtime-api-runtime.yaml"))
+# loop-runtime-api's RBAC comes from the chart too, as in production (#414): the dev loop
 # kept a drifted copy that could not patch a Tenant. ClusterRole and binding are
-# cluster-scoped, so only the namespaced objects are placed in loopruntime-system.
+# cluster-scoped, so only the namespaced objects are placed in loop-runtime-system.
 for _obj in _api_runtime_objects:
     if _obj["kind"] in ("ConfigMap", "Secret"):
-        _obj["metadata"]["namespace"] = "loopruntime-system"
+        _obj["metadata"]["namespace"] = "loop-runtime-system"
 k8s_yaml(encode_yaml_stream(_api_runtime_objects))
 
 k8s_yaml("infra/tilt/api-deployment.yaml")
 k8s_resource(
-    "loopruntime-api",
+    "loop-runtime-api",
     # No port_forwards — k3d core-cluster.yaml already maps localhost:3001 → NodePort 30001.
     # Adding port_forwards here would conflict with k3d's loadbalancer binding.
-    # loopruntime-api-runtime added as dep: Pod needs the ConfigMap+Secret rendered before envFrom can resolve.
-    resource_deps=["db-migrate", "postgresql", "loopruntime-api-runtime"],
-    labels=["loopruntime"],
+    # loop-runtime-api-runtime added as dep: Pod needs the ConfigMap+Secret rendered before envFrom can resolve.
+    resource_deps=["db-migrate", "postgresql", "loop-runtime-api-runtime"],
+    labels=["loop-runtime"],
 )
 
 # ---------------------------------------------------------------------------
-# loopruntime-cloud — EXTRACTED to github.com/getloopscale/loopruntime-cloud (M4, 2026-06-16).
+# loop-console — EXTRACTED to github.com/getloopscale/loop-console (M4, 2026-06-16).
 # ---------------------------------------------------------------------------
-# The cloud-API + dashboard now live in the standalone loopruntime-cloud repo with their
-# own dev loop (which assumes the engine + loopruntime-data are running). The engine
-# Tiltfile no longer builds/deploys cloud from source. The deployed loopruntime-cloud
-# SERVICE chart (charts/loopruntime-cloud) remains platform infra, sourced from the
-# loopruntime-cloud repo's published image.
+# The cloud-API + dashboard now live in the standalone loop-console repo with their
+# own dev loop (which assumes the engine + loop-runtime-data are running). The engine
+# Tiltfile no longer builds/deploys cloud from source. The deployed loop-console
+# SERVICE chart (charts/loop-console) remains platform infra, sourced from the
+# loop-console repo's published image.
 
 # ---------------------------------------------------------------------------
 # Operator binaries — 4 independent deployments (multi-binary split)
@@ -252,7 +252,7 @@ k8s_resource(
 
 # Group A: Tenant + Environment (heaviest — all provisioners + multi-cluster)
 docker_build(
-    "loopruntime-tenant-operator",
+    "loop-runtime-tenant-operator",
     context=".",
     dockerfile="operators/Dockerfile.tenant-operator",
     only=["operators/", "pkg/", "go.work", "go.work.sum"],
@@ -260,13 +260,13 @@ docker_build(
 k8s_yaml("infra/tilt/tenant-operator-deployment.yaml")
 k8s_resource(
     "tenant-operator",
-    resource_deps=["crds", "loopruntime-api", "gitea", "minio"],
-    labels=["loopruntime"],
+    resource_deps=["crds", "loop-runtime-api", "gitea", "minio"],
+    labels=["loop-runtime"],
 )
 
 # Group B: Application + Exposure (lightest — mgmt cluster only)
 docker_build(
-    "loopruntime-app-operator",
+    "loop-runtime-app-operator",
     context=".",
     dockerfile="operators/Dockerfile.app-operator",
     only=["operators/", "pkg/", "go.work", "go.work.sum"],
@@ -275,12 +275,12 @@ k8s_yaml("infra/tilt/app-operator-deployment.yaml")
 k8s_resource(
     "app-operator",
     resource_deps=["crds"],
-    labels=["loopruntime"],
+    labels=["loop-runtime"],
 )
 
 # Group C: Preview (self-contained — runtime cluster + TTL checks)
 docker_build(
-    "loopruntime-preview-operator",
+    "loop-runtime-preview-operator",
     context=".",
     dockerfile="operators/Dockerfile.preview-operator",
     only=["operators/", "pkg/", "go.work", "go.work.sum"],
@@ -289,12 +289,12 @@ k8s_yaml("infra/tilt/preview-operator-deployment.yaml")
 k8s_resource(
     "preview-operator",
     resource_deps=["crds"],
-    labels=["loopruntime"],
+    labels=["loop-runtime"],
 )
 
 # Group D: Platform infra (ClusterCredential + GitRepoBinding + PlatformBootstrap)
 docker_build(
-    "loopruntime-platform-operator",
+    "loop-runtime-platform-operator",
     context=".",
     dockerfile="operators/Dockerfile.platform-operator",
     only=["operators/", "pkg/", "go.work", "go.work.sum"],
@@ -303,7 +303,7 @@ k8s_yaml("infra/tilt/platform-operator-deployment.yaml")
 k8s_resource(
     "platform-operator",
     resource_deps=["crds", "gitea"],
-    labels=["loopruntime"],
+    labels=["loop-runtime"],
 )
 
 # ---------------------------------------------------------------------------
@@ -312,11 +312,11 @@ k8s_resource(
 local_resource(
     "dev-seed",
     cmd="""
-        kubectl --context k3d-loopruntime-core port-forward -n loopruntime-system svc/postgresql 15432:5432 &
+        kubectl --context k3d-loop-runtime-core port-forward -n loop-runtime-system svc/postgresql 15432:5432 &
         PF_PID=$!
         trap "kill $PF_PID 2>/dev/null; wait $PF_PID 2>/dev/null" EXIT
         sleep 3
-        PGPASSWORD=loopruntime-dev-password psql -h localhost -p 15432 -U loopruntime -d loopruntime <<'SQL'
+        PGPASSWORD=loop-runtime-dev-password psql -h localhost -p 15432 -U loop_runtime -d loop_runtime <<'SQL'
         INSERT INTO users (id, email, github_id, display_name)
         VALUES ('github-paulohenriquevn', 'paulohenriquevn@gmail.com', 6766298, 'paulohenriquevn')
         ON CONFLICT (id) DO NOTHING;
@@ -330,7 +330,7 @@ local_resource(
         ON CONFLICT (tenant_id, user_id) DO NOTHING;
 SQL
     """,
-    resource_deps=["loopruntime-api"],
+    resource_deps=["loop-runtime-api"],
     auto_init=False,
-    labels=["loopruntime"],
+    labels=["loop-runtime"],
 )

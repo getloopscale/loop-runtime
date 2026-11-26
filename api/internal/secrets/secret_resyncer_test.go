@@ -259,7 +259,7 @@ func TestSecretResyncer_NamespaceTerminating_Retries(t *testing.T) {
 			defer mu.Unlock()
 			callsByName[c.Name]++
 			if callsByName[c.Name] == 1 {
-				return fmt.Errorf("create external secret on runtime: %w", namespaceTerminatingErr("loopruntime-e2e-tenant-j-secrets"))
+				return fmt.Errorf("create external secret on runtime: %w", namespaceTerminatingErr("loop-runtime-e2e-tenant-j-secrets"))
 			}
 			return nil // succeed on retry
 		},
@@ -289,7 +289,7 @@ func TestSecretResyncer_NamespaceTerminating_TimeoutFailsExplicit(t *testing.T) 
 	// K8s mock that ALWAYS returns terminating error.
 	k8s := &fakeSecretK8sCreator{
 		errFor: func(c secretCall) error {
-			return namespaceTerminatingErr("loopruntime-e2e-tenant-j-secrets")
+			return namespaceTerminatingErr("loop-runtime-e2e-tenant-j-secrets")
 		},
 	}
 	store := &fakeSecretResyncStore{

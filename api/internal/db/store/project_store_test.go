@@ -33,7 +33,7 @@ import (
 //   - DeleteProject 0-rows-affected → "project not found" error
 //
 // Per matrix § Phase 2 reshape window: behavioral subset moves to
-// real-PG-gated tests when pgxmock or LOOPRUNTIME_E2E_DATABASE_URL harness
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness
 // is wired.
 //
 // The 2 hermetic tests below (interface assertion +

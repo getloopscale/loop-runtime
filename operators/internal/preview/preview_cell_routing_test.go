@@ -49,7 +49,7 @@ func previewCellScheme(t *testing.T) *runtime.Scheme {
 		t.Fatalf("client-go scheme: %v", err)
 	}
 	if err := loopruntimev1.AddToScheme(s); err != nil {
-		t.Fatalf("loopruntime scheme: %v", err)
+		t.Fatalf("loop-runtime scheme: %v", err)
 	}
 	return s
 }
@@ -58,19 +58,19 @@ func cellPreview(cellID string) *loopruntimev1.PreviewEnvironment {
 	return &loopruntimev1.PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "pr-7",
-			Namespace:  "loopruntime-system",
+			Namespace:  "loop-runtime-system",
 			Finalizers: []string{previewFinalizer},
 		},
 		Spec: loopruntimev1.PreviewEnvironmentSpec{TenantID: "tn-acme", ProjectID: "shop", PRNumber: 7, CellID: cellID},
 	}
 }
 
-const cellPreviewNamespace = "loopruntime-tn-acme-shop-preview-pr-7"
+const cellPreviewNamespace = "loop-runtime-tn-acme-shop-preview-pr-7"
 
 func reconcileCellPreview(t *testing.T, r *PreviewReconciler) error {
 	t.Helper()
 	_, err := r.Reconcile(context.Background(),
-		ctrl.Request{NamespacedName: types.NamespacedName{Name: "pr-7", Namespace: "loopruntime-system"}})
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: "pr-7", Namespace: "loop-runtime-system"}})
 	return err
 }
 
@@ -95,8 +95,8 @@ func TestPreviewReconcile_ProvisionsEveryResourceInThePreviewCell(t *testing.T) 
 	if err := cell1.List(ctx, &policies, client.InNamespace(cellPreviewNamespace)); err != nil || len(policies.Items) == 0 {
 		t.Fatalf("isolation NetworkPolicies must be in the preview's cell, got %d (err %v)", len(policies.Items), err)
 	}
-	if err := cell1.Get(ctx, client.ObjectKey{Namespace: cellPreviewNamespace, Name: "loopruntime-app"}, &corev1.ServiceAccount{}); err != nil {
-		t.Fatalf("loopruntime-app ServiceAccount must be in the preview's cell: %v", err)
+	if err := cell1.Get(ctx, client.ObjectKey{Namespace: cellPreviewNamespace, Name: "loop-runtime-app"}, &corev1.ServiceAccount{}); err != nil {
+		t.Fatalf("loop-runtime-app ServiceAccount must be in the preview's cell: %v", err)
 	}
 	var quotas corev1.ResourceQuotaList
 	if err := cell1.List(ctx, &quotas, client.InNamespace(cellPreviewNamespace)); err != nil || len(quotas.Items) == 0 {
@@ -162,7 +162,7 @@ func TestPreviewReconcile_ReportsTheURLTheAPIComputed(t *testing.T) {
 	}
 
 	var got loopruntimev1.PreviewEnvironment
-	if err := mgmt.Get(context.Background(), types.NamespacedName{Name: "pr-7", Namespace: "loopruntime-system"}, &got); err != nil {
+	if err := mgmt.Get(context.Background(), types.NamespacedName{Name: "pr-7", Namespace: "loop-runtime-system"}, &got); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if got.Status.URL != pv.Spec.PublicURL {

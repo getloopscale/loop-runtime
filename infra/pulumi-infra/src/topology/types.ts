@@ -90,6 +90,6 @@ export interface ClusterRegistryEntry {
 
 /**
  * The cluster registry — keyed by clusterId.
- * This is the primary contract between loopruntime-infra and downstream consumers.
+ * This is the primary contract between loop-runtime-infra and downstream consumers.
  */
 export type ClusterRegistry = Record<string, ClusterRegistryEntry>;

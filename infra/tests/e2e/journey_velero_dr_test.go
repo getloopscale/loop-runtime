@@ -10,7 +10,7 @@
 // invariants the plan promised would hold.
 //
 // Skip semantics:
-//   - Skipped when LOOPRUNTIME_E2E unset (suite-level gate).
+//   - Skipped when LOOP_RUNTIME_E2E unset (suite-level gate).
 //   - Skipped when the velero-system namespace is missing — Velero is
 //     installed via Helmfile mgmt Wave -1 but is not part of the
 //     bare-minimum standalone bootstrap; running the rest of the suite
@@ -23,9 +23,9 @@
 //
 //   * V-1: velero-system pod healthy
 //   * V-2: BackupStorageLocation `default` phase=Available
-//   * V-3: 5 loopruntime-* Schedules exist + Enabled
-//   * V-4: loopruntime-crds-backup template includes all 10 runtime.getloopscale.com CRDs
-//   * V-5: PrometheusRule loopruntime-velero-alerts has 4 alerts
+//   * V-3: 5 loop-runtime-* Schedules exist + Enabled
+//   * V-4: loop-runtime-crds-backup template includes all 10 runtime.getloopscale.com CRDs
+//   * V-5: PrometheusRule loop-runtime-velero-alerts has 4 alerts
 //   * V-6: ORPHAN LoopRuntimeGiteaBackupStale removed from
 //          prometheusrule-critical.yaml (regression guard)
 //   * V-7: DR drill --dry-run passes (when velero CLI present)
@@ -89,11 +89,11 @@ func veleroNs(args ...string) *exec.Cmd {
 // schedules MUST be added here AND to infra/helm/velero/values-schedules.yaml
 // in the same commit — divergence is a regression caught by V-3.
 var expectedSchedules = []string{
-	"velero-loopruntime-argocd-backup",
-	"velero-loopruntime-crds-backup",
-	"velero-loopruntime-full-backup",
-	"velero-loopruntime-gitea-backup",
-	"velero-loopruntime-secrets-backup",
+	"velero-loop-runtime-argocd-backup",
+	"velero-loop-runtime-crds-backup",
+	"velero-loop-runtime-full-backup",
+	"velero-loop-runtime-gitea-backup",
+	"velero-loop-runtime-secrets-backup",
 }
 
 // expectedLoopRuntimeCRDs is the canonical list of runtime.getloopscale.com CRD plural names
@@ -145,7 +145,7 @@ var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
 		)
 	})
 
-	It("V-3: 5 loopruntime-* schedules exist and are Enabled", func() {
+	It("V-3: 5 loop-runtime-* schedules exist and are Enabled", func() {
 		// One pass per schedule for clearer failure messages.
 		for _, name := range expectedSchedules {
 			// Fully-qualify schedules.velero.io: when chaos-mesh is also
@@ -169,23 +169,23 @@ var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
 		}
 	})
 
-	It("V-4: loopruntime-crds-backup template includes all 10 runtime.getloopscale.com CRDs", func() {
-		cmd := veleroNs("get", "schedules.velero.io", "velero-loopruntime-crds-backup",
+	It("V-4: loop-runtime-crds-backup template includes all 10 runtime.getloopscale.com CRDs", func() {
+		cmd := veleroNs("get", "schedules.velero.io", "velero-loop-runtime-crds-backup",
 			"-o", "jsonpath={.spec.template.includedResources}")
 		out, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(),
-			"velero-loopruntime-crds-backup must exist (got: %s)", string(out))
+			"velero-loop-runtime-crds-backup must exist (got: %s)", string(out))
 
 		rendered := string(out)
 		for _, crd := range expectedLoopRuntimeCRDs {
 			Expect(rendered).To(
 				ContainSubstring(crd),
-				"loopruntime-crds-backup must include CRD %q (got: %s)", crd, rendered,
+				"loop-runtime-crds-backup must include CRD %q (got: %s)", crd, rendered,
 			)
 		}
 	})
 
-	It("V-5: PrometheusRule loopruntime-velero-alerts has 4 alerts", func() {
+	It("V-5: PrometheusRule loop-runtime-velero-alerts has 4 alerts", func() {
 		// The PrometheusRule may live under monitoring or velero-system —
 		// the exact namespace depends on the helmfile values. We probe the
 		// rules via a label selector instead of hard-coding the namespace.

@@ -17,7 +17,7 @@ import (
 // (#446), one service at a time: a service is listed in `dataPlane.services` once its
 // repository publishes to ECR. They ran as compose containers started from directories that
 // no longer exist, on host ports that had drifted from what the engine configured: memory
-// answered on 8080 while the seed chain probed 18081, and loopruntime-cloud reached RAG at :8787, a
+// answered on 8080 while the seed chain probed 18081, and loop-console reached RAG at :8787, a
 // port the host never published.
 //
 // Three ends must agree for a service to be reachable, and each was once the one that
@@ -25,11 +25,11 @@ import (
 // it, and the address its consumer uses.
 var dataPlanePorts = map[string]struct {
 	nodePort, hostPort, servicePort int
-	consumerKey                     string // loopruntime-cloud config key, "" when loopruntime-cloud does not call it
+	consumerKey                     string // loop-console config key, "" when loop-console does not call it
 }{
-	"loopruntime-memory": {30181, 18081, 8080, "memoryBaseUrl"},
-	"loopruntime-rag":    {30182, 18082, 8787, "ragBaseUrl"},
-	"loopruntime-lens":   {30184, 18084, 4318, "lensBaseUrl"},
+	"loop-runtime-memory": {30181, 18081, 8080, "memoryBaseUrl"},
+	"loop-runtime-rag":    {30182, 18082, 8787, "ragBaseUrl"},
+	"loop-runtime-lens":   {30184, 18084, 4318, "lensBaseUrl"},
 }
 
 // enabledDataPlane reads `dataPlane.services` from the dev-public environment.
@@ -104,7 +104,7 @@ func TestDevPublicDataPlaneIsPublishedOnItsHostPort(t *testing.T) {
 	}
 }
 
-// loopruntime-cloud reaches a service that runs on its cluster by Service name. One not moved yet
+// loop-console reaches a service that runs on its cluster by Service name. One not moved yet
 // is reached where its compose container publishes it — measured 2026-09-29, RAG's
 // pipeline container `therag_api` publishes host :18082 → :8787 and nothing listens on host
 // :8787. The address drifted twice before: in July :18082 was a `node` process started by
@@ -113,21 +113,21 @@ func TestDevPublicDataPlaneIsPublishedOnItsHostPort(t *testing.T) {
 // instance, which is why a moved service never goes through the host.
 func TestDevPublicControlPlaneReachesTheDataPlaneWhereItRuns(t *testing.T) {
 	enabled := enabledDataPlane(t)
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopruntime-cloud", "charts/loopruntime-cloud", helmfileCoreEnv...)
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loop-console", "charts/loop-console", helmfileCoreEnv...)
 	for svc, p := range dataPlanePorts {
 		if p.consumerKey == "" {
 			continue
 		}
 		want := fmt.Sprintf("http://host.k3d.internal:%d", p.hostPort)
 		if enabled[svc] {
-			want = fmt.Sprintf("http://%s.loopruntime-data-plane.svc.cluster.local:%d", svc, p.servicePort)
+			want = fmt.Sprintf("http://%s.loop-runtime-data-plane.svc.cluster.local:%d", svc, p.servicePort)
 		}
 		if !strings.Contains(rendered, want) {
-			t.Errorf("loopruntime-cloud does not reach %s at %s (%s)", svc, want, p.consumerKey)
+			t.Errorf("loop-console does not reach %s at %s (%s)", svc, want, p.consumerKey)
 		}
 	}
 	if strings.Contains(rendered, "host.k3d.internal:8787") {
-		t.Error("loopruntime-cloud reaches RAG at :8787, a port the host never published")
+		t.Error("loop-console reaches RAG at :8787, a port the host never published")
 	}
 }
 
@@ -157,28 +157,28 @@ func readCoreClusterPorts(t *testing.T) map[string]bool {
 	return published
 }
 
-// loopruntime-rag refuses to serve as a superuser and its worker refuses any role that cannot
+// loop-runtime-rag refuses to serve as a superuser and its worker refuses any role that cannot
 // cross workspaces, while its migrations need the owner (#474). dev-public connects each
 // process as the role it insists on and migrates as the owner before the app starts.
 func TestDevPublicRAGConnectsEachProcessAsItsRoleAndMigratesAsTheOwner(t *testing.T) {
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopruntime-rag",
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loop-runtime-rag",
 		"infra/helm/data-plane-service", helmfileCoreEnv...)
 	docs := parseDocs(t, rendered)
 
-	for deploy, role := range map[string]string{"loopruntime-rag": "rag_app", "loopruntime-rag-worker": "rag_worker"} {
+	for deploy, role := range map[string]string{"loop-runtime-rag": "rag_app", "loop-runtime-rag-worker": "rag_worker"} {
 		env := asWorkload(t, findDoc(t, docs, "Deployment", deploy)).Spec.Template.Spec.Containers[0].Env
-		i := envIndex(env, "LOOPRUNTIMERAG_PG_URI")
+		i := envIndex(env, "LOOP_RUNTIMERAG_PG_URI")
 		if i < 0 || !strings.HasPrefix(env[i].Value, "postgres://"+role+":") {
-			t.Errorf("%s: LOOPRUNTIMERAG_PG_URI does not connect as %s: %+v", deploy, role, env)
+			t.Errorf("%s: LOOP_RUNTIMERAG_PG_URI does not connect as %s: %+v", deploy, role, env)
 		}
 	}
 
-	init := asWorkload(t, findDoc(t, docs, "Deployment", "loopruntime-rag")).Spec.Template.Spec.InitContainers
+	init := asWorkload(t, findDoc(t, docs, "Deployment", "loop-runtime-rag")).Spec.Template.Spec.InitContainers
 	last := init[len(init)-1]
 	if last.Name != "migrate" || strings.Join(last.Command, " ") != "node_modules/.bin/tsx src/migrate.ts" {
-		t.Fatalf("loopruntime-rag's last init container = %s %v, want migrate running src/migrate.ts", last.Name, last.Command)
+		t.Fatalf("loop-runtime-rag's last init container = %s %v, want migrate running src/migrate.ts", last.Name, last.Command)
 	}
-	if i := envIndex(last.Env, "LOOPRUNTIMERAG_MIGRATE_PG_URI"); i < 0 || !strings.HasPrefix(last.Env[i].Value, "postgres://therag:") {
+	if i := envIndex(last.Env, "LOOP_RUNTIMERAG_MIGRATE_PG_URI"); i < 0 || !strings.HasPrefix(last.Env[i].Value, "postgres://therag:") {
 		t.Errorf("migrate does not connect as the owner: %+v", last.Env)
 	}
 }

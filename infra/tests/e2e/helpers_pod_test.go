@@ -19,7 +19,7 @@ import (
 
 // e2eNamespace is the workload namespace of the E2E tenant's (project, env),
 // derived by the platform's own naming rule. Specs never spell it by hand: the
-// two-segment "loopruntime-<tenant>-<env>" they used to build names a namespace no
+// two-segment "loop-runtime-<tenant>-<env>" they used to build names a namespace no
 // deploy creates, and an absence check there passes vacuously.
 func e2eNamespace(project, env string) (string, error) {
 	return naming.Namespace(seed.TenantID, project, env)
@@ -100,7 +100,7 @@ func proveDead(tenant, project, env string) {
 //   - Distroless/scratch base image (port-forward works regardless)
 //
 // V9 Final fix (post-L11): kubectl exec assumed wget/curl exist in the
-// app image, but loopruntime-packs uses distroless base → exit 127. port-forward
+// app image, but loop-runtime-packs uses distroless base → exit 127. port-forward
 // works for any image because the kubelet tunnel runs OUTSIDE the
 // container's filesystem.
 func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Duration) {
@@ -141,7 +141,7 @@ func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Durat
 			return fmt.Errorf("no Running+Ready pod for app=%s in %s (status: %s)", resName, ns, lines[0])
 		}
 
-		// Discover the container port the app listens on. loopruntime-packs
+		// Discover the container port the app listens on. loop-runtime-packs
 		// app images typically expose 3000 (node) or 8080 (other). We
 		// try the first containerPort declared.
 		portOut, perr := kubectlForCluster(ClusterWorkload,
@@ -150,7 +150,7 @@ func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Durat
 		).CombinedOutput()
 		appPort := strings.TrimSpace(string(portOut))
 		if perr != nil || appPort == "" {
-			appPort = "3000" // safe default for loopruntime-packs node template
+			appPort = "3000" // safe default for loop-runtime-packs node template
 		}
 
 		// kubectl port-forward to a random local port, run HTTP GET,

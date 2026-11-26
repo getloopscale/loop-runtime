@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopRuntime Authors
 //
 // ScalingResolver — closes B40 gap: app_scaling_config table is read by the
-// deploy path. See loopruntime-scale-end-to-end-plan (T1.1, D1, D2).
+// deploy path. See loop-runtime-scale-end-to-end-plan (T1.1, D1, D2).
 //
 // Precedence (D1): if app_scaling_config has a row for (tenant, project, env, app),
 // that row OVERRIDES the value from loopzero.yaml. Otherwise loopzero.yaml is preserved

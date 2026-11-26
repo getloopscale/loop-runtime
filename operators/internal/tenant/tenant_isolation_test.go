@@ -144,9 +144,9 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			createGoldenTenantAndWaitPhaseSet(tenantName, loopruntimev1.PlanStarter, []string{"production", "staging"})
 		})
 
-		It("should create loopruntime-{tenant}-{env} namespace for each declared environment", func() {
+		It("should create loop-runtime-{tenant}-{env} namespace for each declared environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := fmt.Sprintf("loopruntime-%s-default-project-%s", tenantName, env)
+				nsName := fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env)
 				Eventually(func(g Gomega) {
 					var ns corev1.Namespace
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
@@ -156,19 +156,19 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 		It("should set runtime.getloopscale.com/tenant label on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				expectNamespaceLabel(fmt.Sprintf("loopruntime-%s-default-project-%s", tenantName, env), "runtime.getloopscale.com/tenant", tenantName)
+				expectNamespaceLabel(fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env), "runtime.getloopscale.com/tenant", tenantName)
 			}
 		})
 
 		It("should set runtime.getloopscale.com/environment label on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				expectNamespaceLabel(fmt.Sprintf("loopruntime-%s-default-project-%s", tenantName, env), "runtime.getloopscale.com/environment", env)
+				expectNamespaceLabel(fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env), "runtime.getloopscale.com/environment", env)
 			}
 		})
 
 		It("should set runtime.getloopscale.com/managed-by=environment-controller on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := fmt.Sprintf("loopruntime-%s-default-project-%s", tenantName, env)
+				nsName := fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env)
 				Eventually(func(g Gomega) {
 					var ns corev1.Namespace
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
@@ -210,8 +210,8 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		})
 
 		It("should give each tenant a distinct namespace that the other cannot claim", func() {
-			nsA := fmt.Sprintf("loopruntime-%s-default-project-production", tenantA)
-			nsB := fmt.Sprintf("loopruntime-%s-default-project-production", tenantB)
+			nsA := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantA)
+			nsB := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantB)
 
 			Eventually(func(g Gomega) {
 				var a, b corev1.Namespace
@@ -340,18 +340,18 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should not duplicate the loopruntime-deployer ServiceAccount after re-reconcile", func() {
-			nsName := fmt.Sprintf("loopruntime-%s-default-project-production", tenantName)
+		It("should not duplicate the loop-runtime-deployer ServiceAccount after re-reconcile", func() {
+			nsName := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName)
 			Eventually(func(g Gomega) {
 				var saList corev1.ServiceAccountList
 				g.Expect(k8sClient.List(ctx, &saList, client.InNamespace(nsName))).To(Succeed())
 				count := 0
 				for _, sa := range saList.Items {
-					if sa.Name == "loopruntime-deployer" {
+					if sa.Name == "loop-runtime-deployer" {
 						count++
 					}
 				}
-				g.Expect(count).To(Equal(1), "exactly one loopruntime-deployer SA should exist — no duplicates")
+				g.Expect(count).To(Equal(1), "exactly one loop-runtime-deployer SA should exist — no duplicates")
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -362,7 +362,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_rolebinding_deployer ---
 	// Source: src_tenant_isolation_namespace_created_with_rolebindings
-	// BC: Capsule BC-001 (owner RoleBinding) → LoopRuntime loopruntime-deployer RoleBinding in runtime namespace
+	// BC: Capsule BC-001 (owner RoleBinding) → LoopRuntime loop-runtime-deployer RoleBinding in runtime namespace
 
 	Context("golden_tenant_isolation_rolebinding_deployer", func() {
 		const tenantName = "golden-rb-test"
@@ -380,12 +380,12 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should create loopruntime-deployer ServiceAccount in the runtime namespace", func() {
-			expectServiceAccountExists("loopruntime-deployer", fmt.Sprintf("loopruntime-%s-default-project-production", tenantName))
+		It("should create loop-runtime-deployer ServiceAccount in the runtime namespace", func() {
+			expectServiceAccountExists("loop-runtime-deployer", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
-		It("should create loopruntime-deployer RoleBinding that binds the SA to a Role", func() {
-			expectDeployerRoleBinding(fmt.Sprintf("loopruntime-%s-default-project-production", tenantName))
+		It("should create loop-runtime-deployer RoleBinding that binds the SA to a Role", func() {
+			expectDeployerRoleBinding(fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
 		AfterAll(func() {
@@ -437,7 +437,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			for _, env := range []string{"production", "staging"} {
 				envCRName, nerr := naming.EnvironmentCRName(tenantName, "default-project", env)
 				Expect(nerr).NotTo(HaveOccurred())
-				expectedNS := fmt.Sprintf("loopruntime-%s-default-project-%s", tenantName, env)
+				expectedNS := fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env)
 				Eventually(func(g Gomega) {
 					var envCR loopruntimev1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -475,7 +475,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 					Plan:         loopruntimev1.PlanStarter,
 					Environments: []loopruntimev1.TenantEnvironmentEntry{},
 					GitOps: loopruntimev1.GitOpsSpec{
-						RepoName: "loopruntime-tenant-golden-empty-envs",
+						RepoName: "loop-runtime-tenant-golden-empty-envs",
 						Branch:   "main",
 					},
 					Preview: loopruntimev1.PreviewSpec{},
@@ -548,7 +548,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should bind the loopruntime-build-sa ServiceAccount to the executor Role", func() {
+		It("should bind the loop-runtime-build-sa ServiceAccount to the executor Role", func() {
 			buildNs := "build-" + tenantName
 			Eventually(func(g Gomega) {
 				var rb rbacv1.RoleBinding
@@ -557,7 +557,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 				}, &rb)).To(Succeed())
 				g.Expect(rb.RoleRef.Name).To(Equal("argo-workflow-executor"))
 				g.Expect(rb.Subjects).To(HaveLen(1))
-				g.Expect(rb.Subjects[0].Name).To(Equal("loopruntime-build-sa"))
+				g.Expect(rb.Subjects[0].Name).To(Equal("loop-runtime-build-sa"))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -586,17 +586,17 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should create loopruntime-workflow-submitter RoleBinding with subject from the argo namespace", func() {
+		It("should create loop-runtime-workflow-submitter RoleBinding with subject from the argo namespace", func() {
 			buildNs := "build-" + tenantName
 			Eventually(func(g Gomega) {
 				var rb rbacv1.RoleBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopruntime-workflow-submitter", Namespace: buildNs,
+					Name: "loop-runtime-workflow-submitter", Namespace: buildNs,
 				}, &rb)).To(Succeed())
-				g.Expect(rb.RoleRef.Name).To(Equal("loopruntime-workflow-submitter"))
+				g.Expect(rb.RoleRef.Name).To(Equal("loop-runtime-workflow-submitter"))
 				g.Expect(rb.Subjects).To(HaveLen(1))
 				g.Expect(rb.Subjects[0].Kind).To(Equal("ServiceAccount"))
-				g.Expect(rb.Subjects[0].Name).To(Equal("loopruntime-workflow-submitter"))
+				g.Expect(rb.Subjects[0].Name).To(Equal("loop-runtime-workflow-submitter"))
 				g.Expect(rb.Subjects[0].Namespace).To(Equal("argo"),
 					"workflow submitter must be in the argo namespace so the API can submit builds")
 			}, timeout, interval).Should(Succeed())

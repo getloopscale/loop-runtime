@@ -28,7 +28,7 @@ export class Traefik extends pulumi.ComponentResource {
   public readonly ingressEndpoint: pulumi.Output<string>;
 
   constructor(name: string, args: TraefikArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopruntime:platform:Traefik", name, {}, opts);
+    super("loop-runtime:platform:Traefik", name, {}, opts);
 
     this.release = new k8s.helm.v3.Release(
       `${args.role}-traefik`,

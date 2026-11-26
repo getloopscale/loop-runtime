@@ -23,7 +23,7 @@ func IsRFC1123Name(s string) bool {
 
 // ValidateEnvironmentName is the one rule for an environment name, applied
 // by every route that accepts one (POST /builds, POST /environments). The
-// name becomes a segment of the namespace loopruntime-<tenant>-<project>-<env>, so
+// name becomes a segment of the namespace loop-runtime-<tenant>-<project>-<env>, so
 // it must be a DNS-1123 label (no trailing hyphen); it must also start with
 // a letter. Two routes used to answer this with two different regexes, so a
 // name could be deployable and not creatable, or the reverse.

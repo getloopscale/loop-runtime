@@ -171,11 +171,11 @@ type ActivationKernel struct {
 func (k ActivationKernel) Activate(
 	ctx context.Context, tx db.DBTX, release *db.Release, apps []ActivationAppInfo, durationSecs int,
 ) error {
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.release.activate",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.release.activate",
 		trace.WithAttributes(
-			attribute.String("loopruntime.tenant", release.TenantID),
-			attribute.String("loopruntime.environment", release.Environment),
-			attribute.String("loopruntime.release_id", release.ID),
+			attribute.String("loop-runtime.tenant", release.TenantID),
+			attribute.String("loop-runtime.environment", release.Environment),
+			attribute.String("loop-runtime.release_id", release.ID),
 		))
 	defer span.End()
 
@@ -285,7 +285,7 @@ func recordActivationMetrics(release *db.Release, durationSecs int) {
 
 // stageDeploySucceeded is step 5.5, the transactional outbox (Option C,
 // MEET-2026-07-03-005): the deploy.succeeded event is staged on the SAME tx.
-// loopruntime-cloud drains deploy_events and fans out to the customer's webhooks; the
+// loop-console drains deploy_events and fans out to the customer's webhooks; the
 // engine never references the webhook tables. FATAL by design: if the event
 // cannot be staged the activation rolls back and the convergence loop retries,
 // which is what makes delivery at-least-once. transition_id is a fresh UUID per
@@ -360,14 +360,14 @@ func (k ActivationKernel) emitCompleted(ctx context.Context, release *db.Release
 // F-03 fix: computes URL for server/frontend apps so deploy.completed SSE event includes it.
 //
 // Plan release-blockers-2026-06-25-set v1.1 #61 (2026-06-26):
-// Closes loopruntime-cloud#61 ("loopscale deploy announces .loopruntime.local URL not publicly
+// Closes loop-console#61 ("loopscale deploy announces .loop-runtime.local URL not publicly
 // resolvable"). The deploy.completed SSE event URL composition is now the
-// SAME canonical that status.go uses — operator-configured LOOPRUNTIME_PUBLIC_DOMAIN
+// SAME canonical that status.go uses — operator-configured LOOP_RUNTIME_PUBLIC_DOMAIN
 // (e.g. `prod-dev.getloopscale.app`) preferred when set; falls back to BASE_DOMAIN
-// (legacy default `loopruntime.local`) only when no public override is wired. This
+// (legacy default `loop-runtime.local`) only when no public override is wired. This
 // mirrors the existing `StatusHandler.publicDomain` fallback ladder so
 // `loopscale deploy` and `loopscale status` emit byte-identical URLs (no more
-// "deploy says .loopruntime.local, status says .prod-dev.getloopscale.app" mismatch).
+// "deploy says .loop-runtime.local, status says .prod-dev.getloopscale.app" mismatch).
 func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain string) []ActivationAppInfo {
 	var specs []db.BuildAppSpec
 	if release.Apps != nil {

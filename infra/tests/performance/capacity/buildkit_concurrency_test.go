@@ -22,35 +22,35 @@ import (
 //	 community observation, not a LoopRuntime-measured value."
 //
 // The test submits N builds simultaneously (N > projected ceiling) and
-// monitors loopruntime_builds_active to find the actual peak concurrency. This
+// monitors loop_runtime_builds_active to find the actual peak concurrency. This
 // reveals how many builds truly make forward progress at the same time
 // vs queueing at the BuildKit level.
 //
 // Run:
 //
-//	# Port-forward loopruntime-api metrics:
-//	kubectl --context=$LOOPRUNTIME_CORE_CONTEXT -n loopruntime-system port-forward svc/loopruntime-api-metrics 19090:9090 &
+//	# Port-forward loop-runtime-api metrics:
+//	kubectl --context=$LOOP_RUNTIME_CORE_CONTEXT -n loop-runtime-system port-forward svc/loop-runtime-api-metrics 19090:9090 &
 //
-//	LOOPRUNTIME_CAPACITY=1 \
-//	LOOPRUNTIME_API_URL=https://api.dev.getloopscale.com \
-//	LOOPRUNTIME_API_METRICS_URL=http://localhost:19090 \
-//	LOOPRUNTIME_SERVICE_AUTH=... \
-//	LOOPRUNTIME_APP_DOMAIN=dev.getloopscale.com \
-//	LOOPRUNTIME_BUILD_NODES=2 \
+//	LOOP_RUNTIME_CAPACITY=1 \
+//	LOOP_RUNTIME_API_URL=https://api.dev.getloopscale.com \
+//	LOOP_RUNTIME_API_METRICS_URL=http://localhost:19090 \
+//	LOOP_RUNTIME_SERVICE_AUTH=... \
+//	LOOP_RUNTIME_APP_DOMAIN=dev.getloopscale.com \
+//	LOOP_RUNTIME_BUILD_NODES=2 \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityBuildKitConcurrency -v -timeout 60m
 func TestCapacityBuildKitConcurrency(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
-	metricsURL := os.Getenv("LOOPRUNTIME_API_METRICS_URL")
-	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
-	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
+	apiURL := os.Getenv("LOOP_RUNTIME_API_URL")
+	metricsURL := os.Getenv("LOOP_RUNTIME_API_METRICS_URL")
+	serviceAuth := os.Getenv("LOOP_RUNTIME_SERVICE_AUTH")
+	appDomain := os.Getenv("LOOP_RUNTIME_APP_DOMAIN")
 	if apiURL == "" || metricsURL == "" || serviceAuth == "" || appDomain == "" {
-		t.Fatal("LOOPRUNTIME_API_URL, LOOPRUNTIME_API_METRICS_URL, LOOPRUNTIME_SERVICE_AUTH, LOOPRUNTIME_APP_DOMAIN required")
+		t.Fatal("LOOP_RUNTIME_API_URL, LOOP_RUNTIME_API_METRICS_URL, LOOP_RUNTIME_SERVICE_AUTH, LOOP_RUNTIME_APP_DOMAIN required")
 	}
 
 	buildNodes := 2
-	if s := os.Getenv("LOOPRUNTIME_BUILD_NODES"); s != "" {
+	if s := os.Getenv("LOOP_RUNTIME_BUILD_NODES"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
 			buildNodes = n
 		}
@@ -59,7 +59,7 @@ func TestCapacityBuildKitConcurrency(t *testing.T) {
 	// Gap 4: Build cluster context for node-level CPU/memory monitoring.
 	// Without this, we only see API-level concurrency metrics and miss
 	// disk I/O and CPU saturation on the actual build nodes.
-	buildCtx := os.Getenv("LOOPRUNTIME_BUILD_CONTEXT")
+	buildCtx := os.Getenv("LOOP_RUNTIME_BUILD_CONTEXT")
 
 	const (
 		numBuilds        = 12 // Exceeds projected ceiling (2 nodes * 4 = 8)
@@ -75,7 +75,7 @@ func TestCapacityBuildKitConcurrency(t *testing.T) {
 	defer cancel()
 
 	// --- Step 1: Create deploy harness ---
-	fixturePath := os.Getenv("LOOPRUNTIME_FIXTURE_PATH")
+	fixturePath := os.Getenv("LOOP_RUNTIME_FIXTURE_PATH")
 	if fixturePath == "" {
 		fixturePath = "../../e2e/fixtures/hello-server"
 	}
@@ -126,7 +126,7 @@ func TestCapacityBuildKitConcurrency(t *testing.T) {
 			case <-monitorCtx.Done():
 				return
 			case <-ticker.C:
-				active, err := ScrapePrometheusMetricSum(metricsURL, "loopruntime_builds_active")
+				active, err := ScrapePrometheusMetricSum(metricsURL, "loop_runtime_builds_active")
 				if err != nil {
 					continue
 				}

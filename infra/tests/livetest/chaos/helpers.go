@@ -11,7 +11,7 @@
 //
 //  1. ApplyChaos      — kubectl apply -f <manifest>
 //  2. WaitForFinished — poll chaos resource status until phase=Finished
-//  3. AssertSLOHeld   — wrap existing loopruntime-ops chaos slo-compare (preserved per ADR D8)
+//  3. AssertSLOHeld   — wrap existing loop-runtime-ops chaos slo-compare (preserved per ADR D8)
 //  4. AssertSpanCoverage — NEW per blueprint P3: query OTel/Tempo for span patterns
 //  5. CleanupChaos    — kubectl delete podchaos,networkchaos,iochaos,stresschaos --all
 package chaos
@@ -45,7 +45,7 @@ type ChaosResult struct {
 // TempoTraceQuery represents a query to the Tempo backend.
 type TempoTraceQuery struct {
 	TempoURL  string // http://tempo.monitoring.svc.cluster.local:3200 (default if empty)
-	Service   string // e.g., "loopruntime-api"
+	Service   string // e.g., "loop-runtime-api"
 	Operation string // span name to look for
 	Window    time.Duration
 }

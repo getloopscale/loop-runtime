@@ -6,18 +6,18 @@
 // Usage:
 //
 //	# L0 — Baseline (current 2 tenants, single deploy)
-//	LOOPRUNTIME_LOAD_TEST=1 LOOPRUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOPRUNTIME_AUTH_TOKEN=<token> \
+//	LOOP_RUNTIME_LOAD_TEST=1 LOOP_RUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOP_RUNTIME_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL0_Baseline -timeout 10m
 //
 //	# L1 — 10 tenants, concurrent deploys
-//	LOOPRUNTIME_LOAD_TEST=1 LOOPRUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOPRUNTIME_AUTH_TOKEN=<token> \
+//	LOOP_RUNTIME_LOAD_TEST=1 LOOP_RUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOP_RUNTIME_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL1_10Tenants -timeout 30m
 //
 //	# L2 — 50 tenants, sustained load
-//	LOOPRUNTIME_LOAD_TEST=1 LOOPRUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOPRUNTIME_AUTH_TOKEN=<token> \
+//	LOOP_RUNTIME_LOAD_TEST=1 LOOP_RUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOP_RUNTIME_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL2_50Tenants -timeout 60m
 //
-// This test is SKIPPED unless LOOPRUNTIME_LOAD_TEST=1 is set.
+// This test is SKIPPED unless LOOP_RUNTIME_LOAD_TEST=1 is set.
 package load
 
 import (
@@ -33,7 +33,7 @@ import (
 func TestL0_Baseline(t *testing.T) {
 	_, sim := requireLoadTestEnv(t)
 
-	projectName := os.Getenv("LOOPRUNTIME_LOAD_PROJECT")
+	projectName := os.Getenv("LOOP_RUNTIME_LOAD_PROJECT")
 	if projectName == "" {
 		projectName = "aquim-ai" // Default to known project
 	}

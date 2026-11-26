@@ -61,11 +61,11 @@ func relabel(t *testing.T, configs []any, discovered map[string]string) (map[str
 	return labels, true
 }
 
-func loopruntimePodsRelabels(t *testing.T, helmfile, env string, extraEnv []string) []any {
+func loopRuntimePodsRelabels(t *testing.T, helmfile, env string, extraEnv []string) []any {
 	t.Helper()
-	job := promtailJobs(t, helmfile, env, extraEnv)["loopruntime-pods"]
+	job := promtailJobs(t, helmfile, env, extraEnv)["loop-runtime-pods"]
 	if job == nil {
-		t.Fatal("no loopruntime-pods job")
+		t.Fatal("no loop-runtime-pods job")
 	}
 	configs, _ := job["relabel_configs"].([]any)
 	return configs
@@ -76,7 +76,7 @@ func loopruntimePodsRelabels(t *testing.T, helmfile, env string, extraEnv []stri
 // decide on, so every tenant pod was dropped and Runtime logs stayed empty
 // (getloopscale/loop-runtime#110).
 var tenantPodDiscovered = map[string]string{
-	"__meta_kubernetes_namespace":                                      "loopruntime-tn-acme-shop-production",
+	"__meta_kubernetes_namespace":                                      "loop-runtime-tn-acme-shop-production",
 	"__meta_kubernetes_pod_uid":                                        "0e1d",
 	"__meta_kubernetes_pod_container_name":                             "web",
 	"__meta_kubernetes_pod_label_app":                                  "shop-web",
@@ -96,20 +96,20 @@ func TestPromtailKeepsATenantPodByItsOwnLabels(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			labels, kept := relabel(t, loopruntimePodsRelabels(t, c.helmfile, c.env, c.extraEnv), tenantPodDiscovered)
+			labels, kept := relabel(t, loopRuntimePodsRelabels(t, c.helmfile, c.env, c.extraEnv), tenantPodDiscovered)
 			if !kept {
-				t.Fatal("the loopruntime-pods job drops a pod labelled runtime.getloopscale.com/tenant")
+				t.Fatal("the loop-runtime-pods job drops a pod labelled runtime.getloopscale.com/tenant")
 			}
-			// namespace, app and container are what loopruntime-api selects a project's runtime
+			// namespace, app and container are what loop-runtime-api selects a project's runtime
 			// logs by (api/internal/logs/loki/client.go, buildRuntimeLogQL); app is the
 			// app's name, as the Runtime logs filter sends it.
 			for label, want := range map[string]string{
-				"namespace":               "loopruntime-tn-acme-shop-production",
-				"container":               "web",
-				"app":                     "web",
-				"loopruntime_tenant":      "tn-acme",
-				"loopruntime_project":     "shop",
-				"loopruntime_environment": "production",
+				"namespace":                "loop-runtime-tn-acme-shop-production",
+				"container":                "web",
+				"app":                      "web",
+				"loop_runtime_tenant":      "tn-acme",
+				"loop_runtime_project":     "shop",
+				"loop_runtime_environment": "production",
 			} {
 				if got := labels[label]; got != want {
 					t.Errorf("%s = %q, want %q", label, got, want)
@@ -123,17 +123,17 @@ func TestPromtailKeepsATenantPodByItsOwnLabels(t *testing.T) {
 }
 
 func TestPromtailKeepsAPlatformComponentPod(t *testing.T) {
-	labels, kept := relabel(t, loopruntimePodsRelabels(t, "cell.helmfile.yaml.gotmpl", "staging", stagingMonitoringOutputs()), map[string]string{
-		"__meta_kubernetes_namespace":                                    "loopruntime-system",
+	labels, kept := relabel(t, loopRuntimePodsRelabels(t, "cell.helmfile.yaml.gotmpl", "staging", stagingMonitoringOutputs()), map[string]string{
+		"__meta_kubernetes_namespace":                                    "loop-runtime-system",
 		"__meta_kubernetes_pod_uid":                                      "77aa",
 		"__meta_kubernetes_pod_container_name":                           "manager",
 		"__meta_kubernetes_pod_label_runtime_getloopscale_com_component": "app-operator",
 		"__meta_kubernetes_pod_label_runtime_getloopscale_com_app":       "app-operator",
 	})
 	if !kept {
-		t.Fatal("the loopruntime-pods job drops a pod labelled runtime.getloopscale.com/component")
+		t.Fatal("the loop-runtime-pods job drops a pod labelled runtime.getloopscale.com/component")
 	}
-	for _, label := range []string{"loopruntime_component", "app"} {
+	for _, label := range []string{"loop_runtime_component", "app"} {
 		if got := labels[label]; got != "app-operator" {
 			t.Errorf("%s = %q, want app-operator", label, got)
 		}
@@ -161,13 +161,13 @@ func TestPromtailPlatformPodsCarryTheirAppName(t *testing.T) {
 }
 
 func TestPromtailLoopruntimePodsJobDropsAPodThatIsNeitherTenantNorComponent(t *testing.T) {
-	_, kept := relabel(t, loopruntimePodsRelabels(t, "cell.helmfile.yaml.gotmpl", "staging", stagingMonitoringOutputs()), map[string]string{
+	_, kept := relabel(t, loopRuntimePodsRelabels(t, "cell.helmfile.yaml.gotmpl", "staging", stagingMonitoringOutputs()), map[string]string{
 		"__meta_kubernetes_namespace":          "kube-system",
 		"__meta_kubernetes_pod_uid":            "9c9c",
 		"__meta_kubernetes_pod_container_name": "coredns",
 		"__meta_kubernetes_pod_label_k8s_app":  "kube-dns",
 	})
 	if kept {
-		t.Error("the loopruntime-pods job keeps a pod with neither runtime.getloopscale.com/tenant nor runtime.getloopscale.com/component")
+		t.Error("the loop-runtime-pods job keeps a pod with neither runtime.getloopscale.com/tenant nor runtime.getloopscale.com/component")
 	}
 }

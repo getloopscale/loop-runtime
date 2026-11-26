@@ -41,11 +41,11 @@ var _ = Describe("Journey 09: Preview", Ordered, Label("journey"), func() {
 
 		// Create a workspace with loopzero.yaml so CLI commands have project context.
 		var err error
-		workDir, err = os.MkdirTemp("", "loopruntime-e2e-preview-")
+		workDir, err = os.MkdirTemp("", "loop-runtime-e2e-preview-")
 		Expect(err).NotTo(HaveOccurred())
 
-		loopruntimeYAML := fmt.Sprintf("version: 1\nproject: %s\napps:\n  api:\n    path: .\n    type: server\n    build: dockerfile\n", project)
-		err = os.WriteFile(workDir+"/loopzero.yaml", []byte(loopruntimeYAML), 0644)
+		loopRuntimeYAML := fmt.Sprintf("version: 1\nproject: %s\napps:\n  api:\n    path: .\n    type: server\n    build: dockerfile\n", project)
+		err = os.WriteFile(workDir+"/loopzero.yaml", []byte(loopRuntimeYAML), 0644)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -131,7 +131,7 @@ var _ = Describe("Journey 09: Preview", Ordered, Label("journey"), func() {
 		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "preview", "delete", previewID, "--yes", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime preview delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime preview delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"preview delete stdout": stdout,

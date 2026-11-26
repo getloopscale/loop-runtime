@@ -148,12 +148,12 @@ func TestBuilds_Create_MissingApps(t *testing.T) {
 		t.Fatalf("want 'app is required' message hint; body=%s", w.Body.String())
 	}
 
-	// Red Team loopruntime-cloud#123 — the error message must guide the customer to
+	// Red Team loop-console#123 — the error message must guide the customer to
 	// the canonical manifest (.loopzero/services.json v2 / services: []), not the
 	// LEGACY loopzero.yaml / apps: section. Following the stale guidance leads the
 	// user to create/edit a loopzero.yaml that the build silently ignores
 	// (.loopzero/services.json is the only manifest loopzerokit emits and the engine
-	// consumes — see loopruntime-cloud/CLAUDE.md § How loopruntime-cloud connects).
+	// consumes — see loop-console/CLAUDE.md § How loop-console connects).
 	if bytes.Contains(w.Body.Bytes(), []byte("loopzero.yaml")) {
 		t.Fatalf("RED #123: message must NOT reference legacy loopzero.yaml; body=%s", w.Body.String())
 	}
@@ -554,7 +554,7 @@ func TestBuilds_Redeploy_BodyParamsIgnored(t *testing.T) {
 	}
 }
 
-// Red Team loopruntime-cloud#126 — when redeploy_of points at a build whose source
+// Red Team loop-console#126 — when redeploy_of points at a build whose source
 // has empty Apps (legacy seed data, synthetic test fixture, etc.), the
 // handler USED to return the generic missing-apps error message that tells
 // the user to "Check your `.loopzero/services.json` for a `services:` array."

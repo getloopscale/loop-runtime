@@ -65,9 +65,9 @@ func TestTunnelHasWildcardDnsRecord(t *testing.T) {
 			"This covers all subdomains including cname.{baseDomain} for custom domains.")
 	}
 
-	// The wildcard record must be named loopruntime-tunnel-dns
-	if !strings.Contains(content, `"loopruntime-tunnel-dns"`) {
-		t.Error("tunnel.ts missing loopruntime-tunnel-dns DNS record resource")
+	// The wildcard record must be named loop-runtime-tunnel-dns
+	if !strings.Contains(content, `"loop-runtime-tunnel-dns"`) {
+		t.Error("tunnel.ts missing loop-runtime-tunnel-dns DNS record resource")
 	}
 }
 

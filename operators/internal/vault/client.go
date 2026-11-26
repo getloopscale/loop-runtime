@@ -37,7 +37,7 @@ import (
 // The key path helper and the typed quota/unreachable errors that used to live here
 // were removed: nothing read them, the errors' doc claimed a tenant_controller branch
 // that never existed, and the path helper formatted `transit/keys/tenant-<id>` while
-// the api creates `loopruntime-tenants-<id>`, so it named a key nobody creates. Whoever
+// the api creates `loop-runtime-tenants-<id>`, so it named a key nobody creates. Whoever
 // implements the shredder takes the key name from pkg/vault.TenantKeyName, the one
 // the api encrypts with, not from a second formula.
 type TenantTransitClient interface {

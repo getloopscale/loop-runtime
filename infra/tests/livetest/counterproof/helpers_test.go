@@ -11,7 +11,7 @@ import (
 )
 
 // T3.4 helper-level hermetic tests. Validates byte-grep parsers without
-// invoking LIVE deploy ($LOOPRUNTIME commands stay in LIVE-tagged spec).
+// invoking LIVE deploy ($LOOP_RUNTIME commands stay in LIVE-tagged spec).
 
 func TestLayer1_ChaosSummaryByteGrep_PASS_when_10_pass_0_fail(t *testing.T) {
 	tmp := t.TempDir()

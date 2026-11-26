@@ -27,8 +27,8 @@ import (
 	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
-// loopruntimeApplicationsGroupResource synthesizes Conflict errors for RetryOnConflict.
-var loopruntimeApplicationsGroupResource = schema.GroupResource{Group: "runtime.getloopscale.com", Resource: "loopruntimeapplications"}
+// loopRuntimeApplicationsGroupResource synthesizes Conflict errors for RetryOnConflict.
+var loopRuntimeApplicationsGroupResource = schema.GroupResource{Group: "runtime.getloopscale.com", Resource: "loopruntimeapplications"}
 
 // LoopRuntimeApplicationInput holds the parameters for creating a LoopRuntimeApplication CR.
 type LoopRuntimeApplicationInput struct {
@@ -61,7 +61,7 @@ type ApplicationCRManager struct {
 }
 
 // NewApplicationCRManager creates an ApplicationCRManager reusing an existing typed client.
-// If namespace is empty, defaults to k8s.ControlPlaneNamespace (loopruntime-system).
+// If namespace is empty, defaults to k8s.ControlPlaneNamespace (loop-runtime-system).
 func NewApplicationCRManager(c client.Client, namespace string) *ApplicationCRManager {
 	if namespace == "" {
 		namespace = k8s.ControlPlaneNamespace
@@ -73,7 +73,7 @@ func NewApplicationCRManager(c client.Client, namespace string) *ApplicationCRMa
 // It is idempotent: calling it multiple times with the same input is safe.
 // The CR name is deterministic: {tenant}-{project}-{app}-{env}.
 func (m *ApplicationCRManager) EnsureLoopRuntimeApplication(ctx context.Context, input LoopRuntimeApplicationInput) error {
-	crName := loopruntimeApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment)
+	crName := loopRuntimeApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		var existing apiv1.LoopRuntimeApplication
@@ -83,7 +83,7 @@ func (m *ApplicationCRManager) EnsureLoopRuntimeApplication(ctx context.Context,
 			createErr := m.Client.Create(ctx, desired)
 			if k8serrors.IsAlreadyExists(createErr) {
 				// Another caller created it between our Get and Create — retry as update.
-				return k8serrors.NewConflict(loopruntimeApplicationsGroupResource, crName, createErr)
+				return k8serrors.NewConflict(loopRuntimeApplicationsGroupResource, crName, createErr)
 			}
 			if createErr != nil {
 				return fmt.Errorf("k8s: create LoopRuntimeApplication CR %q: %w", crName, createErr)
@@ -120,11 +120,11 @@ func (m *ApplicationCRManager) EnsureLoopRuntimeApplication(ctx context.Context,
 // maxK8sNameLen is the maximum length for a Kubernetes metadata.name field.
 const maxK8sNameLen = 253
 
-// loopruntimeApplicationCRName computes a deterministic, collision-free name for a LoopRuntimeApplication CR.
+// loopRuntimeApplicationCRName computes a deterministic, collision-free name for a LoopRuntimeApplication CR.
 // Uses a short hash suffix to avoid ambiguity when component names contain hyphens.
 // The name is truncated to 253 chars (K8s limit) if needed, preserving the hash suffix.
-// Example: "tn-loopruntime-my-project-api-production-a1b2c3d4"
-func loopruntimeApplicationCRName(tenant, project, app, env string) string {
+// Example: "tn-loop-runtime-my-project-api-production-a1b2c3d4"
+func loopRuntimeApplicationCRName(tenant, project, app, env string) string {
 	// The hash input uses pipe separators to guarantee uniqueness even when
 	// components contain hyphens (e.g., project="my-app" vs project="my", app="app").
 	hashInput := fmt.Sprintf("%s|%s|%s|%s", tenant, project, app, env)
@@ -147,7 +147,7 @@ func loopruntimeApplicationCRName(tenant, project, app, env string) string {
 func buildLoopRuntimeApplicationCR(namespace string, input LoopRuntimeApplicationInput) *apiv1.LoopRuntimeApplication {
 	app := &apiv1.LoopRuntimeApplication{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      loopruntimeApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment),
+			Name:      loopRuntimeApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment),
 			Namespace: namespace,
 			Labels: map[string]string{
 				naming.LabelTenant:      input.TenantID,

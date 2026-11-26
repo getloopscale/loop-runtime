@@ -436,7 +436,7 @@ func TestTenantCRManager_ListEnvironments_ReturnsProjectPerEntry(t *testing.T) {
 	}
 }
 
-// EC-4 pre-flight: a combined namespace `loopruntime-<tenant>-<project>-<env>` over 63
+// EC-4 pre-flight: a combined namespace `loop-runtime-<tenant>-<project>-<env>` over 63
 // chars fails BEFORE any client round-trip (fires on the naming validator).
 func TestTenantCRManager_AddEnvironment_RejectsCombinedNamespaceOver63Chars(t *testing.T) {
 	mgr := newTenantMgr(t)

@@ -6,7 +6,7 @@
 // cluster (local k3d). They prove the offline tests in regression_test.go
 // also work in real environments without requiring DigitalOcean.
 //
-// Gated on LOOPRUNTIME_K3D_INTEGRATION=1 to avoid depending on local k3d in CI.
+// Gated on LOOP_RUNTIME_K3D_INTEGRATION=1 to avoid depending on local k3d in CI.
 
 package load
 
@@ -21,10 +21,10 @@ import (
 )
 
 func k3dContext() string {
-	if v := os.Getenv("LOOPRUNTIME_K3D_CONTEXT"); v != "" {
+	if v := os.Getenv("LOOP_RUNTIME_K3D_CONTEXT"); v != "" {
 		return v
 	}
-	return "k3d-loopruntime-test"
+	return "k3d-loop-runtime-test"
 }
 
 // runCommand wraps exec.Command with a 60s timeout.
@@ -49,8 +49,8 @@ func runCommand(t *testing.T, name string, args ...string) (string, int) {
 
 func skipUnlessK3d(t *testing.T) {
 	t.Helper()
-	if os.Getenv("LOOPRUNTIME_K3D_INTEGRATION") == "" {
-		t.Skip("set LOOPRUNTIME_K3D_INTEGRATION=1 to run k3d integration tests")
+	if os.Getenv("LOOP_RUNTIME_K3D_INTEGRATION") == "" {
+		t.Skip("set LOOP_RUNTIME_K3D_INTEGRATION=1 to run k3d integration tests")
 	}
 	out, exit := runCommand(t, "kubectl", "--context", k3dContext(), "cluster-info")
 	if exit != 0 {
@@ -71,21 +71,21 @@ func TestK3d_InternalChartsAllInstall(t *testing.T) {
 		path      string   // chart path relative to this package; "" means infra/helm/<dir>
 		extraArgs []string // e.g., --no-hooks for smoke-test
 	}
-	// Note: loopruntime-controller and tenant-controller monolith charts removed
+	// Note: loop-runtime-controller and tenant-controller monolith charts removed
 	// pre-GA per ADR-0023 (operator split) + ADR-0042 (ghost chart deletion).
-	// Operator workloads now ship via 4 split charts: loopruntime-tenant-operator,
-	// loopruntime-app-operator, loopruntime-preview-operator, loopruntime-platform-operator.
-	// loopruntime-api and loopruntime-cloud are one chart each under charts/, installed by Helmfile
+	// Operator workloads now ship via 4 split charts: loop-runtime-tenant-operator,
+	// loop-runtime-app-operator, loop-runtime-preview-operator, loop-runtime-platform-operator.
+	// loop-runtime-api and loop-console are one chart each under charts/, installed by Helmfile
 	// with their bootstrap values; that install is what this exercises.
 	charts := []chartCase{
-		{dir: "loopruntime-api", path: "../../../../charts/loopruntime-api",
-			extraArgs: []string{"-f", "../../../../charts/loopruntime-api/values-bootstrap.yaml"}},
-		{dir: "loopruntime-cloud", path: "../../../../charts/loopruntime-cloud",
-			extraArgs: []string{"-f", "../../../../charts/loopruntime-cloud/values-bootstrap.yaml"}},
+		{dir: "loop-runtime-api", path: "../../../../charts/loop-runtime-api",
+			extraArgs: []string{"-f", "../../../../charts/loop-runtime-api/values-bootstrap.yaml"}},
+		{dir: "loop-console", path: "../../../../charts/loop-console",
+			extraArgs: []string{"-f", "../../../../charts/loop-console/values-bootstrap.yaml"}},
 		{dir: "cloudflared"},
 		{dir: "cluster-issuer"},
 		{dir: "network-policies"},
-		// smoke-test runs a post-install Job that probes loopruntime-api/gitea/argocd —
+		// smoke-test runs a post-install Job that probes loop-runtime-api/gitea/argocd —
 		// expected to fail without those services. Use --no-hooks to validate
 		// the manifest renders correctly without executing the Job.
 		{dir: "smoke-test", extraArgs: []string{"--no-hooks"}},
@@ -93,7 +93,7 @@ func TestK3d_InternalChartsAllInstall(t *testing.T) {
 
 	// Use a per-run timestamp suffix to avoid namespace re-use races
 	// between sequential tests in the same `go test` run.
-	suffix := os.Getenv("LOOPRUNTIME_K3D_NS_SUFFIX")
+	suffix := os.Getenv("LOOP_RUNTIME_K3D_NS_SUFFIX")
 	if suffix == "" {
 		suffix = strings.ReplaceAll(time.Now().UTC().Format("20060102-150405"), ":", "")
 	}
@@ -108,13 +108,13 @@ func TestK3d_InternalChartsAllInstall(t *testing.T) {
 			if c.dir == "cluster-issuer" {
 				// ClusterIssuer is cluster-scoped — must be deleted explicitly
 				runCommand(t, "kubectl", "--context", ctx,
-					"delete", "clusterissuer", "loopruntime-ca-issuer", "--ignore-not-found")
+					"delete", "clusterissuer", "loop-runtime-ca-issuer", "--ignore-not-found")
 			}
 			defer func() {
 				runCommand(t, "helm", "--kube-context", ctx, "uninstall", release, "-n", ns)
 				if c.dir == "cluster-issuer" {
 					runCommand(t, "kubectl", "--context", ctx,
-						"delete", "clusterissuer", "loopruntime-ca-issuer", "--ignore-not-found")
+						"delete", "clusterissuer", "loop-runtime-ca-issuer", "--ignore-not-found")
 				}
 				// Use --wait=false so we don't block on Terminating; new run uses
 				// a different suffix anyway.
@@ -133,7 +133,7 @@ func TestK3d_InternalChartsAllInstall(t *testing.T) {
 			if chartPath == "" {
 				chartPath = "../../../helm/" + c.dir
 			} else {
-				// The charts/ charts include loopruntime-common, which a clone does not carry
+				// The charts/ charts include loop-runtime-common, which a clone does not carry
 				// built; Helmfile builds it before installing, and so does this.
 				if out, exit := runCommand(t, "helm", "dependency", "build", chartPath); exit != 0 {
 					t.Fatalf("helm dependency build %s failed (exit %d): %s", chartPath, exit, out)
@@ -181,7 +181,7 @@ func TestK3d_AdmissionPoliciesChartInstalls(t *testing.T) {
 
 	// Install chart
 	out, exit := runCommand(t, "helm", "--kube-context", ctx,
-		"install", "ap-int", "../../../../charts/loopruntime-admission-policies/",
+		"install", "ap-int", "../../../../charts/loop-runtime-admission-policies/",
 		"--namespace", ns,
 		"--set", "clusterImagePolicy.mode=warn",
 		"--set", "alerts.enabled=false",
@@ -195,12 +195,12 @@ func TestK3d_AdmissionPoliciesChartInstalls(t *testing.T) {
 	vapOut, _ := runCommand(t, "kubectl", "--context", ctx,
 		"get", "validatingadmissionpolicy", "-o", "name")
 	expectedVAPs := []string{
-		"loopruntime-argocd-managed-by",
-		"loopruntime-disallow-latest-tag",
-		"loopruntime-protect-platform-networkpolicies",
-		"loopruntime-require-image-signature",
-		"loopruntime-require-resource-limits",
-		"loopruntime-restrict-image-registries",
+		"loop-runtime-argocd-managed-by",
+		"loop-runtime-disallow-latest-tag",
+		"loop-runtime-protect-platform-networkpolicies",
+		"loop-runtime-require-image-signature",
+		"loop-runtime-require-resource-limits",
+		"loop-runtime-restrict-image-registries",
 	}
 	for _, vap := range expectedVAPs {
 		if !strings.Contains(vapOut, vap) {
@@ -223,7 +223,7 @@ func TestK3d_ScopedKubeconfigScript(t *testing.T) {
 	defer os.Remove(scopedPath)
 
 	// k3d kubeconfig write
-	kc, exit := runCommand(t, "k3d", "kubeconfig", "write", "loopruntime-test")
+	kc, exit := runCommand(t, "k3d", "kubeconfig", "write", "loop-runtime-test")
 	if exit != 0 {
 		t.Skipf("k3d kubeconfig write failed: %s", kc)
 	}
@@ -250,7 +250,7 @@ func TestK3d_ScopedKubeconfigScript(t *testing.T) {
 
 	// Use it to list pods (proves the SA token works)
 	listOut, listExit := runCommand(t, "kubectl",
-		"--kubeconfig", scopedPath, "get", "pods", "-n", "loopruntime-system",
+		"--kubeconfig", scopedPath, "get", "pods", "-n", "loop-runtime-system",
 		"--request-timeout=5s")
 	if listExit != 0 {
 		t.Fatalf("kubectl with scoped kubeconfig failed: %s", listOut)
@@ -283,7 +283,7 @@ func TestK3d_ArgocdRegisterScript(t *testing.T) {
 	scopedPath := tmp.Name()
 	defer os.Remove(scopedPath)
 
-	kc, _ := runCommand(t, "k3d", "kubeconfig", "write", "loopruntime-test")
+	kc, _ := runCommand(t, "k3d", "kubeconfig", "write", "loop-runtime-test")
 	kcPath := strings.TrimSpace(kc)
 	defer os.Remove(kcPath)
 
@@ -321,7 +321,7 @@ func TestK3d_ArgocdRegisterScript(t *testing.T) {
 func TestK3d_RegressionSuiteRunsAgainstClusterPartial(t *testing.T) {
 	skipUnlessK3d(t)
 
-	kc, _ := runCommand(t, "k3d", "kubeconfig", "write", "loopruntime-test")
+	kc, _ := runCommand(t, "k3d", "kubeconfig", "write", "loop-runtime-test")
 	kcPath := strings.TrimSpace(kc)
 	defer os.Remove(kcPath)
 

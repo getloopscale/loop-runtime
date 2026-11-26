@@ -8,7 +8,7 @@
 -- the Account of its tenant). Only touches rows still NULL.
 -- ============================================================================
 
-UPDATE loopruntime_api_keys k
+UPDATE loop_runtime_api_keys k
 SET account_id = t.account_id
 FROM tenants t
 WHERE t.id = k.tenant_id

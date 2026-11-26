@@ -118,7 +118,7 @@ func (r *DynamicRouter) refresh(ctx context.Context) error {
 
 // Resolve returns the CellConfig for the given cell_id.
 //
-// Emits loopruntime_cell_routing_decisions_total{cell, decision} per
+// Emits loop_runtime_cell_routing_decisions_total{cell, decision} per
 // MEET-INFRA-NORMALIZE-T3-multi-cell C19 + ADR D6.
 //
 // Decisions:

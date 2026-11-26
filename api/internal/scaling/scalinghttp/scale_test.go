@@ -522,7 +522,7 @@ func TestScale_ResponseCarriesMonthlyCostAndPlanTier(t *testing.T) {
 	}
 }
 
-// Red Team loopruntime-cloud#101 regression-protector (2026-06-27): the
+// Red Team loop-console#101 regression-protector (2026-06-27): the
 // /api/v1/projects/{name}/scale endpoint MUST reject a request whose
 // replicas (or autoscaling.max) exceeds the tenant's plan cap. Before
 // the fix, the scale path had ZERO max-replica enforcement — Starter
@@ -676,7 +676,7 @@ func TestScaleHandler_NilChecker_NoEnforcement(t *testing.T) {
 	}
 }
 
-// Red Team loopruntime-cloud#103 regression-protector — input validation MUST
+// Red Team loop-console#103 regression-protector — input validation MUST
 // return HTTP 400 with the client-classified `INVALID_REPLICAS` code,
 // never `500 INVALID_ARGUMENT` (status×code mismatch + server-failure
 // connotation for a client-input error). The 3 scenarios lock the 3

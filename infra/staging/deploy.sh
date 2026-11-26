@@ -3,7 +3,7 @@
 # Copyright 2025-2026 The LoopRuntime Authors
 #
 # Deploys the head of develop to staging, pulled from the staging host by
-# loopruntime-staging-deploy.timer. Nothing on GitHub reaches the host: no runner, no
+# loop-runtime-staging-deploy.timer. Nothing on GitHub reaches the host: no runner, no
 # credential of the host in the repository. The host reports back through commit
 # statuses, with a token that lives only on the host.
 #
@@ -16,7 +16,7 @@
 #   3. Pins each engine image to the newest develop build: the image the commit
 #      published, or else the tag the previous deploy ran. The first deploy starts
 #      from the tags platformImages.tags pins in the staging environment. The images
-#      other repositories build (loopruntime-cloud and loopruntime-dashboard from
+#      other repositories build (loop-console and loop-console-dashboard from
 #      getloopscale/console, looptrace from getloopscale/looptrace) keep the pins in git.
 #   4. Runs `task staging:platform` at that commit with those pins, and reports
 #      staging/deploy success or failure on the commit.
@@ -34,15 +34,15 @@ BRANCH="${DEPLOY_BRANCH:-develop}"
 GITHUB_API="${DEPLOY_GITHUB_API:-https://api.github.com}"
 REGISTRY="${DEPLOY_REGISTRY:-https://ghcr.io}"
 IMAGE_NAMESPACE="${DEPLOY_IMAGE_NAMESPACE:-getloopscale}"
-STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loopruntime-staging/deploy}"
-TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loopruntime-staging/github-status-token}"
+STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loop-runtime-staging/deploy}"
+TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loop-runtime-staging/github-status-token}"
 PLATFORM_CMD="${DEPLOY_PLATFORM_CMD:-task staging:platform}"
 # How long a commit with no artifacts run yet is waited for before it is deployed with
 # the images it already has (a commit whose paths no build watches).
 RUN_GRACE_SECONDS="${DEPLOY_RUN_GRACE_SECONDS:-900}"
 # The images other repositories publish (getloopscale/console, getloopscale/looptrace). No
 # commit here builds them, so their pins are always the ones in git.
-EXTERNAL_IMAGES="loopruntime-cloud loopruntime-dashboard looptrace"
+EXTERNAL_IMAGES="loop-console loop-console-dashboard looptrace"
 STATUS_URL_BASE="${DEPLOY_STATUS_URL_BASE:-https://staging.getloopscale.com}"
 # The validation of a deployed commit, given its SHA. Empty: the checkout's validate.sh.
 VALIDATE_CMD="${DEPLOY_VALIDATE_CMD:-}"

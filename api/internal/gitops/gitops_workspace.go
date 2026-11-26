@@ -44,7 +44,7 @@ func (p *GiteaGitOpsPusher) openWorkspace(ctx context.Context, tenantID, op stri
 	if err := p.repo.EnsureRepo(ctx, repoName, tenantGitOpsRepoOptions); err != nil {
 		return nil, nil, fmt.Errorf("gitops %s: ensure repo: %w", op, err)
 	}
-	tmpDir, err := os.MkdirTemp("", "loopruntime-gitops-"+op+"-*")
+	tmpDir, err := os.MkdirTemp("", "loop-runtime-gitops-"+op+"-*")
 	if err != nil {
 		return nil, nil, fmt.Errorf("gitops %s: create temp dir: %w", op, err)
 	}
@@ -56,7 +56,7 @@ func (p *GiteaGitOpsPusher) openWorkspace(ctx context.Context, tenantID, op stri
 		cleanup()
 		return nil, nil, fmt.Errorf("gitops %s: clone %s: %w", op, repoName, err)
 	}
-	for _, kv := range [][2]string{{"user.email", "loopruntime-api@runtime.getloopscale.com"}, {"user.name", "LoopRuntime API"}} {
+	for _, kv := range [][2]string{{"user.email", "loop-runtime-api@runtime.getloopscale.com"}, {"user.name", "LoopRuntime API"}} {
 		if err := p.git.Run(ctx, ws.dir, "config", kv[0], kv[1]); err != nil {
 			cleanup()
 			return nil, nil, fmt.Errorf("gitops %s: git config %s: %w", op, kv[0], err)

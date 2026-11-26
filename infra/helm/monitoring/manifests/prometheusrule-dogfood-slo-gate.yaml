@@ -13,7 +13,7 @@
 #      API P95 < 500ms; SEV-1 count == 0
 #
 # This file defines:
-#   - Recording rule: loopruntime_dogfood_gate_window_active (boolean — fires
+#   - Recording rule: loop_runtime_dogfood_gate_window_active (boolean — fires
 #     1 when a chaos window is active AND the gate ConfigMap exists).
 #   - 4 alerts that detect gate violations DURING the 4h window:
 #     * Phase6RollbackLatencyExceeds705ms (the critical AUDIT-CITED
@@ -24,7 +24,7 @@
 #       generator OR generator died — gate evidence would be
 #       meaningless)
 #
-# Inhibit pattern (mirror of chaos-rules): alerts use `unless loopruntime_chaos_active == 1`
+# Inhibit pattern (mirror of chaos-rules): alerts use `unless loop_runtime_chaos_active == 1`
 # selectively. The rollback + API latency alerts STILL fire during
 # chaos (the gate IS testing latency under chaos). Only specific
 # alerts that would be 100% false positives during chaos use the
@@ -33,10 +33,10 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-dogfood-slo-gate
-  namespace: loopruntime-system
+  name: loop-runtime-dogfood-slo-gate
+  namespace: loop-runtime-system
   labels:
-    app: loopruntime
+    app: loop-runtime
     role: alert-rules
     prometheus: kube-prometheus
     release: monitoring
@@ -44,32 +44,32 @@ metadata:
     runtime.getloopscale.com/plan: active-execution-plan
 spec:
   groups:
-    - name: loopruntime.dogfood.recording
+    - name: loop-runtime.dogfood.recording
       interval: 30s
       rules:
         # Phase 6 gate window: 1 when the operator has started the
-        # gate (creates ConfigMap `loopruntime-dogfood-gate-window` with
+        # gate (creates ConfigMap `loop-runtime-dogfood-gate-window` with
         # annotation `runtime.getloopscale.com/dogfood-window=active`). Used by the
         # 4h-window alerts to scope evaluation.
-        - record: loopruntime_dogfood_gate_window_active
+        - record: loop_runtime_dogfood_gate_window_active
           expr: |
             max(
               kube_configmap_annotations{
-                namespace="loopruntime-system",
-                configmap="loopruntime-dogfood-gate-window",
+                namespace="loop-runtime-system",
+                configmap="loop-runtime-dogfood-gate-window",
                 annotation_runtime_getloopscale_com_phase6_window="active"
               }
             ) or vector(0)
 
         # 4h window p95 of rollback duration — projected so the
         # dashboard can render a single timeseries panel.
-        - record: loopruntime_phase6_rollback_p95_4h_ms
+        - record: loop_runtime_phase6_rollback_p95_4h_ms
           expr: |
             histogram_quantile(0.95,
-              sum(rate(loopruntime_rollback_duration_seconds_bucket[4h])) by (le)
+              sum(rate(loop_runtime_rollback_duration_seconds_bucket[4h])) by (le)
             ) * 1000
 
-    - name: loopruntime.dogfood.alerts
+    - name: loop-runtime.dogfood.alerts
       interval: 1m
       rules:
         # CRITICAL — the headline SLO of the gate.
@@ -78,9 +78,9 @@ spec:
         # that under sustained load + chaos".
         - alert: Phase6RollbackLatencyExceeds705ms
           expr: |
-            (loopruntime_phase6_rollback_p95_4h_ms > 705)
+            (loop_runtime_phase6_rollback_p95_4h_ms > 705)
             AND
-            (loopruntime_dogfood_gate_window_active == 1)
+            (loop_runtime_dogfood_gate_window_active == 1)
           for: 5m
           labels:
             severity: critical
@@ -89,7 +89,7 @@ spec:
           annotations:
             summary: Phase 6 gate FAIL — rollback P95 > 705ms (AUDIT baseline) for 5m
             description: |
-              `loopruntime_rollback_duration_seconds` p95 over the 4h gate
+              `loop_runtime_rollback_duration_seconds` p95 over the 4h gate
               window exceeded 705ms (the LIVE baseline observed
               2026-05-02 during cell-1 activation). Sustained for 5m
               means the gate is failing.

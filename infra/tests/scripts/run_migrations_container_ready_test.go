@@ -28,25 +28,25 @@ func readProductionScript(t *testing.T, name string) string {
 }
 
 // TestRunMigrationsDetectsContainerNotReady locks issue #106 Design E
-// (ADR PROPOSED `2026-06-19-loopruntime-api-vault-bootstrap-ordering`).
+// (ADR PROPOSED `2026-06-19-loop-runtime-api-vault-bootstrap-ordering`).
 //
 // Pre-fix state: `infra/scripts/production/run-migrations.sh:96-97`
-// detected "loopruntime-api pod absent" via pod-NAME presence check
-// (`[[ -z "${LOOPRUNTIME_API_POD}" ]]`). When loopruntime-api is in CrashLoopBackOff
+// detected "loop-runtime-api pod absent" via pod-NAME presence check
+// (`[[ -z "${LOOP_RUNTIME_API_POD}" ]]`). When loop-runtime-api is in CrashLoopBackOff
 // (e.g., dev-public env where `OPENBAO_TRANSIT_ENABLED=true` requires
 // `OPENBAO_VAULT_SECRET_ID` that ships only post-seed-chain), the pod
 // NAME exists — so the fallback branch is skipped — and the script
 // tries `kubectl exec` which fails with
-// `container not found ("loopruntime-api")`. Cleanroom catch 2026-06-19.
+// `container not found ("loop-runtime-api")`. Cleanroom catch 2026-06-19.
 //
 // The existing psql-loop fallback at lines 111-148 was DESIGNED for
-// "pre-tilt loopruntime-api absent" (see comment block 98-103). Extending the
+// "pre-tilt loop-runtime-api absent" (see comment block 98-103). Extending the
 // detector to ALSO trigger when the container is not Ready honors the
 // fallback intent + does NOT reverse the T2.5+EC-05 hard-fail design of
 // `validateOpenBaoTransit` in api/internal/config/config.go (runtime
 // behavior unchanged; only the migration runner detector changes).
 //
-// Recommended in ADR `2026-06-19-loopruntime-api-vault-bootstrap-ordering`
+// Recommended in ADR `2026-06-19-loop-runtime-api-vault-bootstrap-ordering`
 // (currently PROPOSED, awaiting sponsor grill-me). This test +
 // implementation ship pre-ratification with explicit PR-body call-out;
 // rollback path is `git revert` single commit.
@@ -57,35 +57,35 @@ func TestRunMigrationsDetectsContainerNotReady(t *testing.T) {
 	body := readProductionScript(t, "run-migrations.sh")
 
 	// T1. Script MUST query the container Ready status. The canonical
-	// jsonpath uses `.status.containerStatuses[?(@.name=="loopruntime-api")].ready`
+	// jsonpath uses `.status.containerStatuses[?(@.name=="loop-runtime-api")].ready`
 	// to pick the specific container by name (defensive against pods
 	// with multiple containers — e.g., when sidecars are added later).
 	if !strings.Contains(body, "containerStatuses") {
 		t.Error("run-migrations.sh has no `containerStatuses` query — Design E detector extension missing (issue #106)")
 	}
-	if !strings.Contains(body, "name==\"loopruntime-api\"") && !strings.Contains(body, `name=="loopruntime-api"`) {
-		t.Error("run-migrations.sh does not pick container by name `loopruntime-api` in jsonpath — defense against multi-container pods missing")
+	if !strings.Contains(body, "name==\"loop-runtime-api\"") && !strings.Contains(body, `name=="loop-runtime-api"`) {
+		t.Error("run-migrations.sh does not pick container by name `loop-runtime-api` in jsonpath — defense against multi-container pods missing")
 	}
 
-	// T2. LOOPRUNTIME_API_READY variable MUST be declared. Named container
+	// T2. LOOP_RUNTIME_API_READY variable MUST be declared. Named container
 	// status capture is the canonical pattern.
-	if !strings.Contains(body, "LOOPRUNTIME_API_READY") {
-		t.Error("run-migrations.sh has no `LOOPRUNTIME_API_READY` variable — detector capture missing")
+	if !strings.Contains(body, "LOOP_RUNTIME_API_READY") {
+		t.Error("run-migrations.sh has no `LOOP_RUNTIME_API_READY` variable — detector capture missing")
 	}
 
 	// T3. The fallback gate MUST be EXTENDED to include both
-	// `LOOPRUNTIME_API_POD empty` OR `LOOPRUNTIME_API_READY != true`. Without the OR
+	// `LOOP_RUNTIME_API_POD empty` OR `LOOP_RUNTIME_API_READY != true`. Without the OR
 	// branch the original detector regresses.
-	// Pattern: `[[ -z "${LOOPRUNTIME_API_POD}" || "$LOOPRUNTIME_API_READY" != "true" ]]`
+	// Pattern: `[[ -z "${LOOP_RUNTIME_API_POD}" || "$LOOP_RUNTIME_API_READY" != "true" ]]`
 	// (or equivalent with braced expansion).
-	if !strings.Contains(body, "LOOPRUNTIME_API_READY") || !strings.Contains(body, "!= \"true\"") {
-		t.Error("run-migrations.sh fallback gate does not test `LOOPRUNTIME_API_READY != \"true\"` — Design E branch missing")
+	if !strings.Contains(body, "LOOP_RUNTIME_API_READY") || !strings.Contains(body, "!= \"true\"") {
+		t.Error("run-migrations.sh fallback gate does not test `LOOP_RUNTIME_API_READY != \"true\"` — Design E branch missing")
 	}
 
-	// T4. The combined gate MUST evaluate `LOOPRUNTIME_API_POD empty` OR
+	// T4. The combined gate MUST evaluate `LOOP_RUNTIME_API_POD empty` OR
 	// `READY != true` — not AND. Grep for the `||` operator inside the
 	// same `[[ ... ]]` block referencing both variables.
-	if !strings.Contains(body, "LOOPRUNTIME_API_POD") || !strings.Contains(body, "||") {
+	if !strings.Contains(body, "LOOP_RUNTIME_API_POD") || !strings.Contains(body, "||") {
 		t.Error("run-migrations.sh fallback gate does not OR the two conditions — Design E logic missing")
 	}
 

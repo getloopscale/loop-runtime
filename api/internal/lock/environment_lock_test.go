@@ -24,7 +24,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/loopruntime_test?sslmode=disable"
+		dbURL = "postgres://postgres:postgres@localhost:5432/loop_runtime_test?sslmode=disable"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

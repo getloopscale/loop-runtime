@@ -12,7 +12,7 @@ import (
 // T0.2b (plan simplify-deploy-loopzerokit-only v2.0) — thread the declared start
 // command through the build-plan chain: AppSpec → AppUnit → AppBuildPlan, so
 // the canonical Dockerfile generator (T1.1) reads the declared CMD instead of
-// a loopruntime-packs heuristic.
+// a loop-runtime-packs heuristic.
 
 func TestNormalizeApp_CarriesStart(t *testing.T) {
 	// Arrange — a server AppSpec with a declared start command

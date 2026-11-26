@@ -668,7 +668,7 @@ func (h *SecretHandler) persistEnvGroup(ctx context.Context, tenantID, project, 
 // (D2 ADR). Without a workload sync the row stays canonical in PG and is
 // reported "pending"; B-176 requires the same skip metric the single-set
 // path emits, once per persisted row, because
-// sum(loopruntime_secret_externalsecret_total) is the trigger docs/decisions.md § 2
+// sum(loop_runtime_secret_externalsecret_total) is the trigger docs/decisions.md § 2
 // relies on to notice the secrets table stopped being empty.
 func (h *SecretHandler) syncBulkWrite(ctx context.Context, tenantID, project string, wr *bulkWrite) {
 	aggs := &wr.state.aggs
@@ -787,7 +787,7 @@ func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
 	env := r.URL.Query().Get("env")
 	project := r.URL.Query().Get("project")
 
-	// Red Team loopruntime-cloud#92 absorption (2026-06-27): missing-parent-guard.
+	// Red Team loop-console#92 absorption (2026-06-27): missing-parent-guard.
 	// Without this check, GET /api/v1/secrets?project=<nonexistent> returned
 	// 200 with an empty list. CWE-204 defense + UX: the dashboard's Secrets
 	// page rendered an "Add secret" form on top of a deleted project. Same
@@ -939,7 +939,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// Create K8s Secret on mgmt + ExternalSecret CR on workload for ESO sync.
 	// dogfood-2026-05-08-fixes T2.3 (F-2): emit "skip" metric when k8sSync is
 	// nil — that path was the silent-failure cause, formerly invisible. Now
-	// `rate(loopruntime_secret_externalsecret_total{result="skip"}[5m]) > 0` alerts
+	// `rate(loop_runtime_secret_externalsecret_total{result="skip"}[5m]) > 0` alerts
 	// that the API is silently no-opping `loopscale secret set`.
 	//
 	// B-176: bulkProcessEnvs handles the same condition and must emit the same

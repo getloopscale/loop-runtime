@@ -62,10 +62,10 @@ func waitBuildTerminal(buildID string, timeout time.Duration) string {
 	return finalStatus
 }
 
-// deployAndWaitSuccess runs loopruntime deploy --json in the given directory, waits for
+// deployAndWaitSuccess runs loop-runtime deploy --json in the given directory, waits for
 // the build to reach SUCCEEDED, and returns the build ID and full JSON response.
 func deployAndWaitSuccess(dir, env string, timeout time.Duration) (buildID string, result map[string]interface{}) {
-	stdout, stderr, exitCode := execLoopRuntime(loopruntimeInvocation{dir: dir},
+	stdout, stderr, exitCode := execLoopRuntime(loopRuntimeInvocation{dir: dir},
 		"deploy", "--env", env, "--no-wait", "--json")
 
 	Expect(exitCode).To(Equal(0),

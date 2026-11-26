@@ -146,7 +146,7 @@ type BuildStatusResponse struct {
 //
 // A `nil` AdmissionChecker is legal and means "no admission control" —
 // the handler will skip the check entirely, which is the current
-// production default until LOOPRUNTIME_ADMISSION_CONTROL is flipped.
+// production default until LOOP_RUNTIME_ADMISSION_CONTROL is flipped.
 type AdmissionChecker interface {
 	// Check returns (admitted, retryAfter, code, message). admitted=true
 	// means the build can proceed. When false, the handler returns a
@@ -182,7 +182,7 @@ type BuildHandler struct {
 // idempotent: existing envs return nil immediately; new envs create the
 // Environment CR + namespace + ArgoCD app and wait for phase=Active.
 // M2 v1.2 (2026-06-07): `project` propagates end-to-end so the
-// canonical 3-segment namespace `loopruntime-<tenant>-<project>-<env>` is
+// canonical 3-segment namespace `loop-runtime-<tenant>-<project>-<env>` is
 // computed and the Tenant CR spec.environments entry carries the
 // project field. Empty project preserves the legacy 2-segment path
 // for production-legacy callers (ADR D2).
@@ -351,7 +351,7 @@ func validateBuildRequest(req createBuildRequest) *loopruntimeerrors.LoopRuntime
 	if len(req.Apps) == 0 {
 		detail := "At least one app is required. Check your `.loopzero/services.json` for a `services:` array."
 		if req.RedeployOf != "" {
-			// Red Team loopruntime-cloud#126 — a redeploy has no local services.json
+			// Red Team loop-console#126 — a redeploy has no local services.json
 			// to edit; name the source build instead.
 			detail = fmt.Sprintf("Source build %s has no apps to redeploy. Pick a build that completed with at least one app.", req.RedeployOf)
 		}
@@ -520,7 +520,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 
 // mapBuildError maps orchestrator errors to HTTP responses.
 //
-// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loopruntime-cloud#34):
+// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loop-console#34):
 // extends the ladder with build.AsSubmitBuildError dispatch BEFORE the
 // fallback so wrap-site discriminated errors from BuildOrchestrator.SubmitBuild
 // (workflow / project ensure / DB write / app normalize / unknown) surface
@@ -533,8 +533,8 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 // correlation ID into the user-facing message (trace-id fallback). Other
 // branches (typed *LoopRuntimeError + generic catchall) ignore r.
 func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if errors.As(err, &loopruntimeErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if errors.As(err, &loopRuntimeErr) {
 		// DA-18: Override message for DEPLOY_IN_PROGRESS
 		if errors.Is(err, loopruntimeerrors.ErrDeployInProgress) {
 			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
@@ -542,7 +542,7 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 				"A deploy is already in progress for this environment."))
 			return
 		}
-		httpio.WriteLoopRuntimeError(w, loopruntimeErr)
+		httpio.WriteLoopRuntimeError(w, loopRuntimeErr)
 		return
 	}
 

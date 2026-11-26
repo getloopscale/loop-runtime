@@ -14,7 +14,7 @@ import (
 
 // SubmitBuildErrorReason discriminates failure modes returned by
 // BuildOrchestrator.SubmitBuild. Sprint 6 plan qa-sprint6-cleanup-2026-06-25
-// T1.1 (closes loopruntime-cloud#34) — mirrors the Sprint 5 canonical typed-error
+// T1.1 (closes loop-console#34) — mirrors the Sprint 5 canonical typed-error
 // pattern (api/internal/source/pushbundle_error.go) applied to the build
 // trigger surface. Before Sprint 6 every untyped error fell through
 // routes/builds.go::mapBuildError to the generic ErrInternalError catchall;
@@ -40,7 +40,7 @@ const (
 	// the apps in the request.
 	ReasonBuildSubmitAppNormalizeFailed SubmitBuildErrorReason = 4
 	// ReasonBuildSubmitUnknown is the catchall (NEW — Sprint 6 ADR D2). Per
-	// Sprint 5 ADR D2 (closes loopruntime-cloud#33): the canonical anti-pattern is
+	// Sprint 5 ADR D2 (closes loop-console#33): the canonical anti-pattern is
 	// defaulting to a misleading specific reason. Operators see the verbatim
 	// cause composed into the user-facing message.
 	ReasonBuildSubmitUnknown SubmitBuildErrorReason = 5

@@ -47,7 +47,7 @@ type CellAwareRuntimeClientFactory struct {
 	MgmtClient client.Client
 	// DefaultClient is returned only for cellID="" (legacy path).
 	DefaultClient client.Client
-	// MgmtNamespace is where ClusterCredential CRs live (default: loopruntime-system).
+	// MgmtNamespace is where ClusterCredential CRs live (default: loop-runtime-system).
 	MgmtNamespace string
 
 	mu      sync.RWMutex

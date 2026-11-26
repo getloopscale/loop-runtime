@@ -386,7 +386,7 @@ func defaultBuild(id, status string) *db.Build {
 
 // succeededStatusWithDigests builds a WorkflowStatus that mimics what the
 // Argo Workflow CR reports after a successful cosign signing step. The
-// supply-chain VAP (loopruntime-require-image-signature) requires manifests to
+// supply-chain VAP (loop-runtime-require-image-signature) requires manifests to
 // reference images by digest, so reconcile tests MUST surface a digest in
 // the workflow outputs — otherwise BuildManifestApps fails-loud and
 // downstream calls (OnBuildCompleted/RetryReleaseActivation) never fire.

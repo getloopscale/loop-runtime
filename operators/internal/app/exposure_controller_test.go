@@ -128,7 +128,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 					CellID:      "cell-0",
 					DisplayName: "cert test tenant",
 					Plan:        loopruntimev1.PlanStarter,
-					GitOps:      loopruntimev1.GitOpsSpec{RepoName: "loopruntime-tn-cert", Branch: "main"},
+					GitOps:      loopruntimev1.GitOpsSpec{RepoName: "loop-runtime-tn-cert", Branch: "main"},
 					Limits:      loopruntimev1.ResourceLimits{MaxBuildConcurrency: 1},
 					Environments: []loopruntimev1.TenantEnvironmentEntry{
 						{Name: "production", Cluster: "workload", Project: "certproj"},
@@ -137,7 +137,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
-			loopruntimeApp := &loopruntimev1.LoopRuntimeApplication{
+			loopRuntimeApp := &loopruntimev1.LoopRuntimeApplication{
 				ObjectMeta: metav1.ObjectMeta{Name: appRef, Namespace: "default"},
 				Spec: loopruntimev1.LoopRuntimeApplicationSpec{
 					TenantRef:   "tn-cert",
@@ -147,17 +147,17 @@ var _ = Describe("ExposureController", Ordered, func() {
 					AppName:     serviceName,
 				},
 			}
-			Expect(k8sClient.Create(ctx, loopruntimeApp)).To(Succeed())
+			Expect(k8sClient.Create(ctx, loopRuntimeApp)).To(Succeed())
 
 			certNS := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{Name: "loopruntime-tn-cert-certproj-production"},
+				ObjectMeta: metav1.ObjectMeta{Name: "loop-runtime-tn-cert-certproj-production"},
 			}
 			_ = k8sClient.Create(ctx, certNS) // idempotent across suite runs
 
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-certproj-" + serviceName,
-					Namespace: "loopruntime-tn-cert-certproj-production",
+					Namespace: "loop-runtime-tn-cert-certproj-production",
 				},
 				Type: corev1.SecretTypeTLS,
 				Data: map[string][]byte{
@@ -189,7 +189,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 			deleteRouteWithFinalizer(routeName)
 			secret := &corev1.Secret{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{
-				Name: "tls-certproj-" + serviceName, Namespace: "loopruntime-tn-cert-certproj-production",
+				Name: "tls-certproj-" + serviceName, Namespace: "loop-runtime-tn-cert-certproj-production",
 			}, secret); err == nil {
 				_ = k8sClient.Delete(ctx, secret)
 			}

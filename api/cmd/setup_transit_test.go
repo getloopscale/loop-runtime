@@ -31,7 +31,7 @@ func newTestLogger() *slog.Logger {
 }
 
 // TestSetupTransitClient_ReturnsNilWhenAESLocalMode — EC-05 precedence:
-// when only LOOPRUNTIME_SECRET_ENCRYPTION_KEY is set and transit is OFF, the
+// when only LOOP_RUNTIME_SECRET_ENCRYPTION_KEY is set and transit is OFF, the
 // helper MUST return (nil, nil) so callers fall back to the legacy AES
 // path. The store.encryptForStore dispatcher handles encryption there.
 func TestSetupTransitClient_ReturnsNilWhenAESLocalMode(t *testing.T) {
@@ -54,7 +54,7 @@ func TestSetupTransitClient_ReturnsNilWhenAESLocalMode(t *testing.T) {
 // TestSetupTransitClient_ReturnsNilWhenPlaintextMode — EC-05 precedence:
 // dev-only plaintext path also short-circuits to (nil, nil). Production
 // never reaches this state because config.Validate() refuses plaintext
-// unless LOOPRUNTIME_DEV=true; the helper is mode-agnostic and trusts upstream.
+// unless LOOP_RUNTIME_DEV=true; the helper is mode-agnostic and trusts upstream.
 func TestSetupTransitClient_ReturnsNilWhenPlaintextMode(t *testing.T) {
 	cfg := config.Config{
 		OpenBaoTransitEnabled: false,

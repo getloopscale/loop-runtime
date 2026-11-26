@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// B-022: `loopruntime-cloud` is the engine's authenticating proxy. `r.Route("/engine")` strips the prefix,
-// applies requireJWT and forwards to `loopruntime-api`; when it goes down, `/engine/*` and `/v1/*` return 502
+// B-022: `loop-console` is the engine's authenticating proxy. `r.Route("/engine")` strips the prefix,
+// applies requireJWT and forwards to `loop-runtime-api`; when it goes down, `/engine/*` and `/v1/*` return 502
 // TOGETHER, even with the engine healthy — measured on 2026-08-10.
 //
 // It was the only component with that coupling that NOBODY probed. Without an availability
@@ -19,7 +19,7 @@ import (
 //
 // This test exists so the probe does not disappear silently: a removed target breaks nothing
 // visibly, it only erases the data, and the missing data is invisible until someone needs it.
-func TestProbeCoversLoopRuntimeCloud(t *testing.T) {
+func TestProbeCoversLoopConsole(t *testing.T) {
 	const path = "../../helm/monitoring/manifests/probe-targets.yaml"
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -27,15 +27,15 @@ func TestProbeCoversLoopRuntimeCloud(t *testing.T) {
 	}
 	s := string(b)
 
-	if !strings.Contains(s, "loopruntime-cloud.loopruntime-system.svc") {
-		t.Error("`loopruntime-cloud` left the probe targets: without it there is no availability " +
+	if !strings.Contains(s, "loop-console.loop-runtime-system.svc") {
+		t.Error("`loop-console` left the probe targets: without it there is no availability " +
 			"series for the component whose outage also takes down the engine path (B-022)")
 	}
 	// The counterpart: the targets that already existed must not have been replaced by the new one.
 	for _, target := range []string{
-		"loopruntime-api.loopruntime-system.svc",
-		"gitea-http.loopruntime-system.svc",
-		"traefik.loopruntime-system.svc",
+		"loop-runtime-api.loop-runtime-system.svc",
+		"gitea-http.loop-runtime-system.svc",
+		"traefik.loop-runtime-system.svc",
 		"argocd-server.argocd.svc",
 	} {
 		if !strings.Contains(s, target) {

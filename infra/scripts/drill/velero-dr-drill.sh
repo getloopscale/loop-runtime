@@ -34,10 +34,10 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 DRILL_TIMEOUT_SECS="${DRILL_TIMEOUT_SECS:-300}"
-KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopruntime-core}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loop-runtime-core}"
 DRY_RUN=false
 DRILL_TENANT_NAME="drill-test"
-DRILL_TENANT_NAMESPACE="loopruntime-system"
+DRILL_TENANT_NAMESPACE="loop-runtime-system"
 DRILL_BACKUP_NAME=""
 DRILL_RESTORE_NAME=""
 START_TS="$(date -u +%s)"
@@ -160,7 +160,7 @@ print(items[0].get("status", {}).get("phase", "Unknown"))
 
 phase_schedules_have_runs() {
   local out
-  if ! out=$($VELERO backup get --selector "velero.io/schedule-name=loopruntime-crds-backup" -o json 2>&1); then
+  if ! out=$($VELERO backup get --selector "velero.io/schedule-name=loop-runtime-crds-backup" -o json 2>&1); then
     emit_phase schedules_have_runs fail "$out"
     return 1
   fi
@@ -179,10 +179,10 @@ print(len([b for b in items if b.get("status", {}).get("phase") == "Completed"])
   if [[ "${count:-0}" -lt 1 ]]; then
     # In a fresh install no scheduled run has happened yet — this is OK
     # in dry-run mode. In live mode it's a soft warning, not a fail.
-    emit_phase schedules_have_runs warn "no completed loopruntime-crds-backup runs yet (count=${count:-0})"
+    emit_phase schedules_have_runs warn "no completed loop-runtime-crds-backup runs yet (count=${count:-0})"
     return 0
   fi
-  emit_phase schedules_have_runs pass "completed loopruntime-crds-backup runs=$count"
+  emit_phase schedules_have_runs pass "completed loop-runtime-crds-backup runs=$count"
 }
 
 # ---------------------------------------------------------------------------

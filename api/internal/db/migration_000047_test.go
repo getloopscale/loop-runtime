@@ -18,9 +18,9 @@ import (
 // bigint column stores up to 2^63-1 by definition, well past 2^31. Skips when
 // the real-PG harness is not wired.
 func TestMigration000047_UsageQuantityBigint(t *testing.T) {
-	dsn := os.Getenv("LOOPRUNTIME_E2E_DATABASE_URL")
+	dsn := os.Getenv("LOOP_RUNTIME_E2E_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("LOOPRUNTIME_E2E_DATABASE_URL not set — real-PG migration test skipped")
+		t.Skip("LOOP_RUNTIME_E2E_DATABASE_URL not set — real-PG migration test skipped")
 	}
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, dsn)

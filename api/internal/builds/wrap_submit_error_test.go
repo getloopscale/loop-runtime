@@ -16,7 +16,7 @@ import (
 // negative direction + sentinel preservation). The negative direction
 // asserts unknown-stage inputs route to ReasonBuildSubmitUnknown, NOT to a
 // misleading discriminated reason — the structural guard against the
-// loopruntime-cloud#34 catchall anti-pattern this Sprint closes.
+// loop-console#34 catchall anti-pattern this Sprint closes.
 
 func TestWrapSubmitBuildError_NewDiscriminators(t *testing.T) {
 	cases := []struct {

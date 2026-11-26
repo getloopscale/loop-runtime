@@ -12,12 +12,12 @@ import (
 
 // MaintenanceMode is an HTTP middleware that returns 503 Service Unavailable on
 // MUTATING requests (POST/PUT/PATCH/DELETE) while the maintenance setting
-// (LOOPRUNTIME_MAINTENANCE_MODE, see ParseMaintenanceSetting) is on. Read-only requests (GET/HEAD/OPTIONS) and the
+// (LOOP_RUNTIME_MAINTENANCE_MODE, see ParseMaintenanceSetting) is on. Read-only requests (GET/HEAD/OPTIONS) and the
 // health endpoint always pass through.
 //
 // Sprint 8 v3.2 / CHG-002a / D-7: required pre-flight before T0.1 (PG resize)
 // to prevent in-flight mutations from observing partial database state during
-// the ~5min managed-PG failover window. Operator sets LOOPRUNTIME_MAINTENANCE_MODE
+// the ~5min managed-PG failover window. Operator sets LOOP_RUNTIME_MAINTENANCE_MODE
 // before `pulumi up`, then unsets after PG online + smoke check passes.
 //
 // Response shape preserves the typed-error contract used elsewhere in the API
@@ -37,7 +37,7 @@ func MaintenanceMode(setting MaintenanceSetting) func(http.Handler) http.Handler
 	}
 }
 
-// MaintenanceSetting is LOOPRUNTIME_MAINTENANCE_MODE, parsed once at boot.
+// MaintenanceSetting is LOOP_RUNTIME_MAINTENANCE_MODE, parsed once at boot.
 type MaintenanceSetting struct {
 	Enabled bool
 	Message string // shown to refused callers
@@ -45,7 +45,7 @@ type MaintenanceSetting struct {
 
 const defaultMaintenanceMessage = "LoopRuntime is in maintenance mode. Mutations are temporarily disabled while infrastructure is being resized. Try again shortly."
 
-// ParseMaintenanceSetting reads a LOOPRUNTIME_MAINTENANCE_MODE value. Empty, "0",
+// ParseMaintenanceSetting reads a LOOP_RUNTIME_MAINTENANCE_MODE value. Empty, "0",
 // "false", "off" and "no" (any case) mean off — the published chart renders
 // "false" by default, so reading every non-empty value as "on" put a default
 // install into maintenance. "1", "true", "on" and "yes" mean on with the

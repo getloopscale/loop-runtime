@@ -55,7 +55,7 @@ spec:
                 description: API configures the API bootstrap endpoint for DB seeding.
                 properties:
                   bootstrapEndpoint:
-                    default: http://loopruntime-api.loopruntime-system.svc.cluster.local:8080/internal/bootstrap
+                    default: http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/internal/bootstrap
                     description: |-
                       BootstrapEndpoint is the internal URL for the bootstrap endpoint.
                       SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
@@ -65,7 +65,7 @@ spec:
                     description: |-
                       BootstrapSecretRef references the Secret containing the bootstrap auth token.
                       The Secret must contain a key "bootstrap-secret" with the Bearer token value
-                      matching LOOPRUNTIME_BOOTSTRAP_SECRET on the API side (SEC-003).
+                      matching LOOP_RUNTIME_BOOTSTRAP_SECRET on the API side (SEC-003).
                       B1: Without this, callBootstrapEndpoint fails 401 when SEC-003 is enabled.
                     properties:
                       name:
@@ -75,7 +75,7 @@ spec:
                     - name
                     type: object
                   healthEndpoint:
-                    default: http://loopruntime-api.loopruntime-system.svc.cluster.local:8080/api/v1/health
+                    default: http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/api/v1/health
                     description: |-
                       HealthEndpoint is the internal URL for the API health check.
                       SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
@@ -137,7 +137,7 @@ spec:
                     - name
                     type: object
                   internalURL:
-                    default: http://gitea-http.loopruntime-system.svc.cluster.local:3000
+                    default: http://gitea-http.loop-runtime-system.svc.cluster.local:3000
                     description: |-
                       InternalURL is the cluster-internal URL for Gitea HTTP API.
                       SEC-004: Validated to prevent SSRF via arbitrary URL redirection.

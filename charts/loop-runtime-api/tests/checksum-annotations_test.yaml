@@ -1,0 +1,35 @@
+# helm-unittest: loop-runtime-common.checksumAnnotations helper validation.
+# Plan T2.8 — exercises the new helper from Phase 2 (T2.3) via consumer.
+
+suite: loop-runtime-common.checksumAnnotations integration
+templates:
+  - deployment.yaml
+  - configmap.yaml
+  - secret.yaml
+
+tests:
+  - it: deployment has checksum/config annotation
+    template: deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations["checksum/config"]
+
+  - it: deployment has checksum/secret annotation (loop-runtime-api uses both)
+    template: deployment.yaml
+    asserts:
+      - exists:
+          path: spec.template.metadata.annotations["checksum/secret"]
+
+  - it: checksum/config is sha256 hex (64 chars)
+    template: deployment.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/config"]
+          pattern: "^[a-f0-9]{64}$"
+
+  - it: checksum/secret is sha256 hex
+    template: deployment.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/secret"]
+          pattern: "^[a-f0-9]{64}$"

@@ -14,8 +14,8 @@ import (
 func TestWorkflowUsesTheConfiguredSignerAndScannerImages(t *testing.T) {
 	// Arrange
 	infra := testInfraParams()
-	infra.CosignImage = "reg.local/loopruntime-cosign-signer:test"
-	infra.SyftImage = "reg.local/loopruntime-syft-scanner:test"
+	infra.CosignImage = "reg.local/loop-runtime-cosign-signer:test"
+	infra.SyftImage = "reg.local/loop-runtime-syft-scanner:test"
 	infra.CosignAttestEnabled = true
 
 	// Act

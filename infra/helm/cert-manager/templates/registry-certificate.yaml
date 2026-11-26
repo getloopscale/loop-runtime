@@ -1,25 +1,25 @@
 ---
 # Server certificate for the local container registry.
-# Issued by loopruntime-local-ca-issuer. Consumed by the k3d registry Docker container
+# Issued by loop-runtime-local-ca-issuer. Consumed by the k3d registry Docker container
 # via volume mount (see Taskfile `registry:tls:setup` task that extracts this
 # Secret to the host filesystem).
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: loopruntime-local-registry
+  name: loop-runtime-local-registry
   namespace: cert-manager
   labels:
-    app.kubernetes.io/part-of: loopruntime
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: registry-tls
 spec:
-  commonName: k3d-loopruntime-registry
+  commonName: k3d-loop-runtime-registry
   dnsNames:
-    - k3d-loopruntime-registry
-    - k3d-loopruntime-registry.local
+    - k3d-loop-runtime-registry
+    - k3d-loop-runtime-registry.local
     - localhost
   ipAddresses:
     - 127.0.0.1
-  secretName: loopruntime-local-registry-tls
+  secretName: loop-runtime-local-registry-tls
   duration: 8760h    # 1 year
   renewBefore: 720h  # 30 days
   privateKey:
@@ -30,6 +30,6 @@ spec:
     - digital signature
     - key encipherment
   issuerRef:
-    name: loopruntime-local-ca-issuer
+    name: loop-runtime-local-ca-issuer
     kind: ClusterIssuer
     group: cert-manager.io

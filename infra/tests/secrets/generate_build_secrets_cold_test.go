@@ -52,7 +52,7 @@ func init() {
 
 func TestABuildSecretsColdInstallReachesItsBackupStep(t *testing.T) {
 	run := runScript(t, "../../helmfile/scripts/generate-build-secrets.sh", coldBuildProfile,
-		[]string{"HOME=" + t.TempDir(), "LOOPRUNTIME_BUCKET_NAME=loopruntime-builds"}, "standalone")
+		[]string{"HOME=" + t.TempDir(), "LOOP_RUNTIME_BUCKET_NAME=loop-runtime-builds"}, "standalone")
 	if strings.Contains(run.output(), "No such file or directory") {
 		t.Fatalf("the script lost track of its own directory after generating the cosign key:\n%s", run)
 	}

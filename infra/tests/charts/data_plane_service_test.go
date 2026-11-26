@@ -62,15 +62,15 @@ type workload struct {
 
 const dataPlaneValues = `
 image:
-  repository: registry.example/loopruntime-memory
+  repository: registry.example/loop-runtime-memory
   tag: "0123456789abcdef0123456789abcdef01234567"
 port: 8080
 healthPath: /v1/health
 nodePort: 30181
-existingSecret: loopruntime-memory
+existingSecret: loop-runtime-memory
 env:
   HOST: "0.0.0.0"
-  LOOPRUNTIMEMEM_EMBEDDER: openai
+  LOOP_RUNTIMEMEM_EMBEDDER: openai
 secretEnv:
   - name: OPENAI_API_KEY
     key: openai-api-key
@@ -83,7 +83,7 @@ postgres:
   image: registry.example/pgvector:v0.5.1
   database: themem
   user: themem
-  uriEnv: LOOPRUNTIMEMEM_PG_URI
+  uriEnv: LOOP_RUNTIMEMEM_PG_URI
   dataPath: /var/lib/postgresql/data
   storage: 2Gi
 `
@@ -94,7 +94,7 @@ func renderDataPlane(t *testing.T, values string) []workloadDoc {
 	if err := os.WriteFile(f, []byte(values), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	out := renderChart(t, uniqueChart(t, "data-plane-service"), "loopruntime-memory", nil, f)
+	out := renderChart(t, uniqueChart(t, "data-plane-service"), "loop-runtime-memory", nil, f)
 	return parseDocs(t, out)
 }
 
@@ -149,10 +149,10 @@ func envIndex(env []envVar, name string) int {
 
 func TestDataPlaneServiceRunsThePinnedImageAsNonRoot(t *testing.T) {
 	docs := renderDataPlane(t, dataPlaneValues)
-	app := asWorkload(t, findDoc(t, docs, "Deployment", "loopruntime-memory"))
+	app := asWorkload(t, findDoc(t, docs, "Deployment", "loop-runtime-memory"))
 	c := app.Spec.Template.Spec.Containers[0]
 
-	if c.Image != "registry.example/loopruntime-memory:0123456789abcdef0123456789abcdef01234567" {
+	if c.Image != "registry.example/loop-runtime-memory:0123456789abcdef0123456789abcdef01234567" {
 		t.Errorf("image = %q", c.Image)
 	}
 	if len(c.Ports) != 1 || c.Ports[0].ContainerPort != 8080 {
@@ -167,7 +167,7 @@ func TestDataPlaneServiceRunsThePinnedImageAsNonRoot(t *testing.T) {
 }
 
 func TestDataPlaneServiceProbesItsHealthPath(t *testing.T) {
-	c := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopruntime-memory")).Spec.Template.Spec.Containers[0]
+	c := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loop-runtime-memory")).Spec.Template.Spec.Containers[0]
 	for name, probe := range map[string]map[string]any{"readiness": c.ReadinessProbe, "liveness": c.LivenessProbe} {
 		get, _ := probe["httpGet"].(map[string]any)
 		if get["path"] != "/v1/health" {
@@ -179,23 +179,23 @@ func TestDataPlaneServiceProbesItsHealthPath(t *testing.T) {
 // The URI embeds the password through Kubernetes' $(VAR) expansion, which only resolves a
 // variable defined EARLIER in the list — defined later, the literal "$(…)" reaches the app.
 func TestDataPlaneServiceBuildsItsDatabaseURIFromItsOwnPostgres(t *testing.T) {
-	env := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopruntime-memory")).Spec.Template.Spec.Containers[0].Env
+	env := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loop-runtime-memory")).Spec.Template.Spec.Containers[0].Env
 
-	pw, uri := envIndex(env, "POSTGRES_PASSWORD"), envIndex(env, "LOOPRUNTIMEMEM_PG_URI")
+	pw, uri := envIndex(env, "POSTGRES_PASSWORD"), envIndex(env, "LOOP_RUNTIMEMEM_PG_URI")
 	if pw < 0 || uri < 0 {
-		t.Fatalf("env = %+v, want POSTGRES_PASSWORD and LOOPRUNTIMEMEM_PG_URI", env)
+		t.Fatalf("env = %+v, want POSTGRES_PASSWORD and LOOP_RUNTIMEMEM_PG_URI", env)
 	}
 	if pw > uri {
 		t.Errorf("POSTGRES_PASSWORD is defined after the URI that expands it")
 	}
-	want := "postgres://themem:$(POSTGRES_PASSWORD)@loopruntime-memory-postgres:5432/themem"
+	want := "postgres://themem:$(POSTGRES_PASSWORD)@loop-runtime-memory-postgres:5432/themem"
 	if env[uri].Value != want {
-		t.Errorf("LOOPRUNTIMEMEM_PG_URI = %q, want %q", env[uri].Value, want)
+		t.Errorf("LOOP_RUNTIMEMEM_PG_URI = %q, want %q", env[uri].Value, want)
 	}
 }
 
 func TestDataPlaneServiceReadsSecretsFromTheExistingSecret(t *testing.T) {
-	env := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopruntime-memory")).Spec.Template.Spec.Containers[0].Env
+	env := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loop-runtime-memory")).Spec.Template.Spec.Containers[0].Env
 	for name, key := range map[string]string{
 		"OPENAI_API_KEY": "openai-api-key", "THEMORY_ADMIN_BOOTSTRAP_TOKEN": "admin-bootstrap-token", "POSTGRES_PASSWORD": "postgres-password",
 	} {
@@ -205,19 +205,19 @@ func TestDataPlaneServiceReadsSecretsFromTheExistingSecret(t *testing.T) {
 			continue
 		}
 		ref, _ := env[i].ValueFrom["secretKeyRef"].(map[string]any)
-		if ref["name"] != "loopruntime-memory" || ref["key"] != key {
-			t.Errorf("%s valueFrom = %v, want secret loopruntime-memory key %s", name, env[i].ValueFrom, key)
+		if ref["name"] != "loop-runtime-memory" || ref["key"] != key {
+			t.Errorf("%s valueFrom = %v, want secret loop-runtime-memory key %s", name, env[i].ValueFrom, key)
 		}
 	}
-	if i := envIndex(env, "LOOPRUNTIMEMEM_EMBEDDER"); i < 0 || env[i].Value != "openai" {
-		t.Errorf("plain env LOOPRUNTIMEMEM_EMBEDDER missing: %+v", env)
+	if i := envIndex(env, "LOOP_RUNTIMEMEM_EMBEDDER"); i < 0 || env[i].Value != "openai" {
+		t.Errorf("plain env LOOP_RUNTIMEMEM_EMBEDDER missing: %+v", env)
 	}
 }
 
 // The edge reaches the service at a fixed host port, so the node port must be pinned
 // (an unpinned one moves on every recreation and the cluster's port map stops matching).
 func TestDataPlaneServiceIsReachableOnItsPinnedNodePort(t *testing.T) {
-	svc := findDoc(t, renderDataPlane(t, dataPlaneValues), "Service", "loopruntime-memory").raw
+	svc := findDoc(t, renderDataPlane(t, dataPlaneValues), "Service", "loop-runtime-memory").raw
 	for _, want := range []string{"type: NodePort", "nodePort: 30181", "port: 8080"} {
 		if !strings.Contains(svc, want) {
 			t.Errorf("Service lacks %q:\n%s", want, svc)
@@ -227,7 +227,7 @@ func TestDataPlaneServiceIsReachableOnItsPinnedNodePort(t *testing.T) {
 
 func TestDataPlaneServiceWithoutANodePortStaysInsideTheCluster(t *testing.T) {
 	values := strings.Replace(dataPlaneValues, "nodePort: 30181\n", "", 1)
-	svc := findDoc(t, renderDataPlane(t, values), "Service", "loopruntime-memory").raw
+	svc := findDoc(t, renderDataPlane(t, values), "Service", "loop-runtime-memory").raw
 	if strings.Contains(svc, "NodePort") {
 		t.Errorf("Service is a NodePort without a nodePort value:\n%s", svc)
 	}
@@ -235,11 +235,11 @@ func TestDataPlaneServiceWithoutANodePortStaysInsideTheCluster(t *testing.T) {
 
 func TestDataPlaneServiceRunsEachWorkerWithTheAppsEnvironment(t *testing.T) {
 	docs := renderDataPlane(t, dataPlaneValues)
-	c := asWorkload(t, findDoc(t, docs, "Deployment", "loopruntime-memory-worker")).Spec.Template.Spec.Containers[0]
+	c := asWorkload(t, findDoc(t, docs, "Deployment", "loop-runtime-memory-worker")).Spec.Template.Spec.Containers[0]
 	if strings.Join(c.Command, " ") != "node_modules/.bin/tsx src/worker.ts" {
 		t.Errorf("worker command = %v", c.Command)
 	}
-	if envIndex(c.Env, "LOOPRUNTIMEMEM_PG_URI") < 0 || envIndex(c.Env, "OPENAI_API_KEY") < 0 {
+	if envIndex(c.Env, "LOOP_RUNTIMEMEM_PG_URI") < 0 || envIndex(c.Env, "OPENAI_API_KEY") < 0 {
 		t.Errorf("worker env = %+v, want the app's database and secrets", c.Env)
 	}
 	if c.ReadinessProbe != nil {
@@ -249,12 +249,12 @@ func TestDataPlaneServiceRunsEachWorkerWithTheAppsEnvironment(t *testing.T) {
 
 func TestDataPlaneServiceKeepsItsDatabaseOnAVolume(t *testing.T) {
 	docs := renderDataPlane(t, dataPlaneValues)
-	pg := asWorkload(t, findDoc(t, docs, "StatefulSet", "loopruntime-memory-postgres"))
+	pg := asWorkload(t, findDoc(t, docs, "StatefulSet", "loop-runtime-memory-postgres"))
 	c := pg.Spec.Template.Spec.Containers[0]
 	if c.Image != "registry.example/pgvector:v0.5.1" {
 		t.Errorf("postgres image = %q", c.Image)
 	}
-	if len(pg.Spec.VolumeClaimTemplates) != 1 || !strings.Contains(findDoc(t, docs, "StatefulSet", "loopruntime-memory-postgres").raw, "storage: 2Gi") {
+	if len(pg.Spec.VolumeClaimTemplates) != 1 || !strings.Contains(findDoc(t, docs, "StatefulSet", "loop-runtime-memory-postgres").raw, "storage: 2Gi") {
 		t.Errorf("postgres has no 2Gi volume claim")
 	}
 	for _, name := range []string{"POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"} {
@@ -262,7 +262,7 @@ func TestDataPlaneServiceKeepsItsDatabaseOnAVolume(t *testing.T) {
 			t.Errorf("postgres env lacks %s", name)
 		}
 	}
-	findDoc(t, docs, "Service", "loopruntime-memory-postgres")
+	findDoc(t, docs, "Service", "loop-runtime-memory-postgres")
 }
 
 // A tag names one build; a service without one would run whatever a mutable tag points at.
@@ -272,7 +272,7 @@ func TestDataPlaneServiceRefusesAnImageWithoutATag(t *testing.T) {
 	if err := os.WriteFile(f, []byte(values), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := renderChartE(t, uniqueChart(t, "data-plane-service"), "loopruntime-memory", nil, f); err == nil {
+	if _, err := renderChartE(t, uniqueChart(t, "data-plane-service"), "loop-runtime-memory", nil, f); err == nil {
 		t.Error("rendered a service with no image tag")
 	}
 }
@@ -284,53 +284,53 @@ func TestDataPlaneServiceRefusesAnImageWithoutATag(t *testing.T) {
 // have, and answers "no attempt" forever (measured: the init container never finished).
 func TestDataPlaneServiceWaitsForItsDatabaseBeforeStarting(t *testing.T) {
 	docs := renderDataPlane(t, dataPlaneValues)
-	for _, name := range []string{"loopruntime-memory", "loopruntime-memory-worker"} {
+	for _, name := range []string{"loop-runtime-memory", "loop-runtime-memory-worker"} {
 		init := asWorkload(t, findDoc(t, docs, "Deployment", name)).Spec.Template.Spec.InitContainers
 		if len(init) != 1 {
 			t.Fatalf("%s: init containers = %+v, want one that waits for Postgres", name, init)
 		}
 		cmd := strings.Join(init[0].Command, " ")
-		if init[0].Image != "registry.example/pgvector:v0.5.1" || !strings.Contains(cmd, "pg_isready") || !strings.Contains(cmd, "loopruntime-memory-postgres") || !strings.Contains(cmd, "-U themem") {
-			t.Errorf("%s: init container %s runs %q, want pg_isready -U themem against loopruntime-memory-postgres", name, init[0].Image, cmd)
+		if init[0].Image != "registry.example/pgvector:v0.5.1" || !strings.Contains(cmd, "pg_isready") || !strings.Contains(cmd, "loop-runtime-memory-postgres") || !strings.Contains(cmd, "-U themem") {
+			t.Errorf("%s: init container %s runs %q, want pg_isready -U themem against loop-runtime-memory-postgres", name, init[0].Image, cmd)
 		}
 	}
 }
 
-// loopruntime-memory refuses to serve requests as a superuser: row level security does not
+// loop-runtime-memory refuses to serve requests as a superuser: row level security does not
 // apply to one, so its tenant isolation would hold nothing (measured 2026-09-30, the
 // first install crash-looped on exactly that refusal). A service declares the login
 // roles it connects as; the chart creates each one without superuser or BYPASSRLS
 // before the service starts, and the owner's URI stays on postgres.uriEnv for migrations.
 const dataPlaneRoleValues = dataPlaneValues + `  roles:
     - name: themory_app
-      uriEnv: LOOPRUNTIMEMEM_PG_URI
+      uriEnv: LOOP_RUNTIMEMEM_PG_URI
       passwordKey: app-role-password
 `
 
 func roleValues() string {
-	return strings.Replace(dataPlaneRoleValues, "uriEnv: LOOPRUNTIMEMEM_PG_URI\n  dataPath", "uriEnv: LOOPRUNTIMEMEM_MIGRATE_PG_URI\n  dataPath", 1)
+	return strings.Replace(dataPlaneRoleValues, "uriEnv: LOOP_RUNTIMEMEM_PG_URI\n  dataPath", "uriEnv: LOOP_RUNTIMEMEM_MIGRATE_PG_URI\n  dataPath", 1)
 }
 
 func TestDataPlaneServiceConnectsAsItsDeclaredRole(t *testing.T) {
-	env := asWorkload(t, findDoc(t, renderDataPlane(t, roleValues()), "Deployment", "loopruntime-memory")).Spec.Template.Spec.Containers[0].Env
+	env := asWorkload(t, findDoc(t, renderDataPlane(t, roleValues()), "Deployment", "loop-runtime-memory")).Spec.Template.Spec.Containers[0].Env
 
-	pw, uri := envIndex(env, "THEMORY_APP_PASSWORD"), envIndex(env, "LOOPRUNTIMEMEM_PG_URI")
+	pw, uri := envIndex(env, "THEMORY_APP_PASSWORD"), envIndex(env, "LOOP_RUNTIMEMEM_PG_URI")
 	if pw < 0 || uri < 0 || pw > uri {
-		t.Fatalf("env = %+v, want THEMORY_APP_PASSWORD defined before LOOPRUNTIMEMEM_PG_URI", env)
+		t.Fatalf("env = %+v, want THEMORY_APP_PASSWORD defined before LOOP_RUNTIMEMEM_PG_URI", env)
 	}
-	if want := "postgres://themory_app:$(THEMORY_APP_PASSWORD)@loopruntime-memory-postgres:5432/themem"; env[uri].Value != want {
-		t.Errorf("LOOPRUNTIMEMEM_PG_URI = %q, want %q", env[uri].Value, want)
+	if want := "postgres://themory_app:$(THEMORY_APP_PASSWORD)@loop-runtime-memory-postgres:5432/themem"; env[uri].Value != want {
+		t.Errorf("LOOP_RUNTIMEMEM_PG_URI = %q, want %q", env[uri].Value, want)
 	}
-	if ref, _ := env[pw].ValueFrom["secretKeyRef"].(map[string]any); ref["key"] != "app-role-password" || ref["name"] != "loopruntime-memory" {
-		t.Errorf("THEMORY_APP_PASSWORD reads %v, want loopruntime-memory/app-role-password", env[pw].ValueFrom)
+	if ref, _ := env[pw].ValueFrom["secretKeyRef"].(map[string]any); ref["key"] != "app-role-password" || ref["name"] != "loop-runtime-memory" {
+		t.Errorf("THEMORY_APP_PASSWORD reads %v, want loop-runtime-memory/app-role-password", env[pw].ValueFrom)
 	}
-	if m := envIndex(env, "LOOPRUNTIMEMEM_MIGRATE_PG_URI"); m < 0 || !strings.HasPrefix(env[m].Value, "postgres://themem:") {
-		t.Errorf("the owner's URI is not on LOOPRUNTIMEMEM_MIGRATE_PG_URI: %+v", env)
+	if m := envIndex(env, "LOOP_RUNTIMEMEM_MIGRATE_PG_URI"); m < 0 || !strings.HasPrefix(env[m].Value, "postgres://themem:") {
+		t.Errorf("the owner's URI is not on LOOP_RUNTIMEMEM_MIGRATE_PG_URI: %+v", env)
 	}
 }
 
 func TestDataPlaneServiceCreatesItsRolesBeforeItStarts(t *testing.T) {
-	init := asWorkload(t, findDoc(t, renderDataPlane(t, roleValues()), "Deployment", "loopruntime-memory")).Spec.Template.Spec.InitContainers
+	init := asWorkload(t, findDoc(t, renderDataPlane(t, roleValues()), "Deployment", "loop-runtime-memory")).Spec.Template.Spec.InitContainers
 
 	if len(init) != 2 || init[0].Name != "wait-for-postgres" || init[1].Name != "ensure-roles" {
 		t.Fatalf("init containers = %+v, want wait-for-postgres then ensure-roles", init)
@@ -347,7 +347,7 @@ func TestDataPlaneServiceCreatesItsRolesBeforeItStarts(t *testing.T) {
 }
 
 func TestDataPlaneServiceWithoutRolesConnectsAsTheOwner(t *testing.T) {
-	init := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopruntime-memory")).Spec.Template.Spec.InitContainers
+	init := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loop-runtime-memory")).Spec.Template.Spec.InitContainers
 	for _, c := range init {
 		if c.Name == "ensure-roles" {
 			t.Errorf("a service that declares no role got an ensure-roles init container")
@@ -363,12 +363,12 @@ func TestDataPlaneServiceRefusesARoleNameThatIsNotAnIdentifier(t *testing.T) {
 	if err := os.WriteFile(f, []byte(values), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := renderChartE(t, uniqueChart(t, "data-plane-service"), "loopruntime-memory", nil, f); err == nil {
+	if _, err := renderChartE(t, uniqueChart(t, "data-plane-service"), "loop-runtime-memory", nil, f); err == nil {
 		t.Error("rendered a role whose name breaks out of the SQL literal")
 	}
 }
 
-// A service whose migrations are a separate command (loopruntime-rag, #474) declares it; the
+// A service whose migrations are a separate command (loop-runtime-rag, #474) declares it; the
 // chart runs it with the service's own image and environment as the app's last init
 // container — after its roles exist, before it serves — so a deploy leaves the schema at
 // the version the image expects. Only the app runs it: a worker migrating too would race
@@ -378,26 +378,26 @@ func migrationValues() string {
 }
 
 func TestDataPlaneServiceMigratesBeforeTheAppStarts(t *testing.T) {
-	w := asWorkload(t, findDoc(t, renderDataPlane(t, migrationValues()), "Deployment", "loopruntime-memory"))
+	w := asWorkload(t, findDoc(t, renderDataPlane(t, migrationValues()), "Deployment", "loop-runtime-memory"))
 	init := w.Spec.Template.Spec.InitContainers
 
 	last := init[len(init)-1]
 	if last.Name != "migrate" {
 		t.Fatalf("init containers = %+v, want migrate last", init)
 	}
-	if last.Image != "registry.example/loopruntime-memory:0123456789abcdef0123456789abcdef01234567" {
+	if last.Image != "registry.example/loop-runtime-memory:0123456789abcdef0123456789abcdef01234567" {
 		t.Errorf("migrate runs %s, want the service's own image", last.Image)
 	}
 	if got := strings.Join(last.Command, " "); got != "node dist/migrate.js" {
 		t.Errorf("migrate command = %q, want %q", got, "node dist/migrate.js")
 	}
-	if envIndex(last.Env, "LOOPRUNTIMEMEM_PG_URI") < 0 || envIndex(last.Env, "POSTGRES_PASSWORD") < 0 {
+	if envIndex(last.Env, "LOOP_RUNTIMEMEM_PG_URI") < 0 || envIndex(last.Env, "POSTGRES_PASSWORD") < 0 {
 		t.Errorf("migrate env = %+v, want the service's database environment", last.Env)
 	}
 }
 
 func TestDataPlaneServiceWorkersDoNotMigrate(t *testing.T) {
-	w := asWorkload(t, findDoc(t, renderDataPlane(t, migrationValues()), "Deployment", "loopruntime-memory-worker"))
+	w := asWorkload(t, findDoc(t, renderDataPlane(t, migrationValues()), "Deployment", "loop-runtime-memory-worker"))
 	for _, c := range w.Spec.Template.Spec.InitContainers {
 		if c.Name == "migrate" {
 			t.Errorf("the worker runs the migrations too; only the app may")
@@ -406,7 +406,7 @@ func TestDataPlaneServiceWorkersDoNotMigrate(t *testing.T) {
 }
 
 func TestDataPlaneServiceWithoutMigrationsHasNoMigrateStep(t *testing.T) {
-	w := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopruntime-memory"))
+	w := asWorkload(t, findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loop-runtime-memory"))
 	for _, c := range w.Spec.Template.Spec.InitContainers {
 		if c.Name == "migrate" {
 			t.Errorf("a service that declares no migrations got a migrate init container")
@@ -414,36 +414,36 @@ func TestDataPlaneServiceWithoutMigrationsHasNoMigrateStep(t *testing.T) {
 	}
 }
 
-// loopruntime-rag's server and worker read the same LOOPRUNTIMERAG_PG_URI but must connect as different
+// loop-runtime-rag's server and worker read the same LOOP_RUNTIMERAG_PG_URI but must connect as different
 // roles — rag_app is bound to one workspace by row level security, rag_worker crosses them
 // through named policies — and each refuses to boot as the other (#474). A role can name
 // the processes it serves ("app" is the service itself); without that it serves them all.
 func perProcessRoleValues() string {
-	return strings.Replace(dataPlaneValues, "uriEnv: LOOPRUNTIMEMEM_PG_URI\n  dataPath", `uriEnv: LOOPRUNTIMEMEM_MIGRATE_PG_URI
+	return strings.Replace(dataPlaneValues, "uriEnv: LOOP_RUNTIMEMEM_PG_URI\n  dataPath", `uriEnv: LOOP_RUNTIMEMEM_MIGRATE_PG_URI
   roles:
-    - { name: themory_app, uriEnv: LOOPRUNTIMEMEM_PG_URI, passwordKey: app-role-password, processes: [app] }
-    - { name: themory_worker, uriEnv: LOOPRUNTIMEMEM_PG_URI, passwordKey: worker-role-password, processes: [worker] }
+    - { name: themory_app, uriEnv: LOOP_RUNTIMEMEM_PG_URI, passwordKey: app-role-password, processes: [app] }
+    - { name: themory_worker, uriEnv: LOOP_RUNTIMEMEM_PG_URI, passwordKey: worker-role-password, processes: [worker] }
   dataPath`, 1)
 }
 
 func TestDataPlaneServiceConnectsEachProcessAsItsOwnRole(t *testing.T) {
 	docs := renderDataPlane(t, perProcessRoleValues())
-	for deploy, wantRole := range map[string]string{"loopruntime-memory": "themory_app", "loopruntime-memory-worker": "themory_worker"} {
+	for deploy, wantRole := range map[string]string{"loop-runtime-memory": "themory_app", "loop-runtime-memory-worker": "themory_worker"} {
 		env := asWorkload(t, findDoc(t, docs, "Deployment", deploy)).Spec.Template.Spec.Containers[0].Env
 		var uris []string
 		for _, e := range env {
-			if e.Name == "LOOPRUNTIMEMEM_PG_URI" {
+			if e.Name == "LOOP_RUNTIMEMEM_PG_URI" {
 				uris = append(uris, e.Value)
 			}
 		}
 		if len(uris) != 1 || !strings.HasPrefix(uris[0], "postgres://"+wantRole+":") {
-			t.Errorf("%s: LOOPRUNTIMEMEM_PG_URI = %q, want exactly one, as %s", deploy, uris, wantRole)
+			t.Errorf("%s: LOOP_RUNTIMEMEM_PG_URI = %q, want exactly one, as %s", deploy, uris, wantRole)
 		}
 	}
 }
 
 func TestDataPlaneServiceCreatesEveryRoleWhateverProcessItServes(t *testing.T) {
-	init := asWorkload(t, findDoc(t, renderDataPlane(t, perProcessRoleValues()), "Deployment", "loopruntime-memory")).Spec.Template.Spec.InitContainers
+	init := asWorkload(t, findDoc(t, renderDataPlane(t, perProcessRoleValues()), "Deployment", "loop-runtime-memory")).Spec.Template.Spec.InitContainers
 	for _, c := range init {
 		if c.Name != "ensure-roles" {
 			continue
@@ -461,15 +461,15 @@ func TestDataPlaneServiceCreatesEveryRoleWhateverProcessItServes(t *testing.T) {
 
 // An MCP server is a second process of the same service: same image, same database, its own
 // port. The gateway reaches it through a ClusterIP Service of its own, and it gets settings
-// the app must not see (LOOPRUNTIME_MCP_RESOURCE switches loopruntime-memory's transport and auth).
+// the app must not see (LOOP_RUNTIME_MCP_RESOURCE switches loop-runtime-memory's transport and auth).
 const servingWorkerValues = `
   - name: mcp
     command: ["themory", "mcp"]
     port: 3100
     healthPath: /.well-known/oauth-protected-resource
     env:
-      LOOPRUNTIME_MCP_RESOURCE: https://app.example.test/mcp/memory
-      LOOPRUNTIMEMEM_EMBEDDER: none
+      LOOP_RUNTIME_MCP_RESOURCE: https://app.example.test/mcp/memory
+      LOOP_RUNTIMEMEM_EMBEDDER: none
 `
 
 func renderWithServingWorker(t *testing.T) []workloadDoc {
@@ -479,7 +479,7 @@ func renderWithServingWorker(t *testing.T) []workloadDoc {
 }
 
 func TestDataPlaneServiceExposesAServingWorkerInsideTheCluster(t *testing.T) {
-	svc := findDoc(t, renderWithServingWorker(t), "Service", "loopruntime-memory-mcp").raw
+	svc := findDoc(t, renderWithServingWorker(t), "Service", "loop-runtime-memory-mcp").raw
 	for _, want := range []string{"type: ClusterIP", "port: 3100", "app.kubernetes.io/component: mcp"} {
 		if !strings.Contains(svc, want) {
 			t.Errorf("worker Service lacks %q:\n%s", want, svc)
@@ -491,7 +491,7 @@ func TestDataPlaneServiceExposesAServingWorkerInsideTheCluster(t *testing.T) {
 }
 
 func TestDataPlaneServiceProbesAServingWorkerOnItsOwnPort(t *testing.T) {
-	c := asWorkload(t, findDoc(t, renderWithServingWorker(t), "Deployment", "loopruntime-memory-mcp")).Spec.Template.Spec.Containers[0]
+	c := asWorkload(t, findDoc(t, renderWithServingWorker(t), "Deployment", "loop-runtime-memory-mcp")).Spec.Template.Spec.Containers[0]
 	if len(c.Ports) != 1 || c.Ports[0].ContainerPort != 3100 {
 		t.Errorf("worker ports = %+v, want 3100", c.Ports)
 	}
@@ -502,28 +502,28 @@ func TestDataPlaneServiceProbesAServingWorkerOnItsOwnPort(t *testing.T) {
 
 func TestDataPlaneServiceGivesAWorkerItsOwnEnvironment(t *testing.T) {
 	docs := renderWithServingWorker(t)
-	worker := asWorkload(t, findDoc(t, docs, "Deployment", "loopruntime-memory-mcp")).Spec.Template.Spec.Containers[0].Env
-	app := asWorkload(t, findDoc(t, docs, "Deployment", "loopruntime-memory")).Spec.Template.Spec.Containers[0].Env
+	worker := asWorkload(t, findDoc(t, docs, "Deployment", "loop-runtime-memory-mcp")).Spec.Template.Spec.Containers[0].Env
+	app := asWorkload(t, findDoc(t, docs, "Deployment", "loop-runtime-memory")).Spec.Template.Spec.Containers[0].Env
 
-	if i := envIndex(worker, "LOOPRUNTIME_MCP_RESOURCE"); i < 0 || worker[i].Value != "https://app.example.test/mcp/memory" {
-		t.Errorf("worker env lacks its own LOOPRUNTIME_MCP_RESOURCE: %+v", worker)
+	if i := envIndex(worker, "LOOP_RUNTIME_MCP_RESOURCE"); i < 0 || worker[i].Value != "https://app.example.test/mcp/memory" {
+		t.Errorf("worker env lacks its own LOOP_RUNTIME_MCP_RESOURCE: %+v", worker)
 	}
-	if envIndex(app, "LOOPRUNTIME_MCP_RESOURCE") >= 0 {
+	if envIndex(app, "LOOP_RUNTIME_MCP_RESOURCE") >= 0 {
 		t.Error("the app received a worker-only setting")
 	}
 	// A worker value overrides the shared one; listing the name twice would leave the
 	// winner to the order Kubernetes happens to apply.
 	var count int
 	for _, e := range worker {
-		if e.Name == "LOOPRUNTIMEMEM_EMBEDDER" {
+		if e.Name == "LOOP_RUNTIMEMEM_EMBEDDER" {
 			count++
 			if e.Value != "none" {
-				t.Errorf("worker LOOPRUNTIMEMEM_EMBEDDER = %q, want its own value", e.Value)
+				t.Errorf("worker LOOP_RUNTIMEMEM_EMBEDDER = %q, want its own value", e.Value)
 			}
 		}
 	}
 	if count != 1 {
-		t.Errorf("worker lists LOOPRUNTIMEMEM_EMBEDDER %d times, want once", count)
+		t.Errorf("worker lists LOOP_RUNTIMEMEM_EMBEDDER %d times, want once", count)
 	}
 }
 
@@ -533,7 +533,7 @@ func TestDataPlaneServiceRefusesAHealthPathOnAWorkerThatServesNothing(t *testing
 	if err := os.WriteFile(f, []byte(values), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := renderChartE(t, uniqueChart(t, "data-plane-service"), "loopruntime-memory", nil, f); err == nil {
+	if _, err := renderChartE(t, uniqueChart(t, "data-plane-service"), "loop-runtime-memory", nil, f); err == nil {
 		t.Error("rendered a worker probe with no port to probe")
 	}
 }

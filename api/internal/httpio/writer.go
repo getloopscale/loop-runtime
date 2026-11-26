@@ -58,7 +58,7 @@ func WriteLoopRuntimeError(w http.ResponseWriter, err *loopruntimeerrors.LoopRun
 }
 
 // WriteLoopRuntimeErrorWithFieldErrors is the multi-field variant of WriteLoopRuntimeError.
-// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T2.3 closes loopruntime-cloud#29:
+// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T2.3 closes loop-console#29:
 // when a validator surfaces an aggregated list of field violations
 // (jsonschema Causes walk), this helper emits them in the response body's
 // `errors[]` extension member (RFC 9457 § 3.2) without changing the legacy

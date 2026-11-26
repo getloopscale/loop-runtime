@@ -4,7 +4,7 @@
 // Package argo builds the Argo Workflow specs that drive every LoopRuntime
 // build: BuildKit image build, cosign signing, syft SBOM generation,
 // language-strategy dispatch, and supply-chain admission. Built atop
-// the loopruntime-forge SDK and the LanguageStrategy interface
+// the loop-runtime-forge SDK and the LanguageStrategy interface
 // (`ResolveStrategyForApp`). See CHANGELOG.md "Build Mode Dispatch"
 // + finding-2026-05-08-build-mode-dispatch.
 package argo
@@ -184,7 +184,7 @@ func (b *WorkflowBuilder) buildkitContainer(p buildkitParams) (*forge.Container,
 //   - 1 total app  → /workspace/Dockerfile
 //   - 2+ total apps → /workspace/Dockerfile.{appName}
 //
-// Used by: loopruntimePacksDockerfileStep (generator), buildkitTemplateForApp (consumer),
+// Used by: loopRuntimePacksDockerfileStep (generator), buildkitTemplateForApp (consumer),
 // and CreateBuildPlan (plan consumer). All 3 must agree on the path.
 func dockerfilePathForApp(appName string, totalApps int) string {
 	if totalApps <= 1 {

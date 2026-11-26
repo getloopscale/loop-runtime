@@ -78,7 +78,7 @@ func TestOryKratosValuesNoPlaintextSecrets(t *testing.T) {
 
 	content := string(data)
 	// Dev secrets must be clearly marked as dev-only
-	if strings.Contains(content, "loopruntime-dev-cookie-secret") && !strings.Contains(content, "LOCAL DEV ONLY") {
+	if strings.Contains(content, "loop-runtime-dev-cookie-secret") && !strings.Contains(content, "LOCAL DEV ONLY") {
 		t.Error("ory-kratos values.yaml has dev secrets without LOCAL DEV ONLY marker")
 	}
 }

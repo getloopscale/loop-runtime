@@ -381,7 +381,7 @@ func (h *RepositoryHandler) validateLoopRuntimeYamlOnRef(ctx context.Context, w 
 		if errors.As(err, &fnf) {
 			httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 				"code":    "MISSING_DEPLOY_DESCRIPTOR",
-				"message": github.DeployDescriptorPath + " not found on branch \"" + branch + "\". Add it at the repository root, declaring the apps to deploy under `apps:`, and commit it. Docs: https://docs.getloopscale.com/config/loopruntime-yaml",
+				"message": github.DeployDescriptorPath + " not found on branch \"" + branch + "\". Add it at the repository root, declaring the apps to deploy under `apps:`, and commit it. Docs: https://docs.getloopscale.com/config/loop-runtime-yaml",
 			})
 			return false
 		}
@@ -398,7 +398,7 @@ func (h *RepositoryHandler) validateLoopRuntimeYamlOnRef(ctx context.Context, w 
 	if _, err := github.ParseDeployDescriptorFile(path, content); err != nil {
 		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_DEPLOY_DESCRIPTOR",
-			"message": err.Error() + " Docs: https://docs.getloopscale.com/config/loopruntime-yaml",
+			"message": err.Error() + " Docs: https://docs.getloopscale.com/config/loop-runtime-yaml",
 		})
 		return false
 	}

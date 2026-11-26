@@ -1,7 +1,7 @@
 # The public edge of staging, in place of CloudFront and ACM: TLS for the public hostnames
 # with Let's Encrypt certificates, and every request passed on to the core cluster's ALB.
 #
-# `task staging:edge` writes the environment this file reads (/etc/loopruntime-edge/edge.env):
+# `task staging:edge` writes the environment this file reads (/etc/loop-runtime-edge/edge.env):
 #
 #   EDGE_BIND_ADDRESS   the host's public address; nothing else is listened on
 #   EDGE_HOSTS          the public hostnames, separated by ", "; one certificate each
@@ -32,7 +32,7 @@
 }
 
 # Answers whether a host is a tenant's active custom domain: 200 with the cell that serves
-# it in X-LoopRuntime-Cell, or the API's refusal. Caddy asks it before it issues a certificate
+# it in X-Loop-Runtime-Cell, or the API's refusal. Caddy asks it before it issues a certificate
 # (?domain=<host>), and the custom domain site asks it for every request.
 #
 # The address names no host. forward_auth passes the viewer's Host on, and a request whose
@@ -92,16 +92,16 @@ https:// {
 	}
 	forward_auth 127.0.0.1:{$EDGE_ASK_PORT} {
 		uri /ask?domain={host}
-		copy_headers X-LoopRuntime-Cell
+		copy_headers X-Loop-Runtime-Cell
 	}
-	map {http.request.header.X-LoopRuntime-Cell} {cell_origin} {
+	map {http.request.header.X-Loop-Runtime-Cell} {cell_origin} {
 		import {$EDGE_CELL_ORIGINS}
 		default cell-without-a-load-balancer.invalid
 	}
 	reverse_proxy {$EDGE_ORIGIN} {
 		header_up Host {cell_origin}
 		header_up X-Forwarded-Host {host}
-		header_up -X-LoopRuntime-Cell
+		header_up -X-Loop-Runtime-Cell
 		transport http {
 			tls_trust_pool file {$EDGE_ORIGIN_CA}
 		}

@@ -41,7 +41,7 @@ func init() {
 		panic(fmt.Sprintf("failed to register client-go scheme: %v", err))
 	}
 	if err := loopruntimev1.AddToScheme(scheme); err != nil {
-		panic(fmt.Sprintf("failed to register loopruntime/v1 scheme: %v", err))
+		panic(fmt.Sprintf("failed to register loop-runtime/v1 scheme: %v", err))
 	}
 }
 
@@ -65,7 +65,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
 
-	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loopruntime-preview-operator")
+	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loop-runtime-preview-operator")
 	if tracingErr != nil {
 		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
 	}
@@ -92,7 +92,7 @@ func main() {
 		},
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "loopruntime-preview-operator.runtime.getloopscale.com",
+		LeaderElectionID:       "loop-runtime-preview-operator.runtime.getloopscale.com",
 		Cache:                  cacheOpts,
 	})
 	if err != nil {
@@ -139,7 +139,7 @@ func main() {
 // managerCacheOptions scopes the manager's informers.
 //
 // The only Secret this operator reads on this cluster is a cell's kubeconfig,
-// in loopruntime-system (CellAwareRuntimeClientFactory). The chart grants exactly
+// in loop-runtime-system (CellAwareRuntimeClientFactory). The chart grants exactly
 // that through a namespaced Role, so the Secret informer watches that
 // namespace and nothing else. PreviewEnvironment stays cluster-wide
 // (ADR-0018 C9).

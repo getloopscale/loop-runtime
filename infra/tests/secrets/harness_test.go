@@ -35,7 +35,7 @@ const openbaoScripts = "../../scripts/openbao"
 // fakeProfileEnv names the set of fakes a re-entered binary answers with. Each
 // script under test gets its own profile, because `kubectl get secret` means one
 // thing to the ESO bootstrap and nothing at all to the sync check.
-const fakeProfileEnv = "LOOPRUNTIME_FAKE_PROFILE"
+const fakeProfileEnv = "LOOP_RUNTIME_FAKE_PROFILE"
 
 // fakeTool is a stand-in for one CLI. It receives the arguments the script passed
 // and returns the exit code the script sees. It runs in its own process, so it

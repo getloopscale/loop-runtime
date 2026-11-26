@@ -72,7 +72,7 @@ type PreviewCRPhaseLookup interface {
 // *store.PostgresProjectStore already matches this signature — no adapter
 // needed, same shape used by `SecretProjectChecker`).
 //
-// Red Team loopruntime-cloud#92 absorption (2026-06-27): without this gate,
+// Red Team loop-console#92 absorption (2026-06-27): without this gate,
 // GET /api/v1/projects/<nonexistent>/previews returned 200 with an empty
 // list, so the dashboard's Previews UI rendered functional UI for a
 // deleted/non-existent project.
@@ -106,7 +106,7 @@ func (h *PreviewHandler) WithPhaseLookup(p PreviewCRPhaseLookup) *PreviewHandler
 }
 
 // WithProjectChecker wires the parent-project existence gate (Red Team
-// loopruntime-cloud#92 absorption). Fluent setter.
+// loop-console#92 absorption). Fluent setter.
 func (h *PreviewHandler) WithProjectChecker(c PreviewProjectChecker) *PreviewHandler {
 	h.projectChecker = c
 	return h
@@ -119,7 +119,7 @@ const previewRequestTimeout = 30 * time.Second
 // Auth + project URL parameter extraction. Returns (tenantID, projectName,
 // ok). When ok=false, an error response has already been written.
 //
-// Red Team loopruntime-cloud#92 absorption (2026-06-27): when a ProjectChecker
+// Red Team loop-console#92 absorption (2026-06-27): when a ProjectChecker
 // is wired, this gate ALSO verifies that the project name exists for the
 // authenticated tenant. Without this, every preview handler (List / Get
 // / Delete / Create) would render an empty/200 response for non-existent

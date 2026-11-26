@@ -16,9 +16,9 @@ import (
 // behind build tag `live`.
 
 func TestDefaultOptions_SetsCanonicalDefaults(t *testing.T) {
-	opts := DefaultOptions("/repo/loopruntime")
-	if opts.RepoRoot != "/repo/loopruntime" {
-		t.Errorf("RepoRoot = %q, want /repo/loopruntime", opts.RepoRoot)
+	opts := DefaultOptions("/repo/loop-runtime")
+	if opts.RepoRoot != "/repo/loop-runtime" {
+		t.Errorf("RepoRoot = %q, want /repo/loop-runtime", opts.RepoRoot)
 	}
 	if opts.TaskCmd != "task" {
 		t.Errorf("TaskCmd = %q, want task", opts.TaskCmd)

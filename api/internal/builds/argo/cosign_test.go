@@ -23,7 +23,7 @@ func TestCosignSignTemplate_Secure_NoInsecureFlag(t *testing.T) {
 }
 
 func TestCosignSignTemplate_Insecure_EmitsFlag(t *testing.T) {
-	c := cosignSignTemplate("api", "k3d-loopruntime-registry:5000/tenant/app:abc", true)
+	c := cosignSignTemplate("api", "k3d-loop-runtime-registry:5000/tenant/app:abc", true)
 	script := c.Source
 	if !strings.Contains(script, "--allow-http-registry") {
 		t.Errorf("insecure registry MUST emit --allow-http-registry (for plain HTTP local):\n%s", script)
@@ -166,15 +166,15 @@ func TestCosignSignTemplateKeyless_PrivateFulcioOverride(t *testing.T) {
 		AppName:   "api",
 		ImageTag:  "registry.example.com/org/app:abc",
 		Keyless:   true,
-		FulcioURL: "https://fulcio.loopruntime.internal",
-		RekorURL:  "https://rekor.loopruntime.internal",
+		FulcioURL: "https://fulcio.loop-runtime.internal",
+		RekorURL:  "https://rekor.loop-runtime.internal",
 	})
 	script := c.Source
 
-	if !strings.Contains(script, "fulcio.loopruntime.internal") {
+	if !strings.Contains(script, "fulcio.loop-runtime.internal") {
 		t.Errorf("private Fulcio URL must override default:\n%s", script)
 	}
-	if !strings.Contains(script, "rekor.loopruntime.internal") {
+	if !strings.Contains(script, "rekor.loop-runtime.internal") {
 		t.Errorf("private Rekor URL must override default:\n%s", script)
 	}
 	if strings.Contains(script, "fulcio.sigstore.dev") {

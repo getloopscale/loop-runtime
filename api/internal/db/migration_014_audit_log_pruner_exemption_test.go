@@ -48,8 +48,8 @@ func TestMigration014_BypassIsRestrictedToDelete(t *testing.T) {
 	// And the bypass var must be checked BY VALUE — current_setting with
 	// the missing_ok=true flag (second arg `true`) so the trigger never
 	// errors on sessions that did not set the var.
-	if !strings.Contains(sql, "current_setting('loopruntime.audit_pruner', true)") {
-		t.Error("trigger must call current_setting('loopruntime.audit_pruner', true)")
+	if !strings.Contains(sql, "current_setting('loop_runtime.audit_pruner', true)") {
+		t.Error("trigger must call current_setting('loop_runtime.audit_pruner', true)")
 	}
 }
 

@@ -33,7 +33,7 @@ by us, and nothing was created on AWS to test option C.
 ## Decision
 
 1. Customer domains enter through a Caddy fleet that issues certificates on demand. Before
-   it asks for a certificate, Caddy asks loopruntime-api whether the host is an active custom
+   it asks for a certificate, Caddy asks loop-runtime-api whether the host is an active custom
    domain (`GET /internal/edge/route?domain=<host>`), and it refuses names under the
    platform's own domain. The answer also names the cell, and Caddy proxies the request to
    that cell's load balancer.

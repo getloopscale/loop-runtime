@@ -67,7 +67,7 @@ type AppProjectSpec struct {
 	SourceRepos []string
 
 	// DestinationNamespaces restricts which namespaces ArgoCD can deploy to.
-	// If empty, defaults to "loopruntime-{tenantID}-*" wildcard pattern.
+	// If empty, defaults to "loop-runtime-{tenantID}-*" wildcard pattern.
 	DestinationNamespaces []string
 
 	// DestinationServer is the Kubernetes API server URL for allowed destinations.

@@ -357,7 +357,7 @@ func (f *fakePromoteEnsurer) EnsureEnvironment(_ context.Context, tenantID, proj
 	return f.err
 }
 
-// TestPromote_EnsuresTargetEnvironment_BeforeService (closes Red Team loopruntime-cloud#158)
+// TestPromote_EnsuresTargetEnvironment_BeforeService (closes Red Team loop-console#158)
 // asserts the promote handler calls EnvironmentEnsurer.EnsureEnvironment for the
 // (tenant, project, toEnv) tuple BEFORE invoking the promote service. Pre-fix
 // state: promote never called EnsureEnvironment → Tenant CR spec.environments[]

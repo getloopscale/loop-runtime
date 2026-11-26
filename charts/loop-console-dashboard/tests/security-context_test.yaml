@@ -1,0 +1,36 @@
+# helm-unittest: securityContext rendering for loop-console-dashboard.
+# Plan T1.5.
+
+suite: securityContext rendering
+templates:
+  - deployment.yaml
+  - configmap.yaml
+
+tests:
+  - it: renders pod-level securityContext.runAsNonRoot=true
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: renders container-level allowPrivilegeEscalation=false
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: drops ALL capabilities
+    template: deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: nginx pod runs as non-root (dashboard exception to ROFS — needs /tmp + /var/cache)
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true

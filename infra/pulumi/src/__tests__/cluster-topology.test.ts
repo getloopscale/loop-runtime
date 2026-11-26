@@ -28,12 +28,12 @@ const config = {
 describe("platformClusterPlans", () => {
   // Order matters too: it is the order of the database firewall's trusted rules.
   it("names the four clusters exactly as the stack has always named them, in firewall-rule order", () => {
-    const plans = platformClusterPlans(config, "loopruntime-dev-nyc3");
+    const plans = platformClusterPlans(config, "loop-runtime-dev-nyc3");
     expect(plans.map((plan) => [plan.output, plan.name])).toEqual([
-      ["mgmtCluster", "loopruntime-dev-nyc3-mgmt"],
-      ["buildCluster", "loopruntime-dev-nyc3-build"],
-      ["runtimeCluster", "loopruntime-dev-nyc3-runtime"],
-      ["runtimeCluster2", "loopruntime-dev-nyc3-runtime-2"],
+      ["mgmtCluster", "loop-runtime-dev-nyc3-mgmt"],
+      ["buildCluster", "loop-runtime-dev-nyc3-build"],
+      ["runtimeCluster", "loop-runtime-dev-nyc3-runtime"],
+      ["runtimeCluster2", "loop-runtime-dev-nyc3-runtime-2"],
     ]);
   });
 

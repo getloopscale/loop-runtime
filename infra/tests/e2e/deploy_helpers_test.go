@@ -56,5 +56,5 @@ func initGitRepo(dir string) string {
 // additional arguments. Returns stdout, stderr, and the exit code.
 // Auth is via configStore (XDG_CONFIG_HOME from BeforeSuite), not env.
 func runLoopRuntimeDeploy(dir string, args ...string) (stdout, stderr string, exitCode int) {
-	return execLoopRuntime(loopruntimeInvocation{dir: dir}, append([]string{"deploy"}, args...)...)
+	return execLoopRuntime(loopRuntimeInvocation{dir: dir}, append([]string{"deploy"}, args...)...)
 }

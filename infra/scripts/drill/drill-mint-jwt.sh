@@ -6,7 +6,7 @@
 #
 # Mints a JWT against the drill mgmt cluster via Hydra client_credentials grant.
 # Analog of infra/helmfile/scripts/seed-local-user.sh adapted for DOKS drill
-# (instead of k3d-loopruntime-core local context).
+# (instead of k3d-loop-runtime-core local context).
 #
 # JWT script taxonomy (T2.6 of plan 2026-05-21-deep-review-remediation):
 #   - infra/helmfile/scripts/lib/hydra-mint.sh  — SHARED LOW-LEVEL LIB
@@ -36,9 +36,9 @@
 # Environment inputs:
 #   DRILL_KUBECONFIG  — path to drill mgmt cluster kubeconfig (Pulumi output)
 #   DRILL_PG_HOST     — managed PG host (Pulumi output, used for user seed)
-#   DRILL_PG_PASS     — managed PG password (defaults to "loopruntime-drill-password" placeholder)
+#   DRILL_PG_PASS     — managed PG password (defaults to "loop-runtime-drill-password" placeholder)
 #   DRILL_PG_PORT     — managed PG port (default 25060 DO managed PG)
-#   SEED_USER_ID      — user id (default loopruntime-bootstrap)
+#   SEED_USER_ID      — user id (default loop-runtime-bootstrap)
 #   SEED_TENANT_ID    — tenant id (default tn-e2etest)
 #   SEED_ACCOUNT_ID   — account created when the user owns none (default acct-bootstrap)
 #
@@ -63,19 +63,19 @@ if [[ ! -r "$DRILL_KUBECONFIG" ]]; then
   exit 1
 fi
 
-SEED_USER_ID="${SEED_USER_ID:-loopruntime-bootstrap}"
+SEED_USER_ID="${SEED_USER_ID:-loop-runtime-bootstrap}"
 SEED_TENANT_ID="${SEED_TENANT_ID:-tn-e2etest}"
 SEED_ROLE="${SEED_ROLE:-owner}"
-SEED_EMAIL="${SEED_EMAIL:-bootstrap@loopruntime.local}"
+SEED_EMAIL="${SEED_EMAIL:-bootstrap@loop-runtime.local}"
 SEED_DISPLAY_NAME="${SEED_DISPLAY_NAME:-Drill Bootstrap}"
 SEED_USERNAME="${SEED_USERNAME:-bootstrap}"
 SEED_ACCOUNT_ID="${SEED_ACCOUNT_ID:-acct-bootstrap}"
 
-NS_LOOPRUNTIME="${LOOPRUNTIME_NAMESPACE:-loopruntime-system}"
+NS_LOOP_RUNTIME="${LOOP_RUNTIME_NAMESPACE:-loop-runtime-system}"
 # Bug #35 LIVE fix (2026-05-18 iter 28): drill helmfile installs ory-hydra
-# in loopruntime-auth namespace (chart default), not loopruntime-system. Default this to
-# loopruntime-auth to match drill. Local k3d standalone may override via env.
-NS_HYDRA="${HYDRA_NAMESPACE:-loopruntime-auth}"
+# in loop-runtime-auth namespace (chart default), not loop-runtime-system. Default this to
+# loop-runtime-auth to match drill. Local k3d standalone may override via env.
+NS_HYDRA="${HYDRA_NAMESPACE:-loop-runtime-auth}"
 HYDRA_PORT_LOCAL="${HYDRA_PORT_LOCAL:-14444}"
 
 # Minimum JWT TTL — EC-07 fix. L3 spec runs 60min; buffer 1h.
@@ -83,15 +83,15 @@ MIN_JWT_TTL_SECONDS=7200
 
 log() { printf '[drill-mint-jwt] %s\n' "$*" >&2; }
 
-# loopruntime-ops is the Go home of the logic this script used to re-implement in sed
+# loop-runtime-ops is the Go home of the logic this script used to re-implement in sed
 # and SQL (#236). An installed binary wins; otherwise it is built from this
 # checkout.
 DRILL_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-loopruntime_ops() {
-  if command -v loopruntime-ops >/dev/null 2>&1; then
-    loopruntime-ops "$@"
+loop_runtime_ops() {
+  if command -v loop-runtime-ops >/dev/null 2>&1; then
+    loop-runtime-ops "$@"
   else
-    (cd "$DRILL_REPO_ROOT/cmd/loopruntime-ops" && go run . "$@")
+    (cd "$DRILL_REPO_ROOT/cmd/loop-runtime-ops" && go run . "$@")
   fi
 }
 
@@ -110,11 +110,11 @@ if ! kubectl --kubeconfig "$DRILL_KUBECONFIG" wait \
 fi
 log "Hydra Ready"
 
-# --- Resolve loopruntime-bootstrap-credentials Secret ---
-CSEC=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPRUNTIME" \
-  get secret loopruntime-bootstrap-credentials -o jsonpath='{.data.client_secret}' 2>/dev/null | base64 -d || true)
+# --- Resolve loop-runtime-bootstrap-credentials Secret ---
+CSEC=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOP_RUNTIME" \
+  get secret loop-runtime-bootstrap-credentials -o jsonpath='{.data.client_secret}' 2>/dev/null | base64 -d || true)
 if [[ -z "$CSEC" ]]; then
-  log "ERROR: loopruntime-bootstrap-credentials Secret not found in $NS_LOOPRUNTIME"
+  log "ERROR: loop-runtime-bootstrap-credentials Secret not found in $NS_LOOP_RUNTIME"
   log "  hint: run bootstrap-oauth-clients.sh against drill mgmt cluster first (helmfile sync should do this)"
   exit 2
 fi
@@ -139,7 +139,7 @@ if [[ -z "${DRILL_PG_HOST:-}" ]] && [[ -d "infra/pulumi-drill" ]]; then
   # Parse password from pgUri (postgres:// and postgresql://, Bug #17). A
   # pgUri that does not parse aborts here rather than becoming the password.
   if [[ -n "$PG_URI_FULL" ]]; then
-    DRILL_PG_PASS=$(printf '%s' "$PG_URI_FULL" | loopruntime_ops dsn password)
+    DRILL_PG_PASS=$(printf '%s' "$PG_URI_FULL" | loop_runtime_ops dsn password)
     export DRILL_PG_HOST DRILL_PG_PORT DRILL_PG_PASS
     log "  ✓ DRILL_PG_HOST=$DRILL_PG_HOST DRILL_PG_PORT=$DRILL_PG_PORT (password parsed from pgUri)"
   fi
@@ -147,7 +147,7 @@ fi
 
 if [[ -n "${DRILL_PG_HOST:-}" ]]; then
   # Managed PG path (preferred for drill — D4 mgmt-tier managed PG)
-  DRILL_PG_PASS="${DRILL_PG_PASS:-loopruntime-drill-password}"
+  DRILL_PG_PASS="${DRILL_PG_PASS:-loop-runtime-drill-password}"
   DRILL_PG_PORT="${DRILL_PG_PORT:-25060}"
   # Bug #39 LIVE fix (2026-05-18 iter 33): DO Managed PG DatabaseFirewall restricts
   # to cluster_uuid auth (per Bug #11 prod-parity mandate, CTO Rule #0). Local psql
@@ -155,14 +155,14 @@ if [[ -n "${DRILL_PG_HOST:-}" ]]; then
   # mgmt cluster via transient pod (cluster_uuid auth passes firewall).
   # Bug #38 v2 retention: still uses individual flags + PGPASSWORD/PGSSLMODE env
   # to avoid URI-encode pitfall with special chars in doadmin password.
-  #   (b) Seed tables in `loopruntime` DB per Bug #12 fix.
-  DRILL_PG_DB="${DRILL_PG_DB:-loopruntime}"
+  #   (b) Seed tables in `loop-runtime` DB per Bug #12 fix.
+  DRILL_PG_DB="${DRILL_PG_DB:-loop_runtime}"
   run_psql() {
     # Bug #39 v3 (2026-05-18 iter 36): kubectl run --rm -i races on pod attach
     # (one-shot command pod terminates before attach completes). Use Job-like
     # pattern: run (no attach) → wait completion → logs → exitCode → delete.
     local POD_NAME="drill-psql-$$-$RANDOM"
-    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPRUNTIME" run "$POD_NAME" \
+    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOP_RUNTIME" run "$POD_NAME" \
       --restart=Never --image=postgres:16-alpine --quiet \
       --env="PGPASSWORD=$DRILL_PG_PASS" \
       --env="PGSSLMODE=require" \
@@ -171,15 +171,15 @@ if [[ -n "${DRILL_PG_HOST:-}" ]]; then
            --username=doadmin --dbname="$DRILL_PG_DB" \
            --no-psqlrc -v ON_ERROR_STOP=1 "$@" >/dev/null 2>&1
     # Wait for pod to reach terminal state (Succeeded or Failed)
-    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPRUNTIME" wait \
+    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOP_RUNTIME" wait \
       --for=jsonpath='{.status.phase}'=Succeeded "pod/$POD_NAME" \
       --timeout=120s >/dev/null 2>&1 || true
     local PHASE EXIT
-    PHASE=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPRUNTIME" get pod "$POD_NAME" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
-    EXIT=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPRUNTIME" get pod "$POD_NAME" -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}' 2>/dev/null || echo "1")
+    PHASE=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOP_RUNTIME" get pod "$POD_NAME" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+    EXIT=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOP_RUNTIME" get pod "$POD_NAME" -o jsonpath='{.status.containerStatuses[0].state.terminated.exitCode}' 2>/dev/null || echo "1")
     # Echo logs to stderr (preserves stdout for callers that pipe stdout)
-    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPRUNTIME" logs "$POD_NAME" >&2 2>/dev/null || true
-    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPRUNTIME" delete pod "$POD_NAME" --wait=false >/dev/null 2>&1 || true
+    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOP_RUNTIME" logs "$POD_NAME" >&2 2>/dev/null || true
+    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOP_RUNTIME" delete pod "$POD_NAME" --wait=false >/dev/null 2>&1 || true
     if [ "$PHASE" != "Succeeded" ] || [ "${EXIT:-1}" != "0" ]; then
       echo "ERROR: drill-psql pod $POD_NAME phase=$PHASE exitCode=$EXIT" >&2
       return "${EXIT:-1}"
@@ -189,34 +189,34 @@ if [[ -n "${DRILL_PG_HOST:-}" ]]; then
 else
   # In-cluster fallback (rare for drill — typically only used in tests)
   log "warn: DRILL_PG_HOST not set — falling back to in-cluster postgresql exec"
-  PG_POD=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPRUNTIME" \
+  PG_POD=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOP_RUNTIME" \
     get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
   if [[ -z "$PG_POD" ]]; then
     log "ERROR: postgresql pod not found AND DRILL_PG_HOST not set"
     exit 1
   fi
-  PG_PASS_INCLUSTER=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPRUNTIME" \
-    get secret loopruntime-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)
+  PG_PASS_INCLUSTER=$(kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOP_RUNTIME" \
+    get secret loop-runtime-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)
   if [[ -z "$PG_PASS_INCLUSTER" ]]; then
-    # T1.3: fail-fast — drill MUST have loopruntime-db-credentials reconciled
+    # T1.3: fail-fast — drill MUST have loop-runtime-db-credentials reconciled
     # before JWT minting. If empty, helmfile bootstrap incomplete.
-    echo "ERROR: loopruntime-db-credentials.password missing in drill mgmt cluster (ns=$NS_LOOPRUNTIME)" >&2
+    echo "ERROR: loop-runtime-db-credentials.password missing in drill mgmt cluster (ns=$NS_LOOP_RUNTIME)" >&2
     echo "       Run drill-helmfile-bootstrap.sh first OR re-check Pulumi outputs." >&2
     exit 1
   fi
   run_psql() {
-    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOPRUNTIME" exec "$PG_POD" -c postgresql -- \
-      env PGPASSWORD="$PG_PASS_INCLUSTER" psql -U loopruntime -d loopruntime -v ON_ERROR_STOP=1 "$@"
+    kubectl --kubeconfig "$DRILL_KUBECONFIG" -n "$NS_LOOP_RUNTIME" exec "$PG_POD" -c postgresql -- \
+      env PGPASSWORD="$PG_PASS_INCLUSTER" psql -U loop_runtime -d loop_runtime -v ON_ERROR_STOP=1 "$@"
   }
 fi
 
 log "Seeding user=$SEED_USER_ID tenant=$SEED_TENANT_ID role=$SEED_ROLE"
 # The bootstrap-user rule (user + account + tenant + exactly ONE membership)
-# lives once in `loopruntime-ops sql bootstrap-user`, shared with the local and E2E
+# lives once in `loop-runtime-ops sql bootstrap-user`, shared with the local and E2E
 # seeds. This copy used to insert the tenant without account_id, which fails on
 # every database migrated past 000044. Rendered first, so a refused field stops
 # here instead of reaching the psql pod.
-SEED_SQL="$(loopruntime_ops sql bootstrap-user \
+SEED_SQL="$(loop_runtime_ops sql bootstrap-user \
   --user-id "$SEED_USER_ID" --email "$SEED_EMAIL" --display-name "$SEED_DISPLAY_NAME" \
   --username "$SEED_USERNAME" --account-id "$SEED_ACCOUNT_ID" \
   --tenant-id "$SEED_TENANT_ID" --role "$SEED_ROLE")"
@@ -253,10 +253,10 @@ log "Minting JWT via Hydra client_credentials grant (via shared lib)..."
 HYDRA_NAMESPACE="$NS_HYDRA"
 HYDRA_PORT_LOCAL="$HYDRA_PORT_LOCAL"
 KUBECTL_CMD="kubectl --kubeconfig $DRILL_KUBECONFIG"
-CLIENT_ID="loopruntime-bootstrap"
+CLIENT_ID="loop-runtime-bootstrap"
 CLIENT_SECRET="$CSEC"
 SCOPE="openid offline_access"
-AUDIENCE="loopruntime-engine"
+AUDIENCE="loop-runtime-engine"
 MIN_JWT_TTL="$MIN_JWT_TTL_SECONDS"
 
 if ! TOKEN=$(mint_jwt); then

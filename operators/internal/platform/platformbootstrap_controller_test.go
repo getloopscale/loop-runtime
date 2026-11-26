@@ -32,7 +32,7 @@ func newPlatformBootstrap(name, namespace, giteaURL, argoCDURL, apiURL string) *
 				AdminSecretRef: loopruntimev1.SecretKeyRef{
 					Name: "gitea-admin",
 				},
-				Organizations: []string{"loopruntime"},
+				Organizations: []string{"loop-runtime"},
 				TokenName:     "platform-bootstrap-token",
 				InternalURL:   giteaURL,
 			},
@@ -104,14 +104,14 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 					w.WriteHeader(http.StatusCreated)
 					_, _ = fmt.Fprint(w, `{"id":1,"name":"platform-bootstrap-token","sha1":"test-token-value-12345"}`)
 
-				case r.URL.Path == "/api/v1/orgs/loopruntime" && r.Method == http.MethodGet:
+				case r.URL.Path == "/api/v1/orgs/loop-runtime" && r.Method == http.MethodGet:
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = fmt.Fprint(w, `{"id":1,"name":"loopruntime"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"name":"loop-runtime"}`)
 
 				case r.URL.Path == "/api/v1/orgs" && r.Method == http.MethodPost:
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusCreated)
-					_, _ = fmt.Fprint(w, `{"id":1,"name":"loopruntime"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"name":"loop-runtime"}`)
 
 				default:
 					http.Error(w, fmt.Sprintf("unexpected gitea request: %s %s", r.Method, r.URL.Path), http.StatusNotFound)
@@ -129,7 +129,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = fmt.Fprint(w, `{"Version":"v2.10.0"}`)
 
-				case r.URL.Path == "/api/v1/account/loopruntime-api/token" && r.Method == http.MethodPost:
+				case r.URL.Path == "/api/v1/account/loop-runtime-api/token" && r.Method == http.MethodPost:
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = fmt.Fprint(w, `{"token":"argocd-api-key-token-67890"}`)
 
@@ -187,7 +187,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 			// Create platform-tokens secret namespace-local for token storage
 			platformTokensSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "loopruntime-platform-tokens",
+					Name:      "loop-runtime-platform-tokens",
 					Namespace: pbNamespace,
 				},
 				StringData: map[string]string{},
@@ -246,7 +246,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 		It("should store tokens in the platform-tokens Secret", func() {
 			var secret corev1.Secret
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name:      "loopruntime-platform-tokens",
+				Name:      "loop-runtime-platform-tokens",
 				Namespace: pbNamespace,
 			}, &secret)).To(Succeed())
 			Expect(secret.Data).To(HaveKey("GITEA_TOKEN"))
@@ -280,7 +280,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 			// Platform tokens secret for this test
 			platformTokensSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "loopruntime-platform-tokens-fail",
+					Name:      "loop-runtime-platform-tokens-fail",
 					Namespace: pbNamespace,
 				},
 				StringData: map[string]string{},
@@ -353,9 +353,9 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 				case r.URL.Path == "/api/v1/users/gitea_admin/tokens" && r.Method == http.MethodGet:
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = fmt.Fprint(w, `[{"id":1,"name":"platform-bootstrap-token"}]`)
-				case r.URL.Path == "/api/v1/orgs/loopruntime":
+				case r.URL.Path == "/api/v1/orgs/loop-runtime":
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = fmt.Fprint(w, `{"id":1,"name":"loopruntime"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"name":"loop-runtime"}`)
 				default:
 					w.WriteHeader(http.StatusOK)
 				}
@@ -388,7 +388,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 
 			platformTokensSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "loopruntime-platform-tokens-terminal",
+					Name:      "loop-runtime-platform-tokens-terminal",
 					Namespace: pbNamespace,
 				},
 				StringData: map[string]string{

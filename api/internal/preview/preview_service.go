@@ -279,7 +279,7 @@ func (s *PreviewService) ensureCR(ctx context.Context, rec *store.PreviewRecord)
 // submitPreviewBuild triggers the preview's build and links it to the row.
 // Best-effort, but logged loudly: a missing build leaves the preview stuck in
 // 'creating'.
-func (s *PreviewService) submitPreviewBuild(ctx context.Context, rec *store.PreviewRecord, loopruntimeYamlApps map[string]map[string]interface{}) {
+func (s *PreviewService) submitPreviewBuild(ctx context.Context, rec *store.PreviewRecord, loopRuntimeYamlApps map[string]map[string]interface{}) {
 	if s.deps.Builds == nil {
 		return
 	}
@@ -289,7 +289,7 @@ func (s *PreviewService) submitPreviewBuild(ctx context.Context, rec *store.Prev
 		Environment: previewEnvName(rec.PRNumber),
 		CommitSHA:   rec.CommitSHA,
 		CreatedBy:   "preview-service",
-		Apps:        s.resolvePreviewApps(ctx, rec, loopruntimeYamlApps),
+		Apps:        s.resolvePreviewApps(ctx, rec, loopRuntimeYamlApps),
 	})
 	if err != nil {
 		s.deps.Logger.Error("preview service: build submission failed",
@@ -312,9 +312,9 @@ func (s *PreviewService) submitPreviewBuild(ctx context.Context, rec *store.Prev
 // LanguageStrategy). Otherwise the apps of the latest SUCCEEDED build are
 // reused; those lack framework/path/build. With neither, the build is
 // submitted without apps and the lookup outcome is logged.
-func (s *PreviewService) resolvePreviewApps(ctx context.Context, rec *store.PreviewRecord, loopruntimeYamlApps map[string]map[string]interface{}) []deploycontracts.AppSpec {
-	if len(loopruntimeYamlApps) > 0 {
-		apps := appsFromLoopRuntimeYaml(loopruntimeYamlApps)
+func (s *PreviewService) resolvePreviewApps(ctx context.Context, rec *store.PreviewRecord, loopRuntimeYamlApps map[string]map[string]interface{}) []deploycontracts.AppSpec {
+	if len(loopRuntimeYamlApps) > 0 {
+		apps := appsFromLoopRuntimeYaml(loopRuntimeYamlApps)
 		s.deps.Logger.Info("preview service: apps inherited from PR loopzero.yaml",
 			"preview", rec.ID, "apps", len(apps))
 		return apps

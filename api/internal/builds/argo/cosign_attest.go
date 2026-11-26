@@ -40,7 +40,7 @@ type CosignAttestParams struct {
 	// --allow-http-registry --allow-insecure-registry flags for local
 	// k3d HTTP-only registries. Discovered LIVE 2026-05-27 (build v5):
 	// without these flags, cosign attest fails "http: server gave HTTP
-	// response to HTTPS client" against k3d-loopruntime-registry:5000.
+	// response to HTTPS client" against k3d-loop-runtime-registry:5000.
 	InsecureRegistry bool
 	// FulcioURL + RekorURL used when Keyless=true. Empty → cosign defaults
 	// (Sigstore public infra). Mirror CosignFulcioURL / CosignRekorURL InfraParams.

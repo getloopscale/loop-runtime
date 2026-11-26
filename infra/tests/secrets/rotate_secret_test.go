@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// rotate-secret.sh (T8.1 EC-22 of plan 2026-06-02-loopruntime-api-vault-integration)
+// rotate-secret.sh (T8.1 EC-22 of plan 2026-06-02-loop-runtime-api-vault-integration)
 // writes a new value to OpenBao, refreshes every ExternalSecret that reads the path,
 // and restarts every Deployment that consumes one. A path two binaries read must
 // restart both, a typo must stop before anything is written, and a failed write
@@ -109,14 +109,14 @@ func TestRotateSecretDryRunNamesFourStepsAndCallsNothing(t *testing.T) {
 // restarting one of the two leaves the other on a revoked token.
 func TestRotateSecretRestartsBothBinariesThatReadTheGiteaToken(t *testing.T) {
 	r := runRotate(t, nil, "--env", "vault-local", "--path", "api/secrets/gitea/token", "--dry-run")
-	expectExit(t, r, 0, "binaries to restart: loopruntime-api,loopruntime-tenant-operator")
+	expectExit(t, r, 0, "binaries to restart: loop-runtime-api,loop-runtime-tenant-operator")
 }
 
 func TestRotateSecretRestartsOnlyTheOperatorForTheDigitalOceanToken(t *testing.T) {
 	r := runRotate(t, nil, "--env", "vault-local", "--path", "operators/secrets/digitalocean/token", "--dry-run")
 	expectExit(t, r, 0)
-	if !lineEndsWith(r.stderr, "binaries to restart: loopruntime-tenant-operator") {
-		t.Errorf("want exactly loopruntime-tenant-operator restarted\n%s", r)
+	if !lineEndsWith(r.stderr, "binaries to restart: loop-runtime-tenant-operator") {
+		t.Errorf("want exactly loop-runtime-tenant-operator restarted\n%s", r)
 	}
 }
 

@@ -19,7 +19,7 @@
 //      prove linear scalability.
 //
 //   3. custom metrics — references to the Rate/Trend metrics defined
-//      in lib/loopruntime-api.js. Scripts can opt-in per test.
+//      in lib/loop-runtime-api.js. Scripts can opt-in per test.
 
 export const base = {
   // HTTP layer — measured by k6 automatically.
@@ -41,36 +41,36 @@ export const base = {
   'dropped_iterations': ['count<100'],
 
   // Custom LoopRuntime metrics.
-  'loopruntime_build_submit_success':   ['rate>0.99'],  // ≥ 99% submissions accepted
-  'loopruntime_project_created':        ['rate>0.99'],  // ≥ 99% project creations succeed
-  'loopruntime_build_succeeded':        ['rate>0.99'],  // ≥ 99% builds reach SUCCEEDED
-  'loopruntime_app_verified':           ['rate>0.99'],  // ≥ 99% apps verified live (HTTP 200)
-  'loopruntime_upload_duration_ms':     ['p(95)<10000'], // upload < 10s
-  'loopruntime_build_submit_duration_ms': ['p(95)<2000'], // build submit < 2s
-  'loopruntime_deploy_duration_ms':     ['p(95)<600000'], // deploy < 600s (CLAUDE.md budget)
-  'loopruntime_app_verify_duration_ms': ['p(95)<120000'], // app live within 120s of build SUCCEEDED
+  'loop_runtime_build_submit_success':   ['rate>0.99'],  // ≥ 99% submissions accepted
+  'loop_runtime_project_created':        ['rate>0.99'],  // ≥ 99% project creations succeed
+  'loop_runtime_build_succeeded':        ['rate>0.99'],  // ≥ 99% builds reach SUCCEEDED
+  'loop_runtime_app_verified':           ['rate>0.99'],  // ≥ 99% apps verified live (HTTP 200)
+  'loop_runtime_upload_duration_ms':     ['p(95)<10000'], // upload < 10s
+  'loop_runtime_build_submit_duration_ms': ['p(95)<2000'], // build submit < 2s
+  'loop_runtime_deploy_duration_ms':     ['p(95)<600000'], // deploy < 600s (CLAUDE.md budget)
+  'loop_runtime_app_verify_duration_ms': ['p(95)<120000'], // app live within 120s of build SUCCEEDED
 };
 
 // Per-level tightenings. Merge into base to get the final thresholds.
 export const perLevel = {
   l1: {
-    'loopruntime_deploy_duration_ms': ['p(99)<600000'], // L1: p99 < 10min
+    'loop_runtime_deploy_duration_ms': ['p(99)<600000'], // L1: p99 < 10min
   },
   l2: {
-    'loopruntime_deploy_duration_ms': ['p(99)<600000'], // L2: p99 < 10min
-    'loopruntime_build_succeeded':    ['rate>0.99'],    // >= 99%
+    'loop_runtime_deploy_duration_ms': ['p(99)<600000'], // L2: p99 < 10min
+    'loop_runtime_build_succeeded':    ['rate>0.99'],    // >= 99%
   },
   l3: {
-    'loopruntime_deploy_duration_ms': ['p(99)<900000'], // L3: p99 < 15min (more contention)
-    'loopruntime_build_succeeded':    ['rate>0.995'],   // >= 99.5% per roadmap 08
+    'loop_runtime_deploy_duration_ms': ['p(99)<900000'], // L3: p99 < 15min (more contention)
+    'loop_runtime_build_succeeded':    ['rate>0.995'],   // >= 99.5% per roadmap 08
   },
   l4: {
-    'loopruntime_deploy_duration_ms': ['p(99)<1200000'], // L4: p99 < 20min
-    'loopruntime_build_succeeded':    ['rate>0.99'],     // >= 99% per roadmap 08
+    'loop_runtime_deploy_duration_ms': ['p(99)<1200000'], // L4: p99 < 20min
+    'loop_runtime_build_succeeded':    ['rate>0.99'],     // >= 99% per roadmap 08
   },
   l5: {
-    'loopruntime_deploy_duration_ms': ['p(99)<1500000'], // L5: p99 < 25min
-    'loopruntime_build_succeeded':    ['rate>0.99'],     // >= 99% per roadmap 08
+    'loop_runtime_deploy_duration_ms': ['p(99)<1500000'], // L5: p99 < 25min
+    'loop_runtime_build_succeeded':    ['rate>0.99'],     // >= 99% per roadmap 08
   },
 };
 

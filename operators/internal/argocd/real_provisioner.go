@@ -194,7 +194,7 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 					// ArgoCD Notifications: subscribe to sync-completed trigger.
 					// When Synced + Healthy, ArgoCD calls POST /internal/argocd-callback
 					// on the API to activate the release (push-based, replaces polling).
-					"notifications.argoproj.io/subscribe.on-sync-healthy.loopruntime-api": "",
+					"notifications.argoproj.io/subscribe.on-sync-healthy.loop-runtime-api": "",
 					// MEET-2026-04-22-058 (B12): skip-reconcile REMOVED. The annotation
 					// coupled two writers (operator sets, API removes via broken PATCH)
 					// and required Casbin RBAC scope that doesn't exist. Amplification
@@ -332,7 +332,7 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 // (`kubectl get crd applications.argoproj.io -o jsonpath='{.spec.versions[*].subresources}'`
 // returns `{}`), so `.status` is an ordinary field and a whole-object Update replaces it.
 // Dropping it made sync/health flap to empty every few seconds, and every reader — including
-// `loopruntime platform status` — saw false drift (issue #271). If ArgoCD upstream ever enables the
+// `loop-runtime platform status` — saw false drift (issue #271). If ArgoCD upstream ever enables the
 // subresource, this clause becomes inert and can go.
 //
 // The .status copy runs BEFORE the metadata guard on purpose: preserving status must not

@@ -14,12 +14,12 @@ import (
 
 // cwtDir returns the path to the ClusterWorkflowTemplate YAML files.
 // F27 (M23 audit 2026-07-10): CWTs migrated from `infra/helm/argo-workflows/
-// templates/` to `charts/loopruntime-build-cwts/templates/` when Argo Workflows moved
+// templates/` to `charts/loop-runtime-build-cwts/templates/` when Argo Workflows moved
 // to the published-chart tier. Fall back to legacy path only if new path absent
 // (both paths tolerated).
 func cwtDir() string {
-	// New canonical location (charts/loopruntime-build-cwts/templates/)
-	newPath := filepath.Join(helmDir(), "..", "..", "charts", "loopruntime-build-cwts", "templates")
+	// New canonical location (charts/loop-runtime-build-cwts/templates/)
+	newPath := filepath.Join(helmDir(), "..", "..", "charts", "loop-runtime-build-cwts", "templates")
 	if info, err := os.Stat(newPath); err == nil && info.IsDir() {
 		if matches, _ := filepath.Glob(filepath.Join(newPath, "cwt-*.yaml")); len(matches) > 0 {
 			return newPath
@@ -136,8 +136,8 @@ func TestCWTs_AllHaveLoopRuntimePrefix(t *testing.T) {
 			continue
 		}
 		cwtName, _ := metadata["name"].(string)
-		if !strings.HasPrefix(cwtName, "loopruntime-") {
-			t.Errorf("%s: metadata.name = %q, want loopruntime-* prefix", name, cwtName)
+		if !strings.HasPrefix(cwtName, "loop-runtime-") {
+			t.Errorf("%s: metadata.name = %q, want loop-runtime-* prefix", name, cwtName)
 		}
 	}
 }

@@ -110,8 +110,8 @@ func TestHandlePush_OverTheBuildLimitBuildsNothingAndSaysSoOnTheCommit(t *testin
 		t.Fatalf("commit statuses = %+v, want exactly one", statuses)
 	}
 	got := statuses[0]
-	if got.State != "failure" || got.Context != "loopruntime/deploy" {
-		t.Errorf("status = %+v, want failure on loopruntime/deploy", got)
+	if got.State != "failure" || got.Context != "loop-runtime/deploy" {
+		t.Errorf("status = %+v, want failure on loop-runtime/deploy", got)
 	}
 	if got.Description != refusal {
 		t.Errorf("description = %q, want the plan refusal", got.Description)

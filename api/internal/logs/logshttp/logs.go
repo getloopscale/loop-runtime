@@ -191,7 +191,7 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Plan J-17 Layer 3 (2026-06-06): operator-only debug mode bypasses
 	// the user-facing filter. `?mode=debug` returns every container line
-	// including raw main-container stdout. Gated by the same LOOPRUNTIME_ADMIN_API
+	// including raw main-container stdout. Gated by the same LOOP_RUNTIME_ADMIN_API
 	// + X-Service-Auth pattern used by admin endpoints — a dashboard user
 	// JWT cannot enable it.
 	if r.URL.Query().Get("mode") == "debug" {

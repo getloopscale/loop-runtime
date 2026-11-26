@@ -5,7 +5,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: preview-operator
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -24,7 +24,7 @@ rules:
     verbs: ["update"]
 
   # --- Cell routing: resolve the runtime cluster of a preview's cell ---
-  # Mirrors charts/loopruntime-preview-operator/templates/clusterrole.yaml. The
+  # Mirrors charts/loop-runtime-preview-operator/templates/clusterrole.yaml. The
   # kubeconfig Secret itself is read through the Role below, not here.
   - apiGroups: ["runtime.getloopscale.com"]
     resources: ["tenants", "clustercredentials"]
@@ -66,16 +66,16 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: preview-operator
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 ---
-# Secret read in loopruntime-system only: cell kubeconfigs. The operator's Secret
+# Secret read in loop-runtime-system only: cell kubeconfigs. The operator's Secret
 # cache watches this namespace alone. Mirrors
-# charts/loopruntime-preview-operator/templates/role-secret-access.yaml.
+# charts/loop-runtime-preview-operator/templates/role-secret-access.yaml.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: preview-operator-secrets-loopruntime-system
-  namespace: loopruntime-system
+  name: preview-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -84,36 +84,36 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: preview-operator-secrets-loopruntime-system
-  namespace: loopruntime-system
+  name: preview-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: preview-operator-secrets-loopruntime-system
+  name: preview-operator-secrets-loop-runtime-system
 subjects:
   - kind: ServiceAccount
     name: preview-operator
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: preview-operator
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   labels:
     app: preview-operator
-    app.kubernetes.io/component: loopruntime-operator
+    app.kubernetes.io/component: loop-runtime-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: preview-operator
-      app.kubernetes.io/component: loopruntime-operator
+      app.kubernetes.io/component: loop-runtime-operator
   template:
     metadata:
       labels:
         app: preview-operator
-        app.kubernetes.io/component: loopruntime-operator
+        app.kubernetes.io/component: loop-runtime-operator
     spec:
       serviceAccountName: preview-operator
       securityContext:
@@ -122,16 +122,16 @@ spec:
         fsGroup: 1000
       containers:
         - name: operator
-          image: loopruntime-preview-operator
+          image: loop-runtime-preview-operator
           args:
             - "--leader-elect=false"
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8080"
           env:
             - name: CELL_0_KUBECONFIG
-              value: "/etc/loopruntime/runtime-kubeconfig"
+              value: "/etc/loop-runtime/runtime-kubeconfig"
             - name: BASE_DOMAIN
-              value: "loopruntime.local"
+              value: "loop-runtime.local"
           ports:
             - containerPort: 8081
               name: health
@@ -162,7 +162,7 @@ spec:
             - name: tmp
               mountPath: /tmp
             - name: runtime-kubeconfig
-              mountPath: /etc/loopruntime/runtime-kubeconfig
+              mountPath: /etc/loop-runtime/runtime-kubeconfig
               subPath: runtime-kubeconfig
               readOnly: true
           securityContext:
@@ -179,7 +179,7 @@ spec:
           emptyDir: {}
         - name: runtime-kubeconfig
           configMap:
-            name: loopruntime-cell-0-kubeconfig
+            name: loop-runtime-cell-0-kubeconfig
             items:
               - key: config
                 path: runtime-kubeconfig

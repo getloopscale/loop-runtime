@@ -77,7 +77,7 @@ func TestReleaseInspector_Inspect_HappyPath(t *testing.T) {
 	digest := "sha256:abc"
 	sig := "registry.example.com/x@" + digest
 	signedAt := time.Now().UTC()
-	url := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=42"
+	url := "https://rekor.loop-runtime.test/api/v1/log/entries?logIndex=42"
 	rel.ImageDigest = &digest
 	rel.ImageSignature = &sig
 	rel.ImageSignedAt = &signedAt
@@ -88,7 +88,7 @@ func TestReleaseInspector_Inspect_HappyPath(t *testing.T) {
 		{Action: "release.attestation_url_set", Actor: "system:release-attestation", ResourceType: "release", ResourceID: "rel-001", CreatedAt: time.Now().UTC()},
 		{Action: "release.attestation_url_set", Actor: "system:release-attestation", ResourceType: "release", ResourceID: "rel-OTHER", CreatedAt: time.Now().UTC()},
 	}}
-	bs := &fakeBuildStore{wfID: "loopruntime-build-001-xyz"}
+	bs := &fakeBuildStore{wfID: "loop-runtime-build-001-xyz"}
 
 	insp := NewReleaseInspector(store, audit, bs)
 	got, err := insp.Inspect(context.Background(), "rel-001")
@@ -98,8 +98,8 @@ func TestReleaseInspector_Inspect_HappyPath(t *testing.T) {
 	if got.ReleaseID != "rel-001" {
 		t.Errorf("release_id = %q, want rel-001", got.ReleaseID)
 	}
-	if got.WorkflowID == nil || *got.WorkflowID != "loopruntime-build-001-xyz" {
-		t.Errorf("workflow_id = %v, want loopruntime-build-001-xyz", got.WorkflowID)
+	if got.WorkflowID == nil || *got.WorkflowID != "loop-runtime-build-001-xyz" {
+		t.Errorf("workflow_id = %v, want loop-runtime-build-001-xyz", got.WorkflowID)
 	}
 	if got.SigningPath != "keyless" {
 		t.Errorf("signing_path = %q, want keyless", got.SigningPath)

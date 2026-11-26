@@ -60,10 +60,10 @@ const releaseArtifactsWorkflow = ".github/workflows/release-artifacts.yml"
 // image each. Consolidating back to a single build — the refactor the original test
 // was written to catch — shows up here as a missing key.
 var splitOperatorDockerfiles = map[string]string{
-	"loopruntime-tenant-operator":   "operators/Dockerfile.tenant-operator",
-	"loopruntime-app-operator":      "operators/Dockerfile.app-operator",
-	"loopruntime-preview-operator":  "operators/Dockerfile.preview-operator",
-	"loopruntime-platform-operator": "operators/Dockerfile.platform-operator",
+	"loop-runtime-tenant-operator":   "operators/Dockerfile.tenant-operator",
+	"loop-runtime-app-operator":      "operators/Dockerfile.app-operator",
+	"loop-runtime-preview-operator":  "operators/Dockerfile.preview-operator",
+	"loop-runtime-platform-operator": "operators/Dockerfile.platform-operator",
 }
 
 // nonImageChangeFilters are paths-filter keys that legitimately have no matrix

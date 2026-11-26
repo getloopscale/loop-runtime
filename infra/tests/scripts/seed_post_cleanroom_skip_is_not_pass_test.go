@@ -36,11 +36,11 @@ printf '%s|PASS=%d FAIL=%d SKIP=%d\n' "${RESULTS[0]}" "$PASS" "$FAIL" "$SKIP"`
 }
 
 // A seed that skips exits 0 because skipping is not an error — but the chain counted
-// that exit as PASS. On the 2026-09-29 cleanroom, seed admin-loopruntime-dev printed
+// that exit as PASS. On the 2026-09-29 cleanroom, seed admin-loop-runtime-dev printed
 // "SKIP — KRATOS_ADMIN_URL not set", the summary said PASS, and the two steps that need
 // the admin session failed with no hint that the cause was upstream (#453).
 func TestASkippedSeedIsCountedAsSkippedNotPassed(t *testing.T) {
-	got := runStepOutcome(t, "seed admin-loopruntime-dev: SKIP — KRATOS_ADMIN_URL not set", 0)
+	got := runStepOutcome(t, "seed admin-loop-runtime-dev: SKIP — KRATOS_ADMIN_URL not set", 0)
 	if !strings.HasPrefix(got, "SKIP: 9-stub") || !strings.Contains(got, "PASS=0 FAIL=0 SKIP=1") {
 		t.Errorf("a skipping seed was not recorded as SKIP: %q", got)
 	}

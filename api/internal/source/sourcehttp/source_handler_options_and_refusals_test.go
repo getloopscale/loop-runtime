@@ -20,8 +20,8 @@ import (
 
 func TestNewSourceHandler_DefaultBucket(t *testing.T) {
 	h := NewSourceHandler(nil)
-	if h.sourceBucket != "loopruntime-builds" {
-		t.Errorf("expected default bucket 'loopruntime-builds', got %q", h.sourceBucket)
+	if h.sourceBucket != "loop-runtime-builds" {
+		t.Errorf("expected default bucket 'loop-runtime-builds', got %q", h.sourceBucket)
 	}
 	if h.objStore != nil {
 		t.Error("expected nil objStore by default")
@@ -37,7 +37,7 @@ func TestWithSourceBucket_OverridesDefault(t *testing.T) {
 
 func TestWithSourceBucket_EmptyKeepsDefault(t *testing.T) {
 	h := NewSourceHandler(nil, WithSourceBucket(""))
-	if h.sourceBucket != "loopruntime-builds" {
+	if h.sourceBucket != "loop-runtime-builds" {
 		t.Errorf("expected default bucket when empty string, got %q", h.sourceBucket)
 	}
 }

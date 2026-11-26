@@ -25,7 +25,7 @@ var apiStatusByCode = map[string]int{
 	"INVALID_CALLBACK":      http.StatusBadRequest, // builds — build completion callback
 	"MULTIPART_FIELD_ORDER": http.StatusBadRequest, // source/sourcehttp — services_json must precede bundle
 	// Validation at the input boundary is a 4xx with a client-classified code,
-	// never a 500 (Red Team loopruntime-cloud#103).
+	// never a 500 (Red Team loop-console#103).
 	"INVALID_ARGUMENT":        http.StatusBadRequest, // db/store/scaling_types.go
 	"INVALID_DOMAIN":          http.StatusBadRequest, // domains/domainshttp — domain format
 	"INVALID_REPLICAS":        http.StatusBadRequest, // scaling/scalinghttp — replicas <= 0

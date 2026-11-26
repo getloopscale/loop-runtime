@@ -55,7 +55,7 @@ const (
 // leader, registered on bgWg. Observe-only + non-fatal (see file header).
 func startMeteringLoop(shutdownCtx context.Context, bgWg *sync.WaitGroup, cfg config.Config, lease leader.Lease, logger *slog.Logger) {
 	// Dedicated bounded worker pool (ADR-10) — physically separate from the API
-	// pool, connected as loopruntime_worker so the SET LOCAL app.tenant_id='' RLS bypass
+	// pool, connected as loop_runtime_worker so the SET LOCAL app.tenant_id='' RLS bypass
 	// in the money-writer is load-bearing, not incidental.
 	poolCfg, err := pgxpool.ParseConfig(cfg.EffectiveWorkerDatabaseURL())
 	if err != nil {
@@ -123,7 +123,7 @@ func startMeteringLoop(shutdownCtx context.Context, bgWg *sync.WaitGroup, cfg co
 
 // tenantCRNamespace is the canonical namespace for Tenant + ClusterCredential CRs
 // (ADR-0018 — mirrors k8s.tenantNamespace, which is unexported).
-const tenantCRNamespace = "loopruntime-system"
+const tenantCRNamespace = "loop-runtime-system"
 
 // meteringMgmtClient builds a controller-runtime client for the mgmt cluster whose
 // scheme includes the runtime.getloopscale.com CRD types (Tenant, ClusterCredential) AND corev1

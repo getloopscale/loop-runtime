@@ -96,7 +96,7 @@ func (e EnvRef) Equal(other EnvRef) bool {
 }
 
 // Namespace returns the canonical K8s workload namespace per ADR D2 +
-// pkg/naming.Namespace formula: "loopruntime-{TenantID}-{Project}-{EnvName}".
+// pkg/naming.Namespace formula: "loop-runtime-{TenantID}-{Project}-{EnvName}".
 //
 // T1.3.b of plan 2026-06-11-code-review-remediation v1.2 — adds an
 // EnvRef-keyed wrapper around the existing (tenant, project, env)
@@ -119,7 +119,7 @@ func (e EnvRef) Equal(other EnvRef) bool {
 // from pkg/domain importing it.
 //
 // T1.3.f follow-through: an earlier draft built the namespace string
-// inline (`"loopruntime-" + e.TenantID + ...`) to avoid an import. That draft
+// inline (`"loop-runtime-" + e.TenantID + ...`) to avoid an import. That draft
 // was caught by TestTenantCRManager_AddEnvironment_RejectsCombinedNamespaceOver63Chars
 // which legitimately expected the 63-char ceiling guard to fire BEFORE
 // the apiserver round-trip. Delegating to naming.Namespace restores the

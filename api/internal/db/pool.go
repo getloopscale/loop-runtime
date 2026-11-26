@@ -56,7 +56,7 @@ func NewPool(ctx context.Context, databaseURL string, poolCfg PoolConfig) (*PgxA
 	// Sprint 6: Distributed tracing for database queries.
 	// otelpgx hooks into pgx to create spans for every query, batch, and prepare.
 	// Spans include db.statement, db.operation, and timing. Zero-overhead when
-	// the global TracerProvider is a no-op (LOOPRUNTIME_TRACING_ENABLED=false).
+	// the global TracerProvider is a no-op (LOOP_RUNTIME_TRACING_ENABLED=false).
 	cfg.ConnConfig.Tracer = otelpgx.NewTracer(
 		otelpgx.WithTrimSQLInSpanName(),
 	)

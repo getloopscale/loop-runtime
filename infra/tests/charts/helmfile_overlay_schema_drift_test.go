@@ -6,14 +6,14 @@
 // per-operator chart schemas (additionalProperties:false at /config) and
 // renamed config.insecureSkipTls → config.operatorInsecureSkipTls, but the
 // dev-public helmfile overlay files were not updated in the same commit.
-// `helmfile sync` then FAILed hard against `loopruntime-platform-operator` AND
-// `loopruntime-tenant-operator` with messages like:
+// `helmfile sync` then FAILed hard against `loop-runtime-platform-operator` AND
+// `loop-runtime-tenant-operator` with messages like:
 //
 //	values don't meet the specifications of the schema(s):
-//	loopruntime-platform-operator:
+//	loop-runtime-platform-operator:
 //	- at '/config': additional properties 'baseDomain' not allowed
 //
-//	loopruntime-tenant-operator:
+//	loop-runtime-tenant-operator:
 //	- at '/config': additional properties 'insecureSkipTls' not allowed
 //
 // Same canonical stale-helper-post-architecture-refactor class as the

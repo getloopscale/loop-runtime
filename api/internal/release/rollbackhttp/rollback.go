@@ -217,9 +217,9 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 		BaseDomain:    h.baseDomain,
 	})
 	if err != nil {
-		var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-		if errors.As(err, &loopruntimeErr) {
-			httpio.WriteLoopRuntimeError(w, loopruntimeErr)
+		var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+		if errors.As(err, &loopRuntimeErr) {
+			httpio.WriteLoopRuntimeError(w, loopRuntimeErr)
 			return
 		}
 		// Mirror mapBuildError at builds.go:402 — log unexpected errors for diagnosis.

@@ -42,7 +42,7 @@ func newTenant(name string, plan loopruntimev1.PlanTier, envs []string) *looprun
 			Plan:         plan,
 			Environments: environments,
 			GitOps: loopruntimev1.GitOpsSpec{
-				RepoName: "loopruntime-tenant-" + name,
+				RepoName: "loop-runtime-tenant-" + name,
 				Branch:   "main",
 			},
 			Preview: loopruntimev1.PreviewSpec{
@@ -192,22 +192,22 @@ func createTenantAndWaitActive(tenantName string, plan loopruntimev1.PlanTier, e
 	}, timeout, interval).Should(Succeed())
 }
 
-// expectDeployerRoleBinding waits for the canonical "loopruntime-deployer"
+// expectDeployerRoleBinding waits for the canonical "loop-runtime-deployer"
 // RoleBinding in the given namespace and asserts its RoleRef + Subjects
-// shape: binds ServiceAccount "loopruntime-deployer" to Role "loopruntime-deployer".
+// shape: binds ServiceAccount "loop-runtime-deployer" to Role "loop-runtime-deployer".
 // Phase 3 helper: collapses 2 inline 13-line copies across
 // tenant_controller_test + tenant_isolation_test.
 func expectDeployerRoleBinding(nsName string) {
 	Eventually(func(g Gomega) {
 		var rb rbacv1.RoleBinding
 		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-			Name: "loopruntime-deployer", Namespace: nsName,
+			Name: "loop-runtime-deployer", Namespace: nsName,
 		}, &rb)).To(Succeed())
-		g.Expect(rb.RoleRef.Name).To(Equal("loopruntime-deployer"))
+		g.Expect(rb.RoleRef.Name).To(Equal("loop-runtime-deployer"))
 		g.Expect(rb.RoleRef.Kind).To(Equal("Role"))
 		g.Expect(rb.Subjects).To(HaveLen(1))
 		g.Expect(rb.Subjects[0].Kind).To(Equal("ServiceAccount"))
-		g.Expect(rb.Subjects[0].Name).To(Equal("loopruntime-deployer"))
+		g.Expect(rb.Subjects[0].Name).To(Equal("loop-runtime-deployer"))
 	}, timeout, interval).Should(Succeed())
 }
 
@@ -322,7 +322,7 @@ func expectNamespaceLabel(nsName, label, value string) {
 	}, timeout, interval).Should(Succeed())
 }
 
-// expectDeployerRoleHasResource waits for the canonical "loopruntime-deployer"
+// expectDeployerRoleHasResource waits for the canonical "loop-runtime-deployer"
 // Role in the given namespace and asserts that one of its Rules grants
 // access to a specific resource (e.g., "ingresses", "networkpolicies").
 // Phase 3 helper: collapses 3 inline near-clones in tenant_controller_test
@@ -332,7 +332,7 @@ func expectDeployerRoleHasResource(nsName, resource string) {
 	Eventually(func(g Gomega) {
 		var role rbacv1.Role
 		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-			Name: "loopruntime-deployer", Namespace: nsName,
+			Name: "loop-runtime-deployer", Namespace: nsName,
 		}, &role)).To(Succeed())
 		hasResource := false
 		for _, rule := range role.Rules {
@@ -432,7 +432,7 @@ func deleteTenantNamespaces(tenantName string, environments ...string) {
 	}
 	nsNames := make([]string, 0, len(environments)+1)
 	for _, env := range environments {
-		nsNames = append(nsNames, "loopruntime-"+tenantName+"-default-project-"+env)
+		nsNames = append(nsNames, "loop-runtime-"+tenantName+"-default-project-"+env)
 	}
 	nsNames = append(nsNames, "build-"+tenantName)
 	for _, nsName := range nsNames {
@@ -495,7 +495,7 @@ var _ = Describe("TenantController", Ordered, func() {
 					Plan:         loopruntimev1.PlanStarter,
 					Environments: []loopruntimev1.TenantEnvironmentEntry{},
 					GitOps: loopruntimev1.GitOpsSpec{
-						RepoName: "loopruntime-tenant-empty",
+						RepoName: "loop-runtime-tenant-empty",
 						Branch:   "main",
 					},
 					Preview: loopruntimev1.PreviewSpec{},
@@ -574,7 +574,7 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 	Context("namespace creation", func() {
 		It("should create a namespace per environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := "loopruntime-" + tenantName + "-default-project-" + env
+				nsName := "loop-runtime-" + tenantName + "-default-project-" + env
 				Eventually(func(g Gomega) {
 					var ns corev1.Namespace
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
@@ -584,7 +584,7 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 
 		It("should set correct labels on namespaces", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := "loopruntime-" + tenantName + "-default-project-" + env
+				nsName := "loop-runtime-" + tenantName + "-default-project-" + env
 				Eventually(func(g Gomega) {
 					var ns corev1.Namespace
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
@@ -605,7 +605,7 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 					}, &envCR)).To(Succeed())
 					g.Expect(envCR.Spec.TenantRef.Name).To(Equal(tenantName))
 					g.Expect(envCR.Spec.Environment).To(Equal(env))
-					g.Expect(envCR.Spec.Namespace.Name).To(Equal("loopruntime-" + tenantName + "-default-project-" + env))
+					g.Expect(envCR.Spec.Namespace.Name).To(Equal("loop-runtime-" + tenantName + "-default-project-" + env))
 					// Verify ownerReference to Tenant
 					g.Expect(envCR.OwnerReferences).To(HaveLen(1))
 					g.Expect(envCR.OwnerReferences[0].Kind).To(Equal("Tenant"))
@@ -616,7 +616,7 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 
 		It("should NOT set ownerReference on namespaces (cross-namespace limitation)", func() {
 			var ns corev1.Namespace
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loopruntime-" + tenantName + "-default-project-production"}, &ns)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loop-runtime-" + tenantName + "-default-project-production"}, &ns)).To(Succeed())
 			Expect(ns.OwnerReferences).To(BeEmpty())
 		})
 	})
@@ -624,7 +624,7 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 	Context("ResourceQuota", func() {
 		It("should create ResourceQuota in each namespace with spec.limits values", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := "loopruntime-" + tenantName + "-default-project-" + env
+				nsName := "loop-runtime-" + tenantName + "-default-project-" + env
 				Eventually(func(g Gomega) {
 					var quota corev1.ResourceQuota
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -642,7 +642,7 @@ var _ = Describe("TenantController — Namespace Provisioning", Ordered, func() 
 	Context("LimitRange", func() {
 		It("should create LimitRange with default container limits", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := "loopruntime-" + tenantName + "-default-project-" + env
+				nsName := "loop-runtime-" + tenantName + "-default-project-" + env
 				Eventually(func(g Gomega) {
 					var lr corev1.LimitRange
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -727,18 +727,18 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 	})
 
 	Context("ServiceAccount", func() {
-		It("should create loopruntime-deployer ServiceAccount in each namespace", func() {
-			expectServiceAccountExists("loopruntime-deployer", "loopruntime-"+tenantName+"-default-project-production")
+		It("should create loop-runtime-deployer ServiceAccount in each namespace", func() {
+			expectServiceAccountExists("loop-runtime-deployer", "loop-runtime-"+tenantName+"-default-project-production")
 		})
 	})
 
 	Context("Role for starter plan", func() {
 		It("should create Role with basic deploy permissions", func() {
-			nsName := "loopruntime-" + tenantName + "-default-project-production"
+			nsName := "loop-runtime-" + tenantName + "-default-project-production"
 			Eventually(func(g Gomega) {
 				var role rbacv1.Role
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopruntime-deployer", Namespace: nsName,
+					Name: "loop-runtime-deployer", Namespace: nsName,
 				}, &role)).To(Succeed())
 				// Starter: deployments, services, configmaps
 				g.Expect(role.Rules).ToNot(BeEmpty())
@@ -756,8 +756,8 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 	})
 
 	Context("RoleBinding", func() {
-		It("should bind loopruntime-deployer SA to the Role", func() {
-			expectDeployerRoleBinding("loopruntime-" + tenantName + "-default-project-production")
+		It("should bind loop-runtime-deployer SA to the Role", func() {
+			expectDeployerRoleBinding("loop-runtime-" + tenantName + "-default-project-production")
 		})
 	})
 
@@ -773,7 +773,7 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 			entTenant := newTenant("rbac-ent", loopruntimev1.PlanEnterprise, []string{"production"})
 			Expect(k8sClient.Create(ctx, entTenant)).To(Succeed())
 
-			nsName := "loopruntime-rbac-ent-default-project-production"
+			nsName := "loop-runtime-rbac-ent-default-project-production"
 			// Enterprise should have ingresses and networkpolicies
 			expectDeployerRoleHasResource(nsName, "ingresses")
 		})
@@ -790,13 +790,13 @@ var _ = Describe("TenantController — RBAC", Ordered, func() {
 			})).To(Succeed())
 
 			// Verify still single SA, Role, RoleBinding
-			nsName := "loopruntime-" + tenantName + "-default-project-production"
+			nsName := "loop-runtime-" + tenantName + "-default-project-production"
 			Eventually(func(g Gomega) {
 				var saList corev1.ServiceAccountList
 				g.Expect(k8sClient.List(ctx, &saList, client.InNamespace(nsName))).To(Succeed())
 				saCount := 0
 				for _, sa := range saList.Items {
-					if sa.Name == "loopruntime-deployer" {
+					if sa.Name == "loop-runtime-deployer" {
 						saCount++
 					}
 				}
@@ -841,7 +841,7 @@ var _ = Describe("TenantController — NetworkPolicy", Ordered, func() {
 
 	Context("NetworkPolicy creation", func() {
 		It("should create 3 NetworkPolicies per namespace (deny-all, allow-ingress, allow-egress)", func() {
-			nsName := "loopruntime-" + tenantName + "-default-project-production"
+			nsName := "loop-runtime-" + tenantName + "-default-project-production"
 			Eventually(func(g Gomega) {
 				var policies networkingv1.NetworkPolicyList
 				g.Expect(k8sClient.List(ctx, &policies, client.InNamespace(nsName))).To(Succeed())
@@ -850,7 +850,7 @@ var _ = Describe("TenantController — NetworkPolicy", Ordered, func() {
 		})
 
 		It("should create deny-all policy", func() {
-			nsName := "loopruntime-" + tenantName + "-default-project-production"
+			nsName := "loop-runtime-" + tenantName + "-default-project-production"
 			Eventually(func(g Gomega) {
 				var np networkingv1.NetworkPolicy
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -864,7 +864,7 @@ var _ = Describe("TenantController — NetworkPolicy", Ordered, func() {
 		})
 
 		It("should NOT have any rule with cidr 0.0.0.0/0 (internet blocked)", func() {
-			nsName := "loopruntime-" + tenantName + "-default-project-production"
+			nsName := "loop-runtime-" + tenantName + "-default-project-production"
 			var policies networkingv1.NetworkPolicyList
 			Expect(k8sClient.List(ctx, &policies, client.InNamespace(nsName))).To(Succeed())
 
@@ -889,7 +889,7 @@ var _ = Describe("TenantController — NetworkPolicy", Ordered, func() {
 
 	AfterAll(func() {
 		ns := &corev1.Namespace{}
-		if err := k8sClient.Get(ctx, types.NamespacedName{Name: "loopruntime-" + tenantName + "-default-project-production"}, ns); err == nil {
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: "loop-runtime-" + tenantName + "-default-project-production"}, ns); err == nil {
 			_ = k8sClient.Delete(ctx, ns)
 		}
 		deleteTenantWithFinalizer(tenantName)
@@ -993,7 +993,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		It("should create PriorityClass with value 100 and PreemptionPolicy Never", func() {
-			expectPriorityClass("loopruntime-tenant-starter", 100, corev1.PreemptNever)
+			expectPriorityClass("loop-runtime-tenant-starter", 100, corev1.PreemptNever)
 		})
 
 		It("should set PriorityClassReady condition to True", func() {
@@ -1020,7 +1020,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 
 			// PriorityClass still exists with correct values
 			var pc schedulingv1.PriorityClass
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loopruntime-tenant-starter"}, &pc)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loop-runtime-tenant-starter"}, &pc)).To(Succeed())
 			Expect(pc.Value).To(Equal(int32(100)))
 		})
 
@@ -1038,7 +1038,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		It("should create PriorityClass with value 500 and PreemptLowerPriority", func() {
-			expectPriorityClass("loopruntime-tenant-growth", 500, corev1.PreemptLowerPriority)
+			expectPriorityClass("loop-runtime-tenant-growth", 500, corev1.PreemptLowerPriority)
 		})
 
 		AfterAll(func() {
@@ -1056,7 +1056,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		It("should create the paid mid-tier PriorityClass", func() {
-			expectPriorityClass("loopruntime-tenant-growth", 500, corev1.PreemptLowerPriority)
+			expectPriorityClass("loop-runtime-tenant-growth", 500, corev1.PreemptLowerPriority)
 		})
 
 		AfterAll(func() {
@@ -1073,7 +1073,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 		})
 
 		It("should create PriorityClass with value 1000 and PreemptLowerPriority", func() {
-			expectPriorityClass("loopruntime-tenant-enterprise", 1000, corev1.PreemptLowerPriority)
+			expectPriorityClass("loop-runtime-tenant-enterprise", 1000, corev1.PreemptLowerPriority)
 		})
 
 		AfterAll(func() {
@@ -1102,7 +1102,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 			// New PriorityClass should be created
 			Eventually(func(g Gomega) {
 				var pc schedulingv1.PriorityClass
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loopruntime-tenant-growth"}, &pc)).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loop-runtime-tenant-growth"}, &pc)).To(Succeed())
 				g.Expect(pc.Value).To(Equal(int32(500)))
 				g.Expect(*pc.PreemptionPolicy).To(Equal(corev1.PreemptLowerPriority))
 			}, timeout, interval).Should(Succeed())
@@ -1131,7 +1131,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 			// Verify PriorityClass exists before deletion
 			Eventually(func(g Gomega) {
 				var pc schedulingv1.PriorityClass
-				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loopruntime-tenant-starter"}, &pc)).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loop-runtime-tenant-starter"}, &pc)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -1163,7 +1163,7 @@ var _ = Describe("TenantController — PriorityClass", Ordered, func() {
 
 			// PriorityClass should still exist
 			var pc schedulingv1.PriorityClass
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loopruntime-tenant-starter"}, &pc)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "loop-runtime-tenant-starter"}, &pc)).To(Succeed())
 			Expect(pc.Value).To(Equal(int32(100)))
 		})
 	})
@@ -1240,7 +1240,7 @@ var _ = Describe("TenantController — Gitea Repo Provisioning", Ordered, func()
 	})
 
 	AfterAll(func() {
-		for _, nsName := range []string{"build-" + tenantName, "loopruntime-" + tenantName + "-default-project-production"} {
+		for _, nsName := range []string{"build-" + tenantName, "loop-runtime-" + tenantName + "-default-project-production"} {
 			ns := &corev1.Namespace{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, ns); err == nil {
 				_ = k8sClient.Delete(ctx, ns)
@@ -1280,7 +1280,7 @@ var _ = Describe("TenantController — Condition-Gated Reconciliation (Crash Rec
 
 			// Add a custom annotation to the namespace to detect if it gets re-reconciled
 			// (CreateOrUpdate preserves existing annotations, so the canary should persist)
-			nsName := "loopruntime-" + tenantName + "-default-project-production"
+			nsName := "loop-runtime-" + tenantName + "-default-project-production"
 			var ns corev1.Namespace
 			// Phase=Active (asserted in BeforeAll) does not imply this namespace is
 			// already readable — it is created by the Environment reconcile, which
@@ -1453,7 +1453,7 @@ var _ = Describe("TenantController — Phase Transition + Deletion", Ordered, fu
 				t.Spec.Plan = loopruntimev1.PlanEnterprise
 			})).To(Succeed())
 
-			nsName := "loopruntime-" + tenantName + "-default-project-production"
+			nsName := "loop-runtime-" + tenantName + "-default-project-production"
 			expectDeployerRoleHasResource(nsName, "ingresses")
 		})
 	})
@@ -1576,7 +1576,7 @@ var _ = Describe("TenantController — ArgoCD Application Provisioning", Ordered
 			for _, env := range []string{"production", "staging"} {
 				appName, nerr := naming.ArgoAppName(tenantName, "default-project", env)
 				Expect(nerr).NotTo(HaveOccurred())
-				expectedNS := fmt.Sprintf("loopruntime-%s-default-project-%s", tenantName, env)
+				expectedNS := fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env)
 
 				fakeArgoCDProvider.Mu.Lock()
 				app := fakeArgoCDProvider.Applications[appName]

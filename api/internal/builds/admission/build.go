@@ -29,7 +29,7 @@
 //   - A stale count causes at most one extra admission; the next tick
 //     will reject the subsequent one.
 //
-// The gate is configured via `LOOPRUNTIME_ADMISSION_CONTROL=true`. When the
+// The gate is configured via `LOOP_RUNTIME_ADMISSION_CONTROL=true`. When the
 // flag is false (the default today), `Check` always returns `Admit` so
 // the existing dev stack keeps behaving exactly as before. This is the
 // rollback path documented in roadmap 07.
@@ -120,7 +120,7 @@ type ActiveBuildsQuerier interface {
 // gate only enforces positive caps.
 type Config struct {
 	// MaxConcurrentPerCell is the hard ceiling for non-terminal builds
-	// within a single cell. Matches the `loopruntime_build_queue_depth` red
+	// within a single cell. Matches the `loop_runtime_build_queue_depth` red
 	// line in cell-budget (20 by default).
 	MaxConcurrentPerCell int
 	// MaxConcurrentPerTenant is the per-tenant fairness cap within a
@@ -156,7 +156,7 @@ type BuildGate struct {
 }
 
 // NewBuildGate builds a gate backed by the given querier. When enabled
-// is false (the `LOOPRUNTIME_ADMISSION_CONTROL` flag unset), every Check call
+// is false (the `LOOP_RUNTIME_ADMISSION_CONTROL` flag unset), every Check call
 // returns Admit without touching the querier. This is the rollback
 // path and also the current production default during the dev iteration.
 func NewBuildGate(querier ActiveBuildsQuerier, cfg Config, enabled bool) *BuildGate {

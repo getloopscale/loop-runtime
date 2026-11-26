@@ -7,7 +7,7 @@
 // WAF/DDoS protection via CF edge.
 //
 // Architecture (validated 2026-04-08 with aquim.ai):
-//   - loopruntime domain add empresa.com → CF API creates zone → returns nameservers
+//   - loop-runtime domain add empresa.com → CF API creates zone → returns nameservers
 //   - User changes nameservers at registrar
 //   - CF activates zone → CNAME @ → cname.dev.getloopscale.com (proxied, flattened)
 //   - Traffic: CF edge (WAF/DDoS/TLS) → CF Tunnel → Traefik → Pod

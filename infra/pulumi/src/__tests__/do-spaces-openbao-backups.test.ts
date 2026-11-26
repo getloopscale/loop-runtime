@@ -10,9 +10,9 @@ import {
 
 describe("do-spaces-openbao-backups component (F1.2)", () => {
   describe("buildBackupResourceTags", () => {
-    it("returns canonical tags with project=loopruntime + component=openbao", () => {
+    it("returns canonical tags with project=loop-runtime + component=openbao", () => {
       const tags = buildBackupResourceTags("prod");
-      expect(tags.project).toBe("loopruntime");
+      expect(tags.project).toBe("loop-runtime");
       expect(tags.component).toBe("openbao");
       expect(tags.stack).toBe("prod");
       expect(tags.purpose).toBe("openbao-raft-snapshot-backup");

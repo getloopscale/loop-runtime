@@ -12,7 +12,7 @@ import (
 // The commit status a push deploy leaves on GitHub links the deployed app. It was
 // composed on BASE_DOMAIN, the internal placeholder, so on staging it pointed at
 // <app>.staging.getloopscale.com, which nothing serves, while the app answers on
-// LOOPRUNTIME_PUBLIC_DOMAIN (<app>.apps.staging.getloopscale.com).
+// LOOP_RUNTIME_PUBLIC_DOMAIN (<app>.apps.staging.getloopscale.com).
 func TestCommitStatusLinksTheAppOnThePublicDomain(t *testing.T) {
 	cfg := config.Config{BaseDomain: "staging.example.test", PublicDomain: "apps.staging.example.test"}
 

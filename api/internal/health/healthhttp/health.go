@@ -88,9 +88,9 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	_, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.health.deep_check",
+	_, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.health.deep_check",
 		trace.WithAttributes(
-			attribute.String("loopruntime.health.status", "pending"),
+			attribute.String("loop-runtime.health.status", "pending"),
 		))
 	defer span.End()
 
@@ -137,11 +137,11 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 
 	if degraded {
 		result["status"] = "degraded"
-		span.SetAttributes(attribute.String("loopruntime.health.status", "degraded"))
+		span.SetAttributes(attribute.String("loop-runtime.health.status", "degraded"))
 		w.WriteHeader(http.StatusServiceUnavailable)
 	} else {
 		result["status"] = "ok"
-		span.SetAttributes(attribute.String("loopruntime.health.status", "healthy"))
+		span.SetAttributes(attribute.String("loop-runtime.health.status", "healthy"))
 		w.WriteHeader(http.StatusOK)
 	}
 	_ = json.NewEncoder(w).Encode(result)

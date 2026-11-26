@@ -3,14 +3,14 @@
 
 //go:build live
 
-// DP9 — loopruntime-rag LIVE journey (rag-edge-live anchor).
+// DP9 — loop-runtime-rag LIVE journey (rag-edge-live anchor).
 //
-// This is the anchor scenario per loopruntime/.claude/rules/dogfood-golden-rule.md
-// § 1 (slug rag-edge-live): a real loopruntime-rag capability, exercised end-to-end
+// This is the anchor scenario per loop-runtime/.claude/rules/dogfood-golden-rule.md
+// § 1 (slug rag-edge-live): a real loop-runtime-rag capability, exercised end-to-end
 // with a real per-tenant key + real OpenAI provider (text-embedding-3-small
 // + real LLM), against the REST surface. The MCP-surface half of the anchor
 // is validated by the sibling gateway integration tests
-// (loopruntime-cloud/internal/mcp/*_test.go); this file owns the REST half.
+// (loop-console/internal/mcp/*_test.go); this file owns the REST half.
 //
 // Why direct-host + edge fail-closed both matter (Rule 3 — honesty):
 //   - The Model B customer-key exchange through the edge broker is currently
@@ -35,7 +35,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("DP-rag loopruntime-rag LIVE (rag-edge-live anchor)",
+var _ = Describe("DP-rag loop-runtime-rag LIVE (rag-edge-live anchor)",
 	Label("live", "dogfood", "dp-rag", "anchor"), func() {
 		var (
 			ctx    context.Context
@@ -100,7 +100,7 @@ var _ = Describe("DP-rag loopruntime-rag LIVE (rag-edge-live anchor)",
 				//     purposely specific so the answer step in (4) can
 				//     assert grounded citation semantics rather than an
 				//     LLM hallucination that happens to look right.
-				paragraph := "The DP9 canonical smoke — 2026-07-14 marker — verifies that loopruntime-rag " +
+				paragraph := "The DP9 canonical smoke — 2026-07-14 marker — verifies that loop-runtime-rag " +
 					"ingestion, embedding, retrieval, and answer synthesis operate end-to-end " +
 					"with a real OpenAI provider and a per-tenant workspace key."
 				docBody, _ := json.Marshal(map[string]any{

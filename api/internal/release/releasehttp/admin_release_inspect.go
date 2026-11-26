@@ -6,15 +6,15 @@
 //
 // GET /api/v1/admin/releases/{id}/inspect
 //
-// Gated behind LOOPRUNTIME_ADMIN_API=true. Service authentication is NOT done
+// Gated behind LOOP_RUNTIME_ADMIN_API=true. Service authentication is NOT done
 // here: the router mounts this handler behind Authenticator.RequireAdminService,
-// the one admin gate (canonical LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET only).
+// the one admin gate (canonical LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET only).
 // Returns the diagnostic payload assembled by release.ReleaseInspector.
 //
 // Exit-code-equivalent HTTP status mapping (CLI Rule 4):
 //   - 200 success
 //   - 403 missing or invalid X-Service-Auth (maps to CLI exit 4)
-//   - 404 release not found OR LOOPRUNTIME_ADMIN_API not enabled
+//   - 404 release not found OR LOOP_RUNTIME_ADMIN_API not enabled
 //         (maps to CLI exit 1)
 //   - 500 unexpected internal error
 
@@ -40,7 +40,7 @@ import (
 // lives in release.ReleaseInspector (DIP).
 func AdminReleaseInspectHandler(inspector release.ReleaseInspector, apiEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !apiEnabled { // LOOPRUNTIME_ADMIN_API, read once at boot
+		if !apiEnabled { // LOOP_RUNTIME_ADMIN_API, read once at boot
 			httpio.WriteCodeErrorJSON(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
 			return
 		}

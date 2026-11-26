@@ -11,7 +11,7 @@ tasks:
       ConfigMaps hold REAL values (not chart-default placeholders).
 
       Catches the bug class that fooled cleanroom 2026-06-04:
-        - loopruntime-cluster-kubeconfigs build slot pointing at mgmt cluster
+        - loop-runtime-cluster-kubeconfigs build slot pointing at mgmt cluster
         - gitea-admin.token holding 32-char placeholder
         - MinIO rootPassword out of sync with minio-credentials.secretkey
         - operator NetworkPolicy egress to wrong ns
@@ -43,11 +43,11 @@ tasks:
       # returns DECODED bytes directly. Replaces `base64 -d` (Linux GNU) which
       # silently breaks on macOS BSD (uses `-D` capital).
       #
-      # Pre-sync: generate-secrets.sh creates LOOPRUNTIME_DB_PASSWORD Secret if missing
+      # Pre-sync: generate-secrets.sh creates LOOP_RUNTIME_DB_PASSWORD Secret if missing
       # (idempotent — picks up existing for re-runs). Required by ory-kratos +
-      # ory-hydra values.yaml.gotmpl `requiredEnv "LOOPRUNTIME_DB_PASSWORD"`.
-      # T2.2 of plan 2026-06-04: honor LOOPRUNTIME_HELMFILE_ENV when set so
-      # `LOOPRUNTIME_HELMFILE_ENV=dev-public task setup` produces *-dev.getloopscale.com
+      # ory-hydra values.yaml.gotmpl `requiredEnv "LOOP_RUNTIME_DB_PASSWORD"`.
+      # T2.2 of plan 2026-06-04: honor LOOP_RUNTIME_HELMFILE_ENV when set so
+      # `LOOP_RUNTIME_HELMFILE_ENV=dev-public task setup` produces *-dev.getloopscale.com
       # URLs in the Kratos ConfigMap. Default remains standalone-multi for
       # backwards compatibility with the legacy localhost flow.
       #
@@ -58,7 +58,7 @@ tasks:
       # node Ready up to 180s before any cluster operation. Idempotent
       # (no-op if already ready).
       - |
-        echo "[infra:install:core] waiting for k3d-loopruntime-core API server + node Ready..."
+        echo "[infra:install:core] waiting for k3d-loop-runtime-core API server + node Ready..."
         for i in $(seq 1 36); do
           if kubectl --context {{.CORE_CONTEXT}} wait --for=condition=Ready node --all --timeout=5s 2>/dev/null; then
             echo "  ready after ${i} attempts"
@@ -68,14 +68,14 @@ tasks:
           sleep 5
         done
       - |
-        HELMFILE_ENV="${LOOPRUNTIME_HELMFILE_ENV:-standalone-multi}"
+        HELMFILE_ENV="${LOOP_RUNTIME_HELMFILE_ENV:-standalone-multi}"
         echo "[infra:install:core] helmfile env: $HELMFILE_ENV"
         # The operator's credentials file fills what the environment leaves unset —
         # the Resend key generate-secrets.sh stores for Kratos (#445).
-        eval "$(cd cmd/loopruntime-ops && go run . creds env)"
+        eval "$(cd cmd/loop-runtime-ops && go run . creds env)"
         bash infra/helmfile/scripts/generate-secrets.sh "$HELMFILE_ENV" core
       - |
-        HELMFILE_ENV="${LOOPRUNTIME_HELMFILE_ENV:-standalone-multi}"
+        HELMFILE_ENV="${LOOP_RUNTIME_HELMFILE_ENV:-standalone-multi}"
         # Plan 2026-06-04-dev-public-docr-fix-forward T4.1.bis — propagate
         # .env values as exported env vars so helmfile {{ env "..." }}
         # interpolations resolve (Task v3 `dotenv:` loads as task vars but
@@ -90,13 +90,13 @@ tasks:
         # Then the operator's credentials file, for what is still unset: Kratos's
         # OAuth clients and mail key live there, and the seeds read them from it too.
         # Without this a cold dev-public install rendered REPLACE_VIA_* into Kratos (#445).
-        eval "$(cd cmd/loopruntime-ops && go run . creds env)"
+        eval "$(cd cmd/loop-runtime-ops && go run . creds env)"
         # Portable secret extraction (T2.3.b EC-02) — works on macOS + Linux
-        export LOOPRUNTIME_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
-          get secret loopruntime-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
+        export LOOP_RUNTIME_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
+          get secret loop-runtime-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
           2>/dev/null || echo "")
-        if [ -z "$LOOPRUNTIME_DB_PASSWORD" ]; then
-          echo "ERROR: LOOPRUNTIME_DB_PASSWORD not in loopruntime-db-credentials Secret — run generate-secrets.sh first"
+        if [ -z "$LOOP_RUNTIME_DB_PASSWORD" ]; then
+          echo "ERROR: LOOP_RUNTIME_DB_PASSWORD not in loop-runtime-db-credentials Secret — run generate-secrets.sh first"
           exit 1
         fi
         helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl \
@@ -108,19 +108,19 @@ tasks:
       # kubectl exec into postgres pod, create DBs idempotently.
       - |
         echo "Ensuring gitea/kratos/hydra databases exist..."
-        POD=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        POD=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
         # Portable secret extraction (T2.3.b EC-02)
-        PG_ADMIN_PASS=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
-          get secret loopruntime-db-credentials -o go-template='{{`{{index .data "postgres-password" | base64decode}}`}}')
+        PG_ADMIN_PASS=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
+          get secret loop-runtime-db-credentials -o go-template='{{`{{index .data "postgres-password" | base64decode}}`}}')
         for DB in gitea kratos hydra; do
-          kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec -i "$POD" -c postgresql -- \
+          kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
-          kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec -i "$POD" -c postgresql -- \
+          kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE $DB OWNER {{.PG_USER}}"
           echo "$DB database: ensured"
         done
       # Post-sync: MinIO lifecycle rules (Job spec immutable — delete-and-recreate)
-      - kubectl --context {{.CORE_CONTEXT}} delete job minio-lifecycle-setup -n loopruntime-system --ignore-not-found 2>/dev/null
+      - kubectl --context {{.CORE_CONTEXT}} delete job minio-lifecycle-setup -n loop-runtime-system --ignore-not-found 2>/dev/null
       - kubectl --context {{.CORE_CONTEXT}} apply -f infra/helm/minio/lifecycle-job.yaml
       # Post-sync: the Ory edge NodePorts. infra/k3d/core-cluster.yaml reserves host
       # ports 14433/14444 for them and the Caddyfile logs in through them; only
@@ -161,14 +161,14 @@ tasks:
           exit 1
         fi
         echo "OK: dashboard-only selector matched $count releases"
-      # Same pre-sync as infra:install:core for LOOPRUNTIME_DB_PASSWORD
+      # Same pre-sync as infra:install:core for LOOP_RUNTIME_DB_PASSWORD
       - bash infra/helmfile/scripts/generate-secrets.sh {{.ENV}} core
       - |
-        export LOOPRUNTIME_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
-          get secret loopruntime-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
+        export LOOP_RUNTIME_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
+          get secret loop-runtime-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
           2>/dev/null || echo "")
-        if [ -z "$LOOPRUNTIME_DB_PASSWORD" ]; then
-          echo "ERROR: LOOPRUNTIME_DB_PASSWORD not in loopruntime-db-credentials Secret — run generate-secrets.sh first"
+        if [ -z "$LOOP_RUNTIME_DB_PASSWORD" ]; then
+          echo "ERROR: LOOP_RUNTIME_DB_PASSWORD not in loop-runtime-db-credentials Secret — run generate-secrets.sh first"
           exit 1
         fi
         helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl \
@@ -179,13 +179,13 @@ tasks:
       # Post-sync DB creation (idempotent, identical to mgmt)
       - |
         echo "Ensuring gitea/kratos/hydra databases exist..."
-        POD=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG_ADMIN_PASS=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
-          get secret loopruntime-db-credentials -o go-template='{{`{{index .data "postgres-password" | base64decode}}`}}')
+        POD=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        PG_ADMIN_PASS=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
+          get secret loop-runtime-db-credentials -o go-template='{{`{{index .data "postgres-password" | base64decode}}`}}')
         for DB in gitea kratos hydra; do
-          kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec -i "$POD" -c postgresql -- \
+          kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
-          kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec -i "$POD" -c postgresql -- \
+          kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE $DB OWNER {{.PG_USER}}"
           echo "$DB database: ensured"
         done
@@ -195,12 +195,12 @@ tasks:
     deps: [helm:repos]
     cmds:
       # T2.3.a (EC-01) MASTER SYNC — single helmfile sync per cluster.
-      # Build helmfile declares: argo-workflows, loopruntime-build-cwts, loki, promtail.
-      # CWTs (loopruntime-build-cwts release) handle Helm directives via the chart's
+      # Build helmfile declares: argo-workflows, loop-runtime-build-cwts, loki, promtail.
+      # CWTs (loop-runtime-build-cwts release) handle Helm directives via the chart's
       # own template render — no separate `helm template | kubectl apply` step needed.
       - >-
         helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl
-        -e "${LOOPRUNTIME_HELMFILE_ENV:-standalone-multi}"
+        -e "${LOOP_RUNTIME_HELMFILE_ENV:-standalone-multi}"
         --kube-context {{.BUILD_CONTEXT}}
         sync --skip-deps
       # Post-sync: MinIO credentials Secret for cache CWTs (envFrom.secretRef)
@@ -209,7 +209,7 @@ tasks:
       - |
         kubectl --context {{.BUILD_CONTEXT}} -n argo create secret generic buildkit-registry-config \
           --from-literal=config.json='{"auths":{}}' \
-          --from-literal=buildkitd.toml='[registry."k3d-loopruntime-registry:5000"]
+          --from-literal=buildkitd.toml='[registry."k3d-loop-runtime-registry:5000"]
           http = true
           insecure = true' \
           --dry-run=client -o yaml | kubectl --context {{.BUILD_CONTEXT}} apply -f -
@@ -233,17 +233,17 @@ tasks:
       # generate-runtime-secrets.sh against the workload context (KUBECONFIG,
       # no global current-context mutation). Idempotent.
       - |
-        # THE CLUSTER COMES FROM THE PARAMETER. While it was a fixed `loopruntime-cell-0`, this step
+        # THE CLUSTER COMES FROM THE PARAMETER. While it was a fixed `loop-runtime-cell-0`, this step
         # generated the `static-assets-s3` Secret ALWAYS on the first cell — and the second
         # cell's `static-assets` stayed in CreateContainerConfigError with "secret not found",
         # measured on 2026-08-10. It is the same class as the fixed-context defect, one layer
         # down: installing on every cell is not enough if the secrets are only born on one of them.
         CELL_CTX_K3D="{{.CELL_CTX}}"; CELL_CTX_K3D="${CELL_CTX_K3D#k3d-}"
-        S3_KEY=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get secret minio-credentials -o jsonpath='{.data.accesskey}' | openssl base64 -d -A)
-        S3_SECRET=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get secret minio-credentials -o jsonpath='{.data.secretkey}' | openssl base64 -d -A)
+        S3_KEY=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get secret minio-credentials -o jsonpath='{.data.accesskey}' | openssl base64 -d -A)
+        S3_SECRET=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get secret minio-credentials -o jsonpath='{.data.secretkey}' | openssl base64 -d -A)
         KUBECONFIG=$(k3d kubeconfig write "${CELL_CTX_K3D}") \
-          LOOPRUNTIME_PROFILE=standalone-multi \
-          LOOPRUNTIME_S3_ACCESS_KEY="$S3_KEY" LOOPRUNTIME_S3_SECRET_KEY="$S3_SECRET" \
+          LOOP_RUNTIME_PROFILE=standalone-multi \
+          LOOP_RUNTIME_S3_ACCESS_KEY="$S3_KEY" LOOP_RUNTIME_S3_SECRET_KEY="$S3_SECRET" \
           bash infra/helmfile/scripts/generate-runtime-secrets.sh standalone-multi workload
       # T2.3.a (EC-01) MASTER SYNC — runtime helmfile declares:
       # cert-manager, traefik, keda, keda-http-addon, argo-rollouts, policy-controller,
@@ -260,17 +260,17 @@ tasks:
       #
       # Worse: `task clusters:recreate -- cell-1` calls this same task (k3d.yml), so
       # recreating cell-1 installed onto the WRONG cluster, with no error.
-      # LOOPRUNTIME_CELL_CONTEXT comes from the SAME CELL_CTX as the flag: one source, two
+      # LOOP_RUNTIME_CELL_CONTEXT comes from the SAME CELL_CTX as the flag: one source, two
       # consumers. The helmfile declares `kubeContext: {{ `{{` }} requiredEnv
-      # "LOOPRUNTIME_CELL_CONTEXT" {{ `}}` }}` so that a `helmfile sync` without the flag
+      # "LOOP_RUNTIME_CELL_CONTEXT" {{ `}}` }}` so that a `helmfile sync` without the flag
       # does NOT land on kubectl's active context (measured against helmfile
       # 1.1.6: with no declaration and no flag, helm receives no --kube-context
       # at all). Binding a fixed value there would recreate the defect the comments
       # above describe; `requiredEnv` fails loudly when nobody passes it.
       - >-
-        LOOPRUNTIME_CELL_CONTEXT="{{.CELL_CTX}}"
+        LOOP_RUNTIME_CELL_CONTEXT="{{.CELL_CTX}}"
         helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl
-        -e "${LOOPRUNTIME_HELMFILE_ENV:-standalone-multi}"
+        -e "${LOOP_RUNTIME_HELMFILE_ENV:-standalone-multi}"
         --kube-context "{{.CELL_CTX}}"
         sync --skip-deps
       # Post-sync: Traefik middlewares + wildcard cert + TLSStore
@@ -302,7 +302,7 @@ tasks:
     cmds:
       - >-
         helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl
-        -e "${LOOPRUNTIME_HELMFILE_ENV:-standalone-multi}"
+        -e "${LOOP_RUNTIME_HELMFILE_ENV:-standalone-multi}"
         --kube-context {{.BUILD_CONTEXT}}
         --selector name=loki sync --skip-deps
       # The cross-cluster query bridge (Service loki-cross-cluster, NodePort
@@ -322,7 +322,7 @@ tasks:
       # release Helmfile manages in build clusters, with the correct push URL resolved.
       - >-
         helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl
-        -e "${LOOPRUNTIME_HELMFILE_ENV:-standalone-multi}"
+        -e "${LOOP_RUNTIME_HELMFILE_ENV:-standalone-multi}"
         --kube-context {{.BUILD_CONTEXT}}
         --selector name=promtail sync
 
@@ -330,25 +330,25 @@ tasks:
     desc: Install LoopRuntime Grafana dashboards and ServiceMonitors
     cmds:
       # Server-side apply — dashboard bundle exceeds 256KB `last-applied-configuration` annotation limit.
-      # `--force-conflicts` ensures ownership transfer across reruns (field manager: loopruntime-task).
+      # `--force-conflicts` ensures ownership transfer across reruns (field manager: loop-runtime-task).
       - >-
         kubectl --context {{.CORE_CONTEXT}} -n monitoring
-        create configmap loopruntime-grafana-dashboards
+        create configmap loop-runtime-grafana-dashboards
         --from-file=infra/helm/monitoring/dashboards/
         --dry-run=client -o yaml |
         kubectl --context {{.CORE_CONTEXT}} label -f - --local --dry-run=client -o yaml
         grafana_dashboard=1 |
         kubectl --context {{.CORE_CONTEXT}} apply --server-side --force-conflicts
-        --field-manager=loopruntime-task -f -
-      # ServiceMonitors for mgmt cluster components (loopruntime-api, gitea, minio, loopruntime operators).
+        --field-manager=loop-runtime-task -f -
+      # ServiceMonitors for mgmt cluster components (loop-runtime-api, gitea, minio, loop-runtime operators).
       # CHG-2026-05-05 (charts-sota dogfood): tenant-controller ServiceMonitor
-      # consolidated into servicemonitor-loopruntime-operators.yaml after ADR-0023 operator split.
+      # consolidated into servicemonitor-loop-runtime-operators.yaml after ADR-0023 operator split.
       - >-
         kubectl --context {{.CORE_CONTEXT}} apply
         -f infra/helm/monitoring/manifests/servicemonitor.yaml
         -f infra/helm/monitoring/manifests/servicemonitor-gitea.yaml
         -f infra/helm/monitoring/manifests/servicemonitor-minio.yaml
-        -f infra/helm/monitoring/manifests/servicemonitor-loopruntime-operators.yaml
+        -f infra/helm/monitoring/manifests/servicemonitor-loop-runtime-operators.yaml
       # Cross-cluster metrics services (NodePort for Prometheus to scrape via additionalScrapeConfigs)
       - >-
         kubectl --context {{.BUILD_CONTEXT}} apply
@@ -431,33 +431,33 @@ tasks:
       This task is now a thin wrapper that re-runs the helmfile sync for
       these specific releases + ensures databases exist.
 
-      Pre-T2.3 namespace was loopruntime-system; helmfile uses loopruntime-auth. Migration
+      Pre-T2.3 namespace was loop-runtime-system; helmfile uses loop-runtime-auth. Migration
       validated in T2.4 LIVE cleanroom.
     deps: [helm:repos]
     cmds:
       # Ensure kratos + hydra databases (idempotent — chart values.yaml.gotmpl
-      # uses requiredEnv LOOPRUNTIME_DB_PASSWORD which is set by generate-secrets.sh).
+      # uses requiredEnv LOOP_RUNTIME_DB_PASSWORD which is set by generate-secrets.sh).
       - |
         echo "=== Ensuring kratos and hydra databases ==="
-        POD=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        POD=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
         # T2.3.b (EC-02) — portable base64 via kubectl go-template
-        PG_ADMIN_PASS=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
-          get secret loopruntime-db-credentials -o go-template='{{`{{index .data "postgres-password" | base64decode}}`}}')
+        PG_ADMIN_PASS=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
+          get secret loop-runtime-db-credentials -o go-template='{{`{{index .data "postgres-password" | base64decode}}`}}')
         for DB in kratos hydra; do
-          kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec -i "$POD" -c postgresql -- \
+          kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='$DB'" | grep -q 1 || \
-          kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec -i "$POD" -c postgresql -- \
+          kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system exec -i "$POD" -c postgresql -- \
             env PGPASSWORD="$PG_ADMIN_PASS" psql -U postgres -c "CREATE DATABASE $DB OWNER {{.PG_USER}}"
           echo "$DB database: ensured"
         done
       # T2.3.a (EC-01) — helmfile sync ory releases via master pattern (needs:
       # resolves postgresql → kratos → hydra ordering automatically).
       - |
-        export LOOPRUNTIME_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
-          get secret loopruntime-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
+        export LOOP_RUNTIME_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
+          get secret loop-runtime-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}' \
           2>/dev/null || echo "")
         helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl \
-          -e "${LOOPRUNTIME_HELMFILE_ENV:-standalone-multi}" \
+          -e "${LOOP_RUNTIME_HELMFILE_ENV:-standalone-multi}" \
           --kube-context {{.CORE_CONTEXT}} \
           --selector name=ory-kratos --selector name=ory-hydra \
           sync --skip-deps
@@ -478,9 +478,9 @@ tasks:
         echo "=== Ory Health ==="
 
         # Kratos health via kubectl port-forward (quick check)
-        KRATOS_POD=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get pod -l app.kubernetes.io/name=kratos -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        KRATOS_POD=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get pod -l app.kubernetes.io/name=kratos -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
         if [ -n "$KRATOS_POD" ]; then
-          STATUS=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get pod "$KRATOS_POD" -o jsonpath='{.status.phase}')
+          STATUS=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get pod "$KRATOS_POD" -o jsonpath='{.status.phase}')
           if [ "$STATUS" = "Running" ]; then
             echo "  [PASS] Ory Kratos — pod Running ($KRATOS_POD)"
             PASS=$((PASS+1))
@@ -494,9 +494,9 @@ tasks:
         fi
 
         # Hydra health
-        HYDRA_POD=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get pod -l app.kubernetes.io/name=hydra -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        HYDRA_POD=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get pod -l app.kubernetes.io/name=hydra -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
         if [ -n "$HYDRA_POD" ]; then
-          STATUS=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get pod "$HYDRA_POD" -o jsonpath='{.status.phase}')
+          STATUS=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get pod "$HYDRA_POD" -o jsonpath='{.status.phase}')
           if [ "$STATUS" = "Running" ]; then
             echo "  [PASS] Ory Hydra — pod Running ($HYDRA_POD)"
             PASS=$((PASS+1))
@@ -511,7 +511,7 @@ tasks:
 
         # Hydra OIDC discovery (via kubectl exec — no port-forward needed)
         if [ -n "$HYDRA_POD" ]; then
-          DISC=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec "$HYDRA_POD" -- wget -qO- http://localhost:4444/.well-known/openid-configuration 2>/dev/null)
+          DISC=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system exec "$HYDRA_POD" -- wget -qO- http://localhost:4444/.well-known/openid-configuration 2>/dev/null)
           if echo "$DISC" | grep -q "device_authorization_endpoint" 2>/dev/null; then
             echo "  [PASS] Hydra OIDC discovery — device_authorization_endpoint present"
             PASS=$((PASS+1))
@@ -526,27 +526,27 @@ tasks:
         if [ "$FAIL" -gt 0 ]; then exit 1; fi
 
   cloud:register-client:
-    desc: Register the loopruntime-cli OAuth2 client in Hydra (idempotent)
+    desc: Register the loop-runtime-cli OAuth2 client in Hydra (idempotent)
     cmds:
       - |
-        HYDRA_POD=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get pod -l app.kubernetes.io/name=hydra -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        HYDRA_POD=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get pod -l app.kubernetes.io/name=hydra -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
         if [ -z "$HYDRA_POD" ]; then
           echo "Hydra not running. Run: task cloud:setup"
           exit 1
         fi
         # Check if client exists
-        EXISTS=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec "$HYDRA_POD" -c hydra -- \
-          wget -qO- http://localhost:4445/admin/clients/loopruntime-cli 2>/dev/null | grep -c "loopruntime-cli" || true)
+        EXISTS=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system exec "$HYDRA_POD" -c hydra -- \
+          wget -qO- http://localhost:4445/admin/clients/loop-runtime-cli 2>/dev/null | grep -c "loop-runtime-cli" || true)
         if [ "$EXISTS" -gt 0 ]; then
-          echo "OAuth2 client 'loopruntime-cli' already registered"
+          echo "OAuth2 client 'loop-runtime-cli' already registered"
           exit 0
         fi
         # Register public client with device_code + refresh_token grants
-        kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec "$HYDRA_POD" -c hydra -- \
-          wget -qO- --post-data='{"client_id":"loopruntime-cli","client_name":"LoopRuntime CLI","grant_types":["urn:ietf:params:oauth:grant-type:device_code","refresh_token","authorization_code"],"response_types":["code"],"scope":"openid offline_access","token_endpoint_auth_method":"none","redirect_uris":["http://localhost:9876/auth"]}' \
+        kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system exec "$HYDRA_POD" -c hydra -- \
+          wget -qO- --post-data='{"client_id":"loop-runtime-cli","client_name":"LoopRuntime CLI","grant_types":["urn:ietf:params:oauth:grant-type:device_code","refresh_token","authorization_code"],"response_types":["code"],"scope":"openid offline_access","token_endpoint_auth_method":"none","redirect_uris":["http://localhost:9876/auth"]}' \
           --header="Content-Type: application/json" \
           http://localhost:4445/admin/clients 2>/dev/null
-        echo "OAuth2 client 'loopruntime-cli' registered"
+        echo "OAuth2 client 'loop-runtime-cli' registered"
   monitoring:install:
     desc: Install full monitoring stack (Prometheus + Grafana + OTel + ServiceMonitors + dashboards)
     cmds:
@@ -616,7 +616,7 @@ tasks:
     desc: Sanctioned fast-path for API image hotfix (build, push, rollout restart with audit)
     vars:
       TAG: '{{.TAG | default "homolog"}}'
-      CONTEXT: '{{.CONTEXT | default "do-nyc3-loopruntime-infra-homolog-nyc3-mgmt"}}'
+      CONTEXT: '{{.CONTEXT | default "do-nyc3-loop-runtime-infra-homolog-nyc3-mgmt"}}'
     cmds:
       - |
         set -euo pipefail
@@ -627,14 +627,14 @@ tasks:
         echo "  Context:  {{.CONTEXT}}"
         echo ""
         echo "Building API image..."
-        docker build -f api/Dockerfile -t registry.digitalocean.com/loopruntime-system/loopruntime-api:{{.TAG}} .
+        docker build -f api/Dockerfile -t registry.digitalocean.com/loop-runtime-system/loop-runtime-api:{{.TAG}} .
         echo "Pushing..."
-        docker push registry.digitalocean.com/loopruntime-system/loopruntime-api:{{.TAG}}
+        docker push registry.digitalocean.com/loop-runtime-system/loop-runtime-api:{{.TAG}}
         echo "Rolling out..."
-        kubectl --context={{.CONTEXT}} -n loopruntime-system rollout restart deploy/loopruntime-api
+        kubectl --context={{.CONTEXT}} -n loop-runtime-system rollout restart deploy/loop-runtime-api
         echo ""
         echo "✅ Hotfix applied. Rollout status:"
-        kubectl --context={{.CONTEXT}} -n loopruntime-system rollout status deploy/loopruntime-api --timeout=120s
+        kubectl --context={{.CONTEXT}} -n loop-runtime-system rollout status deploy/loop-runtime-api --timeout=120s
         echo ""
         echo "⚠️  Do NOT use 'kubectl set image'. This task is the sanctioned fast-path."
 
@@ -689,7 +689,7 @@ tasks:
   break-glass:
     desc: Issue time-boxed cluster-admin access for emergency operations (MEET-055 M3)
     vars:
-      CONTEXT: '{{.CONTEXT | default "do-nyc3-loopruntime-infra-homolog-nyc3-mgmt"}}'
+      CONTEXT: '{{.CONTEXT | default "do-nyc3-loop-runtime-infra-homolog-nyc3-mgmt"}}'
       TTL: '{{.TTL | default "4"}}'
       REASON: '{{.REASON | default ""}}'
     cmds:
@@ -702,32 +702,32 @@ tasks:
   pprof:api:
     desc: Port-forward to API pprof endpoint (http://localhost:6060/debug/pprof/)
     cmds:
-      - kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system port-forward deploy/loopruntime-api 6060:6060
+      - kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system port-forward deploy/loop-runtime-api 6060:6060
 
   pprof:operators:
     desc: "Port-forward to one operator's pprof endpoint (http://localhost:6061/debug/pprof/). OPERATOR=tenant|app|preview|platform"
     # The operators are four binaries since the split; each serves pprof on
     # :6061 (operators/internal/operatorboot/pprof.go). The single
-    # deploy/loopruntime-controller this used to target no longer exists.
+    # deploy/loop-runtime-controller this used to target no longer exists.
     requires:
       vars:
         - name: OPERATOR
           enum: [tenant, app, preview, platform]
     cmds:
-      - kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system port-forward deploy/{{.OPERATOR}}-operator 6061:6061
+      - kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system port-forward deploy/{{.OPERATOR}}-operator 6061:6061
 
   blackbox:status:
     desc: Check blackbox exporter health and probe results
     cmds:
       - |
         echo "=== Blackbox Pod ==="
-        kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get pods -l app.kubernetes.io/name=prometheus-blackbox-exporter 2>/dev/null || echo "Blackbox pod not found"
+        kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get pods -l app.kubernetes.io/name=prometheus-blackbox-exporter 2>/dev/null || echo "Blackbox pod not found"
         echo ""
         echo "=== Probe CRDs ==="
         kubectl --context {{.CORE_CONTEXT}} -n monitoring get probes 2>/dev/null || echo "No Probe resources found"
         echo ""
         echo "=== PrometheusRules ==="
-        kubectl --context {{.CORE_CONTEXT}} -n monitoring get prometheusrules loopruntime-probe-alerts 2>/dev/null || echo "PrometheusRule not found"
+        kubectl --context {{.CORE_CONTEXT}} -n monitoring get prometheusrules loop-runtime-probe-alerts 2>/dev/null || echo "PrometheusRule not found"
 
   sloth:generate:
     desc: Generate PrometheusRules from Sloth SLO specs
@@ -766,11 +766,11 @@ tasks:
         apiVersion: monitoring.coreos.com/v1
         kind: PrometheusRule
         metadata:
-          name: loopruntime-slo-burn-rate
+          name: loop-runtime-slo-burn-rate
           namespace: monitoring
           labels:
             release: monitoring
-            app.kubernetes.io/part-of: loopruntime
+            app.kubernetes.io/part-of: loop-runtime
         spec:
           groups:""".replace("\n        ", "\n") + "".join(groups) + "\n"
         open("infra/helm/monitoring/manifests/prometheusrule-slo-generated.yaml", "w").write(doc)
@@ -798,13 +798,13 @@ tasks:
     cmds:
       - |
         echo "=== Tempo Pod ==="
-        kubectl --context k3d-loopruntime-core -n loopruntime-system get pods -l app.kubernetes.io/name=tempo 2>/dev/null || echo "Tempo pod not found"
+        kubectl --context k3d-loop-runtime-core -n loop-runtime-system get pods -l app.kubernetes.io/name=tempo 2>/dev/null || echo "Tempo pod not found"
         echo ""
         echo "=== ServiceMonitor ==="
-        kubectl --context k3d-loopruntime-core -n monitoring get servicemonitor loopruntime-tempo 2>/dev/null || echo "ServiceMonitor not found"
+        kubectl --context k3d-loop-runtime-core -n monitoring get servicemonitor loop-runtime-tempo 2>/dev/null || echo "ServiceMonitor not found"
         echo ""
         echo "=== PrometheusRules ==="
-        kubectl --context k3d-loopruntime-core -n monitoring get prometheusrules loopruntime-tracing 2>/dev/null || echo "PrometheusRule not found"
+        kubectl --context k3d-loop-runtime-core -n monitoring get prometheusrules loop-runtime-tracing 2>/dev/null || echo "PrometheusRule not found"
 
   # ---------------------------------------------------------------------------
   # Helm chart operations (charts/)
@@ -816,12 +816,12 @@ tasks:
       - bash infra/scripts/local/setup-cross-cluster-networking.sh
       - bash infra/scripts/local/update-cross-cluster-ips.sh
       # T2.2 of plan dashboard-badge-data-plane-poller (Red Team #128).
-      # Patches mgmt CoreDNS NodeHosts so `k3d-loopruntime-cell-0-server-0`
+      # Patches mgmt CoreDNS NodeHosts so `k3d-loop-runtime-cell-0-server-0`
       # resolves — required for the mgmt Prometheus scrape of the workload
       # cluster's kube-state-metrics NodePort (values-prometheus.yaml).
       # Idempotent (diff-then-patch). Same mechanism J-17 Loki cross-
       # cluster uses (memory j17-aprendizado-coredns-cross-cluster-build-lb).
-      - (cd cmd/loopruntime-ops && go run . seed networking-cross-cluster-coredns)
+      - (cd cmd/loop-runtime-ops && go run . seed networking-cross-cluster-coredns)
 
   tokens:provision:
     desc: Provision API tokens (Gitea + ArgoCD) and build cluster kubeconfig
@@ -829,10 +829,10 @@ tasks:
       - bash infra/scripts/production/provision-api-tokens.sh
       - |
         echo ""
-        if kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system get deployment/loopruntime-api >/dev/null 2>&1; then
+        if kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system get deployment/loop-runtime-api >/dev/null 2>&1; then
           echo "Restarting API to pick up new tokens..."
-          kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system rollout restart deployment/loopruntime-api
-          kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system rollout status deployment/loopruntime-api --timeout=60s
+          kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system rollout restart deployment/loop-runtime-api
+          kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system rollout status deployment/loop-runtime-api --timeout=60s
         else
           echo "API deployment not found (not running yet — tokens will be picked up on first start)."
         fi
@@ -854,11 +854,11 @@ tasks:
         FAIL=0
 
         # Check ArgoCD token (T2.3.b portable base64 — kubectl go-template)
-        ARGOCD_TOKEN=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
-          get secret loopruntime-api-tokens -o go-template='{{`{{.data.argocd-token | base64decode}}`}}' \
+        ARGOCD_TOKEN=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
+          get secret loop-runtime-api-tokens -o go-template='{{`{{.data.argocd-token | base64decode}}`}}' \
           2>/dev/null)
         if [ -z "$ARGOCD_TOKEN" ]; then
-          echo "  [FAIL] ArgoCD token — not found in secret loopruntime-api-tokens"
+          echo "  [FAIL] ArgoCD token — not found in secret loop-runtime-api-tokens"
           FAIL=$((FAIL+1))
         else
           # Check if token has expiration
@@ -898,8 +898,8 @@ tasks:
         fi
 
         # Check Gitea token (T2.3.b portable base64 — kubectl go-template)
-        GITEA_TOKEN=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
-          get secret loopruntime-api-tokens -o go-template='{{`{{.data.gitea-token | base64decode}}`}}' \
+        GITEA_TOKEN=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
+          get secret loop-runtime-api-tokens -o go-template='{{`{{.data.gitea-token | base64decode}}`}}' \
           2>/dev/null)
         if [ -z "$GITEA_TOKEN" ]; then
           echo "  [FAIL] Gitea token — not found"
@@ -934,59 +934,59 @@ tasks:
   # just one image (e.g., `task images:build:cosign-signer`) when iterating
   # on a single piece, cutting dev rebuild time from ~15min to ~3min.
   images:build:clone-runner:
-    desc: Build + push loopruntime-clone-runner (both :latest and :v0.1.0 tags)
+    desc: Build + push loop-runtime-clone-runner (both :latest and :v0.1.0 tags)
     cmds:
       - |
-        echo "=== Building loopruntime-clone-runner ==="
+        echo "=== Building loop-runtime-clone-runner ==="
         # Pinned Tilt env vars to :v0.1.0; the build must publish BOTH
         # :latest AND :v0.1.0 so api/internal/builds/argo/cosign.go can resolve
-        # via LOOPRUNTIME_CLONE_IMAGE env var.
-        docker build -t localhost:5000/loopruntime-clone-runner:latest infra/images/clone-runner/
-        docker tag  localhost:5000/loopruntime-clone-runner:latest localhost:5000/loopruntime-clone-runner:v0.1.0
-        docker push localhost:5000/loopruntime-clone-runner:latest
-        docker push localhost:5000/loopruntime-clone-runner:v0.1.0
-        echo "  Pushed: localhost:5000/loopruntime-clone-runner:{latest,v0.1.0}"
+        # via LOOP_RUNTIME_CLONE_IMAGE env var.
+        docker build -t localhost:5000/loop-runtime-clone-runner:latest infra/images/clone-runner/
+        docker tag  localhost:5000/loop-runtime-clone-runner:latest localhost:5000/loop-runtime-clone-runner:v0.1.0
+        docker push localhost:5000/loop-runtime-clone-runner:latest
+        docker push localhost:5000/loop-runtime-clone-runner:v0.1.0
+        echo "  Pushed: localhost:5000/loop-runtime-clone-runner:{latest,v0.1.0}"
 
   images:build:minio:
-    desc: Build + push loopruntime-minio, the MinIO server built from pinned source (#394)
+    desc: Build + push loop-runtime-minio, the MinIO server built from pinned source (#394)
     cmds:
       - |
-        echo "=== Building loopruntime-minio (from source — MinIO publishes no community images) ==="
+        echo "=== Building loop-runtime-minio (from source — MinIO publishes no community images) ==="
         # The tag is the upstream release the image is built from; the core helmfile
         # pins the same one for a local-registry profile.
-        docker build -t localhost:5000/loopruntime-minio:RELEASE.2024-12-18T13-15-44Z infra/images/minio/
-        docker push localhost:5000/loopruntime-minio:RELEASE.2024-12-18T13-15-44Z
-        echo "  Pushed: localhost:5000/loopruntime-minio:RELEASE.2024-12-18T13-15-44Z"
+        docker build -t localhost:5000/loop-runtime-minio:RELEASE.2024-12-18T13-15-44Z infra/images/minio/
+        docker push localhost:5000/loop-runtime-minio:RELEASE.2024-12-18T13-15-44Z
+        echo "  Pushed: localhost:5000/loop-runtime-minio:RELEASE.2024-12-18T13-15-44Z"
 
   images:build:syft-scanner:
-    desc: Build + push loopruntime-syft-scanner (Sprint 6 SBOM generation)
+    desc: Build + push loop-runtime-syft-scanner (Sprint 6 SBOM generation)
     cmds:
       - |
-        echo "=== Building loopruntime-syft-scanner (Sprint 6 / T0.2) ==="
+        echo "=== Building loop-runtime-syft-scanner (Sprint 6 / T0.2) ==="
         # T8.3 + NEW-11 (2026-04-30): publish both :latest and :v0.1.0.
-        docker build -t localhost:5000/loopruntime-syft-scanner:latest infra/images/syft-scanner/
-        docker tag  localhost:5000/loopruntime-syft-scanner:latest localhost:5000/loopruntime-syft-scanner:v0.1.0
-        docker push localhost:5000/loopruntime-syft-scanner:latest
-        docker push localhost:5000/loopruntime-syft-scanner:v0.1.0
-        echo "  Pushed: localhost:5000/loopruntime-syft-scanner:{latest,v0.1.0}"
+        docker build -t localhost:5000/loop-runtime-syft-scanner:latest infra/images/syft-scanner/
+        docker tag  localhost:5000/loop-runtime-syft-scanner:latest localhost:5000/loop-runtime-syft-scanner:v0.1.0
+        docker push localhost:5000/loop-runtime-syft-scanner:latest
+        docker push localhost:5000/loop-runtime-syft-scanner:v0.1.0
+        echo "  Pushed: localhost:5000/loop-runtime-syft-scanner:{latest,v0.1.0}"
 
   images:build:cosign-signer:
-    desc: Build + push loopruntime-cosign-signer (Sprint 6 supply-chain signing)
+    desc: Build + push loop-runtime-cosign-signer (Sprint 6 supply-chain signing)
     cmds:
       - |
-        echo "=== Building loopruntime-cosign-signer (Sprint 6 supply-chain) ==="
+        echo "=== Building loop-runtime-cosign-signer (Sprint 6 supply-chain) ==="
         # NEW-11/NEW-12 (2026-04-30): publish both :latest and :v0.1.0.
-        # Tilt env LOOPRUNTIME_COSIGN_IMAGE points to :v0.1.0.
-        docker build -t localhost:5000/loopruntime-cosign-signer:latest infra/images/cosign-signer/
-        docker tag  localhost:5000/loopruntime-cosign-signer:latest localhost:5000/loopruntime-cosign-signer:v0.1.0
-        docker push localhost:5000/loopruntime-cosign-signer:latest
-        docker push localhost:5000/loopruntime-cosign-signer:v0.1.0
-        echo "  Pushed: localhost:5000/loopruntime-cosign-signer:{latest,v0.1.0}"
+        # Tilt env LOOP_RUNTIME_COSIGN_IMAGE points to :v0.1.0.
+        docker build -t localhost:5000/loop-runtime-cosign-signer:latest infra/images/cosign-signer/
+        docker tag  localhost:5000/loop-runtime-cosign-signer:latest localhost:5000/loop-runtime-cosign-signer:v0.1.0
+        docker push localhost:5000/loop-runtime-cosign-signer:latest
+        docker push localhost:5000/loop-runtime-cosign-signer:v0.1.0
+        echo "  Pushed: localhost:5000/loop-runtime-cosign-signer:{latest,v0.1.0}"
 
   images:build:
     desc: Build + push ALL tooling images (composite of per-image tasks)
     # T4.1 (simplify-deploy-loopzerokit-only v2.0): packs-runner + dockerfile-lint
-    # image builds removed — loopruntime-packs generation (T2.1) and the BYO-Dockerfile
+    # image builds removed — loop-runtime-packs generation (T2.1) and the BYO-Dockerfile
     # lint path (T2.2) are gone; the build uses canonical in-process Dockerfiles.
     cmds:
       - task: images:build:clone-runner
@@ -998,29 +998,29 @@ tasks:
   # Platform image push to DOCR — for env=dev-public (clusterRole=cloud-local).
 
   images:ghcr:pullsecret:
-    desc: Provision ghcr-pull imagePullSecret (loopruntime-cloud GHCR canonical) — issue #104 Architecture A
+    desc: Provision ghcr-pull imagePullSecret (loop-console GHCR canonical) — issue #104 Architecture A
     cmds:
       - |
         set -euo pipefail
         echo "=== images:ghcr:pullsecret — provision ghcr-pull Secret (issue #104) ==="
 
         # Issue #104 Architecture A (ADR PROPOSED
-        # `2026-06-19-loopruntime-cloud-image-registry-canonical`). loopruntime-cloud
+        # `2026-06-19-loop-console-image-registry-canonical`). loop-console
         # images are published to GHCR by the AM6 reusable workflow
-        # (`loopruntime/.github/workflows/build-publish.yml`). Engine helmfile
+        # (`loop-runtime/.github/workflows/build-publish.yml`). Engine helmfile
         # needs a `kubernetes.io/dockerconfigjson` Secret authenticating
-        # to ghcr.io to pull. Canonical SoT: ~/.loopruntime/ghcr-pull-token.txt
-        # mode 0600 (sibling of ~/.loopruntime/gomod-token.txt per memory
+        # to ghcr.io to pull. Canonical SoT: ~/.loop-runtime/ghcr-pull-token.txt
+        # mode 0600 (sibling of ~/.loop-runtime/gomod-token.txt per memory
         # `reference_gomod_token_canonical_path`).
         #
         # Token requirements (fine-grained PAT recommended for dev-public):
-        #   - Repository access: getloopscale/loopruntime-cloud
+        #   - Repository access: getloopscale/loop-console
         #   - Permission: Packages: read
         # OR Classic PAT with `read:packages` scope.
-        GHCR_PULL_TOKEN_PATH="${HOME}/.loopruntime/ghcr-pull-token.txt"
+        GHCR_PULL_TOKEN_PATH="${HOME}/.loop-runtime/ghcr-pull-token.txt"
         if [ ! -f "$GHCR_PULL_TOKEN_PATH" ]; then
-          echo "ERROR: missing $GHCR_PULL_TOKEN_PATH — required to pull loopruntime-cloud from GHCR" >&2
-          echo "  Generate a GitHub PAT with \`read:packages\` (or fine-grained \`Packages: read\` on getloopscale/loopruntime-cloud) and save:" >&2
+          echo "ERROR: missing $GHCR_PULL_TOKEN_PATH — required to pull loop-console from GHCR" >&2
+          echo "  Generate a GitHub PAT with \`read:packages\` (or fine-grained \`Packages: read\` on getloopscale/loop-console) and save:" >&2
           echo "  echo \"ghp_xxx\" > $GHCR_PULL_TOKEN_PATH && chmod 600 $GHCR_PULL_TOKEN_PATH" >&2
           exit 1
         fi
@@ -1034,20 +1034,20 @@ tasks:
         DOCKER_CONFIG_JSON="$(printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$(printf '%s:%s' "$GHCR_USER" "$GHCR_TOKEN" | base64 -w0)")"
         DOCKER_CONFIG_B64="$(printf '%s' "$DOCKER_CONFIG_JSON" | base64 -w0)"
 
-        # Provision in loopruntime-system namespace of mgmt cluster (where the
-        # loopruntime-cloud Deployment lives). Idempotent kubectl apply.
-        kubectl --context {{.CORE_CONTEXT}} create namespace loopruntime-system --dry-run=client -o yaml | kubectl --context {{.CORE_CONTEXT}} apply -f -
+        # Provision in loop-runtime-system namespace of mgmt cluster (where the
+        # loop-console Deployment lives). Idempotent kubectl apply.
+        kubectl --context {{.CORE_CONTEXT}} create namespace loop-runtime-system --dry-run=client -o yaml | kubectl --context {{.CORE_CONTEXT}} apply -f -
         cat <<EOF | kubectl --context {{.CORE_CONTEXT}} apply -f -
         apiVersion: v1
         kind: Secret
         type: kubernetes.io/dockerconfigjson
         metadata:
           name: ghcr-pull
-          namespace: loopruntime-system
+          namespace: loop-runtime-system
         data:
           .dockerconfigjson: ${DOCKER_CONFIG_B64}
         EOF
-        echo "=== ghcr-pull Secret provisioned in {{.CORE_CONTEXT}}/loopruntime-system ==="
+        echo "=== ghcr-pull Secret provisioned in {{.CORE_CONTEXT}}/loop-runtime-system ==="
 
   # ---------------------------------------------------------------------------
   # Dashboard public flow (local-Caddy demo droplet)
@@ -1060,9 +1060,9 @@ tasks:
       binds :80 + :443 (requires sudo) and terminates Let's Encrypt TLS for
       app/cloud/auth.getloopscale.com. Serves dashboard prod-bundle via file_server
       (canonical Option B per plan caddyfile-app-dev-prod-bundle-file-server-
-      canonical v1.1 closing Red Team loopruntime-cloud#66). Routes /sessions/* +
+      canonical v1.1 closing Red Team loop-console#66). Routes /sessions/* +
       /self-service/* to :14433 (ory-kratos-public), /v1/* to :13002 (cloud).
-      v1.2: exports DASHBOARD_DIST to ../loopruntime-cloud/dashboard/dist via sudo -E
+      v1.2: exports DASHBOARD_DIST to ../loop-console/dashboard/dist via sudo -E
       so file_server serves the prod-bundle without operator manual env-export.
     cmds:
       - |
@@ -1082,10 +1082,10 @@ tasks:
       - |
         # v1.2 pre-check: dashboard prod-bundle must exist (file_server canonical
         # path per plan caddyfile-app-dev-prod-bundle-file-server-canonical).
-        DASHBOARD_DIST="${DASHBOARD_DIST:-$(pwd)/../loopruntime-cloud/dashboard/dist}"
+        DASHBOARD_DIST="${DASHBOARD_DIST:-$(pwd)/../loop-console/dashboard/dist}"
         if [ ! -f "$DASHBOARD_DIST/index.html" ]; then
           echo "ERROR: dashboard prod-bundle missing at $DASHBOARD_DIST/index.html"
-          echo "       Build it first: cd ../loopruntime-cloud/dashboard && npm run build"
+          echo "       Build it first: cd ../loop-console/dashboard && npm run build"
           exit 1
         fi
         echo "Dashboard prod-bundle ready: $DASHBOARD_DIST ($(du -sh "$DASHBOARD_DIST" | cut -f1))"
@@ -1095,7 +1095,7 @@ tasks:
           echo "ERROR: caddy binary not found. Install from https://caddyserver.com/"
           exit 1
         fi
-        DASHBOARD_DIST="${DASHBOARD_DIST:-$(pwd)/../loopruntime-cloud/dashboard/dist}"
+        DASHBOARD_DIST="${DASHBOARD_DIST:-$(pwd)/../loop-console/dashboard/dist}"
         export DASHBOARD_DIST
         echo "Starting Caddy (sudo required for :80/:443); DASHBOARD_DIST=$DASHBOARD_DIST"
         sudo -E "$CADDY" start --config infra/local/Caddyfile
@@ -1120,8 +1120,8 @@ tasks:
   cloud:port-forward:up:
     desc: |
       Start the 4 persistent port-forwards that Caddy proxies into. Auto-retry
-      on pod recreation (loopruntime-cloud pod restart, kratos rollout, etc.). PID
-      file at /tmp/loopruntime-port-forward-public.pids. T7.3 of plan.
+      on pod recreation (loop-console pod restart, kratos rollout, etc.). PID
+      file at /tmp/loop-runtime-port-forward-public.pids. T7.3 of plan.
     cmds:
       - bash infra/scripts/local/port-forward-public-dashboard.sh start
 
@@ -1159,11 +1159,11 @@ tasks:
         echo "Copy the printed 'webhook signing secret' (whsec_*) and store via:"
         echo ""
         echo "  WHSEC='<paste here>'"
-        echo "  kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \\"
-        echo "    create secret generic loopruntime-stripe-webhook \\"
+        echo "  kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \\"
+        echo "    create secret generic loop-runtime-stripe-webhook \\"
         echo "    --from-literal=STRIPE_WEBHOOK_SECRET=\$WHSEC \\"
         echo "    --dry-run=client -o yaml | kubectl --context {{.CORE_CONTEXT}} apply -f -"
-        echo "  kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system rollout restart deploy/loopruntime-cloud"
+        echo "  kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system rollout restart deploy/loop-console"
         echo ""
         echo "---"
         stripe listen --forward-to {{.WEBHOOK_URL}}
@@ -1205,9 +1205,9 @@ tasks:
       the droplet's metadata service, unless the environment sets them (#455).
     cmds:
       - |
-        eval "$(cd cmd/loopruntime-ops && go run . creds env)"
+        eval "$(cd cmd/loop-runtime-ops && go run . creds env)"
         DROPLET_IP="${DROPLET_IP:-$(curl -fsS --max-time 3 http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null || true)}"
-        [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || { echo "CLOUDFLARE_API_TOKEN: set it, or add cloudflare.api_token to ~/.loopruntime/dev-credentials.json"; exit 1; }
+        [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || { echo "CLOUDFLARE_API_TOKEN: set it, or add cloudflare.api_token to ~/.loop-runtime/dev-credentials.json"; exit 1; }
         [ -n "$DROPLET_IP" ] || { echo "DROPLET_IP: set it (not on a droplet, so no metadata service answered)"; exit 1; }
         export DROPLET_IP
         bash infra/scripts/local/setup-dev-public-dns.sh --verify
@@ -1224,12 +1224,12 @@ tasks:
         msg: "caddy binary not installed; install from caddyserver.com"
     cmds:
       - |
-        eval "$(cd cmd/loopruntime-ops && go run . creds env)"
-        # The dashboard bundle comes from the loopruntime-dashboard image pinned beside the
-        # platform images (#462); LOOPRUNTIME_DASHBOARD_DIST, when set, still overrides it.
+        eval "$(cd cmd/loop-runtime-ops && go run . creds env)"
+        # The dashboard bundle comes from the loop-console-dashboard image pinned beside the
+        # platform images (#462); LOOP_CONSOLE_DASHBOARD_DIST, when set, still overrides it.
         env_file=infra/helmfile/environments/dev-public.yaml
-        LOOPRUNTIME_DASHBOARD_IMAGE="$(yq -r '.platformImages.registry + "loopruntime-dashboard:" + .platformImages.tags."loopruntime-dashboard"' "$env_file")"
-        export LOOPRUNTIME_DASHBOARD_IMAGE
+        LOOP_CONSOLE_DASHBOARD_IMAGE="$(yq -r '.platformImages.registry + "loop-console-dashboard:" + .platformImages.tags."loop-console-dashboard"' "$env_file")"
+        export LOOP_CONSOLE_DASHBOARD_IMAGE
         bash infra/scripts/local/caddy-up-dev-public.sh --verify
 
   dev-public:sync-kratos:
@@ -1246,9 +1246,9 @@ tasks:
       checksum/kratos-config annotation changes with the config.
 
       Required env (exported from .env):
-        LOOPRUNTIME_GITHUB_CLIENT_ID, LOOPRUNTIME_GITHUB_CLIENT_SECRET
-        LOOPRUNTIME_GOOGLE_CLIENT_ID, LOOPRUNTIME_GOOGLE_CLIENT_SECRET
-        LOOPRUNTIME_RESEND_API_KEY
+        LOOP_RUNTIME_GITHUB_CLIENT_ID, LOOP_RUNTIME_GITHUB_CLIENT_SECRET
+        LOOP_RUNTIME_GOOGLE_CLIENT_ID, LOOP_RUNTIME_GOOGLE_CLIENT_SECRET
+        LOOP_RUNTIME_RESEND_API_KEY
     cmds:
       - |
         if [ -f .env ]; then
@@ -1257,19 +1257,19 @@ tasks:
           source .env
           set +a
         fi
-        # Then ~/.loopruntime/dev-credentials.json, the file the seeds read, for what is still
+        # Then ~/.loop-runtime/dev-credentials.json, the file the seeds read, for what is still
         # unset (#445). The check below still refuses a variable neither source sets.
-        eval "$(cd cmd/loopruntime-ops && go run . creds env)"
-        for var in LOOPRUNTIME_GITHUB_CLIENT_ID LOOPRUNTIME_GITHUB_CLIENT_SECRET LOOPRUNTIME_GOOGLE_CLIENT_ID LOOPRUNTIME_GOOGLE_CLIENT_SECRET LOOPRUNTIME_RESEND_API_KEY; do
+        eval "$(cd cmd/loop-runtime-ops && go run . creds env)"
+        for var in LOOP_RUNTIME_GITHUB_CLIENT_ID LOOP_RUNTIME_GITHUB_CLIENT_SECRET LOOP_RUNTIME_GOOGLE_CLIENT_ID LOOP_RUNTIME_GOOGLE_CLIENT_SECRET LOOP_RUNTIME_RESEND_API_KEY; do
           if [ -z "$(printenv "$var")" ]; then
-            echo "ERROR: $var is not set (export it, add it to .env, or fill ~/.loopruntime/dev-credentials.json) — Kratos would render the REPLACE_VIA_* placeholder"
+            echo "ERROR: $var is not set (export it, add it to .env, or fill ~/.loop-runtime/dev-credentials.json) — Kratos would render the REPLACE_VIA_* placeholder"
             exit 1
           fi
         done
-        export LOOPRUNTIME_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system \
-          get secret loopruntime-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}')
-        if [ -z "$LOOPRUNTIME_DB_PASSWORD" ]; then
-          echo "ERROR: LOOPRUNTIME_DB_PASSWORD not in loopruntime-db-credentials Secret — run generate-secrets.sh first"
+        export LOOP_RUNTIME_DB_PASSWORD=$(kubectl --context {{.CORE_CONTEXT}} -n loop-runtime-system \
+          get secret loop-runtime-db-credentials -o go-template='{{`{{.data.password | base64decode}}`}}')
+        if [ -z "$LOOP_RUNTIME_DB_PASSWORD" ]; then
+          echo "ERROR: LOOP_RUNTIME_DB_PASSWORD not in loop-runtime-db-credentials Secret — run generate-secrets.sh first"
           exit 1
         fi
         helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl \
@@ -1287,7 +1287,7 @@ tasks:
       ~60min and destroy LIVE state).
 
       For full destructive trio (real cleanroom + chaos injection):
-        task clean:all && LOOPRUNTIME_HELMFILE_ENV=dev-public task setup
+        task clean:all && LOOP_RUNTIME_HELMFILE_ENV=dev-public task setup
         + bash infra/scripts/local/trio-dev-public.sh
     cmds:
       - bash infra/scripts/local/trio-dev-public.sh
@@ -1305,7 +1305,7 @@ tasks:
           - check-live-proof-syntax_test.sh       22 asserts
           - check-trio-dev-public-syntax_test.sh  17 asserts
           - check-dev-public-scripts-syntax_test  23 asserts
-        LIVE (~30s, needs Caddy + Kratos + loopruntime-cloud running):
+        LIVE (~30s, needs Caddy + Kratos + loop-console running):
           - dev-public-oidc-redirect_test.sh       8 asserts
           - dev-public-billing-portal_test.sh      5 asserts
           - live-proof-dev-public.sh               9 asserts
@@ -1322,12 +1322,12 @@ tasks:
 
   dev-public:bootstrap:
     desc: |
-      Full dev-public bootstrap on the operator droplet (loopruntime-e2e-runner).
+      Full dev-public bootstrap on the operator droplet (loop-runtime-e2e-runner).
       Composes DNS + Caddy + (platform helmfile sync deferred until clusters
       created via parent `task setup`) + Kratos ConfigMap patch.
 
       Recommended invocation (operator):
-        export $(grep -E '^LOOPRUNTIME_|^CLOUDFLARE_|^DROPLET_IP' .env | xargs)
+        export $(grep -E '^LOOP_RUNTIME_|^CLOUDFLARE_|^DROPLET_IP' .env | xargs)
         task infrafile:dev-public:bootstrap
 
       Per T2.2 of plan 2026-06-04: this target is the dev-public default
@@ -1340,7 +1340,7 @@ tasks:
       - |
         printf '[dev-public:bootstrap] DNS + Caddy OK.\n'
         printf '[dev-public:bootstrap] Next: \n'
-        printf '  LOOPRUNTIME_HELMFILE_ENV=dev-public task setup\n'
+        printf '  LOOP_RUNTIME_HELMFILE_ENV=dev-public task setup\n'
         printf '  Then visit: https://app-dev.getloopscale.com/login\n'
 
   # ---------------------------------------------------------------------------

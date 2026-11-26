@@ -120,10 +120,10 @@ type TenantEnvironmentEntry struct {
 	Cluster string `json:"cluster"`
 
 	// Project is the project segment of the canonical namespace formula
-	// `loopruntime-<tenant>-<project>-<env>`. J-23 LIVE catch 2026-06-07
+	// `loop-runtime-<tenant>-<project>-<env>`. J-23 LIVE catch 2026-06-07
 	// (#69, sponsor verbatim "Atacar #69 fix tenant_gitops + CRD"): the
 	// renderer canonical refactor (commit a567cdbb5) emits manifests with
-	// namespace `loopruntime-<tenant>-<project>-<env>` for ALL envs. The API
+	// namespace `loop-runtime-<tenant>-<project>-<env>` for ALL envs. The API
 	// populates it when creating / updating the Tenant CR
 	// (api/internal/k8s/tenant_cr_manager.go), the operator reads it in
 	// reconcileArgoCDApp (tenant_gitops.go) to compute the canonical

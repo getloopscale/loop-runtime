@@ -35,10 +35,10 @@ type TenantCRCellPatcher struct {
 var _ placement.TenantCRPatcher = (*TenantCRCellPatcher)(nil)
 
 // NewTenantCRCellPatcher patches Tenant CRs in namespace (default
-// "loopruntime-system", where the tenant operator keeps them).
+// "loop-runtime-system", where the tenant operator keeps them).
 func NewTenantCRCellPatcher(client dynamic.Interface, namespace string) *TenantCRCellPatcher {
 	if namespace == "" {
-		namespace = "loopruntime-system"
+		namespace = "loop-runtime-system"
 	}
 	return &TenantCRCellPatcher{client: client, namespace: namespace}
 }

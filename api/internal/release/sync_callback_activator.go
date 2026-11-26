@@ -39,9 +39,9 @@ type SyncCallbackActivator struct {
 	deployEventStore store.DeployEventStore
 	baseDomain       string
 	// publicDomain is the operator-configured wildcard root mirrored from
-	// LOOPRUNTIME_PUBLIC_DOMAIN (e.g. `prod-dev.getloopscale.app`). When set, the
+	// LOOP_RUNTIME_PUBLIC_DOMAIN (e.g. `prod-dev.getloopscale.app`). When set, the
 	// deploy.completed SSE event URL uses this domain instead of the legacy
-	// baseDomain (`loopruntime.local`) — closes loopruntime-cloud#61 so the URL `loopscale deploy`
+	// baseDomain (`loop-runtime.local`) — closes loop-console#61 so the URL `loopscale deploy`
 	// announces is the SAME publicly-resolvable URL `loopscale status` returns.
 	publicDomain string
 	logger       *slog.Logger
@@ -97,9 +97,9 @@ func (a *SyncCallbackActivator) lookupTenantEnv(ctx context.Context, appName str
 // NewSyncCallbackActivator creates a new SyncCallbackActivator.
 //
 // release-blockers-2026-06-25-set v1.1 #61: publicDomain is the
-// canonical public wildcard (LOOPRUNTIME_PUBLIC_DOMAIN) used to compose the
+// canonical public wildcard (LOOP_RUNTIME_PUBLIC_DOMAIN) used to compose the
 // URL announced in the deploy.completed SSE event. Empty publicDomain
-// falls back to baseDomain (legacy default `loopruntime.local`) so test fixtures
+// falls back to baseDomain (legacy default `loop-runtime.local`) so test fixtures
 // + envs without a public wildcard preserve pre-#61 behavior.
 func NewSyncCallbackActivator(
 	releaseStore ReleaseConvergenceStore,
@@ -137,7 +137,7 @@ type PendingReleaseByTenantEnvFinder interface {
 }
 
 // OnSyncCompleted is called when ArgoCD reports an Application as Synced + Healthy.
-// The appName is in format "{tenantID}-{environment}" (e.g., "tn-loopruntime-production").
+// The appName is in format "{tenantID}-{environment}" (e.g., "tn-loop-runtime-production").
 // It finds all PENDING releases matching that tenant+environment and activates them.
 func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error {
 	// T6.6 of deep-review-remediation-plan (closes find_code_007 / CODE-007 LOW):

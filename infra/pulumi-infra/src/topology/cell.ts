@@ -8,7 +8,7 @@
  * and registers the cell in the control plane via ClusterCredential CRD metadata.
  *
  * Cells do NOT install bootstrap addons (Traefik, cert-manager, etc.) —
- * that's the responsibility of the role-based bootstrap in loopruntime-platform.
+ * that's the responsibility of the role-based bootstrap in loop-runtime-platform.
  * Cells add cell-specific metadata, labels, and registrations.
  *
  * Infra-topology-refactor.md Phase 6.
@@ -60,10 +60,10 @@ export interface CellOutput {
  * This is the logical composition that:
  * 1. Associates cellId with the runtime cluster
  * 2. Produces cell-scoped outputs for StackReference consumers
- * 3. Generates labels for ClusterCredential registration (done by loopruntime-platform)
+ * 3. Generates labels for ClusterCredential registration (done by loop-runtime-platform)
  *
  * Bootstrap addons (Traefik, cert-manager, ESO) are NOT installed here —
- * they are installed by the role-based bootstrap pipeline in loopruntime-platform.
+ * they are installed by the role-based bootstrap pipeline in loop-runtime-platform.
  */
 export function createCell(cfg: CellConfig): CellOutput {
   const spec = cfg.cluster.spec;

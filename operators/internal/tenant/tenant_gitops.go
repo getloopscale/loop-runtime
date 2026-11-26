@@ -23,11 +23,11 @@ import (
 
 // canonicalDestNamespace returns the namespace name to use as an ArgoCD
 // App destination for a tenant environment. When projectSlug is set,
-// returns the canonical formula `loopruntime-<tenant>-<project>-<env>` that
+// returns the canonical formula `loop-runtime-<tenant>-<project>-<env>` that
 // matches what the manifest renderer emits (renderer_helpers.go:
 // namespace). When projectSlug is empty (pre-#69 Tenant CRs created
 // before the API started populating env.Project), falls back to the
-// legacy two-segment `loopruntime-<tenant>-<env>` formula so the controller
+// legacy two-segment `loop-runtime-<tenant>-<env>` formula so the controller
 // continues reconciling existing installations without manual repair.
 //
 // J-23 LIVE catch 2026-06-07 #69: the renderer canonical refactor
@@ -192,7 +192,7 @@ func buildAppProjectDestNamespaces(tenant *loopruntimev1.Tenant, previewEnvs []l
 	}
 	for _, pe := range previewEnvs {
 		// All envs (production, staging, preview-pr-N) share the SAME
-		// uniform namespace formula: "loopruntime-<tenant>-<project>-<env>".
+		// uniform namespace formula: "loop-runtime-<tenant>-<project>-<env>".
 		// Canonical refactor 2026-06-07 — no if/else branching on env type.
 		envName := fmt.Sprintf("preview-pr-%d", pe.Spec.PRNumber)
 		// T1.3.c of plan 2026-06-11-code-review-remediation v1.2 — call-site
@@ -224,7 +224,7 @@ func buildAppProjectDestNamespaces(tenant *loopruntimev1.Tenant, previewEnvs []l
 // Audit gap M10 F2 / §6.E.4c: the canonical production pattern is
 // `tn-acme-gitops` (api/internal/k8s/tenant_cr_manager.go:308 emits
 // `{tenantID}-gitops`). The operator-test fixtures historically use
-// `loopruntime-tenant-<tenantName>`. Both shapes are accepted because both
+// `loop-runtime-tenant-<tenantName>`. Both shapes are accepted because both
 // embed the tenant name as a delimited component. A reference that
 // does NOT contain the tenant name as a component (typo or attack)
 // is rejected before the provisioner is given the foreign name.

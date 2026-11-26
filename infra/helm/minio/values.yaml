@@ -3,7 +3,7 @@
 # Use --set rootPassword=<secure-value> or a values override file.
 mode: standalone
 
-rootUser: loopruntime-admin
+rootUser: loop-runtime-admin
 rootPassword: ""  # T1.3: empty triggers MinIO fail-fast; override via helmfile env or --set
 
 livenessProbe:
@@ -47,23 +47,23 @@ consoleService:
 # job creates each bucket idempotently on every helm install/upgrade.
 #
 # Each bucket maps to a specific consumer in the codebase:
-#   loopruntime-builds       → CLI uploads source bundle here (POST /source/upload)
-#                       and Argo loopruntime-clone CWT downloads from here
-#                       (charts/loopruntime-build-cwts/templates/cwt-clone.yaml).
-#   loopruntime-artifacts    → BuildKit layer cache (cwt-cache-save/restore.yaml).
-#   loopruntime-logs         → Loki long-term storage when S3 backend configured.
-#   loopruntime-static-assets→ Frontend delivery + SBOMs + attestations
+#   loop-runtime-builds       → CLI uploads source bundle here (POST /source/upload)
+#                       and Argo loop-runtime-clone CWT downloads from here
+#                       (charts/loop-runtime-build-cwts/templates/cwt-clone.yaml).
+#   loop-runtime-artifacts    → BuildKit layer cache (cwt-cache-save/restore.yaml).
+#   loop-runtime-logs         → Loki long-term storage when S3 backend configured.
+#   loop-runtime-static-assets→ Frontend delivery + SBOMs + attestations
 #                       (api/internal/buildplane/argo/constants.go:s3BucketStaticAssets).
 #                       In LoopRuntime Cloud this is DO Spaces (worker.mjs); in
 #                       standalone (no external S3) it MUST live in MinIO.
 buckets:
-  - name: loopruntime-builds
+  - name: loop-runtime-builds
     policy: none
-  - name: loopruntime-artifacts
+  - name: loop-runtime-artifacts
     policy: none
-  - name: loopruntime-logs
+  - name: loop-runtime-logs
     policy: none
-  - name: loopruntime-static-assets
+  - name: loop-runtime-static-assets
     policy: none
   # velero-backup-dr-plan v1.0 / EC-4 fix — Velero in standalone uses
   # this bucket as BackupStorageLocation. Without it pre-created, Velero

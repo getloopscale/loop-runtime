@@ -1,16 +1,16 @@
 config:
-  loopruntime-infra:environment: homolog
-  loopruntime-infra:provider: digitalocean
-  loopruntime-infra:region: nyc3
-  loopruntime-infra:domain: homolog.getloopscale.com
-  loopruntime-infra:dnsZone: getloopscale.com
-  loopruntime-infra:infraVersion: v3
-  loopruntime-infra:vpcCidr: "10.30.0.0/16"
-  loopruntime-infra:dbNodeClass: small
-  loopruntime-infra:dbVersion: "16"
-  loopruntime-infra:dbNodeCount: "1"
-  loopruntime-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
-  loopruntime-infra:topology:
+  loop-runtime-infra:environment: homolog
+  loop-runtime-infra:provider: digitalocean
+  loop-runtime-infra:region: nyc3
+  loop-runtime-infra:domain: homolog.getloopscale.com
+  loop-runtime-infra:dnsZone: getloopscale.com
+  loop-runtime-infra:infraVersion: v3
+  loop-runtime-infra:vpcCidr: "10.30.0.0/16"
+  loop-runtime-infra:dbNodeClass: small
+  loop-runtime-infra:dbVersion: "16"
+  loop-runtime-infra:dbNodeCount: "1"
+  loop-runtime-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
+  loop-runtime-infra:topology:
     mgmt:
       - id: combo-mgmt-build
         region: nyc3

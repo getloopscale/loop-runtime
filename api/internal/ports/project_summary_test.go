@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopRuntime Authors
 
 // T3.2 of plan dashboard-badge-data-plane-poller — closes Red Team
-// loopruntime-cloud#128. RED test guarantee: ProjectSummary MUST expose the
+// loop-console#128. RED test guarantee: ProjectSummary MUST expose the
 // data-plane-poller snapshot fields (last_replicas_ready_value +
 // last_replicas_ready_at) as *POINTER* types tagged `omitempty` so
 // projects without a snapshot yet (Cleanroom warm-up / poller disabled)
@@ -62,7 +62,7 @@ func TestProjectSummary_WireFormat_OmitsNilReplicasReadyFields(t *testing.T) {
 }
 
 // TestProjectSummary_WireFormat_SerializesActiveEnvCount asserts the
-// canonical wire shape for the Red Team loopruntime-cloud#134 fix: the
+// canonical wire shape for the Red Team loop-console#134 fix: the
 // `active_env_count` field surfaces the count of env_targets that
 // have a currently-serving ACTIVE release. Preview OR permanent env
 // kinds both qualify — the truth "LIVE" the dashboard label promises.

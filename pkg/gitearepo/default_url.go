@@ -5,7 +5,7 @@ package gitearepo
 
 // DefaultInternalURL is the in-cluster address of the platform's Gitea HTTP
 // API when nothing configures one. The platform installs Gitea into the
-// loopruntime-system namespace in every environment (infra/helmfile/
+// loop-runtime-system namespace in every environment (infra/helmfile/
 // core.helmfile.yaml.gotmpl), so this is the address a component reaches when
 // it is installed with its defaults.
 //
@@ -17,6 +17,6 @@ package gitearepo
 //
 // The same value is also written where a Go constant cannot reach: the
 // kubebuilder default on PlatformBootstrap's Gitea InternalURL (and the CRD
-// copies generated from it) and config.giteaUrl in the loopruntime-api chart. Tests
+// copies generated from it) and config.giteaUrl in the loop-runtime-api chart. Tests
 // pin each of those to this constant, so they cannot drift from it again.
-const DefaultInternalURL = "http://gitea-http.loopruntime-system.svc.cluster.local:3000"
+const DefaultInternalURL = "http://gitea-http.loop-runtime-system.svc.cluster.local:3000"

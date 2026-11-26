@@ -41,7 +41,7 @@ import (
 var reservedEnvironmentNames = map[string]bool{
 	"default":                     true,
 	"kube-system":                 true,
-	"loopruntime-system":          true,
+	"loop-runtime-system":         true,
 	"argocd":                      true,
 	"monitoring":                  true,
 	pkgdomain.DefaultPermanentEnv: true, // M2 v1.2 — EC-8 cross-project reserved
@@ -52,7 +52,7 @@ var reservedEnvironmentNames = map[string]bool{
 // the operator side; the message uses product language (Rule 3 — no
 // "ArgoCD", "Gitea", "MinIO", etc. in user-facing strings).
 // Plan: 2026-06-15-code-review-49-findings-remediation T0.1 (R2-F1 BLOCKER).
-const envDeleteCleanupWarning = "environment removed but cleanup may take a few seconds; run 'loopruntime platform status' to verify"
+const envDeleteCleanupWarning = "environment removed but cleanup may take a few seconds; run 'loop-runtime platform status' to verify"
 
 // T1.3 of deep-review-remediation-plan (closes find_arch_001 + find_dep_routes_type_hub partial):
 // canonical types live in domain/. Aliases preserve back-compat with
@@ -68,7 +68,7 @@ type (
 //
 // M2 v1.2 (2026-06-07): the write/lookup methods carry an explicit
 // `project` argument. The canonical 3-segment namespace
-// `loopruntime-<tenant>-<project>-<env>` is computed by `pkg/naming` and is
+// `loop-runtime-<tenant>-<project>-<env>` is computed by `pkg/naming` and is
 // the source of truth for routing post-M2. Legacy callers (Phase 2/3
 // of the M2 plan) may pass `project=""` during the cascade; the
 // operator preserves backward compatibility for tuples that landed
@@ -151,7 +151,7 @@ type EnvProjectLookup interface {
 // triple still has a desired or active release row in env_targets. Used
 // by Delete to attach an EC-7 warning ("ArgoCD App may persist briefly")
 // so operators are informed about the eventual-consistency cleanup
-// instead of being surprised by a stale App in `loopruntime platform status`.
+// instead of being surprised by a stale App in `loop-runtime platform status`.
 //
 // Nil implementation = no warning surfaced (test fixtures + legacy).
 type EnvActiveReleaseLookup interface {
@@ -196,7 +196,7 @@ func (h *EnvironmentHandler) WithProjectLookup(p EnvProjectLookup) *EnvironmentH
 }
 
 // WithActiveReleaseLookup wires the EC-7 warning emitter for Delete.
-// Nil → no warning surfaced; operators rely on `loopruntime platform status`
+// Nil → no warning surfaced; operators rely on `loop-runtime platform status`
 // instead.
 func (h *EnvironmentHandler) WithActiveReleaseLookup(l EnvActiveReleaseLookup) *EnvironmentHandler {
 	h.relLookup = l
@@ -255,7 +255,7 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Red Team loopruntime-cloud#48 closure — A01:2021 Broken Access Control / CWE-639.
+	// Red Team loop-console#48 closure — A01:2021 Broken Access Control / CWE-639.
 	// `?project=` was silently ignored server-side, letting a caller probe
 	// for env names of projects outside their tenant. Canonical fix:
 	//   1) Cross-tenant gate via projectStore (same EC-1 SEPA-CRITICAL

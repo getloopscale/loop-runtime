@@ -121,7 +121,7 @@ func TestValidator_AllowedSimilarDomains(t *testing.T) {
 
 	// These look similar but should be allowed
 	allowed := []string{
-		"loopruntime.com",     // different TLD
+		"loop-runtime.com",    // different TLD
 		"notgetloopscale.com", // different domain
 		"mygetloopscale.com",  // different domain
 		"api.mycompany.dev",   // different domain, same TLD

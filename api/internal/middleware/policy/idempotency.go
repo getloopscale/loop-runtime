@@ -100,14 +100,14 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 			}
 
 			// Check for existing key (scoped by tenant to prevent cross-tenant replay)
-			ctx, span := otel.Tracer("loopruntime-api").Start(r.Context(), "loopruntime.api.idempotency.check",
+			ctx, span := otel.Tracer("loop-runtime-api").Start(r.Context(), "loop-runtime.api.idempotency.check",
 				trace.WithAttributes(
-					attribute.String("loopruntime.idempotency.key", key),
+					attribute.String("loop-runtime.idempotency.key", key),
 				))
 
 			existing, err := store.Get(ctx, key, tenantID)
 			if err != nil {
-				span.SetAttributes(attribute.Bool("loopruntime.idempotency.hit", false))
+				span.SetAttributes(attribute.Bool("loop-runtime.idempotency.hit", false))
 				span.End()
 				writeIdempotencyError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to check idempotency key")
 				return
@@ -117,14 +117,14 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 				// A key belongs to the endpoint it was first used on; reused on
 				// another one it must not replay that endpoint's answer.
 				if existing.RequestHash != hash || existing.Endpoint != r.URL.Path {
-					span.SetAttributes(attribute.Bool("loopruntime.idempotency.hit", false))
+					span.SetAttributes(attribute.Bool("loop-runtime.idempotency.hit", false))
 					span.End()
 					writeIdempotencyError(w, http.StatusUnprocessableEntity, "IDEMPOTENCY_MISMATCH",
 						"Idempotency key already used with a different request (payload or endpoint)")
 					return
 				}
 				// Same key, same payload → return cached response
-				span.SetAttributes(attribute.Bool("loopruntime.idempotency.hit", true))
+				span.SetAttributes(attribute.Bool("loop-runtime.idempotency.hit", true))
 				span.End()
 				metrics.IdempotencyHits.WithLabelValues(r.URL.Path).Inc()
 				w.Header().Set("Content-Type", "application/json")
@@ -136,7 +136,7 @@ func Idempotency(store IdempotencyStore) func(http.Handler) http.Handler {
 				return
 			}
 
-			span.SetAttributes(attribute.Bool("loopruntime.idempotency.hit", false))
+			span.SetAttributes(attribute.Bool("loop-runtime.idempotency.hit", false))
 			span.End()
 			metrics.IdempotencyMisses.WithLabelValues(r.URL.Path).Inc()
 			// New key → process request and capture response

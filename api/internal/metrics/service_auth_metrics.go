@@ -13,7 +13,7 @@ import (
 // Alert: LoopRuntimeServiceAuthSecretExpiring fires when age > 80 days.
 var (
 	ServiceAuthSecretAge = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "loopruntime_service_auth_secret_age_seconds",
+		Name: "loop_runtime_service_auth_secret_age_seconds",
 		Help: "Age of the current service auth secret in seconds.",
 	})
 )

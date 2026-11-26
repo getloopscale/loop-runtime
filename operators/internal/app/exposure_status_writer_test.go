@@ -280,7 +280,7 @@ func assertAnchoredPatches(t *testing.T, tlsEnabled bool) {
 		t.Fatal(err)
 	}
 	seed := &loopruntimev1.ExposedRoute{
-		ObjectMeta: metav1.ObjectMeta{Name: "r1", Namespace: "loopruntime-system", Generation: 7},
+		ObjectMeta: metav1.ObjectMeta{Name: "r1", Namespace: "loop-runtime-system", Generation: 7},
 		Spec: loopruntimev1.ExposedRouteSpec{
 			Hostname: "probe.example.invalid",
 			TLS:      loopruntimev1.TLSConfig{Enabled: tlsEnabled},
@@ -392,7 +392,7 @@ func TestApplicationController_ConcurrentStatusWriteSurvivesThePatch(t *testing.
 		t.Fatal(err)
 	}
 	seed := &loopruntimev1.LoopRuntimeApplication{
-		ObjectMeta: metav1.ObjectMeta{Name: "app1", Namespace: "loopruntime-system", Generation: 7},
+		ObjectMeta: metav1.ObjectMeta{Name: "app1", Namespace: "loop-runtime-system", Generation: 7},
 		Spec: loopruntimev1.LoopRuntimeApplicationSpec{
 			TenantRef: "tn-x", Project: "p", Environment: "e",
 			ServiceName: "svc", Hostname: "app1.example.invalid",
@@ -473,7 +473,7 @@ func TestApplicationController_ErrorPathPersistsAFreshReadinessSummary(t *testin
 
 	const staleGen, currentGen = 6, 7
 	seed := &loopruntimev1.LoopRuntimeApplication{
-		ObjectMeta: metav1.ObjectMeta{Name: "app-err", Namespace: "loopruntime-system", Generation: currentGen},
+		ObjectMeta: metav1.ObjectMeta{Name: "app-err", Namespace: "loop-runtime-system", Generation: currentGen},
 		Spec: loopruntimev1.LoopRuntimeApplicationSpec{
 			TenantRef: "tn-x", Project: "p", Environment: "e",
 			ServiceName: "svc", Hostname: "app-err.example.invalid",
@@ -697,7 +697,7 @@ func findStatusPersistSites(t *testing.T) []statusPersistSite {
 //
 // # The SIX-package guard exists now, and it is the authoritative one (B-138)
 //
-// `cmd/loopruntime-ops/internal/quality/readinesssummary` covers the six packages by
+// `cmd/loop-runtime-ops/internal/quality/readinesssummary` covers the six packages by
 // AST and FOLLOWS THE CALL: a persist inside a helper counts as covered when
 // the helper folds the summary. That is what the count above could not see —
 // measured on 2026-08-19, the "19 without summary" were ALL artefacts of

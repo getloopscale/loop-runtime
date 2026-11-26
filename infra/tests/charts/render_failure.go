@@ -22,7 +22,7 @@ import "strings"
 // failure took 123.89s and blocked a commit that only touched `CHANGELOG.md` and
 // `BACKLOG.md`.
 //
-// The `loopruntime-cloud` case was fixed at the root — it renders a LOCAL chart, so
+// The `loop-console` case was fixed at the root — it renders a LOCAL chart, so
 // `--skip-deps` removes the network (measured: 17 repo calls and 10s became zero
 // and 0s). The `openbao` case cannot be: the chart comes from a remote
 // repository, and with `--skip-deps` the render fails with `repo openbao not
@@ -53,7 +53,7 @@ func ClassifyRenderFailure(output string) (network bool, explanation string) {
 			return true, "THE FAILURE IS NETWORK, not chart content: the output contains " +
 				"`" + s + "`. This render contacts a remote repository, so network " +
 				"unavailability fails the delivery gate while nothing in the repository is " +
-				"wrong (B-156). Re-run with network, or skip with LOOPRUNTIME_TEST_SKIP_HELMFILE=1."
+				"wrong (B-156). Re-run with network, or skip with LOOP_RUNTIME_TEST_SKIP_HELMFILE=1."
 		}
 	}
 	return false, "The output carries no network signature — treat it as a CONTENT " +

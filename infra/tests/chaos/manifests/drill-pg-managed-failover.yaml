@@ -4,7 +4,7 @@
 # Local k3d uses bitnami postgresql with instant pod restart; drill prod-parity uses
 # DO Managed PG with real failover semantics (~30-60s primary→standby switch).
 #
-# Hypothesis: API circuit breaker engages at >90% pool saturation. loopruntime-api
+# Hypothesis: API circuit breaker engages at >90% pool saturation. loop-runtime-api
 # rejects mutations with HTTP 503 (no DB crash). After network heals + DO
 # Managed PG primary recovers (~30s), API resumes normal operation within 60s.
 #
@@ -19,7 +19,7 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
   name: drill-pg-managed-failover
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   annotations:
     runtime.getloopscale.com/plan: "2026-05-18-drill-skills-trio"
     runtime.getloopscale.com/scenario-id: "drill-pg-managed-failover"
@@ -27,24 +27,24 @@ metadata:
     runtime.getloopscale.com/hypothesis: "Circuit breaker rejects mutations with 503 during PG partition; reads continue from connection pool cache"
     runtime.getloopscale.com/slo-query: |
       # 503 rate spikes during partition window, recovers post-heal
-      rate(loopruntime_api_requests_total{status=~"5.."}[1m]) < 0.05
+      rate(loop_runtime_api_requests_total{status=~"5.."}[1m]) < 0.05
       and
-      # Circuit breaker engaged (loopruntime_circuit_breaker_state metric)
-      loopruntime_circuit_breaker_state{name="pg"} == 1
+      # Circuit breaker engaged (loop_runtime_circuit_breaker_state metric)
+      loop_runtime_circuit_breaker_state{name="pg"} == 1
     runtime.getloopscale.com/recovery-budget-seconds: "60"
 spec:
   action: partition
   mode: all
   selector:
     namespaces:
-      - loopruntime-system
+      - loop-runtime-system
     labelSelectors:
-      "app": "loopruntime-api"
+      "app": "loop-runtime-api"
   direction: to
   externalTargets:
     # DO Managed PG host pattern. The chaos-daemon blocks connections to
     # `*.db.ondigitalocean.com` resolving DSN target. Drill stack's actual
     # host populated dynamically by orchestrator (drill-chaos-orchestrator.sh
     # substitutes via envsubst or kubectl apply -f -).
-    - "${DRILL_PG_HOST_PATTERN:-loopruntime-drill-pg-do-user-*.db.ondigitalocean.com}"
+    - "${DRILL_PG_HOST_PATTERN:-loop-runtime-drill-pg-do-user-*.db.ondigitalocean.com}"
   duration: "60s"

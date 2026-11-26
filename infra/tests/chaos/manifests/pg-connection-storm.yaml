@@ -9,7 +9,7 @@
 # with 503 for mutating operations while reads continue working.
 #
 # Hypothesis:
-#   - Pool saturation > 90% triggers loopruntime_pg_circuit_breaker_tripped=1
+#   - Pool saturation > 90% triggers loop_runtime_pg_circuit_breaker_tripped=1
 #   - Mutations (POST /builds) return 503 with typed error
 #   - Reads (GET /builds/:id) continue succeeding
 #   - After the experiment ends, pool saturation returns to baseline
@@ -19,24 +19,24 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: StressChaos
 metadata:
   name: pg-connection-storm
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   annotations:
     runtime.getloopscale.com/roadmap: "07"
     runtime.getloopscale.com/dod-test: "TestPGCircuitBreaker_RejectAt90Percent"
     runtime.getloopscale.com/hypothesis: "PG saturation > 90% trips breaker, mutations 503, reads OK, auto-reset"
     # SLO query post-decomposition (2026-06-29). Legacy
-    # loopruntime_pg_circuit_breaker_tripped removed; saturation signal is
-    # loopruntime_postgres_connections_active (canonical). Reads continue:
-    # loopruntime_api_requests_total{status=~"2.."} > 0.
+    # loop_runtime_pg_circuit_breaker_tripped removed; saturation signal is
+    # loop_runtime_postgres_connections_active (canonical). Reads continue:
+    # loop_runtime_api_requests_total{status=~"2.."} > 0.
     runtime.getloopscale.com/slo-query: |
-      (max_over_time(loopruntime_postgres_connections_active[3m]) > 0) and on() ((sum(rate(loopruntime_api_requests_total{status=~"2.."}[2m])) or vector(0)) >= 0)
+      (max_over_time(loop_runtime_postgres_connections_active[3m]) > 0) and on() ((sum(rate(loop_runtime_api_requests_total{status=~"2.."}[2m])) or vector(0)) >= 0)
 spec:
   mode: all
   selector:
     namespaces:
-      - loopruntime-system
+      - loop-runtime-system
     labelSelectors:
-      "app": "loopruntime-api"
+      "app": "loop-runtime-api"
   stressors:
     # CPU pressure slows the pool connection handlers and queues
     # requests up to the pool limit.

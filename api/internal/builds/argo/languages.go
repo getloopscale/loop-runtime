@@ -42,7 +42,7 @@ type LanguageStrategy interface {
 	//
 	// build-mode-dispatch-and-dockerfile-security-plan T1.1 (2026-05-07):
 	// restored as interface method; was removed in MEET-2026-03-29-017 when
-	// loopruntime-packs went universal. The universal stance ignored the orthogonal
+	// loop-runtime-packs went universal. The universal stance ignored the orthogonal
 	// `build: dockerfile` axis. This restoration re-applies symmetry: each
 	// strategy decides what runs in this phase.
 	DockerfileStep(apps []deploycontracts.AppSpec, totalApps int) *forge.Container
@@ -122,12 +122,12 @@ func (s *unsupportedStrategy) CacheDirs() []string { return nil }
 func (s *unsupportedStrategy) failStep(name string) *forge.Container {
 	var msg string
 	if strings.TrimSpace(s.runtime) == "" {
-		msg = "loopruntime: loopzero.yaml does not declare a `runtime` for this app — " +
+		msg = "loop-runtime: loopzero.yaml does not declare a `runtime` for this app — " +
 			"add `runtime: python` or `runtime: node`. " +
-			"LoopRuntimeCloud deploys the fixed LoopZeroKit stack and the runtime has no default: " +
+			"LoopConsole deploys the fixed LoopZeroKit stack and the runtime has no default: " +
 			"guessing here would silently build the wrong image."
 	} else {
-		msg = fmt.Sprintf("loopruntime: runtime %q is not supported — LoopRuntimeCloud deploys the fixed LoopZeroKit stack (python, node)", s.runtime)
+		msg = fmt.Sprintf("loop-runtime: runtime %q is not supported — LoopConsole deploys the fixed LoopZeroKit stack (python, node)", s.runtime)
 	}
 	return buildContainer(name, imageAlpine, forge.ResourcesTiny(), failScript(msg))
 }
@@ -200,7 +200,7 @@ func (s *NodeStrategy) ScanStep(_ []deploycontracts.AppSpec) *forge.Container {
 }
 
 func (s *NodeStrategy) DockerfileStep(apps []deploycontracts.AppSpec, totalApps int) *forge.Container {
-	// T1.2: canonical platform Dockerfile (replaces loopruntime-packs).
+	// T1.2: canonical platform Dockerfile (replaces loop-runtime-packs).
 	return canonicalDockerfileStepOrFail("node", apps, totalApps)
 }
 
@@ -241,7 +241,7 @@ func (s *PythonStrategy) ScanStep(apps []deploycontracts.AppSpec) *forge.Contain
 }
 
 func (s *PythonStrategy) DockerfileStep(apps []deploycontracts.AppSpec, totalApps int) *forge.Container {
-	// T1.2: canonical platform Dockerfile (replaces loopruntime-packs).
+	// T1.2: canonical platform Dockerfile (replaces loop-runtime-packs).
 	return canonicalDockerfileStepOrFail("python", apps, totalApps)
 }
 
@@ -272,9 +272,9 @@ const dockerfileStepTemplate = "generate-dockerfile"
 func buildContainer(name, image string, resources *forge.ResourceRequirements, script string) *forge.Container {
 	// Plan J-17 Layer 2 (2026-06-06) — every step that flows through
 	// buildContainer gets its script wrapped with user-facing log
-	// markers (::loopruntime:: phase=X step=Y level=Z). Promtail extracts
+	// markers (::loop-runtime:: phase=X step=Y level=Z). Promtail extracts
 	// the phase/step/level into Loki labels; the API's default LogQL
-	// filter `{loopruntime_phase=~".+"}` then surfaces only labeled lines
+	// filter `{loop_runtime_phase=~".+"}` then surfaces only labeled lines
 	// to the dashboard "Logs" tab.
 	wrapped := wrapWithLoopRuntimeMarkers(name, script)
 	return &forge.Container{

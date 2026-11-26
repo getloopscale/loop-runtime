@@ -21,7 +21,7 @@ import (
 // tenant. Handing them the request pool does not fail; since migration 000062
 // made the tables fail-closed it makes every sweep read and delete NOTHING,
 // with no error and no log line. Measured 2026-08-14 against a real database
-// holding one audit_log row: owner-without-context 0, loopruntime_api 0, loopruntime_worker 1.
+// holding one audit_log row: owner-without-context 0, loop_runtime_api 0, loop_runtime_worker 1.
 //
 // The reach is a NAMED policy (`*_worker_cross_tenant`, migration 000062) held
 // by a role that owns nothing and cannot run DDL. That is the difference the
@@ -30,7 +30,7 @@ import (
 // migrations 000063/000064 removed.
 //
 // `EffectiveWorkerDatabaseURL()` still falls back to `DATABASE_URL` when
-// LOOPRUNTIME_WORKER_DATABASE_URL is unset. That fallback is no longer a
+// LOOP_RUNTIME_WORKER_DATABASE_URL is unset. That fallback is no longer a
 // "defense-in-depth gap" as its doc-comment called it — under fail-closed RLS
 // it is a silent no-op — so the guard turns it into a boot failure naming the
 // variable to set.

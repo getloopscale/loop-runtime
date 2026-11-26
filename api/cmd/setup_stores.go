@@ -97,7 +97,7 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	giteaSourceStore, err := source.NewGiteaSourceStore(source.GiteaSourceStoreConfig{
 		BaseURL: cfg.GiteaURL,
 		Token:   cfg.GiteaToken,
-		OrgName: cfg.GiteaOrg, // B77: was hardcoded "loopruntime"
+		OrgName: cfg.GiteaOrg, // B77: was hardcoded "loop-runtime"
 	})
 	if err != nil {
 		return nil, err

@@ -1,0 +1,13 @@
+# Renews the tenant apps' wildcard certificate when it is due; a renewal restarts the edge.
+[Unit]
+Description=Renew the wildcard certificate of staging's tenant apps
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=EDGE_APPS_DOMAIN=apps.staging.getloopscale.com
+Environment=EDGE_LEGO_DIR=/var/lib/loop-runtime-edge-certificate
+Environment=EDGE_DNS_TOKEN_FILE=/etc/loop-runtime-edge/hostinger-api-token
+Environment=EDGE_CERT_EMAIL=ops@getloopscale.com
+ExecStart=/usr/local/lib/loop-runtime-staging/apps-certificate.sh

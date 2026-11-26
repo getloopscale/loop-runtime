@@ -27,7 +27,7 @@ import (
 // renderer puts on them, renamed to tenant_id, project, app and environment
 // (getloopscale/loop-runtime#107). The sum folds a project's apps, and the cells
 // that serve it, into the tuple.
-const ReplicasReadyQuery = `sum by (tenant_id, project, environment) (loopruntime_app:kube_pod_status_ready:sum)`
+const ReplicasReadyQuery = `sum by (tenant_id, project, environment) (loop_runtime_app:kube_pod_status_ready:sum)`
 
 // PrometheusReplicasReadySource observes data-plane readiness through one
 // instant Prometheus query per poll.

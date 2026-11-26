@@ -104,29 +104,29 @@ func TestMonitoringAddressesExportsTheLokiALB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("monitoring-addresses.sh loki: %v\n%s", err, stderr)
 	}
-	if got := exported(t, out, "LOOPRUNTIME_LOKI_ALB_DNS_NAME"); got != lokiALB {
-		t.Errorf("LOOPRUNTIME_LOKI_ALB_DNS_NAME = %q, want %q", got, lokiALB)
+	if got := exported(t, out, "LOOP_RUNTIME_LOKI_ALB_DNS_NAME"); got != lokiALB {
+		t.Errorf("LOOP_RUNTIME_LOKI_ALB_DNS_NAME = %q, want %q", got, lokiALB)
 	}
 }
 
 // The cells' External Secrets call core's secret-fetch broker through the internal ALB of
-// Ingress loopruntime-system/loopruntime-api-secret-fetch, read after the core sync.
+// Ingress loop-runtime-system/loop-runtime-api-secret-fetch, read after the core sync.
 func TestMonitoringAddressesExportsTheCoreAPISecretFetchALB(t *testing.T) {
-	const coreAPIALB = "internal-k8s-loopruntime-loopruntime-4444444444.us-east-1.elb.amazonaws.com"
+	const coreAPIALB = "internal-k8s-loop-runtime-loop-runtime-4444444444.us-east-1.elb.amazonaws.com"
 	f := newFakeCluster(t, fakeIngressKubectl)
-	f.publish("core", "loopruntime-api-secret-fetch", coreAPIALB)
+	f.publish("core", "loop-runtime-api-secret-fetch", coreAPIALB)
 
 	out, stderr, err := f.run("monitoring-addresses.sh", "core-api", "--wait", "5")
 
 	if err != nil {
 		t.Fatalf("monitoring-addresses.sh core-api: %v\n%s", err, stderr)
 	}
-	if got := exported(t, out, "LOOPRUNTIME_CORE_API_ALB_DNS_NAME"); got != coreAPIALB {
-		t.Errorf("LOOPRUNTIME_CORE_API_ALB_DNS_NAME = %q, want %q", got, coreAPIALB)
+	if got := exported(t, out, "LOOP_RUNTIME_CORE_API_ALB_DNS_NAME"); got != coreAPIALB {
+		t.Errorf("LOOP_RUNTIME_CORE_API_ALB_DNS_NAME = %q, want %q", got, coreAPIALB)
 	}
 	calls, _ := os.ReadFile(filepath.Join(f.state, "calls"))
-	if !strings.Contains(string(calls), "--context core -n loopruntime-system get ingress loopruntime-api-secret-fetch") {
-		t.Errorf("the core API's Ingress was not read from core's loopruntime-system namespace: %s", calls)
+	if !strings.Contains(string(calls), "--context core -n loop-runtime-system get ingress loop-runtime-api-secret-fetch") {
+		t.Errorf("the core API's Ingress was not read from core's loop-runtime-system namespace: %s", calls)
 	}
 }
 
@@ -142,8 +142,8 @@ func TestMonitoringAddressesExportsEveryRemoteClusterMetricsALB(t *testing.T) {
 		t.Fatalf("monitoring-addresses.sh metrics: %v\n%s", err, stderr)
 	}
 	want := "build=" + buildALB + ",cell-0=" + cell0ALB + ",cell-1=" + cell1ALB
-	if got := exported(t, out, "LOOPRUNTIME_METRICS_ALB_DNS_NAMES"); got != want {
-		t.Errorf("LOOPRUNTIME_METRICS_ALB_DNS_NAMES = %q, want %q", got, want)
+	if got := exported(t, out, "LOOP_RUNTIME_METRICS_ALB_DNS_NAMES"); got != want {
+		t.Errorf("LOOP_RUNTIME_METRICS_ALB_DNS_NAMES = %q, want %q", got, want)
 	}
 }
 
@@ -167,11 +167,11 @@ func TestMonitoringAddressesPrintsTheNamesWithoutEscapes(t *testing.T) {
 		t.Fatalf("monitoring-addresses.sh loki: %v\n%s", err, stderr)
 	}
 
-	wantMetrics := `export LOOPRUNTIME_METRICS_ALB_DNS_NAMES="build=` + buildALB + `,cell-0=` + cell0ALB + `,cell-1=` + cell1ALB + "\"\n"
+	wantMetrics := `export LOOP_RUNTIME_METRICS_ALB_DNS_NAMES="build=` + buildALB + `,cell-0=` + cell0ALB + `,cell-1=` + cell1ALB + "\"\n"
 	if metrics != wantMetrics {
 		t.Errorf("metrics output = %q, want %q", metrics, wantMetrics)
 	}
-	wantLoki := `export LOOPRUNTIME_LOKI_ALB_DNS_NAME="` + lokiALB + "\"\n"
+	wantLoki := `export LOOP_RUNTIME_LOKI_ALB_DNS_NAME="` + lokiALB + "\"\n"
 	if loki != wantLoki {
 		t.Errorf("loki output = %q, want %q", loki, wantLoki)
 	}
@@ -207,8 +207,8 @@ func TestMonitoringAddressesWaitsForTheALB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("monitoring-addresses.sh loki --wait: %v\n%s", err, stderr)
 	}
-	if got := exported(t, out, "LOOPRUNTIME_LOKI_ALB_DNS_NAME"); got != lokiALB {
-		t.Errorf("LOOPRUNTIME_LOKI_ALB_DNS_NAME = %q, want %q", got, lokiALB)
+	if got := exported(t, out, "LOOP_RUNTIME_LOKI_ALB_DNS_NAME"); got != lokiALB {
+		t.Errorf("LOOP_RUNTIME_LOKI_ALB_DNS_NAME = %q, want %q", got, lokiALB)
 	}
 }
 
@@ -245,18 +245,18 @@ const podsWithOneUnwiredController = `{"items": [
      "ownerReferences": [{"kind": "ReplicaSet", "name": "aws-load-balancer-controller-9cdfcfd7"}]},
    "spec": {"containers": [{"name": "controller", "env": [
      {"name": "AWS_REGION", "value": "us-east-1"},
-     {"name": "AWS_ROLE_ARN", "value": "arn:aws:iam::000000000000:role/loopruntime-staging-cell-0-lb-controller"},
+     {"name": "AWS_ROLE_ARN", "value": "arn:aws:iam::000000000000:role/loop-runtime-staging-cell-0-lb-controller"},
      {"name": "AWS_WEB_IDENTITY_TOKEN_FILE", "value": "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"}]}]}},
   {"metadata": {"namespace": "external-secrets", "name": "external-secrets-5d9f7c-abcde",
      "labels": {"pod-template-hash": "5d9f7c"},
      "ownerReferences": [{"kind": "ReplicaSet", "name": "external-secrets-5d9f7c"}]},
    "spec": {"containers": [{"name": "external-secrets", "env": [
-     {"name": "AWS_ROLE_ARN", "value": "arn:aws:iam::000000000000:role/loopruntime-staging-cell-0-external-secrets"},
+     {"name": "AWS_ROLE_ARN", "value": "arn:aws:iam::000000000000:role/loop-runtime-staging-cell-0-external-secrets"},
      {"name": "AWS_ENDPOINT_URL", "value": "https://172.29.0.1:9597"}]}]}},
   {"metadata": {"namespace": "monitoring", "name": "loki-0",
      "ownerReferences": [{"kind": "StatefulSet", "name": "loki"}]},
    "spec": {"containers": [{"name": "loki", "env": [
-     {"name": "AWS_ROLE_ARN", "value": "arn:aws:iam::000000000000:role/loopruntime-staging-build-loki"}]}]}},
+     {"name": "AWS_ROLE_ARN", "value": "arn:aws:iam::000000000000:role/loop-runtime-staging-build-loki"}]}]}},
   {"metadata": {"namespace": "monitoring", "name": "promtail-cwm8q",
      "ownerReferences": [{"kind": "DaemonSet", "name": "promtail"}]},
    "spec": {"containers": [{"name": "promtail"}]}}
@@ -295,7 +295,7 @@ func TestRestartUninjectedPodsFailsWhenThePodsCannotBeListed(t *testing.T) {
 }
 
 // The platform task runs both scripts, and syncs the core Promtail, Prometheus and
-// loopruntime-api again once the remote clusters publish their ALBs.
+// loop-runtime-api again once the remote clusters publish their ALBs.
 func TestStagingPlatformSyncsCoreMonitoringAfterTheRemoteClusters(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(), "taskfiles", "staging.yml"))
 	if err != nil {
@@ -309,7 +309,7 @@ func TestStagingPlatformSyncsCoreMonitoringAfterTheRemoteClusters(t *testing.T) 
 		"monitoring-addresses.sh loki --wait",
 		"infra/helmfile/cell.helmfile.yaml.gotmpl",
 		"monitoring-addresses.sh metrics --wait",
-		"helmfile --selector name=promtail --selector name=prometheus --selector name=loopruntime-api -f infra/helmfile/core.helmfile.yaml.gotmpl",
+		"helmfile --selector name=promtail --selector name=prometheus --selector name=loop-runtime-api -f infra/helmfile/core.helmfile.yaml.gotmpl",
 	}
 	at := 0
 	for _, step := range order {

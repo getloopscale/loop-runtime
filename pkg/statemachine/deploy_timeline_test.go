@@ -37,7 +37,7 @@ func TestDeployTimeline_HappyPath_AllPhasesComplete(t *testing.T) {
 }
 
 // TestDeployTimeline_PanicsOnOutOfOrderPhase confirms invariant:
-// skipping a phase is a programming error and MUST panic per loopruntime-design.md.
+// skipping a phase is a programming error and MUST panic per loop-runtime-design.md.
 func TestDeployTimeline_PanicsOnOutOfOrderPhase(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {

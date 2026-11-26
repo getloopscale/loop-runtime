@@ -3,7 +3,7 @@
 //
 // The platform images are published to Amazon ECR, the registry production pulls from.
 //
-// The repositories are created by loopruntime-infra-live (`registry/ecr` unit) with IMMUTABLE
+// The repositories are created by loop-runtime-infra-live (`registry/ecr` unit) with IMMUTABLE
 // tags, so a push that reuses a tag is refused. That is the property that makes an image
 // reference traceable to one commit, and it is also why this file exists: the GHCR channel
 // moves `:develop` and `:latest` on every build, and copying those rules onto ECR would
@@ -26,17 +26,17 @@ import (
 const buildPublishWorkflow = ".github/workflows/build-publish.yml"
 
 // engineImageDockerfiles is every ECR repository this repository builds. The other two
-// repositories in the registry (loopruntime-cloud, loopruntime-dashboard) are built by loopruntime-cloud.
+// repositories in the registry (loop-console, loop-console-dashboard) are built by loop-console.
 var engineImageDockerfiles = map[string]string{
-	"loopruntime-api":               "api/Dockerfile",
-	"loopruntime-tenant-operator":   "operators/Dockerfile.tenant-operator",
-	"loopruntime-app-operator":      "operators/Dockerfile.app-operator",
-	"loopruntime-preview-operator":  "operators/Dockerfile.preview-operator",
-	"loopruntime-platform-operator": "operators/Dockerfile.platform-operator",
-	"loopruntime-minio":             "infra/images/minio/Dockerfile",
-	"loopruntime-clone-runner":      "infra/images/clone-runner/Dockerfile",
-	"loopruntime-syft-scanner":      "infra/images/syft-scanner/Dockerfile",
-	"loopruntime-cosign-signer":     "infra/images/cosign-signer/Dockerfile",
+	"loop-runtime-api":               "api/Dockerfile",
+	"loop-runtime-tenant-operator":   "operators/Dockerfile.tenant-operator",
+	"loop-runtime-app-operator":      "operators/Dockerfile.app-operator",
+	"loop-runtime-preview-operator":  "operators/Dockerfile.preview-operator",
+	"loop-runtime-platform-operator": "operators/Dockerfile.platform-operator",
+	"loop-runtime-minio":             "infra/images/minio/Dockerfile",
+	"loop-runtime-clone-runner":      "infra/images/clone-runner/Dockerfile",
+	"loop-runtime-syft-scanner":      "infra/images/syft-scanner/Dockerfile",
+	"loop-runtime-cosign-signer":     "infra/images/cosign-signer/Dockerfile",
 }
 
 type workflowStep struct {
@@ -192,7 +192,7 @@ func TestImagesJobGrantsEveryPermissionTheReusableDeclares(t *testing.T) {
 // organisation's plan ("Feature not available for the getloopscale organization"), and
 // every repository calling this workflow is private. Unconditional, the step failed the
 // whole publish after the image was already pushed — and before the cosign keyless
-// signature that follows it could run (loopruntime-cloud run 36512769358). The cosign
+// signature that follows it could run (loop-console run 36512769358). The cosign
 // signature is the guarantee; the native attestation is where a public repository
 // also publishes it.
 func TestNativeAttestationRunsOnlyOnPublicRepositories(t *testing.T) {
@@ -213,7 +213,7 @@ func TestNativeAttestationRunsOnlyOnPublicRepositories(t *testing.T) {
 
 // The engine's images go to production, so they pass the same vulnerability gate the
 // control plane's do (CRITICAL+HIGH with a fix available, in build-publish.yml). Without
-// it the images built on Go 1.26.1 reached ECR carrying 53 HIGH findings (loopruntime-api) and
+// it the images built on Go 1.26.1 reached ECR carrying 53 HIGH findings (loop-runtime-api) and
 // nothing measured them.
 func TestImagesJobGatesOnKnownVulnerabilities(t *testing.T) {
 	job := loadWorkflow(t, releaseArtifactsWorkflow).Jobs["images"]

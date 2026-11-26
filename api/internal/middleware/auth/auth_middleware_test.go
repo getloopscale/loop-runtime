@@ -156,7 +156,7 @@ func TestAuth_MultipleTenants_NeedsHeader(t *testing.T) {
 		t.Error("handler should not be called")
 	}))
 
-	// Act: no X-LoopRuntime-Tenant header
+	// Act: no X-Loop-Runtime-Tenant header
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer valid-token")
 	rec := httptest.NewRecorder()
@@ -190,7 +190,7 @@ func TestAuth_MultipleTenants_WithHeader_Resolves(t *testing.T) {
 	// Act
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer valid-token")
-	req.Header.Set("X-LoopRuntime-Tenant", "tn-b")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-b")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -224,9 +224,9 @@ func TestAuth_ServiceAuth_ValidSecret(t *testing.T) {
 	// Act
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Service-Auth", "test-service-secret")
-	req.Header.Set("X-LoopRuntime-User-ID", "svc-user")
-	req.Header.Set("X-LoopRuntime-Tenant", "tn-svc")
-	req.Header.Set("X-LoopRuntime-Email", "svc@test.com")
+	req.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-svc")
+	req.Header.Set("X-Loop-Runtime-Email", "svc@test.com")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

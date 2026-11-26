@@ -255,7 +255,7 @@ func generatedEnvTargetToEnvTarget(row generated.EnvironmentTarget) *Environment
 // lock. found is false when no target row matches, which the caller must
 // report: a snapshot that is never written silently goes stale.
 //
-// Cross-tenant: build the store on the background (loopruntime_worker) pool.
+// Cross-tenant: build the store on the background (loop_runtime_worker) pool.
 func (s *PostgresEnvironmentTargetStore) RecordReplicasReady(ctx context.Context, tenantID, projectID, env string, replicasReady int32, at time.Time) (found bool, err error) {
 	q := generated.New()
 	rows, err := q.RecordEnvironmentTargetReplicasReady(ctx, s.resolveSqlcDBTX(nil), generated.RecordEnvironmentTargetReplicasReadyParams{

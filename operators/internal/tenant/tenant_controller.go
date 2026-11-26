@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopRuntime Authors
 
 // Package tenant implements the Tenant + Environment controllers
-// (operator binary `loopruntime-tenant-operator` per ADR-0023). Owns the
+// (operator binary `loop-runtime-tenant-operator` per ADR-0023). Owns the
 // per-tenant lifecycle: provisioning, multi-cell placement resolve
 // via cellrouting.RuntimeClientFactory, GitOps repo creation, credential
 // rotation, deletion (soft + grace + cleanup). Cross-cluster
@@ -69,7 +69,7 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // (mgmt cluster) RBAC. controller-gen rbac generates ClusterRole rules
 // from these. Cross-cluster RBAC (BuildClient, RuntimeFactory) is
 // hand-maintained per ADR-0026 condition #2 and lives in
-// charts/loopruntime-tenant-operator/templates/cross-cluster-rbac.yaml.
+// charts/loop-runtime-tenant-operator/templates/cross-cluster-rbac.yaml.
 //
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants/status,verbs=get;update;patch
@@ -77,7 +77,7 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=environments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=resourcequotas,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.k8s.io,resources=priorityclasses,verbs=get;list;watch;create;update;patch
@@ -86,7 +86,7 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // LISTs ClusterCredentials to resolve cell→runtime-cluster mapping.
 // Marker added to satisfy clustercredentials.runtime.getloopscale.com list permission;
 // otherwise tenant-operator crashes with "User \"system:serviceaccount:
-// loopruntime-system:loopruntime-tenant-operator\" cannot list resource clustercredentials"
+// loop-runtime-system:loop-runtime-tenant-operator\" cannot list resource clustercredentials"
 // on every reconcile of any cell-aware Tenant.
 //
 // Vocabulary: the mapping named above relates two DIFFERENT things.

@@ -129,7 +129,7 @@ func TestEnvRef_Equal_ByValue(t *testing.T) {
 }
 
 // TestEnvRef_Namespace_Canonical — T1.3.b of plan 2026-06-11-code-review-remediation.
-// Asserts the canonical namespace formula `loopruntime-{tenant}-{project}-{env}`
+// Asserts the canonical namespace formula `loop-runtime-{tenant}-{project}-{env}`
 // matches pkg/naming.Namespace for the same inputs. The format string is
 // locked in BOTH pkg/naming.Namespace AND this method; this test pins
 // them in lock-step so any future change to one MUST also update the
@@ -139,9 +139,9 @@ func TestEnvRef_Namespace_Canonical(t *testing.T) {
 		tenant, project, env string
 		want                 string
 	}{
-		{"tn-acme", "api", "production", "loopruntime-tn-acme-api-production"},
-		{"tn-x", "frontend", "staging-eu-1", "loopruntime-tn-x-frontend-staging-eu-1"},
-		{"tn-abc", "monorepo", "preview-pr-42", "loopruntime-tn-abc-monorepo-preview-pr-42"},
+		{"tn-acme", "api", "production", "loop-runtime-tn-acme-api-production"},
+		{"tn-x", "frontend", "staging-eu-1", "loop-runtime-tn-x-frontend-staging-eu-1"},
+		{"tn-abc", "monorepo", "preview-pr-42", "loop-runtime-tn-abc-monorepo-preview-pr-42"},
 	}
 	for _, tc := range cases {
 		ref, err := NewEnvRef(tc.tenant, tc.project, tc.env)

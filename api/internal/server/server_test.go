@@ -252,10 +252,10 @@ func TestValidateProductionEnv(t *testing.T) {
 
 	t.Run("returns nil when all required vars are set", func(t *testing.T) {
 		vars := map[string]string{
-			"DATABASE_URL":                     "postgres://localhost:5432/loopruntime",
-			"LOOPRUNTIME_ARGO_CALLBACK_SECRET": "some-secret",
-			"GITEA_TOKEN":                      "tok-123",
-			"ARGOCD_TOKEN":                     "tok-456",
+			"DATABASE_URL":                      "postgres://localhost:5432/loop_runtime",
+			"LOOP_RUNTIME_ARGO_CALLBACK_SECRET": "some-secret",
+			"GITEA_TOKEN":                       "tok-123",
+			"ARGOCD_TOKEN":                      "tok-456",
 		}
 		err := server.ValidateProductionEnv(logger, vars)
 		if err != nil {
@@ -265,23 +265,23 @@ func TestValidateProductionEnv(t *testing.T) {
 
 	t.Run("returns error when a required var is empty", func(t *testing.T) {
 		vars := map[string]string{
-			"DATABASE_URL":                     "postgres://localhost:5432/loopruntime",
-			"LOOPRUNTIME_ARGO_CALLBACK_SECRET": "",
-			"GITEA_TOKEN":                      "tok-123",
-			"ARGOCD_TOKEN":                     "tok-456",
+			"DATABASE_URL":                      "postgres://localhost:5432/loop_runtime",
+			"LOOP_RUNTIME_ARGO_CALLBACK_SECRET": "",
+			"GITEA_TOKEN":                       "tok-123",
+			"ARGOCD_TOKEN":                      "tok-456",
 		}
 		err := server.ValidateProductionEnv(logger, vars)
 		if err == nil {
-			t.Fatal("expected error for missing LOOPRUNTIME_ARGO_CALLBACK_SECRET, got nil")
+			t.Fatal("expected error for missing LOOP_RUNTIME_ARGO_CALLBACK_SECRET, got nil")
 		}
 	})
 
 	t.Run("returns error listing all missing vars", func(t *testing.T) {
 		vars := map[string]string{
-			"DATABASE_URL":                     "",
-			"LOOPRUNTIME_ARGO_CALLBACK_SECRET": "",
-			"GITEA_TOKEN":                      "",
-			"ARGOCD_TOKEN":                     "",
+			"DATABASE_URL":                      "",
+			"LOOP_RUNTIME_ARGO_CALLBACK_SECRET": "",
+			"GITEA_TOKEN":                       "",
+			"ARGOCD_TOKEN":                      "",
 		}
 		err := server.ValidateProductionEnv(logger, vars)
 		if err == nil {

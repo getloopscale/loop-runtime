@@ -62,9 +62,9 @@ func (h *validateHarness) validate(args ...string) (string, error) {
 	}
 	// The fake token command writes the token where the suite is told to read it; the
 	// fake suite records the variables it ran with.
-	tokenCmd := h.script("token", fmt.Sprintf("echo seeded-token > \"$LOOPRUNTIME_DOGFOOD_JWT_PATH\"\nexit %s\n", h.tokenExit))
-	planCmd := h.script("plan", fmt.Sprintf("echo \"plan set for the tenant of $(cat \"$LOOPRUNTIME_DOGFOOD_JWT_PATH\")\"\nexit %s\n", h.planExit))
-	suiteCmd := h.script("suite", fmt.Sprintf("echo \"jwt=$(cat \"$LOOPRUNTIME_DOGFOOD_JWT_PATH\") deep=$LOOPRUNTIME_DOGFOOD_DEEP_HEALTH_URL cloud=$LOOPRUNTIME_DOGFOOD_CLOUD_URL\"\nprintf '%%s' %q\nexit %s\n", h.suiteOut, h.suiteExit))
+	tokenCmd := h.script("token", fmt.Sprintf("echo seeded-token > \"$LOOP_RUNTIME_DOGFOOD_JWT_PATH\"\nexit %s\n", h.tokenExit))
+	planCmd := h.script("plan", fmt.Sprintf("echo \"plan set for the tenant of $(cat \"$LOOP_RUNTIME_DOGFOOD_JWT_PATH\")\"\nexit %s\n", h.planExit))
+	suiteCmd := h.script("suite", fmt.Sprintf("echo \"jwt=$(cat \"$LOOP_RUNTIME_DOGFOOD_JWT_PATH\") deep=$LOOP_RUNTIME_DOGFOOD_DEEP_HEALTH_URL cloud=$LOOP_RUNTIME_DOGFOOD_CLOUD_URL\"\nprintf '%%s' %q\nexit %s\n", h.suiteOut, h.suiteExit))
 	cmd := exec.Command("bash", append([]string{filepath.Join(repoRoot(), "infra/staging/validate.sh")}, args...)...)
 	cmd.Env = append(os.Environ(),
 		"DEPLOY_GITHUB_API="+h.server.URL,
@@ -233,14 +233,14 @@ func TestStagingValidateFailsAJourneyFilterThatSelectsNothing(t *testing.T) {
 }
 
 func TestStagingDeployUnitLeavesTimeForTheValidation(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(repoRoot(), "infra/staging/systemd/loopruntime-staging-deploy.service"))
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "infra/staging/systemd/loop-runtime-staging-deploy.service"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// A platform sync takes about ten minutes and the suite may take up to its 30 minute
 	// go test timeout, so the unit allows an hour.
 	if !strings.Contains(string(data), "TimeoutStartSec=60min") {
-		t.Errorf("loopruntime-staging-deploy.service does not allow 60 minutes for a deploy and its validation")
+		t.Errorf("loop-runtime-staging-deploy.service does not allow 60 minutes for a deploy and its validation")
 	}
 }
 
@@ -324,8 +324,8 @@ func TestStagingValidateGivesTheSuiteTheCells(t *testing.T) {
 	if !regexp.MustCompile(`(?m)^\s*kube_env\b`).MatchString(body) {
 		t.Errorf("run_suite does not call kube_env, so the suite's kubectl cannot reach the cells:\n%s", body)
 	}
-	if !regexp.MustCompile(`LOOPRUNTIME_DOGFOOD_CELL_CONTEXTS=`).MatchString(body) {
-		t.Errorf("run_suite does not name the cell contexts in LOOPRUNTIME_DOGFOOD_CELL_CONTEXTS:\n%s", body)
+	if !regexp.MustCompile(`LOOP_RUNTIME_DOGFOOD_CELL_CONTEXTS=`).MatchString(body) {
+		t.Errorf("run_suite does not name the cell contexts in LOOP_RUNTIME_DOGFOOD_CELL_CONTEXTS:\n%s", body)
 	}
 }
 

@@ -14,7 +14,7 @@
 --
 -- RLS: metering_cursor + metering_config carry NO row-level-security policy by
 -- design. They are control-plane tables (not tenant-facing). The metering worker
--- runs as the non-owner loopruntime_worker role (RLS applies to it on tenant tables),
+-- runs as the non-owner loop_runtime_worker role (RLS applies to it on tenant tables),
 -- and it scans cross-tenant here; leaving these two tables without an RLS policy
 -- keeps them unfiltered for the worker. Cross-tenant billing writes into
 -- cost_counters / usage_records still go through `SET LOCAL app.tenant_id = ''`
@@ -39,5 +39,5 @@ CREATE TABLE IF NOT EXISTS metering_config (
 );
 INSERT INTO metering_config (id, enabled) VALUES (true, false) ON CONFLICT (id) DO NOTHING;
 
-GRANT SELECT, INSERT, UPDATE ON metering_cursor TO loopruntime_worker;
-GRANT SELECT ON metering_config TO loopruntime_worker;
+GRANT SELECT, INSERT, UPDATE ON metering_cursor TO loop_runtime_worker;
+GRANT SELECT ON metering_config TO loop_runtime_worker;

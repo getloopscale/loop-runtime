@@ -184,7 +184,7 @@ func TestPreviewService_CreatePreview_HappyPath(t *testing.T) {
 		Store:      store,
 		Builds:     builds,
 		CRCreator:  cr,
-		BaseDomain: "preview.loopruntime.app",
+		BaseDomain: "preview.loop-runtime.app",
 	})
 	if err != nil {
 		t.Fatalf("init: %v", err)
@@ -404,12 +404,12 @@ func TestPreviewURL_CanonicalWildcardConvention(t *testing.T) {
 		},
 		{
 			name:     "public empty → falls back to base domain (legacy local)",
-			base:     "loopruntime.local",
+			base:     "loop-runtime.local",
 			tenant:   "acme",
 			project:  "webapp",
 			entry:    "web",
 			prNumber: 42,
-			want:     "https://acme-webapp-web-preview-pr-42.loopruntime.local",
+			want:     "https://acme-webapp-web-preview-pr-42.loop-runtime.local",
 		},
 		{
 			name:     "no entry app — URL omits app segment (structurally valid, won't match IngressRoute)",
@@ -624,7 +624,7 @@ func TestPreviewService_CreatePreview_D3_UpsertSlotAtomically(t *testing.T) {
 	svc, err := NewPreviewService(PreviewServiceDeps{
 		Store:      store,
 		SlotStore:  slot,
-		BaseDomain: "preview.loopruntime.app",
+		BaseDomain: "preview.loop-runtime.app",
 	})
 	if err != nil {
 		t.Fatalf("init: %v", err)
@@ -708,7 +708,7 @@ func TestPreviewService_CreatePreview_D3_DifferentProjectsDoNotSubstitute(t *tes
 	svc, err := NewPreviewService(PreviewServiceDeps{
 		Store:      store,
 		SlotStore:  slot,
-		BaseDomain: "preview.loopruntime.app",
+		BaseDomain: "preview.loop-runtime.app",
 	})
 	if err != nil {
 		t.Fatalf("init: %v", err)

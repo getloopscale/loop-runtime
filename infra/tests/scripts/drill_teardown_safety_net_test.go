@@ -30,7 +30,7 @@ func doctlStub(t *testing.T, listFails bool, clusterList string) string {
 	body := "#!/bin/sh\n" +
 		"case \"$*\" in\n" +
 		"  'kubernetes cluster list'*) " + list + " ;;\n" +
-		"  'kubernetes cluster get'*) echo 'loopruntime-drill loopruntime-drill-expires-at-2020-01-01T00-00-00' ;;\n" +
+		"  'kubernetes cluster get'*) echo 'loop-runtime-drill loop-runtime-drill-expires-at-2020-01-01T00-00-00' ;;\n" +
 		"  'kubernetes cluster delete'*) exit 0 ;;\n" +
 		"  *list*) exit 0 ;;\n" +
 		"esac\n" +
@@ -100,7 +100,7 @@ func TestWatchdog_FailsWhenDoctlCannotList(t *testing.T) {
 // stopped existing when the drill scripts moved into drill/, so every expired
 // stack ended in "validator not found" and nothing was cleaned.
 func TestWatchdog_CleansAnExpiredStackThroughTheValidator(t *testing.T) {
-	stub := doctlStub(t, false, "c1 loopruntime-drill-mgmt loopruntime-drill")
+	stub := doctlStub(t, false, "c1 loop-runtime-drill-mgmt loop-runtime-drill")
 
 	code, out := runDrillScript(t, stub, "watchdog.sh")
 

@@ -2,7 +2,7 @@
 # Measures the ratio of non-5xx responses from the LoopRuntime API.
 # Target: 99.9% — the API must be available for CLI and webhook operations.
 version: "prometheus/v1"
-service: "loopruntime-api"
+service: "loop-runtime-api"
 labels:
   owner: "platform-team"
   tier: "infrastructure"
@@ -12,8 +12,8 @@ slos:
     description: "Percentage of API requests that do not result in a server error (5xx)."
     sli:
       events:
-        error_query: sum(rate(loopruntime_api_requests_total{status=~"5.."}[{{.window}}]))
-        total_query: sum(rate(loopruntime_api_requests_total[{{.window}}]))
+        error_query: sum(rate(loop_runtime_api_requests_total{status=~"5.."}[{{.window}}]))
+        total_query: sum(rate(loop_runtime_api_requests_total[{{.window}}]))
     alerting:
       name: LoopRuntimeAPIAvailabilityBudgetBurn
       labels:

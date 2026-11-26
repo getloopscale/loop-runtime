@@ -1,4 +1,4 @@
-# Host port registry — read by `loopruntime-ops leak ports`.
+# Host port registry — read by `loop-runtime-ops leak ports`.
 #
 # POLARITY: CLOSED BY DEFAULT. A port listening on 0.0.0.0 that does not appear
 # here is a FAILURE, not a silence. The firewall that existed before did the
@@ -28,13 +28,13 @@
 
 # --- external: reachable from the internet, with a measured consumer ---------------
 # These two were closed once, on 2026-07-30, and broke two CI gates that probe the
-# droplet from OUTSIDE (`dev-version-drift.yml` in loopruntime-rag and loopruntime-lens). Both were
+# droplet from OUTSIDE (`dev-version-drift.yml` in loop-runtime-rag and loop-runtime-lens). Both were
 # green on every run until 23:2xZ and failed on the first run after the rules
 # (03:3xZ / 03:4xZ) with "dev host unreachable after 8 attempts". The gate is a
 # CONTROL — it is what detects a deploy — so closing without replacing the
 # verification path trades an exposure for blindness.
-8787  | external | therag_api — read by loopruntime-rag/dev-version-drift.yml from a GitHub runner
-18084 | external | loopruntime-lens OTLP — read by loopruntime-lens/dev-version-drift.yml from a GitHub runner
+8787  | external | therag_api — read by loop-runtime-rag/dev-version-drift.yml from a GitHub runner
+18084 | external | loop-runtime-lens OTLP — read by loop-runtime-lens/dev-version-drift.yml from a GitHub runner
 22    | external | operator SSH — how this very measurement was taken
 
 # --- edge: the edge publishes over HTTPS; the raw port closes ---------------------
@@ -44,11 +44,11 @@
 14433 | edge  | public Kratos — the edge serves it at https://auth-dev.getloopscale.com
 14444 | edge  | public Hydra — same
 3000  | edge  | NodePort behind Caddy
-3002  | edge  | loopruntime-cloud — the edge serves it at https://app-dev.getloopscale.com
-13001 | edge  | loopruntime-api — reached through loopruntime-cloud, never directly
-8092  | edge  | compose Traefik (loopruntime-workspace) — the edge stopped using it in #470; closed until the compose stack is retired
-18081 | edge  | loopruntime-memory NodePort (core cluster) — the edge serves it at https://app-dev.getloopscale.com/v1/memory/ behind forward_auth
-18082 | edge  | loopruntime-rag NodePort (core cluster) — the edge serves it at https://app-dev.getloopscale.com/v1/rag/ behind forward_auth
+3002  | edge  | loop-console — the edge serves it at https://app-dev.getloopscale.com
+13001 | edge  | loop-runtime-api — reached through loop-console, never directly
+8092  | edge  | compose Traefik (loop-runtime-workspace) — the edge stopped using it in #470; closed until the compose stack is retired
+18081 | edge  | loop-runtime-memory NodePort (core cluster) — the edge serves it at https://app-dev.getloopscale.com/v1/memory/ behind forward_auth
+18082 | edge  | loop-runtime-rag NodePort (core cluster) — the edge serves it at https://app-dev.getloopscale.com/v1/rag/ behind forward_auth
 8443  | edge  | TLS ingress
 8444  | edge  | TLS ingress
 
@@ -67,7 +67,7 @@
 
 # --- host: consumed by the host itself ----------------------------------------------
 5432  | host  | Postgres — multi-tenant memories
-5434  | host  | Postgres — loopruntime-lens
+5434  | host  | Postgres — loop-runtime-lens
 8080  | host  | themory_app — consumed by the edge
 8090  | host  | cell ingress
 8091  | host  | cell ingress
@@ -75,7 +75,7 @@
 30090 | host  | build cluster serverlb
 30091 | host  | cell-0 serverlb
 30093 | host  | host process
-30094 | host  | cross-cluster log bridge — read by loopruntime-api
+30094 | host  | cross-cluster log bridge — read by loop-runtime-api
 30120 | host  | build cluster serverlb
 30191 | host  | cell-1 serverlb
 30193 | host  | build cluster serverlb

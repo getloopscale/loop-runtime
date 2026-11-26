@@ -67,7 +67,7 @@ func setupHealthServices(cfg config.Config) []healthhttp.ServiceHealthChecker {
 type serverWiring struct {
 	cfg       config.Config
 	dbAdapter *db.PgxAdapter
-	// crossTenant is the background pool (loopruntime_worker), asserted able to
+	// crossTenant is the background pool (loop_runtime_worker), asserted able to
 	// cross tenants at boot. Tenant provisioning runs on it; nil without a
 	// database.
 	crossTenant    *db.PgxAdapter
@@ -289,7 +289,7 @@ func wireDatabaseHandlers(sc *server.Config, w serverWiring) {
 	sc.Secrets.AuditLogger = &store.AuditLogger{DB: d}
 	// GET /api/v1/billing: plan + usage, and the three cost metrics once the
 	// cost store is reachable. The engine does NOT issue billing portal
-	// sessions (ADR 2026-08-11): loopruntime-cloud creates the Stripe customer and is
+	// sessions (ADR 2026-08-11): loop-console creates the Stripe customer and is
 	// the only issuer, so no Stripe key lives on the CLI and deploy path.
 	// The plan shown is the plan enforced: billing reads it through the same
 	// store every plan gate uses (sc.PlanTierStore, set by
@@ -349,7 +349,7 @@ func wireAdmin(sc *server.Config, w serverWiring) {
 	sc.Admin.Evictor = buildAdminEvictor(w.cfg, w.crossTenant)
 	pinner := newAdminCellPinner(w.crossTenant)
 	if mgmt := buildMgmtDynamicClient(w.cfg, w.logger); mgmt != nil {
-		pinner = pinner.WithTenantCRPatcher(placementadapter.NewTenantCRCellPatcher(mgmt, "loopruntime-system"))
+		pinner = pinner.WithTenantCRPatcher(placementadapter.NewTenantCRCellPatcher(mgmt, "loop-runtime-system"))
 	}
 	sc.Admin.Pinner = pinner
 	sc.Admin.ReleaseInspector = newAdminReleaseInspector(w.crossTenant)

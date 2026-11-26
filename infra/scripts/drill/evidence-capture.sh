@@ -215,17 +215,17 @@ for cluster in mgmt build runtime runtime-2; do
   fi
 done
 
-# Capture loopruntime_* metrics from mgmt API
+# Capture loop_runtime_* metrics from mgmt API
 set +e
-METRICS_OUT="$EVIDENCE_DIR/loopruntime-metrics.txt"
+METRICS_OUT="$EVIDENCE_DIR/loop-runtime-metrics.txt"
 if [[ -r "$DRILL_KUBECONFIG_DIR/mgmt.yaml" ]] && command -v kubectl >/dev/null 2>&1; then
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "DRY-RUN: would fetch metrics" > "$METRICS_OUT"
     M_RC=0
   else
     KUBECONFIG="$DRILL_KUBECONFIG_DIR/mgmt.yaml" \
-      kubectl exec -n loopruntime-system deploy/loopruntime-api -- \
-      wget -qO- http://localhost:9090/metrics 2>&1 | grep "^loopruntime_" > "$METRICS_OUT"
+      kubectl exec -n loop-runtime-system deploy/loop-runtime-api -- \
+      wget -qO- http://localhost:9090/metrics 2>&1 | grep "^loop_runtime_" > "$METRICS_OUT"
     M_RC=$?
   fi
 else
@@ -235,11 +235,11 @@ fi
 set -e
 
 if [[ "$M_RC" -eq 0 ]]; then
-  log "  ✓ loopruntime_* metrics captured to $METRICS_OUT"
-  echo "- ✓ loopruntime_* metrics ($METRICS_OUT)" >> "$AUDIT_DOC"
+  log "  ✓ loop_runtime_* metrics captured to $METRICS_OUT"
+  echo "- ✓ loop_runtime_* metrics ($METRICS_OUT)" >> "$AUDIT_DOC"
 else
   log "  ✗ metrics capture failed — partial fragment preserved"
-  echo "- ✗ loopruntime_* metrics (exit $M_RC, see $METRICS_OUT)" >> "$AUDIT_DOC"
+  echo "- ✗ loop_runtime_* metrics (exit $M_RC, see $METRICS_OUT)" >> "$AUDIT_DOC"
 fi
 
 # --- Phase 4: Commit local git (operator forensic recovery anchor) ---

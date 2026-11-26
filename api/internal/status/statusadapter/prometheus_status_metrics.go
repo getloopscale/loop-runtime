@@ -22,9 +22,9 @@ import (
 // Prometheus federates (infra/helm/monitoring/values-tenant-app-recording-rules.yaml).
 // Each carries tenant_id, project, app and environment.
 const (
-	appReadyReplicasSeries      = "loopruntime_app:kube_pod_status_ready:sum"
-	appRequestRateSeries        = "loopruntime_app:traefik_service_requests:rate5m"
-	appRequestRateByClassSeries = "loopruntime_app_status_class:traefik_service_requests:rate5m"
+	appReadyReplicasSeries      = "loop_runtime_app:kube_pod_status_ready:sum"
+	appRequestRateSeries        = "loop_runtime_app:traefik_service_requests:rate5m"
+	appRequestRateByClassSeries = "loop_runtime_app_status_class:traefik_service_requests:rate5m"
 )
 
 // PrometheusStatusMetrics reads the live numbers of the status answer with one

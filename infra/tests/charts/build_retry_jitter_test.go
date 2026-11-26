@@ -25,7 +25,7 @@ import (
 // Argo's backoff has no jitter field, so the jitter has to be introduced by the
 // step itself before the work starts.
 func TestBuildTemplates_CloneRetryIsJittered(t *testing.T) {
-	const clone = "../../../charts/loopruntime-build-cwts/templates/cwt-clone.yaml"
+	const clone = "../../../charts/loop-runtime-build-cwts/templates/cwt-clone.yaml"
 
 	body, err := os.ReadFile(clone)
 	if err != nil {
@@ -52,7 +52,7 @@ func TestBuildTemplates_CloneRetryIsJittered(t *testing.T) {
 // and a transient registry error there fails the whole build with no attempt to
 // recover.
 func TestBuildTemplates_ExternalStepsDeclareRetry(t *testing.T) {
-	dir := "../../../charts/loopruntime-build-cwts/templates"
+	dir := "../../../charts/loop-runtime-build-cwts/templates"
 	entries, err := filepath.Glob(filepath.Join(dir, "cwt-*.yaml"))
 	if err != nil || len(entries) == 0 {
 		t.Fatalf("no ClusterWorkflowTemplates under %s (err=%v)", dir, err)

@@ -37,7 +37,7 @@
 set -euo pipefail
 
 OUTPUT=""
-CONTEXT="${CONTEXT:-k3d-loopruntime-core}"
+CONTEXT="${CONTEXT:-k3d-loop-runtime-core}"
 PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.getloopscale.com}"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.getloopscale.com}"
 FIXTURE_DIR="${BASELINE_FIXTURE_DIR:-}"
@@ -112,18 +112,18 @@ capture_config_state() {
     plan_limits_present="$(tr -d '[:space:]' < "$FIXTURE_DIR/plan_limits_present.txt" 2>/dev/null || echo "false")"
     cosign_mode="$(tr -d '[:space:]' < "$FIXTURE_DIR/cosign_mode.txt" 2>/dev/null || echo "keyed")"
   else
-    pg_max="$(kubectl --context="$CONTEXT" -n loopruntime-system exec -i postgresql-0 -c postgresql -- \
-                env PGPASSWORD=loopruntime-dev-password psql -U loopruntime -d loopruntime -tAc \
+    pg_max="$(kubectl --context="$CONTEXT" -n loop-runtime-system exec -i postgresql-0 -c postgresql -- \
+                env PGPASSWORD=loop-runtime-dev-password psql -U loop_runtime -d loop_runtime -tAc \
                 "SELECT max(version) FROM schema_migrations" 2>/dev/null | tr -d '[:space:]' || echo "0")"
     if [ -z "$pg_max" ] ; then pg_max=0 ; fi
-    if kubectl --context="$CONTEXT" -n loopruntime-system exec -i postgresql-0 -c postgresql -- \
-         env PGPASSWORD=loopruntime-dev-password psql -U loopruntime -d loopruntime -tAc \
+    if kubectl --context="$CONTEXT" -n loop-runtime-system exec -i postgresql-0 -c postgresql -- \
+         env PGPASSWORD=loop-runtime-dev-password psql -U loop_runtime -d loop_runtime -tAc \
          "SELECT 1 FROM information_schema.tables WHERE table_name='plan_limits'" 2>/dev/null | grep -q 1 ; then
       plan_limits_present=true
     else
       plan_limits_present=false
     fi
-    cosign_mode="$(kubectl --context="$CONTEXT" -n loopruntime-system get configmap loopruntime-cosign-config \
+    cosign_mode="$(kubectl --context="$CONTEXT" -n loop-runtime-system get configmap loop-runtime-cosign-config \
                     -o jsonpath='{.data.mode}' 2>/dev/null || echo "keyed")"
     [ -n "$cosign_mode" ] || cosign_mode="keyed"
   fi

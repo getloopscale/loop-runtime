@@ -17,8 +17,8 @@
 # Checks executed:
 #   T0.1 cluster health probe (3 contexts, ≥95% pods Running)
 #   T0.2 token regeneration via seed-local-user.sh
-#   T0.3 VAP allowlist + buildkit-registry-config + loopruntime-minio-credentials
-#   T0.4 loopruntime-api env (REGISTRY_INSECURE, MINIO_ENDPOINT)
+#   T0.3 VAP allowlist + buildkit-registry-config + loop-runtime-minio-credentials
+#   T0.4 loop-runtime-api env (REGISTRY_INSECURE, MINIO_ENDPOINT)
 #   T0.5 Traefik LB exposure + documented curl --resolve command
 #
 # Exit codes:
@@ -40,11 +40,11 @@ JSON_ONLY=0
 
 REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 SEED_SCRIPT="${REPO_ROOT}/infra/helmfile/scripts/seed-local-user.sh"
-TOKEN_FILE="${HOME}/.loopruntime/local-dogfood-token.txt"
+TOKEN_FILE="${HOME}/.loop-runtime/local-dogfood-token.txt"
 
-MGMT_CTX="k3d-loopruntime-core"
-BUILD_CTX="k3d-loopruntime-build"
-WORKLOAD_CTX="k3d-loopruntime-cell-0"
+MGMT_CTX="k3d-loop-runtime-core"
+BUILD_CTX="k3d-loop-runtime-build"
+WORKLOAD_CTX="k3d-loop-runtime-cell-0"
 
 # Each check appends one entry to RESULTS as JSON object.
 declare -a RESULTS=()
@@ -96,7 +96,7 @@ require_bin() {
 # CrashLoopBackOff or ImagePullBackOff present in platform namespaces.
 check_cluster_health() {
   local ctx=$1
-  local id="T0.1.${ctx#k3d-loopruntime-}"
+  local id="T0.1.${ctx#k3d-loop-runtime-}"
 
   if ! kubectl --context "$ctx" get nodes >/dev/null 2>&1; then
     record "$id" "FAIL" "context $ctx unreachable"
@@ -108,7 +108,7 @@ check_cluster_health() {
   bad=$(kubectl --context "$ctx" get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}|{.status.phase}|{range .status.containerStatuses[*]}{.state.waiting.reason}{end}{"\n"}{end}' 2>/dev/null \
     | awk -F'|' '
         $2=="Pending" && $3 ~ /CreateContainerConfigError|ImagePullBackOff|ErrImagePull/ { print $0; next }
-        $2!="Running" && $2!="Succeeded" && $1 !~ /^kube-system\// && $1 !~ /^loopruntime-test-/ && $1 !~ /Terminating/ {
+        $2!="Running" && $2!="Succeeded" && $1 !~ /^kube-system\// && $1 !~ /^loop-runtime-test-/ && $1 !~ /Terminating/ {
           # Also flag CrashLoopBackOff
           if ($3 ~ /CrashLoopBackOff/) { print $0; next }
         }
@@ -125,7 +125,7 @@ check_cluster_health() {
   # Total pods sanity
   local total
   total=$(kubectl --context "$ctx" get pods -A --no-headers 2>/dev/null | wc -l)
-  record "$id" "PASS" "$total pods, all Running/Succeeded (excluding kube-system + loopruntime-test-* terminating)"
+  record "$id" "PASS" "$total pods, all Running/Succeeded (excluding kube-system + loop-runtime-test-* terminating)"
 }
 
 # -----------------------------------------------------------------------------
@@ -193,30 +193,30 @@ check_token() {
 check_vap_prefix() {
   local id="T0.3.vap-restrict"
   local expr
-  expr=$(kubectl --context "$WORKLOAD_CTX" get validatingadmissionpolicy loopruntime-restrict-image-registries \
+  expr=$(kubectl --context "$WORKLOAD_CTX" get validatingadmissionpolicy loop-runtime-restrict-image-registries \
     -o jsonpath='{.spec.validations[0].expression}' 2>/dev/null || true)
   if [[ -z "$expr" ]]; then
-    record "$id" "FAIL" "VAP loopruntime-restrict-image-registries not found in workload cluster"
+    record "$id" "FAIL" "VAP loop-runtime-restrict-image-registries not found in workload cluster"
     return
   fi
-  if ! grep -q 'k3d-loopruntime-registry:5000/' <<<"$expr"; then
-    record "$id" "FAIL" "VAP missing k3d-loopruntime-registry:5000/ prefix; helm upgrade admission-policies needed"
+  if ! grep -q 'k3d-loop-runtime-registry:5000/' <<<"$expr"; then
+    record "$id" "FAIL" "VAP missing k3d-loop-runtime-registry:5000/ prefix; helm upgrade admission-policies needed"
     return
   fi
-  record "$id" "PASS" "VAP allowlist contains k3d-loopruntime-registry:5000/"
+  record "$id" "PASS" "VAP allowlist contains k3d-loop-runtime-registry:5000/"
 }
 
 check_vap_signature() {
   local id="T0.3.vap-signature"
-  if ! kubectl --context "$WORKLOAD_CTX" get validatingadmissionpolicy loopruntime-require-image-signature >/dev/null 2>&1; then
-    record "$id" "FAIL" "VAP loopruntime-require-image-signature missing"
+  if ! kubectl --context "$WORKLOAD_CTX" get validatingadmissionpolicy loop-runtime-require-image-signature >/dev/null 2>&1; then
+    record "$id" "FAIL" "VAP loop-runtime-require-image-signature missing"
     return
   fi
   local action
-  action=$(kubectl --context "$WORKLOAD_CTX" get validatingadmissionpolicybinding loopruntime-require-image-signature-binding \
+  action=$(kubectl --context "$WORKLOAD_CTX" get validatingadmissionpolicybinding loop-runtime-require-image-signature-binding \
     -o jsonpath='{.spec.validationActions}' 2>/dev/null || echo "")
   if [[ -z "$action" ]]; then
-    warn "VAPB loopruntime-require-image-signature-binding not found, signature not enforced"
+    warn "VAPB loop-runtime-require-image-signature-binding not found, signature not enforced"
     record "$id" "FAIL" "VAPB binding missing"
     return
   fi
@@ -240,41 +240,41 @@ check_minio_credentials() {
   local missing=()
   local key
   for key in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY MINIO_ENDPOINT AWS_DEFAULT_REGION AWS_ENDPOINT_URL; do
-    if ! kubectl --context "$BUILD_CTX" -n argo get secret loopruntime-minio-credentials \
+    if ! kubectl --context "$BUILD_CTX" -n argo get secret loop-runtime-minio-credentials \
       -o jsonpath="{.data.${key}}" 2>/dev/null | grep -q .; then
       missing+=("$key")
     fi
   done
   if [[ ${#missing[@]} -gt 0 ]]; then
-    record "$id" "FAIL" "loopruntime-minio-credentials missing keys: ${missing[*]}"
+    record "$id" "FAIL" "loop-runtime-minio-credentials missing keys: ${missing[*]}"
     return
   fi
-  record "$id" "PASS" "loopruntime-minio-credentials has all 5 required keys"
+  record "$id" "PASS" "loop-runtime-minio-credentials has all 5 required keys"
 }
 
 # -----------------------------------------------------------------------------
-# T0.4 — loopruntime-api deploy env vars
+# T0.4 — loop-runtime-api deploy env vars
 # -----------------------------------------------------------------------------
-# loopruntime_api_config_value prints the value loopruntime-api runs with for a non-secret
+# loop_runtime_api_config_value prints the value loop-runtime-api runs with for a non-secret
 # variable: an explicit container variable wins, then the ConfigMaps mounted
 # through envFrom, last one first (a later envFrom source wins a key both define).
 # Both install paths put these variables in a ConfigMap — Tilt renders it from
-# charts/loopruntime-api, and Helmfile installs charts/loopruntime-api — so reading only the
+# charts/loop-runtime-api, and Helmfile installs charts/loop-runtime-api — so reading only the
 # explicit variables would report every one of them as unset.
-loopruntime_api_config_value() {
+loop_runtime_api_config_value() {
   local name="$1" value cms
-  value=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get deploy loopruntime-api \
+  value=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get deploy loop-runtime-api \
     -o jsonpath="{range .spec.template.spec.containers[0].env[?(@.name==\"${name}\")]}{.value}{end}" 2>/dev/null || true)
   if [[ -n "$value" ]]; then
     printf '%s' "$value"
     return
   fi
-  cms=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get deploy loopruntime-api \
+  cms=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get deploy loop-runtime-api \
     -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].configMapRef.name}' 2>/dev/null || true)
   local reversed=() cname
   for cname in $cms; do reversed=("$cname" "${reversed[@]}"); done
   for cname in "${reversed[@]}"; do
-    value=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get cm "$cname" \
+    value=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get cm "$cname" \
       -o jsonpath="{.data.${name}}" 2>/dev/null || true)
     if [[ -n "$value" ]]; then
       printf '%s' "$value"
@@ -286,8 +286,8 @@ loopruntime_api_config_value() {
 check_deploy_env() {
   local id="T0.4"
   local registry_insecure minio_endpoint
-  registry_insecure=$(loopruntime_api_config_value REGISTRY_INSECURE)
-  minio_endpoint=$(loopruntime_api_config_value MINIO_ENDPOINT)
+  registry_insecure=$(loop_runtime_api_config_value REGISTRY_INSECURE)
+  minio_endpoint=$(loop_runtime_api_config_value MINIO_ENDPOINT)
 
   local issues=()
   [[ "$registry_insecure" != "true" ]] && issues+=("REGISTRY_INSECURE=$registry_insecure (expected true)")
@@ -313,9 +313,9 @@ check_traefik_lb() {
     return
   fi
   local ports
-  ports=$(docker port k3d-loopruntime-cell-0-serverlb 2>/dev/null || true)
+  ports=$(docker port k3d-loop-runtime-cell-0-serverlb 2>/dev/null || true)
   if [[ -z "$ports" ]]; then
-    record "$id" "FAIL" "k3d-loopruntime-cell-0-serverlb container not running"
+    record "$id" "FAIL" "k3d-loop-runtime-cell-0-serverlb container not running"
     return
   fi
   if ! grep -q '443/tcp' <<<"$ports"; then
@@ -332,18 +332,18 @@ check_traefik_lb() {
 # -----------------------------------------------------------------------------
 # Detects a regression of bug CHG-2026-04-29-DOGFOOD-FB-INGRESSNS: the operator generated
 # an ingress NetworkPolicy with namespaceSelector matchLabels={kubernetes.io/metadata.name:
-# loopruntime-system}, but Traefik lives in namespace `traefik`. Result: HTTP 502 on
+# loop-runtime-system}, but Traefik lives in namespace `traefik`. Result: HTTP 502 on
 # every deploy. Fixed in code (constants.NamespaceIngress + ingressNS() helper).
 # This check guarantees the regression does not come back.
 check_networkpolicy_traefik_target() {
   local id="T0.6"
   # Requires an active Environment in tn-e2etest. If not, graceful SKIP.
-  if ! kubectl --context "$WORKLOAD_CTX" get ns loopruntime-tn-e2etest-production >/dev/null 2>&1; then
-    record "$id" "SKIP" "namespace loopruntime-tn-e2etest-production absent (no active Environment)"
+  if ! kubectl --context "$WORKLOAD_CTX" get ns loop-runtime-tn-e2etest-production >/dev/null 2>&1; then
+    record "$id" "SKIP" "namespace loop-runtime-tn-e2etest-production absent (no active Environment)"
     return
   fi
   local target
-  target=$(kubectl --context "$WORKLOAD_CTX" -n loopruntime-tn-e2etest-production \
+  target=$(kubectl --context "$WORKLOAD_CTX" -n loop-runtime-tn-e2etest-production \
     get networkpolicy allow-ingress-traefik \
     -o jsonpath='{.spec.ingress[0].from[0].namespaceSelector.matchLabels.kubernetes\.io/metadata\.name}' 2>/dev/null || true)
   if [[ -z "$target" ]]; then
@@ -358,39 +358,39 @@ check_networkpolicy_traefik_target() {
 }
 
 # -----------------------------------------------------------------------------
-# T0.7 — LOOPRUNTIME_SERVICE_AUTH discovered and saved
+# T0.7 — LOOP_RUNTIME_SERVICE_AUTH discovered and saved
 # -----------------------------------------------------------------------------
 # Plan dogfood-real-e2e D8: admin commands CANNOT be SKIP. Without service auth,
 # §14 admin tenants evict does not get tested. This function:
-#   1. Reads the value of the LOOPRUNTIME_SERVICE_AUTH_SECRET env var in the loopruntime-api deploy
-#   2. Saves it to ~/.loopruntime/local-service-auth.txt (chmod 600)
+#   1. Reads the value of the LOOP_RUNTIME_SERVICE_AUTH_SECRET env var in the loop-runtime-api deploy
+#   2. Saves it to ~/.loop-runtime/local-service-auth.txt (chmod 600)
 #   3. Does not log the value to stdout (only a truncated hash)
 check_service_auth() {
   local id="T0.7"
-  local out_file="${HOME}/.loopruntime/local-service-auth.txt"
+  local out_file="${HOME}/.loop-runtime/local-service-auth.txt"
   local val
   # First try direct env (Tilt pattern)
-  val=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get deploy loopruntime-api \
-    -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="LOOPRUNTIME_SERVICE_AUTH_SECRET")]}{.value}{end}' 2>/dev/null || true)
+  val=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get deploy loop-runtime-api \
+    -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="LOOP_RUNTIME_SERVICE_AUTH_SECRET")]}{.value}{end}' 2>/dev/null || true)
   # If empty, fall back to envFrom secretRef (helmfile canonical pattern —
-  # chart mounts loopruntime-service-auth Secret via envFrom).
+  # chart mounts loop-runtime-service-auth Secret via envFrom).
   if [[ -z "$val" ]]; then
     local envfrom_secrets
-    envfrom_secrets=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get deploy loopruntime-api \
+    envfrom_secrets=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get deploy loop-runtime-api \
       -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].secretRef.name}' 2>/dev/null || true)
     for sname in $envfrom_secrets; do
       [[ -z "$sname" ]] && continue
-      val=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret "$sname" \
-        -o jsonpath='{.data.LOOPRUNTIME_SERVICE_AUTH_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)
+      val=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get secret "$sname" \
+        -o jsonpath='{.data.LOOP_RUNTIME_SERVICE_AUTH_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)
       [[ -n "$val" ]] && break
     done
   fi
   if [[ -z "$val" ]]; then
-    record "$id" "FAIL" "LOOPRUNTIME_SERVICE_AUTH_SECRET not in loopruntime-api .env[] nor any envFrom Secret"
+    record "$id" "FAIL" "LOOP_RUNTIME_SERVICE_AUTH_SECRET not in loop-runtime-api .env[] nor any envFrom Secret"
     return
   fi
   # Persist atomically (write tmp + mv).
-  mkdir -p "${HOME}/.loopruntime"
+  mkdir -p "${HOME}/.loop-runtime"
   local tmp="${out_file}.tmp.$$"
   printf '%s' "$val" > "$tmp"
   chmod 600 "$tmp"
@@ -398,30 +398,30 @@ check_service_auth() {
   # Truncated hash as evidence (does not leak the secret).
   local hash
   hash=$(printf '%s' "$val" | sha256sum | cut -c1-12)
-  record "$id" "PASS" "service auth written to ~/.loopruntime/local-service-auth.txt (sha256:${hash}…)"
+  record "$id" "PASS" "service auth written to ~/.loop-runtime/local-service-auth.txt (sha256:${hash}…)"
 }
 
 # -----------------------------------------------------------------------------
-# T0.8 — LOOPRUNTIME_CLUSTER_ISSUER points at an existing ClusterIssuer
+# T0.8 — LOOP_RUNTIME_CLUSTER_ISSUER points at an existing ClusterIssuer
 # -----------------------------------------------------------------------------
 # Detects a regression of bug CHG-2026-04-29-DOGFOOD-FB-ISSUER: the env var pointed
-# at `letsencrypt-prod` but the real installed issuer is `loopruntime-ca-issuer`.
+# at `letsencrypt-prod` but the real installed issuer is `loop-runtime-ca-issuer`.
 # Certs never issued → Traefik 502.
 check_cluster_issuer() {
   local id="T0.8"
   local issuer
   # First try env directive (Tilt pattern)
-  issuer=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get deploy loopruntime-api \
-    -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="LOOPRUNTIME_CLUSTER_ISSUER")]}{.value}{end}' 2>/dev/null || true)
+  issuer=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get deploy loop-runtime-api \
+    -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="LOOP_RUNTIME_CLUSTER_ISSUER")]}{.value}{end}' 2>/dev/null || true)
   # Fall back to envFrom + ConfigMap value (helmfile dev-public uses ConfigMap)
   if [[ -z "$issuer" ]]; then
     local envfrom_cms
-    envfrom_cms=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get deploy loopruntime-api \
+    envfrom_cms=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get deploy loop-runtime-api \
       -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].configMapRef.name}' 2>/dev/null || true)
     for cname in $envfrom_cms; do
       [[ -z "$cname" ]] && continue
-      issuer=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get cm "$cname" \
-        -o jsonpath='{.data.LOOPRUNTIME_CLUSTER_ISSUER}' 2>/dev/null || true)
+      issuer=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get cm "$cname" \
+        -o jsonpath='{.data.LOOP_RUNTIME_CLUSTER_ISSUER}' 2>/dev/null || true)
       [[ -n "$issuer" ]] && break
     done
   fi
@@ -432,23 +432,23 @@ check_cluster_issuer() {
     # is the only one, that's the dev-public canonical.
     if kubectl --context "$WORKLOAD_CTX" get clusterissuer selfsigned-issuer >/dev/null 2>&1; then
       issuer="selfsigned-issuer"
-    elif kubectl --context "$WORKLOAD_CTX" get clusterissuer loopruntime-ca-issuer >/dev/null 2>&1; then
-      issuer="loopruntime-ca-issuer"
+    elif kubectl --context "$WORKLOAD_CTX" get clusterissuer loop-runtime-ca-issuer >/dev/null 2>&1; then
+      issuer="loop-runtime-ca-issuer"
     fi
   fi
   if [[ -z "$issuer" ]]; then
-    record "$id" "FAIL" "no LOOPRUNTIME_CLUSTER_ISSUER set and no known ClusterIssuer present"
+    record "$id" "FAIL" "no LOOP_RUNTIME_CLUSTER_ISSUER set and no known ClusterIssuer present"
     return
   fi
   if ! kubectl --context "$WORKLOAD_CTX" get clusterissuer "$issuer" >/dev/null 2>&1; then
     record "$id" "FAIL" "ClusterIssuer '$issuer' not found in workload cluster — drift between env var and live state"
     return
   fi
-  record "$id" "PASS" "LOOPRUNTIME_CLUSTER_ISSUER='$issuer' resolves to live ClusterIssuer"
+  record "$id" "PASS" "LOOP_RUNTIME_CLUSTER_ISSUER='$issuer' resolves to live ClusterIssuer"
 }
 
 # -----------------------------------------------------------------------------
-# T0.9 — ESO ClusterSecretStore `loopruntime-core-store` Ready=True
+# T0.9 — ESO ClusterSecretStore `loop-runtime-core-store` Ready=True
 # -----------------------------------------------------------------------------
 # Discovered live during journey-03 (CHG-2026-04-29-DOGFOOD-REAL-E2E):
 # standalone-multi (helmfile L2) did not provision the CSS that Pulumi
@@ -458,13 +458,13 @@ check_cluster_issuer() {
 check_eso_cluster_secret_store() {
   local id="T0.9"
   local status
-  status=$(kubectl --context "$WORKLOAD_CTX" get clustersecretstore loopruntime-core-store \
+  status=$(kubectl --context "$WORKLOAD_CTX" get clustersecretstore loop-runtime-core-store \
     -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
   if [[ "$status" != "True" ]]; then
-    record "$id" "FAIL" "ClusterSecretStore loopruntime-core-store not Ready (got: '$status'). Run: bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh"
+    record "$id" "FAIL" "ClusterSecretStore loop-runtime-core-store not Ready (got: '$status'). Run: bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh"
     return
   fi
-  record "$id" "PASS" "ClusterSecretStore loopruntime-core-store Ready=True (ESO can sync mgmt→runtime secrets)"
+  record "$id" "PASS" "ClusterSecretStore loop-runtime-core-store Ready=True (ESO can sync mgmt→runtime secrets)"
 }
 
 # -----------------------------------------------------------------------------
@@ -489,7 +489,7 @@ check_no_terminating_namespaces() {
 # T0.11 — No dangling kubeconfig contexts (WARN level)
 # -----------------------------------------------------------------------------
 # DOKS contexts remain in ~/.kube/config after pulumi destroy. Operator typos
-# like `kubectl --context loopruntime-core` (without the k3d- prefix) can target a
+# like `kubectl --context loop-runtime-core` (without the k3d- prefix) can target a
 # nonexistent cluster and produce confusing errors. Detected via a 5s probe; reports WARN
 # (not FAIL — the user may legitimately have DOKS sleeping).
 check_dangling_kubecontexts() {
@@ -502,7 +502,7 @@ check_dangling_kubecontexts() {
     if ! timeout 5 kubectl --context "$ctx" get ns kube-system >/dev/null 2>&1; then
       dangling+=("$ctx")
     fi
-  done < <(kubectl config get-contexts -o name 2>/dev/null | grep -E "^(loopruntime|do-)")
+  done < <(kubectl config get-contexts -o name 2>/dev/null | grep -E "^(loop-runtime|do-)")
 
   if [[ ${#dangling[@]} -gt 0 ]]; then
     record "$id" "WARN" "${#dangling[@]} dangling kubecontext(s): $(IFS=,; echo "${dangling[*]}"). Remove via: for c in ${dangling[*]}; do kubectl config delete-context \$c; done"

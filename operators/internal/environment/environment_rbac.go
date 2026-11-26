@@ -56,7 +56,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 		return fmt.Errorf("role %s/%s: %w", nsName, constants.RoleDeployer, err)
 	}
 
-	// RoleBinding — bind loopruntime-deployer SA to loopruntime-deployer Role.
+	// RoleBinding — bind loop-runtime-deployer SA to loop-runtime-deployer Role.
 	if err := tenantpolicy.ApplySingleSARoleBinding(ctx, runtimeClient, nsName, constants.RoleBindingDeployer, constants.RoleDeployer, constants.SADeployer); err != nil {
 		return fmt.Errorf("rolebinding %s/%s: %w", nsName, constants.RoleBindingDeployer, err)
 	}
@@ -65,9 +65,9 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 	// Pods use this SA with automountServiceAccountToken=false.
 	//
 	// imagePullSecrets provisioning (bug #24 fix — L2 race condition):
-	//   1. Copy the docker config from loopruntime-system-source in loopruntime-system
-	//      (seeded once at platform bootstrap) into this namespace as loopruntime-system.
-	//   2. Attach it to loopruntime-app SA.
+	//   1. Copy the docker config from loop-runtime-system-source in loop-runtime-system
+	//      (seeded once at platform bootstrap) into this namespace as loop-runtime-system.
+	//   2. Attach it to loop-runtime-app SA.
 	// F-09 (CHG-2026-04-29-DOGFOOD T4.1 / drift-baseline.md port #2):
 	// when the source pull secret does not exist (standalone-multi, local k3d
 	// with a public registry), this path used to log "pull secret ensure
@@ -83,7 +83,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 		// Source absent: a profile with no private registry. Not a runtime failure.
 		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
 			metav1.ConditionFalse, "SourceMissing",
-			"Source registry pull secret not present in loopruntime-system; pods will rely on public images or external auto-mount.",
+			"Source registry pull secret not present in loop-runtime-system; pods will rely on public images or external auto-mount.",
 			env.Generation)
 	default:
 		log.FromContext(ctx).Info("pull secret ensure failed (non-fatal)", "error", err.Error(), "namespace", nsName)
@@ -129,13 +129,13 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 	return nil
 }
 
-// ensurePullSecret copies the registry pull secret from loopruntime-system into the tenant namespace.
+// ensurePullSecret copies the registry pull secret from loop-runtime-system into the tenant namespace.
 // fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
 func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, runtimeClient client.Client, nsName string) error {
 	var src corev1.Secret
 	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: constants.SecretRegistryPull}
 	if err := r.Get(ctx, srcKey, &src); err != nil {
-		return fmt.Errorf("source pull secret loopruntime-system/loopruntime-system: %w", err)
+		return fmt.Errorf("source pull secret loop-runtime-system/loop-runtime-system: %w", err)
 	}
 
 	dst := &corev1.Secret{
@@ -154,7 +154,7 @@ func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, runtimeCli
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("destination pull secret %s/loopruntime-system: %w", nsName, err)
+		return fmt.Errorf("destination pull secret %s/loop-runtime-system: %w", nsName, err)
 	}
 	return nil
 }

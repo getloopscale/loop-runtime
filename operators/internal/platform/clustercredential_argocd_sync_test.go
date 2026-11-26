@@ -44,16 +44,16 @@ users:
 func TestClusterCredential_ArgoCDSecretSyncFailureIsVisibleInStatus(t *testing.T) {
 	s := bootstrapScheme(t)
 	cr := &loopruntimev1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopruntime-system", Generation: 2,
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loop-runtime-system", Generation: 2,
 			Finalizers: []string{clusterCredentialFinalizer}},
 		Spec: loopruntimev1.ClusterCredentialSpec{
-			ClusterName: "loopruntime-cell-1", APIServer: "https://127.0.0.1:1", CellID: "cell-1",
-			SecretRef: loopruntimev1.SecretReference{Name: "cell-1-kubeconfig", Namespace: "loopruntime-system"},
+			ClusterName: "loop-runtime-cell-1", APIServer: "https://127.0.0.1:1", CellID: "cell-1",
+			SecretRef: loopruntimev1.SecretReference{Name: "cell-1-kubeconfig", Namespace: "loop-runtime-system"},
 			Scope:     loopruntimev1.CredentialScope{ArgoCD: true},
 		},
 	}
 	kubeconfig := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "loopruntime-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "loop-runtime-system"},
 		Data:       map[string][]byte{"kubeconfig": []byte(execOnlyKubeconfig)},
 	}
 	c := fake.NewClientBuilder().WithScheme(s).WithObjects(cr, kubeconfig).
@@ -61,10 +61,10 @@ func TestClusterCredential_ArgoCDSecretSyncFailureIsVisibleInStatus(t *testing.T
 	r := &ClusterCredentialReconciler{Client: c, ArgoCDNamespace: "argocd"}
 
 	_, _ = r.Reconcile(context.Background(),
-		ctrl.Request{NamespacedName: types.NamespacedName{Name: "cell-1", Namespace: "loopruntime-system"}})
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: "cell-1", Namespace: "loop-runtime-system"}})
 
 	var got loopruntimev1.ClusterCredential
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "cell-1", Namespace: "loopruntime-system"}, &got); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "cell-1", Namespace: "loop-runtime-system"}, &got); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	synced := conditions.GetCondition(got.Status.Conditions, conditions.TypeArgoCDSecretSynced)

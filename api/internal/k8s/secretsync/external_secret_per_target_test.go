@@ -25,7 +25,7 @@ const (
 	shopTenant    = "tn-1"
 	shopProject   = "shop"
 	shopEnv       = "production"
-	shopNamespace = "loopruntime-tn-1-shop-production"
+	shopNamespace = "loop-runtime-tn-1-shop-production"
 )
 
 func shopSecret(app, name string) ports.SecretRef {
@@ -41,7 +41,7 @@ func newRuntimeFake(objs ...runtime.Object) *dynamicfake.FakeDynamicClient {
 
 func managerOn(dyn *dynamicfake.FakeDynamicClient) *SecretK8sManager {
 	return &SecretK8sManager{
-		mgmtClient: fake.NewClientset(), runtimeDynamic: dyn, mgmtNamespace: "loopruntime-system",
+		mgmtClient: fake.NewClientset(), runtimeDynamic: dyn, mgmtNamespace: "loop-runtime-system",
 		tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0",
 	}
 }
@@ -55,7 +55,7 @@ func perSecretExternalSecret(app, name string) *unstructured.Unstructured {
 		"metadata": map[string]interface{}{
 			"name":      externalSecretName(app, name),
 			"namespace": shopNamespace,
-			"labels":    map[string]interface{}{"runtime.getloopscale.com/managed-by": "loopruntime-api"},
+			"labels":    map[string]interface{}{"runtime.getloopscale.com/managed-by": "loop-runtime-api"},
 		},
 		"spec": map[string]interface{}{
 			"target": map[string]interface{}{
@@ -137,8 +137,8 @@ func TestEverySecretOfAnAppIsAnEntryOfOneExternalSecret(t *testing.T) {
 	if got, _, _ := unstructured.NestedString(es.Object, "spec", "target", "creationPolicy"); got != "Owner" {
 		t.Errorf("spec.target.creationPolicy = %q, want Owner so a removed entry leaves the Secret", got)
 	}
-	if got, _, _ := unstructured.NestedString(es.Object, "spec", "secretStoreRef", "name"); got != "loopruntime-broker" {
-		t.Errorf("spec.secretStoreRef.name = %q, want loopruntime-broker", got)
+	if got, _, _ := unstructured.NestedString(es.Object, "spec", "secretStoreRef", "name"); got != "loop-runtime-broker" {
+		t.Errorf("spec.secretStoreRef.name = %q, want loop-runtime-broker", got)
 	}
 	data, _, _ := unstructured.NestedSlice(es.Object, "spec", "data")
 	for _, raw := range data {

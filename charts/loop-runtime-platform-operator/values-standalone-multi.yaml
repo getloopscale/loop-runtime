@@ -1,0 +1,21 @@
+# Standalone-multi (k3d 3-cluster local) overrides for loop-runtime-platform-operator.
+#
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C12 (4 charts × 4
+# environments = 16 cells; this is the standalone-multi cell).
+#
+# k3d uses an in-cluster registry (`k3d-loop-runtime-registry:5000`) accessible
+# without auth — empty imagePullSecrets is correct. Image repository
+# overridden to point at the local registry instead of DOCR. Mirrors
+# pattern from `infra/helm/tenant-controller/values-standalone-multi.yaml`.
+global:
+  registry: k3d-loop-runtime-registry:5000
+  imagePullSecrets: []
+
+image:
+  repository: loop-runtime-platform-operator
+  pullPolicy: IfNotPresent   # FB-#1 (MEET-070): k3d image import populates node crictl cache; pullPolicy=Always cycles ImagePullBackOff because registry HTTP returns 404
+
+# FB-#3 partial fix (MEET-070): platform-operator only needs
+# ARGOCD_NAMESPACE (the only os.Getenv in cmd/platform-operator/main.go).
+config:
+  argocdNamespace: argocd

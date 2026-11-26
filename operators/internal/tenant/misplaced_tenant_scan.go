@@ -22,14 +22,14 @@ import (
 const misplacedTenantScanInterval = 5 * time.Minute
 
 // MisplacedTenantScanner surfaces Tenant CRs outside the canonical namespace
-// (ADR-0018 C2/C5). The tenant-operator's cache is scoped to loopruntime-system, so
+// (ADR-0018 C2/C5). The tenant-operator's cache is scoped to loop-runtime-system, so
 // such a Tenant is invisible to every reconciler; this scan reads the cluster
 // uncached, at start and then periodically, and publishes the count per
-// namespace in loopruntime_misplaced_tenant_total — the series the
+// namespace in loop_runtime_misplaced_tenant_total — the series the
 // MisplacedTenantDetected alert queries.
 type MisplacedTenantScanner struct {
 	// Reader must be uncached (mgr.GetAPIReader()): the cache cannot see
-	// outside loopruntime-system, which is the whole point.
+	// outside loop-runtime-system, which is the whole point.
 	Reader   client.Reader
 	Interval time.Duration
 }

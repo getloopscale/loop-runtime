@@ -13,7 +13,7 @@
 # Default values are for local development only.
 mode: distributed
 
-rootUser: loopruntime-admin
+rootUser: loop-runtime-admin
 rootPassword: ""  # T1.3: empty triggers MinIO fail-fast
 
 statefulset:
@@ -83,21 +83,21 @@ consoleService:
 
 # B75 (end-to-end-deploy-validation-plan iter 9) — buckets required by LoopRuntime.
 # Source of truth aligned with values.yaml. In LoopRuntime Cloud production,
-# `loopruntime-static-assets` lives in DO Spaces (worker.mjs), but the in-cluster
+# `loop-runtime-static-assets` lives in DO Spaces (worker.mjs), but the in-cluster
 # MinIO still creates it in case `S3_USE_INCLUSTER_MINIO=true` overrides
 # the cloud delivery path (e.g., DR scenarios).
 buckets:
-  - name: loopruntime-builds
+  - name: loop-runtime-builds
     policy: none
-  - name: loopruntime-artifacts
+  - name: loop-runtime-artifacts
     policy: none
-  - name: loopruntime-logs
+  - name: loop-runtime-logs
     policy: none
-  - name: loopruntime-static-assets
+  - name: loop-runtime-static-assets
     policy: none
 
-# NetworkPolicy: only loopruntime-system namespace can talk to MinIO.
-# Build cluster reaches via egress NetworkPolicy in loopruntime-build CWTs.
+# NetworkPolicy: only loop-runtime-system namespace can talk to MinIO.
+# Build cluster reaches via egress NetworkPolicy in loop-runtime-build CWTs.
 networkPolicy:
   enabled: true
   allowExternal: false

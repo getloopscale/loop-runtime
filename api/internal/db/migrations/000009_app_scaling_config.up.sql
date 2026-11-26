@@ -28,7 +28,7 @@ CREATE TABLE app_scaling_config (
     UNIQUE (tenant_id, project_id, environment, app_name)
 );
 
--- Lookup index for the hot path: GetByApp (called on every loopruntime status / scale).
+-- Lookup index for the hot path: GetByApp (called on every loop_runtime status / scale).
 CREATE INDEX idx_app_scaling_config_lookup
     ON app_scaling_config (tenant_id, project_id, environment);
 

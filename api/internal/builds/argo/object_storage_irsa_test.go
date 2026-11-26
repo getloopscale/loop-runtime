@@ -31,13 +31,13 @@ func workflowJSON(t *testing.T, params InfraParams, spec deploycontracts.Workflo
 }
 
 // On the AWS profile the build steps reach S3 as the IRSA role of the workflow
-// ServiceAccount and no loopruntime-minio-credentials Secret exists: a step that reads it
+// ServiceAccount and no loop-runtime-minio-credentials Secret exists: a step that reads it
 // never starts (CreateContainerConfigError), as the SBOM step of the first tenant build
 // on staging would have.
 func TestWorkflowBuilder_IRSAObjectStoreReadsNoMinIOSecret(t *testing.T) {
 	params := testInfraParams()
 	params.ObjectStoreIRSA = true
-	params.StaticAssetsBucket = "loopruntime-staging-static-assets-000000000000"
+	params.StaticAssetsBucket = "loop-runtime-staging-static-assets-000000000000"
 
 	for name, render := range renderers() {
 		t.Run(name, func(t *testing.T) {
@@ -48,7 +48,7 @@ func TestWorkflowBuilder_IRSAObjectStoreReadsNoMinIOSecret(t *testing.T) {
 			if strings.Contains(wf, "$MINIO_ENDPOINT") {
 				t.Errorf("the workflow points aws at $MINIO_ENDPOINT, which only the MinIO Secret sets")
 			}
-			if !strings.Contains(wf, "s3://loopruntime-staging-static-assets-000000000000/") {
+			if !strings.Contains(wf, "s3://loop-runtime-staging-static-assets-000000000000/") {
 				t.Errorf("the workflow does not upload to the configured StaticAssetsBucket")
 			}
 		})

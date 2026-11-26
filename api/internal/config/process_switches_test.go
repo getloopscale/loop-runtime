@@ -27,7 +27,7 @@ func TestPprofEnabledAcceptsOnlyTrueOrOne(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setEnv {
-				t.Setenv("LOOPRUNTIME_PPROF_ENABLED", tt.envValue)
+				t.Setenv("LOOP_RUNTIME_PPROF_ENABLED", tt.envValue)
 			}
 			if got := Load().PprofEnabled; got != tt.want {
 				t.Errorf("Load().PprofEnabled = %v, want %v (env=%q, set=%v)", got, tt.want, tt.envValue, tt.setEnv)
@@ -40,18 +40,18 @@ func TestPprofListensOn6060UnlessAnAddressIsGiven(t *testing.T) {
 	if got := Load().PprofAddr; got != ":6060" {
 		t.Fatalf("default PprofAddr = %q, want :6060", got)
 	}
-	t.Setenv("LOOPRUNTIME_PPROF_ADDR", "127.0.0.1:7070")
+	t.Setenv("LOOP_RUNTIME_PPROF_ADDR", "127.0.0.1:7070")
 	if got := Load().PprofAddr; got != "127.0.0.1:7070" {
-		t.Fatalf("PprofAddr = %q, want the LOOPRUNTIME_PPROF_ADDR value", got)
+		t.Fatalf("PprofAddr = %q, want the LOOP_RUNTIME_PPROF_ADDR value", got)
 	}
 }
 
 func TestEnvReadinessCheckerIsOffUnlessExactlyTrue(t *testing.T) {
-	t.Setenv("LOOPRUNTIME_ENV_READINESS_CHECKER", "1")
+	t.Setenv("LOOP_RUNTIME_ENV_READINESS_CHECKER", "1")
 	if Load().EnvReadinessChecker {
 		t.Fatal(`EnvReadinessChecker must stay off for anything but "true"`)
 	}
-	t.Setenv("LOOPRUNTIME_ENV_READINESS_CHECKER", "true")
+	t.Setenv("LOOP_RUNTIME_ENV_READINESS_CHECKER", "true")
 	if !Load().EnvReadinessChecker {
 		t.Fatal(`EnvReadinessChecker must be on for "true"`)
 	}

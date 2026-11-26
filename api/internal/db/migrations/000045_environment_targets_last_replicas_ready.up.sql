@@ -2,11 +2,11 @@
 -- Copyright 2025-2026 The LoopRuntime Authors
 
 -- Migration 000045 — Data-plane snapshot columns on environment_targets for
--- Red Team loopruntime-cloud#128 hardening (dashboard /projects list badge
+-- Red Team loop-console#128 hardening (dashboard /projects list badge
 -- lies "Live" when data-plane serves 502 despite control-plane ACTIVE).
 --
 -- Two nullable snapshot columns absorb periodic Prometheus scrape
--- writes from the loopruntime-app-operator data-plane poller (plan T2.1):
+-- writes from the loop-runtime-app-operator data-plane poller (plan T2.1):
 --   * last_replicas_ready_value — value of
 --     kube_deployment_status_replicas_ready at last scrape.
 --   * last_replicas_ready_at    — wall-clock of last scrape success.

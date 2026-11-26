@@ -123,10 +123,10 @@ func TestSumComputeRequests_InitAndSidecar(t *testing.T) {
 // tenant's (project,env) namespaces on a cell and sums the effective request.
 func TestCollectNamespaces_SumsAcrossNamespaces(t *testing.T) {
 	lister := fakePodLister{byNS: map[string][]corev1.Pod{
-		"loopruntime-acme-web-prod":    {podWith("500m", "512Mi")},
-		"loopruntime-acme-worker-prod": {podWith("250m", "256Mi"), podWith("250m", "256Mi")},
+		"loop-runtime-acme-web-prod":    {podWith("500m", "512Mi")},
+		"loop-runtime-acme-worker-prod": {podWith("250m", "256Mi"), podWith("250m", "256Mi")},
 	}}
-	cpu, mem, err := collectNamespaces(context.Background(), lister, []string{"loopruntime-acme-web-prod", "loopruntime-acme-worker-prod"})
+	cpu, mem, err := collectNamespaces(context.Background(), lister, []string{"loop-runtime-acme-web-prod", "loop-runtime-acme-worker-prod"})
 	if err != nil {
 		t.Fatalf("collectNamespaces: %v", err)
 	}
@@ -145,11 +145,11 @@ func TestCollectNamespaces_SumsAcrossNamespaces(t *testing.T) {
 func TestCollectNamespaces_ListErrorShortCircuits(t *testing.T) {
 	boom := errors.New("cell unreachable")
 	lister := fakePodLister{
-		byNS:  map[string][]corev1.Pod{"loopruntime-acme-web-prod": {podWith("500m", "512Mi")}},
-		errNS: map[string]error{"loopruntime-acme-worker-prod": boom},
+		byNS:  map[string][]corev1.Pod{"loop-runtime-acme-web-prod": {podWith("500m", "512Mi")}},
+		errNS: map[string]error{"loop-runtime-acme-worker-prod": boom},
 	}
 	cpu, mem, err := collectNamespaces(context.Background(), lister,
-		[]string{"loopruntime-acme-web-prod", "loopruntime-acme-worker-prod"})
+		[]string{"loop-runtime-acme-web-prod", "loop-runtime-acme-worker-prod"})
 	if err == nil {
 		t.Fatal("collectNamespaces returned nil error on a list failure — SC-3 violated (must short-circuit, never swallow to 0)")
 	}

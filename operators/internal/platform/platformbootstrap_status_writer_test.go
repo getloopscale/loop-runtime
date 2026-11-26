@@ -216,7 +216,7 @@ func TestPlatformBootstrap_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testin
 	bodies := capturedStatusPatches(t, &loopruntimev1.PlatformBootstrap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "platform",
-			Namespace: "loopruntime-system",
+			Namespace: "loop-runtime-system",
 			// Non-zero on purpose. With Generation at its zero value, a mutation
 			// like `Status.ObservedGeneration = pb.Generation` writes 0, omitempty
 			// drops it, and the lost-write comparison below cannot see the very
@@ -341,7 +341,7 @@ func TestClusterCredential_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testin
 	seed := &loopruntimev1.ClusterCredential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cell-0",
-			Namespace: "loopruntime-system",
+			Namespace: "loop-runtime-system",
 			// Non-zero for the same reason as the sibling test: with Generation at
 			// zero a lost write of ObservedGeneration is erased by omitempty and
 			// the comparison below sees nothing.
@@ -419,11 +419,11 @@ func TestGitRepositoryBinding_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *tes
 		}
 	}
 	seed := &loopruntimev1.GitRepositoryBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: "gh", Namespace: "loopruntime-system", Generation: 7},
+		ObjectMeta: metav1.ObjectMeta{Name: "gh", Namespace: "loop-runtime-system", Generation: 7},
 		Spec: loopruntimev1.GitRepositoryBindingSpec{
 			RepoURL: "https://example.invalid/x.git",
 			CredentialSecretRef: loopruntimev1.CredentialSecretRef{
-				Name: "creds", Key: "token", Namespace: "loopruntime-system",
+				Name: "creds", Key: "token", Namespace: "loop-runtime-system",
 			},
 		},
 	}
@@ -436,7 +436,7 @@ func TestGitRepositoryBinding_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *tes
 	// slice showed can vanish from a merge patch. A guard that never reaches the
 	// site it most needs to watch is a guard by name. Review of slice-24.
 	creds := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "creds", Namespace: "loopruntime-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "creds", Namespace: "loop-runtime-system"},
 		Data:       map[string][]byte{"token": []byte("ghp_probe")},
 	}
 

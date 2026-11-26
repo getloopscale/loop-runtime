@@ -10,7 +10,7 @@ kratos:
         domain: {{ .Values.cookieDomain | quote }}
     # The courier sends through Resend's HTTP API from getloopscale.com, the domain the
     # staging Resend account verifies. The key is not rendered into the config: the
-    # ory-kratos-resend Secret (aws-secrets-manager, from loopruntime/staging/resend) sets
+    # ory-kratos-resend Secret (aws-secrets-manager, from loop-runtime/staging/resend) sets
     # COURIER_HTTP_REQUEST_CONFIG_AUTH_CONFIG_VALUE, which overrides `auth.config.value`,
     # and the base values render no Authorization header where aws.resendSecret is set.
     courier:

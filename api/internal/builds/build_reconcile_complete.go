@@ -72,7 +72,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	// CHG-2026-04-29-DOGFOOD iter 8: forward digest map from buildApps
 	// (populated by enrichAppReleasesWithAttestation just above) so the
 	// manifest renders use `image@sha256:...` instead of `image:tag`.
-	// Mutable tag refs are rejected by VAP `loopruntime-require-image-signature`
+	// Mutable tag refs are rejected by VAP `loop-runtime-require-image-signature`
 	// in tenant namespaces — pods would be Forbidden at admission time.
 	digests := make(map[string]string, len(buildApps))
 	for _, ar := range buildApps {

@@ -29,7 +29,7 @@
 // itself instead of being absorbed as a green run.
 //
 // Scope: modules INSIDE this repository. `use` entries that leave the repo
-// (`../loopruntime-contracts`) belong to a sibling repo with its own gates and are
+// (`../loop-runtime-contracts`) belong to a sibling repo with its own gates and are
 // deliberately not audited from here.
 //
 // KNOWN TENSION, recorded rather than silently settled. Two taskfile comments

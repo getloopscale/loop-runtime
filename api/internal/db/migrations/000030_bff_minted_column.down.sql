@@ -3,10 +3,10 @@
 --
 -- WARNING per EC-12: dev-only rollback. Production rollback with active BFF
 -- rows MUST first delete distinguishable BFF rows via:
---   DELETE FROM loopruntime_api_keys WHERE key_name='bff-dashboard';
+--   DELETE FROM loop_runtime_api_keys WHERE key_name='bff-dashboard';
 -- otherwise those rows lose their distinguishing marker and the cleanup cron
 -- (in code, post-rollback) cannot find them.
 
-DROP INDEX IF EXISTS idx_loopruntime_api_keys_bff_minted_expires;
+DROP INDEX IF EXISTS idx_loop_runtime_api_keys_bff_minted_expires;
 
-ALTER TABLE loopruntime_api_keys DROP COLUMN bff_minted;
+ALTER TABLE loop_runtime_api_keys DROP COLUMN bff_minted;

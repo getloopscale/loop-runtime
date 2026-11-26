@@ -4,12 +4,12 @@
 -- ============================================================================
 -- 000055_lens_dashboards
 --
--- loopruntime-lens M66 — per-workspace custom dashboards for the /v1/dashboard/lens BFF.
+-- loop-runtime-lens M66 — per-workspace custom dashboards for the /v1/dashboard/lens BFF.
 -- A dashboard is an ordered list of widgets (KPI tile / trend chart / top-N table)
 -- each bound to an existing M51/M60 observability series; the whole board is stored
 -- as ONE JSONB `config` blob (KISS — the handler validates the widget palette + caps
 -- at the write boundary; opik's single-config-blob precedent). Consumed/queried by the
--- loopruntime-cloud LensDashboardsHandler (raw database/sql) — loopruntime-cloud does not run
+-- loop-console LensDashboardsHandler (raw database/sql) — loop-console does not run
 -- migrations, the engine owns schema.
 --
 -- Tenancy DIVERGES from 000053_lens_saved_views: a custom dashboard is a SHARED team

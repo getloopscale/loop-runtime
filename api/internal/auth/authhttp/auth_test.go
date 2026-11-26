@@ -108,11 +108,11 @@ func TestAuth_Whoami_PrivateEmail_DeriveNoreply(t *testing.T) {
 // and no "github-" prefix. Previous handler returned email="" without fallback.
 // Now username comes from users.username column (populated by migration 000037).
 func TestAuth_Whoami_ServiceAccount_UsesUsername(t *testing.T) {
-	h := NewAuthHandler(&fakeUsernameLookup{byID: map[string]string{"loopruntime-e2e": "loopruntime-e2e"}})
+	h := NewAuthHandler(&fakeUsernameLookup{byID: map[string]string{"loop-runtime-e2e": "loop-runtime-e2e"}})
 
 	uc := &auth.UserContext{
-		UserID:   "loopruntime-e2e", // no github- prefix
-		Email:    "",                // no email for client_credentials
+		UserID:   "loop-runtime-e2e", // no github- prefix
+		Email:    "",                 // no email for client_credentials
 		TenantID: "e2e-tenant",
 		Role:     "owner",
 	}
@@ -129,8 +129,8 @@ func TestAuth_Whoami_ServiceAccount_UsesUsername(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp["username"] != "loopruntime-e2e" {
-		t.Fatalf("want username loopruntime-e2e, got %q", resp["username"])
+	if resp["username"] != "loop-runtime-e2e" {
+		t.Fatalf("want username loop-runtime-e2e, got %q", resp["username"])
 	}
 	if resp["email"] != "" {
 		t.Fatalf("service account must not invent an email, got %q", resp["email"])

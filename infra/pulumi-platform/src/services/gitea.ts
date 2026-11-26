@@ -32,7 +32,7 @@ export class Gitea extends pulumi.ComponentResource {
   public readonly ready: pulumi.Output<boolean>;
 
   constructor(name: string, args: GiteaArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopruntime:platform:Gitea", name, {}, opts);
+    super("loop-runtime:platform:Gitea", name, {}, opts);
 
     // HOST in Gitea config expects "host:port" format
     const dbHostPort = pulumi.interpolate`${args.dbHost}:${args.dbPort}`;
@@ -53,7 +53,7 @@ export class Gitea extends pulumi.ComponentResource {
             admin: {
               username: "gitea_admin",
               password: args.adminPassword,
-              email: "admin@loopruntime.internal",
+              email: "admin@loop-runtime.internal",
             },
             config: {
               server: {

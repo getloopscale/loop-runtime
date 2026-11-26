@@ -14,7 +14,7 @@ import (
 // Background: the operator-generated `allow-ingress-traefik` NetworkPolicy
 // MUST allow traffic from the namespace where Traefik runs. LoopRuntime's helmfile
 // installs Traefik in `traefik` for ALL environments. The previous default
-// (`loopruntime-system`) silently blocked Traefik from reaching tenant pods,
+// (`loop-runtime-system`) silently blocked Traefik from reaching tenant pods,
 // surfacing as HTTP 502 in any deploy. Tests pin both the default and the
 // env-var override path.
 //

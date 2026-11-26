@@ -151,7 +151,7 @@ func TestEnvListProjectFilter_ExcludesOtherProjects(t *testing.T) {
 // TestEnvListProjectFilter_PrefersProjectScopedRow asserts WHICH of the two
 // rows survives when both exist. They are not interchangeable: the
 // project-scoped row is the one whose 3-segment namespace
-// `loopruntime-<tenant>-<project>-<env>` routes post-M2. Returning the legacy row
+// `loop-runtime-<tenant>-<project>-<env>` routes post-M2. Returning the legacy row
 // would dedup the list correctly and still hand the caller the wrong entry.
 func TestEnvListProjectFilter_PrefersProjectScopedRow(t *testing.T) {
 	envs := []EnvironmentEntry{

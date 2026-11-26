@@ -15,7 +15,7 @@ import (
 // Plan T1.1 ADR D2: ArgoCD returns HTTP 400 "another operation is already
 // in progress" when 2+ syncs hit the same App concurrently. Pre-emptive
 // serialization here eliminates the error at the source instead of relying
-// on loopruntime-api retries that consume circuit breaker quota.
+// on loop-runtime-api retries that consume circuit breaker quota.
 //
 // EC-1 (memory leak prevention): after release, if no other goroutine holds
 // the App's lock, delete it from the map. This prevents unbounded growth

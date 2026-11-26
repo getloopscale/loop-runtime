@@ -43,7 +43,7 @@ func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 
 	// Preview CR manager — creates/queries PreviewEnvironment CRs on
 	// mgmt cluster. Shares the same typed client + namespace as
-	// TenantCRManager (both target loopruntime-system in the mgmt cluster).
+	// TenantCRManager (both target loop-runtime-system in the mgmt cluster).
 	previewCRMgr := workload.NewPreviewCRManager(tenantCRMgr.Client)
 
 	return &K8sDeps{

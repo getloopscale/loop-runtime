@@ -31,7 +31,7 @@ metadata:
       API marks build FAILED, NO image pushed to DOCR (silent unsigned push
       would be a security regression).
     runtime.getloopscale.com/slo-query: |
-      sum(rate(loopruntime_cosign_sign_failure_total{reason="fulcio_unreachable"}[1m])) > 0
+      sum(rate(loop_runtime_cosign_sign_failure_total{reason="fulcio_unreachable"}[1m])) > 0
     runtime.getloopscale.com/dod-test: |
       During chaos window: at least 1 build attempts cosign-sign + fails
       cleanly. No unsigned image appears in DOCR (verify via:

@@ -113,14 +113,16 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
-- The engine is named loop-runtime everywhere, because LoopZero is the name of the agent framework. Inside the code the name is spelled `loopruntime`, with no hyphen. What an operator has to change:
-  - Images, charts and the ops binary: `loopzero-api` is `loopruntime-api`, and so on for every `loopzero-*` name.
-  - Namespaces and resource names: `loopzero-system` is `loopruntime-system`, tenant namespaces start with `loopruntime-`.
-  - Environment variables: every `LOOPZERO_*` variable is `LOOPRUNTIME_*`.
+- The engine is named loop-runtime everywhere, because LoopZero is the name of the agent framework. Platform components follow one pattern, `loop-{name}`, written with a hyphen wherever the syntax allows one. What an operator has to change:
+  - Images, charts and the ops binary: `loopzero-api` is `loop-runtime-api`, and so on for every `loopzero-*` name.
+  - The console's images and charts: `loopzero-cloud` is `loop-console` and `loopzero-dashboard` is `loop-console-dashboard`.
+  - Namespaces and resource names: `loopzero-system` is `loop-runtime-system`, tenant namespaces start with `loop-runtime-`.
+  - Environment variables: every `LOOPZERO_*` variable is `LOOP_RUNTIME_*`.
   - The API group of the CRDs, labels, annotations and finalizers: `loopzero.io` is `runtime.getloopscale.com`. The kind `LoopZeroApplication` is `LoopRuntimeApplication`. Resources of the old group are not migrated; a cluster has to be rebuilt.
-  - HTTP headers: `X-LoopZero-*` is `X-LoopRuntime-*`.
-  - Metrics: the `loopzero_` prefix is `loopruntime_`, and labels derived from the group read `label_runtime_getloopscale_com_*`.
-  - PostgreSQL: databases and roles named `loopzero*` are `loopruntime*`.
+  - HTTP headers: `X-LoopZero-*` is `X-Loop-Runtime-*`.
+  - Metrics: the `loopzero_` prefix is `loop_runtime_`, and labels derived from the group read `label_runtime_getloopscale_com_*`.
+  - PostgreSQL: databases, roles and settings named `loopzero*` are `loop_runtime*`, and the console's database is `loop_console`.
+  - Helm values written in camelCase follow: `loopzeroOpsImage` is `loopRuntimeOpsImage`.
   The deploy descriptor a repository may carry is `loopscale.yaml`, then `loopzero.yaml`.
 - The dashboard chart writes its runtime configuration to `window.__LOOPSCALE_CONFIG__`. A dashboard image older than this one reads the previous global and finds nothing.
 - The repository is `getloopscale/loop-runtime`, and the Go modules are `github.com/getloopscale/loop-runtime/...`. The name LoopZero belongs to the agent framework. The staging scripts, the reusable `build-publish.yml` workflow and every link point at the new address. Image names, namespaces, the `LOOPZERO_` variables and the `loopzero.io` API group are unchanged in this step.

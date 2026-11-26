@@ -31,7 +31,7 @@ import (
 func dbURL() string {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		url = "postgres://postgres:postgres@localhost:5432/loopruntime_test?sslmode=disable"
+		url = "postgres://postgres:postgres@localhost:5432/loop_runtime_test?sslmode=disable"
 	}
 	return url
 }

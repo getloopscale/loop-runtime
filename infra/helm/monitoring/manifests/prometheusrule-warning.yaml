@@ -3,16 +3,16 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-warning-alerts
+  name: loop-runtime-warning-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopruntime.warning
+    - name: loop-runtime.warning
       rules:
         - alert: LoopRuntimeAPIHighLatency
-          expr: histogram_quantile(0.99, sum(rate(loopruntime_api_request_duration_seconds_bucket[5m])) by (le)) > 5
+          expr: histogram_quantile(0.99, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le)) > 5
           for: 5m
           labels:
             severity: warning
@@ -22,7 +22,7 @@ spec:
             runbook: "Check downstream dependencies (Gitea, Argo, PostgreSQL). Scaling API pods only helps if API itself is the bottleneck."
 
         - alert: LoopRuntimeBuildQueueBacklog
-          expr: loopruntime_build_queue_depth > 10
+          expr: loop_runtime_build_queue_depth > 10
           for: 5m
           labels:
             severity: warning
@@ -32,7 +32,7 @@ spec:
             runbook: "Check Argo Workflows controller capacity. Consider scaling workflow workers."
 
         - alert: LoopRuntimeReconcilerUnhealthy
-          expr: increase(loopruntime_operator_reconcile_errors_total[5m]) > 5
+          expr: increase(loop_runtime_operator_reconcile_errors_total[5m]) > 5
           labels:
             severity: warning
           annotations:
@@ -71,10 +71,10 @@ spec:
             runbook: "Check ArgoCD controller resources and application count. May indicate capacity issues."
 
         # MEET-2026-03-31-023 T0-3: Build stuck in RELEASING state.
-        # The metric loopruntime_releasing_builds exists in api/internal/metrics/release_metrics.go.
+        # The metric loop_runtime_releasing_builds exists in api/internal/metrics/release_metrics.go.
         # This alert was designed but never created as a PrometheusRule.
         - alert: LoopRuntimeOrphanBuild
-          expr: loopruntime_releasing_builds > 0
+          expr: loop_runtime_releasing_builds > 0
           for: 5m
           labels:
             severity: warning
@@ -85,18 +85,18 @@ spec:
 
         # MEET-2026-03-31-023 T1-8: Releases stuck in PENDING state.
         - alert: LoopRuntimeReleasesPendingStuck
-          expr: loopruntime_releases_pending > 0
+          expr: loop_runtime_releases_pending > 0
           for: 10m
           labels:
             severity: warning
           annotations:
             summary: "{{ $value }} release(s) stuck in PENDING for 10+ minutes"
             description: "Releases should converge within 5 minutes. Check ArgoCD sync status and convergence loop health."
-            runbook: "Check ArgoCD Application health. Verify convergence loop is running (loopruntime_reconcile_loop_last_success_timestamp). Check if TriggerSync failed."
+            runbook: "Check ArgoCD Application health. Verify convergence loop is running (loop_runtime_reconcile_loop_last_success_timestamp). Check if TriggerSync failed."
 
         # MEET-2026-03-31-023 T1-8: Reconcile loop health heartbeat.
         - alert: LoopRuntimeReconcileLoopStale
-          expr: time() - loopruntime_reconcile_loop_last_success_timestamp{loop="build"} > 120
+          expr: time() - loop_runtime_reconcile_loop_last_success_timestamp{loop="build"} > 120
           for: 0m
           labels:
             severity: warning
@@ -118,7 +118,7 @@ spec:
         # WS.1: Service auth secret approaching 90-day rotation deadline.
         # Fires at 80 days (6912000s) to give operators 10 days to rotate.
         - alert: LoopRuntimeServiceAuthSecretExpiring
-          expr: loopruntime_service_auth_secret_age_seconds > 6912000
+          expr: loop_runtime_service_auth_secret_age_seconds > 6912000
           for: 1h
           labels:
             severity: warning
@@ -141,7 +141,7 @@ spec:
     # Workload Protection Alerts (MEET-2026-03-30-021)
     # ═══════════════════════════════════════════════════
 
-    - name: loopruntime.workload.warning
+    - name: loop-runtime.workload.warning
       rules:
         # F1-C4: CrashLoopBackOff for 5+ minutes (reduced from 10m per SRE review)
         - alert: LoopRuntimeAppCrashLoop
@@ -225,7 +225,7 @@ spec:
             description: "Deployment hit progressDeadlineSeconds (210s). New pods could not become ready."
             runbook: "Check pod events and logs. Likely causes: image crash, failing health check, insufficient resources. Use `loopscale rollback` to revert."
 
-    - name: loopruntime.workload.critical
+    - name: loop-runtime.workload.critical
       rules:
         # F1-C6: CrashLoopBackOff persisting for 30+ minutes — critical escalation
         - alert: LoopRuntimeAppCrashLoopCritical
@@ -247,10 +247,10 @@ spec:
     # SLO Alerts (Sprint 4 — Observability)
     # ═══════════════════════════════════════
 
-    - name: loopruntime.slos
+    - name: loop-runtime.slos
       rules:
         - alert: LoopRuntimeQueueSlow
-          expr: histogram_quantile(0.95, sum(rate(loopruntime_build_duration_seconds_bucket{status="succeeded"}[1h])) by (le)) > 300
+          expr: histogram_quantile(0.95, sum(rate(loop_runtime_build_duration_seconds_bucket{status="succeeded"}[1h])) by (le)) > 300
           for: 10m
           labels:
             severity: warning
@@ -261,7 +261,7 @@ spec:
             description: "Build duration (p95) has been above 300s for 10 minutes. SLO target: <300s."
 
         - alert: LoopRuntimeDeployFailureRate
-          expr: (sum(rate(loopruntime_builds_total{status="failed"}[24h])) / sum(rate(loopruntime_builds_total[24h]))) > 0.1
+          expr: (sum(rate(loop_runtime_builds_total{status="failed"}[24h])) / sum(rate(loop_runtime_builds_total[24h]))) > 0.1
           for: 30m
           labels:
             severity: warning
@@ -272,7 +272,7 @@ spec:
             description: "Deploy success rate dropped below 90% over the last 24 hours. SLO target: >90%."
 
         - alert: LoopRuntimeLockContention
-          expr: histogram_quantile(0.95, sum(rate(loopruntime_lock_hold_duration_seconds_bucket[5m])) by (le)) > 2
+          expr: histogram_quantile(0.95, sum(rate(loop_runtime_lock_hold_duration_seconds_bucket[5m])) by (le)) > 2
           for: 5m
           labels:
             severity: warning
@@ -283,7 +283,7 @@ spec:
             description: "Environment lock hold time (p95) above 2s for 5 minutes. SLO target: <2s."
 
         - alert: LoopRuntimeSyncSlow
-          expr: histogram_quantile(0.95, sum(rate(loopruntime_deploy_duration_seconds_bucket[1h])) by (le)) > 600
+          expr: histogram_quantile(0.95, sum(rate(loop_runtime_deploy_duration_seconds_bucket[1h])) by (le)) > 600
           for: 10m
           labels:
             severity: warning
@@ -294,7 +294,7 @@ spec:
             description: "Full deploy cycle (build + sync) p95 above 600s for 10 minutes. SLO target: <600s."
 
         - alert: LoopRuntimeBuildQueueSlow
-          expr: loopruntime_build_queue_depth > 5
+          expr: loop_runtime_build_queue_depth > 5
           for: 5m
           labels:
             severity: warning
@@ -316,7 +316,7 @@ spec:
             runbook: "Check backend service health. Review Traefik access logs. Check IngressRoute configuration for misrouted paths."
 
         - alert: LoopRuntimeBuildTenantSaturated
-          expr: increase(loopruntime_build_tenant_backpressure_total[5m]) > 0
+          expr: increase(loop_runtime_build_tenant_backpressure_total[5m]) > 0
           for: 5m
           labels:
             severity: warning
@@ -326,7 +326,7 @@ spec:
             runbook: "This means the tenant is submitting builds faster than they complete. Check if builds are stuck. Consider increasing MAX_CONCURRENT_BUILDS_PER_TENANT if the tenant has a legitimate burst workload."
 
         - alert: LoopRuntimeCFKVDriftDetected
-          expr: loopruntime_cfkv_drift_detected == 1
+          expr: loop_runtime_cfkv_drift_detected == 1
           for: 10m
           labels:
             severity: warning
@@ -337,11 +337,11 @@ spec:
 
         # P2-9: DB pool saturation — early warning before connection exhaustion
         - alert: LoopRuntimeDBPoolSaturation
-          expr: (loopruntime_postgres_connections_active / loopruntime_postgres_pool_max_conns) > 0.8
+          expr: (loop_runtime_postgres_connections_active / loop_runtime_postgres_pool_max_conns) > 0.8
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "PostgreSQL connection pool >80% utilized"
             description: "{{ $value | humanizePercentage }} of pool connections are active for 5+ minutes. Approaching exhaustion."
-            runbook: "Check loopruntime_postgres_pool_acquire_duration_seconds for increased wait times. If sustained, increase DB_MAX_CONNS or investigate slow queries via pg_stat_statements."
+            runbook: "Check loop_runtime_postgres_pool_acquire_duration_seconds for increased wait times. If sustained, increase DB_MAX_CONNS or investigate slow queries via pg_stat_statements."

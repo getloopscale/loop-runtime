@@ -62,7 +62,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-test-production"
 			tenantName = "env-test"
 			envName    = "production"
-			nsName     = "loopruntime-env-test-production"
+			nsName     = "loop-runtime-env-test-production"
 		)
 
 		BeforeAll(func() {
@@ -104,11 +104,11 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		// Task 7.4: Dedicated ServiceAccount for app workloads
-		It("should create loopruntime-app ServiceAccount for workloads", func() {
+		It("should create loop-runtime-app ServiceAccount for workloads", func() {
 			Eventually(func(g Gomega) {
 				var sa corev1.ServiceAccount
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopruntime-app", Namespace: nsName,
+					Name: "loop-runtime-app", Namespace: nsName,
 				}, &sa)).To(Succeed())
 				g.Expect(sa.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/managed-by", "environment-controller"))
 				// automountServiceAccountToken should be false
@@ -121,12 +121,12 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			Eventually(func(g Gomega) {
 				var sa corev1.ServiceAccount
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopruntime-deployer", Namespace: nsName,
+					Name: "loop-runtime-deployer", Namespace: nsName,
 				}, &sa)).To(Succeed())
 
 				var role rbacv1.Role
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopruntime-deployer", Namespace: nsName,
+					Name: "loop-runtime-deployer", Namespace: nsName,
 				}, &role)).To(Succeed())
 				// Starter plan: should have deployments
 				hasDeployments := false
@@ -141,11 +141,11 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 
 				var rb rbacv1.RoleBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopruntime-deployer", Namespace: nsName,
+					Name: "loop-runtime-deployer", Namespace: nsName,
 				}, &rb)).To(Succeed())
-				g.Expect(rb.RoleRef.Name).To(Equal("loopruntime-deployer"))
+				g.Expect(rb.RoleRef.Name).To(Equal("loop-runtime-deployer"))
 				g.Expect(rb.Subjects).To(HaveLen(1))
-				g.Expect(rb.Subjects[0].Name).To(Equal("loopruntime-deployer"))
+				g.Expect(rb.Subjects[0].Name).To(Equal("loop-runtime-deployer"))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -237,7 +237,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-idemp-production"
 			tenantName = "env-idemp"
 			envName    = "production"
-			nsName     = "loopruntime-env-idemp-production"
+			nsName     = "loop-runtime-env-idemp-production"
 		)
 
 		BeforeAll(func() {
@@ -267,7 +267,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 				Expect(k8sClient.List(ctx, &saList, client.InNamespace(nsName))).To(Succeed())
 				saCount := 0
 				for _, sa := range saList.Items {
-					if sa.Name == "loopruntime-deployer" {
+					if sa.Name == "loop-runtime-deployer" {
 						saCount++
 					}
 				}
@@ -323,7 +323,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-del-production"
 			tenantName = "env-del"
 			envName    = "production"
-			nsName     = "loopruntime-env-del-production"
+			nsName     = "loop-runtime-env-del-production"
 		)
 
 		It("should clean up namespace when Environment is deleted", func() {
@@ -380,7 +380,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-noquota-staging"
 			tenantName = "env-noquota"
 			envName    = "staging"
-			nsName     = "loopruntime-env-noquota-staging"
+			nsName     = "loop-runtime-env-noquota-staging"
 		)
 
 		BeforeAll(func() {
@@ -435,7 +435,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-noisol-production"
 			tenantName = "env-noisol"
 			envName    = "production"
-			nsName     = "loopruntime-env-noisol-production"
+			nsName     = "loop-runtime-env-noisol-production"
 		)
 
 		BeforeAll(func() {
@@ -486,7 +486,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-ent-production"
 			tenantName = "env-ent"
 			envName    = "production"
-			nsName     = "loopruntime-env-ent-production"
+			nsName     = "loop-runtime-env-ent-production"
 		)
 
 		BeforeAll(func() {

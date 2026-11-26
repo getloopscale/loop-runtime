@@ -12,23 +12,23 @@ import (
 // (LD_PRELOAD, PATH...). Warn mode lets those keys through, so production
 // must refuse to start with it.
 func TestValidateRejectsTheEnvBlocklistWarnModeInProduction(t *testing.T) {
-	t.Setenv("LOOPRUNTIME_ENV", "production")
-	t.Setenv("LOOPRUNTIME_ENV_BLOCKLIST_MODE", "warn")
+	t.Setenv("LOOP_RUNTIME_ENV", "production")
+	t.Setenv("LOOP_RUNTIME_ENV_BLOCKLIST_MODE", "warn")
 
 	err := Load().Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "LOOPRUNTIME_ENV_BLOCKLIST_MODE") {
-		t.Fatalf("Validate() = %v, want a refusal naming LOOPRUNTIME_ENV_BLOCKLIST_MODE", err)
+	if err == nil || !strings.Contains(err.Error(), "LOOP_RUNTIME_ENV_BLOCKLIST_MODE") {
+		t.Fatalf("Validate() = %v, want a refusal naming LOOP_RUNTIME_ENV_BLOCKLIST_MODE", err)
 	}
 }
 
 func TestValidateRejectsAnUnknownEnvBlocklistMode(t *testing.T) {
-	t.Setenv("LOOPRUNTIME_ENV_BLOCKLIST_MODE", "off")
+	t.Setenv("LOOP_RUNTIME_ENV_BLOCKLIST_MODE", "off")
 
 	err := Load().Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "LOOPRUNTIME_ENV_BLOCKLIST_MODE") {
-		t.Fatalf("Validate() = %v, want a refusal naming LOOPRUNTIME_ENV_BLOCKLIST_MODE", err)
+	if err == nil || !strings.Contains(err.Error(), "LOOP_RUNTIME_ENV_BLOCKLIST_MODE") {
+		t.Fatalf("Validate() = %v, want a refusal naming LOOP_RUNTIME_ENV_BLOCKLIST_MODE", err)
 	}
 }
 

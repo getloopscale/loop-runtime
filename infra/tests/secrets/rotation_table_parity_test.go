@@ -27,7 +27,7 @@ import (
 //   - a table entry naming no inventory ExternalSecret: no rotation reaches it, and
 //     a restart list that outlived its secret describes a platform that is gone.
 
-const externalSecretsInventory = "../../helm/loopruntime-external-secrets/values.yaml"
+const externalSecretsInventory = "../../helm/loop-runtime-external-secrets/values.yaml"
 
 func TestRotationRestartTableMatchesTheExternalSecretInventory(t *testing.T) {
 	inventory := inventoryTargets(t)

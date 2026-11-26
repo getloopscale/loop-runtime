@@ -367,7 +367,7 @@ func TestStatus_Get_NoBuildsNoRelease(t *testing.T) {
 	}
 }
 
-// Red Team loopruntime-cloud#85 regression-protector — provenance.
+// Red Team loop-console#85 regression-protector — provenance.
 // `active_release.git_commit` MUST match the app commit_sha of the
 // build the release references (build.commit_sha), NOT the internal
 // gitops/SoT push commit. The Red Team observed:
@@ -438,7 +438,7 @@ func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA(t *testing.T) {
 	}
 }
 
-// Red Team loopruntime-cloud#70/#62 closure: when the queried environment has no
+// Red Team loop-console#70/#62 closure: when the queried environment has no
 // last_build AND no active_release, the response MUST list any sibling
 // environments that DO have a SUCCEEDED build under `other_envs_with_releases`
 // so the CLI / dashboard can render an honest hint instead of an empty void.

@@ -86,9 +86,9 @@ func TestReleaseUpdateStatus_RejectsNilTx_Hermetic(t *testing.T) {
 // (2) REAL-PG-GATED — applies-when-match + superseded-no-op. Honest-skip without
 // a live PG (there is no hermetic PG tier; the operator live run proves it).
 func TestBuildUpdateStatusIfCurrent_Behavior_RealPG(t *testing.T) {
-	dbURL := os.Getenv("LOOPRUNTIME_E2E_DATABASE_URL")
+	dbURL := os.Getenv("LOOP_RUNTIME_E2E_DATABASE_URL")
 	if dbURL == "" {
-		t.Skip("operator HARD STOP: requires live PG (LOOPRUNTIME_E2E_DATABASE_URL) — the CAS 0-rows/applies behavior is single-statement SQL; honest-skip in the hermetic tier per cleanroom-up-live-test-mandate")
+		t.Skip("operator HARD STOP: requires live PG (LOOP_RUNTIME_E2E_DATABASE_URL) — the CAS 0-rows/applies behavior is single-statement SQL; honest-skip in the hermetic tier per cleanroom-up-live-test-mandate")
 	}
 	// Wired for the operator live-PG run: construct a real *PgxAdapter via
 	// NewPool, seed a QUEUED build, assert UpdateStatusIfCurrent(QUEUED,Started)

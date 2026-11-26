@@ -47,12 +47,12 @@ func readScript(t *testing.T, name string) string {
 // TestVaultBootstrapDev_TargetNSDefaultIsLoopRuntimeSystem locks Finding #2 of
 // issue #91 (Cleanroom mandate canonical chain run 2026-06-18). The
 // legacy default ESO_TARGET_NS:-external-secrets wrote the
-// loopruntime-openbao-approle Secret to a namespace where loopruntime-api Deployment
-// envFrom could not reach it (envFrom reads from loopruntime-system), so a
-// fresh Cleanroom seed left loopruntime-api in CrashLoopBackOff with
+// loop-runtime-openbao-approle Secret to a namespace where loop-runtime-api Deployment
+// envFrom could not reach it (envFrom reads from loop-runtime-system), so a
+// fresh Cleanroom seed left loop-runtime-api in CrashLoopBackOff with
 // "OPENBAO_VAULT_SECRET_ID required" and the downstream master seed
-// Step 2 Layer 4 (kubectl rollout status deploy/loopruntime-api --timeout=120s)
-// aborted. Default is now loopruntime-system (canonical consumer ns). Override
+// Step 2 Layer 4 (kubectl rollout status deploy/loop-runtime-api --timeout=120s)
+// aborted. Default is now loop-runtime-system (canonical consumer ns). Override
 // preserved via ESO_TARGET_NS env var for pre-canonical workloads.
 //
 // Same stale-helper-post-architecture-refactor class as PR #88
@@ -60,14 +60,14 @@ func readScript(t *testing.T, name string) string {
 func TestVaultBootstrapDev_TargetNSDefaultIsLoopRuntimeSystem(t *testing.T) {
 	body := readScript(t, "vault-bootstrap-dev.sh")
 
-	// T1. Default ns is loopruntime-system. The script line is the canonical
+	// T1. Default ns is loop-runtime-system. The script line is the canonical
 	// pattern `TARGET_NS="${ESO_TARGET_NS:-DEFAULT}"`.
 	defaultLine := regexp.MustCompile(`(?m)^TARGET_NS="\$\{ESO_TARGET_NS:-([^}]+)\}"$`).FindStringSubmatch(body)
 	if defaultLine == nil {
 		t.Fatalf("could not find TARGET_NS default-resolution line in script body")
 	}
-	if got, want := defaultLine[1], "loopruntime-system"; got != want {
-		t.Errorf("TARGET_NS default = %q; want %q (loopruntime-api Deployment envFrom reads from loopruntime-system; setting external-secrets here corrupts the Cleanroom chain)", got, want)
+	if got, want := defaultLine[1], "loop-runtime-system"; got != want {
+		t.Errorf("TARGET_NS default = %q; want %q (loop-runtime-api Deployment envFrom reads from loop-runtime-system; setting external-secrets here corrupts the Cleanroom chain)", got, want)
 	}
 
 	// T2. ESO_TARGET_NS env var override pattern preserved (back-compat
@@ -87,11 +87,11 @@ func TestVaultBootstrapDev_TargetNSDefaultIsLoopRuntimeSystem(t *testing.T) {
 		t.Error("Step 10 log line does not interpolate $TARGET_NS — log/kubectl-apply drift risk")
 	}
 
-	// T4. kubectl create secret loopruntime-openbao-approle uses $TARGET_NS
+	// T4. kubectl create secret loop-runtime-openbao-approle uses $TARGET_NS
 	// (no hardcoded namespace).
-	kubectlRe := regexp.MustCompile(`kubectl[^\n]*-n "\$TARGET_NS"[^\n]*create secret generic loopruntime-openbao-approle`)
+	kubectlRe := regexp.MustCompile(`kubectl[^\n]*-n "\$TARGET_NS"[^\n]*create secret generic loop-runtime-openbao-approle`)
 	if !kubectlRe.MatchString(body) {
-		t.Error("kubectl create secret loopruntime-openbao-approle does not use $TARGET_NS — drift between resolved default and actual apply target")
+		t.Error("kubectl create secret loop-runtime-openbao-approle does not use $TARGET_NS — drift between resolved default and actual apply target")
 	}
 
 	// T5. No literal `-n external-secrets` anywhere in the script.
@@ -104,9 +104,9 @@ func TestVaultBootstrapDev_TargetNSDefaultIsLoopRuntimeSystem(t *testing.T) {
 	// T6. Traceability comment present (Finding #2 / issue #91 /
 	// Cleanroom mandate). Catches future docs drift where the canonical
 	// rationale gets pruned by a "clean up comments" refactor and the
-	// next operator does not understand why loopruntime-system is canonical.
+	// next operator does not understand why loop-runtime-system is canonical.
 	traceRe := regexp.MustCompile(`Finding #2|issue #91|Cleanroom mandate`)
 	if !traceRe.MatchString(body) {
-		t.Error("canonical traceability comment missing — future operator will not understand why loopruntime-system default")
+		t.Error("canonical traceability comment missing — future operator will not understand why loop-runtime-system default")
 	}
 }

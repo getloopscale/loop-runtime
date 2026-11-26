@@ -11,12 +11,12 @@ import (
 )
 
 // T4.1 of plan 2026-05-28-meet-001-engineering-closure-plan.md.
-// CR-8 (MEET-2026-05-28-001 SRE + Production Design): "Zero loopruntime_cosign_*
-// / loopruntime_sign_* / loopruntime_attest_* / loopruntime_rekor_* / loopruntime_fulcio_* metrics
+// CR-8 (MEET-2026-05-28-001 SRE + Production Design): "Zero loop_runtime_cosign_*
+// / loop_runtime_sign_* / loop_runtime_attest_* / loop_runtime_rekor_* / loop_runtime_fulcio_* metrics
 // in the codebase. You cannot detect Sigstore brownouts in prod." This
 // file ships the 8 metrics that close that gap.
 //
-// Naming: loopruntime_<subsystem>_<name> per CLAUDE.md spec §15.2.
+// Naming: loop_runtime_<subsystem>_<name> per CLAUDE.md spec §15.2.
 // EC-6 fix (plan v1.1): NO circuit_breaker_state metric — Production
 // Design Review flagged that as a separate workstream (no circuit
 // breaker exists yet). Re-add when the circuit breaker lands.
@@ -35,14 +35,14 @@ var signHistogramBuckets = prometheus.LinearBuckets(1, 5, 12)
 var (
 	// 1. CosignSignDuration — cosign sign step duration in seconds.
 	CosignSignDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "loopruntime_cosign_sign_duration_seconds",
+		Name:    "loop_runtime_cosign_sign_duration_seconds",
 		Help:    "Duration of cosign sign-image step in seconds.",
 		Buckets: signHistogramBuckets,
 	}, []string{"keyless"})
 
 	// 2. CosignAttestDuration — cosign attest step duration in seconds.
 	CosignAttestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "loopruntime_cosign_attest_duration_seconds",
+		Name:    "loop_runtime_cosign_attest_duration_seconds",
 		Help:    "Duration of cosign attest-image step in seconds.",
 		Buckets: signHistogramBuckets,
 	}, []string{"keyless"})
@@ -50,27 +50,27 @@ var (
 	// 3. CosignSignTotal — total cosign sign attempts by result.
 	// Denominator for LoopRuntimeCosignSignErrorRate alert (T4.2 / EC-7).
 	CosignSignTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopruntime_cosign_sign_total",
+		Name: "loop_runtime_cosign_sign_total",
 		Help: "Total cosign sign-image invocations by result.",
 	}, []string{"result"}) // result="success" | "failure"
 
 	// 4. CosignAttestTotal — total cosign attest attempts by result.
 	// Denominator for LoopRuntimeCosignAttestErrorRate alert (T4.2 / EC-7).
 	CosignAttestTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopruntime_cosign_attest_total",
+		Name: "loop_runtime_cosign_attest_total",
 		Help: "Total cosign attest-image invocations by result.",
 	}, []string{"result"}) // result="success" | "failure"
 
 	// 5. CosignSignErrors — sign errors attributed to a Sigstore component.
 	// Labels: component="fulcio|rekor|ctlog|other".
 	CosignSignErrors = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopruntime_cosign_sign_errors_total",
+		Name: "loop_runtime_cosign_sign_errors_total",
 		Help: "Cosign sign errors by upstream Sigstore component.",
 	}, []string{"component"})
 
 	// 6. CosignAttestErrors — attest errors attributed to a Sigstore component.
 	CosignAttestErrors = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopruntime_cosign_attest_errors_total",
+		Name: "loop_runtime_cosign_attest_errors_total",
 		Help: "Cosign attest errors by upstream Sigstore component.",
 	}, []string{"component"})
 
@@ -79,7 +79,7 @@ var (
 	// The ratio populated/(null+populated) is the SLI for the T4.2
 	// LoopRuntimeReleaseAttestationRekorURLNullRate alert.
 	ReleaseAttestationRekorURLPersist = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopruntime_release_attestation_rekor_url_null_total",
+		Name: "loop_runtime_release_attestation_rekor_url_null_total",
 		Help: "Releases bucketed by whether image_attestation_rekor_url was persisted.",
 	}, []string{"result"}) // result="null" | "populated"
 
@@ -88,7 +88,7 @@ var (
 	// (cert issue + Rekor record). This isolates the Fulcio call so
 	// operators can root-cause "sign slow but Rekor fast" or vice versa.
 	FulcioCertIssuanceDuration = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "loopruntime_fulcio_cert_issuance_duration_seconds",
+		Name:    "loop_runtime_fulcio_cert_issuance_duration_seconds",
 		Help:    "Fulcio certificate issuance call duration (subset of cosign sign).",
 		Buckets: prometheus.LinearBuckets(0.5, 1, 10), // 0.5s..9.5s
 	})

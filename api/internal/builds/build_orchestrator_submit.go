@@ -41,11 +41,11 @@ import (
 // Returns ErrLockTimeout if the lock cannot be acquired within 5s.
 func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts.SubmitBuildRequest) (*deploycontracts.SubmitBuildResponse, error) {
 	// MEET-2026-03-30-020: distributed tracing (C3 naming convention)
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.build.submit",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.build.submit",
 		trace.WithAttributes(
-			attribute.String("loopruntime.tenant", req.TenantID),
-			attribute.String("loopruntime.project", req.ProjectID),
-			attribute.String("loopruntime.environment", req.Environment),
+			attribute.String("loop-runtime.tenant", req.TenantID),
+			attribute.String("loop-runtime.project", req.ProjectID),
+			attribute.String("loop-runtime.environment", req.Environment),
 		))
 	defer span.End()
 
@@ -98,10 +98,10 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 		// After `loopscale project delete` + redeploy, the build succeeds but the
 		// project doesn't appear in `loopscale project list` because it was hard-deleted.
 		if o.projectStore != nil {
-			ensureCtx, ensureSpan := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.project.ensure",
+			ensureCtx, ensureSpan := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.project.ensure",
 				trace.WithAttributes(
-					attribute.String("loopruntime.tenant", req.TenantID),
-					attribute.String("loopruntime.project", req.ProjectID),
+					attribute.String("loop-runtime.tenant", req.TenantID),
+					attribute.String("loop-runtime.project", req.ProjectID),
 				))
 			if err := o.projectStore.EnsureProject(ensureCtx, tx, req.TenantID, req.ProjectID, req.CreatedBy); err != nil {
 				ensureSpan.RecordError(err)
@@ -280,7 +280,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 	metrics.DeploysTotal.WithLabelValues(req.TenantID, req.Environment, "submitted").Inc()
 	metrics.BuildQueueDepth.Inc()
 
-	span.SetAttributes(attribute.String("loopruntime.build_id", buildID))
+	span.SetAttributes(attribute.String("loop-runtime.build_id", buildID))
 
 	streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", buildID)
 	return &deploycontracts.SubmitBuildResponse{

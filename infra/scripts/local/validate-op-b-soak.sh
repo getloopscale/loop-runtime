@@ -6,7 +6,7 @@
 # H19/H19a from the heal script. Without this script, "operator waits 7
 # days" is unverifiable promise.
 #
-# Validates: loopruntime_clustercredential_ca_fetch_total{result="fallback"} must
+# Validates: loop_runtime_clustercredential_ca_fetch_total{result="fallback"} must
 # be ZERO over the configured window. Any non-zero fallback means Op B is
 # silently degrading to snapshot caData — H19/H19a are still needed.
 #
@@ -60,7 +60,7 @@ if ! [[ "$DAYS" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
-QUERY="sum(increase(loopruntime_clustercredential_ca_fetch_total{result=\"fallback\"}[${DAYS}d]))"
+QUERY="sum(increase(loop_runtime_clustercredential_ca_fetch_total{result=\"fallback\"}[${DAYS}d]))"
 
 log() { printf '[validate-op-b-soak] %s\n' "$*" >&2; }
 

@@ -27,7 +27,7 @@ const nonceStoreBootstrapTimeout = 2 * time.Second
 
 // setupServiceAuthNonceStore returns the service-auth replay-protection nonce store.
 //
-// Env: LOOPRUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR (e.g., "redis.loopruntime-system:6379").
+// Env: LOOP_RUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR (e.g., "redis.loop-runtime-system:6379").
 // When empty, it is the in-memory store. When set but unreachable, it is an
 // error: the boot fails instead of running every replica without shared
 // replay protection while the operator believes it is on.
@@ -42,15 +42,15 @@ const nonceStoreBootstrapTimeout = 2 * time.Second
 // won't share state across replicas. This function replaces the
 // default with the Redis-backed implementation when env-configured.
 func setupServiceAuthNonceStore(logger *slog.Logger) (serviceauth.NonceStore, error) {
-	addr := os.Getenv("LOOPRUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR")
+	addr := os.Getenv("LOOP_RUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR")
 	if addr == "" {
-		logger.Info("service-auth nonce store: in-memory (set LOOPRUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR for multi-replica Redis)")
+		logger.Info("service-auth nonce store: in-memory (set LOOP_RUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR for multi-replica Redis)")
 		return serviceauth.NewInMemoryNonceStore(5 * time.Minute), nil
 	}
 
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
-		Password: os.Getenv("LOOPRUNTIME_SERVICE_AUTH_NONCE_REDIS_PASSWORD"),
+		Password: os.Getenv("LOOP_RUNTIME_SERVICE_AUTH_NONCE_REDIS_PASSWORD"),
 		DB:       0,
 	})
 
@@ -63,7 +63,7 @@ func setupServiceAuthNonceStore(logger *slog.Logger) (serviceauth.NonceStore, er
 		if cerr := client.Close(); cerr != nil {
 			logger.Warn("service-auth nonce store: closing the unreachable Redis client failed", "error", cerr)
 		}
-		return nil, fmt.Errorf("service-auth nonce store: LOOPRUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR=%s is set but Redis did not answer within %s: %w",
+		return nil, fmt.Errorf("service-auth nonce store: LOOP_RUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR=%s is set but Redis did not answer within %s: %w",
 			addr, nonceStoreBootstrapTimeout, err)
 	}
 

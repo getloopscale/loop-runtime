@@ -33,7 +33,7 @@ import (
 //     fires regardless because resource version changes. Predicate filters
 //     event TYPES not API operations.
 //   - Spec change (tenant.Spec.Plan etc.): generation bumps → reconcile.
-//   - Annotation update (loopruntime admin tenants pin → runtime.getloopscale.com/cell-id):
+//   - Annotation update (loop-runtime admin tenants pin → runtime.getloopscale.com/cell-id):
 //     reconcile via AnnotationChangedPredicate.
 //
 // Apply at controller setup:

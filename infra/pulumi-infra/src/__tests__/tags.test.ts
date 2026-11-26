@@ -6,9 +6,9 @@ import { standardTags, tagsToStringArray } from "../core/tags";
 
 describe("standardTags", () => {
   it("returns required labels with managedBy pulumi", () => {
-    const tags = standardTags("loopruntime-infra", "dev");
+    const tags = standardTags("loop-runtime-infra", "dev");
     expect(tags).toEqual({
-      project: "loopruntime-infra",
+      project: "loop-runtime-infra",
       environment: "dev",
       managedBy: "pulumi",
     });
@@ -23,12 +23,12 @@ describe("standardTags", () => {
 describe("tagsToStringArray", () => {
   it("converts base labels to key:value string array", () => {
     const arr = tagsToStringArray({
-      project: "loopruntime-infra",
+      project: "loop-runtime-infra",
       environment: "dev",
       managedBy: "pulumi",
     });
     expect(arr).toEqual([
-      "project:loopruntime-infra",
+      "project:loop-runtime-infra",
       "env:dev",
       "managed-by:pulumi",
     ]);
@@ -36,7 +36,7 @@ describe("tagsToStringArray", () => {
 
   it("includes owner when present", () => {
     const arr = tagsToStringArray({
-      project: "loopruntime",
+      project: "loop-runtime",
       environment: "prod",
       managedBy: "pulumi",
       owner: "platform-team",
@@ -46,7 +46,7 @@ describe("tagsToStringArray", () => {
 
   it("includes costCenter when present", () => {
     const arr = tagsToStringArray({
-      project: "loopruntime",
+      project: "loop-runtime",
       environment: "prod",
       managedBy: "pulumi",
       costCenter: "eng-123",
@@ -56,7 +56,7 @@ describe("tagsToStringArray", () => {
 
   it("excludes optional fields when absent", () => {
     const arr = tagsToStringArray({
-      project: "loopruntime",
+      project: "loop-runtime",
       environment: "dev",
       managedBy: "pulumi",
     });

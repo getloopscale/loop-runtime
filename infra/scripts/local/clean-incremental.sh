@@ -14,7 +14,7 @@ DRY_RUN="${1:-}"
 # Adjusted from 10→7 GB after empirical measurement: mgmt cluster baseline
 # uses ~5GB + dev tools ~2GB = ~8GB consumption already. 2 reduced clusters
 # (build 1+1, workload 1+1) need ~5GB total → 7GB target is realistic.
-MIN_MEM_GB="${LOOPRUNTIME_MIN_FREE_GB:-7}"
+MIN_MEM_GB="${LOOP_RUNTIME_MIN_FREE_GB:-7}"
 
 log() { printf '[clean-incremental] %s\n' "$*" >&2; }
 run() {
@@ -44,7 +44,7 @@ log "Pruning build cache (keep 5GB)..."
 run "docker builder prune -f --filter 'until=24h' --keep-storage 5GB >/dev/null"
 
 # 4. Per-context cleanup of Succeeded/Failed pods (PRESERVE Running)
-for ctx in $(kubectl config get-contexts -o name 2>/dev/null | grep "^k3d-loopruntime-" || true); do
+for ctx in $(kubectl config get-contexts -o name 2>/dev/null | grep "^k3d-loop-runtime-" || true); do
   log "Cleaning context: $ctx"
   # Succeeded pods (jobs completed)
   run "kubectl --context $ctx delete pod -A --field-selector status.phase=Succeeded --ignore-not-found >/dev/null 2>&1"

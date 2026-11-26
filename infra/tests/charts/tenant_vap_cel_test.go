@@ -39,23 +39,23 @@ type vapDoc struct {
 }
 
 // loadTenantVAP renders the admission-policies chart and returns the
-// shape-validation and immutability CEL expressions of loopruntime-tenant-cr-shape,
+// shape-validation and immutability CEL expressions of loop-runtime-tenant-cr-shape,
 // plus its system-exclusion matchCondition. It reads the RENDER, not the
-// template: the exclusion is produced by the loopruntime-admission.systemActorExemptions
+// template: the exclusion is produced by the loop-runtime-admission.systemActorExemptions
 // helper, so a template read sees an include line and no expression at all.
 func loadTenantVAP(t *testing.T) (shapeExpr, cellImmutableExpr, systemExcludeExpr string) {
 	t.Helper()
 	// The policy is off in the base values (the cells hold no Tenants) and on
 	// in values-mgmt.yaml, where the Tenants live — render the install that
 	// enforces it, so turning it off there fails these tests too.
-	chart := publishedChart(t, "loopruntime-admission-policies")
+	chart := publishedChart(t, "loop-runtime-admission-policies")
 	rendered := renderChart(t, chart, "ap", nil, filepath.Join(chart, "values-mgmt.yaml"))
 	for _, doc := range strings.Split(rendered, "\n---") {
 		var v vapDoc
 		if err := yaml.Unmarshal([]byte(doc), &v); err != nil {
 			continue
 		}
-		if v.Kind != "ValidatingAdmissionPolicy" || v.Metadata.Name != "loopruntime-tenant-cr-shape" {
+		if v.Kind != "ValidatingAdmissionPolicy" || v.Metadata.Name != "loop-runtime-tenant-cr-shape" {
 			continue
 		}
 		if len(v.Spec.Validations) >= 2 {
@@ -183,8 +183,8 @@ func TestTenantVAP_AppliesToRegularUser(t *testing.T) {
 }
 
 // TestTenantVAP_ExemptsLoopRuntimeAPIControlPlane (vap-pinpath-exemption T1): the
-// loopruntime-api pod's own ServiceAccount is the ONLY sanctioned cell-move writer
-// (`loopruntime admin tenants pin` → CellPinner.patchTenantCR runs as this SA via
+// loop-runtime-api pod's own ServiceAccount is the ONLY sanctioned cell-move writer
+// (`loop-runtime admin tenants pin` → CellPinner.patchTenantCR runs as this SA via
 // rest.InClusterConfig()). It MUST be excluded from the policy, exactly like
 // kube-controller-manager — otherwise the immutability validation Denies the
 // sanctioned pin and the DB/CR split-brain. exclude expr must return false
@@ -192,25 +192,25 @@ func TestTenantVAP_AppliesToRegularUser(t *testing.T) {
 func TestTenantVAP_ExemptsLoopRuntimeAPIControlPlane(t *testing.T) {
 	_, _, exclude := loadTenantVAP(t)
 	vars := map[string]any{"request": map[string]any{"userInfo": map[string]any{
-		"username": "system:serviceaccount:loopruntime-system:loopruntime-api",
+		"username": "system:serviceaccount:loop-runtime-system:loop-runtime-api",
 		"groups":   []any{"system:authenticated", "system:serviceaccounts"},
 	}}}
 	if evalCEL(t, exclude, vars) {
-		t.Error("loopruntime-api control-plane SA should be excluded so the sanctioned pin is admitted (matchCondition returned true = policy applies → pin Denied, split-brain)")
+		t.Error("loop-runtime-api control-plane SA should be excluded so the sanctioned pin is admitted (matchCondition returned true = policy applies → pin Denied, split-brain)")
 	}
 }
 
 // TestTenantVAP_DoesNotExemptOtherServiceAccounts (vap-pinpath-exemption T2):
-// the exemption is scoped to the exact loopruntime-api SA username — a look-alike SA
+// the exemption is scoped to the exact loop-runtime-api SA username — a look-alike SA
 // in the same namespace stays subject to the immutability guarantee (specific
 // equality, not a namespace prefix).
 func TestTenantVAP_DoesNotExemptOtherServiceAccounts(t *testing.T) {
 	_, _, exclude := loadTenantVAP(t)
 	vars := map[string]any{"request": map[string]any{"userInfo": map[string]any{
-		"username": "system:serviceaccount:loopruntime-system:loopruntime-operator",
+		"username": "system:serviceaccount:loop-runtime-system:loop-runtime-operator",
 		"groups":   []any{"system:authenticated", "system:serviceaccounts"},
 	}}}
 	if !evalCEL(t, exclude, vars) {
-		t.Error("a non-loopruntime-api SA must remain subject to the policy (matchCondition returned false = exempt)")
+		t.Error("a non-loop-runtime-api SA must remain subject to the policy (matchCondition returned false = exempt)")
 	}
 }

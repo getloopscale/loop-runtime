@@ -30,9 +30,9 @@ import (
 
 // GiteaGitOpsPusherConfig holds configuration for connecting to Gitea GitOps repos.
 type GiteaGitOpsPusherConfig struct {
-	BaseURL string // e.g., "http://gitea-http.loopruntime-system.svc:3000"
+	BaseURL string // e.g., "http://gitea-http.loop-runtime-system.svc:3000"
 	Token   string // Gitea access token for push authentication
-	OrgName string // e.g., "loopruntime"
+	OrgName string // e.g., "loop-runtime"
 }
 
 // GiteaGitOpsPusher implements deploycontracts.GitOpsPusher by committing manifests
@@ -96,11 +96,11 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts deploycontracts.GitOp
 		metrics.GitOpsOperationDuration.WithLabelValues("push").Observe(time.Since(pushStart).Seconds())
 	}()
 
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.gitops.push_manifests",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.gitops.push_manifests",
 		trace.WithAttributes(
-			attribute.String("loopruntime.tenant", opts.TenantID),
-			attribute.String("loopruntime.project", opts.ProjectID),
-			attribute.String("loopruntime.environment", opts.Environment),
+			attribute.String("loop-runtime.tenant", opts.TenantID),
+			attribute.String("loop-runtime.project", opts.ProjectID),
+			attribute.String("loop-runtime.environment", opts.Environment),
 		))
 	defer span.End()
 
@@ -132,7 +132,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts deploycontracts.GitOp
 	if err != nil {
 		return "", err
 	}
-	span.SetAttributes(attribute.String("loopruntime.gitops.commit_sha", sha))
+	span.SetAttributes(attribute.String("loop-runtime.gitops.commit_sha", sha))
 	return sha, nil
 }
 

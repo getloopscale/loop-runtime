@@ -6,11 +6,11 @@
 #
 # Replaces the previous `for f in *.up.sql; do psql < $f` loop that lacked
 # version tracking and silently re-applied migrations on every run. Uses the
-# `migrate` binary already installed in the loopruntime-api image
+# `migrate` binary already installed in the loop-runtime-api image
 # (see api/Dockerfile: `COPY --from=migrate-builder /go/bin/migrate ...`).
 #
 # Behavior:
-#   1. Resolve mgmt context + loopruntime-api pod.
+#   1. Resolve mgmt context + loop-runtime-api pod.
 #   2. Detect "first run on existing DB" (schema_migrations absent + tenants
 #      table exists). If so: register existing schema as fully applied (see
 #      step inside this script — `migrate` invocation is allowlisted below).
@@ -43,26 +43,26 @@ fi
 # Plan 2026-05-16 T2.4 — parameterize cluster reference for drill.
 #
 # Two modes:
-#   1. Local k3d (default): kubectl --context k3d-loopruntime-core
+#   1. Local k3d (default): kubectl --context k3d-loop-runtime-core
 #   2. Drill DOKS:          kubectl --kubeconfig <DRILL_KUBECONFIG>
 #
 # Drill mode triggered when DRILL_KUBECONFIG env var is set + readable.
-# This avoids hardcoding `k3d-loopruntime-core` (which doesn't exist in drill DOKS
+# This avoids hardcoding `k3d-loop-runtime-core` (which doesn't exist in drill DOKS
 # kubeconfig) and prevents the current-context drift surface that caused
 # finding-2026-05-16-drill-teardown-kubeconfig-orphan.md.
 
-CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopruntime-core}"
-NAMESPACE="${NAMESPACE:-loopruntime-system}"
-PG_USER="${PG_USER:-loopruntime}"
+CORE_CONTEXT="${CORE_CONTEXT:-k3d-loop-runtime-core}"
+NAMESPACE="${NAMESPACE:-loop-runtime-system}"
+PG_USER="${PG_USER:-loop_runtime}"
 # T1.3 (plan 2026-05-21-deep-review-remediation): read from K8s Secret SoT.
 # Fail fast if neither env nor Secret provides it.
-PG_PASS="${PG_PASS:-$(kubectl --context "$CORE_CONTEXT" -n "$NAMESPACE" get secret loopruntime-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
+PG_PASS="${PG_PASS:-$(kubectl --context "$CORE_CONTEXT" -n "$NAMESPACE" get secret loop-runtime-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)}"
 if [[ -z "$PG_PASS" ]]; then
-  echo "ERROR: PG_PASS unset AND loopruntime-db-credentials Secret missing in $NAMESPACE" >&2
+  echo "ERROR: PG_PASS unset AND loop-runtime-db-credentials Secret missing in $NAMESPACE" >&2
   echo "       Run generate-secrets.sh first OR set PG_PASS env var" >&2
   exit 1
 fi
-PG_DB="${PG_DB:-loopruntime}"
+PG_DB="${PG_DB:-loop_runtime}"
 PG_HOST="${PG_HOST:-postgresql.${NAMESPACE}.svc.cluster.local}"
 PG_PORT="${PG_PORT:-5432}"
 # SSL mode — local k3d bitnami uses sslmode=disable; DO managed PG REQUIRES
@@ -113,7 +113,7 @@ stamp_schema_version() {
 
 # apply_migrations_with_psql <pod> <dir> — the pre-API bootstrap path.
 #
-# The migrate binary ships only in the loopruntime-api image, so before that pod is
+# The migrate binary ships only in the loop-runtime-api image, so before that pod is
 # Ready the SQL files are applied with psql directly. This path keeps the
 # guarantees golang-migrate gives: it resumes from the recorded version,
 # refuses a dirty database, stops at the first failed file and never records
@@ -159,54 +159,54 @@ apply_migrations_with_psql() {
   log "  applied $applied migration(s); schema_migrations clean."
 }
 
-# Resolve pod label that includes both core-cluster loopruntime-api and any future
+# Resolve pod label that includes both core-cluster loop-runtime-api and any future
 # replicas (Recreate strategy means single pod at a time).
-LOOPRUNTIME_API_POD="$(kctl -n "$NAMESPACE" get pod -l app=loopruntime-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+LOOP_RUNTIME_API_POD="$(kctl -n "$NAMESPACE" get pod -l app=loop-runtime-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 
 # Issue #106 Design E (Cleanroom catch 2026-06-19; ADR
-# `2026-06-19-loopruntime-api-vault-bootstrap-ordering`). The pod-NAME presence
+# `2026-06-19-loop-runtime-api-vault-bootstrap-ordering`). The pod-NAME presence
 # check alone misses the CrashLoopBackOff case. In dev-public env,
-# loopruntime-api ships with OPENBAO_TRANSIT_ENABLED=true which makes the binary
+# loop-runtime-api ships with OPENBAO_TRANSIT_ENABLED=true which makes the binary
 # fail-fast on missing OPENBAO_VAULT_SECRET_ID (that env var only ships
 # from seed-post-cleanroom-all.sh Step 7b post-vault-bootstrap). The pod
-# NAME exists (Deployment scheduled) but the container "loopruntime-api" is not
+# NAME exists (Deployment scheduled) but the container "loop-runtime-api" is not
 # Running, so `kubectl exec` errors with `container not found`. Honor the
 # existing fallback intent by ALSO triggering the psql-loop path when
 # the named container is not Ready. Defensive jsonpath picks the
 # container by name (safe against future sidecars).
-LOOPRUNTIME_API_READY="false"
-if [[ -n "${LOOPRUNTIME_API_POD}" ]]; then
-  LOOPRUNTIME_API_READY="$(kctl -n "$NAMESPACE" get pod "$LOOPRUNTIME_API_POD" -o jsonpath='{.status.containerStatuses[?(@.name=="loopruntime-api")].ready}' 2>/dev/null || echo "false")"
-  [[ -z "$LOOPRUNTIME_API_READY" ]] && LOOPRUNTIME_API_READY="false"
+LOOP_RUNTIME_API_READY="false"
+if [[ -n "${LOOP_RUNTIME_API_POD}" ]]; then
+  LOOP_RUNTIME_API_READY="$(kctl -n "$NAMESPACE" get pod "$LOOP_RUNTIME_API_POD" -o jsonpath='{.status.containerStatuses[?(@.name=="loop-runtime-api")].ready}' 2>/dev/null || echo "false")"
+  [[ -z "$LOOP_RUNTIME_API_READY" ]] && LOOP_RUNTIME_API_READY="false"
 fi
 
-if [[ -z "${LOOPRUNTIME_API_POD}" || "$LOOPRUNTIME_API_READY" != "true" ]]; then
-  # `task setup` calls `task db:migrate` BEFORE `tilt up` so loopruntime-api pod
+if [[ -z "${LOOP_RUNTIME_API_POD}" || "$LOOP_RUNTIME_API_READY" != "true" ]]; then
+  # `task setup` calls `task db:migrate` BEFORE `tilt up` so loop-runtime-api pod
   # may not exist yet (only Helm bootstrap charts are installed by setup).
   # Tilt's local_resource db-migrate handles schema bootstrap via psql loop
   # + seeds schema_migrations to the highest version. This script (the
   # canonical golang-migrate path) takes over post-tilt via `task k3d:heal`
   # H17 + subsequent `task db:migrate` calls.
-  if [[ "${LOOPRUNTIME_MIGRATIONS_REQUIRE_API:-true}" == "false" ]]; then
-    log "INFO: loopruntime-api pod absent OR not Ready (CrashLoopBackOff); skipping golang-migrate (pre-tilt setup)."
+  if [[ "${LOOP_RUNTIME_MIGRATIONS_REQUIRE_API:-true}" == "false" ]]; then
+    log "INFO: loop-runtime-api pod absent OR not Ready (CrashLoopBackOff); skipping golang-migrate (pre-tilt setup)."
     log "      Tilt's db-migrate local_resource will bootstrap schema via psql"
     log "      and seed schema_migrations. Run 'task k3d:heal' after 'tilt up'"
     log "      to canonicalize via golang-migrate."
     exit 0
   fi
-  # Auto-detect: if postgresql is up but loopruntime-api is not, fall back to the
+  # Auto-detect: if postgresql is up but loop-runtime-api is not, fall back to the
   # legacy psql-loop schema bootstrap. `task setup` calls this BEFORE
   # `tilt up`, and the rest of bootstrap (e.g., bootstrap:standalone seed
   # of users) requires the tables to exist. We can't use golang-migrate
-  # without loopruntime-api pod (image has the migrate binary) but we CAN apply
+  # without loop-runtime-api pod (image has the migrate binary) but we CAN apply
   # the same SQL files via `psql` directly to postgresql-0 — exactly what
   # `task db:migrate` did before the T1.2 refactor.
   PG_POD_BOOT="$(kctl -n "$NAMESPACE" get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
   if [[ -n "$PG_POD_BOOT" ]]; then
-    if [[ -z "${LOOPRUNTIME_API_POD}" ]]; then
-      log "INFO: loopruntime-api pod absent — running psql-loop fallback (pre-tilt setup)."
+    if [[ -z "${LOOP_RUNTIME_API_POD}" ]]; then
+      log "INFO: loop-runtime-api pod absent — running psql-loop fallback (pre-tilt setup)."
     else
-      log "INFO: loopruntime-api pod ${LOOPRUNTIME_API_POD} not Ready (CrashLoopBackOff suspected) — running psql-loop fallback (issue #106 Design E)."
+      log "INFO: loop-runtime-api pod ${LOOP_RUNTIME_API_POD} not Ready (CrashLoopBackOff suspected) — running psql-loop fallback (issue #106 Design E)."
     fi
     log "      Applies only the migrations newer than schema_migrations, stamps"
     log "      each one the way golang-migrate does, and stops at the first failure."
@@ -220,19 +220,19 @@ if [[ -z "${LOOPRUNTIME_API_POD}" || "$LOOPRUNTIME_API_READY" != "true" ]]; then
     apply_migrations_with_psql "$PG_POD_BOOT" "$MIGRATIONS_DIR"
     exit 0
   fi
-  log "ERROR: loopruntime-api pod not found in $CORE_CONTEXT/$NAMESPACE"
-  log "       (label selector app=loopruntime-api). Is tilt up + cluster healthy?"
+  log "ERROR: loop-runtime-api pod not found in $CORE_CONTEXT/$NAMESPACE"
+  log "       (label selector app=loop-runtime-api). Is tilt up + cluster healthy?"
   exit 1
 fi
-log "Using loopruntime-api pod: $LOOPRUNTIME_API_POD"
+log "Using loop-runtime-api pod: $LOOP_RUNTIME_API_POD"
 
 # EC-2: Compute HIGHEST migration dynamically (NEVER hardcode).
 # Reads /migrations/*.up.sql inside the pod (mounted from image build).
-HIGHEST="$(kctl -n "$NAMESPACE" exec "$LOOPRUNTIME_API_POD" -- \
+HIGHEST="$(kctl -n "$NAMESPACE" exec "$LOOP_RUNTIME_API_POD" -- \
   sh -c "ls /migrations/*.up.sql 2>/dev/null | sort -V | tail -1 | sed -E 's|.*/0*([0-9]+)_.*|\1|'" || true)"
 if [[ -z "$HIGHEST" || ! "$HIGHEST" =~ ^[0-9]+$ ]]; then
   log "ERROR: failed to detect highest migration version inside pod"
-  log "       Verified mount: kubectl exec $LOOPRUNTIME_API_POD -- ls /migrations/"
+  log "       Verified mount: kubectl exec $LOOP_RUNTIME_API_POD -- ls /migrations/"
   exit 1
 fi
 log "Highest migration version detected: $HIGHEST"
@@ -241,11 +241,11 @@ log "Highest migration version detected: $HIGHEST"
 # table exists — meaning migrations were applied previously via legacy psql
 # loop without version tracking, per pre-T1.2 behavior).
 #
-# Strategy: loopruntime-api image (alpine final) has `migrate` but NOT `psql`.
+# Strategy: loop-runtime-api image (alpine final) has `migrate` but NOT `psql`.
 # Use `migrate version` to inspect schema_migrations without needing psql.
 # - exit 0 + "<N>" stdout      → schema_migrations exists with version N
 # - non-zero + "no migration"  → table absent (or empty)
-MIGRATE_VERSION_OUT="$(kctl -n "$NAMESPACE" exec "$LOOPRUNTIME_API_POD" -- \
+MIGRATE_VERSION_OUT="$(kctl -n "$NAMESPACE" exec "$LOOP_RUNTIME_API_POD" -- \
   migrate -path /migrations -database "$DSN" version 2>&1 || true)"
 log "migrate version output: $MIGRATE_VERSION_OUT"
 
@@ -264,7 +264,7 @@ log "tenants table present: ${HAS_TENANTS:-no}"
 if echo "$MIGRATE_VERSION_OUT" | grep -qiE "no migration|nilversion|first run|not exist" && [[ "$HAS_TENANTS" == "1" ]]; then
   log "Detected first run on existing DB (schema_migrations absent, tenants present)"
   log "Forcing version=$HIGHEST without re-applying SQL..."
-  kctl -n "$NAMESPACE" exec "$LOOPRUNTIME_API_POD" -- \
+  kctl -n "$NAMESPACE" exec "$LOOP_RUNTIME_API_POD" -- \
     migrate -path /migrations -database "$DSN" force "$HIGHEST"
   log "Backfill complete: schema_migrations populated."
 fi
@@ -285,14 +285,14 @@ fi
 log "Running migrate up..."
 if [[ "$DRY_RUN" == "1" ]]; then
   log "DRY_RUN=1 — skipping 'migrate up'. Would have executed:"
-  log "  kubectl exec $LOOPRUNTIME_API_POD -- migrate -path /migrations -database \$DSN -verbose up"
+  log "  kubectl exec $LOOP_RUNTIME_API_POD -- migrate -path /migrations -database \$DSN -verbose up"
   log "Current schema version (read-only):"
-  kctl -n "$NAMESPACE" exec "$LOOPRUNTIME_API_POD" -- \
+  kctl -n "$NAMESPACE" exec "$LOOP_RUNTIME_API_POD" -- \
     migrate -path /migrations -database "$DSN" version 2>&1 | sed 's/^/  /' || true
   log "Exiting cleanly without applying migrations."
   exit 0
 fi
-MIGRATE_UP_OUT="$(kctl -n "$NAMESPACE" exec "$LOOPRUNTIME_API_POD" -- \
+MIGRATE_UP_OUT="$(kctl -n "$NAMESPACE" exec "$LOOP_RUNTIME_API_POD" -- \
   migrate -path /migrations -database "$DSN" -verbose up 2>&1)" && MIGRATE_UP_EXIT=0 || MIGRATE_UP_EXIT=$?
 echo "$MIGRATE_UP_OUT" | sed 's/^/  [migrate-up] /'
 if [[ $MIGRATE_UP_EXIT -ne 0 ]]; then
@@ -302,7 +302,7 @@ if [[ $MIGRATE_UP_EXIT -ne 0 ]]; then
     log "  ✓ Disambiguation: 'no change' — schema already current (idempotent re-run)"
   else
     # Check (b): migrate version returns a numeric version
-    POST_VERSION_OUT="$(kctl -n "$NAMESPACE" exec "$LOOPRUNTIME_API_POD" -- \
+    POST_VERSION_OUT="$(kctl -n "$NAMESPACE" exec "$LOOP_RUNTIME_API_POD" -- \
       migrate -path /migrations -database "$DSN" version 2>&1 || true)"
     # grep returns exit 1 on no match → pipefail + set -e would kill script.
     # Append `|| true` to ensure pipeline exits 0 regardless of grep result.
@@ -319,7 +319,7 @@ fi
 
 log "Migrations applied successfully."
 log "Current schema_migrations status (via migrate version):"
-kctl -n "$NAMESPACE" exec "$LOOPRUNTIME_API_POD" -- \
+kctl -n "$NAMESPACE" exec "$LOOP_RUNTIME_API_POD" -- \
   migrate -path /migrations -database "$DSN" version || true
 if [[ -n "$PG_POD" ]]; then
   log "Full schema_migrations table:"

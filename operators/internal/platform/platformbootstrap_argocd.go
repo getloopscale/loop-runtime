@@ -76,7 +76,7 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 			return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("ArgoCD admin secret: %v", passErr))
 		}
 
-		// Step 4: Generate apiKey token for loopruntime-api account (non-expiring).
+		// Step 4: Generate apiKey token for loop-runtime-api account (non-expiring).
 		// MEET-2026-03-28-013: replaced createArgoCDSession (24h session JWT) with
 		// generateArgoCDApiKey (non-expiring apiKey scoped to sync+get via RBAC).
 		apiKeyToken, err := argoClient.GenerateAPIKey(ctx, adminPassword)
@@ -134,12 +134,12 @@ func (c *argoCDHTTPClient) CheckReachable(ctx context.Context) error {
 	return nil
 }
 
-// GenerateAPIKey creates a non-expiring apiKey token for the loopruntime-api account.
+// GenerateAPIKey creates a non-expiring apiKey token for the loop-runtime-api account.
 // MEET-2026-03-28-013: replaces createArgoCDSession which generated 24h session JWTs.
 //
 // Flow:
 //  1. Login as admin to get a temporary session token
-//  2. Use the session token to generate an apiKey for loopruntime-api account
+//  2. Use the session token to generate an apiKey for loop-runtime-api account
 //  3. Return the apiKey JWT (non-expiring, scoped via ArgoCD RBAC)
 func (c *argoCDHTTPClient) GenerateAPIKey(ctx context.Context, password string) (string, error) {
 	// Step 1: Login as admin (temporary session, only used to generate apiKey)
@@ -173,7 +173,7 @@ func (c *argoCDHTTPClient) GenerateAPIKey(ctx context.Context, password string) 
 		return "", fmt.Errorf("decoding ArgoCD session response: %w", err)
 	}
 
-	// Step 2: Generate apiKey token for loopruntime-api account
+	// Step 2: Generate apiKey token for loop-runtime-api account
 	tokenBody, err := json.Marshal(map[string]string{"name": "platform-deploy"})
 	if err != nil {
 		return "", fmt.Errorf("marshal ArgoCD token request: %w", err)

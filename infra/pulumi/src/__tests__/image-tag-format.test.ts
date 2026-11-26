@@ -7,7 +7,7 @@
 //   (a) semver  — `v0.2.0`, `v1.10.3-rc1`
 //   (b) SHA     — `sha-{8..40 hex chars}` or just `[a-f0-9]{8,40}`
 //   (c) latest  — `latest` (allowed; production blocked by VAP
-//                 `loopruntime-disallow-latest-tag` runtime; CI here only blocks
+//                 `loop-runtime-disallow-latest-tag` runtime; CI here only blocks
 //                 branch-name tags from leaking).
 //
 // Branch-name tags like `f07-fix`, `REDACTED_SECRET_061`, `achado28` mask the
@@ -30,7 +30,7 @@ const ACCEPTED_TAG_RE =
 interface TagInstance {
   file: string;
   tag: string;
-  context: string; // e.g. "loopruntime-api/values.yaml"
+  context: string; // e.g. "loop-runtime-api/values.yaml"
 }
 
 function findHelmTagsInDir(dir: string): TagInstance[] {
@@ -67,14 +67,14 @@ describe('image tag format enforcement (ADR D1)', () => {
   const tags = findHelmTagsInDir(helmDir);
 
   // Filter only tags from LoopRuntime charts (not third-party). LoopRuntime charts include
-  // loopruntime-* AND tenant-controller (sibling without prefix).
-  const loopruntimeTags = tags.filter((t) => /infra\/helm\/(loopruntime-|tenant-controller\/)/.test(t.context));
+  // loop-runtime-* AND tenant-controller (sibling without prefix).
+  const loopRuntimeTags = tags.filter((t) => /infra\/helm\/(loop-runtime-|tenant-controller\/)/.test(t.context));
 
   it('found at least one LoopRuntime chart tag to validate', () => {
-    expect(loopruntimeTags.length).toBeGreaterThan(0);
+    expect(loopRuntimeTags.length).toBeGreaterThan(0);
   });
 
-  for (const t of loopruntimeTags) {
+  for (const t of loopRuntimeTags) {
     it(`tag in ${t.context} matches ADR D1 format (semver|sha|latest)`, () => {
       const ok = ACCEPTED_TAG_RE.test(t.tag);
       if (!ok) {

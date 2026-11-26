@@ -48,13 +48,13 @@ const (
 
 	// CellContextsEnv names the kubectl contexts of the cells, separated by
 	// spaces. The journey reads the app's Rollout from the one that has it.
-	CellContextsEnv = "LOOPRUNTIME_DOGFOOD_CELL_CONTEXTS"
+	CellContextsEnv = "LOOP_RUNTIME_DOGFOOD_CELL_CONTEXTS"
 
 	probeFixtureRoot  = "fixtures/env-probe"
 	probeManifestPath = ".loopzero/services.json"
 )
 
-// all: so the embed includes .loopruntime, which holds the manifest.
+// all: so the embed includes .loop-runtime, which holds the manifest.
 //
 //go:embed all:fixtures/env-probe
 var probeFixture embed.FS
@@ -154,7 +154,7 @@ func SecretDigest(value string) string {
 
 // TenantNamespace is the namespace of a project's environment on its cell.
 func TenantNamespace(tenantID, project, environment string) string {
-	return "loopruntime-" + tenantID + "-" + project + "-" + environment
+	return "loop-runtime-" + tenantID + "-" + project + "-" + environment
 }
 
 // WaitFor calls check every interval until it reports true, and fails

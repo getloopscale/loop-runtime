@@ -47,7 +47,7 @@ type ReadinessSnapshotStore interface {
 
 // ReadinessPoller records, per environment target, how many replicas the data
 // plane is serving, so the dashboard's project badge can tell a deploy that
-// is ACTIVE and serving from one that is ACTIVE and down (loopruntime-cloud#128).
+// is ACTIVE and serving from one that is ACTIVE and down (loop-console#128).
 //
 // It lives in the api because the api owns environment_targets: the
 // app-operator used to run it and write the table through raw SQL over a

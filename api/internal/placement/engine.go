@@ -16,7 +16,7 @@
 // interface, ConstraintEngine and CellLabelQuerier, all unused in production
 // paths. ExtractRegion (below) was kept: it feeds CellStatus.Region. The
 // default cell id itself is domain.DefaultCellID (pkg/domain), shared with
-// operators and cmd/loopruntime-ops. The cell-0 value of tenants.cell_id remains as the SQL DEFAULT — this
+// operators and cmd/loop-runtime-ops. The cell-0 value of tenants.cell_id remains as the SQL DEFAULT — this
 // is data, not code, and has its own comment in 000001_initial_schema.up.sql.
 package placement
 

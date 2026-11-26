@@ -29,20 +29,20 @@ func exposedRoute(ns, name, host, tenant string) *unstructured.Unstructured {
 func newFakeRouteSource(objs ...runtime.Object) *K8sEdgeRouteSource {
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
 		map[schema.GroupVersionResource]string{ExposedRouteGVR: "ExposedRouteList"}, objs...)
-	return &K8sEdgeRouteSource{client: client, namespace: "loopruntime-system"}
+	return &K8sEdgeRouteSource{client: client, namespace: "loop-runtime-system"}
 }
 
 // Each ExposedRoute contributes its hostname and the tenant label the app operator
 // stamps on it; that pair is all the edge index needs.
 func TestK8sEdgeRouteSourceListsHostnameAndTenant(t *testing.T) {
 	src := newFakeRouteSource(
-		exposedRoute("loopruntime-system", "a", "tn-a-p-web-production.loopruntime.local", "tn-a"),
+		exposedRoute("loop-runtime-system", "a", "tn-a-p-web-production.loop-runtime.local", "tn-a"),
 	)
 	routes, err := src.ListEdgeRoutes(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(routes) != 1 || routes[0] != (EdgeRoute{Hostname: "tn-a-p-web-production.loopruntime.local", TenantID: "tn-a"}) {
+	if len(routes) != 1 || routes[0] != (EdgeRoute{Hostname: "tn-a-p-web-production.loop-runtime.local", TenantID: "tn-a"}) {
 		t.Errorf("routes = %+v", routes)
 	}
 }
@@ -51,8 +51,8 @@ func TestK8sEdgeRouteSourceListsHostnameAndTenant(t *testing.T) {
 // so it is left out rather than routed by guess.
 func TestK8sEdgeRouteSourceSkipsARouteItCannotAttribute(t *testing.T) {
 	src := newFakeRouteSource(
-		exposedRoute("loopruntime-system", "no-tenant", "x.loopruntime.local", ""),
-		exposedRoute("loopruntime-system", "no-host", "", "tn-a"),
+		exposedRoute("loop-runtime-system", "no-tenant", "x.loop-runtime.local", ""),
+		exposedRoute("loop-runtime-system", "no-host", "", "tn-a"),
 	)
 	routes, err := src.ListEdgeRoutes(context.Background())
 	if err != nil {
@@ -66,7 +66,7 @@ func TestK8sEdgeRouteSourceSkipsARouteItCannotAttribute(t *testing.T) {
 // Routes are read from the namespace the control plane keeps them in, not cluster-wide.
 func TestK8sEdgeRouteSourceReadsOnlyItsNamespace(t *testing.T) {
 	src := newFakeRouteSource(
-		exposedRoute("elsewhere", "b", "tn-b-p-web-production.loopruntime.local", "tn-b"),
+		exposedRoute("elsewhere", "b", "tn-b-p-web-production.loop-runtime.local", "tn-b"),
 	)
 	routes, err := src.ListEdgeRoutes(context.Background())
 	if err != nil {

@@ -223,10 +223,10 @@ func TestT09_TilftileSplitOperatorMigrationStatus(t *testing.T) {
 //     conclusion from a failed lookup.
 //
 //  2. The CLI half asserted a file in ANOTHER REPOSITORY. `cli/` was extracted
-//     to sibling `../loopruntime-cli` at M5 (CLAUDE.md § "Was here, now extracted").
+//     to sibling `../loop-runtime-cli` at M5 (CLAUDE.md § "Was here, now extracted").
 //     The code stat'd cli/src/register/infra.ts and, on IsNotExist, called
 //     t.Logf and returned. Measured 2026-09-05: that path exists nowhere in the
-//     umbrella checkout, and `loopruntime-cli` is not cloned beside this repo at all —
+//     umbrella checkout, and `loop-runtime-cli` is not cloned beside this repo at all —
 //     so the early
 //     return was the ONLY branch ever taken since M5, and the ReadFile +
 //     Contains assertion beneath it was unreachable code. t.Logf is invisible

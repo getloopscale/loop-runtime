@@ -65,7 +65,7 @@ type SBOMObjectReader interface {
 // BuildSBOMHandler serves GET /api/v1/builds/:id/sbom.
 //
 // Sprint 6 / T1.2 — exposes per-app SBOM metadata + presigned download
-// URLs. The SBOM blob itself lives in S3 (bucket: loopruntime-static-assets);
+// URLs. The SBOM blob itself lives in S3 (bucket: loop-runtime-static-assets);
 // the DB only stores the key + counts.
 type BuildSBOMHandler struct {
 	store      AppSBOMStore

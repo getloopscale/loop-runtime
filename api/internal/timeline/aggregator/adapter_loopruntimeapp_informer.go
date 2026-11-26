@@ -50,7 +50,7 @@ func (t *LoopRuntimeAppInformerReader) Stream(ctx context.Context, deployID stri
 		if st == nil {
 			return false, nil
 		}
-		phase, status, terminal := loopruntimeAppProjection(st.Phase)
+		phase, status, terminal := loopRuntimeAppProjection(st.Phase)
 		ev := PhaseEvent{
 			Phase:           phase,
 			Status:          status,
@@ -68,7 +68,7 @@ func (t *LoopRuntimeAppInformerReader) Stream(ctx context.Context, deployID stri
 	return pollUntilTerminal(ctx, t.PollInterval, emit)
 }
 
-func loopruntimeAppProjection(phase string) (string, string, bool) {
+func loopRuntimeAppProjection(phase string) (string, string, bool) {
 	switch phase {
 	case "PROGRESSING":
 		return "deploy", "in_progress", false

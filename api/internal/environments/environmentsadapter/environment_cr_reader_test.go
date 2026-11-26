@@ -94,11 +94,11 @@ func TestEnvironmentCRReader_IsReady_UsesCanonicalNamespace(t *testing.T) {
 	scheme := runtime.NewScheme()
 	// Pre-create the canonical CR. The fake client returns it when
 	// the lookup name matches.
-	canonical := makeReadyEnvCR("tn-x-web-staging", "loopruntime-system")
+	canonical := makeReadyEnvCR("tn-x-web-staging", "loop-runtime-system")
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		scheme, envCRGvrToListKind(), canonical,
 	)
-	r := NewEnvironmentCRReader(client, "loopruntime-system")
+	r := NewEnvironmentCRReader(client, "loop-runtime-system")
 
 	ready, err := r.IsReady(context.Background(), "tn-x", "web", "staging")
 	if err != nil {
@@ -124,11 +124,11 @@ func TestEnvironmentCRReader_IsReady_UsesCanonicalNamespace(t *testing.T) {
 func TestEnvironmentCRReader_IsReady_FallsBackLegacyWhenProjectEmpty(t *testing.T) {
 	scheme := runtime.NewScheme()
 	// Legacy production CR — no project segment.
-	legacy := makeReadyEnvCR("tn-x-production", "loopruntime-system")
+	legacy := makeReadyEnvCR("tn-x-production", "loop-runtime-system")
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		scheme, envCRGvrToListKind(), legacy,
 	)
-	r := NewEnvironmentCRReader(client, "loopruntime-system")
+	r := NewEnvironmentCRReader(client, "loop-runtime-system")
 
 	ready, err := r.IsReady(context.Background(), "tn-x", "", "production")
 	if err != nil {
@@ -148,7 +148,7 @@ func TestEnvironmentCRReader_IsReady_AbsentCRReturnsNotReadyNoError(t *testing.T
 		scheme, envCRGvrToListKind(),
 		// No objects — CR absent.
 	)
-	r := NewEnvironmentCRReader(client, "loopruntime-system")
+	r := NewEnvironmentCRReader(client, "loop-runtime-system")
 
 	ready, err := r.IsReady(context.Background(), "tn-x", "web", "missing")
 	if err != nil {
@@ -166,7 +166,7 @@ func TestEnvironmentCRReader_IsReady_RejectsEmptyTenantOrEnv(t *testing.T) {
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		scheme, envCRGvrToListKind(),
 	)
-	r := NewEnvironmentCRReader(client, "loopruntime-system")
+	r := NewEnvironmentCRReader(client, "loop-runtime-system")
 
 	if _, err := r.IsReady(context.Background(), "", "web", "staging"); err == nil {
 		t.Errorf("expected error for empty tenantID, got nil")

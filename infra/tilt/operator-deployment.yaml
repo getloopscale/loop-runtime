@@ -8,7 +8,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: tenant-controller
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -115,13 +115,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: tenant-controller
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tenant-controller
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   labels:
     app: tenant-controller
 spec:
@@ -141,40 +141,40 @@ spec:
         fsGroup: 1000
       containers:
         - name: controller
-          image: loopruntime-tenant-controller
+          image: loop-runtime-tenant-controller
           args:
             - "--leader-elect=false"
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8080"
           env:
             - name: GITEA_URL
-              value: "http://gitea-http.loopruntime-system.svc.cluster.local:3000"
+              value: "http://gitea-http.loop-runtime-system.svc.cluster.local:3000"
             - name: GITEA_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: loopruntime-api-tokens
+                  name: loop-runtime-api-tokens
                   key: gitea-token
             - name: ARGOCD_NAMESPACE
               value: "argocd"
             - name: BUILD_KUBECONFIG
-              value: "/etc/loopruntime/build-kubeconfig"
+              value: "/etc/loop-runtime/build-kubeconfig"
             - name: CELL_0_KUBECONFIG
-              value: "/etc/loopruntime/runtime-kubeconfig"
+              value: "/etc/loop-runtime/runtime-kubeconfig"
             # MinIO per-tenant provisioner disabled for local dev.
             # Production uses SPACES_ACCESS_KEY_ID/SECRET_ACCESS_KEY (DO Spaces).
             # Set MINIO_ENDPOINT + ACCESS/SECRET_KEY to enable per-tenant isolation.
             - name: BASE_DOMAIN
-              value: "loopruntime.local"
+              value: "loop-runtime.local"
             # Workload cluster API server URL for ArgoCD Application destination.
             # This is the workload cluster's k3d LB IP on the mgmt network.
-            # Update after cluster recreate: docker inspect k3d-loopruntime-cell-0-server-0
+            # Update after cluster recreate: docker inspect k3d-loop-runtime-cell-0-server-0
             - name: WORKLOAD_CLUSTER_URL
-              value: "https://k3d-loopruntime-cell-0-server-0:6443"
+              value: "https://k3d-loop-runtime-cell-0-server-0:6443"
             # TLS verification: true for local dev (self-signed certs).
             # Production MUST set OPERATOR_INSECURE_SKIP_TLS=false (SEC-001).
             - name: OPERATOR_INSECURE_SKIP_TLS
               value: "true"
-            # Local dev: Traefik is in 'traefik' namespace (production: loopruntime-system)
+            # Local dev: Traefik is in 'traefik' namespace (production: loop-runtime-system)
             - name: INGRESS_NAMESPACE
               value: "traefik"
           ports:
@@ -207,11 +207,11 @@ spec:
             - name: tmp
               mountPath: /tmp
             - name: build-kubeconfig
-              mountPath: /etc/loopruntime/build-kubeconfig
+              mountPath: /etc/loop-runtime/build-kubeconfig
               subPath: build-kubeconfig
               readOnly: true
             - name: runtime-kubeconfig
-              mountPath: /etc/loopruntime/runtime-kubeconfig
+              mountPath: /etc/loop-runtime/runtime-kubeconfig
               subPath: runtime-kubeconfig
               readOnly: true
           securityContext:
@@ -230,13 +230,13 @@ spec:
           emptyDir: {}
         - name: build-kubeconfig
           configMap:
-            name: loopruntime-build-kubeconfig
+            name: loop-runtime-build-kubeconfig
             items:
               - key: config
                 path: build-kubeconfig
         - name: runtime-kubeconfig
           configMap:
-            name: loopruntime-cell-0-kubeconfig
+            name: loop-runtime-cell-0-kubeconfig
             items:
               - key: config
                 path: runtime-kubeconfig

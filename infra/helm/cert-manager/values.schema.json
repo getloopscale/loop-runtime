@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://loopruntime.platform/schemas/cert-manager/values.schema.json",
+  "$id": "https://loop-runtime.platform/schemas/cert-manager/values.schema.json",
   "title": "cert-manager LoopRuntime wrapper values schema",
   "description": "Plan 2026-05-20 T2.5 ext — fail-fast on LoopRuntime-specific cert-manager hardening invariants. INF-G08 + ADR D7 hardened pod security context defaults uniformly across pod-bearing charts; regression to root/privileged would fail VAP requireResourceLimits + requirePodSecurityStandard. Schema enforces non-root + capability drop + read-only root FS at lint time.",
   "type": "object",

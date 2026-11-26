@@ -1,5 +1,5 @@
 # NodePort Service to expose Traefik metrics for cross-cluster scraping.
-# Deploy to workload cluster: kubectl --context k3d-loopruntime-cell-0 apply -f metrics-service-traefik.yaml
+# Deploy to workload cluster: kubectl --context k3d-loop-runtime-cell-0 apply -f metrics-service-traefik.yaml
 apiVersion: v1
 kind: Service
 metadata:

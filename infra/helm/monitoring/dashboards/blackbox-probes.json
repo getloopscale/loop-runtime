@@ -31,7 +31,7 @@
       "title": "← Home",
       "tooltip": "Back to System Home",
       "type": "link",
-      "url": "/d/loopruntime-home/loopruntime-system-home"
+      "url": "/d/loop-runtime-home/loop-runtime-system-home"
     }
   ],
   "panels": [
@@ -114,7 +114,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "probe_success{job=~\".*loopruntime-api-probe.*\",instance=~\".*health.*\"} or vector(0)",
+          "expr": "probe_success{job=~\".*loop-runtime-api-probe.*\",instance=~\".*health.*\"} or vector(0)",
           "legendFormat": "API",
           "refId": "A"
         }
@@ -183,7 +183,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "probe_success{job=~\".*loopruntime-api-probe.*\",instance=~\".*gitea.*\"} or vector(0)",
+          "expr": "probe_success{job=~\".*loop-runtime-api-probe.*\",instance=~\".*gitea.*\"} or vector(0)",
           "legendFormat": "Gitea",
           "refId": "A"
         }
@@ -252,7 +252,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "probe_success{job=~\".*loopruntime-api-probe.*\",instance=~\".*traefik.*\"} or vector(0)",
+          "expr": "probe_success{job=~\".*loop-runtime-api-probe.*\",instance=~\".*traefik.*\"} or vector(0)",
           "legendFormat": "Traefik",
           "refId": "A"
         }
@@ -321,7 +321,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "probe_success{job=~\".*loopruntime-infra-probe.*\"} or vector(0)",
+          "expr": "probe_success{job=~\".*loop-runtime-infra-probe.*\"} or vector(0)",
           "legendFormat": "ArgoCD",
           "refId": "A"
         }
@@ -577,7 +577,7 @@
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": [
-    "loopruntime",
+    "loop-runtime",
     "blackbox",
     "probes"
   ],
@@ -606,6 +606,6 @@
   "timepicker": {},
   "timezone": "browser",
   "title": "LoopRuntime — Blackbox Probes",
-  "uid": "loopruntime-blackbox-probes",
+  "uid": "loop-runtime-blackbox-probes",
   "version": 1
 }

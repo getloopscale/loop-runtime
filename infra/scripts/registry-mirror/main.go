@@ -16,8 +16,8 @@
 //
 // Usage:
 //
-//	SOURCE_REGISTRY=registry.digitalocean.com/loopruntime-system \
-//	DEST_REGISTRY=registry.example.com/loopruntime-platform \
+//	SOURCE_REGISTRY=registry.digitalocean.com/loop-runtime-system \
+//	DEST_REGISTRY=registry.example.com/loop-runtime-platform \
 //	go run infra/scripts/registry-mirror/main.go
 //
 // Exit codes:

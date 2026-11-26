@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://loopruntime.platform/schemas/cluster-issuer/values.schema.json",
+  "$id": "https://loop-runtime.platform/schemas/cluster-issuer/values.schema.json",
   "title": "cluster-issuer chart values schema",
   "description": "Plan 2026-05-20 T2.5 ext — fail-fast on issuer config drift. cert-manager rejects an issuer with missing ACME fields silently (issuer enters Failed state, certs never issued). Schema catches at helmfile lint.",
   "type": "object",
@@ -36,10 +36,10 @@
         }
       }
     },
-    "loopruntimeCaIssuerName": {
+    "loopRuntimeCaIssuerName": {
       "type": "string",
       "minLength": 1,
-      "description": "Name of the always-created LoopRuntime CA issuer for local fallback (loopruntime-ca-issuer). Used by services that lack ACME-reachable DNS."
+      "description": "Name of the always-created LoopRuntime CA issuer for local fallback (loop-runtime-ca-issuer). Used by services that lack ACME-reachable DNS."
     },
     "selfSignedAliases": {
       "type": "array",

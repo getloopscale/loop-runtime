@@ -5,17 +5,17 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: capacity-loopruntime-alerts
-  namespace: loopruntime-system
+  name: capacity-loop-runtime-alerts
+  namespace: loop-runtime-system
   labels:
-    app: loopruntime
+    app: loop-runtime
     role: alert-rules
     prometheus: kube-prometheus
     release: monitoring
     runtime.getloopscale.com/task: T-07
 spec:
   groups:
-    - name: loopruntime.capacity
+    - name: loop-runtime.capacity
       interval: 1m
       rules:
         # Alert 1: Gitea auth latency — symptom of CPU saturation before
@@ -128,9 +128,9 @@ spec:
         - alert: BuildFailureRateHigh
           expr: |
             (
-              sum(rate(loopruntime_builds_total{status="FAILED"}[5m]))
+              sum(rate(loop_runtime_builds_total{status="FAILED"}[5m]))
               /
-              sum(rate(loopruntime_builds_total[5m]))
+              sum(rate(loop_runtime_builds_total[5m]))
             ) > 0.10
           for: 5m
           labels:

@@ -109,7 +109,7 @@ func newCommentParams() PreviewCommentParams {
 		OwnerRepo:      "acme/api",
 		PRNumber:       42,
 		ProjectID:      "api",
-		URL:            "https://pr42-api.preview.loopruntime.app",
+		URL:            "https://pr42-api.preview.loop-runtime.app",
 		CommitSHA:      "deadbeef1234",
 		Status:         "Ready",
 	}
@@ -129,7 +129,7 @@ func TestRenderPreviewComment_IncludesMarker(t *testing.T) {
 
 func TestRenderPreviewComment_ContainsURL(t *testing.T) {
 	body := renderPreviewComment(newCommentParams())
-	if !strings.Contains(body, "https://pr42-api.preview.loopruntime.app") {
+	if !strings.Contains(body, "https://pr42-api.preview.loop-runtime.app") {
 		t.Error("comment must contain preview URL")
 	}
 }

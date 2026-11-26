@@ -73,9 +73,9 @@ var _ = Describe("PreviewController", Ordered, func() {
 			// J-23 canonical namespace formula 2026-06-07 (the sponsor
 			// asked for every environment, previews included, to be
 			// separated by project rather than special-cased): uniformly
-			// `loopruntime-<tenant>-<project>-<env>` for all envs including
+			// `loop-runtime-<tenant>-<project>-<env>` for all envs including
 			// preview-pr-N (was `<tenant>-<project>-pr-N` pre-refactor).
-			expectedNS = "loopruntime-acme-api-preview-pr-101"
+			expectedNS = "loop-runtime-acme-api-preview-pr-101"
 		)
 
 		BeforeAll(func() {
@@ -149,15 +149,15 @@ var _ = Describe("PreviewController", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		// J-23 2026-06-07: the `loopruntime-app` ServiceAccount that rendered
+		// J-23 2026-06-07: the `loop-runtime-app` ServiceAccount that rendered
 		// pods reference (renderer_deployment.go:146 + renderer_rollout.go
 		// :400). Without it ArgoCD sync succeeds but pods CrashLoop with
-		// "serviceaccount loopruntime-app not found".
-		It("creates the loopruntime-app ServiceAccount with AutomountServiceAccountToken=false", func() {
+		// "serviceaccount loop-runtime-app not found".
+		It("creates the loop-runtime-app ServiceAccount with AutomountServiceAccountToken=false", func() {
 			Eventually(func(g Gomega) {
 				var sa corev1.ServiceAccount
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopruntime-app", Namespace: expectedNS,
+					Name: "loop-runtime-app", Namespace: expectedNS,
 				}, &sa)).To(Succeed())
 				g.Expect(sa.AutomountServiceAccountToken).NotTo(BeNil())
 				g.Expect(*sa.AutomountServiceAccountToken).To(BeFalse())
@@ -273,7 +273,7 @@ var _ = Describe("PreviewController", Ordered, func() {
 			projectSlug = "api"
 			prNumber    = 303
 			// J-23 canonical namespace 2026-06-07.
-			expectedNS = "loopruntime-acme-api-preview-pr-303"
+			expectedNS = "loop-runtime-acme-api-preview-pr-303"
 		)
 
 		BeforeAll(func() {

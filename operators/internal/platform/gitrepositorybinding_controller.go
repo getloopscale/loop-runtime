@@ -39,7 +39,7 @@ const (
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=gitrepositorybindings,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=gitrepositorybindings/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=gitrepositorybindings/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",namespace=argocd,resources=secrets,verbs=get;list;watch;create;update;delete
 type GitRepositoryBindingReconciler struct {
 	client.Client

@@ -19,12 +19,12 @@ import (
 // Measured in app-dev 2026-08-09, in the operator's own log:
 //
 //	Failed to watch *v1.Tenant: tenants.runtime.getloopscale.com is forbidden:
-//	User "system:serviceaccount:loopruntime-system:loopruntime-app-operator" cannot list resource "tenants"
+//	User "system:serviceaccount:loop-runtime-system:loop-runtime-app-operator" cannot list resource "tenants"
 //
 // Third layer of issue #274, after the namespace without a project and the nil
 // RuntimeFactory.
 func TestAppOperatorCanReadTenant(t *testing.T) {
-	out := renderChart(t, uniqueChart(t, "loopruntime-app-operator"), "rbac-check", nil)
+	out := renderChart(t, uniqueChart(t, "loop-runtime-app-operator"), "rbac-check", nil)
 
 	// Isolate the operator's ClusterRole: the tenants rule must be in it, not in
 	// any other document of the chart.
@@ -53,7 +53,7 @@ func TestAppOperatorCanReadTenant(t *testing.T) {
 // cell was forbidden: the fast-path Healthy and the TLS certificate check never
 // reached the workload. The Tilt manifest has carried the grant all along.
 func TestAppOperatorCanReadClusterCredentials(t *testing.T) {
-	docs := renderRBAC(t, "loopruntime-app-operator", nil)
+	docs := renderRBAC(t, "loop-runtime-app-operator", nil)
 	var verbs []string
 	for _, cr := range docs.clusterRoles {
 		for _, rule := range cr.Rules {

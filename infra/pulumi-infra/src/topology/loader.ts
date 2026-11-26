@@ -5,7 +5,7 @@
  * Topology loader — parses and validates the declarative topology
  * from Pulumi stack config.
  *
- * Config key: `loopruntime-infra:topology` (YAML object in Pulumi.<stack>.yaml)
+ * Config key: `loop-runtime-infra:topology` (YAML object in Pulumi.<stack>.yaml)
  *
  * If the topology key is absent, falls back to legacy singleton config
  * (mgmtNodeClass, runtimeNodeClass, etc.) for backwards compatibility

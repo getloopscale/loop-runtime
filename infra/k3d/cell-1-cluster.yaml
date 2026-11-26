@@ -1,19 +1,19 @@
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
-  name: loopruntime-cell-1
+  name: loop-runtime-cell-1
 # Pin to match production DOKS 1.32.13 (Rule 10: local equals production).
 # cell-1-activation-plan T0.1 — pairs with cell-1 in the cells SQL table
-# (migration 000006). Cluster name `loopruntime-cell-1` aligns with production
-# wire-clusters.sh + Pulumi convention (LOOPRUNTIME_RUNTIME2_KUBECONFIG, runtime2*).
+# (migration 000006). Cluster name `loop-runtime-cell-1` aligns with production
+# wire-clusters.sh + Pulumi convention (LOOP_RUNTIME_RUNTIME2_KUBECONFIG, runtime2*).
 # ClusterCredential CR name is `cell-1` (per existing live state), with
-# spec.clusterName=loopruntime-cell-1 + spec.cellID=cell-1.
+# spec.clusterName=loop-runtime-cell-1 + spec.cellID=cell-1.
 #
 # Once cells.status flips from 'maintenance' to 'active' (migration 000007),
 # this cluster becomes a routing target for tenants pinned via
-# `loopruntime admin tenants pin --cell cell-1`.
+# `loop-runtime admin tenants pin --cell cell-1`.
 #
-# Port allocation distinct from loopruntime-cell-0 (which uses 8090/8443/30091):
+# Port allocation distinct from loop-runtime-cell-0 (which uses 8090/8443/30091):
 #   * kubeAPI hostPort 6446 (mgmt=6443, workload=6444, build=6445, runtime-2=6446)
 #   * 8091:80   — Traefik HTTP entrypoint (workload uses 8090)
 #   * 8444:443  — Traefik HTTPS entrypoint (workload uses 8443)
@@ -38,12 +38,12 @@ ports:
   - port: 30191:30091
     nodeFilters:
       - loadbalancer
-network: k3d-loopruntime
+network: k3d-loop-runtime
 registries:
   use:
-    - k3d-loopruntime-registry:5000
+    - k3d-loop-runtime-registry:5000
   # B6 fix (cleanroom iter 6, 2026-05-05): mirror docker.io via pull-through
-  # cache in k3d-loopruntime-registry. See core-cluster.yaml for full rationale.
+  # cache in k3d-loop-runtime-registry. See core-cluster.yaml for full rationale.
   config: |
     mirrors:
       "docker.io":

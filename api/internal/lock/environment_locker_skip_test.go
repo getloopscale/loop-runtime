@@ -20,9 +20,9 @@ import (
 // because the lock path wrapped the tx in a second adapter that did not
 // translate it.
 func TestPoolEnvironmentLocker_UniqueViolationIsTyped(t *testing.T) {
-	dsn := os.Getenv("LOOPRUNTIME_E2E_DATABASE_URL")
+	dsn := os.Getenv("LOOP_RUNTIME_E2E_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("LOOPRUNTIME_E2E_DATABASE_URL not set — real-PG environment lock test skipped")
+		t.Skip("LOOP_RUNTIME_E2E_DATABASE_URL not set — real-PG environment lock test skipped")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)

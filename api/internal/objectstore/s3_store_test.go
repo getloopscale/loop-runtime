@@ -41,7 +41,7 @@ func TestUploadSendsASignedPathStylePutForAKeyNeedingEncoding(t *testing.T) {
 	store := newStore(t, srv.URL, "SECRET")
 
 	// Act
-	err := store.Upload(context.Background(), "loopruntime-builds", "tn-1/source/my file é.bundle", strings.NewReader("payload")) // english-only: a non-ASCII key is the case under test
+	err := store.Upload(context.Background(), "loop-runtime-builds", "tn-1/source/my file é.bundle", strings.NewReader("payload")) // english-only: a non-ASCII key is the case under test
 
 	// Assert
 	if err != nil {
@@ -50,7 +50,7 @@ func TestUploadSendsASignedPathStylePutForAKeyNeedingEncoding(t *testing.T) {
 	if got.method != http.MethodPut {
 		t.Errorf("method = %s, want PUT", got.method)
 	}
-	if want := "/loopruntime-builds/tn-1/source/my%20file%20%C3%A9.bundle"; got.escapedPath != want {
+	if want := "/loop-runtime-builds/tn-1/source/my%20file%20%C3%A9.bundle"; got.escapedPath != want {
 		t.Errorf("path = %s, want %s", got.escapedPath, want)
 	}
 	if !strings.HasPrefix(got.auth, "AWS4-HMAC-SHA256 Credential=AKID/") || !strings.Contains(got.auth, "/us-east-1/s3/aws4_request") {
@@ -69,16 +69,16 @@ func TestUploadReturnsTheServerRefusal(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := newStore(t, srv.URL, "SECRET").Upload(context.Background(), "loopruntime-builds", "tn-1/k", strings.NewReader("x"))
+	err := newStore(t, srv.URL, "SECRET").Upload(context.Background(), "loop-runtime-builds", "tn-1/k", strings.NewReader("x"))
 
-	if err == nil || !strings.Contains(err.Error(), "loopruntime-builds/tn-1/k") {
+	if err == nil || !strings.Contains(err.Error(), "loop-runtime-builds/tn-1/k") {
 		t.Fatalf("err = %v, want an error naming the object", err)
 	}
 }
 
 func TestPresignProducesAPathStyleSigV4URL(t *testing.T) {
 	signed, err := newStore(t, "https://nyc3.digitaloceanspaces.com", "SECRET").
-		Presign(context.Background(), "loopruntime-static-assets", "sbom/tn-1/proj/abc/api.cdx.json", time.Hour)
+		Presign(context.Background(), "loop-runtime-static-assets", "sbom/tn-1/proj/abc/api.cdx.json", time.Hour)
 	if err != nil {
 		t.Fatalf("Presign: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestPresignProducesAPathStyleSigV4URL(t *testing.T) {
 	if parsed.Scheme != "https" || parsed.Host != "nyc3.digitaloceanspaces.com" {
 		t.Errorf("origin = %s://%s", parsed.Scheme, parsed.Host)
 	}
-	if parsed.Path != "/loopruntime-static-assets/sbom/tn-1/proj/abc/api.cdx.json" {
+	if parsed.Path != "/loop-runtime-static-assets/sbom/tn-1/proj/abc/api.cdx.json" {
 		t.Errorf("path = %q", parsed.Path)
 	}
 	q := parsed.Query()
@@ -151,7 +151,7 @@ func TestNewS3StoreEndpointForms(t *testing.T) {
 		endpoint string
 		wantErr  bool
 	}{
-		{"minio.loopruntime-system.svc:9000", false},
+		{"minio.loop-runtime-system.svc:9000", false},
 		{"http://minio:9000/", false},
 		{"https://nyc3.digitaloceanspaces.com", false},
 		{"", true},
@@ -174,20 +174,20 @@ func TestUploadStreamsAReaderOfUnknownLength(t *testing.T) {
 		q := r.URL.Query()
 		switch {
 		case r.Method == http.MethodPost && q.Has("uploads"):
-			_, _ = io.WriteString(w, `<InitiateMultipartUploadResult><Bucket>loopruntime-builds</Bucket><Key>k</Key><UploadId>u1</UploadId></InitiateMultipartUploadResult>`)
+			_, _ = io.WriteString(w, `<InitiateMultipartUploadResult><Bucket>loop-runtime-builds</Bucket><Key>k</Key><UploadId>u1</UploadId></InitiateMultipartUploadResult>`)
 		case r.Method == http.MethodPut && q.Get("uploadId") == "u1":
 			b, _ := io.ReadAll(r.Body)
 			parts = append(parts, string(b))
 			w.Header().Set("ETag", `"e1"`)
 		case r.Method == http.MethodPost && q.Get("uploadId") == "u1":
-			_, _ = io.WriteString(w, `<CompleteMultipartUploadResult><Bucket>loopruntime-builds</Bucket><Key>k</Key><ETag>"e"</ETag></CompleteMultipartUploadResult>`)
+			_, _ = io.WriteString(w, `<CompleteMultipartUploadResult><Bucket>loop-runtime-builds</Bucket><Key>k</Key><ETag>"e"</ETag></CompleteMultipartUploadResult>`)
 		default:
 			w.WriteHeader(http.StatusNotImplemented)
 		}
 	}))
 	defer srv.Close()
 
-	err := newStore(t, srv.URL, "SECRET").Upload(context.Background(), "loopruntime-builds", "tn-1/k", io.MultiReader(strings.NewReader("pay"), strings.NewReader("load")))
+	err := newStore(t, srv.URL, "SECRET").Upload(context.Background(), "loop-runtime-builds", "tn-1/k", io.MultiReader(strings.NewReader("pay"), strings.NewReader("load")))
 
 	if err != nil {
 		t.Fatalf("Upload: %v", err)

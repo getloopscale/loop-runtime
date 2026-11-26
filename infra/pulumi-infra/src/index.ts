@@ -175,7 +175,7 @@ export const cellRegistry = pulumi.output(
 );
 
 // --- Legacy-compatible outputs (consumed by CI pipelines) ---
-// These will be deprecated once loopruntime-platform migrates to clusterRegistry.
+// These will be deprecated once loop-runtime-platform migrates to clusterRegistry.
 const mgmt = getMgmtCluster(clusters);
 export const mgmtClusterName = mgmt.clusterName;
 export const mgmtClusterEndpoint = mgmt.endpoint;

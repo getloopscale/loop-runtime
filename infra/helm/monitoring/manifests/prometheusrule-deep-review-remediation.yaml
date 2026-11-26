@@ -9,7 +9,7 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-deep-review-remediation-alerts
+  name: loop-runtime-deep-review-remediation-alerts
   namespace: monitoring
   labels:
     release: monitoring
@@ -17,20 +17,20 @@ metadata:
 spec:
   groups:
     # === T5.5 — Supply chain (closes find_obs_001 HIGH) ===
-    - name: loopruntime.supply-chain
+    - name: loop-runtime.supply-chain
       rules:
         - alert: LoopRuntimeUnsignedReleasePushed
           expr: |
-            sum(rate(loopruntime_release_signed_total{signed="false"}[5m])) > 0
+            sum(rate(loop_runtime_release_signed_total{signed="false"}[5m])) > 0
           for: 2m
           labels:
             severity: warning
-            loopruntime_component: supply-chain
+            loop_runtime_component: supply-chain
           annotations:
             runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#loopruntimeunsignedreleasepushed"
             summary: "Unsigned release pushed to registry"
             description: |
-              `loopruntime_release_signed_total{signed="false"}` is incrementing,
+              `loop_runtime_release_signed_total{signed="false"}` is incrementing,
               meaning at least one release activated an image that was NOT
               cosign-signed. Either cosign signing failed silently in the
               build pipeline or a path bypassed signing. Investigate before
@@ -39,57 +39,57 @@ spec:
 
         - alert: LoopRuntimeSBOMGenerationStalled
           expr: |
-            sum(rate(loopruntime_sbom_generated_total[10m])) == 0
-            and on() sum(rate(loopruntime_release_activated_total[10m])) > 0
+            sum(rate(loop_runtime_sbom_generated_total[10m])) == 0
+            and on() sum(rate(loop_runtime_release_activated_total[10m])) > 0
           for: 5m
           labels:
             severity: warning
-            loopruntime_component: supply-chain
+            loop_runtime_component: supply-chain
           annotations:
             summary: "Releases activating without SBOM generation"
             runbook: "docs/runbooks.md"
             description: |
-              Active releases are happening but loopruntime_sbom_generated_total
+              Active releases are happening but loop_runtime_sbom_generated_total
               has not incremented — syft step is silently broken in the
               build pipeline. Provenance for these releases is missing.
 
         - alert: LoopRuntimeAttestationSaveFailing
           expr: |
-            sum(rate(loopruntime_release_attestation_save_fail_total[5m])) > 0
+            sum(rate(loop_runtime_release_attestation_save_fail_total[5m])) > 0
           for: 2m
           labels:
             severity: warning
-            loopruntime_component: supply-chain
+            loop_runtime_component: supply-chain
           annotations:
             runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#loopruntimeattestationsavefailing"
             summary: "Per-app attestation persistence failing"
             description: |
-              loopruntime_release_attestation_save_fail_total > 0 in the last 5m.
+              loop_runtime_release_attestation_save_fail_total > 0 in the last 5m.
               The release proceeded (best-effort) but attestation rows
               failed to land in DB. Visibility regression — investigate
               attestation_store before pre-launch security review.
 
     # === T5.1 — Multi-cell fallback (closes find_cell_fallback_no_metric MEDIUM)
-    # Alert + metric pending wire-up of loopruntime_cell_fallback_total in T5.1
+    # Alert + metric pending wire-up of loop_runtime_cell_fallback_total in T5.1
     # code task. PrometheusRule ships ahead of metric emission (Helm
     # template stays valid even if metric is absent — alert just stays
     # silent until the metric appears).
 
     # === T5.2 — Secret ESO skip (closes find_secret_skip_no_alert MEDIUM + find_obs_006 HIGH) ===
-    - name: loopruntime.secrets-eso
+    - name: loop-runtime.secrets-eso
       rules:
         - alert: LoopRuntimeSecretESOSyncSkipped
           expr: |
-            sum(rate(loopruntime_secret_externalsecret_total{result="skip"}[5m])) > 0
+            sum(rate(loop_runtime_secret_externalsecret_total{result="skip"}[5m])) > 0
           for: 2m
           labels:
             severity: warning
-            loopruntime_component: secrets
+            loop_runtime_component: secrets
           annotations:
             runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#loopruntimesecretesosyncskipped"
             summary: "loopscale secret set silently no-ops (ESO sync disabled)"
             description: |
-              loopruntime_secret_externalsecret_total{result="skip"} > 0 means the
+              loop_runtime_secret_externalsecret_total{result="skip"} > 0 means the
               SecretK8sManager was nil at boot (CELL_0_KUBECONFIG mount
               missing or context name drift — see B34). API returns 200 OK
               but writes nothing to the workload cluster — silent data
@@ -97,34 +97,34 @@ spec:
 
         - alert: LoopRuntimeSecretESOSyncFailing
           expr: |
-            sum(rate(loopruntime_secret_externalsecret_total{result="fail"}[5m])) > 0.05
+            sum(rate(loop_runtime_secret_externalsecret_total{result="fail"}[5m])) > 0.05
           for: 5m
           labels:
             severity: warning
-            loopruntime_component: secrets
+            loop_runtime_component: secrets
           annotations:
             runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#loopruntimesecretesosyncfailing"
             summary: "ExternalSecret CR creation failing >5%"
             description: |
-              loopruntime_secret_externalsecret_total{result="fail"} rate > 0.05/s
+              loop_runtime_secret_externalsecret_total{result="fail"} rate > 0.05/s
               over 5m — investigate runtime client RBAC or cell-0-cluster
               connectivity.
 
     # === T5.3 — Workqueue terminal-write fail (closes find_workqueue_silent_db_errors HIGH) ===
-    - name: loopruntime.workqueue
+    - name: loop-runtime.workqueue
       rules:
         - alert: LoopRuntimeWorkqueueTerminalWriteFailed
           expr: |
-            sum by (terminal) (rate(loopruntime_workqueue_terminal_write_fail_total[5m])) > 0
+            sum by (terminal) (rate(loop_runtime_workqueue_terminal_write_fail_total[5m])) > 0
           for: 2m
           labels:
             severity: warning
-            loopruntime_component: workqueue
+            loop_runtime_component: workqueue
           annotations:
             summary: "Workqueue terminal-state DB write failed (duplicate side-effects risk)"
             runbook: "docs/runbooks.md"
             description: |
-              loopruntime_workqueue_terminal_write_fail_total{{`{{ $labels.terminal }}`}}
+              loop_runtime_workqueue_terminal_write_fail_total{{`{{ $labels.terminal }}`}}
               > 0 — Complete or Fail call returned DB error. If terminal=complete:
               successful handler followed by FAILED Complete write means the
               item will be re-dequeued and the handler will run again,
@@ -133,56 +133,56 @@ spec:
               rows accumulate.
 
     # === T1.5 — CellPinner CR-patch divergence (closes find_arch_005 MEDIUM) ===
-    - name: loopruntime.cell-pinner
+    - name: loop-runtime.cell-pinner
       rules:
         - alert: LoopRuntimeCellPinnerCRPatchDiverged
           expr: |
-            sum(rate(loopruntime_cell_pinner_cr_patch_fail_total[5m])) > 0
+            sum(rate(loop_runtime_cell_pinner_cr_patch_fail_total[5m])) > 0
           for: 2m
           labels:
             severity: warning
-            loopruntime_component: cell-pinner
+            loop_runtime_component: cell-pinner
           annotations:
             summary: "CellPinner DB ↔ CR diverged — operator patch failed"
             runbook: "docs/runbooks.md"
             description: |
-              loopruntime_cell_pinner_cr_patch_fail_total > 0 means tenants.cell_id
+              loop_runtime_cell_pinner_cr_patch_fail_total > 0 means tenants.cell_id
               was UPDATED in PostgreSQL but the corresponding Tenant CR
               MergePatch FAILED. The operator reads tenant.Spec.CellID from
               the CR, so until the CR is patched manually new
               EnvironmentReconciler operations land on the OLD cell.
 
     # === T5.7 (subset) — Operator L4 metrics not yet aliased (closes find_obs_004 partial) ===
-    - name: loopruntime.operator-l4
+    - name: loop-runtime.operator-l4
       rules:
         - alert: LoopRuntimeTenantDeletionStuck
           expr: |
-            sum(rate(loopruntime_tenant_deletion_stuck_total[5m])) > 0
+            sum(rate(loop_runtime_tenant_deletion_stuck_total[5m])) > 0
           for: 5m
           labels:
             severity: warning
-            loopruntime_component: tenant-operator
+            loop_runtime_component: tenant-operator
           annotations:
             summary: "Tenant deletion stuck — manual intervention may be required"
             runbook: "docs/runbooks.md"
             description: |
-              loopruntime_tenant_deletion_stuck_total is incrementing. The tenant
+              loop_runtime_tenant_deletion_stuck_total is incrementing. The tenant
               lifecycle reached a state where automatic deletion cannot
               proceed (likely finalizer holding, or hard cleanup pending
               admin force).
 
         - alert: LoopRuntimeMisplacedTenant
           expr: |
-            sum(rate(loopruntime_misplaced_tenant_total[10m])) > 0
+            sum(rate(loop_runtime_misplaced_tenant_total[10m])) > 0
           for: 5m
           labels:
             severity: warning
-            loopruntime_component: cell-router
+            loop_runtime_component: cell-router
           annotations:
             summary: "Tenant resources observed on wrong cell — ADR-0018 violation"
             runbook: "docs/runbooks.md"
             description: |
-              loopruntime_misplaced_tenant_total > 0 means at least one tenant's
+              loop_runtime_misplaced_tenant_total > 0 means at least one tenant's
               workload is running on a cluster whose cellID does NOT match
               tenants.cell_id. This is a multi-cell isolation breach. Run
-              `loopruntime admin tenants pin` to reconcile or escalate.
+              `loop-runtime admin tenants pin` to reconcile or escalate.

@@ -2,7 +2,7 @@
 # the cells, ../../../helm/monitoring/values-prometheus-federation.yaml) through that
 # cluster's internal ALB, and renders no k3d job (../../../helm/monitoring/values-prometheus.yaml).
 #
-# LOOPRUNTIME_METRICS_ALB_DNS_NAMES is `<cluster>=<DNSName>,...`, the DNSName of each remote
+# LOOP_RUNTIME_METRICS_ALB_DNS_NAMES is `<cluster>=<DNSName>,...`, the DNSName of each remote
 # cluster's prometheus-federation Ingress, which `task staging:platform` reads once the
 # cells are synced (infra/staging/monitoring-addresses.sh). The first core sync of a
 # rebuild runs before those ALBs exist, without it, and federates nothing yet; once it is
@@ -10,12 +10,12 @@
 #
 # On the emulator (`emulator.endpoint`) an ALB is reached at the emulator's endpoint with
 # its DNSName in the path; on AWS the DNSName resolves in the VPC.
-{{- $names := env "LOOPRUNTIME_METRICS_ALB_DNS_NAMES" }}
+{{- $names := env "LOOP_RUNTIME_METRICS_ALB_DNS_NAMES" }}
 {{- $byCluster := dict }}
 {{- range $pair := without (splitList "," $names) "" }}
 {{- $parts := splitList "=" $pair }}
 {{- if or (ne (len $parts) 2) (not (regexMatch "^[a-z0-9-]+$" (index $parts 0))) (not (regexMatch "^[A-Za-z0-9.-]+(:[0-9]+)?$" (index $parts 1))) }}
-{{- fail (printf "LOOPRUNTIME_METRICS_ALB_DNS_NAMES: %q is not <cluster>=<DNSName>" $pair) }}
+{{- fail (printf "LOOP_RUNTIME_METRICS_ALB_DNS_NAMES: %q is not <cluster>=<DNSName>" $pair) }}
 {{- end }}
 {{- $_ := set $byCluster (index $parts 0) (index $parts 1) }}
 {{- end }}
@@ -28,7 +28,7 @@ federation:
   clusters:
 {{- if $names }}
 {{- range $cluster := $clusters }}
-{{- $alb := index $byCluster $cluster | required (printf "LOOPRUNTIME_METRICS_ALB_DNS_NAMES names no ALB for the %s cluster" $cluster) }}
+{{- $alb := index $byCluster $cluster | required (printf "LOOP_RUNTIME_METRICS_ALB_DNS_NAMES names no ALB for the %s cluster" $cluster) }}
     - name: {{ $cluster }}
 {{- if $endpoint }}
       scheme: {{ (urlParse $endpoint).scheme }}
@@ -46,7 +46,7 @@ federation:
 # The platform's PostgreSQL: the namespace values-prometheus.yaml scrapes its instances in,
 # and its alert rules, read from the one file that defines them.
 platformPostgres:
-  namespace: loopruntime-data-plane
+  namespace: loop-runtime-data-plane
 serverFiles:
   alerting_rules.yml:
     groups:

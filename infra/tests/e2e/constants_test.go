@@ -128,17 +128,17 @@ const (
 	e2eTraefikPortCell2 = "8444"
 
 	// e2eBaseDomainLocal is the local k3d base domain.
-	e2eBaseDomainLocal = "loopruntime.local"
+	e2eBaseDomainLocal = "loop-runtime.local"
 
 	// e2eBaseDomainDrill is the drill DOKS base domain (CF wildcard A record).
 	e2eBaseDomainDrill = "drill.getloopscale.com"
 
 	// mgmtKubeContext is the kubectl context for the management cluster.
-	mgmtKubeContext = "k3d-loopruntime-core"
+	mgmtKubeContext = "k3d-loop-runtime-core"
 
 	// buildKubeContext is the kubectl context for the build cluster.
-	buildKubeContext = "k3d-loopruntime-build"
+	buildKubeContext = "k3d-loop-runtime-build"
 
 	// workloadKubeContext is the kubectl context for the workload cluster.
-	workloadKubeContext = "k3d-loopruntime-cell-0"
+	workloadKubeContext = "k3d-loop-runtime-cell-0"
 )

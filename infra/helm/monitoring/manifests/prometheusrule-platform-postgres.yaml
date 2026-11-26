@@ -12,13 +12,13 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-platform-postgres-alerts
+  name: loop-runtime-platform-postgres-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopruntime.platform-postgres
+    - name: loop-runtime.platform-postgres
       rules:
         - alert: LoopRuntimePlatformPostgresDown
           expr: up{job="platform-postgres"} == 0 or absent(up{job="platform-postgres"})
@@ -78,8 +78,8 @@ spec:
 
         - alert: LoopRuntimePlatformPostgresVolumeFilling
           expr: >-
-            kubelet_volume_stats_available_bytes{namespace="loopruntime-data-plane", persistentvolumeclaim=~"platform-postgres-.+"}
-            / kubelet_volume_stats_capacity_bytes{namespace="loopruntime-data-plane", persistentvolumeclaim=~"platform-postgres-.+"} < 0.2
+            kubelet_volume_stats_available_bytes{namespace="loop-runtime-data-plane", persistentvolumeclaim=~"platform-postgres-.+"}
+            / kubelet_volume_stats_capacity_bytes{namespace="loop-runtime-data-plane", persistentvolumeclaim=~"platform-postgres-.+"} < 0.2
           for: 15m
           labels:
             severity: critical

@@ -23,7 +23,7 @@ const (
 	ErrorClassCosignFailed           ErrorClass = "COSIGN_FAILED"
 	ErrorClassRegistryAuth           ErrorClass = "REGISTRY_AUTH"
 	ErrorClassDockerfileLint         ErrorClass = "DOCKERFILE_LINT"
-	ErrorClassLoopRuntimeYAMLInvalid ErrorClass = "LOOPRUNTIME_YAML_INVALID"
+	ErrorClassLoopRuntimeYAMLInvalid ErrorClass = "LOOP_RUNTIME_YAML_INVALID"
 	ErrorClassCancelledByUser        ErrorClass = "CANCELLED_BY_USER"
 	ErrorClassWorkflowDeleted        ErrorClass = "WORKFLOW_DELETED"
 	ErrorClassUnknown                ErrorClass = "UNKNOWN"
@@ -39,12 +39,12 @@ var suggestions = map[ErrorClass]string{
 	ErrorClassCosignFailed:   "Image signing failed. Operator may need to rotate the signing key.",
 	ErrorClassRegistryAuth:   "Could not push to image registry. Verify pull secret and registry credentials.",
 	ErrorClassDockerfileLint: "Dockerfile failed validation. See lint output for the specific violation.",
-	// Red Team loopruntime-cloud#123 — guide the customer to the canonical manifest
+	// Red Team loop-console#123 — guide the customer to the canonical manifest
 	// (loopzerokit v2 emits `.loopzero/services.json`; the legacy `loopzero.yaml` has
-	// been retired). The class name stays `LOOPRUNTIME_YAML_INVALID` for engine
+	// been retired). The class name stays `LOOP_RUNTIME_YAML_INVALID` for engine
 	// compat — Classify() still matches "loopzero.yaml" substrings upstream — but
 	// the user-visible suggestion is honest.
-	ErrorClassLoopRuntimeYAMLInvalid: "Project manifest could not be parsed. Check your `.loopzero/services.json` and run `loopruntime validate` locally.",
+	ErrorClassLoopRuntimeYAMLInvalid: "Project manifest could not be parsed. Check your `.loopzero/services.json` and run `loop-runtime validate` locally.",
 	ErrorClassCancelledByUser:        "Deploy was cancelled. Trigger a new deploy when ready.",
 	ErrorClassWorkflowDeleted:        "Build was interrupted by an operator. Trigger a new deploy.",
 	ErrorClassUnknown:                "Build step failed. See build logs for details.",
@@ -105,7 +105,7 @@ func Classify(rawError string, logPreview string) ErrorClass {
 		strings.Contains(combined, "from_registry_not_allowed"):
 		return ErrorClassDockerfileLint
 	case strings.Contains(combined, "loopzero.yaml"),
-		strings.Contains(combined, "invalid loopruntime yaml"):
+		strings.Contains(combined, "invalid loop-runtime yaml"):
 		return ErrorClassLoopRuntimeYAMLInvalid
 	}
 	return ErrorClassUnknown

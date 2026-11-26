@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: loopruntime-cloud
-  namespace: loopruntime-system
+  name: loop-console
+  namespace: loop-runtime-system
   labels:
-    app: loopruntime-cloud
+    app: loop-console
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: loopruntime-cloud
+      app: loop-console
   template:
     metadata:
       labels:
-        app: loopruntime-cloud
+        app: loop-console
       annotations:
         checksum/config: tilt-managed-placeholder-T1.1.c
     spec:
@@ -23,7 +23,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: cloud
-        image: loopruntime-cloud
+        image: loop-console
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 13002
@@ -54,21 +54,21 @@ spec:
           readOnlyRootFilesystem: true
         envFrom:
         - configMapRef:
-            name: loopruntime-cloud-runtime-config
+            name: loop-console-runtime-config
         - secretRef:
-            name: loopruntime-cloud-runtime-secret
+            name: loop-console-runtime-secret
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: loopruntime-cloud
-  namespace: loopruntime-system
+  name: loop-console
+  namespace: loop-runtime-system
   labels:
-    app: loopruntime-cloud
+    app: loop-console
 spec:
   type: NodePort
   selector:
-    app: loopruntime-cloud
+    app: loop-console
   ports:
   - port: 13002
     targetPort: 13002

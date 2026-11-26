@@ -47,7 +47,7 @@ import (
 // twice what is configured (SD-04.7). Two things bound that, and neither makes
 // it disappear:
 //   - the Traefik `rate-limit` Middleware is now attached to the public route
-//     (ingressRoute.middlewares in charts/loopruntime-api/values-bootstrap.yaml), and the edge is the one
+//     (ingressRoute.middlewares in charts/loop-runtime-api/values-bootstrap.yaml), and the edge is the one
 //     place where a single instance of the limit exists;
 //   - auth and per-tenant limits upstream carry the real guard.
 //

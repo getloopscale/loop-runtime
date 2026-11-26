@@ -113,7 +113,7 @@ func TestSetupReloadsTheDevPublicEdgeLast(t *testing.T) {
 		t.Fatal("setup has no steps")
 	}
 	last := steps[len(steps)-1][1]
-	if !strings.Contains(last, "dev-public:caddy") || !strings.Contains(last, `LOOPRUNTIME_HELMFILE_ENV`) {
-		t.Errorf("setup's last step is %q, want the dev-public edge reload guarded by LOOPRUNTIME_HELMFILE_ENV", last)
+	if !strings.Contains(last, "dev-public:caddy") || !strings.Contains(last, `LOOP_RUNTIME_HELMFILE_ENV`) {
+		t.Errorf("setup's last step is %q, want the dev-public edge reload guarded by LOOP_RUNTIME_HELMFILE_ENV", last)
 	}
 }

@@ -216,21 +216,21 @@ func intPow(base, exp int) int {
 // repairHint is the operator guidance attached to ErrCellPinDiverged, when the
 // database already records the new cell and the Tenant CR is the stale side.
 //
-// It does NOT say "run `loopruntime admin tenants pin`" as if that were a new idea:
+// It does NOT say "run `loop-runtime admin tenants pin`" as if that were a new idea:
 // this function IS that path, and it just failed. What unblocks it is re-running
-// the pin, so the patch is retried under the loopruntime-api identity. The direct
+// the pin, so the patch is retried under the loop-runtime-api identity. The direct
 // `kubectl patch` is quoted for the identities allowed to use it, and the
 // warning that everyone else is denied is the point: since 2026-08-13 the
-// ValidatingAdmissionPolicy `loopruntime-tenant-cr-shape` makes spec.cellID immutable
-// except for system:masters and the loopruntime-api ServiceAccount, and a bare
+// ValidatingAdmissionPolicy `loop-runtime-tenant-cr-shape` makes spec.cellID immutable
+// except for system:masters and the loop-runtime-api ServiceAccount, and a bare
 // `kubectl patch` from an unprivileged kubeconfig gets `Denied` with no reason
 // given (B-097).
 func repairHint(ns, tenantID, cellID string) string {
 	return fmt.Sprintf(
 		"the database already records the new cell; the Tenant CR is the stale side. "+
-			"Re-run the pin so the patch is retried under the loopruntime-api identity. "+
+			"Re-run the pin so the patch is retried under the loop-runtime-api identity. "+
 			"The direct patch `kubectl -n %s patch tenant %s --type=merge -p '{\"spec\":{\"cellID\":%q}}'` "+
-			"is DENIED by the loopruntime-tenant-cr-shape admission policy (spec.cellID is immutable) "+
-			"for every identity except system:masters and the loopruntime-api ServiceAccount",
+			"is DENIED by the loop-runtime-tenant-cr-shape admission policy (spec.cellID is immutable) "+
+			"for every identity except system:masters and the loop-runtime-api ServiceAccount",
 		ns, tenantID, cellID)
 }

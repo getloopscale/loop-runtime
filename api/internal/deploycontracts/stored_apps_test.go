@@ -12,7 +12,7 @@ import (
 
 // Every field a build persists must survive the trip back to an AppSpec. A
 // stored app that loses Runtime, Path, Build or Start rebuilds with the wrong
-// strategy (loopruntime#185: empty runtime -> unsupportedStrategy -> SYNC_FAILED), so
+// strategy (loop-runtime#185: empty runtime -> unsupportedStrategy -> SYNC_FAILED), so
 // this test fills every field of db.BuildAppSpec by reflection and requires the
 // same-named AppSpec field to come back non-zero. A field added to the stored
 // shape and forgotten here fails this test instead of a preview build.

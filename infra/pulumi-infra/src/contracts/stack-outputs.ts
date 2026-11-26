@@ -5,8 +5,8 @@
  * Stack output contracts for the 3-project split.
  *
  * These interfaces define the stable API between Pulumi projects.
- * loopruntime-infra exports → loopruntime-platform and loopruntime-control-plane consume.
- * loopruntime-platform exports → loopruntime-control-plane consumes.
+ * loop-runtime-infra exports → loop-runtime-platform and loop-runtime-control-plane consume.
+ * loop-runtime-platform exports → loop-runtime-control-plane consumes.
  *
  * Field additions are backwards-compatible.
  * Field removals or type changes require coordinated migration.
@@ -15,7 +15,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// loopruntime-infra outputs (consumed by loopruntime-platform + loopruntime-control-plane)
+// loop-runtime-infra outputs (consumed by loop-runtime-platform + loop-runtime-control-plane)
 // ---------------------------------------------------------------------------
 
 export interface InfraStackOutputs {
@@ -69,7 +69,7 @@ export interface InfraStackOutputs {
 }
 
 // ---------------------------------------------------------------------------
-// loopruntime-platform outputs (consumed by loopruntime-control-plane)
+// loop-runtime-platform outputs (consumed by loop-runtime-control-plane)
 // ---------------------------------------------------------------------------
 
 export interface PlatformStackOutputs {
@@ -98,7 +98,7 @@ export interface PlatformStackOutputs {
 }
 
 // ---------------------------------------------------------------------------
-// loopruntime-control-plane outputs (operational, not consumed by other projects)
+// loop-runtime-control-plane outputs (operational, not consumed by other projects)
 // ---------------------------------------------------------------------------
 
 // NOT REFERENCED (measured 2026-09-07): no module names ControlPlaneStackOutputs.
@@ -106,7 +106,7 @@ export interface PlatformStackOutputs {
 // consumers that exist read outputs untyped via requireOutput(name).
 export interface ControlPlaneStackOutputs {
   // Service readiness
-  readonly loopruntimeApiReady: boolean;
+  readonly loopRuntimeApiReady: boolean;
   readonly tenantControllerReady: boolean;
   readonly oryKratosReady: boolean;
   readonly oryHydraReady: boolean;

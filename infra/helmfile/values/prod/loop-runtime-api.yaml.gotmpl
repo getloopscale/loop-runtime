@@ -1,0 +1,10 @@
+# prod overlay for charts/loop-runtime-api, layered on charts/loop-runtime-api/values-bootstrap.yaml.
+
+# The internal ALB the cells' External Secrets call the secret-fetch broker through
+# (cell.helmfile release loop-runtime-broker, at LOOP_RUNTIME_CORE_API_INTERNAL_URL). Its HTTPS
+# listener serves the ACM certificate the environment names in
+# LOOP_RUNTIME_CORE_API_INTERNAL_CERTIFICATE_ARN; without one the chart refuses to render
+# rather than send the broker's bearer token over HTTP.
+secretFetchLoadBalancer:
+  enabled: {{ .Values.profile.secretFetchBroker }}
+  certificateArn: {{ env "LOOP_RUNTIME_CORE_API_INTERNAL_CERTIFICATE_ARN" | quote }}

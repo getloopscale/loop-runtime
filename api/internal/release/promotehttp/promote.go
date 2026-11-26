@@ -96,7 +96,7 @@ type PromoteHandler struct {
 	projects   PromoteProjectStore
 	service    PromoteService
 	baseDomain string
-	// envEnsurer closes Red Team loopruntime-cloud#158 — the promote path was
+	// envEnsurer closes Red Team loop-console#158 — the promote path was
 	// missing the m37/#37 EnsureEnvironment retrofit that builds.go had.
 	// Without it, promoting to a not-yet-existing production env leaves
 	// the Tenant CR spec.environments[] short of the (project, env)
@@ -119,7 +119,7 @@ func NewPromoteHandler(projects PromoteProjectStore, service PromoteService, bas
 // auto-creates the target (production/staging/…) Environment CR before
 // attempting the release-target creation. Nil ensurer (default) preserves
 // legacy behavior (target env must pre-exist). Mirrors
-// BuildHandler.WithEnvironmentEnsurer. Closes Red Team loopruntime-cloud#158.
+// BuildHandler.WithEnvironmentEnsurer. Closes Red Team loop-console#158.
 func (h *PromoteHandler) WithEnvironmentEnsurer(e EnvironmentEnsurer) *PromoteHandler {
 	h.envEnsurer = e
 	return h
@@ -175,7 +175,7 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// one release cycle (helper emits a deprecation WARN on legacy hits).
 	correlationID := correlation.Read(r)
 
-	// Red Team loopruntime-cloud#158: auto-create the target env before the release
+	// Red Team loop-console#158: auto-create the target env before the release
 	// row is created. Symptomatic pre-fix state: promote → SetDesired created
 	// the env_target row + release row, but the Tenant CR spec.environments[]
 	// was missing (project, ToEnv) → AppProject destinations never extended
@@ -188,9 +188,9 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// on already-existing envs. Failure surfaces as a typed error → JSON.
 	if h.envEnsurer != nil {
 		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, name, req.To); ensureErr != nil {
-			var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-			if errors.As(ensureErr, &loopruntimeErr) {
-				httpio.WriteLoopRuntimeError(w, loopruntimeErr)
+			var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+			if errors.As(ensureErr, &loopRuntimeErr) {
+				httpio.WriteLoopRuntimeError(w, loopRuntimeErr)
 				return
 			}
 			slog.Error("promote: EnsureEnvironment failed",
@@ -213,9 +213,9 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		UserID:        uc.UserID,
 	})
 	if err != nil {
-		var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-		if errors.As(err, &loopruntimeErr) {
-			httpio.WriteLoopRuntimeError(w, loopruntimeErr)
+		var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+		if errors.As(err, &loopRuntimeErr) {
+			httpio.WriteLoopRuntimeError(w, loopRuntimeErr)
 			return
 		}
 		// Mirror mapBuildError at builds.go:402 — log unexpected errors for diagnosis.

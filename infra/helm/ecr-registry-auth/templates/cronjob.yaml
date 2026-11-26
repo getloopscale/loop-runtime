@@ -2,7 +2,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: loopruntime-registry-auth
+  name: loop-runtime-registry-auth
   namespace: {{ .Release.Namespace }}
 spec:
   schedule: {{ .Values.schedule | quote }}

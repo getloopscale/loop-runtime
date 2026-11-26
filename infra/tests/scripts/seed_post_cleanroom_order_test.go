@@ -15,7 +15,7 @@ import (
 // the master seed chain.
 //
 // Finding #4 of issue #91 (Cleanroom mandate chain run 2026-06-18) was an order
-// defect: Step 3 (seed-admin-loopruntime-dev) POSTs a login against auth-dev, and
+// defect: Step 3 (seed-admin-loop-runtime-dev) POSTs a login against auth-dev, and
 // ran before the patch-kratos seed had rewritten the Kratos URLs, so every fresh
 // Cleanroom failed the admin login. The fix of record was to run patch-kratos
 // first. The root cause is gone now — the Kratos and Hydra URLs are environment

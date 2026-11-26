@@ -1,46 +1,46 @@
 encryptionsalt: v1:6Hb/r7BROOo=:v1:aX4LORfGhAeWlYK5:fpCLPditmDKjNGDBtc6J+OfgTdv9hA==
 config:
-  loopruntime-infra:digitaloceanToken:
+  loop-runtime-infra:digitaloceanToken:
     secure: v1:RBI7xFTZE0kPVAnr:tYS3nQkhurXxfHqppxZRWZymGLfEftRcP43MsA+4Zzgj1f7DTyWMRlC/p0RSSYBN1rpVJMsNsbX0vYIzPFlVyipAfg7dY3liVtBO1lQFvD6/CDnNMUcl
-  loopruntime-infra:cfApiToken:
+  loop-runtime-infra:cfApiToken:
     secure: v1:1diskOSkelmh9jIS:WTH4XsJ+t55xB62Cu1GJIdW2ygy6LmyVaDQEL52ajceAOzphRwuj7zucH0FbiDINlUSuaHEFYZ5+CpWAEMAHzjfBITCP
-  loopruntime-infra:spacesAccessKeyId:
+  loop-runtime-infra:spacesAccessKeyId:
     secure: v1:ScWHqHGdFyQ3CDHh:Dmsg/NvUF0qMCqPkQTfafZHGeMvCaTsZ45eTed7VLPPl5xru
-  loopruntime-infra:spacesSecretAccessKey:
+  loop-runtime-infra:spacesSecretAccessKey:
     secure: v1:lig05g+/b5hjSCMW:rfFRbFJHg8KIFwXEqAgGSkYx7S+Q7VtaP+sV1kjPnd/SMEmYuYux3qZEZdct10yA2A01iU/Xuak/2V8=
-  loopruntime-infra:tunnelSecret:
+  loop-runtime-infra:tunnelSecret:
     secure: v1:RF9FwLglwf8MGRdr:Ep+ILIQIp/dlIWN1t1qTzloKrR2g2R/5m4WJfzJok5ISsF3FBrjjs/vKZtQWBLI+Bcm+H+Rqf+ZVcxbY
-  loopruntime-infra:environment: dev
-  loopruntime-infra:provider: digitalocean
-  loopruntime-infra:region: sfo3
-  loopruntime-infra:domain: dev.getloopscale.com
-  loopruntime-infra:dnsZone: getloopscale.com
-  loopruntime-infra:infraVersion: v3
-  loopruntime-infra:mgmtK8sVersion: 1.33.9-do.4
-  loopruntime-infra:mgmtNodeClass: medium
-  loopruntime-infra:mgmtMinNodes: "3"
-  loopruntime-infra:mgmtMaxNodes: "5"
-  loopruntime-infra:runtimeK8sVersion: 1.33.9-do.4
-  loopruntime-infra:runtimeNodeClass: small
-  loopruntime-infra:runtimeMinNodes: "2"
+  loop-runtime-infra:environment: dev
+  loop-runtime-infra:provider: digitalocean
+  loop-runtime-infra:region: sfo3
+  loop-runtime-infra:domain: dev.getloopscale.com
+  loop-runtime-infra:dnsZone: getloopscale.com
+  loop-runtime-infra:infraVersion: v3
+  loop-runtime-infra:mgmtK8sVersion: 1.33.9-do.4
+  loop-runtime-infra:mgmtNodeClass: medium
+  loop-runtime-infra:mgmtMinNodes: "3"
+  loop-runtime-infra:mgmtMaxNodes: "5"
+  loop-runtime-infra:runtimeK8sVersion: 1.33.9-do.4
+  loop-runtime-infra:runtimeNodeClass: small
+  loop-runtime-infra:runtimeMinNodes: "2"
   # CHG-2026-04-28-LAYERED-BOOTSTRAP T0.2 + B18 — runtime burst capacity for L3-100.
   # 3 nodes was insufficient (50 vCPU L3 deploy left tail tenants pending).
   # 8 nodes covers worst-case scheduling pressure during L3 burst.
-  loopruntime-infra:runtimeMaxNodes: "8"
-  loopruntime-infra:buildK8sVersion: 1.33.9-do.4
-  loopruntime-infra:buildNodeClass: medium
-  loopruntime-infra:buildMinNodes: "2"
-  loopruntime-infra:buildMaxNodes: "5"
-  loopruntime-infra:dbNodeClass: medium
-  loopruntime-infra:dbVersion: "16"
-  loopruntime-infra:dbNodeCount: "3"
-  loopruntime-infra:stripePriceProId: price_1TJGIuA0ZwssSKrVEMKZsiMj
-  loopruntime-infra:stripePriceTeamId: price_1TJGJ5A0ZwssSKrVy3mjsal6
-  loopruntime-infra:cfAccountId: 362767409c4de7fda7990c10103efdd9
-  loopruntime-infra:cfZoneId: 9f9a41bef0bcb7adf15969c81c303bef
+  loop-runtime-infra:runtimeMaxNodes: "8"
+  loop-runtime-infra:buildK8sVersion: 1.33.9-do.4
+  loop-runtime-infra:buildNodeClass: medium
+  loop-runtime-infra:buildMinNodes: "2"
+  loop-runtime-infra:buildMaxNodes: "5"
+  loop-runtime-infra:dbNodeClass: medium
+  loop-runtime-infra:dbVersion: "16"
+  loop-runtime-infra:dbNodeCount: "3"
+  loop-runtime-infra:stripePriceProId: price_1TJGIuA0ZwssSKrVEMKZsiMj
+  loop-runtime-infra:stripePriceTeamId: price_1TJGJ5A0ZwssSKrVy3mjsal6
+  loop-runtime-infra:cfAccountId: 362767409c4de7fda7990c10103efdd9
+  loop-runtime-infra:cfZoneId: 9f9a41bef0bcb7adf15969c81c303bef
   # OpenBao auto-unseal (F1.1 plan 2026-06-02-openbao-adoption v1.2).
   # Opt-in via CLI: pulumi config set openbaoEnabled true --stack dev
-  # loopruntime-infra:openbaoEnabled: "false"  # default
-  # loopruntime-infra:openbaoAwsRegion: "us-east-1"
-  loopruntime-infra:lokiPushUrl: http://10.20.0.26:30100
-  loopruntime-infra:vpcCidr: 10.20.0.0/16
+  # loop-runtime-infra:openbaoEnabled: "false"  # default
+  # loop-runtime-infra:openbaoAwsRegion: "us-east-1"
+  loop-runtime-infra:lokiPushUrl: http://10.20.0.26:30100
+  loop-runtime-infra:vpcCidr: 10.20.0.0/16

@@ -53,7 +53,7 @@ func environmentTestScheme(t *testing.T) *runtime.Scheme {
 }
 
 // overflowEnv builds an Environment whose canonical M2 namespace
-// (`loopruntime-<tenant>-<project>-<env>`) exceeds the 63-char limit (85 chars),
+// (`loop-runtime-<tenant>-<project>-<env>`) exceeds the 63-char limit (85 chars),
 // forcing the reconcile down the NameTooLong branch. The finalizer is
 // pre-seeded so EnsureFinalizer is a no-op and Generation stays stable.
 func overflowEnv() *loopruntimev1.Environment {
@@ -183,7 +183,7 @@ func TestEnvironmentReconciler_DeleteFromEmpty_RemovesFinalizer(t *testing.T) {
 		},
 		Spec: loopruntimev1.EnvironmentCRSpec{
 			TenantRef: loopruntimev1.TenantRef{Name: "tn-x"},
-			Namespace: loopruntimev1.NamespaceSpec{Name: "loopruntime-tn-x-default-project-production"},
+			Namespace: loopruntimev1.NamespaceSpec{Name: "loop-runtime-tn-x-default-project-production"},
 		},
 	}
 

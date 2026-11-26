@@ -382,7 +382,7 @@ func TestBuildOrchestrator_RetryReleaseActivation_WrongState(t *testing.T) {
 // The orchestrator keeps the configured registry as given: the local k3d default belongs to
 // config.Load in development, and nowhere else may a build silently push to it.
 func TestNewBuildOrchestrator_KeepsTheConfiguredRegistryURL(t *testing.T) {
-	const registry = "123456789012.dkr.ecr.us-east-1.amazonaws.com/loopruntime-tenants"
+	const registry = "123456789012.dkr.ecr.us-east-1.amazonaws.com/loop-runtime-tenants"
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore:   newFakeBuildStoreOrch(),
 		ReleaseStore: newFakeReleaseStoreContainer(),

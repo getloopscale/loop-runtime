@@ -12,7 +12,7 @@ import { ContainerRegistrySpec, ContainerRegistryOutput } from "./registry";
  * CloudProviderFactory composes them all.
  *
  * This stack is AS-IS legacy retired at AM10 and implements DigitalOcean only;
- * no provider is added here (new infrastructure is Terraform, ../loopruntime-infra-live).
+ * no provider is added here (new infrastructure is Terraform, ../loop-runtime-infra-live).
  */
 
 export interface IProviderNetwork {

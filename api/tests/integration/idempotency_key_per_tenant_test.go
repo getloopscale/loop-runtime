@@ -34,7 +34,7 @@ import (
 // @see internal/db/migrations/000066_idempotency_key_per_tenant.up.sql
 func TestIdempotencyKey_SameKeyTwoTenants(t *testing.T) {
 	ctx := context.Background()
-	pool := poolFor(t, dsnOrSkip(t, "LOOPRUNTIME_WORKER_DATABASE_URL"))
+	pool := poolFor(t, dsnOrSkip(t, "LOOP_RUNTIME_WORKER_DATABASE_URL"))
 
 	const (
 		key     = "deploy-1" // exactly the shape a human picks

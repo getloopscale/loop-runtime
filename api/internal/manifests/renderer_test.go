@@ -231,9 +231,9 @@ func TestRender_Namespace(t *testing.T) {
 
 	result, _ := Render(input)
 
-	// Canonical refactor 2026-06-07: namespace = loopruntime-<tenant>-<project>-<env>.
-	if !strings.Contains(result, "namespace: loopruntime-acme-webapp-production") {
-		t.Errorf("namespace should be loopruntime-{tenant}-{project}-{env}; rendered:\n%s", result)
+	// Canonical refactor 2026-06-07: namespace = loop-runtime-<tenant>-<project>-<env>.
+	if !strings.Contains(result, "namespace: loop-runtime-acme-webapp-production") {
+		t.Errorf("namespace should be loop-runtime-{tenant}-{project}-{env}; rendered:\n%s", result)
 	}
 }
 
@@ -664,8 +664,8 @@ func TestRender_ServiceAccount_Dedicated(t *testing.T) {
 	}
 
 	dep := parseDeployment(t, mustRender(t, input))
-	if dep.Spec.Template.Spec.ServiceAccountName != "loopruntime-app" {
-		t.Errorf("serviceAccountName: got %q, want loopruntime-app", dep.Spec.Template.Spec.ServiceAccountName)
+	if dep.Spec.Template.Spec.ServiceAccountName != "loop-runtime-app" {
+		t.Errorf("serviceAccountName: got %q, want loop-runtime-app", dep.Spec.Template.Spec.ServiceAccountName)
 	}
 	if dep.Spec.Template.Spec.AutomountServiceAccountToken == nil || *dep.Spec.Template.Spec.AutomountServiceAccountToken {
 		t.Error("automountServiceAccountToken must be false")

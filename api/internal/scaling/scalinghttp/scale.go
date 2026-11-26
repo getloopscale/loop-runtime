@@ -82,7 +82,7 @@ type ScaleApplyFunc func(ctx context.Context, cfg ScaleConfigInput) (changed boo
 // to avoid importing services here). Returns (allowed, planName, cap)
 // for the given tenant + requested replica count.
 //
-// Red Team loopruntime-cloud#101 absorption (2026-06-27): the scale endpoint
+// Red Team loop-console#101 absorption (2026-06-27): the scale endpoint
 // previously had ZERO max-replica enforcement. A Starter-tier tenant
 // could POST replicas:999 and the apply path would honor it (the
 // build path enforced via this same checker, but the LIVE scale path
@@ -152,7 +152,7 @@ func (h *ScaleHandler) SetPlanTierStore(s pkgdomain.PlanTierStore) {
 
 // SetReplicasChecker wires the per-plan replica cap checker used to
 // reject /scale requests that exceed the tenant's plan limit. Red Team
-// loopruntime-cloud#101 (2026-06-27): scale endpoint had ZERO replica cap
+// loop-console#101 (2026-06-27): scale endpoint had ZERO replica cap
 // enforcement before this wiring — Starter tier could set replicas:999.
 // Production setup at setup_orchestrator.go wires the same
 // planLimiterCapAdapter used by the build path so both paths share one
@@ -382,7 +382,7 @@ func validateScaleMode(fixed, auto bool) *loopruntimeerrors.LoopRuntimeError {
 }
 
 // validateReplicaBounds refuses replica counts outside what the mode allows.
-// Red Team loopruntime-cloud#103: these are client input errors, answered as 400
+// Red Team loop-console#103: these are client input errors, answered as 400
 // INVALID_REPLICAS, never as a 5xx.
 func (req *scaleRequest) validateReplicaBounds(fixed bool) *loopruntimeerrors.LoopRuntimeError {
 	switch {
@@ -413,10 +413,10 @@ func (h *ScaleHandler) enforceLimits(
 	if err := h.enforceKEDA(req, planTier); err != nil {
 		return err
 	}
-	// Red Team loopruntime-cloud#101 absorption (2026-06-27): enforce the
+	// Red Team loop-console#101 absorption (2026-06-27): enforce the
 	// per-plan max-replicas cap on EVERY mutation path, not just the
 	// build path. The cap is the same one services.enforceScaling
-	// already uses for loopruntime deploy; wiring it here covers loopruntime scale
+	// already uses for loop-runtime deploy; wiring it here covers loop-runtime scale
 	// + the dashboard scale form + any direct API client. Without
 	// this, Starter tier could set replicas:999 and the apply path
 	// honored it.

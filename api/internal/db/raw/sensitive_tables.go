@@ -14,7 +14,7 @@
 package raw
 
 // SensitiveTables is the committed exclusion list of tables that
-// raw queries CANNOT touch. Enforced by the cmd/loopruntime-ops/internal/quality/tenantpredicate/
+// raw queries CANNOT touch. Enforced by the cmd/loop-runtime-ops/internal/quality/tenantpredicate/
 // gate which scans every .go file under this package for references
 // to these table names.
 //

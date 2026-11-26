@@ -36,7 +36,7 @@ func violationCount(plan string) float64 {
 // unlimited, blocks-new-only for grandfathered accounts, and never exceeds the
 // cap under concurrency (the advisory-lock atomic guard).
 //
-//	DATABASE_URL=postgres://loopruntime:loopruntime@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapPerAccount -race -v
+//	DATABASE_URL=postgres://loop_runtime:loop_runtime@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapPerAccount -race -v
 
 // realProjectCapChecker adapts a real PlanLimiter to store.ProjectCapChecker.
 type realProjectCapChecker struct{ l *enforcement.PlanLimiter }
@@ -58,7 +58,7 @@ func projectCapStore(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 	}
 	t.Cleanup(func() { _ = stdDB.Close() })
 	// The plan is read through the cross-tenant worker role, as main wires it
-	// (wirePlanEnforcement): seedDBURL is LOOPRUNTIME_WORKER_DATABASE_URL.
+	// (wirePlanEnforcement): seedDBURL is LOOP_RUNTIME_WORKER_DATABASE_URL.
 	limiter := enforcement.NewPlanLimiter(store.NewPlanLimitsStore(&db.PgxAdapter{Pool: workerPool(t)}), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	// The store runs as main wires it: on the request pool, whose connections
 	// carry the caller's tenant scope, and counting the Account's projects

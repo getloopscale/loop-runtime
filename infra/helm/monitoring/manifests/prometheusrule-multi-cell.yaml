@@ -13,23 +13,23 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-multi-cell-alerts
+  name: loop-runtime-multi-cell-alerts
   namespace: monitoring
   labels:
     release: monitoring
     runtime.getloopscale.com/component: multi-cell
 spec:
   groups:
-    - name: loopruntime.multi-cell
+    - name: loop-runtime.multi-cell
       rules:
         # === Routing decisions ===
         - alert: MultiCellRouterErrorRate
           expr: |
-            sum by (cell) (rate(loopruntime_cell_routing_decisions_total{decision="error"}[5m])) > 0.01
+            sum by (cell) (rate(loop_runtime_cell_routing_decisions_total{decision="error"}[5m])) > 0.01
           for: 5m
           labels:
             severity: critical
-            loopruntime_component: cell-router
+            loop_runtime_component: cell-router
           annotations:
             summary: "Cell router emitting error decisions for {{ $labels.cell }}"
             runbook: "docs/runbooks.md — halt criteria per stage, and what to do when one is met (added 2026-09-07: mapped to the runbook that covers this domain, not written from scratch)"
@@ -41,27 +41,27 @@ spec:
 
         # === Cell connectivity / health ===
         - alert: CellUnhealthy
-          expr: loopruntime_cell_health == 0
+          expr: loop_runtime_cell_health == 0
           for: 2m
           labels:
             severity: critical
-            loopruntime_component: cell-router
+            loop_runtime_component: cell-router
           annotations:
             summary: "Cell {{ $labels.cell }} unhealthy"
             runbook: "docs/runbooks.md — halt criteria per stage, and what to do when one is met (added 2026-09-07: mapped to the runbook that covers this domain, not written from scratch)"
             description: |
-              loopruntime_cell_health for cell {{ $labels.cell }} has been 0 for 2m.
+              loop_runtime_cell_health for cell {{ $labels.cell }} has been 0 for 2m.
               Either the ClusterCredential reports status.connected=false or
               the active probe failed. Tenants pinned to this cell cannot
               deploy. Confirm via:
-                kubectl get clustercredential -n loopruntime-system -l runtime.getloopscale.com/cell={{ $labels.cell }} -o yaml
+                kubectl get clustercredential -n loop-runtime-system -l runtime.getloopscale.com/cell={{ $labels.cell }} -o yaml
 
         - alert: ClusterCredentialDisconnected
-          expr: loopruntime_cluster_credential_status{connected="false"} == 1
+          expr: loop_runtime_cluster_credential_status{connected="false"} == 1
           for: 1m
           labels:
             severity: critical
-            loopruntime_component: cluster-credential
+            loop_runtime_component: cluster-credential
           annotations:
             summary: "ClusterCredential for cell {{ $labels.cell }} disconnected"
             runbook: "docs/runbooks.md — halt criteria per stage, and what to do when one is met (added 2026-09-07: mapped to the runbook that covers this domain, not written from scratch)"
@@ -75,11 +75,11 @@ spec:
         # === Capacity ===
         - alert: CellCapacityWarning
           expr: |
-            loopruntime_cell_capacity_pods{cell!=""} > 800
+            loop_runtime_cell_capacity_pods{cell!=""} > 800
           for: 10m
           labels:
             severity: warning
-            loopruntime_component: cell-router
+            loop_runtime_component: cell-router
           annotations:
             summary: "Cell {{ $labels.cell }} approaching pod capacity"
             runbook: "docs/runbooks.md — halt criteria per stage, and what to do when one is met (added 2026-09-07: mapped to the runbook that covers this domain, not written from scratch)"
@@ -91,11 +91,11 @@ spec:
 
         - alert: CellCapacityCritical
           expr: |
-            loopruntime_cell_capacity_pods{cell!=""} > 1500
+            loop_runtime_cell_capacity_pods{cell!=""} > 1500
           for: 5m
           labels:
             severity: critical
-            loopruntime_component: cell-router
+            loop_runtime_component: cell-router
           annotations:
             summary: "Cell {{ $labels.cell }} at critical pod capacity"
             runbook: "docs/runbooks.md — halt criteria per stage, and what to do when one is met (added 2026-09-07: mapped to the runbook that covers this domain, not written from scratch)"
@@ -107,16 +107,16 @@ spec:
 
         # === Discovery + orphans (existing metrics, paired alerts) ===
         - alert: CellDiscoveryEmpty
-          expr: loopruntime_cell_discovery_count == 0
+          expr: loop_runtime_cell_discovery_count == 0
           for: 2m
           labels:
             severity: critical
-            loopruntime_component: cell-router
+            loop_runtime_component: cell-router
           annotations:
             summary: "Cell router discovered zero cells"
             runbook: "docs/runbooks.md — halt criteria per stage, and what to do when one is met (added 2026-09-07: mapped to the runbook that covers this domain, not written from scratch)"
             description: |
-              loopruntime_cell_discovery_count == 0 for 2m. Either no
+              loop_runtime_cell_discovery_count == 0 for 2m. Either no
               ClusterCredential CRs exist with status.connected=true, or
               the K8sCellStore lost connectivity to the K8s API. NO
               tenant deploys can route until at least one cell is
@@ -125,11 +125,11 @@ spec:
               (check api logs for "refusing to clear N known cells").
 
         - alert: OrphanedTenants
-          expr: loopruntime_orphaned_tenants > 0
+          expr: loop_runtime_orphaned_tenants > 0
           for: 5m
           labels:
             severity: warning
-            loopruntime_component: cell-router
+            loop_runtime_component: cell-router
           annotations:
             summary: "{{ $value }} tenants orphaned (assigned to missing cells)"
             runbook: "docs/runbooks.md — halt criteria per stage, and what to do when one is met (added 2026-09-07: mapped to the runbook that covers this domain, not written from scratch)"

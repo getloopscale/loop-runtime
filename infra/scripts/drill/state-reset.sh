@@ -218,8 +218,8 @@ except Exception:
     exit 2
   fi
 
-  CLUSTER_COUNT=$(doctl kubernetes cluster list --no-header 2>/dev/null | grep -c loopruntime-drill || echo 0)
-  DB_COUNT=$(doctl databases list --no-header 2>/dev/null | grep -c loopruntime-drill || echo 0)
+  CLUSTER_COUNT=$(doctl kubernetes cluster list --no-header 2>/dev/null | grep -c loop-runtime-drill || echo 0)
+  DB_COUNT=$(doctl databases list --no-header 2>/dev/null | grep -c loop-runtime-drill || echo 0)
 
   if [[ "$CLUSTER_COUNT" -gt 0 || "$DB_COUNT" -gt 0 ]]; then
     log "Cloud has REAL resources ($CLUSTER_COUNT clusters + $DB_COUNT DBs)"

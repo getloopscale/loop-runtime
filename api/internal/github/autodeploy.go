@@ -45,7 +45,7 @@ type AutoDeployConfig struct {
 	BuildCanceller BuildCanceller
 	ObjectStore    ObjectUploader
 	BuildSubmitter BuildSubmitter
-	SourceBucket   string // S3 bucket for source bundles (default: "loopruntime-builds")
+	SourceBucket   string // S3 bucket for source bundles (default: "loop-runtime-builds")
 	Logger         *slog.Logger
 	// BusyRetryEvery and BusyWait bound how a push waits for an environment
 	// that is deploying: one submit attempt per BusyRetryEvery, for at most
@@ -128,16 +128,16 @@ const (
 	// autoDeployEnvironment is the environment a push to the default branch
 	// deploys to.
 	autoDeployEnvironment = "production"
-	defaultSourceBucket   = "loopruntime-builds"
+	defaultSourceBucket   = "loop-runtime-builds"
 )
 
 // HandlePush processes a push event and triggers a deploy if the repo is linked.
 // This is called asynchronously from the webhook handler.
 func (d *AutoDeployer) HandlePush(ctx context.Context, req PushRequest) error {
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.github.autodeploy",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.github.autodeploy",
 		trace.WithAttributes(
-			attribute.String("loopruntime.github.repo", req.RepoFullName),
-			attribute.String("loopruntime.github.commit_sha", req.CommitSHA),
+			attribute.String("loop-runtime.github.repo", req.RepoFullName),
+			attribute.String("loop-runtime.github.commit_sha", req.CommitSHA),
 		))
 	defer span.End()
 
@@ -166,21 +166,21 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, req PushRequest) error {
 	}
 	defer src.close()
 
-	loopruntimeYaml, err := src.deployDescriptor()
+	loopRuntimeYaml, err := src.deployDescriptor()
 	if err != nil {
 		// Not deployable by the same rule Connect applies: nothing to build.
 		log.Warn("auto-deploy: repository is not deployable, skipping", "error", err)
 		d.markCommitUndeployable(log, req, owner, repo, err)
 		return nil
 	}
-	log.Info("auto-deploy: deploy descriptor found", "project_in_yaml", loopruntimeYaml.Project, "apps", len(loopruntimeYaml.Apps))
+	log.Info("auto-deploy: deploy descriptor found", "project_in_yaml", loopRuntimeYaml.Project, "apps", len(loopRuntimeYaml.Apps))
 
 	if err := d.stageBundle(ctx, src, req.TenantID, req.CommitSHA, req.CommitMessage, req.SenderLogin); err != nil {
 		return fmt.Errorf("auto-deploy: %w", err)
 	}
 
 	d.cancelSupersededBuilds(ctx, log, req)
-	if err := d.submitBuild(ctx, log, req, loopruntimeYaml); err != nil {
+	if err := d.submitBuild(ctx, log, req, loopRuntimeYaml); err != nil {
 		return err
 	}
 	d.markCommitPending(log, req, owner, repo)
@@ -201,7 +201,7 @@ func (d *AutoDeployer) cancelSupersededBuilds(ctx context.Context, log *slog.Log
 	}
 }
 
-func (d *AutoDeployer) submitBuild(ctx context.Context, log *slog.Logger, req PushRequest, loopruntimeYaml *LoopRuntimeYamlMinimal) error {
+func (d *AutoDeployer) submitBuild(ctx context.Context, log *slog.Logger, req PushRequest, loopRuntimeYaml *LoopRuntimeYamlMinimal) error {
 	if d.cfg.BuildSubmitter == nil {
 		log.Info("auto-deploy: build submitter not configured (webhook-only mode)")
 		return nil
@@ -216,7 +216,7 @@ func (d *AutoDeployer) submitBuild(ctx context.Context, log *slog.Logger, req Pu
 		Branch:          req.Branch,
 		CommitMessage:   req.CommitMessage,
 		SenderLogin:     req.SenderLogin,
-		LoopRuntimeYaml: loopruntimeYaml,
+		LoopRuntimeYaml: loopRuntimeYaml,
 	}
 	retryEvery, wait := d.cfg.BusyRetryEvery, d.cfg.BusyWait
 	if retryEvery <= 0 {
@@ -290,7 +290,7 @@ func (d *AutoDeployer) markCommitPending(log *slog.Logger, req PushRequest, owne
 		if err := d.cfg.AppClient.SetCommitStatus(statusCtx, req.InstallationID, owner, repo, req.CommitSHA, CommitStatus{
 			State:       "pending",
 			Description: "Deploying to production...",
-			Context:     "loopruntime/deploy",
+			Context:     "loop-runtime/deploy",
 		}); err != nil {
 			log.Warn("auto-deploy: set commit status failed", "error", err)
 		} else {
@@ -318,7 +318,7 @@ func (d *AutoDeployer) markCommitUndeployable(log *slog.Logger, req PushRequest,
 	if err := d.cfg.AppClient.SetCommitStatus(statusCtx, req.InstallationID, owner, repo, req.CommitSHA, CommitStatus{
 		State:       "failure",
 		Description: fitCommitStatusDescription(description),
-		Context:     "loopruntime/deploy",
+		Context:     "loop-runtime/deploy",
 	}); err != nil {
 		log.Warn("auto-deploy: set commit status failed", "error", err)
 		return
@@ -355,18 +355,18 @@ func (d *AutoDeployer) PrepareSourceBundle(ctx context.Context, repoFullName, co
 	}
 	defer src.close()
 
-	loopruntimeYaml, descriptorErr := src.deployDescriptor()
+	loopRuntimeYaml, descriptorErr := src.deployDescriptor()
 	if descriptorErr != nil {
 		log.Warn("prepare-source-bundle: repository is not deployable; the preview falls back to the last build's apps", "error", descriptorErr)
-		loopruntimeYaml = nil
+		loopRuntimeYaml = nil
 	} else {
-		log.Info("prepare-source-bundle: deploy descriptor parsed", "apps", len(loopruntimeYaml.Apps))
+		log.Info("prepare-source-bundle: deploy descriptor parsed", "apps", len(loopRuntimeYaml.Apps))
 	}
 
-	if err := d.stageBundle(ctx, src, tenantID, commitSHA, "preview build", "loopruntime-preview-service"); err != nil {
+	if err := d.stageBundle(ctx, src, tenantID, commitSHA, "preview build", "loop-runtime-preview-service"); err != nil {
 		return nil, fmt.Errorf("prepare-source-bundle: %w", err)
 	}
-	return loopruntimeYaml, nil
+	return loopRuntimeYaml, nil
 }
 
 func splitRepoFullName(repoFullName string) (owner, repo string, err error) {
@@ -391,7 +391,7 @@ func (d *AutoDeployer) downloadSource(ctx context.Context, installationID int64,
 	}
 	defer func() { _ = body.Close() }()
 
-	f, err := os.CreateTemp("", "loopruntime-github-source-*.tar.gz")
+	f, err := os.CreateTemp("", "loop-runtime-github-source-*.tar.gz")
 	if err != nil {
 		return nil, fmt.Errorf("create temp file: %w", err)
 	}
@@ -423,7 +423,7 @@ func (s *sourceTarball) close() {
 	_ = os.Remove(s.file.Name())
 }
 
-// stageBundle converts the tarball to a git bundle (the loopruntime-clone step
+// stageBundle converts the tarball to a git bundle (the loop-runtime-clone step
 // expects bundle format) and uploads it to `<tenantID>/source/<sha>.bundle`.
 // With no object store configured the upload is skipped with a warning.
 func (d *AutoDeployer) stageBundle(ctx context.Context, src *sourceTarball, tenantID, commitSHA, commitMessage, author string) error {
@@ -468,7 +468,7 @@ type LoopRuntimeYamlMinimal struct {
 }
 
 // tarballToGitBundle converts a GitHub tarball (.tar.gz) into a git bundle.
-// The loopruntime-clone CWT expects git bundle format, not raw tarballs.
+// The loop-runtime-clone CWT expects git bundle format, not raw tarballs.
 // Process: safe extract tarball (StripComponents=1) → git init → git add → git commit → git bundle create.
 //
 // SEC: Uses archive.SafeExtractTarGz with symlink rejection, path traversal
@@ -480,7 +480,7 @@ type LoopRuntimeYamlMinimal struct {
 // push and a PR preview, or two tenants deploying one upstream commit) must
 // never share, and delete, one another's bundle.
 func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commitMessage, author string) (string, func(), error) {
-	tmpDir, err := os.MkdirTemp("", "loopruntime-github-bundle-*")
+	tmpDir, err := os.MkdirTemp("", "loop-runtime-github-bundle-*")
 	if err != nil {
 		return "", nil, fmt.Errorf("create temp dir: %w", err)
 	}

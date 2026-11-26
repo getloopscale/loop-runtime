@@ -2,7 +2,7 @@
 #
 # DISCOVERY (2026-05-28 Ralph iter 4):
 # - cosign v2.4.3 sign pod (namespace=argo) hit `connection refused` calling Fulcio.
-# - LIVE iptables-save in k3d-loopruntime-build-server-0 revealed:
+# - LIVE iptables-save in k3d-loop-runtime-build-server-0 revealed:
 #     -A KUBE-POD-FW-<hash> -m comment "rule to REJECT traffic destined for
 #      POD name:fulcio-server ... namespace: fulcio-system"
 #      -m mark ! --mark 0x10000/0x10000 -j REJECT
@@ -25,10 +25,10 @@
 # - Defense-in-depth: only argo namespace can reach Sigstore signing services.
 #
 # APPLY:
-#   kubectl --context k3d-loopruntime-build apply -f sigstore-networkpolicies.yaml
+#   kubectl --context k3d-loop-runtime-build apply -f sigstore-networkpolicies.yaml
 #
 # VERIFY:
-#   kubectl --context k3d-loopruntime-build run nettest --rm -it --image=busybox:1.36 \
+#   kubectl --context k3d-loop-runtime-build run nettest --rm -it --image=busybox:1.36 \
 #     -n argo -- wget -qO- --timeout=5 http://fulcio-server.fulcio-system.svc:80
 
 ---
@@ -39,7 +39,7 @@ metadata:
   namespace: fulcio-system
   labels:
     app.kubernetes.io/name: fulcio
-    app.kubernetes.io/managed-by: loopruntime-m07-keyless
+    app.kubernetes.io/managed-by: loop-runtime-m07-keyless
     runtime.getloopscale.com/purpose: sigstore-ingress-from-argo
 spec:
   podSelector:
@@ -69,7 +69,7 @@ metadata:
   namespace: rekor-system
   labels:
     app.kubernetes.io/name: rekor
-    app.kubernetes.io/managed-by: loopruntime-m07-keyless
+    app.kubernetes.io/managed-by: loop-runtime-m07-keyless
     runtime.getloopscale.com/purpose: sigstore-ingress-from-argo
 spec:
   podSelector:
@@ -105,7 +105,7 @@ metadata:
   namespace: ctlog-system
   labels:
     app.kubernetes.io/name: ctlog
-    app.kubernetes.io/managed-by: loopruntime-m07-keyless
+    app.kubernetes.io/managed-by: loop-runtime-m07-keyless
     runtime.getloopscale.com/purpose: sigstore-ingress-from-fulcio
 spec:
   podSelector:

@@ -72,7 +72,7 @@ func TestEveryStreamOfTheCloudHostSkipsTheBufferingMiddleware(t *testing.T) {
     - name: rate-limit
       namespace: traefik
 `)
-	out := renderChart(t, uniqueChart(t, "loopruntime-cloud"), "loopruntime-cloud", nil, values)
+	out := renderChart(t, uniqueChart(t, "loop-console"), "loop-console", nil, values)
 	irs := ingressRoutesIn(t, out)
 	if len(irs) != 1 {
 		t.Fatalf("want 1 IngressRoute, got %d", len(irs))

@@ -50,7 +50,7 @@ func NewClient(accountID, namespaceID, apiToken string) *Client {
 }
 
 // Put writes a routing entry to KV. The key is the flat subdomain
-// (e.g., "tn-loopruntime-e2e-project-web-production").
+// (e.g., "tn-loop-runtime-e2e-project-web-production").
 // The entry is JSON-serialized before writing.
 func (c *Client) Put(ctx context.Context, subdomain string, entry interface{}) error {
 	start := time.Now()

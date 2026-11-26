@@ -7,7 +7,7 @@
 -- J-16 Settings — customer-facing workspace/deploy webhook registrations.
 -- Mirrors the approved 000025_memory_webhooks schema for a new resource: these
 -- webhooks fire on DEPLOY events (deploy.succeeded / deploy.failed / …) rather
--- than memory events. Consumed by the loopruntime-cloud WorkspaceWebhooksHandler.
+-- than memory events. Consumed by the loop-console WorkspaceWebhooksHandler.
 --
 -- Distinct from `webhook_events` (Stripe ingestion, 000001) and `memory_webhooks`
 -- (memory events, 000025). Webhook DELIVERY is NOT implemented in this v0.1 — the

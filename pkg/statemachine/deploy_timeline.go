@@ -7,7 +7,7 @@
 // Deploy → Live) with per-phase substate refinement only in Deploy
 // (sync_status + health_status — handled at the aggregator layer, NOT
 // here). The state machine enforces phase ordering monotonically:
-// invalid transitions panic per `loopruntime-design.md § State machines are
+// invalid transitions panic per `loop-runtime-design.md § State machines are
 // strict`. The aggregator owns its instance — concurrent access is a
 // programming bug.
 package statemachine
@@ -90,7 +90,7 @@ func (s *DeployTimelineState) Status() DeployTimelinePhaseStatus { return s.stat
 // non-Live phase /canceled.
 func (s *DeployTimelineState) IsTerminal() bool { return s.terminal }
 
-// Transition advances the state machine. Per `loopruntime-design.md` state
+// Transition advances the state machine. Per `loop-runtime-design.md` state
 // machines are strict: invalid transitions PANIC (programming error,
 // NOT runtime error). The aggregator goroutine wraps Transition() calls
 // in `defer recover()` so a panic converts to an ERROR log + DEGRADED

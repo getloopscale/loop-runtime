@@ -1,8 +1,8 @@
 {
   "title": "LoopRuntime — Sigstore Pipeline",
-  "uid": "loopruntime-sigstore-pipeline",
+  "uid": "loop-runtime-sigstore-pipeline",
   "tags": [
-    "loopruntime",
+    "loop-runtime",
     "sigstore",
     "supply-chain",
     "cosign"
@@ -45,23 +45,23 @@
       "id": 2,
       "type": "timeseries",
       "title": "Cosign sign duration P50 / P95 / P99 (s)",
-      "description": "Driven by loopruntime_cosign_sign_duration_seconds histogram. Alert LoopRuntimeCosignSignSlow fires when P99 > 60s for 10m.",
+      "description": "Driven by loop_runtime_cosign_sign_duration_seconds histogram. Alert LoopRuntimeCosignSignSlow fires when P99 > 60s for 10m.",
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
       "targets": [
         {
           "refId": "P50",
-          "expr": "histogram_quantile(0.50, rate(loopruntime_cosign_sign_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(loop_runtime_cosign_sign_duration_seconds_bucket[5m]))",
           "legendFormat": "P50 keyless={{keyless}}"
         },
         {
           "refId": "P95",
-          "expr": "histogram_quantile(0.95, rate(loopruntime_cosign_sign_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(loop_runtime_cosign_sign_duration_seconds_bucket[5m]))",
           "legendFormat": "P95 keyless={{keyless}}"
         },
         {
           "refId": "P99",
-          "expr": "histogram_quantile(0.99, rate(loopruntime_cosign_sign_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, rate(loop_runtime_cosign_sign_duration_seconds_bucket[5m]))",
           "legendFormat": "P99 keyless={{keyless}}"
         }
       ],
@@ -83,13 +83,13 @@
       "id": 3,
       "type": "timeseries",
       "title": "Cosign sign attempts/s by result",
-      "description": "loopruntime_cosign_sign_total counter — denominator for LoopRuntimeCosignSignErrorRate.",
+      "description": "loop_runtime_cosign_sign_total counter — denominator for LoopRuntimeCosignSignErrorRate.",
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1},
       "targets": [
         {
           "refId": "Total",
-          "expr": "sum(rate(loopruntime_cosign_sign_total[5m])) by (result)",
+          "expr": "sum(rate(loop_runtime_cosign_sign_total[5m])) by (result)",
           "legendFormat": "{{result}}"
         }
       ],
@@ -106,23 +106,23 @@
       "id": 11,
       "type": "timeseries",
       "title": "Cosign attest duration P50 / P95 / P99 (s)",
-      "description": "Driven by loopruntime_cosign_attest_duration_seconds histogram.",
+      "description": "Driven by loop_runtime_cosign_attest_duration_seconds histogram.",
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10},
       "targets": [
         {
           "refId": "P50",
-          "expr": "histogram_quantile(0.50, rate(loopruntime_cosign_attest_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(loop_runtime_cosign_attest_duration_seconds_bucket[5m]))",
           "legendFormat": "P50 keyless={{keyless}}"
         },
         {
           "refId": "P95",
-          "expr": "histogram_quantile(0.95, rate(loopruntime_cosign_attest_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(loop_runtime_cosign_attest_duration_seconds_bucket[5m]))",
           "legendFormat": "P95 keyless={{keyless}}"
         },
         {
           "refId": "P99",
-          "expr": "histogram_quantile(0.99, rate(loopruntime_cosign_attest_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, rate(loop_runtime_cosign_attest_duration_seconds_bucket[5m]))",
           "legendFormat": "P99 keyless={{keyless}}"
         }
       ],
@@ -132,13 +132,13 @@
       "id": 12,
       "type": "timeseries",
       "title": "Cosign attest attempts/s by result",
-      "description": "loopruntime_cosign_attest_total counter — denominator for attest error-rate.",
+      "description": "loop_runtime_cosign_attest_total counter — denominator for attest error-rate.",
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10},
       "targets": [
         {
           "refId": "Total",
-          "expr": "sum(rate(loopruntime_cosign_attest_total[5m])) by (result)",
+          "expr": "sum(rate(loop_runtime_cosign_attest_total[5m])) by (result)",
           "legendFormat": "{{result}}"
         }
       ],
@@ -155,13 +155,13 @@
       "id": 21,
       "type": "timeseries",
       "title": "Sign errors by component (stacked)",
-      "description": "loopruntime_cosign_sign_errors_total grouped by component. Use to root-cause LoopRuntimeCosignSignErrorRate alert.",
+      "description": "loop_runtime_cosign_sign_errors_total grouped by component. Use to root-cause LoopRuntimeCosignSignErrorRate alert.",
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 19},
       "targets": [
         {
           "refId": "Errors",
-          "expr": "sum(rate(loopruntime_cosign_sign_errors_total[5m])) by (component)",
+          "expr": "sum(rate(loop_runtime_cosign_sign_errors_total[5m])) by (component)",
           "legendFormat": "{{component}}"
         }
       ],
@@ -176,13 +176,13 @@
       "id": 22,
       "type": "timeseries",
       "title": "Attest errors by component (stacked)",
-      "description": "loopruntime_cosign_attest_errors_total grouped by component.",
+      "description": "loop_runtime_cosign_attest_errors_total grouped by component.",
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 19},
       "targets": [
         {
           "refId": "Errors",
-          "expr": "sum(rate(loopruntime_cosign_attest_errors_total[5m])) by (component)",
+          "expr": "sum(rate(loop_runtime_cosign_attest_errors_total[5m])) by (component)",
           "legendFormat": "{{component}}"
         }
       ],
@@ -210,7 +210,7 @@
       "targets": [
         {
           "refId": "NullRate",
-          "expr": "rate(loopruntime_release_attestation_rekor_url_null_total{result=\"null\"}[5m]) / clamp_min(rate(loopruntime_release_attestation_rekor_url_null_total{result=\"null\"}[5m]) + rate(loopruntime_release_attestation_rekor_url_null_total{result=\"populated\"}[5m]), 0.01)",
+          "expr": "rate(loop_runtime_release_attestation_rekor_url_null_total{result=\"null\"}[5m]) / clamp_min(rate(loop_runtime_release_attestation_rekor_url_null_total{result=\"null\"}[5m]) + rate(loop_runtime_release_attestation_rekor_url_null_total{result=\"populated\"}[5m]), 0.01)",
           "legendFormat": "null rate"
         }
       ],
@@ -238,17 +238,17 @@
       "targets": [
         {
           "refId": "P50",
-          "expr": "histogram_quantile(0.50, rate(loopruntime_fulcio_cert_issuance_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(loop_runtime_fulcio_cert_issuance_duration_seconds_bucket[5m]))",
           "legendFormat": "P50"
         },
         {
           "refId": "P95",
-          "expr": "histogram_quantile(0.95, rate(loopruntime_fulcio_cert_issuance_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(loop_runtime_fulcio_cert_issuance_duration_seconds_bucket[5m]))",
           "legendFormat": "P95"
         },
         {
           "refId": "P99",
-          "expr": "histogram_quantile(0.99, rate(loopruntime_fulcio_cert_issuance_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, rate(loop_runtime_fulcio_cert_issuance_duration_seconds_bucket[5m]))",
           "legendFormat": "P99"
         }
       ],

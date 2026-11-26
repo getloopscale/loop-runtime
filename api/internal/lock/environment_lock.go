@@ -46,11 +46,11 @@ type Tx = pgx.Tx
 func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant, project, env string, fn func(tx Tx) (T, error)) (T, error) {
 	// MEET-2026-03-30-020: Span wraps the entire lock lifecycle (acquire + fn + commit).
 	// Instrumented AROUND the lock, NOT inside the critical section (C3, meeting condition).
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.lock.acquire",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.lock.acquire",
 		trace.WithAttributes(
-			attribute.String("loopruntime.tenant", tenant),
-			attribute.String("loopruntime.project", project),
-			attribute.String("loopruntime.environment", env),
+			attribute.String("loop-runtime.tenant", tenant),
+			attribute.String("loop-runtime.project", project),
+			attribute.String("loop-runtime.environment", env),
 		))
 	defer span.End()
 

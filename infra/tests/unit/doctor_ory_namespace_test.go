@@ -10,7 +10,7 @@ import (
 )
 
 // The doctor must look for the Ory services where setup installs them. It kept
-// checking loopruntime-system after Ory moved to loopruntime-auth, so a healthy install printed four
+// checking loop-runtime-system after Ory moved to loop-runtime-auth, so a healthy install printed four
 // "not installed (required for cloud auth)" warnings — a doctor that cries wolf on a
 // clean run is one nobody reads (#407).
 func TestTheDoctorLooksForOryWhereTheHelmfileInstallsIt(t *testing.T) {

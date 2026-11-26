@@ -12,11 +12,11 @@ import (
 	"testing"
 )
 
-func newTestDeployer(t *testing.T, loopruntimeYaml string, cfg AutoDeployConfig) *AutoDeployer {
+func newTestDeployer(t *testing.T, loopRuntimeYaml string, cfg AutoDeployConfig) *AutoDeployer {
 	t.Helper()
 	files := map[string]string{"owner-repo-abc123/main.go": "package main"}
-	if loopruntimeYaml != "" {
-		files["owner-repo-abc123/loopzero.yaml"] = loopruntimeYaml
+	if loopRuntimeYaml != "" {
+		files["owner-repo-abc123/loopzero.yaml"] = loopRuntimeYaml
 	}
 	server := newGitHubTarballServerWithFiles(t, files)
 	t.Cleanup(server.Close)

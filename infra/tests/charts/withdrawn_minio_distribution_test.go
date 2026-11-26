@@ -31,7 +31,7 @@ func TestNothingReachesForAWithdrawnMinioChannel(t *testing.T) {
 	root := repoRoot(t)
 	for _, dir := range []string{"charts", "infra/helm", "infra/helmfile", "infra/images", "infra/tests/e2e", "taskfiles"} {
 		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, d os.DirEntry, err error) error {
-			// A symlink points into a tree this walk already covers (loopruntime-monitoring
+			// A symlink points into a tree this walk already covers (loop-runtime-monitoring
 			// links infra/helm/monitoring), so it is skipped rather than read twice.
 			if err != nil || !d.Type().IsRegular() || strings.HasSuffix(path, ".md") || strings.HasSuffix(path, "_test.go") {
 				return err
@@ -105,7 +105,7 @@ func TestMinioImagesBuildFromAVerifiedSourceCommit(t *testing.T) {
 	}
 }
 
-// The cache and clone steps run `sh -c` in loopruntime-clone-runner, an Alpine image, so
+// The cache and clone steps run `sh -c` in loop-runtime-clone-runner, an Alpine image, so
 // `sh` is BusyBox ash. The minio/mc image they used before was RHEL-based, where
 // `sh` is bash, and a bash-only construct worked there and fails here with
 // "syntax error: unexpected redirection" — measured on cache-save when the image
@@ -114,7 +114,7 @@ func TestMinioImagesBuildFromAVerifiedSourceCommit(t *testing.T) {
 var bashOnlyConstruct = regexp.MustCompile(`<<<|\bread\s+-[a-zA-Z]*a|\[@\]|\[\[\s|\bdeclare\s+-a\b`)
 
 func TestShellStepsInTheCloneRunnerUseOnlyPosixSh(t *testing.T) {
-	rendered := renderChart(t, publishedChart(t, "loopruntime-build-cwts"), "posix-sh", nil)
+	rendered := renderChart(t, publishedChart(t, "loop-runtime-build-cwts"), "posix-sh", nil)
 	var checked int
 	for _, doc := range strings.Split(rendered, "\n---") {
 		var cwt struct {
@@ -135,7 +135,7 @@ func TestShellStepsInTheCloneRunnerUseOnlyPosixSh(t *testing.T) {
 		}
 		for _, tpl := range cwt.Spec.Templates {
 			c := tpl.Container
-			if c == nil || !strings.Contains(c.Image, "loopruntime-clone-runner") || len(c.Command) < 3 || c.Command[0] != "sh" {
+			if c == nil || !strings.Contains(c.Image, "loop-runtime-clone-runner") || len(c.Command) < 3 || c.Command[0] != "sh" {
 				continue
 			}
 			checked++
@@ -151,12 +151,12 @@ func TestShellStepsInTheCloneRunnerUseOnlyPosixSh(t *testing.T) {
 		}
 	}
 	if checked == 0 {
-		t.Fatal("no `sh -c` step running loopruntime-clone-runner was found; the check measured nothing")
+		t.Fatal("no `sh -c` step running loop-runtime-clone-runner was found; the check measured nothing")
 	}
 }
 
-// loopruntime-minio is the server only: upstream's release image also carried mc, ours
-// does not, and the client lives in loopruntime-clone-runner (#394). A script that runs
+// loop-runtime-minio is the server only: upstream's release image also carried mc, ours
+// does not, and the client lives in loop-runtime-clone-runner (#394). A script that runs
 // `mc` inside the MinIO server pod therefore fails — measured when
 // provision-api-tokens.sh stopped a cold setup at "Ensuring MinIO buckets exist".
 // The buckets are declared once, in infra/helm/minio/values.yaml, and created by

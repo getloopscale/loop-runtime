@@ -18,18 +18,18 @@
 #   source infra/helmfile/scripts/lib/hydra-mint.sh
 #
 #   # Drill caller (DOKS):
-#   HYDRA_NAMESPACE=loopruntime-auth \
+#   HYDRA_NAMESPACE=loop-runtime-auth \
 #     HYDRA_PORT_LOCAL=4444 \
 #     KUBECTL_CMD="kubectl --kubeconfig=$DRILL_KUBECONFIG --insecure-skip-tls-verify" \
-#     CLIENT_ID=loopruntime-engine \
+#     CLIENT_ID=loop-runtime-engine \
 #     CLIENT_SECRET=$DRILL_HYDRA_SECRET \
 #     mint_jwt
 #
 #   # Local caller (k3d):
-#   HYDRA_NAMESPACE=loopruntime-system \
+#   HYDRA_NAMESPACE=loop-runtime-system \
 #     HYDRA_PORT_LOCAL=14444 \
 #     KUBECTL_CMD="kubectl --context $SEED_CTX" \
-#     CLIENT_ID=loopruntime-engine \
+#     CLIENT_ID=loop-runtime-engine \
 #     CLIENT_SECRET=$LOCAL_HYDRA_SECRET \
 #     mint_jwt
 #
@@ -95,7 +95,7 @@ hydra_mint_start_pf() {
 #   CLIENT_ID         — OAuth client_id
 #   CLIENT_SECRET     — OAuth client_secret
 #   SCOPE             — optional scope (default: empty)
-#   AUDIENCE          — optional audience (default: empty; drill uses "loopruntime-engine")
+#   AUDIENCE          — optional audience (default: empty; drill uses "loop-runtime-engine")
 #   MIN_JWT_TTL       — optional min TTL seconds (default: 0 disabled; drill EC-07 uses 7200)
 # Output: JWT to stdout
 # Exit: 0 success, 2 mint failure, 4 JWT TTL too short (EC-07)

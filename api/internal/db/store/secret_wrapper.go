@@ -148,14 +148,14 @@ func NewPostgresSecretStoreWithVault(db db.DBTX, vaultClient VaultTransitClient,
 // Post-fix, tenantAAD is included in Seal+Open so cross-tenant ciphertext
 // transplant fails the authentication tag → decrypt returns error rather
 // than wrong-tenant plaintext. The AAD is NOT secret (it's the canonical
-// label `loopruntime-secret-v1|tenant=<id>`); secrecy comes from the AES key,
+// label `loop-runtime-secret-v1|tenant=<id>`); secrecy comes from the AES key,
 // integrity from the AAD-bound tag.
 //
 // Format chosen for forward extensibility — future iterations may extend
 // to bind project/env/app/name; the `v1` prefix lets decrypt detect format
 // versions when migrating ciphertexts.
 func tenantAAD(tenantID string) []byte {
-	return []byte("loopruntime-secret-v1|tenant=" + tenantID)
+	return []byte("loop-runtime-secret-v1|tenant=" + tenantID)
 }
 
 // decrypt reads the legacy AES-256-GCM format. Reads nonce || ciphertext as written

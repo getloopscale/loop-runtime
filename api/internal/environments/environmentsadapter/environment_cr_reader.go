@@ -49,16 +49,16 @@ var environmentCRGVR = schema.GroupVersionResource{
 // a shallow check that returns true before reconciliation completes).
 type EnvironmentCRReader struct {
 	Client    dynamic.Interface
-	Namespace string // canonical "loopruntime-system" (matches operators/internal/tenant)
+	Namespace string // canonical "loop-runtime-system" (matches operators/internal/tenant)
 }
 
 var _ environments.EnvironmentReadinessChecker = (*EnvironmentCRReader)(nil)
 
 // NewEnvironmentCRReader constructs a reader bound to the core-cluster
-// dynamic client. Namespace defaults to "loopruntime-system" if empty.
+// dynamic client. Namespace defaults to "loop-runtime-system" if empty.
 func NewEnvironmentCRReader(client dynamic.Interface, namespace string) *EnvironmentCRReader {
 	if namespace == "" {
-		namespace = "loopruntime-system"
+		namespace = "loop-runtime-system"
 	}
 	return &EnvironmentCRReader{Client: client, Namespace: namespace}
 }
@@ -73,8 +73,8 @@ func NewEnvironmentCRReader(client dynamic.Interface, namespace string) *Environ
 // CR naming convention (M2 v1.2, 2026-06-07):
 //   - canonical (post-M2): `<tenantID>-<project>-<envName>` — when
 //     project is non-empty. Per `pkg/naming.Namespace` semantics, this
-//     matches the cell-0-cluster namespace `loopruntime-<tenant>-<project>-<env>`
-//     once the `loopruntime-` prefix is stripped (CR names live in mgmt, no prefix).
+//     matches the cell-0-cluster namespace `loop-runtime-<tenant>-<project>-<env>`
+//     once the `loop-runtime-` prefix is stripped (CR names live in mgmt, no prefix).
 //   - legacy (pre-M2 / production): `<tenantID>-<envName>` — when
 //     project is empty (ADR D2 — backward compatibility for tenants whose
 //     production env was provisioned before the M2 migration).

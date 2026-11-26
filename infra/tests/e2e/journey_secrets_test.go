@@ -48,7 +48,7 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 		workDir = copyFixture("secret-app")
 		initGitRepo(workDir)
 
-		// V9 L15: loopruntime secret set requires project record in DB. With L8
+		// V9 L15: loop-runtime secret set requires project record in DB. With L8
 		// env-per-journey isolation, each journey is now truly isolated, so
 		// the project must be created within the journey itself BEFORE
 		// attempting "sets secret before deploy". Pre-L8, journeys
@@ -130,8 +130,8 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 
 	It("redeploys after secret removal", func() {
 		// Remove secrets declaration from loopzero.yaml to avoid MISSING_SECRETS.
-		loopruntimeYAML := workDir + "/loopzero.yaml"
-		content, err := os.ReadFile(loopruntimeYAML)
+		loopRuntimeYAML := workDir + "/loopzero.yaml"
+		content, err := os.ReadFile(loopRuntimeYAML)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Remove the secrets: line from loopzero.yaml.
@@ -144,7 +144,7 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 			}
 			filtered = append(filtered, line)
 		}
-		err = os.WriteFile(loopruntimeYAML, []byte(strings.Join(filtered, "\n")), 0644)
+		err = os.WriteFile(loopRuntimeYAML, []byte(strings.Join(filtered, "\n")), 0644)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Commit the change.

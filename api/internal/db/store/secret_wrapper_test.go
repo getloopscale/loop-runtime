@@ -30,7 +30,7 @@ package store
 //
 // Per D6 ADR of the plan, this is an integration test against a real
 // PostgreSQL instance via DATABASE_URL (default
-// postgres://postgres:postgres@localhost:5432/loopruntime_test). Skips
+// postgres://postgres:postgres@localhost:5432/loop_runtime_test). Skips
 // gracefully when PG is unreachable so the wider unit suite is not
 // blocked by infra availability.
 

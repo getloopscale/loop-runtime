@@ -33,7 +33,7 @@ import {
   healthCheck,
   verifyAppLive,
   appURL,
-} from './lib/loopruntime-api.js';
+} from './lib/loop-runtime-api.js';
 import { thresholdsFor } from './lib/thresholds.js';
 import { loadBundleBytes } from '../fixtures/bundle-builder.js';
 
@@ -80,7 +80,7 @@ export default function (data) {
   const vuID = exec.vu.idInTest;
   const tenantID = `k6-l1-tn-${vuID}`;
   const userID = `k6-l1-user-${vuID}`;
-  const email = `k6-l1-${vuID}@loopruntime.test`;
+  const email = `k6-l1-${vuID}@loop-runtime.test`;
   const projectName = `k6-l1-app-${vuID}`;
 
   let commitSHA;
@@ -185,10 +185,10 @@ export function handleSummary(data) {
 
 function summaryText(data) {
   const m = data.metrics;
-  const succeeded = (m.loopruntime_build_succeeded || {}).values || {};
-  const deploy = (m.loopruntime_deploy_duration_ms || {}).values || {};
-  const verified = (m.loopruntime_app_verified || {}).values || {};
-  const verify = (m.loopruntime_app_verify_duration_ms || {}).values || {};
+  const succeeded = (m.loop_runtime_build_succeeded || {}).values || {};
+  const deploy = (m.loop_runtime_deploy_duration_ms || {}).values || {};
+  const verified = (m.loop_runtime_app_verified || {}).values || {};
+  const verify = (m.loop_runtime_app_verify_duration_ms || {}).values || {};
   return `
 ═════════════════════════════════════════════════════════
   L1 — 10 tenants (k6)

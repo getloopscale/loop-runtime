@@ -22,12 +22,12 @@
 //
 // Usage:
 //
-//	LOOPRUNTIME_API_URL=https://api.dev.getloopscale.com \
-//	LOOPRUNTIME_SERVICE_AUTH=... \
+//	LOOP_RUNTIME_API_URL=https://api.dev.getloopscale.com \
+//	LOOP_RUNTIME_SERVICE_AUTH=... \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityGitea \
 //	  -args -rps=100 -duration=30s -out=/tmp/capacity-bench/gitea-$(date +%s).json
 //
-// Opt-in: set LOOPRUNTIME_CAPACITY=1 to run these tests. Otherwise skipped.
+// Opt-in: set LOOP_RUNTIME_CAPACITY=1 to run these tests. Otherwise skipped.
 package capacity
 
 import (
@@ -154,13 +154,13 @@ func WriteResult(r Result, path string) error {
 	return enc.Encode(r)
 }
 
-// SkipUnlessCapacityEnabled skips the test unless LOOPRUNTIME_CAPACITY=1 is set.
+// SkipUnlessCapacityEnabled skips the test unless LOOP_RUNTIME_CAPACITY=1 is set.
 // Capacity tests assume a real environment + credentials; they are
 // opt-in to prevent CI from running them by default.
 func SkipUnlessCapacityEnabled(t *testing.T) {
 	t.Helper()
-	if os.Getenv("LOOPRUNTIME_CAPACITY") != "1" {
-		t.Skip("set LOOPRUNTIME_CAPACITY=1 to run capacity benchmarks")
+	if os.Getenv("LOOP_RUNTIME_CAPACITY") != "1" {
+		t.Skip("set LOOP_RUNTIME_CAPACITY=1 to run capacity benchmarks")
 	}
 }
 
@@ -245,8 +245,8 @@ func writeJSON(v interface{}, path string) error {
 
 // ScrapePrometheusMetric fetches the /metrics endpoint and extracts a single
 // gauge or counter value by exact metric name. For metrics WITHOUT labels
-// (e.g., go_memstats_heap_inuse_bytes, loopruntime_build_queue_depth) this returns
-// the unique value. For metrics WITH labels (e.g., loopruntime_builds_active{tenant})
+// (e.g., go_memstats_heap_inuse_bytes, loop_runtime_build_queue_depth) this returns
+// the unique value. For metrics WITH labels (e.g., loop_runtime_builds_active{tenant})
 // this returns ONLY the first label combination — use ScrapePrometheusMetricSum
 // instead to get the total across all label values.
 func ScrapePrometheusMetric(metricsURL, metricName string) (float64, error) {
@@ -262,7 +262,7 @@ func ScrapePrometheusMetric(metricsURL, metricName string) (float64, error) {
 
 // ScrapePrometheusMetricSum fetches the /metrics endpoint and SUMS all values
 // for a given metric name across all label combinations. This is required for
-// metrics like loopruntime_builds_active{tenant="..."} where each tenant has its own
+// metrics like loop_runtime_builds_active{tenant="..."} where each tenant has its own
 // time series. Without summing, you only get one tenant's count instead of the
 // total active builds across the cell.
 func ScrapePrometheusMetricSum(metricsURL, metricName string) (float64, error) {

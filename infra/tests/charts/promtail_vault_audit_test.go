@@ -16,7 +16,7 @@ import (
 
 // The OpenBao audit trail (T8.1 + T8.3 of plan 2026-06-02-openbao-adoption): Promtail
 // scrapes the audit log out of the secrets-system namespace and tags it
-// loopruntime_component=vault-audit, and the openbao-audit dashboard reads it by that tag.
+// loop_runtime_component=vault-audit, and the openbao-audit dashboard reads it by that tag.
 //
 // The scrape is read from the values Helmfile hands the chart, not from the gotmpl,
 // so what is asserted is what Promtail receives.
@@ -76,15 +76,15 @@ func TestPromtailExtractsTheAuditFields(t *testing.T) {
 }
 
 // TestPromtailTagsTheAuditStreamForTheDashboard — the dashboard and the two P1
-// alerts filter on loopruntime_component=vault-audit; without the label they match nothing.
+// alerts filter on loop_runtime_component=vault-audit; without the label they match nothing.
 func TestPromtailTagsTheAuditStreamForTheDashboard(t *testing.T) {
 	relabels, _ := vaultAuditJob(t)["relabel_configs"].([]any)
 	for _, r := range relabels {
-		if dig(r, "target_label") == "loopruntime_component" && dig(r, "replacement") == "vault-audit" {
+		if dig(r, "target_label") == "loop_runtime_component" && dig(r, "replacement") == "vault-audit" {
 			return
 		}
 	}
-	t.Errorf("no relabel sets loopruntime_component=vault-audit; relabel_configs: %v", relabels)
+	t.Errorf("no relabel sets loop_runtime_component=vault-audit; relabel_configs: %v", relabels)
 }
 
 func TestOpenBaoAuditDashboardCarriesItsPanelsAndDatasources(t *testing.T) {

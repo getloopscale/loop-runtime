@@ -17,34 +17,34 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
   name: gitea-outage
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   annotations:
     runtime.getloopscale.com/roadmap: "08"
     runtime.getloopscale.com/hypothesis: "Gitea outage = fast-fail builds, typed errors, no stuck state, no deadlocks"
-    # SLO: loopruntime-api scrape still alive post-outage AND release backlog
+    # SLO: loop-runtime-api scrape still alive post-outage AND release backlog
     # under control. Canonical metric names per 2026-06-24 audit
-    # (post-decomposition rename): loopruntime_api_requests_total (was
-    # loopruntime_http_requests_total), loopruntime_releases_pending (was
-    # loopruntime_releases_ready_over_timeout — reaper now emits queue depth
-    # directly). Steady-state: ≥ 1 loopruntime_api_requests_total series AND
+    # (post-decomposition rename): loop_runtime_api_requests_total (was
+    # loop_runtime_http_requests_total), loop_runtime_releases_pending (was
+    # loop_runtime_releases_ready_over_timeout — reaper now emits queue depth
+    # directly). Steady-state: ≥ 1 loop_runtime_api_requests_total series AND
     # release queue ≤ 5. `and on()` joins heterogeneous vectors;
     # `or vector(...)` defaults when metrics scrape lag.
     runtime.getloopscale.com/slo-query: |
-      ((count(loopruntime_api_requests_total) or vector(0)) > 0) and on() ((sum(loopruntime_releases_pending) or vector(0)) <= 5)
+      ((count(loop_runtime_api_requests_total) or vector(0)) > 0) and on() ((sum(loop_runtime_releases_pending) or vector(0)) <= 5)
 spec:
   action: partition
   mode: all
   selector:
     namespaces:
-      - loopruntime-system
+      - loop-runtime-system
     labelSelectors:
-      "app": "loopruntime-api"
+      "app": "loop-runtime-api"
   direction: to
   target:
     mode: all
     selector:
       namespaces:
-        - loopruntime-system
+        - loop-runtime-system
       labelSelectors:
         "app.kubernetes.io/name": "gitea"
   duration: "120s"

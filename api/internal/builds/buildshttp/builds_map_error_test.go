@@ -16,7 +16,7 @@ import (
 	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
-// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loopruntime-cloud#34):
+// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loop-console#34):
 // mapBuildError ladder regression + discrimination tests. The ladder order
 // MUST stay: (1) typed *LoopRuntimeError dispatch including DEPLOY_IN_PROGRESS
 // short-circuit; (2) NEW build.AsSubmitBuildError dispatch with the

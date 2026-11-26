@@ -2,16 +2,16 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-probe-alerts
+  name: loop-runtime-probe-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopruntime.probes
+    - name: loop-runtime.probes
       rules:
         - alert: LoopRuntimeAPIProbeFailure
-          expr: probe_success{job="probe/monitoring/loopruntime-api-probe"} == 0
+          expr: probe_success{job="probe/monitoring/loop-runtime-api-probe"} == 0
           for: 2m
           labels:
             severity: critical
@@ -31,7 +31,7 @@ spec:
             runbook: "Check cert-manager Certificate resources. Verify ACME issuer is working. Renew manually if needed."
 
         - alert: LoopRuntimeProbeSlow
-          expr: probe_duration_seconds{job=~"probe/monitoring/loopruntime-.*"} > 10
+          expr: probe_duration_seconds{job=~"probe/monitoring/loop-runtime-.*"} > 10
           for: 5m
           labels:
             severity: warning

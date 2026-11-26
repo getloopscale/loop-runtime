@@ -327,7 +327,7 @@ func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, bu
 			// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
 			// Per ADR D1: SLSA L3 attestation chain — Rekor URL of
 			// cosign-attest step persisted alongside signature for
-			// downstream verification (loopruntime deploy --verify-attestation).
+			// downstream verification (loop-runtime deploy --verify-attestation).
 			// Empty when CosignAttestEnabled=false (default) or attest
 			// step never ran. Empty release column stays NULL.
 			if first.ImageAttestationRekorURL != "" {

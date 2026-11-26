@@ -39,7 +39,7 @@ func TestStatus_NotFoundCodes(t *testing.T) {
 }
 
 // M4 T1.1 — the per-Account project-cap typed error maps to 422 (mirrors
-// REPLICAS_EXCEED_PLAN; the canonical loopruntime cap status).
+// REPLICAS_EXCEED_PLAN; the canonical loop-runtime cap status).
 func TestStatus_ProjectsExceedPlan_422(t *testing.T) {
 	if got := Status(loopruntimeerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-x")); got != 422 {
 		t.Errorf("Status(PROJECTS_EXCEED_PLAN) = %d, want 422", got)

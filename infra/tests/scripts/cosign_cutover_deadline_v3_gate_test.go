@@ -30,8 +30,8 @@ func securityScriptPath(t *testing.T, name string) string {
 // so the script under test can be executed with zero cluster access.
 //
 // versionTarget is served as .data.target_version of the ConfigMap
-// loopruntime-cosign-version-config; versionSetAt as .data.set_at (empty = key
-// absent). loopruntime-cosign-config is always served as NotFound, which is its
+// loop-runtime-cosign-version-config; versionSetAt as .data.set_at (empty = key
+// absent). loop-runtime-cosign-config is always served as NotFound, which is its
 // measured live state (B-146: the cutover owner deliberately does not
 // provision it; issue #348).
 func kubectlStub(t *testing.T, versionTarget, versionSetAt string) string {
@@ -42,13 +42,13 @@ func kubectlStub(t *testing.T, versionTarget, versionSetAt string) string {
 		"jp=\"\"\n" +
 		"for a in \"$@\"; do\n" +
 		"  case \"$a\" in\n" +
-		"    loopruntime-cosign-version-config) name=version ;;\n" +
-		"    loopruntime-cosign-config) name=cosign ;;\n" +
+		"    loop-runtime-cosign-version-config) name=version ;;\n" +
+		"    loop-runtime-cosign-config) name=cosign ;;\n" +
 		"    jsonpath=*) jp=\"${a#jsonpath=}\" ;;\n" +
 		"  esac\n" +
 		"done\n" +
 		"if [[ \"$name\" == cosign ]]; then\n" +
-		"  echo 'Error from server (NotFound): configmaps \"loopruntime-cosign-config\" not found' >&2\n" +
+		"  echo 'Error from server (NotFound): configmaps \"loop-runtime-cosign-config\" not found' >&2\n" +
 		"  exit 1\n" +
 		"fi\n" +
 		"if [[ \"$name\" == version ]]; then\n" +
@@ -96,13 +96,13 @@ func runCutoverGuard(t *testing.T, versionTarget, versionSetAt string) (int, str
 // TestCutoverGuard_BaselineVersionIsNotAPendingUpgrade locks the contract that
 // the chart, the script header and the script body must agree on.
 //
-// charts/loopruntime-admission-policies/templates/cosign-version-config.yaml ships
+// charts/loop-runtime-admission-policies/templates/cosign-version-config.yaml ships
 // target_version=v2.4.3 with set_at omitted and documents that state as
 // "no upgrade pending"; it declares set_at REQUIRED only when
 // targetVersion != v2.4.3. The script header says the same ("set_at REQUIRED
 // when target_version=v3").
 //
-// Measured live 2026-09-05 on k3d-loopruntime-core: the ConfigMap exists exactly in
+// Measured live 2026-09-05 on k3d-loop-runtime-core: the ConfigMap exists exactly in
 // that shipped default state (target_version=v2.4.3, no set_at), and the guard
 // exited 1 — refusing an "ambiguous deadline" for a version that is the
 // baseline, not an upgrade target. The v3 pre-check runs before the keyed/
@@ -121,11 +121,11 @@ func TestCutoverGuard_BaselineVersionIsNotAPendingUpgrade(t *testing.T) {
 			"pending'.\nexit=%d\noutput:\n%s", code, out)
 	}
 	if code != 2 {
-		t.Fatalf("expected exit 2 (mode unreadable — loopruntime-cosign-config is absent by the "+
+		t.Fatalf("expected exit 2 (mode unreadable — loop-runtime-cosign-config is absent by the "+
 			"B-146 decision), got exit %d\noutput:\n%s", code, out)
 	}
 	if !strings.Contains(out, "cannot read mode from ConfigMap") {
-		t.Fatalf("expected the loud missing-input failure naming loopruntime-cosign-config, "+
+		t.Fatalf("expected the loud missing-input failure naming loop-runtime-cosign-config, "+
 			"got:\n%s", out)
 	}
 }

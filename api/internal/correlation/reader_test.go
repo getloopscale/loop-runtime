@@ -42,7 +42,7 @@ func TestRead_LegacyHeader(t *testing.T) {
 
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/promote", nil)
 	r.Header.Set("X-Correlation-ID", "corr-legacy-456")
-	r.Header.Set("User-Agent", "loopruntime-cli/0.4.0")
+	r.Header.Set("User-Agent", "loop-runtime-cli/0.4.0")
 
 	got := Read(r)
 	if got != "corr-legacy-456" {
@@ -52,7 +52,7 @@ func TestRead_LegacyHeader(t *testing.T) {
 	if !strings.Contains(logged, "deprecated") {
 		t.Errorf("legacy header MUST emit deprecation WARN; log: %s", logged)
 	}
-	if !strings.Contains(logged, "loopruntime-cli/0.4.0") {
+	if !strings.Contains(logged, "loop-runtime-cli/0.4.0") {
 		t.Errorf("WARN MUST include User-Agent; log: %s", logged)
 	}
 }

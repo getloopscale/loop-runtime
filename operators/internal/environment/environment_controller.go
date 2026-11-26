@@ -63,7 +63,7 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=environments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=environments/finalizers,verbs=update
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants,verbs=get;list;watch;patch
-// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch
 type EnvironmentReconciler struct {
 	client.Client
 	RuntimeFactory   cellrouting.RuntimeClientFactory

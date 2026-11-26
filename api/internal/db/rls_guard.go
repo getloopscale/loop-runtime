@@ -98,10 +98,10 @@ func AssertRequestPoolIsolated(ctx context.Context, pool *pgxpool.Pool) error {
 
 	reason := fmt.Sprintf("the role owns %s, and an owner escapes FORCE by holding the DDL "+
 		"that can lift it (`ALTER TABLE ... NO FORCE`)", probeTable)
-	fix := "point DATABASE_URL at the non-owner request role (loopruntime_api)"
+	fix := "point DATABASE_URL at the non-owner request role (loop_runtime_api)"
 	if posture.BypassRLS {
 		reason = "the role has BYPASSRLS, so isolation policies are never evaluated"
-		fix = "point DATABASE_URL at a non-owner role without BYPASSRLS (loopruntime_api), " +
+		fix = "point DATABASE_URL at a non-owner role without BYPASSRLS (loop_runtime_api), " +
 			"or run `ALTER ROLE <role> NOBYPASSRLS`"
 	}
 
@@ -109,7 +109,7 @@ func AssertRequestPoolIsolated(ctx context.Context, pool *pgxpool.Pool) error {
 		"db: refusing to serve requests — the request pool can read across tenants: %s.\n"+
 			"  cause: %s\n"+
 			"  fix:   %s\n"+
-			"Background loops that legitimately span tenants use loopruntime_worker, which reaches "+
+			"Background loops that legitimately span tenants use loop_runtime_worker, which reaches "+
 			"them through the named *_worker_cross_tenant policies (migration 000062)",
 		posture, reason, fix)
 }
@@ -176,8 +176,8 @@ func MeasureBackgroundReach(ctx context.Context, pool *pgxpool.Pool, probeTable 
 // definition. Since migration 000062 the tenant tables are fail-closed, and the
 // request role holds no cross-tenant policy: over that pool a sweep does not
 // fail, it finds nothing. Measured on 2026-08-14 against a real database
-// holding one audit_log row: the owner without context read 0, loopruntime_api read 0,
-// loopruntime_worker read 1.
+// holding one audit_log row: the owner without context read 0, loop_runtime_api read 0,
+// loop_runtime_worker read 1.
 //
 // "Deleted 0 rows" and "reconciled 0 builds" are indistinguishable from a quiet
 // night. There is no runtime symptom, no error, and no metric that separates
@@ -186,7 +186,7 @@ func MeasureBackgroundReach(ctx context.Context, pool *pgxpool.Pool, probeTable 
 //
 // The check refuses BOTH failure modes, and they are different:
 //
-//   - no reach at all (loopruntime_api) → the loops would sweep nothing;
+//   - no reach at all (loop_runtime_api) → the loops would sweep nothing;
 //   - reach through an UNNAMED privilege (owner, BYPASSRLS) → the loops would
 //     work, while holding a broad standing privilege that no auditor can
 //     enumerate and nobody can revoke per table.
@@ -206,7 +206,7 @@ func AssertBackgroundPoolCrossTenant(ctx context.Context, pool *pgxpool.Pool) er
 			"db: refusing to start background loops — the pool reaches every tenant through an "+
 				"UNNAMED privilege: %s.\n"+
 				"  cause: %s\n"+
-				"  fix:   point LOOPRUNTIME_WORKER_DATABASE_URL at loopruntime_worker, whose reach is the named "+
+				"  fix:   point LOOP_RUNTIME_WORKER_DATABASE_URL at loop_runtime_worker, whose reach is the named "+
 				"*_worker_cross_tenant policies (migration 000062) — enumerable in pg_policies and "+
 				"revocable one table at a time",
 			posture,
@@ -220,7 +220,7 @@ func AssertBackgroundPoolCrossTenant(ctx context.Context, pool *pgxpool.Pool) er
 			"db: refusing to start background loops — the pool CANNOT cross tenants: %s.\n"+
 				"  cause: no policy on %s names this role, and the tables are fail-closed since "+
 				"migration 000062, so every sweep would read and delete NOTHING — silently\n"+
-				"  fix:   set LOOPRUNTIME_WORKER_DATABASE_URL to the loopruntime_worker role (migration 000023 "+
+				"  fix:   set LOOP_RUNTIME_WORKER_DATABASE_URL to the loop_runtime_worker role (migration 000023 "+
 				"created it; 000062 gave it the named *_worker_cross_tenant policies)",
 			posture, probeTable,
 		)

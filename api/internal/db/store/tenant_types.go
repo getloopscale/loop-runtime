@@ -40,7 +40,7 @@ type TenantDeletionCounts struct {
 
 // AdminTenantStore is the minimal contract consumed by the admin
 // eviction adapter (placementadapter.TenantDBDeleterAdapter) +
-// the LOOPRUNTIME_ADMIN_API handler. Queries here intentionally bypass tenant
+// the LOOP_RUNTIME_ADMIN_API handler. Queries here intentionally bypass tenant
 // scoping — the caller is authenticated as an operator and needs to
 // read/write across tenants.
 //

@@ -17,12 +17,12 @@
  * Migration pattern (T9.4):
  *   BEFORE (Pulumi.dev.yaml):
  *     config:
- *       loopruntime:cf-api-token:
+ *       loop-runtime:cf-api-token:
  *         secure: v1:AAAA==
  *
  *   AFTER (Pulumi.dev.yaml):
  *     config:
- *       loopruntime:cf-api-token-vault-path: api/secrets/cloudflare/api-token
+ *       loop-runtime:cf-api-token-vault-path: api/secrets/cloudflare/api-token
  *
  *   AFTER (TS code):
  *     const cfToken = await VaultSecretReader.read("api/secrets/cloudflare/api-token");
@@ -44,7 +44,7 @@ export interface VaultSecretSource {
   /**
    * Read a single secret value at the given KV-v2 path with named key.
    *
-   * @param path  Full Vault path (e.g., `secret/data/loopruntime/dev/api/secrets/cloudflare/api-token`)
+   * @param path  Full Vault path (e.g., `secret/data/loop-runtime/dev/api/secrets/cloudflare/api-token`)
    * @param key   Sub-key within the kv-v2 secret data map
    */
   read(path: string, key: string): pulumi.Output<string>;

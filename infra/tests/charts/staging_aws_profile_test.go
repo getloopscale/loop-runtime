@@ -17,30 +17,30 @@ import (
 // shapes infra-live gives them. The tests pass them explicitly instead of inheriting a
 // shell's.
 var stagingOutputs = []string{
-	"LOOPRUNTIME_DB_HOST=172.29.0.1",
-	"LOOPRUNTIME_DB_PORT=5432",
-	"LOOPRUNTIME_DB_NAME=loopruntime",
-	"LOOPRUNTIME_DB_MASTER_SECRET=arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!db-test",
-	"LOOPRUNTIME_CACHE_HOST=172.29.0.1",
-	"LOOPRUNTIME_CACHE_PORT=6379",
-	"LOOPRUNTIME_CACHE_AUTH_SECRET=arn:aws:secretsmanager:us-east-1:000000000000:secret:loopruntime-staging/valkey-auth-token-test",
-	"LOOPRUNTIME_VPC_ID=vpc-test",
-	"LOOPRUNTIME_CELL_CONTEXT=cell-0",
-	"LOOPRUNTIME_EDGE_KVS_ARN=" + stagingEdgeKVSArn,
+	"LOOP_RUNTIME_DB_HOST=172.29.0.1",
+	"LOOP_RUNTIME_DB_PORT=5432",
+	"LOOP_RUNTIME_DB_NAME=loop_runtime",
+	"LOOP_RUNTIME_DB_MASTER_SECRET=arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!db-test",
+	"LOOP_RUNTIME_CACHE_HOST=172.29.0.1",
+	"LOOP_RUNTIME_CACHE_PORT=6379",
+	"LOOP_RUNTIME_CACHE_AUTH_SECRET=arn:aws:secretsmanager:us-east-1:000000000000:secret:loop-runtime-staging/valkey-auth-token-test",
+	"LOOP_RUNTIME_VPC_ID=vpc-test",
+	"LOOP_RUNTIME_CELL_CONTEXT=cell-0",
+	"LOOP_RUNTIME_EDGE_KVS_ARN=" + stagingEdgeKVSArn,
 	// Not an infra-live output: core's secret-fetch ALB, which the task reads from its
 	// Ingress after the core sync and before the cells (secret_fetch_broker_test.go).
-	"LOOPRUNTIME_CORE_API_ALB_DNS_NAME=" + stagingCoreAPIALB,
+	"LOOP_RUNTIME_CORE_API_ALB_DNS_NAME=" + stagingCoreAPIALB,
 }
 
 const stagingEdgeKVSArn = "arn:aws:cloudfront::000000000000:key-value-store/edge-routes-test"
 
-// loopruntime-api publishes each app's public route to the edge's key value store, the
+// loop-runtime-api publishes each app's public route to the edge's key value store, the
 // app-routes output staging exports before the core sync.
 func TestStagingApiPublishesRoutesToTheEdgeKeyValueStore(t *testing.T) {
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopruntime-api", "charts/loopruntime-api", stagingOutputs...)
-	config := renderedObject(t, rendered, "ConfigMap", "loopruntime-api")
-	if got := dig(config, "data", "LOOPRUNTIME_EDGE_KVS_ARN"); got != stagingEdgeKVSArn {
-		t.Errorf("LOOPRUNTIME_EDGE_KVS_ARN = %v, want %s", got, stagingEdgeKVSArn)
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loop-runtime-api", "charts/loop-runtime-api", stagingOutputs...)
+	config := renderedObject(t, rendered, "ConfigMap", "loop-runtime-api")
+	if got := dig(config, "data", "LOOP_RUNTIME_EDGE_KVS_ARN"); got != stagingEdgeKVSArn {
+		t.Errorf("LOOP_RUNTIME_EDGE_KVS_ARN = %v, want %s", got, stagingEdgeKVSArn)
 	}
 }
 
@@ -66,9 +66,9 @@ func stagingInstalledReleases(t *testing.T, helmfile string) map[string]bool {
 func TestStagingRunsNoInClusterDataServices(t *testing.T) {
 	installed := stagingInstalledReleases(t, "core.helmfile.yaml.gotmpl")
 	for _, release := range []string{
-		"loopruntime-system/postgresql",
-		"loopruntime-system/gitea-redis",
-		"loopruntime-system/minio",
+		"loop-runtime-system/postgresql",
+		"loop-runtime-system/gitea-redis",
+		"loop-runtime-system/minio",
 	} {
 		if installed[release] {
 			t.Errorf("%s is installed on staging; the AWS profile uses the managed service instead", release)
@@ -77,9 +77,9 @@ func TestStagingRunsNoInClusterDataServices(t *testing.T) {
 	for _, release := range []string{
 		"external-secrets/external-secrets",
 		"external-secrets/aws-secrets-manager",
-		"loopruntime-system/database-bootstrap",
+		"loop-runtime-system/database-bootstrap",
 		"kube-system/aws-load-balancer-controller",
-		"loopruntime-system/loopruntime-api",
+		"loop-runtime-system/loop-runtime-api",
 	} {
 		if !installed[release] {
 			t.Errorf("%s is not installed on staging", release)
@@ -95,7 +95,7 @@ func TestStagingRunsNoInClusterDataServices(t *testing.T) {
 // Every workload that calls AWS carries the IRSA role infra-live creates for it, named
 // `<namePrefix>-<cluster>-<workload>` and trusting exactly that ServiceAccount.
 func TestStagingWorkloadsCarryTheirIRSARoles(t *testing.T) {
-	const prefix = "arn:aws:iam::000000000000:role/loopruntime-staging-"
+	const prefix = "arn:aws:iam::000000000000:role/loop-runtime-staging-"
 	cases := []struct {
 		helmfile, release string
 		path              []any
@@ -120,24 +120,24 @@ func TestStagingWorkloadsCarryTheirIRSARoles(t *testing.T) {
 		})
 	}
 
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopruntime-api", "charts/loopruntime-api", stagingOutputs...)
-	sa := renderedObject(t, rendered, "ServiceAccount", "loopruntime-api")
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loop-runtime-api", "charts/loop-runtime-api", stagingOutputs...)
+	sa := renderedObject(t, rendered, "ServiceAccount", "loop-runtime-api")
 	if sa == nil {
-		t.Fatal("loopruntime-api renders no ServiceAccount loopruntime-api")
+		t.Fatal("loop-runtime-api renders no ServiceAccount loop-runtime-api")
 	}
 	annotations, _ := dig(sa, "metadata", "annotations").(map[string]any)
-	if got := annotations["eks.amazonaws.com/role-arn"]; got != prefix+"core-loopruntime-api" {
-		t.Errorf("loopruntime-api ServiceAccount role-arn = %v, want %score-loopruntime-api", got, prefix)
+	if got := annotations["eks.amazonaws.com/role-arn"]; got != prefix+"core-loop-runtime-api" {
+		t.Errorf("loop-runtime-api ServiceAccount role-arn = %v, want %score-loop-runtime-api", got, prefix)
 	}
 }
 
-// loopruntime-api's database credentials are an ExternalSecret over the RDS master secret
+// loop-runtime-api's database credentials are an ExternalSecret over the RDS master secret
 // and the platform secret, and its request pool connects as the non-owner role.
 func TestStagingDatabaseCredentialsComeFromSecretsManager(t *testing.T) {
 	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "aws-secrets-manager", "infra/helm/aws-secrets-manager", stagingOutputs...)
-	es := renderedObject(t, rendered, "ExternalSecret", "loopruntime-db-credentials")
+	es := renderedObject(t, rendered, "ExternalSecret", "loop-runtime-db-credentials")
 	if es == nil {
-		t.Fatal("no ExternalSecret loopruntime-db-credentials")
+		t.Fatal("no ExternalSecret loop-runtime-db-credentials")
 	}
 	keys := map[string]bool{}
 	data, _ := dig(es, "spec", "data").([]any)
@@ -146,14 +146,14 @@ func TestStagingDatabaseCredentialsComeFromSecretsManager(t *testing.T) {
 		ref, _ := entry["remoteRef"].(map[string]any)
 		keys[ref["key"].(string)] = true
 	}
-	for _, want := range []string{"arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!db-test", "loopruntime/staging/platform"} {
+	for _, want := range []string{"arn:aws:secretsmanager:us-east-1:000000000000:secret:rds!db-test", "loop-runtime/staging/platform"} {
 		if !keys[want] {
-			t.Errorf("loopruntime-db-credentials does not read %s; reads %v", want, keys)
+			t.Errorf("loop-runtime-db-credentials does not read %s; reads %v", want, keys)
 		}
 	}
 	apiURI, _ := dig(es, "spec", "target", "template", "data", "api-uri").(string)
-	if !strings.HasPrefix(apiURI, "postgresql://loopruntime_api:") || !strings.Contains(apiURI, "@172.29.0.1:5432/loopruntime?sslmode=require") {
-		t.Errorf("api-uri = %q, want the loopruntime_api role on the RDS endpoint with TLS", apiURI)
+	if !strings.HasPrefix(apiURI, "postgresql://loop_runtime_api:") || !strings.Contains(apiURI, "@172.29.0.1:5432/loop_runtime?sslmode=require") {
+		t.Errorf("api-uri = %q, want the loop_runtime_api role on the RDS endpoint with TLS", apiURI)
 	}
 }
 
@@ -167,8 +167,8 @@ func TestStagingVeleroBackupLocationIsAWSS3(t *testing.T) {
 		t.Fatalf("backupStorageLocation = %v, want exactly one location", locations)
 	}
 	location, _ := locations[0].(map[string]any)
-	if got := location["bucket"]; got != "loopruntime-staging-velero-backups-000000000000" {
-		t.Errorf("bucket = %v, want loopruntime-staging-velero-backups-000000000000", got)
+	if got := location["bucket"]; got != "loop-runtime-staging-velero-backups-000000000000" {
+		t.Errorf("bucket = %v, want loop-runtime-staging-velero-backups-000000000000", got)
 	}
 	config, _ := location["config"].(map[string]any)
 	if url, ok := config["s3Url"]; ok {
@@ -211,63 +211,63 @@ func TestStagingEdgeIngressRegistersInstanceTargets(t *testing.T) {
 // TLS Secret never appears is dropped by Traefik ("secret ... does not exist"), which
 // leaves the host answering 404.
 func TestStagingAPIRouteLeavesTLSToTheEdge(t *testing.T) {
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopruntime-api", "charts/loopruntime-api", stagingOutputs...)
-	if cert := renderedObject(t, rendered, "Certificate", "loopruntime-api-tls"); cert != nil {
-		t.Errorf("loopruntime-api renders Certificate loopruntime-api-tls (issuer %v); the edge holds the public certificate",
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loop-runtime-api", "charts/loop-runtime-api", stagingOutputs...)
+	if cert := renderedObject(t, rendered, "Certificate", "loop-runtime-api-tls"); cert != nil {
+		t.Errorf("loop-runtime-api renders Certificate loop-runtime-api-tls (issuer %v); the edge holds the public certificate",
 			dig(cert, "spec", "issuerRef", "name"))
 	}
-	route := renderedObject(t, rendered, "IngressRoute", "loopruntime-api")
+	route := renderedObject(t, rendered, "IngressRoute", "loop-runtime-api")
 	if route == nil {
-		t.Fatal("loopruntime-api renders no IngressRoute")
+		t.Fatal("loop-runtime-api renders no IngressRoute")
 	}
 	if secret := dig(route, "spec", "tls", "secretName"); secret != nil {
-		t.Errorf("loopruntime-api IngressRoute tls.secretName = %v, want none", secret)
+		t.Errorf("loop-runtime-api IngressRoute tls.secretName = %v, want none", secret)
 	}
 }
 
-// loopruntime-cloud signs its session tokens with SESSION_TOKEN_SECRET. Without one it makes
+// loop-console signs its session tokens with SESSION_TOKEN_SECRET. Without one it makes
 // up a random secret per pod, and every token dies with the pod that issued it (#523 of
 // getloopscale/console). Staging reads it from the platform secret, through External
 // Secrets, into the Secret the chart mounts as existingSecret.
 func TestStagingCloudSessionSecretComesFromSecretsManager(t *testing.T) {
 	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "aws-secrets-manager", "infra/helm/aws-secrets-manager", stagingOutputs...)
-	es := renderedObject(t, rendered, "ExternalSecret", "loopruntime-cloud-secrets")
+	es := renderedObject(t, rendered, "ExternalSecret", "loop-console-secrets")
 	if es == nil {
-		t.Fatal("no ExternalSecret loopruntime-cloud-secrets")
+		t.Fatal("no ExternalSecret loop-console-secrets")
 	}
-	if ns, _ := dig(es, "metadata", "namespace").(string); ns != "loopruntime-system" {
-		t.Errorf("loopruntime-cloud-secrets is in namespace %q, want loopruntime-system", ns)
+	if ns, _ := dig(es, "metadata", "namespace").(string); ns != "loop-runtime-system" {
+		t.Errorf("loop-console-secrets is in namespace %q, want loop-runtime-system", ns)
 	}
 	found := false
 	data, _ := dig(es, "spec", "data").([]any)
 	for _, d := range data {
 		entry, _ := d.(map[string]any)
 		ref, _ := entry["remoteRef"].(map[string]any)
-		if entry["secretKey"] == "SESSION_TOKEN_SECRET" && ref["key"] == "loopruntime/staging/platform" && ref["property"] == "session-token-secret" {
+		if entry["secretKey"] == "SESSION_TOKEN_SECRET" && ref["key"] == "loop-runtime/staging/platform" && ref["property"] == "session-token-secret" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("loopruntime-cloud-secrets does not map session-token-secret of loopruntime/staging/platform onto SESSION_TOKEN_SECRET: %v", data)
+		t.Errorf("loop-console-secrets does not map session-token-secret of loop-runtime/staging/platform onto SESSION_TOKEN_SECRET: %v", data)
 	}
 
-	cloud := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopruntime-cloud", "charts/loopruntime-cloud", stagingOutputs...)
-	deployment := renderedObject(t, cloud, "Deployment", "loopruntime-cloud")
+	cloud := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loop-console", "charts/loop-console", stagingOutputs...)
+	deployment := renderedObject(t, cloud, "Deployment", "loop-console")
 	if deployment == nil {
-		t.Fatal("no Deployment loopruntime-cloud")
+		t.Fatal("no Deployment loop-console")
 	}
 	containers, _ := dig(deployment, "spec", "template", "spec", "containers").([]any)
 	mounted := false
 	for _, c := range containers {
 		sources, _ := dig(c, "envFrom").([]any)
 		for _, s := range sources {
-			if dig(s, "secretRef", "name") == "loopruntime-cloud-secrets" && dig(s, "secretRef", "optional") != true {
+			if dig(s, "secretRef", "name") == "loop-console-secrets" && dig(s, "secretRef", "optional") != true {
 				mounted = true
 			}
 		}
 	}
 	if !mounted {
-		t.Error("the loopruntime-cloud Deployment does not mount loopruntime-cloud-secrets as a required envFrom source")
+		t.Error("the loop-console Deployment does not mount loop-console-secrets as a required envFrom source")
 	}
 }
 
@@ -295,8 +295,8 @@ func TestStagingResendKeyReachesTheCourierFromItsOwnSecret(t *testing.T) {
 	if es == nil {
 		t.Fatal("no ExternalSecret ory-kratos-resend")
 	}
-	if got := externalSecretRefs(t, es)["apiKey"]; got != "loopruntime/staging/resend#api-key" {
-		t.Errorf("ory-kratos-resend reads the key from %q, want loopruntime/staging/resend#api-key", got)
+	if got := externalSecretRefs(t, es)["apiKey"]; got != "loop-runtime/staging/resend#api-key" {
+		t.Errorf("ory-kratos-resend reads the key from %q, want loop-runtime/staging/resend#api-key", got)
 	}
 	override, _ := dig(es, "spec", "target", "template", "data", "COURIER_HTTP_REQUEST_CONFIG_AUTH_CONFIG_VALUE").(string)
 	if !strings.HasPrefix(override, "Bearer ") || !strings.Contains(override, ".apiKey") {
@@ -318,42 +318,42 @@ func TestStagingResendKeyReachesTheCourierFromItsOwnSecret(t *testing.T) {
 	}
 }
 
-// loopruntime-cloud runs in production mode on staging, which refuses to start without its
+// loop-console runs in production mode on staging, which refuses to start without its
 // Stripe keys; staging's are test-mode keys, from their own secret.
 func TestStagingCloudRunsInProductionModeWithStripeTestKeys(t *testing.T) {
 	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "aws-secrets-manager", "infra/helm/aws-secrets-manager", stagingOutputs...)
-	es := renderedObject(t, rendered, "ExternalSecret", "loopruntime-cloud-secrets")
+	es := renderedObject(t, rendered, "ExternalSecret", "loop-console-secrets")
 	if es == nil {
-		t.Fatal("no ExternalSecret loopruntime-cloud-secrets")
+		t.Fatal("no ExternalSecret loop-console-secrets")
 	}
 	refs := externalSecretRefs(t, es)
 	for key, want := range map[string]string{
-		"STRIPE_API_KEY":        "loopruntime/staging/stripe#api-key",
-		"STRIPE_WEBHOOK_SECRET": "loopruntime/staging/stripe#webhook-secret",
-		"STRIPE_PRICE_STARTER":  "loopruntime/staging/stripe#price-starter",
-		"STRIPE_PRICE_PRO":      "loopruntime/staging/stripe#price-pro",
-		"STRIPE_PRICE_TEAM":     "loopruntime/staging/stripe#price-team",
+		"STRIPE_API_KEY":        "loop-runtime/staging/stripe#api-key",
+		"STRIPE_WEBHOOK_SECRET": "loop-runtime/staging/stripe#webhook-secret",
+		"STRIPE_PRICE_STARTER":  "loop-runtime/staging/stripe#price-starter",
+		"STRIPE_PRICE_PRO":      "loop-runtime/staging/stripe#price-pro",
+		"STRIPE_PRICE_TEAM":     "loop-runtime/staging/stripe#price-team",
 	} {
 		if refs[key] != want {
-			t.Errorf("loopruntime-cloud-secrets maps %s from %q, want %s", key, refs[key], want)
+			t.Errorf("loop-console-secrets maps %s from %q, want %s", key, refs[key], want)
 		}
 	}
 
-	cloud := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopruntime-cloud", "charts/loopruntime-cloud", stagingOutputs...)
-	config := renderedObject(t, cloud, "ConfigMap", "loopruntime-cloud")
-	if got := dig(config, "data", "LOOPRUNTIME_ENV"); got != "prod" {
-		t.Errorf("LOOPRUNTIME_ENV = %v, want prod (the console's production mode)", got)
+	cloud := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loop-console", "charts/loop-console", stagingOutputs...)
+	config := renderedObject(t, cloud, "ConfigMap", "loop-console")
+	if got := dig(config, "data", "LOOP_RUNTIME_ENV"); got != "prod" {
+		t.Errorf("LOOP_RUNTIME_ENV = %v, want prod (the console's production mode)", got)
 	}
 }
 
 // The control plane's traces reach the collector the core helmfile installs, which hands
-// them to Tempo. Unset, loopruntime-cloud dialled the console's default address,
+// them to Tempo. Unset, loop-console dialled the console's default address,
 // which no cluster resolves, every five seconds.
 func TestStagingControlPlaneTracesReachTheCollector(t *testing.T) {
 	const collector = "otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317"
 	for _, release := range []struct{ name, chart string }{
-		{"loopruntime-api", "charts/loopruntime-api"},
-		{"loopruntime-cloud", "charts/loopruntime-cloud"},
+		{"loop-runtime-api", "charts/loop-runtime-api"},
+		{"loop-console", "charts/loop-console"},
 	} {
 		rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", release.name, release.chart, stagingOutputs...)
 		config := renderedObject(t, rendered, "ConfigMap", release.name)
@@ -363,15 +363,15 @@ func TestStagingControlPlaneTracesReachTheCollector(t *testing.T) {
 	}
 }
 
-// loopruntime-api runs on core and reads the build cluster's Loki, which staging publishes
+// loop-runtime-api runs on core and reads the build cluster's Loki, which staging publishes
 // through an internal ALB the emulator serves at its endpoint with the ALB's DNSName in
 // the path. Before the ALB exists (a rebuild's first core sync) the chart's default
 // stands, and the core sync after the build one renders the ALB address.
 func TestStagingApiReadsLokiThroughTheBuildClusterALB(t *testing.T) {
 	const alb = "internal-k8s-monitoring-lokiinte-0123456789.us-east-1.elb.amazonaws.com"
-	env := append(append([]string{}, stagingOutputs...), "LOOPRUNTIME_LOKI_ALB_DNS_NAME="+alb)
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopruntime-api", "charts/loopruntime-api", env...)
-	config := renderedObject(t, rendered, "ConfigMap", "loopruntime-api")
+	env := append(append([]string{}, stagingOutputs...), "LOOP_RUNTIME_LOKI_ALB_DNS_NAME="+alb)
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loop-runtime-api", "charts/loop-runtime-api", env...)
+	config := renderedObject(t, rendered, "ConfigMap", "loop-runtime-api")
 	want := "https://172.29.0.1:9597/_aws/elasticloadbalancing/" + alb
 	if got := dig(config, "data", "LOKI_URL"); got != want {
 		t.Errorf("LOKI_URL = %v, want %s", got, want)
@@ -392,8 +392,8 @@ func TestStagingBuildSigningKeyComesFromSecretsManager(t *testing.T) {
 	}
 	refs := externalSecretRefs(t, es)
 	for _, key := range []string{"cosign.key", "cosign.pub", "cosign.password"} {
-		if got := refs[key]; got != "loopruntime/staging/cosign-signing-key#"+key {
-			t.Errorf("%s reads %q, want loopruntime/staging/cosign-signing-key#%s", key, got, key)
+		if got := refs[key]; got != "loop-runtime/staging/cosign-signing-key#"+key {
+			t.Errorf("%s reads %q, want loop-runtime/staging/cosign-signing-key#%s", key, got, key)
 		}
 	}
 }
@@ -401,27 +401,27 @@ func TestStagingBuildSigningKeyComesFromSecretsManager(t *testing.T) {
 // Builds push tenant app images under the ECR prefix infra-live's registry/ecr creates
 // repositories for on the first push, at the address the pods reach the registry by.
 func TestStagingBuildsPushTenantImagesToTheECRPrefix(t *testing.T) {
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopruntime-api", "charts/loopruntime-api", stagingOutputs...)
-	cm := renderedObject(t, rendered, "ConfigMap", "loopruntime-api")
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loop-runtime-api", "charts/loop-runtime-api", stagingOutputs...)
+	cm := renderedObject(t, rendered, "ConfigMap", "loop-runtime-api")
 	if cm == nil {
-		t.Fatal("loopruntime-api renders no ConfigMap loopruntime-api")
+		t.Fatal("loop-runtime-api renders no ConfigMap loop-runtime-api")
 	}
-	if got := dig(cm, "data", "REGISTRY_URL"); got != "172.29.0.1:9597/loopruntime-tenants" {
-		t.Errorf("REGISTRY_URL = %v, want 172.29.0.1:9597/loopruntime-tenants", got)
+	if got := dig(cm, "data", "REGISTRY_URL"); got != "172.29.0.1:9597/loop-runtime-tenants" {
+		t.Errorf("REGISTRY_URL = %v, want 172.29.0.1:9597/loop-runtime-tenants", got)
 	}
 }
 
 // The cells admit tenant pods whose images come from the tenant registry prefix, and no
 // longer from the DigitalOcean registry the policy named before ECR.
 func TestStagingCellsAdmitTenantImagesFromTheECRPrefix(t *testing.T) {
-	rendered := helmfileTemplate(t, "cell.helmfile.yaml.gotmpl", "staging", "admission-policies", "charts/loopruntime-admission-policies", stagingOutputs...)
-	vap := renderedObject(t, rendered, "ValidatingAdmissionPolicy", "loopruntime-restrict-image-registries")
+	rendered := helmfileTemplate(t, "cell.helmfile.yaml.gotmpl", "staging", "admission-policies", "charts/loop-runtime-admission-policies", stagingOutputs...)
+	vap := renderedObject(t, rendered, "ValidatingAdmissionPolicy", "loop-runtime-restrict-image-registries")
 	if vap == nil {
-		t.Fatal("no ValidatingAdmissionPolicy loopruntime-restrict-image-registries")
+		t.Fatal("no ValidatingAdmissionPolicy loop-runtime-restrict-image-registries")
 	}
 	expr, _ := dig(vap, "spec", "validations", 0, "expression").(string)
-	if !strings.Contains(expr, `c.image.startsWith("172.29.0.1:9597/loopruntime-tenants/")`) {
-		t.Errorf("container rule %q does not admit 172.29.0.1:9597/loopruntime-tenants/", expr)
+	if !strings.Contains(expr, `c.image.startsWith("172.29.0.1:9597/loop-runtime-tenants/")`) {
+		t.Errorf("container rule %q does not admit 172.29.0.1:9597/loop-runtime-tenants/", expr)
 	}
 	if strings.Contains(expr, "registry.digitalocean.com") {
 		t.Errorf("container rule %q still admits the DigitalOcean registry", expr)
@@ -433,23 +433,23 @@ func TestStagingCellsAdmitTenantImagesFromTheECRPrefix(t *testing.T) {
 // (identity/build-registry-push). The token lasts 12 hours.
 func TestStagingBuildRegistryCredentialIsAnECRTokenRefreshedByTheBuildCluster(t *testing.T) {
 	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", "staging", "ecr-registry-auth", "infra/helm/ecr-registry-auth", stagingOutputs...)
-	sa := renderedObject(t, rendered, "ServiceAccount", "loopruntime-registry-auth")
+	sa := renderedObject(t, rendered, "ServiceAccount", "loop-runtime-registry-auth")
 	if sa == nil {
-		t.Fatal("no ServiceAccount loopruntime-registry-auth")
+		t.Fatal("no ServiceAccount loop-runtime-registry-auth")
 	}
 	if ns := dig(sa, "metadata", "namespace"); ns != "argo" {
 		t.Errorf("ServiceAccount namespace = %v, want argo", ns)
 	}
 	annotations, _ := dig(sa, "metadata", "annotations").(map[string]any)
-	if got := annotations["eks.amazonaws.com/role-arn"]; got != "arn:aws:iam::000000000000:role/loopruntime-staging-build-registry-push" {
+	if got := annotations["eks.amazonaws.com/role-arn"]; got != "arn:aws:iam::000000000000:role/loop-runtime-staging-build-registry-push" {
 		t.Errorf("role-arn = %v, want the build-registry-push role", got)
 	}
-	cron := renderedObject(t, rendered, "CronJob", "loopruntime-registry-auth")
+	cron := renderedObject(t, rendered, "CronJob", "loop-runtime-registry-auth")
 	if cron == nil {
-		t.Fatal("no CronJob loopruntime-registry-auth")
+		t.Fatal("no CronJob loop-runtime-registry-auth")
 	}
-	if got := dig(cron, "spec", "jobTemplate", "spec", "template", "spec", "serviceAccountName"); got != "loopruntime-registry-auth" {
-		t.Errorf("CronJob runs as %v, want loopruntime-registry-auth", got)
+	if got := dig(cron, "spec", "jobTemplate", "spec", "template", "spec", "serviceAccountName"); got != "loop-runtime-registry-auth" {
+		t.Errorf("CronJob runs as %v, want loop-runtime-registry-auth", got)
 	}
 	env := map[string]any{}
 	for _, c := range []string{"initContainers", "containers"} {
@@ -464,19 +464,19 @@ func TestStagingBuildRegistryCredentialIsAnECRTokenRefreshedByTheBuildCluster(t 
 	if env["REGISTRY_HOST"] != "172.29.0.1:9597" || env["SECRET_NAME"] != "buildkit-registry-config" {
 		t.Errorf("CronJob env REGISTRY_HOST=%v SECRET_NAME=%v, want 172.29.0.1:9597 and buildkit-registry-config", env["REGISTRY_HOST"], env["SECRET_NAME"])
 	}
-	if renderedObject(t, rendered, "Job", "loopruntime-registry-auth-initial") == nil {
-		t.Error("no Job loopruntime-registry-auth-initial: the first build would wait for the first schedule")
+	if renderedObject(t, rendered, "Job", "loop-runtime-registry-auth-initial") == nil {
+		t.Error("no Job loop-runtime-registry-auth-initial: the first build would wait for the first schedule")
 	}
 }
 
-// Staging has no MinIO and no loopruntime-minio-credentials Secret: the clone and cache
-// steps of every build reach S3 as the IRSA role of loopruntime-build-sa. The first tenant
+// Staging has no MinIO and no loop-runtime-minio-credentials Secret: the clone and cache
+// steps of every build reach S3 as the IRSA role of loop-runtime-build-sa. The first tenant
 // build on staging waited on that missing Secret (CreateContainerConfigError) until it
 // was cancelled. The role reads the builds bucket only, so the dependency cache goes to
 // the artifacts bucket.
 func TestStagingBuildStepsReachS3AsTheBuildWorkflowsRole(t *testing.T) {
-	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", "staging", "loopruntime-build-cwts", "charts/loopruntime-build-cwts", stagingOutputs...)
-	for _, cwt := range []string{"loopruntime-clone", "loopruntime-cache-restore", "loopruntime-cache-save"} {
+	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", "staging", "loop-runtime-build-cwts", "charts/loop-runtime-build-cwts", stagingOutputs...)
+	for _, cwt := range []string{"loop-runtime-clone", "loop-runtime-cache-restore", "loop-runtime-cache-save"} {
 		t.Run(cwt, func(t *testing.T) {
 			obj := renderedObject(t, rendered, "ClusterWorkflowTemplate", cwt)
 			if obj == nil {
@@ -501,7 +501,7 @@ func TestStagingBuildStepsReachS3AsTheBuildWorkflowsRole(t *testing.T) {
 					}
 					return out
 				}(), "\n")
-				for _, want := range []string{"MC_WEB_IDENTITY_TOKEN_FILE_loopruntime", "MC_ROLE_ARN_loopruntime", "MC_STS_ENDPOINT_loopruntime"} {
+				for _, want := range []string{"MC_WEB_IDENTITY_TOKEN_FILE_loop-runtime", "MC_ROLE_ARN_loop-runtime", "MC_STS_ENDPOINT_loop-runtime"} {
 					if !strings.Contains(script, want) {
 						t.Errorf("%s does not set %s: mc would sign with no credentials", cwt, want)
 					}
@@ -509,7 +509,7 @@ func TestStagingBuildStepsReachS3AsTheBuildWorkflowsRole(t *testing.T) {
 				if regexp.MustCompile(`(?m)^\s*--insecure\b`).MatchString(script) {
 					t.Errorf("%s passes --insecure to mc; staging's S3 has a verifiable certificate", cwt)
 				}
-				if cwt != "loopruntime-clone" && !strings.Contains(script, "loopruntime/loopruntime-staging-artifacts-000000000000/") {
+				if cwt != "loop-runtime-clone" && !strings.Contains(script, "loop-runtime/loop-runtime-staging-artifacts-000000000000/") {
 					t.Errorf("%s does not keep the cache in the artifacts bucket, the one the build role can write", cwt)
 				}
 			}
@@ -518,15 +518,15 @@ func TestStagingBuildStepsReachS3AsTheBuildWorkflowsRole(t *testing.T) {
 }
 
 // The SBOM and static app steps upload to the staging static assets bucket; the
-// pipeline's default name, loopruntime-static-assets, is no bucket on staging.
+// pipeline's default name, loop-runtime-static-assets, is no bucket on staging.
 func TestStagingAPINamesTheStaticAssetsBucket(t *testing.T) {
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopruntime-api", "charts/loopruntime-api", stagingOutputs...)
-	cm := renderedObject(t, rendered, "ConfigMap", "loopruntime-api")
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loop-runtime-api", "charts/loop-runtime-api", stagingOutputs...)
+	cm := renderedObject(t, rendered, "ConfigMap", "loop-runtime-api")
 	if cm == nil {
-		t.Fatal("no ConfigMap loopruntime-api")
+		t.Fatal("no ConfigMap loop-runtime-api")
 	}
-	if got := dig(cm, "data", "STATIC_ASSETS_BUCKET"); got != "loopruntime-staging-static-assets-000000000000" {
-		t.Errorf("STATIC_ASSETS_BUCKET = %v, want loopruntime-staging-static-assets-000000000000", got)
+	if got := dig(cm, "data", "STATIC_ASSETS_BUCKET"); got != "loop-runtime-staging-static-assets-000000000000" {
+		t.Errorf("STATIC_ASSETS_BUCKET = %v, want loop-runtime-staging-static-assets-000000000000", got)
 	}
 }
 
@@ -534,7 +534,7 @@ func TestStagingAPINamesTheStaticAssetsBucket(t *testing.T) {
 // default-deny egress did not open: the first IRSA clone timed out dialling it. Only
 // that host and port open; production has no emulator block and keeps 443.
 func TestStagingBuildPodsReachTheEmulator(t *testing.T) {
-	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", "staging", "loopruntime-build-cwts", "charts/loopruntime-build-cwts", stagingOutputs...)
+	rendered := helmfileTemplate(t, "build.helmfile.yaml.gotmpl", "staging", "loop-runtime-build-cwts", "charts/loop-runtime-build-cwts", stagingOutputs...)
 	np := renderedObject(t, rendered, "NetworkPolicy", "build-pod-egress")
 	if np == nil {
 		t.Fatal("no NetworkPolicy build-pod-egress")
@@ -553,35 +553,35 @@ func TestStagingBuildPodsReachTheEmulator(t *testing.T) {
 }
 
 // Staging's GitHub App (id, private key, webhook secret) lives in a secret of its own,
-// seeded from the host like Resend's and Stripe's, and reaches loopruntime-api as the
-// optional loopruntime-api-github source its values-bootstrap declares. The console's
+// seeded from the host like Resend's and Stripe's, and reaches loop-runtime-api as the
+// optional loop-runtime-api-github source its values-bootstrap declares. The console's
 // install button sends the browser to that App's slug.
 func TestStagingGitHubAppReachesTheAPIFromItsOwnSecret(t *testing.T) {
 	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "aws-secrets-manager", "infra/helm/aws-secrets-manager", stagingOutputs...)
-	es := renderedObject(t, rendered, "ExternalSecret", "loopruntime-api-github")
+	es := renderedObject(t, rendered, "ExternalSecret", "loop-runtime-api-github")
 	if es == nil {
-		t.Fatal("no ExternalSecret loopruntime-api-github")
+		t.Fatal("no ExternalSecret loop-runtime-api-github")
 	}
-	if ns, _ := dig(es, "metadata", "namespace").(string); ns != "loopruntime-system" {
-		t.Errorf("loopruntime-api-github is in namespace %q, want loopruntime-system", ns)
+	if ns, _ := dig(es, "metadata", "namespace").(string); ns != "loop-runtime-system" {
+		t.Errorf("loop-runtime-api-github is in namespace %q, want loop-runtime-system", ns)
 	}
 	refs := externalSecretRefs(t, es)
 	for key, want := range map[string]string{
-		"GITHUB_APP_ID":          "loopruntime/staging/github-app#app-id",
-		"GITHUB_APP_PRIVATE_KEY": "loopruntime/staging/github-app#private-key",
-		"GITHUB_WEBHOOK_SECRET":  "loopruntime/staging/github-app#webhook-secret",
+		"GITHUB_APP_ID":          "loop-runtime/staging/github-app#app-id",
+		"GITHUB_APP_PRIVATE_KEY": "loop-runtime/staging/github-app#private-key",
+		"GITHUB_WEBHOOK_SECRET":  "loop-runtime/staging/github-app#webhook-secret",
 		// The App's OAuth client: the API asks GitHub which installations a
 		// user can access before it binds one to a tenant.
-		"GITHUB_APP_CLIENT_ID":     "loopruntime/staging/github-app#client-id",
-		"GITHUB_APP_CLIENT_SECRET": "loopruntime/staging/github-app#client-secret",
+		"GITHUB_APP_CLIENT_ID":     "loop-runtime/staging/github-app#client-id",
+		"GITHUB_APP_CLIENT_SECRET": "loop-runtime/staging/github-app#client-secret",
 	} {
 		if refs[key] != want {
-			t.Errorf("loopruntime-api-github maps %s from %q, want %s", key, refs[key], want)
+			t.Errorf("loop-runtime-api-github maps %s from %q, want %s", key, refs[key], want)
 		}
 	}
 
-	cloud := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loopruntime-cloud", "charts/loopruntime-cloud", stagingOutputs...)
-	config := renderedObject(t, cloud, "ConfigMap", "loopruntime-cloud")
+	cloud := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loop-console", "charts/loop-console", stagingOutputs...)
+	config := renderedObject(t, cloud, "ConfigMap", "loop-console")
 	if got := dig(config, "data", "GITHUB_APP_SLUG"); got != "loopscale-staging" {
 		t.Errorf("GITHUB_APP_SLUG = %v, want loopscale-staging", got)
 	}
@@ -591,22 +591,22 @@ func TestStagingGitHubAppReachesTheAPIFromItsOwnSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !regexp.MustCompile(`for name in [^;\n]*\bgithub-app\b`).Match(taskfile) {
-		t.Error("staging:platform does not seed loopruntime/staging/github-app from the host")
+		t.Error("staging:platform does not seed loop-runtime/staging/github-app from the host")
 	}
 }
 
-// Without githubAppSecret the chart renders no loopruntime-api-github, and the API keeps
+// Without githubAppSecret the chart renders no loop-runtime-api-github, and the API keeps
 // its repository features off instead of reading an empty secret.
 func TestNoGitHubAppSecretRendersNoGitHubExternalSecret(t *testing.T) {
 	out := renderChart(t, uniqueChart(t, "aws-secrets-manager"), "aws-secrets-manager", nil, writeValues(t, `
 region: us-east-1
 coreSecrets: true
-platformSecret: loopruntime/test/platform
+platformSecret: loop-runtime/test/platform
 database: {host: db, masterSecret: m}
 cache: {host: c, authTokenSecret: a}
 `))
-	if strings.Contains(out, "name: loopruntime-api-github") {
-		t.Error("loopruntime-api-github rendered without githubAppSecret")
+	if strings.Contains(out, "name: loop-runtime-api-github") {
+		t.Error("loop-runtime-api-github rendered without githubAppSecret")
 	}
 }
 

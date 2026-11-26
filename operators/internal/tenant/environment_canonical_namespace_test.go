@@ -5,7 +5,7 @@
 // namespace contract (plan 2026-06-09-m2-operator-canonical-fix v1.4, T3.1):
 //
 //   - An Environment CR with Project=sample and Environment=production makes
-//     the controller create namespace `loopruntime-tn-X-sample-production` (the
+//     the controller create namespace `loop-runtime-tn-X-sample-production` (the
 //     three-segment canonical form), never the two-segment legacy form.
 //   - An Environment CR whose Project and Environment combine into a name
 //     longer than 63 characters gets NamespaceReady=False Reason=NameTooLong
@@ -61,7 +61,7 @@ func canonicalNamespaceEnvironment(project, envName, tenantName string) *looprun
 var _ = Describe("EnvironmentController canonical namespace and 63-char overflow", Ordered, func() {
 
 	Context("canonical three-segment namespace", func() {
-		It("creates namespace `loopruntime-tn-X-sample-production` when Project=sample + Environment=production", func() {
+		It("creates namespace `loop-runtime-tn-X-sample-production` when Project=sample + Environment=production", func() {
 			env := canonicalNamespaceEnvironment("sample", "production", "tn-canon")
 			// Spec.Namespace.Name is filtered out by the CRD's `Optional`
 			// validation but the controller recomputes from Project regardless.
@@ -71,7 +71,7 @@ var _ = Describe("EnvironmentController canonical namespace and 63-char overflow
 			Eventually(func(g Gomega) {
 				var ns corev1.Namespace
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopruntime-tn-canon-sample-production",
+					Name: "loop-runtime-tn-canon-sample-production",
 				}, &ns)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 		})
@@ -98,7 +98,7 @@ var _ = Describe("EnvironmentController canonical namespace and 63-char overflow
 		// end-to-end corroboration, no longer quarantined.
 		It("sets Status condition NameTooLong without requeue when computed name >63 chars", func() {
 			// Compose tenant + project + env so the canonical name exceeds
-			// 63 chars: `loopruntime-<26>-<27>-<25>` = 4 + 26 + 1 + 27 + 1 + 25 = 84 chars.
+			// 63 chars: `loop-runtime-<26>-<27>-<25>` = 4 + 26 + 1 + 27 + 1 + 25 = 84 chars.
 			env := canonicalNamespaceEnvironment(
 				"production-data-pipeline-v2", // 27 chars
 				"staging-canary-experiment",   // 25 chars
@@ -128,7 +128,7 @@ var _ = Describe("EnvironmentController canonical namespace and 63-char overflow
 			// Sanity: no namespace was actually created at the M2 or any other form.
 			var ns corev1.Namespace
 			err := k8sClient.Get(ctx, types.NamespacedName{
-				Name: "loopruntime-tn-very-long-tenant-name-h-production-data-pipeline-v2-staging-canary-experiment",
+				Name: "loop-runtime-tn-very-long-tenant-name-h-production-data-pipeline-v2-staging-canary-experiment",
 			}, &ns)
 			Expect(err).To(HaveOccurred(), "63-char overflow must NOT create any namespace")
 		})

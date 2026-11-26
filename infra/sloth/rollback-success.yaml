@@ -2,7 +2,7 @@
 # Measures the ratio of successful rollbacks to total attempts.
 # Target: 99.9% — rollbacks are the last safety net; they must work.
 version: "prometheus/v1"
-service: "loopruntime-rollbacks"
+service: "loop-runtime-rollbacks"
 labels:
   owner: "platform-team"
   tier: "product"
@@ -12,8 +12,8 @@ slos:
     description: "Percentage of rollbacks that restore service health."
     sli:
       events:
-        error_query: sum(rate(loopruntime_rollbacks_total{status!="success"}[{{.window}}]))
-        total_query: sum(rate(loopruntime_rollbacks_total[{{.window}}]))
+        error_query: sum(rate(loop_runtime_rollbacks_total{status!="success"}[{{.window}}]))
+        total_query: sum(rate(loop_runtime_rollbacks_total[{{.window}}]))
     alerting:
       name: LoopRuntimeRollbackSuccessBudgetBurn
       labels:

@@ -16,25 +16,25 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
   name: pg-network-latency
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   annotations:
     runtime.getloopscale.com/roadmap: "04"
     runtime.getloopscale.com/hypothesis: "500ms PG latency degrades gracefully, no 500s, no deadlocks"
     # SLO query post-decomposition (2026-06-29). Canonical names
-    # loopruntime_http_* → loopruntime_api_*. Histogram + counter scraped via
-    # job=loopruntime-api-metrics (infra/helm/monitoring/values-prometheus.yaml).
+    # loop_runtime_http_* → loop_runtime_api_*. Histogram + counter scraped via
+    # job=loop-runtime-api-metrics (infra/helm/monitoring/values-prometheus.yaml).
     # `or vector(0)` defaults the 5xx rate to 0 when no 5xx series
     # exist (the desired steady state).
     runtime.getloopscale.com/slo-query: |
-      (histogram_quantile(0.99, sum by (le) (rate(loopruntime_api_request_duration_seconds_bucket[2m]))) < 30) and on() ((sum(rate(loopruntime_api_requests_total{status=~"5.."}[2m])) or vector(0)) == 0)
+      (histogram_quantile(0.99, sum by (le) (rate(loop_runtime_api_request_duration_seconds_bucket[2m]))) < 30) and on() ((sum(rate(loop_runtime_api_requests_total{status=~"5.."}[2m])) or vector(0)) == 0)
 spec:
   action: delay
   mode: all
   selector:
     namespaces:
-      - loopruntime-system
+      - loop-runtime-system
     labelSelectors:
-      "app": "loopruntime-api"
+      "app": "loop-runtime-api"
   delay:
     latency: "500ms"
     correlation: "0"
@@ -46,9 +46,9 @@ spec:
     mode: all
     selector:
       namespaces:
-        - loopruntime-system
+        - loop-runtime-system
       labelSelectors:
-        "app": "loopruntime-api"
+        "app": "loop-runtime-api"
   direction: to
   # EC-6 fix (active-execution-plan §3.A.1, iter 2): the previous
   # `${PG_PRIVATE_HOST}` literal was never substituted (applyChaos uses
@@ -58,5 +58,5 @@ spec:
   # the in-cluster Service DNS. For production-equivalent chaos, deploy
   # a parameterized override (future work — Section 3.B follow-up).
   externalTargets:
-    - "postgresql.loopruntime-system.svc.cluster.local"
+    - "postgresql.loop-runtime-system.svc.cluster.local"
   duration: "180s"

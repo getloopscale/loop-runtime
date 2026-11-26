@@ -4,12 +4,12 @@
 -- ============================================================================
 -- 000060_lens_alert_rules_prompt_scope
 --
--- loopruntime-promptly M21 DoD-5 — "a monitor warns when production changes".
+-- loop-runtime-promptly M21 DoD-5 — "a monitor warns when production changes".
 --
 -- The monitor → incident → webhook chain ALREADY EXISTS (000054 / 000056 + the
--- evaluator in loopruntime-cloud/internal/lens_alert_evaluator). What is missing is
+-- evaluator in loop-console/internal/lens_alert_evaluator). What is missing is
 -- DIMENSIONAL, not structural: today's metrics cover the whole workspace, and
--- the M15 metric is per PROMPT. See the umbrella's ADR 0004 and getloopscale/loopruntime-cloud#450.
+-- the M15 metric is per PROMPT. See the umbrella's ADR 0004 and getloopscale/loop-console#450.
 --
 -- Additive by construction: a new nullable column + a widened CHECK. No existing
 -- rule changes behaviour, and a prompt-scoped rule is unrepresentable without
@@ -45,7 +45,7 @@ ALTER TABLE lens_fired_alerts ADD CONSTRAINT lens_fired_alerts_metric_check
 --    representable and BOTH fail in silence.
 --
 --    (a) metric='prompt_resolutions' with prompt_name NULL — the evaluator has
---        nothing to query in loopruntime-lens and skips the rule forever; the customer
+--        nothing to query in loop-runtime-lens and skips the rule forever; the customer
 --        sees an armed rule that never fires.
 --    (b) prompt_name filled in on a 'cost' rule — simply ignored, and the next
 --        reader cannot tell whether the scope applied or not.

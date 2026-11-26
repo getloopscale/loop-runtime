@@ -11,8 +11,8 @@ import (
 
 // A push deploy uploads the repository's source bundle to the same bucket a CLI
 // upload does. Without SourceBucket the auto-deployer fell back to its default,
-// "loopruntime-builds", which a deployment naming another bucket (staging names
-// loopruntime-staging-builds-000000000000) does not have, and every push failed
+// "loop-runtime-builds", which a deployment naming another bucket (staging names
+// loop-runtime-staging-builds-000000000000) does not have, and every push failed
 // with "The specified bucket does not exist".
 func TestAutoDeployUploadsToTheConfiguredSourceBucket(t *testing.T) {
 	cfg := config.Config{SourceBucket: "tenant-sources-example"}

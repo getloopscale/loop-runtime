@@ -1,5 +1,5 @@
 {
-  "name": "loopruntime-infra",
+  "name": "loop-runtime-infra",
   "version": "1.0.0",
   "main": "src/index.ts",
   "scripts": {

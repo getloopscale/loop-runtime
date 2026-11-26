@@ -130,19 +130,19 @@ func resolveAccountAndLock(ctx context.Context, tx db.DBTX, tenantID string) (st
 // sets `app.tenant_id = <deploying tenant>` on the submit path). Until
 // 2026-08-14 the request pool held BYPASSRLS, so the policy never applied and
 // the count saw every tenant. Migration 000062 plus the boot guard
-// `AssertRequestPoolIsolated` moved that pool to `loopruntime_api` — non-owner, no
+// `AssertRequestPoolIsolated` moved that pool to `loop_runtime_api` — non-owner, no
 // BYPASSRLS — and the count silently became per-TENANT.
 //
 // Measured on a real database: one account, two tenants, one project each.
 //
-//	loopruntime_api  (context = tenant 1)  -> 1   <= cap, creation allowed
-//	loopruntime_worker                     -> 2
+//	loop_runtime_api  (context = tenant 1)  -> 1   <= cap, creation allowed
+//	loop_runtime_worker                     -> 2
 //
 // A plan capped at N projects became N per tenant, unbounded across tenants.
 // Nothing errored and nothing logged; the cap simply stopped being the cap.
 //
 // `crossTenant` is the fix: a handle on the connection that legitimately spans
-// tenants (loopruntime_worker, whose reach is the named *_worker_cross_tenant policies
+// tenants (loop_runtime_worker, whose reach is the named *_worker_cross_tenant policies
 // of migration 000062). It is used for the COUNT only — the lock, the checks and
 // the write all stay on the caller's transaction.
 //
@@ -398,7 +398,7 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			CreatedBy:          r.CreatedBy,
 			EnvironmentCount:   r.EnvironmentCount,
 			ProductionEnvCount: r.ProductionEnvCount,
-			// Red Team loopruntime-cloud#134 (2026-07-02): "LIVE ENVS" counter must
+			// Red Team loop-console#134 (2026-07-02): "LIVE ENVS" counter must
 			// reflect envs with a currently-serving ACTIVE release (preview
 			// or permanent), not the legacy production_env_count subset.
 			ActiveEnvCount: r.ActiveEnvCount,
@@ -435,7 +435,7 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			out.LastDeployAt = &t
 		}
 		// T3.2 of plan dashboard-badge-data-plane-poller (Red Team
-		// loopruntime-cloud#128). Both pgtype fields carry .Valid=false when
+		// loop-console#128). Both pgtype fields carry .Valid=false when
 		// the environment_targets row has no data-plane snapshot yet
 		// (Cleanroom warm-up window before the first readiness-poller
 		// tick OR the poller is disabled via the env-gate). Nil pointers

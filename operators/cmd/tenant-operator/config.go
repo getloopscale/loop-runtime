@@ -74,7 +74,7 @@ func loadConfig(getenv func(string) string) (config, error) {
 		WorkloadClusterURL:   getenv("WORKLOAD_CLUSTER_URL"),
 	}
 
-	maxConcurrent, err := operatorboot.PositiveInt(getenv, "LOOPRUNTIME_TENANT_MAX_CONCURRENT", 0)
+	maxConcurrent, err := operatorboot.PositiveInt(getenv, "LOOP_RUNTIME_TENANT_MAX_CONCURRENT", 0)
 	if err != nil {
 		problems = append(problems, err)
 	}

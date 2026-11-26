@@ -45,11 +45,11 @@ func TestHTTPMetricsMiddleware_RecordsRequestDurationAndCount(t *testing.T) {
 	output := string(body)
 
 	// Check that our custom metrics appear in the output
-	if !strings.Contains(output, "loopruntime_api_requests_total") {
-		t.Error("expected loopruntime_api_requests_total metric in /metrics output")
+	if !strings.Contains(output, "loop_runtime_api_requests_total") {
+		t.Error("expected loop_runtime_api_requests_total metric in /metrics output")
 	}
-	if !strings.Contains(output, "loopruntime_api_request_duration_seconds") {
-		t.Error("expected loopruntime_api_request_duration_seconds metric in /metrics output")
+	if !strings.Contains(output, "loop_runtime_api_request_duration_seconds") {
+		t.Error("expected loop_runtime_api_request_duration_seconds metric in /metrics output")
 	}
 
 	// Check that the correct labels are present

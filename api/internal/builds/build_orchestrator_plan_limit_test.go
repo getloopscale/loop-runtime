@@ -78,14 +78,14 @@ func TestSubmitBuild_StarterPlan_ReplicasExceedCap_Returns422(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected ErrReplicasExceedPlan, got nil")
 	}
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if !errors.As(err, &loopruntimeErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
 		t.Fatalf("expected *LoopRuntimeError, got: %T %v", err, err)
 	}
-	if loopruntimeErr.Code != "REPLICAS_EXCEED_PLAN" {
-		t.Errorf("expected code REPLICAS_EXCEED_PLAN, got %q (msg: %s)", loopruntimeErr.Code, loopruntimeErr.Message)
+	if loopRuntimeErr.Code != "REPLICAS_EXCEED_PLAN" {
+		t.Errorf("expected code REPLICAS_EXCEED_PLAN, got %q (msg: %s)", loopRuntimeErr.Code, loopRuntimeErr.Message)
 	}
-	if got := errorshttp.Status(loopruntimeErr); got != 422 {
+	if got := errorshttp.Status(loopRuntimeErr); got != 422 {
 		t.Errorf("expected HTTP 422, got %d", got)
 	}
 
@@ -127,12 +127,12 @@ func TestSubmitBuild_StarterPlan_AutoscalingMaxExceedsCap_Returns422(t *testing.
 	if err == nil {
 		t.Fatal("expected ErrReplicasExceedPlan for autoscaling.max=5 on starter (cap=2)")
 	}
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if !errors.As(err, &loopruntimeErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
 		t.Fatalf("expected *LoopRuntimeError, got: %T %v", err, err)
 	}
-	if loopruntimeErr.Code != "REPLICAS_EXCEED_PLAN" {
-		t.Errorf("expected REPLICAS_EXCEED_PLAN, got %q", loopruntimeErr.Code)
+	if loopRuntimeErr.Code != "REPLICAS_EXCEED_PLAN" {
+		t.Errorf("expected REPLICAS_EXCEED_PLAN, got %q", loopRuntimeErr.Code)
 	}
 	if checker.recordedRequested != 5 {
 		t.Errorf("expected checker called with 5 (autoscaling.max), got %d", checker.recordedRequested)
@@ -234,8 +234,8 @@ func TestSubmitBuild_ProPlan_ReplicasOverCap_Returns422(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if !errors.As(err, &loopruntimeErr) || loopruntimeErr.Code != "REPLICAS_EXCEED_PLAN" {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) || loopRuntimeErr.Code != "REPLICAS_EXCEED_PLAN" {
 		t.Errorf("expected REPLICAS_EXCEED_PLAN, got: %v", err)
 	}
 }
@@ -269,14 +269,14 @@ func TestSubmitBuild_ReplicasAndAutoscalingSet_Returns422Ambiguous(t *testing.T)
 	if err == nil {
 		t.Fatal("expected ErrScalingAmbiguous")
 	}
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if !errors.As(err, &loopruntimeErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
 		t.Fatalf("expected *LoopRuntimeError, got %T: %v", err, err)
 	}
-	if loopruntimeErr.Code != "SCALING_AMBIGUOUS" {
-		t.Errorf("expected SCALING_AMBIGUOUS, got %q (msg: %s)", loopruntimeErr.Code, loopruntimeErr.Message)
+	if loopRuntimeErr.Code != "SCALING_AMBIGUOUS" {
+		t.Errorf("expected SCALING_AMBIGUOUS, got %q (msg: %s)", loopRuntimeErr.Code, loopRuntimeErr.Message)
 	}
-	if got := errorshttp.Status(loopruntimeErr); got != 422 {
+	if got := errorshttp.Status(loopRuntimeErr); got != 422 {
 		t.Errorf("expected HTTP 422, got %d", got)
 	}
 	if len(bs.builds) != 0 {

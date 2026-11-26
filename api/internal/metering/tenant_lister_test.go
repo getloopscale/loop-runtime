@@ -43,7 +43,7 @@ func tenantCRWithPhase(id, namespace string, phase apiv1.TenantPhase) *apiv1.Ten
 // TestCRTenantLister_FiltersOnPhaseActiveConstant — T1.3 + C2: the enumeration
 // returns ONLY the tenant IDs whose observed status.phase is Active (the
 // TenantPhaseActive CONSTANT, never a "Active" literal) AND that live in the
-// canonical loopruntime-system namespace. Provisioning / Suspended are excluded by phase
+// canonical loop-runtime-system namespace. Provisioning / Suspended are excluded by phase
 // (T1.3 — they reserve no billable compute, ADR-5); an Active CR in a NON-canonical
 // namespace is excluded by scope (C2 — proves client.InNamespace constrains List).
 func TestCRTenantLister_FiltersOnPhaseActiveConstant(t *testing.T) {
@@ -66,7 +66,7 @@ func TestCRTenantLister_FiltersOnPhaseActiveConstant(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != "tn-active" {
 		t.Fatalf("ListActiveTenants = %v, want [tn-active] — only the Active CR in "+
-			"loopruntime-system (T1.3 phase-filter on TenantPhaseActive constant + C2 namespace scope)", got)
+			"loop-runtime-system (T1.3 phase-filter on TenantPhaseActive constant + C2 namespace scope)", got)
 	}
 }
 

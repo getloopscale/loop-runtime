@@ -8,7 +8,7 @@
 # Workflow:
 #   1. Iterate over Pulumi stack config keys ending in well-known secret names
 #   2. Read decoded value via `pulumi config get --show-secrets`
-#   3. Write to Vault path `secret/loopruntime/<env>/iac/<resource>/<key>` (kv-v2)
+#   3. Write to Vault path `secret/loop-runtime/<env>/iac/<resource>/<key>` (kv-v2)
 #   4. Operator removes inline entry via `pulumi config rm` (Step 7 of runbook)
 #
 # Safety:
@@ -62,7 +62,7 @@ done
   echo "ERR: PULUMI_CONFIG_PASSPHRASE not set" >&2; exit 1
 }
 
-# Mapping: pulumi config key → vault path (under secret/loopruntime/<env>/iac/...)
+# Mapping: pulumi config key → vault path (under secret/loop-runtime/<env>/iac/...)
 # Operators add/override entries here as the canonical inventory.
 declare -A MAPPING=(
   ["cf-api-token"]="iac/cloudflare/api-token"
@@ -72,8 +72,8 @@ declare -A MAPPING=(
   ["github-app-private-key"]="iac/github/app-private-key"
   ["github-app-webhook-secret"]="iac/github/app-webhook-secret"
   ["stripe-secret-key"]="iac/stripe/secret-key"
-  ["loopruntime-secret-encryption-key"]="iac/loopruntime/secret-encryption-key"
-  ["loopruntime-bootstrap-secret"]="iac/loopruntime/bootstrap-secret"
+  ["loop-runtime-secret-encryption-key"]="iac/loop-runtime/secret-encryption-key"
+  ["loop-runtime-bootstrap-secret"]="iac/loop-runtime/bootstrap-secret"
 )
 
 echo "[migrate-pulumi-to-vault] stack=${STACK} env=${ENV_LABEL} dry-run=${DRY_RUN}"
@@ -89,7 +89,7 @@ FAILED=0
 
 for key in "${!MAPPING[@]}"; do
   vault_subpath="${MAPPING[$key]}"
-  vault_path="secret/loopruntime/${ENV_LABEL}/${vault_subpath}"
+  vault_path="secret/loop-runtime/${ENV_LABEL}/${vault_subpath}"
 
   # Try to read the decoded value via pulumi config get
   if value=$(pulumi config get --stack "${STACK}" "${key}" --show-secrets 2>/dev/null); then

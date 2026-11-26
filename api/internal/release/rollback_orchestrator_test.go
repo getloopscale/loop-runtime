@@ -445,7 +445,7 @@ func TestRollback_URLGeneration(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// The canonical host the IngressRoute serves (naming.AppURL), not the legacy
-	// "{project}-{env}.{domain}" that Traefik answered with 404 (loopruntime-cloud#159).
+	// "{project}-{env}.{domain}" that Traefik answered with 404 (loop-console#159).
 	expected := "https://tn-1-proj-1-web-staging.dev.getloopscale.com"
 	if result.URL != expected {
 		t.Errorf("URL = %q, want %q", result.URL, expected)
@@ -611,7 +611,7 @@ func TestRollback_URLPrefersThePublicDomain(t *testing.T) {
 
 	result, err := orch.Rollback(context.Background(), RollbackRequest{
 		TenantID: "tn-1", ProjectID: "proj-1", ProjectName: "my-app",
-		Environment: "production", BaseDomain: "loopruntime.local",
+		Environment: "production", BaseDomain: "loop-runtime.local",
 	})
 	orch.Wait()
 

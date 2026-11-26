@@ -25,7 +25,7 @@ var _ = Describe("Journey 10: Failure Modes", Label("journey"), func() {
 			skipIfNotE2E()
 
 			stdout, stderr, exitCode := execLoopRuntime(
-				loopruntimeInvocation{env: []string{"LOOPRUNTIME_TOKEN=garbage-not-a-real-jwt"}},
+				loopRuntimeInvocation{env: []string{"LOOP_RUNTIME_TOKEN=garbage-not-a-real-jwt"}},
 				"whoami", "--json")
 
 			Expect(exitCode).To(Equal(4),

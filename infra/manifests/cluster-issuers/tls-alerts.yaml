@@ -16,14 +16,14 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: tls-loopruntime-alerts
-  namespace: loopruntime-system
+  name: tls-loop-runtime-alerts
+  namespace: loop-runtime-system
   labels:
-    app: loopruntime
+    app: loop-runtime
     role: alert-rules
 spec:
   groups:
-    - name: loopruntime.tls
+    - name: loop-runtime.tls
       interval: 1m
       rules:
         # Alert 1: Certificate approaching rotation cap (Origin CA 5y policy)

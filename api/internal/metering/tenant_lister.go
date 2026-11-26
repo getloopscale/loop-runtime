@@ -39,7 +39,7 @@ type CRTenantLister struct {
 }
 
 // ListActiveTenants returns the IDs of Tenant CRs whose observed status.phase is
-// Active, scoped to the canonical loopruntime-system namespace (C2) and filtered on the
+// Active, scoped to the canonical loop-runtime-system namespace (C2) and filtered on the
 // TenantPhaseActive CONSTANT (T1.3 — never a hardcoded string). Provisioning /
 // Suspended / PendingDeletion / Deleting are skipped: a non-Active tenant reserves
 // no billable compute the loop should meter (ADR-5), and metering a draining

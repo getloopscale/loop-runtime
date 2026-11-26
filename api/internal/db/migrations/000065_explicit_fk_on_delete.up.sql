@@ -16,8 +16,8 @@
 -- | accounts.owner_id -> users               | RESTRICT  | deleting the owner would orphan an account that still bills. Ownership must be transferred first, deliberately. NOT NULL, so SET NULL is impossible anyway. |
 -- | tenants.account_id -> accounts           | RESTRICT  | an account with live tenants must not vanish by side effect. Deleting the tenants is the explicit act. |
 -- | subscriptions.account_id -> accounts     | CASCADE   | a subscription without an account is not a record, it is debris. |
--- | loopruntime_api_keys.account_id -> accounts     | CASCADE   | credentials die with the account they authenticate. Leaving them is a live key for an entity that no longer exists. |
--- | loopruntime_api_keys.rotated_from -> loopruntime_api_keys | SET NULL | the rotation ancestor may be purged; the successor MUST survive it. Cascading here would delete the key currently in use because its predecessor was cleaned up. |
+-- | loop_runtime_api_keys.account_id -> accounts     | CASCADE   | credentials die with the account they authenticate. Leaving them is a live key for an entity that no longer exists. |
+-- | loop_runtime_api_keys.rotated_from -> loop_runtime_api_keys | SET NULL | the rotation ancestor may be purged; the successor MUST survive it. Cascading here would delete the key currently in use because its predecessor was cleaned up. |
 -- | preview_environments.build_id -> builds  | SET NULL  | the build GC prunes builds after 30 days. The preview outlives the pointer and keeps its own state. |
 -- | preview_environments.release_id -> releases | SET NULL | same reason as build_id. |
 --
@@ -47,15 +47,15 @@ ALTER TABLE subscriptions
   ADD  CONSTRAINT subscriptions_account_id_fkey
        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE;
 
-ALTER TABLE loopruntime_api_keys
-  DROP CONSTRAINT IF EXISTS loopruntime_api_keys_account_id_fkey,
-  ADD  CONSTRAINT loopruntime_api_keys_account_id_fkey
+ALTER TABLE loop_runtime_api_keys
+  DROP CONSTRAINT IF EXISTS loop_runtime_api_keys_account_id_fkey,
+  ADD  CONSTRAINT loop_runtime_api_keys_account_id_fkey
        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE;
 
-ALTER TABLE loopruntime_api_keys
-  DROP CONSTRAINT IF EXISTS loopruntime_api_keys_rotated_from_fkey,
-  ADD  CONSTRAINT loopruntime_api_keys_rotated_from_fkey
-       FOREIGN KEY (rotated_from) REFERENCES loopruntime_api_keys(id) ON DELETE SET NULL;
+ALTER TABLE loop_runtime_api_keys
+  DROP CONSTRAINT IF EXISTS loop_runtime_api_keys_rotated_from_fkey,
+  ADD  CONSTRAINT loop_runtime_api_keys_rotated_from_fkey
+       FOREIGN KEY (rotated_from) REFERENCES loop_runtime_api_keys(id) ON DELETE SET NULL;
 
 ALTER TABLE preview_environments
   DROP CONSTRAINT IF EXISTS preview_environments_build_id_fkey,

@@ -64,7 +64,7 @@ argo-rollouts:
 
   # Dashboard DISABLED (same policy as Chaos Mesh: attack surface
   # not justified for LoopRuntime's deployment model). All status/info accessed
-  # via kubectl + loopruntime CLI, never via dashboard.
+  # via kubectl + loop-runtime CLI, never via dashboard.
   dashboard:
     enabled: false
 

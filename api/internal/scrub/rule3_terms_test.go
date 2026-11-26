@@ -29,9 +29,9 @@ func TestTextRemovesEveryRule3InternalTerm(t *testing.T) {
 		{"Kaniko build failed", "Kaniko"},
 		{"cosign verify failed", "cosign"},
 		{"sync to cell-0 failed", "cell-0"},
-		{"dial postgresql.loopruntime-system.svc.cluster.local", "svc.cluster.local"},
-		{"system:serviceaccount:loopruntime-system:default forbidden", "serviceaccount"},
-		{`in namespace "loopruntime-system" forbidden`, "loopruntime-system"},
+		{"dial postgresql.loop-runtime-system.svc.cluster.local", "svc.cluster.local"},
+		{"system:serviceaccount:loop-runtime-system:default forbidden", "serviceaccount"},
+		{`in namespace "loop-runtime-system" forbidden`, "loop-runtime-system"},
 		{"Authorization: Bearer ghp_secret1234567890abcd", "ghp_secret"},
 	}
 	for _, tc := range cases {

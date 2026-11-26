@@ -4,7 +4,7 @@
 package store
 
 // metering_store_test.go — PG-REAL tests for the compute-metering money-writer
-// (plan metering-compute-loop T2.3). Real Postgres via LOOPRUNTIME_E2E_DATABASE_URL,
+// (plan metering-compute-loop T2.3). Real Postgres via LOOP_RUNTIME_E2E_DATABASE_URL,
 // each test in a BEGIN…ROLLBACK tx (no pollution). mig 000048 must be applied.
 
 import (
@@ -24,16 +24,16 @@ import (
 	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
-// meteringPool opens a pgxpool on LOOPRUNTIME_E2E_DATABASE_URL (owner — the happy-path
+// meteringPool opens a pgxpool on LOOP_RUNTIME_E2E_DATABASE_URL (owner — the happy-path
 // wrapper test proves tx-orchestration + delta-threading; the RLS-load-bearing
-// proof lives in the loopruntime_worker-DSN negative twin). Skips when the harness is
+// proof lives in the loop_runtime_worker-DSN negative twin). Skips when the harness is
 // not wired. The pool-owning MeteringStore commits its OWN tx, so the test can
 // NOT use an outer BEGIN…ROLLBACK — teardown is FK-ordered DELETEs via t.Cleanup.
 func meteringPool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("LOOPRUNTIME_E2E_DATABASE_URL")
+	dsn := os.Getenv("LOOP_RUNTIME_E2E_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("LOOPRUNTIME_E2E_DATABASE_URL not set — real-PG metering wrapper test skipped")
+		t.Skip("LOOP_RUNTIME_E2E_DATABASE_URL not set — real-PG metering wrapper test skipped")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -126,9 +126,9 @@ func seedMeteringFixture(t *testing.T, ctx context.Context, tx pgx.Tx, tenantID,
 
 func meterTx(t *testing.T) (context.Context, pgx.Tx, func()) {
 	t.Helper()
-	dsn := os.Getenv("LOOPRUNTIME_E2E_DATABASE_URL")
+	dsn := os.Getenv("LOOP_RUNTIME_E2E_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("LOOPRUNTIME_E2E_DATABASE_URL not set — real-PG metering test skipped")
+		t.Skip("LOOP_RUNTIME_E2E_DATABASE_URL not set — real-PG metering test skipped")
 	}
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, dsn)
@@ -967,7 +967,7 @@ func seedMeteringProjectsEnvs(t *testing.T, ctx context.Context, pool *pgxpool.P
 
 // TestMeteringStore_NamespacesForTenant_AllProjectEnvNamespaces — ADR-5: the
 // tenant's metered namespaces are naming.Namespace(tenant, project, env) for EVERY
-// (project, env) tuple, NOT a single loopruntime-<tenant> ns (v1.1's single-ns
+// (project, env) tuple, NOT a single loop-runtime-<tenant> ns (v1.1's single-ns
 // under-billing bug). Asserts the EXACT set — a missing ns is the regression.
 func TestMeteringStore_NamespacesForTenant_AllProjectEnvNamespaces(t *testing.T) {
 	ctx, pool := meteringPool(t)
@@ -1189,15 +1189,15 @@ func TestMeteringStore_MeterComputeSplit_ContinuesNotResets(t *testing.T) {
 	}
 }
 
-// meteringWorkerPool opens a pool as the GENUINE loopruntime_worker role (RLS applies,
-// rolbypassrls=false) via LOOPRUNTIME_E2E_WORKER_DATABASE_URL. Skips when unset. Fails
+// meteringWorkerPool opens a pool as the GENUINE loop_runtime_worker role (RLS applies,
+// rolbypassrls=false) via LOOP_RUNTIME_E2E_WORKER_DATABASE_URL. Skips when unset. Fails
 // LOUD if the DSN resolves to a BYPASSRLS role — an owner connection would make
 // the RLS twin theatre (it bypasses the policy unconditionally). SEPA CRITICAL #1.
 func meteringWorkerPool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("LOOPRUNTIME_E2E_WORKER_DATABASE_URL")
+	dsn := os.Getenv("LOOP_RUNTIME_E2E_WORKER_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("LOOPRUNTIME_E2E_WORKER_DATABASE_URL not set — loopruntime_worker RLS test skipped")
+		t.Skip("LOOP_RUNTIME_E2E_WORKER_DATABASE_URL not set — loop_runtime_worker RLS test skipped")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -1210,13 +1210,13 @@ func meteringWorkerPool(t *testing.T) (context.Context, *pgxpool.Pool) {
 		t.Fatalf("check bypassrls: %v", err)
 	}
 	if bypass {
-		t.Fatal("LOOPRUNTIME_E2E_WORKER_DATABASE_URL connects as a BYPASSRLS role — the RLS twin would be theatre; use a genuine loopruntime_worker DSN")
+		t.Fatal("LOOP_RUNTIME_E2E_WORKER_DATABASE_URL connects as a BYPASSRLS role — the RLS twin would be theatre; use a genuine loop_runtime_worker DSN")
 	}
 	return ctx, pool
 }
 
 // TestMeteringStore_MeterCompute_UnderRealWorkerRLS — the wrapper writes SUCCEED
-// on a genuine loopruntime_worker connection (RLS enforced, no bypass): the SET LOCAL
+// on a genuine loop_runtime_worker connection (RLS enforced, no bypass): the SET LOCAL
 // app.tenant_id=” inside the tx satisfies the cost_counters policy so the
 // cross-tenant write is allowed. Proves the money-writer works under production
 // RLS, not just under the owner-bypass used by the other tests.
@@ -1234,7 +1234,7 @@ func TestMeteringStore_MeterCompute_UnderRealWorkerRLS(t *testing.T) {
 		MaxDelta: time.Hour, PlanTier: "starter",
 	})
 	if err != nil {
-		t.Fatalf("wrapper under loopruntime_worker RLS: %v (SET LOCAL='' should satisfy the policy)", err)
+		t.Fatalf("wrapper under loop_runtime_worker RLS: %v (SET LOCAL='' should satisfy the policy)", err)
 	}
 	if !adv || delta != 5 {
 		t.Errorf("advanced=%v delta=%d, want true 5 (write succeeds under real RLS)", adv, delta)
@@ -1244,12 +1244,12 @@ func TestMeteringStore_MeterCompute_UnderRealWorkerRLS(t *testing.T) {
 		t.Fatalf("read counter (owner view): %v", err)
 	}
 	if counter != 5 {
-		t.Errorf("counter=%d, want 5 (loopruntime_worker wrote via SET LOCAL='')", counter)
+		t.Errorf("counter=%d, want 5 (loop_runtime_worker wrote via SET LOCAL='')", counter)
 	}
 }
 
 // TestMeteringStore_WithoutRLSBypass_WritesZeroRows — the negative twin: on a
-// loopruntime_worker connection carrying a LEAKED foreign app.tenant_id and WITHOUT the
+// loop_runtime_worker connection carrying a LEAKED foreign app.tenant_id and WITHOUT the
 // wrapper's reset, the raw CTE's cost_counters write violates the RLS policy and
 // is rejected — NO counter row for the target tenant. Proves the wrapper's
 // SET LOCAL app.tenant_id=” is load-bearing against a leaked pooled setting.
@@ -1260,7 +1260,7 @@ func TestMeteringStore_WithoutRLSBypass_WritesZeroRows(t *testing.T) {
 	const cellID = "cell-ws-noby"
 	expected := seedMeteringFixtureCommitted(t, octx, ownerPool, tenantID, cellID, "now() - interval '10 seconds'")
 
-	// Raw CTE on a loopruntime_worker tx with a LEAKED foreign app.tenant_id and NO reset.
+	// Raw CTE on a loop_runtime_worker tx with a LEAKED foreign app.tenant_id and NO reset.
 	tx, err := workerPool.Begin(wctx)
 	if err != nil {
 		t.Fatalf("begin: %v", err)

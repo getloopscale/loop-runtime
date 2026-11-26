@@ -1,0 +1,95 @@
+# loop-runtime-api secrets via External Secrets Operator -> openbao
+# Prereq: ESO installed + backend reachable. Apply: kubectl apply -f eso-openbao.yaml
+# Then: helm install loop-runtime-api ... --set secrets.existingSecret=loop-runtime-api-secrets
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: loop-runtime-api-openbao
+spec:
+  provider:
+    vault:
+      server: "https://!!changeme-openbao-host!!:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        appRole:
+          path: "approle"
+          roleId: "!!changeme-role-id!!"
+          secretRef:
+            name: openbao-approle
+            namespace: external-secrets
+            key: secret_id
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: loop-runtime-api-secrets
+  namespace: loop-runtime-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: loop-runtime-api-openbao
+    kind: ClusterSecretStore
+  target:
+    name: loop-runtime-api-secrets
+    creationPolicy: Owner
+  data:
+    - secretKey: DATABASE_URL
+      remoteRef: { key: "loop-runtime/api", property: "database_url" }
+    - secretKey: LOOP_RUNTIME_WORKER_DATABASE_URL
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_worker_database_url" }
+    - secretKey: LOOP_RUNTIME_API_DATABASE_URL
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_api_database_url" }
+    - secretKey: GITEA_TOKEN
+      remoteRef: { key: "loop-runtime/api", property: "gitea_token" }
+    - secretKey: ARGOCD_TOKEN
+      remoteRef: { key: "loop-runtime/api", property: "argocd_token" }
+    - secretKey: MINIO_ACCESS_KEY
+      remoteRef: { key: "loop-runtime/api", property: "minio_access_key" }
+    - secretKey: MINIO_SECRET_KEY
+      remoteRef: { key: "loop-runtime/api", property: "minio_secret_key" }
+    - secretKey: LOOP_RUNTIME_ARGO_CALLBACK_SECRET
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_argo_callback_secret" }
+    - secretKey: LOOP_RUNTIME_BOOTSTRAP_SECRET
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_bootstrap_secret" }
+    - secretKey: LOOP_RUNTIME_SECRET_ENCRYPTION_KEY
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_secret_encryption_key" }
+    - secretKey: OPENBAO_VAULT_ROLE_ID
+      remoteRef: { key: "loop-runtime/api", property: "openbao_vault_role_id" }
+    - secretKey: OPENBAO_VAULT_SECRET_ID
+      remoteRef: { key: "loop-runtime/api", property: "openbao_vault_secret_id" }
+    - secretKey: CF_API_TOKEN
+      remoteRef: { key: "loop-runtime/api", property: "cf_api_token" }
+    - secretKey: CORE_KUBECONFIG
+      remoteRef: { key: "loop-runtime/api", property: "mgmt_kubeconfig" }
+    - secretKey: BUILD_KUBECONFIG
+      remoteRef: { key: "loop-runtime/api", property: "build_kubeconfig" }
+    - secretKey: CELL_0_KUBECONFIG
+      remoteRef: { key: "loop-runtime/api", property: "runtime_kubeconfig" }
+    - secretKey: STRIPE_SECRET_KEY
+      remoteRef: { key: "loop-runtime/api", property: "stripe_secret_key" }
+    - secretKey: GITHUB_APP_PRIVATE_KEY
+      remoteRef: { key: "loop-runtime/api", property: "github_app_private_key" }
+    - secretKey: GITHUB_WEBHOOK_SECRET
+      remoteRef: { key: "loop-runtime/api", property: "github_webhook_secret" }
+    - secretKey: LOOP_RUNTIME_ADMIN_API_KEY
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_admin_api_key" }
+    - secretKey: LOOP_RUNTIME_ADMIN_API_KEY_PREVIOUS
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_admin_api_key_previous" }
+    - secretKey: LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_admin_service_auth_secret" }
+    - secretKey: LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_admin_service_auth_secret_previous" }
+    - secretKey: LOOP_RUNTIME_BROKER_TOKEN
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_broker_token" }
+    - secretKey: LOOP_RUNTIME_BROKER_TOKENS
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_broker_tokens" }
+    - secretKey: LOOP_RUNTIME_EDGE_ROUTE_TOKEN
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_edge_route_token" }
+    - secretKey: LOOP_RUNTIME_SERVICE_AUTH_SECRET
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_service_auth_secret" }
+    - secretKey: LOOP_RUNTIME_SERVICE_AUTH_SECRET_PREVIOUS
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_service_auth_secret_previous" }
+    - secretKey: LOOP_RUNTIME_SERVICE_AUTH_NONCE_REDIS_PASSWORD
+      remoteRef: { key: "loop-runtime/api", property: "loop_runtime_service_auth_nonce_redis_password" }

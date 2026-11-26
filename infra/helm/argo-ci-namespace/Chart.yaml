@@ -5,9 +5,9 @@ version: 0.1.0
 appVersion: "0.1.0"
 type: application
 keywords:
-  - loopruntime
+  - loop-runtime
   - ci
   - boundary-isolation
 maintainers:
-  - name: loopruntime-platform
+  - name: loop-runtime-platform
 home: https://github.com/getloopscale/loop-runtime

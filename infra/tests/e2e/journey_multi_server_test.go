@@ -55,7 +55,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 	It("validates project with 2 apps", func() {
 		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "validate", "--json")
 		Expect(exitCode).To(Equal(0),
-			"loopruntime validate should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime validate should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"validate stdout": stdout,
@@ -71,7 +71,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 	It("workload names are project-scoped", func() {
 		// Workload primitive is Deployment (legacy) OR Rollout
 		// (argo-rollouts-progressive-delivery-plan T1.3, default-on per
-		// LOOPRUNTIME_PROGRESSIVE_DELIVERY=true). Query both kinds via comma-list
+		// LOOP_RUNTIME_PROGRESSIVE_DELIVERY=true). Query both kinds via comma-list
 		// so this spec is forward-compatible regardless of which renderer
 		// path generated the manifests.
 		//

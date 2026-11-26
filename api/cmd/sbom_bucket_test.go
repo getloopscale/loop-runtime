@@ -22,7 +22,7 @@ func TestSBOMDownloadPresignsInTheStaticAssetsBucket(t *testing.T) {
 func TestSBOMDownloadUsesTheBuildDefaultBucketWhenNoneIsConfigured(t *testing.T) {
 	cfg := config.Config{SourceBucket: "example-builds"}
 
-	if got := sbomBucket(cfg); got != "loopruntime-static-assets" {
+	if got := sbomBucket(cfg); got != "loop-runtime-static-assets" {
 		t.Errorf("sbomBucket = %q, want the bucket the build uploads to by default", got)
 	}
 }

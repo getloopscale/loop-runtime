@@ -32,9 +32,9 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 			// J-23 canonical refactor 2026-06-07 (the sponsor asked for
 			// every environment, previews included, to be separated by
 			// project rather than special-cased): namespace formula is uniformly
-			// `loopruntime-<tenant>-<project>-<env>` for ALL envs including
+			// `loop-runtime-<tenant>-<project>-<env>` for ALL envs including
 			// preview-pr-N. Pre-refactor was `<tenant>-<project>-pr-N`
-			// (no `loopruntime-` prefix, no `preview-` env segment) — which
+			// (no `loop-runtime-` prefix, no `preview-` env segment) — which
 			// collided with EnvironmentNamespace shape and broke ArgoCD
 			// destination matching. Tests aligned to canonical.
 			name: "happy path: tenant + project + PR number",
@@ -46,7 +46,7 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 					PRNumber:  42,
 				},
 			},
-			want: "loopruntime-acme-api-preview-pr-42",
+			want: "loop-runtime-acme-api-preview-pr-42",
 		},
 		{
 			name: "single-character slugs are RFC 1123 valid",
@@ -57,7 +57,7 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 					PRNumber:  1,
 				},
 			},
-			want: "loopruntime-a-b-preview-pr-1",
+			want: "loop-runtime-a-b-preview-pr-1",
 		},
 		{
 			name: "empty tenant slug returns error",
@@ -413,7 +413,7 @@ func TestPreviewReconciler_NamespaceName_RejectsLegacyFormat(t *testing.T) {
 // doc comment promised the legacy "{tenant}-{project}-pr-{N}" format, but the
 // body already delegated to Namespace — a redundant wrapper, not a format of its
 // own. This test pins the equivalence that made the deletion safe: the preview
-// namespace is the canonical loopruntime-{tenant}-{project}-preview-pr-{N}, like any
+// namespace is the canonical loop-runtime-{tenant}-{project}-preview-pr-{N}, like any
 // other environment.
 func TestPreviewNamespaceName_IsTheCanonicalFormat(t *testing.T) {
 	r := &PreviewReconciler{}
@@ -427,7 +427,7 @@ func TestPreviewNamespaceName_IsTheCanonicalFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("previewNamespaceName: %v", err)
 	}
-	want := "loopruntime-tn-acme-sample-preview-pr-3"
+	want := "loop-runtime-tn-acme-sample-preview-pr-3"
 	if got != want {
 		t.Errorf("previewNamespaceName = %q, want %q — the legacy format matches "+
 			"no namespace on any cluster", got, want)

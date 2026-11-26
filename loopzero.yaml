@@ -1,5 +1,5 @@
 version: 1
-project: loopruntime
+project: loop-runtime
 
 apps:
   api:

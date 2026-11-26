@@ -18,7 +18,7 @@ func TestFetchSpans_ParsesTempoResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify filter param plumbed through
 		tags := r.URL.Query().Get("tags")
-		if !strings.Contains(tags, "loopruntime-api") {
+		if !strings.Contains(tags, "loop-runtime-api") {
 			t.Errorf("expected service filter in tags, got %q", tags)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -33,7 +33,7 @@ func TestFetchSpans_ParsesTempoResponse(t *testing.T) {
 
 	q := TempoTraceQuery{
 		TempoURL:  srv.URL,
-		Service:   "loopruntime-api",
+		Service:   "loop-runtime-api",
 		Operation: "deploy",
 		Window:    1 * time.Minute,
 	}
@@ -53,7 +53,7 @@ func TestAssertSpanCoverageReal_PASS_when_above_threshold(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	q := TempoTraceQuery{TempoURL: srv.URL, Service: "loopruntime-api", Operation: "deploy", Window: 1 * time.Minute}
+	q := TempoTraceQuery{TempoURL: srv.URL, Service: "loop-runtime-api", Operation: "deploy", Window: 1 * time.Minute}
 	count, err := AssertSpanCoverageReal(context.Background(), q, 3)
 	if err != nil {
 		t.Fatalf("unexpected error: %v (count=%d)", err, count)
@@ -70,7 +70,7 @@ func TestAssertSpanCoverageReal_FAIL_when_below_threshold(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	q := TempoTraceQuery{TempoURL: srv.URL, Service: "loopruntime-api", Operation: "deploy"}
+	q := TempoTraceQuery{TempoURL: srv.URL, Service: "loop-runtime-api", Operation: "deploy"}
 	count, err := AssertSpanCoverageReal(context.Background(), q, 5)
 	if err == nil {
 		t.Fatal("expected error when count below threshold")
@@ -84,7 +84,7 @@ func TestAssertSpanCoverageReal_FAIL_when_below_threshold(t *testing.T) {
 }
 
 func TestAssertSpanCoverageReal_NetworkError_ReturnsMinusOne(t *testing.T) {
-	q := TempoTraceQuery{TempoURL: "http://127.0.0.1:1", Service: "loopruntime-api"}
+	q := TempoTraceQuery{TempoURL: "http://127.0.0.1:1", Service: "loop-runtime-api"}
 	count, err := AssertSpanCoverageReal(context.Background(), q, 1)
 	if err == nil {
 		t.Fatal("expected network error")

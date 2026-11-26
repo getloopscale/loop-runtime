@@ -14,16 +14,16 @@ import (
 
 // TestMigration000046_Schema — T2.1 of plan metering-compute-loop. PG-REAL:
 // asserts the compute-metering schema is in effect against a real Postgres
-// (LOOPRUNTIME_E2E_DATABASE_URL). Skips when the real-PG harness is not wired.
+// (LOOP_RUNTIME_E2E_DATABASE_URL). Skips when the real-PG harness is not wired.
 //
 // Covers: (a) cost_counters.metric CHECK admits the compute metrics;
 // (b) metering_cursor PK is (tenant_id, metric, cell_id) with NO period column
 // (SC-4 period-independence lock); (c) metering_config is seeded enabled=false
 // (EC-5 observe-only ships off); (d) both metering tables have RLS DISABLED.
 func TestMigration000046_Schema(t *testing.T) {
-	dsn := os.Getenv("LOOPRUNTIME_E2E_DATABASE_URL")
+	dsn := os.Getenv("LOOP_RUNTIME_E2E_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("LOOPRUNTIME_E2E_DATABASE_URL not set — real-PG migration test skipped")
+		t.Skip("LOOP_RUNTIME_E2E_DATABASE_URL not set — real-PG migration test skipped")
 	}
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, dsn)

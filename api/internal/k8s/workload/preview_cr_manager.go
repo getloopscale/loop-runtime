@@ -36,7 +36,7 @@ type PreviewCRSpec struct {
 // the api is the second Go consumer of the operators/api contract module,
 // so the compiler checks every CR field at build time (was unstructured
 // map pre-M8). Shares the typed Client used by TenantCRManager — both
-// target loopruntime-system on the mgmt cluster.
+// target loop-runtime-system on the mgmt cluster.
 //
 // LIVE catch 2026-06-07 J-23 bug #4: PreviewCRCreator interface in
 // services had no production implementation. Adapter lives here (next to
@@ -154,7 +154,7 @@ func buildPreviewCR(spec PreviewCRSpec) *apiv1.PreviewEnvironment {
 				"runtime.getloopscale.com/tenant":     spec.TenantID,
 				"runtime.getloopscale.com/project":    spec.ProjectID,
 				"runtime.getloopscale.com/pr-number":  fmt.Sprintf("%d", spec.PRNumber),
-				"runtime.getloopscale.com/managed-by": "loopruntime-api",
+				"runtime.getloopscale.com/managed-by": "loop-runtime-api",
 			},
 		},
 		Spec: apiv1.PreviewEnvironmentSpec{

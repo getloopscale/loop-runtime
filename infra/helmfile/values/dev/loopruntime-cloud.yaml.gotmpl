@@ -1,7 +1,0 @@
-# dev overlay for charts/loopruntime-cloud, layered on charts/loopruntime-cloud/values-bootstrap.yaml.
-#
-# The dev environment installs loopruntime-cloud (profile.loopruntimeCloud: true) and the release
-# in core.helmfile.yaml.gotmpl layers values/<environment>/loopruntime-cloud.yaml.gotmpl.
-# Until this file existed, `helmfile -e dev` could not resolve that layer, so every
-# dev render or sync of the core helmfile failed on it (found with #391). dev has
-# no override of its own: the bootstrap values stand, as they do for its loopruntime-api.

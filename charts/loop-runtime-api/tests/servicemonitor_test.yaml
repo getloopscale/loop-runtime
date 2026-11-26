@@ -1,0 +1,36 @@
+# helm-unittest: ServiceMonitor conditional rendering for loop-runtime-api.
+# INF-G08 + Plan T2.2: ServiceMonitor only renders when metrics.serviceMonitor.enabled=true.
+
+suite: servicemonitor conditional
+templates:
+  - servicemonitor.yaml
+
+tests:
+  - it: does NOT render ServiceMonitor by default (metrics not configured)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does NOT render ServiceMonitor when explicitly disabled
+    set:
+      metrics.serviceMonitor.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders ServiceMonitor when enabled
+    set:
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ServiceMonitor
+
+  - it: ServiceMonitor selector includes loop-runtime-api app label
+    set:
+      metrics.serviceMonitor.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          pattern: "loop-runtime-api"

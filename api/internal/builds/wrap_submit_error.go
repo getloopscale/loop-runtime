@@ -13,7 +13,7 @@ import (
 // BuildOrchestrator.SubmitBuild into a typed *SubmitBuildError so
 // routes/builds.go::mapBuildError can dispatch via AsSubmitBuildError to a
 // reason-specific user-facing message (Sprint 6 plan qa-sprint6-cleanup-
-// 2026-06-25 T2.2 — closes loopruntime-cloud#34).
+// 2026-06-25 T2.2 — closes loop-console#34).
 //
 // EC-3 absorption (Sprint 5 mirror): typed sentinels that pre-existed Sprint
 // 6 MUST pass through unwrapped so the existing handler ladder ordering at

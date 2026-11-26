@@ -315,7 +315,7 @@ func TestDevPublic_DeployBuildPromote_DeploymentDetailFailLoud(t *testing.T) {
 		w.Header().Set("Content-Type", "application/problem+json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"type":   "urn:loopruntime:redeploy:bad-request",
+			"type":   "urn:loop-runtime:redeploy:bad-request",
 			"title":  "Bad Request",
 			"detail": "Source build has no apps to redeploy",
 		})
@@ -404,7 +404,7 @@ func TestDevPublic_DeployBuildPromote_PromoteCanonicalURL(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
 	require.Contains(t, string(body), "prod-dev.getloopscale.app",
-		"promote URL MUST cite canonical prod-dev.getloopscale.app per #159 (NOT loopruntime.local)")
+		"promote URL MUST cite canonical prod-dev.getloopscale.app per #159 (NOT loop-runtime.local)")
 	require.Contains(t, string(body), "tn-",
 		"promote URL MUST include tenant prefix per canonical naming.AppURL per #159")
 	require.Regexp(t, `rel-[0-9a-f]{16}`, string(body),
@@ -451,13 +451,13 @@ func TestDevPublic_DeployBuildPromote_PromoteNoOp(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&parsed))
 	require.True(t, relIDPattern.MatchString(parsed.NewRelease),
 		"promote MUST return canonical rel-<16hex> per #120 (NOT rel-rel-<repeat> double prefix)")
-	require.NotContains(t, parsed.URL, "loopruntime.local",
-		"promote URL MUST cite prod-dev.getloopscale.app per #120 (NOT loopruntime.local)")
+	require.NotContains(t, parsed.URL, "loop-runtime.local",
+		"promote URL MUST cite prod-dev.getloopscale.app per #120 (NOT loop-runtime.local)")
 }
 
 // TestDevPublic_DeployBuildPromote_CliLogsListbuildsInference migrated from #160.
 func TestDevPublic_DeployBuildPromote_CliLogsListbuildsInference(t *testing.T) {
-	// #160: loopruntime logs --env preview inference MUST use /builds?env=<env> (canonical build-history)
+	// #160: loop-runtime logs --env preview inference MUST use /builds?env=<env> (canonical build-history)
 	// instead of /status.last_build.id (release-bound view).
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/projects/sample/builds", func(w http.ResponseWriter, r *http.Request) {
@@ -527,7 +527,7 @@ func TestDevPublic_DeployBuildPromote_CliPromoteNonTTY(t *testing.T) {
 }
 
 // TestDevPublic_DeployBuildPromote_ConcurrentBuildsUnderEnvLock_RaceAware asserts
-// the withEnvironmentLock + pg_advisory_xact_lock invariant per rules/loopruntime-design.md.
+// the withEnvironmentLock + pg_advisory_xact_lock invariant per rules/loop-runtime-design.md.
 // EC-2 absorption: sync.WaitGroup barrier ensures both goroutines contend at
 // HTTP send time, not scheduler-serialized.
 func TestDevPublic_DeployBuildPromote_ConcurrentBuildsUnderEnvLock_RaceAware(t *testing.T) {

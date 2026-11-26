@@ -13,7 +13,7 @@ import (
 
 func TestFor_StarterGetsTheBaseTier(t *testing.T) {
 	e := For(loopruntimev1.PlanStarter)
-	if e.PriorityClassName != "loopruntime-tenant-starter" || e.PriorityValue != 100 || e.Preemption != corev1.PreemptNever {
+	if e.PriorityClassName != "loop-runtime-tenant-starter" || e.PriorityValue != 100 || e.Preemption != corev1.PreemptNever {
 		t.Fatalf("starter priority = %+v", e)
 	}
 	if e.ManagesSecrets || e.ManagesNetworking {
@@ -25,7 +25,7 @@ func TestFor_StarterGetsTheBaseTier(t *testing.T) {
 // get the paid mid tier, not fall through to starter.
 func TestFor_ProGetsThePaidMidTier(t *testing.T) {
 	e := For(loopruntimev1.PlanPro)
-	if e.PriorityClassName != "loopruntime-tenant-growth" || e.PriorityValue != 500 || e.Preemption != corev1.PreemptLowerPriority {
+	if e.PriorityClassName != "loop-runtime-tenant-growth" || e.PriorityValue != 500 || e.Preemption != corev1.PreemptLowerPriority {
 		t.Fatalf("pro priority = %+v", e)
 	}
 	if !e.ManagesSecrets || e.ManagesNetworking {
@@ -48,7 +48,7 @@ func TestFor_LegacyGrowthMeansPro(t *testing.T) {
 
 func TestFor_EnterpriseGetsEverything(t *testing.T) {
 	e := For(loopruntimev1.PlanEnterprise)
-	if e.PriorityClassName != "loopruntime-tenant-enterprise" || e.PriorityValue != 1000 {
+	if e.PriorityClassName != "loop-runtime-tenant-enterprise" || e.PriorityValue != 1000 {
 		t.Fatalf("enterprise priority = %+v", e)
 	}
 	if !e.ManagesSecrets || !e.ManagesNetworking {

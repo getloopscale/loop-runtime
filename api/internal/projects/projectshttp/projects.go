@@ -324,7 +324,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Tenant.Spec.Environments (TenantEnvironmentEntry.Project=req.Name,
 	// Name="production"). TenantController then cascades into Environment
 	// CR creation; EnvironmentController.reconcileNamespace (T3.1) computes
-	// the canonical M2 namespace `loopruntime-<tenant>-<project>-production`.
+	// the canonical M2 namespace `loop-runtime-<tenant>-<project>-production`.
 	//
 	// EC-5 / R8 honest disclosure: the strict PG-tx-first/K8s-after
 	// ordering described in the plan TDD body (lines 569-579) would

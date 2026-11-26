@@ -19,7 +19,7 @@ import (
 // KratosAdminEnv names the variable with the base URL of the Kratos admin API.
 // That API is never exposed: whoever runs the suite reaches it through a
 // port-forward and hands the local address here.
-const KratosAdminEnv = "LOOPRUNTIME_DOGFOOD_KRATOS_ADMIN_URL"
+const KratosAdminEnv = "LOOP_RUNTIME_DOGFOOD_KRATOS_ADMIN_URL"
 
 // KratosAdminURL is the Kratos admin API of the environment, "" when the run
 // has none.

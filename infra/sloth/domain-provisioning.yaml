@@ -2,7 +2,7 @@
 # Measures successful domain provisioning (CF zone creation + DNS + TLS).
 # Target: 99% — domain provisioning should be reliable.
 version: "prometheus/v1"
-service: "loopruntime-domains"
+service: "loop-runtime-domains"
 labels:
   owner: "platform-team"
   tier: "product"
@@ -12,8 +12,8 @@ slos:
     description: "Percentage of custom domain provisions that complete successfully."
     sli:
       events:
-        error_query: sum(rate(loopruntime_domain_provisioning_duration_seconds_count{result!="success"}[{{.window}}]))
-        total_query: sum(rate(loopruntime_domain_provisioning_duration_seconds_count[{{.window}}]))
+        error_query: sum(rate(loop_runtime_domain_provisioning_duration_seconds_count{result!="success"}[{{.window}}]))
+        total_query: sum(rate(loop_runtime_domain_provisioning_duration_seconds_count[{{.window}}]))
     alerting:
       name: LoopRuntimeDomainProvisioningBudgetBurn
       labels:

@@ -20,8 +20,8 @@ function unwrap<T>(o: pulumi.Output<T>): Promise<T> {
 
 describe("secretFromEnvOrConfig", () => {
   it("takes the environment variable when it is set", async () => {
-    const got = secretFromEnvOrConfig("LOOPRUNTIME_X", "x", {
-      env: { LOOPRUNTIME_X: "from-env" },
+    const got = secretFromEnvOrConfig("LOOP_RUNTIME_X", "x", {
+      env: { LOOP_RUNTIME_X: "from-env" },
       getSecret: () => pulumi.secret("from-config"),
     });
     expect(got).toBeDefined();
@@ -29,16 +29,16 @@ describe("secretFromEnvOrConfig", () => {
   });
 
   it("marks a value taken from the environment as a secret", async () => {
-    const got = secretFromEnvOrConfig("LOOPRUNTIME_X", "x", {
-      env: { LOOPRUNTIME_X: "from-env" },
+    const got = secretFromEnvOrConfig("LOOP_RUNTIME_X", "x", {
+      env: { LOOP_RUNTIME_X: "from-env" },
       getSecret: () => undefined,
     });
     expect(await pulumi.isSecret(got!)).toBe(true);
   });
 
   it("falls back to the config secret when the environment variable is unset or empty", async () => {
-    for (const env of [{}, { LOOPRUNTIME_X: "" }]) {
-      const got = secretFromEnvOrConfig("LOOPRUNTIME_X", "x", {
+    for (const env of [{}, { LOOP_RUNTIME_X: "" }]) {
+      const got = secretFromEnvOrConfig("LOOP_RUNTIME_X", "x", {
         env,
         getSecret: (key) => (key === "x" ? pulumi.secret("from-config") : undefined),
       });
@@ -47,7 +47,7 @@ describe("secretFromEnvOrConfig", () => {
   });
 
   it("is undefined when neither source is set", () => {
-    const got = secretFromEnvOrConfig("LOOPRUNTIME_X", "x", { env: {}, getSecret: () => undefined });
+    const got = secretFromEnvOrConfig("LOOP_RUNTIME_X", "x", { env: {}, getSecret: () => undefined });
     expect(got).toBeUndefined();
   });
 });

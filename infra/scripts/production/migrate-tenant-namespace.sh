@@ -2,20 +2,20 @@
 # CHG-2026-04-29-DOGFOOD T3.3 — F-04 partial fix (T1 scope)
 #
 # Migration script: reconciles duplicated Tenant + Environment CRs across
-# namespaces into the canonical `loopruntime-system`. Pure data-cleanup — does NOT
+# namespaces into the canonical `loop-runtime-system`. Pure data-cleanup — does NOT
 # change product contracts, does NOT touch operator/API code. T3.1 (hard-coding
 # the namespace in code) + T3.2 (ValidatingAdmissionPolicy) stay T2 and
 # await a governance meeting (per the CLAUDE.md Pre-release rule).
 #
 # Strategy (idempotent, dry-run by default):
-#  1. List ALL Tenant CRs in namespaces != loopruntime-system.
+#  1. List ALL Tenant CRs in namespaces != loop-runtime-system.
 #  2. For each one:
-#     a. Back up the YAML to ~/.loopruntime/backups/tenant-migration-<ts>/
-#     b. If a same-named Tenant already exists in loopruntime-system, compare
+#     a. Back up the YAML to ~/.loop-runtime/backups/tenant-migration-<ts>/
+#     b. If a same-named Tenant already exists in loop-runtime-system, compare
 #        creationTimestamp:
-#          - NEWER one (loopruntime-system) → keep loopruntime-system, delete the duplicate
+#          - NEWER one (loop-runtime-system) → keep loop-runtime-system, delete the duplicate
 #          - NEWER one (other ns) → error (manual decision required)
-#     c. If it does NOT exist in loopruntime-system, copy it there preserving spec
+#     c. If it does NOT exist in loop-runtime-system, copy it there preserving spec
 #        (strip resourceVersion/uid/managedFields/status; preserve
 #        labels/annotations/finalizers).
 #     d. Remove the finalizer from the original CR in the other ns + delete --wait.
@@ -24,7 +24,7 @@
 # Usage:
 #   bash infra/scripts/production/migrate-tenant-namespace.sh                # dry-run
 #   bash infra/scripts/production/migrate-tenant-namespace.sh --apply        # commit
-#   bash infra/scripts/production/migrate-tenant-namespace.sh --apply --force-prefer=loopruntime-system
+#   bash infra/scripts/production/migrate-tenant-namespace.sh --apply --force-prefer=loop-runtime-system
 #
 # Exit codes:
 #   0 — success (or nothing to do)
@@ -45,8 +45,8 @@ for arg in "$@"; do
   esac
 done
 
-CANONICAL_NS="loopruntime-system"
-BACKUP_DIR="${HOME}/.loopruntime/backups/tenant-migration-$(date +%Y%m%d-%H%M%S)"
+CANONICAL_NS="loop-runtime-system"
+BACKUP_DIR="${HOME}/.loop-runtime/backups/tenant-migration-$(date +%Y%m%d-%H%M%S)"
 
 log() { printf '[migrate-tenant-namespace] %s\n' "$*" >&2; }
 say() { printf '%s\n' "$*"; }
@@ -55,7 +55,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   log "DRY-RUN mode — no changes will be applied. Re-run with --apply to commit."
 fi
 
-# 1) List misplaced Tenants (namespace != loopruntime-system).
+# 1) List misplaced Tenants (namespace != loop-runtime-system).
 MISPLACED_TENANTS=$(kubectl get tenants -A -o json 2>/dev/null \
   | python3 -c '
 import sys, json
@@ -93,7 +93,7 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
   log "backup directory: $BACKUP_DIR"
 fi
 
-# decide_winner: returns "canonical" if loopruntime-system version is newer (or
+# decide_winner: returns "canonical" if loop-runtime-system version is newer (or
 # only one exists in canonical), "other" if non-canonical is newer (manual
 # decision needed), "missing" if no canonical exists yet.
 decide_winner() {
@@ -142,12 +142,12 @@ migrate_cr() {
         # controller — they are not inert. Removing the finalizer + delete
         # cascades REAL cleanup of the shared resources (ArgoCD App,
         # workload namespace, etc.) that are ALSO managed by the canonical
-        # CR in loopruntime-system. Result: HTTP 200 turns into HTTP 404, the
+        # CR in loop-runtime-system. Result: HTTP 200 turns into HTTP 404, the
         # workload ns goes into Terminating, the ArgoCD App is deleted.
         # MITIGATION: mark the stale CR with the `argocd.argoproj.io/skip-reconcile:
         # true` annotation BEFORE removing the finalizer. That pauses the
         # tenant-controller reconciliation loop over the stale CR while
-        # the cleanup runs. The canonical CR in loopruntime-system stays
+        # the cleanup runs. The canonical CR in loop-runtime-system stays
         # active and re-creates/preserves the shared resources.
         log "  → marking $other_ns/$name with skip-reconcile to pause controller"
         kubectl annotate "$kind" -n "$other_ns" "$name" \

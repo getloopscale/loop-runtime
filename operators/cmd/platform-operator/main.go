@@ -40,7 +40,7 @@ func init() {
 		panic(fmt.Sprintf("failed to register client-go scheme: %v", err))
 	}
 	if err := loopruntimev1.AddToScheme(scheme); err != nil {
-		panic(fmt.Sprintf("failed to register loopruntime/v1 scheme: %v", err))
+		panic(fmt.Sprintf("failed to register loop-runtime/v1 scheme: %v", err))
 	}
 }
 
@@ -64,7 +64,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
 
-	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loopruntime-platform-operator")
+	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loop-runtime-platform-operator")
 	if tracingErr != nil {
 		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
 	}
@@ -96,7 +96,7 @@ func main() {
 		},
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "loopruntime-platform-operator.runtime.getloopscale.com",
+		LeaderElectionID:       "loop-runtime-platform-operator.runtime.getloopscale.com",
 		Cache:                  cacheOpts,
 	})
 	if err != nil {
@@ -142,10 +142,10 @@ func main() {
 // CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16. Cache
 // scoping per ADR-0018 v2 C9 + operator-split-invariants.md I-1.
 // PlatformBootstrap, GitRepositoryBinding, ClusterCredential all
-// live in `loopruntime-system` only.
+// live in `loop-runtime-system` only.
 //
 // Secrets are read and written in two namespaces, the ones the chart grants
-// through namespaced Roles: loopruntime-system (cell kubeconfigs, the Gitea admin
+// through namespaced Roles: loop-runtime-system (cell kubeconfigs, the Gitea admin
 // Secret, platform-tokens, Git credentials) and the ArgoCD namespace (the
 // cluster, repository and repo-creds Secrets the controllers write for
 // ArgoCD, and its admin Secret). The Secret informer — which also feeds the

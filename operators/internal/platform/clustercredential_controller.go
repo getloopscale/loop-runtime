@@ -43,7 +43,7 @@ const (
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",namespace=argocd,resources=secrets,verbs=get;list;watch;create;update;delete
 type ClusterCredentialReconciler struct {
 	client.Client
@@ -442,7 +442,7 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 // 5s fetch budget keeps reconcile under its 30s deadline even when fetch hangs.
 //
 // ADR D2 (graceful fallback): never returns error — degrades to existing
-// behavior. SRE detects degradation via loopruntime_clustercredential_ca_fetch_total{result="fallback"}.
+// behavior. SRE detects degradation via loop_runtime_clustercredential_ca_fetch_total{result="fallback"}.
 func (r *ClusterCredentialReconciler) resolveCAData(
 	ctx context.Context,
 	cr *loopruntimev1.ClusterCredential,

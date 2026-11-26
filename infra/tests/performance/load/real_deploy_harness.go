@@ -74,7 +74,7 @@ type RealDeployConfig struct {
 	// ServiceAuth is the X-Service-Auth bypass token.
 	ServiceAuth string
 	// BootstrapSecret is the shared secret for POST /internal/bootstrap.
-	// Default: "loopruntime-dev-bootstrap-secret" (dev mode).
+	// Default: "loop-runtime-dev-bootstrap-secret" (dev mode).
 	BootstrapSecret string
 	// FixturePath is the path to the fixture directory to bundle
 	// (e.g., "infra/tests/e2e/fixtures/hello-server").
@@ -104,7 +104,7 @@ func NewRealDeployHarness(cfg RealDeployConfig) (*RealDeployHarness, error) {
 	}
 	bootstrapSecret := cfg.BootstrapSecret
 	if bootstrapSecret == "" {
-		bootstrapSecret = "loopruntime-dev-bootstrap-secret"
+		bootstrapSecret = "loop-runtime-dev-bootstrap-secret"
 	}
 	return &RealDeployHarness{
 		apiURL:          cfg.APIURL,
@@ -224,7 +224,7 @@ func PrepareFixtureBundle(fixturePath string) ([]byte, error) {
 		return nil, fmt.Errorf("fixture not found at %s: %w", abs, err)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "loopruntime-fixture-*")
+	tmpDir, err := os.MkdirTemp("", "loop-runtime-fixture-*")
 	if err != nil {
 		return nil, fmt.Errorf("create temp dir: %w", err)
 	}
@@ -241,7 +241,7 @@ func PrepareFixtureBundle(fixturePath string) ([]byte, error) {
 	// git init + add + commit
 	cmds := [][]string{
 		{"git", "init", "-q", "."},
-		{"git", "config", "user.email", "loadtest@loopruntime.test"},
+		{"git", "config", "user.email", "loadtest@loop-runtime.test"},
 		{"git", "config", "user.name", "Load Test"},
 		{"git", "add", "-A"},
 		{"git", "commit", "-q", "-m", "load test fixture"},
@@ -278,11 +278,11 @@ type TenantIdentity struct {
 func NewTenantIdentity(level string, i int) TenantIdentity {
 	slug := fmt.Sprintf("lt-%s-tn-%d", level, i)
 	return TenantIdentity{
-		// Bootstrap creates tenant_id = "tn-" + slug. The X-LoopRuntime-Tenant
+		// Bootstrap creates tenant_id = "tn-" + slug. The X-Loop-Runtime-Tenant
 		// header must match the DB value exactly.
 		TenantID:    fmt.Sprintf("tn-%s", slug),
 		UserID:      fmt.Sprintf("github-lt-%s-user-%d", level, i),
-		Email:       fmt.Sprintf("lt-%s-%d@loadtest.loopruntime.dev", level, i),
+		Email:       fmt.Sprintf("lt-%s-%d@loadtest.loop-runtime.dev", level, i),
 		ProjectName: fmt.Sprintf("lt-%s-app-%d", level, i),
 	}
 }
@@ -542,7 +542,7 @@ func (h *RealDeployHarness) setAuth(req *http.Request, t TenantIdentity) {
 
 func (h *RealDeployHarness) uploadRealBundle(ctx context.Context, t TenantIdentity) (string, time.Duration, error) {
 	start := time.Now()
-	loopruntimeYAML := fmt.Sprintf(`version: 2
+	loopRuntimeYAML := fmt.Sprintf(`version: 2
 project: %s
 apps:
   api:
@@ -551,7 +551,7 @@ apps:
     render: server
     port: 3000
 `, t.ProjectName)
-	sha, err := UploadSource(ctx, h.client, h.apiURL, ServiceAuthHeaders(h.serviceAuth, t), loopruntimeYAML, h.bundleBytes)
+	sha, err := UploadSource(ctx, h.client, h.apiURL, ServiceAuthHeaders(h.serviceAuth, t), loopRuntimeYAML, h.bundleBytes)
 	return sha, time.Since(start), err
 }
 
@@ -622,7 +622,7 @@ func (h *RealDeployHarness) verifyAppLive(ctx context.Context, appURL string) (b
 func (h *RealDeployHarness) appURL(t TenantIdentity) string {
 	// App URLs follow the pattern: {tenant}-{project}-{app}-{env}.{domain}
 	// For the hello-server fixture with app name "api" and env "production":
-	appName := os.Getenv("LOOPRUNTIME_VERIFY_APP_NAME")
+	appName := os.Getenv("LOOP_RUNTIME_VERIFY_APP_NAME")
 	if appName == "" {
 		appName = "api"
 	}

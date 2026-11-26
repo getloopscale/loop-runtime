@@ -93,7 +93,7 @@ type projectCapEnforcement struct {
 }
 
 // newProjectCapEnforcement builds the enforcement from the plan limiter and the
-// cross-tenant (loopruntime_worker) connection. A nil limiter yields the zero value:
+// cross-tenant (loop_runtime_worker) connection. A nil limiter yields the zero value:
 // no enforcement, which is the dev-without-pool path.
 func newProjectCapEnforcement(limiter *enforcement.PlanLimiter, crossTenant db.DBTX) projectCapEnforcement {
 	if limiter == nil {
@@ -340,12 +340,12 @@ func setupOrchestrator(
 		Sync:       workflows.SyncClient,
 		Locker:     stores.Locker,
 		BaseDomain: cfg.BaseDomain,
-		// 2026-06-30 (closes Red Team loopruntime-cloud#120 sub-finding 3 — #61
+		// 2026-06-30 (closes Red Team loop-console#120 sub-finding 3 — #61
 		// regression): wire cfg.PublicDomain so the promote response URL is
 		// the canonical user-facing host (prod-dev.getloopscale.app) not the
-		// internal placeholder (loopruntime.local). Empty PublicDomain falls back
+		// internal placeholder (loop-runtime.local). Empty PublicDomain falls back
 		// to BaseDomain inside the orchestrator (back-compat for local
-		// Tilt dev where LOOPRUNTIME_PUBLIC_DOMAIN is unset). Mirrors the canonical
+		// Tilt dev where LOOP_RUNTIME_PUBLIC_DOMAIN is unset). Mirrors the canonical
 		// pattern already applied to ReleaseConvergenceLoop + SyncCallbackActivator.
 		Apps:         promotedApps,
 		PublicDomain: cfg.PublicDomain,
@@ -442,7 +442,7 @@ func setupOrchestrator(
 	} else {
 		logger.Warn("scale: no GitOps pusher or sync client in this boot; a scale is stored and applied by the next deploy")
 	}
-	// Red Team loopruntime-cloud#101 absorption (2026-06-27): wire the same
+	// Red Team loop-console#101 absorption (2026-06-27): wire the same
 	// plan-cap checker the build path uses so the scale endpoint can
 	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
 	// Without this, the scale path silently bypassed the cap.
@@ -502,7 +502,7 @@ func setupOrchestrator(
 	// ArgoCD sync callback activator — processes webhook from ArgoCD Notifications.
 	// Push-based activation: ArgoCD notifies when sync completes instead of API polling.
 	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain is the
-	// canonical public wildcard (LOOPRUNTIME_PUBLIC_DOMAIN) — same source
+	// canonical public wildcard (LOOP_RUNTIME_PUBLIC_DOMAIN) — same source
 	// status.go uses — so deploy.completed SSE URL matches `loopscale status`.
 	// Empty PublicDomain → fall back to BaseDomain (preserves pre-#61
 	// behavior for envs without a public override).
@@ -546,7 +546,7 @@ func setupOrchestrator(
 
 // metricsPrometheusURL is the Prometheus the Status page's metrics are queried on. The
 // API sends those queries itself, so it prefers the Prometheus the API pod reaches
-// (LOOPRUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL) over LOOPRUNTIME_PROMETHEUS_ADDRESS, which is
+// (LOOP_RUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL) over LOOP_RUNTIME_PROMETHEUS_ADDRESS, which is
 // written into canary analyses that run on the cells and may name a host only they
 // resolve.
 func metricsPrometheusURL(cfg config.Config) string {

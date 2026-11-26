@@ -3,15 +3,15 @@
 #
 # T2.1 of plan 2026-06-08-pre-release-test-rigor v1.2 — connects the canonical
 # fixture GitHub repo (`getloopscale/loopzerokit-example`, per 2026-06-16 sponsor
-# mandate; supersedes legacy `loopruntime-repotest`) to the canonical LoopRuntime project
+# mandate; supersedes legacy `loop-runtime-repotest`) to the canonical LoopRuntime project
 # `sample` in admin@getloopscale.com's tenant. Idempotent + handles orphan
 # installations.
 #
 # Preconditions:
 #   - T0.2 ran (admin@getloopscale.com seeded with session at
-#     ~/.loopruntime/admin-loopruntime-dev-session.txt)
+#     ~/.loop-runtime/admin-loop-runtime-dev-session.txt)
 #   - `gh auth status` exits 0 with write permission on getloopscale/loopzerokit-example
-#   - LoopRuntime CLI built (`loopruntime` in PATH OR LOOPRUNTIME_BIN env var pointing at binary)
+#   - LoopRuntime CLI built (`loop-runtime` in PATH OR LOOP_RUNTIME_BIN env var pointing at binary)
 #
 # EC-12 (DOCUMENT preflight): gh auth status + rate-limit headroom asserted
 # BEFORE any API call. Aborts with clear "gh auth login" message if absent.
@@ -37,28 +37,28 @@ set -euo pipefail
 REPO_OWNER="${REPO_OWNER:-getloopscale}"
 # Canonical 2026-06-16: loopzerokit-example is the FAANG-canonical LoopZeroKit-native
 # fixture (scaffolded via `npm create loopzerokit@latest`; has `loopzero.config.ts`
-# v2 + canonical `apps:` map). The legacy `loopruntime-repotest` (superseded by
+# v2 + canonical `apps:` map). The legacy `loop-runtime-repotest` (superseded by
 # loopzerokit-example per sponsor mandate 2026-06-16) was a `loopzero.yaml`-only
 # fixture per Plan v1.1 transition window; user mandate 2026-06-16
 # directed discard+delete in favor of the canonical LoopZeroKit shape.
 REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
 PROJECT_NAME="${PROJECT_NAME:-sample}"
-SESSION_FILE="${SESSION_FILE:-$HOME/.loopruntime/admin-loopruntime-dev-session.txt}"
+SESSION_FILE="${SESSION_FILE:-$HOME/.loop-runtime/admin-loop-runtime-dev-session.txt}"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.getloopscale.com}"
 # Canonical 2026-06-20 (issue #108): post-M2 decomposition, the LoopRuntime CLI
-# lives in sibling repo loopruntime-cli/bin/loopruntime at the workspace root. The master
+# lives in sibling repo loop-runtime-cli/bin/loop-runtime at the workspace root. The master
 # orchestrator seed-post-cleanroom-all.sh invokes Step 11 without exporting
-# LOOPRUNTIME_BIN; pre-fix this defaulted to `loopruntime` on PATH and Step 11 emitted
+# LOOP_RUNTIME_BIN; pre-fix this defaulted to `loop-runtime` on PATH and Step 11 emitted
 # WARN+return-2 when the operator's PATH lacked the binary. The discovery
-# chain below prefers: (a) operator-exported LOOPRUNTIME_BIN, then (b) `loopruntime` on
-# PATH, then (c) workspace-relative loopruntime-cli/bin/loopruntime, then (d) literal
-# `loopruntime` so the existing WARN path remains the last-resort signal.
-# Regression-locked by infra/tests/charts/loopruntime_bin_workspace_discovery_test.go.
-LOOPRUNTIME_BIN="${LOOPRUNTIME_BIN:-$(command -v loopruntime 2>/dev/null || readlink -f "$(dirname "$0")/../../../../loopruntime-cli/bin/loopruntime" 2>/dev/null || echo loopruntime)}"
-GITHUB_APP_SLUG="${GITHUB_APP_SLUG:-loopruntime-platform}"
-CONTEXT="${CONTEXT:-k3d-loopruntime-core}"
-PG_NAMESPACE="${PG_NAMESPACE:-loopruntime-system}"
+# chain below prefers: (a) operator-exported LOOP_RUNTIME_BIN, then (b) `loop-runtime` on
+# PATH, then (c) workspace-relative loop-runtime-cli/bin/loop-runtime, then (d) literal
+# `loop-runtime` so the existing WARN path remains the last-resort signal.
+# Regression-locked by infra/tests/charts/loop_runtime_bin_workspace_discovery_test.go.
+LOOP_RUNTIME_BIN="${LOOP_RUNTIME_BIN:-$(command -v loop-runtime 2>/dev/null || readlink -f "$(dirname "$0")/../../../../loop-runtime-cli/bin/loop-runtime" 2>/dev/null || echo loop-runtime)}"
+GITHUB_APP_SLUG="${GITHUB_APP_SLUG:-loop-runtime-platform}"
+CONTEXT="${CONTEXT:-k3d-loop-runtime-core}"
+PG_NAMESPACE="${PG_NAMESPACE:-loop-runtime-system}"
 
 DRY_RUN=0
 VERIFY=0
@@ -98,7 +98,7 @@ preflight_gh() {
 preflight_session() {
   if [ ! -f "$SESSION_FILE" ] ; then
     log "ERROR: admin@getloopscale.com session file missing at $SESSION_FILE"
-    log "       Run: loopruntime-ops seed admin-loopruntime-dev --verify"
+    log "       Run: loop-runtime-ops seed admin-loop-runtime-dev --verify"
     return 1
   fi
   if [ ! -s "$SESSION_FILE" ] ; then
@@ -123,7 +123,7 @@ mint_app_jwt() {
   # via `kubectl exec`. The earlier `jsonpath=spec.containers[0].env[GITHUB_APP_ID]`
   # query only sees STATIC env declarations — it misses envFrom sources
   # (configMapRef/secretRef), which is how GITHUB_APP_ID is wired canonical
-  # (the loopruntime-api ConfigMap). The running env is authoritative.
+  # (the loop-runtime-api ConfigMap). The running env is authoritative.
   #
   # Canonical 2026-06-20: the container selector must name the container the
   # Deployment actually runs. A wrong `-c` selects no container; kubectl errors
@@ -133,27 +133,27 @@ mint_app_jwt() {
   # in the pod (caught LIVE during dev-public Cleanroom-fresh seed --verify,
   # Step 11 was the only FAIL out of 17).
   #
-  # The container name is `api` — in charts/loopruntime-api, which Helmfile installs,
-  # and in the Tilt-owned infra/tilt/api-deployment.yaml. It was `loopruntime-api` in the
-  # bootstrap chart infra/helm/loopruntime-api until that copy was deleted (one chart per
+  # The container name is `api` — in charts/loop-runtime-api, which Helmfile installs,
+  # and in the Tilt-owned infra/tilt/api-deployment.yaml. It was `loop-runtime-api` in the
+  # bootstrap chart infra/helm/loop-runtime-api until that copy was deleted (one chart per
   # pair, docs/decisions.md). Regression-locked by
   # infra/tests/charts/connect_canonical_fixture_container_name_test.go, which reads
   # the name from the rendered chart rather than from a literal.
   # The single quotes are the point: $GITHUB_APP_ID must expand INSIDE the pod, in
-  # the loopruntime-api environment. Expanding it here would read the operator's machine,
+  # the loop-runtime-api environment. Expanding it here would read the operator's machine,
   # which does not have it.
   # shellcheck disable=SC2016
-  app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" exec deployment/loopruntime-api -c api -- \
+  app_id="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" exec deployment/loop-runtime-api -c api -- \
     sh -c 'echo "$GITHUB_APP_ID"' 2>/dev/null | tr -d '\r\n' || true)"
   if [ -z "$app_id" ]; then
-    log "ERROR mint_app_jwt: cannot resolve GITHUB_APP_ID from loopruntime-api pod running env"
-    log "       (try: kubectl --context=$CONTEXT -n $PG_NAMESPACE exec deployment/loopruntime-api -- env | grep GITHUB_APP_ID)"
+    log "ERROR mint_app_jwt: cannot resolve GITHUB_APP_ID from loop-runtime-api pod running env"
+    log "       (try: kubectl --context=$CONTEXT -n $PG_NAMESPACE exec deployment/loop-runtime-api -- env | grep GITHUB_APP_ID)"
     return 2
   fi
-  private_key="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" get secret loopruntime-api-github \
+  private_key="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" get secret loop-runtime-api-github \
     -o jsonpath='{.data.GITHUB_APP_PRIVATE_KEY}' 2>/dev/null | base64 -d)"
   if [ -z "$private_key" ]; then
-    log "ERROR mint_app_jwt: cannot read GITHUB_APP_PRIVATE_KEY from loopruntime-api-github Secret"
+    log "ERROR mint_app_jwt: cannot read GITHUB_APP_PRIVATE_KEY from loop-runtime-api-github Secret"
     return 2
   fi
   APP_JWT="$(APP_ID="$app_id" PRIVATE_KEY="$private_key" python3 -c '
@@ -293,10 +293,10 @@ except Exception:
   fi
 
   # Project create via LoopRuntime CLI per Principio CLI-First.
-  # The CLI uses ~/.loopruntime/config.json for token; export as env var here.
-  if ! command -v "$LOOPRUNTIME_BIN" > /dev/null 2>&1 ; then
-    log "WARN: LoopRuntime CLI ($LOOPRUNTIME_BIN) not in PATH — project create skipped"
-    log "      Build via: cd cli && npm run build && export LOOPRUNTIME_BIN=\$(pwd)/bin/loopruntime"
+  # The CLI uses ~/.loop-runtime/config.json for token; export as env var here.
+  if ! command -v "$LOOP_RUNTIME_BIN" > /dev/null 2>&1 ; then
+    log "WARN: LoopRuntime CLI ($LOOP_RUNTIME_BIN) not in PATH — project create skipped"
+    log "      Build via: cd cli && npm run build && export LOOP_RUNTIME_BIN=\$(pwd)/bin/loop-runtime"
     return 2
   fi
 
@@ -304,15 +304,15 @@ except Exception:
   # Canonical 2026-06-16: use $jwt (the canonical Bearer token from
   # /v1/auth/session/token exchange above). The stale $token reference was
   # from an earlier refactor — `set -u` correctly traps as unbound.
-  # LOOPRUNTIME_URL canonical for dev-public: ${PUBLIC_CLOUD_URL}/engine — the
-  # Caddy edge routes cloud-dev.getloopscale.com/* → loopruntime-cloud:13002, which
-  # in turn proxies /engine/* → loopruntime-api engine. The CLI's default
+  # LOOP_RUNTIME_URL canonical for dev-public: ${PUBLIC_CLOUD_URL}/engine — the
+  # Caddy edge routes cloud-dev.getloopscale.com/* → loop-console:13002, which
+  # in turn proxies /engine/* → loop-runtime-api engine. The CLI's default
   # localhost:8080 is for production-like topology (Traefik direct).
-  # Per j05-aprendizado-cli-loopruntime-url-subshell-env-propagation memory.
-  LOOPRUNTIME_URL="${PUBLIC_CLOUD_URL}/engine" LOOPRUNTIME_TOKEN="$jwt" \
-    "$LOOPRUNTIME_BIN" project create "$PROJECT_NAME" \
+  # Per j05-aprendizado-cli-loop-runtime-url-subshell-env-propagation memory.
+  LOOP_RUNTIME_URL="${PUBLIC_CLOUD_URL}/engine" LOOP_RUNTIME_TOKEN="$jwt" \
+    "$LOOP_RUNTIME_BIN" project create "$PROJECT_NAME" \
     --json > /tmp/connect-fixture-project-create.json 2>&1 || {
-    log "ERROR: loopruntime project create failed; output:"
+    log "ERROR: loop-runtime project create failed; output:"
     head -c 500 /tmp/connect-fixture-project-create.json >&2
     return 2
   }
@@ -324,7 +324,7 @@ except Exception:
 ensure_repo_linked() {
   # Even when the project exists AND the GitHub App install is active, the
   # webhook handler ignores push events from repos NOT explicitly linked
-  # via the project_repositories table (LIVE-caught 2026-06-09 — loopruntime-api
+  # via the project_repositories table (LIVE-caught 2026-06-09 — loop-runtime-api
   # logs: "github webhook: repo not linked to any project, ignoring").
   # Canonical link endpoint: POST /api/v1/projects/{name}/connect with
   # {repo, installation_id, branch}. Idempotent — repeat calls return the
@@ -418,11 +418,11 @@ except Exception:
 verify_audit_log() {
   local pg_password event_count
   pg_password="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" \
-    get secret loopruntime-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || echo "loopruntime-dev-password")"
+    get secret loop-runtime-db-credentials -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || echo "loop-runtime-dev-password")"
 
   event_count="$(kubectl --context="$CONTEXT" -n "$PG_NAMESPACE" \
     exec -i postgresql-0 -c postgresql -- \
-    env PGPASSWORD="$pg_password" psql -U loopruntime -d loopruntime -tAc \
+    env PGPASSWORD="$pg_password" psql -U loop_runtime -d loop_runtime -tAc \
     "SELECT count(*) FROM audit_log WHERE action='project.connected' AND resource_type='project'" 2>/dev/null | tr -d '[:space:]' || echo "0")"
 
   if [ "$event_count" -ge "1" ] ; then

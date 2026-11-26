@@ -50,7 +50,7 @@ func TestDrillBootstrap_CreatesEachCellWithAnIDBootstrapAccepts(t *testing.T) {
 // (operators/internal/platform/clustercredential_controller.go), which sets
 // status.connected from a live /healthz probe on every reconcile and overwrites
 // anything else wrote there. The drill used to write connected=true itself
-// (Bug #22) so loopruntime-api would find cells before the operator ran; loopruntime-api's
+// (Bug #22) so loop-runtime-api would find cells before the operator ran; loop-runtime-api's
 // release is wait:false (core.helmfile), so it restarts until the operator,
 // installed by the same sync, connects the cells — no bootstrap write needed.
 func TestDrillBootstrap_WritesNoClusterCredentialStatus(t *testing.T) {
@@ -67,10 +67,10 @@ func TestDrillBootstrap_WritesNoClusterCredentialStatus(t *testing.T) {
 func TestDrillBootstrap_PatchesNoChartRenderedObject(t *testing.T) {
 	drill := readDrillBootstrap(t)
 	for name, pattern := range map[string]string{
-		"loopruntime-api env (Bugs #52, #65/#73/#79)": `set env deployment/loopruntime-api`,
-		"operator env (Bug #57)":                      `set env deployment/"\$OP"`,
-		"operator NetworkPolicy (Bug #59)":            `patch networkpolicy`,
-		"loopruntime-clone template (Bug #64)":        `clusterworkflowtemplate loopruntime-clone`,
+		"loop-runtime-api env (Bugs #52, #65/#73/#79)": `set env deployment/loop-runtime-api`,
+		"operator env (Bug #57)":                       `set env deployment/"\$OP"`,
+		"operator NetworkPolicy (Bug #59)":             `patch networkpolicy`,
+		"loop-runtime-clone template (Bug #64)":        `clusterworkflowtemplate loop-runtime-clone`,
 	} {
 		if regexp.MustCompile(pattern).MatchString(drill) {
 			t.Errorf("the drill still patches the %s instead of rendering it", name)

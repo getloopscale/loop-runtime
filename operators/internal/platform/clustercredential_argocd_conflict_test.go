@@ -41,13 +41,13 @@ users:
 func TestClusterCredential_ArgoCDSecretWriteSurvivesAConflict(t *testing.T) {
 	s := bootstrapScheme(t)
 	cr := &loopruntimev1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopruntime-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loop-runtime-system"},
 		Spec: loopruntimev1.ClusterCredentialSpec{
-			ClusterName: "loopruntime-cell-1", APIServer: "https://127.0.0.1:1", CellID: "cell-1",
+			ClusterName: "loop-runtime-cell-1", APIServer: "https://127.0.0.1:1", CellID: "cell-1",
 			Scope: loopruntimev1.CredentialScope{ArgoCD: true},
 		},
 	}
-	existing := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "cluster-loopruntime-cell-1", Namespace: "argocd"}}
+	existing := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "cluster-loop-runtime-cell-1", Namespace: "argocd"}}
 	conflicts := 0
 	c := interceptor.NewClient(fake.NewClientBuilder().WithScheme(s).WithObjects(existing).Build(), interceptor.Funcs{
 		Update: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
@@ -65,7 +65,7 @@ func TestClusterCredential_ArgoCDSecretWriteSurvivesAConflict(t *testing.T) {
 	}
 
 	var got corev1.Secret
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "cluster-loopruntime-cell-1", Namespace: "argocd"}, &got); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "cluster-loop-runtime-cell-1", Namespace: "argocd"}, &got); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if got.StringData["server"] != "https://127.0.0.1:1" && string(got.Data["server"]) != "https://127.0.0.1:1" {

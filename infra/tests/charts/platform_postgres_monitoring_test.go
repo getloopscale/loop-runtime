@@ -125,7 +125,7 @@ func TestStagingCorePrometheusScrapesThePlatformPostgres(t *testing.T) {
 	}
 	for _, want := range []string{
 		"role: pod",
-		"- loopruntime-data-plane", // where the cluster runs
+		"- loop-runtime-data-plane", // where the cluster runs
 		"__meta_kubernetes_pod_label_cnpg_io_cluster", // every instance of every cluster there
 		"__meta_kubernetes_pod_container_port_name",   // the metrics port, not PostgreSQL's
 	} {
@@ -172,7 +172,7 @@ func TestStagingPromtailCollectsTheDataPlaneAndItsDatabaseOperator(t *testing.T)
 		t.Fatal("no platform-pods job on the core cluster")
 	}
 	names, _ := dig(job, "kubernetes_sd_configs", 0, "namespaces", "names").([]any)
-	for _, want := range []string{"loopruntime-data-plane", "cnpg-system"} {
+	for _, want := range []string{"loop-runtime-data-plane", "cnpg-system"} {
 		found := false
 		for _, n := range names {
 			found = found || n == want

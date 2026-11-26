@@ -179,7 +179,7 @@ func TestPreviewController_ReconcileEmitsAStatusPatchWithoutResourceVersion(t *t
 	bodies := capturedStatusPatches(t, &loopruntimev1.PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "pr-42",
-			Namespace:  "loopruntime-system",
+			Namespace:  "loop-runtime-system",
 			Generation: 1,
 			// No finalizer: Reconcile must add one, which is the metadata write
 			// that bumps resourceVersion and is exactly what the snapshot must
@@ -214,7 +214,7 @@ func TestPreviewController_ReconcileEmitsAStatusPatchWithoutResourceVersion(t *t
 // do with placement — which is precisely how the synthetic version fooled me.
 func TestPreviewStatusPatch_ASnapshotTakenBeforeTheFinalizerLeaksTheVersion(t *testing.T) {
 	stale := &loopruntimev1.PreviewEnvironment{
-		ObjectMeta: metav1.ObjectMeta{Name: "pr-42", Namespace: "loopruntime-system", ResourceVersion: "12345"},
+		ObjectMeta: metav1.ObjectMeta{Name: "pr-42", Namespace: "loop-runtime-system", ResourceVersion: "12345"},
 	}
 	obj := stale.DeepCopy()
 	obj.ResourceVersion = "12346" // the finalizer Update bumped it

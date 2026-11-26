@@ -32,10 +32,10 @@ func TestSplitOperators_OnlyTenantOpGrantsClusterRoleEscalation(t *testing.T) {
 		mayGrantCR bool
 	}
 	cases := []chartCheck{
-		{"loopruntime-tenant-operator", true}, // legitimate
-		{"loopruntime-app-operator", false},
-		{"loopruntime-preview-operator", false},
-		{"loopruntime-platform-operator", false},
+		{"loop-runtime-tenant-operator", true}, // legitimate
+		{"loop-runtime-app-operator", false},
+		{"loop-runtime-preview-operator", false},
+		{"loop-runtime-platform-operator", false},
 	}
 
 	for _, c := range cases {

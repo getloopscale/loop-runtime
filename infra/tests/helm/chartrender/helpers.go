@@ -15,11 +15,11 @@
 // Per ADR D5: shared setup reduces ~30 LOC per test file across 19 charts.
 // Per ADR D11: NewOptions invokes `helm dep update` programmatically to
 //
-//	handle charts with dependencies: block (e.g., loopruntime-platform umbrella).
+//	handle charts with dependencies: block (e.g., loop-runtime-platform umbrella).
 //
 // Per ADR D12: IsLibraryChart identifies charts that emit zero manifests
 //
-//	(e.g., loopruntime-common with Chart.yaml type: library).
+//	(e.g., loop-runtime-common with Chart.yaml type: library).
 //
 // Usage from a test file (build tag required):
 //
@@ -33,9 +33,9 @@
 //	)
 //
 //	func TestLoopRuntimeAPI_Defaults(t *testing.T) {
-//	    chartPath, _ := chartrender.PublishedChartPath("loopruntime-api")
+//	    chartPath, _ := chartrender.PublishedChartPath("loop-runtime-api")
 //	    opts, _ := chartrender.NewOptions(chartPath, "")
-//	    output := chartrender.RenderTemplate(t, opts, chartPath, "loopruntime-api-test",
+//	    output := chartrender.RenderTemplate(t, opts, chartPath, "loop-runtime-api-test",
 //	        []string{"templates/deployment.yaml"})
 //	    var deploy appsV1.Deployment
 //	    chartrender.MustUnmarshalK8SYaml(t, output, &deploy)
@@ -63,7 +63,7 @@ import (
 // parallel tests in the same package (typical Microsoft 2026 category
 // fan-out) do not all race for helm's lock file. Without this cache,
 // concurrent invocations on a chart with a `dependencies:` block (e.g.
-// loopruntime-cloud → loopruntime-common library) OOM-killed the test binary at ~13
+// loop-console → loop-runtime-common library) OOM-killed the test binary at ~13
 // parallel goroutines (observed 2026-05-20: SIGKILL after 11min hang).
 var (
 	depUpdateOnce  = make(map[string]*sync.Once)
@@ -154,7 +154,7 @@ func BootstrapChartPath(chartName string) (string, error) {
 // PublishedChartPath resolves to charts/<name>/ ONLY.
 // Use when the test deliberately targets the published (OCI / ArgoCD L3)
 // variant of an overlapping chart. Published variants typically use the
-// loopruntime-common library for full labels + container hardening.
+// loop-runtime-common library for full labels + container hardening.
 func PublishedChartPath(chartName string) (string, error) {
 	if chartName == "" {
 		return "", fmt.Errorf("chart name cannot be empty")
@@ -240,7 +240,7 @@ type chartYaml struct {
 // with `type: library`. Library charts emit zero manifests; render-time
 // tests are NOT applicable per ADR D12.
 //
-// This addresses edge case EC-3 (loopruntime-common library chart).
+// This addresses edge case EC-3 (loop-runtime-common library chart).
 func IsLibraryChart(chartPath string) (bool, error) {
 	data, err := os.ReadFile(filepath.Join(chartPath, "Chart.yaml")) //nolint:gosec // chart path is test-controlled (resolved via ChartPath sanity-checked at repo root)
 	if err != nil {
@@ -353,7 +353,7 @@ func NewOptions(chartPath, envValuesFile string) (*helm.Options, error) {
 // render while others wait on the Once and then read the stored value.
 //
 // Plan 2026-05-20 Global DoD: "CI runtime <60s for full suite".
-// Render cache cuts loopruntime-tenant-operator from 14 helm calls → 1 call
+// Render cache cuts loop-runtime-tenant-operator from 14 helm calls → 1 call
 // (measured: 8 → 1 after per-key Once fix).
 type renderEntry struct {
 	once   sync.Once
@@ -495,7 +495,7 @@ func AssertEnvParityIfNoStub(t *testing.T, env, chartName string) {
 // docs (as YAML strings) whose Kind matches the requested value.
 //
 // Used when a chart emits multiple resources of the SAME kind
-// (e.g., loopruntime-crds emits 8 CustomResourceDefinitions, loopruntime-admission-policies
+// (e.g., loop-runtime-crds emits 8 CustomResourceDefinitions, loop-runtime-admission-policies
 // emits 6 ValidatingAdmissionPolicies). Callers iterate the returned
 // slice and unmarshal each entry into the appropriate typed struct.
 //
@@ -535,7 +535,7 @@ func SplitYAMLByKind(output, kind string) []string {
 // clear error if no matching kind is found.
 //
 // This addresses the case where a single template file emits multiple
-// K8s resources (e.g., loopruntime-api/templates/deployment.yaml emits both
+// K8s resources (e.g., loop-runtime-api/templates/deployment.yaml emits both
 // Service AND Deployment).
 //
 // For multiple same-kind docs (e.g., 8 CRDs in one render), use

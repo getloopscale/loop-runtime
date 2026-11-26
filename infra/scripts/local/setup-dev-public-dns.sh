@@ -12,7 +12,7 @@
 #
 # Inputs (env vars):
 #   CLOUDFLARE_API_TOKEN  — token with Zone:DNS:Edit on getloopscale.com
-#   CF_LOOPRUNTIME_DEV_ZONE_ID — zone id for getloopscale.com (default committed below)
+#   CF_LOOP_RUNTIME_DEV_ZONE_ID — zone id for getloopscale.com (default committed below)
 #   DROPLET_IP            — public IPv4 of this dev droplet
 #
 # Flags:
@@ -33,10 +33,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN required (export from .env)}"
-: "${CF_LOOPRUNTIME_DEV_ZONE_ID:=9f9a41bef0bcb7adf15969c81c303bef}"
+: "${CF_LOOP_RUNTIME_DEV_ZONE_ID:=9f9a41bef0bcb7adf15969c81c303bef}"
 : "${DROPLET_IP:?DROPLET_IP required (e.g. DROPLET_IP=165.227.121.20)}"
 
-ZONE="$CF_LOOPRUNTIME_DEV_ZONE_ID"
+ZONE="$CF_LOOP_RUNTIME_DEV_ZONE_ID"
 TOKEN="$CLOUDFLARE_API_TOKEN"
 
 log() { printf '[setup-dev-public-dns] %s\n' "$*" >&2; }

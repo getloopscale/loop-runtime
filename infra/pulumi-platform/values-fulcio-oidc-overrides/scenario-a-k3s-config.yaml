@@ -7,13 +7,13 @@
 # Apply via (preserves cluster state — pods + PVCs + Helm releases survive
 # container restart since K3s reads config.yaml at startup):
 #
-#   docker exec k3d-loopruntime-build-server-0 sh -c 'cat > /etc/rancher/k3s/config.yaml' \
+#   docker exec k3d-loop-runtime-build-server-0 sh -c 'cat > /etc/rancher/k3s/config.yaml' \
 #     < infra/pulumi-platform/values-fulcio-oidc-overrides/scenario-a-k3s-config.yaml
-#   docker restart k3d-loopruntime-build-server-0
+#   docker restart k3d-loop-runtime-build-server-0
 #   # Wait ~10s for k3s ready: kubectl get nodes
 #
 # Then apply Scenario A.1 RBAC (now effective):
-#   KC=$(k3d kubeconfig write loopruntime-build)
+#   KC=$(k3d kubeconfig write loop-runtime-build)
 #   kubectl --kubeconfig="$KC" apply -f \
 #     infra/pulumi-platform/values-fulcio-oidc-overrides/scenario-a-anonymous-discovery.yaml
 #

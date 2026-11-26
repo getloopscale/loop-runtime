@@ -107,7 +107,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	r.Get("/api/v1/health", health.Health)
 	r.Get("/api/v1/health/deep", health.DeepHealth)
 	// B-123 — `/health/ready` is the ecosystem's name for this answer
-	// (loopruntime-contracts/httpsurface, D5). `deep` describes HOW the check is
+	// (loop-runtime-contracts/httpsurface, D5). `deep` describes HOW the check is
 	// implemented; `ready` describes what it answers, which is the question an
 	// orchestrator asks before sending traffic.
 	//
@@ -121,7 +121,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	r.Get("/api/v1/health/ready", health.DeepHealth)
 	// F-07 (CHG-2026-04-29-DOGFOOD T5.2) — public endpoint, no auth.
 	// Returns binary metadata (version, commit, build_date, go_version, platform).
-	// Stable schema per Rule 5 (loopruntime CLI --json contract analogue).
+	// Stable schema per Rule 5 (loop-runtime CLI --json contract analogue).
 	r.Get("/api/v1/version", versionhttp.VersionHandler())
 	// The status FLEET contract: the dashboard collector probes `/v1/version`
 	// and reads `{version, built_at}`. Same truth as the endpoint above, in the
@@ -138,7 +138,7 @@ func NewRouter(cfg Config) *chi.Mux {
 		r.Post("/internal/bootstrap", bootstrap.Bootstrap)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.EdgeRoute, cfg.EdgeRoute != nil,
-		"LOOPRUNTIME_EDGE_ROUTE_TOKEN is not set, or the route index could not reach the cluster "+
+		"LOOP_RUNTIME_EDGE_ROUTE_TOKEN is not set, or the route index could not reach the cluster "+
 			"(wireEdgeRoute, setup_server.go) — the edge then has no host to cell lookup") {
 		r.Get("/internal/edge/route", cfg.EdgeRoute.ServeHTTP)
 	}
@@ -151,7 +151,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	// v1.2 D3 + plan 2026-06-02-openbao-adoption v1.3 T4.1).
 	// /internal/v1/secret-fetch/{tenant_id}/{secret_name} is the endpoint
 	// the ESO ClusterSecretStore webhook backend calls to resolve user
-	// secrets — loopruntime-api loads the vault:v1: ciphertext from PG +
+	// secrets — loop-runtime-api loads the vault:v1: ciphertext from PG +
 	// decrypts via OpenBao transit + returns plaintext_b64. The handler
 	// itself enforces secret_name regex (EC-08) + tenant↔cell binding
 	// (EC-07) + writes audit_log. Bearer-token auth is provided by the
@@ -161,8 +161,8 @@ func NewRouter(cfg Config) *chi.Mux {
 	// and retries with backoff (safer than registering a broken handler).
 	if surfaces.Recorded(cfg.Surfaces, surfaces.SecretFetch, cfg.Secrets.FetchHandler != nil,
 		"one of four dependencies is missing: the secrets backend transit client, the database, "+
-			"the cross-tenant pool and a broker token per cell (`LOOPRUNTIME_BROKER_TOKENS`, or "+
-			"`LOOPRUNTIME_BROKER_TOKEN` for the default cell alone)") {
+			"the cross-tenant pool and a broker token per cell (`LOOP_RUNTIME_BROKER_TOKENS`, or "+
+			"`LOOP_RUNTIME_BROKER_TOKEN` for the default cell alone)") {
 		// T2.1 + ADR D2 of plan 2026-06-10-j22-layer2-code-review-fixes
 		// (revised 2026-06-11 LIVE catch — ESO v1beta1 CRD rejects
 		// `remoteRef.metadata` as unknown field): 2-segment URL where
@@ -180,7 +180,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	// and the only trace is one Info line at startup — measured on the droplet as
 	// a 404 here against a 405 on /health. In production that means a customer's
 	// `git push` builds nothing, silently. The record surfaces as
-	// `loopruntime_api_surface_enabled{surface="github_webhook"}`.
+	// `loop_runtime_api_surface_enabled{surface="github_webhook"}`.
 	if cfg.GitHubWebhookHandler != nil {
 		r.Post("/api/v1/webhooks/github", cfg.GitHubWebhookHandler.ServeHTTP)
 		_ = cfg.Surfaces.Record(surfaces.GitHubWebhook, true, "")
@@ -193,15 +193,15 @@ func NewRouter(cfg Config) *chi.Mux {
 	// context). Sibling of /webhooks/github so it bypasses the user-auth
 	// middleware that requires identity headers.
 	//
-	// qa-sprint2-cleanup-2026-06-24 T1.2 (closes loopruntime-cloud#16): /evict now
+	// qa-sprint2-cleanup-2026-06-24 T1.2 (closes loop-console#16): /evict now
 	// wraps the handler with Authenticator.RequireAdminService (chi canonical
-	// r.With form). The middleware reads only LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET
-	// (canonical) + _PREVIOUS — NOT the legacy LOOPRUNTIME_SERVICE_AUTH_SECRET that
+	// r.With form). The middleware reads only LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET
+	// (canonical) + _PREVIOUS — NOT the legacy LOOP_RUNTIME_SERVICE_AUTH_SECRET that
 	// the cloud /engine/* proxy carries on user-JWT requests. The handler
-	// still enforces LOOPRUNTIME_ADMIN_API=true as a separate defense-in-depth gate.
+	// still enforces LOOP_RUNTIME_ADMIN_API=true as a separate defense-in-depth gate.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.AdminEvict, cfg.Admin.Evictor != nil,
 		"no database — `buildAdminEvictor` (wireAdmin, setup_server.go) is built on "+
-			"the cross-tenant pool, which exists only with a database. A missing `loopruntime-api-admin` Secret does NOT turn "+
+			"the cross-tenant pool, which exists only with a database. A missing `loop-runtime-api-admin` Secret does NOT turn "+
 			"this route off: it feeds the key the middleware checks, and without it "+
 			"access is DENIED (fail closed), not opened") {
 		r.With(authn.RequireAdminService).Post(
@@ -220,7 +220,7 @@ func NewRouter(cfg Config) *chi.Mux {
 	// diagnostic read-only endpoint for on-call to inspect a release's
 	// signing + attestation chain without source access. Like every admin
 	// route it sits behind Authenticator.RequireAdminService; the handler keeps only
-	// the LOOPRUNTIME_ADMIN_API feature gate.
+	// the LOOP_RUNTIME_ADMIN_API feature gate.
 	if surfaces.Recorded(cfg.Surfaces, surfaces.ReleaseInspect, cfg.Admin.ReleaseInspector != nil,
 		"no database — built by newAdminReleaseInspector (setup_server.go) on the "+
 			"cross-tenant pool, which exists only with a database. It is on-call's view of a release's signing chain; turned off, "+

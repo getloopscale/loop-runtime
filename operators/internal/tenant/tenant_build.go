@@ -152,7 +152,7 @@ func (r *TenantReconciler) ensureBuildServiceAccount(ctx context.Context, buildN
 }
 
 // ensureBuildStorageCredentials creates global MinIO/Spaces credentials when per-tenant
-// provisioner is disabled. CWTs reference Secret "loopruntime-minio-credentials" via envFrom.
+// provisioner is disabled. CWTs reference Secret "loop-runtime-minio-credentials" via envFrom.
 func (r *TenantReconciler) ensureBuildStorageCredentials(ctx context.Context, buildNs, tenantName string) error {
 	if r.MinIOProvisioner != nil || r.Credentials.MinIOEndpoint == "" {
 		return nil

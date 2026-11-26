@@ -36,7 +36,7 @@ import (
 //     — these required real SQL execution against a fake DBTX (now
 //     incompatible with the SqlcBridge requirement). DELETED here;
 //     reshape obligation logged for Phase 2 (T2.x) when pgxmock or
-//     LOOPRUNTIME_E2E_DATABASE_URL harness is wired.
+//     LOOP_RUNTIME_E2E_DATABASE_URL harness is wired.
 //
 // KEEP-INVARIANT coverage of validation invariants (digest format,
 // non-empty app_name, non-empty release/tenant, SBOM format whitelist)
@@ -97,8 +97,8 @@ func TestAppAttestationStoreSqlc_SaveAppAttestations_RejectsEmptyReleaseID(t *te
 		t.Fatal("expected error for empty release_id, got nil")
 	}
 	// Audit gap M02 #13: typed LoopRuntimeError code surfaces in audit_log.
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if !errors.As(err, &loopruntimeErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
 		t.Errorf("expected *loopruntimeerrors.LoopRuntimeError, got %T: %v", err, err)
 	}
 }
@@ -149,8 +149,8 @@ func TestAppAttestationStoreSqlc_UpdateAppSBOM_RejectsEmptyInputs(t *testing.T) 
 	}
 	// Validates typed LoopRuntimeError surface for audit_log mapping.
 	err = store.UpdateAppSBOM(context.Background(), "", "", "s3://...", SBOMFormatCycloneDXJSON, 42)
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if !errors.As(err, &loopruntimeErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
 		t.Errorf("expected *loopruntimeerrors.LoopRuntimeError, got %T: %v", err, err)
 	}
 }

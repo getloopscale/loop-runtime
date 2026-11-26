@@ -8,21 +8,21 @@ set -euo pipefail
 # discovered LIVE during dogfood E2E unblock 2026-04-30:
 #
 #   H1 — k3d cluster restart drops build/runtime nodes from the shared
-#        `k3d-loopruntime` docker network. Reattach all server/agent/serverlb
+#        `k3d-loop-runtime` docker network. Reattach all server/agent/serverlb
 #        containers via `docker network connect`.
 #
-#   H2 — `loopruntime-cluster-kubeconfigs` Secret stores the peer kubeconfigs
-#        loopruntime-api uses (build, cell-0) with a CA cert + apiServer IP. After
+#   H2 — `loop-runtime-cluster-kubeconfigs` Secret stores the peer kubeconfigs
+#        loop-runtime-api uses (build, cell-0) with a CA cert + apiServer IP. After
 #        restart, k3s rotates the CA AND the IP changes — Secret references
-#        stale data. `loopruntime-ops seed cluster-kubeconfigs` re-mints them with
+#        stale data. `loop-runtime-ops seed cluster-kubeconfigs` re-mints them with
 #        the current IPs and each peer's live CA.
 #
 #   H3 — ArgoCD `runtime-argocd-cluster` and `build-argocd-cluster` cluster
 #        secrets carry the same stale apiServer URL. Recreate from scratch
 #        (delete + apply) so ArgoCD discovery cache invalidates fully.
 #
-#   H4 — k3d-loopruntime-registry hostname is not in coredns of the build cluster
-#        once it joined `k3d-loopruntime-build` private net first; even after H1
+#   H4 — k3d-loop-runtime-registry hostname is not in coredns of the build cluster
+#        once it joined `k3d-loop-runtime-build` private net first; even after H1
 #        re-attach, /etc/hosts is needed because the agent's containerd
 #        does ALL its image pulls before joining the cluster network. Add
 #        an explicit hostAlias entry to all node /etc/hosts.
@@ -30,23 +30,23 @@ set -euo pipefail
 #   H5 — RBAC: build & runtime clusters have `kube-system:default` SA
 #        without permission to create Workflow / LoopRuntimeApplication CRs. In
 #        local dev, bind that SA to cluster-admin. Production uses
-#        scoped per-cluster SAs (loopruntime-ctrl-build, loopruntime-ctrl-runtime).
+#        scoped per-cluster SAs (loop-runtime-ctrl-build, loop-runtime-ctrl-runtime).
 #
 #   H6 — removed: the build install renders buildkit-registry-config.
 #
-#   H7 — `loopruntime-minio-credentials` MINIO_ENDPOINT must point to the mgmt
-#        cluster NodePort 32000 reachable on the shared k3d-loopruntime network.
+#   H7 — `loop-runtime-minio-credentials` MINIO_ENDPOINT must point to the mgmt
+#        cluster NodePort 32000 reachable on the shared k3d-loop-runtime network.
 #
-#   H8, H9 — removed: the install renders loopruntime-api's attestation images
-#        and loopruntime-build-cwts' local clone runner.
+#   H8, H9 — removed: the install renders loop-runtime-api's attestation images
+#        and loop-runtime-build-cwts' local clone runner.
 #
 #   H10 — tenant-controller Deployment env WORKLOAD_CLUSTER_URL drifts every
 #         k3d restart (current values overlay hardcodes a stale IP). Patch
 #         live + roll the controller; existing ArgoCD Apps with stale
 #         destination get a one-shot patch too.
 #
-#   H11 — ArgoCD token in loopruntime-api-tokens Secret expired (24h-session token
-#         instead of loopruntime-api:apiKey non-expiring). loopruntime-api can't trigger
+#   H11 — ArgoCD token in loop-runtime-api-tokens Secret expired (24h-session token
+#         instead of loop-runtime-api:apiKey non-expiring). loop-runtime-api can't trigger
 #         post-deploy / post-delete sync → resources orphaned in workload.
 #         Detect via JWT exp claim, regenerate via provision-api-tokens.sh.
 #
@@ -74,7 +74,7 @@ set -euo pipefail
 # Idempotent — safe to re-run after every `k3d cluster start`.
 #
 # Pre-flight: requires kubectl + docker + k3d on PATH and four k3d
-# clusters running (loopruntime-core, loopruntime-build, loopruntime-cell-0, loopruntime-cell-1).
+# clusters running (loop-runtime-core, loop-runtime-build, loop-runtime-cell-0, loop-runtime-cell-1).
 #
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopRuntime Authors
@@ -82,15 +82,15 @@ set -euo pipefail
 
 set -uo pipefail
 
-SHARED_NET="${SHARED_NET:-k3d-loopruntime}"
-MGMT_CTX="${MGMT_CTX:-k3d-loopruntime-core}"
-BUILD_CTX="${BUILD_CTX:-k3d-loopruntime-build}"
-RT_CTX="${RT_CTX:-k3d-loopruntime-cell-0}"
+SHARED_NET="${SHARED_NET:-k3d-loop-runtime}"
+MGMT_CTX="${MGMT_CTX:-k3d-loop-runtime-core}"
+BUILD_CTX="${BUILD_CTX:-k3d-loop-runtime-build}"
+RT_CTX="${RT_CTX:-k3d-loop-runtime-cell-0}"
 # cell-1-activation-plan T0.2 — second runtime cluster context (cell-1).
 # Provisioned by infra/k3d/cell-1-cluster.yaml.
-# Cluster name `loopruntime-cell-1` matches Pulumi/wire-clusters.sh convention.
-RT2_CTX="${RT2_CTX:-k3d-loopruntime-cell-1}"
-REGISTRY_HOST="${REGISTRY_HOST:-k3d-loopruntime-registry}"
+# Cluster name `loop-runtime-cell-1` matches Pulumi/wire-clusters.sh convention.
+RT2_CTX="${RT2_CTX:-k3d-loop-runtime-cell-1}"
+REGISTRY_HOST="${REGISTRY_HOST:-k3d-loop-runtime-registry}"
 
 log() { printf '[k3d-heal] %s\n' "$*" >&2; }
 warn() { printf '[k3d-heal] WARN: %s\n' "$*" >&2; }
@@ -117,7 +117,7 @@ for ctx in "$MGMT_CTX" "$BUILD_CTX" "$RT_CTX" "$RT2_CTX"; do
 done
 
 # ---------------------------------------------------------------------------
-# H1 — Reattach build + runtime nodes to shared k3d-loopruntime network.
+# H1 — Reattach build + runtime nodes to shared k3d-loop-runtime network.
 # ---------------------------------------------------------------------------
 log "H1: ensuring all k3d nodes are on shared network $SHARED_NET"
 attach_to_shared() {
@@ -138,9 +138,9 @@ attach_to_shared() {
     fi
   fi
 }
-for c in k3d-loopruntime-build-server-0 k3d-loopruntime-build-agent-0 k3d-loopruntime-build-serverlb \
-         k3d-loopruntime-cell-0-server-0 k3d-loopruntime-cell-0-agent-0 k3d-loopruntime-cell-0-serverlb \
-         k3d-loopruntime-cell-1-server-0 k3d-loopruntime-cell-1-agent-0 k3d-loopruntime-cell-1-serverlb; do
+for c in k3d-loop-runtime-build-server-0 k3d-loop-runtime-build-agent-0 k3d-loop-runtime-build-serverlb \
+         k3d-loop-runtime-cell-0-server-0 k3d-loop-runtime-cell-0-agent-0 k3d-loop-runtime-cell-0-serverlb \
+         k3d-loop-runtime-cell-1-server-0 k3d-loop-runtime-cell-1-agent-0 k3d-loop-runtime-cell-1-serverlb; do
   attach_to_shared "$c"
 done
 
@@ -150,9 +150,9 @@ ip_on() {
     "{{(index .NetworkSettings.Networks \"${SHARED_NET}\").IPAddress}}" \
     2>/dev/null || true
 }
-MGMT_IP=$(ip_on k3d-loopruntime-core-server-0)
-BUILD_IP=$(ip_on k3d-loopruntime-build-server-0)
-RT_IP=$(ip_on k3d-loopruntime-cell-0-server-0)
+MGMT_IP=$(ip_on k3d-loop-runtime-core-server-0)
+BUILD_IP=$(ip_on k3d-loop-runtime-build-server-0)
+RT_IP=$(ip_on k3d-loop-runtime-cell-0-server-0)
 REG_IP=$(docker network inspect "$SHARED_NET" \
   --format '{{range .Containers}}{{if eq .Name "'"$REGISTRY_HOST"'"}}{{.IPv4Address}}{{end}}{{end}}' \
   2>/dev/null | sed 's|/.*||')
@@ -163,7 +163,7 @@ REG_IP=$(docker network inspect "$SHARED_NET" \
 log "  resolved: MGMT=$MGMT_IP BUILD=$BUILD_IP RT=$RT_IP REG=$REG_IP"
 
 # ---------------------------------------------------------------------------
-# H4 — Add k3d-loopruntime-registry to /etc/hosts on build + runtime nodes.
+# H4 — Add k3d-loop-runtime-registry to /etc/hosts on build + runtime nodes.
 # Idempotent (grep before append). containerd reads /etc/hosts at pull time.
 # ---------------------------------------------------------------------------
 if [[ -n "$REG_IP" ]]; then
@@ -183,17 +183,17 @@ if [[ -n "$REG_IP" ]]; then
     fi
   }
   # 2026-05-14 (plan T0.2): runtime-2 nodes added so helmfile sync against
-  # k3d-loopruntime-cell-1 can pull from the shared local registry (EC-1 fix).
-  for c in k3d-loopruntime-build-server-0 k3d-loopruntime-build-agent-0 \
-           k3d-loopruntime-cell-0-server-0 k3d-loopruntime-cell-0-agent-0 \
-           k3d-loopruntime-cell-1-server-0 k3d-loopruntime-cell-1-agent-0; do
+  # k3d-loop-runtime-cell-1 can pull from the shared local registry (EC-1 fix).
+  for c in k3d-loop-runtime-build-server-0 k3d-loop-runtime-build-agent-0 \
+           k3d-loop-runtime-cell-0-server-0 k3d-loop-runtime-cell-0-agent-0 \
+           k3d-loop-runtime-cell-1-server-0 k3d-loop-runtime-cell-1-agent-0; do
     ensure_host "$c"
   done
 fi
 
 # ---------------------------------------------------------------------------
 # H5 — Bind kube-system:default SA to cluster-admin in build + runtime.
-# Local k3d only — production has scoped SAs (loopruntime-ctrl-*).
+# Local k3d only — production has scoped SAs (loop-runtime-ctrl-*).
 # ---------------------------------------------------------------------------
 log "H5: ensuring kube-system:default cluster-admin in build + runtime"
 ensure_admin() {
@@ -205,34 +205,34 @@ ensure_admin() {
       --clusterrole=cluster-admin --serviceaccount=kube-system:default 2>&1 | head -1
   fi
 }
-ensure_admin "$BUILD_CTX" loopruntime-api-build-admin
-ensure_admin "$RT_CTX" loopruntime-api-runtime-admin
+ensure_admin "$BUILD_CTX" loop-runtime-api-build-admin
+ensure_admin "$RT_CTX" loop-runtime-api-runtime-admin
 
 # ---------------------------------------------------------------------------
-# H2 — Refresh the peer-cluster kubeconfigs in loopruntime-cluster-kubeconfigs with
+# H2 — Refresh the peer-cluster kubeconfigs in loop-runtime-cluster-kubeconfigs with
 # current IPs, a fresh token and the peer's live CA.
 #
-# The minting lives in `loopruntime-ops seed cluster-kubeconfigs` (#236), the one
+# The minting lives in `loop-runtime-ops seed cluster-kubeconfigs` (#236), the one
 # writer of those keys. This block used to mint kube-system/default tokens for
 # 24h with TLS verification off, which on every heal reverted two fixes: the
-# scoped build identity (argo/loopruntime-workflow-submitter, Sprint 7 #36) and the
+# scoped build identity (argo/loop-runtime-workflow-submitter, Sprint 7 #36) and the
 # 720h lifetime (#242). It also overwrote the core key with an expiring token,
-# where loopruntime-api reaches its own cluster in-cluster anyway. The live CA is read
+# where loop-runtime-api reaches its own cluster in-cluster anyway. The live CA is read
 # on every run, so a k3s CA rotation no longer needs TLS turned off.
 # ---------------------------------------------------------------------------
-log "H2: refreshing the peer kubeconfigs in loopruntime-cluster-kubeconfigs (loopruntime-ops seed cluster-kubeconfigs)"
+log "H2: refreshing the peer kubeconfigs in loop-runtime-cluster-kubeconfigs (loop-runtime-ops seed cluster-kubeconfigs)"
 HEAL_REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-loopruntime_ops() {
-  if command -v loopruntime-ops >/dev/null 2>&1; then
-    loopruntime-ops "$@"
+loop_runtime_ops() {
+  if command -v loop-runtime-ops >/dev/null 2>&1; then
+    loop-runtime-ops "$@"
   else
-    (cd "$HEAL_REPO_ROOT/cmd/loopruntime-ops" && go run . "$@")
+    (cd "$HEAL_REPO_ROOT/cmd/loop-runtime-ops" && go run . "$@")
   fi
 }
-if CORE_CONTEXT="$MGMT_CTX" loopruntime_ops seed cluster-kubeconfigs; then
-  log "  loopruntime-cluster-kubeconfigs peer keys refreshed"
+if CORE_CONTEXT="$MGMT_CTX" loop_runtime_ops seed cluster-kubeconfigs; then
+  log "  loop-runtime-cluster-kubeconfigs peer keys refreshed"
 else
-  warn "H2 failed — loopruntime-api cannot reach the build or cell-0 cluster until it succeeds"
+  warn "H2 failed — loop-runtime-api cannot reach the build or cell-0 cluster until it succeeds"
   HEAL_FAILED+=("H2")
 fi
 
@@ -271,34 +271,34 @@ done
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# H7 — loopruntime-minio-credentials with mgmt NodePort URL reachable from build.
+# H7 — loop-runtime-minio-credentials with mgmt NodePort URL reachable from build.
 # ---------------------------------------------------------------------------
-log "H7: ensuring loopruntime-minio-credentials in build cluster"
-MINIO_AK=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret minio \
+log "H7: ensuring loop-runtime-minio-credentials in build cluster"
+MINIO_AK=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get secret minio \
   -o jsonpath='{.data.rootUser}' 2>/dev/null | base64 -d 2>/dev/null || true)
-MINIO_SK=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret minio \
+MINIO_SK=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get secret minio \
   -o jsonpath='{.data.rootPassword}' 2>/dev/null | base64 -d 2>/dev/null || true)
 MINIO_EP="http://${MGMT_IP}:32000"
 if [[ -n "$MINIO_AK" && -n "$MINIO_SK" ]]; then
   kubectl --context "$BUILD_CTX" get ns argo >/dev/null 2>&1 || \
     kubectl --context "$BUILD_CTX" create ns argo >/dev/null
-  kubectl --context "$BUILD_CTX" -n argo create secret generic loopruntime-minio-credentials \
+  kubectl --context "$BUILD_CTX" -n argo create secret generic loop-runtime-minio-credentials \
     --from-literal=AWS_ACCESS_KEY_ID="$MINIO_AK" \
     --from-literal=AWS_SECRET_ACCESS_KEY="$MINIO_SK" \
     --from-literal=MINIO_ENDPOINT="$MINIO_EP" \
     --from-literal=AWS_DEFAULT_REGION=us-east-1 \
     --from-literal=AWS_ENDPOINT_URL="$MINIO_EP" \
     --dry-run=client -o yaml | kubectl --context "$BUILD_CTX" apply -f - >/dev/null
-  log "  loopruntime-minio-credentials → $MINIO_EP"
+  log "  loop-runtime-minio-credentials → $MINIO_EP"
 else
   warn "MinIO root creds not found in mgmt — H7 skipped"
 fi
 
 # ---------------------------------------------------------------------------
 # H8, H9 — REMOVED (principle_violations#243). The install renders both:
-# dev-public's loopruntime-api overlay pins LOOPRUNTIME_COSIGN_IMAGE/LOOPRUNTIME_SYFT_IMAGE to the
-# local registry (standalone's loopruntime-api is Tilt's; LOOPRUNTIME_CLONE_IMAGE has no
-# reader), and build.helmfile gives loopruntime-build-cwts the local clone runner
+# dev-public's loop-runtime-api overlay pins LOOP_RUNTIME_COSIGN_IMAGE/LOOP_RUNTIME_SYFT_IMAGE to the
+# local registry (standalone's loop-runtime-api is Tilt's; LOOP_RUNTIME_CLONE_IMAGE has no
+# reader), and build.helmfile gives loop-runtime-build-cwts the local clone runner
 # wherever profile.localRegistry is set. H8 overwrote the pinned tags with
 # :latest and H9 upgraded the release outside Helmfile.
 # ---------------------------------------------------------------------------
@@ -306,30 +306,30 @@ fi
 # ---------------------------------------------------------------------------
 # H10 — tenant-operator Deployment env: WORKLOAD_CLUSTER_URL must point at
 # the runtime cluster apiServer IP (current). Hardcoded YAML overlay
-# `charts/loopruntime-tenant-operator/values-standalone-multi.yaml` uses an IP
+# `charts/loop-runtime-tenant-operator/values-standalone-multi.yaml` uses an IP
 # that drifts every k3d restart. Patch live until permanent solution
 # (operator reads ClusterCredential CR for runtime → automatic).
 # Discovered LIVE 2026-04-30 — NEW-14: ArgoCD App destination went to BUILD
 # cluster IP (172.18.0.10) because the operator was started with the
 # stale value baked into the helm overlay before the most recent restart.
 # ADR-0023 / plan v1.1 T1.5 update: legacy `app=tenant-controller` selector
-# replaced with `app.kubernetes.io/component=loopruntime-operator,app.kubernetes.io/name=loopruntime-tenant-operator`
-# to match the split chart (loopruntime-tenant-operator) — the only operator that
+# replaced with `app.kubernetes.io/component=loop-runtime-operator,app.kubernetes.io/name=loop-runtime-tenant-operator`
+# to match the split chart (loop-runtime-tenant-operator) — the only operator that
 # wires SetupTenantController and therefore needs WORKLOAD_CLUSTER_URL.
 # ---------------------------------------------------------------------------
 log "H10: ensuring tenant-operator WORKLOAD_CLUSTER_URL points at runtime"
 WORKLOAD_URL="https://${RT_IP}:6443"
 # B27 fix (real-paas-cleanroom-dogfood-loop iter 25, 2026-05-05): match
-# both the split chart name (loopruntime-tenant-operator) and the Tilt-applied
+# both the split chart name (loop-runtime-tenant-operator) and the Tilt-applied
 # legacy name (tenant-operator). In cleanroom only `tenant-operator`
-# exists; production helmfile sync produces `loopruntime-tenant-operator`.
+# exists; production helmfile sync produces `loop-runtime-tenant-operator`.
 # Without matching both, H10 silently no-ops in cleanroom and the operator
 # keeps a stale IP / DNS-name baked into the Tilt YAML — ArgoCD App
 # destination then fails with "unable to find destination server".
-TC_DEPLOY=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get deploy \
-  -l app.kubernetes.io/name=loopruntime-tenant-operator -o name 2>/dev/null | head -1)
+TC_DEPLOY=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get deploy \
+  -l app.kubernetes.io/name=loop-runtime-tenant-operator -o name 2>/dev/null | head -1)
 if [[ -z "$TC_DEPLOY" ]]; then
-  TC_DEPLOY=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get deploy \
+  TC_DEPLOY=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get deploy \
     -l app=tenant-operator -o name 2>/dev/null | head -1)
 fi
 # tenant-operator may be absent in standalone (tilt-owned, installed:false in the
@@ -337,15 +337,15 @@ fi
 # WORKLOAD_CLUSTER_URL). Skip the operator env-patch + rollout when the deployment
 # does not exist, so the bootstrap heal does not fail under `set -e`. The ArgoCD
 # Application URL patching below still runs. Fix: finding-2026-05-22-pg-password-divergence § k3d-heal-H10.
-if [[ -z "$TC_DEPLOY" ]] || ! kubectl --context "$MGMT_CTX" -n loopruntime-system get "$TC_DEPLOY" >/dev/null 2>&1; then
+if [[ -z "$TC_DEPLOY" ]] || ! kubectl --context "$MGMT_CTX" -n loop-runtime-system get "$TC_DEPLOY" >/dev/null 2>&1; then
   log "  tenant-operator deployment absent — skipping operator env-patch + rollout (tilt-owned in standalone)"
 else
-CURRENT_URL=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get "$TC_DEPLOY" \
+CURRENT_URL=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get "$TC_DEPLOY" \
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="WORKLOAD_CLUSTER_URL")].value}' 2>/dev/null)
 if [[ "$CURRENT_URL" == "$WORKLOAD_URL" ]]; then
   log "  $TC_DEPLOY: WORKLOAD_CLUSTER_URL already $WORKLOAD_URL"
 else
-  kubectl --context "$MGMT_CTX" -n loopruntime-system set env "$TC_DEPLOY" \
+  kubectl --context "$MGMT_CTX" -n loop-runtime-system set env "$TC_DEPLOY" \
     WORKLOAD_CLUSTER_URL="$WORKLOAD_URL" >/dev/null 2>&1
   log "  $TC_DEPLOY: $CURRENT_URL → $WORKLOAD_URL"
 fi
@@ -361,9 +361,9 @@ fi
 # init) then sees no spec drift and never re-emits the correct URL.
 # Discovered LIVE in real-paas-cleanroom-dogfood-loop iter 29:
 # Application stuck at hostname despite H10 patch + new pod with IP env.
-kubectl --context "$MGMT_CTX" -n loopruntime-system rollout restart "$TC_DEPLOY" >/dev/null 2>&1
+kubectl --context "$MGMT_CTX" -n loop-runtime-system rollout restart "$TC_DEPLOY" >/dev/null 2>&1
 log "  $TC_DEPLOY: rolled, waiting for new pod ready..."
-if kubectl --context "$MGMT_CTX" -n loopruntime-system rollout status "$TC_DEPLOY" --timeout=60s >/dev/null 2>&1; then
+if kubectl --context "$MGMT_CTX" -n loop-runtime-system rollout status "$TC_DEPLOY" --timeout=60s >/dev/null 2>&1; then
   log "  $TC_DEPLOY: rollout complete (old pod terminated)"
 else
   warn "  $TC_DEPLOY: rollout status timeout (60s) — proceeding"
@@ -372,10 +372,10 @@ fi
 # Force the tenant-operator to re-emit Application destination on existing
 # tenants by triggering a reconcile via touch annotation. ONLY the new pod
 # (env=fresh URL) sees this, since the old pod was killed above.
-TENANTS=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get tenants \
+TENANTS=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get tenants \
   --no-headers 2>/dev/null | awk '$2=="Active" {print $1}' | head -3)
 for t in $TENANTS; do
-  kubectl --context "$MGMT_CTX" -n loopruntime-system annotate tenant "$t" \
+  kubectl --context "$MGMT_CTX" -n loop-runtime-system annotate tenant "$t" \
     runtime.getloopscale.com/heal-trigger="$(date +%s)" --overwrite >/dev/null 2>&1
 done
 [[ -n "$TENANTS" ]] && log "  triggered reconcile on $(echo $TENANTS | wc -w) Active tenant(s)"
@@ -384,13 +384,13 @@ fi  # end tenant-operator-present guard (H10 dual-ownership fix)
 # Patch only TENANT ArgoCD Applications carrying a stale URL.
 # CHG-2026-04-30-DELETE-SINGLE-CELL: skip apps that use destination.name
 # (cell-aware multi-cell pattern). Only patch ones that still use legacy
-# destination.server with stale IP. loopruntime-tenant-operator v0.4.1+ writes
+# destination.server with stale IP. loop-runtime-tenant-operator v0.4.1+ writes
 # `name: <cellID>` for non-default cells — those resolve via ArgoCD's
 # cluster registry and don't need IP patching.
 # NOTE: the LABEL VALUE `tenant-controller` is the legacy-but-stable value
 # written by `constants.ManagedByTenantController` in the operator code
 # (preserves match with pre-existing Application objects). The BINARY that
-# writes it is now `loopruntime-tenant-operator`.
+# writes it is now `loop-runtime-tenant-operator`.
 TENANT_APPS=$(kubectl --context "$MGMT_CTX" -n argocd get applications \
   -l runtime.getloopscale.com/managed-by=tenant-controller \
   -o jsonpath='{range .items[*]}{.metadata.name}|{.spec.destination.server}|{.spec.destination.name}{"\n"}{end}' \
@@ -418,17 +418,17 @@ fi
 # install (ADR-0008 multi-cell + 4-binary operator split).
 
 # ---------------------------------------------------------------------------
-# H11 — ArgoCD token expired. loopruntime-api-tokens Secret may have expired (24h
+# H11 — ArgoCD token expired. loop-runtime-api-tokens Secret may have expired (24h
 # admin session token if provisioned with the wrong path). Detect via JWT
 # exp claim and regenerate via provision-api-tokens.sh which mints from the
-# `loopruntime-api:apiKey` ArgoCD account (non-expiring).
+# `loop-runtime-api:apiKey` ArgoCD account (non-expiring).
 # Discovered LIVE 2026-04-30 — NEW-15: project delete failed to trigger
 # ArgoCD prune sync because [DEPLOY_SERVICE_AUTH_FAILED] — token had
 # expired 13.8h before. Cleanup of solo-server resources never happened,
 # Proof of Death timed out 300s.
 # ---------------------------------------------------------------------------
-log "H11: ensuring ArgoCD token in loopruntime-api-tokens Secret is valid"
-TOKEN_RAW=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret loopruntime-api-tokens \
+log "H11: ensuring ArgoCD token in loop-runtime-api-tokens Secret is valid"
+TOKEN_RAW=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get secret loop-runtime-api-tokens \
   -o jsonpath='{.data.argocd-token}' 2>/dev/null | base64 -d 2>/dev/null || true)
 TOKEN_VALID="false"
 if [[ -n "$TOKEN_RAW" ]]; then
@@ -438,7 +438,7 @@ if [[ -n "$TOKEN_RAW" ]]; then
   EXP=$(echo "$PAYLOAD" | tr '_-' '/+' | base64 -d 2>/dev/null \
     | python3 -c 'import sys,json; print(json.load(sys.stdin).get("exp",0))' 2>/dev/null || echo 0)
   NOW=$(date +%s)
-  # exp=0 means non-expiring (loopruntime-api:apiKey style). Anything >300s in the
+  # exp=0 means non-expiring (loop-runtime-api:apiKey style). Anything >300s in the
   # future is fine; under that or already past = regenerate.
   if [[ "$EXP" == "0" ]] || (( EXP > NOW + 300 )); then
     TOKEN_VALID="true"
@@ -451,7 +451,7 @@ else
   REPO_ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
   if [[ -x "$REPO_ROOT/infra/scripts/production/provision-api-tokens.sh" ]]; then
     if bash "$REPO_ROOT/infra/scripts/production/provision-api-tokens.sh" >/dev/null 2>&1; then
-      log "  argocd-token regenerated (loopruntime-api:apiKey, non-expiring)"
+      log "  argocd-token regenerated (loop-runtime-api:apiKey, non-expiring)"
     else
       warn "provision-api-tokens.sh failed — argocd sync calls may keep failing"
     fi
@@ -463,7 +463,7 @@ fi
 # ---------------------------------------------------------------------------
 # H12 — a cell whose ClusterCredential is missing or disconnected is
 # re-bootstrapped through bootstrap-cell-cc.sh, which mints the scoped
-# loopruntime-ctrl-runtime identity, the live address and TLS posture, and labels the
+# loop-runtime-ctrl-runtime identity, the live address and TLS posture, and labels the
 # CR (regression matrix entries 153-155).
 #
 # H13 and H14 mode A used to rewrite the kubeconfig by hand instead: H13 with
@@ -479,13 +479,13 @@ BOOTSTRAP="$REPO_ROOT/infra/helmfile/scripts/bootstrap-cell-cc.sh"
 for cell in 0 1; do
   cell_id="cell-${cell}"
   log "H12: ensuring ClusterCredential ${cell_id} is connected"
-  connected=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get clustercredentials \
+  connected=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get clustercredentials \
     -o jsonpath="{.items[?(@.spec.cellID==\"${cell_id}\")].status.connected}" 2>/dev/null || echo "")
   if [[ "$connected" == "true" ]]; then
     log "  ${cell_id} already connected — skip"
     continue
   fi
-  if KUBECONFIG="$(k3d kubeconfig write loopruntime-core 2>/dev/null)" INGRESS_DOMAIN="loopruntime.local" \
+  if KUBECONFIG="$(k3d kubeconfig write loop-runtime-core 2>/dev/null)" INGRESS_DOMAIN="loop-runtime.local" \
       bash "$BOOTSTRAP" --cell "$cell" --env standalone-multi >/dev/null 2>&1; then
     log "  ${cell_id} re-bootstrapped via bootstrap-cell-cc.sh"
   else
@@ -523,7 +523,7 @@ else
     log "  cell-1-argocd-cluster token still valid (exp=$H15_EXP, ${H15_EXP}s; ~$(( (H15_EXP - H15_NOW) / 60 ))min remaining) — skip"
   else
     log "  cell-1-argocd-cluster token expired/expiring (exp=$H15_EXP, now=$H15_NOW) — patching"
-    H15_FRESH_TOKEN=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret cell-1-kubeconfig \
+    H15_FRESH_TOKEN=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get secret cell-1-kubeconfig \
       -o jsonpath='{.data.kubeconfig}' 2>/dev/null | base64 -d 2>/dev/null \
       | grep "token:" | awk '{print $2}' || echo "")
     if [[ -z "$H15_FRESH_TOKEN" ]]; then
@@ -556,19 +556,19 @@ fi
 # staging HTTP 200 timeout root-caused to cluster-cell-0 stale CA).
 # Issue #67 (2026-05-25): the previous H19 patched only the rendered Secret
 # in argocd namespace, but the ClusterCredential reconciler in
-# loopruntime-platform-operator rewrites that Secret from CR.spec.tls.insecure on
+# loop-runtime-platform-operator rewrites that Secret from CR.spec.tls.insecure on
 # every reconcile loop (Secret watcher, periodic recheck, or any CC edit).
 # Within minutes of H19 running, the Secret reverted to insecure:false and
 # x509 came back. Fix the source of truth — flip spec.tls.insecure on the
 # CR itself so the operator's next reconcile WRITES insecure:true into the
 # Secret instead of overwriting our patch.
 log "H19a: hardening ClusterCredential CRs (spec.tls.insecure=true — declarative source of truth)"
-for H19A_CR in $(kubectl --context "$MGMT_CTX" -n loopruntime-system get clustercredentials -o name 2>/dev/null \
+for H19A_CR in $(kubectl --context "$MGMT_CTX" -n loop-runtime-system get clustercredentials -o name 2>/dev/null \
   | sed 's#clustercredential.runtime.getloopscale.com/##'); do
-  H19A_CURRENT=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get clustercredential "$H19A_CR" \
+  H19A_CURRENT=$(kubectl --context "$MGMT_CTX" -n loop-runtime-system get clustercredential "$H19A_CR" \
     -o jsonpath='{.spec.tls.insecure}' 2>/dev/null || echo "")
   if [[ "$H19A_CURRENT" == "true" ]]; then continue; fi
-  if kubectl --context "$MGMT_CTX" -n loopruntime-system patch clustercredential "$H19A_CR" \
+  if kubectl --context "$MGMT_CTX" -n loop-runtime-system patch clustercredential "$H19A_CR" \
     --type=merge -p '{"spec":{"tls":{"insecure":true}}}' >/dev/null 2>&1; then
     log "  $H19A_CR → spec.tls.insecure=true"
   else
@@ -604,20 +604,20 @@ if [[ "$H19_PATCHED" -eq 1 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Restart loopruntime-api so kubeconfigs Secret refresh takes effect (H2).
+# Restart loop-runtime-api so kubeconfigs Secret refresh takes effect (H2).
 # ---------------------------------------------------------------------------
-log "rolling loopruntime-api so refreshed kubeconfigs take effect"
-# loopruntime-api is tilt-owned in standalone (helmfile app-tier installed:false), so the
+log "rolling loop-runtime-api so refreshed kubeconfigs take effect"
+# loop-runtime-api is tilt-owned in standalone (helmfile app-tier installed:false), so the
 # Deployment is absent during `task setup` (before `tilt up`). Skip when absent;
 # tilt picks up the refreshed kubeconfigs Secret on its own next reconcile.
-if ! kubectl --context "$MGMT_CTX" -n loopruntime-system get deploy loopruntime-api >/dev/null 2>&1; then
-  log "  loopruntime-api deployment absent — skipping rollout (tilt-owned in standalone)"
+if ! kubectl --context "$MGMT_CTX" -n loop-runtime-system get deploy loop-runtime-api >/dev/null 2>&1; then
+  log "  loop-runtime-api deployment absent — skipping rollout (tilt-owned in standalone)"
 else
-  kubectl --context "$MGMT_CTX" -n loopruntime-system rollout restart deploy/loopruntime-api >/dev/null 2>&1
-  if kubectl --context "$MGMT_CTX" -n loopruntime-system rollout status deploy/loopruntime-api --timeout=90s >/dev/null 2>&1; then
-    log "  loopruntime-api Ready"
+  kubectl --context "$MGMT_CTX" -n loop-runtime-system rollout restart deploy/loop-runtime-api >/dev/null 2>&1
+  if kubectl --context "$MGMT_CTX" -n loop-runtime-system rollout status deploy/loop-runtime-api --timeout=90s >/dev/null 2>&1; then
+    log "  loop-runtime-api Ready"
   else
-    warn "loopruntime-api rollout did not complete cleanly"
+    warn "loop-runtime-api rollout did not complete cleanly"
   fi
 fi
 
@@ -631,9 +631,9 @@ fi
 
 
 # ---------------------------------------------------------------------------
-# T4.1 (simplify-deploy-loopzerokit-only v2.0): H16 loopruntime-packs-runner +
-# loopruntime-dockerfile-lint registry seeding removed — those images are no longer
-# used (canonical in-process Dockerfile generation replaced loopruntime-packs; the
+# T4.1 (simplify-deploy-loopzerokit-only v2.0): H16 loop-runtime-packs-runner +
+# loop-runtime-dockerfile-lint registry seeding removed — those images are no longer
+# used (canonical in-process Dockerfile generation replaced loop-runtime-packs; the
 # BYO-Dockerfile lint path was deleted). SCRIPT_DIR retained for H17+ below.
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -654,15 +654,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # ---------------------------------------------------------------------------
 if [[ -x "$SCRIPT_DIR/run-migrations.sh" ]]; then
   log "H17: ensuring schema_migrations table is populated"
-  # Probe loopruntime-api pod readiness before attempting kubectl exec.
-  if kubectl --context "$MGMT_CTX" -n loopruntime-system get pod -l app=loopruntime-api --no-headers 2>/dev/null | grep -q Running; then
+  # Probe loop-runtime-api pod readiness before attempting kubectl exec.
+  if kubectl --context "$MGMT_CTX" -n loop-runtime-system get pod -l app=loop-runtime-api --no-headers 2>/dev/null | grep -q Running; then
     if CORE_CONTEXT="$MGMT_CTX" bash "$SCRIPT_DIR/run-migrations.sh" >/dev/null 2>&1; then
       log "  schema_migrations: backfilled / current"
     else
       warn "  run-migrations.sh failed — DB migrations may need manual attention"
     fi
   else
-    log "  loopruntime-api pod not Running yet — skip H17 (will heal on next pass)"
+    log "  loop-runtime-api pod not Running yet — skip H17 (will heal on next pass)"
   fi
 fi
 

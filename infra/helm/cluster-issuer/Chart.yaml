@@ -2,7 +2,7 @@ apiVersion: v2
 name: cluster-issuer
 description: |
   cert-manager ClusterIssuer for the runtime cluster (LoopRuntime platform).
-  Creates: loopruntime-ca-issuer (selfsigned for local dev) or letsencrypt-{staging,prod}.
+  Creates: loop-runtime-ca-issuer (selfsigned for local dev) or letsencrypt-{staging,prod}.
   CHG-2026-04-28-LAYERED-BOOTSTRAP / T2.3.
 type: application
 version: 0.1.0

@@ -57,7 +57,7 @@ import (
 // binary and the API take the SAME lease, so the two can never run the loops
 // at once. The value predates the API using it and is kept so existing
 // leader_generations rows keep their meaning.
-const BackgroundLoopsLeaseName = "loopruntime-controller"
+const BackgroundLoopsLeaseName = "loop-runtime-controller"
 
 // ErrFenced is returned by Heartbeat or Validate when the lease has been
 // taken over by another holder (a higher generation exists in PG, or the

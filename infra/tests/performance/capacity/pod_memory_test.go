@@ -21,31 +21,31 @@ import (
 //	"Pod memory real. The 50 Mi/pod average is from one fixture (loadtest-app).
 //	 Real tenant apps (Django, Rails, Next.js) will be bigger."
 //
-// The test clones github.com/getloopscale/loopruntime-stacks, deploys each framework
+// The test clones github.com/getloopscale/loop-runtime-stacks, deploys each framework
 // template via the full pipeline, waits for the pod to stabilize, then
 // measures memory via kubectl top. This gives the ACTUAL memory footprint
 // of each framework stack that LoopRuntime supports.
 //
-// Templates used (from loopruntime-stacks): go-api, node-express, python-fastapi,
+// Templates used (from loop-runtime-stacks): go-api, node-express, python-fastapi,
 // ruby-sinatra, rust-axum.
 //
 // Run:
 //
-//	LOOPRUNTIME_CAPACITY=1 \
-//	LOOPRUNTIME_API_URL=https://api.dev.getloopscale.com \
-//	LOOPRUNTIME_SERVICE_AUTH=... \
-//	LOOPRUNTIME_APP_DOMAIN=dev.getloopscale.com \
-//	LOOPRUNTIME_CELL_0_CONTEXT=do-sfo3-loopruntime-infra-dev-sfo3-runtime \
+//	LOOP_RUNTIME_CAPACITY=1 \
+//	LOOP_RUNTIME_API_URL=https://api.dev.getloopscale.com \
+//	LOOP_RUNTIME_SERVICE_AUTH=... \
+//	LOOP_RUNTIME_APP_DOMAIN=dev.getloopscale.com \
+//	LOOP_RUNTIME_CELL_0_CONTEXT=do-sfo3-loop-runtime-infra-dev-sfo3-runtime \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityPodMemoryByFramework -v -timeout 120m
 func TestCapacityPodMemoryByFramework(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
-	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
-	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
-	runtimeCtx := os.Getenv("LOOPRUNTIME_CELL_0_CONTEXT")
+	apiURL := os.Getenv("LOOP_RUNTIME_API_URL")
+	serviceAuth := os.Getenv("LOOP_RUNTIME_SERVICE_AUTH")
+	appDomain := os.Getenv("LOOP_RUNTIME_APP_DOMAIN")
+	runtimeCtx := os.Getenv("LOOP_RUNTIME_CELL_0_CONTEXT")
 	if apiURL == "" || serviceAuth == "" || appDomain == "" || runtimeCtx == "" {
-		t.Fatal("LOOPRUNTIME_API_URL, LOOPRUNTIME_SERVICE_AUTH, LOOPRUNTIME_APP_DOMAIN, LOOPRUNTIME_CELL_0_CONTEXT required")
+		t.Fatal("LOOP_RUNTIME_API_URL, LOOP_RUNTIME_SERVICE_AUTH, LOOP_RUNTIME_APP_DOMAIN, LOOP_RUNTIME_CELL_0_CONTEXT required")
 	}
 
 	cfg := NewConfig("pod-memory")
@@ -53,12 +53,12 @@ func TestCapacityPodMemoryByFramework(t *testing.T) {
 	const (
 		projectedAvgMi = 50 // cell-budget.md: 50 Mi/pod average
 		stabilizeWait  = 30 * time.Second
-		stacksRepo     = "https://github.com/getloopscale/loopruntime-stacks.git"
+		stacksRepo     = "https://github.com/getloopscale/loop-runtime-stacks.git"
 	)
 
 	// Frameworks to benchmark: template name → loopzero.yaml metadata.
 	type frameworkSpec struct {
-		Template  string // directory name in loopruntime-stacks/templates/
+		Template  string // directory name in loop-runtime-stacks/templates/
 		Framework string // framework field for submitBuild
 		Port      int
 	}
@@ -74,8 +74,8 @@ func TestCapacityPodMemoryByFramework(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Minute)
 	defer cancel()
 
-	// --- Step 1: Clone loopruntime-stacks ---
-	stacksDir, err := os.MkdirTemp("", "loopruntime-stacks-*")
+	// --- Step 1: Clone loop-runtime-stacks ---
+	stacksDir, err := os.MkdirTemp("", "loop-runtime-stacks-*")
 	if err != nil {
 		t.Fatalf("mktemp: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestCapacityPodMemoryByFramework(t *testing.T) {
 	t.Logf("cloning %s...", stacksRepo)
 	cloneCmd := exec.CommandContext(ctx, "git", "clone", "--depth=1", stacksRepo, stacksDir)
 	if out, err := cloneCmd.CombinedOutput(); err != nil {
-		t.Fatalf("clone loopruntime-stacks: %v: %s", err, string(out))
+		t.Fatalf("clone loop-runtime-stacks: %v: %s", err, string(out))
 	}
 
 	client := &http.Client{Timeout: 300 * time.Second}
@@ -133,11 +133,11 @@ func TestCapacityPodMemoryByFramework(t *testing.T) {
 		}
 
 		// Upload with the correct loopzero.yaml for this framework.
-		loopruntimeYAML := fmt.Sprintf("version: 2\nproject: %s\napps:\n  api:\n    build: dockerfile\n    framework: %s\n    render: server\n    port: %d\n",
+		loopRuntimeYAML := fmt.Sprintf("version: 2\nproject: %s\napps:\n  api:\n    build: dockerfile\n    framework: %s\n    render: server\n    port: %d\n",
 			projectName, fw.Framework, fw.Port)
 
 		auth := load.ServiceAuthHeaders(serviceAuth, tenant)
-		commitSHA, err := load.UploadSource(ctx, client, apiURL, auth, loopruntimeYAML, bundle)
+		commitSHA, err := load.UploadSource(ctx, client, apiURL, auth, loopRuntimeYAML, bundle)
 		if err != nil {
 			t.Logf("  ERROR upload: %v", err)
 			continue
@@ -222,7 +222,7 @@ func TestCapacityPodMemoryByFramework(t *testing.T) {
 		Frameworks:   results,
 		ProjectedAvg: int64(projectedAvgMi) * 1024 * 1024,
 		ActualAvg:    avgMem * 1024 * 1024,
-		Notes:        fmt.Sprintf("source: getloopscale/loopruntime-stacks templates, %d/%d frameworks measured", len(results), len(frameworks)),
+		Notes:        fmt.Sprintf("source: getloopscale/loop-runtime-stacks templates, %d/%d frameworks measured", len(results), len(frameworks)),
 	}
 
 	t.Log("=== pod-memory-by-framework ===")

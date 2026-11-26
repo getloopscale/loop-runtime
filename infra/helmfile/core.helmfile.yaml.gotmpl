@@ -9,11 +9,11 @@
 #   helmfile -f infra/helmfile/core.helmfile.yaml -e dev sync       # LoopRuntime Cloud (multi-cluster)
 #   helmfile -f infra/helmfile/core.helmfile.yaml -e standalone sync # Self-hosting (single cluster)
 #
-# Required env vars (injected by `loopruntime platform install` from Pulumi outputs):
-#   LOOPRUNTIME_DB_HOST, LOOPRUNTIME_DB_PORT, LOOPRUNTIME_DB_NAME, LOOPRUNTIME_DB_USER, LOOPRUNTIME_DB_PASSWORD
-#   LOOPRUNTIME_REGISTRY_ENDPOINT, LOOPRUNTIME_REGISTRY_NAME
-#   LOOPRUNTIME_BUCKET_NAME, LOOPRUNTIME_BUCKET_ENDPOINT, LOOPRUNTIME_SPACES_KEY, LOOPRUNTIME_SPACES_SECRET
-#   LOOPRUNTIME_CF_KV_NAMESPACE, LOOPRUNTIME_CF_TUNNEL_TOKEN
+# Required env vars (injected by `loop-runtime platform install` from Pulumi outputs):
+#   LOOP_RUNTIME_DB_HOST, LOOP_RUNTIME_DB_PORT, LOOP_RUNTIME_DB_NAME, LOOP_RUNTIME_DB_USER, LOOP_RUNTIME_DB_PASSWORD
+#   LOOP_RUNTIME_REGISTRY_ENDPOINT, LOOP_RUNTIME_REGISTRY_NAME
+#   LOOP_RUNTIME_BUCKET_NAME, LOOP_RUNTIME_BUCKET_ENDPOINT, LOOP_RUNTIME_SPACES_KEY, LOOP_RUNTIME_SPACES_SECRET
+#   LOOP_RUNTIME_CF_KV_NAMESPACE, LOOP_RUNTIME_CF_TUNNEL_TOKEN
 
 # The environments are declared once, in environments.yaml.
 bases:
@@ -32,9 +32,9 @@ helmDefaults:
   # error). What turns a divergence into a failure is the
   # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
   #
-  # LOOPRUNTIME_CORE_CONTEXT names it where the core cluster is not the k3d one (staging's
-  # EKS context is `core`), the way LOOPRUNTIME_BUILD_CONTEXT does for the build plane.
-  kubeContext: {{ env "LOOPRUNTIME_CORE_CONTEXT" | default "k3d-loopruntime-core" }}
+  # LOOP_RUNTIME_CORE_CONTEXT names it where the core cluster is not the k3d one (staging's
+  # EKS context is `core`), the way LOOP_RUNTIME_BUILD_CONTEXT does for the build plane.
+  kubeContext: {{ env "LOOP_RUNTIME_CORE_CONTEXT" | default "k3d-loop-runtime-core" }}
   wait: true
   waitForJobs: true
   timeout: 600
@@ -107,8 +107,8 @@ repositories:
 # Helmfile-level hooks were removed because they ran on every command (list,
 # lint, diff) and required cluster connectivity even in offline validation.
 # Required Secrets:
-#   loopruntime-system/{loopruntime-db-credentials,gitea-admin,minio-credentials,
-#                loopruntime-registry-pull}
+#   loop-runtime-system/{loop-runtime-db-credentials,gitea-admin,minio-credentials,
+#                loop-runtime-registry-pull}
 # Apply once: bash infra/helmfile/scripts/generate-secrets.sh <env> mgmt
 # ---------------------------------------------------------------------------
 
@@ -116,10 +116,10 @@ repositories:
 # Releases — ordered by sync wave via `needs:`
 # ---------------------------------------------------------------------------
 {{- /* Where this file installs Gitea, in every environment. Every release that
-       talks to Gitea (loopruntime-api, the tenant and platform operators) is told from
+       talks to Gitea (loop-runtime-api, the tenant and platform operators) is told from
        here, instead of each environment overlay restating the address and each
        drill or heal patching it into the running objects. */}}
-{{- $giteaNamespace := "loopruntime-system" }}
+{{- $giteaNamespace := "loop-runtime-system" }}
 {{- $giteaURL := printf "http://gitea-http.%s.svc.cluster.local:3000" $giteaNamespace }}
 {{- /* The OTLP gRPC address of the otel-collector release, where the control plane sends its traces. */ -}}
 {{- $otelCollector := "otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317" }}
@@ -162,12 +162,12 @@ releases:
   # spelled exactly as ory-hydra's values spell it — the gateway matches `iss` verbatim —
   # and a server joins through `mcp.servers` only once it validates tokens itself.
   - name: mcp-gateway
-    namespace: loopruntime-mcp
+    namespace: loop-runtime-mcp
     chart: ../helm/mcp-gateway
     needs:
       - agentgateway-system/agentgateway
     values:
-      - issuer: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loopruntime-auth.svc.cluster.local:4444{{ end }}/"
+      - issuer: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loop-runtime-auth.svc.cluster.local:4444{{ end }}/"
         publicOrigin: {{ .Values | get "publicCloudUrl" "" | trimSuffix "/" | quote }}
         servers: {{ .Values | get "mcp.servers" list | toJson }}
 
@@ -190,17 +190,17 @@ releases:
   # Tenant/Environment/LoopRuntimeApplication/ExposedRoute/PlatformBootstrap/
   # GitRepositoryBinding/ClusterCredential/PreviewEnvironment/AppSecret/
   # ReconciliationReport). Without this release, the 4 split operator
-  # binaries (loopruntime-{tenant,app,preview,platform}-operator) crash at
+  # binaries (loop-runtime-{tenant,app,preview,platform}-operator) crash at
   # startup with `no matches for kind ... in version runtime.getloopscale.com/v1`.
   # Detected on standalone bootstrap 2026-04-28.
   # Wave -3: must run BEFORE controllers register watches.
   # Lifecycle-independent: chart never deletes CRDs
   # (helm.sh/resource-policy: keep) so re-runs are idempotent.
-  - name: loopruntime-crds
+  - name: loop-runtime-crds
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
-    chart: ../../charts/loopruntime-crds
+    namespace: loop-runtime-system
+    chart: ../../charts/loop-runtime-crds
     values:
       - {}
     # No `needs:` — CRDs are foundational, must install first.
@@ -245,7 +245,7 @@ releases:
   - name: postgresql
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
     chart: bitnami/postgresql
     # B21 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Bitnami removed chart 16.0.7
     # from the public index in 2025 (only the ~6 most recent versions are
@@ -256,21 +256,21 @@ releases:
     installed: {{ .Values.inClusterPostgres | default false }}
     values:
       - ../helm/postgresql/values.yaml
-    # Consume the canonical loopruntime-db-credentials secret (minted by
-    # generate-secrets.sh BEFORE this sync) so PG initializes the `loopruntime` user
-    # with the SAME password kratos/hydra/loopruntime-api read from that secret.
+    # Consume the canonical loop-runtime-db-credentials secret (minted by
+    # generate-secrets.sh BEFORE this sync) so PG initializes the `loop-runtime` user
+    # with the SAME password kratos/hydra/loop-runtime-api read from that secret.
     # Without this, Bitnami auto-generates a divergent random password →
     # kratos SASL auth fails → helmfile --wait deadlocks. The secret carries
-    # both `postgres-password` (admin) and `password` (loopruntime user) keys, which
+    # both `postgres-password` (admin) and `password` (loop-runtime user) keys, which
     # are Bitnami's default secretKeys. Fix: finding-2026-05-22-pg-password-divergence.
     set:
       - name: auth.existingSecret
-        value: loopruntime-db-credentials
+        value: loop-runtime-db-credentials
 
   - name: gitea-redis
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
     chart: bitnami/redis
     version: 19.6.4
     # Bug #15 LIVE FIX: drill uses DO Managed Valkey (prod ADR-0016 D-6
@@ -296,7 +296,7 @@ releases:
 {{- end }}
 {{- if not .Values.profile.managedRedis }}
       # Drill uses DO Managed Valkey (Bug #15 fix) — no in-cluster gitea-redis.
-      - loopruntime-system/gitea-redis
+      - loop-runtime-system/gitea-redis
 {{- end }}
       # iter 16 audit: explicit needs:traefik because Gitea uses IngressRoute.
       # Without this, helmfile may install gitea before traefik (works by luck
@@ -304,11 +304,11 @@ releases:
       - traefik/traefik
 {{- if .Values.inClusterPostgres }}
       # B22: gitea backend uses Postgres. In standalone, must wait for in-cluster PG.
-      - loopruntime-system/postgresql
+      - loop-runtime-system/postgresql
 {{- end }}
 {{- if .Values.profile.awsSecretsManager }}
       # Its database on RDS, and the Secret with its database and Valkey credentials.
-      - loopruntime-system/database-bootstrap
+      - loop-runtime-system/database-bootstrap
 {{- end }}
     values:
       - ../helm/gitea/values.yaml
@@ -328,7 +328,7 @@ releases:
   - name: minio
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
     chart: minio/minio
     version: 5.4.0
     # An environment whose buckets are managed S3 runs no MinIO.
@@ -359,39 +359,39 @@ releases:
 {{- $platformRegistry := .Values | get "platformImages.registry" "" }}
       - image:
 {{- if $platformRegistry }}
-          repository: "{{ $platformRegistry }}loopruntime-minio"
-          tag: {{ index .Values.platformImages.tags "loopruntime-minio" | quote }}
+          repository: "{{ $platformRegistry }}loop-runtime-minio"
+          tag: {{ index .Values.platformImages.tags "loop-runtime-minio" | quote }}
 {{- else if .Values.profile.localRegistry }}
-          repository: "k3d-loopruntime-registry:5000/loopruntime-minio"
+          repository: "k3d-loop-runtime-registry:5000/loop-runtime-minio"
           tag: "RELEASE.2024-12-18T13-15-44Z"
 {{- else }}
 {{- /* The same rule the platform charts follow: an environment that declares a
        registry prefix pulls from it; one that declares none (standalone self-host)
-       gets the bare image name, as loopruntime-api's `repository: loopruntime-api` does there. */}}
-          repository: "{{ .Values | get "registries.docrPrefix" "" }}loopruntime-minio"
+       gets the bare image name, as loop-runtime-api's `repository: loop-runtime-api` does there. */}}
+          repository: "{{ .Values | get "registries.docrPrefix" "" }}loop-runtime-minio"
           tag: "RELEASE.2024-12-18T13-15-44Z"
 {{- end }}
         mcImage:
 {{- if $platformRegistry }}
-          repository: "{{ $platformRegistry }}loopruntime-clone-runner"
-          tag: {{ index .Values.platformImages.tags "loopruntime-clone-runner" | quote }}
+          repository: "{{ $platformRegistry }}loop-runtime-clone-runner"
+          tag: {{ index .Values.platformImages.tags "loop-runtime-clone-runner" | quote }}
 {{- else if .Values.profile.localRegistry }}
-          repository: "k3d-loopruntime-registry:5000/loopruntime-clone-runner"
+          repository: "k3d-loop-runtime-registry:5000/loop-runtime-clone-runner"
           tag: "v0.1.0"
 {{- else }}
-          repository: "{{ .Values | get "registries.docrPrefix" "" }}loopruntime-clone-runner"
+          repository: "{{ .Values | get "registries.docrPrefix" "" }}loop-runtime-clone-runner"
           tag: "v0.1.0"
 {{- end }}
 {{- if .Values.profile.localObjectStore }}
     # Standalone: pin MinIO root password deterministically. The chart leaves
     # rootPassword empty (fail-fast for prod), which makes the official chart
-    # auto-generate a RANDOM password — but loopruntime-api (infra/tilt/api-deployment.yaml)
-    # and static-assets consume the deterministic loopruntime-dev-password. Random vs
+    # auto-generate a RANDOM password — but loop-runtime-api (infra/tilt/api-deployment.yaml)
+    # and static-assets consume the deterministic loop-runtime-dev-password. Random vs
     # hardcoded => SOURCE_UPLOAD_FAILED (access denied). Same deterministic-creds
-    # pattern as PG (T1.3). rootUser=loopruntime-admin comes from values.yaml.
+    # pattern as PG (T1.3). rootUser=loop-runtime-admin comes from values.yaml.
     set:
       - name: rootPassword
-        value: "loopruntime-dev-password"
+        value: "loop-runtime-dev-password"
 {{- end }}
 
   # velero-backup-dr-plan v1.0 / T1.2 — Velero server (Wave -1, infra
@@ -405,7 +405,7 @@ releases:
       - cert-manager/cert-manager
 {{- if .Values.profile.localObjectStore }}
       # BSL targets in-cluster MinIO. Wait for MinIO up first.
-      - loopruntime-system/minio
+      - loop-runtime-system/minio
 {{- end }}
     values:
       - ../helm/velero/values.yaml
@@ -481,9 +481,9 @@ releases:
   # which Grafana's dashboard sidecar loads (values-grafana.yaml). The chart's
   # PrometheusRules stay off: this Prometheus reads its rules from values-prometheus.yaml,
   # not from Prometheus Operator objects.
-  - name: loopruntime-monitoring
+  - name: loop-runtime-monitoring
     namespace: monitoring
-    chart: ../../charts/loopruntime-monitoring
+    chart: ../../charts/loop-runtime-monitoring
     needs:
       - monitoring/grafana
     values:
@@ -495,7 +495,7 @@ releases:
   # infra/helm/opencost/. Per Anti-Pattern #8: NO Go gate reimplementation;
   # tool adopted as-is. Federation-friendly (single mgmt install covers all cells).
   - name: opencost
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
     chart: ../helm/opencost
     version: 1.0.0
     needs:
@@ -532,21 +532,21 @@ releases:
   # B22 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — When inClusterPostgres=true
   # (standalone profile), ory-kratos must wait for postgresql release to
   # finish or its automigrate init container will retry forever resolving
-  # `postgresql.loopruntime-system.svc.cluster.local`. In dev/prod the postgres
+  # `postgresql.loop-runtime-system.svc.cluster.local`. In dev/prod the postgres
   # is external (DO managed), so the `needs:` is conditionally rendered.
   - name: ory-kratos
     labels:
       profile: dashboard-only
-    namespace: loopruntime-auth
+    namespace: loop-runtime-auth
     chart: ory/kratos
     version: 0.61.0
 {{- if .Values.inClusterPostgres }}
     needs:
-      - loopruntime-system/postgresql
+      - loop-runtime-system/postgresql
 {{- else if .Values.profile.awsSecretsManager }}
     # Its database exists and its credentials Secret is written.
     needs:
-      - loopruntime-system/database-bootstrap
+      - loop-runtime-system/database-bootstrap
 {{- end }}
     values:
       - ../helm/ory-kratos/values.yaml.gotmpl
@@ -556,37 +556,37 @@ releases:
   - name: ory-hydra
     labels:
       profile: dashboard-only
-    namespace: loopruntime-auth
+    namespace: loop-runtime-auth
     chart: ory/hydra
     version: 0.61.0
     needs:
-      - loopruntime-auth/ory-kratos
+      - loop-runtime-auth/ory-kratos
     values:
       - ../helm/ory-hydra/values.yaml.gotmpl
       # Layered values per env (T2.2). Drill env DSN override → managed PG.
       - values/{{ .Environment.Name }}/ory-hydra.yaml.gotmpl
 
   # Wave 2: LoopRuntime platform
-  - name: loopruntime-api
+  - name: loop-runtime-api
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
-    # The published chart, installed with charts/loopruntime-api/values-bootstrap.yaml: there is
-    # one loopruntime-api chart (docs/decisions.md, "One chart per bootstrap/published pair").
-    chart: ../../charts/loopruntime-api
-    # STANDALONE (local k3d): loopruntime-api is owned by `tilt up` (self-contained
+    namespace: loop-runtime-system
+    # The published chart, installed with charts/loop-runtime-api/values-bootstrap.yaml: there is
+    # one loop-runtime-api chart (docs/decisions.md, "One chart per bootstrap/published pair").
+    chart: ../../charts/loop-runtime-api
+    # STANDALONE (local k3d): loop-runtime-api is owned by `tilt up` (self-contained
     # infra/tilt/api-deployment.yaml + docker_build hash-tagged image). The
     # helmfile chart uses image :latest which is NEVER built locally (only the
     # 5 build-pipeline images are), so installing it here produced a 2-container
-    # frankenstein pod (helmfile `loopruntime-api` :latest unpullable + tilt `api`) and
+    # frankenstein pod (helmfile `loop-runtime-api` :latest unpullable + tilt `api`) and
     # its --wait deadlocked `task setup` before the build/workload clusters
     # installed. Cloud/dev/prod/drill keep it installed (images from DOCR/CI).
     # See finding-2026-05-22-pg-password-divergence § helmfile<->tilt dual-ownership.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
     # CANONICAL FIX 2026-06-15 dev-public Cleanroom chain-gap closure:
     # `wait: false` overrides the global `wait: true` helmDefault for THIS
-    # release only. Reason: loopruntime-api requires ClusterCredentials + several
-    # Secrets (argocd-refresh-credentials, loopruntime-openbao-approle, etc.) that
+    # release only. Reason: loop-runtime-api requires ClusterCredentials + several
+    # Secrets (argocd-refresh-credentials, loop-runtime-openbao-approle, etc.) that
     # are provisioned by the LATER `task bootstrap:standalone` chain. With
     # the global `wait: true`, helm install timed out at 10min because pod
     # never reached Ready (CrashLoopBackOff on missing deps) BEFORE the
@@ -598,40 +598,40 @@ releases:
     wait: false
     needs:
       - argocd/argocd
-      - loopruntime-system/gitea
+      - loop-runtime-system/gitea
 {{- if .Values.profile.inClusterObjectStore }}
-      - loopruntime-system/minio
+      - loop-runtime-system/minio
 {{- end }}
 {{- if .Values.profile.awsSecretsManager }}
-      # The schema at the latest migration and the loopruntime_api role it connects as.
-      - loopruntime-system/database-bootstrap
+      # The schema at the latest migration and the loop_runtime_api role it connects as.
+      - loop-runtime-system/database-bootstrap
 {{- end }}
-      - loopruntime-auth/ory-kratos
+      - loop-runtime-auth/ory-kratos
     values:
-      - ../../charts/loopruntime-api/values-bootstrap.yaml
+      - ../../charts/loop-runtime-api/values-bootstrap.yaml
       - config:
           giteaUrl: {{ $giteaURL | quote }}
           # The otel-collector release below, which exports to Tempo.
           otelExporterOtlpEndpoint: {{ $otelCollector | quote }}
-          # One bucket name for the whole install: loopruntime-build-cwts (build.helmfile)
+          # One bucket name for the whole install: loop-runtime-build-cwts (build.helmfile)
           # clones from the same environment value.
-          sourceBucket: {{ .Values | get "sourceBucket" "loopruntime-builds" | quote }}
+          sourceBucket: {{ .Values | get "sourceBucket" "loop-runtime-builds" | quote }}
           staticAssetsBucket: {{ .Values | get "staticAssetsBucket" "" | quote }}
       # Layered values per env (T2.2): image channel, pull secret, per-environment
       # config. MUST be LAST in the values list to win merge precedence.
-      - values/{{ .Environment.Name }}/loopruntime-api.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loop-runtime-api.yaml.gotmpl
     set:
       # Finding 2026-05-12 — wire env-file `replicas.api` to chart
       # `replicaCount`. Before this, the env-file value was orphan config:
       # defined in prod.yaml (=3) + standalone-multi.yaml (=1) but never
-      # consumed, leaving loopruntime-api at hardcoded 1 replica even in prod.
-      # See concepts/operations/finding-2026-05-12-loopruntime-api-replica-orphan.md
+      # consumed, leaving loop-runtime-api at hardcoded 1 replica even in prod.
+      # See concepts/operations/finding-2026-05-12-loop-runtime-api-replica-orphan.md
       - name: replicaCount
         value: "{{ .Values | get "replicas" (dict) | get "api" 1 }}"
 
   # ADR-0023 / plan v1.1 T1.5 — 4 split operator charts replace the
   # deleted monolith chart `infra/helm/tenant-controller` and the
-  # redundant `infra/helm/loopruntime-controller` (both pointed at the
+  # redundant `infra/helm/loop-runtime-controller` (both pointed at the
   # operators monolith binary built from the deleted `cmd/main.go`).
   #
   # Each chart deploys its own operator binary built from
@@ -642,123 +642,123 @@ releases:
   # Production deployments are still on the legacy monolith image
   # (built from commit b1a8618a or earlier) and are governed by
   # CHG-NNNN-OPERATOR-SPLIT-PROD per ADR-0023 4-stage cutover.
-  - name: loopruntime-tenant-operator
+  - name: loop-runtime-tenant-operator
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
-    chart: ../../charts/loopruntime-tenant-operator
+    namespace: loop-runtime-system
+    chart: ../../charts/loop-runtime-tenant-operator
     # STANDALONE: tilt owns operators (infra/tilt/*-operator-deployment.yaml).
-    # Same dual-ownership reason as loopruntime-api. See finding-2026-05-22-pg-password-divergence.
+    # Same dual-ownership reason as loop-runtime-api. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
     # CANONICAL FIX 2026-06-15 dev-public Cleanroom chain-gap (same family
-    # as loopruntime-api at line 482): operator requires ClusterCredentials which
+    # as loop-runtime-api at line 482): operator requires ClusterCredentials which
     # are provisioned by LATER task bootstrap:standalone. wait: false lets
     # helmfile sync complete; pod self-recovers when deps arrive.
     wait: false
     needs:
-      - loopruntime-system/loopruntime-api
+      - loop-runtime-system/loop-runtime-api
       # B45: LoopRuntime CRDs must exist before controller-runtime starts watches.
-      - loopruntime-system/loopruntime-crds
+      - loop-runtime-system/loop-runtime-crds
     values:
-      - ../../charts/loopruntime-tenant-operator/values.yaml
+      - ../../charts/loop-runtime-tenant-operator/values.yaml
       - config:
           giteaUrl: {{ $giteaURL | quote }}
         networkPolicy:
           giteaNamespace: {{ $giteaNamespace | quote }}
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../../charts/loopruntime-tenant-operator/values-standalone-multi.yaml
+      - ../../charts/loop-runtime-tenant-operator/values-standalone-multi.yaml
 {{- end }}
       # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets (Bug #23 fix).
-      - values/{{ .Environment.Name }}/loopruntime-tenant-operator.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loop-runtime-tenant-operator.yaml.gotmpl
 
-  - name: loopruntime-app-operator
+  - name: loop-runtime-app-operator
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
-    chart: ../../charts/loopruntime-app-operator
+    namespace: loop-runtime-system
+    chart: ../../charts/loop-runtime-app-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
-    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopruntime-api at line 482).
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loop-runtime-api at line 482).
     wait: false
     needs:
-      - loopruntime-system/loopruntime-api
-      - loopruntime-system/loopruntime-crds
+      - loop-runtime-system/loop-runtime-api
+      - loop-runtime-system/loop-runtime-crds
     values:
-      - ../../charts/loopruntime-app-operator/values.yaml
+      - ../../charts/loop-runtime-app-operator/values.yaml
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../../charts/loopruntime-app-operator/values-standalone-multi.yaml
+      - ../../charts/loop-runtime-app-operator/values-standalone-multi.yaml
 {{- end }}
       # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets.
-      - values/{{ .Environment.Name }}/loopruntime-app-operator.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loop-runtime-app-operator.yaml.gotmpl
 
-  - name: loopruntime-preview-operator
+  - name: loop-runtime-preview-operator
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
-    chart: ../../charts/loopruntime-preview-operator
+    namespace: loop-runtime-system
+    chart: ../../charts/loop-runtime-preview-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
-    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopruntime-api at line 482).
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loop-runtime-api at line 482).
     wait: false
     needs:
-      - loopruntime-system/loopruntime-api
-      - loopruntime-system/loopruntime-crds
+      - loop-runtime-system/loop-runtime-api
+      - loop-runtime-system/loop-runtime-crds
     values:
-      - ../../charts/loopruntime-preview-operator/values.yaml
+      - ../../charts/loop-runtime-preview-operator/values.yaml
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../../charts/loopruntime-preview-operator/values-standalone-multi.yaml
+      - ../../charts/loop-runtime-preview-operator/values-standalone-multi.yaml
 {{- end }}
       # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets.
-      - values/{{ .Environment.Name }}/loopruntime-preview-operator.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loop-runtime-preview-operator.yaml.gotmpl
 
-  - name: loopruntime-platform-operator
+  - name: loop-runtime-platform-operator
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
-    chart: ../../charts/loopruntime-platform-operator
+    namespace: loop-runtime-system
+    chart: ../../charts/loop-runtime-platform-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
-    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopruntime-api at line 482).
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loop-runtime-api at line 482).
     wait: false
     needs:
-      - loopruntime-system/loopruntime-api
-      - loopruntime-system/loopruntime-crds
+      - loop-runtime-system/loop-runtime-api
+      - loop-runtime-system/loop-runtime-crds
     values:
-      - ../../charts/loopruntime-platform-operator/values.yaml
+      - ../../charts/loop-runtime-platform-operator/values.yaml
       - networkPolicy:
           giteaNamespace: {{ $giteaNamespace | quote }}
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../../charts/loopruntime-platform-operator/values-standalone-multi.yaml
+      - ../../charts/loop-runtime-platform-operator/values-standalone-multi.yaml
 {{- end }}
       # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets.
-      - values/{{ .Environment.Name }}/loopruntime-platform-operator.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loop-runtime-platform-operator.yaml.gotmpl
 
-  - name: loopruntime-cloud
+  - name: loop-console
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
-    # The published chart, installed with charts/loopruntime-cloud/values-bootstrap.yaml:
-    # there is one loopruntime-cloud chart (docs/decisions.md, "One chart per
+    namespace: loop-runtime-system
+    # The published chart, installed with charts/loop-console/values-bootstrap.yaml:
+    # there is one loop-console chart (docs/decisions.md, "One chart per
     # bootstrap/published pair").
-    chart: ../../charts/loopruntime-cloud
-    # Bug #29 LIVE fix (2026-05-17 iter 20): loopruntime-cloud image not in DOCR
-    # for drill. Skip — drill L2 harness goes through loopruntime-api directly,
-    # not loopruntime-cloud dashboard. Production keeps loopruntime-cloud installed.
-    # STANDALONE: tilt owns loopruntime-cloud (dual-ownership, same as loopruntime-api).
-    installed: {{ and .Values.profile.loopruntimeCloud (ne (.Values | get "clusterRole" "dev") "standalone") }}
-    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopruntime-api at line 482):
-    # depends on loopruntime-api Ready + loopruntime-service-auth Secret; same self-recovery
+    chart: ../../charts/loop-console
+    # Bug #29 LIVE fix (2026-05-17 iter 20): loop-console image not in DOCR
+    # for drill. Skip — drill L2 harness goes through loop-runtime-api directly,
+    # not loop-console dashboard. Production keeps loop-console installed.
+    # STANDALONE: tilt owns loop-console (dual-ownership, same as loop-runtime-api).
+    installed: {{ and .Values.profile.loopRuntimeCloud (ne (.Values | get "clusterRole" "dev") "standalone") }}
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loop-runtime-api at line 482):
+    # depends on loop-runtime-api Ready + loop-runtime-service-auth Secret; same self-recovery
     # pattern. helmfile sync applies manifests; pod cycles in CrashLoopBackOff
     # until bootstrap chain completes.
     wait: false
     needs:
-      - loopruntime-auth/ory-hydra
-      - loopruntime-system/loopruntime-api
+      - loop-runtime-auth/ory-hydra
+      - loop-runtime-system/loop-runtime-api
     values:
-      - ../../charts/loopruntime-cloud/values-bootstrap.yaml
+      - ../../charts/loop-console/values-bootstrap.yaml
       # Plan 2026-06-04-dev-public-docr-fix-forward T2.1 — env-specific
       # overlay (image channel, pull secret, per-environment URLs).
-      - values/{{ .Environment.Name }}/loopruntime-cloud.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loop-console.yaml.gotmpl
       # T3.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
       # When the environment provides publicAuthUrl (the browser-facing Kratos
       # host), the cloud API redirects the browser back to Kratos through it
@@ -778,15 +778,15 @@ releases:
   # The console bundle (nginx), behind the app host route of public-routes. Only where
   # Traefik serves the public hostnames (publicRoutes.enabled): dev-public's Caddy serves
   # the bundle from the image's files instead.
-  - name: loopruntime-dashboard
+  - name: loop-console-dashboard
     labels:
       profile: dashboard-only
-    namespace: loopruntime-system
-    chart: ../../charts/loopruntime-dashboard
-    installed: {{ and .Values.profile.loopruntimeCloud (.Values | get "publicRoutes.enabled" false) }}
+    namespace: loop-runtime-system
+    chart: ../../charts/loop-console-dashboard
+    installed: {{ and .Values.profile.loopRuntimeCloud (.Values | get "publicRoutes.enabled" false) }}
     wait: false
     values:
-{{- if and .Values.profile.loopruntimeCloud (.Values | get "publicRoutes.enabled" false) }}
+{{- if and .Values.profile.loopRuntimeCloud (.Values | get "publicRoutes.enabled" false) }}
       - global:
           registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" | quote }}
 {{- if .Values | get "aws.imagePullSecret" "" }}
@@ -795,8 +795,8 @@ releases:
             - name: ghcr-pull
 {{- end }}
         image:
-          repository: loopruntime-dashboard
-          tag: {{ required "platformImages.tags.loopruntime-dashboard is not set: pin the image CI published" (index .Values.platformImages.tags "loopruntime-dashboard") | quote }}
+          repository: loop-console-dashboard
+          tag: {{ required "platformImages.tags.loop-console-dashboard is not set: pin the image CI published" (index .Values.platformImages.tags "loop-console-dashboard") | quote }}
         config:
           # The SPA calls its own origin; public-routes proxies the APIs on the app host.
           viteApiUrl: ""
@@ -818,10 +818,10 @@ releases:
 {{- end }}
 
   # Traefik IngressRoutes for the public hostnames no chart owns: login on the auth host
-  # (Kratos and Hydra) and, with loopruntime-cloud, the console on the app host. Where the
+  # (Kratos and Hydra) and, with loop-console, the console on the app host. Where the
   # edge passes every hostname to Traefik (staging's ALB); see infra/helm/public-routes.
   - name: public-routes
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
     chart: ../helm/public-routes
     installed: {{ .Values | get "publicRoutes.enabled" false }}
     needs:
@@ -832,7 +832,7 @@ releases:
           enabled: true
           host: {{ .Values | get "publicAuthUrl" "" | trimPrefix "https://" | trimSuffix "/" | quote }}
         console:
-          enabled: {{ .Values.profile.loopruntimeCloud }}
+          enabled: {{ .Values.profile.loopRuntimeCloud }}
           host: {{ .Values | get "uiBaseUrl" "" | trimPrefix "https://" | trimSuffix "/" | quote }}
 
   # The platform's own PostgreSQL for data-plane services (platformPostgres): the
@@ -859,7 +859,7 @@ releases:
       - cnpg-system/cloudnative-pg
 
   - name: platform-postgres
-    namespace: loopruntime-data-plane
+    namespace: loop-runtime-data-plane
     chart: ../helm/platform-postgres
     installed: {{ .Values | get "platformPostgres.enabled" false }}
     needs:
@@ -894,12 +894,12 @@ releases:
   # The data plane (#446): memory, RAG and lens, one release each of one chart, every
   # service with its own Postgres. dev-public ran them as compose containers started from
   # directories that no longer exist; this is their versioned definition. Secrets come from
-  # generate-secrets.sh (loopruntime-data-plane namespace), images from `platformImages`.
+  # generate-secrets.sh (loop-runtime-data-plane namespace), images from `platformImages`.
   # `looptrace` is the lens under its current name: staging runs it on platform-postgres,
   # with its Secrets written by External Secrets.
-{{- range $svc := list "loopruntime-memory" "loopruntime-rag" "loopruntime-lens" "looptrace" }}
+{{- range $svc := list "loop-runtime-memory" "loop-runtime-rag" "loop-runtime-lens" "looptrace" }}
   - name: {{ $svc }}
-    namespace: loopruntime-data-plane
+    namespace: loop-runtime-data-plane
     chart: ../helm/data-plane-service
     installed: {{ has $svc ($.Values | get "dataPlane.services" list) }}
     wait: false
@@ -909,7 +909,7 @@ releases:
 
   # Wave 90: Chaos engineering (active-execution-plan §3.A.4, iter 2)
   # Sprint 8 T0.3 installed CRDs via separate path; this release wires the
-  # controller via the `loopruntime-chaos-mesh` wrapper chart (infra/helm/chaos-mesh)
+  # controller via the `loop-runtime-chaos-mesh` wrapper chart (infra/helm/chaos-mesh)
   # so all clusters bootstrap the controller consistently. Opt-in: only
   # installs when `installChaosMesh: true` in environment values. Default
   # false so prod + dev don't carry the controller unnecessarily; chaos
@@ -956,14 +956,14 @@ releases:
         coreSecrets: true
         platformSecret: {{ .Values.aws.platformSecret | quote }}
         database:
-          host: {{ env "LOOPRUNTIME_DB_HOST" | quote }}
-          port: {{ env "LOOPRUNTIME_DB_PORT" | default "5432" }}
-          name: {{ env "LOOPRUNTIME_DB_NAME" | default "loopruntime" | quote }}
-          masterSecret: {{ env "LOOPRUNTIME_DB_MASTER_SECRET" | quote }}
+          host: {{ env "LOOP_RUNTIME_DB_HOST" | quote }}
+          port: {{ env "LOOP_RUNTIME_DB_PORT" | default "5432" }}
+          name: {{ env "LOOP_RUNTIME_DB_NAME" | default "loop_runtime" | quote }}
+          masterSecret: {{ env "LOOP_RUNTIME_DB_MASTER_SECRET" | quote }}
         cache:
-          host: {{ env "LOOPRUNTIME_CACHE_HOST" | quote }}
-          port: {{ env "LOOPRUNTIME_CACHE_PORT" | default "6379" }}
-          authTokenSecret: {{ env "LOOPRUNTIME_CACHE_AUTH_SECRET" | quote }}
+          host: {{ env "LOOP_RUNTIME_CACHE_HOST" | quote }}
+          port: {{ env "LOOP_RUNTIME_CACHE_PORT" | default "6379" }}
+          authTokenSecret: {{ env "LOOP_RUNTIME_CACHE_AUTH_SECRET" | quote }}
         resendSecret: {{ .Values | get "aws.resendSecret" "" | quote }}
         stripeSecret: {{ .Values | get "aws.stripeSecret" "" | quote }}
         githubAppSecret: {{ .Values | get "aws.githubAppSecret" "" | quote }}
@@ -971,20 +971,20 @@ releases:
         # Staging only: the registry login the nodes pull the private GHCR images with.
         imagePullSecret:
           secretsManagerKey: {{ . | quote }}
-          namespaces: [loopruntime-system]
+          namespaces: [loop-runtime-system]
 {{- end }}
 
-  # The managed database brought to what loopruntime-api boots against: identity and Gitea
+  # The managed database brought to what loop-runtime-api boots against: identity and Gitea
   # databases, the non-owner roles, the schema at the latest migration.
   - name: database-bootstrap
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
     chart: ../helm/database-bootstrap
     needs:
       - external-secrets/aws-secrets-manager
     values:
       - rolesSql: {{ readFile "../scripts/production/provision-db-roles.sql" | toJson }}
         images:
-          migrate: "{{ .Values.platformImages.registry }}loopruntime-api:{{ index .Values.platformImages.tags "loopruntime-api" }}"
+          migrate: "{{ .Values.platformImages.registry }}loop-runtime-api:{{ index .Values.platformImages.tags "loop-runtime-api" }}"
 {{- end }}
 {{- if .Values.profile.awsLoadBalancerController }}
 
@@ -1032,17 +1032,17 @@ releases:
 
   # Wave 99: Validation
   - name: smoke-test
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
     chart: ../helm/smoke-test
-    # Bug #29 LIVE fix: skip in drill — depends on loopruntime-cloud (skipped).
+    # Bug #29 LIVE fix: skip in drill — depends on loop-console (skipped).
     # Drill validates via Phase 6 L2 harness directly.
-    # STANDALONE: depends on the tilt-owned app tier (loopruntime-api/cloud/operators),
+    # STANDALONE: depends on the tilt-owned app tier (loop-runtime-api/cloud/operators),
     # so skip the helmfile smoke-test locally too. See finding-2026-05-22-pg-password-divergence.
     #
     # DEV-PUBLIC (2026-06-15 canonical chain-gap closure): smoke-test is a
     # Helm POST-INSTALL HOOK (`helm.sh/hook: post-install`), so `wait: false`
     # does NOT bypass it (hooks always block helm install). The Job's
-    # `init-wait` container probes loopruntime-api /health which is CrashLoopBackOff
+    # `init-wait` container probes loop-runtime-api /health which is CrashLoopBackOff
     # until LATER `task bootstrap:standalone` provisions argocd-refresh-credentials
     # + ClusterCredentials. The Job fails with BackoffLimitExceeded, taking
     # the whole helmfile sync with it. Canonical fix: skip smoke-test in
@@ -1052,14 +1052,14 @@ releases:
     # exist at sync time via External Secrets Operator + manual seeded SOPS).
     installed: {{ and .Values.profile.smokeTest (ne (.Values | get "clusterRole" "dev") "standalone") }}
     needs:
-      - loopruntime-system/loopruntime-api
-{{- if .Values.profile.loopruntimeCloud }}
-      - loopruntime-system/loopruntime-cloud
+      - loop-runtime-system/loop-runtime-api
+{{- if .Values.profile.loopRuntimeCloud }}
+      - loop-runtime-system/loop-console
 {{- end }}
-      - loopruntime-system/loopruntime-tenant-operator
-      - loopruntime-system/loopruntime-app-operator
-      - loopruntime-system/loopruntime-preview-operator
-      - loopruntime-system/loopruntime-platform-operator
+      - loop-runtime-system/loop-runtime-tenant-operator
+      - loop-runtime-system/loop-runtime-app-operator
+      - loop-runtime-system/loop-runtime-preview-operator
+      - loop-runtime-system/loop-runtime-platform-operator
     values:
       - ../helm/smoke-test/values.yaml
 
@@ -1076,8 +1076,8 @@ releases:
   # copying the runtime block wholesale would invent a dependency that does not exist on
   # this cluster and would block the sync.
   - name: admission-policies-mgmt
-    namespace: loopruntime-system
-    chart: ../../charts/loopruntime-admission-policies
+    namespace: loop-runtime-system
+    chart: ../../charts/loop-runtime-admission-policies
     values:
-      - ../../charts/loopruntime-admission-policies/values.yaml
-      - ../../charts/loopruntime-admission-policies/values-mgmt.yaml
+      - ../../charts/loop-runtime-admission-policies/values.yaml
+      - ../../charts/loop-runtime-admission-policies/values-mgmt.yaml

@@ -19,7 +19,7 @@ import (
 // 403 NO_TENANT. These tests pin which connection can answer it — the
 // composition root builds the membership store on the cross-tenant pool.
 //
-//	DATABASE_URL=<loopruntime_api> LOOPRUNTIME_WORKER_DATABASE_URL=<loopruntime_worker> \
+//	DATABASE_URL=<loop_runtime_api> LOOP_RUNTIME_WORKER_DATABASE_URL=<loop_runtime_worker> \
 //	  go test ./tests/integration/ -run MembershipStore -v
 const membershipOwner = "rls-member-uid"
 

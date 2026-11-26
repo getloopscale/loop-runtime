@@ -21,7 +21,7 @@ const MaxBundleBytes = 64 << 20
 
 // PushBundleErrorReason discriminates failure modes returned by PushBundle.
 //
-// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.2 (closes loopruntime-cloud#31):
+// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.2 (closes loop-console#31):
 // the legacy untyped fmt.Errorf chain collapsed every failure mode into the
 // canonical "Ensure your git history is clean and try again." Message —
 // actively misleading because the user's git history was clean. Typed reasons
@@ -53,7 +53,7 @@ const (
 	ReasonArchiveReadError PushBundleErrorReason = 5
 	// ReasonSourceBackendAuthFailure: the backend rejected authentication
 	// (401 / 403 / "authentication required" / "permission denied" patterns).
-	// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T1.1 (closes loopruntime-cloud#33).
+	// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T1.1 (closes loop-console#33).
 	ReasonSourceBackendAuthFailure PushBundleErrorReason = 6
 	// ReasonSourceBackendCapacity: the backend ran out of capacity (507 /
 	// "quota exceeded" / "no space left on device" patterns).
@@ -119,7 +119,7 @@ func (e *PushBundleError) UserError(traceID string) *loopruntimeerrors.LoopRunti
 }
 
 // PushBundleError is the discriminated typed error returned by PushBundle.
-// Sprint 4 T3.2 closes loopruntime-cloud#31: replaces the untyped fmt.Errorf chain
+// Sprint 4 T3.2 closes loop-console#31: replaces the untyped fmt.Errorf chain
 // so SourceHandler.Upload can map each reason to a specific actionable Message
 // instead of the misleading legacy "Ensure your git history is clean" string.
 type PushBundleError struct {
@@ -152,7 +152,7 @@ func (e *PushBundleError) Unwrap() error { return e.Cause }
 //
 // The substring set was empirically determined from real gitea-race scenarios
 // observed in dogfood iterations and is documented in
-// loopruntime/.claude/knowledge-base/audits/F-03-concurrent-deploy-2026-05-14.md.
+// loop-runtime/.claude/knowledge-base/audits/F-03-concurrent-deploy-2026-05-14.md.
 func IsGiteaRaceCondition(err error) bool {
 	if err == nil {
 		return false

@@ -10,27 +10,27 @@
 #     `-dev` subdomain (auth-dev / app-dev / cloud-dev . getloopscale.com)
 #   - allowedReturnUrls + corsAllowedOrigins enumerate the dev hosts
 #   - cookieDomain stays `getloopscale.com` (eTLD+1) — same shape as standalone-public
-#   - OAuth credentials read from LOOPRUNTIME_*_DEV env vars (per T3.2 of plan) so
+#   - OAuth credentials read from LOOP_RUNTIME_*_DEV env vars (per T3.2 of plan) so
 #     dev OAuth apps coexist with prod ones in the same .env file
 #
 # Operator workflow on this droplet:
-#   1. ssh root@loopruntime-e2e-runner (or git clone fresh)
+#   1. ssh root@loop-runtime-e2e-runner (or git clone fresh)
 #   2. cd <repo>
-#   3. export $(grep -E '^LOOPRUNTIME_|^CLOUDFLARE_' .env | xargs)
+#   3. export $(grep -E '^LOOP_RUNTIME_|^CLOUDFLARE_' .env | xargs)
 #   4. infra/scripts/local/setup-dev-public-dns.sh --verify
 #   5. infra/scripts/local/caddy-up-dev-public.sh --verify
 #   6. helmfile -e dev-public -f infra/helmfile/core.helmfile.yaml.gotmpl sync
 #   7. task doctor (38/0)
 #   8. Browser: https://app-dev.getloopscale.com/login
 
-domain: loopruntime.local
+domain: loop-runtime.local
 # The public root of every app URL: users reach <label>.prod-dev.getloopscale.app, and the
-# edge rewrites it to <label>.loopruntime.local for the cell's Traefik. loopruntime-api announces it
+# edge rewrites it to <label>.loop-runtime.local for the cell's Traefik. loop-runtime-api announces it
 # (status.url) and the app-operator probes under it (#447) — one value, two readers.
 publicAppDomain: prod-dev.getloopscale.app
-dnsZone: loopruntime.local
+dnsZone: loop-runtime.local
 
-# clusterRole=cloud-local: triggers loopruntime-cloud + loopruntime-api install via helmfile
+# clusterRole=cloud-local: triggers loop-console + loop-runtime-api install via helmfile
 # (rather than tilt local). The local Caddy edge proxies their services to
 # the public *-dev hostnames.
 clusterRole: cloud-local
@@ -56,7 +56,7 @@ certIssuer:
   name: selfsigned-issuer
 
 # Platform images (#435): Amazon ECR, the registry production pulls from, provisioned
-# by getloopscale/loopruntime-infra-live (`registry/ecr`). Every tag is the full commit SHA CI
+# by getloopscale/loop-runtime-infra-live (`registry/ecr`). Every tag is the full commit SHA CI
 # built the image from; the repositories are immutable, so a tag names one build and
 # this file says exactly which commit each service runs. Promoting a service is a
 # commit that changes its line here.
@@ -67,35 +67,35 @@ platformImages:
   registry: "776217504929.dkr.ecr.us-east-1.amazonaws.com/"
   tags:
     # getloopscale/loop-runtime
-    loopruntime-api: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
-    loopruntime-tenant-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
-    loopruntime-app-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
-    loopruntime-preview-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
-    loopruntime-platform-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loop-runtime-api: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loop-runtime-tenant-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loop-runtime-app-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loop-runtime-preview-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loop-runtime-platform-operator: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
     # Built from pinned upstream source; they pass the vulnerability gate since #441.
-    loopruntime-minio: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
-    loopruntime-clone-runner: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
-    loopruntime-syft-scanner: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
-    loopruntime-cosign-signer: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
-    # getloopscale/loopruntime-cloud
-    loopruntime-cloud: "03ff7b193dd60e1075052cbdb2c38bc96106bfd7"
+    loop-runtime-minio: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loop-runtime-clone-runner: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loop-runtime-syft-scanner: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    loop-runtime-cosign-signer: "5782d4331d58a88c97bc2f3f4c692af87f2e06a2"
+    # getloopscale/loop-console
+    loop-console: "03ff7b193dd60e1075052cbdb2c38bc96106bfd7"
     # The dashboard bundle the edge serves at app-dev (extracted by dev-public:caddy, #462).
-    loopruntime-dashboard: "03ff7b193dd60e1075052cbdb2c38bc96106bfd7"
-    # getloopscale/loopruntime-lens
-    loopruntime-lens: "3e3e4604109ab91ab8a930970c994f58ae8f9f9e"
-    # getloopscale/loopruntime-rag
-    loopruntime-rag: "532e55a347ca7fc4d7030fbafa54dae5bf4cb2e3"
-    # getloopscale/loopruntime-memory
-    loopruntime-memory: "02e004700865676c7a3500b9bb39cbffe5c91602"
+    loop-console-dashboard: "03ff7b193dd60e1075052cbdb2c38bc96106bfd7"
+    # getloopscale/loop-runtime-lens
+    loop-runtime-lens: "3e3e4604109ab91ab8a930970c994f58ae8f9f9e"
+    # getloopscale/loop-runtime-rag
+    loop-runtime-rag: "532e55a347ca7fc4d7030fbafa54dae5bf4cb2e3"
+    # getloopscale/loop-runtime-memory
+    loop-runtime-memory: "02e004700865676c7a3500b9bb39cbffe5c91602"
 
 # The data plane (#446): memory, RAG and lens run on the core cluster from Helmfile,
 # pulled from ECR by commit like the platform images (`platformImages.tags`). A service is
 # listed here once its repository publishes to ECR; each needs its tag above.
 dataPlane:
   services:
-    - loopruntime-lens
-    - loopruntime-memory
-    - loopruntime-rag
+    - loop-runtime-lens
+    - loop-runtime-memory
+    - loop-runtime-rag
 
 # MCP servers behind infra/helm/mcp-gateway (#470). A server joins once it validates Hydra
 # tokens itself; its resource URI is `publicCloudUrl` + `path`.
@@ -103,17 +103,17 @@ mcp:
   servers:
     - name: memory
       path: /mcp/memory
-      host: loopruntime-memory-mcp.loopruntime-data-plane.svc.cluster.local
+      host: loop-runtime-memory-mcp.loop-runtime-data-plane.svc.cluster.local
       port: 3100
       upstreamPath: /mcp
 
-# Tenant builds still push to and run from k3d-loopruntime-registry (fast local iteration).
+# Tenant builds still push to and run from k3d-loop-runtime-registry (fast local iteration).
 # `docrPrefix` is read by the admission policies only; its registry was deleted and
 # the policies move to ECR separately (#435).
 registries:
-  docrPrefix: "registry.digitalocean.com/loopruntime-system/"
+  docrPrefix: "registry.digitalocean.com/loop-runtime-system/"
   additionalPrefixes:
-    - "k3d-loopruntime-registry:5000/"
+    - "k3d-loop-runtime-registry:5000/"
 
 loki:
   maxGlobalStreamsPerUser: 50000
@@ -131,13 +131,13 @@ crossCluster:
   argoApi: "http://host.k3d.internal:30093"
   # The build cluster's Loki, published on the build serverlb (infra/k3d/build-cluster.yaml
   # `30120:30120`). build.helmfile renders the NodePort Service on this port and the
-  # loopruntime-api overlay reads Loki at host.k3d.internal:<this port>. Declared here so the
+  # loop-runtime-api overlay reads Loki at host.k3d.internal:<this port>. Declared here so the
   # three agree by construction; the `loki-cross-cluster` seed used to compute the
   # pair at runtime and patch it onto live objects.
   lokiNodePort: 30120
-  # loopruntime-api, as a cell reaches it: host port 13001 is published by the core serverlb to
-  # loopruntime-api's NodePort 30001 (infra/k3d/core-cluster.yaml). The cell's secret-fetch
-  # broker (cell.helmfile, release loopruntime-broker) calls it. The broker seed used to
+  # loop-runtime-api, as a cell reaches it: host port 13001 is published by the core serverlb to
+  # loop-runtime-api's NodePort 30001 (infra/k3d/core-cluster.yaml). The cell's secret-fetch
+  # broker (cell.helmfile, release loop-runtime-broker) calls it. The broker seed used to
   # record the core server-0 CONTAINER IP here, which docker reassigns on every restart.
   coreApi: "http://host.k3d.internal:13001"
   giteaApi: "http://host.k3d.internal:3000"
@@ -146,7 +146,7 @@ crossCluster:
 velero:
   bucket: velero-backups
   region: us-east-1
-  s3Url: http://minio.loopruntime-system.svc:9000
+  s3Url: http://minio.loop-runtime-system.svc:9000
 
 # D1 of plan 2026-06-04: *-dev.getloopscale.com hostnames
 # uiBaseUrl controls 4 URLs in Hydra: login, consent, logout,
@@ -159,8 +159,8 @@ velero:
 # to redirect.
 #
 # Verified before removing that nothing depended on it: the GitHub webhook is registered
-# against `app-dev` (cmd/loopruntime-ops/internal/seed/github_webhook_fixture.go:44), and
-# `app-dev` already has the same direct bypass to loopruntime-api that `cloud-dev` had.
+# against `app-dev` (cmd/loop-runtime-ops/internal/seed/github_webhook_fixture.go:44), and
+# `app-dev` already has the same direct bypass to loop-runtime-api that `cloud-dev` had.
 uiBaseUrl: "https://app-dev.getloopscale.com"
 dashboardOrigin: "https://app-dev.getloopscale.com"
 publicAuthUrl: "https://auth-dev.getloopscale.com"
@@ -186,34 +186,34 @@ dashboardRoute:
 # apps). Consequence: dev + legacy prod share OAuth client_id. Cognitive
 # separation moves to URL/cookie space (auth-dev vs auth) only.
 #
-# Helm chart values.yaml.gotmpl already reads `{{ env "LOOPRUNTIME_GITHUB_CLIENT_ID" }}`
+# Helm chart values.yaml.gotmpl already reads `{{ env "LOOP_RUNTIME_GITHUB_CLIENT_ID" }}`
 # (no _DEV suffix), so no chart override needed — same env var works for
 # both standalone-public and dev-public envs.
 #
 # Stripe webhook (T4.1) deviates: dev gets a SEPARATE webhook endpoint
 # (we_1TeVZFJF08yCtMK1RiMjeLc0) with its own whsec_*. Operator wires the
-# Secret `loopruntime-stripe-webhook-dev` (created 2026-06-04) so loopruntime-cloud
+# Secret `loop-runtime-stripe-webhook-dev` (created 2026-06-04) so loop-console
 # verifies dev events with the right signing key.
 #
 # Plan J-09 T4.1 (2026-06-05) — GitHub App webhook secret. Operator wires
-# the `loopruntime-github-webhook` Secret BEFORE bootstrapping dev-public so the
-# loopruntime-api Deployment can mount GITHUB_WEBHOOK_SECRET via envFrom. Without
+# the `loop-runtime-github-webhook` Secret BEFORE bootstrapping dev-public so the
+# loop-runtime-api Deployment can mount GITHUB_WEBHOOK_SECRET via envFrom. Without
 # the secret the webhook handler stays unmounted (router nil-guards) and
 # auto-deploy never fires. The secret value is the SAME string configured
 # on the GitHub App webhook URL https://app-dev.getloopscale.com/api/v1/webhooks/github
 # so HMAC validation succeeds end-to-end.
 #
 # Runbook:
-#   kubectl --namespace loopruntime-system create secret generic loopruntime-github-webhook \
+#   kubectl --namespace loop-runtime-system create secret generic loop-runtime-github-webhook \
 #     --from-literal=value="$(openssl rand -hex 32)" \
 #     --dry-run=client -o yaml | kubectl apply -f -
-#   # then paste the same value into the App config at github.com/settings/apps/loopruntime-platform
+#   # then paste the same value into the App config at github.com/settings/apps/loop-runtime-platform
 #
-# loopruntime-api Deployment must reference the Secret via env:
+# loop-runtime-api Deployment must reference the Secret via env:
 #   - name: GITHUB_WEBHOOK_SECRET
 #     valueFrom:
 #       secretKeyRef:
-#         name: loopruntime-github-webhook
+#         name: loop-runtime-github-webhook
 #         key: value
 #         optional: true   # absent secret => webhook handler off, NOT crash
 
@@ -225,11 +225,11 @@ profile:
   managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
-  loopruntimeCloud: true               # install the control plane (loopruntime-cloud), unless clusterRole is standalone
+  loopRuntimeCloud: true               # install the control plane (loop-console), unless clusterRole is standalone
   smokeTest: false              # run the post-install smoke-test release
   localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
   inClusterObjectStore: true    # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
   awsSecretsManager: false      # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
   awsLoadBalancerController: false  # install the AWS Load Balancer Controller and publish the edge through an ALB
-  localRegistry: true           # cells admit images from the local k3d registry (k3d-loopruntime-registry:5000)
-  secretFetchBroker: true       # install the ESO secret-fetch broker (loopruntime-broker) on the cells; its chart allows a plaintext bearer only in dev-public
+  localRegistry: true           # cells admit images from the local k3d registry (k3d-loop-runtime-registry:5000)
+  secretFetchBroker: true       # install the ESO secret-fetch broker (loop-runtime-broker) on the cells; its chart allows a plaintext bearer only in dev-public

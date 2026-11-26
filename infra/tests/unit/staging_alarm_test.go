@@ -308,14 +308,14 @@ func TestTheTokenCheckIsInstalledAndRunsEveryDay(t *testing.T) {
 		}
 		return string(data)
 	}
-	if service := read("infra/staging/systemd/loopruntime-staging-tokens.service"); !strings.Contains(service, "ExecStart=/usr/local/lib/loopruntime-staging/alarm.sh check-tokens") {
-		t.Errorf("loopruntime-staging-tokens.service does not run alarm.sh check-tokens:\n%s", service)
+	if service := read("infra/staging/systemd/loop-runtime-staging-tokens.service"); !strings.Contains(service, "ExecStart=/usr/local/lib/loop-runtime-staging/alarm.sh check-tokens") {
+		t.Errorf("loop-runtime-staging-tokens.service does not run alarm.sh check-tokens:\n%s", service)
 	}
-	if timer := read("infra/staging/systemd/loopruntime-staging-tokens.timer"); !strings.Contains(timer, "OnCalendar=daily") || !strings.Contains(timer, "Persistent=true") {
-		t.Errorf("loopruntime-staging-tokens.timer does not run once a day, catching up after downtime:\n%s", timer)
+	if timer := read("infra/staging/systemd/loop-runtime-staging-tokens.timer"); !strings.Contains(timer, "OnCalendar=daily") || !strings.Contains(timer, "Persistent=true") {
+		t.Errorf("loop-runtime-staging-tokens.timer does not run once a day, catching up after downtime:\n%s", timer)
 	}
 	task := read("taskfiles/staging.yml")
-	if !strings.Contains(task, "infra/staging/systemd/loopruntime-staging-tokens.timer") || !strings.Contains(task, "loopruntime-staging-disk.timer loopruntime-staging-tokens.timer") {
-		t.Errorf("staging:nightly does not install and enable loopruntime-staging-tokens.timer")
+	if !strings.Contains(task, "infra/staging/systemd/loop-runtime-staging-tokens.timer") || !strings.Contains(task, "loop-runtime-staging-disk.timer loop-runtime-staging-tokens.timer") {
+		t.Errorf("staging:nightly does not install and enable loop-runtime-staging-tokens.timer")
 	}
 }

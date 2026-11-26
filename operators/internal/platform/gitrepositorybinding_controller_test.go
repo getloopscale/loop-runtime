@@ -72,7 +72,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			// Start a real HTTP server that simulates a reachable Gitea API.
 			reachableServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`{"id":1,"name":"test-gitops","full_name":"loopruntime/test-gitops"}`))
+				_, _ = w.Write([]byte(`{"id":1,"name":"test-gitops","full_name":"loop-runtime/test-gitops"}`))
 			}))
 		})
 
@@ -93,7 +93,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, credSecret)).To(Succeed())
 
-			repoURL := fmt.Sprintf("%s/loopruntime/test-gitops.git", reachableServer.URL)
+			repoURL := fmt.Sprintf("%s/loop-runtime/test-gitops.git", reachableServer.URL)
 
 			binding := newGitRepositoryBinding(
 				"grb-happy", bindingNamespace,
@@ -147,7 +147,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 				g.Expect(argoSecret.Data).To(HaveKey("password"))
 				g.Expect(string(argoSecret.Data["type"])).To(Equal("git"))
 				g.Expect(string(argoSecret.Data["url"])).To(Equal(repoURL))
-				g.Expect(string(argoSecret.Data["username"])).To(Equal("loopruntime-platform"))
+				g.Expect(string(argoSecret.Data["username"])).To(Equal("loop-runtime-platform"))
 				g.Expect(string(argoSecret.Data["password"])).To(Equal(testToken))
 			}, timeout, interval).Should(Succeed())
 
@@ -169,7 +169,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 		It("should set CredentialsResolved=False and requeue", func() {
 			binding := newGitRepositoryBinding(
 				"grb-no-cred", bindingNamespace,
-				"http://gitea.example.com/loopruntime/missing-gitops.git",
+				"http://gitea.example.com/loop-runtime/missing-gitops.git",
 				"nonexistent-cred-secret", credentialKey, bindingNamespace,
 				"argocd", argoCDNs,
 			)
@@ -216,7 +216,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, credSecret)).To(Succeed())
 
-			repoURL := fmt.Sprintf("%s/loopruntime/rotation-gitops.git", rotationServer.URL)
+			repoURL := fmt.Sprintf("%s/loop-runtime/rotation-gitops.git", rotationServer.URL)
 
 			binding := newGitRepositoryBinding(
 				"grb-rotation", bindingNamespace,
@@ -316,7 +316,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, credSecret)).To(Succeed())
 
-			repoURL := fmt.Sprintf("%s/loopruntime/delete-gitops.git", deleteServer.URL)
+			repoURL := fmt.Sprintf("%s/loop-runtime/delete-gitops.git", deleteServer.URL)
 
 			binding := newGitRepositoryBinding(
 				"grb-delete", bindingNamespace,
@@ -390,7 +390,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, credSecret)).To(Succeed())
 
-			repoURL := fmt.Sprintf("%s/loopruntime/idempotent-gitops.git", idempotentServer.URL)
+			repoURL := fmt.Sprintf("%s/loop-runtime/idempotent-gitops.git", idempotentServer.URL)
 
 			binding := newGitRepositoryBinding(
 				"grb-idempotent", bindingNamespace,

@@ -1,6 +1,6 @@
 # The Secret aws-secrets-manager writes from the RDS master secret and the platform
 # secret: `uri` (the owner) and the api/worker/cloud role passwords.
-credentialsSecret: loopruntime-db-credentials
+credentialsSecret: loop-runtime-db-credentials
 
 # Databases created next to the platform's own, owned by the master user.
 databases:
@@ -12,7 +12,7 @@ databases:
 # handed in by the helmfile so there is one copy of it. Required.
 rolesSql: ""
 
-# psql runs the role and database steps; the loopruntime-api image carries golang-migrate and
+# psql runs the role and database steps; the loop-runtime-api image carries golang-migrate and
 # the migrations of the release it serves (/migrations).
 images:
   psql: postgres:16.10-alpine3.22

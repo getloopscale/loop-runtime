@@ -150,23 +150,23 @@ func Layer8_LiveProofByteGrep(ctx context.Context, repoRoot string) Layer {
 		return c
 	}
 	// L1: source-of-truth grep for expected env vars
-	hasGitHub := regexp.MustCompile(`LOOPRUNTIME_GITHUB_CLIENT_ID\s*=\s*\S`).MatchString(string(data))
-	hasGoogle := regexp.MustCompile(`LOOPRUNTIME_GOOGLE_CLIENT_ID\s*=\s*\S`).MatchString(string(data))
-	hasStripe := regexp.MustCompile(`LOOPRUNTIME_STRIPE_SECRET_KEY\s*=\s*(rk|sk)_`).MatchString(string(data))
-	hasResend := regexp.MustCompile(`LOOPRUNTIME_RESEND_API_KEY\s*=\s*re_`).MatchString(string(data))
+	hasGitHub := regexp.MustCompile(`LOOP_RUNTIME_GITHUB_CLIENT_ID\s*=\s*\S`).MatchString(string(data))
+	hasGoogle := regexp.MustCompile(`LOOP_RUNTIME_GOOGLE_CLIENT_ID\s*=\s*\S`).MatchString(string(data))
+	hasStripe := regexp.MustCompile(`LOOP_RUNTIME_STRIPE_SECRET_KEY\s*=\s*(rk|sk)_`).MatchString(string(data))
+	hasResend := regexp.MustCompile(`LOOP_RUNTIME_RESEND_API_KEY\s*=\s*re_`).MatchString(string(data))
 
 	missing := []string{}
 	if !hasGitHub {
-		missing = append(missing, "LOOPRUNTIME_GITHUB_CLIENT_ID")
+		missing = append(missing, "LOOP_RUNTIME_GITHUB_CLIENT_ID")
 	}
 	if !hasGoogle {
-		missing = append(missing, "LOOPRUNTIME_GOOGLE_CLIENT_ID")
+		missing = append(missing, "LOOP_RUNTIME_GOOGLE_CLIENT_ID")
 	}
 	if !hasStripe {
-		missing = append(missing, "LOOPRUNTIME_STRIPE_SECRET_KEY")
+		missing = append(missing, "LOOP_RUNTIME_STRIPE_SECRET_KEY")
 	}
 	if !hasResend {
-		missing = append(missing, "LOOPRUNTIME_RESEND_API_KEY")
+		missing = append(missing, "LOOP_RUNTIME_RESEND_API_KEY")
 	}
 	if len(missing) > 0 {
 		c.Detail = fmt.Sprintf("L1 .env missing: %v", missing)

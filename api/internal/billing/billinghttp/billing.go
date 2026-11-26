@@ -5,7 +5,7 @@
 // + T2.7 of maturity-3-62-to-4-0-roadmap (Stripe Portal SDK).
 //
 // Wires GET /api/v1/billing and POST /api/v1/billing/portal so the CLI's
-// `loopruntime billing` and `loopruntime billing portal` commands actually have an
+// `loop-runtime billing` and `loop-runtime billing portal` commands actually have an
 // endpoint to call. Pre-T1.6 the CLI hit silent 404 because the routes
 // were declared in the spec but no handler existed in router.go.
 //
@@ -130,7 +130,7 @@ type BillingResponse struct {
 // `cost_counters` holds zero rows, and every metric used to be served as
 // `{"used": 0}` — a protection that has never evaluated anything, rendered as
 // a customer who has consumed nothing. The gate already tells operators apart
-// via `loopruntime_cost_cap_decisions_total{reason="unmeasured"}`; this tells the
+// via `loop_runtime_cost_cap_decisions_total{reason="unmeasured"}`; this tells the
 // reader of the response.
 //
 // Polarity is deliberate: Go's zero value is `false`, so any decoder that
@@ -274,9 +274,9 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 	//
 	// Not hypothetical. Measured on app-dev 2026-08-11: the provider Secret is
 	// `optional: true` and absent, so this was the ACTIVE path — every
-	// `loopruntime billing portal` returned the assembled URL.
+	// `loop-runtime billing portal` returned the assembled URL.
 	//
-	// Per ADR 2026-08-11, loopruntime-cloud is the only portal-session issuer. When the
+	// Per ADR 2026-08-11, loop-console is the only portal-session issuer. When the
 	// engine cannot issue, it FAILS saying where to go — a URL that looks like it
 	// works hides the problem until someone investigates why the portal did not open.
 	if h.portalCreator == nil {

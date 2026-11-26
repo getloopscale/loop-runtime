@@ -24,7 +24,7 @@ import (
 // When tracing is disabled (no TracerProvider registered), otelhttp produces
 // no-op spans with zero overhead, and TraceIDs reports none.
 func OtelHTTP(next http.Handler) http.Handler {
-	return otelhttp.NewHandler(next, "loopruntime-api",
+	return otelhttp.NewHandler(next, "loop-runtime-api",
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
 			return r.Method + " " + r.URL.Path
 		}),

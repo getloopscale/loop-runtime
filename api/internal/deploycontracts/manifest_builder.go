@@ -28,7 +28,7 @@ type BuildManifestAppsInput struct {
 	// pipeline (cosign step output, with fallback to BuildKit digest).
 	// When present, the manifest renders use `ImageDigestRef` instead of
 	// `ImageTag` — required by the supply-chain VAP
-	// `loopruntime-require-image-signature` which rejects mutable tag refs in
+	// `loop-runtime-require-image-signature` which rejects mutable tag refs in
 	// tenant namespaces (CHG-2026-04-29-DOGFOOD iter 8: discovered live
 	// when standalone-multi pods got Forbidden by the VAP).
 	// Nil/empty map → fall back to ImageTag (legacy path).
@@ -50,7 +50,7 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 		// (server|worker only). Every app emits K8s manifests.
 
 		// CHG-2026-04-29-DOGFOOD iter 8 — supply-chain VAP enforcement.
-		// Mutable tags are rejected by `loopruntime-require-image-signature` in
+		// Mutable tags are rejected by `loop-runtime-require-image-signature` in
 		// tenant namespaces. Without a digest from the build pipeline the
 		// manifest would produce pods Forbidden at admission. Failing loud
 		// here beats a silent admission failure later — the caller is

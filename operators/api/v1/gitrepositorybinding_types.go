@@ -32,7 +32,7 @@ type GitRepositoryBindingSpec struct {
 	// SEC-003 / T3.5: must be an HTTP(S) URL or SSH git URL. Prevents SSRF
 	// via arbitrary URL schemes (file://, gopher://, javascript:, etc.) reaching
 	// the HTTP client used by GitRepositoryBindingController. Plain http://
-	// is allowed for in-cluster Gitea services (e.g., http://gitea.loopruntime-system.svc:3000).
+	// is allowed for in-cluster Gitea services (e.g., http://gitea.loop-runtime-system.svc:3000).
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
 	// +kubebuilder:validation:Pattern=`^(https?://[^\s]+|ssh://git@[^\s]+|git@[^\s:]+:[^\s]+)$`

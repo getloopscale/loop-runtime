@@ -20,10 +20,10 @@ import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 const SPLIT_CHARTS = [
-  "loopruntime-tenant-operator",
-  "loopruntime-app-operator",
-  "loopruntime-preview-operator",
-  "loopruntime-platform-operator",
+  "loop-runtime-tenant-operator",
+  "loop-runtime-app-operator",
+  "loop-runtime-preview-operator",
+  "loop-runtime-platform-operator",
 ] as const;
 
 function helmTemplate(chart: string): string {
@@ -53,7 +53,7 @@ describe("operator-split invariants matrix (I-1 through I-8)", () => {
     // Direct verification: each binary's main.go declares unique LeaderElectionID.
     const ids = new Set<string>();
     for (const chart of SPLIT_CHARTS) {
-      const binary = chart.replace(/^loopruntime-/, "");
+      const binary = chart.replace(/^loop-runtime-/, "");
       const main = readFileSync(
         resolve(REPO_ROOT, "operators", "cmd", binary, "main.go"),
         "utf-8",
@@ -84,7 +84,7 @@ describe("operator-split invariants matrix (I-1 through I-8)", () => {
     const text = readFileSync(goTest, "utf-8");
     // Test must reference all 4 binaries.
     for (const chart of SPLIT_CHARTS) {
-      const binary = chart.replace(/^loopruntime-/, "");
+      const binary = chart.replace(/^loop-runtime-/, "");
       expect(text, `${binary} must be referenced in metrics registration test`).toContain(binary);
     }
   });

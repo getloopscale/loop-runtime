@@ -41,31 +41,31 @@ func tenantSpecField(t *testing.T, client *dynamicfake.FakeDynamicClient, namesp
 }
 
 func TestTenantCRCellPatcher_PatchesCellIDAndPreservesOtherFields(t *testing.T) {
-	client := newFakeTenantClient("tn-x", "loopruntime-system",
+	client := newFakeTenantClient("tn-x", "loop-runtime-system",
 		map[string]interface{}{"cellID": "cell-0", "displayName": "preserved-display"})
-	p := NewTenantCRCellPatcher(client, "loopruntime-system")
+	p := NewTenantCRCellPatcher(client, "loop-runtime-system")
 
 	if err := p.PatchTenantCellID(context.Background(), "tn-x", "cell-1"); err != nil {
 		t.Fatalf("PatchTenantCellID: %v", err)
 	}
 
-	if got := tenantSpecField(t, client, "loopruntime-system", "tn-x", "cellID"); got != "cell-1" {
+	if got := tenantSpecField(t, client, "loop-runtime-system", "tn-x", "cellID"); got != "cell-1" {
 		t.Errorf("spec.cellID = %q, want cell-1", got)
 	}
-	if got := tenantSpecField(t, client, "loopruntime-system", "tn-x", "displayName"); got != "preserved-display" {
+	if got := tenantSpecField(t, client, "loop-runtime-system", "tn-x", "displayName"); got != "preserved-display" {
 		t.Errorf("a merge patch must keep spec.displayName, got %q", got)
 	}
 }
 
 func TestTenantCRCellPatcher_RespectsCustomNamespace(t *testing.T) {
-	client := newFakeTenantClient("tn-x", "loopruntime-prod", map[string]interface{}{"cellID": "cell-0"})
-	p := NewTenantCRCellPatcher(client, "loopruntime-prod")
+	client := newFakeTenantClient("tn-x", "loop-runtime-prod", map[string]interface{}{"cellID": "cell-0"})
+	p := NewTenantCRCellPatcher(client, "loop-runtime-prod")
 
 	if err := p.PatchTenantCellID(context.Background(), "tn-x", "cell-1"); err != nil {
 		t.Fatalf("PatchTenantCellID: %v", err)
 	}
 
-	if got := tenantSpecField(t, client, "loopruntime-prod", "tn-x", "cellID"); got != "cell-1" {
+	if got := tenantSpecField(t, client, "loop-runtime-prod", "tn-x", "cellID"); got != "cell-1" {
 		t.Errorf("spec.cellID = %q, want cell-1", got)
 	}
 }
@@ -73,13 +73,13 @@ func TestTenantCRCellPatcher_RespectsCustomNamespace(t *testing.T) {
 func TestTenantCRCellPatcher_DefaultsToLoopRuntimeSystemNamespace(t *testing.T) {
 	p := NewTenantCRCellPatcher(newFakeTenantClient("", "", nil), "")
 
-	if p.Namespace() != "loopruntime-system" {
-		t.Errorf("Namespace() = %q, want loopruntime-system", p.Namespace())
+	if p.Namespace() != "loop-runtime-system" {
+		t.Errorf("Namespace() = %q, want loop-runtime-system", p.Namespace())
 	}
 }
 
 func TestTenantCRCellPatcher_MissingTenantIsAnError(t *testing.T) {
-	p := NewTenantCRCellPatcher(newFakeTenantClient("", "", nil), "loopruntime-system")
+	p := NewTenantCRCellPatcher(newFakeTenantClient("", "", nil), "loop-runtime-system")
 
 	if err := p.PatchTenantCellID(context.Background(), "tn-missing", "cell-1"); err == nil {
 		t.Fatal("expected an error patching an absent Tenant CR")

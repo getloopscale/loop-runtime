@@ -9,7 +9,7 @@ namespaceName: argo-ci
 # ServiceAccount for CI Workflow pods. Per ADR D3, RBAC scoped to
 # namespace only (RoleBinding, NOT ClusterRoleBinding).
 serviceAccount:
-  name: loopruntime-ci-runner
+  name: loop-runtime-ci-runner
 
 # NetworkPolicy egress allowlist.
 # Default: lock everything down, explicit allow per destination.
@@ -18,10 +18,10 @@ networkPolicy:
   enabled: true
   # Allow egress to Gitea API for status posting + repo clone.
   # Format: "<svc-name>.<namespace>.svc.cluster.local"
-  giteaService: "gitea-http.loopruntime-system.svc.cluster.local"
+  giteaService: "gitea-http.loop-runtime-system.svc.cluster.local"
   giteaPort: 3000
   # Allow egress to DOCR for image pulls during CI runs (rarely needed
-  # but loopruntime-ops binary might fetch dependencies). Operator validates.
+  # but loop-runtime-ops binary might fetch dependencies). Operator validates.
   docrHost: "registry.digitalocean.com"
   docrPort: 443
   # Allow egress to Argo Workflows controller for Workflow CR queries

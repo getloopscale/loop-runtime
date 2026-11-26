@@ -16,11 +16,11 @@ import (
 )
 
 // cellID() must default to domain.DefaultCellID when the env var is unset,
-// and honor LOOPRUNTIME_CELL_ID when set. This is the same contract as the
+// and honor LOOP_RUNTIME_CELL_ID when set. This is the same contract as the
 // store layer (roadmap 03) so the controller binary stays consistent.
 
 func TestCellID_DefaultsToCellDefaultWhenUnset(t *testing.T) {
-	_ = os.Unsetenv("LOOPRUNTIME_CELL_ID")
+	_ = os.Unsetenv("LOOP_RUNTIME_CELL_ID")
 	got := cellID(stubConfig())
 	if got != domain.DefaultCellID {
 		t.Errorf("cellID() = %q, want %q", got, domain.DefaultCellID)
@@ -28,7 +28,7 @@ func TestCellID_DefaultsToCellDefaultWhenUnset(t *testing.T) {
 }
 
 func TestCellID_HonorsEnvOverride(t *testing.T) {
-	t.Setenv("LOOPRUNTIME_CELL_ID", "cell-sfo3-02")
+	t.Setenv("LOOP_RUNTIME_CELL_ID", "cell-sfo3-02")
 	got := cellID(stubConfig())
 	if got != "cell-sfo3-02" {
 		t.Errorf("cellID() = %q, want cell-sfo3-02", got)
@@ -36,18 +36,18 @@ func TestCellID_HonorsEnvOverride(t *testing.T) {
 }
 
 func TestPodName_PrefersHostname(t *testing.T) {
-	t.Setenv("HOSTNAME", "loopruntime-controller-abc123")
+	t.Setenv("HOSTNAME", "loop-runtime-controller-abc123")
 	got := podName()
-	if got != "loopruntime-controller-abc123" {
-		t.Errorf("podName() = %q, want loopruntime-controller-abc123", got)
+	if got != "loop-runtime-controller-abc123" {
+		t.Errorf("podName() = %q, want loop-runtime-controller-abc123", got)
 	}
 }
 
 func TestPodName_FallsBackWhenHostnameUnset(t *testing.T) {
 	_ = os.Unsetenv("HOSTNAME")
 	got := podName()
-	if got != "loopruntime-controller" {
-		t.Errorf("podName() = %q, want loopruntime-controller (fallback)", got)
+	if got != "loop-runtime-controller" {
+		t.Errorf("podName() = %q, want loop-runtime-controller (fallback)", got)
 	}
 }
 

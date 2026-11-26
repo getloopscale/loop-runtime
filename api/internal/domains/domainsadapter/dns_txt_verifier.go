@@ -19,20 +19,20 @@ type txtResolver interface {
 }
 
 // DNSTXTVerifier implements domains.DomainVerifier with a DNS TXT lookup of
-// _loopruntime-verify.{domain}. A nil Resolver uses net.DefaultResolver.
+// _loop-runtime-verify.{domain}. A nil Resolver uses net.DefaultResolver.
 type DNSTXTVerifier struct {
 	Resolver txtResolver
 }
 
 // VerifyTXT reports whether the expected token is published at
-// _loopruntime-verify.{domain}. A record that does not exist is (false, nil); any
+// _loop-runtime-verify.{domain}. A record that does not exist is (false, nil); any
 // other lookup failure is an error.
 func (v *DNSTXTVerifier) VerifyTXT(ctx context.Context, domain, expectedToken string) (bool, error) {
 	resolver := v.Resolver
 	if resolver == nil {
 		resolver = net.DefaultResolver
 	}
-	txtName := "_loopruntime-verify." + domain
+	txtName := "_loop-runtime-verify." + domain
 	records, err := resolver.LookupTXT(ctx, txtName)
 	if err != nil {
 		if isDNSNotFound(err) {

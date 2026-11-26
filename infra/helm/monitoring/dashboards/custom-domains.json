@@ -16,7 +16,7 @@
       "targetBlank": false,
       "title": "← Home",
       "type": "link",
-      "url": "/d/loopruntime-home/loopruntime-system-home"
+      "url": "/d/loop-runtime-home/loop-runtime-system-home"
     }
   ],
   "liveNow": false,
@@ -50,23 +50,23 @@
       "id": 1,
       "targets": [
         {
-          "expr": "sum(loopruntime_custom_domains_total{status=\"pending_ns\"}) or vector(0)",
+          "expr": "sum(loop_runtime_custom_domains_total{status=\"pending_ns\"}) or vector(0)",
           "legendFormat": "pending_ns"
         },
         {
-          "expr": "sum(loopruntime_custom_domains_total{status=\"ns_active\"}) or vector(0)",
+          "expr": "sum(loop_runtime_custom_domains_total{status=\"ns_active\"}) or vector(0)",
           "legendFormat": "ns_active"
         },
         {
-          "expr": "sum(loopruntime_custom_domains_total{status=\"provisioning\"}) or vector(0)",
+          "expr": "sum(loop_runtime_custom_domains_total{status=\"provisioning\"}) or vector(0)",
           "legendFormat": "provisioning"
         },
         {
-          "expr": "sum(loopruntime_custom_domains_total{status=\"active\"}) or vector(0)",
+          "expr": "sum(loop_runtime_custom_domains_total{status=\"active\"}) or vector(0)",
           "legendFormat": "active"
         },
         {
-          "expr": "sum(loopruntime_custom_domains_total{status=\"failed\"}) or vector(0)",
+          "expr": "sum(loop_runtime_custom_domains_total{status=\"failed\"}) or vector(0)",
           "legendFormat": "failed"
         }
       ],
@@ -108,7 +108,7 @@
       "id": 2,
       "targets": [
         {
-          "expr": "max(loopruntime_cfkv_drift_detected) or vector(0)",
+          "expr": "max(loop_runtime_cfkv_drift_detected) or vector(0)",
           "legendFormat": "Drift"
         }
       ],
@@ -180,11 +180,11 @@
       "id": 3,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopruntime_build_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_build_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "Deploy p95"
         },
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopruntime_build_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_build_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "Deploy p50"
         }
       ],
@@ -227,11 +227,11 @@
       "id": 4,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopruntime_domain_ns_propagation_duration_seconds_bucket[1h])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_domain_ns_propagation_duration_seconds_bucket[1h])) by (le))",
           "legendFormat": "p95"
         },
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopruntime_domain_ns_propagation_duration_seconds_bucket[1h])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_domain_ns_propagation_duration_seconds_bucket[1h])) by (le))",
           "legendFormat": "p50"
         }
       ],
@@ -259,7 +259,7 @@
       "id": 5,
       "targets": [
         {
-          "expr": "sum(rate(loopruntime_domain_cf_zone_errors_total[5m])) by (operation)",
+          "expr": "sum(rate(loop_runtime_domain_cf_zone_errors_total[5m])) by (operation)",
           "legendFormat": "{{operation}}"
         }
       ],
@@ -277,7 +277,7 @@
   "refresh": "1m",
   "schemaVersion": 39,
   "tags": [
-    "loopruntime",
+    "loop-runtime",
     "domains",
     "cloudflare"
   ],
@@ -304,5 +304,5 @@
     "to": "now"
   },
   "title": "LoopRuntime — Custom Domains & CF",
-  "uid": "loopruntime-custom-domains"
+  "uid": "loop-runtime-custom-domains"
 }

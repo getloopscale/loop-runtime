@@ -137,7 +137,7 @@ func TestPredefinedErrors(t *testing.T) {
 // NOT include the operation-specific verbs "promoting" or "rolling
 // back", nor the source-only noun "source environment".
 //
-// Regression protection for loopruntime-cloud#166 (CRITICAL): user hit this
+// Regression protection for loop-console#166 (CRITICAL): user hit this
 // misleading message during a rollback path — the promote-flavored
 // wording ("source environment", "promoting or rolling back") sent
 // operators looking for a promote-side problem when the actual
@@ -153,7 +153,7 @@ func TestErrNoActiveRelease_MessageIsOperationNeutral(t *testing.T) {
 	}
 	for _, term := range forbidden {
 		if strings.Contains(msg, term) {
-			t.Errorf("ErrNoActiveRelease.Message contains %q — docstring pins operation-neutral wording (loopruntime-cloud#166). Full message: %q", term, msg)
+			t.Errorf("ErrNoActiveRelease.Message contains %q — docstring pins operation-neutral wording (loop-console#166). Full message: %q", term, msg)
 		}
 	}
 	if msg == "" {

@@ -14,20 +14,20 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 )
 
-// The request pool runs as loopruntime_api, and every tenant table is under
+// The request pool runs as loop_runtime_api, and every tenant table is under
 // fail-closed Row Level Security (migration 000062): a statement sees only the
 // rows of the tenant named by `app.tenant_id`. Nothing on the request path set
 // that variable outside the environment lock, so every read of a tenant table
 // on an authenticated request saw nothing — measured on 2026-09-25 against the
-// migrated schema: a user's own membership row read 0 rows as loopruntime_api and 1 as
-// loopruntime_worker.
+// migrated schema: a user's own membership row read 0 rows as loop_runtime_api and 1 as
+// loop_runtime_worker.
 //
 // The request pool now scopes every connection it hands out to the tenant the
 // request context carries. These tests pin that behaviour over the real role:
 // the scoped tenant's rows are visible, another tenant's are not, and a
 // connection reused by an unscoped caller carries no tenant forward.
 //
-//	DATABASE_URL=<loopruntime_api> LOOPRUNTIME_WORKER_DATABASE_URL=<loopruntime_worker> \
+//	DATABASE_URL=<loop_runtime_api> LOOP_RUNTIME_WORKER_DATABASE_URL=<loop_runtime_worker> \
 //	  go test ./tests/integration/ -run RequestPool -v
 
 const requestScopeTenantA, requestScopeTenantB = "tn-rls-scope-a", "tn-rls-scope-b"
@@ -100,7 +100,7 @@ func requireIsolatedRequestRole(t *testing.T) {
 	if bypasses {
 		// A role that bypasses RLS cannot reproduce https://github.com/getloopscale/loop-runtime/issues/384:
 		// it sees every tenant's rows whether or not the connection is scoped.
-		t.Skip("DATABASE_URL is not the isolated request role (it bypasses RLS); point it at loopruntime_api")
+		t.Skip("DATABASE_URL is not the isolated request role (it bypasses RLS); point it at loop_runtime_api")
 	}
 }
 

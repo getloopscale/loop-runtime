@@ -116,7 +116,7 @@ func TestAdminEndpoint_TakesTLSFromTheScheme(t *testing.T) {
 		secure     bool
 		wantsError bool
 	}{
-		{"minio.loopruntime-system.svc.cluster.local:9000", "minio.loopruntime-system.svc.cluster.local:9000", false, false},
+		{"minio.loop-runtime-system.svc.cluster.local:9000", "minio.loop-runtime-system.svc.cluster.local:9000", false, false},
 		{"http://minio:9000", "minio:9000", false, false},
 		{"https://minio.example.com", "minio.example.com", true, false},
 		{"ftp://minio", "", false, true},

@@ -218,7 +218,7 @@ type ProjectSummary struct {
 	CreatedBy        string    `json:"created_by,omitempty"`
 	CreatedAt        time.Time `json:"created_at,omitempty"`
 	EnvironmentCount int64     `json:"environment_count"`
-	// Red Team loopruntime-cloud#41 absorption (2026-06-27): subset of
+	// Red Team loop-console#41 absorption (2026-06-27): subset of
 	// EnvironmentCount that includes ONLY env_targets with kind='permanent'
 	// (production-like envs). Distinguishes preview-only projects
 	// (production_env_count == 0) from those wired to production.
@@ -229,7 +229,7 @@ type ProjectSummary struct {
 	// serving ACTIVE release (preview OR permanent kind). This is what
 	// the dashboard "LIVE ENVS" counter SHOULD reflect — a project with
 	// a preview env in the ACTIVE state + Live URL serving 200 must
-	// count as 1, not 0. Red Team loopruntime-cloud#134 absorption (2026-07-02).
+	// count as 1, not 0. Red Team loop-console#134 absorption (2026-07-02).
 	//
 	// Semantic distinction:
 	//   - EnvironmentCount   — all env_targets (any kind, any release state)
@@ -273,7 +273,7 @@ type ProjectSummary struct {
 	// when no builds OR apps_spec missing.
 	LatestFramework string `json:"latest_framework,omitempty"`
 	// LatestBuildEnvironment = latest_build.environment — feeds the
-	// dashboard's Red Team loopruntime-cloud#41 disambiguation: when this is
+	// dashboard's Red Team loop-console#41 disambiguation: when this is
 	// "preview" AND there is no active production release, the project
 	// is preview-only and the badge MUST show "Preview" (not "Live" with
 	// a "URL PENDING" hint). Red Team 2026-06-27 caught the divergence
@@ -282,7 +282,7 @@ type ProjectSummary struct {
 	// when no builds exist.
 	LatestBuildEnvironment string `json:"latest_build_environment,omitempty"`
 	// LastReplicasReadyValue + LastReplicasReadyAt — T3.2 of plan
-	// dashboard-badge-data-plane-poller closing Red Team loopruntime-cloud#128
+	// dashboard-badge-data-plane-poller closing Red Team loop-console#128
 	// (badge lies "Live" when control-plane ACTIVE + data-plane 502).
 	// The api's readiness poller (environments.ReadinessPoller) reads
 	// ready replicas per (tenant,project,env) from Prometheus and

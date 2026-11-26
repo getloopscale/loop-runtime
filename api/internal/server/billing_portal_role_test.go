@@ -25,7 +25,7 @@ func (m roleMember) GetMemberships(_ context.Context, _ string) ([]auth.TenantMe
 }
 
 // Opening the billing portal session shows invoices, payment method and
-// history, and loopruntime-cloud requires `owner` for the same capability. The engine
+// history, and loop-console requires `owner` for the same capability. The engine
 // route must require the same role; an authenticated member must be refused
 // before the handler runs.
 func TestBillingPortalRequiresTheOwnerRole(t *testing.T) {

@@ -61,7 +61,7 @@ printf '%s\n' "-----BEGIN PUBLIC KEY-----" "fake-public" "-----END PUBLIC KEY---
 func (s *cosignSeed) run(t *testing.T) string {
 	t.Helper()
 	cmd := exec.Command("bash", filepath.Join(repoRoot(), "infra", "helmfile", "scripts", "seed-aws-cosign-key.sh"),
-		"loopruntime/staging/cosign-signing-key")
+		"loop-runtime/staging/cosign-signing-key")
 	cmd.Env = append(os.Environ(), "PATH="+filepath.Join(s.dir, "bin")+":"+os.Getenv("PATH"))
 	out, err := cmd.CombinedOutput()
 	if err != nil {

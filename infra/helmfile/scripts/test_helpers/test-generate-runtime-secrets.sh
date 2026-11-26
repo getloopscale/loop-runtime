@@ -18,16 +18,16 @@ ORIG_PATH="$PATH"
 export PATH="${MOCK_BIN}:$PATH"
 trap "rm -rf $MOCK_LOG $MOCK_BIN" EXIT
 
-export LOOPRUNTIME_CF_TUNNEL_TOKEN="REDACTED_SECRET_039"
-export LOOPRUNTIME_DB_HOST="db.example.com"
-export LOOPRUNTIME_DB_USER="loopruntime"
-export LOOPRUNTIME_DB_PASSWORD="secret"
+export LOOP_RUNTIME_CF_TUNNEL_TOKEN="REDACTED_SECRET_039"
+export LOOP_RUNTIME_DB_HOST="db.example.com"
+export LOOP_RUNTIME_DB_USER="loop_runtime"
+export LOOP_RUNTIME_DB_PASSWORD="secret"
 
 # Issue #117 — generate-runtime-secrets.sh now REFUSES to run without an
 # explicit KUBECONFIG, because it must never inherit an ambient kubecontext
 # when writing runtime Secrets. This harness is a caller, so it honours the
 # same contract a real caller does (taskfiles/infra.yml pins via
-# `KUBECONFIG=$(k3d kubeconfig write loopruntime-cell-0)`).
+# `KUBECONFIG=$(k3d kubeconfig write loop-runtime-cell-0)`).
 #
 # The file is a throwaway: kubectl is shimmed by mock-kubectl.sh on PATH and
 # never reads it. Pointing at a real cluster here would be wrong — the value
@@ -53,10 +53,10 @@ else
   fail "tunnel-token-value" "value not in kubectl args"
 fi
 
-if grep -q "loopruntime-eso-source" "$MOCK_LOG"; then
-  ok "loopruntime-eso-source Secret created (ESO connection)"
+if grep -q "loop-runtime-eso-source" "$MOCK_LOG"; then
+  ok "loop-runtime-eso-source Secret created (ESO connection)"
 else
-  fail "ESO" "loopruntime-eso-source not created"
+  fail "ESO" "loop-runtime-eso-source not created"
 fi
 
 log ""

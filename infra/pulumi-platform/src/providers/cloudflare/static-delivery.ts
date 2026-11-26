@@ -21,7 +21,7 @@ export interface StaticDeliveryConfig {
   readonly environment: string;
   /** Base domain for app hostnames (e.g., "dev.getloopscale.com") */
   readonly baseDomain: string;
-  /** DO Spaces endpoint for static assets (e.g., "https://loopruntime-static-assets.sfo3.digitaloceanspaces.com") */
+  /** DO Spaces endpoint for static assets (e.g., "https://loop-runtime-static-assets.sfo3.digitaloceanspaces.com") */
   readonly s3Endpoint: pulumi.Input<string>;
 }
 
@@ -42,8 +42,8 @@ export function createStaticDelivery(
   config: StaticDeliveryConfig,
 ): StaticDeliveryOutput {
   // 1. KV namespace — routing table read by the Worker on every request
-  const kvTitle = `loopruntime-routing-${config.environment}`;
-  const kvNamespace = new cloudflare.WorkersKvNamespace(`loopruntime-routing-${config.environment}`, {
+  const kvTitle = `loop-runtime-routing-${config.environment}`;
+  const kvNamespace = new cloudflare.WorkersKvNamespace(`loop-runtime-routing-${config.environment}`, {
     accountId: config.accountId,
     title: kvTitle,
   });
@@ -69,7 +69,7 @@ export function createStaticDelivery(
         );
     });
 
-  const scriptName = `loopruntime-static-delivery-${config.environment}`;
+  const scriptName = `loop-runtime-static-delivery-${config.environment}`;
 
   const workerScript = new cloudflare.WorkersScript(scriptName, {
     accountId: config.accountId,
@@ -78,7 +78,7 @@ export function createStaticDelivery(
     compatibilityDate: "2025-01-17",
     bindings: [
       {
-        name: "LOOPRUNTIME_ROUTING",
+        name: "LOOP_RUNTIME_ROUTING",
         type: "kv_namespace",
         namespaceId: kvNamespace.id,
       },
@@ -93,7 +93,7 @@ export function createStaticDelivery(
 
   // 3. Worker route — intercept all requests on *.{baseDomain}/*
   new cloudflare.WorkersRoute(
-    `loopruntime-static-delivery-route-${config.environment}`,
+    `loop-runtime-static-delivery-route-${config.environment}`,
     {
       zoneId: config.zoneId,
       pattern: `*.${config.baseDomain}/*`,

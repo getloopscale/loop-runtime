@@ -9,12 +9,12 @@
 # EC-6 fix (plan v1.1): NO LoopRuntimeSigstoreCircuitBreakerOpen alert — no
 # circuit breaker exists yet (Production Design Review flagged as
 # separate workstream). Re-add when the circuit breaker lands.
-# EC-7 fix (plan v1.1): error-rate alerts reference loopruntime_cosign_*_total
+# EC-7 fix (plan v1.1): error-rate alerts reference loop_runtime_cosign_*_total
 # denominators added in T4.1.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-sigstore-alerts
+  name: loop-runtime-sigstore-alerts
   namespace: monitoring
   labels:
     release: monitoring
@@ -22,20 +22,20 @@ metadata:
     runtime.getloopscale.com/plan: 2026-05-28-meet-001-engineering-closure
 spec:
   groups:
-    - name: loopruntime.sigstore
+    - name: loop-runtime.sigstore
       rules:
         # 1. Sign step P99 latency. The cosign sign duration histogram
         # uses LinearBuckets(1, 5, 12) so the realistic worst-case bin
         # is 56s; alert fires when P99 exceeds 60s for 10 minutes.
         # Operators investigate Fulcio cert issuance or Rekor record
         # latency (the two components inside the sign step) using the
-        # loopruntime_cosign_sign_errors_total{component} counter for
+        # loop_runtime_cosign_sign_errors_total{component} counter for
         # attribution.
         - alert: LoopRuntimeCosignSignSlow
           expr: |
             histogram_quantile(
               0.99,
-              rate(loopruntime_cosign_sign_duration_seconds_bucket[10m])
+              rate(loop_runtime_cosign_sign_duration_seconds_bucket[10m])
             ) > 60
           for: 10m
           labels:
@@ -53,9 +53,9 @@ spec:
         - alert: LoopRuntimeCosignSignErrorRate
           expr: |
             (
-              sum(rate(loopruntime_cosign_sign_errors_total[5m]))
+              sum(rate(loop_runtime_cosign_sign_errors_total[5m]))
               /
-              clamp_min(sum(rate(loopruntime_cosign_sign_total[5m])), 0.01)
+              clamp_min(sum(rate(loop_runtime_cosign_sign_total[5m])), 0.01)
             ) > 0.01
           for: 10m
           labels:
@@ -64,23 +64,23 @@ spec:
             runtime.getloopscale.com/plan: 2026-05-28-meet-001-engineering-closure
           annotations:
             summary: "Cosign sign error rate > 1%"
-            description: "Cosign sign error rate exceeded 1% over 10m. Group by `component` (fulcio|rekor|ctlog) to root-cause via loopruntime_cosign_sign_errors_total."
+            description: "Cosign sign error rate exceeded 1% over 10m. Group by `component` (fulcio|rekor|ctlog) to root-cause via loop_runtime_cosign_sign_errors_total."
             runbook: "https://docs.getloopscale.com/runbooks/alerts/LoopRuntimeCosignSignErrorRate"
 
         # 3. Rekor URL null rate. This is the SLI for the LIVE
         # 2026-05-28 3-layer bug class: cosign attest succeeded but
         # the URL silently dropped. The new
-        # loopruntime_release_attestation_rekor_url_null_total{result} counter
+        # loop_runtime_release_attestation_rekor_url_null_total{result} counter
         # (T4.1 metric 7) bucketed every persist call. > 1% null over
         # 10m means the attestation persistence pipeline is degraded.
         - alert: LoopRuntimeReleaseAttestationRekorURLNullRate
           expr: |
             (
-              rate(loopruntime_release_attestation_rekor_url_null_total{result="null"}[5m])
+              rate(loop_runtime_release_attestation_rekor_url_null_total{result="null"}[5m])
               /
               clamp_min(
-                rate(loopruntime_release_attestation_rekor_url_null_total{result="null"}[5m])
-                + rate(loopruntime_release_attestation_rekor_url_null_total{result="populated"}[5m]),
+                rate(loop_runtime_release_attestation_rekor_url_null_total{result="null"}[5m])
+                + rate(loop_runtime_release_attestation_rekor_url_null_total{result="populated"}[5m]),
                 0.01
               )
             ) > 0.01

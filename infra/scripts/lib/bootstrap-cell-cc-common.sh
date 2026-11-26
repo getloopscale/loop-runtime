@@ -20,11 +20,11 @@ set -euo pipefail
 #                      Used as ClusterCredential CR name, Secret name prefix,
 #                      and spec.cellID + spec.clusterName (F-08 alignment).
 #   K3D_CLUSTER_NAME — k3d cluster suffix (e.g., workload, runtime-2).
-#                      Resolved to docker container k3d-loopruntime-<name>-server-0.
+#                      Resolved to docker container k3d-loop-runtime-<name>-server-0.
 #   --dry-run        — render manifests to stdout, do NOT apply.
 #
 # Outputs (when not dry-run):
-#   - Secret loopruntime-system/<cell_id>-kubeconfig (bearer-token kubeconfig for the target cluster)
+#   - Secret loop-runtime-system/<cell_id>-kubeconfig (bearer-token kubeconfig for the target cluster)
 #   - ClusterCredential cell-id (cellID=cell_id, clusterName=cell_id, apiServer=https://<ip>:6443)
 #
 # Idempotent: kubectl apply --server-side. Safe to re-run.
@@ -36,8 +36,8 @@ bootstrap_cell_cc() {
   local K3D_CLUSTER="${2:?bootstrap_cell_cc requires K3D_CLUSTER_NAME}"
   local DRY_RUN="${3:-}"
 
-  local CTX="${MGMT_CTX:-k3d-loopruntime-core}"
-  local NS="${LOOPRUNTIME_NS:-loopruntime-system}"
+  local CTX="${MGMT_CTX:-k3d-loop-runtime-core}"
+  local NS="${LOOP_RUNTIME_NS:-loop-runtime-system}"
   local SCOPED_LIB
   SCOPED_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/../helmfile/scripts/lib/scoped-kubeconfig.sh"
 
@@ -51,13 +51,13 @@ bootstrap_cell_cc() {
     return 1
   fi
 
-  # 1. Resolve target cluster IP on k3d-loopruntime bridge.
+  # 1. Resolve target cluster IP on k3d-loop-runtime bridge.
   #    Container must be Running AND IP must be valid IPv4 (docker inspect
   #    sometimes returns "invalid IP" or stale metadata when container is
   #    stopped — guard against that explicitly).
-  local CONTAINER="k3d-loopruntime-${K3D_CLUSTER}-server-0"
+  local CONTAINER="k3d-loop-runtime-${K3D_CLUSTER}-server-0"
   if ! docker inspect "$CONTAINER" --format '{{.State.Status}}' 2>/dev/null | grep -q "^running$"; then
-    log_cell "$CONTAINER not running (or absent); cannot bootstrap. Run 'task clusters:create' or 'k3d cluster start loopruntime-${K3D_CLUSTER}'."
+    log_cell "$CONTAINER not running (or absent); cannot bootstrap. Run 'task clusters:create' or 'k3d cluster start loop-runtime-${K3D_CLUSTER}'."
     return 1
   fi
   local TARGET_IP
@@ -76,8 +76,8 @@ bootstrap_cell_cc() {
   # shellcheck disable=SC2064
   trap "rm -f '$RAW_KC'" RETURN
 
-  if ! k3d kubeconfig get "loopruntime-${K3D_CLUSTER}" >"$RAW_KC" 2>/dev/null || [[ ! -s "$RAW_KC" ]]; then
-    log_cell "loopruntime-${K3D_CLUSTER} kubeconfig unavailable"
+  if ! k3d kubeconfig get "loop-runtime-${K3D_CLUSTER}" >"$RAW_KC" 2>/dev/null || [[ ! -s "$RAW_KC" ]]; then
+    log_cell "loop-runtime-${K3D_CLUSTER} kubeconfig unavailable"
     return 1
   fi
 
@@ -113,7 +113,7 @@ bootstrap_cell_cc() {
     log_cell "DRY RUN — manifests below, no apply:"
     DRY="true"
   fi
-  KUBECTL_CONTEXT="$CTX" LOOPRUNTIME_NS="$NS" INGRESS_DOMAIN="loopruntime.local" \
+  KUBECTL_CONTEXT="$CTX" LOOP_RUNTIME_NS="$NS" INGRESS_DOMAIN="loop-runtime.local" \
     MANAGED_BY="bootstrap-cell-cc" TLS_INSECURE="true" DRY_RUN="$DRY" \
     bash "$CC_CREATE" "$CELL_ID" "$CELL_ID" "$SCOPED_KC" || return 2
   [[ "$DRY" == "true" ]] && return 0
@@ -121,5 +121,5 @@ bootstrap_cell_cc() {
   # The Secret's name is the constructor's to choose, and it logs it; naming it
   # here again read ${SECRET_NAME}, which nothing set, and aborted under set -u
   # after the apply had succeeded (#400).
-  log_cell "applied: CC ${CELL_ID} -> https://${TARGET_IP}:6443 (k3d cluster: loopruntime-${K3D_CLUSTER})"
+  log_cell "applied: CC ${CELL_ID} -> https://${TARGET_IP}:6443 (k3d cluster: loop-runtime-${K3D_CLUSTER})"
 }

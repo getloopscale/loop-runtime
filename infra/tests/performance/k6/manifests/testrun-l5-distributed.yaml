@@ -12,10 +12,10 @@ apiVersion: k6.io/v1alpha1
 kind: TestRun
 metadata:
   name: k6-l5-distributed
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   labels:
     app.kubernetes.io/name: k6-load-test
-    app.kubernetes.io/part-of: loopruntime
+    app.kubernetes.io/part-of: loop-runtime
 spec:
   parallelism: 16
   script:
@@ -26,16 +26,16 @@ spec:
     image: grafana/k6:0.52.0
     env:
       - name: K6_API_URL
-        value: "http://loopruntime-api.loopruntime-system.svc.cluster.local:8080"
+        value: "http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080"
       - name: K6_SVC_AUTH
         valueFrom:
           secretKeyRef:
-            name: loopruntime-api-secrets
-            key: LOOPRUNTIME_SERVICE_AUTH_SECRET
+            name: loop-runtime-api-secrets
+            key: LOOP_RUNTIME_SERVICE_AUTH_SECRET
       - name: K6_BUNDLE_PATH
         value: "/fixtures/bundle.bin"
       - name: K6_PROMETHEUS_RW_SERVER_URL
-        value: "http://prometheus-server.loopruntime-system.svc.cluster.local/api/v1/write"
+        value: "http://prometheus-server.loop-runtime-system.svc.cluster.local/api/v1/write"
       - name: K6_TENANT_COUNT
         value: "5000"
       - name: K6_TENANTS_PER_CELL

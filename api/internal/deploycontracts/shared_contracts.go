@@ -118,7 +118,7 @@ type WorkflowStatus struct {
 	// workflow declared no outputs (legacy or non-build workflows).
 	Outputs map[string]map[string]string
 
-	// Red Team loopruntime-cloud#133: pod-level stuck-state signal. When Argo reports
+	// Red Team loop-console#133: pod-level stuck-state signal. When Argo reports
 	// the workflow Phase as "Running" but the underlying pod is wedged in
 	// ImagePullBackOff / ErrImagePull / CreateContainerError sustained past
 	// the RunningTimeout window, the reaper's M-03 "skip if workflow still

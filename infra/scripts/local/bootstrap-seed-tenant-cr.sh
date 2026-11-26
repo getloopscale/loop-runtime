@@ -7,7 +7,7 @@
 # buildTenantCR() so dogfood seed parity matches the API code path.
 #
 # Why: seed-local-user.sh inserts user/tenant/membership rows in the
-# DB but does NOT create a Kubernetes Tenant CR. loopruntime-api creates the
+# DB but does NOT create a Kubernetes Tenant CR. loop-runtime-api creates the
 # CR via EnsureTenant only on the project-create code path. journey-01
 # bypasses project-create (calls /api/v1/source/upload + /api/v1/builds
 # directly) so without this script no Tenant CR exists, no namespace,
@@ -19,8 +19,8 @@
 
 set -euo pipefail
 
-CTX="${MGMT_CTX:-k3d-loopruntime-core}"
-NS="${LOOPRUNTIME_NS:-loopruntime-system}"
+CTX="${MGMT_CTX:-k3d-loop-runtime-core}"
+NS="${LOOP_RUNTIME_NS:-loop-runtime-system}"
 TENANT_ID="${SEED_TENANT_ID:-tn-e2etest}"
 DISPLAY_NAME="${SEED_TENANT_DISPLAY:-${TENANT_ID}}"
 PLAN="${SEED_TENANT_PLAN:-starter}"

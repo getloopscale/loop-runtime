@@ -7,7 +7,7 @@
 ##   browser → Cloudflare DNS (A record) → droplet :80/:443
 ##                                          → Caddy (this file)
 ##                                            → localhost:5173  (vite dev server)
-##                                            → localhost:3002 (loopruntime-cloud via port-forward)
+##                                            → localhost:3002 (loop-console via port-forward)
 ##                                            → localhost:14433 (ory-kratos-public via port-forward)
 ##
 ## Auto-HTTPS via Let's Encrypt HTTP-01 challenge on :80.
@@ -19,7 +19,7 @@
 ## Required prereqs:
 ##   - Caddy >= 2.7 installed
 ##   - Cloudflare DNS A records pointing app/cloud/auth.getloopscale.com at the host
-##   - `task cloud:port-forward:up` to expose loopruntime-cloud + ory-kratos locally
+##   - `task cloud:port-forward:up` to expose loop-console + ory-kratos locally
 
 {
   email admin@getloopscale.com
@@ -75,7 +75,7 @@
 # production upstreams, not at dev ports on the operator's machine — they would have had to be
 # rewritten anyway. Meanwhile, `app.getloopscale.com` was one `npm run dev` away from serving the
 # dev-server on the internet under a production name, which is what the Red Team already closed
-# twice (loopruntime-cloud#66 and #141).
+# twice (loop-console#66 and #141).
 #
 # Record: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-remove-legacy-prod-hostnames.md
 # ============================================================================
@@ -96,7 +96,7 @@ app-dev.getloopscale.com {
   # Referrer/HSTS gap on the SPA.
   #
   # Plan caddyfile-app-dev-prod-bundle-file-server-canonical (2026-06-26):
-  # closes Red Team loopruntime-cloud#66 (Vite source TypeScript publicly served).
+  # closes Red Team loop-console#66 (Vite source TypeScript publicly served).
   # Prior plan caddyfile-csp-vite-dev-vs-prod-bundle v1.1 ADR D2 was wrong —
   # it argued the operator-local Caddy was non-public, removed Vite-path 404
   # guards + kept the Vite dev reverse-proxy. Reality: this Caddy IS public
@@ -105,15 +105,15 @@ app-dev.getloopscale.com {
   # shipped — switched to file_server serving dashboard/dist (prod-bundle);
   # those Vite source files are NEVER reachable publicly because they don't
   # exist in the served root. CSP restored matching dashboard/nginx.conf
-  # canonical shape. Operator workflow: cd loopruntime-cloud/dashboard && npm run
+  # canonical shape. Operator workflow: cd loop-console/dashboard && npm run
   # build before task cloud:caddy:up. The Taskfile target cloud:caddy:up
   # exports DASHBOARD_DIST automatically to the workspace sibling repo
-  # loopruntime-cloud/dashboard/dist (per the sibling layout <REPO_PARENT>/{loopruntime,loopruntime-cloud,
-  # loopruntime-cli,loopruntime-contracts} workspace layout). Override DASHBOARD_DIST
+  # loop-console/dashboard/dist (per the sibling layout <REPO_PARENT>/{loop-runtime,loop-console,
+  # loop-runtime-cli,loop-runtime-contracts} workspace layout). Override DASHBOARD_DIST
   # before task invocation if you have a non-standard layout.
   # See docs/runbooks.md.
-  # Red Team loopruntime-cloud#86 closure path normalization is enforced at the
-  # loopruntime-cloud BFF layer (cloud/internal/middleware/path_normalize.go)
+  # Red Team loop-console#86 closure path normalization is enforced at the
+  # loop-console BFF layer (cloud/internal/middleware/path_normalize.go)
   # because Caddy's `path_regexp` matcher operates on the CLEANED path
   # (consecutive slashes already collapsed by Caddy's URL parser before
   # routing). A Caddyfile-side rewrite cannot detect `//engine/*` here
@@ -157,7 +157,7 @@ app-dev.getloopscale.com {
   # through every explicit handle — i.e., dashboard SPA routes, not API
   # paths. Plan caddyfile-app-dev-prod-bundle-file-server-canonical v1.3.
 
-  # loopruntime-cloud#141 (SECURITY) defense-in-depth — explicit deny of
+  # loop-console#141 (SECURITY) defense-in-depth — explicit deny of
   # dev-server-only paths that MUST NEVER be reachable on the public
   # edge, even if a stale/dev build accidentally landed in DASHBOARD_DIST.
   # Blocks source (/src/*), Vite runtime (/@vite/*, /@react-refresh),
@@ -172,7 +172,7 @@ app-dev.getloopscale.com {
   respond @dev_server_only 404
 
   # Narrowed from /sessions/* to the single endpoint the dashboard calls
-  # (measured 2026-08-06 against loopruntime-cloud/dashboard/src: 6 call sites, all
+  # (measured 2026-08-06 against loop-console/dashboard/src: 6 call sites, all
   # /sessions/whoami). The wildcard also exposed Kratos's session LIST and
   # session DELETE on the dashboard origin, which no client uses. Logout is
   # unaffected — it lives under /self-service/logout, handled below.
@@ -205,7 +205,7 @@ app-dev.getloopscale.com {
   # The dashboard's "Install GitHub App" button uses a RELATIVE URL
   # (/v1/integrations/github/install?return_to=...). Without this
   # handle the request hits Vite and 404s, breaking the install flow.
-  # Proxy /v1/integrations/github/* to loopruntime-cloud so install + callback
+  # Proxy /v1/integrations/github/* to loop-console so install + callback
   # both work from app-dev.getloopscale.com. Cookies are set with Domain=
   # getloopscale.com (AUTH_COOKIE_DOMAIN) so they travel cross-subdomain
   # back to app-dev when GitHub redirects.
@@ -233,18 +233,18 @@ app-dev.getloopscale.com {
     reverse_proxy localhost:18091
   }
 
-  # Data plane — loopruntime-memory / loopruntime-rag / loopruntime-lens (#470). Each call is authorised by the
-  # core cluster's loopruntime-cloud (localhost:3002, its NodePort) before it reaches a service:
-  # its forward-auth endpoint validates the caller's loopruntime_live_* key, mints a per-tenant
+  # Data plane — loop-runtime-memory / loop-runtime-rag / loop-runtime-lens (#470). Each call is authorised by the
+  # core cluster's loop-console (localhost:3002, its NodePort) before it reaches a service:
+  # its forward-auth endpoint validates the caller's loop_runtime_live_* key, mints a per-tenant
   # key on the service, and answers it in `Authorization` plus the caller's identity in
-  # `X-LoopRuntime-User-Id`; any other answer (401/403/503) goes back to the client and nothing
+  # `X-Loop-Runtime-User-Id`; any other answer (401/403/503) goes back to the client and nothing
   # reaches the service. The path loses its product prefix (/v1/memory/x → /v1/x) and
   # goes to the service's NodePort on the core cluster (infra/k3d/core-cluster.yaml).
   #
   # Until #470 these went to a docker-compose Traefik on :8092 that authorised against a
-  # second loopruntime-cloud with its own user database, from directories no longer on the host.
+  # second loop-console with its own user database, from directories no longer on the host.
   #
-  # A client-supplied X-LoopRuntime-User-Id is dropped BEFORE forward_auth so only the one the
+  # A client-supplied X-Loop-Runtime-User-Id is dropped BEFORE forward_auth so only the one the
   # authoriser returns reaches the service, and `route` keeps that order: Caddy's default
   # order runs forward_auth before request_header, which would drop the identity the
   # authoriser just copied (the same trap `cell_edge` below records).
@@ -252,10 +252,10 @@ app-dev.getloopscale.com {
   # MUST precede the /v1/* catch-all below.
   handle /v1/memory/* {
     route {
-      request_header -X-LoopRuntime-User-Id
+      request_header -X-Loop-Runtime-User-Id
       forward_auth localhost:3002 {
         uri /internal/authz/forward
-        copy_headers Authorization X-LoopRuntime-User-Id
+        copy_headers Authorization X-Loop-Runtime-User-Id
       }
       uri path_regexp ^/v1/memory/ /v1/
       reverse_proxy localhost:18081
@@ -263,10 +263,10 @@ app-dev.getloopscale.com {
   }
   handle /v1/rag/* {
     route {
-      request_header -X-LoopRuntime-User-Id
+      request_header -X-Loop-Runtime-User-Id
       forward_auth localhost:3002 {
         uri /internal/authz/forward-rag
-        copy_headers Authorization X-LoopRuntime-User-Id
+        copy_headers Authorization X-Loop-Runtime-User-Id
       }
       uri path_regexp ^/v1/rag/ /v1/
       reverse_proxy localhost:18082
@@ -274,28 +274,28 @@ app-dev.getloopscale.com {
   }
   handle /v1/lens/* {
     route {
-      request_header -X-LoopRuntime-User-Id
+      request_header -X-Loop-Runtime-User-Id
       forward_auth localhost:3002 {
         uri /internal/authz/forward-lens
-        copy_headers Authorization X-LoopRuntime-User-Id
+        copy_headers Authorization X-Loop-Runtime-User-Id
       }
       uri path_regexp ^/v1/lens/ /v1/
       reverse_proxy localhost:18084
     }
   }
 
-  # loopruntime-cloud's /internal/* routes (forward-auth, the MCP resolve) are the authorisation
+  # loop-console's /internal/* routes (forward-auth, the MCP resolve) are the authorisation
   # itself and sit outside every auth middleware; the edge above calls them on the host.
-  # From the internet, /internal/authz/forward would hand any valid loopruntime_live_* key a
+  # From the internet, /internal/authz/forward would hand any valid loop_runtime_live_* key a
   # per-tenant data-plane key in a response header. Nothing below proxies /internal/*
   # today; this makes it a refusal rather than an absence (#470).
   handle /internal/* {
     respond 404
   }
 
-  # T6.2 follow-up canonical (2026-06-12 sponsor walkthrough catch): loopruntime-cloud
+  # T6.2 follow-up canonical (2026-06-12 sponsor walkthrough catch): loop-console
   # API endpoints (/v1/auth/me, /v1/auth/session/token, /v1/projects, /v1/billing,
-  # etc) accessed cross-origin from dashboard would require CORS, but loopruntime-cloud
+  # etc) accessed cross-origin from dashboard would require CORS, but loop-console
   # has CORS disabled per MEET-040 (same-origin assumption). Mirror the existing
   # /sessions/* + /self-service/* + /v1/integrations/github/* same-origin pattern
   # for ALL /v1/* paths so dashboard fetches against relative URLs travel cookies
@@ -306,8 +306,8 @@ app-dev.getloopscale.com {
     }
   }
 
-  # Red Team loopruntime-cloud#112 closure (2026-06-28) — Hydra consent / device-flow
-  # routes wired in loopruntime-cloud cmd/main.go:542-545 (consent.Login + LoginComplete +
+  # Red Team loop-console#112 closure (2026-06-28) — Hydra consent / device-flow
+  # routes wired in loop-console cmd/main.go:542-545 (consent.Login + LoginComplete +
   # Consent + DeviceVerify). The CLI device-flow lands the operator at
   # https://app-dev.getloopscale.com/auth/login?login_challenge=<id>; without this
   # handle the request fell through to the SPA file_server catch-all and React
@@ -315,7 +315,7 @@ app-dev.getloopscale.com {
   # which was preventing the deploy chain end-to-end (P0 mandate 2026-06-28).
   # Mirror the /v1/* shape (same Host rewrite + same upstream).
   #
-  # Red Team loopruntime/loopruntime#162 (2026-07-01): the previous `handle /auth/*` captured
+  # Red Team loop-runtime/loop-runtime#162 (2026-07-01): the previous `handle /auth/*` captured
   # EVERY path under /auth/*, but the BFF only registers the 4 OAuth-flow routes
   # below. Post-signup redirects to /auth/check-email (register_proxy.go:98) +
   # email verify link at /auth/verify hit the BFF and returned 404 Caddy raw
@@ -331,17 +331,17 @@ app-dev.getloopscale.com {
   }
 
   # Plan caddyfile-app-dev-prod-bundle-file-server-canonical v1.4 (2026-06-26
-  # — closes loopruntime-cloud#88): /engine/* is the canonical BFF proxy prefix the
+  # — closes loop-console#88): /engine/* is the canonical BFF proxy prefix the
   # dashboard (`engineFetch` in `src/lib/api.ts:197` → `cloudFetch(`/engine${path}`)`)
-  # AND the LoopRuntime CLI (`loopscale whoami` → `GET ${LOOPRUNTIME_URL}/engine/api/v1/auth/whoami`)
-  # both use to reach the engine API via loopruntime-cloud's opaque pass-through
-  # (`/engine/*` route in loopruntime-cloud authenticated with Ed25519 service-auth
-  # per loopruntime-cloud/CLAUDE.md). Without this handle, every engine call
+  # AND the LoopRuntime CLI (`loopscale whoami` → `GET ${LOOP_RUNTIME_URL}/engine/api/v1/auth/whoami`)
+  # both use to reach the engine API via loop-console's opaque pass-through
+  # (`/engine/*` route in loop-console authenticated with Ed25519 service-auth
+  # per loop-console/CLAUDE.md). Without this handle, every engine call
   # (deploy, whoami, list projects, build status, …) falls through to the
   # SPA catch-all and the consumer JSON.parse's `<!DOCTYPE html>...` →
   # Red Team #88 LIVE: `loopscale whoami → "Cannot reach API"` + dashboard
   # dashboard data screens render blank. Mirror /v1/* shape (Host: cloud-dev
-  # so loopruntime-cloud's host-aware middleware treats this as the canonical
+  # so loop-console's host-aware middleware treats this as the canonical
   # cross-origin proxy entry).
   handle /engine/* {
     reverse_proxy localhost:3002 {
@@ -349,22 +349,22 @@ app-dev.getloopscale.com {
     }
   }
 
-  # GitHub webhook direct-to-loopruntime-api (mirrors cloud-dev bloc handling for
+  # GitHub webhook direct-to-loop-runtime-api (mirrors cloud-dev bloc handling for
   # /api/v1/webhooks/github). GitHub App webhook_url is registered against
   # app-dev.getloopscale.com (canonical surface post-2026-06-22). Without this
   # explicit handle the POST falls through to the SPA file_server which
   # only advertises GET/HEAD → GitHub delivery attempts 405 forever.
-  # HMAC-SHA256 in webhook body is validated by loopruntime-api directly
+  # HMAC-SHA256 in webhook body is validated by loop-runtime-api directly
   # (api/internal/github/webhook/handler.go); Caddy is the single edge
   # boundary here per the same defense-in-layers rationale as the
   # cloud-dev.getloopscale.com bloc below.
   handle /api/v1/webhooks/github {
     reverse_proxy localhost:13001 {
-      header_up Host loopruntime-api.loopruntime-system.svc.cluster.local
+      header_up Host loop-runtime-api.loop-runtime-system.svc.cluster.local
     }
   }
 
-  # Red Team loopruntime-cloud#100 absorption (2026-06-27) — silent MIME outage
+  # Red Team loop-console#100 absorption (2026-06-27) — silent MIME outage
   # on stale chunk requests. Browser tabs already-open before a deploy
   # have an HTML page that references chunk filenames (e.g.,
   # /assets/index-OLDHASH.js) that no longer exist on disk. With the
@@ -381,7 +381,7 @@ app-dev.getloopscale.com {
   # cache header for chunks (vite hashed filenames are content-addressed,
   # so cache forever is safe).
   handle /assets/* {
-    root * {$LOOPRUNTIME_DASHBOARD_DIST:../loopruntime-cloud/dashboard/dist}
+    root * {$LOOP_CONSOLE_DASHBOARD_DIST:../loop-console/dashboard/dist}
     encode gzip
     header Cache-Control "public, max-age=31536000, immutable"
     file_server
@@ -397,7 +397,7 @@ app-dev.getloopscale.com {
     path /sw.js /workbox-*.js
   }
   handle @pwa_service_worker {
-    root * {$LOOPRUNTIME_DASHBOARD_DIST:../loopruntime-cloud/dashboard/dist}
+    root * {$LOOP_CONSOLE_DASHBOARD_DIST:../loop-console/dashboard/dist}
     encode gzip
     # Service worker MUST NOT be cached — the browser checks for a new
     # SW on every visit; cache it and the user is stuck on the old
@@ -424,7 +424,7 @@ app-dev.getloopscale.com {
   # being present + DASHBOARD_DIST env var set) + Red Team #100
   # absorption (silent MIME outage on stale-chunk requests).
   handle {
-    root * {$LOOPRUNTIME_DASHBOARD_DIST:../loopruntime-cloud/dashboard/dist}
+    root * {$LOOP_CONSOLE_DASHBOARD_DIST:../loop-console/dashboard/dist}
     encode gzip
     header Cache-Control "no-cache"
     try_files {path} /index.html
@@ -435,8 +435,8 @@ app-dev.getloopscale.com {
 #
 # It had two halves and both were already covered here. The payload was the GitHub
 # webhook, which cannot carry a JWT (GitHub signs the body with HMAC) and so went
-# straight to loopruntime-api; but the webhook is registered against `app-dev`
-# (cmd/loopruntime-ops/internal/seed/github_webhook_fixture.go:44) and the `app-dev` block above
+# straight to loop-runtime-api; but the webhook is registered against `app-dev`
+# (cmd/loop-runtime-ops/internal/seed/github_webhook_fixture.go:44) and the `app-dev` block above
 # already has the same direct bypass. The other half was a compatibility 301 for old
 # clients — which do not exist: the platform has not launched yet.
 #
@@ -450,7 +450,7 @@ auth-dev.getloopscale.com {
   header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
   # T1.2 of plan kratos-self-service-rate-limit-systemic v1.1 — Caddy edge
-  # rate-limit closing Red Team loopruntime-cloud#68 (login) + #89 (recovery email
+  # rate-limit closing Red Team loop-console#68 (login) + #89 (recovery email
   # bomb / unlimited flow creates) + defense-in-depth #43 (register).
   # Module: github.com/mholt/caddy-ratelimit@5625512 (bundled by
   # caddy-build-canonical.sh per T1.1 EC-1).
@@ -472,7 +472,7 @@ auth-dev.getloopscale.com {
   #                                         caps email-bomb attack)
   #
   # Caddy sliding-window algorithm + 429 + Retry-After per blueprint Q1.
-  # Red Team loopruntime-cloud#68/#43 closure: the original zone path patterns
+  # Red Team loop-console#68/#43 closure: the original zone path patterns
   # `/self-service/{login,registration}/methods/*` cover only Kratos's old
   # API flow submit path. The CANONICAL browser-flow submit path used by
   # the dashboard is `/self-service/{login,registration}` WITHOUT the
@@ -516,8 +516,8 @@ auth-dev.getloopscale.com {
 
   # T3.2 of plan kratos-self-service-rate-limit-systemic v1.1 (Red Team
   # post-fix-verification absorption 2026-06-27) — route the canonical
-  # register submission paths through the loopruntime-cloud BFF response-shape
-  # unifier (T3.1). Closes Red Team loopruntime-cloud#43 (account enumeration via
+  # register submission paths through the loop-console BFF response-shape
+  # unifier (T3.1). Closes Red Team loop-console#43 (account enumeration via
   # response-shape divergence — existing email + valid password → 400
   # "exists" while new email + valid password → 200 success).
   #
@@ -542,7 +542,7 @@ auth-dev.getloopscale.com {
   #
   # Split into two explicit handles (was a single `@bff_register_paths`
   # named matcher). Functional behavior is identical (both paths still
-  # reverse-proxy to the loopruntime-cloud BFF at localhost:3002 with the
+  # reverse-proxy to the loop-console BFF at localhost:3002 with the
   # canonical `Host: cloud-dev.getloopscale.com` header); the explicit shape
   # is required by the `caddyfile-csp` gate's canonical detection
   # (`handle /self-service/registration/methods/password { ... }` +
@@ -618,8 +618,8 @@ auth-dev.getloopscale.com {
 # The two wildcards used to forward every host to cell-0's ingress, so an app placed
 # on cell-1 was live on its cell and 404 at its public URL.
 #
-# LOOPRUNTIME_EDGE_ROUTE_TOKEN is the bearer the engine requires; it lives in the
-# `loopruntime-edge-route-token` Secret (generate-secrets.sh). It is substituted when the
+# LOOP_RUNTIME_EDGE_ROUTE_TOKEN is the bearer the engine requires; it lives in the
+# `loop-runtime-edge-route-token` Secret (generate-secrets.sh). It is substituted when the
 # config is adapted ({$...}), so the shell running `caddy reload` must export it —
 # caddy-up-dev-public.sh reads it from the Secret. NEVER inline it here — this file
 # is in git.
@@ -631,19 +631,19 @@ auth-dev.getloopscale.com {
   # forward_auth BEFORE request_header, which deleted the cell the lookup had just
   # copied: the map fell to its default and every app answered 502.
   route {
-    request_header -X-LoopRuntime-Cell
+    request_header -X-Loop-Runtime-Cell
     forward_auth localhost:13001 {
       uri /internal/edge/route
-      header_up Authorization "Bearer {$LOOPRUNTIME_EDGE_ROUTE_TOKEN}"
-      copy_headers X-LoopRuntime-Cell
+      header_up Authorization "Bearer {$LOOP_RUNTIME_EDGE_ROUTE_TOKEN}"
+      copy_headers X-Loop-Runtime-Cell
     }
-    map {header.X-LoopRuntime-Cell} {cell_ingress} {
+    map {header.X-Loop-Runtime-Cell} {cell_ingress} {
       cell-0 127.0.0.1:8443
       cell-1 127.0.0.1:8444
       default 127.0.0.1:9
     }
     reverse_proxy {cell_ingress} {
-      header_up Host {http.request.host.labels.3}.loopruntime.local
+      header_up Host {http.request.host.labels.3}.loop-runtime.local
       transport http {
         tls
         tls_insecure_skip_verify
@@ -665,7 +665,7 @@ auth-dev.getloopscale.com {
 # The {http.request.host.labels.3} expression extracts the first label
 # from the public hostname (Caddy indexes labels RIGHT-to-LEFT, so for
 # `foo.preview-dev.getloopscale.app` → labels.3 = "foo"). The Host header
-# forwarded to the workload Traefik LB substitutes the .loopruntime.local
+# forwarded to the workload Traefik LB substitutes the .loop-runtime.local
 # suffix, matching the IngressRoute exactly.
 #
 # Cloudflare DNS: wildcard A record `*.preview-dev.getloopscale.app` →
@@ -691,12 +691,12 @@ auth-dev.getloopscale.com {
 # once per host; idempotent. `caddy list-modules | grep dns.providers`
 # must show `dns.providers.cloudflare` for this block to issue certs.
 #
-# Red Team loopruntime-cloud#127 root cause (2026-06-30 → 2026-07-01):
+# Red Team loop-console#127 root cause (2026-06-30 → 2026-07-01):
 # the upstream was previously `https://172.18.0.10:443` — a hardcoded
 # Docker network IP. Docker network 172.18.0.0/16 assigns container IPs
 # via DHCP; k3d cluster containers get a new IP on every `docker restart`
 # / `k3d cluster create`. The IP `172.18.0.10` drifted from
-# k3d-loopruntime-cell-0-serverlb to k3d-loopruntime-secrets-serverlb after a restart
+# k3d-loop-runtime-cell-0-serverlb to k3d-loop-runtime-secrets-serverlb after a restart
 # and every customer-app request silently routed to VAULT → 502
 # sustentado for the ENTIRE Red Team dev-public probe surface. The
 # canonical stable form is `https://127.0.0.1:8443` — k3d declares the
@@ -715,13 +715,13 @@ auth-dev.getloopscale.com {
 # J-25 prod-dev wildcard — production deploy URLs (Vercel-canonical)
 # URL convention: <project>-<env>.prod-dev.getloopscale.app
 # Per ADR D1 of plan 2026-06-12-dashboard-journey-j25-live-url-discoverability,
-# loopruntime-api status.go:252 emits this format when BASE_DOMAIN=prod-dev.getloopscale.app
-# (configured in infra/tilt/loopruntime-api-values.yaml — Tilt-canonical for
+# loop-runtime-api status.go:252 emits this format when BASE_DOMAIN=prod-dev.getloopscale.app
+# (configured in infra/tilt/loop-runtime-api-values.yaml — Tilt-canonical for
 # dev-public per memory `feedback_tilt_owned_deployment_yaml_drift`).
 #
 # Pattern parallel to *.preview-dev.getloopscale.app (J-23 delivered 2026-06-07):
 # Caddy rewrites external `<project>-<env>.prod-dev.getloopscale.app` →
-# internal `<project>-<env>.loopruntime.local` so Traefik IngressRoute matches.
+# internal `<project>-<env>.loop-runtime.local` so Traefik IngressRoute matches.
 # labels.3 extracts the 3rd dot-separated label from the request host:
 #   `foo-production.prod-dev.getloopscale.app` → labels.3 = "foo-production"
 #   `kitchensink-production.prod-dev.getloopscale.app` → labels.3 = "kitchensink-production"
@@ -734,10 +734,10 @@ auth-dev.getloopscale.com {
 # TLS via Cloudflare DNS-01 challenge (LE prod). CF_API_TOKEN env var
 # canonical (same as preview block above).
 #
-# Red Team loopruntime-cloud#127 root cause (2026-06-30 → 2026-07-01): same
+# Red Team loop-console#127 root cause (2026-06-30 → 2026-07-01): same
 # as the *.preview-dev.getloopscale.app block above — the previous
 # `https://172.18.0.10:443` hardcoded Docker network IP drifted from
-# k3d-loopruntime-cell-0-serverlb to k3d-loopruntime-secrets-serverlb after a docker
+# k3d-loop-runtime-cell-0-serverlb to k3d-loop-runtime-secrets-serverlb after a docker
 # restart and every customer-app request routed to VAULT → 502
 # sustentado. Canonical stable form: `https://127.0.0.1:8443`.
 # Regression-protector:

@@ -4,7 +4,7 @@
 # seed-aws-platform-secret.sh <secret-id>
 #
 # Fills in the keys the platform generates for itself in the Secrets Manager secret
-# infra-live creates for that purpose (`security/secrets`, loopruntime/<env>/platform). The
+# infra-live creates for that purpose (`security/secrets`, loop-runtime/<env>/platform). The
 # aws-secrets-manager chart reads every one of them through External Secrets.
 #
 # Only MISSING keys are generated; a key that already has a value keeps it, so re-running

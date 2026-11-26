@@ -33,7 +33,7 @@ func appHostname(tenantID, projectID, appName, environment, baseDomain string) s
 // generated for an app inside a tenant environment namespace.
 //
 // **Why `<project>-<app>` instead of `<app>`**: tenant environment namespaces
-// are SHARED across projects (`loopruntime-{tenant}-{env}`), so two projects with an
+// are SHARED across projects (`loop-runtime-{tenant}-{env}`), so two projects with an
 // app of the same name (very common: `api`, `web`, `worker`) would generate
 // colliding `Deployment/api` + `Service/api` — the second deploy silently
 // overwrites the first, and Service.spec.selector matches pods from BOTH
@@ -57,7 +57,7 @@ func resourceName(projectID, appName string) string {
 func commonLabels(ri renderScope, app AppManifestInput) map[string]string {
 	return map[string]string{
 		"app":                                  resourceName(ri.ProjectID, app.Name),
-		"app.kubernetes.io/managed-by":         "loopruntime",
+		"app.kubernetes.io/managed-by":         "loop-runtime",
 		"runtime.getloopscale.com/tenant":      ri.TenantID,
 		"runtime.getloopscale.com/project":     ri.ProjectID,
 		"runtime.getloopscale.com/app-name":    app.Name,

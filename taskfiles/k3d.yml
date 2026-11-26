@@ -19,7 +19,7 @@ tasks:
 
       B6/B7 fix (real-paas-cleanroom-dogfood-loop-plan iter 6→7→7b, 2026-05-05):
       registry is a plain registry:2 (read/write) for local image pushes
-      (loopruntime-clone-runner, loopruntime-syft-scanner, loopruntime-cosign-signer, etc. via `task images:build`).
+      (loop-runtime-clone-runner, loop-runtime-syft-scanner, loop-runtime-cosign-signer, etc. via `task images:build`).
       It is NOT in pull-through proxy mode — registry:2 in proxy mode
       REJECTS pushes with `error from registry: unsupported`, breaking
       local builds. Discovered LIVE during iter 7.
@@ -30,24 +30,24 @@ tasks:
       directly at https://mirror.gcr.io (Google's free, rate-limit-free
       anonymous mirror of public Docker Hub images). Pulls of third-party
       images go directly mirror.gcr.io → containerd. Pushes of our own
-      images go to k3d-loopruntime-registry:5000 unchanged. No interference.
+      images go to k3d-loop-runtime-registry:5000 unchanged. No interference.
 
       Architecture invariant preserved: "local cleanroom does not depend
       on Docker Hub" — true at the containerd resolution layer.
     cmds:
-      - k3d registry list -o json | grep -q '"name":"k3d-loopruntime-registry"' || k3d registry create loopruntime-registry --port 5000
+      - k3d registry list -o json | grep -q '"name":"k3d-loop-runtime-registry"' || k3d registry create loop-runtime-registry --port 5000
 
   ecr:credential-provider:
     desc: Install the kubelet ECR credential provider when the environment declares platformImages (#435)
     # How the nodes pull platform images from Amazon ECR: the kubelet image credential
     # provider, as on EKS — no pull secret, no token-refresh job. k3s turns it on only
     # when bin/ AND config.yaml exist under /var/lib/rancher/credentialprovider, which the
-    # core and build nodes mount from ${HOME}/.loopruntime/credentialprovider. It must run BEFORE
+    # core and build nodes mount from ${HOME}/.loop-runtime/credentialprovider. It must run BEFORE
     # `clusters:create`: the kubelet reads the provider at start.
     #
     # The one input is the read-only pull identity's key (IAM user
-    # loopruntime-dev-cluster-ecr-pull, created by getloopscale/loopruntime-infra-live iam-bootstrap), as
-    # an AWS shared-credentials file at ${HOME}/.loopruntime/credentialprovider/aws-credentials.
+    # loop-runtime-dev-cluster-ecr-pull, created by getloopscale/loop-runtime-infra-live iam-bootstrap), as
+    # an AWS shared-credentials file at ${HOME}/.loop-runtime/credentialprovider/aws-credentials.
     # The operator creates that key out of band so it never lands in Terraform state.
     vars:
       ECR_PROVIDER_VERSION: v1.37.0
@@ -57,9 +57,9 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        ENV="${LOOPRUNTIME_HELMFILE_ENV:-standalone-multi}"
+        ENV="${LOOP_RUNTIME_HELMFILE_ENV:-standalone-multi}"
         ENV_FILE="infra/helmfile/environments/${ENV}.yaml"
-        DIR="${HOME}/.loopruntime/credentialprovider"
+        DIR="${HOME}/.loop-runtime/credentialprovider"
         if ! grep -q '^platformImages:' "$ENV_FILE"; then
           echo "[ecr:credential-provider] ${ENV} declares no platformImages — nothing to install"
           exit 0
@@ -68,7 +68,7 @@ tasks:
         if [ ! -s "$CREDS" ]; then
           echo "ERROR: ${CREDS} is missing or empty." >&2
           echo "  ${ENV} pulls platform images from ECR, and the nodes authenticate with the read-only" >&2
-          echo "  IAM user loopruntime-dev-cluster-ecr-pull. Create its access key and write it as an AWS" >&2
+          echo "  IAM user loop-runtime-dev-cluster-ecr-pull. Create its access key and write it as an AWS" >&2
           echo "  shared-credentials file ([default] aws_access_key_id / aws_secret_access_key), mode 0600." >&2
           exit 1
         fi
@@ -136,16 +136,16 @@ tasks:
       # The core and build nodes mount this directory (infra/k3d/*-cluster.yaml). Created
       # here so it belongs to this user: a bind mount of a missing path makes Docker create
       # it as root, and `task ecr:credential-provider` could no longer write into it.
-      - mkdir -p "${HOME}/.loopruntime/credentialprovider"
-      - k3d cluster list -o json | grep -q '"name":"loopruntime-core"' || k3d cluster create --config infra/k3d/core-cluster.yaml
+      - mkdir -p "${HOME}/.loop-runtime/credentialprovider"
+      - k3d cluster list -o json | grep -q '"name":"loop-runtime-core"' || k3d cluster create --config infra/k3d/core-cluster.yaml
       - kubectl --context {{.CORE_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
-      - k3d cluster list -o json | grep -q '"name":"loopruntime-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
+      - k3d cluster list -o json | grep -q '"name":"loop-runtime-build"' || k3d cluster create --config infra/k3d/build-cluster.yaml
       - kubectl --context {{.BUILD_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
-      - k3d cluster list -o json | grep -q '"name":"loopruntime-cell-0"' || k3d cluster create --config infra/k3d/cell-0-cluster.yaml
+      - k3d cluster list -o json | grep -q '"name":"loop-runtime-cell-0"' || k3d cluster create --config infra/k3d/cell-0-cluster.yaml
       - kubectl --context {{.CELL_0_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
-      # cell-1-activation-plan T0.1: loopruntime-cell-1 maps to cells.cell_id='cell-1'.
+      # cell-1-activation-plan T0.1: loop-runtime-cell-1 maps to cells.cell_id='cell-1'.
       # Idempotent: skips if already exists (per memory feedback_no_tribal_knowledge.md).
-      - k3d cluster list -o json | grep -q '"name":"loopruntime-cell-1"' || k3d cluster create --config infra/k3d/cell-1-cluster.yaml
+      - k3d cluster list -o json | grep -q '"name":"loop-runtime-cell-1"' || k3d cluster create --config infra/k3d/cell-1-cluster.yaml
       - kubectl --context {{.CELL_1_CONTEXT}} wait --for=condition=Ready node --all --timeout=120s
       - task: clusters:verify
 
@@ -189,17 +189,17 @@ tasks:
   clusters:delete:
     desc: Delete all k3d clusters
     cmds:
-      - k3d cluster delete loopruntime-core || true
-      - k3d cluster delete loopruntime-build || true
-      - k3d cluster delete loopruntime-cell-0 || true
-      - k3d cluster delete loopruntime-cell-1 || true
+      - k3d cluster delete loop-runtime-core || true
+      - k3d cluster delete loop-runtime-build || true
+      - k3d cluster delete loop-runtime-cell-0 || true
+      - k3d cluster delete loop-runtime-cell-1 || true
 
   clusters:recreate:
     desc: Recreate a single k3d cluster (e.g., task clusters:recreate -- cell-0)
     cmds:
-      # The case label IS the cluster suffix — `loopruntime-${CLUSTER}` just below derives the
+      # The case label IS the cluster suffix — `loop-runtime-${CLUSTER}` just below derives the
       # cluster name from it. While the label was `mgmt` and the config `core-cluster.yaml`, this
-      # task deleted `loopruntime-mgmt` (nonexistent, a silent no-op) and created `loopruntime-core`: the
+      # task deleted `loop-runtime-mgmt` (nonexistent, a silent no-op) and created `loop-runtime-core`: the
       # "Recreating…" lied and no cluster was actually recreated. Keeping label and name
       # 1:1 is what stops the divergence from coming back.
       - |
@@ -211,27 +211,27 @@ tasks:
         case "$CLUSTER" in
           core)    CONFIG="infra/k3d/core-cluster.yaml";   INSTALL_TASK="infra:install:core" ;;
           build)   CONFIG="infra/k3d/build-cluster.yaml";  INSTALL_TASK="infra:install:build" ;;
-          cell-0)  CONFIG="infra/k3d/cell-0-cluster.yaml"; INSTALL_TASK="infra:install:cell"; CELL_CTX_ARG="k3d-loopruntime-cell-0" ;;
-          cell-1)  CONFIG="infra/k3d/cell-1-cluster.yaml"; INSTALL_TASK="infra:install:cell"; CELL_CTX_ARG="k3d-loopruntime-cell-1" ;;
+          cell-0)  CONFIG="infra/k3d/cell-0-cluster.yaml"; INSTALL_TASK="infra:install:cell"; CELL_CTX_ARG="k3d-loop-runtime-cell-0" ;;
+          cell-1)  CONFIG="infra/k3d/cell-1-cluster.yaml"; INSTALL_TASK="infra:install:cell"; CELL_CTX_ARG="k3d-loop-runtime-cell-1" ;;
           *)       echo "Unknown cluster: $CLUSTER. Use core, build, cell-0, or cell-0."; exit 1 ;;
         esac
-        echo "Recreating loopruntime-${CLUSTER}..."
-        k3d cluster delete "loopruntime-${CLUSTER}" 2>/dev/null || true
+        echo "Recreating loop-runtime-${CLUSTER}..."
+        k3d cluster delete "loop-runtime-${CLUSTER}" 2>/dev/null || true
         k3d cluster create --config "$CONFIG"
         echo "Installing components..."
         task "$INSTALL_TASK" ${CELL_CTX_ARG:+CELL_CTX="$CELL_CTX_ARG"}
-        echo "Done. loopruntime-${CLUSTER} recreated."
+        echo "Done. loop-runtime-${CLUSTER} recreated."
 
   # ---------------------------------------------------------------------------
   # VK — Vault K3d local cluster (T3 validation for vault cluster isolation)
   # Per sponsor-direct decision 2026-06-02. Opt-in (not part of default
   # `task setup` flow). Used to validate vault cluster topology + cross-cluster
-  # auth pattern before provisioning DOKS loopruntime-secrets-prod.
+  # auth pattern before provisioning DOKS loop-runtime-secrets-prod.
   # ---------------------------------------------------------------------------
 
   k3d:secrets:create:
     desc: |
-      Create the loopruntime-secrets k3d cluster (single-node, kubeAPI=6447).
+      Create the loop-runtime-secrets k3d cluster (single-node, kubeAPI=6447).
       Idempotent — skips if cluster already exists.
       Bootstrap OpenBao after via `task k3d:secrets:bootstrap`.
     cmds:
@@ -250,30 +250,30 @@ tasks:
       # "resource not found" about resources that existed.
       #
       # `--kubeconfig-update-default` stays at its default `true`: the context entry
-      # IS STILL written, and the `--context k3d-loopruntime-secrets` calls below keep working.
-      - k3d cluster list -o json | grep -q '"name":"loopruntime-secrets"' || k3d cluster create --config infra/k3d/secrets-cluster.yaml --kubeconfig-switch-context=false
-      - kubectl --context k3d-loopruntime-secrets wait --for=condition=Ready node --all --timeout=120s
-      - kubectl --context k3d-loopruntime-secrets cluster-info
-      - echo "[OK] loopruntime-secrets cluster ready. Next:- task k3d:secrets:bootstrap"
+      # IS STILL written, and the `--context k3d-loop-runtime-secrets` calls below keep working.
+      - k3d cluster list -o json | grep -q '"name":"loop-runtime-secrets"' || k3d cluster create --config infra/k3d/secrets-cluster.yaml --kubeconfig-switch-context=false
+      - kubectl --context k3d-loop-runtime-secrets wait --for=condition=Ready node --all --timeout=120s
+      - kubectl --context k3d-loop-runtime-secrets cluster-info
+      - echo "[OK] loop-runtime-secrets cluster ready. Next:- task k3d:secrets:bootstrap"
 
   k3d:secrets:destroy:
     desc: |
-      Destroy loopruntime-secrets cluster. State is lost (in-memory devMode).
+      Destroy loop-runtime-secrets cluster. State is lost (in-memory devMode).
       Use this when iterating on cluster config or testing fresh cleanroom.
     cmds:
-      - k3d cluster delete loopruntime-secrets || true   # idempotent-by-construction (matches clusters:delete L126); issue #234
-      - echo "[OK] loopruntime-secrets destroyed."
+      - k3d cluster delete loop-runtime-secrets || true   # idempotent-by-construction (matches clusters:delete L126); issue #234
+      - echo "[OK] loop-runtime-secrets destroyed."
 
   k3d:secrets:bootstrap:
     desc: |
-      Bootstrap OpenBao on loopruntime-secrets cluster: cert-manager + cluster-issuer +
+      Bootstrap OpenBao on loop-runtime-secrets cluster: cert-manager + cluster-issuer +
       openbao-cert + openbao (official chart, HA Raft PRODLIKE.2). Idempotent.
       Pre-requisite:- task k3d:secrets:create.
 
       BUG8.E LIVE pivot 2026-06-02: removed bank-vaults-operator step.
       Now using openbao/openbao official chart direct (zero operator layer).
 
-      Phase A revalidation 2026-06-03 (post k3d-loopruntime-secrets destruction during
+      Phase A revalidation 2026-06-03 (post k3d-loop-runtime-secrets destruction during
       trio clean:deep): added openbao-cert step — without it the Secret
       openbao-tls is never created and openbao-0 pod is stuck in
       ContainerCreating with FailedMount. Description updated from "devMode"
@@ -288,49 +288,49 @@ tasks:
         helmfile sync --selector name=openbao-init  # T5.1-T5.9 provisioning
     cmds:
       - |
-        kubectl --context k3d-loopruntime-secrets get nodes >/dev/null 2>&1 || {
-          echo "ERROR: loopruntime-secrets cluster not running. Run: task k3d:secrets:create" >&2
+        kubectl --context k3d-loop-runtime-secrets get nodes >/dev/null 2>&1 || {
+          echo "ERROR: loop-runtime-secrets cluster not running. Run: task k3d:secrets:create" >&2
           exit 1
         }
-      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopruntime-secrets --selector name=cert-manager sync
-      - kubectl --context k3d-loopruntime-secrets -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
-      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopruntime-secrets --selector name=cluster-issuer sync
-      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopruntime-secrets --selector name=openbao-cert sync
-      - kubectl --context k3d-loopruntime-secrets -n secrets-system wait --for=condition=Ready certificate/openbao --timeout=120s
-      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loopruntime-secrets --selector name=openbao sync
+      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loop-runtime-secrets --selector name=cert-manager sync
+      - kubectl --context k3d-loop-runtime-secrets -n cert-manager wait --for=condition=Available deployment --all --timeout=180s
+      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loop-runtime-secrets --selector name=cluster-issuer sync
+      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loop-runtime-secrets --selector name=openbao-cert sync
+      - kubectl --context k3d-loop-runtime-secrets -n secrets-system wait --for=condition=Ready certificate/openbao --timeout=120s
+      - helmfile -f infra/helmfile/secrets.helmfile.yaml.gotmpl -e vault-local --kube-context k3d-loop-runtime-secrets --selector name=openbao sync
       - echo "[OK] OpenBao bootstrapped (HA Raft PRODLIKE.2, sealed). Next:- bao operator init + unseal (see docs/runbooks.md). Validate:- task k3d:secrets:status"
 
   k3d:secrets:status:
     desc: |
-      Show loopruntime-secrets cluster status: pods, services, OpenBao seal state.
+      Show loop-runtime-secrets cluster status: pods, services, OpenBao seal state.
     cmds:
-      - kubectl --context k3d-loopruntime-secrets get pods -A | grep -E 'NAMESPACE|vault|cert-manager' || true
-      - kubectl --context k3d-loopruntime-secrets -n secrets-system get svc 2>/dev/null || echo "secrets-system namespace not present yet"
+      - kubectl --context k3d-loop-runtime-secrets get pods -A | grep -E 'NAMESPACE|vault|cert-manager' || true
+      - kubectl --context k3d-loop-runtime-secrets -n secrets-system get svc 2>/dev/null || echo "secrets-system namespace not present yet"
       - |
-        if kubectl --context k3d-loopruntime-secrets -n secrets-system get pod openbao-0 >/dev/null 2>&1; then
+        if kubectl --context k3d-loop-runtime-secrets -n secrets-system get pod openbao-0 >/dev/null 2>&1; then
           echo "--- OpenBao seal status ---"
-          kubectl --context k3d-loopruntime-secrets -n secrets-system exec openbao-0 -- bao status 2>/dev/null || echo "bao CLI not yet ready"
+          kubectl --context k3d-loop-runtime-secrets -n secrets-system exec openbao-0 -- bao status 2>/dev/null || echo "bao CLI not yet ready"
         fi
 
   k3d:secrets:wire:
     desc: |
       Wire OpenBao into the core cluster when the optional secrets cluster exists:
-      install the chart, then init/unseal and hand loopruntime-api its AppRole and SPKI pin
+      install the chart, then init/unseal and hand loop-runtime-api its AppRole and SPKI pin
       (infra/scripts/local/vault-bootstrap-dev.sh). Skips, saying so, when there is
-      no loopruntime-secrets cluster — a self-hoster runs without OpenBao (#398).
+      no loop-runtime-secrets cluster — a self-hoster runs without OpenBao (#398).
     cmds:
       - |
-        if ! k3d cluster list -o json 2>/dev/null | grep -q '"name":"loopruntime-secrets"'; then
-          echo "[k3d:secrets:wire] SKIP — no loopruntime-secrets cluster: this install runs without OpenBao (the secrets cluster is optional)."
+        if ! k3d cluster list -o json 2>/dev/null | grep -q '"name":"loop-runtime-secrets"'; then
+          echo "[k3d:secrets:wire] SKIP — no loop-runtime-secrets cluster: this install runs without OpenBao (the secrets cluster is optional)."
           echo "[k3d:secrets:wire] The Tilt dev loop enables OpenBao transit and needs it: task k3d:secrets:create, then re-run this task."
           exit 0
         fi
         task k3d:secrets:bootstrap
         bash infra/scripts/local/vault-bootstrap-dev.sh
         # The bootstrap issues a new AppRole role_id every run and writes only the
-        # secret_id; loopruntime-api refuses transit without the role_id, so sync it now (#405).
+        # secret_id; loop-runtime-api refuses transit without the role_id, so sync it now (#405).
         # CORE_CONTEXT pins the seed to core: the secrets bootstrap leaves kubectl elsewhere.
-        (cd cmd/loopruntime-ops && CORE_CONTEXT={{.CORE_CONTEXT}} go run . seed vault-role-id-sync)
+        (cd cmd/loop-runtime-ops && CORE_CONTEXT={{.CORE_CONTEXT}} go run . seed vault-role-id-sync)
 
   # ---------------------------------------------------------------------------
   # S0.3: Infrastructure install

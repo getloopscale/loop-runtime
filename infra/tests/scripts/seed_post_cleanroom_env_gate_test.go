@@ -27,13 +27,13 @@ import (
 func TestSeedPostCleanroomAll_DevPublicStepsGatedByEnv(t *testing.T) {
 	body := readScript(t, "seed-post-cleanroom-all.sh")
 
-	gateRe := regexp.MustCompile(`\[\[\s*"\$\{?LOOPRUNTIME_HELMFILE_ENV[:\-]*\}?"\s*==\s*"dev-public"\s*\]\]`)
+	gateRe := regexp.MustCompile(`\[\[\s*"\$\{?LOOP_RUNTIME_HELMFILE_ENV[:\-]*\}?"\s*==\s*"dev-public"\s*\]\]`)
 	if !gateRe.MatchString(body) {
-		t.Error("seed-post-cleanroom-all.sh does not contain the canonical env-gate `[[ \"$LOOPRUNTIME_HELMFILE_ENV\" == \"dev-public\" ]]` — issue #99 fix missing")
+		t.Error("seed-post-cleanroom-all.sh does not contain the canonical env-gate `[[ \"$LOOP_RUNTIME_HELMFILE_ENV\" == \"dev-public\" ]]` — issue #99 fix missing")
 	}
 
 	if !stepIsInsideEnvGate(body, "seed github-webhook-fixture") {
-		t.Error("Step 5b (github-webhook-fixture) is NOT inside the LOOPRUNTIME_HELMFILE_ENV=dev-public conditional — issue #99 regression")
+		t.Error("Step 5b (github-webhook-fixture) is NOT inside the LOOP_RUNTIME_HELMFILE_ENV=dev-public conditional — issue #99 regression")
 	}
 
 	// Env-agnostic steps must stay unconditional — gating them would be an
@@ -51,12 +51,12 @@ func TestSeedPostCleanroomAll_DevPublicStepsGatedByEnv(t *testing.T) {
 }
 
 // stepIsInsideEnvGate returns true when the run_step invocation for the
-// given step script is between the `[[ "$LOOPRUNTIME_HELMFILE_ENV" == "dev-public" ]]`
+// given step script is between the `[[ "$LOOP_RUNTIME_HELMFILE_ENV" == "dev-public" ]]`
 // condition and the matching `fi`. Uses a line-by-line scan tracking gate
 // depth (gates do not nest in this script).
 func stepIsInsideEnvGate(body, stepScript string) bool {
 	lines := strings.Split(body, "\n")
-	gateRe := regexp.MustCompile(`if\s+\[\[\s*"\$\{?LOOPRUNTIME_HELMFILE_ENV[:\-]*\}?"\s*==\s*"dev-public"\s*\]\]`)
+	gateRe := regexp.MustCompile(`if\s+\[\[\s*"\$\{?LOOP_RUNTIME_HELMFILE_ENV[:\-]*\}?"\s*==\s*"dev-public"\s*\]\]`)
 	inGate := false
 	depth := 0
 	for _, raw := range lines {

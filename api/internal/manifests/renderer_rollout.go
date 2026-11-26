@@ -242,7 +242,7 @@ func analysisOrPause(withAnalysis bool, fallbackPause string) []k8sCanaryStep {
 // canaryAnalysisTemplateName is the AnalysisTemplate name referenced by
 // Rollout canary steps. Per D3, the template is per-namespace, so this
 // name is constant within each tenant env namespace.
-const canaryAnalysisTemplateName = "loopruntime-canary-analysis"
+const canaryAnalysisTemplateName = "loop-runtime-canary-analysis"
 
 // buildStableService creates the stable Service for canary traffic split.
 // Argo Rollouts manages spec.selector.rollouts-pod-template-hash to mark
@@ -491,7 +491,7 @@ func buildAppPodSpec(container k8sContainer) k8sPodSpec {
 		}
 	}
 	return k8sPodSpec{
-		ServiceAccountName:           "loopruntime-app",
+		ServiceAccountName:           "loop-runtime-app",
 		AutomountServiceAccountToken: &falseVal,
 		SecurityContext: &k8sPodSecurityContext{
 			RunAsNonRoot:   &trueVal,

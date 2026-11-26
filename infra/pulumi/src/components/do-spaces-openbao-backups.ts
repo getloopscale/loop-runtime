@@ -12,7 +12,7 @@ import * as pulumi from "@pulumi/pulumi";
  * built-in snapshot + DO Spaces NYC3 cross-region + retention 7d/30d/12w).
  *
  * Resources created:
- *   1. digitalocean.SpacesBucket "loopruntime-openbao-backups" — cross-region
+ *   1. digitalocean.SpacesBucket "loop-runtime-openbao-backups" — cross-region
  *      from mgmt cluster (SFO3 prod → bucket in NYC3 per Q12).
  *      Snapshots written here are themselves AES-256-GCM encrypted by
  *      OpenBao seal key (which is wrapped by AWS KMS per F1.1) — so
@@ -35,7 +35,7 @@ import * as pulumi from "@pulumi/pulumi";
  * purpose. Validated at component-create time via validateArgs.
  *
  * Outputs (exported in index.ts):
- *   - openbaoBackupBucketName     (string, public — "loopruntime-openbao-backups")
+ *   - openbaoBackupBucketName     (string, public — "loop-runtime-openbao-backups")
  *   - openbaoBackupBucketEndpoint (string, public — "https://nyc3.digitaloceanspaces.com")
  *   - openbaoBackupRegion         (string, public)
  *   - openbaoBackupAccessKeyId    (string, secret)
@@ -60,7 +60,7 @@ export interface DoSpacesOpenbaoBackupsArgs {
   readonly mgmtRegion?: string;
 
   /**
-   * Bucket name. Defaults to "loopruntime-openbao-backups". DO Spaces bucket
+   * Bucket name. Defaults to "loop-runtime-openbao-backups". DO Spaces bucket
    * names are globally namespaced within DO; if collision occurs at
    * `pulumi up`, operator picks alternative via this arg.
    */
@@ -89,7 +89,7 @@ export interface DoSpacesOpenbaoBackupsOutputs {
 /** Tag map applied to bucket + key for audit/ownership. */
 export function buildBackupResourceTags(stackName: string): Record<string, string> {
   return {
-    project: "loopruntime",
+    project: "loop-runtime",
     component: "openbao",
     stack: stackName,
     purpose: "openbao-raft-snapshot-backup",
@@ -190,9 +190,9 @@ export function createDoSpacesOpenbaoBackups(
   const bucketRegion = args.bucketRegion ?? "nyc3";
   // DO Spaces bucket names are globally unique across all DO accounts in
   // a region. Per-stack naming required for env isolation (dev+staging+
-  // prod coexisting). F1.2 originally used "loopruntime-openbao-backups";
-  // refactored to "loopruntime-openbao-backups-<stack>" for per-env distinct.
-  const bucketName = args.bucketName ?? `loopruntime-openbao-backups-${args.stackName}`;
+  // prod coexisting). F1.2 originally used "loop-runtime-openbao-backups";
+  // refactored to "loop-runtime-openbao-backups-<stack>" for per-env distinct.
+  const bucketName = args.bucketName ?? `loop-runtime-openbao-backups-${args.stackName}`;
   const retentionHourlyDays = args.retentionHourlyDays ?? 7;
   const retentionDailyDays = args.retentionDailyDays ?? 30;
   const retentionWeeklyDays = args.retentionWeeklyDays ?? 84; // 12 weeks
@@ -268,7 +268,7 @@ export function createDoSpacesOpenbaoBackups(
   const accessKey = new digitalocean.SpacesKey(
     "openbao-backups-key",
     {
-      name: `loopruntime-openbao-backups-${args.stackName}`,
+      name: `loop-runtime-openbao-backups-${args.stackName}`,
       grants: [
         {
           bucket: bucketName,

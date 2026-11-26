@@ -30,7 +30,7 @@ metadata:
     runtime.getloopscale.com/slo-query: |
       # Build duration p99 stays under 10 min
       histogram_quantile(0.99,
-        sum by (le) (rate(loopruntime_build_duration_seconds_bucket[5m]))
+        sum by (le) (rate(loop_runtime_build_duration_seconds_bucket[5m]))
       ) < 600
 spec:
   action: latency
@@ -46,7 +46,7 @@ spec:
   delay: "500ms"
   percent: 100
   # Mount path matches BuildKit's default cache + workspace location.
-  # If loopruntime-chaos-mesh values override this, update here in lockstep.
+  # If loop-runtime-chaos-mesh values override this, update here in lockstep.
   volumePath: "/var/lib/buildkit"
   # IOChaos hooks via fuse-overlayfs at the daemon level; requires
   # privileged=true on chaos daemon (set in infra/helm/chaos-mesh/

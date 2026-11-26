@@ -1,37 +1,37 @@
 config:
-  loopruntime-infra:environment: staging
-  loopruntime-infra:provider: digitalocean
-  loopruntime-infra:region: nyc3
-  loopruntime-infra:domain: staging.getloopscale.com
-  loopruntime-infra:dnsZone: getloopscale.com
-  loopruntime-infra:infraVersion: v1
+  loop-runtime-infra:environment: staging
+  loop-runtime-infra:provider: digitalocean
+  loop-runtime-infra:region: nyc3
+  loop-runtime-infra:domain: staging.getloopscale.com
+  loop-runtime-infra:dnsZone: getloopscale.com
+  loop-runtime-infra:infraVersion: v1
 
   # Management cluster — platform services
-  loopruntime-infra:mgmtK8sVersion: "1.33.9-do.4"
-  loopruntime-infra:mgmtNodeClass: small
-  loopruntime-infra:mgmtMinNodes: "2"
-  loopruntime-infra:mgmtMaxNodes: "3"
+  loop-runtime-infra:mgmtK8sVersion: "1.33.9-do.4"
+  loop-runtime-infra:mgmtNodeClass: small
+  loop-runtime-infra:mgmtMinNodes: "2"
+  loop-runtime-infra:mgmtMaxNodes: "3"
 
   # Runtime cluster — user applications
-  loopruntime-infra:runtimeK8sVersion: "1.33.9-do.4"
-  loopruntime-infra:runtimeNodeClass: small
-  loopruntime-infra:runtimeMinNodes: "2"
-  loopruntime-infra:runtimeMaxNodes: "3"
+  loop-runtime-infra:runtimeK8sVersion: "1.33.9-do.4"
+  loop-runtime-infra:runtimeNodeClass: small
+  loop-runtime-infra:runtimeMinNodes: "2"
+  loop-runtime-infra:runtimeMaxNodes: "3"
 
   # Build cluster — Argo Workflows + BuildKit
-  loopruntime-infra:buildK8sVersion: "1.33.9-do.4"
-  loopruntime-infra:buildNodeClass: small
-  loopruntime-infra:buildMinNodes: "2"
-  loopruntime-infra:buildMaxNodes: "3"
+  loop-runtime-infra:buildK8sVersion: "1.33.9-do.4"
+  loop-runtime-infra:buildNodeClass: small
+  loop-runtime-infra:buildMinNodes: "2"
+  loop-runtime-infra:buildMaxNodes: "3"
 
   # Database — managed PostgreSQL (single node for staging)
-  loopruntime-infra:dbNodeClass: small
-  loopruntime-infra:dbVersion: "16"
-  loopruntime-infra:dbNodeCount: "1"
+  loop-runtime-infra:dbNodeClass: small
+  loop-runtime-infra:dbVersion: "16"
+  loop-runtime-infra:dbNodeCount: "1"
 
   # Cloudflare — same zone, different subdomain (staging.getloopscale.com)
-  loopruntime-infra:cfAccountId: "362767409c4de7fda7990c10103efdd9"
-  loopruntime-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
+  loop-runtime-infra:cfAccountId: "362767409c4de7fda7990c10103efdd9"
+  loop-runtime-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
 
   # Secrets — set at first deploy via infra-deploy.yml workflow:
   #   The workflow sets spacesAccessKeyId, spacesSecretAccessKey, digitaloceanToken

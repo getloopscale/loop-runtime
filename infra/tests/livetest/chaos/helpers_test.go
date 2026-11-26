@@ -60,7 +60,7 @@ func TestAssertSpanCoverage_DelegatesToRealClient(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	q := TempoTraceQuery{TempoURL: srv.URL, Service: "loopruntime-api", Operation: "deploy", Window: time.Minute}
+	q := TempoTraceQuery{TempoURL: srv.URL, Service: "loop-runtime-api", Operation: "deploy", Window: time.Minute}
 
 	// Above threshold -> real trace count, no error (proves delegation).
 	count, err := AssertSpanCoverage(context.Background(), q, 2)

@@ -8,7 +8,7 @@
 //
 // Run:
 //
-//	LOOPRUNTIME_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
+//	LOOP_RUNTIME_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
 package config
 
 import (
@@ -32,11 +32,11 @@ func TestB18RuntimeMaxNodesConfig(t *testing.T) {
 }
 
 func TestB16ClusterImagePolicyChartExists(t *testing.T) {
-	chartFile := "../../../charts/loopruntime-admission-policies/Chart.yaml"
+	chartFile := "../../../charts/loop-runtime-admission-policies/Chart.yaml"
 	if _, err := os.Stat(chartFile); err != nil {
 		t.Fatalf("B16 regression: %s missing — was T0.1 reverted? %v", chartFile, err)
 	}
-	tplFile := "../../../charts/loopruntime-admission-policies/templates/cluster-image-policy.yaml"
+	tplFile := "../../../charts/loop-runtime-admission-policies/templates/cluster-image-policy.yaml"
 	if _, err := os.Stat(tplFile); err != nil {
 		t.Fatalf("B16 regression: ClusterImagePolicy template missing: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestB22KratosNeedsPostgresConditional(t *testing.T) {
 	if !strings.Contains(s, "{{- if .Values.inClusterPostgres }}") {
 		t.Errorf("B22 regression: conditional `needs:` block missing for inClusterPostgres")
 	}
-	if !strings.Contains(s, "- loopruntime-system/postgresql") {
+	if !strings.Contains(s, "- loop-runtime-system/postgresql") {
 		t.Errorf("B22 regression: kratos/gitea must declare needs:postgresql")
 	}
 }
@@ -247,16 +247,16 @@ func TestB29RedisServiceHostname(t *testing.T) {
 }
 
 func TestB31ImageTagsPinned(t *testing.T) {
-	// Path drift fix 2026-05-15 iter 5: `infra/helm/loopruntime-controller/`
+	// Path drift fix 2026-05-15 iter 5: `infra/helm/loop-runtime-controller/`
 	// and `infra/helm/tenant-controller/` were DELETED in T1.5 (commit
 	// 27cfe6cd, ADR-0023 operator-split). The same tag-pinning invariant
 	// is now enforced for the 4 split-binary charts via the OCI-published
-	// `charts/loopruntime-*-operator/values.yaml` files. Re-targeted to loopruntime-api
+	// `charts/loop-runtime-*-operator/values.yaml` files. Re-targeted to loop-runtime-api
 	// only; split-operator tag-pinning is covered by the Helm CI per chart.
-	// The loopruntime-api bootstrap defaults moved from infra/helm/loopruntime-api/values.yaml
+	// The loop-runtime-api bootstrap defaults moved from infra/helm/loop-runtime-api/values.yaml
 	// to the values Helmfile installs the one chart with.
 	files := []string{
-		"../../../charts/loopruntime-api/values-bootstrap.yaml",
+		"../../../charts/loop-runtime-api/values-bootstrap.yaml",
 	}
 	// The shape rules used to live here as four whole-file regexes. They moved
 	// into `imageTagVerdict`, which judges the tag VALUE and states its reason —
@@ -288,34 +288,34 @@ func TestB33B36GenerateSecretsStandaloneFallback(t *testing.T) {
 	}
 	s := string(data)
 	if !strings.Contains(s, "B33: standalone fallback") {
-		t.Errorf("B33 regression: generate-secrets.sh missing standalone fallback marker for loopruntime-db-credentials")
+		t.Errorf("B33 regression: generate-secrets.sh missing standalone fallback marker for loop-runtime-db-credentials")
 	}
 	// F26 (M23 audit 2026-07-10): B36 log-string canonicalized to
-	// "ensuring loopruntime-cluster-kubeconfigs (per-slot idempotent)"; behavior
+	// "ensuring loop-runtime-cluster-kubeconfigs (per-slot idempotent)"; behavior
 	// preserved. Assert the canonical form.
-	if !strings.Contains(s, "B36: standalone — ensuring loopruntime-cluster-kubeconfigs") {
-		t.Errorf("B36 regression: generate-secrets.sh missing canonical loopruntime-cluster-kubeconfigs ensure step")
+	if !strings.Contains(s, "B36: standalone — ensuring loop-runtime-cluster-kubeconfigs") {
+		t.Errorf("B36 regression: generate-secrets.sh missing canonical loop-runtime-cluster-kubeconfigs ensure step")
 	}
-	if !strings.Contains(s, "loopruntime-cluster-kubeconfigs") {
-		t.Errorf("B36 regression: generate-secrets.sh must create loopruntime-cluster-kubeconfigs Secret")
+	if !strings.Contains(s, "loop-runtime-cluster-kubeconfigs") {
+		t.Errorf("B36 regression: generate-secrets.sh must create loop-runtime-cluster-kubeconfigs Secret")
 	}
 }
 
 func TestB35DatabaseUrlMapping(t *testing.T) {
-	// Path drift fix 2026-05-15 iter 5: `loopruntime-controller` + `tenant-
+	// Path drift fix 2026-05-15 iter 5: `loop-runtime-controller` + `tenant-
 	// controller` charts DELETED in T1.5 (commit 27cfe6cd). The 4 split
 	// operators do NOT receive DATABASE_URL directly (they use the
-	// API's data-access layer); only loopruntime-api and loopruntime-cloud carry
+	// API's data-access layer); only loop-runtime-api and loop-console carry
 	// the env. See finding `concepts/operations/finding-2026-05-15-
 	// infra-tests-load-regression-obsolete.md`.
 	//
 	// B35 was DATABASE_URL pointing at nothing. The invariant is that it maps to a
-	// key the setup actually writes into loopruntime-db-credentials — not a fixed key name:
-	// loopruntime-api reads `api-uri` since the role split (#396) and loopruntime-cloud reads `uri`.
+	// key the setup actually writes into loop-runtime-db-credentials — not a fixed key name:
+	// loop-runtime-api reads `api-uri` since the role split (#396) and loop-console reads `uri`.
 	written := dbCredentialKeysWritten(t)
 	for _, f := range []string{
-		"../../../charts/loopruntime-api/values-bootstrap.yaml",
-		"../../../charts/loopruntime-cloud/values-bootstrap.yaml",
+		"../../../charts/loop-runtime-api/values-bootstrap.yaml",
+		"../../../charts/loop-console/values-bootstrap.yaml",
 	} {
 		data, err := os.ReadFile(f)
 		if err != nil {
@@ -339,8 +339,8 @@ func TestB35DatabaseUrlMapping(t *testing.T) {
 				continue
 			}
 			found = true
-			if ref.SecretName != "loopruntime-db-credentials" {
-				t.Errorf("B35 regression: %s maps DATABASE_URL from %q, want loopruntime-db-credentials", f, ref.SecretName)
+			if ref.SecretName != "loop-runtime-db-credentials" {
+				t.Errorf("B35 regression: %s maps DATABASE_URL from %q, want loop-runtime-db-credentials", f, ref.SecretName)
 			}
 			if !written[ref.Key] {
 				t.Errorf("B35 regression: %s maps DATABASE_URL to key %q, which generate-secrets.sh never writes (writes %v)", f, ref.Key, written)
@@ -353,7 +353,7 @@ func TestB35DatabaseUrlMapping(t *testing.T) {
 }
 
 // dbCredentialKeysWritten returns the keys generate-secrets.sh writes into
-// loopruntime-db-credentials, read from its --from-literal flags.
+// loop-runtime-db-credentials, read from its --from-literal flags.
 func dbCredentialKeysWritten(t *testing.T) map[string]bool {
 	t.Helper()
 	raw, err := os.ReadFile("../../../infra/helmfile/scripts/generate-secrets.sh")
@@ -364,7 +364,7 @@ func dbCredentialKeysWritten(t *testing.T) map[string]bool {
 	from := strings.Index(s, "DB_ROLE_LITERALS=(")
 	to := strings.Index(s, `"${DB_ROLE_LITERALS[@]}"`)
 	if from < 0 || to < from {
-		t.Fatal("generate-secrets.sh no longer builds loopruntime-db-credentials the way this test reads it")
+		t.Fatal("generate-secrets.sh no longer builds loop-runtime-db-credentials the way this test reads it")
 	}
 	keys := map[string]bool{}
 	for _, m := range regexp.MustCompile(`--from-literal=([a-z-]+)=`).FindAllStringSubmatch(s[from:to], -1) {
@@ -374,13 +374,13 @@ func dbCredentialKeysWritten(t *testing.T) map[string]bool {
 }
 
 func TestB40LoopRuntimeApiServicePort3001(t *testing.T) {
-	data, err := os.ReadFile("../../../charts/loopruntime-api/values.yaml")
+	data, err := os.ReadFile("../../../charts/loop-runtime-api/values.yaml")
 	if err != nil {
-		t.Fatalf("read loopruntime-api values.yaml: %v", err)
+		t.Fatalf("read loop-runtime-api values.yaml: %v", err)
 	}
 	s := string(data)
 	if !strings.Contains(s, "port: 3001") {
-		t.Errorf("B40 regression: loopruntime-api service.port must be 3001 (matches binary listen)")
+		t.Errorf("B40 regression: loop-runtime-api service.port must be 3001 (matches binary listen)")
 	}
 }
 
@@ -404,15 +404,15 @@ func TestB45LoopRuntimeCrdsRelease(t *testing.T) {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
 	s := string(data)
-	if !strings.Contains(s, "- name: loopruntime-crds") {
-		t.Errorf("B45 regression: mgmt helmfile must declare loopruntime-crds release")
+	if !strings.Contains(s, "- name: loop-runtime-crds") {
+		t.Errorf("B45 regression: mgmt helmfile must declare loop-runtime-crds release")
 	}
-	if !strings.Contains(s, "../../charts/loopruntime-crds") {
-		t.Errorf("B45 regression: loopruntime-crds release must point to charts/loopruntime-crds")
+	if !strings.Contains(s, "../../charts/loop-runtime-crds") {
+		t.Errorf("B45 regression: loop-runtime-crds release must point to charts/loop-runtime-crds")
 	}
-	// Controllers must `needs: loopruntime-crds`
-	if !strings.Contains(s, "- loopruntime-system/loopruntime-crds") {
-		t.Errorf("B45 regression: controllers must declare needs:loopruntime-system/loopruntime-crds")
+	// Controllers must `needs: loop-runtime-crds`
+	if !strings.Contains(s, "- loop-runtime-system/loop-runtime-crds") {
+		t.Errorf("B45 regression: controllers must declare needs:loop-runtime-system/loop-runtime-crds")
 	}
 }
 
@@ -427,16 +427,16 @@ func TestB48SmokeArgocdHttp(t *testing.T) {
 	}
 }
 
-func TestB49LoopRuntimeCloudOryUrls(t *testing.T) {
-	data, err := os.ReadFile("../../../charts/loopruntime-cloud/values-bootstrap.yaml")
+func TestB49LoopConsoleOryUrls(t *testing.T) {
+	data, err := os.ReadFile("../../../charts/loop-console/values-bootstrap.yaml")
 	if err != nil {
-		t.Fatalf("read loopruntime-cloud values.yaml: %v", err)
+		t.Fatalf("read loop-console values.yaml: %v", err)
 	}
 	s := string(data)
-	if strings.Contains(s, "ory-hydra-admin.loopruntime-system") {
-		t.Errorf("B49 regression: loopruntime-cloud Hydra URL points to loopruntime-system (Hydra deploys to loopruntime-auth)")
+	if strings.Contains(s, "ory-hydra-admin.loop-runtime-system") {
+		t.Errorf("B49 regression: loop-console Hydra URL points to loop-runtime-system (Hydra deploys to loop-runtime-auth)")
 	}
-	if !strings.Contains(s, "ory-hydra-admin.loopruntime-auth.svc.cluster.local") {
-		t.Errorf("B49 regression: loopruntime-cloud must use ory-hydra-admin.loopruntime-auth.svc.cluster.local")
+	if !strings.Contains(s, "ory-hydra-admin.loop-runtime-auth.svc.cluster.local") {
+		t.Errorf("B49 regression: loop-console must use ory-hydra-admin.loop-runtime-auth.svc.cluster.local")
 	}
 }

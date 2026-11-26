@@ -1089,14 +1089,14 @@ func TestBuildOrchestrator_OnBuildCompleted_SucceededWithEmptyApps(t *testing.T)
 		t.Fatal("expected error for succeeded callback with empty apps, got nil")
 	}
 
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if !errors.As(err, &loopruntimeErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
 		t.Fatalf("expected LoopRuntimeError, got %T: %v", err, err)
 	}
 	// The service owns the code; its HTTP status is the route layer's mapping
 	// (httpio), asserted by the error-code registry tests.
-	if loopruntimeErr.Code != "INVALID_CALLBACK" {
-		t.Errorf("expected code INVALID_CALLBACK, got %q", loopruntimeErr.Code)
+	if loopRuntimeErr.Code != "INVALID_CALLBACK" {
+		t.Errorf("expected code INVALID_CALLBACK, got %q", loopRuntimeErr.Code)
 	}
 }
 

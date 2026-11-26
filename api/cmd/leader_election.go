@@ -121,12 +121,12 @@ func (e *loopsElection) release(lease *leader.Lease) {
 // server starts at once and standby replicas serve traffic while they wait.
 // The lease is the fenced generation lease the controller binary takes, under
 // the same name, so the two binaries never run the loops together. With
-// LOOPRUNTIME_DISABLE_LEGACY_LOOPS=true the API does not compete: the controller
+// LOOP_RUNTIME_DISABLE_LEGACY_LOOPS=true the API does not compete: the controller
 // owns the loops.
 func startLoopsElection(ctx context.Context, bgWg *sync.WaitGroup, cfg config.Config,
 	bgAdapter *db.PgxAdapter, logger *slog.Logger, startLoops func(context.Context)) {
 	if cfg.DisableLegacyLoops {
-		logger.Info("LOOPRUNTIME_DISABLE_LEGACY_LOOPS=true — loops will not run here; controller binary owns them")
+		logger.Info("LOOP_RUNTIME_DISABLE_LEGACY_LOOPS=true — loops will not run here; controller binary owns them")
 		metrics.LeaderStatus.Set(0)
 		return
 	}

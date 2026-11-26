@@ -7,7 +7,7 @@
 # Captured metrics (saved as JSON):
 #   - API /health success rate over the window
 #   - API P50/P95/P99 latency (via Prometheus if available, else curl probe)
-#   - Pod restart counts per critical app (loopruntime-api, operators, gitea, pg)
+#   - Pod restart counts per critical app (loop-runtime-api, operators, gitea, pg)
 #   - Resource utilization snapshot (CPU/memory)
 #   - Active builds + active ArgoCD app sync state
 #
@@ -43,8 +43,8 @@ parse_duration() {
 }
 DURATION_SEC=$(parse_duration "$DURATION")
 
-TARGET_CTX="${TARGET_CONTEXT:-k3d-loopruntime-core}"
-WORKLOAD_CTX="${CELL_0_CONTEXT:-k3d-loopruntime-cell-0}"
+TARGET_CTX="${TARGET_CONTEXT:-k3d-loop-runtime-core}"
+WORKLOAD_CTX="${CELL_0_CONTEXT:-k3d-loop-runtime-cell-0}"
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 OUTPUT="/tmp/chaos-baseline-${SCENARIO}-${TS}.json"
 
@@ -128,7 +128,7 @@ log "capturing pod restart counts..."
 
 restart_count() {
   local ctx="$1" ns="$2" selector="$3"
-  # `|| true` after the pipe: control-plane pods (loopruntime-api, operators, pg,
+  # `|| true` after the pipe: control-plane pods (loop-runtime-api, operators, pg,
   # gitea) only exist on the mgmt cluster. When TARGET_CTX is workload/build,
   # the kubectl query returns non-zero (ns/pods absent) and — under
   # `set -e` + `pipefail` — would abort the whole baseline. The fallback keeps
@@ -137,11 +137,11 @@ restart_count() {
   kubectl --context "$ctx" get pods -n "$ns" -l "$selector" -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}' 2>/dev/null | awk '{s+=$1} END {print s+0}' || echo 0
 }
 
-LOOPRUNTIME_API_RESTARTS=$(restart_count "$TARGET_CTX" loopruntime-system "app=loopruntime-api")
-TENANT_OP_RESTARTS=$(restart_count "$TARGET_CTX" loopruntime-system "app=tenant-operator")
-APP_OP_RESTARTS=$(restart_count "$TARGET_CTX" loopruntime-system "app=app-operator")
-PG_RESTARTS=$(restart_count "$TARGET_CTX" loopruntime-system "app.kubernetes.io/name=postgresql")
-GITEA_RESTARTS=$(restart_count "$TARGET_CTX" loopruntime-system "app=gitea")
+LOOP_RUNTIME_API_RESTARTS=$(restart_count "$TARGET_CTX" loop-runtime-system "app=loop-runtime-api")
+TENANT_OP_RESTARTS=$(restart_count "$TARGET_CTX" loop-runtime-system "app=tenant-operator")
+APP_OP_RESTARTS=$(restart_count "$TARGET_CTX" loop-runtime-system "app=app-operator")
+PG_RESTARTS=$(restart_count "$TARGET_CTX" loop-runtime-system "app.kubernetes.io/name=postgresql")
+GITEA_RESTARTS=$(restart_count "$TARGET_CTX" loop-runtime-system "app=gitea")
 
 # ---------------------------------------------------------------------------
 # ArgoCD app health (always-zero fallback prevents `grep -c || echo 0`
@@ -203,7 +203,7 @@ cat > "$OUTPUT" <<EOF
     "latency_p99_ms": $P99
   },
   "pod_restart_counts": {
-    "loopruntime_api": $LOOPRUNTIME_API_RESTARTS,
+    "loop_runtime_api": $LOOP_RUNTIME_API_RESTARTS,
     "tenant_operator": $TENANT_OP_RESTARTS,
     "app_operator": $APP_OP_RESTARTS,
     "postgresql": $PG_RESTARTS,
@@ -221,7 +221,7 @@ EOF
 
 log "baseline captured: $OUTPUT"
 log "  api_success: ${SUCCESS_RATE}% / p95: ${P95}ms / p99: ${P99}ms"
-log "  pod restarts: api=$LOOPRUNTIME_API_RESTARTS tenant-op=$TENANT_OP_RESTARTS pg=$PG_RESTARTS"
+log "  pod restarts: api=$LOOP_RUNTIME_API_RESTARTS tenant-op=$TENANT_OP_RESTARTS pg=$PG_RESTARTS"
 log "  argocd: ${ARGOCD_HEALTHY}/${ARGOCD_TOTAL} healthy"
 
 # Echo path so callers can use it

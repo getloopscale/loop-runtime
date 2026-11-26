@@ -140,7 +140,7 @@ $SLO_QUERY
 
 | Pod | Pre-chaos count | Post-recovery count | Delta |
 |-----|----------------|---------------------|-------|
-| loopruntime-api | (see baseline.json) | (see post.json) | **$RESTART_DELTA** |
+| loop-runtime-api | (see baseline.json) | (see post.json) | **$RESTART_DELTA** |
 
 ## Verdict reasoning
 

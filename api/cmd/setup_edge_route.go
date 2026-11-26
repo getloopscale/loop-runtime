@@ -28,7 +28,7 @@ const (
 
 // newEdgeRoute builds the host → cell index and keeps it fresh. Two consumers read it:
 // the /internal/edge/route lookup (an edge that asks, like dev-public's Caddy; needs
-// LOOPRUNTIME_EDGE_ROUTE_TOKEN) and the publisher to the store an edge reads (the CloudFront
+// LOOP_RUNTIME_EDGE_ROUTE_TOKEN) and the publisher to the store an edge reads (the CloudFront
 // KeyValueStore on AWS, or the Cloudflare KV of the Worker, #448). With neither, nothing is built. It also
 // needs the cross-tenant pool that reads tenants.cell_id and the in-cluster API.
 // Returns the lookup handler, or nil when the route must stay unregistered.
@@ -36,7 +36,7 @@ func newEdgeRoute(cfg config.Config, crossTenant *db.PgxAdapter, shutdownCtx con
 	bgWg *sync.WaitGroup, logger *slog.Logger) http.Handler {
 	publisher := edgeRoutePublisher(shutdownCtx, cfg, logger)
 	if cfg.EdgeRouteToken == "" && publisher == nil {
-		logger.Warn("edge routing disabled: none of LOOPRUNTIME_EDGE_ROUTE_TOKEN, LOOPRUNTIME_EDGE_KVS_ARN or the Cloudflare KV credentials is set",
+		logger.Warn("edge routing disabled: none of LOOP_RUNTIME_EDGE_ROUTE_TOKEN, LOOP_RUNTIME_EDGE_KVS_ARN or the Cloudflare KV credentials is set",
 			"component", "edge-router")
 		return nil
 	}
@@ -44,7 +44,7 @@ func newEdgeRoute(cfg config.Config, crossTenant *db.PgxAdapter, shutdownCtx con
 		logger.Warn("edge routing disabled: no cross-tenant database pool", "component", "edge-router")
 		return nil
 	}
-	source, err := placement.NewK8sEdgeRouteSource(nil, "loopruntime-system")
+	source, err := placement.NewK8sEdgeRouteSource(nil, "loop-runtime-system")
 	if err != nil {
 		logger.Error("edge routing disabled: cannot reach the cluster", "component", "edge-router", "error", err)
 		return nil
@@ -88,7 +88,7 @@ func (c customDomainRoutes) ListEdgeRoutes(ctx context.Context) ([]placement.Edg
 }
 
 // edgeRoutePublisher returns the store the edge reads the routes from: the CloudFront
-// KeyValueStore on AWS (LOOPRUNTIME_EDGE_KVS_ARN), else the Cloudflare KV, else nil. A store
+// KeyValueStore on AWS (LOOP_RUNTIME_EDGE_KVS_ARN), else the Cloudflare KV, else nil. A store
 // that is configured but cannot be reached is logged as an error and publishes nothing.
 func edgeRoutePublisher(ctx context.Context, cfg config.Config, logger *slog.Logger) placement.EdgeRoutePublisher {
 	if cfg.EdgeKVSARN != "" {

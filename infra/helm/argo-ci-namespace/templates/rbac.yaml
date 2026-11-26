@@ -1,4 +1,4 @@
-# T0.2 Scenario B POC — RBAC for loopruntime-ci-runner ServiceAccount.
+# T0.2 Scenario B POC — RBAC for loop-runtime-ci-runner ServiceAccount.
 # Per ADR-2026-05-27-T0.2-RATIFIED D3: namespace-scoped only
 # (RoleBinding, NOT ClusterRoleBinding).
 #

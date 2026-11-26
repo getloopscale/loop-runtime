@@ -36,7 +36,7 @@ func newEnvironmentEnsurer(cfg config.Config, k8sDeps *K8sDeps, logger *slog.Log
 	// per deploy, so it is opt-in.
 	if cfg.EnvReadinessChecker {
 		if mgmtDynamic := buildMgmtDynamicClient(cfg, logger); mgmtDynamic != nil {
-			ensurer.ReadinessChecker = environmentsadapter.NewEnvironmentCRReader(mgmtDynamic, "loopruntime-system")
+			ensurer.ReadinessChecker = environmentsadapter.NewEnvironmentCRReader(mgmtDynamic, "loop-runtime-system")
 			logger.Info("env readiness checker wired: EnsureEnvironment polls Environment CR status.phase")
 		}
 	}

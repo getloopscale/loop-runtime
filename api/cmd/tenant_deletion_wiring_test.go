@@ -60,7 +60,7 @@ func TestTenantDeletionStore_IsAssignedInTheProductionAssembly(t *testing.T) {
 // entire class. A measured zero and an assumed zero are different facts, and
 // this test is what keeps the first one true.
 //
-// It is deliberately NOT a loopruntime-ops gate. `silent-surface` answers a different
+// It is deliberately NOT a loop-runtime-ops gate. `silent-surface` answers a different
 // question — does the guard REPORT its decision — and a surface can report
 // `false` forever while nothing is broken about the reporting. This one answers
 // whether the condition can ever be true at all. Same file, same suite, no new

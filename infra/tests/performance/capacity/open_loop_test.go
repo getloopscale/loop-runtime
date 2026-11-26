@@ -14,7 +14,7 @@ import (
 )
 
 // Hermetic tests for the open-loop runner every capacity bench shares. They run
-// without LOOPRUNTIME_CAPACITY: the request is a fake, so nothing leaves the process.
+// without LOOP_RUNTIME_CAPACITY: the request is a fake, so nothing leaves the process.
 
 func shortRun() Config {
 	return Config{RPS: 1000, Duration: 40 * time.Millisecond, Workers: 4}

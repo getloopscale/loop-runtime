@@ -846,7 +846,7 @@ paths:
       - health
       summary: Readiness — the service can take traffic
       description: >-
-        The ecosystem-canonical readiness name (loopruntime-contracts/httpsurface, D5). Checks the
+        The ecosystem-canonical readiness name (loop-runtime-contracts/httpsurface, D5). Checks the
         database and every registered service; 200 when all are healthy, 503 when any is degraded.
         Shares the handler with /api/v1/health/deep, whose name describes how the check is
         implemented rather than what it answers.

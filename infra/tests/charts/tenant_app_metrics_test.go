@@ -31,10 +31,10 @@ var (
 // tenantAppSeries are the series the API queries
 // (api/internal/projectmetrics/projectmetricshttp/metrics_proxy.go).
 var tenantAppSeries = []string{
-	"loopruntime_app:kube_pod_status_ready:sum",
-	"loopruntime_app:traefik_service_requests:rate5m",
-	"loopruntime_app_status_class:traefik_service_requests:rate5m",
-	"loopruntime_app_le:traefik_service_request_duration_seconds_bucket:rate5m",
+	"loop_runtime_app:kube_pod_status_ready:sum",
+	"loop_runtime_app:traefik_service_requests:rate5m",
+	"loop_runtime_app_status_class:traefik_service_requests:rate5m",
+	"loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m",
 }
 
 type recordingRule struct {
@@ -169,7 +169,7 @@ func TestCorePrometheusFederatesTheRecordedTenantAppSeries(t *testing.T) {
 			}
 		}
 		for _, rule := range rules {
-			wanted := strings.HasPrefix(rule.Record, "loopruntime_app")
+			wanted := strings.HasPrefix(rule.Record, "loop_runtime_app")
 			if byRecordedName.MatchString(rule.Record) != wanted {
 				t.Errorf("%s: %v selecting %s = %v, want %v (only the per-app series leave the cell)",
 					name, byRecordedName, rule.Record, !wanted, wanted)

@@ -158,9 +158,9 @@ type RenderInput struct {
 
 	// Configurable defaults (arch-cp-006). Zero values fall back to built-in defaults.
 	// B14 (MEET-2026-04-23-058): ClusterIssuerName is REQUIRED — no fallback.
-	// Set from Config.ClusterIssuer (env LOOPRUNTIME_CLUSTER_ISSUER). Empty = RenderDocs error.
+	// Set from Config.ClusterIssuer (env LOOP_RUNTIME_CLUSTER_ISSUER). Empty = RenderDocs error.
 	ClusterIssuerName    string // Required — no default; RenderDocs returns an error when empty
-	GatewayNamespace     string // Default: "loopruntime-system"
+	GatewayNamespace     string // Default: "loop-runtime-system"
 	DefaultCPURequest    string // Default: "100m"
 	DefaultMemoryRequest string // Default: "128Mi"
 	DefaultCPULimit      string // Default: "500m"
@@ -182,7 +182,7 @@ type RenderInput struct {
 
 	// ProgressiveDelivery controls whether to emit Rollout (canary) or
 	// legacy Deployment manifests (D8). Callers fill it from
-	// config.Config.ProgressiveDelivery (env LOOPRUNTIME_PROGRESSIVE_DELIVERY,
+	// config.Config.ProgressiveDelivery (env LOOP_RUNTIME_PROGRESSIVE_DELIVERY,
 	// default on), so an operator can revert to legacy Deployment during an
 	// incident rollback.
 	ProgressiveDelivery bool
@@ -190,7 +190,7 @@ type RenderInput struct {
 	// LeanResources halves the fallback resource defaults (the Default*
 	// fields above still win when set) to fit 100 apps in the current DO dev
 	// runtime cluster while a droplet quota increase is in flight. Callers
-	// fill it from config.Config.LeanResources (env LOOPRUNTIME_LEAN_RESOURCES).
+	// fill it from config.Config.LeanResources (env LOOP_RUNTIME_LEAN_RESOURCES).
 	LeanResources bool
 }
 
@@ -200,7 +200,7 @@ type RenderInput struct {
 // keep using Render() (which delegates here + Concat).
 //
 // B14 (MEET-2026-04-23-058): ClusterIssuerName is required. Callers MUST
-// populate it from Config.ClusterIssuer (env LOOPRUNTIME_CLUSTER_ISSUER).
+// populate it from Config.ClusterIssuer (env LOOP_RUNTIME_CLUSTER_ISSUER).
 func RenderDocs(input RenderInput) ([]K8sDoc, error) {
 	if input.ClusterIssuerName == "" {
 		return nil, fmt.Errorf("manifests.Render: ClusterIssuerName is required (B14 — wire from Config.ClusterIssuer)")

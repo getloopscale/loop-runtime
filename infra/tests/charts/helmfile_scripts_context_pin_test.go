@@ -5,7 +5,7 @@
 // generalizes): a helmfile script that invokes `kubectl` without making
 // its target cluster explicit silently writes to whatever kubecontext
 // happens to be active. On a clean machine it passes; on a dev box
-// carrying residue (e.g. `k3d-loopruntime-secrets` left over from a vault
+// carrying residue (e.g. `k3d-loop-runtime-secrets` left over from a vault
 // bootstrap) it provisions into the WRONG CLUSTER and `task setup`
 // dies mid-chain — or worse, succeeds against the wrong target.
 //
@@ -34,7 +34,7 @@
 //	(4) Caller-pinned contract made EXPLICIT AND FAIL-FAST via
 //	    `: "${KUBECONFIG:?...}"`. Some scripts legitimately target a
 //	    cluster chosen by the caller (generate-runtime-secrets.sh is
-//	    invoked as `KUBECONFIG=$(k3d kubeconfig write loopruntime-cell-0)
+//	    invoked as `KUBECONFIG=$(k3d kubeconfig write loop-runtime-cell-0)
 //	    bash ...`). Inheriting is fine; inheriting SILENTLY is not.
 //	    The `:?` form aborts with a message when the caller forgot.
 //

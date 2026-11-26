@@ -9,10 +9,10 @@
 # Workflow:
 #   1. logcli query '{namespace="secrets-system"}' --since=720h (last 30d)
 #   2. compress via gzip
-#   3. upload to s3://loopruntime-audit-logs-${env}/vault/${YYYY-MM}.jsonl.gz via
+#   3. upload to s3://loop-runtime-audit-logs-${env}/vault/${YYYY-MM}.jsonl.gz via
 #      mc (mc is installed in the container image; AWS_ACCESS_KEY_ID +
 #      AWS_SECRET_ACCESS_KEY mounted from K8s Secret)
-#   4. emit metric loopruntime_loki_archive_success / loopruntime_loki_archive_bytes
+#   4. emit metric loop_runtime_loki_archive_success / loop_runtime_loki_archive_bytes
 #
 # Disabled by default (env opt-in via overlay). Operator enables when DO
 # Spaces bucket exists + creds K8s Secret is present.
@@ -68,13 +68,13 @@ spec:
                   echo "[archive] $(wc -c < "${ARCHIVE}") bytes captured"
                   gzip "${ARCHIVE}"
                   echo "[archive] uploading to DO Spaces..."
-                  mc alias set loopruntime "${DO_SPACES_ENDPOINT}" \
+                  mc alias set loop-runtime "${DO_SPACES_ENDPOINT}" \
                     "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}"
                   mc cp "${ARCHIVE}.gz" \
-                    "loopruntime/loopruntime-audit-logs-${LOOPRUNTIME_ENV}/vault/${TS}.jsonl.gz"
+                    "loop-runtime/loop-runtime-audit-logs-${LOOP_RUNTIME_ENV}/vault/${TS}.jsonl.gz"
                   echo "[archive] upload complete"
               env:
-                - name: LOOPRUNTIME_ENV
+                - name: LOOP_RUNTIME_ENV
                   value: "prod"  # overlay per env (dev/staging/prod)
                 - name: DO_SPACES_ENDPOINT
                   value: "https://sfo3.digitaloceanspaces.com"

@@ -15,4 +15,4 @@ package k8s
 // from a second reader disagreeing with the first. Its guards are
 // k8s/tenancy/tenant_namespace_const_test.go and
 // infra/tests/config/regression_adr_test.go.
-const ControlPlaneNamespace = "loopruntime-system"
+const ControlPlaneNamespace = "loop-runtime-system"

@@ -140,10 +140,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, span := otel.Tracer("loopruntime-api").Start(r.Context(), "loopruntime.api.webhook.github.receive",
+	_, span := otel.Tracer("loop-runtime-api").Start(r.Context(), "loop-runtime.api.webhook.github.receive",
 		trace.WithAttributes(
-			attribute.String("loopruntime.webhook.event_type", eventType),
-			attribute.String("loopruntime.webhook.delivery_id", deliveryID),
+			attribute.String("loop-runtime.webhook.event_type", eventType),
+			attribute.String("loop-runtime.webhook.delivery_id", deliveryID),
 		))
 	defer span.End()
 

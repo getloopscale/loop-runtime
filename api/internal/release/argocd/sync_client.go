@@ -152,9 +152,9 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 // not exist" — a misleading message that has nothing to do with the AppProject.
 // Hard-refresh (GET ?refresh=hard) drops the cache and forces re-clone.
 func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.argocd.sync_trigger",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.argocd.sync_trigger",
 		trace.WithAttributes(
-			attribute.String("loopruntime.argocd.app_name", appName),
+			attribute.String("loop-runtime.argocd.app_name", appName),
 		))
 	defer span.End()
 

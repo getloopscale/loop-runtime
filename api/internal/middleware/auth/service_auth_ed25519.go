@@ -16,18 +16,18 @@ import (
 )
 
 // serviceAuthSignaturePresent counts how often each request carried the
-// X-LoopRuntime-Signature header — drives the Phase 1 → Phase 2 cutover gate
+// X-Loop-Runtime-Signature header — drives the Phase 1 → Phase 2 cutover gate
 // (operator waits for 100% present over 7 consecutive days per Q3).
 var serviceAuthSignaturePresent = promauto.NewCounterVec(prometheus.CounterOpts{
-	Name: "loopruntime_service_auth_signature_present_total",
-	Help: "Service-auth requests broken down by whether X-LoopRuntime-Signature was present. Drives Phase 1 → Phase 2 cutover gate (7-day soak at 100% present rate per ADR 2026-05-13-service-auth-ed25519-adoption Q3).",
+	Name: "loop_runtime_service_auth_signature_present_total",
+	Help: "Service-auth requests broken down by whether X-Loop-Runtime-Signature was present. Drives Phase 1 → Phase 2 cutover gate (7-day soak at 100% present rate per ADR 2026-05-13-service-auth-ed25519-adoption Q3).",
 }, []string{"outcome"}) // outcome = present | absent
 
 // serviceAuthSignatureRejected counts signed-request rejections by
 // reason, so an operator can distinguish replay attacks (timestamp +
 // nonce) from forgeries (invalid sig) in the dashboards.
 var serviceAuthSignatureRejected = promauto.NewCounterVec(prometheus.CounterOpts{
-	Name: "loopruntime_service_auth_signature_rejected_total",
+	Name: "loop_runtime_service_auth_signature_rejected_total",
 	Help: "Service-auth signed-request rejections by reason: invalid_signature, replay_window, replay_nonce, no_trusted_keys, malformed_input.",
 }, []string{"reason"})
 
@@ -45,7 +45,7 @@ const (
 )
 
 // verifyServiceAuthSignature evaluates the three signature headers
-// (X-LoopRuntime-Signature, X-LoopRuntime-Timestamp, X-LoopRuntime-Nonce) against the
+// (X-Loop-Runtime-Signature, X-Loop-Runtime-Timestamp, X-Loop-Runtime-Nonce) against the
 // canonical payload built from the request. Returns ok=true iff every
 // gate passes (signature valid + timestamp within window + nonce
 // claimed). Returns ok=false with the rejection reason on any gate
@@ -54,9 +54,9 @@ const (
 // The presence-vs-absence decision is made by the CALLER (auth middleware)
 // — this function only runs when all three signature headers are present.
 func (a *Authenticator) verifyServiceAuthSignature(r *http.Request, userID, tenantID string) (ok bool, reason signatureRejectReason) {
-	sig := r.Header.Get("X-LoopRuntime-Signature")
-	tsStr := r.Header.Get("X-LoopRuntime-Timestamp")
-	nonce := r.Header.Get("X-LoopRuntime-Nonce")
+	sig := r.Header.Get("X-Loop-Runtime-Signature")
+	tsStr := r.Header.Get("X-Loop-Runtime-Timestamp")
+	nonce := r.Header.Get("X-Loop-Runtime-Nonce")
 
 	tsInt, err := strconv.ParseInt(tsStr, 10, 64)
 	if err != nil {
@@ -96,7 +96,7 @@ func (a *Authenticator) verifyServiceAuthSignature(r *http.Request, userID, tena
 // is invalid" (a strong attack signal) from "client did not sign at
 // all" (Phase 1 default).
 func hasServiceAuthSignatureHeaders(r *http.Request) bool {
-	return r.Header.Get("X-LoopRuntime-Signature") != "" &&
-		r.Header.Get("X-LoopRuntime-Timestamp") != "" &&
-		r.Header.Get("X-LoopRuntime-Nonce") != ""
+	return r.Header.Get("X-Loop-Runtime-Signature") != "" &&
+		r.Header.Get("X-Loop-Runtime-Timestamp") != "" &&
+		r.Header.Get("X-Loop-Runtime-Nonce") != ""
 }

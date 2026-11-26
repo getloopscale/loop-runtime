@@ -32,7 +32,7 @@
 --   * zero migrations in this repository contain UPDATE/DELETE, so no schema change
 --     depends on the bypass;
 --   * exactly ONE Go path does DML outside a request — `audit_log_pruner.go` — and
---     it runs inside loopruntime-api, which `db.AssertRequestPoolIsolated` forces to connect
+--     it runs inside loop-runtime-api, which `db.AssertRequestPoolIsolated` forces to connect
 --     as a non-owner. It never held this bypass, so removing it changes nothing for
 --     the pruner. (That pruner deleting zero rows under RLS is a real defect, tracked
 --     separately; it is not caused by, and not fixed by, this migration.)

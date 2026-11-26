@@ -21,7 +21,7 @@ import (
 // on POST /api/v1/projects. Reuses the M4 integration harness (projectCapStore / projectCapSeed /
 // projectCapCleanup / violationCount / isCapError) from project_cap_per_account_test.go.
 //
-//	DATABASE_URL=postgres://loopruntime:loopruntime@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapOnDeploy -race -v
+//	DATABASE_URL=postgres://loop_runtime:loop_runtime@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapOnDeploy -race -v
 
 // mustEnsure drives the deploy-time auto-create (nil tx → EnsureProject opens its
 // own tx and account-lock, the EC-1 own-tx branch). Mirrors what the build-submit

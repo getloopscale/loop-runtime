@@ -132,7 +132,7 @@
       },
       "targets": [
         {
-          "expr": "{namespace=\"secrets-system\", loopruntime_component=\"vault-audit\"}",
+          "expr": "{namespace=\"secrets-system\", loop_runtime_component=\"vault-audit\"}",
           "refId": "A"
         }
       ]

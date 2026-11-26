@@ -71,7 +71,7 @@
       "targetBlank": false,
       "title": "Platform Overview",
       "type": "link",
-      "url": "/d/loopruntime-platform-overview"
+      "url": "/d/loop-runtime-platform-overview"
     },
     {
       "asDropdown": false,
@@ -82,7 +82,7 @@
       "targetBlank": false,
       "title": "Build Pipeline",
       "type": "link",
-      "url": "/d/loopruntime-build-pipeline"
+      "url": "/d/loop-runtime-build-pipeline"
     },
     {
       "asDropdown": false,
@@ -93,7 +93,7 @@
       "targetBlank": false,
       "title": "Per-Tenant Health",
       "type": "link",
-      "url": "/d/loopruntime-per-tenant"
+      "url": "/d/loop-runtime-per-tenant"
     },
     {
       "asDropdown": false,
@@ -104,7 +104,7 @@
       "targetBlank": false,
       "title": "Drift Detection",
       "type": "link",
-      "url": "/d/loopruntime-drift-detection"
+      "url": "/d/loop-runtime-drift-detection"
     },
     {
       "asDropdown": false,
@@ -115,7 +115,7 @@
       "targetBlank": false,
       "title": "Failure Investigation",
       "type": "link",
-      "url": "/d/loopruntime-failure-investigation"
+      "url": "/d/loop-runtime-failure-investigation"
     },
     {
       "asDropdown": false,
@@ -126,7 +126,7 @@
       "targetBlank": false,
       "title": "Component Inventory",
       "type": "link",
-      "url": "/d/loopruntime-component-inventory"
+      "url": "/d/loop-runtime-component-inventory"
     },
     {
       "asDropdown": false,
@@ -137,7 +137,7 @@
       "targetBlank": false,
       "title": "Tenant Workloads",
       "type": "link",
-      "url": "/d/loopruntime-tenant-workloads"
+      "url": "/d/loop-runtime-tenant-workloads"
     },
     {
       "asDropdown": false,
@@ -148,7 +148,7 @@
       "targetBlank": false,
       "title": "Tenant Ecosystem",
       "type": "link",
-      "url": "/d/loopruntime-tenant-ecosystem"
+      "url": "/d/loop-runtime-tenant-ecosystem"
     }
   ],
   "panels": [
@@ -235,7 +235,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=\"kubernetes-pods\", app=\"loopruntime-api\"}",
+          "expr": "up{job=\"kubernetes-pods\", app=\"loop-runtime-api\"}",
           "legendFormat": "",
           "refId": "A"
         }
@@ -308,7 +308,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "clamp_max(loopruntime_postgres_connections_active + loopruntime_postgres_connections_idle, 1)",
+          "expr": "clamp_max(loop_runtime_postgres_connections_active + loop_runtime_postgres_connections_idle, 1)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -454,7 +454,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "clamp_max(count(kube_pod_status_phase{namespace=\"loopruntime-system\", pod=~\"argocd-application-controller.*\", phase=\"Running\"}), 1)",
+          "expr": "clamp_max(count(kube_pod_status_phase{namespace=\"loop-runtime-system\", pod=~\"argocd-application-controller.*\", phase=\"Running\"}), 1)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -717,7 +717,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopruntime_api_requests_total[5m])) by (status)",
+          "expr": "sum(rate(loop_runtime_api_requests_total[5m])) by (status)",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
@@ -761,7 +761,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopruntime_api_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -811,7 +811,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopruntime_releasing_builds) or vector(0)",
+          "expr": "sum(loop_runtime_releasing_builds) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -869,7 +869,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "loopruntime_build_queue_depth or vector(0)",
+          "expr": "loop_runtime_build_queue_depth or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -927,7 +927,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopruntime_releases_pending) or vector(0)",
+          "expr": "sum(loop_runtime_releases_pending) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1000,7 +1000,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "max(loopruntime_api_leader_status)",
+          "expr": "max(loop_runtime_api_leader_status)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1059,12 +1059,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopruntime_deploys_total[5m]))",
+          "expr": "sum(rate(loop_runtime_deploys_total[5m]))",
           "legendFormat": "Deploys/s",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(loopruntime_build_duration_seconds_count[5m]))",
+          "expr": "sum(rate(loop_runtime_build_duration_seconds_count[5m]))",
           "legendFormat": "Builds completed/s",
           "refId": "B"
         }
@@ -1108,7 +1108,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopruntime_build_duration_seconds_bucket[5m])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_build_duration_seconds_bucket[5m])) by (le)) or vector(0)",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -1151,7 +1151,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopruntime_lock_acquired_total[5m]))",
+          "expr": "sum(rate(loop_runtime_lock_acquired_total[5m]))",
           "legendFormat": "Acquisitions/s",
           "refId": "A"
         }
@@ -1194,7 +1194,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopruntime_idempotency_cache_misses_total[5m]))",
+          "expr": "sum(rate(loop_runtime_idempotency_cache_misses_total[5m]))",
           "legendFormat": "Misses/s",
           "refId": "A"
         }
@@ -1253,22 +1253,22 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(loopruntime_postgres_connections_active)",
+          "expr": "sum(loop_runtime_postgres_connections_active)",
           "legendFormat": "Active",
           "refId": "A"
         },
         {
-          "expr": "sum(loopruntime_postgres_connections_idle)",
+          "expr": "sum(loop_runtime_postgres_connections_idle)",
           "legendFormat": "Idle",
           "refId": "B"
         },
         {
-          "expr": "sum(loopruntime_postgres_connections_total)",
+          "expr": "sum(loop_runtime_postgres_connections_total)",
           "legendFormat": "Total",
           "refId": "C"
         },
         {
-          "expr": "max(loopruntime_postgres_pool_max_conns)",
+          "expr": "max(loop_runtime_postgres_pool_max_conns)",
           "legendFormat": "Max",
           "refId": "D"
         }
@@ -1361,7 +1361,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "loopruntime_sse_connections_active or vector(0)",
+          "expr": "loop_runtime_sse_connections_active or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1371,7 +1371,7 @@
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": [
-    "loopruntime",
+    "loop-runtime",
     "home"
   ],
   "templating": {
@@ -1399,6 +1399,6 @@
   "timepicker": {},
   "timezone": "browser",
   "title": "LoopRuntime — System Home",
-  "uid": "loopruntime-home",
+  "uid": "loop-runtime-home",
   "version": 1
 }

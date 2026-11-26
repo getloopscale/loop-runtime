@@ -105,9 +105,9 @@ func (a *Authenticator) MiddlewareWithTTL(validator TokenValidator, store Member
 			// RequireSignature flag and unsigned requests are rejected.
 			if serviceAuth := r.Header.Get("X-Service-Auth"); serviceAuth != "" {
 				if a.validateServiceAuth(serviceAuth) {
-					userID := r.Header.Get("X-LoopRuntime-User-ID")
-					tenantID := r.Header.Get("X-LoopRuntime-Tenant")
-					email := r.Header.Get("X-LoopRuntime-Email")
+					userID := r.Header.Get("X-Loop-Runtime-User-ID")
+					tenantID := r.Header.Get("X-Loop-Runtime-Tenant")
+					email := r.Header.Get("X-Loop-Runtime-Email")
 					if userID != "" && tenantID != "" {
 						// Dual-control: Ed25519 signature gate (Phase 1 + Phase 2 logic).
 						sigPresent := hasServiceAuthSignatureHeaders(r)
@@ -181,14 +181,14 @@ func (a *Authenticator) MiddlewareWithTTL(validator TokenValidator, store Member
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 
 			// Validate token (with bounded cache)
-			ctx, span := otel.Tracer("loopruntime-api").Start(r.Context(), "loopruntime.api.auth.validate_token",
+			ctx, span := otel.Tracer("loop-runtime-api").Start(r.Context(), "loop-runtime.api.auth.validate_token",
 				trace.WithAttributes(
-					attribute.String("loopruntime.auth.result", "pending"),
+					attribute.String("loop-runtime.auth.result", "pending"),
 				))
 
 			result, err := validateWithCache(ctx, validator, cache, &cacheSize, token, cacheTTL)
 			if err != nil {
-				span.SetAttributes(attribute.String("loopruntime.auth.result", "failure"))
+				span.SetAttributes(attribute.String("loop-runtime.auth.result", "failure"))
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
 				span.End()
@@ -205,7 +205,7 @@ func (a *Authenticator) MiddlewareWithTTL(validator TokenValidator, store Member
 				}
 				return
 			}
-			span.SetAttributes(attribute.String("loopruntime.auth.result", "success"))
+			span.SetAttributes(attribute.String("loop-runtime.auth.result", "success"))
 			span.End()
 
 			// Resolve tenant
@@ -231,9 +231,9 @@ func (a *Authenticator) MiddlewareWithTTL(validator TokenValidator, store Member
 				uc.TenantID = memberships[0].TenantID
 				uc.Role = memberships[0].Role
 			default:
-				requestedTenant := r.Header.Get("X-LoopRuntime-Tenant")
+				requestedTenant := r.Header.Get("X-Loop-Runtime-Tenant")
 				if requestedTenant == "" {
-					writeError(w, http.StatusConflict, "TENANT_REQUIRED", "Multiple teams available. Set the X-LoopRuntime-Tenant header")
+					writeError(w, http.StatusConflict, "TENANT_REQUIRED", "Multiple teams available. Set the X-Loop-Runtime-Tenant header")
 					return
 				}
 				found := false
@@ -247,7 +247,7 @@ func (a *Authenticator) MiddlewareWithTTL(validator TokenValidator, store Member
 				}
 				if !found {
 					a.emitFailure(r, AuthFailureTenantNotFound,
-						"Bearer user not a member of X-LoopRuntime-Tenant",
+						"Bearer user not a member of X-Loop-Runtime-Tenant",
 						map[string]any{"requested_tenant": requestedTenant, "user_id": result.UserID})
 					writeError(w, http.StatusForbidden, "TENANT_NOT_FOUND", "You are not a member of the requested team")
 					return

@@ -26,7 +26,7 @@
 #     creates the ALB, so the ALB's name is not known yet when it renders;
 #   - every other Promtail (core, the cells) pushes to the ALB, whose DNSName
 #     `task staging:platform` reads from the Ingress status after the build sync and
-#     exports as LOOPRUNTIME_LOKI_ALB_DNS_NAME. On the emulator (`emulator.endpoint`) an ALB
+#     exports as LOOP_RUNTIME_LOKI_ALB_DNS_NAME. On the emulator (`emulator.endpoint`) an ALB
 #     is reached at the emulator's endpoint with its DNSName in the path
 #     (/_aws/elasticloadbalancing/<DNSName>/...), the addressing its ALBs serve without a
 #     socket of their own; on AWS the DNSName resolves in the VPC.
@@ -40,7 +40,7 @@ config:
 {{- if $colocated }}
     - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
 {{- else }}
-{{- $lokiALB := requiredEnv "LOOPRUNTIME_LOKI_ALB_DNS_NAME" }}
+{{- $lokiALB := requiredEnv "LOOP_RUNTIME_LOKI_ALB_DNS_NAME" }}
 {{- with .Environment.Values | getOrNil "emulator.endpoint" }}
     - url: {{ printf "%s/_aws/elasticloadbalancing/%s/loki/api/v1/push" . $lokiALB }}
 {{- else }}
@@ -92,23 +92,23 @@ config:
                 correlation_id: correlation_id
           - labels:
               correlation_id:
-          # ::loopruntime:: marker extractor (J-17 Layer 1 completion 2026-06-09)
-          # Argo Workflow steps emit `::loopruntime:: phase=X step=Y level=Z msg=...`
-          # via api/internal/argo/loopruntime_log.go wrapper. loopruntime-api LogQL queries
-          # filter user-view logs by `loopruntime_phase=~".+"` so only curated
+          # ::loop-runtime:: marker extractor (J-17 Layer 1 completion 2026-06-09)
+          # Argo Workflow steps emit `::loop-runtime:: phase=X step=Y level=Z msg=...`
+          # via api/internal/argo/loop_runtime_log.go wrapper. loop-runtime-api LogQL queries
+          # filter user-view logs by `loop_runtime_phase=~".+"` so only curated
           # milestones surface — raw stdout reserved for operator debug
           # mode (?mode=debug + X-Service-Auth). Until 2026-06-09 the
           # consumer side was wired but Promtail never extracted the
           # labels — LIVE-caught sponsor walkthrough: dashboard showed
           # empty logs even though Loki had data. Regex extracts the 3
           # canonical fields; non-marker lines no-op and stay ingested
-          # without loopruntime_phase label (visible only via Debug=true).
+          # without loop_runtime_phase label (visible only via Debug=true).
           - regex:
-              expression: '^::loopruntime:: phase=(?P<loopruntime_phase>\S+) step=(?P<loopruntime_step>\S+) level=(?P<loopruntime_level>\S+)'
+              expression: '^::loop-runtime:: phase=(?P<loop_runtime_phase>\S+) step=(?P<loop_runtime_step>\S+) level=(?P<loop_runtime_level>\S+)'
           - labels:
-              loopruntime_phase:
-              loopruntime_step:
-              loopruntime_level:
+              loop_runtime_phase:
+              loop_runtime_step:
+              loop_runtime_level:
         relabel_configs:
           # Only collect logs from Argo Workflow pods (have workflow label)
           - source_labels: [__meta_kubernetes_pod_label_workflows_argoproj_io_workflow]
@@ -137,7 +137,7 @@ config:
 
       # ────────────────────────────────────────────────────────────
       # Job 2 — LoopRuntime tenant runtime pods (workload cluster) + control
-      # plane pods (loopruntime-api, loopruntime-cloud, operators) on mgmt.
+      # plane pods (loop-runtime-api, loop-console, operators) on mgmt.
       #
       # Beta Logs Gate finding (2026-05-13): the previous promtail
       # configuration ONLY scraped pods with the
@@ -152,14 +152,14 @@ config:
       #   - `runtime.getloopscale.com/tenant` set: the pods of a tenant app, which the
       #     manifest renderer labels with tenant, project, app-name and
       #     environment.
-      #   - `runtime.getloopscale.com/component` set: loopruntime-api, loopruntime-cloud and
+      #   - `runtime.getloopscale.com/component` set: loop-runtime-api, loop-console and
       #     the 4 split operators (each chart sets this label).
       # The tenant side used to read the namespace's
       # `runtime.getloopscale.com/managed-by` label. Pod service discovery gives no
       # namespace label, so every tenant pod was dropped
       # (getloopscale/loop-runtime#110).
       # ────────────────────────────────────────────────────────────
-      - job_name: loopruntime-pods
+      - job_name: loop-runtime-pods
         kubernetes_sd_configs:
           - role: pod
         pipeline_stages:
@@ -174,20 +174,20 @@ config:
               level:
         relabel_configs:
           # Keep pods that are EITHER a tenant runtime workload OR a
-          # loopruntime-* control-plane component. The "regex" form here is
+          # loop-runtime-* control-plane component. The "regex" form here is
           # the Prometheus union-of-selectors idiom — both labels are
           # OR'd via `__tmp_keep` intermediate.
           - source_labels: [__meta_kubernetes_pod_label_runtime_getloopscale_com_tenant]
             regex: ".+"
             action: replace
-            target_label: __tmp_loopruntime_tenant
+            target_label: __tmp_loop_runtime_tenant
             replacement: "1"
           - source_labels: [__meta_kubernetes_pod_label_runtime_getloopscale_com_component]
             regex: ".+"
             action: replace
-            target_label: __tmp_loopruntime_component
+            target_label: __tmp_loop_runtime_component
             replacement: "1"
-          - source_labels: [__tmp_loopruntime_tenant, __tmp_loopruntime_component]
+          - source_labels: [__tmp_loop_runtime_tenant, __tmp_loop_runtime_component]
             regex: "(1.*|.*1)"
             action: keep
           # __path__ for log file tailing
@@ -202,7 +202,7 @@ config:
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_container_name]
             target_label: container
-          # `app` is the name loopruntime-api filters a project's runtime logs by
+          # `app` is the name loop-runtime-api filters a project's runtime logs by
           # (`{namespace=..., app=...}`, api/internal/logs/loki/client.go): the
           # tenant app's name, or a platform component's runtime.getloopscale.com/app.
           - source_labels: [__meta_kubernetes_pod_label_runtime_getloopscale_com_app]
@@ -213,16 +213,16 @@ config:
             target_label: app
           - source_labels: [__meta_kubernetes_pod_label_runtime_getloopscale_com_tenant]
             regex: "(.+)"
-            target_label: loopruntime_tenant
+            target_label: loop_runtime_tenant
           - source_labels: [__meta_kubernetes_pod_label_runtime_getloopscale_com_project]
             regex: "(.+)"
-            target_label: loopruntime_project
+            target_label: loop_runtime_project
           - source_labels: [__meta_kubernetes_pod_label_runtime_getloopscale_com_environment]
             regex: "(.+)"
-            target_label: loopruntime_environment
+            target_label: loop_runtime_environment
           - source_labels: [__meta_kubernetes_pod_label_runtime_getloopscale_com_component]
             regex: "(.+)"
-            target_label: loopruntime_component
+            target_label: loop_runtime_component
 
       # ────────────────────────────────────────────────────────────────
       # T8.1 of plan 2026-06-02-openbao-adoption v1.4 — Vault audit log
@@ -258,13 +258,13 @@ config:
             regex: "(.+)"
             target_label: app
           # Fixed component label so Grafana dashboards can filter
-          - target_label: loopruntime_component
+          - target_label: loop_runtime_component
             replacement: vault-audit
 {{- if .Environment.Values.profile.awsLoadBalancerController }}
 
       # ────────────────────────────────────────────────────────────────
       # The AWS environments: each cluster's platform pods. The jobs above
-      # select workload pods (Argo workflows, tenants, loopruntime components),
+      # select workload pods (Argo workflows, tenants, loop-runtime components),
       # which an idle cell or build cluster does not run, so its Promtail had
       # nothing to ship. These are the cluster's own ingress, controllers and
       # monitoring, without the pods another job already tails.
@@ -284,7 +284,7 @@ config:
                 - argocd
                 - keda
                 # The data-plane services, their PostgreSQL and its operator.
-                - loopruntime-data-plane
+                - loop-runtime-data-plane
                 - cnpg-system
         pipeline_stages:
           - cri: {}

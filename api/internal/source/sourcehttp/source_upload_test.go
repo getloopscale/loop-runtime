@@ -48,7 +48,7 @@ func (f *fakeSourceStore) PushBundle(_ context.Context, tenantID, projectID stri
 	return source.PushResult{SourceID: f.CommitSHA}, nil
 }
 
-// Plan B v3.1 T-B.3 (2026-06-05) — wire field renamed `loopruntime_yaml` →
+// Plan B v3.1 T-B.3 (2026-06-05) — wire field renamed `loop_runtime_yaml` →
 // `services_json`. Helpers updated to send the JSON payload as either
 // text field or file upload (mirroring CLI behavior). Parameter names
 // preserved for diff cleanliness; semantics now point at services.json.
@@ -234,7 +234,7 @@ func TestSourceUpload(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy loopruntime_yaml is rejected with the E-009 migration hint", func(t *testing.T) {
+	t.Run("legacy loop_runtime_yaml is rejected with the E-009 migration hint", func(t *testing.T) {
 		// B-184. This subtest replaces SIX that stood here asserting the legacy
 		// loopzero.yaml flow (missing name -> 422, 0 apps -> 422, ambiguous app type ->
 		// 422, worker type -> 200, server-without-port -> 422, frontend type ->
@@ -250,18 +250,18 @@ func TestSourceUpload(t *testing.T) {
 		// parameter, so they could not have passed if they had run.
 		//
 		// What replaced the flow had no test at all: the handler now REJECTS a
-		// legacy loopruntime_yaml field with an E-009 migration hint
+		// legacy loop_runtime_yaml field with an E-009 migration hint
 		// (api/internal/source/sourcehttp/source.go, EC-B3-7). Six dead assertions
 		// about a deleted behaviour become one live assertion about the behaviour
 		// that deleted it.
 		store := newFakeSourceStore("sha-legacy-reject")
 		handler := sourceroutes.NewSourceHandler(store)
 
-		// Arrange -- the legacy loopruntime_yaml field in the manifest slot, then a
+		// Arrange -- the legacy loop_runtime_yaml field in the manifest slot, then a
 		// bundle, and NO services_json.
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
-		if err := writer.WriteField("loopruntime_yaml", "apps:\n  api:\n    type: server\n    port: 3000\n"); err != nil {
+		if err := writer.WriteField("loop_runtime_yaml", "apps:\n  api:\n    type: server\n    port: 3000\n"); err != nil {
 			t.Fatal(err)
 		}
 		part, err := writer.CreateFormFile("bundle", "bundle.git")
@@ -284,7 +284,7 @@ func TestSourceUpload(t *testing.T) {
 
 		// Assert
 		if rec.Code != http.StatusUnprocessableEntity {
-			t.Fatalf("expected 422 for legacy loopruntime_yaml, got %d: %s", rec.Code, rec.Body.String())
+			t.Fatalf("expected 422 for legacy loop_runtime_yaml, got %d: %s", rec.Code, rec.Body.String())
 		}
 		var errResp map[string]any
 		if err := json.NewDecoder(rec.Body).Decode(&errResp); err != nil {
@@ -314,7 +314,7 @@ func TestSourceUpload(t *testing.T) {
 		// We don't actually create a 500MB body — we set Content-Length header
 		body := &bytes.Buffer{}
 		writer := multipart.NewWriter(body)
-		_ = writer.WriteField("loopruntime_yaml", validLoopRuntimeYAML)
+		_ = writer.WriteField("loop_runtime_yaml", validLoopRuntimeYAML)
 		part, _ := writer.CreateFormFile("bundle", "bundle.git")
 		_, _ = part.Write([]byte("small"))
 		_ = writer.Close()
@@ -378,8 +378,8 @@ func TestSourceUpload(t *testing.T) {
 		}
 	})
 
-	t.Run("loopruntime_yaml sent as file upload (CLI behavior) returns 200", func(t *testing.T) {
-		// Arrange — the CLI sends loopruntime_yaml as a file (Blob with filename),
+	t.Run("loop_runtime_yaml sent as file upload (CLI behavior) returns 200", func(t *testing.T) {
+		// Arrange — the CLI sends loop_runtime_yaml as a file (Blob with filename),
 		// not as a text field. The API must accept both forms.
 		store := newFakeSourceStore("sha-file-yaml")
 		handler := sourceroutes.NewSourceHandler(store)

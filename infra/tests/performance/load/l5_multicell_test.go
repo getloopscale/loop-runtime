@@ -20,27 +20,27 @@ import (
 //   - CrossCellAggregator returns merged results
 //   - Cell failure does not propagate (blast radius = 1 cell)
 //
-// Gated on LOOPRUNTIME_REAL_DEPLOY=1 + LOOPRUNTIME_LOAD_LEVEL=l5 (or "all") +
-// LOOPRUNTIME_MULTI_CELL=1.
+// Gated on LOOP_RUNTIME_REAL_DEPLOY=1 + LOOP_RUNTIME_LOAD_LEVEL=l5 (or "all") +
+// LOOP_RUNTIME_MULTI_CELL=1.
 
 func requireL5Harness(t *testing.T) *RealDeployHarness {
 	t.Helper()
-	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
-		t.Skip("set LOOPRUNTIME_REAL_DEPLOY=1")
+	if os.Getenv("LOOP_RUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("set LOOP_RUNTIME_REAL_DEPLOY=1")
 	}
-	level := os.Getenv("LOOPRUNTIME_LOAD_LEVEL")
+	level := os.Getenv("LOOP_RUNTIME_LOAD_LEVEL")
 	if level != "l5" && level != "all" {
-		t.Skipf("set LOOPRUNTIME_LOAD_LEVEL=l5 (got %q)", level)
+		t.Skipf("set LOOP_RUNTIME_LOAD_LEVEL=l5 (got %q)", level)
 	}
-	if os.Getenv("LOOPRUNTIME_MULTI_CELL") != "1" {
-		t.Skip("set LOOPRUNTIME_MULTI_CELL=1 (requires provisioned cells)")
+	if os.Getenv("LOOP_RUNTIME_MULTI_CELL") != "1" {
+		t.Skip("set LOOP_RUNTIME_MULTI_CELL=1 (requires provisioned cells)")
 	}
 
 	harness, err := NewRealDeployHarness(RealDeployConfig{
-		APIURL:      os.Getenv("LOOPRUNTIME_API_URL"),
-		AppDomain:   os.Getenv("LOOPRUNTIME_APP_DOMAIN"),
-		ServiceAuth: os.Getenv("LOOPRUNTIME_SERVICE_AUTH"),
-		FixturePath: envOr("LOOPRUNTIME_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
+		APIURL:      os.Getenv("LOOP_RUNTIME_API_URL"),
+		AppDomain:   os.Getenv("LOOP_RUNTIME_APP_DOMAIN"),
+		ServiceAuth: os.Getenv("LOOP_RUNTIME_SERVICE_AUTH"),
+		FixturePath: envOr("LOOP_RUNTIME_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)

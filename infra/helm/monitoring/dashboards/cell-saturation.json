@@ -9,7 +9,7 @@
   "uid": "cell-saturation",
   "description": "Per-cell capacity headroom. Yellow = warn, Red = admission control should start rejecting. Thresholds defined in cell-budget.",
   "tags": [
-    "loopruntime",
+    "loop-runtime",
     "cell",
     "saturation",
     "roadmap-04"
@@ -47,7 +47,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "query": "label_values(loopruntime_cell_tenant_count, cell_id)",
+        "query": "label_values(loop_runtime_cell_tenant_count, cell_id)",
         "refresh": 2,
         "includeAll": true,
         "multi": false,
@@ -62,7 +62,7 @@
     {
       "title": "PG pool — active connections",
       "type": "gauge",
-      "description": "Active PG connections from loopruntime-api pool. Pool default max=25 (DB_MAX_CONNS). DO managed PG db-s-2vcpu-4gb max_connections=97. Yellow=15 (60%), Red=20 (80%).",
+      "description": "Active PG connections from loop-runtime-api pool. Pool default max=25 (DB_MAX_CONNS). DO managed PG db-s-2vcpu-4gb max_connections=97. Yellow=15 (60%), Red=20 (80%).",
       "gridPos": {
         "h": 8,
         "w": 6,
@@ -75,7 +75,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "loopruntime_postgres_connections_active",
+          "expr": "loop_runtime_postgres_connections_active",
           "legendFormat": "active"
         }
       ],
@@ -134,7 +134,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "loopruntime_build_queue_depth",
+          "expr": "loop_runtime_build_queue_depth",
           "legendFormat": "queued"
         }
       ],
@@ -179,7 +179,7 @@
     {
       "title": "Active builds",
       "type": "gauge",
-      "description": "Builds currently RUNNING or RELEASING. RUNNING = loopruntime_builds_active - loopruntime_build_queue_depth, RELEASING = loopruntime_releasing_builds. Yellow=8, Red=10.",
+      "description": "Builds currently RUNNING or RELEASING. RUNNING = loop_runtime_builds_active - loop_runtime_build_queue_depth, RELEASING = loop_runtime_releasing_builds. Yellow=8, Red=10.",
       "gridPos": {
         "h": 8,
         "w": 6,
@@ -192,7 +192,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(sum(loopruntime_builds_active) or vector(0)) - (loopruntime_build_queue_depth or vector(0)) + (loopruntime_releasing_builds or vector(0))",
+          "expr": "(sum(loop_runtime_builds_active) or vector(0)) - (loop_runtime_build_queue_depth or vector(0)) + (loop_runtime_releasing_builds or vector(0))",
           "legendFormat": "running+releasing"
         }
       ],
@@ -250,7 +250,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "loopruntime_cell_tenant_count{cell_id=~\"$cell\"}",
+          "expr": "loop_runtime_cell_tenant_count{cell_id=~\"$cell\"}",
           "legendFormat": "{{ cell_id }}"
         }
       ],
@@ -308,7 +308,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(loopruntime_api_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(loop_runtime_api_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p99"
         },
         {
@@ -316,7 +316,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(loopruntime_api_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(loop_runtime_api_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p50"
         }
       ],
@@ -368,7 +368,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(loopruntime_gitops_operation_duration_seconds_bucket{operation=\"push\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(loop_runtime_gitops_operation_duration_seconds_bucket{operation=\"push\"}[5m])))",
           "legendFormat": "p99"
         }
       ],
@@ -474,7 +474,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "loopruntime_api_leader_status",
+          "expr": "loop_runtime_api_leader_status",
           "legendFormat": "leader"
         }
       ],

@@ -22,13 +22,13 @@ import (
 // causing `kubectl apply` to fail with "Conflict: object has been modified"
 // on any namespace/cluster where the same-named Secret has different state.
 func TestBackupRestore_NoResourceVersionConflict(t *testing.T) {
-	if os.Getenv("LOOPRUNTIME_K3D_INTEGRATION") == "" {
-		t.Skip("set LOOPRUNTIME_K3D_INTEGRATION=1 to run k3d integration tests")
+	if os.Getenv("LOOP_RUNTIME_K3D_INTEGRATION") == "" {
+		t.Skip("set LOOP_RUNTIME_K3D_INTEGRATION=1 to run k3d integration tests")
 	}
 
 	// Find latest backup file
 	home := os.Getenv("HOME")
-	backupDir := home + "/.loopruntime/backups"
+	backupDir := home + "/.loop-runtime/backups"
 	entries, err := os.ReadDir(backupDir)
 	if err != nil {
 		t.Skipf("backup dir not found: %v", err)
@@ -67,7 +67,7 @@ func TestBackupRestore_NoResourceVersionConflict(t *testing.T) {
 	}
 
 	// Verify it's still valid YAML by attempting kubectl apply --dry-run=server
-	cmd := exec.Command("kubectl", "--context", "k3d-loopruntime-test",
+	cmd := exec.Command("kubectl", "--context", "k3d-loop-runtime-test",
 		"apply", "-f", backupPath, "--dry-run=server")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -88,12 +88,12 @@ func TestBackupRestore_NoResourceVersionConflict(t *testing.T) {
 // TestBackupRestore_AllSecretsPresent validates that the backup file
 // contains all 6 expected LoopRuntime-managed Secrets.
 func TestBackupRestore_AllSecretsPresent(t *testing.T) {
-	if os.Getenv("LOOPRUNTIME_K3D_INTEGRATION") == "" {
-		t.Skip("set LOOPRUNTIME_K3D_INTEGRATION=1 to run k3d integration tests")
+	if os.Getenv("LOOP_RUNTIME_K3D_INTEGRATION") == "" {
+		t.Skip("set LOOP_RUNTIME_K3D_INTEGRATION=1 to run k3d integration tests")
 	}
 
 	home := os.Getenv("HOME")
-	backupDir := home + "/.loopruntime/backups"
+	backupDir := home + "/.loop-runtime/backups"
 	entries, err := os.ReadDir(backupDir)
 	if err != nil {
 		t.Skipf("backup dir not found: %v", err)
@@ -117,10 +117,10 @@ func TestBackupRestore_AllSecretsPresent(t *testing.T) {
 	content := string(data)
 
 	expected := []string{
-		"loopruntime-db-credentials",
+		"loop-runtime-db-credentials",
 		"gitea-admin",
 		"minio-credentials",
-		"loopruntime-registry-pull",
+		"loop-runtime-registry-pull",
 	}
 	for _, name := range expected {
 		if !strings.Contains(content, "name: "+name) {
@@ -131,12 +131,12 @@ func TestBackupRestore_AllSecretsPresent(t *testing.T) {
 
 // TestBackupRestore_BackupFilePermissions verifies backup files are 0600.
 func TestBackupRestore_BackupFilePermissions(t *testing.T) {
-	if os.Getenv("LOOPRUNTIME_K3D_INTEGRATION") == "" {
-		t.Skip("set LOOPRUNTIME_K3D_INTEGRATION=1 to run k3d integration tests")
+	if os.Getenv("LOOP_RUNTIME_K3D_INTEGRATION") == "" {
+		t.Skip("set LOOP_RUNTIME_K3D_INTEGRATION=1 to run k3d integration tests")
 	}
 
 	home := os.Getenv("HOME")
-	backupDir := home + "/.loopruntime/backups"
+	backupDir := home + "/.loop-runtime/backups"
 	entries, err := os.ReadDir(backupDir)
 	if err != nil {
 		t.Skip("no backup dir")

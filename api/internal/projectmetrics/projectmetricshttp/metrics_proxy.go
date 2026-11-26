@@ -200,10 +200,10 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Rollout that LoopScale does not instrument, so its replicas come from pod
 // readiness and its traffic from the cell's ingress (getloopscale/loop-runtime#107).
 const (
-	appReadyReplicasSeries         = "loopruntime_app:kube_pod_status_ready:sum"
-	appRequestRateSeries           = "loopruntime_app:traefik_service_requests:rate5m"
-	appRequestRateByClassSeries    = "loopruntime_app_status_class:traefik_service_requests:rate5m"
-	appRequestDurationBucketSeries = "loopruntime_app_le:traefik_service_request_duration_seconds_bucket:rate5m"
+	appReadyReplicasSeries         = "loop_runtime_app:kube_pod_status_ready:sum"
+	appRequestRateSeries           = "loop_runtime_app:traefik_service_requests:rate5m"
+	appRequestRateByClassSeries    = "loop_runtime_app_status_class:traefik_service_requests:rate5m"
+	appRequestDurationBucketSeries = "loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m"
 )
 
 // buildPromQL injects mandatory tenant_id + project labels into the Prometheus
@@ -226,7 +226,7 @@ func buildPromQL(signal, tenantID, projectName string) string {
 	case "p95_latency":
 		return fmt.Sprintf("histogram_quantile(0.95, sum by (le) (%s{%s}))", appRequestDurationBucketSeries, labels)
 	case "error_rate":
-		// loopruntime#170: error_rate is displayed as a PERCENTAGE by the dashboard
+		// loop-runtime#170: error_rate is displayed as a PERCENTAGE by the dashboard
 		// (SignalGrid fmtPercent). It must be the ratio of 5xx to total requests
 		// ×100, NOT a raw 5xx req/s rate. An app that answered no 5xx has no 5xx
 		// series, so the numerator falls back to 0 and the app reads 0%. With no
@@ -237,11 +237,11 @@ func buildPromQL(signal, tenantID, projectName string) string {
 	case "rps":
 		return fmt.Sprintf("sum(%s{%s})", appRequestRateSeries, labels)
 	case "status_terminal":
-		return fmt.Sprintf("loopruntime_release_status_terminal{%s}", labels)
+		return fmt.Sprintf("loop_runtime_release_status_terminal{%s}", labels)
 	case "alerts_active":
 		return fmt.Sprintf("ALERTS{alertstate=%q,%s}", "firing", labels)
 	case "last_deploy_time":
-		return fmt.Sprintf("loopruntime_release_last_deploy_timestamp_seconds{%s}", labels)
+		return fmt.Sprintf("loop_runtime_release_last_deploy_timestamp_seconds{%s}", labels)
 	default:
 		return fmt.Sprintf("up{%s}", labels)
 	}

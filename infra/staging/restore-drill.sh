@@ -9,7 +9,7 @@
 #
 #   infra/staging/restore-drill.sh <sha>
 #
-# The drill is `loopruntime-ops drill postgres-restore`, built from this checkout: it writes
+# The drill is `loop-runtime-ops drill postgres-restore`, built from this checkout: it writes
 # a marker to the running cluster, recovers a temporary cluster from the bucket, compares
 # and deletes it. The nightly rebuild runs this on the environment it has just built
 # (infra/staging/rebuild.sh); it can be run by hand at any time.
@@ -17,13 +17,13 @@ set -euo pipefail
 
 REPO="${DEPLOY_REPO:-getloopscale/loop-runtime}"
 GITHUB_API="${DEPLOY_GITHUB_API:-https://api.github.com}"
-STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loopruntime-staging/deploy}"
-TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loopruntime-staging/github-status-token}"
+STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loop-runtime-staging/deploy}"
+TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loop-runtime-staging/github-status-token}"
 STATUS_URL_BASE="${DEPLOY_STATUS_URL_BASE:-https://staging.getloopscale.com}"
-KUBECONFIG_FILE="${VALIDATE_KUBECONFIG:-/var/lib/loopruntime-staging/kubeconfig}"
+KUBECONFIG_FILE="${VALIDATE_KUBECONFIG:-/var/lib/loop-runtime-staging/kubeconfig}"
 EMULATOR_DIR="${VALIDATE_EMULATOR_DIR:-/var/lib/aws-emulator/.aws/emulator/9597}"
-ALARM="${RESTORE_DRILL_ALARM_CMD:-/usr/local/lib/loopruntime-staging/alarm.sh}"
-# The drill itself. Empty: loopruntime-ops built from this checkout, against the core cluster.
+ALARM="${RESTORE_DRILL_ALARM_CMD:-/usr/local/lib/loop-runtime-staging/alarm.sh}"
+# The drill itself. Empty: loop-runtime-ops built from this checkout, against the core cluster.
 DRILL_CMD="${RESTORE_DRILL_CMD:-}"
 
 log() { printf '%s staging-restore-drill: %s\n' "$(date -u +%FT%TZ)" "$*" >&2; }
@@ -51,9 +51,9 @@ drill_log="$logs/restore-drill-$(date -u +%Y%m%dT%H%M%SZ).log"
 
 if [[ -z "$DRILL_CMD" ]]; then
   root="$(cd "$(dirname "$0")/../.." && pwd)"
-  bin="$STATE_DIR/restore-drill/loopruntime-ops"
+  bin="$STATE_DIR/restore-drill/loop-runtime-ops"
   mkdir -p "$(dirname "$bin")"
-  (cd "$root/cmd/loopruntime-ops" && GOWORK=off go build -o "$bin" .) || fail "could not build loopruntime-ops from $root"
+  (cd "$root/cmd/loop-runtime-ops" && GOWORK=off go build -o "$bin" .) || fail "could not build loop-runtime-ops from $root"
   export KUBECONFIG="$KUBECONFIG_FILE" AWS_CONFIG_FILE="$EMULATOR_DIR/config" \
     AWS_SHARED_CREDENTIALS_FILE="$EMULATOR_DIR/emulator_credentials" AWS_CA_BUNDLE="$EMULATOR_DIR/ca.pem" \
     AWS_ENDPOINT_URL=https://localhost:9597 AWS_REGION=us-east-1

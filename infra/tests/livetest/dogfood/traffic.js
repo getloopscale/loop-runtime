@@ -17,7 +17,7 @@
 //          --vus 50 \
 //          --out experimental-prometheus-rw \
 //          -e API_URL=https://api.drill.drill.getloopscale.com \
-//          -e API_TOKEN="$(cat ~/.loopruntime/drill-credentials.json | jq -r .token)" \
+//          -e API_TOKEN="$(cat ~/.loop-runtime/drill-credentials.json | jq -r .token)" \
 //          infra/tests/livetest/dogfood/traffic.js
 //
 // Profile rationale:
@@ -38,10 +38,10 @@ import { Counter, Trend } from 'k6/metrics';
 // ── Custom metrics emitted into Prometheus ─────────────────────────
 // These augment the built-in `http_req_duration` etc. with
 // LoopRuntime-specific naming so dashboards can target a stable label set.
-const phase6Errors = new Counter('loopruntime_phase6_errors_total');
-const phase6Reads = new Counter('loopruntime_phase6_reads_total');
-const phase6Writes = new Counter('loopruntime_phase6_writes_total');
-const phase6LatencyMs = new Trend('loopruntime_phase6_request_latency_ms');
+const phase6Errors = new Counter('loop_runtime_phase6_errors_total');
+const phase6Reads = new Counter('loop_runtime_phase6_reads_total');
+const phase6Writes = new Counter('loop_runtime_phase6_writes_total');
+const phase6LatencyMs = new Trend('loop_runtime_phase6_request_latency_ms');
 
 // ── Options ─────────────────────────────────────────────────────────
 // Default 4h duration + 50 VUs. Override via env vars to script
@@ -60,7 +60,7 @@ export const options = {
     // is only a fraction of traffic.
     http_req_duration: ['p(95)<1500'], // 1.5s p95 for API surface — generous
     http_req_failed: ['rate<0.01'], // <1% 5xx rate
-    loopruntime_phase6_errors_total: ['count<100'], // absolute error cap over 4h
+    loop_runtime_phase6_errors_total: ['count<100'], // absolute error cap over 4h
   },
 };
 
@@ -69,8 +69,8 @@ const TOKEN = __ENV.API_TOKEN || '';
 const TENANT = __ENV.TENANT_ID || 'phase6-soak-tenant';
 
 const authHeaders = TOKEN
-  ? { Authorization: `Bearer ${TOKEN}`, 'X-LoopRuntime-Tenant': TENANT }
-  : { 'X-LoopRuntime-Tenant': TENANT };
+  ? { Authorization: `Bearer ${TOKEN}`, 'X-Loop-Runtime-Tenant': TENANT }
+  : { 'X-Loop-Runtime-Tenant': TENANT };
 
 // ── Read-heavy operations (3 of every 4 iterations) ─────────────────
 function readPath() {

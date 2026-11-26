@@ -46,7 +46,7 @@ DELETE FROM cells WHERE cell_id = 'cell-1'
 UPDATE cells
    SET cell_id      = 'cell-0',
        display_name = 'Cell 0',
-       notes        = 'Primeira cell. 1:1 com o cluster loopruntime-cell-0. Absorveu cell-default ' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
+       notes        = 'Primeira cell. 1:1 com o cluster loop-runtime-cell-0. Absorveu cell-default ' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
                    || '(que era sentinela de "ainda nao resolvido", nao uma cell) e cell-1 ' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
                    || '(que nomeava esta mesma maquina). ADR 2026-08-09.' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
  WHERE cell_id = 'cell-default'
@@ -68,7 +68,7 @@ UPDATE release_app_attestations SET cell_id = 'cell-1' WHERE cell_id = 'cell-2';
 UPDATE cells
    SET cell_id      = 'cell-1',
        display_name = 'Cell 1',
-       notes        = 'Segunda cell. 1:1 com o cluster loopruntime-cell-1. Era cell-2; renumerada ' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
+       notes        = 'Segunda cell. 1:1 com o cluster loop-runtime-cell-1. Era cell-2; renumerada ' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
                    || 'quando a fusao liberou o numero. O status nao muda aqui — quem admite ' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
                    || 'trafego continua sendo decidido pelo canary. ADR 2026-08-09.' -- english-only: applied migration history stays verbatim; migration 000067 rewrites this text in English
  WHERE cell_id = 'cell-2'

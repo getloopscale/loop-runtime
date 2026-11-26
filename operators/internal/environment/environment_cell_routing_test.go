@@ -41,7 +41,7 @@ func (f cellFactory) For(_ context.Context, cellID string) (client.Client, error
 	return c, nil
 }
 
-const routedNamespace = "loopruntime-tn-cell-loja-production"
+const routedNamespace = "loop-runtime-tn-cell-loja-production"
 
 func routedTenant(cellID string) *loopruntimev1.Tenant {
 	return &loopruntimev1.Tenant{

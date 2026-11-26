@@ -30,7 +30,7 @@ func newPreviewMgr(t *testing.T) *PreviewCRManager {
 func samplePreviewSpec() PreviewCRSpec {
 	return PreviewCRSpec{
 		Name:      "prev-1111",
-		TenantID:  "tn-loopruntime",
+		TenantID:  "tn-loop-runtime",
 		ProjectID: "my-project",
 		PRNumber:  42,
 		Branch:    "feat/x",
@@ -51,8 +51,8 @@ func TestEnsurePreviewCR_CreateWhenNotFound(t *testing.T) {
 	if err := mgr.Client.Get(context.Background(), client.ObjectKey{Namespace: k8s.ControlPlaneNamespace, Name: spec.Name}, &got); err != nil {
 		t.Fatalf("expected PreviewEnvironment CR to exist: %v", err)
 	}
-	if got.Spec.TenantID != "tn-loopruntime" {
-		t.Errorf("tenantId = %q, want tn-loopruntime", got.Spec.TenantID)
+	if got.Spec.TenantID != "tn-loop-runtime" {
+		t.Errorf("tenantId = %q, want tn-loop-runtime", got.Spec.TenantID)
 	}
 	if got.Spec.ProjectID != "my-project" {
 		t.Errorf("projectId = %q, want my-project", got.Spec.ProjectID)
@@ -70,8 +70,8 @@ func TestEnsurePreviewCR_CreateWhenNotFound(t *testing.T) {
 		t.Errorf("expiresAt = %v, want %v", got.Spec.ExpiresAt, spec.ExpiresAt)
 	}
 	// Labels enable the DeletePreviewCR label-selector lookup (J-23 bug #5).
-	if got.Labels["runtime.getloopscale.com/tenant"] != "tn-loopruntime" {
-		t.Errorf("label runtime.getloopscale.com/tenant = %q, want tn-loopruntime", got.Labels["runtime.getloopscale.com/tenant"])
+	if got.Labels["runtime.getloopscale.com/tenant"] != "tn-loop-runtime" {
+		t.Errorf("label runtime.getloopscale.com/tenant = %q, want tn-loop-runtime", got.Labels["runtime.getloopscale.com/tenant"])
 	}
 	if got.Labels["runtime.getloopscale.com/pr-number"] != "42" {
 		t.Errorf("label runtime.getloopscale.com/pr-number = %q, want 42", got.Labels["runtime.getloopscale.com/pr-number"])
@@ -175,7 +175,7 @@ func TestDeletePreviewCR_IdempotentWhenAbsent(t *testing.T) {
 func TestEnsurePreviewCR_CarriesThePublicURL(t *testing.T) {
 	mgr := newPreviewMgr(t)
 	spec := samplePreviewSpec()
-	spec.PublicURL = "https://tn-loopruntime-my-project-web-preview-pr-42.preview.example.test"
+	spec.PublicURL = "https://tn-loop-runtime-my-project-web-preview-pr-42.preview.example.test"
 
 	if err := mgr.EnsurePreviewCR(context.Background(), spec); err != nil {
 		t.Fatalf("EnsurePreviewCR: %v", err)

@@ -17,7 +17,7 @@ import (
 // env var is configured, the bootstrap installs the in-memory store.
 // This is the dev / single-replica default; production must override.
 func TestSetupServiceAuthNonceStore_DefaultsToInMemory(t *testing.T) {
-	t.Setenv("LOOPRUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR", "")
+	t.Setenv("LOOP_RUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR", "")
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	store, err := setupServiceAuthNonceStore(logger)
@@ -34,12 +34,12 @@ func TestSetupServiceAuthNonceStore_DefaultsToInMemory(t *testing.T) {
 }
 
 // TestSetupServiceAuthNonceStore_InstallsRedisWhenAddrSet — happy
-// path: operator sets LOOPRUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR pointing at a
+// path: operator sets LOOP_RUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR pointing at a
 // reachable Redis. Bootstrap installs *RedisNonceStore so multi-replica
 // API replay protection works.
 func TestSetupServiceAuthNonceStore_InstallsRedisWhenAddrSet(t *testing.T) {
 	srv := miniredis.RunT(t)
-	t.Setenv("LOOPRUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR", srv.Addr())
+	t.Setenv("LOOP_RUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR", srv.Addr())
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	store, err := setupServiceAuthNonceStore(logger)
@@ -58,7 +58,7 @@ func TestSetupServiceAuthNonceStore_InstallsRedisWhenAddrSet(t *testing.T) {
 // same class as ErrDatabaseURLNotSet; the orchestrator restarts the pod until
 // Redis answers. A Redis outage during a request already fails closed.
 func TestSetupServiceAuthNonceStore_RedisUnreachableRefusesToBoot(t *testing.T) {
-	t.Setenv("LOOPRUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR", "127.0.0.1:1") // closed port
+	t.Setenv("LOOP_RUNTIME_SERVICE_AUTH_NONCE_REDIS_ADDR", "127.0.0.1:1") // closed port
 
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	if store, err := setupServiceAuthNonceStore(logger); err == nil {

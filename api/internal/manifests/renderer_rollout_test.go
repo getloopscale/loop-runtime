@@ -17,12 +17,12 @@ func rolloutBaseInput() RenderInput {
 		Environment:         "production",
 		BuildID:             "build-1",
 		ReleaseID:           "rel-1",
-		BaseDomain:          "loopruntime.local",
-		ClusterIssuerName:   "loopruntime-ca-issuer",
+		BaseDomain:          "loop-runtime.local",
+		ClusterIssuerName:   "loop-runtime-ca-issuer",
 		ProgressiveDelivery: true,
 		PrometheusAddress:   "http://prometheus.monitoring.svc.cluster.local:9090",
 		Apps: []AppManifestInput{
-			{Name: "api", Type: "server", Port: 3000, ImageRef: "k3d-loopruntime-registry:5000/acme/webapp/api@sha256:abc"},
+			{Name: "api", Type: "server", Port: 3000, ImageRef: "k3d-loop-runtime-registry:5000/acme/webapp/api@sha256:abc"},
 		},
 	}
 }
@@ -96,8 +96,8 @@ func TestBuildRollout_ProPlanWithAnalysis(t *testing.T) {
 		t.Errorf("pro step 2 should be analysis (Prometheus configured)")
 	} else if len(steps[2].Analysis.Templates) != 1 {
 		t.Errorf("pro step 2 should reference 1 template, got %d", len(steps[2].Analysis.Templates))
-	} else if steps[2].Analysis.Templates[0].TemplateName != "loopruntime-canary-analysis" {
-		t.Errorf("template name = %q, want loopruntime-canary-analysis", steps[2].Analysis.Templates[0].TemplateName)
+	} else if steps[2].Analysis.Templates[0].TemplateName != "loop-runtime-canary-analysis" {
+		t.Errorf("template name = %q, want loop-runtime-canary-analysis", steps[2].Analysis.Templates[0].TemplateName)
 	}
 	// Step 3: setWeight 50
 	if steps[3].SetWeight == nil || *steps[3].SetWeight != 50 {
@@ -156,7 +156,7 @@ func TestBuildRollout_EmptyPlanDefaultsToStarter(t *testing.T) {
 func TestBuildRollout_WorkerHasPauseOnlyNoTraffic(t *testing.T) {
 	input := rolloutBaseInput()
 	input.Apps = []AppManifestInput{
-		{Name: "background", Type: "worker", ImageRef: "k3d-loopruntime-registry:5000/acme/webapp/background@sha256:abc"},
+		{Name: "background", Type: "worker", ImageRef: "k3d-loop-runtime-registry:5000/acme/webapp/background@sha256:abc"},
 	}
 	rollout := buildRollout(scopeFor(t, input), input.Apps[0], 0)
 
@@ -224,8 +224,8 @@ func TestBuildAnalysisTemplate_PrometheusQuery(t *testing.T) {
 	if at.Kind != "AnalysisTemplate" {
 		t.Errorf("Kind = %q, want AnalysisTemplate", at.Kind)
 	}
-	if at.Metadata.Name != "loopruntime-canary-analysis" {
-		t.Errorf("name = %q, want loopruntime-canary-analysis", at.Metadata.Name)
+	if at.Metadata.Name != "loop-runtime-canary-analysis" {
+		t.Errorf("name = %q, want loop-runtime-canary-analysis", at.Metadata.Name)
 	}
 	if len(at.Spec.Metrics) != 1 {
 		t.Fatalf("should have 1 metric, got %d", len(at.Spec.Metrics))
@@ -309,7 +309,7 @@ func TestRenderServerApp_LegacyDeployment_FlagFalse(t *testing.T) {
 func TestRenderWorkerApp_ProgressiveDelivery_RolloutNoServices(t *testing.T) {
 	input := rolloutBaseInput()
 	input.Apps = []AppManifestInput{
-		{Name: "background", Type: "worker", ImageRef: "k3d-loopruntime-registry:5000/acme/webapp/background@sha256:abc"},
+		{Name: "background", Type: "worker", ImageRef: "k3d-loop-runtime-registry:5000/acme/webapp/background@sha256:abc"},
 	}
 	docs, err := renderWorkerApp(scopeFor(t, input), input.Apps[0])
 	if err != nil {
@@ -371,7 +371,7 @@ func TestBuildHPA_TargetsRollout_Progressive(t *testing.T) {
 		Name:        "api",
 		Type:        "server",
 		Port:        3000,
-		ImageRef:    "k3d-loopruntime-registry:5000/acme/webapp/api@sha256:abc",
+		ImageRef:    "k3d-loop-runtime-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 1, MaxReplicas: 5, TargetCPU: 70},
 	}
 	hpa := buildHPA(scopeFor(t, input), app)
@@ -390,7 +390,7 @@ func TestBuildHPA_TargetsDeployment_Legacy(t *testing.T) {
 		Name:        "api",
 		Type:        "server",
 		Port:        3000,
-		ImageRef:    "k3d-loopruntime-registry:5000/acme/webapp/api@sha256:abc",
+		ImageRef:    "k3d-loop-runtime-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 1, MaxReplicas: 5, TargetCPU: 70},
 	}
 	hpa := buildHPA(scopeFor(t, input), app)
@@ -405,7 +405,7 @@ func TestBuildScaledObject_TargetsRollout_Progressive(t *testing.T) {
 		Name:        "api",
 		Type:        "server",
 		Port:        3000,
-		ImageRef:    "k3d-loopruntime-registry:5000/acme/webapp/api@sha256:abc",
+		ImageRef:    "k3d-loop-runtime-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 5, TargetCPU: 70},
 	}
 	so := buildScaledObject(scopeFor(t, input), app)
@@ -428,7 +428,7 @@ func TestBuildScaledObject_LegacyDeployment(t *testing.T) {
 		Name:        "api",
 		Type:        "server",
 		Port:        3000,
-		ImageRef:    "k3d-loopruntime-registry:5000/acme/webapp/api@sha256:abc",
+		ImageRef:    "k3d-loop-runtime-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 5, TargetCPU: 70},
 	}
 	so := buildScaledObject(scopeFor(t, input), app)
@@ -447,7 +447,7 @@ func TestBuildHTTPScaledObject_PointsToStableService_Progressive(t *testing.T) {
 		Name:        "api",
 		Type:        "server",
 		Port:        3000,
-		ImageRef:    "k3d-loopruntime-registry:5000/acme/webapp/api@sha256:abc",
+		ImageRef:    "k3d-loop-runtime-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 3},
 	}
 	httpSO := buildHTTPScaledObject(scopeFor(t, input), app)
@@ -465,7 +465,7 @@ func TestBuildHTTPScaledObject_PointsToServiceLegacy(t *testing.T) {
 		Name:        "api",
 		Type:        "server",
 		Port:        3000,
-		ImageRef:    "k3d-loopruntime-registry:5000/acme/webapp/api@sha256:abc",
+		ImageRef:    "k3d-loop-runtime-registry:5000/acme/webapp/api@sha256:abc",
 		Autoscaling: &AutoscalingConfig{MinReplicas: 0, MaxReplicas: 3},
 	}
 	httpSO := buildHTTPScaledObject(scopeFor(t, input), app)

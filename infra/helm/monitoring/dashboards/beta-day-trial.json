@@ -53,7 +53,7 @@
       "id": 1,
       "targets": [
         {
-          "expr": "(86400 - (time() - on() (max(loopruntime_beta_trial_started_at_seconds{tenant=\"$beta_tenant\"}) or vector(time())))) / 3600",
+          "expr": "(86400 - (time() - on() (max(loop_runtime_beta_trial_started_at_seconds{tenant=\"$beta_tenant\"}) or vector(time())))) / 3600",
           "legendFormat": "hours remaining",
           "refId": "A"
         }
@@ -81,7 +81,7 @@
         },
         "overrides": []
       },
-      "description": "Hours left in the 24h day-trial window. Requires recording rule `loopruntime_beta_trial_started_at_seconds{tenant=X}` set when the customer's first service goes Healthy (operator emits via curl to the API's /internal/recording endpoint — falls back to `vector(time())` if not set, which shows the trial as expired-by-default to force operator to wire the rule)."
+      "description": "Hours left in the 24h day-trial window. Requires recording rule `loop_runtime_beta_trial_started_at_seconds{tenant=X}` set when the customer's first service goes Healthy (operator emits via curl to the API's /internal/recording endpoint — falls back to `vector(time())` if not set, which shows the trial as expired-by-default to force operator to wire the rule)."
     },
     {
       "title": "Incidents in last 24h (SEV-1 + SEV-2)",
@@ -91,7 +91,7 @@
       "id": 2,
       "targets": [
         {
-          "expr": "sum(increase(loopruntime_sev_1_total{tenant=\"$beta_tenant\"}[24h])) + sum(increase(loopruntime_sev_2_total{tenant=\"$beta_tenant\"}[24h]))",
+          "expr": "sum(increase(loop_runtime_sev_1_total{tenant=\"$beta_tenant\"}[24h])) + sum(increase(loop_runtime_sev_2_total{tenant=\"$beta_tenant\"}[24h]))",
           "legendFormat": "incidents",
           "refId": "A"
         }
@@ -128,12 +128,12 @@
       "id": 3,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopruntime_api_request_duration_seconds_bucket{tenant=\"$beta_tenant\"}[5m])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_api_request_duration_seconds_bucket{tenant=\"$beta_tenant\"}[5m])) by (le)) * 1000",
           "legendFormat": "p95",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopruntime_api_request_duration_seconds_bucket{tenant=\"$beta_tenant\"}[5m])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_api_request_duration_seconds_bucket{tenant=\"$beta_tenant\"}[5m])) by (le)) * 1000",
           "legendFormat": "p50",
           "refId": "B"
         }
@@ -174,7 +174,7 @@
       "id": 4,
       "targets": [
         {
-          "expr": "sum by (status) (increase(loopruntime_builds_total{tenant=\"$beta_tenant\"}[24h]))",
+          "expr": "sum by (status) (increase(loop_runtime_builds_total{tenant=\"$beta_tenant\"}[24h]))",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
@@ -235,7 +235,7 @@
       "id": 5,
       "targets": [
         {
-          "expr": "sum(increase(loopruntime_audit_log_total{action=~\"auth\\\\..*\",tenant=\"$beta_tenant\"}[1h]))",
+          "expr": "sum(increase(loop_runtime_audit_log_total{action=~\"auth\\\\..*\",tenant=\"$beta_tenant\"}[1h]))",
           "legendFormat": "auth failures/hour",
           "refId": "A"
         }
@@ -273,7 +273,7 @@
       "id": 6,
       "targets": [
         {
-          "expr": "loopruntime_domain_tls_expiry_days",
+          "expr": "loop_runtime_domain_tls_expiry_days",
           "legendFormat": "{{domain}}",
           "refId": "A"
         }
@@ -301,7 +301,7 @@
         },
         "overrides": []
       },
-      "description": "Audit §6.C.8 dropped the `tenant` label from this gauge (cardinality cap), so this panel intentionally shows ALL domains and the operator filters by domain name in the legend. For per-tenant attribution see the `loopruntime_custom_domains_total{tenant}` join described in beta-weekly-status-template.md."
+      "description": "Audit §6.C.8 dropped the `tenant` label from this gauge (cardinality cap), so this panel intentionally shows ALL domains and the operator filters by domain name in the legend. For per-tenant attribution see the `loop_runtime_custom_domains_total{tenant}` join described in beta-weekly-status-template.md."
     }
   ],
   "refresh": "30s",

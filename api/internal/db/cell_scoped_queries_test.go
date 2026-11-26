@@ -28,7 +28,7 @@ func osReadFile(relPath string) ([]byte, error) {
 //
 // The tests use a minimal fake DBTX that captures the last query + args.
 // They do NOT touch a real Postgres connection; a separate integration
-// test (gated by LOOPRUNTIME_TEST_DB_URL) covers the full round-trip including
+// test (gated by LOOP_RUNTIME_TEST_DB_URL) covers the full round-trip including
 // EXPLAIN plan verification.
 
 // dbtest.RecordingDBTX is a DBTX fake that captures queries without executing them.

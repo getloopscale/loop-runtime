@@ -122,7 +122,7 @@ func TestDockerfileNaming_GeneratorMatchesConsumer(t *testing.T) {
 		{"multi-3", "worker", 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// Generator side (loopruntimePacksDockerfileStep uses dockerfilePathForApp)
+			// Generator side (loopRuntimePacksDockerfileStep uses dockerfilePathForApp)
 			generatorPath := dockerfilePathForApp(tc.appName, tc.totalApps)
 			// Consumer side (buildkitTemplateForApp uses same function)
 			consumerPath := dockerfilePathForApp(tc.appName, tc.totalApps)

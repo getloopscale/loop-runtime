@@ -28,7 +28,7 @@ import {
   healthCheck,
   verifyAppLive,
   appURL,
-} from './lib/loopruntime-api.js';
+} from './lib/loop-runtime-api.js';
 import { thresholdsFor } from './lib/thresholds.js';
 import { loadBundleBytes } from '../fixtures/bundle-builder.js';
 
@@ -66,7 +66,7 @@ export default function (data) {
   const iterID = exec.scenario.iterationInTest;
   const tenantID = `k6-l2-tn-${iterID}`;
   const userID = `k6-l2-user-${iterID}`;
-  const email = `k6-l2-${iterID}@loopruntime.test`;
+  const email = `k6-l2-${iterID}@loop-runtime.test`;
   const projectName = `k6-l2-app-${iterID}`;
 
   let commitSHA, buildID;
@@ -121,11 +121,11 @@ export function handleSummary(data) {
 
 function buildReport(title, data) {
   const m = data.metrics;
-  const succeeded = (m.loopruntime_build_succeeded || {}).values || {};
-  const verified = (m.loopruntime_app_verified || {}).values || {};
-  const deploy = (m.loopruntime_deploy_duration_ms || {}).values || {};
-  const verify = (m.loopruntime_app_verify_duration_ms || {}).values || {};
-  const admissionRej = (m.loopruntime_admission_reject_total || {}).values || {};
+  const succeeded = (m.loop_runtime_build_succeeded || {}).values || {};
+  const verified = (m.loop_runtime_app_verified || {}).values || {};
+  const deploy = (m.loop_runtime_deploy_duration_ms || {}).values || {};
+  const verify = (m.loop_runtime_app_verify_duration_ms || {}).values || {};
+  const admissionRej = (m.loop_runtime_admission_reject_total || {}).values || {};
   return `
 ═════════════════════════════════════════════════════════
   ${title}

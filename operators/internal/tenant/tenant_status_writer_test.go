@@ -186,7 +186,7 @@ func TestTenantStatusPatch_CarriesNoResourceVersion(t *testing.T) {
 	base := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "tn-probe",
-			Namespace:       "loopruntime-system",
+			Namespace:       "loop-runtime-system",
 			ResourceVersion: "101",
 			Finalizers:      []string{tenantFinalizer},
 		},
@@ -219,7 +219,7 @@ func TestTenantStatusPatch_CarriesNoResourceVersion(t *testing.T) {
 // reproduces the defect, so the assertion above is measuring rather than hoping.
 func TestTenantStatusPatch_StaleSnapshotWouldCarryResourceVersion(t *testing.T) {
 	before := &loopruntimev1.Tenant{
-		ObjectMeta: metav1.ObjectMeta{Name: "tn-probe", Namespace: "loopruntime-system", ResourceVersion: "100"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tn-probe", Namespace: "loop-runtime-system", ResourceVersion: "100"},
 		Status:     loopruntimev1.TenantStatus{Phase: loopruntimev1.TenantPhase("Provisioning")},
 	}
 	after := before.DeepCopy()
@@ -265,7 +265,7 @@ func TestTenantDeletion_StatusPatchesAreCorrectlyAnchored(t *testing.T) {
 	seed := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "tn-probe",
-			Namespace:         "loopruntime-system",
+			Namespace:         "loop-runtime-system",
 			Generation:        7,
 			Finalizers:        []string{tenantFinalizer},
 			DeletionTimestamp: &now,

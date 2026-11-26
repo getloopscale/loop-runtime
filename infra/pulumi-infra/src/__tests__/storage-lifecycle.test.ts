@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 // SD-15.8 (infrastructure system-design audit, 2026-09-07, as corrected).
 //
 // The audit first reported that source bundles were never expired. That was
-// false: infra/helm/minio/lifecycle-job.yaml expires the loopruntime-builds bucket at
+// false: infra/helm/minio/lifecycle-job.yaml expires the loop-runtime-builds bucket at
 // 30 days, applied by `task infra:install:core`.
 //
 // What survived the correction is narrower and real. That ILM rule is applied

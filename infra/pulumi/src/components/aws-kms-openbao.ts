@@ -38,7 +38,7 @@ import * as pulumi from "@pulumi/pulumi";
  * Outputs (exported in index.ts):
  *   - awsKmsKeyArn          (string, public)
  *   - awsKmsKeyId           (string, public)
- *   - awsKmsKeyAlias        (string, public, default "alias/loopruntime-openbao-{stack}")
+ *   - awsKmsKeyAlias        (string, public, default "alias/loop-runtime-openbao-{stack}")
  *   - awsUnsealUserName     (string, public)
  *   - awsUnsealAccessKeyId  (secret)
  *   - awsUnsealSecretKey    (secret)
@@ -69,7 +69,7 @@ export interface AwsKmsOpenbaoArgs {
   readonly description?: string;
 
   /**
-   * KMS key alias suffix. Final alias is "alias/loopruntime-openbao-{suffix}".
+   * KMS key alias suffix. Final alias is "alias/loop-runtime-openbao-{suffix}".
    * Defaults to stackName.
    */
   readonly aliasSuffix?: string;
@@ -91,7 +91,7 @@ export interface AwsKmsOpenbaoOutputs {
 /** Tag map applied to KMS key + IAM user for audit/ownership. */
 export function buildResourceTags(stackName: string): Record<string, string> {
   return {
-    Project: "loopruntime",
+    Project: "loop-runtime",
     Component: "openbao",
     Stack: stackName,
     Purpose: "openbao-auto-unseal",
@@ -169,7 +169,7 @@ export function createAwsKmsOpenbao(args: AwsKmsOpenbaoArgs): AwsKmsOpenbaoOutpu
     "OpenBao Raft seal key — DO NOT DELETE. Loss permanently invalidates DO Spaces snapshots.";
   const tags = buildResourceTags(args.stackName);
 
-  // The provider must be explicitly regional — the default loopruntime-infra
+  // The provider must be explicitly regional — the default loop-runtime-infra
   // Pulumi run uses DigitalOcean provider, so AWS resources need their
   // own provider instance scoped to the configured region.
   //
@@ -215,7 +215,7 @@ export function createAwsKmsOpenbao(args: AwsKmsOpenbaoArgs): AwsKmsOpenbaoOutpu
   const kmsAlias = new aws.kms.Alias(
     "openbao-unseal-alias",
     {
-      name: `alias/loopruntime-openbao-${aliasSuffix}`,
+      name: `alias/loop-runtime-openbao-${aliasSuffix}`,
       targetKeyId: kmsKey.keyId,
     },
     { provider: awsProvider },
@@ -230,7 +230,7 @@ export function createAwsKmsOpenbao(args: AwsKmsOpenbaoArgs): AwsKmsOpenbaoOutpu
     "openbao-unseal-user",
     {
       name: `openbao-unseal-${args.stackName}`,
-      path: "/loopruntime/",
+      path: "/loop-runtime/",
       tags,
     },
     { provider: awsProvider },

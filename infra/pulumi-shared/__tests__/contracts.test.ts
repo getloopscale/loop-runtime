@@ -5,7 +5,7 @@
 //
 // Plan 2026-05-15 T2.2 (audit M05 gap "2 stacks sem testes"): pulumi-shared
 // is the SINGLE SOURCE OF TRUTH for cross-stack output types. Any drift
-// here cascades to loopruntime-infra + loopruntime-platform mid-`pulumi up`. These tests
+// here cascades to loop-runtime-infra + loop-runtime-platform mid-`pulumi up`. These tests
 // lock the type surface as a compile-time + structure-time contract.
 //
 // What we test (and why):
@@ -31,7 +31,7 @@ describe("ClusterRegistryEntry", () => {
   it("compiles with all required fields", () => {
     const entry: ClusterRegistryEntry = {
       clusterId: "cluster-1",
-      clusterName: "loopruntime-core",
+      clusterName: "loop-runtime-core",
       role: "mgmt",
       region: "sfo3",
       kubeconfig: "<secret>",
@@ -44,7 +44,7 @@ describe("ClusterRegistryEntry", () => {
   it("optional cellId may be omitted", () => {
     const entry: ClusterRegistryEntry = {
       clusterId: "cluster-2",
-      clusterName: "loopruntime-build",
+      clusterName: "loop-runtime-build",
       role: "build",
       region: "sfo3",
       kubeconfig: "<secret>",
@@ -74,7 +74,7 @@ describe("ClusterRegistry", () => {
     const registry: ClusterRegistry = {
       "cluster-1": {
         clusterId: "cluster-1",
-        clusterName: "loopruntime-core",
+        clusterName: "loop-runtime-core",
         role: "mgmt",
         region: "sfo3",
         kubeconfig: "",
@@ -90,13 +90,13 @@ describe("InfraStackOutputs — public schema", () => {
   it("compiles with all 21 required fields", () => {
     const outputs: InfraStackOutputs = {
       clusterRegistry: {},
-      mgmtClusterName: "loopruntime-core",
+      mgmtClusterName: "loop-runtime-core",
       mgmtClusterEndpoint: "",
       mgmtKubeconfig: "",
-      buildClusterName: "loopruntime-build",
+      buildClusterName: "loop-runtime-build",
       buildClusterEndpoint: "",
       buildKubeconfig: "",
-      runtimeClusterName: "loopruntime-runtime",
+      runtimeClusterName: "loop-runtime-runtime",
       runtimeClusterEndpoint: "",
       runtimeKubeconfig: "",
       dbHost: "",
@@ -117,7 +117,7 @@ describe("InfraStackOutputs — public schema", () => {
     // Spot-check the multi-cluster primary contract
     expect(outputs.clusterRegistry).toEqual({});
     // Spot-check legacy singleton outputs (deprecated but preserved)
-    expect(outputs.mgmtClusterName).toBe("loopruntime-core");
+    expect(outputs.mgmtClusterName).toBe("loop-runtime-core");
   });
 });
 
@@ -142,7 +142,7 @@ describe("PlatformStackOutputs — public schema", () => {
       ...outputs,
       cfTunnelId: "tunnel-1",
       cfKvNamespaceId: "kv-1",
-      cfWorkerName: "loopruntime-static",
+      cfWorkerName: "loop-runtime-static",
     };
     expect(withCF.cfTunnelId).toBe("tunnel-1");
   });

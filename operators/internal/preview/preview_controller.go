@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopRuntime Authors
 
 // Package preview implements the PreviewEnvironment controller
-// (operator binary `loopruntime-preview-operator` per ADR-0023). Owns
+// (operator binary `loop-runtime-preview-operator` per ADR-0023). Owns
 // the preview-environment lifecycle: namespace creation +
 // NetworkPolicy + ResourceQuota + LimitRange + TTL expiry +
 // condition-wait + cleanup retry. State machine per CLAUDE.md §
@@ -54,7 +54,7 @@ var previewSM = statemachine.NewPreviewTypedMachine()
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=previewenvironments/finalizers,verbs=update
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants,verbs=get;list;watch
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch
 type PreviewReconciler struct {
 	client.Client
 	// RuntimeFactory resolves the runtime cluster of a preview's cell. It is
@@ -306,17 +306,17 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewLimitRangeReady,
 		metav1.ConditionTrue, "Ready", "Preview limit range applied", preview.Generation)
 
-	// J-23 (2026-06-07) — pods rendered by the API reference SA `loopruntime-app`
+	// J-23 (2026-06-07) — pods rendered by the API reference SA `loop-runtime-app`
 	// in their spec. Create the SA right after the isolation primitives so
 	// ArgoCD sync finds it on first apply. Ordering matters: SA must exist
 	// before the first deploy, otherwise pods CrashLoop with "serviceaccount
-	// loopruntime-app not found" and the workload-readiness gate keeps requeuing.
+	// loop-runtime-app not found" and the workload-readiness gate keeps requeuing.
 	if saErr := r.reconcilePreviewServiceAccount(ctx, rtClient, nsName); saErr != nil {
 		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewServiceAccountReady, "ApplyFailed", saErr.Error(), "SA failure")
 		return ctrl.Result{}, saErr
 	}
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewServiceAccountReady,
-		metav1.ConditionTrue, "Ready", "Preview loopruntime-app ServiceAccount provisioned", preview.Generation)
+		metav1.ConditionTrue, "Ready", "Preview loop-runtime-app ServiceAccount provisioned", preview.Generation)
 
 	// Report the URL the API computed (pkg/naming.PreviewURL), eagerly so it
 	// is visible while the workload comes up. The controller holds no URL

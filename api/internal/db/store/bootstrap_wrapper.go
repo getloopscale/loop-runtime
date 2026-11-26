@@ -10,7 +10,7 @@ package store
 // T2.2 (Batch B #3) of plan 2026-05-29-sqlc-migration-plan
 // v1.3.
 //
-// main builds it on the cross-tenant background pool (loopruntime_worker): the
+// main builds it on the cross-tenant background pool (loop_runtime_worker): the
 // tenant being created does not exist yet, so no tenant scope can be set
 // on the session, and tenants/tenant_members/subscriptions are under
 // fail-closed RLS (migration 000062).

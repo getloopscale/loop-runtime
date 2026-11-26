@@ -14,7 +14,7 @@
 #   - clusteranalysistemplates.argoproj.io/v1alpha1
 
 apiVersion: v2
-name: loopruntime-argo-rollouts
+name: loop-runtime-argo-rollouts
 description: Argo Rollouts wrapper for LoopRuntime platform progressive delivery (canary)
 type: application
 version: 0.1.0

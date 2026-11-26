@@ -222,7 +222,7 @@ var (
 	// ErrNoActiveRelease is returned when rollback or promote is attempted but
 	// the target environment has no active release. Shared by both flows so the
 	// message must stay neutral (no "rollback"/"promote"/"source environment"
-	// wording). Regression: loopruntime-cloud#166 (CRITICAL) — user hit the pre-fix
+	// wording). Regression: loop-console#166 (CRITICAL) — user hit the pre-fix
 	// promote-flavored wording during a rollback path and mis-diagnosed the
 	// upstream cause. Test pin: TestErrNoActiveRelease_MessageIsOperationNeutral.
 	ErrNoActiveRelease = &LoopRuntimeError{
@@ -325,7 +325,7 @@ var (
 	// bundle to the source store fails AND the typed PushBundleError mapping
 	// (PushBundleErrorReason.Summary in api/internal/source) cannot identify a
 	// specific reason. Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3
-	// (closes loopruntime-cloud#31): replaced the legacy actively-misleading
+	// (closes loop-console#31): replaced the legacy actively-misleading
 	// "Ensure your git history is clean and try again." text (the user's git
 	// history WAS clean in the QA report; the real failure was elsewhere)
 	// with a neutral fallback. Specific actionable text is now emitted by
@@ -615,8 +615,8 @@ func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *Loop
 // ErrBuildSubmitFailed is the canonical LoopRuntimeError for build-trigger failures
 // that REACH the orchestrator (vs INTERNAL_ERROR which stays for unexpected
 // failures outside the orchestrator's responsibility). Sprint 6 plan qa-
-// sprint6-cleanup-2026-06-25 ADR D3 (closes loopruntime-cloud#34) — distinct code
-// so loopruntime-cli + dashboards + telemetry can switch on it cleanly.
+// sprint6-cleanup-2026-06-25 ADR D3 (closes loop-console#34) — distinct code
+// so loop-runtime-cli + dashboards + telemetry can switch on it cleanly.
 var ErrBuildSubmitFailed = &LoopRuntimeError{
 	Code:    "BUILD_SUBMIT_FAILED",
 	Message: "The build could not be triggered. Try again, or check `loopscale status` for details.",
@@ -629,7 +629,7 @@ var ErrBuildSubmitFailed = &LoopRuntimeError{
 // placeholders by the caller's scrubbing — the message falls back to
 // "<summary>. Reference: <traceID>. Contact support if it persists." so the
 // operator still has a handle on the server-side log without the cause
-// leaking (Red Team loopruntime-cloud#35). An empty summary (a reason no catalog
+// leaking (Red Team loop-console#35). An empty summary (a reason no catalog
 // names) uses base.Message and never the detail.
 //
 // The reason → summary catalogs live next to the reason enums that own them
@@ -706,7 +706,7 @@ func isUsefulDetail(detail string) bool {
 //
 // Before this sentinel, a backend that could not encrypt surfaced as the same
 // generic INTERNAL_ERROR as a database outage or any other 5xx. `loopscale secret
-// set` answered "Something went wrong" and nothing persisted, while `loopruntime
+// set` answered "Something went wrong" and nothing persisted, while `loop-runtime
 // secret list` kept working (reads do not encrypt). The issue author had to
 // GUESS the cause from which project happened to work — their report offers a
 // hypothesis, not a diagnosis, because the API supplied nothing to diagnose.

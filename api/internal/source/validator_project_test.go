@@ -62,7 +62,7 @@ func TestValidateServicesJSON_V2_Project_OK(t *testing.T) {
 }
 
 // EC-2 absorbed: v1 fallback MUST stay "services-bundle" so live tenants
-// keep their Gitea repos intact (loopruntime-source-{tenant}-services-bundle).
+// keep their Gitea repos intact (loop-runtime-source-{tenant}-services-bundle).
 func TestValidateServicesJSON_V1_NoProject_FallbackServicesBundle(t *testing.T) {
 	m, err := ValidateServicesJSONNative(validV1ServicesJSON(), EnvBlocklistEnforce)
 	if err != nil {

@@ -56,15 +56,15 @@ func TestCheckVersion_ServerError(t *testing.T) {
 func TestValidateToken_BearerHeaderSent(t *testing.T) {
 	c, _ := newClient(t, func(w http.ResponseWriter, r *http.Request) {
 		got := r.Header.Get("Authorization")
-		want := "token loopruntime-test-token"
+		want := "token loop-runtime-test-token"
 		if got != want {
 			t.Errorf("Authorization header = %q, want %q", got, want)
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"username":"loopruntime"}`))
+		_, _ = w.Write([]byte(`{"username":"loop-runtime"}`))
 	})
 
-	if err := c.ValidateToken(context.Background(), "loopruntime-test-token"); err != nil {
+	if err := c.ValidateToken(context.Background(), "loop-runtime-test-token"); err != nil {
 		t.Fatalf("ValidateToken() error = %v, want nil", err)
 	}
 }

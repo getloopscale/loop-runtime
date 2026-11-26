@@ -57,7 +57,7 @@ var _ = Describe("Journey 01: Solo Deploy", Ordered, Label("journey", "smoke"), 
 		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "validate", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime validate should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime validate should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"validate stdout": stdout,

@@ -3,7 +3,7 @@
 
 // Helpers shared by CLI command E2E tests.
 //
-// These tests exercise individual `loopruntime` subcommands against the running k3d
+// These tests exercise individual `loop-runtime` subcommands against the running k3d
 // stack. They follow the 5-contract template per command:
 //
 //  1. Happy path: command exits 0 in the documented success scenario
@@ -12,7 +12,7 @@
 //  4. Internal terms: no leak per Rule 3 (ArgoCD/Gitea/MinIO/etc.)
 //  5. Exit codes: only 0/1/2/3/4/5 are produced (Rule 4)
 //
-// Set LOOPRUNTIME_E2E=1 to enable. Tests skip when k3d not running.
+// Set LOOP_RUNTIME_E2E=1 to enable. Tests skip when k3d not running.
 package e2e
 
 import (
@@ -34,10 +34,10 @@ var internalTerms = forbiddenInternalTerms
 // Kept as alias for backward compatibility with existing tests.
 var allowedExitCodes = allowedExitCodesMap
 
-// loopruntimeInvocation describes one run of the `loopruntime` CLI. The zero value is the
+// loopRuntimeInvocation describes one run of the `loop-runtime` CLI. The zero value is the
 // suite default: the E2E API URL, auth from the per-suite configStore, and the
 // current working directory.
-type loopruntimeInvocation struct {
+type loopRuntimeInvocation struct {
 	// dir is the working directory; empty means the test process's own.
 	dir string
 	// env entries are applied AFTER the defaults, so a KEY=value here wins
@@ -48,19 +48,19 @@ type loopruntimeInvocation struct {
 	unset []string
 }
 
-// execLoopRuntime is the one place an E2E spec spawns `loopruntime`. It captures stdout,
+// execLoopRuntime is the one place an E2E spec spawns `loop-runtime`. It captures stdout,
 // stderr and the exit code; a CLI that never started reports -1, never 0, so an
 // exit-0 assertion cannot pass with no binary on PATH.
 //
 // T2 amendment 2026-05-13 (finding-2026-05-13-e2e-token-refresh-divergence):
 // auth comes from the per-suite XDG_CONFIG_HOME populated by BeforeSuite via
-// `loopscale login --token`, NOT from LOOPRUNTIME_TOKEN env injection. The CLI reads the
-// token from configStore (production parity per Rule 10). LOOPRUNTIME_TOKEN is
+// `loopscale login --token`, NOT from LOOP_RUNTIME_TOKEN env injection. The CLI reads the
+// token from configStore (production parity per Rule 10). LOOP_RUNTIME_TOKEN is
 // therefore hard-stripped by default — if the parent process had it set it
 // would silently override configStore. A spec that deliberately sends a
-// token passes it in loopruntimeInvocation.env.
-func execLoopRuntime(inv loopruntimeInvocation, args ...string) (stdout, stderr string, exitCode int) {
-	cmd := exec.Command("loopruntime", args...)
+// token passes it in loopRuntimeInvocation.env.
+func execLoopRuntime(inv loopRuntimeInvocation, args ...string) (stdout, stderr string, exitCode int) {
+	cmd := exec.Command("loop-runtime", args...)
 	cmd.Dir = inv.dir
 	env := make([]string, 0, len(os.Environ())+2+len(inv.env))
 	for _, kv := range os.Environ() {
@@ -68,7 +68,7 @@ func execLoopRuntime(inv loopruntimeInvocation, args ...string) (stdout, stderr 
 			env = append(env, kv)
 		}
 	}
-	env = append(env, "LOOPRUNTIME_API_URL="+apiURL(), "LOOPRUNTIME_TOKEN=")
+	env = append(env, "LOOP_RUNTIME_API_URL="+apiURL(), "LOOP_RUNTIME_TOKEN=")
 	cmd.Env = append(env, inv.env...)
 
 	var outBuf, errBuf strings.Builder
@@ -83,7 +83,7 @@ func execLoopRuntime(inv loopruntimeInvocation, args ...string) (stdout, stderr 
 			exitCode = exitErr.ExitCode()
 		} else {
 			exitCode = -1
-			errBuf.WriteString("\n[execLoopRuntime] loopruntime did not start: " + err.Error())
+			errBuf.WriteString("\n[execLoopRuntime] loop-runtime did not start: " + err.Error())
 		}
 	}
 	return outBuf.String(), errBuf.String(), exitCode
@@ -99,20 +99,20 @@ func hasEnvKey(kv string, keys []string) bool {
 	return false
 }
 
-// runLoopRuntime executes `loopruntime <args...>` with the suite defaults.
+// runLoopRuntime executes `loop-runtime <args...>` with the suite defaults.
 func runLoopRuntime(args ...string) (stdout, stderr string, exitCode int) {
-	return execLoopRuntime(loopruntimeInvocation{}, args...)
+	return execLoopRuntime(loopRuntimeInvocation{}, args...)
 }
 
-// longAPITimeout bumps LOOPRUNTIME_API_TIMEOUT to 120s (vs CLI default 30s in
+// longAPITimeout bumps LOOP_RUNTIME_API_TIMEOUT to 120s (vs CLI default 30s in
 // cli/src/config/constants.ts:53): project delete cascades through cancel
 // builds + gitops remove + sync and exceeds 30s on LIVE k3d.
-const longAPITimeout = "LOOPRUNTIME_API_TIMEOUT=120000"
+const longAPITimeout = "LOOP_RUNTIME_API_TIMEOUT=120000"
 
-// runLoopRuntimeInDir executes `loopruntime <args...>` in dir, for commands like `validate`,
+// runLoopRuntimeInDir executes `loop-runtime <args...>` in dir, for commands like `validate`,
 // `project delete` and `deploy` that operate on cwd.
 func runLoopRuntimeInDir(dir string, args ...string) (stdout, stderr string, exitCode int) {
-	return execLoopRuntime(loopruntimeInvocation{dir: dir, env: []string{longAPITimeout}}, args...)
+	return execLoopRuntime(loopRuntimeInvocation{dir: dir, env: []string{longAPITimeout}}, args...)
 }
 
 // expectAllowedExitCode asserts that `code` is one of 0/1/2/3/4/5 per Rule 4.

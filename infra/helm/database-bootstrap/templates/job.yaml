@@ -10,7 +10,7 @@ The pod waits in CreateContainerConfigError until External Secrets has written t
 credentials Secret; that is the ordering, not a failure.
 */ -}}
 {{- $rolesSql := required "database-bootstrap: rolesSql is required (infra/scripts/production/provision-db-roles.sql)" .Values.rolesSql }}
-{{- $migrateImage := required "database-bootstrap: images.migrate is required (the loopruntime-api image)" .Values.images.migrate }}
+{{- $migrateImage := required "database-bootstrap: images.migrate is required (the loop-runtime-api image)" .Values.images.migrate }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -50,7 +50,7 @@ spec:
             name: {{ .Release.Name }}-sql
       initContainers:
         # Databases first, then the roles: migrations 000062 and 000068 grant to
-        # loopruntime_api and loopruntime_worker only if those roles already exist.
+        # loop_runtime_api and loop_runtime_worker only if those roles already exist.
         - name: databases-and-roles
           image: {{ .Values.images.psql }}
           securityContext:
@@ -86,7 +86,7 @@ spec:
               psql "$OWNER_URI" -q \
                 -v api_password="$API_PASSWORD" -v worker_password="$WORKER_PASSWORD" -v cloud_password="$CLOUD_PASSWORD" \
                 -f /sql/provision-db-roles.sql
-              echo "roles loopruntime_api, loopruntime_worker and loopruntime_cloud provisioned"
+              echo "roles loop_runtime_api, loop_runtime_worker and loop_console provisioned"
           volumeMounts:
             - name: sql
               mountPath: /sql

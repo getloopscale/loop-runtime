@@ -4,11 +4,11 @@
 // Regression-lock for issue #115: `generate-secrets.sh` did not pin
 // `kubectl --context`, so it applied Secrets to whatever kubecontext
 // was active. During a 2026-06-20 dev-public provision, an active
-// `k3d-loopruntime-secrets` context (residue from a prior T0.1 session) caused
-// `task setup` to misprovision Secrets to loopruntime-secrets instead of mgmt
+// `k3d-loop-runtime-secrets` context (residue from a prior T0.1 session) caused
+// `task setup` to misprovision Secrets to loop-runtime-secrets instead of mgmt
 // — `infra:install:core` failed silently with the wrong target.
 //
-// Fix: pin via `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopruntime-core}"` +
+// Fix: pin via `KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loop-runtime-core}"` +
 // a `kubectl()` shell-function wrapper that injects
 // `--context="$KUBECTL_CONTEXT"` on every call. All bare `kubectl`
 // invocations downstream automatically inherit the canonical mgmt
@@ -27,7 +27,7 @@
 //   - Script: infra/helmfile/scripts/generate-secrets.sh
 //   - Issue: getloopscale/loop-runtime#115
 //   - Sister guards: dogfood_all_repo_root_test.go,
-//     live_proof_env_file_test.go, loopruntime_bin_workspace_discovery_test.go
+//     live_proof_env_file_test.go, loop_runtime_bin_workspace_discovery_test.go
 //     (same post-2026-06-20 hermetic-Go-guard pattern)
 package charts
 
@@ -54,8 +54,8 @@ func loadGenerateSecrets(t *testing.T) (body string, scriptPath string) {
 
 // Regexes — raw strings preserve on-disk shape.
 var (
-	// Canonical assignment: KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopruntime-core}"
-	reKubectlContextDefault = regexp.MustCompile(`KUBECTL_CONTEXT="\$\{KUBECTL_CONTEXT:-k3d-loopruntime-core\}"`)
+	// Canonical assignment: KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loop-runtime-core}"
+	reKubectlContextDefault = regexp.MustCompile(`KUBECTL_CONTEXT="\$\{KUBECTL_CONTEXT:-k3d-loop-runtime-core\}"`)
 
 	// Canonical function override: kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 	reKubectlFnOverride = regexp.MustCompile(`kubectl\(\)\s*\{\s*command\s+kubectl\s+--context="\$KUBECTL_CONTEXT"\s+"\$@";?\s*\}`)
@@ -68,7 +68,7 @@ func auditGenerateSecretsContextPin(body string) []string {
 
 	// (a) Canonical KUBECTL_CONTEXT default MUST be present.
 	if !reKubectlContextDefault.MatchString(body) {
-		errs = append(errs, "(a) script does NOT declare `KUBECTL_CONTEXT=\"${KUBECTL_CONTEXT:-k3d-loopruntime-core}\"` — without the canonical mgmt-pin default, an active `k3d-loopruntime-secrets` (or any other) context silently retargets Secret provisioning to the wrong cluster (issue #115).")
+		errs = append(errs, "(a) script does NOT declare `KUBECTL_CONTEXT=\"${KUBECTL_CONTEXT:-k3d-loop-runtime-core}\"` — without the canonical mgmt-pin default, an active `k3d-loop-runtime-secrets` (or any other) context silently retargets Secret provisioning to the wrong cluster (issue #115).")
 	}
 
 	// (b) Canonical kubectl() function override MUST be present.

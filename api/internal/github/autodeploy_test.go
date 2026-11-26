@@ -283,10 +283,10 @@ func (f *fakeBuildCanceller) CancelQueuedBuilds(ctx context.Context, tenantID, p
 
 // newGitHubTarballServer creates a test HTTP server that serves a tarball with loopzero.yaml
 // at the GitHub API tarball download endpoint, and handles installation token requests.
-func newGitHubTarballServer(t *testing.T, loopruntimeYamlContent string) *httptest.Server {
+func newGitHubTarballServer(t *testing.T, loopRuntimeYamlContent string) *httptest.Server {
 	t.Helper()
 	return newGitHubTarballServerWithFiles(t, map[string]string{
-		"owner-repo-abc123/loopzero.yaml": loopruntimeYamlContent,
+		"owner-repo-abc123/loopzero.yaml": loopRuntimeYamlContent,
 		"owner-repo-abc123/main.go":       "package main",
 	})
 }
@@ -572,7 +572,7 @@ func TestHandlePush_InvalidRepoName(t *testing.T) {
 }
 
 func TestHandlePush_DefaultBucket(t *testing.T) {
-	// Arrange — no SourceBucket set, should default to "loopruntime-builds"
+	// Arrange — no SourceBucket set, should default to "loop-runtime-builds"
 	server := newGitHubTarballServer(t, `project: my-app
 apps:
   api:
@@ -603,8 +603,8 @@ apps:
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if uploader.uploadedBucket != "loopruntime-builds" {
-		t.Errorf("expected default bucket 'loopruntime-builds', got %q", uploader.uploadedBucket)
+	if uploader.uploadedBucket != "loop-runtime-builds" {
+		t.Errorf("expected default bucket 'loop-runtime-builds', got %q", uploader.uploadedBucket)
 	}
 }
 

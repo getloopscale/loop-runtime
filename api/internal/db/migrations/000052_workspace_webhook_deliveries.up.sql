@@ -6,14 +6,14 @@
 --
 -- J-16 Settings — workspace/deploy webhook DELIVERY queue (slice 3, consumer).
 --
--- loopruntime-cloud drains the deploy_events outbox (migration 000051), matches each
+-- loop-console drains the deploy_events outbox (migration 000051), matches each
 -- event to the subscribed workspace_webhooks (000050), and inserts one row here
--- per (webhook, event). The delivery worker (loopruntime-cloud, mirror of
+-- per (webhook, event). The delivery worker (loop-console, mirror of
 -- memory_webhook_worker) claims due rows, POSTs to the customer URL through the
--- SSRF-guarded client (safehttp, loopruntime-cloud#149), and records the outcome.
+-- SSRF-guarded client (safehttp, loop-console#149), and records the outcome.
 --
 -- Engine-owned DDL (all migrations live in the engine, shared DB) but WRITTEN
--- and READ exclusively by loopruntime-cloud — the engine never references this table
+-- and READ exclusively by loop-console — the engine never references this table
 -- (decoupling invariant, MEET-2026-07-03-005).
 --
 -- Mirrors memory_webhook_deliveries (000033) and ADDS, per the slice-3

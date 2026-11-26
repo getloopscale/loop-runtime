@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CHG-2026-04-28-LAYERED-BOOTSTRAP / T2.x — offline test for generate-secrets.sh.
 # Uses mock-kubectl.sh to verify that the secret generation script:
-#   1. Creates all required Secrets (loopruntime-db-credentials, gitea-admin, ...)
+#   1. Creates all required Secrets (loop-runtime-db-credentials, gitea-admin, ...)
 #   2. Does NOT include trailing newlines in token values (B4 fix)
 #   3. Generates random passwords when not provided
 #
@@ -27,14 +27,14 @@ export PATH="${MOCK_BIN}:$PATH"
 trap "rm -rf $MOCK_LOG $MOCK_BIN" EXIT
 
 # Provide minimal env vars so the script runs through every code path
-export LOOPRUNTIME_DB_HOST="db.example.com"
-export LOOPRUNTIME_DB_PORT="5432"
-export LOOPRUNTIME_DB_USER="loopruntime"
-export LOOPRUNTIME_DB_PASSWORD="secret123"
-export LOOPRUNTIME_DB_NAME="loopruntime"
-export LOOPRUNTIME_SPACES_KEY="ACCESS_KEY"
-export LOOPRUNTIME_SPACES_SECRET="SECRET_KEY"
-export LOOPRUNTIME_REGISTRY_ENDPOINT="registry.digitalocean.com/loopruntime"
+export LOOP_RUNTIME_DB_HOST="db.example.com"
+export LOOP_RUNTIME_DB_PORT="5432"
+export LOOP_RUNTIME_DB_USER="loop_runtime"
+export LOOP_RUNTIME_DB_PASSWORD="secret123"
+export LOOP_RUNTIME_DB_NAME="loop_runtime"
+export LOOP_RUNTIME_SPACES_KEY="ACCESS_KEY"
+export LOOP_RUNTIME_SPACES_SECRET="SECRET_KEY"
+export LOOP_RUNTIME_REGISTRY_ENDPOINT="registry.digitalocean.com/loop-runtime"
 
 # Execute
 log "Running generate-secrets.sh dev core..."
@@ -75,7 +75,7 @@ fi
 
 # Verify Docker pull secret was constructed
 if grep -q "kubernetes.io/dockerconfigjson" "$MOCK_LOG"; then
-  ok "loopruntime-registry-pull dockerconfigjson Secret applied"
+  ok "loop-runtime-registry-pull dockerconfigjson Secret applied"
 else
   fail "registry-pull" "no dockerconfigjson Secret"
 fi

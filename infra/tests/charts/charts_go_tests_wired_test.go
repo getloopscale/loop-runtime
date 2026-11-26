@@ -4,7 +4,7 @@
 // Meta-guard locking the infra/tests/charts/ Go-guards wiring into
 // `task quality:gates`. Closes the /review HIGH 2026-06-20:
 //
-//	"The 8 Go guards in loopruntime/infra/tests/charts/ do NOT run in
+//	"The 8 Go guards in loop-runtime/infra/tests/charts/ do NOT run in
 //	 task quality:gates (the pre-push gate). taskfiles/test.yml:111
 //	 runs only `go test ./unit/...`; nothing runs `./charts/`."
 //
@@ -33,7 +33,7 @@
 //	    quality:gates body
 //	(b) the helmfile pre-flight guard is removed (would re-introduce
 //	    the silent-SKIP-of-central-guard anti-pattern)
-//	(c) LOOPRUNTIME_TEST_SKIP_HELMFILE pre-flight guard is removed
+//	(c) LOOP_RUNTIME_TEST_SKIP_HELMFILE pre-flight guard is removed
 //	(d) anti-silent-pass invariants regress (|| true / 2>/dev/null /
 //	    missing -count=1)
 package charts
@@ -164,8 +164,8 @@ func TestChartsGoTestsWired(t *testing.T) {
 		strings.Contains(body, "FAIL: helmfile")) {
 		t.Error("C2: helmfile pre-flight does NOT emit a `FAIL` marker — operator visibility lost when helmfile is missing.")
 	}
-	if !strings.Contains(body, "LOOPRUNTIME_TEST_SKIP_HELMFILE") {
-		t.Error("C3: LOOPRUNTIME_TEST_SKIP_HELMFILE pre-flight is NOT present — gate would silently SKIP if operator set the escape env var.")
+	if !strings.Contains(body, "LOOP_RUNTIME_TEST_SKIP_HELMFILE") {
+		t.Error("C3: LOOP_RUNTIME_TEST_SKIP_HELMFILE pre-flight is NOT present — gate would silently SKIP if operator set the escape env var.")
 	}
 
 	// ===== D — Anti-silent-pass invariants =====

@@ -36,7 +36,7 @@ func TestSilenceKlog_DoesNotPanic(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCellID_EmptyEnvVar_ReturnsCellDefault(t *testing.T) {
-	t.Setenv("LOOPRUNTIME_CELL_ID", "")
+	t.Setenv("LOOP_RUNTIME_CELL_ID", "")
 	got := cellID(config.Config{})
 	if got != domain.DefaultCellID {
 		t.Errorf("cellID() = %q, want %q for empty env var", got, domain.DefaultCellID)
@@ -45,7 +45,7 @@ func TestCellID_EmptyEnvVar_ReturnsCellDefault(t *testing.T) {
 
 func TestCellID_WhitespaceEnvVar_ReturnsWhitespace(t *testing.T) {
 	// The function returns the raw value, no trimming — verify contract
-	t.Setenv("LOOPRUNTIME_CELL_ID", " cell-with-spaces ")
+	t.Setenv("LOOP_RUNTIME_CELL_ID", " cell-with-spaces ")
 	got := cellID(config.Config{})
 	if got != " cell-with-spaces " {
 		t.Errorf("cellID() = %q, want raw env value with spaces", got)
@@ -59,8 +59,8 @@ func TestCellID_WhitespaceEnvVar_ReturnsWhitespace(t *testing.T) {
 func TestPodName_EmptyHostname_ReturnsFallback(t *testing.T) {
 	t.Setenv("HOSTNAME", "")
 	got := podName()
-	if got != "loopruntime-controller" {
-		t.Errorf("podName() = %q, want loopruntime-controller for empty HOSTNAME", got)
+	if got != "loop-runtime-controller" {
+		t.Errorf("podName() = %q, want loop-runtime-controller for empty HOSTNAME", got)
 	}
 }
 
@@ -197,8 +197,8 @@ func TestHealthServer_UnknownPath_Returns404(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLeaderLoopName_IsLoopRuntimeController(t *testing.T) {
-	if leaderLoopName != "loopruntime-controller" {
-		t.Errorf("leaderLoopName = %q, want loopruntime-controller", leaderLoopName)
+	if leaderLoopName != "loop-runtime-controller" {
+		t.Errorf("leaderLoopName = %q, want loop-runtime-controller", leaderLoopName)
 	}
 }
 
@@ -359,7 +359,7 @@ func TestStubConfig_ReturnsZeroValue(t *testing.T) {
 func TestCellID_EnvIsolation(t *testing.T) {
 	// First subtest sets the env var
 	t.Run("set", func(t *testing.T) {
-		t.Setenv("LOOPRUNTIME_CELL_ID", "cell-isolated")
+		t.Setenv("LOOP_RUNTIME_CELL_ID", "cell-isolated")
 		if got := cellID(config.Config{}); got != "cell-isolated" {
 			t.Errorf("got %q", got)
 		}
@@ -367,7 +367,7 @@ func TestCellID_EnvIsolation(t *testing.T) {
 
 	// Second subtest should see the original value (unset by cleanup)
 	t.Run("after_cleanup", func(t *testing.T) {
-		// We cannot guarantee LOOPRUNTIME_CELL_ID is unset in the outer scope,
+		// We cannot guarantee LOOP_RUNTIME_CELL_ID is unset in the outer scope,
 		// but we can verify cellID returns SOMETHING without panicking
 		got := cellID(config.Config{})
 		if got == "" {

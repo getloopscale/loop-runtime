@@ -164,19 +164,19 @@ func (b BuildAPI) status(ctx context.Context, buildID string) (string, bool) {
 func ServiceAuthHeaders(secret string, t TenantIdentity) func(*http.Request) {
 	return func(req *http.Request) {
 		req.Header.Set("X-Service-Auth", secret)
-		req.Header.Set("X-LoopRuntime-User-ID", t.UserID)
-		req.Header.Set("X-LoopRuntime-Tenant", t.TenantID)
-		req.Header.Set("X-LoopRuntime-Email", t.Email)
+		req.Header.Set("X-Loop-Runtime-User-ID", t.UserID)
+		req.Header.Set("X-Loop-Runtime-Tenant", t.TenantID)
+		req.Header.Set("X-Loop-Runtime-Email", t.Email)
 	}
 }
 
 // UploadSource posts a source bundle with its manifest to
 // POST /api/v1/source/upload and returns the commit SHA the API recorded.
-func UploadSource(ctx context.Context, client *http.Client, apiURL string, auth func(*http.Request), loopruntimeYAML string, bundle []byte) (string, error) {
+func UploadSource(ctx context.Context, client *http.Client, apiURL string, auth func(*http.Request), loopRuntimeYAML string, bundle []byte) (string, error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	if err := writer.WriteField("loopruntime_yaml", loopruntimeYAML); err != nil {
-		return "", fmt.Errorf("write loopruntime_yaml field: %w", err)
+	if err := writer.WriteField("loop_runtime_yaml", loopRuntimeYAML); err != nil {
+		return "", fmt.Errorf("write loop_runtime_yaml field: %w", err)
 	}
 	bundlePart, err := writer.CreateFormFile("bundle", "source.bundle")
 	if err != nil {

@@ -130,7 +130,7 @@ var _ = Describe("Journey 05: Promote", Ordered, Label("journey"), func() {
 
 		// Project delete removes labeled resources from EVERY environment
 		// it lived in (production + staging here). Tenant-level namespaces
-		// (loopruntime-{tenant}-{env}) are shared across projects and survive a
+		// (loop-runtime-{tenant}-{env}) are shared across projects and survive a
 		// project delete — only the Tenant CR teardown removes them. So
 		// Prova de Morte asserts "no resources for this project" per env,
 		// NOT "namespace gone".

@@ -1,0 +1,45 @@
+{{- if .Values.vaps.argocdManagedBy }}
+# MEET-055: Block manual ArgoCD Application creation.
+# Only Applications with runtime.getloopscale.com/managed-by label are allowed.
+# This prevents manual kubectl apply of Application CRs that cause
+# drift, orphans, and CPU amplification loops.
+#
+# Enforcement: Fail (blocks creation). Break-glass bypasses via
+# cluster-admin SA which is not subject to VAPs.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: loop-runtime-argocd-managed-by
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["argoproj.io"]
+        apiVersions: ["v1alpha1"]
+        operations: ["CREATE"]
+        resources: ["applications", "appprojects"]
+  validations:
+    - expression: >
+        has(object.metadata.labels) &&
+        'runtime.getloopscale.com/managed-by' in object.metadata.labels &&
+        object.metadata.labels['runtime.getloopscale.com/managed-by'] != ''
+      message: >
+        ArgoCD Applications and AppProjects must have the 'runtime.getloopscale.com/managed-by'
+        label set by the TenantController. Manual creation is prohibited.
+        Use 'loopscale init' + 'loopscale deploy' to provision applications.
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: loop-runtime-argocd-managed-by
+spec:
+  policyName: loop-runtime-argocd-managed-by
+  validationActions:
+    - Deny
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        # Only enforce in the loop-runtime-system namespace (where ArgoCD lives)
+        app.kubernetes.io/part-of: loop-runtime-platform
+{{- end }}

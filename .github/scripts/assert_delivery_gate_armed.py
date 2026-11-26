@@ -27,7 +27,7 @@ through an unarmed gate (the repository does not record when each push
 happened, only when each commit was authored).
 
 The assertions that DO exist for premises 1 and 3 live in
-cmd/loopruntime-ops/*_test.go, and they are not enough on their own for one reason
+cmd/loop-runtime-ops/*_test.go, and they are not enough on their own for one reason
 that decides this file's shape: THEY RUN WHERE THE GATE RUNS. They are
 reached through `task quality:hermetic`, which is what the delivery gate
 itself invokes. A guard whose only runner is the thing it guards reports on
@@ -36,12 +36,12 @@ week this was written, and the item that ordered this file forbids repeating
 it. So this check runs on GitHub, on a machine that has no hook, no
 `CLAUDE_PROJECT_DIR` and no stake in the answer.
 
-WHY PYTHON AND NOT A NEW GO GATE. The Go tests in cmd/loopruntime-ops need the Go
-workspace, which needs the private loopruntime-contracts module, which needs a
+WHY PYTHON AND NOT A NEW GO GATE. The Go tests in cmd/loop-runtime-ops need the Go
+workspace, which needs the private loop-runtime-contracts module, which needs a
 deploy key and two checkouts -- the setup `build-and-test` performs, in a job
 that takes 2-4 minutes and whose last 15 runs all failed (measured
 2026-09-06 over runs 32084704925..32197072865; the failing step is `Test the
-hermetic modules`, and `go test ./... -count=1` in cmd/loopruntime-ops is red on
+hermetic modules`, and `go test ./... -count=1` in cmd/loop-runtime-ops is red on
 `trufflehogscan.TestRealTreeIsAdjudicated` in a clean worktree today). A
 new signal hung inside an already-red job is not a signal. This script needs
 python3 and bash, both preinstalled on every runner, and finishes in seconds.
@@ -72,7 +72,7 @@ SETTINGS_RELPATH = ".claude/settings.json"
 # with the gate deciding nothing about them, plus the plainest push as a
 # control. Each must be recognised as a push.
 #
-# The observation is the same one cmd/loopruntime-ops/delivery_gate_bypass_test.go
+# The observation is the same one cmd/loop-runtime-ops/delivery_gate_bypass_test.go
 # makes and for the same reason: pointed at a directory that is not this
 # repository, the hook refuses at the landmark check and exits 2 -- a decision
 # it only reaches AFTER concluding the command was a push. So exit 2 means
@@ -91,7 +91,7 @@ MUST_BE_GATED = [
 # has to DECIDE, not blanket-block. Kept to one deliberately: this script
 # guards the premises ci.yml cites, and a gate that got STRICTER has not
 # falsified any of them. Over-matching is a cost question, and it is
-# cmd/loopruntime-ops/delivery_gate_bypass_test.go that owns it.
+# cmd/loop-runtime-ops/delivery_gate_bypass_test.go that owns it.
 MUST_NOT_BE_GATED = "git status"
 
 
@@ -354,7 +354,7 @@ def premise_0_ci_gates_the_pull_request(root: Path, report: Report) -> bool:
         report.bad(
             "PREMISE 0 — CI gates the pull request: "
             f"{CI_WORKFLOW} triggers on `pull_request` but runs no quality gate "
-            "(no `loopruntime-ops quality <gate>` step). A trigger with nothing behind it protects nothing."
+            "(no `loop-runtime-ops quality <gate>` step). A trigger with nothing behind it protects nothing."
         )
         return False
 
@@ -372,8 +372,8 @@ def premise_0_ci_gates_the_pull_request(root: Path, report: Report) -> bool:
     return True
 
 
-# `loopruntime-ops quality <gate>` as invoked from a workflow or a Taskfile line.
-QUALITY_GATE_CALL = re.compile(r"loopruntime-ops\s+quality\s+([a-z0-9][a-z0-9-]*)")
+# `loop-runtime-ops quality <gate>` as invoked from a workflow or a Taskfile line.
+QUALITY_GATE_CALL = re.compile(r"loop-runtime-ops\s+quality\s+([a-z0-9][a-z0-9-]*)")
 
 
 def _quality_gates_task_gates(root: Path) -> set[str]:

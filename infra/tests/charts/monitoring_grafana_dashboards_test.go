@@ -14,7 +14,7 @@ import (
 )
 
 // The Grafana the helmfiles install shows the repository's dashboards: the core helmfile
-// installs charts/loopruntime-monitoring, one ConfigMap per infra/helm/monitoring/dashboards
+// installs charts/loop-runtime-monitoring, one ConfigMap per infra/helm/monitoring/dashboards
 // file labelled grafana_dashboard=1, and Grafana's dashboard sidecar loads every ConfigMap
 // with that label. Before this, values-grafana.yaml had no sidecar and no helmfile
 // installed the chart, so staging's Grafana started with no dashboard at all.
@@ -25,7 +25,7 @@ func TestCoreHelmfileInstallsEveryRepositoryDashboard(t *testing.T) {
 		t.Fatalf("no dashboards found: %v", err)
 	}
 	for _, env := range []string{"staging", "prod"} {
-		rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", env, "loopruntime-monitoring", "charts/loopruntime-monitoring", stagingOutputs...)
+		rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", env, "loop-runtime-monitoring", "charts/loop-runtime-monitoring", stagingOutputs...)
 		dashboards := map[string]bool{}
 		decoder := yaml.NewDecoder(strings.NewReader(rendered))
 		for {
@@ -42,7 +42,7 @@ func TestCoreHelmfileInstallsEveryRepositoryDashboard(t *testing.T) {
 					dashboards[key] = true
 				}
 			case "PrometheusRule":
-				t.Errorf("%s: loopruntime-monitoring renders a PrometheusRule; the helmfile Prometheus reads its rules from values-prometheus.yaml", env)
+				t.Errorf("%s: loop-runtime-monitoring renders a PrometheusRule; the helmfile Prometheus reads its rules from values-prometheus.yaml", env)
 			}
 		}
 		for _, file := range files {

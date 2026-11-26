@@ -50,10 +50,10 @@ func TestPlatformBootstrap_SpecGitea(t *testing.T) {
 		Spec: PlatformBootstrapSpec{
 			Gitea: GiteaBootstrapSpec{
 				AdminSecretRef: SecretKeyRef{Name: "gitea-admin-secret"},
-				Organizations:  []string{"loopruntime", "acme"},
+				Organizations:  []string{"loop-runtime", "acme"},
 				TokenName:      "platform-bootstrap-token",
 				TokenScopes:    []string{"write:organization", "write:admin"},
-				InternalURL:    "http://gitea-http.loopruntime-system.svc.cluster.local:3000",
+				InternalURL:    "http://gitea-http.loop-runtime-system.svc.cluster.local:3000",
 			},
 		},
 	}
@@ -64,8 +64,8 @@ func TestPlatformBootstrap_SpecGitea(t *testing.T) {
 	if len(pbs.Spec.Gitea.Organizations) != 2 {
 		t.Fatalf("expected 2 organizations, got %d", len(pbs.Spec.Gitea.Organizations))
 	}
-	if pbs.Spec.Gitea.Organizations[0] != "loopruntime" {
-		t.Errorf("expected first org %q, got %q", "loopruntime", pbs.Spec.Gitea.Organizations[0])
+	if pbs.Spec.Gitea.Organizations[0] != "loop-runtime" {
+		t.Errorf("expected first org %q, got %q", "loop-runtime", pbs.Spec.Gitea.Organizations[0])
 	}
 	if pbs.Spec.Gitea.TokenName != "platform-bootstrap-token" {
 		t.Errorf("expected TokenName %q, got %q", "platform-bootstrap-token", pbs.Spec.Gitea.TokenName)
@@ -73,7 +73,7 @@ func TestPlatformBootstrap_SpecGitea(t *testing.T) {
 	if len(pbs.Spec.Gitea.TokenScopes) != 2 {
 		t.Fatalf("expected 2 token scopes, got %d", len(pbs.Spec.Gitea.TokenScopes))
 	}
-	if pbs.Spec.Gitea.InternalURL != "http://gitea-http.loopruntime-system.svc.cluster.local:3000" {
+	if pbs.Spec.Gitea.InternalURL != "http://gitea-http.loop-runtime-system.svc.cluster.local:3000" {
 		t.Errorf("expected InternalURL to match, got %q", pbs.Spec.Gitea.InternalURL)
 	}
 }
@@ -85,7 +85,7 @@ func TestPlatformBootstrap_SpecArgoCD(t *testing.T) {
 				Namespace:       "argocd",
 				AdminSecretName: "argocd-initial-admin-secret",
 				RepoCredentials: []ArgoCDRepoCredential{
-					{Name: "gitea-creds", URL: "http://gitea-http.loopruntime-system.svc.cluster.local:3000"},
+					{Name: "gitea-creds", URL: "http://gitea-http.loop-runtime-system.svc.cluster.local:3000"},
 				},
 				InternalURL: "https://argocd-server.argocd.svc.cluster.local",
 			},
@@ -110,8 +110,8 @@ func TestPlatformBootstrap_SpecAPI(t *testing.T) {
 	pbs := PlatformBootstrap{
 		Spec: PlatformBootstrapSpec{
 			API: APIBootstrapSpec{
-				BootstrapEndpoint: "http://loopruntime-api.loopruntime-system.svc.cluster.local:8080/internal/bootstrap",
-				HealthEndpoint:    "http://loopruntime-api.loopruntime-system.svc.cluster.local:8080/api/v1/health",
+				BootstrapEndpoint: "http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/internal/bootstrap",
+				HealthEndpoint:    "http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/api/v1/health",
 				BootstrapSecretRef: &SecretKeyRef{
 					Name: "bootstrap-secret",
 				},
@@ -119,10 +119,10 @@ func TestPlatformBootstrap_SpecAPI(t *testing.T) {
 		},
 	}
 
-	if pbs.Spec.API.BootstrapEndpoint != "http://loopruntime-api.loopruntime-system.svc.cluster.local:8080/internal/bootstrap" {
+	if pbs.Spec.API.BootstrapEndpoint != "http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/internal/bootstrap" {
 		t.Errorf("expected BootstrapEndpoint to match, got %q", pbs.Spec.API.BootstrapEndpoint)
 	}
-	if pbs.Spec.API.HealthEndpoint != "http://loopruntime-api.loopruntime-system.svc.cluster.local:8080/api/v1/health" {
+	if pbs.Spec.API.HealthEndpoint != "http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/api/v1/health" {
 		t.Errorf("expected HealthEndpoint to match, got %q", pbs.Spec.API.HealthEndpoint)
 	}
 	if pbs.Spec.API.BootstrapSecretRef == nil {
@@ -137,8 +137,8 @@ func TestPlatformBootstrap_SpecAPIWithoutSecret(t *testing.T) {
 	pbs := PlatformBootstrap{
 		Spec: PlatformBootstrapSpec{
 			API: APIBootstrapSpec{
-				BootstrapEndpoint: "http://loopruntime-api:8080/internal/bootstrap",
-				HealthEndpoint:    "http://loopruntime-api:8080/api/v1/health",
+				BootstrapEndpoint: "http://loop-runtime-api:8080/internal/bootstrap",
+				HealthEndpoint:    "http://loop-runtime-api:8080/api/v1/health",
 			},
 		},
 	}

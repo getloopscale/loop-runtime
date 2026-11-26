@@ -93,12 +93,12 @@ func TestGitRunner_SanitizeOutput_EmptyToken(t *testing.T) {
 }
 
 func TestGitRunner_WithEnv(t *testing.T) {
-	r := NewGitRunner("", WithEnv("GIT_AUTHOR_NAME=LoopRuntime", "GIT_AUTHOR_EMAIL=loopruntime@test.com"))
+	r := NewGitRunner("", WithEnv("GIT_AUTHOR_NAME=LoopRuntime", "GIT_AUTHOR_EMAIL=loop-runtime@test.com"))
 
 	env := r.buildEnv()
 	found := 0
 	for _, e := range env {
-		if e == "GIT_AUTHOR_NAME=LoopRuntime" || e == "GIT_AUTHOR_EMAIL=loopruntime@test.com" {
+		if e == "GIT_AUTHOR_NAME=LoopRuntime" || e == "GIT_AUTHOR_EMAIL=loop-runtime@test.com" {
 			found++
 		}
 	}

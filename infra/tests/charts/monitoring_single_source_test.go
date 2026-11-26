@@ -14,7 +14,7 @@ import (
 )
 
 // Dashboards and alert rules have ONE source: infra/helm/monitoring. The published
-// charts/loopruntime-monitoring reaches them through symlinks that `helm package` resolves.
+// charts/loop-runtime-monitoring reaches them through symlinks that `helm package` resolves.
 //
 // Measured 2026-09-23, before this: all 21 published dashboards differed from their
 // infra/helm twins, and 10 PrometheusRules existed in both trees — the published side
@@ -22,8 +22,8 @@ import (
 // earlier, and one rule queried a metric name the operators do not export.
 func TestMonitoring_PublishedChartReadsTheInfraArtifacts(t *testing.T) {
 	for link, want := range map[string]string{
-		"../../../charts/loopruntime-monitoring/dashboards": "../../infra/helm/monitoring/dashboards",
-		"../../../charts/loopruntime-monitoring/rules":      "../../infra/helm/monitoring/manifests",
+		"../../../charts/loop-runtime-monitoring/dashboards": "../../infra/helm/monitoring/dashboards",
+		"../../../charts/loop-runtime-monitoring/rules":      "../../infra/helm/monitoring/manifests",
 	} {
 		got, err := os.Readlink(link)
 		if err != nil {

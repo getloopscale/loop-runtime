@@ -18,12 +18,12 @@ func TestLoadProgressiveDeliveryIsOnUnlessExplicitlyDisabled(t *testing.T) {
 		{" 0 ", false},
 	} {
 		t.Run("value="+tc.value, func(t *testing.T) {
-			t.Setenv("LOOPRUNTIME_PROGRESSIVE_DELIVERY", tc.value)
+			t.Setenv("LOOP_RUNTIME_PROGRESSIVE_DELIVERY", tc.value)
 
 			cfg := Load()
 
 			if cfg.ProgressiveDelivery != tc.want {
-				t.Fatalf("LOOPRUNTIME_PROGRESSIVE_DELIVERY=%q: ProgressiveDelivery = %v, want %v", tc.value, cfg.ProgressiveDelivery, tc.want)
+				t.Fatalf("LOOP_RUNTIME_PROGRESSIVE_DELIVERY=%q: ProgressiveDelivery = %v, want %v", tc.value, cfg.ProgressiveDelivery, tc.want)
 			}
 		})
 	}
@@ -43,12 +43,12 @@ func TestLoadLeanResourcesIsOffUnlessExplicitlyEnabled(t *testing.T) {
 		{" 1 ", true},
 	} {
 		t.Run("value="+tc.value, func(t *testing.T) {
-			t.Setenv("LOOPRUNTIME_LEAN_RESOURCES", tc.value)
+			t.Setenv("LOOP_RUNTIME_LEAN_RESOURCES", tc.value)
 
 			cfg := Load()
 
 			if cfg.LeanResources != tc.want {
-				t.Fatalf("LOOPRUNTIME_LEAN_RESOURCES=%q: LeanResources = %v, want %v", tc.value, cfg.LeanResources, tc.want)
+				t.Fatalf("LOOP_RUNTIME_LEAN_RESOURCES=%q: LeanResources = %v, want %v", tc.value, cfg.LeanResources, tc.want)
 			}
 		})
 	}

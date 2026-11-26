@@ -93,7 +93,7 @@ func TestBuildSBOMHandler_ReturnsAllAppsWithDownloadPath(t *testing.T) {
 			},
 		},
 	}
-	h := NewBuildSBOMHandler(store, &fakeSBOMReader{}, "loopruntime-static-assets", slog.Default())
+	h := NewBuildSBOMHandler(store, &fakeSBOMReader{}, "loop-runtime-static-assets", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/build-1/sbom", nil)
 	req = routestest.WithChiParam(req, "id", "build-1")

@@ -1,10 +1,10 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2025-2026 The LoopRuntime Authors
 
--- Grants loopruntime_worker the privileges the engine's cross-tenant paths execute
+-- Grants loop_runtime_worker the privileges the engine's cross-tenant paths execute
 -- on tables created after migration 000023, and nothing else (#385).
 --
--- loopruntime_worker is the one role that may cross tenants under the fail-closed
+-- loop_runtime_worker is the one role that may cross tenants under the fail-closed
 -- policies of 000062. 000023 granted it an explicit table list; the tables
 -- created afterwards were never granted, and no ALTER DEFAULT PRIVILEGES
 -- covers the role. Measured on a database built from 000001-000067: 13
@@ -32,12 +32,12 @@
 --
 -- Deliberately NOT granted: the tables the engine never queries on that pool.
 -- preview_slot is read and written on the request pool only; lens_*,
--- memory_*, workspace_webhook*, storage_objects and loopruntime_api_keys belong to
--- the control plane (loopruntime_cloud, 000063) and no engine query touches them;
+-- memory_*, workspace_webhook*, storage_objects and loop_runtime_api_keys belong to
+-- the control plane (loop_console, 000063) and no engine query touches them;
 -- metering_config keeps the SELECT 000046 gave it (the metering loop only
 -- reads the kill-switch).
 
-GRANT SELECT, INSERT ON accounts TO loopruntime_worker;
-GRANT INSERT ON deploy_events TO loopruntime_worker;
-GRANT USAGE ON SEQUENCE deploy_events_id_seq TO loopruntime_worker;
-GRANT DELETE ON metering_cursor TO loopruntime_worker;
+GRANT SELECT, INSERT ON accounts TO loop_runtime_worker;
+GRANT INSERT ON deploy_events TO loop_runtime_worker;
+GRANT USAGE ON SEQUENCE deploy_events_id_seq TO loop_runtime_worker;
+GRANT DELETE ON metering_cursor TO loop_runtime_worker;

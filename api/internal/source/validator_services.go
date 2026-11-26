@@ -19,7 +19,7 @@ import (
 // servicesJSONV1LegacyProject is the project name used when a v1 services.json
 // payload arrives without an explicit project field. Plan v1.2 T2.1 + ADR D10:
 // MUST remain "services-bundle" (NOT "default") to keep existing Gitea repos
-// loopruntime-source-{tenant}-services-bundle and their ArgoCD App lineage intact.
+// loop-runtime-source-{tenant}-services-bundle and their ArgoCD App lineage intact.
 const servicesJSONV1LegacyProject = "services-bundle"
 
 // Plan B v3.1 T-B.3 (2026-06-05) — services.json validator.
@@ -123,7 +123,7 @@ func ValidateServicesJSONNative(content string, mode EnvBlocklistMode) (*Service
 	}
 
 	if err := schema.Validate(raw); err != nil {
-		// Sprint 4 T2.2 (closes loopruntime-cloud#29): walk the FULL Causes tree,
+		// Sprint 4 T2.2 (closes loop-console#29): walk the FULL Causes tree,
 		// collecting every leaf violation into a flat FieldError slice. Replaces
 		// the legacy `leaf := ve.Causes[0]` single-cause walk (which masked
 		// simultaneous violations and produced a cascading-retry trap for the
@@ -172,7 +172,7 @@ func ValidateServicesJSONNative(content string, mode EnvBlocklistMode) (*Service
 // flattenJSONSchemaCauses recursively walks the jsonschema.ValidationError
 // Causes tree and emits one FieldError per LEAF (a cause with no further
 // sub-causes). The InstanceLocation becomes Field; the schema message becomes
-// Message. Sprint 4 T2.2 closes loopruntime-cloud#29 (multi-field error aggregation).
+// Message. Sprint 4 T2.2 closes loop-console#29 (multi-field error aggregation).
 //
 // Walk order is depth-first, left-to-right — matches the order jsonschema/v5
 // emits the Causes slice, which makes the first leaf deterministic and

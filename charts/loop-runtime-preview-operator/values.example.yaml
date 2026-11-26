@@ -1,0 +1,8 @@
+# loop-runtime-preview-operator — example install values (install-config-contract Slice 4)
+
+reloader:
+  enabled: false   # rotation-aware restart (operator-installed Reloader)
+
+config:
+  ingressNamespace: "traefik"
+  # ... see CONFIG.md for the full key list

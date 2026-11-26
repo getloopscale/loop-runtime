@@ -1,4 +1,4 @@
-# loopruntime-clone-runner: Alpine image with mc (MinIO client) + git.
+# loop-runtime-clone-runner: Alpine image with mc (MinIO client) + git.
 #
 # It is the platform's ONE image that carries mc: the clone CWT downloads source
 # bundles with it, the cache CWTs save and restore build caches with it, and the
@@ -12,7 +12,7 @@
 # the same guarantee the old binary sha256 gave, one step earlier in the chain.
 #
 # SEC-004 still holds: nothing is downloaded at runtime.
-# Security: runs as non-root user 1000 (loopruntime).
+# Security: runs as non-root user 1000 (loop-runtime).
 FROM mirror.gcr.io/library/golang:1.26.11-alpine3.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a AS mc-build
 
 # Tag RELEASE.2025-08-13T08-35-41Z of github.com/minio/mc. A tag can be moved; the
@@ -48,15 +48,15 @@ ARG MC_TAG=RELEASE.2025-08-13T08-35-41Z
 ARG MC_COMMIT=7394ce0dd2a80935aded936b09fa12cbb3cb8096
 
 LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime" \
-      org.opencontainers.image.title="loopruntime-clone-runner" \
-      io.loopruntime.mc.release="${MC_TAG}" \
-      io.loopruntime.mc.revision="${MC_COMMIT}"
+      org.opencontainers.image.title="loop-runtime-clone-runner" \
+      io.loop-runtime.mc.release="${MC_TAG}" \
+      io.loop-runtime.mc.revision="${MC_COMMIT}"
 
 # /usr/bin/mc is the path the MinIO chart's jobs call explicitly.
 COPY --from=mc-build /out/mc /usr/bin/mc
 
 RUN apk add --no-cache git ca-certificates \
-    && adduser -D -u 1000 loopruntime
+    && adduser -D -u 1000 loop-runtime
 
 USER 1000
 ENTRYPOINT ["/bin/sh"]

@@ -83,9 +83,9 @@ func TestK3dClusterNamesAreUnique(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
 	expectedNames := map[string]bool{
-		"loopruntime-core":   false,
-		"loopruntime-build":  false,
-		"loopruntime-cell-0": false,
+		"loop-runtime-core":   false,
+		"loop-runtime-build":  false,
+		"loop-runtime-cell-0": false,
 	}
 
 	for _, cfg := range configs {
@@ -111,9 +111,9 @@ func TestK3dKubeAPIPorts(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
 	expectedPorts := map[string]string{
-		"loopruntime-core":   "6443",
-		"loopruntime-build":  "6445",
-		"loopruntime-cell-0": "6444",
+		"loop-runtime-core":   "6443",
+		"loop-runtime-build":  "6445",
+		"loop-runtime-cell-0": "6444",
 	}
 
 	seen := make(map[string]string) // port -> cluster name
@@ -135,12 +135,12 @@ func TestK3dKubeAPIPorts(t *testing.T) {
 // TestK3dAgentCount enforces the per-cluster agent capacity each cluster
 // actually needs.
 //
-//   - loopruntime-core   — 2 agents: hosts CRDs + 4 controllers + ArgoCD + Gitea HA
+//   - loop-runtime-core   — 2 agents: hosts CRDs + 4 controllers + ArgoCD + Gitea HA
 //   - Kratos + Hydra + Postgres + Traefik + cert-manager.
 //     1 agent OOM's mid-bootstrap (Achado #131, T5.1 run 4).
-//   - loopruntime-build  — 1 agent:  only runs Argo Workflows + BuildKit; concurrency
+//   - loop-runtime-build  — 1 agent:  only runs Argo Workflows + BuildKit; concurrency
 //     is bounded by the workflow controller, not node count.
-//   - loopruntime-cell-0 — 1 agent: tenant pods scale horizontally, but the
+//   - loop-runtime-cell-0 — 1 agent: tenant pods scale horizontally, but the
 //     cluster itself doesn't need a second node for HA in dev.
 //
 // Tightening this beyond actual need wastes ~1.7 GiB RAM per cluster on
@@ -149,9 +149,9 @@ func TestK3dAgentCount(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
 	expected := map[string]int{
-		"loopruntime-core":   2,
-		"loopruntime-build":  1,
-		"loopruntime-cell-0": 1,
+		"loop-runtime-core":   2,
+		"loop-runtime-build":  1,
+		"loop-runtime-cell-0": 1,
 	}
 
 	for _, cfg := range configs {
@@ -170,10 +170,10 @@ func TestK3dAgentCount(t *testing.T) {
 func TestK3dRegistryConfiguration(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
-	expectedRegistry := "k3d-loopruntime-registry:5000"
+	expectedRegistry := "k3d-loop-runtime-registry:5000"
 	clustersWithRegistry := map[string]bool{
-		"loopruntime-core":  true,
-		"loopruntime-build": true,
+		"loop-runtime-core":  true,
+		"loop-runtime-build": true,
 	}
 
 	for _, cfg := range configs {

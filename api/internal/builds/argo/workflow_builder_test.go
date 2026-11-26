@@ -14,9 +14,9 @@ import (
 
 func testInfraParams() InfraParams {
 	return InfraParams{
-		RegistryURL:      "k3d-loopruntime-registry:5000",
+		RegistryURL:      "k3d-loop-runtime-registry:5000",
 		RegistryInsecure: true,
-		BaseDomain:       "loopruntime.local",
+		BaseDomain:       "loop-runtime.local",
 	}
 }
 
@@ -45,10 +45,10 @@ func testSpec() deploycontracts.WorkflowSpec {
 // planFromApps invokes the production deploycontracts.CreateBuildPlan pipeline on a
 // list of AppSpecs so test inputs and production semantics stay aligned.
 // Defaults match testSpec(): tenant=acme, project=my-app, sha=abc123,
-// registry=k3d-loopruntime-registry:5000 (testInfraParams). Use planFromAppsCustom
+// registry=k3d-loop-runtime-registry:5000 (testInfraParams). Use planFromAppsCustom
 // for non-default tenant/project/sha/registry combinations.
 func planFromApps(apps []deploycontracts.AppSpec) *deploycontracts.BuildPlan {
-	return planFromAppsCustom(apps, "acme", "my-app", "abc123", "k3d-loopruntime-registry:5000")
+	return planFromAppsCustom(apps, "acme", "my-app", "abc123", "k3d-loop-runtime-registry:5000")
 }
 
 func planFromAppsCustom(apps []deploycontracts.AppSpec, tenantID, projectID, commitSHA, registryURL string) *deploycontracts.BuildPlan {
@@ -77,8 +77,8 @@ func TestWorkflowBuilder_Build_ReturnsValidWorkflow(t *testing.T) {
 	}
 
 	// Metadata
-	if wf.GenerateName != "loopruntime-build-build-001-" {
-		t.Errorf("GenerateName = %q, want %q", wf.GenerateName, "loopruntime-build-build-001-")
+	if wf.GenerateName != "loop-runtime-build-build-001-" {
+		t.Errorf("GenerateName = %q, want %q", wf.GenerateName, "loop-runtime-build-build-001-")
 	}
 
 	// Labels
@@ -102,8 +102,8 @@ func TestWorkflowBuilder_Build_SpecFields(t *testing.T) {
 	if wf.OnExit != "finalize" {
 		t.Errorf("OnExit = %q, want %q", wf.OnExit, "finalize")
 	}
-	if wf.ServiceAccountName != "loopruntime-build-sa" {
-		t.Errorf("ServiceAccountName = %q, want %q", wf.ServiceAccountName, "loopruntime-build-sa")
+	if wf.ServiceAccountName != "loop-runtime-build-sa" {
+		t.Errorf("ServiceAccountName = %q, want %q", wf.ServiceAccountName, "loop-runtime-build-sa")
 	}
 	if wf.Parallelism == nil || *wf.Parallelism != 4 {
 		t.Errorf("Parallelism = %v, want 4", wf.Parallelism)
@@ -156,7 +156,7 @@ func TestWorkflowBuilder_Build_HasSharedPVCVolume(t *testing.T) {
 }
 
 // PVC multi-attach fix — formerly a per-consumer wrap, now handled
-// upstream as of loopruntime-forge v0.4.0 (issue getloopscale/argo-workflows-go#11).
+// upstream as of loop-runtime-forge v0.4.0 (issue getloopscale/argo-workflows-go#11).
 // The builder no longer sets Affinity directly; instead it leaves it
 // nil and relies on Workflow.Build() to inject the canonical
 // podAffinity term automatically because VolumeClaimTemplates is set.
@@ -286,8 +286,8 @@ func TestWorkflowBuilder_Build_CloneTask_UsesCWTRef(t *testing.T) {
 	if task.TemplateRef == nil {
 		t.Fatal("clone-repo missing templateRef")
 	}
-	if task.TemplateRef.Name != "loopruntime-clone" {
-		t.Errorf("templateRef.Name = %q, want loopruntime-clone", task.TemplateRef.Name)
+	if task.TemplateRef.Name != "loop-runtime-clone" {
+		t.Errorf("templateRef.Name = %q, want loop-runtime-clone", task.TemplateRef.Name)
 	}
 	if !task.TemplateRef.ClusterScope {
 		t.Error("templateRef.ClusterScope should be true")
@@ -356,7 +356,7 @@ func TestWorkflowBuilder_Build_InsecureFlags_WhenRegistryInsecure(t *testing.T) 
 }
 
 func TestBuildkitEntrypointScript_InsecureIncludesEntitlement(t *testing.T) {
-	script, err := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopruntime-registry:5000", metadataFileFor("api"))
+	script, err := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loop-runtime-registry:5000", metadataFileFor("api"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,11 +366,11 @@ func TestBuildkitEntrypointScript_InsecureIncludesEntitlement(t *testing.T) {
 }
 
 func TestBuildkitEntrypointScript_InsecureIncludesRegistryConfig(t *testing.T) {
-	script, err := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loopruntime-registry:5000", metadataFileFor("api"))
+	script, err := buildkitEntrypointScript("unix:///run/user/1000/buildkitd/buildkitd.sock", true, "k3d-loop-runtime-registry:5000", metadataFileFor("api"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(script, "k3d-loopruntime-registry:5000") {
+	if !strings.Contains(script, "k3d-loop-runtime-registry:5000") {
 		t.Error("buildkitd entrypoint must reference the registry URL for insecure config")
 	}
 	if !strings.Contains(script, "http = true") {
@@ -904,13 +904,13 @@ func TestWorkflowBuilder_BuildKit_BuildctlArgs_ContainsCacheFlags(t *testing.T) 
 	assertStringContains(t, argsStr, "--frontend dockerfile.v0")
 
 	// Output with push
-	assertStringContains(t, argsStr, "--output type=image,name=k3d-loopruntime-registry:5000/acme/my-app-api:abc123,push=true")
+	assertStringContains(t, argsStr, "--output type=image,name=k3d-loop-runtime-registry:5000/acme/my-app-api:abc123,push=true")
 
 	// Export cache — same repo as image, tag :buildcache. ignore-error=true makes cache failures non-fatal.
-	assertStringContains(t, argsStr, "--export-cache type=registry,ref=k3d-loopruntime-registry:5000/acme/my-app-api:buildcache,mode=max,ignore-error=true")
+	assertStringContains(t, argsStr, "--export-cache type=registry,ref=k3d-loop-runtime-registry:5000/acme/my-app-api:buildcache,mode=max,ignore-error=true")
 
 	// Import cache — same ref
-	assertStringContains(t, argsStr, "--import-cache type=registry,ref=k3d-loopruntime-registry:5000/acme/my-app-api:buildcache")
+	assertStringContains(t, argsStr, "--import-cache type=registry,ref=k3d-loop-runtime-registry:5000/acme/my-app-api:buildcache")
 
 	// Metadata file for digest extraction
 	assertStringContains(t, argsStr, "--metadata-file /workspace/metadata-api.json")

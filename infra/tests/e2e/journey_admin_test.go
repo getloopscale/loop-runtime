@@ -6,7 +6,7 @@
 // Migrated from: infra/tests/dogfood/journeys/journey-11-admin.sh
 //
 // Tests: evict dry-run, broad pattern rejection, missing service auth rejection
-// Requires: LOOPRUNTIME_SERVICE_AUTH environment variable
+// Requires: LOOP_RUNTIME_SERVICE_AUTH environment variable
 package e2e
 
 import (
@@ -26,12 +26,12 @@ var _ = Describe("Journey 11: Admin", Label("journey"), func() {
 		seedE2E()
 
 		// Load service auth from file or env.
-		serviceAuth = os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
+		serviceAuth = os.Getenv("LOOP_RUNTIME_SERVICE_AUTH")
 		if serviceAuth == "" {
-			authFile := os.ExpandEnv("${HOME}/.loopruntime/local-service-auth.txt")
+			authFile := os.ExpandEnv("${HOME}/.loop-runtime/local-service-auth.txt")
 			data, err := os.ReadFile(authFile)
 			if err != nil {
-				Skip("LOOPRUNTIME_SERVICE_AUTH not set and " + authFile + " not found")
+				Skip("LOOP_RUNTIME_SERVICE_AUTH not set and " + authFile + " not found")
 			}
 			serviceAuth = strings.TrimSpace(string(data))
 		}
@@ -65,8 +65,8 @@ var _ = Describe("Journey 11: Admin", Label("journey"), func() {
 	})
 
 	It("rejects missing service auth", func() {
-		// Deliberately no LOOPRUNTIME_SERVICE_AUTH: removed from the inherited env too.
-		stdout, stderr, _ := execLoopRuntime(loopruntimeInvocation{unset: []string{"LOOPRUNTIME_SERVICE_AUTH"}},
+		// Deliberately no LOOP_RUNTIME_SERVICE_AUTH: removed from the inherited env too.
+		stdout, stderr, _ := execLoopRuntime(loopRuntimeInvocation{unset: []string{"LOOP_RUNTIME_SERVICE_AUTH"}},
 			"admin", "tenants", "evict", "--pattern", "tn-test-%", "--dry-run", "--json")
 
 		combined := strings.ToLower(stdout + stderr)
@@ -97,5 +97,5 @@ var _ = Describe("Journey 11: Admin", Label("journey"), func() {
 // runLoopRuntimeAdmin runs an admin command authenticated by the operator's
 // X-Service-Auth secret.
 func runLoopRuntimeAdmin(serviceAuth string, args ...string) (stdout, stderr string, exitCode int) {
-	return execLoopRuntime(loopruntimeInvocation{env: []string{"LOOPRUNTIME_SERVICE_AUTH=" + serviceAuth}}, args...)
+	return execLoopRuntime(loopRuntimeInvocation{env: []string{"LOOP_RUNTIME_SERVICE_AUTH=" + serviceAuth}}, args...)
 }

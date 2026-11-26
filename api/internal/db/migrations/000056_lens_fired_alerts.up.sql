@@ -4,12 +4,12 @@
 -- ============================================================================
 -- 000056_lens_fired_alerts
 --
--- loopruntime-lens M84 — a queryable HISTORY of alert firings. Where 000054's
+-- loop-runtime-lens M84 — a queryable HISTORY of alert firings. Where 000054's
 -- lens_alert_rules carries only a single last_triggered_at, this table records
 -- ONE row per breach (metric value at fire time, comparator, threshold, when),
 -- so an alert that fired is auditable in-app over time, not just "last fired".
 --
--- The evaluator (loopruntime-cloud lens_alert_evaluator.processRule) INSERTs one row
+-- The evaluator (loop-console lens_alert_evaluator.processRule) INSERTs one row
 -- here in the SAME transaction as the workspace_webhook_deliveries enqueue + the
 -- status flip — so a breach yields exactly one delivery AND one history row,
 -- atomically (either all three commit or none do).
@@ -23,7 +23,7 @@
 -- Tenancy mirrors 000054: tenant_id references tenants; rule_id references the
 -- alert rule (cascade-deleted with it — history is meaningless without its rule).
 --
--- Owned/queried by loopruntime-cloud (raw database/sql); engine owns the schema.
+-- Owned/queried by loop-console (raw database/sql); engine owns the schema.
 -- Forward-only per CLAUDE.md convention.
 -- ============================================================================
 

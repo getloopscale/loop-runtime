@@ -12,7 +12,7 @@ import (
 )
 
 // T1.1 (plan simplify-deploy-loopzerokit-only v2.0) — canonical Dockerfile generator.
-// Replaces loopruntime-packs (11-language heuristic) with two platform-controlled
+// Replaces loop-runtime-packs (11-language heuristic) with two platform-controlled
 // multi-stage Dockerfiles (node, python) for the fixed LoopZeroKit stack. The
 // generator runs at API time WITHOUT the extracted source, so package-manager
 // selection is deterministic build-time shell logic inside the Dockerfile.

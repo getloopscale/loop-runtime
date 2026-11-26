@@ -14,7 +14,7 @@ import (
 // setupCrossTenantTestDB returns a pool for tests whose FIXTURE spans tenants —
 // creating a tenant and writing its rows in the same breath.
 //
-// It is `loopruntime_worker`, the role whose reach is the named *_worker_cross_tenant
+// It is `loop_runtime_worker`, the role whose reach is the named *_worker_cross_tenant
 // policies (migration 000062), for the same reason production uses it for
 // background work: the alternative is a standing bypass, which migration 000064
 // removed. Falls back to DATABASE_URL when the worker DSN is unset so a machine

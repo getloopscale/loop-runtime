@@ -73,12 +73,12 @@ func TestEveryCoreEnvironmentInstallsTheMCPGateway(t *testing.T) {
 		"gateway-api-crds":  {Namespace: "kube-system", Chart: "../helm/gateway-api-crds"},
 		"agentgateway-crds": {Namespace: "agentgateway-system", Chart: "agentgateway/agentgateway-crds", Version: agentgatewayPin},
 		"agentgateway":      {Namespace: "agentgateway-system", Chart: "agentgateway/agentgateway", Version: agentgatewayPin},
-		"mcp-gateway":       {Namespace: "loopruntime-mcp", Chart: "../helm/mcp-gateway"},
+		"mcp-gateway":       {Namespace: "loop-runtime-mcp", Chart: "../helm/mcp-gateway"},
 	}
 	for _, env := range declaredPlatformEnvironments(t) {
 		t.Run(env, func(t *testing.T) {
 			t.Parallel()
-			out := helmfileRun(t, []string{"LOOPRUNTIME_DB_PASSWORD=unused"},
+			out := helmfileRun(t, []string{"LOOP_RUNTIME_DB_PASSWORD=unused"},
 				"-f", "infra/helmfile/core.helmfile.yaml.gotmpl", "-e", env, "list", "--output=json")
 			var releases []listedVersionedRelease
 			if err := json.Unmarshal([]byte(out), &releases); err != nil {
@@ -154,12 +154,12 @@ func TestDevPublicMemoryMCPIsBehindTheGatewayWithOneResourceURI(t *testing.T) {
 	if server == nil {
 		t.Fatalf("dev-public mcp.servers = %v, want a memory server", servers)
 	}
-	if server["host"] != "loopruntime-memory-mcp.loopruntime-data-plane.svc.cluster.local" || server["port"] != 3100 {
-		t.Errorf("memory server target = %v:%v, want the loopruntime-memory-mcp Service on 3100", server["host"], server["port"])
+	if server["host"] != "loop-runtime-memory-mcp.loop-runtime-data-plane.svc.cluster.local" || server["port"] != 3100 {
+		t.Errorf("memory server target = %v:%v, want the loop-runtime-memory-mcp Service on 3100", server["host"], server["port"])
 	}
 	gatewayResource := fmt.Sprint(gw["publicOrigin"], server["path"])
 
-	mem := helmfileValues(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopruntime-memory", helmfileCoreEnv...)
+	mem := helmfileValues(t, "core.helmfile.yaml.gotmpl", "dev-public", "loop-runtime-memory", helmfileCoreEnv...)
 	var worker map[string]any
 	workers, _ := mem["workers"].([]any)
 	for _, w := range workers {
@@ -168,20 +168,20 @@ func TestDevPublicMemoryMCPIsBehindTheGatewayWithOneResourceURI(t *testing.T) {
 		}
 	}
 	if worker == nil {
-		t.Fatalf("loopruntime-memory workers = %v, want an mcp worker", workers)
+		t.Fatalf("loop-runtime-memory workers = %v, want an mcp worker", workers)
 	}
 	if worker["port"] != 3100 {
 		t.Errorf("mcp worker port = %v, want 3100", worker["port"])
 	}
 	env, _ := worker["env"].(map[string]any)
-	if env["LOOPRUNTIME_MCP_RESOURCE"] != gatewayResource {
-		t.Errorf("server resource %v != gateway audience %v", env["LOOPRUNTIME_MCP_RESOURCE"], gatewayResource)
+	if env["LOOP_RUNTIME_MCP_RESOURCE"] != gatewayResource {
+		t.Errorf("server resource %v != gateway audience %v", env["LOOP_RUNTIME_MCP_RESOURCE"], gatewayResource)
 	}
-	if env["LOOPRUNTIME_OAUTH_ISSUER"] != gw["issuer"] {
-		t.Errorf("server issuer %v != gateway issuer %v", env["LOOPRUNTIME_OAUTH_ISSUER"], gw["issuer"])
+	if env["LOOP_RUNTIME_OAUTH_ISSUER"] != gw["issuer"] {
+		t.Errorf("server issuer %v != gateway issuer %v", env["LOOP_RUNTIME_OAUTH_ISSUER"], gw["issuer"])
 	}
-	if env["LOOPRUNTIME_MCP_TLS_TERMINATED_UPSTREAM"] != "true" {
-		t.Errorf("LOOPRUNTIME_MCP_TLS_TERMINATED_UPSTREAM = %v, want \"true\": the server binds 0.0.0.0 behind the gateway", env["LOOPRUNTIME_MCP_TLS_TERMINATED_UPSTREAM"])
+	if env["LOOP_RUNTIME_MCP_TLS_TERMINATED_UPSTREAM"] != "true" {
+		t.Errorf("LOOP_RUNTIME_MCP_TLS_TERMINATED_UPSTREAM = %v, want \"true\": the server binds 0.0.0.0 behind the gateway", env["LOOP_RUNTIME_MCP_TLS_TERMINATED_UPSTREAM"])
 	}
 }
 

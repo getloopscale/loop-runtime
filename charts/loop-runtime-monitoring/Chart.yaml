@@ -1,0 +1,12 @@
+apiVersion: v2
+name: loop-runtime-monitoring
+description: LoopRuntime platform PrometheusRules and Grafana dashboards
+type: application
+version: 0.3.0
+appVersion: "dev"
+home: https://github.com/getloopscale/loop-runtime
+sources:
+  - https://github.com/getloopscale/loop-runtime
+maintainers:
+  - name: LoopRuntime Team
+    url: https://getloopscale.com

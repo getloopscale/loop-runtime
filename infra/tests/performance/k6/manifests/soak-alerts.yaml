@@ -2,30 +2,30 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: k6-soak-alerts
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   labels:
     app.kubernetes.io/name: k6-soak
-    app.kubernetes.io/part-of: loopruntime
+    app.kubernetes.io/part-of: loop-runtime
     release: prometheus
 spec:
   groups:
-    - name: loopruntime.soak
+    - name: loop-runtime.soak
       rules:
         - alert: LoopRuntimeSoakTestFailed
           expr: |
-            kube_job_status_failed{job_name=~"k6-soak-weekly-.*", namespace="loopruntime-system"} > 0
+            kube_job_status_failed{job_name=~"k6-soak-weekly-.*", namespace="loop-runtime-system"} > 0
           for: 5m
           labels:
             severity: warning
             team: platform
           annotations:
             summary: "Weekly soak test failed"
-            description: "The k6 soak test Job failed. Check logs: kubectl logs -n loopruntime-system -l app.kubernetes.io/name=k6-soak"
+            description: "The k6 soak test Job failed. Check logs: kubectl logs -n loop-runtime-system -l app.kubernetes.io/name=k6-soak"
             runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/infra/tests/performance/k6/README.md#alerts-soak"
 
         - alert: LoopRuntimeAPIMemoryLeak
           expr: |
-            deriv(process_resident_memory_bytes{job="loopruntime-api"}[1h]) > 0
+            deriv(process_resident_memory_bytes{job="loop-runtime-api"}[1h]) > 0
             and
             time() - kube_cronjob_next_schedule_time{cronjob="k6-soak-weekly"} < 28800
           for: 2h
@@ -38,7 +38,7 @@ spec:
 
         - alert: LoopRuntimeAPIFDExhaustion
           expr: |
-            deriv(process_open_fds{job="loopruntime-api"}[1h]) > 0
+            deriv(process_open_fds{job="loop-runtime-api"}[1h]) > 0
             and
             time() - kube_cronjob_next_schedule_time{cronjob="k6-soak-weekly"} < 28800
           for: 2h

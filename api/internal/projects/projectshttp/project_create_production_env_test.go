@@ -47,7 +47,7 @@ func (f *fakeEnvEnsurer) EnsureEnvironment(_ context.Context, tenantID, project,
 // successful POST /api/v1/projects MUST invoke envEnsurer.EnsureEnvironment
 // with envName="production" so the operator chain (TenantController →
 // EnvironmentController) provisions the canonical M2 namespace
-// `loopruntime-<tenant>-<project>-production` automatically.
+// `loop-runtime-<tenant>-<project>-production` automatically.
 func TestProjectCreate_AutoCreatesProductionEnv(t *testing.T) {
 	store := &fakeProjectStore{
 		createResult: ports.ProjectResult{ID: "p1", Name: "my-api", TeamID: "tn-test-123"},

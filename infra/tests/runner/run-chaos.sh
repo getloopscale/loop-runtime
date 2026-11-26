@@ -26,7 +26,7 @@ PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus-server.monitoring.svc.cluste
 
 # shellcheck source=./safety.sh
 . "$SCRIPT_DIR/safety.sh"
-loopruntime_safety_check
+loop_runtime_safety_check
 
 MANIFEST="${1:-}"
 if [[ -z "$MANIFEST" ]]; then
@@ -110,7 +110,7 @@ echo
 
 # Run the query via kubectl proxy (simpler than port-forward)
 PROM_RESULT=$(kubectl run prom-query-$$ --rm -i --restart=Never \
-  --image=curlimages/curl:latest -n loopruntime-system -- \
+  --image=curlimages/curl:latest -n loop-runtime-system -- \
   sh -c "curl -sG --data-urlencode 'query=${SLO_QUERY}' '${PROMETHEUS_URL}'" \
   2>&1 | tail -1)
 

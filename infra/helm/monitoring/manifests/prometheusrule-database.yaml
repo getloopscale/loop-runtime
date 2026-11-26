@@ -3,17 +3,17 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-database-alerts
+  name: loop-runtime-database-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopruntime.database.warning
+    - name: loop-runtime.database.warning
       rules:
         # Track C Rule 1: Pool exhaustion approaching — 80% of max connections used
         - alert: LoopRuntimeDBPoolNearExhaustion
-          expr: loopruntime_postgres_connections_active / 25 > 0.8
+          expr: loop_runtime_postgres_connections_active / 25 > 0.8
           for: 2m
           labels:
             severity: warning
@@ -24,17 +24,17 @@ spec:
 
         # Track C Rule 3: Slow queries — p95 query duration exceeds 500ms
         - alert: LoopRuntimeDBSlowQueries
-          expr: histogram_quantile(0.95, sum(rate(loopruntime_postgres_query_duration_seconds_bucket[5m])) by (le)) > 0.5
+          expr: histogram_quantile(0.95, sum(rate(loop_runtime_postgres_query_duration_seconds_bucket[5m])) by (le)) > 0.5
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "PostgreSQL query duration p95 exceeds 500ms"
             description: "Database query latency (p95) has been above 500ms for 5 minutes. May indicate missing indexes, table bloat, or lock contention."
-            runbook: "Check pg_stat_statements for top queries by mean_exec_time. Look for sequential scans on large tables. Verify advisory lock contention via loopruntime_lock_hold_duration_seconds."
+            runbook: "Check pg_stat_statements for top queries by mean_exec_time. Look for sequential scans on large tables. Verify advisory lock contention via loop_runtime_lock_hold_duration_seconds."
 
         - alert: LoopRuntimeDBPoolExhaustion
-          expr: loopruntime_postgres_connections_active / 25 > 0.95
+          expr: loop_runtime_postgres_connections_active / 25 > 0.95
           for: 1m
           labels:
             severity: critical

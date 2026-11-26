@@ -24,20 +24,20 @@ import (
 //
 // Run:
 //
-//	LOOPRUNTIME_CAPACITY=1 LOOPRUNTIME_MINIO_ENDPOINT=http://localhost:19000 \
-//	LOOPRUNTIME_MINIO_ACCESS_KEY=... LOOPRUNTIME_MINIO_SECRET_KEY=... \
-//	LOOPRUNTIME_MINIO_BUCKET=loopruntime-artifacts \
+//	LOOP_RUNTIME_CAPACITY=1 LOOP_RUNTIME_MINIO_ENDPOINT=http://localhost:19000 \
+//	LOOP_RUNTIME_MINIO_ACCESS_KEY=... LOOP_RUNTIME_MINIO_SECRET_KEY=... \
+//	LOOP_RUNTIME_MINIO_BUCKET=loop-runtime-artifacts \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityMinIO -v \
 //	  -args -rps=50 -duration=60s -workers=20
 func TestCapacityMinIOPut(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	endpoint := os.Getenv("LOOPRUNTIME_MINIO_ENDPOINT")
-	accessKey := os.Getenv("LOOPRUNTIME_MINIO_ACCESS_KEY")
-	secretKey := os.Getenv("LOOPRUNTIME_MINIO_SECRET_KEY")
-	bucket := os.Getenv("LOOPRUNTIME_MINIO_BUCKET")
+	endpoint := os.Getenv("LOOP_RUNTIME_MINIO_ENDPOINT")
+	accessKey := os.Getenv("LOOP_RUNTIME_MINIO_ACCESS_KEY")
+	secretKey := os.Getenv("LOOP_RUNTIME_MINIO_SECRET_KEY")
+	bucket := os.Getenv("LOOP_RUNTIME_MINIO_BUCKET")
 	if endpoint == "" || accessKey == "" || secretKey == "" || bucket == "" {
-		t.Fatal("LOOPRUNTIME_MINIO_ENDPOINT, _ACCESS_KEY, _SECRET_KEY, _BUCKET required")
+		t.Fatal("LOOP_RUNTIME_MINIO_ENDPOINT, _ACCESS_KEY, _SECRET_KEY, _BUCKET required")
 	}
 
 	cfg := NewConfig("minio-put")

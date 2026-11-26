@@ -3,7 +3,7 @@
 //
 // Behaviour tests for worker.mjs, run with `node --test`. The Worker is a service
 // worker script: it is loaded into an isolated context whose globals stand in for the
-// Cloudflare runtime (the LOOPRUNTIME_ROUTING KV binding and fetch).
+// Cloudflare runtime (the LOOP_RUNTIME_ROUTING KV binding and fetch).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -19,7 +19,7 @@ function loadWorker(kv) {
     Headers,
     Response,
     addEventListener: (_type, fn) => { handler = fn; },
-    LOOPRUNTIME_ROUTING: { get: async (key) => (key in kv ? kv[key] : null) },
+    LOOP_RUNTIME_ROUTING: { get: async (key) => (key in kv ? kv[key] : null) },
     fetch: async (input, init) => {
       fetches.push({ url: typeof input === "string" ? input : input.url, init });
       return new Response("upstream", { status: 200 });

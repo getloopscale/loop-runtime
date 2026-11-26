@@ -15,14 +15,14 @@ hydra:
 
   config:
     # T1.3 (plan 2026-05-21-deep-review-remediation): DSN templated via helmfile
-    # env. LOOPRUNTIME_DB_PASSWORD required (set by task setup OR generate-secrets.sh).
+    # env. LOOP_RUNTIME_DB_PASSWORD required (set by task setup OR generate-secrets.sh).
     # Pulumi prod overrides this entire DSN via Secret reference.
     # EC-02 of plan 2026-05-22 v1.1 — single-quoted YAML allows unescaped
     # double quotes inside gotmpl template literal. Previous `"..."` form
     # with `\"` escape failed helmfile template render with
     # `unexpected "\\" in operand`. Cleanroom bug discovered 2026-05-21.
     {{- if not .Values.profile.awsSecretsManager }}
-    dsn: 'postgres://loopruntime:{{ requiredEnv "LOOPRUNTIME_DB_PASSWORD" }}@postgresql.loopruntime-system.svc.cluster.local:5432/hydra?sslmode=disable'
+    dsn: 'postgres://loop_runtime:{{ requiredEnv "LOOP_RUNTIME_DB_PASSWORD" }}@postgresql.loop-runtime-system.svc.cluster.local:5432/hydra?sslmode=disable'
     {{- end }}
 
     # --- URLs ---
@@ -35,7 +35,7 @@ hydra:
         # which couldn't match anything real, breaking JWT validation system-wide
         # had any prod canary actually exercised the flow end-to-end (it was
         # masked by Bug #24 in the drill, never tested in prod). Cross-namespace
-        # FQDN: Hydra in the loopruntime-auth ns, loopruntime-api in the loopruntime-system ns, both
+        # FQDN: Hydra in the loop-runtime-auth ns, loop-runtime-api in the loop-runtime-system ns, both
         # resolve via cluster.local. Works for local k3d (CoreDNS) + drill
         # (DOKS) + prod (DOKS). Single source of truth — env-specific overlays
         # only for special cases (e.g., external HTTPS gateway).
@@ -46,14 +46,14 @@ hydra:
         # (already defined in dev-public.yaml + future drill/prod envs) is
         # the canonical override; absent → fallback to in-cluster FQDN that
         # works for service-to-service token validation.
-        issuer: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loopruntime-auth.svc.cluster.local:4444{{ end }}/"
+        issuer: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loop-runtime-auth.svc.cluster.local:4444{{ end }}/"
         # urls.self.public controls the base used to build device-flow
         # verification_uri + discovery /.well-known endpoints. Must point at
         # the SAME public FQDN as issuer — otherwise Hydra emits
         # verification_uri with the cluster-internal host even when issuer
         # is correct (LIVE failure caught 2026-06-05 against
         # https://cloud-dev.getloopscale.com/v1/auth/device/authorize).
-        public: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loopruntime-auth.svc.cluster.local:4444{{ end }}/"
+        public: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loop-runtime-auth.svc.cluster.local:4444{{ end }}/"
       # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 — KNOWN GAP:
       # login/consent/logout URLs point at localhost:4455 (the k3d port-forward
       # of the Kratos UI) — works LOCALLY only. In drill/prod there is currently NO
@@ -153,9 +153,9 @@ hydra:
     secrets:
       # LOCAL DEV ONLY — production overrides via Pulumi.
       system:
-        - "loopruntime-dev-hydra-system-secret!!"
+        - "loop-runtime-dev-hydra-system-secret!!"
       cookie:
-        - "loopruntime-dev-hydra-cookie-secret!!"
+        - "loop-runtime-dev-hydra-cookie-secret!!"
 
     # --- TTLs ---
     # 2026-05-09: bumped access_token + id_token from 1h → 24h for LOCAL k3d

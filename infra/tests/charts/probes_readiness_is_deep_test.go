@@ -21,7 +21,7 @@ import (
 // readiness must point at a deep-check path. Pinning the literal would fail any
 // route rename while nothing got worse.
 func TestReadinessAndLivenessDoNotShareTheSameHandler(t *testing.T) {
-	api := publishedChart(t, "loopruntime-api")
+	api := publishedChart(t, "loop-runtime-api")
 	// The chart is installed two ways: by ArgoCD with its defaults, and by the
 	// Helmfile bootstrap with values-bootstrap.yaml. Both renders are checked,
 	// because a values file can override a probe as easily as a template can.
@@ -29,8 +29,8 @@ func TestReadinessAndLivenessDoNotShareTheSameHandler(t *testing.T) {
 		name   string
 		values []string
 	}{
-		{"charts/loopruntime-api", nil},
-		{"charts/loopruntime-api with values-bootstrap.yaml", []string{filepath.Join(api, "values-bootstrap.yaml")}},
+		{"charts/loop-runtime-api", nil},
+		{"charts/loop-runtime-api with values-bootstrap.yaml", []string{filepath.Join(api, "values-bootstrap.yaml")}},
 	} {
 		t.Run(install.name, func(t *testing.T) {
 			out := renderChart(t, api, "t", nil, install.values...)

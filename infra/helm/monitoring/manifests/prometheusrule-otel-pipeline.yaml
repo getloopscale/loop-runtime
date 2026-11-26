@@ -2,13 +2,13 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-otel-pipeline-alerts
+  name: loop-runtime-otel-pipeline-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopruntime.telemetry-pipeline
+    - name: loop-runtime.telemetry-pipeline
       rules:
         - alert: LoopRuntimeOTelSpanDropRate
           expr: rate(otelcol_processor_dropped_spans_total[5m]) > 0

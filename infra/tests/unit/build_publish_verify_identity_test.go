@@ -10,8 +10,8 @@ import (
 	"testing"
 )
 
-// The shared build-publish workflow is called from other repositories (loopruntime-cloud,
-// loopruntime-memory, loopruntime-rag, loopruntime-lens). A Fulcio certificate issued inside a reusable workflow
+// The shared build-publish workflow is called from other repositories (loop-console,
+// loop-runtime-memory, loop-runtime-rag, loop-runtime-lens). A Fulcio certificate issued inside a reusable workflow
 // names the REUSABLE in its SAN and the CALLER in its source-repository claim, so the
 // verify step must pin each half to the right thing (#460). Pinning the caller's repository
 // in the SAN, as it did, rejects every signature this workflow produces for another

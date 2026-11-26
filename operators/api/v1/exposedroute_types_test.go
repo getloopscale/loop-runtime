@@ -45,7 +45,7 @@ func TestExposedRoute_SpecFields(t *testing.T) {
 	route := ExposedRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "web-route",
-			Namespace: "loopruntime-acme-production",
+			Namespace: "loop-runtime-acme-production",
 		},
 		Spec: ExposedRouteSpec{
 			ApplicationRef: "my-app",

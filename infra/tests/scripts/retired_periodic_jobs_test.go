@@ -13,7 +13,7 @@ import (
 )
 
 // docRelPath is the declaration of the four periodic jobs that lost their
-// scheduler when the loopruntime-ci-workflows chart was retired (B-019, B-147).
+// scheduler when the loop-runtime-ci-workflows chart was retired (B-019, B-147).
 const docRelPath = "docs/operations/retired-periodic-jobs.md"
 
 // historicalBrokenTaskName is the one task reference in that document which is
@@ -27,7 +27,7 @@ const realCoverageReportTaskName = "quality:test:coverage:report"
 
 // Task-name resolution below mirrors the include layout of Taskfile.yml. It is
 // duplicated rather than imported because the authority for it lives in
-// cmd/loopruntime-ops/internal/quality/skillpaths, which is an internal package of a
+// cmd/loop-runtime-ops/internal/quality/skillpaths, which is an internal package of a
 // different module and cannot be reached from infra/tests.
 var (
 	flattenedSubfiles = []string{

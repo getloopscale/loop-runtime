@@ -12,7 +12,7 @@
 #
 # Usage:
 #   ./infra/scripts/production/break-glass.sh [context] [ttl_hours] [reason]
-#   ./infra/scripts/production/break-glass.sh do-nyc3-loopruntime-infra-homolog-nyc3-mgmt 4 "hotfix: PG connection timeout"
+#   ./infra/scripts/production/break-glass.sh do-nyc3-loop-runtime-infra-homolog-nyc3-mgmt 4 "hotfix: PG connection timeout"
 #
 # The script outputs a kubeconfig that expires after TTL.
 # All actions taken with this kubeconfig should be reconciled into Pulumi within 24h.
@@ -22,13 +22,13 @@ set -euo pipefail
 CONTEXT=${1:?Usage: break-glass.sh <kubectl-context> [ttl_hours] [reason]}
 TTL_HOURS=${2:-4}
 REASON=${3:-"no reason provided"}
-NAMESPACE="loopruntime-system"
+NAMESPACE="loop-runtime-system"
 SA_NAME="break-glass-$(date +%s)"
 TTL_SECONDS=$((TTL_HOURS * 3600))
 OPERATOR=$(whoami)
 
 echo "========================================="
-echo "  LOOPRUNTIME BREAK-GLASS ACCESS"
+echo "  LOOP_RUNTIME BREAK-GLASS ACCESS"
 echo "========================================="
 echo "  Context:  $CONTEXT"
 echo "  TTL:      ${TTL_HOURS}h (${TTL_SECONDS}s)"
@@ -138,7 +138,7 @@ echo "  SA:         $SA_NAME"
 echo ""
 echo "  Usage:"
 echo "    export KUBECONFIG=$KUBECONFIG_FILE"
-echo "    kubectl get pods -n loopruntime-system"
+echo "    kubectl get pods -n loop-runtime-system"
 echo ""
 echo "  ⚠️  Reconcile ALL changes into Pulumi within 24h"
 echo "  ⚠️  Auto-cleanup Job will revoke access in ${TTL_HOURS}h"

@@ -37,7 +37,7 @@ var _ = Describe("J-18 Status + Health — system status pages", Label("live", "
 
 	Context("Scenario B — engine /api/v1/health returns 200", func() {
 		It("engine basic health endpoint reachable", func() {
-			// loopruntime-cloud authenticates every /engine path, the health one included,
+			// loop-console authenticates every /engine path, the health one included,
 			// so the probe carries the seeded session; without it the answer is 401.
 			jwt, err := LoadJWT(env)
 			Expect(err).ToNot(HaveOccurred(), "JWT seed required")

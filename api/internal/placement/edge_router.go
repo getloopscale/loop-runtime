@@ -59,7 +59,7 @@ type TenantCellResolver interface {
 // EdgeRouterConfig says how hostnames map between the edge and the cells.
 type EdgeRouterConfig struct {
 	// InternalDomain is the suffix routes are published under inside a cell
-	// (loopruntime.local on dev-public). A route under it is indexed by its first label.
+	// (loop-runtime.local on dev-public). A route under it is indexed by its first label.
 	InternalDomain string
 	// PublicDomains are the suffixes users reach; the label in front of one is the
 	// same label the route was published with.

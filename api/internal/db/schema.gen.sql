@@ -39,10 +39,10 @@ DECLARE
   v_pruner_bypass TEXT;
 BEGIN
   -- T7.3: allow controlled DELETE by the audit_log_pruner service
-  -- when it sets `SET LOCAL loopruntime.audit_pruner = 'true'` inside a
+  -- when it sets `SET LOCAL loop_runtime.audit_pruner = 'true'` inside a
   -- transaction. Any other caller (psql, app code, runaway query)
   -- has NULL or empty here and falls through to the EXCEPTION.
-  v_pruner_bypass := current_setting('loopruntime.audit_pruner', true);
+  v_pruner_bypass := current_setting('loop_runtime.audit_pruner', true);
   IF TG_OP = 'DELETE' AND v_pruner_bypass = 'true' THEN
     RETURN OLD;
   END IF;
@@ -561,9 +561,9 @@ CREATE TABLE public.lens_saved_views (
 
 ALTER TABLE ONLY public.lens_saved_views FORCE ROW LEVEL SECURITY;
 
--- Name: loopruntime_api_keys; Type: TABLE; Schema: public; Owner: -
+-- Name: loop_runtime_api_keys; Type: TABLE; Schema: public; Owner: -
 
-CREATE TABLE public.loopruntime_api_keys (
+CREATE TABLE public.loop_runtime_api_keys (
     id text NOT NULL,
     subject text NOT NULL,
     tenant_id text NOT NULL,
@@ -578,11 +578,11 @@ CREATE TABLE public.loopruntime_api_keys (
     bff_minted boolean DEFAULT false NOT NULL,
     rotated_from text,
     account_id text NOT NULL,
-    CONSTRAINT loopruntime_api_keys_key_name_check CHECK (((length(key_name) >= 1) AND (length(key_name) <= 64))),
-    CONSTRAINT loopruntime_api_keys_scopes_check CHECK ((jsonb_typeof(scopes) = 'array'::text))
+    CONSTRAINT loop_runtime_api_keys_key_name_check CHECK (((length(key_name) >= 1) AND (length(key_name) <= 64))),
+    CONSTRAINT loop_runtime_api_keys_scopes_check CHECK ((jsonb_typeof(scopes) = 'array'::text))
 );
 
-ALTER TABLE ONLY public.loopruntime_api_keys FORCE ROW LEVEL SECURITY;
+ALTER TABLE ONLY public.loop_runtime_api_keys FORCE ROW LEVEL SECURITY;
 
 -- Name: memory_exports; Type: TABLE; Schema: public; Owner: -
 
@@ -1210,10 +1210,10 @@ ALTER TABLE ONLY public.lens_fired_alerts
 ALTER TABLE ONLY public.lens_saved_views
     ADD CONSTRAINT lens_saved_views_pkey PRIMARY KEY (id);
 
--- Name: loopruntime_api_keys loopruntime_api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: loop_runtime_api_keys loop_runtime_api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
-ALTER TABLE ONLY public.loopruntime_api_keys
-    ADD CONSTRAINT loopruntime_api_keys_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.loop_runtime_api_keys
+    ADD CONSTRAINT loop_runtime_api_keys_pkey PRIMARY KEY (id);
 
 -- Name: memory_exports memory_exports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 
@@ -1499,21 +1499,21 @@ CREATE INDEX idx_lens_fired_alerts_rule_time ON public.lens_fired_alerts USING b
 
 CREATE INDEX idx_lens_saved_views_owner ON public.lens_saved_views USING btree (tenant_id, subject);
 
--- Name: idx_loopruntime_api_keys_account_id; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_loop_runtime_api_keys_account_id; Type: INDEX; Schema: public; Owner: -
 
-CREATE INDEX idx_loopruntime_api_keys_account_id ON public.loopruntime_api_keys USING btree (account_id);
+CREATE INDEX idx_loop_runtime_api_keys_account_id ON public.loop_runtime_api_keys USING btree (account_id);
 
--- Name: idx_loopruntime_api_keys_bff_minted_expires; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_loop_runtime_api_keys_bff_minted_expires; Type: INDEX; Schema: public; Owner: -
 
-CREATE INDEX idx_loopruntime_api_keys_bff_minted_expires ON public.loopruntime_api_keys USING btree (bff_minted, expires_at) WHERE (bff_minted = true);
+CREATE INDEX idx_loop_runtime_api_keys_bff_minted_expires ON public.loop_runtime_api_keys USING btree (bff_minted, expires_at) WHERE (bff_minted = true);
 
--- Name: idx_loopruntime_api_keys_key_hash; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_loop_runtime_api_keys_key_hash; Type: INDEX; Schema: public; Owner: -
 
-CREATE UNIQUE INDEX idx_loopruntime_api_keys_key_hash ON public.loopruntime_api_keys USING btree (key_hash);
+CREATE UNIQUE INDEX idx_loop_runtime_api_keys_key_hash ON public.loop_runtime_api_keys USING btree (key_hash);
 
--- Name: idx_loopruntime_api_keys_tenant; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_loop_runtime_api_keys_tenant; Type: INDEX; Schema: public; Owner: -
 
-CREATE INDEX idx_loopruntime_api_keys_tenant ON public.loopruntime_api_keys USING btree (tenant_id, subject) WHERE (revoked_at IS NULL);
+CREATE INDEX idx_loop_runtime_api_keys_tenant ON public.loop_runtime_api_keys USING btree (tenant_id, subject) WHERE (revoked_at IS NULL);
 
 -- Name: idx_memory_exports_owner_active; Type: INDEX; Schema: public; Owner: -
 
@@ -1861,20 +1861,20 @@ ALTER TABLE ONLY public.lens_fired_alerts
 ALTER TABLE ONLY public.lens_saved_views
     ADD CONSTRAINT lens_saved_views_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
--- Name: loopruntime_api_keys loopruntime_api_keys_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: loop_runtime_api_keys loop_runtime_api_keys_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
-ALTER TABLE ONLY public.loopruntime_api_keys
-    ADD CONSTRAINT loopruntime_api_keys_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.loop_runtime_api_keys
+    ADD CONSTRAINT loop_runtime_api_keys_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
 
--- Name: loopruntime_api_keys loopruntime_api_keys_rotated_from_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: loop_runtime_api_keys loop_runtime_api_keys_rotated_from_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
-ALTER TABLE ONLY public.loopruntime_api_keys
-    ADD CONSTRAINT loopruntime_api_keys_rotated_from_fkey FOREIGN KEY (rotated_from) REFERENCES public.loopruntime_api_keys(id) ON DELETE SET NULL;
+ALTER TABLE ONLY public.loop_runtime_api_keys
+    ADD CONSTRAINT loop_runtime_api_keys_rotated_from_fkey FOREIGN KEY (rotated_from) REFERENCES public.loop_runtime_api_keys(id) ON DELETE SET NULL;
 
--- Name: loopruntime_api_keys loopruntime_api_keys_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: loop_runtime_api_keys loop_runtime_api_keys_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
-ALTER TABLE ONLY public.loopruntime_api_keys
-    ADD CONSTRAINT loopruntime_api_keys_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.loop_runtime_api_keys
+    ADD CONSTRAINT loop_runtime_api_keys_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 
 -- Name: memory_exports memory_exports_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
@@ -2012,7 +2012,7 @@ ALTER TABLE public.app_scaling_config ENABLE ROW LEVEL SECURITY;
 
 -- Name: app_scaling_config app_scaling_config_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY app_scaling_config_cloud_cross_tenant ON public.app_scaling_config TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY app_scaling_config_cloud_cross_tenant ON public.app_scaling_config TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: app_scaling_config app_scaling_config_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2020,7 +2020,7 @@ CREATE POLICY app_scaling_config_tenant_isolation ON public.app_scaling_config U
 
 -- Name: app_scaling_config app_scaling_config_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY app_scaling_config_worker_cross_tenant ON public.app_scaling_config TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY app_scaling_config_worker_cross_tenant ON public.app_scaling_config TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: audit_log; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2028,7 +2028,7 @@ ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 
 -- Name: audit_log audit_log_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY audit_log_cloud_cross_tenant ON public.audit_log TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY audit_log_cloud_cross_tenant ON public.audit_log TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: audit_log audit_log_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2036,7 +2036,7 @@ CREATE POLICY audit_log_tenant_isolation ON public.audit_log USING ((tenant_id =
 
 -- Name: audit_log audit_log_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY audit_log_worker_cross_tenant ON public.audit_log TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY audit_log_worker_cross_tenant ON public.audit_log TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: builds; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2044,7 +2044,7 @@ ALTER TABLE public.builds ENABLE ROW LEVEL SECURITY;
 
 -- Name: builds builds_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY builds_cloud_cross_tenant ON public.builds TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY builds_cloud_cross_tenant ON public.builds TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: builds builds_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2052,7 +2052,7 @@ CREATE POLICY builds_tenant_isolation ON public.builds USING ((tenant_id = curre
 
 -- Name: builds builds_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY builds_worker_cross_tenant ON public.builds TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY builds_worker_cross_tenant ON public.builds TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: cost_counters; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2060,7 +2060,7 @@ ALTER TABLE public.cost_counters ENABLE ROW LEVEL SECURITY;
 
 -- Name: cost_counters cost_counters_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY cost_counters_cloud_cross_tenant ON public.cost_counters TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY cost_counters_cloud_cross_tenant ON public.cost_counters TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: cost_counters cost_counters_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2068,7 +2068,7 @@ CREATE POLICY cost_counters_tenant_isolation ON public.cost_counters USING ((ten
 
 -- Name: cost_counters cost_counters_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY cost_counters_worker_cross_tenant ON public.cost_counters TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY cost_counters_worker_cross_tenant ON public.cost_counters TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: custom_domains; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2076,7 +2076,7 @@ ALTER TABLE public.custom_domains ENABLE ROW LEVEL SECURITY;
 
 -- Name: custom_domains custom_domains_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY custom_domains_cloud_cross_tenant ON public.custom_domains TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY custom_domains_cloud_cross_tenant ON public.custom_domains TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: custom_domains custom_domains_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2084,7 +2084,7 @@ CREATE POLICY custom_domains_tenant_isolation ON public.custom_domains USING ((t
 
 -- Name: custom_domains custom_domains_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY custom_domains_worker_cross_tenant ON public.custom_domains TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY custom_domains_worker_cross_tenant ON public.custom_domains TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: deploy_events; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2092,7 +2092,7 @@ ALTER TABLE public.deploy_events ENABLE ROW LEVEL SECURITY;
 
 -- Name: deploy_events deploy_events_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY deploy_events_cloud_cross_tenant ON public.deploy_events TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY deploy_events_cloud_cross_tenant ON public.deploy_events TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: deploy_events deploy_events_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2100,7 +2100,7 @@ CREATE POLICY deploy_events_tenant_isolation ON public.deploy_events USING ((ten
 
 -- Name: deploy_events deploy_events_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY deploy_events_worker_cross_tenant ON public.deploy_events TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY deploy_events_worker_cross_tenant ON public.deploy_events TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: environment_targets; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2108,7 +2108,7 @@ ALTER TABLE public.environment_targets ENABLE ROW LEVEL SECURITY;
 
 -- Name: environment_targets environment_targets_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY environment_targets_cloud_cross_tenant ON public.environment_targets TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY environment_targets_cloud_cross_tenant ON public.environment_targets TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: environment_targets environment_targets_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2116,7 +2116,7 @@ CREATE POLICY environment_targets_tenant_isolation ON public.environment_targets
 
 -- Name: environment_targets environment_targets_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY environment_targets_worker_cross_tenant ON public.environment_targets TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY environment_targets_worker_cross_tenant ON public.environment_targets TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: github_installations; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2124,7 +2124,7 @@ ALTER TABLE public.github_installations ENABLE ROW LEVEL SECURITY;
 
 -- Name: github_installations github_installations_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY github_installations_cloud_cross_tenant ON public.github_installations TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY github_installations_cloud_cross_tenant ON public.github_installations TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: github_installations github_installations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2132,7 +2132,7 @@ CREATE POLICY github_installations_tenant_isolation ON public.github_installatio
 
 -- Name: github_installations github_installations_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY github_installations_worker_cross_tenant ON public.github_installations TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY github_installations_worker_cross_tenant ON public.github_installations TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: idempotency_keys; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2140,7 +2140,7 @@ ALTER TABLE public.idempotency_keys ENABLE ROW LEVEL SECURITY;
 
 -- Name: idempotency_keys idempotency_keys_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY idempotency_keys_cloud_cross_tenant ON public.idempotency_keys TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY idempotency_keys_cloud_cross_tenant ON public.idempotency_keys TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: idempotency_keys idempotency_keys_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2148,7 +2148,7 @@ CREATE POLICY idempotency_keys_tenant_isolation ON public.idempotency_keys USING
 
 -- Name: idempotency_keys idempotency_keys_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY idempotency_keys_worker_cross_tenant ON public.idempotency_keys TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY idempotency_keys_worker_cross_tenant ON public.idempotency_keys TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: lens_alert_rules; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2156,7 +2156,7 @@ ALTER TABLE public.lens_alert_rules ENABLE ROW LEVEL SECURITY;
 
 -- Name: lens_alert_rules lens_alert_rules_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY lens_alert_rules_cloud_cross_tenant ON public.lens_alert_rules TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY lens_alert_rules_cloud_cross_tenant ON public.lens_alert_rules TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: lens_alert_rules lens_alert_rules_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2164,7 +2164,7 @@ CREATE POLICY lens_alert_rules_tenant_isolation ON public.lens_alert_rules USING
 
 -- Name: lens_alert_rules lens_alert_rules_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY lens_alert_rules_worker_cross_tenant ON public.lens_alert_rules TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY lens_alert_rules_worker_cross_tenant ON public.lens_alert_rules TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: lens_saved_views; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2172,7 +2172,7 @@ ALTER TABLE public.lens_saved_views ENABLE ROW LEVEL SECURITY;
 
 -- Name: lens_saved_views lens_saved_views_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY lens_saved_views_cloud_cross_tenant ON public.lens_saved_views TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY lens_saved_views_cloud_cross_tenant ON public.lens_saved_views TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: lens_saved_views lens_saved_views_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2180,23 +2180,23 @@ CREATE POLICY lens_saved_views_tenant_isolation ON public.lens_saved_views USING
 
 -- Name: lens_saved_views lens_saved_views_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY lens_saved_views_worker_cross_tenant ON public.lens_saved_views TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY lens_saved_views_worker_cross_tenant ON public.lens_saved_views TO loop_runtime_worker USING (true) WITH CHECK (true);
 
--- Name: loopruntime_api_keys; Type: ROW SECURITY; Schema: public; Owner: -
+-- Name: loop_runtime_api_keys; Type: ROW SECURITY; Schema: public; Owner: -
 
-ALTER TABLE public.loopruntime_api_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.loop_runtime_api_keys ENABLE ROW LEVEL SECURITY;
 
--- Name: loopruntime_api_keys loopruntime_api_keys_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
+-- Name: loop_runtime_api_keys loop_runtime_api_keys_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY loopruntime_api_keys_cloud_cross_tenant ON public.loopruntime_api_keys TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY loop_runtime_api_keys_cloud_cross_tenant ON public.loop_runtime_api_keys TO loop_console USING (true) WITH CHECK (true);
 
--- Name: loopruntime_api_keys loopruntime_api_keys_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+-- Name: loop_runtime_api_keys loop_runtime_api_keys_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY loopruntime_api_keys_tenant_isolation ON public.loopruntime_api_keys USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
+CREATE POLICY loop_runtime_api_keys_tenant_isolation ON public.loop_runtime_api_keys USING ((tenant_id = current_setting('app.tenant_id'::text, true))) WITH CHECK ((tenant_id = current_setting('app.tenant_id'::text, true)));
 
--- Name: loopruntime_api_keys loopruntime_api_keys_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
+-- Name: loop_runtime_api_keys loop_runtime_api_keys_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY loopruntime_api_keys_worker_cross_tenant ON public.loopruntime_api_keys TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY loop_runtime_api_keys_worker_cross_tenant ON public.loop_runtime_api_keys TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: memory_exports; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2204,7 +2204,7 @@ ALTER TABLE public.memory_exports ENABLE ROW LEVEL SECURITY;
 
 -- Name: memory_exports memory_exports_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY memory_exports_cloud_cross_tenant ON public.memory_exports TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY memory_exports_cloud_cross_tenant ON public.memory_exports TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: memory_exports memory_exports_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2212,7 +2212,7 @@ CREATE POLICY memory_exports_tenant_isolation ON public.memory_exports USING ((t
 
 -- Name: memory_exports memory_exports_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY memory_exports_worker_cross_tenant ON public.memory_exports TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY memory_exports_worker_cross_tenant ON public.memory_exports TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: memory_webhooks; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2220,7 +2220,7 @@ ALTER TABLE public.memory_webhooks ENABLE ROW LEVEL SECURITY;
 
 -- Name: memory_webhooks memory_webhooks_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY memory_webhooks_cloud_cross_tenant ON public.memory_webhooks TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY memory_webhooks_cloud_cross_tenant ON public.memory_webhooks TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: memory_webhooks memory_webhooks_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2228,7 +2228,7 @@ CREATE POLICY memory_webhooks_tenant_isolation ON public.memory_webhooks USING (
 
 -- Name: memory_webhooks memory_webhooks_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY memory_webhooks_worker_cross_tenant ON public.memory_webhooks TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY memory_webhooks_worker_cross_tenant ON public.memory_webhooks TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: metering_cursor; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2236,7 +2236,7 @@ ALTER TABLE public.metering_cursor ENABLE ROW LEVEL SECURITY;
 
 -- Name: metering_cursor metering_cursor_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY metering_cursor_cloud_cross_tenant ON public.metering_cursor TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY metering_cursor_cloud_cross_tenant ON public.metering_cursor TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: metering_cursor metering_cursor_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2244,7 +2244,7 @@ CREATE POLICY metering_cursor_tenant_isolation ON public.metering_cursor USING (
 
 -- Name: metering_cursor metering_cursor_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY metering_cursor_worker_cross_tenant ON public.metering_cursor TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY metering_cursor_worker_cross_tenant ON public.metering_cursor TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: preview_environments; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2252,7 +2252,7 @@ ALTER TABLE public.preview_environments ENABLE ROW LEVEL SECURITY;
 
 -- Name: preview_environments preview_environments_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY preview_environments_cloud_cross_tenant ON public.preview_environments TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY preview_environments_cloud_cross_tenant ON public.preview_environments TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: preview_environments preview_environments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2260,7 +2260,7 @@ CREATE POLICY preview_environments_tenant_isolation ON public.preview_environmen
 
 -- Name: preview_environments preview_environments_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY preview_environments_worker_cross_tenant ON public.preview_environments TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY preview_environments_worker_cross_tenant ON public.preview_environments TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: preview_slot; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2268,7 +2268,7 @@ ALTER TABLE public.preview_slot ENABLE ROW LEVEL SECURITY;
 
 -- Name: preview_slot preview_slot_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY preview_slot_cloud_cross_tenant ON public.preview_slot TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY preview_slot_cloud_cross_tenant ON public.preview_slot TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: preview_slot preview_slot_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2276,7 +2276,7 @@ CREATE POLICY preview_slot_tenant_isolation ON public.preview_slot USING ((tenan
 
 -- Name: preview_slot preview_slot_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY preview_slot_worker_cross_tenant ON public.preview_slot TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY preview_slot_worker_cross_tenant ON public.preview_slot TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: project_repositories; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2284,7 +2284,7 @@ ALTER TABLE public.project_repositories ENABLE ROW LEVEL SECURITY;
 
 -- Name: project_repositories project_repositories_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY project_repositories_cloud_cross_tenant ON public.project_repositories TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY project_repositories_cloud_cross_tenant ON public.project_repositories TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: project_repositories project_repositories_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2292,7 +2292,7 @@ CREATE POLICY project_repositories_tenant_isolation ON public.project_repositori
 
 -- Name: project_repositories project_repositories_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY project_repositories_worker_cross_tenant ON public.project_repositories TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY project_repositories_worker_cross_tenant ON public.project_repositories TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: projects; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2300,7 +2300,7 @@ ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
 -- Name: projects projects_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY projects_cloud_cross_tenant ON public.projects TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY projects_cloud_cross_tenant ON public.projects TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: projects projects_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2308,7 +2308,7 @@ CREATE POLICY projects_tenant_isolation ON public.projects USING ((tenant_id = c
 
 -- Name: projects projects_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY projects_worker_cross_tenant ON public.projects TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY projects_worker_cross_tenant ON public.projects TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: release_app_attestations; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2316,7 +2316,7 @@ ALTER TABLE public.release_app_attestations ENABLE ROW LEVEL SECURITY;
 
 -- Name: release_app_attestations release_app_attestations_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY release_app_attestations_cloud_cross_tenant ON public.release_app_attestations TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY release_app_attestations_cloud_cross_tenant ON public.release_app_attestations TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: release_app_attestations release_app_attestations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2324,7 +2324,7 @@ CREATE POLICY release_app_attestations_tenant_isolation ON public.release_app_at
 
 -- Name: release_app_attestations release_app_attestations_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY release_app_attestations_worker_cross_tenant ON public.release_app_attestations TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY release_app_attestations_worker_cross_tenant ON public.release_app_attestations TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: releases; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2332,7 +2332,7 @@ ALTER TABLE public.releases ENABLE ROW LEVEL SECURITY;
 
 -- Name: releases releases_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY releases_cloud_cross_tenant ON public.releases TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY releases_cloud_cross_tenant ON public.releases TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: releases releases_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2340,7 +2340,7 @@ CREATE POLICY releases_tenant_isolation ON public.releases USING ((tenant_id = c
 
 -- Name: releases releases_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY releases_worker_cross_tenant ON public.releases TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY releases_worker_cross_tenant ON public.releases TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: rollbacks; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2356,7 +2356,7 @@ ALTER TABLE public.secrets ENABLE ROW LEVEL SECURITY;
 
 -- Name: secrets secrets_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY secrets_cloud_cross_tenant ON public.secrets TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY secrets_cloud_cross_tenant ON public.secrets TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: secrets secrets_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2364,7 +2364,7 @@ CREATE POLICY secrets_tenant_isolation ON public.secrets USING ((tenant_id = cur
 
 -- Name: secrets secrets_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY secrets_worker_cross_tenant ON public.secrets TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY secrets_worker_cross_tenant ON public.secrets TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: subscriptions; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2372,7 +2372,7 @@ ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- Name: subscriptions subscriptions_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY subscriptions_cloud_cross_tenant ON public.subscriptions TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY subscriptions_cloud_cross_tenant ON public.subscriptions TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: subscriptions subscriptions_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2380,7 +2380,7 @@ CREATE POLICY subscriptions_tenant_isolation ON public.subscriptions USING ((ten
 
 -- Name: subscriptions subscriptions_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY subscriptions_worker_cross_tenant ON public.subscriptions TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY subscriptions_worker_cross_tenant ON public.subscriptions TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: tenant_members; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2388,7 +2388,7 @@ ALTER TABLE public.tenant_members ENABLE ROW LEVEL SECURITY;
 
 -- Name: tenant_members tenant_members_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY tenant_members_cloud_cross_tenant ON public.tenant_members TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY tenant_members_cloud_cross_tenant ON public.tenant_members TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: tenant_members tenant_members_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2396,7 +2396,7 @@ CREATE POLICY tenant_members_tenant_isolation ON public.tenant_members USING ((t
 
 -- Name: tenant_members tenant_members_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY tenant_members_worker_cross_tenant ON public.tenant_members TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY tenant_members_worker_cross_tenant ON public.tenant_members TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: tenant_tombstones; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2404,7 +2404,7 @@ ALTER TABLE public.tenant_tombstones ENABLE ROW LEVEL SECURITY;
 
 -- Name: tenant_tombstones tenant_tombstones_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY tenant_tombstones_cloud_cross_tenant ON public.tenant_tombstones TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY tenant_tombstones_cloud_cross_tenant ON public.tenant_tombstones TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: tenant_tombstones tenant_tombstones_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2412,7 +2412,7 @@ CREATE POLICY tenant_tombstones_tenant_isolation ON public.tenant_tombstones USI
 
 -- Name: tenant_tombstones tenant_tombstones_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY tenant_tombstones_worker_cross_tenant ON public.tenant_tombstones TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY tenant_tombstones_worker_cross_tenant ON public.tenant_tombstones TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: tenants; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2420,7 +2420,7 @@ ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
 
 -- Name: tenants tenants_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY tenants_cloud_cross_tenant ON public.tenants TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY tenants_cloud_cross_tenant ON public.tenants TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: tenants_pending_deletion; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2428,7 +2428,7 @@ ALTER TABLE public.tenants_pending_deletion ENABLE ROW LEVEL SECURITY;
 
 -- Name: tenants_pending_deletion tenants_pending_deletion_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY tenants_pending_deletion_cloud_cross_tenant ON public.tenants_pending_deletion TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY tenants_pending_deletion_cloud_cross_tenant ON public.tenants_pending_deletion TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: tenants_pending_deletion tenants_pending_deletion_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2436,7 +2436,7 @@ CREATE POLICY tenants_pending_deletion_tenant_isolation ON public.tenants_pendin
 
 -- Name: tenants_pending_deletion tenants_pending_deletion_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY tenants_pending_deletion_worker_cross_tenant ON public.tenants_pending_deletion TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY tenants_pending_deletion_worker_cross_tenant ON public.tenants_pending_deletion TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: tenants tenants_self_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2444,7 +2444,7 @@ CREATE POLICY tenants_self_isolation ON public.tenants USING ((id = current_sett
 
 -- Name: tenants tenants_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY tenants_worker_cross_tenant ON public.tenants TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY tenants_worker_cross_tenant ON public.tenants TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: usage_records; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2452,7 +2452,7 @@ ALTER TABLE public.usage_records ENABLE ROW LEVEL SECURITY;
 
 -- Name: usage_records usage_records_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY usage_records_cloud_cross_tenant ON public.usage_records TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY usage_records_cloud_cross_tenant ON public.usage_records TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: usage_records usage_records_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2460,7 +2460,7 @@ CREATE POLICY usage_records_tenant_isolation ON public.usage_records USING ((ten
 
 -- Name: usage_records usage_records_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY usage_records_worker_cross_tenant ON public.usage_records TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY usage_records_worker_cross_tenant ON public.usage_records TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: workspace_webhook_deliveries; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2468,7 +2468,7 @@ ALTER TABLE public.workspace_webhook_deliveries ENABLE ROW LEVEL SECURITY;
 
 -- Name: workspace_webhook_deliveries workspace_webhook_deliveries_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY workspace_webhook_deliveries_cloud_cross_tenant ON public.workspace_webhook_deliveries TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY workspace_webhook_deliveries_cloud_cross_tenant ON public.workspace_webhook_deliveries TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: workspace_webhook_deliveries workspace_webhook_deliveries_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2476,7 +2476,7 @@ CREATE POLICY workspace_webhook_deliveries_tenant_isolation ON public.workspace_
 
 -- Name: workspace_webhook_deliveries workspace_webhook_deliveries_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY workspace_webhook_deliveries_worker_cross_tenant ON public.workspace_webhook_deliveries TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY workspace_webhook_deliveries_worker_cross_tenant ON public.workspace_webhook_deliveries TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- Name: workspace_webhooks; Type: ROW SECURITY; Schema: public; Owner: -
 
@@ -2484,7 +2484,7 @@ ALTER TABLE public.workspace_webhooks ENABLE ROW LEVEL SECURITY;
 
 -- Name: workspace_webhooks workspace_webhooks_cloud_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY workspace_webhooks_cloud_cross_tenant ON public.workspace_webhooks TO loopruntime_cloud USING (true) WITH CHECK (true);
+CREATE POLICY workspace_webhooks_cloud_cross_tenant ON public.workspace_webhooks TO loop_console USING (true) WITH CHECK (true);
 
 -- Name: workspace_webhooks workspace_webhooks_tenant_isolation; Type: POLICY; Schema: public; Owner: -
 
@@ -2492,6 +2492,6 @@ CREATE POLICY workspace_webhooks_tenant_isolation ON public.workspace_webhooks U
 
 -- Name: workspace_webhooks workspace_webhooks_worker_cross_tenant; Type: POLICY; Schema: public; Owner: -
 
-CREATE POLICY workspace_webhooks_worker_cross_tenant ON public.workspace_webhooks TO loopruntime_worker USING (true) WITH CHECK (true);
+CREATE POLICY workspace_webhooks_worker_cross_tenant ON public.workspace_webhooks TO loop_runtime_worker USING (true) WITH CHECK (true);
 
 -- PostgreSQL database dump complete

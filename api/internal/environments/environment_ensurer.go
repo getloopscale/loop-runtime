@@ -45,7 +45,7 @@ type EnvironmentLister interface {
 //
 // M2 v1.2 (2026-06-07): `project` is propagated end-to-end so the Tenant CR
 // spec.environments entry carries the field expected by the canonical
-// 3-segment namespace `loopruntime-<tenant>-<project>-<env>`. Empty project
+// 3-segment namespace `loop-runtime-<tenant>-<project>-<env>`. Empty project
 // preserves the legacy 2-segment behaviour (ADR D2 — production legacy).
 type EnvironmentAdder interface {
 	AddEnvironment(ctx context.Context, tenantID, project, envName string) error
@@ -69,9 +69,9 @@ type EnvironmentAdder interface {
 // environmentsadapter.EnvironmentCRReader for the Kubernetes implementation.
 type EnvironmentReadinessChecker interface {
 	// M2 v1.2: `project` selects the canonical 3-segment namespace
-	// `loopruntime-<tenant>-<project>-<env>` whose Environment CR
+	// `loop-runtime-<tenant>-<project>-<env>` whose Environment CR
 	// `status.phase` is probed. Empty project preserves the legacy
-	// 2-segment lookup (`loopruntime-<tenant>-<env>`) for production-legacy
+	// 2-segment lookup (`loop-runtime-<tenant>-<env>`) for production-legacy
 	// tuples (ADR D2).
 	IsReady(ctx context.Context, tenantID, project, envName string) (bool, error)
 }

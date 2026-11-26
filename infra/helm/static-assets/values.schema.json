@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://loopruntime.platform/schemas/static-assets/values.schema.json",
+  "$id": "https://loop-runtime.platform/schemas/static-assets/values.schema.json",
   "title": "static-assets chart values schema",
   "description": "Plan 2026-05-20 T2.5 ext — fail-fast on static-asset delivery config drift. Protects: B82 (k3d kubeconfig localhost-trap), nginx-s3-gateway readOnlyRootFilesystem requirement (silently destroys envsubst), s3 backend credentials secret refs, INF-G08 hardening invariants.",
   "type": "object",

@@ -4,7 +4,7 @@
 # by churn: CRDs/ArgoCD/Secrets change every deploy (6h), Gitea PVCs are
 # big but slow-moving (24h), full snapshot is a weekly safety net.
 #
-# EC-1/EC-2 fix: tenant CRs live in `loopruntime-tn-*` namespaces (canonical
+# EC-1/EC-2 fix: tenant CRs live in `loop-runtime-tn-*` namespaces (canonical
 # `pkg/naming/naming.go TenantNamespace`), and Velero `includedNamespaces`
 # does NOT support glob/wildcards. The crds-backup schedule therefore
 # omits `includedNamespaces` entirely — when only `includedResources` is
@@ -15,9 +15,9 @@ velero:
   schedules:
     # 1) CRD backup — every 6h, 30 days retention.
     # Captures the 10 runtime.getloopscale.com/v1 CRDs across every namespace they live in
-    # (loopruntime-system, loopruntime-tn-*, etc.). Velero's `Schedule.spec.template`
+    # (loop-runtime-system, loop-runtime-tn-*, etc.). Velero's `Schedule.spec.template`
     # mirrors the Backup spec.
-    loopruntime-crds-backup:
+    loop-runtime-crds-backup:
       disabled: false
       schedule: "0 */6 * * *"
       useOwnerReferencesInBackup: false
@@ -39,7 +39,7 @@ velero:
 
     # 2) ArgoCD state — every 6h, 30 days retention.
     # Apps, AppProjects, repository Secrets — the GitOps control plane.
-    loopruntime-argocd-backup:
+    loop-runtime-argocd-backup:
       disabled: false
       schedule: "0 */6 * * *"
       useOwnerReferencesInBackup: false
@@ -54,14 +54,14 @@ velero:
     # 3) Gitea metadata — daily at 02:00 UTC, 14 days retention.
     # PVC data is NOT backed up (D4 — repos are small + re-pushable).
     # Captures StatefulSet, Service, ConfigMap, Secret labelled app=gitea.
-    loopruntime-gitea-backup:
+    loop-runtime-gitea-backup:
       disabled: false
       schedule: "0 2 * * *"
       useOwnerReferencesInBackup: false
       template:
         ttl: "336h"
         includedNamespaces:
-          - loopruntime-system
+          - loop-runtime-system
         labelSelector:
           matchLabels:
             app: gitea
@@ -73,14 +73,14 @@ velero:
     # Cluster kubeconfigs, signing keys, registry pull secrets.
     # NOTE EC-7: backups land in S3 encrypted-at-rest by provider, but
     # readable to anyone holding the bucket API key. Document in runbook.
-    loopruntime-secrets-backup:
+    loop-runtime-secrets-backup:
       disabled: false
       schedule: "0 */6 * * *"
       useOwnerReferencesInBackup: false
       template:
         ttl: "720h"
         includedNamespaces:
-          - loopruntime-system
+          - loop-runtime-system
         includedResources:
           - secrets
         storageLocation: default
@@ -91,7 +91,7 @@ velero:
     # Safety net beyond the targeted scopes. Excludes K8s-internal
     # namespaces (kube-system / kube-public / kube-node-lease) which
     # are managed by the control plane and survive cluster destroys.
-    loopruntime-full-backup:
+    loop-runtime-full-backup:
       disabled: false
       schedule: "0 3 * * 0"
       useOwnerReferencesInBackup: false

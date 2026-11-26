@@ -52,9 +52,9 @@ func (f *fakeArgoListDelete) DeleteApplication(_ context.Context, appName string
 // J-23 LIVE catch 2026-06-07 #69 (the sponsor asked for #69 to be fixed in
 // tenant_gitops and the CRD): the renderer canonical refactor (commit
 // a567cdbb5) emits manifests with the three-segment namespace
-// `loopruntime-<tenant>-<project>-<env>`. Before this helper, tenant_gitops.go
+// `loop-runtime-<tenant>-<project>-<env>`. Before this helper, tenant_gitops.go
 // emitted destinations via the legacy two-segment formula
-// `loopruntime-<tenant>-<env>`, causing ArgoCD destination mismatch and
+// `loop-runtime-<tenant>-<env>`, causing ArgoCD destination mismatch and
 // OutOfSync forever on every production deploy.
 //
 // T2.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: empty
@@ -63,7 +63,7 @@ func (f *fakeArgoListDelete) DeleteApplication(_ context.Context, appName string
 // (TenantEnvironmentEntry.Project required + RFC 1123 Pattern) so every
 // production caller (tenant_gitops.go:143, :186 + tenant_controller.go:337)
 // passes a non-empty project. The two "fallback legacy" cases that
-// previously asserted `loopruntime-acme-{env}` were flipped to expect error —
+// previously asserted `loop-runtime-acme-{env}` were flipped to expect error —
 // the silent fallback was the smoking gun behind all 4 M2 LIVE workarounds
 // documented in feedback_m2_canonical_drift_operator_renderer.
 func TestCanonicalDestNamespace_UsesTheThreeSegmentFormula(t *testing.T) {
@@ -80,14 +80,14 @@ func TestCanonicalDestNamespace_UsesTheThreeSegmentFormula(t *testing.T) {
 			tenant:  "tn-08fa2ecedc3c7e77",
 			project: "sample",
 			env:     "production",
-			want:    "loopruntime-tn-08fa2ecedc3c7e77-sample-production",
+			want:    "loop-runtime-tn-08fa2ecedc3c7e77-sample-production",
 		},
 		{
 			name:    "canonical: preview env name (preview-pr-N)",
 			tenant:  "acme",
 			project: "webapp",
 			env:     "preview-pr-42",
-			want:    "loopruntime-acme-webapp-preview-pr-42",
+			want:    "loop-runtime-acme-webapp-preview-pr-42",
 		},
 		{
 			// T2.1 RED: empty project must error (was M1 fallback pre-T2.1).
@@ -177,7 +177,7 @@ func TestCanonicalDestNamespaceRejectsEmptyProject(t *testing.T) {
 //	Given a Tenant with 2 projects each having a production env
 //	when TenantController.reconcileArgoCDApp runs
 //	then the AppProject spec.destinations contains both M2 namespaces
-//	     (loopruntime-tn-X-A-production AND loopruntime-tn-X-B-production), never the
+//	     (loop-runtime-tn-X-A-production AND loop-runtime-tn-X-B-production), never the
 //	     M1 2-seg form.
 func TestBuildAppProjectDestNamespaces(t *testing.T) {
 	cases := []struct {
@@ -192,7 +192,7 @@ func TestBuildAppProjectDestNamespaces(t *testing.T) {
 			envs: []loopruntimev1.TenantEnvironmentEntry{
 				{Name: "production", Cluster: "workload", Project: "myproject"},
 			},
-			want: []string{"loopruntime-tn-test-myproject-production"},
+			want: []string{"loop-runtime-tn-test-myproject-production"},
 		},
 		{
 			name: "two projects each with production — Cartesian emits 2 M2 destinations (LIVE T6.1 workaround codified)",
@@ -201,8 +201,8 @@ func TestBuildAppProjectDestNamespaces(t *testing.T) {
 				{Name: "production", Cluster: "workload", Project: "proj-b"},
 			},
 			want: []string{
-				"loopruntime-tn-test-proj-a-production",
-				"loopruntime-tn-test-proj-b-production",
+				"loop-runtime-tn-test-proj-a-production",
+				"loop-runtime-tn-test-proj-b-production",
 			},
 		},
 		{
@@ -213,9 +213,9 @@ func TestBuildAppProjectDestNamespaces(t *testing.T) {
 				{Name: "dev", Cluster: "workload", Project: "myapp"},
 			},
 			want: []string{
-				"loopruntime-tn-test-myapp-production",
-				"loopruntime-tn-test-myapp-staging",
-				"loopruntime-tn-test-myapp-dev",
+				"loop-runtime-tn-test-myapp-production",
+				"loop-runtime-tn-test-myapp-staging",
+				"loop-runtime-tn-test-myapp-dev",
 			},
 		},
 		{
@@ -227,8 +227,8 @@ func TestBuildAppProjectDestNamespaces(t *testing.T) {
 				{Spec: loopruntimev1.PreviewEnvironmentSpec{ProjectID: "myapp", PRNumber: 7}},
 			},
 			want: []string{
-				"loopruntime-tn-test-myapp-production",
-				"loopruntime-tn-test-myapp-preview-pr-7",
+				"loop-runtime-tn-test-myapp-production",
+				"loop-runtime-tn-test-myapp-preview-pr-7",
 			},
 		},
 		{

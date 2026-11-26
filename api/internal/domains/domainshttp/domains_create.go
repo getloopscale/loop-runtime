@@ -56,7 +56,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	auditctx.SetResourceID(ctx, req.Project)
 
 	// Validate domain format.
-	// Red Team loopruntime-cloud#103 closure: was `code: INTERNAL_ERROR` which
+	// Red Team loop-console#103 closure: was `code: INTERNAL_ERROR` which
 	// connotes a server failure; this is INPUT validation, so emit the
 	// client-classified `INVALID_DOMAIN` code (mapped to 400 in
 	// pkg/errors/http/mapping.go).
@@ -130,7 +130,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Environment: domain.Environment,
 		Status:      domain.Status,
 		Verification: &domainVerificationInfo{
-			TXTName:  "_loopruntime-verify." + domain.Domain,
+			TXTName:  "_loop-runtime-verify." + domain.Domain,
 			TXTValue: token,
 		},
 		CNAMETarget: h.cnameTarget,

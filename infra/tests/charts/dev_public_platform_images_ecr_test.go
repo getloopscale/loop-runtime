@@ -41,12 +41,12 @@ func assertECRImage(t *testing.T, where, ref, repository string) {
 // as on EKS — and without re-pulling an immutable tag on every start.
 func TestDevPublicPlatformDeploymentsPullFromECR(t *testing.T) {
 	releases := map[string]string{
-		"loopruntime-api":               "charts/loopruntime-api",
-		"loopruntime-tenant-operator":   "charts/loopruntime-tenant-operator",
-		"loopruntime-app-operator":      "charts/loopruntime-app-operator",
-		"loopruntime-preview-operator":  "charts/loopruntime-preview-operator",
-		"loopruntime-platform-operator": "charts/loopruntime-platform-operator",
-		"loopruntime-cloud":             "charts/loopruntime-cloud",
+		"loop-runtime-api":               "charts/loop-runtime-api",
+		"loop-runtime-tenant-operator":   "charts/loop-runtime-tenant-operator",
+		"loop-runtime-app-operator":      "charts/loop-runtime-app-operator",
+		"loop-runtime-preview-operator":  "charts/loop-runtime-preview-operator",
+		"loop-runtime-platform-operator": "charts/loop-runtime-platform-operator",
+		"loop-console":                   "charts/loop-console",
 	}
 	// The data plane (#446): one chart, one release per service enabled on dev-public.
 	for svc := range enabledDataPlane(t) {
@@ -79,27 +79,27 @@ func TestDevPublicPlatformDeploymentsPullFromECR(t *testing.T) {
 	}
 }
 
-// loopruntime-api launches the build steps that sign and scan images; those images come from
+// loop-runtime-api launches the build steps that sign and scan images; those images come from
 // the same registry, pinned the same way.
 func TestDevPublicBuildStepImagesComeFromECR(t *testing.T) {
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopruntime-api", "charts/loopruntime-api", helmfileCoreEnv...)
-	cm := renderedObject(t, rendered, "ConfigMap", "loopruntime-api")
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loop-runtime-api", "charts/loop-runtime-api", helmfileCoreEnv...)
+	cm := renderedObject(t, rendered, "ConfigMap", "loop-runtime-api")
 	if cm == nil {
-		t.Fatal("loopruntime-api rendered no ConfigMap loopruntime-api")
+		t.Fatal("loop-runtime-api rendered no ConfigMap loop-runtime-api")
 	}
 	for key, repository := range map[string]string{
-		"LOOPRUNTIME_COSIGN_IMAGE": "loopruntime-cosign-signer",
-		"LOOPRUNTIME_SYFT_IMAGE":   "loopruntime-syft-scanner",
+		"LOOP_RUNTIME_COSIGN_IMAGE": "loop-runtime-cosign-signer",
+		"LOOP_RUNTIME_SYFT_IMAGE":   "loop-runtime-syft-scanner",
 	} {
 		ref, _ := dig(cm, "data", key).(string)
-		assertECRImage(t, "loopruntime-api ConfigMap "+key, ref, repository)
+		assertECRImage(t, "loop-runtime-api ConfigMap "+key, ref, repository)
 	}
 }
 
 // MinIO and its client are built from source (#394) and published by the same pipeline.
 func TestDevPublicMinioImagesComeFromECR(t *testing.T) {
 	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "dev-public", "minio", helmfileCoreEnv...)
-	for key, repository := range map[string]string{"image": "loopruntime-minio", "mcImage": "loopruntime-clone-runner"} {
+	for key, repository := range map[string]string{"image": "loop-runtime-minio", "mcImage": "loop-runtime-clone-runner"} {
 		repo, _ := dig(values, key, "repository").(string)
 		tag, _ := dig(values, key, "tag").(string)
 		assertECRImage(t, "minio."+key, repo+":"+tag, repository)
@@ -108,7 +108,7 @@ func TestDevPublicMinioImagesComeFromECR(t *testing.T) {
 
 // The build cluster's clone step runs the clone-runner image.
 func TestDevPublicCloneRunnerComesFromECR(t *testing.T) {
-	values := helmfileValues(t, "build.helmfile.yaml.gotmpl", "dev-public", "loopruntime-build-cwts", helmfileCoreEnv...)
+	values := helmfileValues(t, "build.helmfile.yaml.gotmpl", "dev-public", "loop-runtime-build-cwts", helmfileCoreEnv...)
 	ref, _ := dig(values, "images", "cloneRunner").(string)
-	assertECRImage(t, "loopruntime-build-cwts.images.cloneRunner", ref, "loopruntime-clone-runner")
+	assertECRImage(t, "loop-runtime-build-cwts.images.cloneRunner", ref, "loop-runtime-clone-runner")
 }

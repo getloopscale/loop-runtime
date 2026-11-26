@@ -13,14 +13,14 @@ func TestClusterCredential_SpecFields(t *testing.T) {
 	cc := ClusterCredential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cell-0-cluster-01",
-			Namespace: "loopruntime-system",
+			Namespace: "loop-runtime-system",
 		},
 		Spec: ClusterCredentialSpec{
 			ClusterName: "workload-01",
 			APIServer:   "https://10.0.0.1:6443",
 			SecretRef: SecretReference{
 				Name:      "workload-01-kubeconfig",
-				Namespace: "loopruntime-system",
+				Namespace: "loop-runtime-system",
 			},
 			Scope: CredentialScope{
 				ArgoCD:    true,
@@ -38,8 +38,8 @@ func TestClusterCredential_SpecFields(t *testing.T) {
 	if cc.Spec.SecretRef.Name != "workload-01-kubeconfig" {
 		t.Errorf("expected SecretRef.Name %q, got %q", "workload-01-kubeconfig", cc.Spec.SecretRef.Name)
 	}
-	if cc.Spec.SecretRef.Namespace != "loopruntime-system" {
-		t.Errorf("expected SecretRef.Namespace %q, got %q", "loopruntime-system", cc.Spec.SecretRef.Namespace)
+	if cc.Spec.SecretRef.Namespace != "loop-runtime-system" {
+		t.Errorf("expected SecretRef.Namespace %q, got %q", "loop-runtime-system", cc.Spec.SecretRef.Namespace)
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// LokiMarker represents one ::loopruntime:: marker log line surfaced by the
+// LokiMarker represents one ::loop-runtime:: marker log line surfaced by the
 // Loki query (workload+build clusters). The adapter is decoupled from
 // the HTTP client behind LokiQuerier.
 type LokiMarker struct {

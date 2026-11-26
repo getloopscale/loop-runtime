@@ -155,7 +155,7 @@ func TestRollbackOrchestrator_DeliveryFailureReturnsErrorAndKeepsTheActiveReleas
 		Environment:   "production",
 		CorrelationID: "corr-rb-1",
 		UserID:        "user-1",
-		BaseDomain:    "loopruntime.local",
+		BaseDomain:    "loop-runtime.local",
 	}
 
 	// Act
@@ -215,7 +215,7 @@ func TestRollbackOrchestrator_SyncSuccessCompletes(t *testing.T) {
 		Environment:   "production",
 		CorrelationID: "corr-rb-2",
 		UserID:        "user-1",
-		BaseDomain:    "loopruntime.local",
+		BaseDomain:    "loop-runtime.local",
 	}
 
 	// Act

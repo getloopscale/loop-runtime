@@ -46,10 +46,10 @@ let orphans: OrphanLookupResult = {};
 if (config.cfAccountId && config.cfZoneId) {
   orphans = resolveOrphans({
     vpcName: `${baseName}-net`,
-    tunnelName: `loopruntime-${config.environment}`,
-    kvTitle: `loopruntime-routing-${config.environment}`,
+    tunnelName: `loop-runtime-${config.environment}`,
+    kvTitle: `loop-runtime-routing-${config.environment}`,
     dnsWildcard: `*.${config.domain}`,
-    workerScriptName: `loopruntime-static-delivery-${config.environment}`,
+    workerScriptName: `loop-runtime-static-delivery-${config.environment}`,
     workerRoutePattern: `*.${config.domain}/*`,
     cfAccountId: config.cfAccountId,
     cfZoneId: config.cfZoneId,
@@ -74,7 +74,7 @@ if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
     zoneId: config.cfZoneId,
     environment: config.environment,
     baseDomain: config.domain,
-    traefikService: "https://runtime-traefik.loopruntime-system.svc:443",
+    traefikService: "https://runtime-traefik.loop-runtime-system.svc:443",
     importIds: {
       tunnel: orphans.tunnelImportId,
       dnsRecord: orphans.dnsRecordImportId,
@@ -97,7 +97,7 @@ if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
 }
 
 // ---------------------------------------------------------------------------
-// Stack Outputs (stable contract consumed by Helmfile L2 + loopruntime-api wiring)
+// Stack Outputs (stable contract consumed by Helmfile L2 + loop-runtime-api wiring)
 // ---------------------------------------------------------------------------
 export const provider = config.provider;
 export const environment = config.environment;

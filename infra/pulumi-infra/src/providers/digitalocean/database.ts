@@ -38,9 +38,9 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       name: "gitea",
     });
 
-    new digitalocean.DatabaseDb(`${spec.name}-loopruntime`, {
+    new digitalocean.DatabaseDb(`${spec.name}-loop-runtime`, {
       clusterId: cluster.id,
-      name: "loopruntime",
+      name: "loop-runtime",
     });
 
     // Ory Kratos (identity management) and Hydra (OAuth2 server) require separate databases.
@@ -89,7 +89,7 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
     // exposed via the .password output (encrypted in Pulumi state).
     const apiUser = new digitalocean.DatabaseUser(`${spec.name}-api-user`, {
       clusterId: cluster.id,
-      name: "loopruntime_api",
+      name: "loop_runtime_api",
     });
 
     // Gitea user — Helm chart needs a user that can create tables in the gitea DB.
@@ -117,10 +117,10 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
     // Size 20: enough for 2 API replicas × 10 concurrent requests.
     new digitalocean.DatabaseConnectionPool(`${spec.name}-api-pool`, {
       clusterId: cluster.id,
-      name: "loopruntime-api-pool",
+      name: "loop-runtime-api-pool",
       mode: "transaction",
       size: 20,
-      dbName: "loopruntime",
+      dbName: "loop_runtime",
       user: apiUser.name,
     });
 

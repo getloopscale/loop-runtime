@@ -4,10 +4,10 @@
 // release_inspector.go implements T4.4 of plan
 // 2026-05-28-meet-001-engineering-closure-plan.md.
 //
-// CR-10 (MEET-2026-05-28-001 SRE): "There is no loopruntime-ops CLI command
-// like `loopruntime admin release inspect <release-id>` showing which write
+// CR-10 (MEET-2026-05-28-001 SRE): "There is no loop-runtime-ops CLI command
+// like `loop-runtime admin release inspect <release-id>` showing which write
 // path was taken." Pairs with the AdminReleaseInspect HTTP handler and
-// the `loopruntime admin release inspect` CLI command.
+// the `loop-runtime admin release inspect` CLI command.
 //
 // The inspector is read-only: it joins releases + audit_log + workflow
 // snapshot (when available) into a single diagnostic payload. EC-14 of
@@ -30,7 +30,7 @@ import (
 
 // ReleaseInspection is the JSON shape returned by
 // GET /api/v1/admin/releases/{id}/inspect and rendered by
-// `loopruntime admin release inspect --json`.
+// `loop-runtime admin release inspect --json`.
 //
 // Field names are a stability contract (CLAUDE.md Rule 5); new fields
 // may be added but existing names cannot change without a major bump.

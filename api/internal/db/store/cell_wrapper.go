@@ -42,7 +42,7 @@ import (
 )
 
 // CellTenantCounts returns the number of tenants per cell_id.
-// Used by CellMetricsCollector to emit loopruntime_cell_tenant_count gauge.
+// Used by CellMetricsCollector to emit loop_runtime_cell_tenant_count gauge.
 func (s *PostgresCellStore) CellTenantCounts(ctx context.Context) (map[string]int, error) {
 	bridge := s.bridge()
 	q := generated.New()

@@ -25,7 +25,7 @@ export class CertManager extends pulumi.ComponentResource {
   public readonly ready: pulumi.Output<boolean>;
 
   constructor(name: string, args: CertManagerArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopruntime:platform:CertManager", name, {}, opts);
+    super("loop-runtime:platform:CertManager", name, {}, opts);
 
     this.release = new k8s.helm.v3.Release(
       `${args.role}-cert-manager`,

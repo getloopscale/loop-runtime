@@ -4,7 +4,7 @@
 // Package minio provides MinIO credential provisioning for tenant isolation.
 //
 // Each tenant must have isolated MinIO credentials scoped to its own prefix
-// (loopruntime-builds/{tenant}/). Without this, a compromised build can read source
+// (loop-runtime-builds/{tenant}/). Without this, a compromised build can read source
 // bundles and poison caches of other tenants (spec §17.2, §17.4).
 //
 // The provisioner creates per-tenant MinIO users with policies that restrict
@@ -105,9 +105,9 @@ func adminEndpoint(endpoint string) (host string, secure bool, err error) {
 }
 
 // EnsureTenantCredentials creates a MinIO user for the tenant with a policy
-// that restricts access to loopruntime-builds/{tenantID}/* only.
+// that restricts access to loop-runtime-builds/{tenantID}/* only.
 //
-// The user is named "loopruntime-build-{tenantID}" with a randomly generated secret key.
+// The user is named "loop-runtime-build-{tenantID}" with a randomly generated secret key.
 // If the user already exists, the existing credentials are preserved.
 //
 // Policy enforced:
@@ -117,8 +117,8 @@ func adminEndpoint(endpoint string) (host string, secure bool, err error) {
 //	    "Effect": "Allow",
 //	    "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
 //	    "Resource": [
-//	      "arn:aws:s3:::loopruntime-builds/{tenantID}/*",
-//	      "arn:aws:s3:::loopruntime-builds"
+//	      "arn:aws:s3:::loop-runtime-builds/{tenantID}/*",
+//	      "arn:aws:s3:::loop-runtime-builds"
 //	    ],
 //	    "Condition": {
 //	      "StringLike": {"s3:prefix": ["{tenantID}/*"]}
@@ -129,8 +129,8 @@ func (p *AdminProvisioner) EnsureTenantCredentials(ctx context.Context, tenantID
 	if _, err := naming.BuildNamespace(tenantID); err != nil {
 		return "", "", fmt.Errorf("minio: invalid tenantID %q: %w", tenantID, err)
 	}
-	accessKey := fmt.Sprintf("loopruntime-build-%s", tenantID)
-	policyName := fmt.Sprintf("loopruntime-tenant-%s", tenantID)
+	accessKey := fmt.Sprintf("loop-runtime-build-%s", tenantID)
+	policyName := fmt.Sprintf("loop-runtime-tenant-%s", tenantID)
 
 	// Check if user already exists — avoid rotating credentials on every reconcile,
 	// which would break in-flight build workflows using the previous secret key.
@@ -171,15 +171,15 @@ func (p *AdminProvisioner) EnsureTenantCredentials(ctx context.Context, tenantID
 }
 
 // DeleteTenantCredentials removes the MinIO user and policy for a tenant.
-// Reverses EnsureTenantCredentials: deletes user "loopruntime-build-{tenantID}" and
-// policy "loopruntime-tenant-{tenantID}". Idempotent — returns nil if resources
+// Reverses EnsureTenantCredentials: deletes user "loop-runtime-build-{tenantID}" and
+// policy "loop-runtime-tenant-{tenantID}". Idempotent — returns nil if resources
 // do not exist.
 func (p *AdminProvisioner) DeleteTenantCredentials(ctx context.Context, tenantID string) error {
 	if _, err := naming.BuildNamespace(tenantID); err != nil {
 		return fmt.Errorf("minio: invalid tenantID %q: %w", tenantID, err)
 	}
-	accessKey := fmt.Sprintf("loopruntime-build-%s", tenantID)
-	policyName := fmt.Sprintf("loopruntime-tenant-%s", tenantID)
+	accessKey := fmt.Sprintf("loop-runtime-build-%s", tenantID)
+	policyName := fmt.Sprintf("loop-runtime-tenant-%s", tenantID)
 
 	// Delete the user first (detaches policy implicitly in MinIO).
 	if err := p.client.RemoveUser(ctx, accessKey); err != nil {
@@ -227,7 +227,7 @@ func (p *AdminProvisioner) ensurePolicy(ctx context.Context, policyName, tenantI
 					"s3:DeleteObject",
 				},
 				"Resource": []string{
-					fmt.Sprintf("arn:aws:s3:::loopruntime-builds/%s/*", tenantID),
+					fmt.Sprintf("arn:aws:s3:::loop-runtime-builds/%s/*", tenantID),
 				},
 			},
 			{
@@ -236,7 +236,7 @@ func (p *AdminProvisioner) ensurePolicy(ctx context.Context, policyName, tenantI
 					"s3:ListBucket",
 				},
 				"Resource": []string{
-					"arn:aws:s3:::loopruntime-builds",
+					"arn:aws:s3:::loop-runtime-builds",
 				},
 				"Condition": map[string]interface{}{
 					"StringLike": map[string]string{

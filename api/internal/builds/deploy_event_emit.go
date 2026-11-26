@@ -17,7 +17,7 @@ import (
 // stageDeployFailed stages a deploy.failed event on the transactional outbox
 // (deploy_events, engine migration 000051) on the SAME tx as the build→FAILED
 // transition, so failure-event capture is atomic with the deploy (Option C,
-// MEET-2026-07-03-005 + MEET-2026-07-04-001). loopruntime-cloud drains + fans out to
+// MEET-2026-07-03-005 + MEET-2026-07-04-001). loop-console drains + fans out to
 // the customer's workspace_webhooks; the engine never references the webhook
 // tables (decoupling invariant).
 //

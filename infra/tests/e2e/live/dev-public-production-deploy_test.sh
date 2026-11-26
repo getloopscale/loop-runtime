@@ -11,15 +11,15 @@
 # Chain steps:
 #   1. Preflight  — gh auth + kubectl context + dev-public reachability
 #   2. Reset      — reset-for-e2e.sh applied (DB + Kratos identities)
-#   3. Seed       — admin@getloopscale.com session via seed-admin-loopruntime-dev.sh
+#   3. Seed       — admin@getloopscale.com session via seed-admin-loop-runtime-dev.sh
 #   4. Project    — POST /api/v1/projects {name: sample} (T4.1 auto-creates production env)
 #   5. Connect    — connect-canonical-fixture.sh wires the canonical loopzerokit-example repo
 #   6. Push       — gh api PUT /repos/.../contents/<path> synthesizes a real commit
 #   7. Chain      — webhook -> autodeploy -> build -> release ACTIVE -> ArgoCD Synced+Healthy
-#   8. Assert M2  — kubectl get ns loopruntime-<tenant>-sample-production exists (M2 canonical)
+#   8. Assert M2  — kubectl get ns loop-runtime-<tenant>-sample-production exists (M2 canonical)
 #   9. Assert M2  — kubectl get appproject <tenant> destinations contains M2 namespace
-#  10. Assert M2  — kubectl get sa loopruntime-app -n loopruntime-<tenant>-sample-production exists
-#  11. Assert M2  — pods Running 2/2 in loopruntime-<tenant>-sample-production
+#  10. Assert M2  — kubectl get sa loop-runtime-app -n loop-runtime-<tenant>-sample-production exists
+#  11. Assert M2  — pods Running 2/2 in loop-runtime-<tenant>-sample-production
 #  12. Assert M2  — ArgoCD Application <tenant>-production Synced+Healthy
 #  13. Anti-WA    — grep this script body: ZERO `kubectl patch appproject` calls,
 #                    ZERO `kubectl create namespace` calls, ZERO `kubectl ... apply -f -`
@@ -44,11 +44,11 @@ REPO_NAME="${REPO_NAME:-loopzerokit-example}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-develop}"
 PROJECT_NAME="${PROJECT_NAME:-sample}"
 ENV_NAME="${ENV_NAME:-production}"
-SESSION_FILE="${SESSION_FILE:-$HOME/.loopruntime/admin-loopruntime-dev-session.txt}"
+SESSION_FILE="${SESSION_FILE:-$HOME/.loop-runtime/admin-loop-runtime-dev-session.txt}"
 PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.getloopscale.com}"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.getloopscale.com}"
-CONTEXT_MGMT="${CONTEXT_MGMT:-k3d-loopruntime-core}"
-CONTEXT_WORKLOAD="${CONTEXT_WORKLOAD:-k3d-loopruntime-cell-0}"
+CONTEXT_MGMT="${CONTEXT_MGMT:-k3d-loop-runtime-core}"
+CONTEXT_WORKLOAD="${CONTEXT_WORKLOAD:-k3d-loop-runtime-cell-0}"
 
 MAX_DURATION_SECONDS="${MAX_DURATION_SECONDS:-1200}"  # 20 min hard ceiling
 LINK_RELEASE_BUDGET=$((10 * 60)) # release ACTIVE
@@ -81,22 +81,22 @@ TMP_JWT=""
 mint_jwt() {
   if [[ -n "${TMP_JWT:-}" ]]; then echo "$TMP_JWT"; return 0; fi
   # CANONICAL 2026-06-15 dev-public LIVE: prefer HMAC session JWT (carries
-  # tenant_id from active session; passes loopruntime-cloud /engine proxy guard
+  # tenant_id from active session; passes loop-console /engine proxy guard
   # per MEET-2026-04-07-039 B7). Bootstrap RSA JWT remains the fallback
   # for engine-direct (localhost:13001) but lacks tenant_id claim so the
   # /engine/* proxy rejects it.
-  if [[ -f "$HOME/.loopruntime/local-dogfood-session-jwt.txt" ]]; then
-    TMP_JWT=$(cat "$HOME/.loopruntime/local-dogfood-session-jwt.txt")
+  if [[ -f "$HOME/.loop-runtime/local-dogfood-session-jwt.txt" ]]; then
+    TMP_JWT=$(cat "$HOME/.loop-runtime/local-dogfood-session-jwt.txt")
     echo "$TMP_JWT"
     return 0
   fi
   # Local dogfood path: reuse the seeded token file when available
-  if [[ -f "$HOME/.loopruntime/local-dogfood-token.txt" ]]; then
-    TMP_JWT=$(cat "$HOME/.loopruntime/local-dogfood-token.txt")
+  if [[ -f "$HOME/.loop-runtime/local-dogfood-token.txt" ]]; then
+    TMP_JWT=$(cat "$HOME/.loop-runtime/local-dogfood-token.txt")
     echo "$TMP_JWT"
     return 0
   fi
-  printf 'ABORT: no JWT available; run seed-admin-loopruntime-dev.sh + seed-local-user.sh
+  printf 'ABORT: no JWT available; run seed-admin-loop-runtime-dev.sh + seed-local-user.sh
 ' >&2
   return 1
 }
@@ -150,8 +150,8 @@ reset_state() {
 # --- Seed admin session (step 3) -------------------------------------------
 
 seed_session() {
-  log "step 3/13 — seed-admin-loopruntime-dev.sh (admin@getloopscale.com session mint)"
-  bash infra/scripts/local/seed-admin-loopruntime-dev.sh 2>&1 | tail -5 >&2
+  log "step 3/13 — seed-admin-loop-runtime-dev.sh (admin@getloopscale.com session mint)"
+  bash infra/scripts/local/seed-admin-loop-runtime-dev.sh 2>&1 | tail -5 >&2
 
   if [ ! -f "$SESSION_FILE" ]; then
     log "FAIL seed: session file $SESSION_FILE not found"
@@ -265,14 +265,14 @@ assert_m2_chain() {
   # has email + active_tenant_id as its tenant-linking fields).
   # Container selector `-c postgresql` required: pod has 2 containers
   # (postgresql + metrics) and default selection is unstable.
-  tenant="$(kubectl --context="$CONTEXT_MGMT" -n loopruntime-system exec postgresql-0 -c postgresql -- \
-    bash -c 'PGPASSWORD=loopruntime-dev-password psql -U loopruntime -d loopruntime -t -A -c "SELECT active_tenant_id FROM users WHERE email='\''admin@getloopscale.com'\'' LIMIT 1"' 2>/dev/null \
+  tenant="$(kubectl --context="$CONTEXT_MGMT" -n loop-runtime-system exec postgresql-0 -c postgresql -- \
+    bash -c 'PGPASSWORD=loop-runtime-dev-password psql -U loop_runtime -d loop_runtime -t -A -c "SELECT active_tenant_id FROM users WHERE email='\''admin@getloopscale.com'\'' LIMIT 1"' 2>/dev/null \
     | tr -d '[:space:]')"
   if [ -z "$tenant" ]; then
     log "FAIL could not resolve tenant_id for admin@getloopscale.com"
     return 1
   fi
-  local m2_ns="loopruntime-${tenant}-${PROJECT_NAME}-${ENV_NAME}"
+  local m2_ns="loop-runtime-${tenant}-${PROJECT_NAME}-${ENV_NAME}"
   log "expected M2 namespace: $m2_ns"
 
   if ! kubectl --context="$CONTEXT_WORKLOAD" get ns "$m2_ns" >/dev/null 2>&1; then
@@ -291,12 +291,12 @@ assert_m2_chain() {
   fi
   log "AppProject destinations PASS"
 
-  log "step 10/13 — assert SA loopruntime-app exists in M2 namespace"
-  if ! kubectl --context="$CONTEXT_WORKLOAD" -n "$m2_ns" get sa loopruntime-app >/dev/null 2>&1; then
-    log "FAIL SA loopruntime-app missing in $m2_ns"
+  log "step 10/13 — assert SA loop-runtime-app exists in M2 namespace"
+  if ! kubectl --context="$CONTEXT_WORKLOAD" -n "$m2_ns" get sa loop-runtime-app >/dev/null 2>&1; then
+    log "FAIL SA loop-runtime-app missing in $m2_ns"
     return 1
   fi
-  log "SA loopruntime-app PASS"
+  log "SA loop-runtime-app PASS"
 
   log "step 11/13 — assert pods Running in M2 namespace within ${LINK_FINAL_BUDGET}s"
   local deadline=$(( $(date +%s) + LINK_FINAL_BUDGET ))
@@ -335,8 +335,8 @@ assert_no_workarounds() {
   # The 4 workarounds from T6.1 of plan 2026-06-08-pre-release-test-rigor
   # (per feedback_m2_canonical_drift_operator_renderer memory) were:
   #   (a) kubectl patch appproject ... destinations
-  #   (b) kubectl --context loopruntime-cell-0 create namespace loopruntime-...
-  #   (c) kubectl get sa loopruntime-app -o yaml | sed | kubectl apply -f -
+  #   (b) kubectl --context loop-runtime-cell-0 create namespace loop-runtime-...
+  #   (c) kubectl get sa loop-runtime-app -o yaml | sed | kubectl apply -f -
   #   (d) kubectl patch app .../sync force
   # T6.1 SUCCESS = the script body NEVER invokes any of these.
   #
@@ -351,11 +351,11 @@ assert_no_workarounds() {
     log "FAIL anti-workaround: script body contains kubectl patch appproject (workaround a)"
     return 1
   fi
-  if echo "$body" | grep -qE 'kubectl[^|]+create[[:space:]]+namespace[[:space:]]+loopruntime-'; then
-    log "FAIL anti-workaround: script body contains kubectl create namespace loopruntime-* (workaround b)"
+  if echo "$body" | grep -qE 'kubectl[^|]+create[[:space:]]+namespace[[:space:]]+loop-runtime-'; then
+    log "FAIL anti-workaround: script body contains kubectl create namespace loop-runtime-* (workaround b)"
     return 1
   fi
-  if echo "$body" | grep -qE 'kubectl[^|]+(get|exec).*sa[[:space:]]+loopruntime-app.*apply[[:space:]]+-f'; then
+  if echo "$body" | grep -qE 'kubectl[^|]+(get|exec).*sa[[:space:]]+loop-runtime-app.*apply[[:space:]]+-f'; then
     log "FAIL anti-workaround: script body contains SA copy across namespaces (workaround c)"
     return 1
   fi

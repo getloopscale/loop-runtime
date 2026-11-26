@@ -1,7 +1,7 @@
 # velero-backup-dr-plan v1.0 / T3.1 — Velero backup freshness alerting.
 #
 # Replaces the ORPHAN `LoopRuntimeGiteaBackupStale` rule that referenced a metric
-# never emitted (loopruntime_gitea_last_backup_timestamp). Velero exports its own
+# never emitted (loop_runtime_gitea_last_backup_timestamp). Velero exports its own
 # metrics natively at :8085/metrics and Phase 3.2 wires the scrape job.
 #
 # 4 alerts cover the full lifecycle:
@@ -13,19 +13,19 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-velero-alerts
+  name: loop-runtime-velero-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopruntime.velero
+    - name: loop-runtime.velero
       rules:
         # Replaces the ORPHAN LoopRuntimeGiteaBackupStale: covers ALL of LoopRuntime's
-        # schedules (loopruntime-*-backup) with a 12-hour window — a conservative RPO
+        # schedules (loop-runtime-*-backup) with a 12-hour window — a conservative RPO
         # for the 6h schedules and a safety net for the weekly full backup.
         - alert: LoopRuntimeVeleroBackupStale
-          expr: time() - velero_backup_last_successful_timestamp{schedule=~"loopruntime-.*"} > 43200
+          expr: time() - velero_backup_last_successful_timestamp{schedule=~"loop-runtime-.*"} > 43200
           for: 5m
           labels:
             severity: critical
@@ -35,7 +35,7 @@ spec:
             description: "Last successful run of schedule {{ $labels.schedule }} is older than 12 hours. RPO exceeded — risk of data loss in case of cluster failure."
 
         - alert: LoopRuntimeVeleroBackupFailing
-          expr: increase(velero_backup_failure_total{schedule=~"loopruntime-.*"}[6h]) > 0
+          expr: increase(velero_backup_failure_total{schedule=~"loop-runtime-.*"}[6h]) > 0
           for: 0m
           labels:
             severity: critical
@@ -55,7 +55,7 @@ spec:
             description: "Velero deployment has been unreachable for >2 minutes. No backups will run while the server is down."
 
         - alert: LoopRuntimeVeleroBackupPartial
-          expr: velero_backup_partial_failure_total{schedule=~"loopruntime-.*"} > 0
+          expr: velero_backup_partial_failure_total{schedule=~"loop-runtime-.*"} > 0
           for: 0m
           labels:
             severity: warning

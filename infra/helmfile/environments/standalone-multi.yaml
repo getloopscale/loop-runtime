@@ -2,7 +2,7 @@
 # end-to-end-deploy-validation-plan T0.3
 #
 # Variant of `standalone` for local E2E validation with 3 separate k3d
-# clusters (loopruntime-core + loopruntime-build + loopruntime-cell-0). Used by:
+# clusters (loop-runtime-core + loop-runtime-build + loop-runtime-cell-0). Used by:
 #   - infra/tests/e2e/deploy_e2e_test.go (TestE2EDeployHappyPath)
 #
 # Differences vs `standalone`:
@@ -12,16 +12,16 @@
 #   - cosign-signing-key Secret in build cluster (not mgmt)
 #   - cf-tunnel-credentials in workload cluster with replicas:0 (no real CF)
 
-domain: loopruntime.local
+domain: loop-runtime.local
 
-# Phase 3.4 of plan 2026-06-02-loopruntime-api-vault-integration v1.8 (D11 ESO).
+# Phase 3.4 of plan 2026-06-02-loop-runtime-api-vault-integration v1.8 (D11 ESO).
 # Opt-in flag: when true, core.helmfile installs ESO operator +
-# loopruntime-external-secrets CRs (pulls secrets from loopruntime-secrets cluster).
+# loop-runtime-external-secrets CRs (pulls secrets from loop-runtime-secrets cluster).
 # Default false → secrets continue via legacy env var / K8s Secret pattern.
-# Set to true ONLY after loopruntime-secrets cluster up + openbao-init Job ran +
-# ClusterSecretStore loopruntime-secrets-secrets applied (Phase 3.1 manifests).
+# Set to true ONLY after loop-runtime-secrets cluster up + openbao-init Job ran +
+# ClusterSecretStore loop-runtime-secrets-secrets applied (Phase 3.1 manifests).
 vaultEnabled: false
-dnsZone: loopruntime.local
+dnsZone: loop-runtime.local
 
 clusterRole: standalone
 clusterTopology: multi-cluster
@@ -31,10 +31,10 @@ replicas:
   # unblocked multi-replica:
   #   - main.go now starts HTTP server before leader election
   #     (passive standby pods serve /healthz while waiting for lock)
-  #   - loopruntime-api Deployment uses RollingUpdate when replicaCount>=2
+  #   - loop-runtime-api Deployment uses RollingUpdate when replicaCount>=2
   # 2 replicas validates chaos scenario 1 (recover within 120s) +
   # delivers true HA in production. Local k3d resource footprint
-  # acceptable (~256Mi×2 = 512Mi for loopruntime-api).
+  # acceptable (~256Mi×2 = 512Mi for loop-runtime-api).
   api: 2
   controller: 1
   argocd: 1
@@ -54,13 +54,13 @@ certIssuer:
   name: selfsigned-issuer
 
 registries:
-  # CHG-2026-04-29-DOGFOOD iter 9 — k3d-loopruntime-registry serves images
+  # CHG-2026-04-29-DOGFOOD iter 9 — k3d-loop-runtime-registry serves images
   # built locally by the build pipeline (no DOCR in dev). The
   # tenant-id segment is intentionally NOT pinned: LoopRuntime names images
   # `<registry>/<tenant>/<project>-<app>:<sha>`, so the prefix needs
   # to cover all tenants in this k3d cluster.
   additionalPrefixes:
-    - "k3d-loopruntime-registry:5000/"
+    - "k3d-loop-runtime-registry:5000/"
 
 loki:
   maxGlobalStreamsPerUser: 50000
@@ -77,13 +77,13 @@ inClusterPostgres: true
 # Underlying storage class empty → cluster default (local-path on k3d).
 underlyingStorageClass: ""
 
-# Cross-cluster URLs (loopruntime-platform-topology ConfigMap). Used by loopruntime-api
+# Cross-cluster URLs (loop-runtime-platform-topology ConfigMap). Used by loop-runtime-api
 # to reach Argo, Loki, etc. across clusters via the host network.
 crossCluster:
   argoApi: "http://host.k3d.internal:30093"
   # The build cluster's Loki, published on the build serverlb (infra/k3d/build-cluster.yaml
   # `30120:30120`). build.helmfile renders the NodePort Service on this port and the
-  # loopruntime-api overlay reads Loki at host.k3d.internal:<this port>. Declared here so the
+  # loop-runtime-api overlay reads Loki at host.k3d.internal:<this port>. Declared here so the
   # three agree by construction; the `loki-cross-cluster` seed used to compute the
   # pair at runtime and patch it onto live objects.
   lokiNodePort: 30120
@@ -95,7 +95,7 @@ crossCluster:
 velero:
   bucket: velero-backups
   region: us-east-1
-  s3Url: http://minio.loopruntime-system.svc:9000
+  s3Url: http://minio.loop-runtime-system.svc:9000
 
 # Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder
 uiBaseUrl: "http://localhost:4455"
@@ -113,8 +113,8 @@ dashboardOrigin: "http://localhost:3000"
 # publicAuthUrl + publicCloudUrl EMPTY for standalone-multi.
 # - Hydra template now checks `hasKey AND non-empty` (fix 2026-06-06):
 #   empty publicAuthUrl → Hydra uses cluster-internal issuer
-#   (http://ory-hydra-public.loopruntime-auth.svc.cluster.local:4444/) which is
-#   what loopruntime-api expects for JWT validation in standalone.
+#   (http://ory-hydra-public.loop-runtime-auth.svc.cluster.local:4444/) which is
+#   what loop-runtime-api expects for JWT validation in standalone.
 # - Kratos template uses same hasKey AND non-empty pattern: falls back
 #   to uiBaseUrl for base_redirect_uri = http://localhost:4455/.
 publicAuthUrl: ""
@@ -143,7 +143,7 @@ dashboardRoute:
 # MEASURED on 2026-08-10, during the full rebuild of app-dev: the `drill-watchdog-*` pod sat
 # in ImagePullBackOff, and the cause was not a credential — `doctl registry get` answers
 # **404 registry does not exist**. The image the four crons run,
-# `registry.digitalocean.com/loopruntime-system/loopruntime-ops:v0.1.0`, lives in a DELETED registry.
+# `registry.digitalocean.com/loop-runtime-system/loop-runtime-ops:v0.1.0`, lives in a DELETED registry.
 # Nobody can pull it, with or without a token.
 #
 # They also have no target here: `drill:watchdog` and `drill:l2-scale` exercise the DRILL
@@ -152,7 +152,7 @@ dashboardRoute:
 #
 # A recurring red pod is worse than no automation at all: it trains whoever looks at the
 # cluster to ignore red. That noise is what made the watchdog the LAST item investigated in
-# this rebuild. This is not the fix — the fix is to republish `loopruntime-ops` to a reachable
+# this rebuild. This is not the fix — the fix is to republish `loop-runtime-ops` to a reachable
 # registry (BACKLOG.md B-019). The `drill` environment, which has a real target, keeps
 # scheduling all four.
 ciCronsEnabled: false
@@ -165,11 +165,11 @@ profile:
   managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
-  loopruntimeCloud: true               # install the control plane (loopruntime-cloud), unless clusterRole is standalone
+  loopRuntimeCloud: true               # install the control plane (loop-console), unless clusterRole is standalone
   smokeTest: true               # run the post-install smoke-test release
   localObjectStore: true        # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
   inClusterObjectStore: true    # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
   awsSecretsManager: false      # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
   awsLoadBalancerController: false  # install the AWS Load Balancer Controller and publish the edge through an ALB
-  localRegistry: true           # cells admit images from the local k3d registry (k3d-loopruntime-registry:5000)
-  secretFetchBroker: false      # install the ESO secret-fetch broker (loopruntime-broker) on the cells; its chart allows a plaintext bearer only in dev-public
+  localRegistry: true           # cells admit images from the local k3d registry (k3d-loop-runtime-registry:5000)
+  secretFetchBroker: false      # install the ESO secret-fetch broker (loop-runtime-broker) on the cells; its chart allows a plaintext bearer only in dev-public

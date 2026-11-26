@@ -24,22 +24,22 @@ func newAppMgr(t *testing.T) *ApplicationCRManager {
 	if err != nil {
 		t.Fatalf("NewScheme: %v", err)
 	}
-	return NewApplicationCRManager(fake.NewClientBuilder().WithScheme(scheme).Build(), "loopruntime-system")
+	return NewApplicationCRManager(fake.NewClientBuilder().WithScheme(scheme).Build(), "loop-runtime-system")
 }
 
 // getApp fetches a LoopRuntimeApplication CR by name from the manager's fake client.
 func getApp(t *testing.T, m *ApplicationCRManager, name string) *apiv1.LoopRuntimeApplication {
 	t.Helper()
 	var got apiv1.LoopRuntimeApplication
-	if err := m.Client.Get(context.Background(), client.ObjectKey{Namespace: "loopruntime-system", Name: name}, &got); err != nil {
+	if err := m.Client.Get(context.Background(), client.ObjectKey{Namespace: "loop-runtime-system", Name: name}, &got); err != nil {
 		t.Fatalf("expected LoopRuntimeApplication CR %q to exist: %v", name, err)
 	}
 	return &got
 }
 
 func TestBuildLoopRuntimeApplicationCR(t *testing.T) {
-	cr := buildLoopRuntimeApplicationCR("loopruntime-system", LoopRuntimeApplicationInput{
-		TenantID:    "tn-loopruntime",
+	cr := buildLoopRuntimeApplicationCR("loop-runtime-system", LoopRuntimeApplicationInput{
+		TenantID:    "tn-loop-runtime",
 		Project:     "my-project",
 		Environment: "production",
 		AppName:     "api",
@@ -48,20 +48,20 @@ func TestBuildLoopRuntimeApplicationCR(t *testing.T) {
 	})
 
 	// Deterministic name includes hash suffix + human-readable prefix.
-	expectedName := loopruntimeApplicationCRName("tn-loopruntime", "my-project", "api", "production")
+	expectedName := loopRuntimeApplicationCRName("tn-loop-runtime", "my-project", "api", "production")
 	if cr.Name != expectedName {
 		t.Errorf("expected name %q, got %q", expectedName, cr.Name)
 	}
-	if !strings.HasPrefix(cr.Name, "tn-loopruntime-my-project-api-production-") {
+	if !strings.HasPrefix(cr.Name, "tn-loop-runtime-my-project-api-production-") {
 		t.Errorf("expected name to start with human-readable prefix, got %q", cr.Name)
 	}
-	if cr.Namespace != "loopruntime-system" {
-		t.Errorf("expected namespace loopruntime-system, got %s", cr.Namespace)
+	if cr.Namespace != "loop-runtime-system" {
+		t.Errorf("expected namespace loop-runtime-system, got %s", cr.Namespace)
 	}
 
 	// Typed spec fields — the compiler now enforces these names.
-	if cr.Spec.TenantRef != "tn-loopruntime" {
-		t.Errorf("expected tenantRef tn-loopruntime, got %q", cr.Spec.TenantRef)
+	if cr.Spec.TenantRef != "tn-loop-runtime" {
+		t.Errorf("expected tenantRef tn-loop-runtime, got %q", cr.Spec.TenantRef)
 	}
 	if cr.Spec.Project != "my-project" {
 		t.Errorf("expected project my-project, got %q", cr.Spec.Project)
@@ -80,8 +80,8 @@ func TestBuildLoopRuntimeApplicationCR(t *testing.T) {
 	}
 
 	// Labels for controller selection.
-	if cr.Labels["runtime.getloopscale.com/tenant"] != "tn-loopruntime" {
-		t.Errorf("expected label runtime.getloopscale.com/tenant=tn-loopruntime, got %v", cr.Labels["runtime.getloopscale.com/tenant"])
+	if cr.Labels["runtime.getloopscale.com/tenant"] != "tn-loop-runtime" {
+		t.Errorf("expected label runtime.getloopscale.com/tenant=tn-loop-runtime, got %v", cr.Labels["runtime.getloopscale.com/tenant"])
 	}
 	if cr.Labels["runtime.getloopscale.com/project"] != "my-project" {
 		t.Errorf("expected label runtime.getloopscale.com/project=my-project, got %v", cr.Labels["runtime.getloopscale.com/project"])
@@ -95,8 +95,8 @@ func TestBuildLoopRuntimeApplicationCR(t *testing.T) {
 // originating HTTP request.
 func TestBuildLoopRuntimeApplicationCR_PropagatesCorrelationID(t *testing.T) {
 	const wantID = "11111111-2222-3333-4444-555555555555"
-	cr := buildLoopRuntimeApplicationCR("loopruntime-system", LoopRuntimeApplicationInput{
-		TenantID:      "tn-loopruntime",
+	cr := buildLoopRuntimeApplicationCR("loop-runtime-system", LoopRuntimeApplicationInput{
+		TenantID:      "tn-loop-runtime",
 		Project:       "my-project",
 		Environment:   "production",
 		AppName:       "api",
@@ -121,8 +121,8 @@ func TestBuildLoopRuntimeApplicationCR_PropagatesCorrelationID(t *testing.T) {
 // "runtime.getloopscale.com/correlation-id: ”" would pollute the CR + confuse operator-side
 // readers that interpret presence-of-annotation as "I have a trace context".
 func TestBuildLoopRuntimeApplicationCR_OmitsAnnotationWhenCorrelationEmpty(t *testing.T) {
-	cr := buildLoopRuntimeApplicationCR("loopruntime-system", LoopRuntimeApplicationInput{
-		TenantID:      "tn-loopruntime",
+	cr := buildLoopRuntimeApplicationCR("loop-runtime-system", LoopRuntimeApplicationInput{
+		TenantID:      "tn-loop-runtime",
 		Project:       "my-project",
 		Environment:   "production",
 		AppName:       "api",
@@ -137,8 +137,8 @@ func TestBuildLoopRuntimeApplicationCR_OmitsAnnotationWhenCorrelationEmpty(t *te
 }
 
 func TestBuildLoopRuntimeApplicationCR_DefaultPort(t *testing.T) {
-	cr := buildLoopRuntimeApplicationCR("loopruntime-system", LoopRuntimeApplicationInput{
-		TenantID:    "tn-loopruntime",
+	cr := buildLoopRuntimeApplicationCR("loop-runtime-system", LoopRuntimeApplicationInput{
+		TenantID:    "tn-loop-runtime",
 		Project:     "web-app",
 		Environment: "staging",
 		AppName:     "web",
@@ -159,7 +159,7 @@ func TestLoopRuntimeApplicationCRName_LongInputsTruncated(t *testing.T) {
 	longApp := strings.Repeat("c", 60)
 	longEnv := strings.Repeat("d", 60)
 
-	name := loopruntimeApplicationCRName(longTenant, longProject, longApp, longEnv)
+	name := loopRuntimeApplicationCRName(longTenant, longProject, longApp, longEnv)
 	if len(name) > 253 {
 		t.Errorf("CR name exceeds K8s 253-char limit: len=%d, name=%q", len(name), name)
 	}
@@ -174,8 +174,8 @@ func TestLoopRuntimeApplicationCRName_TruncatedStillUnique(t *testing.T) {
 	// Two inputs that share a long prefix but differ at the end must produce
 	// different names even after truncation (the hash is computed on full input).
 	base := strings.Repeat("x", 60)
-	nameA := loopruntimeApplicationCRName("tn-org", base+"alpha", "api", "prod")
-	nameB := loopruntimeApplicationCRName("tn-org", base+"bravo", "api", "prod")
+	nameA := loopRuntimeApplicationCRName("tn-org", base+"alpha", "api", "prod")
+	nameB := loopRuntimeApplicationCRName("tn-org", base+"bravo", "api", "prod")
 	if nameA == nameB {
 		t.Errorf("truncated names must differ for different inputs, both got %q", nameA)
 	}
@@ -183,20 +183,20 @@ func TestLoopRuntimeApplicationCRName_TruncatedStillUnique(t *testing.T) {
 
 func TestLoopRuntimeApplicationCRName(t *testing.T) {
 	// Deterministic: same input always produces same output.
-	name1 := loopruntimeApplicationCRName("tn-loopruntime", "my-project", "api", "production")
-	name2 := loopruntimeApplicationCRName("tn-loopruntime", "my-project", "api", "production")
+	name1 := loopRuntimeApplicationCRName("tn-loop-runtime", "my-project", "api", "production")
+	name2 := loopRuntimeApplicationCRName("tn-loop-runtime", "my-project", "api", "production")
 	if name1 != name2 {
 		t.Errorf("expected deterministic names, got %q and %q", name1, name2)
 	}
 
 	// Collision-free: different inputs that would collide with simple hyphen join.
-	nameA := loopruntimeApplicationCRName("tn-x", "my-app", "web", "prod")
-	nameB := loopruntimeApplicationCRName("tn-x", "my", "app-web", "prod")
+	nameA := loopRuntimeApplicationCRName("tn-x", "my-app", "web", "prod")
+	nameB := loopRuntimeApplicationCRName("tn-x", "my", "app-web", "prod")
 	if nameA == nameB {
 		t.Errorf("expected different names for different inputs, both got %q", nameA)
 	}
 
-	if !strings.HasPrefix(name1, "tn-loopruntime-my-project-api-production-") {
+	if !strings.HasPrefix(name1, "tn-loop-runtime-my-project-api-production-") {
 		t.Errorf("expected human-readable prefix, got %q", name1)
 	}
 	parts := strings.Split(name1, "-")
@@ -209,7 +209,7 @@ func TestLoopRuntimeApplicationCRName(t *testing.T) {
 func TestEnsureLoopRuntimeApplication_CreateWhenNotFound(t *testing.T) {
 	mgr := newAppMgr(t)
 	input := LoopRuntimeApplicationInput{
-		TenantID:    "tn-loopruntime",
+		TenantID:    "tn-loop-runtime",
 		Project:     "my-project",
 		Environment: "production",
 		AppName:     "api",
@@ -221,21 +221,21 @@ func TestEnsureLoopRuntimeApplication_CreateWhenNotFound(t *testing.T) {
 		t.Fatalf("EnsureLoopRuntimeApplication() unexpected error: %v", err)
 	}
 
-	crName := loopruntimeApplicationCRName("tn-loopruntime", "my-project", "api", "production")
+	crName := loopRuntimeApplicationCRName("tn-loop-runtime", "my-project", "api", "production")
 	got := getApp(t, mgr, crName)
 	if got.Spec.ServicePort != 3001 {
 		t.Errorf("servicePort = %d, want 3001", got.Spec.ServicePort)
 	}
-	if got.Spec.TenantRef != "tn-loopruntime" {
-		t.Errorf("tenantRef = %q, want tn-loopruntime", got.Spec.TenantRef)
+	if got.Spec.TenantRef != "tn-loop-runtime" {
+		t.Errorf("tenantRef = %q, want tn-loop-runtime", got.Spec.TenantRef)
 	}
 }
 
 func TestEnsureLoopRuntimeApplication_UpdateWhenExists(t *testing.T) {
 	mgr := newAppMgr(t)
 	// Pre-populate with a CR that has port 80.
-	if err := mgr.Client.Create(context.Background(), buildLoopRuntimeApplicationCR("loopruntime-system", LoopRuntimeApplicationInput{
-		TenantID:    "tn-loopruntime",
+	if err := mgr.Client.Create(context.Background(), buildLoopRuntimeApplicationCR("loop-runtime-system", LoopRuntimeApplicationInput{
+		TenantID:    "tn-loop-runtime",
 		Project:     "my-project",
 		Environment: "production",
 		AppName:     "api",
@@ -247,7 +247,7 @@ func TestEnsureLoopRuntimeApplication_UpdateWhenExists(t *testing.T) {
 
 	// Update to port 3001.
 	if err := mgr.EnsureLoopRuntimeApplication(context.Background(), LoopRuntimeApplicationInput{
-		TenantID:    "tn-loopruntime",
+		TenantID:    "tn-loop-runtime",
 		Project:     "my-project",
 		Environment: "production",
 		AppName:     "api",
@@ -257,7 +257,7 @@ func TestEnsureLoopRuntimeApplication_UpdateWhenExists(t *testing.T) {
 		t.Fatalf("EnsureLoopRuntimeApplication() unexpected error: %v", err)
 	}
 
-	crName := loopruntimeApplicationCRName("tn-loopruntime", "my-project", "api", "production")
+	crName := loopRuntimeApplicationCRName("tn-loop-runtime", "my-project", "api", "production")
 	got := getApp(t, mgr, crName)
 	if got.Spec.ServicePort != 3001 {
 		t.Errorf("servicePort after update = %d, want 3001", got.Spec.ServicePort)
@@ -270,7 +270,7 @@ func TestEnsureLoopRuntimeApplication_UpdateWhenExists(t *testing.T) {
 func TestEnsureLoopRuntimeApplication_RefreshesCorrelationIDOnUpdate(t *testing.T) {
 	mgr := newAppMgr(t)
 	base := LoopRuntimeApplicationInput{
-		TenantID:    "tn-loopruntime",
+		TenantID:    "tn-loop-runtime",
 		Project:     "my-project",
 		Environment: "production",
 		AppName:     "api",
@@ -291,7 +291,7 @@ func TestEnsureLoopRuntimeApplication_RefreshesCorrelationIDOnUpdate(t *testing.
 		t.Fatalf("second EnsureLoopRuntimeApplication: %v", err)
 	}
 
-	crName := loopruntimeApplicationCRName("tn-loopruntime", "my-project", "api", "production")
+	crName := loopRuntimeApplicationCRName("tn-loop-runtime", "my-project", "api", "production")
 	got := getApp(t, mgr, crName)
 	if got.Annotations["runtime.getloopscale.com/correlation-id"] != "corr-bbbb" {
 		t.Errorf("correlation-id after re-deploy = %q, want corr-bbbb (latest request)", got.Annotations["runtime.getloopscale.com/correlation-id"])
@@ -301,7 +301,7 @@ func TestEnsureLoopRuntimeApplication_RefreshesCorrelationIDOnUpdate(t *testing.
 func TestEnsureLoopRuntimeApplication_IdempotentCreate(t *testing.T) {
 	mgr := newAppMgr(t)
 	input := LoopRuntimeApplicationInput{
-		TenantID:    "tn-loopruntime",
+		TenantID:    "tn-loop-runtime",
 		Project:     "web",
 		Environment: "staging",
 		AppName:     "frontend",
@@ -318,7 +318,7 @@ func TestEnsureLoopRuntimeApplication_IdempotentCreate(t *testing.T) {
 
 	// Verify exactly one CR exists.
 	var list apiv1.LoopRuntimeApplicationList
-	if err := mgr.Client.List(context.Background(), &list, client.InNamespace("loopruntime-system")); err != nil {
+	if err := mgr.Client.List(context.Background(), &list, client.InNamespace("loop-runtime-system")); err != nil {
 		t.Fatalf("List CRs: %v", err)
 	}
 	if len(list.Items) != 1 {
@@ -330,8 +330,8 @@ func TestEnsureLoopRuntimeApplication_IdempotentCreate(t *testing.T) {
 // spec.appName, so the api must write the app name into the spec — not only
 // into the label.
 func TestBuildLoopRuntimeApplicationCR_WritesTheAppNameIntoTheSpec(t *testing.T) {
-	cr := buildLoopRuntimeApplicationCR("loopruntime-system", LoopRuntimeApplicationInput{
-		TenantID:    "tn-loopruntime",
+	cr := buildLoopRuntimeApplicationCR("loop-runtime-system", LoopRuntimeApplicationInput{
+		TenantID:    "tn-loop-runtime",
 		Project:     "my-project",
 		Environment: "production",
 		AppName:     "web",
@@ -349,13 +349,13 @@ func TestBuildLoopRuntimeApplicationCR_WritesTheAppNameIntoTheSpec(t *testing.T)
 func TestEnsureLoopRuntimeApplication_BackfillsTheAppNameOnAnExistingCR(t *testing.T) {
 	mgr := newAppMgr(t)
 	input := LoopRuntimeApplicationInput{
-		TenantID:    "tn-loopruntime",
+		TenantID:    "tn-loop-runtime",
 		Project:     "my-project",
 		Environment: "production",
 		AppName:     "web",
 		ServiceName: "web",
 	}
-	legacy := buildLoopRuntimeApplicationCR("loopruntime-system", input)
+	legacy := buildLoopRuntimeApplicationCR("loop-runtime-system", input)
 	legacy.Spec.AppName = ""
 	if err := mgr.Client.Create(context.Background(), legacy); err != nil {
 		t.Fatalf("seed create: %v", err)
@@ -365,7 +365,7 @@ func TestEnsureLoopRuntimeApplication_BackfillsTheAppNameOnAnExistingCR(t *testi
 		t.Fatalf("EnsureLoopRuntimeApplication() unexpected error: %v", err)
 	}
 
-	got := getApp(t, mgr, loopruntimeApplicationCRName("tn-loopruntime", "my-project", "web", "production"))
+	got := getApp(t, mgr, loopRuntimeApplicationCRName("tn-loop-runtime", "my-project", "web", "production"))
 	if got.Spec.AppName != "web" {
 		t.Errorf("spec.appName after re-deploy = %q, want web", got.Spec.AppName)
 	}

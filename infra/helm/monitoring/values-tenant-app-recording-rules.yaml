@@ -9,23 +9,23 @@
 # exports the runtime.getloopscale.com labels of pods and Services (values-kube-state-metrics.yaml),
 # and the rules below join on them.
 #
-# The contract, which loopruntime-api queries on the core Prometheus
+# The contract, which loop-runtime-api queries on the core Prometheus
 # (api/internal/projectmetrics/projectmetricshttp/metrics_proxy.go and
 # api/internal/environments/environmentsadapter/prometheus_readiness_source.go). Every
 # series carries `tenant_id`, `project`, `app` and `environment`:
 #
-#   loopruntime_app:kube_pod_status_ready:sum
+#   loop_runtime_app:kube_pod_status_ready:sum
 #       pods of the app that are Ready
-#   loopruntime_app:traefik_service_requests:rate5m
+#   loop_runtime_app:traefik_service_requests:rate5m
 #       requests per second the ingress forwarded to the app
-#   loopruntime_app_status_class:traefik_service_requests:rate5m
+#   loop_runtime_app_status_class:traefik_service_requests:rate5m
 #       the same, by `status_class` of the answer ("2xx" ... "5xx")
-#   loopruntime_app_le:traefik_service_request_duration_seconds_bucket:rate5m
+#   loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m
 #       the request duration histogram, by `le`, for histogram_quantile
 #
-# The core Prometheus federates the names that start with `loopruntime_app`
-# (values-prometheus.yaml) and adds `cluster`; the two `loopruntime_pod:` and
-# `loopruntime_service:` series are the join's right-hand sides and stay on the cell.
+# The core Prometheus federates the names that start with `loop_runtime_app`
+# (values-prometheus.yaml) and adds `cluster`; the two `loop_runtime_pod:` and
+# `loop_runtime_service:` series are the join's right-hand sides and stay on the cell.
 #
 # The desired replica count is not recorded: it lives in the Rollout's spec, which
 # kube-state-metrics does not read without a custom resource state configuration.
@@ -35,12 +35,12 @@
 serverFiles:
   recording_rules.yml:
     groups:
-      - name: loopruntime-tenant-apps
+      - name: loop-runtime-tenant-apps
         # Rules of a group are evaluated in order, so the joins below read the two
         # label series recorded in the same evaluation.
         rules:
           # A pod of a tenant app, with the app's labels under the contract's names.
-          - record: loopruntime_pod:kube_pod_labels:max
+          - record: loop_runtime_pod:kube_pod_labels:max
             expr: |-
               max by (namespace, pod, tenant_id, project, app, environment) (
                 label_replace(label_replace(label_replace(label_replace(
@@ -54,7 +54,7 @@ serverFiles:
           # one). Traefik names a backend `<namespace>-<Service>-<port>@kubernetescrd`;
           # `traefik_backend` is that name up to the port, which the request rules derive
           # from Traefik's `service` label to join on.
-          - record: loopruntime_service:kube_service_labels:max
+          - record: loop_runtime_service:kube_service_labels:max
             expr: |-
               max by (traefik_backend, tenant_id, project, app, environment) (
                 label_join(
@@ -66,23 +66,23 @@ serverFiles:
                     "environment", "$1", "label_runtime_getloopscale_com_environment", "(.+)"),
                   "traefik_backend", "-", "namespace", "service")
               )
-          - record: loopruntime_app:kube_pod_status_ready:sum
+          - record: loop_runtime_app:kube_pod_status_ready:sum
             expr: |-
               sum by (tenant_id, project, app, environment) (
                 kube_pod_status_ready{condition="true"}
                 * on (namespace, pod) group_left (tenant_id, project, app, environment)
-                loopruntime_pod:kube_pod_labels:max
+                loop_runtime_pod:kube_pod_labels:max
               )
-          - record: loopruntime_app:traefik_service_requests:rate5m
+          - record: loop_runtime_app:traefik_service_requests:rate5m
             expr: |-
               sum by (tenant_id, project, app, environment) (
                 label_replace(
                   rate(traefik_service_requests_total{service=~".+@kubernetescrd"}[5m]),
                   "traefik_backend", "$1", "service", "(.+)-[^-@]+@kubernetescrd")
                 * on (traefik_backend) group_left (tenant_id, project, app, environment)
-                loopruntime_service:kube_service_labels:max
+                loop_runtime_service:kube_service_labels:max
               )
-          - record: loopruntime_app_status_class:traefik_service_requests:rate5m
+          - record: loop_runtime_app_status_class:traefik_service_requests:rate5m
             expr: |-
               sum by (tenant_id, project, app, environment, status_class) (
                 label_replace(
@@ -91,14 +91,14 @@ serverFiles:
                     "traefik_backend", "$1", "service", "(.+)-[^-@]+@kubernetescrd"),
                   "status_class", "${1}xx", "code", "([0-9]).+")
                 * on (traefik_backend) group_left (tenant_id, project, app, environment)
-                loopruntime_service:kube_service_labels:max
+                loop_runtime_service:kube_service_labels:max
               )
-          - record: loopruntime_app_le:traefik_service_request_duration_seconds_bucket:rate5m
+          - record: loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m
             expr: |-
               sum by (tenant_id, project, app, environment, le) (
                 label_replace(
                   rate(traefik_service_request_duration_seconds_bucket{service=~".+@kubernetescrd"}[5m]),
                   "traefik_backend", "$1", "service", "(.+)-[^-@]+@kubernetescrd")
                 * on (traefik_backend) group_left (tenant_id, project, app, environment)
-                loopruntime_service:kube_service_labels:max
+                loop_runtime_service:kube_service_labels:max
               )

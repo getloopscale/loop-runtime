@@ -13,8 +13,8 @@
 //
 // Root cause: `seed-post-cleanroom-all.sh` Step 9 invoked
 // `seed-tenant-fixture-canonical.sh` WITHOUT `--team`, so the seed
-// script's `PLAN_TIER="${LOOPRUNTIME_PLAN_TIER:-team}"` fallback was
-// overridden when an operator shell had `LOOPRUNTIME_PLAN_TIER=starter`
+// script's `PLAN_TIER="${LOOP_RUNTIME_PLAN_TIER:-team}"` fallback was
+// overridden when an operator shell had `LOOP_RUNTIME_PLAN_TIER=starter`
 // exported (a stale Cleanroom or dev-credentials.json residue).
 //
 // The audit asserts the canonical Step 9 invocation carries the
@@ -37,11 +37,11 @@ import (
 
 var (
 	// M15 Wave 3 2026-07-08: Step 9 migrated from bash `--team` flag to Go
-	// seed with an explicit `LOOPRUNTIME_PLAN_TIER=team` env prefix. The
+	// seed with an explicit `LOOP_RUNTIME_PLAN_TIER=team` env prefix. The
 	// operator-env-shadow invariant is preserved: prefixing the env var on
 	// the same command line cannot be shadowed by an outer shell export.
 	reStep9TeamFlag = regexp.MustCompile(
-		`run_step "9-seed-tenant-fixture"\s+"\(cd \$REPO_ROOT/cmd/loopruntime-ops && LOOPRUNTIME_PLAN_TIER=team go run \. seed tenant-fixture[^"]*"`,
+		`run_step "9-seed-tenant-fixture"\s+"\(cd \$REPO_ROOT/cmd/loop-runtime-ops && LOOP_RUNTIME_PLAN_TIER=team go run \. seed tenant-fixture[^"]*"`,
 	)
 )
 
@@ -51,7 +51,7 @@ func auditTeamTierSeed(body string) []string {
 	var errs []string
 
 	if !reStep9TeamFlag.MatchString(body) {
-		errs = append(errs, "(a) seed-post-cleanroom-all.sh Step 9 does NOT prefix `LOOPRUNTIME_PLAN_TIER=team` on the Go seed invocation — operator env `LOOPRUNTIME_PLAN_TIER=starter` (or any other tier) would shadow the canonical default, leaving the Scale page rendering the wrong tier. Restore the explicit `LOOPRUNTIME_PLAN_TIER=team` prefix per ADR-Q7.")
+		errs = append(errs, "(a) seed-post-cleanroom-all.sh Step 9 does NOT prefix `LOOP_RUNTIME_PLAN_TIER=team` on the Go seed invocation — operator env `LOOP_RUNTIME_PLAN_TIER=starter` (or any other tier) would shadow the canonical default, leaving the Scale page rendering the wrong tier. Restore the explicit `LOOP_RUNTIME_PLAN_TIER=team` prefix per ADR-Q7.")
 	}
 
 	// Audit trail comment cites the 2026-06-21 origin so an operator
@@ -89,14 +89,14 @@ func TestDevPublicTeamTierSeed_NegativeControl(t *testing.T) {
 	body := loadSeedPostCleanroomAll(t)
 	mutated := reStep9TeamFlag.ReplaceAllString(
 		body,
-		`run_step "9-seed-tenant-fixture" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed tenant-fixture)"`,
+		`run_step "9-seed-tenant-fixture" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed tenant-fixture)"`,
 	)
 	if mutated == body {
-		t.Fatalf("negative-control setup failed: could not find the canonical `LOOPRUNTIME_PLAN_TIER=team` invocation in script body — either the script changed shape or the regex drifted. The GREEN test is vacuous.")
+		t.Fatalf("negative-control setup failed: could not find the canonical `LOOP_RUNTIME_PLAN_TIER=team` invocation in script body — either the script changed shape or the regex drifted. The GREEN test is vacuous.")
 	}
 	errs := auditTeamTierSeed(mutated)
 	if len(errs) == 0 {
-		t.Errorf("negative control: auditTeamTierSeed() PASSED against a script whose Step 9 dropped `LOOPRUNTIME_PLAN_TIER=team` — the guard would NOT catch the QA 2026-06-21 regression (theatre).")
+		t.Errorf("negative control: auditTeamTierSeed() PASSED against a script whose Step 9 dropped `LOOP_RUNTIME_PLAN_TIER=team` — the guard would NOT catch the QA 2026-06-21 regression (theatre).")
 	}
 	for _, e := range errs {
 		t.Logf("negative-control verdict (expected to fire): %s", e)

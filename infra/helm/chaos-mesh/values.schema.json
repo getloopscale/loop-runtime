@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://loopruntime.platform/schemas/chaos-mesh/values.schema.json",
+  "$id": "https://loop-runtime.platform/schemas/chaos-mesh/values.schema.json",
   "title": "Chaos Mesh LoopRuntime wrapper values schema",
   "description": "Plan 2026-05-20 T2.5 ext — fail-fast on Chaos Mesh hardening drift. Protects ADR-0016 D-4 hardened RBAC (no cluster-admin default), PSA restricted compliance for controller, dashboard.create=false (attack surface), chaos-daemon privileged scoping (intentional but localized).",
   "type": "object",

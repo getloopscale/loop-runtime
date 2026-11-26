@@ -13,7 +13,7 @@ import (
 )
 
 // KVRoutingSource provides the expected set of KV routing keys from the database.
-// Each key is a subdomain (e.g., "tn-loopruntime-project-web-production").
+// Each key is a subdomain (e.g., "tn-loop-runtime-project-web-production").
 type KVRoutingSource interface {
 	// ExpectedStaticKeys returns the set of KV keys that should exist based on
 	// active static builds in the database.

@@ -32,9 +32,9 @@ helm-extra-args: "--strict"
 check-version-increment: false
 
 # Excluded charts (do not run ct against these).
-# loopruntime-common is a library chart — has no installable resources.
+# loop-runtime-common is a library chart — has no installable resources.
 excluded-charts:
-  - loopruntime-common
+  - loop-runtime-common
 
 # Required validations (when ct install runs).
 validate-maintainers: false

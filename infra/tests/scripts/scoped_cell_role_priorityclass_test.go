@@ -20,7 +20,7 @@ type scopedRule struct {
 }
 
 // scopedCellRoleRules parses the ClusterRole scoped-kubeconfig.sh applies on a cell for
-// the loopruntime-ctrl-runtime identity the operators use through ClusterCredential.
+// the loop-runtime-ctrl-runtime identity the operators use through ClusterCredential.
 func scopedCellRoleRules(t *testing.T) []scopedRule {
 	t.Helper()
 	raw, err := os.ReadFile("../../helmfile/scripts/lib/scoped-kubeconfig.sh")

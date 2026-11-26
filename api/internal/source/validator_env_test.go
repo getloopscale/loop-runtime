@@ -76,12 +76,12 @@ func TestValidateServicesJSON_ReservedEnv_KubernetesPrefix_Rejected(t *testing.T
 	}
 }
 
-// T1.3 — RED test #4: prefix LOOPRUNTIME_AUDIT_KEY rejected (platform-reserved).
-func TestValidateServicesJSON_ReservedEnv_LOOPRUNTIMEPrefix_Rejected(t *testing.T) {
-	content := validServicesJSONWithEnv(map[string]string{"LOOPRUNTIME_AUDIT_KEY": "x"})
+// T1.3 — RED test #4: prefix LOOP_RUNTIME_AUDIT_KEY rejected (platform-reserved).
+func TestValidateServicesJSON_ReservedEnv_LOOP_RUNTIMEPrefix_Rejected(t *testing.T) {
+	content := validServicesJSONWithEnv(map[string]string{"LOOP_RUNTIME_AUDIT_KEY": "x"})
 	_, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 	if err == nil {
-		t.Fatal("expected validation error for LOOPRUNTIME_AUDIT_KEY, got nil")
+		t.Fatal("expected validation error for LOOP_RUNTIME_AUDIT_KEY, got nil")
 	}
 }
 
@@ -142,7 +142,7 @@ func TestValidateServicesJSON_WarnMode_PathAccepted(t *testing.T) {
 	}
 }
 
-// T1.3 — RED test #10: empty LOOPRUNTIME_ENV_BLOCKLIST_MODE defaults to enforce
+// T1.3 — RED test #10: empty LOOP_RUNTIME_ENV_BLOCKLIST_MODE defaults to enforce
 // (fail-closed per CLAUDE.md §8).
 func TestValidateServicesJSON_EmptyMode_DefaultsToEnforce(t *testing.T) {
 	content := validServicesJSONWithEnv(map[string]string{"PATH": "/usr/bin"})
@@ -209,7 +209,7 @@ func TestReservedEnv_SymbolNameDoesNotCollideWithFindSec004(t *testing.T) {
 					for _, id := range vs.Names {
 						if id.Name == "reservedEnvKeyPrefixes" {
 							t.Errorf("%s declares `reservedEnvKeyPrefixes`, the same name find_sec_004 "+
-								"uses in build_plan.go and loopruntime-dockerfile-lint. They are different rules "+
+								"uses in build_plan.go and loop-runtime-dockerfile-lint. They are different rules "+
 								"blocking different threats; the shared name is what made them read as "+
 								"diverging copies (B-089).", name)
 						}
@@ -236,7 +236,7 @@ func TestReservedEnv_SymbolNameDoesNotCollideWithFindSec004(t *testing.T) {
 // the gate line asserted live protection that cannot be there. Registered as its
 // own item; the claims were corrected rather than left standing.
 func TestReservedEnv_ThreatsBlockedAreUnchanged(t *testing.T) {
-	for _, k := range []string{"LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "PATH", "LOOPRUNTIME_X", "KUBERNETES_SERVICE_HOST"} {
+	for _, k := range []string{"LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "PATH", "LOOP_RUNTIME_X", "KUBERNETES_SERVICE_HOST"} {
 		if !isReservedEnvKey(k) {
 			t.Errorf("%q must stay blocked — it is a runtime-container compromise vector", k)
 		}

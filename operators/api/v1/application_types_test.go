@@ -47,7 +47,7 @@ func TestLoopRuntimeApplication_SpecFields(t *testing.T) {
 	app := LoopRuntimeApplication{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-app",
-			Namespace: "loopruntime-acme-production",
+			Namespace: "loop-runtime-acme-production",
 		},
 		Spec: LoopRuntimeApplicationSpec{
 			TenantRef:   "acme",

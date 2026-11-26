@@ -27,7 +27,7 @@ export class Grafana extends pulumi.ComponentResource {
   public readonly ready: pulumi.Output<boolean>;
 
   constructor(name: string, args: GrafanaArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopruntime:platform:Grafana", name, {}, opts);
+    super("loop-runtime:platform:Grafana", name, {}, opts);
 
     this.release = new k8s.helm.v3.Release(
       "grafana",
@@ -64,7 +64,7 @@ export class Grafana extends pulumi.ComponentResource {
                       datasourceUid: "loki",
                       filterByTraceID: false,
                       customQuery: true,
-                      query: `{job="loopruntime-api"} |= "\${__trace.traceId}"`,
+                      query: `{job="loop-runtime-api"} |= "\${__trace.traceId}"`,
                     },
                   },
                 },

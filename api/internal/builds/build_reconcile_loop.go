@@ -35,23 +35,23 @@ type BuildCompletionHandler interface {
 type BuildReconcileLoopConfig struct {
 	// Interval is how often the loop polls for non-terminal builds.
 	Interval time.Duration
-	// RegistryURL is used to compute image references (e.g., "k3d-loopruntime-registry:5000").
+	// RegistryURL is used to compute image references (e.g., "k3d-loop-runtime-registry:5000").
 	RegistryURL string
-	// BaseDomain is the base domain for app hostnames (e.g., "loopruntime.local").
+	// BaseDomain is the base domain for app hostnames (e.g., "loop-runtime.local").
 	BaseDomain string
 	// ClusterIssuer is the cert-manager ClusterIssuer used for TLS Certificates.
 	// B14 (MEET-2026-04-23-058): required, no fallback default. Sourced from
-	// Config.ClusterIssuer (env LOOPRUNTIME_CLUSTER_ISSUER).
+	// Config.ClusterIssuer (env LOOP_RUNTIME_CLUSTER_ISSUER).
 	ClusterIssuer string
 	// PrometheusAddress is the Prometheus URL canary AnalysisTemplate queries
 	// (argo-rollouts-progressive-delivery-plan T1.2 / D6). Empty disables
 	// Prometheus-based canary analysis steps. Sourced from
-	// Config.PrometheusAddress (env LOOPRUNTIME_PROMETHEUS_ADDRESS).
+	// Config.PrometheusAddress (env LOOP_RUNTIME_PROMETHEUS_ADDRESS).
 	PrometheusAddress string
 	// ProgressiveDelivery and LeanResources are copied into every RenderInput
 	// the loop builds. Sourced from Config.ProgressiveDelivery (env
-	// LOOPRUNTIME_PROGRESSIVE_DELIVERY) and Config.LeanResources (env
-	// LOOPRUNTIME_LEAN_RESOURCES).
+	// LOOP_RUNTIME_PROGRESSIVE_DELIVERY) and Config.LeanResources (env
+	// LOOP_RUNTIME_LEAN_RESOURCES).
 	ProgressiveDelivery bool
 	LeanResources       bool
 	// MaxConcurrent is the maximum number of builds reconciled concurrently.

@@ -14,9 +14,9 @@ import (
 // kubeconfigTokenSource serves the build cluster's bearer token, re-reading it
 // from the kubeconfig on disk when the previous one is rejected.
 //
-// Issue #242 fix 3. loopruntime-api built its build-cluster client once at startup, so
+// Issue #242 fix 3. loop-runtime-api built its build-cluster client once at startup, so
 // the bearer token was a value captured at process start. When the operator
-// rotated `loopruntime-cluster-kubeconfigs.build.kubeconfig`, the mounted file changed
+// rotated `loop-runtime-cluster-kubeconfigs.build.kubeconfig`, the mounted file changed
 // and nothing else did: every deploy kept authenticating with a credential that
 // had already been replaced, and the only recovery was restarting the pod. The
 // watcher already NOTICED this (`ReportWatchError` logs "build cluster auth

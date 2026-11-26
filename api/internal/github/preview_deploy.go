@@ -188,7 +188,7 @@ func (d *PreviewDeployer) handleCreate(
 	// ALSO returns the parsed loopzero.yaml so we can hand framework/path/build
 	// to the orchestrator (drives LanguageStrategy step naming).
 	if d.bundlePrep != nil {
-		loopruntimeYaml, prepErr := d.bundlePrep.PrepareSourceBundle(ctx,
+		loopRuntimeYaml, prepErr := d.bundlePrep.PrepareSourceBundle(ctx,
 			event.Repository.FullName, commit, event.Installation.ID, repo.TenantID,
 		)
 		if prepErr != nil {
@@ -196,9 +196,9 @@ func (d *PreviewDeployer) handleCreate(
 			return fmt.Errorf("preview deploy bundle: %w", prepErr)
 		}
 		log.Info("preview deploy: source bundle uploaded", "commit", short(commit))
-		if loopruntimeYaml != nil {
-			req.LoopRuntimeYamlApps = loopruntimeYaml.Apps
-			log.Info("preview deploy: loopzero.yaml apps inherited", "apps", len(loopruntimeYaml.Apps))
+		if loopRuntimeYaml != nil {
+			req.LoopRuntimeYamlApps = loopRuntimeYaml.Apps
+			log.Info("preview deploy: loopzero.yaml apps inherited", "apps", len(loopRuntimeYaml.Apps))
 		}
 	} else {
 		log.Warn("preview deploy: no bundle preparer wired; build will likely fail at clone-repo")

@@ -13,7 +13,7 @@ import (
 // The gate has to say WHY it allowed.
 //
 // B-033, measured on app-dev 2026-08-11: the aggregator that fills `cost_counters` is off
-// (`LOOPRUNTIME_PROMETHEUS_URL` missing from the Deployment), the table has **0 rows**, and the
+// (`LOOP_RUNTIME_PROMETHEUS_URL` missing from the Deployment), the table has **0 rows**, and the
 // `Check` contract treats a missing row as zero usage — so **every** cost cap allows, and
 // nothing tells that apart from "the tenant really used nothing".
 //

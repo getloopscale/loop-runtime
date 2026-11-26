@@ -1,6 +1,6 @@
-name: loopruntime-platform
+name: loop-runtime-platform
 runtime: nodejs
 description: >
   LoopRuntime platform services — cert-manager, Traefik, ArgoCD, Gitea, MinIO, Loki,
   Prometheus, Grafana, ESO, Argo Workflows, CF Tunnel/Worker, DNS.
-  Consumes loopruntime-infra outputs via StackReference.
+  Consumes loop-runtime-infra outputs via StackReference.

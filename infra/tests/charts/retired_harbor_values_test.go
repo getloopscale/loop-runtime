@@ -24,11 +24,11 @@ func TestAnInstallStillSettingAHarborKeyIsRefused(t *testing.T) {
 	cases := []struct {
 		chart, key string
 	}{
-		{"loopruntime-api", "config.harborRegistryUrl"},
-		{"loopruntime-tenant-operator", "config.harborUrl"},
-		{"loopruntime-tenant-operator", "config.harborAdminUsername"},
-		{"loopruntime-tenant-operator", "config.harborRegistryHost"},
-		{"loopruntime-tenant-operator", "secrets.harborAdminPassword"},
+		{"loop-runtime-api", "config.harborRegistryUrl"},
+		{"loop-runtime-tenant-operator", "config.harborUrl"},
+		{"loop-runtime-tenant-operator", "config.harborAdminUsername"},
+		{"loop-runtime-tenant-operator", "config.harborRegistryHost"},
+		{"loop-runtime-tenant-operator", "secrets.harborAdminPassword"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.chart+"/"+tc.key, func(t *testing.T) {
@@ -48,7 +48,7 @@ func TestAnInstallStillSettingAHarborKeyIsRefused(t *testing.T) {
 // schema to accept one more key, delivering a credential nothing consumes. So the
 // retired keys must be gone from the templates too, not only refused at the door.
 func TestNoTemplateStillRendersAHarborValue(t *testing.T) {
-	for _, chart := range []string{"loopruntime-api", "loopruntime-tenant-operator"} {
+	for _, chart := range []string{"loop-runtime-api", "loop-runtime-tenant-operator"} {
 		t.Run(chart, func(t *testing.T) {
 			templates := filepath.Join(publishedChart(t, chart), "templates")
 			err := filepath.WalkDir(templates, func(path string, d os.DirEntry, err error) error {

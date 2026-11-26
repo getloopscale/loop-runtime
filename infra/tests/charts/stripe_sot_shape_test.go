@@ -9,7 +9,7 @@
 //	(sk_test_ / pk_test_ / whsec_).
 //
 // Per ADR D1 of the plan: schema validated against committed fixture
-// (hermetic, runs in any env; CI never touches real ~/.loopruntime/dev-
+// (hermetic, runs in any env; CI never touches real ~/.loop-runtime/dev-
 // credentials.json). The optional --check-live-sot operator path is
 // kept as a separate concern (not in this Go test; would belong in a
 // future operator-side tool).
@@ -47,7 +47,7 @@ const (
 	fixturePath = "../fixtures/dev-credentials-stripe-schema-test-mode.json"
 )
 
-// stripeSchema mirrors the relevant slice of ~/.loopruntime/dev-credentials.json.
+// stripeSchema mirrors the relevant slice of ~/.loop-runtime/dev-credentials.json.
 type stripeSchema struct {
 	Stripe map[string]any `json:"stripe"`
 }

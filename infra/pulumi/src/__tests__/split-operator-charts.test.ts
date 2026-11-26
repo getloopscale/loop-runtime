@@ -20,10 +20,10 @@ import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 const CHARTS = [
-  "loopruntime-tenant-operator",
-  "loopruntime-app-operator",
-  "loopruntime-preview-operator",
-  "loopruntime-platform-operator",
+  "loop-runtime-tenant-operator",
+  "loop-runtime-app-operator",
+  "loop-runtime-preview-operator",
+  "loop-runtime-platform-operator",
 ] as const;
 
 function helmTemplate(chart: string): string {
@@ -70,8 +70,8 @@ describe("split operator chart invariants (T2.1)", () => {
     // not in the chart. Read the source and confirm uniqueness.
     const ids = new Set<string>();
     for (const chart of CHARTS) {
-      // chart name → binary dir: loopruntime-tenant-operator → tenant-operator
-      const binary = chart.replace(/^loopruntime-/, "");
+      // chart name → binary dir: loop-runtime-tenant-operator → tenant-operator
+      const binary = chart.replace(/^loop-runtime-/, "");
       const main = readFileSync(
         resolve(REPO_ROOT, "operators", "cmd", binary, "main.go"),
         "utf-8",
@@ -84,7 +84,7 @@ describe("split operator chart invariants (T2.1)", () => {
     // Spot-check the canonical runtime.getloopscale.com domain pattern (ADR-0021 §C13).
     for (const id of ids) {
       expect(id, `LeaderElectionID must use runtime.getloopscale.com scope: ${id}`).toMatch(
-        /^loopruntime-[a-z]+-operator\.runtime\.getloopscale\.com$/,
+        /^loop-runtime-[a-z]+-operator\.runtime\.getloopscale\.com$/,
       );
     }
   });

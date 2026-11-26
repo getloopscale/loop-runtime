@@ -7,7 +7,7 @@ import "testing"
 
 // Tests for the lean-resources fallback — T-08 contingency path. The switch
 // is RenderInput.LeanResources, filled by the caller from
-// config.Config.LeanResources (env LOOPRUNTIME_LEAN_RESOURCES).
+// config.Config.LeanResources (env LOOP_RUNTIME_LEAN_RESOURCES).
 
 func TestResources_DefaultFallback(t *testing.T) {
 	ri := RenderInput{}
@@ -45,7 +45,7 @@ func TestResources_LeanFallback_WhenInputIsLean(t *testing.T) {
 // function of RenderInput alone: the API process environment must not change
 // what the renderer produces for the same input.
 func TestResources_IgnoreTheProcessEnvironment(t *testing.T) {
-	t.Setenv("LOOPRUNTIME_LEAN_RESOURCES", "true")
+	t.Setenv("LOOP_RUNTIME_LEAN_RESOURCES", "true")
 	ri := RenderInput{}
 	if got := ri.memoryRequest(); got != "128Mi" {
 		t.Errorf("memory request = %q with LeanResources unset, want 128Mi regardless of the process env", got)

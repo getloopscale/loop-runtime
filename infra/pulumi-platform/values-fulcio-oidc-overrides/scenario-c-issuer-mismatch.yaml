@@ -1,7 +1,7 @@
 # Scenario C — Issuer mismatch fix (M07 plan 2026-05-28 T2.1).
 #
 # Apply via:
-#   KC=$(k3d kubeconfig write loopruntime-build)
+#   KC=$(k3d kubeconfig write loop-runtime-build)
 #   helm --kubeconfig="$KC" upgrade fulcio sigstore/fulcio \
 #     --version 2.9.1 -n sigstore-system --reuse-values \
 #     -f infra/pulumi-platform/values-fulcio-oidc-overrides/scenario-c-issuer-mismatch.yaml

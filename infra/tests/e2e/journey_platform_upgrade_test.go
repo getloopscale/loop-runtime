@@ -3,9 +3,9 @@
 
 // Journey: Platform Upgrade (T3.2 of deep-review-remediation-plan)
 //
-// Validates the `loopruntime platform status`, `loopruntime platform install --dry-run`,
-// and `loopruntime platform upgrade --dry-run` CLI commands. These are admin-only
-// commands gated behind LOOPRUNTIME_SERVICE_AUTH; this journey validates the
+// Validates the `loop-runtime platform status`, `loop-runtime platform install --dry-run`,
+// and `loop-runtime platform upgrade --dry-run` CLI commands. These are admin-only
+// commands gated behind LOOP_RUNTIME_SERVICE_AUTH; this journey validates the
 // CLI contract surface (exit codes, JSON shape, --help) without
 // performing a real platform install/upgrade.
 //
@@ -27,11 +27,11 @@ var _ = Describe("Journey: Platform Upgrade", Ordered, Label("journey"), func() 
 		seedE2E()
 	})
 
-	It("loopruntime platform --help emits structured help", func() {
+	It("loop-runtime platform --help emits structured help", func() {
 		stdout, stderr, exitCode := runLoopRuntime("platform", "--help")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime platform --help should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime platform --help should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"platform help stdout": stdout,
@@ -44,7 +44,7 @@ var _ = Describe("Journey: Platform Upgrade", Ordered, Label("journey"), func() 
 			"platform --help should list 'status' subcommand")
 	})
 
-	It("loopruntime platform status emits structured output", func() {
+	It("loop-runtime platform status emits structured output", func() {
 		stdout, stderr, exitCode := runLoopRuntime("platform", "status", "--json")
 
 		// platform status invokes kubectl probes against the local cluster.
@@ -56,7 +56,7 @@ var _ = Describe("Journey: Platform Upgrade", Ordered, Label("journey"), func() 
 		//   - exit 5: cluster reachable, drift detected (runtime ≠ Git).
 		// All four are stable user-facing contracts.
 		Expect(exitCode).To(Or(Equal(0), Equal(1), Equal(4), Equal(5)),
-			"loopruntime platform status: unexpected exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)
+			"loop-runtime platform status: unexpected exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"platform status stdout": stdout,
@@ -72,17 +72,17 @@ var _ = Describe("Journey: Platform Upgrade", Ordered, Label("journey"), func() 
 		}
 	})
 
-	It("loopruntime platform install --dry-run does not mutate", func() {
+	It("loop-runtime platform install --dry-run does not mutate", func() {
 		// --dry-run is a stable contract per CLAUDE.md (CLI stability contract): it produces
 		// what *would* happen without applying. The journey only asserts
 		// the contract surface (exit code + Rule-3 + JSON shape). Running
 		// the real install is destructive and requires fresh-cluster setup.
 		stdout, stderr, exitCode := runLoopRuntime("platform", "install", "--dry-run", "--json")
 
-		// Some auth modes return 4 if LOOPRUNTIME_SERVICE_AUTH is not in env;
+		// Some auth modes return 4 if LOOP_RUNTIME_SERVICE_AUTH is not in env;
 		// dry-run path does NOT mutate state regardless.
 		Expect(exitCode).To(Or(Equal(0), Equal(1), Equal(4)),
-			"loopruntime platform install --dry-run: unexpected exit\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime platform install --dry-run: unexpected exit\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"platform install stdout": stdout,

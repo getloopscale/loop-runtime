@@ -4,13 +4,13 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-tracing
+  name: loop-runtime-tracing
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopruntime-tracing
+    - name: loop-runtime-tracing
       rules:
         - alert: LoopRuntimeTempoDown
           expr: 'up{job="tempo"} == 0'
@@ -20,7 +20,7 @@ spec:
           annotations:
             summary: "Grafana Tempo is down"
             description: "Tempo trace backend unreachable for 2+ minutes. Traces are being lost."
-            runbook: "Check pod status: kubectl -n loopruntime-system get pods -l app.kubernetes.io/name=tempo"
+            runbook: "Check pod status: kubectl -n loop-runtime-system get pods -l app.kubernetes.io/name=tempo"
 
         - alert: LoopRuntimeTempoStorageHigh
           expr: |
@@ -43,7 +43,7 @@ spec:
           annotations:
             summary: "OTel Collector is down"
             description: "OTel Collector unreachable for 2+ minutes. All traces and OTel metrics are being lost."
-            runbook: "Check pod: kubectl -n loopruntime-system get pods -l app.kubernetes.io/name=opentelemetry-collector"
+            runbook: "Check pod: kubectl -n loop-runtime-system get pods -l app.kubernetes.io/name=opentelemetry-collector"
 
         - alert: LoopRuntimeCollectorExportErrors
           expr: 'increase(otelcol_exporter_send_failed_spans_total[5m]) > 0'

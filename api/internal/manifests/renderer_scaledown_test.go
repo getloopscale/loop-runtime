@@ -70,7 +70,7 @@ func TestRolloutHasScaleDownDelay(t *testing.T) {
 
 // TestDeploymentUnaffectedByScaleDownDelay keeps the change scoped to the
 // progressive-delivery path. `scaleDownDelaySeconds` is a Rollout field; the
-// legacy Deployment path (LOOPRUNTIME_PROGRESSIVE_DELIVERY=false) has no equivalent
+// legacy Deployment path (LOOP_RUNTIME_PROGRESSIVE_DELIVERY=false) has no equivalent
 // and must not have acquired stray config.
 func TestDeploymentUnaffectedByScaleDownDelay(t *testing.T) {
 	ps := buildAppPodSpec(k8sContainer{Name: "app", Image: "example/app:v1"})

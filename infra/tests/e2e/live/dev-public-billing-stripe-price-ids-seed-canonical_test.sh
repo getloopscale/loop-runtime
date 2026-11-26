@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# LIVE regression-protector for Red Team loopruntime/loopruntime#155 closure
+# LIVE regression-protector for Red Team loop-runtime/loop-runtime#155 closure
 # (Billing: checkout 'pro' returns 503 BILLING_NOT_CONFIGURED — Stripe
 # price IDs not provisioned in dev).
 #
@@ -9,37 +9,37 @@
 # Reproduces #155 verbatim:
 #   * Follow-up of #154 (/v1/billing* routes already registered).
 #   * Root cause: STRIPE_PRICE_{STARTER,PRO,TEAM} env vars unset in the
-#     loopruntime-cloud pod → PriceIDForPlan("pro") returns "" →
+#     loop-console pod → PriceIDForPlan("pro") returns "" →
 #     `internal/routes/billing.go:216` emits 503 BILLING_NOT_CONFIGURED.
-#   * Fix: `loopruntime-ops seed stripe-api-keys` reads `stripe.price_{starter,pro,
+#   * Fix: `loop-runtime-ops seed stripe-api-keys` reads `stripe.price_{starter,pro,
 #     team}` from dev-credentials.json and materializes them in the Secret
-#     `loopruntime-stripe-api-keys` alongside STRIPE_API_KEY. The #154 restart
+#     `loop-runtime-stripe-api-keys` alongside STRIPE_API_KEY. The #154 restart
 #     guarantees the pod picks up the new env vars.
 #
 # Per `feedback_issue_fix_requires_failing_e2e_test_2026_06_25` UNBREAKABLE.
 #
 # Scenarios:
-#   A — Secret loopruntime-stripe-api-keys contains STRIPE_PRICE_PRO key
+#   A — Secret loop-runtime-stripe-api-keys contains STRIPE_PRICE_PRO key
 #       (non-empty base64 value). Requires kubectl.
-#   B — loopruntime-cloud pod env includes STRIPE_PRICE_PRO with non-empty value
+#   B — loop-console pod env includes STRIPE_PRICE_PRO with non-empty value
 #       (envFrom.secretRef materialized correctly).
 #   C — POST /v1/billing/checkout {"plan":"pro"} does NOT return 503
 #       BILLING_NOT_CONFIGURED. Expected: 200 with checkout_url OR 4xx
 #       from auth/config differently — but NOT 503 with that specific code.
 #
 # Slug:           billing-stripe-price-ids-seed-canonical
-# Issue:          loopruntime/loopruntime#155
+# Issue:          loop-runtime/loop-runtime#155
 # Family:         #154 (billing routes 404) — this closes the follow-up layer
-# Closed by:      infra/scripts/local/`loopruntime-ops seed stripe-api-keys` (extended)
+# Closed by:      infra/scripts/local/`loop-runtime-ops seed stripe-api-keys` (extended)
 # Allowlist:      .claude/rules/shell-scripts-allowlist.md § Post-baseline additions (#155)
 # Companion (CI): infra/tests/check-seed-stripe-api-keys-canonical-syntax_test.sh (extended)
 
 set -euo pipefail
 
 PLAN_SLUG="billing-stripe-price-ids-seed-canonical"
-ISSUE_REF="loopruntime/loopruntime#155"
+ISSUE_REF="loop-runtime/loop-runtime#155"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.getloopscale.com}"
-CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopruntime-core}"
+CORE_CONTEXT="${CORE_CONTEXT:-k3d-loop-runtime-core}"
 SESSION_JWT_FILE="${SESSION_JWT_FILE:-}"
 SKIP_LIVE=0
 JSON_OUTPUT=0
@@ -49,13 +49,13 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [--skip-live] [--scenario=A|B|C] [--json] [--help]
 
-LIVE regression-protector for loopruntime/loopruntime#155 (billing checkout 'pro' 503
+LIVE regression-protector for loop-runtime/loop-runtime#155 (billing checkout 'pro' 503
 BILLING_NOT_CONFIGURED — Stripe price IDs unset in dev pod).
 
 Environment:
   PUBLIC_CLOUD_URL  default https://app-dev.getloopscale.com
-  CORE_CONTEXT      default k3d-loopruntime-core
-  SESSION_JWT_FILE  default ~/.loopruntime/local-dogfood-session-jwt.txt (or canonical)
+  CORE_CONTEXT      default k3d-loop-runtime-core
+  SESSION_JWT_FILE  default ~/.loop-runtime/local-dogfood-session-jwt.txt (or canonical)
 
 Per cleanroom-up-live-test-mandate.md UNBREAKABLE. Operator-side. Not for CI.
 EOF
@@ -74,7 +74,7 @@ done
 
 # Canonical JWT discovery
 if [ -z "$SESSION_JWT_FILE" ] ; then
-    for cand in "$HOME/.loopruntime/local-dogfood-session-jwt.txt" "$HOME/.loopruntime/redteam-qa-session-jwt.txt" ; do
+    for cand in "$HOME/.loop-runtime/local-dogfood-session-jwt.txt" "$HOME/.loop-runtime/redteam-qa-session-jwt.txt" ; do
         if [ -s "$cand" ] ; then SESSION_JWT_FILE="$cand" ; break ; fi
     done
 fi
@@ -115,16 +115,16 @@ log "JWT: ${SESSION_JWT_FILE:-(none)}"
 log "============================================================"
 
 # ---------------------------------------------------------------------------
-# Scenario A — loopruntime-stripe-api-keys Secret has STRIPE_PRICE_PRO with data.
+# Scenario A — loop-runtime-stripe-api-keys Secret has STRIPE_PRICE_PRO with data.
 # ---------------------------------------------------------------------------
 if want_scenario A ; then
-    log "Scenario A — Secret loopruntime-stripe-api-keys has non-empty STRIPE_PRICE_PRO"
+    log "Scenario A — Secret loop-runtime-stripe-api-keys has non-empty STRIPE_PRICE_PRO"
     if [ $SKIP_LIVE -eq 1 ] ; then
         record_pass A "skip-live mode — hermetic"
     elif ! command -v kubectl >/dev/null 2>&1 ; then
         record_fail A "kubectl not on PATH"
     else
-        val=$(kubectl --context "$CORE_CONTEXT" -n loopruntime-system get secret loopruntime-stripe-api-keys -o jsonpath='{.data.STRIPE_PRICE_PRO}' 2>/dev/null || true)
+        val=$(kubectl --context "$CORE_CONTEXT" -n loop-runtime-system get secret loop-runtime-stripe-api-keys -o jsonpath='{.data.STRIPE_PRICE_PRO}' 2>/dev/null || true)
         if [ -n "$val" ] ; then
             record_pass A "STRIPE_PRICE_PRO present (base64 len=${#val})"
         else
@@ -134,31 +134,31 @@ if want_scenario A ; then
 fi
 
 # ---------------------------------------------------------------------------
-# Scenario B — loopruntime-cloud pod env sees STRIPE_PRICE_PRO from envFrom Secret.
+# Scenario B — loop-console pod env sees STRIPE_PRICE_PRO from envFrom Secret.
 # ---------------------------------------------------------------------------
 if want_scenario B ; then
-    log "Scenario B — loopruntime-cloud pod env exposes non-empty STRIPE_PRICE_PRO"
+    log "Scenario B — loop-console pod env exposes non-empty STRIPE_PRICE_PRO"
     if [ $SKIP_LIVE -eq 1 ] ; then
         record_pass B "skip-live mode — hermetic"
     elif ! command -v kubectl >/dev/null 2>&1 ; then
         record_fail B "kubectl not on PATH"
     else
-        pod=$(kubectl --context "$CORE_CONTEXT" -n loopruntime-system get pods -l app=loopruntime-cloud -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+        pod=$(kubectl --context "$CORE_CONTEXT" -n loop-runtime-system get pods -l app=loop-console -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
         if [ -z "$pod" ] ; then
-            record_fail B "no loopruntime-cloud pod found"
+            record_fail B "no loop-console pod found"
         else
-            # loopruntime-cloud is distroless — no `printenv` binary. Verify env
+            # loop-console is distroless — no `printenv` binary. Verify env
             # via the pod's own reflection: `kubectl get pod -o json`
             # exposes .spec.containers[].envFrom which references the
-            # loopruntime-stripe-api-keys Secret we materialized. Cross-check
+            # loop-runtime-stripe-api-keys Secret we materialized. Cross-check
             # that the Secret data has STRIPE_PRICE_PRO (Scenario A) AND
             # that the pod's envFrom references it — this proves the
             # wire at pod-config level without needing shell in the pod.
-            wired=$(kubectl --context "$CORE_CONTEXT" -n loopruntime-system get pod "$pod" -o jsonpath='{range .spec.containers[*].envFrom[*].secretRef}{.name}{"\n"}{end}' 2>/dev/null | grep -c '^loopruntime-stripe-api-keys$' || true)
+            wired=$(kubectl --context "$CORE_CONTEXT" -n loop-runtime-system get pod "$pod" -o jsonpath='{range .spec.containers[*].envFrom[*].secretRef}{.name}{"\n"}{end}' 2>/dev/null | grep -c '^loop-runtime-stripe-api-keys$' || true)
             if [ "$wired" -ge 1 ] ; then
-                record_pass B "pod envFrom references loopruntime-stripe-api-keys — Secret keys wired at pod-config level"
+                record_pass B "pod envFrom references loop-runtime-stripe-api-keys — Secret keys wired at pod-config level"
             else
-                record_fail B "pod $pod envFrom does NOT reference loopruntime-stripe-api-keys — chart wiring gap"
+                record_fail B "pod $pod envFrom does NOT reference loop-runtime-stripe-api-keys — chart wiring gap"
             fi
         fi
     fi
@@ -174,7 +174,7 @@ if want_scenario C ; then
     if [ $SKIP_LIVE -eq 1 ] ; then
         record_pass C "skip-live mode — hermetic"
     elif [ -z "$SESSION_JWT_FILE" ] || [ ! -s "$SESSION_JWT_FILE" ] ; then
-        record_fail C "no SESSION_JWT_FILE — run seed-admin-loopruntime-dev.sh --refresh-only"
+        record_fail C "no SESSION_JWT_FILE — run seed-admin-loop-runtime-dev.sh --refresh-only"
     else
         JWT=$(cat "$SESSION_JWT_FILE")
         code=$(curl -s -o /tmp/scC.json -w '%{http_code}' --max-time 10 \

@@ -21,7 +21,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const credentialProviderMount = "${HOME}/.loopruntime/credentialprovider:/var/lib/rancher/credentialprovider"
+const credentialProviderMount = "${HOME}/.loop-runtime/credentialprovider:/var/lib/rancher/credentialprovider"
 
 type k3dVolume struct {
 	Volume      string   `yaml:"volume"`
@@ -32,7 +32,7 @@ type k3dVolumesConfig struct {
 	Volumes []k3dVolume `yaml:"volumes"`
 }
 
-// Core runs loopruntime-api, the operators, loopruntime-cloud and MinIO; build runs the clone,
+// Core runs loop-runtime-api, the operators, loop-console and MinIO; build runs the clone,
 // sign and scan steps. Both pull platform images, so every node of both mounts it.
 func TestPlatformClustersMountTheCredentialProvider(t *testing.T) {
 	for _, file := range []string{"infra/k3d/core-cluster.yaml", "infra/k3d/build-cluster.yaml"} {

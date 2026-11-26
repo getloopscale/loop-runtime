@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://loopruntime.platform/schemas/argo-workflows/values.schema.json",
+  "$id": "https://loop-runtime.platform/schemas/argo-workflows/values.schema.json",
   "title": "Argo Workflows LoopRuntime wrapper values schema",
   "description": "Plan 2026-05-20 T2.5 ext — fail-fast on Argo Workflows build cluster config drift. Protects controller scale (workflowWorkers/podWorkers under 50+ concurrent build load), images.cloneRunner SHA pin (supply chain), sourceBucket (S3 build artifact location).",
   "type": "object",
@@ -21,7 +21,7 @@
       "type": "string",
       "minLength": 1,
       "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$",
-      "description": "S3 bucket name (LoopRuntime SOURCE_BUCKET). MUST match Pulumi-created bucket + loopruntime-api env var. RFC 1123: lowercase + dashes, no leading/trailing dash."
+      "description": "S3 bucket name (LoopRuntime SOURCE_BUCKET). MUST match Pulumi-created bucket + loop-runtime-api env var. RFC 1123: lowercase + dashes, no leading/trailing dash."
     },
     "controller": {
       "type": "object",

@@ -28,7 +28,7 @@ import (
 )
 
 // operatorIdentity is the ServiceAccount the operator charts bind their RBAC to.
-const operatorIdentity = "system:serviceaccount:loopruntime-system:loopruntime-tenant-operator"
+const operatorIdentity = "system:serviceaccount:loop-runtime-system:loop-runtime-tenant-operator"
 
 // TestCellAwareFactory_ResolvesACellWithSecretReadGrantedOnlyInThePlatformNamespace
 // runs the factory the way an operator binary does — through a cached client —
@@ -46,7 +46,7 @@ func TestCellAwareFactory_ResolvesACellWithSecretReadGrantedOnlyInThePlatformNam
 		t.Fatalf("client-go scheme: %v", err)
 	}
 	if err := loopruntimev1.AddToScheme(scheme); err != nil {
-		t.Fatalf("loopruntime scheme: %v", err)
+		t.Fatalf("loop-runtime scheme: %v", err)
 	}
 
 	testEnv := &envtest.Environment{
@@ -113,7 +113,7 @@ func seedCell(ctx context.Context, t *testing.T, admin client.Client) {
 		&loopruntimev1.ClusterCredential{
 			ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: ns},
 			Spec: loopruntimev1.ClusterCredentialSpec{
-				ClusterName: "loopruntime-cell-1",
+				ClusterName: "loop-runtime-cell-1",
 				APIServer:   "https://127.0.0.1:6443",
 				CellID:      "cell-1",
 				SecretRef:   loopruntimev1.SecretReference{Name: "cell-1-kubeconfig", Namespace: ns},

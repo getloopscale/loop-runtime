@@ -20,7 +20,7 @@
 --
 -- Forward-only:
 --   No backfill: existing users default to NULL → middleware picks active
---   team using legacy heuristic. First `loopruntime team switch <name>` call
+--   team using legacy heuristic. First `loop_runtime team switch <name>` call
 --   persists explicit selection. Migration is non-blocking (instant on
 --   small users table).
 

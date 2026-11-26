@@ -12,14 +12,14 @@ import (
 	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
-// Issue #354. Gitea is installed into loopruntime-system in every environment, and the
+// Issue #354. Gitea is installed into loop-runtime-system in every environment, and the
 // default address components fall back to used to name a namespace called
 // gitea that no environment creates. The Go side now reads one constant,
 // gitearepo.DefaultInternalURL. The places below cannot import it — a chart
 // default and the CRD schema default are YAML and JSON — so each is pinned to
 // it here, on the RENDERED or published artifact rather than on the source.
 
-// A loopruntime-api installed from the published chart with its defaults must be told
+// A loop-runtime-api installed from the published chart with its defaults must be told
 // the address the platform installs Gitea at.
 func TestLoopRuntimeAPIChartDefaultGiteaURLIsTheDefaultInternalURL(t *testing.T) {
 	rendered := renderLoopRuntimeAPI(t)
@@ -32,29 +32,29 @@ func TestLoopRuntimeAPIChartDefaultGiteaURLIsTheDefaultInternalURL(t *testing.T)
 	}
 
 	if len(found) != 1 {
-		t.Fatalf("loopruntime-api default render carries GITEA_URL in %d ConfigMaps, want exactly 1: %v", len(found), found)
+		t.Fatalf("loop-runtime-api default render carries GITEA_URL in %d ConfigMaps, want exactly 1: %v", len(found), found)
 	}
 	if found[0] != gitearepo.DefaultInternalURL {
-		t.Errorf("loopruntime-api chart defaults GITEA_URL to %q, want gitearepo.DefaultInternalURL %q",
+		t.Errorf("loop-runtime-api chart defaults GITEA_URL to %q, want gitearepo.DefaultInternalURL %q",
 			found[0], gitearepo.DefaultInternalURL)
 	}
 }
 
-// The CRD the loopruntime-crds chart publishes is what an install that never builds
+// The CRD the loop-runtime-crds chart publishes is what an install that never builds
 // the operators applies, so its PlatformBootstrap default is the one a new CR
 // actually receives.
 func TestLoopRuntimeCRDsChartDefaultsPlatformBootstrapGiteaURLToTheDefaultInternalURL(t *testing.T) {
-	rendered := renderChart(t, publishedChart(t, "loopruntime-crds"), "crds", nil)
+	rendered := renderChart(t, publishedChart(t, "loop-runtime-crds"), "crds", nil)
 
 	crd := renderedObject(t, rendered, "CustomResourceDefinition", "platformbootstraps.runtime.getloopscale.com")
 	if crd == nil {
-		t.Fatal("loopruntime-crds renders no platformbootstraps.runtime.getloopscale.com CustomResourceDefinition")
+		t.Fatal("loop-runtime-crds renders no platformbootstraps.runtime.getloopscale.com CustomResourceDefinition")
 	}
 
 	got := dig(crd, "spec", "versions", 0, "schema", "openAPIV3Schema",
 		"properties", "spec", "properties", "gitea", "properties", "internalURL", "default")
 	if got != gitearepo.DefaultInternalURL {
-		t.Errorf("loopruntime-crds defaults PlatformBootstrap spec.gitea.internalURL to %v, want gitearepo.DefaultInternalURL %q",
+		t.Errorf("loop-runtime-crds defaults PlatformBootstrap spec.gitea.internalURL to %v, want gitearepo.DefaultInternalURL %q",
 			got, gitearepo.DefaultInternalURL)
 	}
 }

@@ -32,7 +32,7 @@ func TestPprofEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setEnv {
-				t.Setenv("LOOPRUNTIME_PPROF_ENABLED", tt.envValue)
+				t.Setenv("LOOP_RUNTIME_PPROF_ENABLED", tt.envValue)
 			}
 			if got := PprofEnabled(); got != tt.want {
 				t.Errorf("PprofEnabled() = %v, want %v (env=%q, set=%v)", got, tt.want, tt.envValue, tt.setEnv)

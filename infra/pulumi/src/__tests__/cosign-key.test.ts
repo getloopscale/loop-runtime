@@ -79,7 +79,7 @@ describe("renderExternalSecretYaml", () => {
       stackName: "production",
       namespace: "argo",
       secretName: "cosign-signing-key",
-      storeName: "loopruntime-pulumi-secrets",
+      storeName: "loop-runtime-pulumi-secrets",
       refreshInterval: "5m",
       generationMarker: "abc123def456",
     });
@@ -89,7 +89,7 @@ describe("renderExternalSecretYaml", () => {
     expect(yaml).toContain("name: cosign-signing-key");
     expect(yaml).toContain("namespace: argo");
     expect(yaml).toContain("refreshInterval: 5m");
-    expect(yaml).toContain("name: loopruntime-pulumi-secrets");
+    expect(yaml).toContain("name: loop-runtime-pulumi-secrets");
     expect(yaml).toContain("kind: ClusterSecretStore");
   });
 
@@ -98,7 +98,7 @@ describe("renderExternalSecretYaml", () => {
       stackName: "drill",
       namespace: "argo",
       secretName: "cosign-signing-key",
-      storeName: "loopruntime-pulumi-secrets",
+      storeName: "loop-runtime-pulumi-secrets",
       refreshInterval: "10m",
       generationMarker: "deadbeef0042",
     });
@@ -111,7 +111,7 @@ describe("renderExternalSecretYaml", () => {
       stackName: "x",
       namespace: "argo",
       secretName: "cosign-signing-key",
-      storeName: "loopruntime-pulumi-secrets",
+      storeName: "loop-runtime-pulumi-secrets",
       refreshInterval: "5m",
       generationMarker: "x",
     });
@@ -126,7 +126,7 @@ describe("renderExternalSecretYaml", () => {
       stackName: "x",
       namespace: "argo",
       secretName: "cosign-signing-key",
-      storeName: "loopruntime-pulumi-secrets",
+      storeName: "loop-runtime-pulumi-secrets",
       refreshInterval: "5m",
       generationMarker: "x",
     });
@@ -192,7 +192,7 @@ describe("createCosignKey", () => {
     const outputs = createCosignKey({ stackName: "test" });
     const manifest = await unwrapOutput(outputs.externalSecretManifest);
     expect(manifest).toContain("namespace: argo");
-    expect(manifest).toContain("name: loopruntime-pulumi-secrets");
+    expect(manifest).toContain("name: loop-runtime-pulumi-secrets");
     expect(manifest).toContain("name: cosign-signing-key");
   });
 

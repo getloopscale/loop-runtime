@@ -48,9 +48,9 @@ func TestServiceAuthEd25519_Phase1_AcceptsUnsigned(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil)
 	req.Header.Set("X-Service-Auth", "shared-secret")
-	req.Header.Set("X-LoopRuntime-User-ID", "svc-user")
-	req.Header.Set("X-LoopRuntime-Tenant", "tn-svc")
-	// NO X-LoopRuntime-Signature — Phase 1 must accept
+	req.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-svc")
+	// NO X-Loop-Runtime-Signature — Phase 1 must accept
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -73,11 +73,11 @@ func TestServiceAuthEd25519_Phase1_AcceptsValidSignature(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil)
 	req.Header.Set("X-Service-Auth", "shared-secret")
-	req.Header.Set("X-LoopRuntime-User-ID", "svc-user")
-	req.Header.Set("X-LoopRuntime-Tenant", "tn-svc")
-	req.Header.Set("X-LoopRuntime-Signature", sig)
-	req.Header.Set("X-LoopRuntime-Timestamp", tsStr)
-	req.Header.Set("X-LoopRuntime-Nonce", n)
+	req.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-svc")
+	req.Header.Set("X-Loop-Runtime-Signature", sig)
+	req.Header.Set("X-Loop-Runtime-Timestamp", tsStr)
+	req.Header.Set("X-Loop-Runtime-Nonce", n)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -106,11 +106,11 @@ func TestServiceAuthEd25519_RejectsTamperedSignature(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing", nil)
 	req.Header.Set("X-Service-Auth", "shared-secret")
-	req.Header.Set("X-LoopRuntime-User-ID", "svc-user")
-	req.Header.Set("X-LoopRuntime-Tenant", "tn-svc")
-	req.Header.Set("X-LoopRuntime-Signature", sig)
-	req.Header.Set("X-LoopRuntime-Timestamp", tsStr)
-	req.Header.Set("X-LoopRuntime-Nonce", n)
+	req.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-svc")
+	req.Header.Set("X-Loop-Runtime-Signature", sig)
+	req.Header.Set("X-Loop-Runtime-Timestamp", tsStr)
+	req.Header.Set("X-Loop-Runtime-Nonce", n)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -138,11 +138,11 @@ func TestServiceAuthEd25519_RejectsStaleTimestamp(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil)
 	req.Header.Set("X-Service-Auth", "shared-secret")
-	req.Header.Set("X-LoopRuntime-User-ID", "svc-user")
-	req.Header.Set("X-LoopRuntime-Tenant", "tn-svc")
-	req.Header.Set("X-LoopRuntime-Signature", sig)
-	req.Header.Set("X-LoopRuntime-Timestamp", tsStr)
-	req.Header.Set("X-LoopRuntime-Nonce", n)
+	req.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-svc")
+	req.Header.Set("X-Loop-Runtime-Signature", sig)
+	req.Header.Set("X-Loop-Runtime-Timestamp", tsStr)
+	req.Header.Set("X-Loop-Runtime-Nonce", n)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -170,11 +170,11 @@ func TestServiceAuthEd25519_RejectsReplayedNonce(t *testing.T) {
 	// First request: accepted.
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil)
 	req.Header.Set("X-Service-Auth", "shared-secret")
-	req.Header.Set("X-LoopRuntime-User-ID", "svc-user")
-	req.Header.Set("X-LoopRuntime-Tenant", "tn-svc")
-	req.Header.Set("X-LoopRuntime-Signature", sig)
-	req.Header.Set("X-LoopRuntime-Timestamp", tsStr)
-	req.Header.Set("X-LoopRuntime-Nonce", n)
+	req.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-svc")
+	req.Header.Set("X-Loop-Runtime-Signature", sig)
+	req.Header.Set("X-Loop-Runtime-Timestamp", tsStr)
+	req.Header.Set("X-Loop-Runtime-Nonce", n)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -184,11 +184,11 @@ func TestServiceAuthEd25519_RejectsReplayedNonce(t *testing.T) {
 	// Second request with identical nonce: rejected.
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil)
 	req2.Header.Set("X-Service-Auth", "shared-secret")
-	req2.Header.Set("X-LoopRuntime-User-ID", "svc-user")
-	req2.Header.Set("X-LoopRuntime-Tenant", "tn-svc")
-	req2.Header.Set("X-LoopRuntime-Signature", sig)
-	req2.Header.Set("X-LoopRuntime-Timestamp", tsStr)
-	req2.Header.Set("X-LoopRuntime-Nonce", n)
+	req2.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req2.Header.Set("X-Loop-Runtime-Tenant", "tn-svc")
+	req2.Header.Set("X-Loop-Runtime-Signature", sig)
+	req2.Header.Set("X-Loop-Runtime-Timestamp", tsStr)
+	req2.Header.Set("X-Loop-Runtime-Nonce", n)
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, req2)
 
@@ -210,9 +210,9 @@ func TestServiceAuthEd25519_Phase2_RejectsUnsignedWhenFlagSet(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil)
 	req.Header.Set("X-Service-Auth", "shared-secret")
-	req.Header.Set("X-LoopRuntime-User-ID", "svc-user")
-	req.Header.Set("X-LoopRuntime-Tenant", "tn-svc")
-	// NO X-LoopRuntime-Signature — Phase 2 must reject
+	req.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-svc")
+	// NO X-Loop-Runtime-Signature — Phase 2 must reject
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

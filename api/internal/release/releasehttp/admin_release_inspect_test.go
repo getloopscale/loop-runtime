@@ -18,10 +18,10 @@ import (
 )
 
 // T4.4 handler tests:
-//   - 200 happy path (LOOPRUNTIME_ADMIN_API + service-auth set)
+//   - 200 happy path (LOOP_RUNTIME_ADMIN_API + service-auth set)
 //   - 403 missing X-Service-Auth → maps to CLI exit 4
 //   - 404 unknown release → maps to CLI exit 1
-//   - 404 LOOPRUNTIME_ADMIN_API=false (must hide endpoint existence)
+//   - 404 LOOP_RUNTIME_ADMIN_API=false (must hide endpoint existence)
 //   - 400 missing path param
 //   - JSON content-type + stable shape
 
@@ -103,7 +103,7 @@ func TestAdminReleaseInspect_403_WithWrongServiceAuth(t *testing.T) {
 }
 
 func TestAdminReleaseInspect_404_WhenAdminAPIDisabled(t *testing.T) {
-	// LOOPRUNTIME_ADMIN_API NOT set → an authenticated operator still sees 404:
+	// LOOP_RUNTIME_ADMIN_API NOT set → an authenticated operator still sees 404:
 	// the flag hides the endpoint even from callers holding the secret.
 	srv := setupHandler(t, &fakeInspector{}, false)
 
@@ -140,7 +140,7 @@ func TestAdminReleaseInspect_Returns_AttestationChain(t *testing.T) {
 	// CR-10 specific assertion: the response must surface the
 	// image_attestation_rekor_url + signing_path so on-call can
 	// answer "which write path was taken" without log access.
-	rekorURL := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=42"
+	rekorURL := "https://rekor.loop-runtime.test/api/v1/log/entries?logIndex=42"
 	insp := &fakeInspector{inspect: func(_ context.Context, _ string) (*release.ReleaseInspection, error) {
 		return &release.ReleaseInspection{
 			ReleaseID:                "rel-001",

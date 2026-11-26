@@ -25,32 +25,32 @@ import (
 //   - Gap 1 (sustained load): Runs multiple waves of builds over time to
 //     detect memory leaks, not just burst peak.
 //   - Gap 2 (multi-replica): Uses kubectl top to measure TOTAL memory across
-//     all loopruntime-api replicas, not just the one behind the port-forward.
+//     all loop-runtime-api replicas, not just the one behind the port-forward.
 //   - Gap 3 (GC pressure): Tracks go_memstats_sys_bytes alongside heap_inuse
 //     to capture the true OS-level memory footprint including GC overhead.
 //
 // Run:
 //
-//	kubectl --context=$LOOPRUNTIME_CORE_CONTEXT -n loopruntime-system port-forward svc/loopruntime-api-metrics 19090:9090 &
+//	kubectl --context=$LOOP_RUNTIME_CORE_CONTEXT -n loop-runtime-system port-forward svc/loop-runtime-api-metrics 19090:9090 &
 //
-//	LOOPRUNTIME_CAPACITY=1 \
-//	LOOPRUNTIME_API_URL=https://api.dev.getloopscale.com \
-//	LOOPRUNTIME_API_METRICS_URL=http://localhost:19090 \
-//	LOOPRUNTIME_SERVICE_AUTH=... \
-//	LOOPRUNTIME_APP_DOMAIN=dev.getloopscale.com \
-//	LOOPRUNTIME_CORE_CONTEXT=do-sfo3-loopruntime-infra-dev-sfo3-mgmt \
+//	LOOP_RUNTIME_CAPACITY=1 \
+//	LOOP_RUNTIME_API_URL=https://api.dev.getloopscale.com \
+//	LOOP_RUNTIME_API_METRICS_URL=http://localhost:19090 \
+//	LOOP_RUNTIME_SERVICE_AUTH=... \
+//	LOOP_RUNTIME_APP_DOMAIN=dev.getloopscale.com \
+//	LOOP_RUNTIME_CORE_CONTEXT=do-sfo3-loop-runtime-infra-dev-sfo3-mgmt \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityGoMemory -v -timeout 45m \
 //	  -args -workers=10
 func TestCapacityGoMemory(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
-	metricsURL := os.Getenv("LOOPRUNTIME_API_METRICS_URL")
-	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
-	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
-	mgmtCtx := os.Getenv("LOOPRUNTIME_CORE_CONTEXT")
+	apiURL := os.Getenv("LOOP_RUNTIME_API_URL")
+	metricsURL := os.Getenv("LOOP_RUNTIME_API_METRICS_URL")
+	serviceAuth := os.Getenv("LOOP_RUNTIME_SERVICE_AUTH")
+	appDomain := os.Getenv("LOOP_RUNTIME_APP_DOMAIN")
+	mgmtCtx := os.Getenv("LOOP_RUNTIME_CORE_CONTEXT")
 	if apiURL == "" || metricsURL == "" || serviceAuth == "" || appDomain == "" {
-		t.Fatal("LOOPRUNTIME_API_URL, LOOPRUNTIME_API_METRICS_URL, LOOPRUNTIME_SERVICE_AUTH, LOOPRUNTIME_APP_DOMAIN required")
+		t.Fatal("LOOP_RUNTIME_API_URL, LOOP_RUNTIME_API_METRICS_URL, LOOP_RUNTIME_SERVICE_AUTH, LOOP_RUNTIME_APP_DOMAIN required")
 	}
 
 	const (
@@ -61,7 +61,7 @@ func TestCapacityGoMemory(t *testing.T) {
 
 	// Sustained load: number of build waves (Gap 1).
 	waves := 3
-	if s := os.Getenv("LOOPRUNTIME_SUSTAINED_WAVES"); s != "" {
+	if s := os.Getenv("LOOP_RUNTIME_SUSTAINED_WAVES"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
 			waves = n
 		}
@@ -77,7 +77,7 @@ func TestCapacityGoMemory(t *testing.T) {
 	defer cancel()
 
 	// --- Step 1: Create deploy harness ---
-	fixturePath := os.Getenv("LOOPRUNTIME_FIXTURE_PATH")
+	fixturePath := os.Getenv("LOOP_RUNTIME_FIXTURE_PATH")
 	if fixturePath == "" {
 		fixturePath = "../../e2e/fixtures/hello-server"
 	}
@@ -99,12 +99,12 @@ func TestCapacityGoMemory(t *testing.T) {
 	}
 	// Gap 3: Track sys_bytes (includes GC overhead, stack, etc.)
 	beforeSys, _ := ScrapePrometheusMetric(metricsURL, "go_memstats_sys_bytes")
-	beforePGConns, _ := ScrapePrometheusMetric(metricsURL, "loopruntime_postgres_connections_active")
+	beforePGConns, _ := ScrapePrometheusMetric(metricsURL, "loop_runtime_postgres_connections_active")
 
 	// Gap 2: Multi-replica baseline via kubectl top.
 	var baselineKubeMi int64
 	if mgmtCtx != "" {
-		pods, err := KubectlTopPods(ctx, mgmtCtx, "loopruntime-system", "app=loopruntime-api")
+		pods, err := KubectlTopPods(ctx, mgmtCtx, "loop-runtime-system", "app=loop-runtime-api")
 		if err != nil {
 			t.Logf("  warning: kubectl top baseline: %v (continuing with metrics-only)", err)
 		} else {
@@ -159,7 +159,7 @@ func TestCapacityGoMemory(t *testing.T) {
 					atomicMax(&peakSys, int64(sys))
 				}
 				// PG connections correlation.
-				if pg, err := ScrapePrometheusMetric(metricsURL, "loopruntime_postgres_connections_active"); err == nil {
+				if pg, err := ScrapePrometheusMetric(metricsURL, "loop_runtime_postgres_connections_active"); err == nil {
 					atomicMax(&peakPGConns, int64(pg))
 				}
 			}
@@ -214,7 +214,7 @@ func TestCapacityGoMemory(t *testing.T) {
 	// Gap 2: Multi-replica post-load via kubectl top.
 	var postKubeMi int64
 	if mgmtCtx != "" {
-		pods, err := KubectlTopPods(ctx, mgmtCtx, "loopruntime-system", "app=loopruntime-api")
+		pods, err := KubectlTopPods(ctx, mgmtCtx, "loop-runtime-system", "app=loop-runtime-api")
 		if err == nil {
 			postKubeMi = TotalMemoryMi(pods)
 			t.Logf("  kubectl top post-load: %d Mi across %d replicas", postKubeMi, len(pods))

@@ -9,7 +9,7 @@
 //     `mgmt-api.ts`, `mgmt-tenant-controller.ts` were DELETED in T1.1.
 //   - Their fixes now live in:
 //       * Helmfile `cell.helmfile.yaml` (KEDA chart name, policy-controller install)
-//       * Helm chart values (kratos-ui memory, loopruntime-controller env)
+//       * Helm chart values (kratos-ui memory, loop-runtime-controller env)
 //
 // Only Fix #1 (registry adopt-or-create) remains in Pulumi (`infra.ts`) because
 // the registry is L1 cloud (DOCR), not L2 Kubernetes.
@@ -43,8 +43,8 @@ describe("Sprint 8 v3.2 — fixes preserved across L1/L2 split", () => {
       expect(src).toContain("orphans?.registryImportId");
     });
 
-    it("falls back to canonical 'loopruntime-system' name when lookup returns undefined", () => {
-      expect(src).toMatch(/orphans\?\.registryImportId\s*\?\?\s*"loopruntime-system"/);
+    it("falls back to canonical 'loop-runtime-system' name when lookup returns undefined", () => {
+      expect(src).toMatch(/orphans\?\.registryImportId\s*\?\?\s*"loop-runtime-system"/);
     });
   });
 
@@ -99,9 +99,9 @@ describe("Sprint 8 v3.2 — fixes preserved across L1/L2 split", () => {
   });
 
   describe("Fix #5: ClusterImagePolicy as Helm chart (B16) — admission-policies", () => {
-    const chartFile = path.resolve(__dirname, "..", "..", "..", "..", "charts", "loopruntime-admission-policies", "Chart.yaml");
-    const valuesFile = path.resolve(__dirname, "..", "..", "..", "..", "charts", "loopruntime-admission-policies", "values.yaml");
-    const cipTemplate = path.resolve(__dirname, "..", "..", "..", "..", "charts", "loopruntime-admission-policies", "templates", "cluster-image-policy.yaml");
+    const chartFile = path.resolve(__dirname, "..", "..", "..", "..", "charts", "loop-runtime-admission-policies", "Chart.yaml");
+    const valuesFile = path.resolve(__dirname, "..", "..", "..", "..", "charts", "loop-runtime-admission-policies", "values.yaml");
+    const cipTemplate = path.resolve(__dirname, "..", "..", "..", "..", "charts", "loop-runtime-admission-policies", "templates", "cluster-image-policy.yaml");
 
     it("Chart.yaml exists for admission-policies", () => {
       expect(fs.existsSync(chartFile)).toBe(true);

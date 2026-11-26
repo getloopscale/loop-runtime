@@ -9,7 +9,7 @@
 // mgmt cluster.
 //
 // Skip semantics:
-//   - Skipped when LOOPRUNTIME_E2E unset (suite-level gate via skipIfNotE2E)
+//   - Skipped when LOOP_RUNTIME_E2E unset (suite-level gate via skipIfNotE2E)
 //   - Skipped when secrets-system namespace missing (chart not deployed)
 //   - Skipped when openbaoEnabled flag false in env (default; chart
 //     installed:false per F1.7 Helmfile gate)
@@ -20,7 +20,7 @@
 //   * OB-3: openbao Service ClusterIP exposes port 8200
 //   * OB-4: cert-manager Certificate openbao-tls Ready
 //   * OB-5: NetworkPolicy openbao-allow-egress exists with port 443 rule
-//   * OB-6: NetworkPolicy openbao-allow-ingress lists loopruntime-system
+//   * OB-6: NetworkPolicy openbao-allow-ingress lists loop-runtime-system
 //   * OB-7: ValidatingAdmissionPolicy openbao-no-devmode-in-prod exists
 //   * OB-8: BaoConfiguration CR `openbao` exists in secrets-system
 //   * OB-9: bao status returns Initialized=true Sealed=false (dev-mode)
@@ -167,14 +167,14 @@ var _ = Describe("Journey: OpenBao Smoke (F1.10)", Label("journey"), func() {
 				"prod boot loops dia 1 (EC-01 P0)")
 	})
 
-	It("OB-6: NetworkPolicy openbao-allow-ingress includes loopruntime-system", func() {
-		// Broker pattern Q6: loopruntime-api must reach OpenBao
+	It("OB-6: NetworkPolicy openbao-allow-ingress includes loop-runtime-system", func() {
+		// Broker pattern Q6: loop-runtime-api must reach OpenBao
 		cmd := openbaoNs("get", "networkpolicy", "openbao-allow-ingress",
 			"-o", "jsonpath={.spec.ingress[*].from[*].namespaceSelector.matchLabels}")
 		out, err := cmd.CombinedOutput()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(string(out)).To(ContainSubstring("loopruntime-system"),
-			"NetworkPolicy ingress must allow loopruntime-system namespace (broker pattern Q6)")
+		Expect(string(out)).To(ContainSubstring("loop-runtime-system"),
+			"NetworkPolicy ingress must allow loop-runtime-system namespace (broker pattern Q6)")
 	})
 
 	It("OB-7: ValidatingAdmissionPolicy openbao-no-devmode-in-prod exists (EC-04)", func() {
@@ -252,7 +252,7 @@ var _ = Describe("Journey: OpenBao Smoke (F1.10)", Label("journey"), func() {
 			cmd := exec.Command("bao", "secrets", "list", "-format=json")
 			cmd.Env = append(cmd.Env,
 				"VAULT_ADDR=http://127.0.0.1:8200",
-				"VAULT_TOKEN=loopruntime-dev-vault-root", // dev-mode well-known
+				"VAULT_TOKEN=loop-runtime-dev-vault-root", // dev-mode well-known
 				"VAULT_SKIP_VERIFY=true",
 			)
 			out, _ := cmd.CombinedOutput()

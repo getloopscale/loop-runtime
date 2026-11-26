@@ -138,12 +138,12 @@ func Status(err error) int {
 	if err == nil {
 		return http.StatusOK
 	}
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if !stderrors.As(err, &loopruntimeErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !stderrors.As(err, &loopRuntimeErr) {
 		return http.StatusInternalServerError
 	}
 	registryMu.RLock()
-	s, ok := statusByCode[loopruntimeErr.Code]
+	s, ok := statusByCode[loopRuntimeErr.Code]
 	registryMu.RUnlock()
 	if ok {
 		return s

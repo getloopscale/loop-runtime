@@ -27,8 +27,8 @@ func TestDomainProvisionerRendersWithTheConfiguredDeliverySwitches(t *testing.T)
 		{"legacy deployment, default sizing", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("LOOPRUNTIME_PROGRESSIVE_DELIVERY", "false")
-			t.Setenv("LOOPRUNTIME_LEAN_RESOURCES", "true")
+			t.Setenv("LOOP_RUNTIME_PROGRESSIVE_DELIVERY", "false")
+			t.Setenv("LOOP_RUNTIME_LEAN_RESOURCES", "true")
 			store := newFakeDomainProvisionerStore()
 			store.verifiedDomains = []ports.CustomDomain{{
 				ID: "dom-1", Domain: "example.com", TenantID: "tn-1",

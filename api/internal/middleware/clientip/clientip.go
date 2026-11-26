@@ -62,7 +62,7 @@ func BucketKey(ip net.IP) string {
 }
 
 // ParseTrustedProxyCIDRs parses a comma-separated CIDR list (for example the
-// LOOPRUNTIME_TRUSTED_PROXY_CIDRS environment variable). Invalid entries are
+// LOOP_RUNTIME_TRUSTED_PROXY_CIDRS environment variable). Invalid entries are
 // skipped; the caller logs the resulting count so a misconfiguration shows.
 func ParseTrustedProxyCIDRs(s string) []*net.IPNet {
 	var out []*net.IPNet

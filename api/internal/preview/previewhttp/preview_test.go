@@ -380,7 +380,7 @@ func TestPreviewHandler_Construction(t *testing.T) {
 }
 
 // =============================================================================
-// Red Team loopruntime-cloud#92 regression-protector (2026-06-27): missing-parent-guard.
+// Red Team loop-console#92 regression-protector (2026-06-27): missing-parent-guard.
 // When a PreviewProjectChecker is wired, every preview handler MUST refuse
 // to operate on non-existent projects with 404 PROJECT_NOT_FOUND instead
 // of 200 + empty list.

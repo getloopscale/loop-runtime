@@ -19,7 +19,7 @@ type CellMetricsQuerier interface {
 }
 
 // CellMetricsCollector periodically queries tenant-per-cell counts
-// and emits the loopruntime_cell_tenant_count Prometheus gauge.
+// and emits the loop_runtime_cell_tenant_count Prometheus gauge.
 // ADR-0008 Phase 0.
 type CellMetricsCollector struct {
 	querier  CellMetricsQuerier

@@ -26,7 +26,7 @@ const (
 	NamespaceDefault = "default"
 
 	// NamespacePlatformSystem is the LoopRuntime platform system namespace.
-	NamespacePlatformSystem = "loopruntime-system"
+	NamespacePlatformSystem = "loop-runtime-system"
 
 	// NamespaceIngress is the namespace where Traefik runs.
 	// LoopRuntime's helmfile (`infra/helmfile/{mgmt,runtime}.helmfile.yaml.gotmpl`)
@@ -37,7 +37,7 @@ const (
 	// pods → HTTP 502 in any deploy. Discovered live during
 	// CHG-2026-04-29-DOGFOOD-FB Phase 1: api pod Running 1/1 + cert ready
 	// + endpoints valid, but Traefik logged repeated 502s and "subset not
-	// found" because the deny-all + allow-ingress-from-loopruntime-system policy
+	// found" because the deny-all + allow-ingress-from-loop-runtime-system policy
 	// silently dropped traffic from the real Traefik namespace. Affects
 	// production identically — DOKS CNI may or may not enforce, but the
 	// guarantee should not depend on CNI choice.

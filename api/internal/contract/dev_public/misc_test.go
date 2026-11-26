@@ -156,7 +156,7 @@ func TestDevPublic_Misc_SeedPostCleanroomTenantCR(t *testing.T) {
 		"paulohenrique.java Tenant CR MUST exist post-#118 canonical seed (pre-fix returned NotFound)")
 	body, _ := io.ReadAll(resp.Body)
 	require.Contains(t, string(body), `"apiVersion":"tenants.runtime.getloopscale.com/v1"`,
-		"Tenant CR apiVersion MUST be canonical `tenants.runtime.getloopscale.com/v1` per #118 (NOT typo `loopruntime.sh`)")
+		"Tenant CR apiVersion MUST be canonical `tenants.runtime.getloopscale.com/v1` per #118 (NOT typo `loop-runtime.sh`)")
 	require.Contains(t, string(body), `"status":"ACTIVE"`,
 		"Tenant CR MUST reach status ACTIVE post-seed per #118")
 }

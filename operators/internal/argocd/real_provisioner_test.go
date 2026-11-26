@@ -115,7 +115,7 @@ func TestBuildApplicationObject_ManualSyncPolicy(t *testing.T) {
 		TargetRevision: "HEAD",
 		Path:           "production",
 		DestinationURL: "https://workload:6443",
-		DestinationNS:  "loopruntime-acme-production",
+		DestinationNS:  "loop-runtime-acme-production",
 	}
 
 	app := buildApplicationObject(spec)
@@ -164,7 +164,7 @@ func TestBuildApplicationObject_Labels(t *testing.T) {
 		TargetRevision: "HEAD",
 		Path:           "production",
 		DestinationURL: "https://workload:6443",
-		DestinationNS:  "loopruntime-acme-production",
+		DestinationNS:  "loop-runtime-acme-production",
 	}
 
 	app := buildApplicationObject(spec)
@@ -193,7 +193,7 @@ func TestBuildApplicationObject_HasNoSkipReconcile(t *testing.T) {
 	spec := ApplicationSpec{
 		Name:           "acme-production",
 		TenantID:       "acme",
-		RepoURL:        "http://gitea/loopruntime/acme-gitops.git",
+		RepoURL:        "http://gitea/loop-runtime/acme-gitops.git",
 		TargetRevision: "main",
 		Path:           "production",
 		DestinationURL: "https://cell-0-cluster:6443",
@@ -213,7 +213,7 @@ func TestBuildApplicationObject_KeepsNotificationSubscription(t *testing.T) {
 	obj := buildApplicationObject(spec)
 	meta := obj.Object["metadata"].(map[string]interface{})
 	annotations, _ := meta["annotations"].(map[string]interface{})
-	key := "notifications.argoproj.io/subscribe.on-sync-healthy.loopruntime-api"
+	key := "notifications.argoproj.io/subscribe.on-sync-healthy.loop-runtime-api"
 	if _, present := annotations[key]; !present {
 		t.Errorf("notification subscription annotation must be preserved; got %v", annotations)
 	}
@@ -306,7 +306,7 @@ func TestEnsureApplication_PreservesTheExistingStatus(t *testing.T) {
 	err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-production", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "production", DestinationNS: "loopruntime-acme-web-production", CellID: "cell-0",
+		Path: "production", DestinationNS: "loop-runtime-acme-web-production", CellID: "cell-0",
 	})
 	if err != nil {
 		t.Fatalf("EnsureApplication: %v", err)
@@ -349,7 +349,7 @@ func TestEnsureAppProject_PreservesTheExistingStatus(t *testing.T) {
 	err := p.EnsureAppProject(context.Background(), AppProjectSpec{
 		Name: "acme", Namespace: "argocd", TenantID: "acme",
 		SourceRepos:           []string{"http://gitea/acme-gitops.git"},
-		DestinationNamespaces: []string{"loopruntime-acme-web-production"},
+		DestinationNamespaces: []string{"loop-runtime-acme-web-production"},
 		CellID:                "cell-0",
 	})
 	if err != nil {
@@ -376,7 +376,7 @@ func TestEnsureApplication_KeepsAnEmptyStatusEmpty(t *testing.T) {
 	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-staging", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "staging", DestinationNS: "loopruntime-acme-web-staging", CellID: "cell-0",
+		Path: "staging", DestinationNS: "loop-runtime-acme-web-staging", CellID: "cell-0",
 	}); err != nil {
 		t.Fatalf("EnsureApplication: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestEnsureApplication_RetryUsesTheStatusOfTheReread(t *testing.T) {
 	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-production", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "production", DestinationNS: "loopruntime-acme-web-production", CellID: "cell-0",
+		Path: "production", DestinationNS: "loop-runtime-acme-web-production", CellID: "cell-0",
 	}); err != nil {
 		t.Fatalf("EnsureApplication sob conflito: %v", err)
 	}
@@ -455,7 +455,7 @@ func TestEnsureApplication_CreateDoesNotInventAStatus(t *testing.T) {
 	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-novo", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "production", DestinationNS: "loopruntime-acme-web-production", CellID: "cell-0",
+		Path: "production", DestinationNS: "loop-runtime-acme-web-production", CellID: "cell-0",
 	}); err != nil {
 		t.Fatalf("EnsureApplication (create): %v", err)
 	}

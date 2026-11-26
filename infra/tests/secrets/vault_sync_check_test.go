@@ -11,9 +11,9 @@ import (
 	"testing"
 )
 
-// vault-sync-check.sh (Phase 9 T9.1 of plan 2026-06-02-loopruntime-api-vault-integration)
+// vault-sync-check.sh (Phase 9 T9.1 of plan 2026-06-02-loop-runtime-api-vault-integration)
 // reads the ExternalSecret inventory with yq and asks the cluster whether each
-// target is Ready. It replaced the loopruntime_config_secret_source metric, so a verdict it
+// target is Ready. It replaced the loop_runtime_config_secret_source metric, so a verdict it
 // gets wrong is a sync failure nobody sees.
 
 const vaultSyncScript = openbaoScripts + "/vault-sync-check.sh"
@@ -123,19 +123,19 @@ func TestVaultSyncCheckRejectsAnInventoryWithNoTargets(t *testing.T) {
 
 func TestVaultSyncCheckPassesWhenEveryTargetIsReady(t *testing.T) {
 	r := runSyncCheck(t, syncInventory, readyStatuses("True", "True", "True"),
-		"--namespace", "loopruntime-system", "--threshold", "3")
+		"--namespace", "loop-runtime-system", "--threshold", "3")
 	expectExit(t, r, 0, "Verdict: PASS")
 }
 
 func TestVaultSyncCheckPassesWhenTheThresholdIsMetDespiteANotReadyTarget(t *testing.T) {
 	r := runSyncCheck(t, syncInventory, readyStatuses("True", "True", "False"),
-		"--namespace", "loopruntime-system", "--threshold", "2")
+		"--namespace", "loop-runtime-system", "--threshold", "2")
 	expectExit(t, r, 0, "Verdict: PASS")
 }
 
 func TestVaultSyncCheckFailsWhenFewerTargetsThanTheThresholdAreReady(t *testing.T) {
 	r := runSyncCheck(t, syncInventory, readyStatuses("True", "True", "False"),
-		"--namespace", "loopruntime-system", "--threshold", "3")
+		"--namespace", "loop-runtime-system", "--threshold", "3")
 	expectExit(t, r, 2, "Verdict: FAIL")
 }
 

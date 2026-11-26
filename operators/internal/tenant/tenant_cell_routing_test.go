@@ -39,7 +39,7 @@ func cellScheme(t *testing.T) *runtime.Scheme {
 		t.Fatalf("client-go scheme: %v", err)
 	}
 	if err := loopruntimev1.AddToScheme(s); err != nil {
-		t.Fatalf("loopruntime scheme: %v", err)
+		t.Fatalf("loop-runtime scheme: %v", err)
 	}
 	return s
 }

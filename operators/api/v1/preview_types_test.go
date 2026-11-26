@@ -62,7 +62,7 @@ func TestPreviewEnvironment_SpecFields(t *testing.T) {
 	pe := PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "preview-pr-42",
-			Namespace: "loopruntime-system",
+			Namespace: "loop-runtime-system",
 		},
 		Spec: PreviewEnvironmentSpec{
 			TenantID:  "tenant-abc",

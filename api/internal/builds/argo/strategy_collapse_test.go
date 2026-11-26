@@ -12,7 +12,7 @@ import (
 
 // T2.1 (plan simplify-deploy-loopzerokit-only v2.0) — collapse to node/python.
 // The fixed LoopZeroKit stack supports only node + python. All other dispatch
-// targets are removed; unsupported runtimes fail closed (no loopruntime-packs, no
+// targets are removed; unsupported runtimes fail closed (no loop-runtime-packs, no
 // silent fallback).
 
 func TestResolveStrategy_NodePython_OK(t *testing.T) {
@@ -33,7 +33,7 @@ func TestResolveStrategy_UnsupportedRuntime_FailsClosed(t *testing.T) {
 		}
 		script := strings.Join(c.Args, "\n")
 		if strings.Contains(script, "loopruntimepacks-generate") {
-			t.Errorf("runtime %q must NOT route to loopruntime-packs after collapse", fw)
+			t.Errorf("runtime %q must NOT route to loop-runtime-packs after collapse", fw)
 		}
 		if !strings.Contains(script, "exit 1") {
 			t.Errorf("unsupported runtime %q must fail closed (exit 1); script:\n%s", fw, script)

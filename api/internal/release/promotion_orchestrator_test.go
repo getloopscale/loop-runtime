@@ -568,15 +568,15 @@ func TestPromote_ConcurrentRace_RejectsLateTransition(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected CONCURRENT_PROMOTE error; got nil")
 	}
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if !errors.As(err, &loopruntimeErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
 		t.Fatalf("expected wrapped *loopruntimeerrors.LoopRuntimeError; got %T (%v)", err, err)
 	}
-	if loopruntimeErr.Code != "INVALID_TRANSITION" {
-		t.Errorf("expected Code=INVALID_TRANSITION, got %s", loopruntimeErr.Code)
+	if loopRuntimeErr.Code != "INVALID_TRANSITION" {
+		t.Errorf("expected Code=INVALID_TRANSITION, got %s", loopRuntimeErr.Code)
 	}
-	if !strings.Contains(loopruntimeErr.Message, "CONCURRENT_PROMOTE") {
-		t.Errorf("expected Message to mention CONCURRENT_PROMOTE, got %q", loopruntimeErr.Message)
+	if !strings.Contains(loopRuntimeErr.Message, "CONCURRENT_PROMOTE") {
+		t.Errorf("expected Message to mention CONCURRENT_PROMOTE, got %q", loopRuntimeErr.Message)
 	}
 }
 
@@ -600,16 +600,16 @@ func TestPromote_ReleaseAlreadyPending_RejectsRetry(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected CONCURRENT_PROMOTE on PENDING row; got nil")
 	}
-	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
-	if !errors.As(err, &loopruntimeErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
 		t.Fatalf("expected *loopruntimeerrors.LoopRuntimeError; got %T", err)
 	}
-	if loopruntimeErr.Code != "INVALID_TRANSITION" {
-		t.Errorf("expected INVALID_TRANSITION, got %s", loopruntimeErr.Code)
+	if loopRuntimeErr.Code != "INVALID_TRANSITION" {
+		t.Errorf("expected INVALID_TRANSITION, got %s", loopRuntimeErr.Code)
 	}
 }
 
-// TestPromote_NewReleaseID_IsCanonical_NoDoublePrefix — Red Team loopruntime-cloud#120
+// TestPromote_NewReleaseID_IsCanonical_NoDoublePrefix — Red Team loop-console#120
 // sub-finding 2: pre-fix the orchestrator concatenated "rel-" + id.GenerateReleaseID()
 // at line 155, producing "rel-rel-<16hex>" (failing id.IsValidReleaseID + confusing
 // downstream consumers). Post-fix: id.GenerateReleaseID alone produces the canonical
@@ -631,12 +631,12 @@ func TestPromote_NewReleaseID_IsCanonical_NoDoublePrefix(t *testing.T) {
 	}
 }
 
-// TestPromote_PublicDomain_PreferredOverBase — Red Team loopruntime-cloud#120
+// TestPromote_PublicDomain_PreferredOverBase — Red Team loop-console#120
 // sub-finding 3 (regression of #61): pre-fix the URL was built from BaseDomain
-// only ("loopruntime.local" internal). Post-fix PublicDomain takes precedence so the
+// only ("loop-runtime.local" internal). Post-fix PublicDomain takes precedence so the
 // response URL is the canonical Live URL.
 //
-// 2026-07-01 (Red Team loopruntime-cloud#159): the URL formula is now the FAANG
+// 2026-07-01 (Red Team loop-console#159): the URL formula is now the FAANG
 // canonical `naming.AppURL` — includes tenant + entryApp segments so the URL
 // matches the IngressRoute Host rule. Fixture apps updated to include
 // `type: "server"` so entryApp resolves.
@@ -654,7 +654,7 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"abc": []byte("y")}},
 		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
 		Locker:       &fakePromotionLocker{},
-		BaseDomain:   "loopruntime.local",         // internal cluster domain (#61 leaker)
+		BaseDomain:   "loop-runtime.local",        // internal cluster domain (#61 leaker)
 		PublicDomain: "prod-dev.getloopscale.app", // canonical public — should win
 		Logger:       slog.Default(),
 	})
@@ -665,8 +665,8 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.Contains(result.URL, "loopruntime.local") {
-		t.Errorf("Red Team #120 — URL %q must NOT contain 'loopruntime.local' when PublicDomain is set", result.URL)
+	if strings.Contains(result.URL, "loop-runtime.local") {
+		t.Errorf("Red Team #120 — URL %q must NOT contain 'loop-runtime.local' when PublicDomain is set", result.URL)
 	}
 	if !strings.Contains(result.URL, "prod-dev.getloopscale.app") {
 		t.Errorf("Red Team #120 — URL %q must contain canonical PublicDomain 'prod-dev.getloopscale.app'", result.URL)
@@ -679,7 +679,7 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 }
 
 // TestPromote_PublicDomainEmpty_FallsBackToBaseDomain — back-compat: when
-// LOOPRUNTIME_PUBLIC_DOMAIN is unset (local Tilt dev), URL falls back to BaseDomain.
+// LOOP_RUNTIME_PUBLIC_DOMAIN is unset (local Tilt dev), URL falls back to BaseDomain.
 // This preserves the pre-#120 behavior for setups that haven't set PublicDomain.
 //
 // 2026-07-01 (Red Team #159): URL formula now canonical (tenant + entryApp).

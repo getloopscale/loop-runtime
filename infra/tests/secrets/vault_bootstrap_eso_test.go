@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// vault-bootstrap-eso.sh (Runbook P1 of plan 2026-06-02-loopruntime-api-vault-integration)
+// vault-bootstrap-eso.sh (Runbook P1 of plan 2026-06-02-loop-runtime-api-vault-integration)
 // applies the ESO reader ServiceAccount, copies the OpenBao CA from the secrets
 // cluster into a ConfigMap on core, applies the ClusterSecretStore and waits for it.
 // Each step has its own exit code, and the CA copy is the step that fails in a way
@@ -46,7 +46,7 @@ func esoKubectl(args []string) int {
 		return 0
 	case argsMatch(args, "create configmap", "--dry-run=client"):
 		drainStdin() // the script pipes the CA in through /dev/stdin
-		fmt.Println("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: loopruntime-secrets-ca")
+		fmt.Println("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: loop-runtime-secrets-ca")
 		return 0
 	case argsMatch(args, "apply -f -"):
 		drainStdin()
@@ -65,9 +65,9 @@ func esoManifests(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	writeFixture(t, dir, "eso-vault-reader-sa.yaml",
-		"apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: eso-vault-reader\n  namespace: loopruntime-system\n")
-	writeFixture(t, dir, "loopruntime-secrets-secrets.yaml",
-		"apiVersion: external-secrets.io/v1beta1\nkind: ClusterSecretStore\nmetadata:\n  name: loopruntime-secrets-secrets\n")
+		"apiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: eso-vault-reader\n  namespace: loop-runtime-system\n")
+	writeFixture(t, dir, "loop-runtime-secrets-secrets.yaml",
+		"apiVersion: external-secrets.io/v1beta1\nkind: ClusterSecretStore\nmetadata:\n  name: loop-runtime-secrets-secrets\n")
 	return dir
 }
 

@@ -93,7 +93,7 @@ func childEnvironment(name string, owner *loopruntimev1.Tenant, deleting bool) *
 
 func buildNamespace(tenant string) *corev1.Namespace {
 	return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-		Name: "loopruntime-build-" + tenant, Labels: map[string]string{constants.LabelTenant: tenant},
+		Name: "loop-runtime-build-" + tenant, Labels: map[string]string{constants.LabelTenant: tenant},
 	}}
 }
 

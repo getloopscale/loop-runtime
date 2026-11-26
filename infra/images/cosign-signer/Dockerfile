@@ -1,4 +1,4 @@
-# loopruntime-cosign-signer: Alpine image with cosign baked in.
+# loop-runtime-cosign-signer: Alpine image with cosign baked in.
 # Used by the sign-image Argo Workflow step to sign user-built container images.
 #
 # cosign is BUILT HERE FROM SOURCE (#441). The upstream release binary pins the Go
@@ -58,15 +58,15 @@ ARG COSIGN_TAG=v2.6.5
 ARG COSIGN_COMMIT=3e82f50a2839855693aacf7b3d0e7e2f30774cb4
 
 LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime" \
-      org.opencontainers.image.title="loopruntime-cosign-signer" \
+      org.opencontainers.image.title="loop-runtime-cosign-signer" \
       org.opencontainers.image.description="Cosign image signer for LoopRuntime build pipeline, built from sigstore/cosign@${COSIGN_COMMIT}" \
-      io.loopruntime.cosign.release="${COSIGN_TAG}" \
-      io.loopruntime.cosign.revision="${COSIGN_COMMIT}"
+      io.loop-runtime.cosign.release="${COSIGN_TAG}" \
+      io.loop-runtime.cosign.revision="${COSIGN_COMMIT}"
 
 COPY --from=cosign-build /out/cosign /usr/local/bin/cosign
 
 RUN apk add --no-cache ca-certificates \
-    && adduser -D -u 1000 loopruntime
+    && adduser -D -u 1000 loop-runtime
 
 USER 1000
 ENTRYPOINT ["/bin/sh"]

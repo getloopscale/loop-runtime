@@ -89,7 +89,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 			Domain:            d.Domain,
 			Status:            d.Status,
-			VerificationError: "TXT record not found for _loopruntime-verify." + d.Domain,
+			VerificationError: "TXT record not found for _loop-runtime-verify." + d.Domain,
 			Hint:              "DNS changes can take up to 48 hours to propagate. Most providers update within 5 minutes.",
 		})
 		return

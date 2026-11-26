@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # start-themory.sh — launch TheMemory as a native host process for the dev loop.
 #
-# Per plan v1.3 § Phase 1 / T1.1 of loopruntime-cloud-themory-e2e-finalize-plan.md.
+# Per plan v1.3 § Phase 1 / T1.1 of loop-console-themory-e2e-finalize-plan.md.
 # Idempotent (skip if PID file present + process alive), fail-loud on real errors.
 #
 # Sequence:
@@ -26,7 +26,7 @@ readonly LOG_FILE="${SCRIPT_DIR}/.themory.log"
 readonly BOOTSTRAP_TOKEN_FILE="${SCRIPT_DIR}/.themory-bootstrap-token"
 readonly ENV_FILE="${SCRIPT_DIR}/.themory.env"
 
-# Source operator dotenv if present (PGURL, OPENAI_API_KEY, OPENAI_BASE_URL, LOOPRUNTIMEMEM_LLM_PROVIDER, etc.)
+# Source operator dotenv if present (PGURL, OPENAI_API_KEY, OPENAI_BASE_URL, LOOP_RUNTIMEMEM_LLM_PROVIDER, etc.)
 # Format: KEY=value, one per line, no quotes. Gitignored per .gitignore.
 if [ -f "$ENV_FILE" ]; then
   set -a
@@ -37,7 +37,7 @@ fi
 
 readonly PGURL="${PGURL:-postgresql://localhost:5432/postgres}"
 readonly PGURL_BASE="${PGURL_BASE:-postgresql://localhost:5432}"
-readonly THEMORY_CLI="${THEMORY_CLI:-$(realpath -m "${SCRIPT_DIR}/../../../../../loopruntime-memory/dist/agent-tools/cli.js")}"
+readonly THEMORY_CLI="${THEMORY_CLI:-$(realpath -m "${SCRIPT_DIR}/../../../../../loop-runtime-memory/dist/agent-tools/cli.js")}"
 readonly THEMORY_PORT="${THEMORY_PORT:-8080}"
 readonly THEMORY_HOST="${THEMORY_HOST:-0.0.0.0}"
 readonly HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-30}"
@@ -77,13 +77,13 @@ ensure_db_exists() {
 
 ensure_cli_present() {
   if [ ! -f "$THEMORY_CLI" ]; then
-    log_fatal "TheMemory CLI not found at $THEMORY_CLI (cd ../loopruntime-memory && npm run build OR set THEMORY_CLI env)"
+    log_fatal "TheMemory CLI not found at $THEMORY_CLI (cd ../loop-runtime-memory && npm run build OR set THEMORY_CLI env)"
   fi
 }
 
 run_migrations() {
   log_info "Running TheMemory migrations against themory_dev"
-  LOOPRUNTIMEMEM_PG_URI="${PGURL_BASE}/themory_dev" node "$THEMORY_CLI" migrate \
+  LOOP_RUNTIMEMEM_PG_URI="${PGURL_BASE}/themory_dev" node "$THEMORY_CLI" migrate \
     || log_fatal "themory migrate FAILED — see error above"
 }
 
@@ -99,12 +99,12 @@ generate_bootstrap_token() {
 start_server() {
   local bootstrap_token="$1"
   log_info "Starting themory server on ${THEMORY_HOST}:${THEMORY_PORT}"
-  # OPENAI_API_KEY + OPENAI_BASE_URL + LOOPRUNTIMEMEM_LLM_PROVIDER are inherited from
+  # OPENAI_API_KEY + OPENAI_BASE_URL + LOOP_RUNTIMEMEM_LLM_PROVIDER are inherited from
   # the caller's shell OR sourced from .themory.env above. Required by the LLM
   # extraction step in TheMemory's write pipeline.
-  LOOPRUNTIMEMEM_PG_URI="${PGURL_BASE}/themory_dev" \
-  LOOPRUNTIMEMEM_PORT="$THEMORY_PORT" \
-  LOOPRUNTIMEMEM_HOST="$THEMORY_HOST" \
+  LOOP_RUNTIMEMEM_PG_URI="${PGURL_BASE}/themory_dev" \
+  LOOP_RUNTIMEMEM_PORT="$THEMORY_PORT" \
+  LOOP_RUNTIMEMEM_HOST="$THEMORY_HOST" \
   THEMORY_ADMIN_BOOTSTRAP_TOKEN="$bootstrap_token" \
     nohup node "$THEMORY_CLI" server >"$LOG_FILE" 2>&1 &
   echo "$!" > "$PID_FILE"

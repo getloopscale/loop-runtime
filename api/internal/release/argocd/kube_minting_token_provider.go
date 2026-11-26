@@ -30,7 +30,7 @@ import (
 
 // KubeMintingTokenProvider is a self-healing ArgoCD token provider:
 //
-//  1. Reads the current token from a K8s Secret (default: loopruntime-api-tokens.argocd-token).
+//  1. Reads the current token from a K8s Secret (default: loop-runtime-api-tokens.argocd-token).
 //  2. Inspects the token's JWT exp claim and refreshes proactively when
 //     the token has < ProactiveRefreshThreshold time until expiry.
 //  3. On reactive auth-failure signal, re-mints the token immediately.
@@ -41,8 +41,8 @@ import (
 //  5. Persists the new token back to the same K8s Secret AND updates the
 //     in-memory atomic value used by SyncClient on its hot path.
 //  6. Exposes Prometheus metrics:
-//     loopruntime_argocd_token_age_seconds        — gauge, sec since last mint
-//     loopruntime_argocd_token_refreshes_total    — counter, labels: trigger,
+//     loop_runtime_argocd_token_age_seconds        — gauge, sec since last mint
+//     loop_runtime_argocd_token_refreshes_total    — counter, labels: trigger,
 //     outcome ∈ {success,error}
 //
 // Goroutine model: a single background loop ticks every PollInterval and
@@ -51,7 +51,7 @@ import (
 // (single-flight). All public state reads are lock-free (atomic.Value).
 //
 // FAANG-grade requirements driven by 2026-04-30 NEW-15: ArgoCD admin session
-// tokens expire after 24h; loopruntime-api had no automatic refresh path so a
+// tokens expire after 24h; loop-runtime-api had no automatic refresh path so a
 // single 24h+ uptime window broke project delete + every post-deploy sync
 // silently. This provider eliminates the operational burden of manual
 // `task k3d:heal` H11 by self-healing in-process.
@@ -102,7 +102,7 @@ type KubeMintingConfig struct {
 	// e.g. http://argocd-server.argocd.svc.cluster.local:80
 	ArgoCDBaseURL string
 
-	// AccountName — ArgoCD account whose token is minted. Default: "loopruntime-api".
+	// AccountName — ArgoCD account whose token is minted. Default: "loop-runtime-api".
 	// Must have apiKey capability configured in argocd-cm.
 	AccountName string
 
@@ -118,11 +118,11 @@ type KubeMintingConfig struct {
 	// minted token back to the storage Secret. Required.
 	KubeClient kubernetes.Interface
 
-	// Namespace where both Secrets live. Default: "loopruntime-system".
+	// Namespace where both Secrets live. Default: "loop-runtime-system".
 	Namespace string
 
 	// TokenSecretName — Secret holding the active token. Default:
-	// "loopruntime-api-tokens". Updated in place on every mint.
+	// "loop-runtime-api-tokens". Updated in place on every mint.
 	TokenSecretName string
 
 	// TokenSecretKey — data key in TokenSecretName. Default: "argocd-token".
@@ -160,13 +160,13 @@ func NewKubeMintingTokenProvider(cfg KubeMintingConfig) (*KubeMintingTokenProvid
 		return nil, loopruntimeerrors.ErrMissingField.Wrap("argocd: KubeClient required")
 	}
 	if cfg.AccountName == "" {
-		cfg.AccountName = "loopruntime-api"
+		cfg.AccountName = "loop-runtime-api"
 	}
 	if cfg.Namespace == "" {
 		cfg.Namespace = k8s.ControlPlaneNamespace
 	}
 	if cfg.TokenSecretName == "" {
-		cfg.TokenSecretName = "loopruntime-api-tokens"
+		cfg.TokenSecretName = "loop-runtime-api-tokens"
 	}
 	if cfg.TokenSecretKey == "" {
 		cfg.TokenSecretKey = "argocd-token"
@@ -477,7 +477,7 @@ func (p *KubeMintingTokenProvider) readCredentials(ctx context.Context) (refresh
 //	(a) admin /api/v1/session login with username+password, OR
 //	(b) reusing a pre-existing apiKey bearer token directly,
 //
-// and then exchanges that for a new loopruntime-api account token via
+// and then exchanges that for a new loop-runtime-api account token via
 // /api/v1/account/{AccountName}/token.
 func (p *KubeMintingTokenProvider) mintToken(ctx context.Context, creds refreshCreds) (string, error) {
 	bearer := creds.bearerToken
@@ -594,7 +594,7 @@ func (p *KubeMintingTokenProvider) writeSecretToken(ctx context.Context, token s
 	return err
 }
 
-// updateAgeMetric refreshes loopruntime_argocd_token_age_seconds.
+// updateAgeMetric refreshes loop_runtime_argocd_token_age_seconds.
 // issuedAt = 0 → age unknown; the metric is set to NaN-substitute -1
 // (matches Prometheus convention "stale" handled by alerts).
 func updateAgeMetric(issuedAt int64) {

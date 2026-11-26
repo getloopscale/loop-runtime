@@ -6,7 +6,7 @@
 //
 // Conditions applied:
 //   - C5: export timeout 1s, retry disabled, bounded queue 2048
-//   - C7: feature flag LOOPRUNTIME_TRACING_ENABLED — default TRUE everywhere
+//   - C7: feature flag LOOP_RUNTIME_TRACING_ENABLED — default TRUE everywhere
 //     (dev + prod). Local Tilt YAML + bootstrap chart explicitly set
 //     false; production default-tracing-enabled is gated downstream by
 //     the OTel collector / Tempo (find_obs_007 alignment).
@@ -35,7 +35,7 @@ import (
 // instead of letting the gRPC client retry forever (F-S3-01).
 //
 // Plan T3.1 D9 — endpoint format examples accepted:
-//   - "otel-collector.loopruntime-system.svc.cluster.local:4317"
+//   - "otel-collector.loop-runtime-system.svc.cluster.local:4317"
 //   - "otel-collector:4317"
 //   - "http://otel-collector:4317" (scheme stripped)
 //   - "otel-collector" (no port)
@@ -71,7 +71,7 @@ func preCheckOTelEndpoint(endpoint string) error {
 
 const (
 	// DefaultEndpoint is the in-cluster OTel Collector address.
-	DefaultEndpoint = "otel-collector.loopruntime-system.svc.cluster.local:4317"
+	DefaultEndpoint = "otel-collector.loop-runtime-system.svc.cluster.local:4317"
 
 	// exportTimeout is the maximum time for an export attempt (C5).
 	// Default OTel SDK is 10s — too long, risks latency under failure.
@@ -96,14 +96,14 @@ type Options struct {
 // Init configures the OTel TracerProvider with OTLP gRPC exporter.
 // Returns a shutdown function for graceful shutdown.
 //
-// If LOOPRUNTIME_TRACING_ENABLED is "false" (C7), returns a no-op shutdown
+// If LOOP_RUNTIME_TRACING_ENABLED is "false" (C7), returns a no-op shutdown
 // with zero overhead — no TracerProvider is registered.
 //
 // If the Collector is unreachable, the API continues normally.
 // Spans are dropped after queue exhaustion (graceful degradation).
 func Init(ctx context.Context, serviceName string, opts Options) (shutdown func(context.Context) error, err error) {
 	if !opts.Enabled {
-		slog.Info("tracing disabled via LOOPRUNTIME_TRACING_ENABLED=false")
+		slog.Info("tracing disabled via LOOP_RUNTIME_TRACING_ENABLED=false")
 		return func(context.Context) error { return nil }, nil
 	}
 
@@ -123,7 +123,7 @@ func Init(ctx context.Context, serviceName string, opts Options) (shutdown func(
 	if err := preCheckOTelEndpoint(endpoint); err != nil {
 		slog.Warn("tracing disabled: OTel endpoint unresolvable",
 			"endpoint", endpoint, "error", err,
-			"hint", "set OTEL_EXPORTER_OTLP_ENDPOINT to a reachable collector or unset LOOPRUNTIME_TRACING_ENABLED")
+			"hint", "set OTEL_EXPORTER_OTLP_ENDPOINT to a reachable collector or unset LOOP_RUNTIME_TRACING_ENABLED")
 		return func(context.Context) error { return nil }, nil
 	}
 
@@ -163,7 +163,7 @@ func Init(ctx context.Context, serviceName string, opts Options) (shutdown func(
 		sdktrace.WithSpanProcessor(bsp),
 	)
 
-	// Register globally so otel.Tracer("loopruntime-api") works everywhere.
+	// Register globally so otel.Tracer("loop-runtime-api") works everywhere.
 	otel.SetTracerProvider(tp)
 
 	// W3C TraceContext propagation for cross-service trace correlation.

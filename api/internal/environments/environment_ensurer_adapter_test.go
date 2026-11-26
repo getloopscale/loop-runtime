@@ -52,7 +52,7 @@ func TestEnvManagerAdapter_HasEnvironment_PropagatesNotFoundMessageAsError(t *te
 	lister, _ := NewEnvManagerAdapter(
 		func(_ context.Context, _, _, _ string) error { return nil },
 		func(_ context.Context, _, _, _ string) (any, error) {
-			return nil, errors.New(`k8s: get tenant CR "tn-1": tenants.loopruntime.dev "tn-1" not found`)
+			return nil, errors.New(`k8s: get tenant CR "tn-1": tenants.loop-runtime.dev "tn-1" not found`)
 		},
 	)
 

@@ -32,9 +32,9 @@ type LogQueryOpts struct {
 	SinceSeconds int64
 	// Debug toggles the LogQL filter that hides non-user-facing log
 	// lines. Plan J-17 Layer 3 (2026-06-06): user view (Debug=false)
-	// shows only lines emitted with the `::loopruntime::` marker via the
-	// pipeline's wrapper (see api/internal/builds/argo/loopruntime_log.go) — those
-	// are tagged in Loki with the `loopruntime_phase` label. Debug=true
+	// shows only lines emitted with the `::loop-runtime::` marker via the
+	// pipeline's wrapper (see api/internal/builds/argo/loop_runtime_log.go) — those
+	// are tagged in Loki with the `loop_runtime_phase` label. Debug=true
 	// bypasses the filter and returns every container line including
 	// main-container raw stdout. Reserved for operator troubleshooting;
 	// route handler must gate this with admin auth.

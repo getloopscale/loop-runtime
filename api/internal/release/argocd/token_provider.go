@@ -32,7 +32,7 @@ type TokenProvider interface {
 // StaticTokenProvider, FileWatchTokenProvider) are simply skipped.
 //
 // CHG-2026-04-30-DOGFOOD-LOCAL-HEAL NEW-15: motivated by ArgoCD admin
-// session tokens expiring after 24h, leaving loopruntime-api with no in-process
+// session tokens expiring after 24h, leaving loop-runtime-api with no in-process
 // recovery path. KubeMintingTokenProvider implements this.
 type AuthFailureNotifier interface {
 	OnAuthFailure()
@@ -71,7 +71,7 @@ type FileWatchTokenProvider struct {
 
 // FileWatchConfig configures the FileWatchTokenProvider.
 type FileWatchConfig struct {
-	// Path is the file path to the token (e.g., /etc/loopruntime/argocd-token).
+	// Path is the file path to the token (e.g., /etc/loop-runtime/argocd-token).
 	Path string
 	// PollInterval is how often to re-read the file. Default: 60s.
 	PollInterval time.Duration

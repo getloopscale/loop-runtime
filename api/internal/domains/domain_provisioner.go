@@ -358,10 +358,10 @@ func (p *DomainProvisioner) processVerified(ctx context.Context) {
 // F-002 fix: Lock (fetch + render) → Unlock → Push → Update status.
 // Pattern matches deploy flow in ContainerDeliveryActivator.
 func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomDomain) {
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.ports.provision",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.ports.provision",
 		trace.WithAttributes(
-			attribute.String("loopruntime.tenant", d.TenantID),
-			attribute.String("loopruntime.domain", d.Domain),
+			attribute.String("loop-runtime.tenant", d.TenantID),
+			attribute.String("loop-runtime.domain", d.Domain),
 		))
 	defer span.End()
 
@@ -534,10 +534,10 @@ func (p *DomainProvisioner) processRemoving(ctx context.Context) {
 // removeDomain re-renders manifests WITHOUT the removed domain, pushes to gitops,
 // then deletes the DB row. F-002 fix: uses withEnvironmentLock for render phase.
 func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDomain) {
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.ports.remove",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.ports.remove",
 		trace.WithAttributes(
-			attribute.String("loopruntime.tenant", d.TenantID),
-			attribute.String("loopruntime.domain", d.Domain),
+			attribute.String("loop-runtime.tenant", d.TenantID),
+			attribute.String("loop-runtime.domain", d.Domain),
 		))
 	defer span.End()
 

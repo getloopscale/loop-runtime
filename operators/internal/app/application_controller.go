@@ -2,7 +2,7 @@
 // Copyright 2025-2026 The LoopRuntime Authors
 
 // Package app implements the Application + Exposure controllers
-// (operator binary `loopruntime-app-operator` per ADR-0023). Owns
+// (operator binary `loop-runtime-app-operator` per ADR-0023). Owns
 // reconciliation of LoopRuntimeApplication + ExposedRoute CRs — the
 // workload-plane resources that materialize a user's deploy onto
 // the runtime cluster.
@@ -50,7 +50,7 @@ const workloadReadyTimeout = 5 * time.Second
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=exposedroutes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants,verbs=get;list;watch
 // +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch
 type ApplicationReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
@@ -158,7 +158,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6): fast-path Healthy.
 	// Mark EndpointsReady=true the moment the workload Pod is Ready in
 	// the tenant's cell, independent of ExposedRoute Reachable. Local k3d
-	// has no public DNS for *.loopruntime.local so ExposedRoute may stay Pending
+	// has no public DNS for *.loop-runtime.local so ExposedRoute may stay Pending
 	// forever; production may take 60+s for DNS+cert+Traefik propagation.
 	// EndpointsReady=true unblocks phase=Serving.
 	r.reconcileWorkloadStatus(ctx, &app)
@@ -430,7 +430,7 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 
 	// Compute the workload namespace from the (tenant, project, env) triple — the real
 	// isolation boundary. The previous helper dropped the project and produced
-	// loopruntime-{tenant}-{env}, a namespace that exists in no cluster: List returned empty
+	// loop-runtime-{tenant}-{env}, a namespace that exists in no cluster: List returned empty
 	// without erroring, so readyReplicas was never counted and every LoopRuntimeApplication sat
 	// in Progressing forever (measured: 26 days on app-dev). Issue #274.
 	ns, err := naming.Namespace(tenant.Name, app.Spec.Project, app.Spec.Environment)
@@ -446,7 +446,7 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 	//   runtime.getloopscale.com/environment   = app.Spec.Environment
 	//
 	// (runtime.getloopscale.com/tenant is implicit via namespace filtering; namespace itself
-	// is loopruntime-{tenantRef}-{project}-{environment}.)
+	// is loop-runtime-{tenantRef}-{project}-{environment}.)
 	//
 	// Source of truth for these labels: api/internal/manifests/renderer_*.go.
 	var pods corev1.PodList

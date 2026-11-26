@@ -3,26 +3,26 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopruntime-domain-alerts
+  name: loop-runtime-domain-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopruntime.domains
+    - name: loop-runtime.domains
       rules:
         - alert: LoopRuntimeDomainTLSExpiringSoon
-          expr: loopruntime_domain_tls_expiry_days < 14
+          expr: loop_runtime_domain_tls_expiry_days < 14
           for: 1h
           labels:
             severity: warning
           annotations:
             summary: "Custom domain TLS certificate expiring soon"
-            description: "TLS certificate for {{ $labels.domain }} expires in {{ $value }} days. Tenant attribution: query audit_log by domain or join loopruntime_custom_domains_total{tenant=...}. (Label `tenant` removed for cardinality cap — audit gap M08 #19.)"
+            description: "TLS certificate for {{ $labels.domain }} expires in {{ $value }} days. Tenant attribution: query audit_log by domain or join loop_runtime_custom_domains_total{tenant=...}. (Label `tenant` removed for cardinality cap — audit gap M08 #19.)"
             runbook: "cert-manager should auto-renew. If not, check cert-manager logs and Certificate CR status. The domain CNAME must still resolve for HTTP-01 challenge."
 
         - alert: LoopRuntimeDomainVerificationStale
-          expr: loopruntime_custom_domains_total{status="pending_verification"} > 0
+          expr: loop_runtime_custom_domains_total{status="pending_verification"} > 0
           for: 48h
           labels:
             severity: info
@@ -32,7 +32,7 @@ spec:
             runbook: "Domains pending > 7 days are auto-cleaned by DomainHealthChecker. No action needed unless tenant reports issues."
 
         - alert: LoopRuntimeDomainProvisioningStuck
-          expr: loopruntime_custom_domains_total{status="provisioning"} > 0
+          expr: loop_runtime_custom_domains_total{status="provisioning"} > 0
           for: 1h
           labels:
             severity: warning
@@ -42,7 +42,7 @@ spec:
             runbook: "Check DomainProvisioner logs. Verify ArgoCD sync is working. Check cert-manager for pending Certificate CRs. If HTTP-01 challenge fails, verify CNAME resolves through CF Tunnel."
 
         - alert: LoopRuntimeDomainCNAMELost
-          expr: increase(loopruntime_domain_cname_check_failures_total[24h]) > 0
+          expr: increase(loop_runtime_domain_cname_check_failures_total[24h]) > 0
           for: 24h
           labels:
             severity: warning
@@ -52,7 +52,7 @@ spec:
             runbook: "DomainHealthChecker weekly CNAME re-verification failed. After 14 days (2 consecutive failures), the domain degrades to failed and IngressRoute is removed. Contact tenant if pattern persists."
 
         - alert: LoopRuntimeDomainHealthCheckerDown
-          expr: increase(loopruntime_domain_health_checker_errors_total[30m]) > 5
+          expr: increase(loop_runtime_domain_health_checker_errors_total[30m]) > 5
           for: 15m
           labels:
             severity: warning
@@ -61,7 +61,7 @@ spec:
             description: "Domain health checker has 5+ errors in {{ $labels.check }} check in the last 30 minutes."
             runbook: "Check API leader pod logs for DomainHealthChecker errors. Verify database connectivity."
 
-    - name: loopruntime.certificates
+    - name: loop-runtime.certificates
       rules:
         - alert: LoopRuntimeCertificateIssuanceFailed
           expr: certmanager_certificate_ready_status == 0

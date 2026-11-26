@@ -142,7 +142,7 @@ func (h *TenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	msg := "Team scheduled for deletion"
 	if record.GraceUntil != nil {
-		msg = "Team scheduled for deletion. You can restore it within 24 hours using: loopruntime team restore"
+		msg = "Team scheduled for deletion. You can restore it within 24 hours using: loop-runtime team restore"
 	}
 	if force {
 		msg = "Team deletion initiated (force mode, no grace period)"

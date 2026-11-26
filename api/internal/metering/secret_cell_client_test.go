@@ -69,12 +69,12 @@ func (f fakeCellResolver) Resolve(_ context.Context, cellID string) (*placement.
 }
 
 func resolverWith(cellID, secretName string) fakeCellResolver {
-	return fakeCellResolver{cellID: {CellID: cellID, SecretRefName: secretName, SecretRefNamespace: "loopruntime-system"}}
+	return fakeCellResolver{cellID: {CellID: cellID, SecretRefName: secretName, SecretRefNamespace: "loop-runtime-system"}}
 }
 
 func kubeconfigSecret(name string, data map[string][]byte) *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "loopruntime-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "loop-runtime-system"},
 		Data:       data,
 	}
 }

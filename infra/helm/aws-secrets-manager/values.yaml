@@ -21,7 +21,7 @@ platformSecret: ""
 database:
   host: ""
   port: 5432
-  name: loopruntime
+  name: loop-runtime
   masterSecret: ""
   # RDS forces TLS (rds.force_ssl); `require` encrypts without pinning the RDS CA.
   sslmode: require
@@ -55,15 +55,15 @@ buildSigningKey:
 
 # Third-party credentials staging cannot generate, each a Secrets Manager secret of its own
 # (a JSON object). Empty: the key Resend issues is read from the platform secret
-# (`resend-api-key`), and loopruntime-cloud gets no Stripe keys.
+# (`resend-api-key`), and loop-console gets no Stripe keys.
 #   resendSecret: {"api-key": "re_..."}
 #   stripeSecret: {"api-key": "sk_test_...", "webhook-secret": "whsec_...",
 #                  "price-starter": "price_...", "price-pro": "price_...", "price-team": "price_..."}
 resendSecret: ""
 stripeSecret: ""
-# The GitHub App loopruntime-api deploys from, {"app-id": "123", "private-key": "-----BEGIN
+# The GitHub App loop-runtime-api deploys from, {"app-id": "123", "private-key": "-----BEGIN
 # RSA PRIVATE KEY-----...", "webhook-secret": "...", "client-id": "Iv1...",
-# "client-secret": "..."}, written into loopruntime-system as the Secret loopruntime-api-github.
+# "client-secret": "..."}, written into loop-runtime-system as the Secret loop-runtime-api-github.
 # All five keys are required: the client id and secret are how the API confirms on GitHub
 # that a user can access an installation before a repository is connected through it.
 # Empty: no such Secret, and the API keeps its repository features off.

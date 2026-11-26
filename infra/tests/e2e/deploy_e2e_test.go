@@ -3,7 +3,7 @@
 
 // Package e2e — end-to-end-deploy-validation-plan T4.3.
 // Orchestration test for the full user→CLI→API→Argo→ArgoCD→pod path.
-// Gated by LOOPRUNTIME_E2E_DEPLOY=1.
+// Gated by LOOP_RUNTIME_E2E_DEPLOY=1.
 package e2e
 
 import (
@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	envFlag       = "LOOPRUNTIME_E2E_DEPLOY"
+	envFlag       = "LOOP_RUNTIME_E2E_DEPLOY"
 	testTenant    = "e2e-test"
 	testProject   = "repotest"
 	testRepoURL   = "https://github.com/getloopscale/loopzerokit-example"
@@ -27,7 +27,7 @@ const (
 	// Use httpProbeTimeout for probe operations.
 )
 
-// requireE2EFlag skips the test unless LOOPRUNTIME_E2E_DEPLOY=1.
+// requireE2EFlag skips the test unless LOOP_RUNTIME_E2E_DEPLOY=1.
 func requireE2EFlag(t *testing.T) {
 	if os.Getenv(envFlag) != "1" {
 		t.Skipf("set %s=1 to run full E2E deploy test (requires 3 k3d clusters + DO Registry auth)", envFlag)
@@ -36,7 +36,7 @@ func requireE2EFlag(t *testing.T) {
 
 // requireKubeContexts asserts all 3 expected k3d contexts exist.
 func requireKubeContexts(t *testing.T) {
-	for _, ctx := range []string{"k3d-loopruntime-core", "k3d-loopruntime-build", "k3d-loopruntime-cell-0"} {
+	for _, ctx := range []string{"k3d-loop-runtime-core", "k3d-loop-runtime-build", "k3d-loop-runtime-cell-0"} {
 		cmd := exec.Command("kubectl", "config", "get-contexts", "-o", "name", ctx)
 		if err := cmd.Run(); err != nil {
 			t.Fatalf("missing kube context %s: run `task setup` first (%v)", ctx, err)
@@ -65,18 +65,18 @@ func runCmd(t *testing.T, name string, args ...string) (string, error) {
 func TestE2EDeployHappyPath(t *testing.T) {
 	requireE2EFlag(t)
 	requireKubeContexts(t)
-	requireBinary(t, "loopruntime")
+	requireBinary(t, "loop-runtime")
 	requireBinary(t, "kubectl")
 
-	t.Logf("=== Step 1/8: Verify mgmt cluster loopruntime-api healthy ===")
-	out, err := runCmd(t, "kubectl", "--context", "k3d-loopruntime-core", "-n", "loopruntime-system",
-		"get", "deploy", "loopruntime-api", "-o", "jsonpath={.status.readyReplicas}")
+	t.Logf("=== Step 1/8: Verify mgmt cluster loop-runtime-api healthy ===")
+	out, err := runCmd(t, "kubectl", "--context", "k3d-loop-runtime-core", "-n", "loop-runtime-system",
+		"get", "deploy", "loop-runtime-api", "-o", "jsonpath={.status.readyReplicas}")
 	if err != nil || !strings.Contains(out, "1") {
-		t.Fatalf("loopruntime-api not ready: out=%q err=%v", out, err)
+		t.Fatalf("loop-runtime-api not ready: out=%q err=%v", out, err)
 	}
 
 	t.Logf("=== Step 2/8: Verify ArgoCD has all 3 clusters registered ===")
-	out, err = runCmd(t, "kubectl", "--context", "k3d-loopruntime-core", "-n", "argocd",
+	out, err = runCmd(t, "kubectl", "--context", "k3d-loop-runtime-core", "-n", "argocd",
 		"get", "secrets", "-l", "argocd.argoproj.io/secret-type=cluster", "-o", "name")
 	clusterCount := strings.Count(out, "secret/")
 	if err != nil || clusterCount < 2 {
@@ -87,14 +87,14 @@ func TestE2EDeployHappyPath(t *testing.T) {
 	workspace := setupWorkspace(t)
 	t.Logf("workspace: %s", workspace)
 
-	t.Logf("=== Step 4/8: loopruntime init in workspace ===")
-	out, err = runCmdInDir(t, workspace, "loopruntime", "init", "--non-interactive", "--framework", testFramework)
+	t.Logf("=== Step 4/8: loop-runtime init in workspace ===")
+	out, err = runCmdInDir(t, workspace, "loop-runtime", "init", "--non-interactive", "--framework", testFramework)
 	t.Logf("init output: %s", out)
 	if err != nil {
 		t.Fatalf("loopscale init failed: %v", err)
 	}
 
-	t.Logf("=== Step 5/8: loopruntime deploy ===")
+	t.Logf("=== Step 5/8: loop-runtime deploy ===")
 	deployCtx, cancel := context.WithTimeout(context.Background(), deployTimeout)
 	defer cancel()
 	deployOut, deployErr := runDeployWithContext(t, deployCtx, workspace)
@@ -110,7 +110,7 @@ func TestE2EDeployHappyPath(t *testing.T) {
 	}
 	t.Logf("release URL: %s", url)
 
-	t.Logf("=== Step 7/8: Workload pod running on loopruntime-cell-0 ===")
+	t.Logf("=== Step 7/8: Workload pod running on loop-runtime-cell-0 ===")
 	if err := waitForWorkloadPodRunning(t, testTenant, probeTimeout); err != nil {
 		t.Fatalf("workload pod did not become Ready: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestE2EDeployHappyPath(t *testing.T) {
 // setupWorkspace clones loopzerokit-example into a tmpdir.
 func setupWorkspace(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "loopruntime-e2e-")
+	dir, err := os.MkdirTemp("", "loop-runtime-e2e-")
 	if err != nil {
 		t.Fatalf("mktemp: %v", err)
 	}
@@ -150,7 +150,7 @@ func runCmdInDir(t *testing.T, dir, name string, args ...string) (string, error)
 // runDeployWithContext invokes `loopscale deploy --watch --json` and streams output.
 func runDeployWithContext(t *testing.T, ctx context.Context, workspace string) (string, error) {
 	t.Helper()
-	cmd := exec.CommandContext(ctx, "loopruntime", "deploy", "--watch", "--json")
+	cmd := exec.CommandContext(ctx, "loop-runtime", "deploy", "--watch", "--json")
 	cmd.Dir = workspace
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -175,10 +175,10 @@ func extractURLFromDeployOutput(t *testing.T, out string) string {
 func waitForWorkloadPodRunning(t *testing.T, tenant string, timeout time.Duration) error {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
-	ns := "loopruntime-tenants"
+	ns := "loop-runtime-tenants"
 	label := fmt.Sprintf("runtime.getloopscale.com/tenant=%s", tenant)
 	for time.Now().Before(deadline) {
-		out, _ := runCmd(t, "kubectl", "--context", "k3d-loopruntime-cell-0", "-n", ns,
+		out, _ := runCmd(t, "kubectl", "--context", "k3d-loop-runtime-cell-0", "-n", ns,
 			"get", "pods", "-l", label, "-o", "jsonpath={.items[0].status.phase}")
 		if strings.TrimSpace(out) == "Running" {
 			return nil
@@ -227,9 +227,9 @@ func TestE2EDeployStructureExists(t *testing.T) {
 	required := []string{
 		"loopscale init",
 		"loopscale deploy",
-		"k3d-loopruntime-core",
-		"k3d-loopruntime-build",
-		"k3d-loopruntime-cell-0",
+		"k3d-loop-runtime-core",
+		"k3d-loop-runtime-build",
+		"k3d-loop-runtime-cell-0",
 		testRepoURL,
 	}
 	for _, r := range required {

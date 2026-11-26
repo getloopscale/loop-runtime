@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Red Team loopruntime-cloud#68 closure LIVE test — proves Caddy edge rate_limit
+# Red Team loop-console#68 closure LIVE test — proves Caddy edge rate_limit
 # engages on Kratos self-service login submission flow (T1.4 of plan
 # kratos-self-service-rate-limit-systemic v1.1).
 #
@@ -68,8 +68,8 @@ emit() {
 
 # EC-8 absorption: pre-flight JWT seed check.
 preflight_seed() {
-  if [ ! -f "$HOME/.loopruntime/local-dogfood-token.txt" ]; then
-    log "BLOCKED: JWT seed missing — run bash infra/scripts/local/seed-admin-loopruntime-dev.sh --refresh-only"
+  if [ ! -f "$HOME/.loop-runtime/local-dogfood-token.txt" ]; then
+    log "BLOCKED: JWT seed missing — run bash infra/scripts/local/seed-admin-loop-runtime-dev.sh --refresh-only"
     emit "BLOCKED" "jwt-seed-missing"
     exit 2
   fi

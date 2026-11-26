@@ -37,10 +37,10 @@ func syncedExternalSecret(app string) *unstructured.Unstructured {
 		"kind":       "ExternalSecret",
 		"metadata": map[string]interface{}{
 			"name": name, "namespace": shopNamespace,
-			"labels": map[string]interface{}{"runtime.getloopscale.com/managed-by": "loopruntime-api"},
+			"labels": map[string]interface{}{"runtime.getloopscale.com/managed-by": "loop-runtime-api"},
 		},
 		"spec": map[string]interface{}{
-			"secretStoreRef": map[string]interface{}{"name": "loopruntime-broker", "kind": "ClusterSecretStore"},
+			"secretStoreRef": map[string]interface{}{"name": "loop-runtime-broker", "kind": "ClusterSecretStore"},
 			"target":         map[string]interface{}{"name": name},
 			"data":           []interface{}{map[string]interface{}{"secretKey": "API_KEY"}},
 		},
@@ -173,12 +173,12 @@ func notDelivered(t *testing.T, err error) *deploycontracts.SecretsNotDeliveredE
 	if !errors.As(err, &undelivered) {
 		t.Fatalf("err = %v, want a SecretsNotDeliveredError", err)
 	}
-	if undelivered.Store != "loopruntime-broker" || undelivered.Namespace != shopNamespace ||
+	if undelivered.Store != "loop-runtime-broker" || undelivered.Namespace != shopNamespace ||
 		undelivered.ExternalSecret != naming.UserSecretName(shopTenant, shopProject, shopEnv, "api") {
-		t.Errorf("the error names store %q and %s/%s, want loopruntime-broker and the ExternalSecret of api",
+		t.Errorf("the error names store %q and %s/%s, want loop-runtime-broker and the ExternalSecret of api",
 			undelivered.Store, undelivered.Namespace, undelivered.ExternalSecret)
 	}
-	if !strings.Contains(err.Error(), `"loopruntime-broker"`) {
+	if !strings.Contains(err.Error(), `"loop-runtime-broker"`) {
 		t.Errorf("the message does not name the secret store: %s", err)
 	}
 	return undelivered

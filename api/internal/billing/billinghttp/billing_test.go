@@ -173,7 +173,7 @@ func TestBilling_Portal_WithSDK_HappyPath(t *testing.T) {
 	custID := "cus_TestSDKPath"
 	creator := &fakePortalCreator{url: "https://billing.stripe.com/p/session/test_xxx"}
 	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{id: custID}).
-		WithPortalSessionCreator(creator, "https://app.loopruntime.cloud/billing")
+		WithPortalSessionCreator(creator, "https://app.loop-runtime.cloud/billing")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -192,8 +192,8 @@ func TestBilling_Portal_WithSDK_HappyPath(t *testing.T) {
 	if creator.gotCust != custID {
 		t.Errorf("creator received customer %q, want %q", creator.gotCust, custID)
 	}
-	if creator.gotReturn != "https://app.loopruntime.cloud/billing" {
-		t.Errorf("creator received return URL %q, want app.loopruntime.cloud/billing", creator.gotReturn)
+	if creator.gotReturn != "https://app.loop-runtime.cloud/billing" {
+		t.Errorf("creator received return URL %q, want app.loop-runtime.cloud/billing", creator.gotReturn)
 	}
 }
 
@@ -204,7 +204,7 @@ func TestBilling_Portal_WithSDK_StripeError_Returns502(t *testing.T) {
 	custID := "cus_TestSDKError"
 	creator := &fakePortalCreator{err: errSDKFailure}
 	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{id: custID}).
-		WithPortalSessionCreator(creator, "https://app.loopruntime.cloud/billing")
+		WithPortalSessionCreator(creator, "https://app.loop-runtime.cloud/billing")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -233,7 +233,7 @@ func TestBilling_Portal_WithSDK_StripeError_Returns502(t *testing.T) {
 func TestBilling_Portal_NoCustomer_DoesNotCallSDK(t *testing.T) {
 	creator := &fakePortalCreator{url: "should-never-be-returned"}
 	h := NewBillingHandler(fakePlanStore{}, fakeCustomerStore{}). // no customer ID
-									WithPortalSessionCreator(creator, "https://app.loopruntime.cloud/billing")
+									WithPortalSessionCreator(creator, "https://app.loop-runtime.cloud/billing")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/portal", nil)
 	req = routestest.WithAuth(req, routestest.DefaultUserContext())
@@ -269,7 +269,7 @@ func (e stripeErr) Error() string { return string(e) }
 // absent, so this was the ACTIVE path. The original comment said the fallback served
 // "local dev + tests"; the intent was local, the effect was public.
 //
-// The decision (ADR 2026-08-11) is that loopruntime-cloud is the only issuer. When the
+// The decision (ADR 2026-08-11) is that loop-console is the only issuer. When the
 // engine cannot issue, it FAILS saying where to go — a URL that looks like it works
 // hides the problem until someone investigates why the portal did not open.
 func TestBilling_Portal_WithoutIssuer_DoesNotAssembleAURL(t *testing.T) {

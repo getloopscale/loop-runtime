@@ -124,7 +124,7 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 //   - app (optional, Beta Logs Gate Criterion 3): filter to a single
 //     app within the project. When omitted, returns logs from ALL
 //     apps in the namespace (legacy behavior). The app label is
-//     promoted by promtail's loopruntime-pods scrape job from the pod's
+//     promoted by promtail's loop-runtime-pods scrape job from the pod's
 //     runtime.getloopscale.com/app-name label.
 func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())

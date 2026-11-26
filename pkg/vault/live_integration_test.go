@@ -149,7 +149,7 @@ func TestLIVE_PolicyDenial_403(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Create a child token bound to eso-read policy (read-only on loopruntime paths).
+	// Create a child token bound to eso-read policy (read-only on loop-runtime paths).
 	secret, err := root.Auth().Token().CreateWithContext(ctx, &bao.TokenCreateRequest{
 		Policies: []string{"eso-read"},
 		TTL:      "60s",
@@ -162,7 +162,7 @@ func TestLIVE_PolicyDenial_403(t *testing.T) {
 	denied := liveClient(t, addr, childToken)
 	denied.SetToken(childToken)
 	// Attempt write to a path NOT covered by eso-read.
-	_, err = denied.Logical().WriteWithContext(ctx, "secret/data/loopruntime/vault-local/should-fail-T8", map[string]interface{}{
+	_, err = denied.Logical().WriteWithContext(ctx, "secret/data/loop-runtime/vault-local/should-fail-T8", map[string]interface{}{
 		"data": map[string]interface{}{"value": "denied"},
 	})
 	if err == nil {

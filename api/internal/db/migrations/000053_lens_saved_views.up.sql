@@ -4,11 +4,11 @@
 -- ============================================================================
 -- 000053_lens_saved_views
 --
--- loopruntime-lens M52 — per-tenant saved trace-list filter combinations for the
+-- loop-runtime-lens M52 — per-tenant saved trace-list filter combinations for the
 -- /v1/dashboard/lens BFF. A saved view stores the nuqs-serialized filter query
 -- string verbatim; "apply" pushes it back onto the URL (the dashboard's nuqs
--- parsers hydrate it). Consumed/queried by the loopruntime-cloud LensSavedViewsHandler
--- (raw database/sql) — loopruntime-cloud does not run migrations, the engine owns schema.
+-- parsers hydrate it). Consumed/queried by the loop-console LensSavedViewsHandler
+-- (raw database/sql) — loop-console does not run migrations, the engine owns schema.
 --
 -- Mirrors 000050_workspace_webhooks tenancy: a (subject, tenant_id) discriminator
 -- scopes every row to the authenticated Principal (personal per-user views;

@@ -23,7 +23,7 @@ import (
 // Container ports — these must match the Deployment spec exactly. Drift
 // here caused the iter-19 "Connection refused" symptom: helpers were
 // probing 8080 but the api container binds 3001 (http) and 9090 (metrics).
-// Single source of truth: charts/loopruntime-api/values.yaml (service.port, service.metricsPort).
+// Single source of truth: charts/loop-runtime-api/values.yaml (service.port, service.metricsPort).
 const (
 	apiHTTPPort    = 3001
 	apiMetricsPort = 9090
@@ -34,10 +34,10 @@ func TestChaos(t *testing.T) {
 	RunSpecs(t, "Chaos Engineering Suite")
 }
 
-// skipUnlessChaos skips if LOOPRUNTIME_CHAOS_TEST=1 is not set.
+// skipUnlessChaos skips if LOOP_RUNTIME_CHAOS_TEST=1 is not set.
 func skipUnlessChaos() {
-	if os.Getenv("LOOPRUNTIME_CHAOS_TEST") != "1" {
-		Skip("skipping chaos test: set LOOPRUNTIME_CHAOS_TEST=1 to run")
+	if os.Getenv("LOOP_RUNTIME_CHAOS_TEST") != "1" {
+		Skip("skipping chaos test: set LOOP_RUNTIME_CHAOS_TEST=1 to run")
 	}
 }
 
@@ -161,7 +161,7 @@ func waitForDeploymentReady(namespace, name string, minReady int, timeout time.D
 			namespace, name, err)
 	}
 	// jsonpath above flattens {key:value} into "value" strings — fall back
-	// to the well-known "app=<name>" pattern which all loopruntime deployments
+	// to the well-known "app=<name>" pattern which all loop-runtime deployments
 	// honor. Reliable across all chaos targets.
 	labelSelector := "app=" + name
 
@@ -196,7 +196,7 @@ var _ = strconv.Atoi
 
 // waitForPodReady waits for at least one pod matching labelSelector to be
 // Running + Ready + NOT Terminating. Used for selectors that may resolve
-// to multiple deployments (e.g. app.kubernetes.io/component=loopruntime-operator
+// to multiple deployments (e.g. app.kubernetes.io/component=loop-runtime-operator
 // matches all 4 split operator deployments).
 //
 // Multi-replica fix: delegates to listReadyHealthyPods which filters
@@ -223,7 +223,7 @@ func waitForPodReady(namespace, labelSelector string, timeout time.Duration) err
 // /api/v1/health endpoint. Selects a Running pod (skipping any pod that
 // chaos may have just Terminated). Returns the wget output + error.
 //
-// Multi-replica fix: replaces "kubectl exec deploy/loopruntime-api" which K8s
+// Multi-replica fix: replaces "kubectl exec deploy/loop-runtime-api" which K8s
 // could route to a Terminating pod, producing "Connection refused" that
 // masks the actual HA outcome. By picking a phase=Running pod we exec
 // into a survivor by construction.
@@ -232,12 +232,12 @@ func waitForPodReady(namespace, labelSelector string, timeout time.Duration) err
 // on 3001 per the Deployment spec; the legacy 8080 was unconditional
 // "Connection refused" — same symptom regardless of chaos state.
 func probeAPIHealth() (string, error) {
-	pod := runningPodName("loopruntime-system", "app=loopruntime-api")
+	pod := runningPodName("loop-runtime-system", "app=loop-runtime-api")
 	if pod == "" {
-		return "", fmt.Errorf("no Running loopruntime-api pod available to exec into")
+		return "", fmt.Errorf("no Running loop-runtime-api pod available to exec into")
 	}
 	url := fmt.Sprintf("http://localhost:%d/api/v1/health", apiHTTPPort)
-	out, err := kubectl("exec", "-n", "loopruntime-system", pod, "--",
+	out, err := kubectl("exec", "-n", "loop-runtime-system", pod, "--",
 		"wget", "-qO-", "-T", "5", url)
 	if err != nil {
 		return string(out), fmt.Errorf("API health probe via pod %s failed: %v", pod, err)
@@ -286,7 +286,7 @@ func checkAPIHealth() error {
 // targets apiMetricsPort (9090), not the legacy 8080.
 //
 // CANONICAL FIX 2026-06-16: relaxed pre-flight that proves /metrics is
-// reachable + at least one loopruntime_ metric is exposed. Prometheus
+// reachable + at least one loop_runtime_ metric is exposed. Prometheus
 // CounterVec/HistogramVec with labels does NOT emit HELP/TYPE lines
 // until first WithLabelValues(...) emission — so substring-checking an
 // untriggered breaker metric was a structural bug in the test.
@@ -301,16 +301,16 @@ func checkMetricExists(metricName string) {
 	url := fmt.Sprintf("http://localhost:%d/metrics", apiMetricsPort)
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		pod := runningPodName("loopruntime-system", "app=loopruntime-api")
+		pod := runningPodName("loop-runtime-system", "app=loop-runtime-api")
 		if pod == "" {
-			lastErr = fmt.Errorf("no Running loopruntime-api pod available")
+			lastErr = fmt.Errorf("no Running loop-runtime-api pod available")
 		} else {
-			out, err := kubectl("exec", "-n", "loopruntime-system", pod, "--",
+			out, err := kubectl("exec", "-n", "loop-runtime-system", pod, "--",
 				"wget", "-qO-", "-T", "5", url)
-			// Surface check: /metrics reachable AND at least one loopruntime_
+			// Surface check: /metrics reachable AND at least one loop_runtime_
 			// metric is exposed. The specific labeled metric may not be
 			// present yet (will appear after first emission).
-			if err == nil && strings.Contains(out, "# HELP loopruntime_") {
+			if err == nil && strings.Contains(out, "# HELP loop_runtime_") {
 				GinkgoWriter.Printf("  checkMetricExists(%s): metrics surface reachable; metric will materialize on first emission\n", metricName)
 				return
 			}
@@ -327,8 +327,8 @@ func checkMetricExists(metricName string) {
 
 	Expect(lastErr).NotTo(HaveOccurred(),
 		"failed to fetch metrics after %d attempts: %s", maxAttempts, lastOut)
-	Expect(lastOut).To(ContainSubstring("# HELP loopruntime_"),
-		"no loopruntime_ metric HELP lines found in /metrics — surface broken (attempts=%d)",
+	Expect(lastOut).To(ContainSubstring("# HELP loop_runtime_"),
+		"no loop_runtime_ metric HELP lines found in /metrics — surface broken (attempts=%d)",
 		maxAttempts)
 }
 
@@ -346,9 +346,9 @@ var _ = Describe("Chaos Engineering", func() {
 			// Read the deployment's desired replica count BEFORE chaos so the
 			// recovery assertion adapts to whatever HA posture the cluster has
 			// (single-replica in some test envs, 2+ in prod-like envs).
-			desired := deploymentReplicas("loopruntime-system", "loopruntime-api")
+			desired := deploymentReplicas("loop-runtime-system", "loop-runtime-api")
 			Expect(desired).To(BeNumerically(">=", 1),
-				"loopruntime-api deployment must have at least 1 replica before chaos")
+				"loop-runtime-api deployment must have at least 1 replica before chaos")
 
 			// PodChaos action=pod-kill mode=one kills a single pod. With
 			// multi-replica, the survivors continue serving traffic during
@@ -370,9 +370,9 @@ var _ = Describe("Chaos Engineering", func() {
 			}
 
 			// The deployment must fully recover to its desired replica count.
-			err = waitForDeploymentReady("loopruntime-system", "loopruntime-api", desired, 120*time.Second)
+			err = waitForDeploymentReady("loop-runtime-system", "loop-runtime-api", desired, 120*time.Second)
 			Expect(err).NotTo(HaveOccurred(),
-				"loopruntime-api did not recover to %d ready replicas within 120s", desired)
+				"loop-runtime-api did not recover to %d ready replicas within 120s", desired)
 
 			// Final health probe must succeed unambiguously.
 			err = checkAPIHealth()
@@ -382,11 +382,11 @@ var _ = Describe("Chaos Engineering", func() {
 		It("should release advisory lock on pod termination", func() {
 			skipUnlessChaos()
 
-			desired := deploymentReplicas("loopruntime-system", "loopruntime-api")
+			desired := deploymentReplicas("loop-runtime-system", "loop-runtime-api")
 			Expect(desired).To(BeNumerically(">=", 1))
 
 			// Pick ONE Running pod by name and delete only that one. The
-			// previous version did `kubectl delete pod -l app=loopruntime-api`
+			// previous version did `kubectl delete pod -l app=loop-runtime-api`
 			// which kills every replica — defeating the very HA property
 			// the lock-release test depends on.
 			//
@@ -394,10 +394,10 @@ var _ = Describe("Chaos Engineering", func() {
 			// holds pg_advisory_xact_lock dies (pod terminated), Postgres
 			// releases the lock automatically. Surviving replicas must be
 			// able to pick it up.
-			target := runningPodName("loopruntime-system", "app=loopruntime-api")
-			Expect(target).NotTo(BeEmpty(), "no Running loopruntime-api pod to terminate")
+			target := runningPodName("loop-runtime-system", "app=loop-runtime-api")
+			Expect(target).NotTo(BeEmpty(), "no Running loop-runtime-api pod to terminate")
 
-			out, err := kubectl("delete", "pod", "-n", "loopruntime-system",
+			out, err := kubectl("delete", "pod", "-n", "loop-runtime-system",
 				target, "--wait=false")
 			Expect(err).NotTo(HaveOccurred(), "failed to delete API pod %s: %s", target, out)
 			GinkgoWriter.Printf("  Deleted single API pod %s (of %d desired)\n", target, desired)
@@ -405,9 +405,9 @@ var _ = Describe("Chaos Engineering", func() {
 			// Deployment must recover to full readyReplicas. 90s budget covers
 			// pod terminationGracePeriod (30s default) + image pull + readiness
 			// probe success.
-			err = waitForDeploymentReady("loopruntime-system", "loopruntime-api", desired, 90*time.Second)
+			err = waitForDeploymentReady("loop-runtime-system", "loop-runtime-api", desired, 90*time.Second)
 			Expect(err).NotTo(HaveOccurred(),
-				"loopruntime-api did not recover to %d ready replicas after single-pod delete", desired)
+				"loop-runtime-api did not recover to %d ready replicas after single-pod delete", desired)
 		})
 	})
 
@@ -427,12 +427,12 @@ var _ = Describe("Chaos Engineering", func() {
 			// intentional-sleep: chaos synchronization window
 			time.Sleep(10 * time.Second)
 
-			err := waitForPodReady("loopruntime-system", "app.kubernetes.io/component=loopruntime-operator", 120*time.Second)
+			err := waitForPodReady("loop-runtime-system", "app.kubernetes.io/component=loop-runtime-operator", 120*time.Second)
 			Expect(err).NotTo(HaveOccurred(), "controller pod did not recover within 120s")
 
 			// Verify leader lease was re-acquired.
-			out, err := kubectl("logs", "-n", "loopruntime-system",
-				"-l", "app.kubernetes.io/component=loopruntime-operator", "--tail=30")
+			out, err := kubectl("logs", "-n", "loop-runtime-system",
+				"-l", "app.kubernetes.io/component=loop-runtime-operator", "--tail=30")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out).To(ContainSubstring("leader"),
 				"controller did not re-acquire leader lease after restart")
@@ -449,7 +449,7 @@ var _ = Describe("Chaos Engineering", func() {
 			skipUnlessChaos()
 
 			// Verify the metric exists before injecting fault.
-			checkMetricExists("loopruntime_pg_circuit_breaker_tripped_total")
+			checkMetricExists("loop_runtime_pg_circuit_breaker_tripped_total")
 
 			cleanup := applyChaos("pg-connection-storm.yaml")
 			defer cleanup()
@@ -553,14 +553,14 @@ var _ = Describe("Chaos Engineering", func() {
 			time.Sleep(60 * time.Second)
 
 			// After recovery, verify Gitea is responsive.
-			// CANONICAL FIX 2026-06-16: Gitea is deployed in loopruntime-system,
+			// CANONICAL FIX 2026-06-16: Gitea is deployed in loop-runtime-system,
 			// NOT a separate "gitea" namespace. The chart-by-name pattern
 			// confused this — verified via `kubectl get pods -A -l
-			// app.kubernetes.io/name=gitea`. LOOPRUNTIME_GITEA_NAMESPACE override
+			// app.kubernetes.io/name=gitea`. LOOP_RUNTIME_GITEA_NAMESPACE override
 			// preserved for prod where gitea may live in its own namespace.
-			giteaNS := os.Getenv("LOOPRUNTIME_GITEA_NAMESPACE")
+			giteaNS := os.Getenv("LOOP_RUNTIME_GITEA_NAMESPACE")
 			if giteaNS == "" {
-				giteaNS = "loopruntime-system"
+				giteaNS = "loop-runtime-system"
 			}
 			out, err := kubectl("get", "pods", "-n", giteaNS,
 				"-l", "app.kubernetes.io/name=gitea",
@@ -581,12 +581,12 @@ var _ = Describe("Chaos Engineering", func() {
 
 			// CANONICAL FIX 2026-06-16: previous fallback hardcoded a
 			// stale DO production context name that no longer exists
-			// (do-sfo3-loopruntime-infra-dev-sfo3-build). Local + drill clusters
-			// use k3d-loopruntime-build. Honor LOOPRUNTIME_BUILD_CONTEXT override for
+			// (do-sfo3-loop-runtime-infra-dev-sfo3-build). Local + drill clusters
+			// use k3d-loop-runtime-build. Honor LOOP_RUNTIME_BUILD_CONTEXT override for
 			// prod chaos drills.
-			buildContext := os.Getenv("LOOPRUNTIME_BUILD_CONTEXT")
+			buildContext := os.Getenv("LOOP_RUNTIME_BUILD_CONTEXT")
 			if buildContext == "" {
-				buildContext = "k3d-loopruntime-build"
+				buildContext = "k3d-loop-runtime-build"
 			}
 
 			// Get a build node name.
@@ -628,7 +628,7 @@ var _ = Describe("Chaos Engineering", func() {
 		It("should recover both within 3 minutes", func() {
 			skipUnlessChaos()
 
-			apiDesired := deploymentReplicas("loopruntime-system", "loopruntime-api")
+			apiDesired := deploymentReplicas("loop-runtime-system", "loop-runtime-api")
 			Expect(apiDesired).To(BeNumerically(">=", 1))
 
 			// Kill ONE API pod (not all) and controller. With multi-replica
@@ -636,13 +636,13 @@ var _ = Describe("Chaos Engineering", func() {
 			// intent: "control plane recovers under simultaneous component
 			// crashes". Killing 1 of N proves the deployment controller +
 			// scheduler + leader election all converge in parallel.
-			apiPod := runningPodName("loopruntime-system", "app=loopruntime-api")
+			apiPod := runningPodName("loop-runtime-system", "app=loop-runtime-api")
 			Expect(apiPod).NotTo(BeEmpty(), "no Running API pod to kill")
 
-			out1, err1 := kubectl("delete", "pod", "-n", "loopruntime-system",
+			out1, err1 := kubectl("delete", "pod", "-n", "loop-runtime-system",
 				apiPod, "--wait=false")
-			out2, err2 := kubectl("delete", "pod", "-n", "loopruntime-system",
-				"-l", "app.kubernetes.io/component=loopruntime-operator", "--wait=false")
+			out2, err2 := kubectl("delete", "pod", "-n", "loop-runtime-system",
+				"-l", "app.kubernetes.io/component=loop-runtime-operator", "--wait=false")
 
 			Expect(err1).NotTo(HaveOccurred(), "API kill failed: %s", out1)
 			Expect(err2).NotTo(HaveOccurred(), "controller kill failed: %s", out2)
@@ -652,12 +652,12 @@ var _ = Describe("Chaos Engineering", func() {
 			// Both must recover within 3 minutes.
 			start := time.Now()
 
-			err := waitForDeploymentReady("loopruntime-system", "loopruntime-api", apiDesired, 180*time.Second)
+			err := waitForDeploymentReady("loop-runtime-system", "loop-runtime-api", apiDesired, 180*time.Second)
 			Expect(err).NotTo(HaveOccurred(),
 				"API did not recover to %d ready replicas within 3min", apiDesired)
 
-			err = waitForPodReady("loopruntime-system",
-				"app.kubernetes.io/component=loopruntime-operator", 180*time.Second)
+			err = waitForPodReady("loop-runtime-system",
+				"app.kubernetes.io/component=loop-runtime-operator", 180*time.Second)
 			Expect(err).NotTo(HaveOccurred(), "controller did not recover within 3min")
 
 			recoveryTime := time.Since(start)
@@ -690,7 +690,7 @@ var _ = Describe("Chaos Engineering", func() {
 
 			// Cross-reference: full chaos test lives in
 			// cell_isolation_test.go::TestCellIsolation_K3dStop which
-			// performs actual `k3d cluster stop loopruntime-cell-0`. This
+			// performs actual `k3d cluster stop loop-runtime-cell-0`. This
 			// Ginkgo Context exists for chaos suite coverage tracking
 			// but delegates to the standalone Go test for execution.
 			//
@@ -725,7 +725,7 @@ var _ = Describe("Chaos Engineering", func() {
 			defer cleanup()
 
 			// During the chaos window, the API leader is killed. The
-			// loopruntime-api Deployment has 1+ replica per prod values, so
+			// loop-runtime-api Deployment has 1+ replica per prod values, so
 			// the workload should remain reachable via the surviving
 			// replica. In standalone (single replica), the kill +
 			// restart is observable as 502 for ~5s — acceptable for
@@ -746,10 +746,10 @@ var _ = Describe("Chaos Engineering", func() {
 
 	// ---------------------------------------------------------------
 	// Scenario 10: Random tenant pod kill (3.B.2)
-	// active-execution-plan §3.B.2 — kill 30% of pods in loopruntime-tn-*
+	// active-execution-plan §3.B.2 — kill 30% of pods in loop-runtime-tn-*
 	// namespaces. Validates KEDA re-scale + tenant SLO isolation.
 	// ---------------------------------------------------------------
-	Context("Random tenant pod kill (30% in loopruntime-tn-*)", func() {
+	Context("Random tenant pod kill (30% in loop-runtime-tn-*)", func() {
 		It("should respect tenant isolation and recover within 90s", func() {
 			skipUnlessChaos()
 
@@ -779,21 +779,21 @@ var _ = Describe("Chaos Engineering", func() {
 	// Scenario: distributed tracing survives chaos (observability invariant)
 	//
 	// Wires the livetest/chaos Tempo helpers (AssertSpanCoverage) into the
-	// LIVE chaos suite: during a pod-kill window, loopruntime-api spans must keep
+	// LIVE chaos suite: during a pod-kill window, loop-runtime-api spans must keep
 	// reaching Tempo — the tracing pipeline is resilient to pod churn.
 	// A chaos test that only checks health/SLO is blind to observability
 	// gaps; a silent trace outage during an incident is its own failure mode.
 	//
-	// Opt-in via LOOPRUNTIME_CHAOS_TRACE_ASSERT=1 because it requires Tempo
+	// Opt-in via LOOP_RUNTIME_CHAOS_TRACE_ASSERT=1 because it requires Tempo
 	// reachable: in-cluster (default DefaultTempoURL) or via a port-forward
-	// exposed through LOOPRUNTIME_TEMPO_URL. Existing LOOPRUNTIME_CHAOS_TEST runs without
+	// exposed through LOOP_RUNTIME_TEMPO_URL. Existing LOOP_RUNTIME_CHAOS_TEST runs without
 	// the flag SKIP it, so this is additive — it cannot regress the suite.
 	// ---------------------------------------------------------------
 	Context("distributed tracing during chaos", func() {
-		It("should keep delivering loopruntime-api spans to Tempo through a pod-kill window", func() {
+		It("should keep delivering loop-runtime-api spans to Tempo through a pod-kill window", func() {
 			skipUnlessChaos()
-			if os.Getenv("LOOPRUNTIME_CHAOS_TRACE_ASSERT") != "1" {
-				Skip("set LOOPRUNTIME_CHAOS_TRACE_ASSERT=1 (and LOOPRUNTIME_TEMPO_URL if not in-cluster) to assert span coverage under chaos")
+			if os.Getenv("LOOP_RUNTIME_CHAOS_TRACE_ASSERT") != "1" {
+				Skip("set LOOP_RUNTIME_CHAOS_TRACE_ASSERT=1 (and LOOP_RUNTIME_TEMPO_URL if not in-cluster) to assert span coverage under chaos")
 			}
 
 			cleanup := applyChaos("pod-kill-api-leader.yaml")
@@ -807,15 +807,15 @@ var _ = Describe("Chaos Engineering", func() {
 			defer cancel()
 
 			q := livechaos.TempoTraceQuery{
-				TempoURL:  os.Getenv("LOOPRUNTIME_TEMPO_URL"), // empty -> DefaultTempoURL (in-cluster)
-				Service:   "loopruntime-api",
-				Operation: os.Getenv("LOOPRUNTIME_CHAOS_TRACE_OP"), // empty -> any loopruntime-api span
+				TempoURL:  os.Getenv("LOOP_RUNTIME_TEMPO_URL"), // empty -> DefaultTempoURL (in-cluster)
+				Service:   "loop-runtime-api",
+				Operation: os.Getenv("LOOP_RUNTIME_CHAOS_TRACE_OP"), // empty -> any loop-runtime-api span
 				Window:    2 * time.Minute,
 			}
 			count, err := livechaos.AssertSpanCoverage(ctx, q, 1)
 			Expect(err).NotTo(HaveOccurred(),
-				"loopruntime-api spans must keep reaching Tempo during pod-kill chaos (tracing pipeline resilience)")
-			GinkgoWriter.Printf("✓ tracing resilient under chaos: %d loopruntime-api trace(s) in Tempo\n", count)
+				"loop-runtime-api spans must keep reaching Tempo during pod-kill chaos (tracing pipeline resilience)")
+			GinkgoWriter.Printf("✓ tracing resilient under chaos: %d loop-runtime-api trace(s) in Tempo\n", count)
 		})
 	})
 })

@@ -21,7 +21,7 @@ import (
 //
 // Migration 000062 made every tenant table fail-closed: a statement sees only
 // the rows of the tenant named by `app.tenant_id`, and the request role
-// (loopruntime_api) holds no other policy. Until this existed nothing on the request
+// (loop_runtime_api) holds no other policy. Until this existed nothing on the request
 // path set the variable outside the environment lock, so an authenticated
 // request read nothing from any tenant table and every write to one was
 // refused — the membership lookup found no team, and reads returned empty

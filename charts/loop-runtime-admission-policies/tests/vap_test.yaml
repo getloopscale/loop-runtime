@@ -1,0 +1,120 @@
+# helm-unittest: ValidatingAdmissionPolicy rendering for loop-runtime-admission-policies.
+# Plan T1.5 + T1.2. Unified to .Values.vaps.* schema (helm-chart-drift-alignment-plan T2.1).
+
+suite: VAP rendering
+templates:
+  - vap-disallow-latest-tag.yaml
+  - vap-restrict-registries.yaml
+  - vap-require-resource-limits.yaml
+  - vap-require-image-signature.yaml
+  - vap-protect-platform-networkpolicies.yaml
+  - vap-argocd-managed-by.yaml
+  - vap-tenant-namespace.yaml
+
+tests:
+  - it: disallow-latest-tag renders as ValidatingAdmissionPolicy
+    template: vap-disallow-latest-tag.yaml
+    set:
+      vaps.disallowLatestTag: true
+    asserts:
+      - hasDocuments:
+          count: 2  # Policy + Binding
+      - isAPIVersion:
+          of: admissionregistration.k8s.io/v1
+
+  - it: restrict-registries renders both Policy and Binding
+    template: vap-restrict-registries.yaml
+    set:
+      vaps.restrictRegistries: true
+      registries.docrPrefix: "registry.digitalocean.com/loop-runtime-system/"
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  # Harbor was retired (docs/decisions.md, "Retire Harbor"): the default allowlist
+  # admits the configured registry prefix and nothing that points at Harbor.
+  - it: restrict-registries admits no Harbor prefix by default
+    template: vap-restrict-registries.yaml
+    set:
+      vaps.restrictRegistries: true
+    documentIndex: 0
+    asserts:
+      - matchRegex:
+          path: spec.validations[0].expression
+          pattern: 'startsWith\("registry\.digitalocean\.com/loop-runtime-system/"\)'
+      - notMatchRegex:
+          path: spec.validations[0].expression
+          pattern: '(?i)harbor'
+      - notMatchRegex:
+          path: spec.validations[1].expression
+          pattern: '(?i)harbor'
+      - notMatchRegex:
+          path: spec.validations[2].expression
+          pattern: '(?i)harbor'
+
+  - it: restrict-registries refuses a harborPrefix value
+    template: vap-restrict-registries.yaml
+    set:
+      vaps.restrictRegistries: true
+      registries.harborPrefix: "harbor.example.com/loop-runtime-platform/"
+    asserts:
+      - failedTemplate:
+          errorPattern: "harborPrefix"
+
+  - it: require-resource-limits renders when enabled
+    template: vap-require-resource-limits.yaml
+    set:
+      vaps.requireResourceLimits: true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: argocd-managed-by renders when enabled
+    template: vap-argocd-managed-by.yaml
+    set:
+      vaps.argocdManagedBy: true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: protect-platform-networkpolicies has matchConditions (B33 regression guard)
+    template: vap-protect-platform-networkpolicies.yaml
+    set:
+      vaps.protectPlatformNetworkpolicies: true
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ValidatingAdmissionPolicy
+      - exists:
+          path: spec.matchConditions
+      - contains:
+          path: spec.matchConditions
+          content:
+            name: exclude-system-actors
+          any: true
+      - matchRegex:
+          path: spec.matchConditions[0].expression
+          pattern: "startsWith\\('system:serviceaccount:kube-system:'\\)"
+
+  - it: require-image-signature renders when enabled
+    template: vap-require-image-signature.yaml
+    set:
+      vaps.requireImageSignature: true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: tenant-namespace exempts the platform's own controllers (B-095)
+    template: vap-tenant-namespace.yaml
+    set:
+      vaps.tenantNamespace: true
+    documentSelector:
+      path: kind
+      value: ValidatingAdmissionPolicy
+    asserts:
+      - contains:
+          path: spec.matchConditions
+          content:
+            name: exclude-system-actors
+          any: true
+

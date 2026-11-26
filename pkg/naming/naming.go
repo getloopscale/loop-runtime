@@ -97,14 +97,14 @@ func composeName(resourceKind, format string, parts ...namePart) (string, error)
 }
 
 // TenantNamespace returns the namespace name for a tenant.
-// tenantName is the K8s CRD resource name (e.g., "tn-loopruntime").
-// Format: "loopruntime-{tenantName}" — maintains compatibility with deployed resources.
+// tenantName is the K8s CRD resource name (e.g., "tn-loop-runtime").
+// Format: "loop-runtime-{tenantName}" — maintains compatibility with deployed resources.
 func TenantNamespace(tenantName string) (string, error) {
-	return composeName("tenant namespace", "loopruntime-%s", namePart{"tenant name", tenantName})
+	return composeName("tenant namespace", "loop-runtime-%s", namePart{"tenant name", tenantName})
 }
 
 // Namespace is the CANONICAL helper for ALL LoopRuntime workload namespaces.
-// Format: "loopruntime-{tenant}-{project}-{env}". One formula for every env
+// Format: "loop-runtime-{tenant}-{project}-{env}". One formula for every env
 // type (production, staging, preview-pr-N, ...).
 //
 // The (tenant, project, env) triple is the real isolation boundary
@@ -112,7 +112,7 @@ func TenantNamespace(tenantName string) (string, error) {
 // canonical refactor 2026-06-07 (verbatim "TUDO DEVERIA esta separado
 // por projeto"): no special-case branches for previews vs envs.
 func Namespace(tenantSlug, projectSlug, envName string) (string, error) {
-	return composeName("namespace", "loopruntime-%s-%s-%s", namePart{"tenant slug", tenantSlug}, namePart{"project slug", projectSlug}, namePart{"env name", envName})
+	return composeName("namespace", "loop-runtime-%s-%s-%s", namePart{"tenant slug", tenantSlug}, namePart{"project slug", projectSlug}, namePart{"env name", envName})
 }
 
 // IsPreviewEnv reports whether an env name is a preview-flavor environment.
@@ -125,7 +125,7 @@ func Namespace(tenantSlug, projectSlug, envName string) (string, error) {
 // (container_delivery, promotion, rollback) can detect previews
 // without importing services.
 //
-// Red Team loopruntime-cloud#41 absorption (2026-06-27): the original predicate
+// Red Team loop-console#41 absorption (2026-06-27): the original predicate
 // only matched the canonical `preview-pr-N` namespace pattern emitted by
 // the PreviewService. PRODUCTION data (`loopzerokit-example` / `preview`)
 // has env_targets with the literal "preview" environment name from the
@@ -242,7 +242,7 @@ const (
 
 	// ManagedByValue is the canonical value for the LabelManagedBy key,
 	// stable across all LoopRuntime-owned resources.
-	ManagedByValue = "loopruntime"
+	ManagedByValue = "loop-runtime"
 )
 
 // StandardLabels is the typed representation of the four canonical LoopRuntime
@@ -283,7 +283,7 @@ func (l StandardLabels) AsMap() map[string]string {
 //
 // **Supply-chain note (CHG-2026-04-29-DOGFOOD iter 8)**: callers that
 // render Pod manifests MUST prefer `ImageDigestRef` when the build pipeline
-// emitted a sha256 digest. The `loopruntime-require-image-signature` VAP rejects
+// emitted a sha256 digest. The `loop-runtime-require-image-signature` VAP rejects
 // any container image reference using a mutable tag — using ImageTag here
 // is correct only for: (a) build-time pull/push (BuildKit), (b) registry
 // path debugging, (c) fallback when digest is not available. For deploy
@@ -295,7 +295,7 @@ func ImageTag(registry, tenant, project, app, commitSHA string) string {
 // ImageDigestRef returns the container image reference pinned to a
 // cryptographic digest. Format: "{registry}/{tenant}/{project}-{app}@sha256:..."
 //
-// This is the form REQUIRED by the supply-chain VAP `loopruntime-require-image-signature`
+// This is the form REQUIRED by the supply-chain VAP `loop-runtime-require-image-signature`
 // (admission denies mutable tag references in tenant namespaces). The build
 // pipeline captures the digest in cosign's "digest" output parameter (see
 // api/internal/services/build_reconcile_complete.go::enrichAppReleasesWithAttestation);

@@ -2,7 +2,7 @@ apiVersion: v2
 name: smoke-test
 description: |
   LoopRuntime platform smoke test — runs as a Job after every Helmfile sync to validate
-  end-to-end connectivity (loopruntime-api health, gitea API, argocd login).
+  end-to-end connectivity (loop-runtime-api health, gitea API, argocd login).
   CHG-2026-04-28-LAYERED-BOOTSTRAP / Phase 4.
 type: application
 version: 0.1.0

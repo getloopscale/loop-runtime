@@ -1,0 +1,63 @@
+# Plan 2026-06-04-dev-public-docr-fix-forward T2.2.
+# Minimal override for env dev-public.
+# Chart defaults canonical (DOCR + dev tag + IfNotPresent + HA).
+
+# Platform images come from Amazon ECR, pinned by the commit each was built from (#435):
+# the registry and the tag are `platformImages` in environments/dev-public.yaml, and a
+# missing entry fails the render instead of falling back to a moving tag. No pull
+# secret: the node's kubelet credential provider authenticates, as on EKS.
+global:
+  registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" }}
+  imagePullSecrets: []
+
+image:
+  tag: {{ required "platformImages.tags.loop-runtime-app-operator is not set" (index .Values.platformImages.tags "loop-runtime-app-operator") | quote }}
+  pullPolicy: IfNotPresent
+
+config:
+  # Chart requires explicit baseDomain (no env-helmfile auto-injection).
+  baseDomain: "{{ .Values.domain }}"
+  # Route hostnames here are the internal SNI (baseDomain); the probe asks for the
+  # public URL users reach instead (#447).
+  routeProbePublicDomain: {{ .Values.publicAppDomain | quote }}
+
+# dev-public NetworkPolicy override: gitea is in loop-runtime-system ns (not the
+# chart-default `gitea` ns). Same fix as loop-runtime-tenant-operator. Without
+# this, operator egress to gitea API is blocked → reconcile loops fail.
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8443
+  extraEgress:
+    - ports:
+        - protocol: TCP
+          port: 6443
+        - protocol: TCP
+          port: 443
+    - ports:
+        - protocol: TCP
+          port: 3000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loop-runtime-system
+    - ports:
+        - protocol: TCP
+          port: 8080
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+    - ports:
+        - protocol: TCP
+          port: 9000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loop-runtime-system

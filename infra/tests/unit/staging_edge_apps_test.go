@@ -50,10 +50,10 @@ const fakeELB = `case "$1 $2" in
   "elbv2 describe-tags")
     cat <<'JSON'
 {"TagDescriptions":[
- {"ResourceArn":"arn-core","Tags":[{"Key":"ingress.k8s.aws/stack","Value":"traefik/traefik-edge"},{"Key":"elbv2.k8s.aws/cluster","Value":"loopruntime-staging-core"}]},
- {"ResourceArn":"arn-cell-0","Tags":[{"Key":"ingress.k8s.aws/stack","Value":"traefik/traefik-edge"},{"Key":"elbv2.k8s.aws/cluster","Value":"loopruntime-staging-cell-0"}]},
- {"ResourceArn":"arn-cell-1","Tags":[{"Key":"ingress.k8s.aws/stack","Value":"traefik/traefik-edge"},{"Key":"elbv2.k8s.aws/cluster","Value":"loopruntime-staging-cell-1"}]},
- {"ResourceArn":"arn-other","Tags":[{"Key":"elbv2.k8s.aws/cluster","Value":"loopruntime-staging-cell-0"}]}]}
+ {"ResourceArn":"arn-core","Tags":[{"Key":"ingress.k8s.aws/stack","Value":"traefik/traefik-edge"},{"Key":"elbv2.k8s.aws/cluster","Value":"loop-runtime-staging-core"}]},
+ {"ResourceArn":"arn-cell-0","Tags":[{"Key":"ingress.k8s.aws/stack","Value":"traefik/traefik-edge"},{"Key":"elbv2.k8s.aws/cluster","Value":"loop-runtime-staging-cell-0"}]},
+ {"ResourceArn":"arn-cell-1","Tags":[{"Key":"ingress.k8s.aws/stack","Value":"traefik/traefik-edge"},{"Key":"elbv2.k8s.aws/cluster","Value":"loop-runtime-staging-cell-1"}]},
+ {"ResourceArn":"arn-other","Tags":[{"Key":"elbv2.k8s.aws/cluster","Value":"loop-runtime-staging-cell-0"}]}]}
 JSON
     ;;
   "cloudfront-keyvaluestore describe-key-value-store") echo "etag-1" ;;
@@ -64,7 +64,7 @@ func TestTheCellsLoadBalancersAreWrittenAsTheirOrigins(t *testing.T) {
 	bin, log := t.TempDir(), filepath.Join(t.TempDir(), "calls")
 	fakeBin(t, bin, "aws", log, fakeELB)
 
-	out, err := runEdgeScript(t, "apps-origins.sh", bin, "EDGE_KVS_ARN=arn:kvs", "EDGE_CLUSTER_PREFIX=loopruntime-staging-")
+	out, err := runEdgeScript(t, "apps-origins.sh", bin, "EDGE_KVS_ARN=arn:kvs", "EDGE_CLUSTER_PREFIX=loop-runtime-staging-")
 	if err != nil {
 		t.Fatalf("apps-origins.sh: %v\n%s", err, out)
 	}
@@ -96,7 +96,7 @@ func TestNoCellLoadBalancerFailsTheOrigins(t *testing.T) {
   "elbv2 describe-load-balancers") echo "arn-core" ;;
   "elbv2 describe-tags") echo '{"TagDescriptions":[]}' ;;
 esac`)
-	if out, err := runEdgeScript(t, "apps-origins.sh", bin, "EDGE_KVS_ARN=arn:kvs", "EDGE_CLUSTER_PREFIX=loopruntime-staging-"); err == nil {
+	if out, err := runEdgeScript(t, "apps-origins.sh", bin, "EDGE_KVS_ARN=arn:kvs", "EDGE_CLUSTER_PREFIX=loop-runtime-staging-"); err == nil {
 		t.Fatalf("apps-origins.sh succeeded with no cell load balancer:\n%s", out)
 	}
 }
@@ -122,7 +122,7 @@ func TestTheWildcardCertificateIsRequestedOverDNSAndRestartsCaddyWhenItChanges(t
 		t.Errorf("lego call %q does not put its flags after run", call)
 	}
 	for _, want := range []string{"--dns hostinger", "--domains *.apps.example.com", "--accept-tos", "--email ops@example.com",
-		"--path " + dir, "--deploy-hook systemctl try-restart loopruntime-edge.service"} {
+		"--path " + dir, "--deploy-hook systemctl try-restart loop-runtime-edge.service"} {
 		if !strings.Contains(call, want) {
 			t.Errorf("lego call %q lacks %q", call, want)
 		}
@@ -167,22 +167,22 @@ func TestCaddyServesTheAppsWithTheWildcardCertificateAndTheViewersHost(t *testin
 }
 
 func TestTheStagingAPIPublishesAppsUnderTheAppsDomain(t *testing.T) {
-	values := readRepoFile(t, "infra", "helmfile", "values", "staging", "loopruntime-api.yaml.gotmpl")
-	if !regexp.MustCompile(`(?m)^\s+loopruntimePublicDomain: "apps\.staging\.getloopscale\.com"$`).MatchString(values) {
-		t.Error("the staging API does not set loopruntimePublicDomain to apps.staging.getloopscale.com")
+	values := readRepoFile(t, "infra", "helmfile", "values", "staging", "loop-runtime-api.yaml.gotmpl")
+	if !regexp.MustCompile(`(?m)^\s+loopRuntimePublicDomain: "apps\.staging\.getloopscale\.com"$`).MatchString(values) {
+		t.Error("the staging API does not set loopRuntimePublicDomain to apps.staging.getloopscale.com")
 	}
 }
 
 func TestTheEdgeUnitHandsCaddyTheWildcardCertificateAsACredential(t *testing.T) {
-	unit := readRepoFile(t, "infra", "staging", "systemd", "loopruntime-edge.service")
+	unit := readRepoFile(t, "infra", "staging", "systemd", "loop-runtime-edge.service")
 	for _, want := range []string{"LoadCredential=apps.crt:", "LoadCredential=apps.key:"} {
 		if !strings.Contains(unit, want) {
-			t.Errorf("loopruntime-edge.service lacks %s", want)
+			t.Errorf("loop-runtime-edge.service lacks %s", want)
 		}
 	}
-	timer := readRepoFile(t, "infra", "staging", "systemd", "loopruntime-edge-certificate.timer")
+	timer := readRepoFile(t, "infra", "staging", "systemd", "loop-runtime-edge-certificate.timer")
 	if !strings.Contains(timer, "OnCalendar=") {
-		t.Error("loopruntime-edge-certificate.timer has no schedule")
+		t.Error("loop-runtime-edge-certificate.timer has no schedule")
 	}
 }
 
@@ -204,7 +204,7 @@ func TestTheCellsLoadBalancersAreWrittenForCaddyToo(t *testing.T) {
 	fakeBin(t, bin, "aws", log, fakeELB)
 	origins := filepath.Join(t.TempDir(), "cell-origins")
 
-	out, err := runEdgeScript(t, "apps-origins.sh", bin, "EDGE_KVS_ARN=arn:kvs", "EDGE_CLUSTER_PREFIX=loopruntime-staging-",
+	out, err := runEdgeScript(t, "apps-origins.sh", bin, "EDGE_KVS_ARN=arn:kvs", "EDGE_CLUSTER_PREFIX=loop-runtime-staging-",
 		"EDGE_ORIGINS_FILE="+origins)
 	if err != nil {
 		t.Fatalf("apps-origins.sh: %v\n%s", err, out)
@@ -273,7 +273,7 @@ func TestACustomDomainIsSentToTheCellTheLookupNames(t *testing.T) {
 	for what, want := range map[string]string{
 		"issues its certificate on demand":     "on_demand",
 		"asks which cell serves the host":      "uri /ask?domain={host}",
-		"takes the cell from the answer":       "copy_headers X-LoopRuntime-Cell",
+		"takes the cell from the answer":       "copy_headers X-Loop-Runtime-Cell",
 		"reads the cells' load balancers":      "import {$EDGE_CELL_ORIGINS}",
 		"addresses the cell's load balancer":   "header_up Host {cell_origin}",
 		"keeps the viewer's host for the cell": "header_up X-Forwarded-Host {host}",
@@ -289,9 +289,9 @@ func TestACustomDomainIsSentToTheCellTheLookupNames(t *testing.T) {
 func TestTheEdgeTaskHandsCaddyTheRouteTokenAsACredential(t *testing.T) {
 	task := stagingEdgeTask(t)
 	for what, want := range map[string]string{
-		"reads the token from the API's secret": "get secret loopruntime-edge-route-token",
-		"keeps it readable by root only":        "install -m 0600 /dev/stdin /etc/loopruntime-edge/route-token",
-		"writes the cells' origins for Caddy":   "EDGE_ORIGINS_FILE=/etc/loopruntime-edge/cell-origins",
+		"reads the token from the API's secret": "get secret loop-runtime-edge-route-token",
+		"keeps it readable by root only":        "install -m 0600 /dev/stdin /etc/loop-runtime-edge/route-token",
+		"writes the cells' origins for Caddy":   "EDGE_ORIGINS_FILE=/etc/loop-runtime-edge/cell-origins",
 	} {
 		if !strings.Contains(task, want) {
 			t.Errorf("the edge task %s: no %q", what, want)
@@ -300,11 +300,11 @@ func TestTheEdgeTaskHandsCaddyTheRouteTokenAsACredential(t *testing.T) {
 	if regexp.MustCompile(`(?m)^\s*EDGE_ROUTE_TOKEN=`).MatchString(task) {
 		t.Error("the edge task writes the route token into edge.env, which is world readable")
 	}
-	unit, err := os.ReadFile(filepath.Join(repoRoot(), "infra/staging/systemd/loopruntime-edge.service"))
+	unit, err := os.ReadFile(filepath.Join(repoRoot(), "infra/staging/systemd/loop-runtime-edge.service"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(unit), "LoadCredential=route-token:/etc/loopruntime-edge/route-token") {
+	if !strings.Contains(string(unit), "LoadCredential=route-token:/etc/loop-runtime-edge/route-token") {
 		t.Error("the edge unit does not load the route token as a credential")
 	}
 }
@@ -312,7 +312,7 @@ func TestTheEdgeTaskHandsCaddyTheRouteTokenAsACredential(t *testing.T) {
 // A plan limit refusal names where the plan is changed. Without an address the API falls
 // back to the console's own path, which a person at the CLI cannot open.
 func TestTheStagingAPIPointsPlanLimitRefusalsAtTheConsolesBillingPage(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(repoRoot(), "infra/helmfile/values/staging/loopruntime-api.yaml.gotmpl"))
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "infra/helmfile/values/staging/loop-runtime-api.yaml.gotmpl"))
 	if err != nil {
 		t.Fatal(err)
 	}

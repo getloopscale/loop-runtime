@@ -50,7 +50,7 @@ func uploadWithReservedEnvKey(t *testing.T, h *SourceHandler) *httptest.Response
 // the process environment says, and warning only when the composition root
 // passes EnvBlocklistWarn.
 func TestUploadEnforcesTheReservedEnvBlocklistUnlessConfiguredToWarn(t *testing.T) {
-	t.Setenv("LOOPRUNTIME_ENV_BLOCKLIST_MODE", "warn")
+	t.Setenv("LOOP_RUNTIME_ENV_BLOCKLIST_MODE", "warn")
 
 	t.Run("default handler refuses", func(t *testing.T) {
 		store := &countingStore{}

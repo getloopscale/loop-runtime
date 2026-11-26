@@ -29,11 +29,11 @@ import (
 	"github.com/getloopscale/loop-runtime/operators/internal/metrics"
 )
 
-var tracer = otel.Tracer("loopruntime-operator")
+var tracer = otel.Tracer("loop-runtime-operator")
 
 // StartReconcileSpan creates the root reconcile span with standard attributes.
 func StartReconcileSpan(ctx context.Context, controller, name, namespace string) (context.Context, trace.Span) {
-	ctx, span := tracer.Start(ctx, "loopruntime.operator."+controller+".reconcile",
+	ctx, span := tracer.Start(ctx, "loop-runtime.operator."+controller+".reconcile",
 		trace.WithAttributes(
 			attribute.String("k8s.object.name", name),
 			attribute.String("k8s.namespace", namespace),

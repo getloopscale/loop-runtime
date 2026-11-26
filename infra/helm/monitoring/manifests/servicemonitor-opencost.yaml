@@ -11,14 +11,14 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: loopruntime-opencost
+  name: loop-runtime-opencost
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   namespaceSelector:
     matchNames:
-      - loopruntime-system
+      - loop-runtime-system
   selector:
     matchLabels:
       app.kubernetes.io/name: opencost

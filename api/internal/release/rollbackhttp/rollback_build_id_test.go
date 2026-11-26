@@ -51,7 +51,7 @@ func (f *capturingRollbackService) Rollback(_ context.Context, in RollbackInput)
 }
 
 func newRollbackTestServer(svc RollbackService, lookup RollbackReleaseLookup, projects RollbackProjectStore) *httptest.Server {
-	h := NewRollbackHandler(projects, svc, "loopruntime.local")
+	h := NewRollbackHandler(projects, svc, "loop-runtime.local")
 	if lookup != nil {
 		h.WithReleaseLookup(lookup)
 	}

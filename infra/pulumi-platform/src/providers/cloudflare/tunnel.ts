@@ -53,8 +53,8 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
   const cfConfig = new pulumi.Config();
   const tunnelSecret = cfConfig.requireSecret("tunnelSecret");
 
-  const tunnelName = `loopruntime-${config.environment}`;
-  const tunnel = new cloudflare.ZeroTrustTunnelCloudflared(`loopruntime-tunnel-${config.environment}`, {
+  const tunnelName = `loop-runtime-${config.environment}`;
+  const tunnel = new cloudflare.ZeroTrustTunnelCloudflared(`loop-runtime-tunnel-${config.environment}`, {
     accountId: config.accountId,
     name: tunnelName,
     tunnelSecret: tunnelSecret,
@@ -70,7 +70,7 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
   // MEET-2026-04-05-033: Changed catch-all from http_status:404 to Traefik
   // to enable custom domain traffic routing.
   new cloudflare.ZeroTrustTunnelCloudflaredConfig(
-    "loopruntime-tunnel-config",
+    "loop-runtime-tunnel-config",
     {
       accountId: config.accountId,
       tunnelId: tunnel.id,
@@ -108,7 +108,7 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
   // No separate cname.{baseDomain} record needed — CF rejects explicit CNAME
   // when a wildcard already exists for the same host.
   // Custom domains: users CNAME to cname.{baseDomain} which resolves via wildcard.
-  new cloudflare.DnsRecord("loopruntime-tunnel-dns", {
+  new cloudflare.DnsRecord("loop-runtime-tunnel-dns", {
     zoneId: config.zoneId,
     name: `*.${config.baseDomain}`,
     type: "CNAME",

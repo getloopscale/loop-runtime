@@ -15,7 +15,7 @@ import (
 
 func TestStartReconcileSpan_ReturnsContextAndSpan(t *testing.T) {
 	ctx := context.Background()
-	ctx, span := StartReconcileSpan(ctx, "tenant", "my-tenant", "loopruntime-system")
+	ctx, span := StartReconcileSpan(ctx, "tenant", "my-tenant", "loop-runtime-system")
 	defer span.End()
 
 	if ctx == nil {

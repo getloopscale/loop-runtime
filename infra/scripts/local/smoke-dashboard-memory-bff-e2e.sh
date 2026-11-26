@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # smoke-dashboard-memory-bff-e2e.sh — observable proof of Dashboard JWT →
-# Go BFF → server-side loopruntime_live_* mint → TheMemory chain.
+# Go BFF → server-side loop_runtime_live_* mint → TheMemory chain.
 #
 # Per plan dashboard-memory-bff-server-side-key-vault v1.2 § T5.1.
 # Companion to smoke-themory-e2e.sh — that script tested the API-key path;
@@ -8,11 +8,11 @@
 #
 # Sequence (6 steps + cleanup trap):
 #   1. Pre-flight — port-forwards alive (13002 + 14433)
-#   2. Kratos API login (test@loopruntime.dev / loopruntime-dev-password) → session_token + cookie
+#   2. Kratos API login (test@loop-runtime.dev / loop-runtime-dev-password) → session_token + cookie
 #   3. POST /v1/auth/session/token with cookie → cloud JWT
 #   4. POST /v1/remember to TheMemory direct → memoryId (sanity baseline)
 #   5. GET /v1/dashboard/memory/list via Go BFF + Bearer JWT → assert 200 + payload
-#      SECURITY GATE: response body MUST NOT contain "loopruntime_live_" substring
+#      SECURITY GATE: response body MUST NOT contain "loop_runtime_live_" substring
 #   6. DELETE /v1/dashboard/memory/forget/{id} via Go BFF → assert 204
 #      Re-list → assert memoryId absent
 #
@@ -24,8 +24,8 @@ set -euo pipefail
 readonly THEMORY_URL="${THEMORY_URL:-http://localhost:8080}"
 readonly CLOUD_URL="${CLOUD_URL:-http://localhost:13002}"
 readonly KRATOS_URL="${KRATOS_URL:-http://localhost:14433}"
-readonly DEV_EMAIL="${DEV_EMAIL:-test@loopruntime.dev}"
-readonly DEV_PASSWORD="${DEV_PASSWORD:-loopruntime-dev-password}"
+readonly DEV_EMAIL="${DEV_EMAIL:-test@loop-runtime.dev}"
+readonly DEV_PASSWORD="${DEV_PASSWORD:-loop-runtime-dev-password}"
 readonly CURL_TIMEOUT="${CURL_TIMEOUT:-10}"
 
 readonly C_RED='\033[0;31m'
@@ -62,9 +62,9 @@ ensure_jq_present() {
 ensure_port_forwards() {
   log_step 1 "Pre-flight — port-forwards alive"
   curl -fsS "${CLOUD_URL}/v1/health" --max-time 3 >/dev/null 2>&1 \
-    || log_fatal "Cloud proxy not reachable at $CLOUD_URL (run: kubectl -n loopruntime-system port-forward deployment/loopruntime-cloud 13002:13002 &)"
+    || log_fatal "Cloud proxy not reachable at $CLOUD_URL (run: kubectl -n loop-runtime-system port-forward deployment/loop-console 13002:13002 &)"
   curl -fsS "${KRATOS_URL}/health/alive" --max-time 3 >/dev/null 2>&1 \
-    || log_fatal "Kratos not reachable at $KRATOS_URL (run: kubectl -n loopruntime-auth port-forward svc/ory-kratos-public 14433:80 &)"
+    || log_fatal "Kratos not reachable at $KRATOS_URL (run: kubectl -n loop-runtime-auth port-forward svc/ory-kratos-public 14433:80 &)"
   log_info "Port-forwards OK"
 }
 
@@ -142,11 +142,11 @@ list_via_bff_with_security_gate() {
     -H "Authorization: Bearer ${JWT}" \
     --max-time "$CURL_TIMEOUT" 2>&1) \
     || log_fatal "BFF list failed: $resp"
-  # SECURITY GATE: response body MUST NOT contain "loopruntime_live_" substring
-  if echo "$resp" | grep -q "loopruntime_live_"; then
-    log_fatal "SECURITY GATE VIOLATION: BFF response contains loopruntime_live_ substring"
+  # SECURITY GATE: response body MUST NOT contain "loop_runtime_live_" substring
+  if echo "$resp" | grep -q "loop_runtime_live_"; then
+    log_fatal "SECURITY GATE VIOLATION: BFF response contains loop_runtime_live_ substring"
   fi
-  log_info "step 5 OK — list returned without loopruntime_live_ leak"
+  log_info "step 5 OK — list returned without loop_runtime_live_ leak"
 }
 
 forget_via_bff() {

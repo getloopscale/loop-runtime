@@ -203,7 +203,7 @@ type RecordEnvironmentTargetReplicasReadyParams struct {
 // observation columns the dashboard badge reads, so it never contends with
 // the release pointers the env lock guards. Zero rows affected means the
 // (tenant, project, environment) has no target row — the caller reports it.
-// Cross-tenant by design: runs on the background (loopruntime_worker) pool.
+// Cross-tenant by design: runs on the background (loop_runtime_worker) pool.
 func (q *Queries) RecordEnvironmentTargetReplicasReady(ctx context.Context, db DBTX, arg RecordEnvironmentTargetReplicasReadyParams) (int64, error) {
 	result, err := db.Exec(ctx, recordEnvironmentTargetReplicasReady,
 		arg.LastReplicasReadyValue,

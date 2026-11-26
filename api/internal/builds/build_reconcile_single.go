@@ -33,9 +33,9 @@ import (
 // that submitted the build, and for no other.
 func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build) {
 	ctx = dbtx.WithTenantScope(ctx, build.TenantID)
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.build.reconcile",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.build.reconcile",
 		trace.WithAttributes(
-			attribute.String("loopruntime.build_id", build.ID),
+			attribute.String("loop-runtime.build_id", build.ID),
 		))
 	defer span.End()
 

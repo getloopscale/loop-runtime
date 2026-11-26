@@ -28,18 +28,18 @@ import (
 //
 // Run:
 //
-//	LOOPRUNTIME_CAPACITY=1 LOOPRUNTIME_GITEA_URL=http://.../ \
-//	LOOPRUNTIME_GITEA_USER=loopruntime-admin LOOPRUNTIME_GITEA_PASS=... \
+//	LOOP_RUNTIME_CAPACITY=1 LOOP_RUNTIME_GITEA_URL=http://.../ \
+//	LOOP_RUNTIME_GITEA_USER=loop-runtime-admin LOOP_RUNTIME_GITEA_PASS=... \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityGiteaAuth -v \
 //	  -args -rps=100 -duration=60s -workers=50
 func TestCapacityGiteaAuth(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	giteaURL := os.Getenv("LOOPRUNTIME_GITEA_URL")
-	user := os.Getenv("LOOPRUNTIME_GITEA_USER")
-	pass := os.Getenv("LOOPRUNTIME_GITEA_PASS")
+	giteaURL := os.Getenv("LOOP_RUNTIME_GITEA_URL")
+	user := os.Getenv("LOOP_RUNTIME_GITEA_USER")
+	pass := os.Getenv("LOOP_RUNTIME_GITEA_PASS")
 	if giteaURL == "" || user == "" || pass == "" {
-		t.Fatal("LOOPRUNTIME_GITEA_URL, LOOPRUNTIME_GITEA_USER, LOOPRUNTIME_GITEA_PASS required")
+		t.Fatal("LOOP_RUNTIME_GITEA_URL, LOOP_RUNTIME_GITEA_USER, LOOP_RUNTIME_GITEA_PASS required")
 	}
 
 	cfg := NewConfig("gitea-auth")

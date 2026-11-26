@@ -68,7 +68,7 @@ func TestStagingTraefikWaitsForTheLoadBalancerController(t *testing.T) {
 // Where the controller is not installed, Traefik must not wait for it: helmfile
 // refuses a release that needs one it does not have.
 func TestDevPublicTraefikDoesNotWaitForAControllerItLacks(t *testing.T) {
-	needs := builtNeeds(t, "cell.helmfile.yaml.gotmpl", "dev-public", "LOOPRUNTIME_CELL_CONTEXT=cell-0")
+	needs := builtNeeds(t, "cell.helmfile.yaml.gotmpl", "dev-public", "LOOP_RUNTIME_CELL_CONTEXT=cell-0")
 
 	if slices.Contains(needs["traefik/traefik"], albController) {
 		t.Errorf("traefik needs %v on dev-public, which installs no %s", needs["traefik/traefik"], albController)

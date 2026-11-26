@@ -210,7 +210,7 @@ type CommitStatus struct {
 	State       string // "pending", "success", "failure", "error"
 	TargetURL   string // URL to LoopRuntime deploy/logs
 	Description string // Short description (max 140 chars)
-	Context     string // "loopruntime/deploy" or "loopruntime/preview"
+	Context     string // "loop-runtime/deploy" or "loop-runtime/preview"
 }
 
 // SetCommitStatus updates the commit status on GitHub.

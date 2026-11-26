@@ -29,7 +29,7 @@
       "targetBlank": false,
       "title": "Back to Home",
       "type": "link",
-      "url": "/d/loopruntime-home"
+      "url": "/d/loop-runtime-home"
     }
   ],
   "panels": [
@@ -101,7 +101,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "count(loopruntime_cfkv_drift_detected{tenant=~\"$tenant\", env=~\"$env\"} == 1) or vector(0)",
+          "expr": "count(loop_runtime_cfkv_drift_detected{tenant=~\"$tenant\", env=~\"$env\"} == 1) or vector(0)",
           "legendFormat": "Active Drifts",
           "refId": "A"
         }
@@ -155,7 +155,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopruntime_release_revision_mismatch_total{tenant=~\"$tenant\", env=~\"$env\"}) or vector(0)",
+          "expr": "sum(loop_runtime_release_revision_mismatch_total{tenant=~\"$tenant\", env=~\"$env\"}) or vector(0)",
           "legendFormat": "Divergences",
           "refId": "A"
         }
@@ -213,7 +213,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "count(loopruntime_release_revision_mismatch_total{tenant=~\"$tenant\", env=~\"$env\"}) or vector(0)",
+          "expr": "count(loop_runtime_release_revision_mismatch_total{tenant=~\"$tenant\", env=~\"$env\"}) or vector(0)",
           "legendFormat": "Mirror Failures",
           "refId": "A"
         }
@@ -271,7 +271,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(increase(loopruntime_release_revision_resync_failure_total{tenant=~\"$tenant\", env=~\"$env\"}[5m])) or vector(0)",
+          "expr": "sum(increase(loop_runtime_release_revision_resync_failure_total{tenant=~\"$tenant\", env=~\"$env\"}[5m])) or vector(0)",
           "legendFormat": "Errors",
           "refId": "A"
         }
@@ -330,7 +330,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopruntime_gitops_operation_duration_seconds_bucket{tenant=~\"$tenant\", env=~\"$env\"}[1h])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_gitops_operation_duration_seconds_bucket{tenant=~\"$tenant\", env=~\"$env\"}[1h])) by (le)) or vector(0)",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -389,7 +389,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "(time() - min(loopruntime_reconcile_loop_last_success_timestamp{tenant=~\"$tenant\", env=~\"$env\"})) or vector(0)",
+          "expr": "(time() - min(loop_runtime_reconcile_loop_last_success_timestamp{tenant=~\"$tenant\", env=~\"$env\"})) or vector(0)",
           "legendFormat": "Seconds Ago",
           "refId": "A"
         }
@@ -464,7 +464,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "loopruntime_cfkv_drift_detected{tenant=~\"$tenant\", env=~\"$env\"} or vector(0)",
+          "expr": "loop_runtime_cfkv_drift_detected{tenant=~\"$tenant\", env=~\"$env\"} or vector(0)",
           "legendFormat": "{{tenant}}/{{env}}",
           "refId": "A"
         }
@@ -516,7 +516,7 @@
       "type": "table",
       "targets": [
         {
-          "expr": "loopruntime_release_revision_mismatch_total{tenant=~\"$tenant\", env=~\"$env\"} or vector(0)",
+          "expr": "loop_runtime_release_revision_mismatch_total{tenant=~\"$tenant\", env=~\"$env\"} or vector(0)",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -697,7 +697,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopruntime_release_revision_resync_failure_total{tenant=~\"$tenant\", env=~\"$env\"}[5m])) by (tenant) or vector(0)",
+          "expr": "sum(rate(loop_runtime_release_revision_resync_failure_total{tenant=~\"$tenant\", env=~\"$env\"}[5m])) by (tenant) or vector(0)",
           "legendFormat": "{{tenant}}",
           "refId": "A"
         }
@@ -741,7 +741,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "loopruntime_reconcile_loop_last_success_timestamp{tenant=~\"$tenant\", env=~\"$env\"} or vector(0)",
+          "expr": "loop_runtime_reconcile_loop_last_success_timestamp{tenant=~\"$tenant\", env=~\"$env\"} or vector(0)",
           "legendFormat": "{{tenant}}/{{env}}",
           "refId": "A"
         }
@@ -751,7 +751,7 @@
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": [
-    "loopruntime",
+    "loop-runtime",
     "drift"
   ],
   "templating": {
@@ -785,14 +785,14 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(loopruntime_cfkv_drift_detected, tenant)",
+        "definition": "label_values(loop_runtime_cfkv_drift_detected, tenant)",
         "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "tenant",
         "options": [],
         "query": {
-          "query": "label_values(loopruntime_cfkv_drift_detected, tenant)",
+          "query": "label_values(loop_runtime_cfkv_drift_detected, tenant)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 2,
@@ -813,14 +813,14 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(loopruntime_cfkv_drift_detected, env)",
+        "definition": "label_values(loop_runtime_cfkv_drift_detected, env)",
         "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "env",
         "options": [],
         "query": {
-          "query": "label_values(loopruntime_cfkv_drift_detected, env)",
+          "query": "label_values(loop_runtime_cfkv_drift_detected, env)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 2,
@@ -835,6 +835,6 @@
   "timepicker": {},
   "timezone": "browser",
   "title": "LoopRuntime — Drift Detection",
-  "uid": "loopruntime-drift-detection",
+  "uid": "loop-runtime-drift-detection",
   "version": 1
 }

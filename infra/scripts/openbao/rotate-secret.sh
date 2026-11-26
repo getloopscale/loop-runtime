@@ -28,10 +28,10 @@
 #   - bao + kubectl + jq in PATH
 #   - BAO_ADDR + BAO_TOKEN env vars set
 #   - BAO_SKIP_VERIFY=true if vault-local self-signed CA
-#   - kubectl contexts k3d-loopruntime-core (production: loopruntime-core) reachable
+#   - kubectl contexts k3d-loop-runtime-core (production: loop-runtime-core) reachable
 #
-# Plan: 2026-06-02-loopruntime-api-vault-integration v1.8 T8.1 EC-22 mitigation.
-# Companion to: seed-loopruntime-secrets.sh (initial provisioning T8.1 EC-21).
+# Plan: 2026-06-02-loop-runtime-api-vault-integration v1.8 T8.1 EC-22 mitigation.
+# Companion to: seed-loop-runtime-secrets.sh (initial provisioning T8.1 EC-21).
 # Runbook reference: docs/runbooks.md P2.
 # SPDX-License-Identifier: Apache-2.0
 
@@ -41,8 +41,8 @@ set -uo pipefail
 # What a rotation touches
 #
 # Which ExternalSecrets read a D6 path is NOT listed here: it is read from the
-# chart inventory (infra/helm/loopruntime-external-secrets/values.yaml), the same file
-# seed-loopruntime-secrets.sh and vault-sync-check.sh read, so a secret added to the
+# chart inventory (infra/helm/loop-runtime-external-secrets/values.yaml), the same file
+# seed-loop-runtime-secrets.sh and vault-sync-check.sh read, so a secret added to the
 # chart is rotatable without editing this script. A hand-kept copy of that list
 # drifted: it refreshed the operator's ExternalSecret for the api's gitea token,
 # which the operator does not read.
@@ -54,24 +54,24 @@ set -uo pipefail
 # Format: <targetSecret>|<comma-separated-deployments>
 # ----------------------------------------------------------------------------
 RESTARTS_BY_EXTERNALSECRET=$(cat <<'EOF'
-gitea-admin|loopruntime-api
-loopruntime-api-tokens|loopruntime-api
-loopruntime-api-minio|loopruntime-api
-loopruntime-api-admin|loopruntime-api
-loopruntime-api-internal|loopruntime-api
-loopruntime-api-github|loopruntime-api
-loopruntime-api-stripe|loopruntime-api
-loopruntime-service-auth|loopruntime-api
-loopruntime-service-auth-ed25519-pub|loopruntime-api
-loopruntime-service-auth-redis|loopruntime-api
-vault-spki-pin|loopruntime-api
-loopruntime-service-auth-ed25519|loopruntime-cloud
-loopruntime-cloud-stripe|loopruntime-cloud
-loopruntime-tenant-operator|loopruntime-tenant-operator
+gitea-admin|loop-runtime-api
+loop-runtime-api-tokens|loop-runtime-api
+loop-runtime-api-minio|loop-runtime-api
+loop-runtime-api-admin|loop-runtime-api
+loop-runtime-api-internal|loop-runtime-api
+loop-runtime-api-github|loop-runtime-api
+loop-runtime-api-stripe|loop-runtime-api
+loop-runtime-service-auth|loop-runtime-api
+loop-runtime-service-auth-ed25519-pub|loop-runtime-api
+loop-runtime-service-auth-redis|loop-runtime-api
+vault-spki-pin|loop-runtime-api
+loop-runtime-service-auth-ed25519|loop-console
+loop-console-stripe|loop-console
+loop-runtime-tenant-operator|loop-runtime-tenant-operator
 cosign-passphrase|argo-workflows-controller
 EOF
 )
-INVENTORY="${ROTATE_INVENTORY:-$(cd "$(dirname "$0")/../../.." && pwd)/infra/helm/loopruntime-external-secrets/values.yaml}"
+INVENTORY="${ROTATE_INVENTORY:-$(cd "$(dirname "$0")/../../.." && pwd)/infra/helm/loop-runtime-external-secrets/values.yaml}"
 
 # ----------------------------------------------------------------------------
 # CLI args
@@ -81,10 +81,10 @@ PATH_REL=""
 VALUE=""
 DRY_RUN=0
 SKIP_VERIFY=0
-NAMESPACE="loopruntime-system"
-CORE_CONTEXT="${LOOPRUNTIME_CORE_CONTEXT:-k3d-loopruntime-core}"
-SECRETS_CONTEXT="${LOOPRUNTIME_SECRETS_CONTEXT:-k3d-loopruntime-secrets}"
-VAULT_NAMESPACE="${LOOPRUNTIME_VAULT_NAMESPACE:-secrets-system}"
+NAMESPACE="loop-runtime-system"
+CORE_CONTEXT="${LOOP_RUNTIME_CORE_CONTEXT:-k3d-loop-runtime-core}"
+SECRETS_CONTEXT="${LOOP_RUNTIME_SECRETS_CONTEXT:-k3d-loop-runtime-secrets}"
+VAULT_NAMESPACE="${LOOP_RUNTIME_VAULT_NAMESPACE:-secrets-system}"
 WAIT_TIMEOUT="${ROTATE_WAIT_TIMEOUT:-300}"  # rollout status timeout (s)
 
 usage() {
@@ -97,25 +97,25 @@ USAGE
 REQUIRED
   --env             LoopRuntime env (vault-local|standalone-multi|dev|drill|staging|prod)
   --path            D6 path relative (e.g., api/secrets/gitea/token)
-                    Any path an ExternalSecret in infra/helm/loopruntime-external-secrets/values.yaml reads.
+                    Any path an ExternalSecret in infra/helm/loop-runtime-external-secrets/values.yaml reads.
   --value           New secret value (REQUIRED — never write empty)
 
 OPTIONAL
   --dry-run         Print planned actions without executing
   --skip-verify     Skip K8s Secret poll verification (faster, less safe)
-  --namespace       K8s namespace for ExternalSecret + deployments (default: loopruntime-system)
+  --namespace       K8s namespace for ExternalSecret + deployments (default: loop-runtime-system)
   --help            Show this help
 
 ENV VARS
   BAO_ADDR              Vault address (REQUIRED unless --dry-run)
   BAO_TOKEN             Vault token (REQUIRED unless --dry-run)
   BAO_SKIP_VERIFY       set to true for self-signed CA (vault-local)
-  LOOPRUNTIME_CORE_CONTEXT     kubectl context for mgmt cluster (default: k3d-loopruntime-core)
-  LOOPRUNTIME_SECRETS_CONTEXT    kubectl context for vault cluster (default: k3d-loopruntime-secrets)
+  LOOP_RUNTIME_CORE_CONTEXT     kubectl context for mgmt cluster (default: k3d-loop-runtime-core)
+  LOOP_RUNTIME_SECRETS_CONTEXT    kubectl context for vault cluster (default: k3d-loop-runtime-secrets)
   ROTATE_WAIT_TIMEOUT   rollout status timeout in seconds (default: 300)
 
 EXAMPLES
-  # Rotate gitea token in vault-local (will restart loopruntime-api + tenant-operator)
+  # Rotate gitea token in vault-local (will restart loop-runtime-api + tenant-operator)
   export BAO_ADDR=https://127.0.0.1:8210 BAO_SKIP_VERIFY=true
   export BAO_TOKEN=\$(jq -r .root_token /tmp/openbao-init.json)
   $0 --env vault-local --path api/secrets/gitea/token --value "ghp_new_xxx"
@@ -213,7 +213,7 @@ for es in "${_ES_FOR_RESTART[@]}"; do
   BINARIES="${BINARIES:+$BINARIES,}$deployments"
 done
 BINARIES=$(echo "$BINARIES" | tr ',' '\n' | sort -u | paste -sd, -)
-FULL_PATH="secret/loopruntime/$ENV/$PATH_REL"
+FULL_PATH="secret/loop-runtime/$ENV/$PATH_REL"
 
 echo "[INFO] env=$ENV path=$PATH_REL" >&2
 echo "[INFO] vault path: $FULL_PATH" >&2

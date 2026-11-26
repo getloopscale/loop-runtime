@@ -12,10 +12,10 @@
 //     bypass would let any tenant migrate its own workload across
 //     cells, breaking placement layer's capacity gate semantics.
 //   • The plan's "loopscale deploy --cell <id>" wording was loose; the
-//     SHIPPING shape is "loopruntime admin tenants pin --cell <id> --tenant
+//     SHIPPING shape is "loop-runtime admin tenants pin --cell <id> --tenant
 //     <id>". Wire-shape change captured here for the CLI to consume.
 //
-// Gated behind LOOPRUNTIME_ADMIN_API=true (same flag as admin_evict). Requires
+// Gated behind LOOP_RUNTIME_ADMIN_API=true (same flag as admin_evict). Requires
 // X-Service-Auth header. Fails 403 without either.
 
 package placementhttp
@@ -80,14 +80,14 @@ var validCellIDPattern = regexp.MustCompile(`^cell-[a-z0-9-]+$`)
 // vap-pinpath-exemption Phase 4 (security review MEET-2026-07-12-001 Condition 2):
 // a successful cell MOVE writes a TENANT_CELL_PINNED audit_log entry so the
 // placement change is forensically traceable now that the admission policy no
-// longer gates the loopruntime-api SA on this path. audit may be nil (nil-safe — CI /
+// longer gates the loop-runtime-api SA on this path. audit may be nil (nil-safe — CI /
 // pinner-only wiring). The actor is the fixed string "admin:service-auth": this
-// route authenticates via a shared secret (LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET), which
+// route authenticates via a shared secret (LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET), which
 // carries no per-user subject — the raw secret is NEVER written to the audit body.
 func AdminPinCellHandler(pinner CellPinner, audit audit.AuditWriter, apiEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Feature flag gate (matches admin_evict semantics).
-		if !apiEnabled { // LOOPRUNTIME_ADMIN_API, read once at boot
+		if !apiEnabled { // LOOP_RUNTIME_ADMIN_API, read once at boot
 			http.NotFound(w, r)
 			return
 		}

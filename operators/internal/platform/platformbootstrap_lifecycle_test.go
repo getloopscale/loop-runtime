@@ -38,7 +38,7 @@ func bootstrapScheme(t *testing.T) *runtime.Scheme {
 func deletingBootstrap() *loopruntimev1.PlatformBootstrap {
 	now := metav1.NewTime(time.Now())
 	return &loopruntimev1.PlatformBootstrap{ObjectMeta: metav1.ObjectMeta{
-		Name: "platform", Namespace: "loopruntime-system",
+		Name: "platform", Namespace: "loop-runtime-system",
 		Finalizers:        []string{constants.FinalizerPlatformBootstrap},
 		DeletionTimestamp: &now,
 	}}
@@ -46,7 +46,7 @@ func deletingBootstrap() *loopruntimev1.PlatformBootstrap {
 
 func platformTokens(managedBy string) *corev1.Secret {
 	return &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-		Name: constants.SecretPlatformTokens, Namespace: "loopruntime-system",
+		Name: constants.SecretPlatformTokens, Namespace: "loop-runtime-system",
 		Labels: map[string]string{constants.LabelManagedBy: managedBy},
 	}}
 }
@@ -55,7 +55,7 @@ func reconcileBootstrap(t *testing.T, c client.Client) error {
 	t.Helper()
 	r := &PlatformBootstrapReconciler{Client: c}
 	_, err := r.Reconcile(context.Background(),
-		ctrl.Request{NamespacedName: types.NamespacedName{Name: "platform", Namespace: "loopruntime-system"}})
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: "platform", Namespace: "loop-runtime-system"}})
 	return err
 }
 
@@ -68,7 +68,7 @@ func TestPlatformBootstrapDelete_RemovesTheTokenSecretItManages(t *testing.T) {
 	}
 
 	err := c.Get(context.Background(),
-		client.ObjectKey{Name: constants.SecretPlatformTokens, Namespace: "loopruntime-system"}, &corev1.Secret{})
+		client.ObjectKey{Name: constants.SecretPlatformTokens, Namespace: "loop-runtime-system"}, &corev1.Secret{})
 	if !apierrors.IsNotFound(err) {
 		t.Fatalf("the Gitea/ArgoCD token Secret must be deleted with the bootstrap, Get err = %v", err)
 	}
@@ -83,7 +83,7 @@ func TestPlatformBootstrapDelete_LeavesATokenSecretItDoesNotManage(t *testing.T)
 	}
 
 	if err := c.Get(context.Background(),
-		client.ObjectKey{Name: constants.SecretPlatformTokens, Namespace: "loopruntime-system"}, &corev1.Secret{}); err != nil {
+		client.ObjectKey{Name: constants.SecretPlatformTokens, Namespace: "loop-runtime-system"}, &corev1.Secret{}); err != nil {
 		t.Fatalf("a Secret this controller does not manage must survive, Get err = %v", err)
 	}
 }
@@ -104,7 +104,7 @@ func TestPlatformBootstrapDelete_KeepsTheFinalizerWhenTheSecretCannotBeDeleted(t
 	}
 
 	var pb loopruntimev1.PlatformBootstrap
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "platform", Namespace: "loopruntime-system"}, &pb); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "platform", Namespace: "loop-runtime-system"}, &pb); err != nil {
 		t.Fatalf("the PlatformBootstrap must still exist: %v", err)
 	}
 	if len(pb.Finalizers) == 0 {
@@ -116,7 +116,7 @@ func TestPlatformBootstrapDelete_KeepsTheFinalizerWhenTheSecretCannotBeDeleted(t
 // controller log.
 func TestPlatformBootstrap_FailedTransitionRecordsTheReason(t *testing.T) {
 	pb := &loopruntimev1.PlatformBootstrap{
-		ObjectMeta: metav1.ObjectMeta{Name: "platform", Namespace: "loopruntime-system", Generation: 3},
+		ObjectMeta: metav1.ObjectMeta{Name: "platform", Namespace: "loop-runtime-system", Generation: 3},
 		Status:     loopruntimev1.PlatformBootstrapStatus{Phase: loopruntimev1.PlatformBootstrapPhaseConfiguringGitea},
 	}
 	c := fake.NewClientBuilder().WithScheme(bootstrapScheme(t)).WithObjects(pb).
@@ -128,7 +128,7 @@ func TestPlatformBootstrap_FailedTransitionRecordsTheReason(t *testing.T) {
 	}
 
 	var got loopruntimev1.PlatformBootstrap
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "platform", Namespace: "loopruntime-system"}, &got); err != nil {
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "platform", Namespace: "loop-runtime-system"}, &got); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	cond := conditions.GetCondition(got.Status.Conditions, conditions.TypeBootstrapComplete)

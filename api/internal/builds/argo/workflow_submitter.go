@@ -62,15 +62,15 @@ type WorkflowSubmitterConfig struct {
 	SyftImage             string
 
 	Kubeconfig string // Path to kubeconfig file
-	Context    string // Kube context (e.g., "k3d-loopruntime-build")
+	Context    string // Kube context (e.g., "k3d-loop-runtime-build")
 
 	// Infrastructure parameters passed to every workflow via the WorkflowBuilder.
 	// C-01 fix: CallbackURL/CallbackSecret removed. No more HTTP callback.
 	// BLOCKER-2 fix: GiteaURL/GiteaToken removed. Clone CWT gets credentials
-	// from K8s Secret (loopruntime-gitea-credentials) via envFrom.
-	RegistryURL      string // e.g., "k3d-loopruntime-registry:5000"
+	// from K8s Secret (loop-runtime-gitea-credentials) via envFrom.
+	RegistryURL      string // e.g., "k3d-loop-runtime-registry:5000"
 	RegistryInsecure bool   // true for local dev registries without TLS
-	BaseDomain       string // e.g., "loopruntime.local" — base domain for app hostnames
+	BaseDomain       string // e.g., "loop-runtime.local" — base domain for app hostnames
 	// CosignKeyless toggles cosign signing mode in user-app build pipeline.
 	// false (default, Sprint 6+): key-based, uses cosign-signing-key Secret.
 	// true (Sprint 9+ deferred):  keyless via Fulcio + Rekor + projected SA token.
@@ -83,16 +83,16 @@ type WorkflowSubmitterConfig struct {
 	// CosignAttestEnabled toggles SLSA L3 SBOM-to-image attestation linking
 	// via cosignAttestTemplate(). false (default) = no attestation step.
 	// Plan 2026-05-27-M07-to-3-85 M2 T8.0 (v1.1 EC-3): MUST be wired via env var
-	// LOOPRUNTIME_COSIGN_ATTEST_ENABLED to avoid silent "Implemented but not wired" pattern.
+	// LOOP_RUNTIME_COSIGN_ATTEST_ENABLED to avoid silent "Implemented but not wired" pattern.
 	CosignAttestEnabled bool
 	// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
 	// CR-1 fix: gate `--insecure-skip-verify` flag in cosign sign/attest
 	// scripts. Wired from Config.CosignInsecureSkipSCT (env var
-	// LOOPRUNTIME_COSIGN_INSECURE_SKIP_SCT_VERIFY). Propagated to InfraParams →
+	// LOOP_RUNTIME_COSIGN_INSECURE_SKIP_SCT_VERIFY). Propagated to InfraParams →
 	// CosignSignParams / CosignAttestParams. Config.Validate() rejects
 	// true in production without TUF root pinned.
 	CosignInsecureSkipSCT bool
-	// Env is the canonical LOOPRUNTIME_ENV value ("development" / "staging" /
+	// Env is the canonical LOOP_RUNTIME_ENV value ("development" / "staging" /
 	// "production"). T1.1 of plan 2026-06-01-p1-security-hardening
 	// (sec-010 / CR-7) — drives per-tenant Fulcio audience selection
 	// via D4 dev-fallback in workflow_builder.audienceFor().
@@ -137,9 +137,9 @@ func NewWorkflowSubmitter(cfg WorkflowSubmitterConfig) (*WorkflowSubmitter, erro
 // Submit generates a self-contained Workflow CR via the WorkflowBuilder and creates it
 // in the build cluster with retry for transient errors.
 func (s *WorkflowSubmitter) Submit(ctx context.Context, spec deploycontracts.WorkflowSpec) (string, error) {
-	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.build.workflow_submit",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.build.workflow_submit",
 		trace.WithAttributes(
-			attribute.String("loopruntime.workflow.namespace", spec.Namespace),
+			attribute.String("loop-runtime.workflow.namespace", spec.Namespace),
 		))
 	defer span.End()
 
@@ -182,7 +182,7 @@ func (s *WorkflowSubmitter) Submit(ctx context.Context, spec deploycontracts.Wor
 		created, err := s.client.Resource(workflowGVR).Namespace(spec.Namespace).Create(ctx, workflow, metav1.CreateOptions{})
 		if err == nil {
 			name := created.GetName()
-			span.SetAttributes(attribute.String("loopruntime.workflow.name", name))
+			span.SetAttributes(attribute.String("loop-runtime.workflow.name", name))
 			return name, nil
 		}
 
@@ -365,7 +365,7 @@ func failedRequiredStep(status *forgemodel.WorkflowStatusDetail) (step, message 
 }
 
 // extractStuckPodReason walks the workflow's per-node status looking for pod
-// nodes wedged in image-pull failure states. Red Team loopruntime-cloud#133.
+// nodes wedged in image-pull failure states. Red Team loop-console#133.
 //
 // Argo mirrors pod-level container-status reasons into `wf.status.nodes[*].message`
 // verbatim. The three kubelet reasons that produce a permanently-stuck workflow

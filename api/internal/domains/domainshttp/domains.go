@@ -39,7 +39,7 @@ import (
 func generateVerificationToken() string {
 	b := make([]byte, 10)
 	_, _ = rand.Read(b)
-	return "loopruntime-verify=" + hex.EncodeToString(b)
+	return "loop-runtime-verify=" + hex.EncodeToString(b)
 }
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
@@ -243,7 +243,7 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// v1: expose verification token to owner/admin for pending domains
 	if statemachine.DomainPhase(d.Status) == statemachine.DPhPendingVerification && auth.HasMinRole(uc.Role, "admin") {
 		resp.Verification = &domainVerificationInfo{
-			TXTName:  "_loopruntime-verify." + d.Domain,
+			TXTName:  "_loop-runtime-verify." + d.Domain,
 			TXTValue: d.VerificationToken,
 		}
 	}

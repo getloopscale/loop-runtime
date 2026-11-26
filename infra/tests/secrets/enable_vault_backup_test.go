@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// enable-vault-backup.sh (Runbook P4 of plan 2026-06-02-loopruntime-api-vault-integration)
+// enable-vault-backup.sh (Runbook P4 of plan 2026-06-02-loop-runtime-api-vault-integration)
 // writes the snapshot agent's S3 credentials into a Secret, syncs the agent with
 // helmfile and verifies the CronJob. It handles two credentials, so besides the
 // pre-flight refusals it must never print either of them.

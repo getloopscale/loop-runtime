@@ -31,21 +31,21 @@ var _ = Describe("Journey 08: GitHub Autodeploy", Ordered, Label("journey"), fun
 
 		project = fmt.Sprintf("ginkgo-connect-%s", uniqueSuffix())
 
-		// loopruntime connect / disconnect read the project name from loopzero.yaml in
+		// loop-runtime connect / disconnect read the project name from loopzero.yaml in
 		// the working directory — the CLI does NOT have a --project flag
-		// (verified 2026-05-06: `loopruntime connect --help` shows only --repo,
+		// (verified 2026-05-06: `loop-runtime connect --help` shows only --repo,
 		// --branch, --installation-id). Mirror infra/tests/dogfood/
 		// journeys/_legacy/journey-08-github-autodeploy.sh: write a minimal
 		// loopzero.yaml and exec connect from that dir.
 		var err error
-		workDir, err = os.MkdirTemp("", "loopruntime-e2e-connect-")
+		workDir, err = os.MkdirTemp("", "loop-runtime-e2e-connect-")
 		Expect(err).NotTo(HaveOccurred())
 
-		loopruntimeYAML := fmt.Sprintf(
+		loopRuntimeYAML := fmt.Sprintf(
 			"project: %s\napps:\n  - name: api\n    type: server\n    build:\n      dockerfile: Dockerfile\n",
 			project,
 		)
-		Expect(os.WriteFile(workDir+"/loopzero.yaml", []byte(loopruntimeYAML), 0644)).To(Succeed())
+		Expect(os.WriteFile(workDir+"/loopzero.yaml", []byte(loopRuntimeYAML), 0644)).To(Succeed())
 	})
 
 	AfterAll(func() {
@@ -65,7 +65,7 @@ var _ = Describe("Journey 08: GitHub Autodeploy", Ordered, Label("journey"), fun
 			"--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime connect should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime connect should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		result, err := parseJSON(stdout)
 		Expect(err).NotTo(HaveOccurred())
@@ -97,7 +97,7 @@ var _ = Describe("Journey 08: GitHub Autodeploy", Ordered, Label("journey"), fun
 		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "disconnect", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopruntime disconnect should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime disconnect should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		result, err := parseJSON(stdout)
 		Expect(err).NotTo(HaveOccurred())

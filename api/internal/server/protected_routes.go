@@ -407,7 +407,7 @@ func registerBillingRoutes(r chi.Router, cfg Config, ch routeChains) {
 		return
 	}
 	r.Get("/api/v1/billing", cfg.BillingHandler.Get)
-	// `owner`, as loopruntime-cloud requires for the same capability: any member
+	// `owner`, as loop-console requires for the same capability: any member
 	// opening the billing portal is horizontal escalation to invoices,
 	// payment method and history.
 	r.With(gatedBy("owner", ch.limited(audited("billing.portal_opened", "billing")))...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)

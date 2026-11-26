@@ -30,36 +30,36 @@ import (
 //
 // Run:
 //
-//	LOOPRUNTIME_CAPACITY=1 \
-//	LOOPRUNTIME_GITEA_URL=http://localhost:13000 \
-//	LOOPRUNTIME_GITEA_USER=gitea_admin \
-//	LOOPRUNTIME_GITEA_PASS=... \
+//	LOOP_RUNTIME_CAPACITY=1 \
+//	LOOP_RUNTIME_GITEA_URL=http://localhost:13000 \
+//	LOOP_RUNTIME_GITEA_USER=gitea_admin \
+//	LOOP_RUNTIME_GITEA_PASS=... \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityGiteaPush -v -timeout 30m \
 //	  -args -workers=10
 func TestCapacityGiteaPushLatency(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	giteaURL := os.Getenv("LOOPRUNTIME_GITEA_URL")
-	user := os.Getenv("LOOPRUNTIME_GITEA_USER")
-	pass := os.Getenv("LOOPRUNTIME_GITEA_PASS")
+	giteaURL := os.Getenv("LOOP_RUNTIME_GITEA_URL")
+	user := os.Getenv("LOOP_RUNTIME_GITEA_USER")
+	pass := os.Getenv("LOOP_RUNTIME_GITEA_PASS")
 	if giteaURL == "" || user == "" || pass == "" {
-		t.Fatal("LOOPRUNTIME_GITEA_URL, LOOPRUNTIME_GITEA_USER, LOOPRUNTIME_GITEA_PASS required")
+		t.Fatal("LOOP_RUNTIME_GITEA_URL, LOOP_RUNTIME_GITEA_USER, LOOP_RUNTIME_GITEA_PASS required")
 	}
 
-	repoCountsStr := os.Getenv("LOOPRUNTIME_GITEA_REPO_COUNTS")
+	repoCountsStr := os.Getenv("LOOP_RUNTIME_GITEA_REPO_COUNTS")
 	if repoCountsStr == "" {
 		repoCountsStr = "10,50,100"
 	}
 	repoCounts := parseIntList(repoCountsStr)
 	if len(repoCounts) == 0 {
-		t.Fatal("LOOPRUNTIME_GITEA_REPO_COUNTS must be a comma-separated list of integers")
+		t.Fatal("LOOP_RUNTIME_GITEA_REPO_COUNTS must be a comma-separated list of integers")
 	}
 
 	// Gap 5: Repos with real history (not just auto_init's single commit).
 	// Real tenant repos have 50-1000+ commits. Without history, push latency
 	// misses git's pack/delta computation overhead on the server side.
 	seedCommits := 50
-	if s := os.Getenv("LOOPRUNTIME_GITEA_SEED_COMMITS"); s != "" {
+	if s := os.Getenv("LOOP_RUNTIME_GITEA_SEED_COMMITS"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n >= 0 {
 			seedCommits = n
 		}
@@ -264,7 +264,7 @@ func gitPushToRepo(ctx context.Context, giteaURL, user, pass, repoName string, p
 	}
 
 	for _, args := range [][]string{
-		{"git", "config", "user.email", "bench@loopruntime.test"},
+		{"git", "config", "user.email", "bench@loop-runtime.test"},
 		{"git", "config", "user.name", "Capacity Bench"},
 		{"git", "add", "-A"},
 		{"git", "commit", "-q", "-m", fmt.Sprintf("bench push %d", pushIdx)},
@@ -371,7 +371,7 @@ func seedRepoWithHistory(ctx context.Context, giteaURL, user, pass, repoName str
 
 	// Configure git identity.
 	for _, args := range [][]string{
-		{"git", "config", "user.email", "seed@loopruntime.test"},
+		{"git", "config", "user.email", "seed@loop-runtime.test"},
 		{"git", "config", "user.name", "Seed"},
 	} {
 		cmd := exec.CommandContext(ctx, args[0], args[1:]...)

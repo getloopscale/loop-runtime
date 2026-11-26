@@ -24,7 +24,7 @@ package store
 //
 // Per matrix § Phase 2 reshape window: DB-roundtrip behavioral
 // subset moves to real-PG-gated tests when pgxmock or
-// LOOPRUNTIME_E2E_DATABASE_URL harness is wired.
+// LOOP_RUNTIME_E2E_DATABASE_URL harness is wired.
 
 import (
 	"context"

@@ -16,7 +16,7 @@ import (
 // clustercredential-create.sh is the one constructor of a cell's ClusterCredential +
 // kubeconfig Secret. The local and drill bootstrap libraries used to build their own
 // heredoc copies, and the copies disagreed: the drill copy labelled with
-// loopruntime.dev/cell-id + loopruntime.dev/drill instead of runtime.getloopscale.com/cell (which the multi-cell
+// loop-runtime.dev/cell-id + loop-runtime.dev/drill instead of runtime.getloopscale.com/cell (which the multi-cell
 // runbook selects on) and set no spec.tls. These tests drive the constructor in
 // DRY_RUN mode — it renders instead of applying — so they need no cluster.
 
@@ -70,7 +70,7 @@ func TestClusterCredentialCreateRendersTheCanonicalLabelSet(t *testing.T) {
 
 	// Act
 	docs, out, err := renderCC(t, []string{
-		"INGRESS_DOMAIN=loopruntime.local", "TLS_INSECURE=true", "MANAGED_BY=bootstrap-cell-cc",
+		"INGRESS_DOMAIN=loop-runtime.local", "TLS_INSECURE=true", "MANAGED_BY=bootstrap-cell-cc",
 	}, "cell-0", "cell-0", kc)
 
 	// Assert
@@ -84,7 +84,7 @@ func TestClusterCredentialCreateRendersTheCanonicalLabelSet(t *testing.T) {
 	labels := field(t, cc, "metadata", "labels").(map[string]any)
 	want := map[string]string{
 		"runtime.getloopscale.com/cell":           "cell-0",
-		"runtime.getloopscale.com/ingress-domain": "loopruntime.local",
+		"runtime.getloopscale.com/ingress-domain": "loop-runtime.local",
 		"app.kubernetes.io/managed-by":            "bootstrap-cell-cc",
 	}
 	for k, v := range want {
@@ -171,7 +171,7 @@ func TestDrillCellBootstrapLabelsTheCredentialWithTheCanonicalCellLabel(t *testi
 			t.Errorf("drill render lacks %q:\n%s", want, s)
 		}
 	}
-	if strings.Contains(s, "loopruntime.dev/") {
-		t.Errorf("drill render still carries a loopruntime.dev/ label:\n%s", s)
+	if strings.Contains(s, "loop-runtime.dev/") {
+		t.Errorf("drill render still carries a loop-runtime.dev/ label:\n%s", s)
 	}
 }

@@ -35,7 +35,7 @@ import (
 // misplacement vector that allowed iter 7-8 of dogfood to land Tenants in
 // `default`. Removed entirely; future multi-namespace topology requires a
 // new ADR superseding this one (ADR-0018 §Constraints C3).
-const tenantNamespace = "loopruntime-system"
+const tenantNamespace = "loop-runtime-system"
 
 // tenantsGroupResource is used to synthesize Conflict errors for RetryOnConflict.
 var tenantsGroupResource = schema.GroupResource{Group: "runtime.getloopscale.com", Resource: "tenants"}
@@ -74,7 +74,7 @@ func tenantKey(tenantID string) client.ObjectKey {
 	return client.ObjectKey{Namespace: tenantNamespace, Name: tenantID}
 }
 
-// EnsureTenant creates or updates a Tenant CR in the loopruntime-system namespace.
+// EnsureTenant creates or updates a Tenant CR in the loop-runtime-system namespace.
 // It is idempotent: calling it multiple times with the same tenantID is safe.
 // If the CR already exists, it updates the spec to match the desired state.
 // It uses retry-on-conflict to handle concurrent modifications by the TenantController.
@@ -122,7 +122,7 @@ func isEnvMatch(entry apiv1.TenantEnvironmentEntry, envName, project string) boo
 // no-op: the create route answers 409, the first-deploy ensurer carries on.
 //
 // M2 v1.2 (2026-06-07): writes the canonical `project` field so the operator
-// can compute the 3-segment namespace `loopruntime-<tenant>-<project>-<env>` via
+// can compute the 3-segment namespace `loop-runtime-<tenant>-<project>-<env>` via
 // pkg/naming.Namespace. Empty project preserves the legacy 2-segment
 // pathway for production legacy (ADR D2).
 //
@@ -133,7 +133,7 @@ func isEnvMatch(entry apiv1.TenantEnvironmentEntry, envName, project string) boo
 func (m *TenantCRManager) AddEnvironment(ctx context.Context, tenantID, project, envName string) error {
 	// EC-4 pre-flight: reject combined namespace > 63 chars before the
 	// k8s round-trip. Legacy callers (project="") bypass this check —
-	// the legacy `loopruntime-<tenant>-<env>` path is enforced elsewhere.
+	// the legacy `loop-runtime-<tenant>-<env>` path is enforced elsewhere.
 	if project != "" {
 		ref, refErr := pkgdomain.NewEnvRef(tenantID, project, envName)
 		if refErr != nil {

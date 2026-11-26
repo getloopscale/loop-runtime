@@ -441,7 +441,7 @@ func TestRolloutReplicas_FailsWhenNoCellHasTheRollout(t *testing.T) {
 }
 
 func TestTenantNamespace_IsTheEnvironmentsNamespaceOnTheCell(t *testing.T) {
-	if got := TenantNamespace("tn-550e0845313d5feb", "loop-app", "production"); got != "loopruntime-tn-550e0845313d5feb-loop-app-production" {
+	if got := TenantNamespace("tn-550e0845313d5feb", "loop-app", "production"); got != "loop-runtime-tn-550e0845313d5feb-loop-app-production" {
 		t.Errorf("TenantNamespace = %s", got)
 	}
 }

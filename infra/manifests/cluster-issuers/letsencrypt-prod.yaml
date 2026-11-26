@@ -2,7 +2,7 @@
 #
 # Plan 2026-05-19-drill-skills-rigor-restoration Bug A fix:
 # the letsencrypt-prod ClusterIssuer was missing from the drill bootstrap. Certificate
-# loopruntime-api-tls was stuck in "DoesNotExist" for 93min during LIVE Phase 4 (discovered
+# loop-runtime-api-tls was stuck in "DoesNotExist" for 93min during LIVE Phase 4 (discovered
 # via dogfood-drill when curl detected the self-signed `TRAEFIK DEFAULT CERT`).
 #
 # Includes dnsZones for both getloopscale.com (prod) AND drill.getloopscale.com (drill)

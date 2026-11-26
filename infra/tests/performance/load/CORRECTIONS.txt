@@ -12,7 +12,7 @@ Load Test Corrections & Learnings — 2026-04-09
 - docker build -f api/Dockerfile → push to DO registry → rollout restart
 - Reason: Pipeline takes ~15min. Direct push is ~2min.
 - Pipeline will overwrite with next successful CI run.
-- **STATUS 2026-05-13:** OBSOLETE — A.1 audit confirms no `docker push.*loopruntime-api` pattern in current scripts. Pipeline is canonical path; operational shortcut no longer present.
+- **STATUS 2026-05-13:** OBSOLETE — A.1 audit confirms no `docker push.*loop-runtime-api` pattern in current scripts. Pipeline is canonical path; operational shortcut no longer present.
 
 ### B. schema_migrations fixed directly in PG
 - Problem: `migrate force 0` (from earlier seed attempt) corrupted the
@@ -23,16 +23,16 @@ Load Test Corrections & Learnings — 2026-04-09
   inside a pod. Use psql for ad-hoc SQL, not the migrate tool.
 - **STATUS 2026-05-13:** IMPLEMENTED ✓ — canonical gate at `infra/scripts/check-no-migrate-force.sh` + workflow `.github/workflows/check-no-migrate-force.yml` + 13/13 hermetic tests at `infra/tests/check-no-migrate-force_test.sh`. Commit: T1.2. Replaces inline gate in ci.yml.
 
-### D. startupProbe added to loopruntime-api Deployment
+### D. startupProbe added to loop-runtime-api Deployment
 - Problem: Leader election takes 60s for non-leaders (12 × 5s). Liveness
   probe kills the pod after 45s (initialDelay=15s + 3×10s). Pod never
   starts as non-leader.
 - Manual fix: kubectl patch to add startupProbe (5s + 12×10s = 125s).
   Liveness/readiness only start AFTER startup probe passes.
-- Definitive fix: Add startupProbe in Pulumi mgmt-bootstrap.ts loopruntime-api
+- Definitive fix: Add startupProbe in Pulumi mgmt-bootstrap.ts loop-runtime-api
   Deployment spec. Also consider starting HTTP server BEFORE leader
   election so health endpoint responds immediately.
-- **STATUS 2026-05-13:** IMPLEMENTED ✓ — startupProbe at `infra/helm/loopruntime-api/templates/deployment.yaml:204` (30×2s=60s). HTTP-before-leader-election via MEET-ASYNC-AMENDMENT-2026-05-12-003 Option A (RATIFIED). `api/cmd/main.go` runs `setupLeaderElection` in a goroutine; HTTP server starts immediately. Pre-A.2 fix.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — startupProbe at `infra/helm/loop-runtime-api/templates/deployment.yaml:204` (30×2s=60s). HTTP-before-leader-election via MEET-ASYNC-AMENDMENT-2026-05-12-003 Option A (RATIFIED). `api/cmd/main.go` runs `setupLeaderElection` in a goroutine; HTTP server starts immediately. Pre-A.2 fix.
 
 ### C. Local IP added to PG firewall (doctl databases firewalls append)
 - IP: 209.38.205.78 added for direct psql access
@@ -118,17 +118,17 @@ Load Test Corrections & Learnings — 2026-04-09
 - Root cause: DO Block Storage is RWO only. K8s scheduler may split
   steps across nodes when under resource pressure.
 - Manual fix: None applied — 9/10 success rate is acceptable for L1.
-- Definitive fix: Add nodeAffinity or podAffinity in loopruntime-forge
+- Definitive fix: Add nodeAffinity or podAffinity in loop-runtime-forge
   Workflow spec to pin all steps to the same node. Or switch to
   ReadWriteMany storage (NFS/DO Spaces FUSE mount).
-  loopruntime-forge is external: github.com/getloopscale/argo-workflows-go
-- **STATUS 2026-05-13:** PARTIALLY ✓ — `api/internal/argo/workflow_builder.go:262-288` adds `podAffinity` rule at LoopRuntime's renderer layer. Symptom resolved in production. Cross-repo RFC drafted at `concepts/operations/rfc-2026-05-13-loopruntime-forge-node-affinity.md` for upstream loopruntime-forge default. ADR D4 in plan documents the boundary. T3.1.
+  loop-runtime-forge is external: github.com/getloopscale/argo-workflows-go
+- **STATUS 2026-05-13:** PARTIALLY ✓ — `api/internal/argo/workflow_builder.go:262-288` adds `podAffinity` rule at LoopRuntime's renderer layer. Symptom resolved in production. Cross-repo RFC drafted at `concepts/operations/rfc-2026-05-13-loop-runtime-forge-node-affinity.md` for upstream loop-runtime-forge default. ADR D4 in plan documents the boundary. T3.1.
 
-### J. loopruntime-packs-runner v0.1.0 → v0.2.0 (bash → Go binary)
+### J. loop-runtime-packs-runner v0.1.0 → v0.2.0 (bash → Go binary)
 - Problem: v0.1.0 used bash script with syntax error on line 272
   (Rust Dockerfile template — malformed parenthesis). Caused 6/10
   failures in generate-dockerfile step.
-- Fix: Rebuilt from loopruntime-packs/Dockerfile.generate which compiles
+- Fix: Rebuilt from loop-runtime-packs/Dockerfile.generate which compiles
   the Go binary. Pushed as v0.2.0.
 - API updated: constants.go imageLoopRuntimePacks → v0.2.0
 - **STATUS 2026-05-13:** SUPERSEDED ✓ — current canonical is v0.4.0 ("lenient contract") per `api/internal/argo/constants.go:39` + memory `reference_build_mode_dispatch_2026_05_08.md`. Two version bumps past the original fix.
@@ -140,7 +140,7 @@ Load Test Corrections & Learnings — 2026-04-09
   burst capacity (20-25 concurrent builds).
 - Cost: +$24/mo base. Extra nodes ~$0.036/hr (temporary).
 - Definitive fix for Multi-Attach: still needs nodeAffinity in
-  loopruntime-forge. Medium nodes are mitigation, not elimination.
+  loop-runtime-forge. Medium nodes are mitigation, not elimination.
 - **STATUS 2026-05-13:** IMPLEMENTED ✓ — `infra/pulumi-infra/src/config/stack.ts:34-36` parametrizes buildNodeClass / buildMinNodes / buildMaxNodes (operator-configurable per stack). `infra/pulumi-infra/src/components/infra.ts:159` enables autoScale when buildMaxNodes is set. Plus item I closes the Multi-Attach symptom at renderer layer.
 
 ### N. Manual node pool change breaks scoped kubeconfigs
@@ -162,7 +162,7 @@ Load Test Corrections & Learnings — 2026-04-09
 
 ### O. Pipeline orphan SA cleanup deletes Pulumi-managed SAs
 - Problem: Pipeline cleanup step deletes SAs without Helm annotations.
-  But tenant-controller and loopruntime-api SAs are created by Pulumi (no Helm
+  But tenant-controller and loop-runtime-api SAs are created by Pulumi (no Helm
   annotations). Deleting them breaks the controller and API pods.
 - Fix needed: Exclude SAs with names matching known Pulumi resources
   from the orphan cleanup, OR remove the orphan SA cleanup entirely.
@@ -195,7 +195,7 @@ Load Test Corrections & Learnings — 2026-04-09
 - Workaround: Push with SHA tag + `kubectl set image` to force new RS.
 - Definitive fix: Use SHA-based image tags in production (already done
   by CI pipeline). The `:dev` tag is inherently racy.
-- **STATUS 2026-05-13:** IMPLEMENTED ✓ — `charts/loopruntime-api/values.yaml:8` uses `pullPolicy: IfNotPresent` (prod chart); CI publishes SHA-based tags. `infra/helm/loopruntime-api/values.yaml:10` uses `Always` for local dev (acceptable divergence). Pre-A.2 fix.
+- **STATUS 2026-05-13:** IMPLEMENTED ✓ — `charts/loop-runtime-api/values.yaml:8` uses `pullPolicy: IfNotPresent` (prod chart); CI publishes SHA-based tags. `infra/helm/loop-runtime-api/values.yaml:10` uses `Always` for local dev (acceptable divergence). Pre-A.2 fix.
 
 ### E. GitOps push produces empty repo — RESOLVED
 - Root cause was the manifest gate blocking ClusterIssuer reference
@@ -245,7 +245,7 @@ Load Test Corrections & Learnings — 2026-04-09
    - 0 manifest gate blocks
    - 0 PG lock conflicts
    - Latency: 293s (fastest) to 521s (slowest)
-   - loopruntime-packs-runner v0.2.0 (Go binary) — all Dockerfile generations OK
+   - loop-runtime-packs-runner v0.2.0 (Go binary) — all Dockerfile generations OK
 
    Previous L1 Results (10 tenants, concurrent):
    - 8/10 SUCCEEDED (80%)

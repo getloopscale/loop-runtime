@@ -56,8 +56,8 @@ func TestSurfaceEnabled_ReasonIsNotALabel(t *testing.T) {
 
 func TestSurfaceEnabled_CanonicalName(t *testing.T) {
 	// The name is an operations contract: dashboards and alerts point at it.
-	if !strings.Contains(SurfaceEnabled.WithLabelValues("x").Desc().String(), "loopruntime_api_surface_enabled") {
-		t.Error("the metric is not named `loopruntime_api_surface_enabled`")
+	if !strings.Contains(SurfaceEnabled.WithLabelValues("x").Desc().String(), "loop_runtime_api_surface_enabled") {
+		t.Error("the metric is not named `loop_runtime_api_surface_enabled`")
 	}
 }
 

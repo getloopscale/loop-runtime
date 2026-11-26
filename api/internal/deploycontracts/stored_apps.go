@@ -10,7 +10,7 @@ import "github.com/getloopscale/loop-runtime/api/internal/db"
 // back to the submission shape, the counterpart of ConvertLoopRuntimeYamlApps for
 // builds that start from a previous build rather than from loopzero.yaml (PR
 // previews). Every persisted field is carried: dropping Runtime, Path, Build
-// or Start rebuilds the app with the wrong strategy (loopruntime#185).
+// or Start rebuilds the app with the wrong strategy (loop-runtime#185).
 func AppSpecFromStored(s db.BuildAppSpec) AppSpec {
 	app := AppSpec{
 		Name:      s.Name,

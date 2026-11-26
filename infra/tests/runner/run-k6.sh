@@ -22,13 +22,13 @@ K6_DIR="$(cd "$SCRIPT_DIR/../performance/k6" && pwd)"
 
 # shellcheck source=./safety.sh
 . "$SCRIPT_DIR/safety.sh"
-loopruntime_safety_check
+loop_runtime_safety_check
 
 K6_SCRIPT="${1:-scripts/l1-10-tenants.js}"
 K6_SEED_LEVEL="${2:-l1}"
 K6_SEED_COUNT="${3:-10}"
 
-NAMESPACE="loopruntime-system"
+NAMESPACE="loop-runtime-system"
 JOB_NAME="k6-runner"
 
 echo "── k6 runner ──"

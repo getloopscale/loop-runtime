@@ -53,7 +53,7 @@ type VersionResponse struct {
 // fleetVersionResponse is the schema the dashboard's status panel consumes.
 //
 // The field names are NOT ours to choose: they are the contract
-// loopruntime-cloud/internal/serviceversions/probe.go already speaks with five services
+// loop-console/internal/serviceversions/probe.go already speaks with five services
 // (`version` + `built_at`). The engine was left off the panel for diverging from
 // it in both path AND field name.
 type fleetVersionResponse struct {

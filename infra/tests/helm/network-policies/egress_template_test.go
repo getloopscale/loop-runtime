@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025-2026 The LoopRuntime Authors
 
-// T8.5b regression test — text-level invariants for the loopruntime-system egress
+// T8.5b regression test — text-level invariants for the loop-runtime-system egress
 // allow-list NetworkPolicy and the default-deny-egress fallback.
 //
 // Why text-level: helm template + kubeconform are the LIVE smoke tests
 // run by infra-deploy.yml. This unit test guards the source against
 // accidental edits that would weaken the gates (e.g., flipping
-// loopruntimeSystemAllowEgress to default-true without the staging soak).
+// loopRuntimeSystemAllowEgress to default-true without the staging soak).
 
 package networkpolicies_test
 
@@ -25,7 +25,7 @@ func readEgressTemplate(t *testing.T) string {
 	templatePath := filepath.Join(
 		filepath.Dir(thisFile),
 		"..", "..", "..", "..",
-		"infra", "helm", "network-policies", "templates", "loopruntime-system-egress.yaml",
+		"infra", "helm", "network-policies", "templates", "loop-runtime-system-egress.yaml",
 	)
 	data, err := os.ReadFile(templatePath)
 	if err != nil {
@@ -51,11 +51,11 @@ func readNetworkPoliciesValues(t *testing.T) string {
 
 func TestNetworkPolicy_EgressTemplateExists(t *testing.T) {
 	tmpl := readEgressTemplate(t)
-	if !strings.Contains(tmpl, "loopruntime-system-allow-egress") {
-		t.Error("template must define loopruntime-system-allow-egress NetworkPolicy")
+	if !strings.Contains(tmpl, "loop-runtime-system-allow-egress") {
+		t.Error("template must define loop-runtime-system-allow-egress NetworkPolicy")
 	}
-	if !strings.Contains(tmpl, "loopruntime-system-default-deny-egress") {
-		t.Error("template must define loopruntime-system-default-deny-egress NetworkPolicy")
+	if !strings.Contains(tmpl, "loop-runtime-system-default-deny-egress") {
+		t.Error("template must define loop-runtime-system-default-deny-egress NetworkPolicy")
 	}
 }
 
@@ -64,12 +64,12 @@ func TestNetworkPolicy_DefaultDenyOptInOnly(t *testing.T) {
 
 	// Per EC-5, defaultDenyEgress MUST default OFF until staging soak
 	// validates the allow-list. Flipping default-on without the inventory
-	// breaks DNS, kube-apiserver, registry pulls — every pod in loopruntime-system.
+	// breaks DNS, kube-apiserver, registry pulls — every pod in loop-runtime-system.
 	if !strings.Contains(values, "defaultDenyEgress: false") {
 		t.Error("values.yaml MUST default defaultDenyEgress to false (T8.5b/c gate)")
 	}
-	if !strings.Contains(values, "loopruntimeSystemAllowEgress: false") {
-		t.Error("values.yaml MUST default loopruntimeSystemAllowEgress to false until cell-by-cell rollout")
+	if !strings.Contains(values, "loopRuntimeSystemAllowEgress: false") {
+		t.Error("values.yaml MUST default loopRuntimeSystemAllowEgress to false until cell-by-cell rollout")
 	}
 }
 

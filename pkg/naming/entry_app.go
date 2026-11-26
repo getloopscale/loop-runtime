@@ -17,7 +17,7 @@ type entryAppSpec struct {
 // JSON payload — the one whose IngressRoute the dashboard "Visit" link (and
 // the promote-emitted URL) should target. Resolution rules (FAANG canonical
 // J-25 sponsor walkthrough 2026-06-12 LIVE catch, extended to promote by
-// Red Team loopruntime-cloud#159 2026-07-01):
+// Red Team loop-console#159 2026-07-01):
 //
 //  1. Prefer the FIRST `server` app — server apps are always Traefik-routed
 //     via IngressRoute, so the canonical URL formula resolves cleanly.

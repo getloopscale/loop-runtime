@@ -5,7 +5,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: tenant-operator
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -21,7 +21,7 @@ rules:
   # CRs of the tenant to emit ArgoCD App + AppProject destinations for active
   # previews. Without `list` on previewenvironments, the operator silently
   # falls back to nil and no preview App is created (build runs but never
-  # syncs to workload cluster → no live URL). Mirrored in charts/loopruntime-
+  # syncs to workload cluster → no live URL). Mirrored in charts/loop-runtime-
   # tenant-operator/templates/clusterrole.yaml for prod helm path.
   - apiGroups: ["runtime.getloopscale.com"]
     resources: ["tenants", "environments", "previewenvironments"]
@@ -68,8 +68,8 @@ rules:
     resources: ["networkpolicies"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]
 
-  # --- Secrets: NOT here — Role tenant-operator-secrets-loopruntime-system below.
-  # Mirrors charts/loopruntime-tenant-operator/templates/role-secret-access.yaml.
+  # --- Secrets: NOT here — Role tenant-operator-secrets-loop-runtime-system below.
+  # Mirrors charts/loop-runtime-tenant-operator/templates/role-secret-access.yaml.
 
   # --- PriorityClasses: tenant workload priorities ---
   - apiGroups: ["scheduling.k8s.io"]
@@ -115,15 +115,15 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: tenant-operator
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 ---
-# Secret read in loopruntime-system only: cell kubeconfigs and the registry pull
+# Secret read in loop-runtime-system only: cell kubeconfigs and the registry pull
 # Secret. The operator's Secret cache watches this namespace alone.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: tenant-operator-secrets-loopruntime-system
-  namespace: loopruntime-system
+  name: tenant-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -132,36 +132,36 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: tenant-operator-secrets-loopruntime-system
-  namespace: loopruntime-system
+  name: tenant-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: tenant-operator-secrets-loopruntime-system
+  name: tenant-operator-secrets-loop-runtime-system
 subjects:
   - kind: ServiceAccount
     name: tenant-operator
-    namespace: loopruntime-system
+    namespace: loop-runtime-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tenant-operator
-  namespace: loopruntime-system
+  namespace: loop-runtime-system
   labels:
     app: tenant-operator
-    app.kubernetes.io/component: loopruntime-operator
+    app.kubernetes.io/component: loop-runtime-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: tenant-operator
-      app.kubernetes.io/component: loopruntime-operator
+      app.kubernetes.io/component: loop-runtime-operator
   template:
     metadata:
       labels:
         app: tenant-operator
-        app.kubernetes.io/component: loopruntime-operator
+        app.kubernetes.io/component: loop-runtime-operator
     spec:
       serviceAccountName: tenant-operator
       securityContext:
@@ -170,29 +170,29 @@ spec:
         fsGroup: 1000
       containers:
         - name: operator
-          image: loopruntime-tenant-operator
+          image: loop-runtime-tenant-operator
           args:
             - "--leader-elect=false"
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8080"
           env:
             - name: GITEA_URL
-              value: "http://gitea-http.loopruntime-system.svc.cluster.local:3000"
+              value: "http://gitea-http.loop-runtime-system.svc.cluster.local:3000"
             - name: GITEA_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: loopruntime-api-tokens
+                  name: loop-runtime-api-tokens
                   key: gitea-token
             - name: ARGOCD_NAMESPACE
               value: "argocd"
             - name: BUILD_KUBECONFIG
-              value: "/etc/loopruntime/build-kubeconfig"
+              value: "/etc/loop-runtime/build-kubeconfig"
             - name: CELL_0_KUBECONFIG
-              value: "/etc/loopruntime/runtime-kubeconfig"
+              value: "/etc/loop-runtime/runtime-kubeconfig"
             - name: BASE_DOMAIN
-              value: "loopruntime.local"
+              value: "loop-runtime.local"
             - name: WORKLOAD_CLUSTER_URL
-              value: "https://k3d-loopruntime-cell-0-server-0:6443"
+              value: "https://k3d-loop-runtime-cell-0-server-0:6443"
             - name: OPERATOR_INSECURE_SKIP_TLS
               value: "true"
             - name: INGRESS_NAMESPACE
@@ -227,11 +227,11 @@ spec:
             - name: tmp
               mountPath: /tmp
             - name: build-kubeconfig
-              mountPath: /etc/loopruntime/build-kubeconfig
+              mountPath: /etc/loop-runtime/build-kubeconfig
               subPath: build-kubeconfig
               readOnly: true
             - name: runtime-kubeconfig
-              mountPath: /etc/loopruntime/runtime-kubeconfig
+              mountPath: /etc/loop-runtime/runtime-kubeconfig
               subPath: runtime-kubeconfig
               readOnly: true
           securityContext:
@@ -248,13 +248,13 @@ spec:
           emptyDir: {}
         - name: build-kubeconfig
           configMap:
-            name: loopruntime-build-kubeconfig
+            name: loop-runtime-build-kubeconfig
             items:
               - key: config
                 path: build-kubeconfig
         - name: runtime-kubeconfig
           configMap:
-            name: loopruntime-cell-0-kubeconfig
+            name: loop-runtime-cell-0-kubeconfig
             items:
               - key: config
                 path: runtime-kubeconfig

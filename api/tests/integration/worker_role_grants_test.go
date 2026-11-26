@@ -15,7 +15,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/lock"
 )
 
-// loopruntime_worker is the one role that may cross tenants, and migration 000023
+// loop_runtime_worker is the one role that may cross tenants, and migration 000023
 // granted it only the tables that existed then. On a database built from the
 // migrations it held nothing on `accounts` or `deploy_events`, so the two
 // cross-tenant writes these tests run were refused with `permission denied`
@@ -23,10 +23,10 @@ import (
 //
 // They exercise the privileges themselves, so they only mean something on a
 // database built from the migrations (not schema.gen.sql with blanket grants)
-// and with LOOPRUNTIME_WORKER_DATABASE_URL connecting as loopruntime_worker:
+// and with LOOP_RUNTIME_WORKER_DATABASE_URL connecting as loop_runtime_worker:
 //
-//	DATABASE_URL=<loopruntime_api> LOOPRUNTIME_WORKER_DATABASE_URL=<loopruntime_worker> \
-//	LOOPRUNTIME_OWNER_DATABASE_URL=<loopruntime> go test ./tests/integration/ -run WorkerRole -v
+//	DATABASE_URL=<loop_runtime_api> LOOP_RUNTIME_WORKER_DATABASE_URL=<loop_runtime_worker> \
+//	LOOP_RUNTIME_OWNER_DATABASE_URL=<loop-runtime> go test ./tests/integration/ -run WorkerRole -v
 
 // requireTheWorkerRolesOwnPrivileges skips unless the worker DSN connects as a
 // role whose table privileges are what the migrations granted: a superuser, a
@@ -45,7 +45,7 @@ func requireTheWorkerRolesOwnPrivileges(t *testing.T) {
 	}
 	if unconstrained {
 		// Such a role cannot reproduce https://github.com/getloopscale/loop-runtime/issues/385.
-		t.Skip("LOOPRUNTIME_WORKER_DATABASE_URL is not the constrained cross-tenant role; point it at loopruntime_worker")
+		t.Skip("LOOP_RUNTIME_WORKER_DATABASE_URL is not the constrained cross-tenant role; point it at loop_runtime_worker")
 	}
 }
 
@@ -98,7 +98,7 @@ func TestWorkerRoleWritesTheDeployOutboxInsideTheEnvironmentLock(t *testing.T) {
 }
 
 // deployEventsOf reads the outbox through the request role scoped to the
-// tenant: loopruntime_worker only writes it, and the drain belongs to the control
+// tenant: loop_runtime_worker only writes it, and the drain belongs to the control
 // plane.
 func deployEventsOf(t *testing.T, tenant string) int {
 	t.Helper()

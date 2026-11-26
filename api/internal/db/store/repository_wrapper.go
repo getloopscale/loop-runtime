@@ -148,7 +148,7 @@ func (s *PostgresRepositoryStore) DeleteInstallation(ctx context.Context, instal
 }
 
 // LinkRepository connects a LoopRuntime project to a GitHub repository.
-// Idempotent re-link per `loopruntime connect` CLI contract.
+// Idempotent re-link per `loop-runtime connect` CLI contract.
 //
 // Plan J-09 T3.2 (2026-06-05) — autoDeploy parameter (was hardcoded true
 // in the SQL). Caller passes the user's choice; default true at the route

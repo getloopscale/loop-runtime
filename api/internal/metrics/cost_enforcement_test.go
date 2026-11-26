@@ -35,7 +35,7 @@ func TestCostCapDecisions_IsRegisteredWithReasonLabel(t *testing.T) {
 func TestCostCapDecisions_NameAndLabelsAreStable(t *testing.T) {
 	desc := CostCapDecisionsTotal.WithLabelValues("x", "y").Desc().String()
 
-	for _, expected := range []string{"loopruntime_cost_cap_decisions_total", "metric", "reason"} {
+	for _, expected := range []string{"loop_runtime_cost_cap_decisions_total", "metric", "reason"} {
 		if !strings.Contains(desc, expected) {
 			t.Errorf("descriptor lost %q: %s", expected, desc)
 		}

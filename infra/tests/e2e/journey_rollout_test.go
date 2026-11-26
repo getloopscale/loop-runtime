@@ -15,7 +15,7 @@
 //          emitted, CLI exit 3.
 //
 // Skip semantics:
-//   - Skipped when LOOPRUNTIME_E2E unset (suite-level gate).
+//   - Skipped when LOOP_RUNTIME_E2E unset (suite-level gate).
 //   - Skipped when Rollout CRD is missing (Argo Rollouts not installed) —
 //     similar to F-07 Velero guard, this checks the actual install signal
 //     rather than just namespace existence.

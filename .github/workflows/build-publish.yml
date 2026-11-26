@@ -38,7 +38,7 @@ on:
       sign:            { required: false, type: boolean, default: false }   # SBOM+provenance(mode=max)+cosign — release only
       verify:          { required: false, type: boolean, default: false }   # identity-pinned cosign verify (needs sign=true)
       trivy:           { required: false, type: boolean, default: false }   # CRITICAL/HIGH Trivy gate before push (uses .trivyignore if present)
-      dockerhub_image: { required: false, type: string,  default: "" }      # e.g. "loopruntime/themory" — also push to Docker Hub when DOCKERHUB_TOKEN is set
+      dockerhub_image: { required: false, type: string,  default: "" }      # e.g. "loop-runtime/themory" — also push to Docker Hub when DOCKERHUB_TOKEN is set
       # Default = `ubuntu-latest`, a GitHub-hosted runner (2026-09-16).
       #
       # It used to be the `getloopscale` org's Blacksmith fleet (2026-07-30), and the argument
@@ -50,21 +50,21 @@ on:
       #
       # The input still exists: anyone with a fleet of their own passes the label.
       runner:          { required: false, type: string,  default: '["ubuntu-latest"]' }
-      # Amazon ECR, the registry production pulls from (loopruntime-infra-live `registry/ecr`).
+      # Amazon ECR, the registry production pulls from (loop-runtime-infra-live `registry/ecr`).
       # Empty = no ECR push: the other repositories of the org call this workflow too, and
       # nothing here may assume an AWS role on their behalf. Both come from the CALLER's
       # repository variables, so the account id is never fixed in text.
       ecr_registry:    { required: false, type: string,  default: "" }      # e.g. <account-id>.dkr.ecr.us-east-1.amazonaws.com
       aws_role_arn:    { required: false, type: string,  default: "" }      # role assumed through GitHub OIDC to push to ECR
     secrets:
-      # Read-only deploy key for loopruntime-contracts — the PREFERRED route since 2026-07-31. It
+      # Read-only deploy key for loop-runtime-contracts — the PREFERRED route since 2026-07-31. It
       # reaches exactly one repository, read-only, revocable on its own. The previous PAT died
       # (`Bad credentials`) and took down 10 builds without naming the cause, because the same
       # dead credential appeared as `Repository not found` in the image build.
       GOMOD_SSH_KEY:      { required: false }
       # Legacy fallback. Kept for consumers of the reusable that still use it — the swap is
       # additive, not a break of contract.
-      GOMOD_TOKEN:        { required: false }   # cross-repo read for the pinned private loopruntime-contracts module
+      GOMOD_TOKEN:        { required: false }   # cross-repo read for the pinned private loop-runtime-contracts module
       DOCKERHUB_USERNAME: { required: false }
       DOCKERHUB_TOKEN:    { required: false }
 permissions:
@@ -314,7 +314,7 @@ jobs:
       # PUBLIC repositories only. On a private repository the organisation's plan refuses it
       # ("Feature not available for the getloopscale organization"), and every caller today is
       # private: unconditional, this step failed the whole publish after the push and before
-      # the cosign signature below could run (loopruntime-cloud run 36512769358). The cosign keyless
+      # the cosign signature below could run (loop-console run 36512769358). The cosign keyless
       # signature is the guarantee either way.
       - name: Attest build provenance (GitHub-native)
         if: ${{ inputs.sign && !github.event.repository.private }}

@@ -33,7 +33,7 @@ func newPlacedManager(lookup TenantCellLookup) (*SecretK8sManager, *fake.Clients
 	mgmt := fake.NewClientset()
 	dyn := newRuntimeFake()
 	return &SecretK8sManager{
-		mgmtClient: mgmt, runtimeDynamic: dyn, mgmtNamespace: "loopruntime-system",
+		mgmtClient: mgmt, runtimeDynamic: dyn, mgmtNamespace: "loop-runtime-system",
 		tenantCells: lookup, runtimeCellID: "cell-0",
 	}, mgmt, dyn
 }

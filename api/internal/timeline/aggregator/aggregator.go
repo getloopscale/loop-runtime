@@ -34,7 +34,7 @@ type EventSink interface {
 const AggregatorDegradedEventType = "deploy_timeline.aggregator.degraded"
 
 // ScrubFunc removes internal terms from an event and reports how many
-// replacements it made (fed to loopruntime_deploy_timeline_scrub_replacements_total).
+// replacements it made (fed to loop_runtime_deploy_timeline_scrub_replacements_total).
 // Production passes scrub.ScrubEventWithCount; tests may inject another.
 type ScrubFunc func(scrub.PhaseEvent) (scrub.PhaseEvent, int)
 

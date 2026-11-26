@@ -79,7 +79,7 @@ func (a *StatusReleaseStoreAdapter) GetActiveByEnv(ctx context.Context, tenantID
 // Kept as a package-private forwarder so existing call sites in adapters
 // don't need to change AND so the tests in release_adapter_test.go keep
 // exercising the same helper name. Moved to pkg/naming 2026-07-01 (Red
-// Team loopruntime-cloud#159 closure) so the promote path can reuse it —
+// Team loop-console#159 closure) so the promote path can reuse it —
 // promotion_orchestrator.go now emits the SAME canonical URL formula as
 // status.go, closing the "promote prints URL that 404s" divergence.
 func resolveEntryApp(appsRaw json.RawMessage) string {

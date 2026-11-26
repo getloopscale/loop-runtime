@@ -15,16 +15,16 @@
 #
 # 1. vault-bootstrap-dev.sh        — OpenBao init + unseal + AppRole +
 #                                    transit chain + SPKI pin
-# 2. loopruntime-ops seed minio (M15 W1)        — MinIO password reset (mgmt + build)
-# 3. seed-admin-loopruntime-dev.sh     — Kratos identity + tenant + session JWT
-# 5. loopruntime-ops seed github-app-dev (M15 W1)         — GitHub App PEM + webhook secret
+# 2. loop-runtime-ops seed minio (M15 W1)        — MinIO password reset (mgmt + build)
+# 3. seed-admin-loop-runtime-dev.sh     — Kratos identity + tenant + session JWT
+# 5. loop-runtime-ops seed github-app-dev (M15 W1)         — GitHub App PEM + webhook secret
 # 5b. seed-github-webhook-fixture-canonical.sh — repo-level webhook config
-# 6. loopruntime-ops seed gitea-token (M15 W2)  — Gitea API token mint + 3-way sync
-# 7. loopruntime-ops seed broker (M15 W3)       — loopruntime-broker token (the store is the
-#                                    cell helmfile's release loopruntime-broker)
+# 6. loop-runtime-ops seed gitea-token (M15 W2)  — Gitea API token mint + 3-way sync
+# 7. loop-runtime-ops seed broker (M15 W3)       — loop-runtime-broker token (the store is the
+#                                    cell helmfile's release loop-runtime-broker)
 # 9. seed-tenant-fixture-canonical.sh — subscription plan + GH installation
-# 17. loopruntime-ops seed data-plane-admin-keys — loopruntime-cloud's data-plane admin keys (#470)
-# 17g. loopruntime-ops seed data-plane-edge      — the edge authorises the data plane (#470)
+# 17. loop-runtime-ops seed data-plane-admin-keys — loop-console's data-plane admin keys (#470)
+# 17g. loop-runtime-ops seed data-plane-edge      — the edge authorises the data plane (#470)
 #
 # A step seeds secret material or data no helmfile can declare. The four that
 # patched objects helmfile renders — patch-kratos, hydra-urls, loki-cross-cluster
@@ -59,7 +59,7 @@ set -euo pipefail
 # The variable was already this script's convention (see the `kubectl --context "${CORE_CONTEXT:-...}"`
 # further down); here it starts applying to the seeds too. `export` because `run_step` uses
 # `eval`, and the binary reads it in `resolveContextName`.
-export CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopruntime-core}"
+export CORE_CONTEXT="${CORE_CONTEXT:-k3d-loop-runtime-core}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -177,64 +177,64 @@ secret_value() {
 }
 
 ensure_seed_endpoints() {
-  if [[ -z "${KRATOS_ADMIN_URL:-}" ]] && port_forward loopruntime-auth ory-kratos-admin 14435:80; then
+  if [[ -z "${KRATOS_ADMIN_URL:-}" ]] && port_forward loop-runtime-auth ory-kratos-admin 14435:80; then
     export KRATOS_ADMIN_URL="http://127.0.0.1:14435"
   fi
-  if [[ -z "${LOOPRUNTIME_ADMIN_HYDRA_PG_URL:-}" ]]; then
+  if [[ -z "${LOOP_RUNTIME_ADMIN_HYDRA_PG_URL:-}" ]]; then
     local pw
-    pw="$(secret_value loopruntime-system loopruntime-db-credentials password)"
-    if [[ -n "$pw" ]] && port_forward loopruntime-system postgresql 15432:5432; then
-      export LOOPRUNTIME_ADMIN_HYDRA_PG_URL="postgres://loopruntime:${pw}@127.0.0.1:15432/loopruntime?sslmode=disable"
+    pw="$(secret_value loop-runtime-system loop-runtime-db-credentials password)"
+    if [[ -n "$pw" ]] && port_forward loop-runtime-system postgresql 15432:5432; then
+      export LOOP_RUNTIME_ADMIN_HYDRA_PG_URL="postgres://loop_runtime:${pw}@127.0.0.1:15432/loop_runtime?sslmode=disable"
     fi
   fi
-  export LOOPRUNTIME_API_URL="${LOOPRUNTIME_API_URL:-http://localhost:13001}"
-  if [[ -z "${LOOPRUNTIME_BOOTSTRAP_SECRET:-}" ]]; then
+  export LOOP_RUNTIME_API_URL="${LOOP_RUNTIME_API_URL:-http://localhost:13001}"
+  if [[ -z "${LOOP_RUNTIME_BOOTSTRAP_SECRET:-}" ]]; then
     local bs
-    bs="$(secret_value loopruntime-system loopruntime-api-internal LOOPRUNTIME_BOOTSTRAP_SECRET)"
-    if [[ -n "$bs" ]]; then export LOOPRUNTIME_BOOTSTRAP_SECRET="$bs"; fi
+    bs="$(secret_value loop-runtime-system loop-runtime-api-internal LOOP_RUNTIME_BOOTSTRAP_SECRET)"
+    if [[ -n "$bs" ]]; then export LOOP_RUNTIME_BOOTSTRAP_SECRET="$bs"; fi
   fi
 }
 
 # Each seed runs in its own process, so what one seed produces never reaches the next
 # unless the chain hands it on. The admin seed reports the tenant it provisioned in its
-# result ("(tenant tn-…)"); the fixture seed needs it as LOOPRUNTIME_TENANT_ID (#453).
+# result ("(tenant tn-…)"); the fixture seed needs it as LOOP_RUNTIME_TENANT_ID (#453).
 export_admin_tenant_id() {
-  [[ -n "${LOOPRUNTIME_TENANT_ID:-}" ]] && return 0
+  [[ -n "${LOOP_RUNTIME_TENANT_ID:-}" ]] && return 0
   local id
   id="$(grep -m1 -oE '\(tenant tn-[a-z0-9-]+\)' "$1" 2>/dev/null | grep -oE 'tn-[a-z0-9-]+' || true)"
-  if [[ -n "$id" ]]; then export LOOPRUNTIME_TENANT_ID="$id"; fi
+  if [[ -n "$id" ]]; then export LOOP_RUNTIME_TENANT_ID="$id"; fi
   return 0
 }
 
-# The fixture step creates its project through the CLI. Prefer LOOPRUNTIME_BIN, then a `loopruntime` on
+# The fixture step creates its project through the CLI. Prefer LOOP_RUNTIME_BIN, then a `loop-runtime` on
 # PATH; otherwise install the PUBLISHED CLI — what a user gets — into a per-version cache.
 # A cold droplet has none, and earlier rounds used one installed by hand (#453).
-LOOPRUNTIME_CLI_VERSION="${LOOPRUNTIME_CLI_VERSION:-0.4.0}"
-ensure_loopruntime_cli() {
-  [[ -n "${LOOPRUNTIME_BIN:-}" ]] && return 0
-  if command -v loopruntime >/dev/null 2>&1; then
-    LOOPRUNTIME_BIN="$(command -v loopruntime)"; export LOOPRUNTIME_BIN; return 0
+LOOP_RUNTIME_CLI_VERSION="${LOOP_RUNTIME_CLI_VERSION:-0.4.0}"
+ensure_loop_runtime_cli() {
+  [[ -n "${LOOP_RUNTIME_BIN:-}" ]] && return 0
+  if command -v loop-runtime >/dev/null 2>&1; then
+    LOOP_RUNTIME_BIN="$(command -v loop-runtime)"; export LOOP_RUNTIME_BIN; return 0
   fi
-  local prefix="$HOME/.cache/loopruntime-cli/${LOOPRUNTIME_CLI_VERSION:-0.4.0}"
-  if [[ ! -x "$prefix/node_modules/.bin/loopruntime" ]]; then
-    npm install --silent --no-audit --no-fund --prefix "$prefix" "@loopruntime/cli@${LOOPRUNTIME_CLI_VERSION:-0.4.0}" >/dev/null 2>&1 \
-      || { log "  could not install @loopruntime/cli@${LOOPRUNTIME_CLI_VERSION:-0.4.0}"; return 0; }
+  local prefix="$HOME/.cache/loop-runtime-cli/${LOOP_RUNTIME_CLI_VERSION:-0.4.0}"
+  if [[ ! -x "$prefix/node_modules/.bin/loop-runtime" ]]; then
+    npm install --silent --no-audit --no-fund --prefix "$prefix" "@loop-runtime/cli@${LOOP_RUNTIME_CLI_VERSION:-0.4.0}" >/dev/null 2>&1 \
+      || { log "  could not install @loop-runtime/cli@${LOOP_RUNTIME_CLI_VERSION:-0.4.0}"; return 0; }
   fi
-  export LOOPRUNTIME_BIN="$prefix/node_modules/.bin/loopruntime"
+  export LOOP_RUNTIME_BIN="$prefix/node_modules/.bin/loop-runtime"
 }
 
 VERIFY_FLAG=""
 [[ "$VERIFY" == "1" ]] && VERIFY_FLAG="--verify"
 
-# Step 0 (NEW 2026-06-20) — auto-provision the separate loopruntime-secrets k3d
+# Step 0 (NEW 2026-06-20) — auto-provision the separate loop-runtime-secrets k3d
 # cluster + OpenBao chart BEFORE Step 1 (vault-bootstrap-dev.sh) attempts
-# init/unseal. Gated on LOOPRUNTIME_HELMFILE_ENV=dev-public per ADR
+# init/unseal. Gated on LOOP_RUNTIME_HELMFILE_ENV=dev-public per ADR
 # 2026-06-20-dev-public-vault-automated-init (sponsor-accepted risk: the
 # dev-public TEST tier uses an AUTOMATED Shamir init; the witness +
 # distributed-shard ceremony is scoped to prod/persistent vaults only).
 #
 # Approach A UNBREAKABLE: this uses `task k3d:secrets:create` +
-# `task k3d:secrets:bootstrap` against the SEPARATE k3d-loopruntime-secrets cluster.
+# `task k3d:secrets:bootstrap` against the SEPARATE k3d-loop-runtime-secrets cluster.
 # `task k3d:secrets:bootstrap-in-core` remains PROHIBITED (independent of
 # witness scope — separate-cluster topology violation).
 #
@@ -245,14 +245,14 @@ VERIFY_FLAG=""
 # Cleanroom-fresh run is the cluster create + ~3min helm sync.
 #
 # In other envs (standalone-multi / unset / prod) this Step 0 is SKIPPED —
-# standalone doesn't run loopruntime-secrets, and prod requires the witnessed
+# standalone doesn't run loop-runtime-secrets, and prod requires the witnessed
 # ceremony per the mandate § Sub-step 2.5 prod/persistent path.
-if [[ "${LOOPRUNTIME_HELMFILE_ENV:-}" == "dev-public" && "$SKIP_VAULT" != "1" ]]; then
+if [[ "${LOOP_RUNTIME_HELMFILE_ENV:-}" == "dev-public" && "$SKIP_VAULT" != "1" ]]; then
   run_step "0a-secrets-cluster-create" "cd $REPO_ROOT && task k3d:secrets:create"
   run_step "0b-secrets-cluster-bootstrap" "cd $REPO_ROOT && task k3d:secrets:bootstrap"
 else
-  skip_step "0a-secrets-cluster-create" "skipped — only applicable in LOOPRUNTIME_HELMFILE_ENV=dev-public (current: ${LOOPRUNTIME_HELMFILE_ENV:-unset})"
-  skip_step "0b-secrets-cluster-bootstrap" "skipped — only applicable in LOOPRUNTIME_HELMFILE_ENV=dev-public (current: ${LOOPRUNTIME_HELMFILE_ENV:-unset})"
+  skip_step "0a-secrets-cluster-create" "skipped — only applicable in LOOP_RUNTIME_HELMFILE_ENV=dev-public (current: ${LOOP_RUNTIME_HELMFILE_ENV:-unset})"
+  skip_step "0b-secrets-cluster-bootstrap" "skipped — only applicable in LOOP_RUNTIME_HELMFILE_ENV=dev-public (current: ${LOOP_RUNTIME_HELMFILE_ENV:-unset})"
 fi
 
 # Step 1
@@ -268,15 +268,15 @@ fi
 # per the canonical runbook (VK.5) — codified here closes the seed chain
 # FAIL=11 for the cross-cluster ESO read path. Reuses the existing
 # canonical vault-bootstrap-eso.sh (NOT a new .sh — Rule 9 + un-homed-logic).
-# Only meaningful under Approach A (separate loopruntime-secrets cluster); single-
+# Only meaningful under Approach A (separate loop-runtime-secrets cluster); single-
 # cluster runs no-op via the script's own preflight.
 if [[ "$SKIP_VAULT" == "1" ]]; then
   skip_step "1b-vault-bootstrap-eso" "skipped together with step 1 (operator already ran vault chain)"
 else
   ESO_BOOTSTRAP="$SCRIPT_DIR/../openbao/vault-bootstrap-eso.sh"
   if [[ -f "$ESO_BOOTSTRAP" ]]; then
-    run_step "1b-vault-bootstrap-eso" "bash $ESO_BOOTSTRAP --mgmt-context k3d-loopruntime-core --vault-context k3d-loopruntime-secrets" || \
-      log "  (continuing — CSS loopruntime-secrets-secrets may need operator triage)"
+    run_step "1b-vault-bootstrap-eso" "bash $ESO_BOOTSTRAP --mgmt-context k3d-loop-runtime-core --vault-context k3d-loop-runtime-secrets" || \
+      log "  (continuing — CSS loop-runtime-secrets-secrets may need operator triage)"
   else
     skip_step "1b-vault-bootstrap-eso" "vault-bootstrap-eso.sh not found at $ESO_BOOTSTRAP (skipped)"
   fi
@@ -285,16 +285,16 @@ fi
 # Step 2
 if [[ "$DRY_RUN" != "1" ]]; then
   ensure_seed_endpoints
-  ensure_loopruntime_cli
+  ensure_loop_runtime_cli
 fi
 
-run_step "2-seed-minio" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed minio ${VERIFY_FLAG:+--verify})"
+run_step "2-seed-minio" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed minio ${VERIFY_FLAG:+--verify})"
 
 # Step 3 — the admin login submit needs the dev-public Kratos URLs, which
 # `helmfile sync` renders (it used to wait on the patch-kratos and hydra-urls
 # seeds, Finding #4 of issue #91; those patches are environment values now).
-run_step "3-seed-admin-loopruntime-dev" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed admin-loopruntime-dev ${VERIFY_FLAG:+--verify})"
-export_admin_tenant_id "/tmp/seed-3-seed-admin-loopruntime-dev.log"
+run_step "3-seed-admin-loop-runtime-dev" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed admin-loop-runtime-dev ${VERIFY_FLAG:+--verify})"
+export_admin_tenant_id "/tmp/seed-3-seed-admin-loop-runtime-dev.log"
 
 # Step 3b (NEW 2026-06-29 per Red Team #117 closure) — QA Red Team
 # canonical identity. The seed-admin script is generic over EMAIL +
@@ -303,57 +303,57 @@ export_admin_tenant_id "/tmp/seed-3-seed-admin-loopruntime-dev.log"
 # QA operator's working inbox, accessible at gmail /u/2). Without
 # this step, every Cleanroom obliterates the QA's identity and
 # recovery returns the anti-enumeration mute for their address.
-# Session is persisted to a separate file (~/.loopruntime/redteam-qa-*) so
+# Session is persisted to a separate file (~/.loop-runtime/redteam-qa-*) so
 # the admin session at the canonical path is not overwritten.
-run_step "3b-seed-redteam-qa-identity" "(cd $REPO_ROOT/cmd/loopruntime-ops && EMAIL=paulohenrique.java@gmail.com SESSION_FILE=\$HOME/.loopruntime/redteam-qa-session.txt SESSION_JWT_FILE=\$HOME/.loopruntime/redteam-qa-session-jwt.txt go run . seed admin-loopruntime-dev)"
+run_step "3b-seed-redteam-qa-identity" "(cd $REPO_ROOT/cmd/loop-runtime-ops && EMAIL=paulohenrique.java@gmail.com SESSION_FILE=\$HOME/.loop-runtime/redteam-qa-session.txt SESSION_JWT_FILE=\$HOME/.loop-runtime/redteam-qa-session-jwt.txt go run . seed admin-loop-runtime-dev)"
 
-# Step 5 (M15 W1: migrated to loopruntime-ops seed; bash script deleted)
-run_step "5-seed-github-app-dev" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed github-app-dev ${VERIFY_FLAG:+--verify})"
+# Step 5 (M15 W1: migrated to loop-runtime-ops seed; bash script deleted)
+run_step "5-seed-github-app-dev" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed github-app-dev ${VERIFY_FLAG:+--verify})"
 
 # Step 5b (NEW 2026-07-04) — canonical GitHub webhook on the fixture
-# repo. Without this, `loopruntime push` on getloopscale/loopzerokit-example silently
+# repo. Without this, `loop-runtime push` on getloopscale/loopzerokit-example silently
 # no-ops: GitHub never POSTs to /api/v1/webhooks/github, autodeploy
 # never runs, dogfood-webhook-chain + chaos c11 chain link 9 FAIL. This
 # is the seam that step 5 (the App PEM + webhook secret) does NOT
 # cover — the REPO webhook is per-repo config on the GitHub side.
 # Env-gated to dev-public (the only env whose Caddy edge handles
-# /api/v1/webhooks/github → loopruntime-api directly per Caddyfile app-dev
+# /api/v1/webhooks/github → loop-runtime-api directly per Caddyfile app-dev
 # block). SKIP-graceful when gh unauthenticated or dev-credentials.json
 # absent (standalone-multi tier).
-if [[ "${LOOPRUNTIME_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  run_step "5b-seed-github-webhook-fixture" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed github-webhook-fixture ${VERIFY_FLAG:+--verify})"
+if [[ "${LOOP_RUNTIME_HELMFILE_ENV:-}" == "dev-public" ]]; then
+  run_step "5b-seed-github-webhook-fixture" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed github-webhook-fixture ${VERIFY_FLAG:+--verify})"
 else
-  skip_step "5b-seed-github-webhook-fixture-canonical" "skipped — only applicable in dev-public (current: ${LOOPRUNTIME_HELMFILE_ENV:-unset})"
+  skip_step "5b-seed-github-webhook-fixture-canonical" "skipped — only applicable in dev-public (current: ${LOOP_RUNTIME_HELMFILE_ENV:-unset})"
 fi
 
 # Step 6
-run_step "6-seed-gitea-token" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed gitea-token ${VERIFY_FLAG:+--verify})"
+run_step "6-seed-gitea-token" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed gitea-token ${VERIFY_FLAG:+--verify})"
 
 # Step 6b (NEW 2026-06-16) — ArgoCD ↔ Gitea repo-creds (MUST run AFTER step 6 so token is canonical)
-run_step "6b-seed-argocd-gitea-creds" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed argocd-gitea-creds ${VERIFY_FLAG:+--verify})"
+run_step "6b-seed-argocd-gitea-creds" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed argocd-gitea-creds ${VERIFY_FLAG:+--verify})"
 
 # Step 7
-run_step "7-seed-broker" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed broker ${VERIFY_FLAG:+--verify})"
+run_step "7-seed-broker" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed broker ${VERIFY_FLAG:+--verify})"
 
-# Step 7b (NEW 2026-06-16) — Vault role_id into Secret loopruntime-openbao-approle (MUST run AFTER vault-bootstrap-dev)
-run_step "7b-seed-vault-role-id-sync" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed vault-role-id-sync ${VERIFY_FLAG:+--verify})"
+# Step 7b (NEW 2026-06-16) — Vault role_id into Secret loop-runtime-openbao-approle (MUST run AFTER vault-bootstrap-dev)
+run_step "7b-seed-vault-role-id-sync" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed vault-role-id-sync ${VERIFY_FLAG:+--verify})"
 
 # Step 9
 # #123 (qa-dogfood-cleanup-2026-06-21 T2.2 / ADR-Q7): pass `--team`
-# explicitly so any inherited `LOOPRUNTIME_PLAN_TIER` env (operator shell
+# explicitly so any inherited `LOOP_RUNTIME_PLAN_TIER` env (operator shell
 # default, stale dev-credentials.json residue) cannot override the
 # canonical dev-public tier. QA dogfooding 2026-06-21 caught the
 # Scale page showing `starter` plan ceiling 2 even after the canonical
 # chain ran — root cause was the env-shadowing path.
-run_step "9-seed-tenant-fixture" "(cd $REPO_ROOT/cmd/loopruntime-ops && LOOPRUNTIME_PLAN_TIER=team go run . seed tenant-fixture ${VERIFY_FLAG:+--verify})"
+run_step "9-seed-tenant-fixture" "(cd $REPO_ROOT/cmd/loop-runtime-ops && LOOP_RUNTIME_PLAN_TIER=team go run . seed tenant-fixture ${VERIFY_FLAG:+--verify})"
 
 # Step 10 (NEW 2026-06-16) — admin-cli Hydra OAuth2 client.
 # Required for dogfood-login Suite 0 T5.4 (≥ 3 Hydra clients).
-# Complements bootstrap-oauth-clients.sh (which provisions loopruntime-cli +
-# loopruntime-bootstrap) with the admin-side client_credentials path.
+# Complements bootstrap-oauth-clients.sh (which provisions loop-runtime-cli +
+# loop-runtime-bootstrap) with the admin-side client_credentials path.
 # Per reference_admin_cli_hydra_client_canonical memory.
-# Step 10 (M15 W2: migrated to loopruntime-ops seed; bash script deleted)
-run_step "10-seed-admin-hydra-client" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed admin-hydra-client ${VERIFY_FLAG:+--verify})"
+# Step 10 (M15 W2: migrated to loop-runtime-ops seed; bash script deleted)
+run_step "10-seed-admin-hydra-client" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed admin-hydra-client ${VERIFY_FLAG:+--verify})"
 
 # Step 11 (NEW 2026-06-16) — connect canonical fixture (project "sample" +
 # repo link). Required by LIVE wrappers that probe /projects/sample/* paths.
@@ -369,21 +369,21 @@ run_step "12-seed-chaos-mesh-canonical" "bash $SCRIPT_DIR/seed-chaos-mesh-canoni
 
 # Step 13 (NEW M2 2026-06-23) — ArgoCD admin token
 # EC-3 absorption (v1.1): env-gate dev-public OR standalone-multi — ArgoCD does not exist in other envs
-if [[ "${LOOPRUNTIME_HELMFILE_ENV:-}" == "dev-public" || "${LOOPRUNTIME_HELMFILE_ENV:-}" == "standalone-multi" ]]; then
-  run_step "13-seed-argocd-token" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed argocd-token ${VERIFY_FLAG:+--verify})"
+if [[ "${LOOP_RUNTIME_HELMFILE_ENV:-}" == "dev-public" || "${LOOP_RUNTIME_HELMFILE_ENV:-}" == "standalone-multi" ]]; then
+  run_step "13-seed-argocd-token" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed argocd-token ${VERIFY_FLAG:+--verify})"
 else
-  skip_step "13-seed-argocd-token" "skipped — only applicable in dev-public/standalone-multi (current: ${LOOPRUNTIME_HELMFILE_ENV:-unset})"
+  skip_step "13-seed-argocd-token" "skipped — only applicable in dev-public/standalone-multi (current: ${LOOP_RUNTIME_HELMFILE_ENV:-unset})"
 fi
 
-# Step 15 (M15 W1: migrated to loopruntime-ops seed; bash script deleted) (NEW M2 2026-06-23) — loopruntime-stripe-webhook Secret materialization (universal; SKIP-graceful on placeholder)
-run_step "15-seed-stripe-webhook-secret" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed stripe-webhook-secret ${VERIFY_FLAG:+--verify})"
+# Step 15 (M15 W1: migrated to loop-runtime-ops seed; bash script deleted) (NEW M2 2026-06-23) — loop-runtime-stripe-webhook Secret materialization (universal; SKIP-graceful on placeholder)
+run_step "15-seed-stripe-webhook-secret" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed stripe-webhook-secret ${VERIFY_FLAG:+--verify})"
 
 # Step 15b (NEW 2026-06-24 — plan stripe-l2-wiring-canonical-fix T3.2) —
-# loopruntime-stripe-api-keys Secret materialization (sibling of 15 per ADR D1;
+# loop-runtime-stripe-api-keys Secret materialization (sibling of 15 per ADR D1;
 # separate rotation cadence: webhook secret vs API key per Stripe runbook).
-run_step "15b-seed-stripe-api-keys" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed stripe-api-keys ${VERIFY_FLAG:+--verify})"
+run_step "15b-seed-stripe-api-keys" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed stripe-api-keys ${VERIFY_FLAG:+--verify})"
 
-# Step 15c (NEW 2026-07-01 — Red Team loopruntime-cloud#156) — Stripe test-mode
+# Step 15c (NEW 2026-07-01 — Red Team loop-console#156) — Stripe test-mode
 # webhook endpoint provisioning + real whsec capture. Without this the
 # canonical fulfillment flow (payment → checkout.session.completed →
 # plan promotion) is dead because Stripe has no endpoint to POST to, and
@@ -391,7 +391,7 @@ run_step "15b-seed-stripe-api-keys" "(cd $REPO_ROOT/cmd/loopruntime-ops && go ru
 # signature validation even if events arrived. Idempotent: skips when
 # endpoint already exists AND whsec canonical. SKIP graceful when
 # stripe.api_key placeholder/missing (standalone-multi tier).
-run_step "15c-seed-stripe-webhook-endpoint" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed stripe-webhook-endpoint ${VERIFY_FLAG:+--verify})"
+run_step "15c-seed-stripe-webhook-endpoint" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed stripe-webhook-endpoint ${VERIFY_FLAG:+--verify})"
 
 # Step 16 (NEW 2026-07-01 — plan dashboard-badge-data-plane-poller T6.1) —
 # data-plane poller first-tick warm-up. EC-2 absorption: without this,
@@ -406,22 +406,22 @@ run_step "15c-seed-stripe-webhook-endpoint" "(cd $REPO_ROOT/cmd/loopruntime-ops 
 # whether the poller is enabled is decided by helmfile overlay per env
 # (dev-public: enabled=true; standalone-multi: not declared → treated
 # as disabled). Legacy shell-env override kept for local dev workflows.
-POLLER_ENABLED_CFG="$(kubectl --context "${CORE_CONTEXT:-k3d-loopruntime-core}" \
-  -n loopruntime-system get configmap loopruntime-api \
-  -o jsonpath='{.data.LOOPRUNTIME_DATA_PLANE_POLLER_ENABLED}' 2>/dev/null || true)"
-if [[ "${LOOPRUNTIME_DATA_PLANE_POLLER_ENABLED:-$POLLER_ENABLED_CFG}" == "true" ]]; then
-  POLLER_WARMUP_S="${LOOPRUNTIME_DATA_PLANE_POLLER_WARMUP_S:-45}"
+POLLER_ENABLED_CFG="$(kubectl --context "${CORE_CONTEXT:-k3d-loop-runtime-core}" \
+  -n loop-runtime-system get configmap loop-runtime-api \
+  -o jsonpath='{.data.LOOP_RUNTIME_DATA_PLANE_POLLER_ENABLED}' 2>/dev/null || true)"
+if [[ "${LOOP_RUNTIME_DATA_PLANE_POLLER_ENABLED:-$POLLER_ENABLED_CFG}" == "true" ]]; then
+  POLLER_WARMUP_S="${LOOP_RUNTIME_DATA_PLANE_POLLER_WARMUP_S:-45}"
   run_step "16-data-plane-poller-first-tick" "sleep $POLLER_WARMUP_S && log '   data-plane poller warmed up (${POLLER_WARMUP_S}s wait)' && true"
 else
-  skip_step "16-data-plane-poller-first-tick" "skipped — loopruntime-api ConfigMap has LOOPRUNTIME_DATA_PLANE_POLLER_ENABLED='${POLLER_ENABLED_CFG:-<absent>}' (poller not wired for this env)"
+  skip_step "16-data-plane-poller-first-tick" "skipped — loop-runtime-api ConfigMap has LOOP_RUNTIME_DATA_PLANE_POLLER_ENABLED='${POLLER_ENABLED_CFG:-<absent>}' (poller not wired for this env)"
 fi
 
-# Step 17 (#470) — loopruntime-cloud's platform-admin key for every data-plane service on the
-# core cluster. loopruntime-cloud mints per-tenant keys with it behind the edge's forward-auth;
+# Step 17 (#470) — loop-console's platform-admin key for every data-plane service on the
+# core cluster. loop-console mints per-tenant keys with it behind the edge's forward-auth;
 # without it every authorised /v1/{memory,rag,lens}/* call answers 503. Keeps a stored
-# key that still authenticates, mints one otherwise, and rolls loopruntime-cloud onto the keys
+# key that still authenticates, mints one otherwise, and rolls loop-console onto the keys
 # (waiting for it). SKIPs where no data-plane service is deployed.
-run_step "17-seed-data-plane-admin-keys" "(cd $REPO_ROOT/cmd/loopruntime-ops && go run . seed data-plane-admin-keys ${VERIFY_FLAG:+--verify})"
+run_step "17-seed-data-plane-admin-keys" "(cd $REPO_ROOT/cmd/loop-runtime-ops && go run . seed data-plane-admin-keys ${VERIFY_FLAG:+--verify})"
 
 # Step 17a-g — data-plane services up, and the edge authorising them. Env-gated to
 # dev-public, the only environment whose Caddy edge serves the data plane.
@@ -430,21 +430,21 @@ run_step "17-seed-data-plane-admin-keys" "(cd $REPO_ROOT/cmd/loopruntime-ops && 
 # core-cluster.yaml): memory /v1/health 200, rag /v1/health 200 (HTTP surface contract
 # B-115), lens /v1/healthz 200.
 #
-# The edge probe is `loopruntime-ops seed data-plane-edge`: an anonymous call must be refused
-# by loopruntime-cloud's forward-auth itself. It replaced three `curl … = 401` checks, which
+# The edge probe is `loop-runtime-ops seed data-plane-edge`: an anonymous call must be refused
+# by loop-console's forward-auth itself. It replaced three `curl … = 401` checks, which
 # the compose Traefik this edge used before #470 passed just as well — a 401 from the
 # service, or from a different authoriser, looked identical to them.
-if [[ "${LOOPRUNTIME_HELMFILE_ENV:-}" == "dev-public" ]]; then
-  DP_EDGE="${LOOPRUNTIME_DATA_PLANE_EDGE:-https://app-dev.getloopscale.com}"
+if [[ "${LOOP_RUNTIME_HELMFILE_ENV:-}" == "dev-public" ]]; then
+  DP_EDGE="${LOOP_RUNTIME_DATA_PLANE_EDGE:-https://app-dev.getloopscale.com}"
   run_step "17a-data-plane-memory-host" "curl -fsS --max-time 5 http://localhost:18081/v1/health -o /dev/null"
   run_step "17c-data-plane-rag-host" "curl -fsS --max-time 5 http://localhost:18082/v1/health -o /dev/null"
   run_step "17e-data-plane-lens-host" "curl -fsS --max-time 5 http://localhost:18084/v1/healthz -o /dev/null"
-  run_step "17g-seed-data-plane-edge" "(cd $REPO_ROOT/cmd/loopruntime-ops && LOOPRUNTIME_EDGE_URL=$DP_EDGE go run . seed data-plane-edge)"
+  run_step "17g-seed-data-plane-edge" "(cd $REPO_ROOT/cmd/loop-runtime-ops && LOOP_RUNTIME_EDGE_URL=$DP_EDGE go run . seed data-plane-edge)"
 else
-  skip_step "17a-data-plane-memory-host" "skipped — only applicable in dev-public (current: ${LOOPRUNTIME_HELMFILE_ENV:-unset})"
-  skip_step "17c-data-plane-rag-host" "skipped — only applicable in dev-public (current: ${LOOPRUNTIME_HELMFILE_ENV:-unset})"
-  skip_step "17e-data-plane-lens-host" "skipped — only applicable in dev-public (current: ${LOOPRUNTIME_HELMFILE_ENV:-unset})"
-  skip_step "17g-seed-data-plane-edge" "skipped — only applicable in dev-public (current: ${LOOPRUNTIME_HELMFILE_ENV:-unset})"
+  skip_step "17a-data-plane-memory-host" "skipped — only applicable in dev-public (current: ${LOOP_RUNTIME_HELMFILE_ENV:-unset})"
+  skip_step "17c-data-plane-rag-host" "skipped — only applicable in dev-public (current: ${LOOP_RUNTIME_HELMFILE_ENV:-unset})"
+  skip_step "17e-data-plane-lens-host" "skipped — only applicable in dev-public (current: ${LOOP_RUNTIME_HELMFILE_ENV:-unset})"
+  skip_step "17g-seed-data-plane-edge" "skipped — only applicable in dev-public (current: ${LOOP_RUNTIME_HELMFILE_ENV:-unset})"
 fi
 
 # Summary

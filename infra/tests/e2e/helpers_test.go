@@ -30,7 +30,7 @@ func fixturesPath() string {
 
 // apiURL returns the E2E API base URL from environment or default.
 func apiURL() string {
-	if url := os.Getenv("LOOPRUNTIME_API_URL"); url != "" {
+	if url := os.Getenv("LOOP_RUNTIME_API_URL"); url != "" {
 		return url
 	}
 	if url := os.Getenv("API_URL"); url != "" {
@@ -68,7 +68,7 @@ func uniqueSuffix() string {
 // the path. Each test gets its own copy to avoid cross-test contamination.
 func copyFixture(fixtureName string) string {
 	src := filepath.Join(fixturesPath(), fixtureName)
-	dst, err := os.MkdirTemp("", "loopruntime-e2e-"+fixtureName+"-")
+	dst, err := os.MkdirTemp("", "loop-runtime-e2e-"+fixtureName+"-")
 	Expect(err).NotTo(HaveOccurred())
 
 	cmd := exec.Command("cp", "-r", src+"/.", dst)
@@ -96,7 +96,7 @@ func verifyAPIHealth() error {
 
 // e2eBaseDomain returns the base domain for app hostnames in the current env.
 // Plan 2026-05-19-drill-skills-rigor-restoration: drill DOKS uses CF wildcard
-// (drill.getloopscale.com) while local k3d uses loopruntime.local. DRILL_KUBECONFIG_DIR
+// (drill.getloopscale.com) while local k3d uses loop-runtime.local. DRILL_KUBECONFIG_DIR
 // presence is the signal for drill mode.
 func e2eBaseDomain() string {
 	if os.Getenv("DRILL_KUBECONFIG_DIR") != "" {
@@ -108,21 +108,21 @@ func e2eBaseDomain() string {
 // ensureProjectDeleted idempotently deletes a project if it exists.
 // Used for cleanup before/after journey tests.
 //
-// LOOPRUNTIME_API_TIMEOUT bumped to 120s (vs CLI default 30s) — project delete
+// LOOP_RUNTIME_API_TIMEOUT bumped to 120s (vs CLI default 30s) — project delete
 // cascades through cancel builds + gitops remove + ArgoCD sync and exceeds
 // 30s on LIVE k3d (observed flakes in journey 73/75 run, 2026-05-06).
 func ensureProjectDeleted(project string) {
 	// The exit code is not checked: an absent project is the expected case.
 	// A CLI that never started is not, and would leave the project behind.
-	_, stderr, exitCode := execLoopRuntime(loopruntimeInvocation{env: []string{longAPITimeout}},
+	_, stderr, exitCode := execLoopRuntime(loopRuntimeInvocation{env: []string{longAPITimeout}},
 		"project", "delete", project, "--yes", "--json")
-	Expect(exitCode).NotTo(Equal(-1), "loopruntime did not start: %s", stderr)
+	Expect(exitCode).NotTo(Equal(-1), "loop-runtime did not start: %s", stderr)
 }
 
-// resolveToken returns the JWT to inject into spawned loopruntime CLI processes.
+// resolveToken returns the JWT to inject into spawned loop-runtime CLI processes.
 // Resolution order (first non-empty wins):
-//  1. process env LOOPRUNTIME_TOKEN (CI/operator override — real Hydra-minted JWT)
-//  2. ~/.loopruntime/local-dogfood-token.txt (dogfood-seeded JWT)
+//  1. process env LOOP_RUNTIME_TOKEN (CI/operator override — real Hydra-minted JWT)
+//  2. ~/.loop-runtime/local-dogfood-token.txt (dogfood-seeded JWT)
 //  3. seed.AuthToken (legacy placeholder; only valid in dev-mode API)
 //
 // 2026-05-09 fix: prefer the FILE over env when both exist. The file is
@@ -133,13 +133,13 @@ func ensureProjectDeleted(project string) {
 // surfaces immediately to subsequent runLoopRuntime calls.
 func resolveToken() string {
 	if home, err := os.UserHomeDir(); err == nil {
-		if data, err := os.ReadFile(home + "/.loopruntime/local-dogfood-token.txt"); err == nil {
+		if data, err := os.ReadFile(home + "/.loop-runtime/local-dogfood-token.txt"); err == nil {
 			if s := strings.TrimSpace(string(data)); s != "" {
 				return s
 			}
 		}
 	}
-	if t := os.Getenv("LOOPRUNTIME_TOKEN"); t != "" {
+	if t := os.Getenv("LOOP_RUNTIME_TOKEN"); t != "" {
 		return t
 	}
 	return seed.AuthToken
@@ -147,8 +147,8 @@ func resolveToken() string {
 
 // skipIfNotE2E skips the current spec if E2E prerequisites are not met.
 func skipIfNotE2E() {
-	if os.Getenv("LOOPRUNTIME_E2E") == "" {
-		Skip("Set LOOPRUNTIME_E2E=1 to run E2E tests")
+	if os.Getenv("LOOP_RUNTIME_E2E") == "" {
+		Skip("Set LOOP_RUNTIME_E2E=1 to run E2E tests")
 	}
 	if !clusterRunning() {
 		Skip("kubectl cluster-info failed — clusters not running")

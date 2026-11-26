@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	testMgmtNS  = "loopruntime-system"
+	testMgmtNS  = "loop-runtime-system"
 	testBuildNS = "argo"
 )
 
@@ -98,7 +98,7 @@ func newEvictorFixture(tenants ...string) evictorFixture {
 	var namespaces []runtime.Object
 	for _, id := range tenants {
 		objs = append(objs, objectsFor(id)...)
-		namespaces = append(namespaces, terminatingNamespace("loopruntime-"+id+"-web-production", id))
+		namespaces = append(namespaces, terminatingNamespace("loop-runtime-"+id+"-web-production", id))
 	}
 	scheme := runtime.NewScheme()
 	mgmt := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, objs...)
@@ -178,8 +178,8 @@ func TestEvictionFinalizesOnlyTheEvictedTenantsNamespaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvictTenantsFromClusters: %v", err)
 	}
-	if len(finalized) != 1 || finalized[0] != "loopruntime-tn-a-web-production" {
-		t.Fatalf("finalized namespaces = %v, want only loopruntime-tn-a-web-production", finalized)
+	if len(finalized) != 1 || finalized[0] != "loop-runtime-tn-a-web-production" {
+		t.Fatalf("finalized namespaces = %v, want only loop-runtime-tn-a-web-production", finalized)
 	}
 	if counts.NamespacesFinalized != 1 {
 		t.Errorf("NamespacesFinalized = %d, want 1", counts.NamespacesFinalized)

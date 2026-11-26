@@ -2,8 +2,8 @@
 # dev-public-seed-post-cleanroom-tenant-cr_test.sh
 #
 # Plan: seed-post-cleanroom-tenant-cr-provisioning (v1.0)
-# Closes: Red Team loopruntime-cloud#118 — QA Red Team identity logs into dev-public but
-#         the tenant CR is absent in k3d-loopruntime-core → deploys fail because
+# Closes: Red Team loop-console#118 — QA Red Team identity logs into dev-public but
+#         the tenant CR is absent in k3d-loop-runtime-core → deploys fail because
 #         tenant-operator cannot reconcile a nonexistent tenant.
 #
 # PER `feedback_issue_fix_requires_failing_e2e_test_2026_06_25` UNBREAKABLE:
@@ -12,7 +12,7 @@
 #
 # OPERATOR HARD STOP — per .claude/rules/cleanroom-up-live-test-mandate.md.
 # Requires:
-#   - k3d-loopruntime-core cluster Ready (Cleanroom TOTAL → UP chain prior)
+#   - k3d-loop-runtime-core cluster Ready (Cleanroom TOTAL → UP chain prior)
 #   - seed-post-cleanroom-all.sh just succeeded (this test is the post-condition)
 #
 # Scenarios:
@@ -32,16 +32,16 @@ set -euo pipefail
 
 # --- Constants --------------------------------------------------------------
 
-ISSUE_REF="loopruntime-cloud#118"
+ISSUE_REF="loop-console#118"
 PLAN_SLUG="seed-post-cleanroom-tenant-cr-provisioning"
 SCRIPT_NAME="$(basename "$0")"
 
-KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopruntime-core}"
-NAMESPACE="${NAMESPACE:-loopruntime-system}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loop-runtime-core}"
+NAMESPACE="${NAMESPACE:-loop-runtime-system}"
 APIVERSION_GROUP="tenants.runtime.getloopscale.com"
 
 # Canonical tenant_ids — pinned LIVE 2026-06-29 against dev-public PG state.
-# These are the deterministic outputs of seed-admin-loopruntime-dev.sh for the
+# These are the deterministic outputs of seed-admin-loop-runtime-dev.sh for the
 # canonical EMAIL=admin@getloopscale.com and EMAIL=paulohenrique.java@gmail.com
 # seed runs respectively (per seed-admin script lines 230-280: tenant_id is
 # derived from the Kratos identity id via a stable canonical format).
@@ -135,7 +135,7 @@ scenario_a() {
   log "Scenario $label — tenant=$tenant"
 
   if ! kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get tenants.runtime.getloopscale.com "$tenant" >/dev/null 2>&1; then
-    record_fail "A" "$tenant NotFound in $KUBE_CONTEXT/$NAMESPACE (seed-admin-loopruntime-dev.sh did not provision it)"
+    record_fail "A" "$tenant NotFound in $KUBE_CONTEXT/$NAMESPACE (seed-admin-loop-runtime-dev.sh did not provision it)"
     return 1
   fi
 

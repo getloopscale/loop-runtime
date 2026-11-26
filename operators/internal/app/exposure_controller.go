@@ -78,7 +78,7 @@ type ExposureReconciler struct {
 	// ProbePublicDomain, when set, makes the reachability probe ask for the URL users
 	// reach — the hostname's first label under this domain, over TLS — instead of the
 	// route hostname itself. For an environment whose route hostnames are an internal
-	// SNI the edge rewrites to (dev-public's *.loopruntime.local), which resolves nowhere and
+	// SNI the edge rewrites to (dev-public's *.loop-runtime.local), which resolves nowhere and
 	// failed the probe for every app (#447). Empty where the hostname is public.
 	ProbePublicDomain string
 }
@@ -284,7 +284,7 @@ func (r *ExposureReconciler) advanceAndPatch(ctx context.Context, route, base *l
 // # WHERE IT LOOKS, AND WHY THAT WAS WRONG
 //
 // It used to call r.Get on route.Namespace with a name derived from the hostname. Both
-// were wrong: the ExposedRoute lives in loopruntime-system on the MGMT cluster, while the Secret
+// were wrong: the ExposedRoute lives in loop-runtime-system on the MGMT cluster, while the Secret
 // is created by the manifest renderer in the tenant namespace on the WORKLOAD cluster,
 // under the name tls-{project}-{app}. A Get against a Secret that cannot exist returns
 // NotFound, the function returned false, and the route logged "certificate not ready,

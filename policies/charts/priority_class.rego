@@ -5,11 +5,11 @@
 package main
 
 platform_critical_components := {
-  "loopruntime-api",
-  "loopruntime-tenant-operator",
-  "loopruntime-app-operator",
-  "loopruntime-preview-operator",
-  "loopruntime-platform-operator",
+  "loop-runtime-api",
+  "loop-runtime-tenant-operator",
+  "loop-runtime-app-operator",
+  "loop-runtime-preview-operator",
+  "loop-runtime-platform-operator",
 }
 
 deny[msg] {

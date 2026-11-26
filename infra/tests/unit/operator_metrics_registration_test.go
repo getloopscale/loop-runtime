@@ -8,7 +8,7 @@
 // `operators/internal/metrics` package via blank-import side-effect.
 // Without this, controller-runtime metrics registry stays empty in the
 // split binary, breaking observability dashboards/alerts that pre-date
-// the split (e.g., loopruntime_misplaced_tenant_total from ADR-0018).
+// the split (e.g., loop_runtime_misplaced_tenant_total from ADR-0018).
 //
 // Lives in infra/tests/unit because each operators/cmd/{op}-operator
 // is its own `package main` and can't host a test file from a
