@@ -4,11 +4,11 @@
 package charts
 
 // The dashboard SPA reads its runtime config from window.__LOOPSCALE_CONFIG__
-// (getloopscale/console dashboard/src/lib/http/config.ts), with the keys API_URL,
+// (getloopscale/loop-console dashboard/src/lib/http/config.ts), with the keys API_URL,
 // AUTH_URL, ACCOUNTS_URL and OAUTH_URL. The chart wrote window.__LOOP_RUNTIME_CONFIG__
 // with other keys, so nothing it set reached the SPA, and the CLI's device flow was
 // refused on staging: Hydra's public origin was not among the origins the SPA may
-// redirect to (getloopscale/console#531).
+// redirect to (getloopscale/loop-console#531).
 
 import (
 	"strings"

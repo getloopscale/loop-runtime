@@ -108,7 +108,7 @@ platformImages:
     loop-runtime-clone-runner: "develop-7a34191"
     loop-runtime-syft-scanner: "develop-7a34191"
     loop-runtime-cosign-signer: "develop-7a34191"
-    # getloopscale/console publishes these two (private on GHCR, pulled with
+    # getloopscale/loop-console publishes these two (private on GHCR, pulled with
     # aws.imagePullSecret). Required while profile.loopRuntimeCloud is on.
     loop-console: "develop-5ccea0d"
     loop-console-dashboard: "develop-5ccea0d"

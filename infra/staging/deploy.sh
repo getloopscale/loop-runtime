@@ -17,7 +17,7 @@
 #      published, or else the tag the previous deploy ran. The first deploy starts
 #      from the tags platformImages.tags pins in the staging environment. The images
 #      other repositories build (loop-console and loop-console-dashboard from
-#      getloopscale/console, looptrace from getloopscale/looptrace) keep the pins in git.
+#      getloopscale/loop-console, looptrace from getloopscale/looptrace) keep the pins in git.
 #   4. Runs `task staging:platform` at that commit with those pins, and reports
 #      staging/deploy success or failure on the commit.
 #   5. After a successful deploy, validates the commit with infra/staging/validate.sh of
@@ -40,7 +40,7 @@ PLATFORM_CMD="${DEPLOY_PLATFORM_CMD:-task staging:platform}"
 # How long a commit with no artifacts run yet is waited for before it is deployed with
 # the images it already has (a commit whose paths no build watches).
 RUN_GRACE_SECONDS="${DEPLOY_RUN_GRACE_SECONDS:-900}"
-# The images other repositories publish (getloopscale/console, getloopscale/looptrace). No
+# The images other repositories publish (getloopscale/loop-console, getloopscale/looptrace). No
 # commit here builds them, so their pins are always the ones in git.
 EXTERNAL_IMAGES="loop-console loop-console-dashboard looptrace"
 STATUS_URL_BASE="${DEPLOY_STATUS_URL_BASE:-https://staging.getloopscale.com}"

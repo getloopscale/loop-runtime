@@ -227,7 +227,7 @@ func TestStagingAPIRouteLeavesTLSToTheEdge(t *testing.T) {
 
 // loop-console signs its session tokens with SESSION_TOKEN_SECRET. Without one it makes
 // up a random secret per pod, and every token dies with the pod that issued it (#523 of
-// getloopscale/console). Staging reads it from the platform secret, through External
+// getloopscale/loop-console). Staging reads it from the platform secret, through External
 // Secrets, into the Secret the chart mounts as existingSecret.
 func TestStagingCloudSessionSecretComesFromSecretsManager(t *testing.T) {
 	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "aws-secrets-manager", "infra/helm/aws-secrets-manager", stagingOutputs...)

@@ -14,7 +14,7 @@ import (
 )
 
 // The dashboard image's Content-Security-Policy adds to 'self' the origins nginx reads
-// from /etc/nginx/conf.d/csp-origins.conf (getloopscale/console#525). The chart renders
+// from /etc/nginx/conf.d/csp-origins.conf (getloopscale/loop-console#525). The chart renders
 // that file from config.cspConnectOrigins and config.cspFormOrigins and mounts it, and a
 // change to it rolls the pods.
 func TestLoopRuntimeDashboardMountsTheCSPOriginsOfItsEnvironment(t *testing.T) {
