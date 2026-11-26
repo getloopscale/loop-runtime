@@ -411,6 +411,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Staging installs Traefik after the AWS Load Balancer Controller on the core and on the cells. Installed side by side, Traefik's ALB Ingress could reach the controller's webhook before the pod served, and the sync stopped with `failed calling webhook "vingress.elbv2.k8s.aws"`.
 - A push to a connected repository respects the plan's builds per month, as the deploy route does. Over the limit nothing is built, and the commit gets a `loopzero/deploy` failure status with the limit, the usage and the advice to upgrade (#159).
 - Creating an environment writes its GitOps path before the environment itself. Written afterwards, the path arrived after the Argo CD Application had read a missing directory, and the Application stayed in `ComparisonError` for about three minutes (#134).
 - Creating an environment writes its directory to the tenant's GitOps repository, so its Argo CD Application compares clean before the first release. The Application reported `ComparisonError`, "app path does not exist", until something was deployed (#134).
