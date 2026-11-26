@@ -32,7 +32,7 @@ externalSecret:
 
 postgres:
   # The init container that waits for the database; the service's database is external.
-  image: mirror.gcr.io/library/postgres:16-alpine@sha256:e013e867e712fec275706a6c51c966f0bb0c93cfa8f51000f85a15f9865a28cb
+  image: mirror.gcr.io/library/postgres:19-alpine@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f
   database: looptrace
   user: looptrace
   uriEnv: LOOPTRACE_PG_URI

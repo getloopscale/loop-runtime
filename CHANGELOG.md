@@ -111,6 +111,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The platform's PostgreSQL on staging runs PostgreSQL 19.0 (`ghcr.io/cloudnative-pg/postgresql:19.0-minimal-trixie`), up from 16.14 (#177).
 - Staging runs the CloudNativePG operator 1.31.0-rc1, installed from the manifest of its release (`infra/helm/cloudnative-pg`) instead of the upstream chart. `platform-postgres` resizes a running instance in place when its CPU or memory change, and with standbys takes the synchronous one from another zone (#177).
 - The platform's PostgreSQL (`platform-postgres`) refuses connections without TLS, checksums its pages, runs with requests equal to limits, and admits only the operator, the data-plane services and the metrics scraper through a NetworkPolicy. `platformPostgres.walStorage`, `cpu`, `memory` and `parameters` size it per environment. With more than one instance it spreads them over zones, makes commits wait for one standby and protects them with a PodDisruptionBudget (#175).
 - The `data-plane-service` chart takes `postgres.external.caSecret` and then connects with `sslmode=verify-full` against that CA. Its pods no longer take service links, and the database role's Secret carries `cnpg.io/reload` so a rotated password is applied at once (#175).
@@ -415,6 +416,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The staging deploy follows the pin in git for looptrace, an image another repository builds. It kept the previous deploy's tag, so a moved pin never rolled out (#178) (#177).
 - Staging runs the looptrace image that mints keys as a role subject to row-level security, where `POST /v1/admin/keys` answered `500` (getloopscale/looptrace#7) (#175).
 - A plan limit refusal names where the plan is changed. The 402 of `POST /secrets/bulk` and of `POST /domains` answered `upgrade_url: /billing` whatever `BILLING_UPGRADE_URL` held, and no message carried the address. Both now answer the configured address, and every plan refusal ends with it when it is absolute: "Upgrade your plan at https://... to continue." (#176).
 - The edge route index knows active custom domains. It was built from ExposedRoutes alone, one per application under the platform host, so the lookup answered 404 for a custom host and no `route:<host>` reached the edge store. The index now also reads the domain store, and `/internal/edge/route` takes the host from `?domain=`, the form an edge that issues certificates on demand asks with (#174).

@@ -27,8 +27,8 @@ spec:
     podAntiAffinityType: {{ .Values.spread.type }}
   bootstrap:
     initdb:
-      # Detects a page the storage corrupted. PostgreSQL 16 leaves it off, and it can
-      # only be chosen when the cluster is created.
+      # Detects a page the storage corrupted. PostgreSQL before 18 leaves it off, so it
+      # is stated whatever the image. It can only be chosen when the cluster is created.
       dataChecksums: true
   storage:
     size: {{ .Values.storage.size }}

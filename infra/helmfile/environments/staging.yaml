@@ -121,7 +121,7 @@ platformImages:
 # recreates the data.
 platformPostgres:
   enabled: true
-  image: "ghcr.io/cloudnative-pg/postgresql:16.14-minimal-trixie@sha256:9d1ace6dcb1e0cec5791f6ffa760ca78a45bdc42fecfe4700b9c498cfdfe5e4e"
+  image: "ghcr.io/cloudnative-pg/postgresql:19.0-minimal-trixie@sha256:12688a494f25aa0b7e1e3cd1800abe85b427fd1a09c991668a48162e3431a2af"
   # One instance, in one zone: no standby, so no synchronous commit and no failover. A
   # production environment sets 3, which spreads them over zones and makes commits wait
   # for one standby (infra/helm/platform-postgres).

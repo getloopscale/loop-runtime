@@ -17,7 +17,7 @@ import (
 // instances, how they replicate, a WAL volume) is pinned as a consequence of its values.
 
 const platformPostgresBase = `
-image: registry.example/postgresql:16.14
+image: registry.example/postgresql:19.0
 databases:
   - { name: looptrace, owner: looptrace, passwordSecret: looptrace-postgres-role }
 `
@@ -58,7 +58,7 @@ func TestPlatformPostgres_RefusesConnectionsWithoutTLS(t *testing.T) {
 
 func TestPlatformPostgres_ChecksumsItsPages(t *testing.T) {
 	if got := dig(platformCluster(t, ""), "spec", "bootstrap", "initdb", "dataChecksums"); got != true {
-		t.Errorf("bootstrap.initdb.dataChecksums = %v, want true: PostgreSQL 16 leaves it off", got)
+		t.Errorf("bootstrap.initdb.dataChecksums = %v, want true: PostgreSQL before 18 leaves it off", got)
 	}
 }
 

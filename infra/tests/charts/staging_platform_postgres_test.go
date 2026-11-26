@@ -26,8 +26,8 @@ func TestStaging_PlatformPostgresRendersOneClusterOnAPinnedImage(t *testing.T) {
 		t.Errorf("Cluster namespace = %v, want loopzero-data-plane", got)
 	}
 	image, _ := dig(cluster, "spec", "imageName").(string)
-	if !regexp.MustCompile(`^ghcr\.io/cloudnative-pg/postgresql:16\.\d+[a-z-]*@sha256:[0-9a-f]{64}$`).MatchString(image) {
-		t.Errorf("Cluster image %q is not a PostgreSQL 16 release pinned by digest", image)
+	if !regexp.MustCompile(`^ghcr\.io/cloudnative-pg/postgresql:19\.\d+[a-z-]*@sha256:[0-9a-f]{64}$`).MatchString(image) {
+		t.Errorf("Cluster image %q is not a PostgreSQL 19 release pinned by digest", image)
 	}
 	if got := dig(cluster, "spec", "instances"); got != 1 {
 		t.Errorf("Cluster instances = %v, want 1", got)
