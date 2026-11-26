@@ -170,6 +170,8 @@ func newConvergenceLoop(cfg config.Config, d Deps, logger *slog.Logger) *release
 		})
 	// J-16: deploy.succeeded outbox writer on the activation path.
 	loop.WithDeployEventStore(store.NewDeployEventStoreSqlc())
+	// A pending release that a newer deploy replaced is cancelled, not timed out.
+	loop.WithLatestReleases(d.ReleaseStore)
 	return loop
 }
 
