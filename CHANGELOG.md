@@ -14,6 +14,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `loopzero-ops drill postgres-restore` proves that the platform's PostgreSQL recovers from its backups: it writes a marker, recovers a temporary cluster from the bucket, compares and deletes it. Staging runs it after every nightly rebuild and reports the commit status `staging/restore-drill` and the alarm `restore-drill` (#186).
 - The core Prometheus scrapes the platform's PostgreSQL and staging loads ten alerts for it (instance down, WAL archive, base backups, volume, replication, transaction ID age, connections), each with a runbook entry. Promtail ships the logs of `loopzero-data-plane` and `cnpg-system` to Loki (#182).
 - The platform's PostgreSQL archives its WAL and takes scheduled base backups to S3 through the Barman Cloud plugin, as an IAM role and with no stored key (`platformPostgres.backup`). The `platform-postgres` chart can build a cluster from those backups, up to a given moment (`recovery`). Staging keeps a week of them (#180).
 - Staging runs the platform's own PostgreSQL for data-plane services on CloudNativePG: the `cloudnative-pg` operator and one `Cluster` in `loopzero-data-plane`, turned on by `platformPostgres` in an environment. Each entry of `platformPostgres.databases` becomes a database owned by a login role of its own. RDS stays the control plane's database (#161).

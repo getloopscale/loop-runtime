@@ -197,6 +197,54 @@ Migrations are **forward-only** (golang-migrate). A `DROP` requires explicit sig
 is a PITR gate before migrating, a bounded RTO for rollback, and a verification log that
 must be filled in.
 
+## Platform PostgreSQL recovery
+
+The platform's PostgreSQL (`platform-postgres` in `loopzero-data-plane`, core cluster) keeps
+base backups and a continuous WAL archive in the environment's `postgres-backups` bucket,
+under a folder named by `platformPostgres.backup.serverName` (default: `platform-postgres`).
+A recovery builds a new cluster from that folder. The operator never restores in place.
+
+**What a recovery gives back.** Everything archived. With one instance, commits newer than
+the last archived WAL segment are lost: at most `archive_timeout`, which CloudNativePG sets
+to 5 minutes, and less under write load. Measured on staging on 2026-11-26: a database of
+a few megabytes recovered in 51 seconds, from creating the cluster to healthy. No recovery
+of a large database has been measured yet, so that number is a floor.
+
+**Proof that it works.** `loopzero-ops drill postgres-restore` writes a marker row, waits
+for its WAL to be archived, recovers a temporary cluster (`platform-postgres-restore-drill`)
+from the bucket, checks the marker and the table counts, and deletes the temporary cluster.
+It only reads the archive and writes one row to the running cluster. Staging runs it after
+every nightly rebuild (`infra/staging/restore-drill.sh`) and reports the commit status
+`staging/restore-drill` and the alarm `restore-drill`.
+
+**Recover the cluster.** The service is down from step 2 until step 4 completes.
+
+1. In the environment file (`infra/helmfile/environments/<env>.yaml`), under
+   `platformPostgres`, set `recovery.serverName` to the folder to recover from (the
+   current `backup.serverName`) and `backup.serverName` to a name never used before, such
+   as `platform-postgres-r1`. The recovered cluster starts a new archive there, and the
+   chart refuses the same name on both. To stop at a moment before a mistake, also set
+   `recovery.targetTime` (RFC 3339, UTC); empty replays every archived segment.
+2. Delete the cluster and wait for its volume claims to go:
+   `kubectl -n loopzero-data-plane delete cluster platform-postgres`. The bucket is not
+   touched.
+3. Deploy the environment. `recovery.*` is read only when the cluster is created.
+4. Wait for `Cluster in healthy state`, then check `ContinuousArchiving=True` and that the
+   first backup under the new folder completes. Restart the services that use the
+   database: their connections died with the old cluster.
+5. Leave `backup.serverName` at the new name and clear `recovery.*`.
+
+**Going back.** A recovery never writes to the folder it read, so the previous archive is
+intact. To undo a recovery, or to pick another moment, repeat the steps with the original
+folder in `recovery.serverName` and one more new name in `backup.serverName`.
+
+**When the drill fails.** Read the log the alarm carries. "no completed backup": see
+`LoopZeroPlatformPostgresBackupStale` under "Platform PostgreSQL alerts". "WAL not archived": see
+`LoopZeroPlatformPostgresWALArchiveFailing`. "recovery timed out": read the logs of the
+`platform-postgres-restore-drill-1` pod while the drill runs; a credential error means the
+IAM role does not trust the service account `platform-postgres-restore-drill`
+(infra-live, `identity/core-platform-postgres`).
+
 ## Multi-cell canary
 
 Staged rollout with **halt criteria fixed in advance per stage** — availability SLI, error
