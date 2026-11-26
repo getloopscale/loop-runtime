@@ -9,6 +9,7 @@ package dogfood
 
 import (
 	"context"
+	"net/url"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -48,15 +49,75 @@ var _ = Describe("J-14 Audit Log — query + filter", Label("live", "dogfood", "
 		})
 	})
 
+	// auditPage reads one page of the audit log with the given query.
+	auditPage := func(query string) (float64, []map[string]any) {
+		status, body, err := CurlJSON(ctx, env, "GET",
+			env.CloudBaseURL+"/engine/api/v1/audit?"+query, jwt, nil)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(status).To(Equal(200), "GET /audit?%s", query)
+		total, ok := body["total"].(float64)
+		Expect(ok).To(BeTrue(), "the answer has no total: %v", body)
+		raw, _ := body["entries"].([]any)
+		entries := make([]map[string]any, 0, len(raw))
+		for _, entry := range raw {
+			asMap, _ := entry.(map[string]any)
+			entries = append(entries, asMap)
+		}
+		return total, entries
+	}
+
 	Context("Scenario B — action filter", func() {
-		It("GET /api/v1/audit-log?action=project.created returns subset", func() {
-			Skip("implementation in T4.5 follow-up — requires seeded audit events")
+		It("GET /engine/api/v1/audit?action=project.created returns only that action", func() {
+			// Creating the project is the audited event; a tenant that already has
+			// it keeps the entry of the day it was created.
+			_, err := NewEngine(env, jwt).EnsureProject(ctx, ProbeProject)
+			Expect(err).ToNot(HaveOccurred())
+
+			total, entries := auditPage("action=project.created&limit=50")
+			Expect(total).To(BeNumerically(">=", 1), "no project.created entry for a tenant that has a project")
+			Expect(entries).ToNot(BeEmpty())
+			for _, entry := range entries {
+				Expect(entry["action"]).To(Equal("project.created"))
+			}
+
+			unfiltered, _ := auditPage("limit=1")
+			Expect(total).To(BeNumerically("<=", unfiltered))
+
+			none, noEntries := auditPage("action=no.such.action&limit=50")
+			Expect(none).To(BeZero())
+			Expect(noEntries).To(BeEmpty())
 		})
 	})
 
 	Context("Scenario C — since filter", func() {
-		It("GET /api/v1/audit-log?since=1h returns only recent events", func() {
-			Skip("implementation in T4.5 follow-up — requires temporal probe helper")
+		It("GET /engine/api/v1/audit?since= returns only entries from that moment on", func() {
+			_, err := NewEngine(env, jwt).EnsureProject(ctx, ProbeProject)
+			Expect(err).ToNot(HaveOccurred())
+
+			_, newest := auditPage("limit=1")
+			Expect(newest).To(HaveLen(1))
+			stamp, _ := newest[0]["timestamp"].(string)
+			newestAt, err := time.Parse(time.RFC3339Nano, stamp)
+			Expect(err).ToNot(HaveOccurred(), "the newest entry has timestamp %q", stamp)
+			// To the second, so that the newest entry is inside the window however
+			// the API compares the bound.
+			since := newestAt.Truncate(time.Second)
+
+			total, entries := auditPage("limit=50&since=" + url.QueryEscape(since.Format(time.RFC3339)))
+			Expect(total).To(BeNumerically(">=", 1))
+			for _, entry := range entries {
+				at, err := time.Parse(time.RFC3339Nano, entry["timestamp"].(string))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(at).To(BeTemporally(">=", since), "entry %v is older than since=%s", entry, since)
+			}
+
+			all, _ := auditPage("limit=1")
+			Expect(total).To(BeNumerically("<=", all))
+
+			tomorrow := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+			later, laterEntries := auditPage("limit=50&since=" + url.QueryEscape(tomorrow))
+			Expect(later).To(BeZero())
+			Expect(laterEntries).To(BeEmpty())
 		})
 	})
 })

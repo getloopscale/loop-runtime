@@ -48,15 +48,21 @@ export LOOPZERO_DOGFOOD_AUTH_URL="${LOOPZERO_DOGFOOD_AUTH_URL:-https://auth.stag
 # loopzero-cloud has no deep health (it answers 404 on /health/deep).
 export LOOPZERO_DOGFOOD_DEEP_HEALTH_URL="${LOOPZERO_DOGFOOD_DEEP_HEALTH_URL:-https://api.staging.getloopscale.com/api/v1/health/deep}"
 export LOOPZERO_DOGFOOD_JWT_PATH="$STATE_DIR/validate/jwt"
+# The Kratos session of the validation identity, for the journeys that act as its browser.
+export LOOPZERO_DOGFOOD_SESSION_PATH="$STATE_DIR/validate/session"
 
 # The journeys that exercise what staging runs: loopzero-api, loopzero-cloud and its
 # /engine proxy, and Kratos. Every journey checks the deep health before its scenarios.
-#   j01 login: a seeded session authenticates against an engine route
+#   j01 login: a seeded session authenticates against an engine route, and choosing
+#     GitHub or Google redirects to the provider with a client id
 #   j02 sign-up: Kratos opens a registration flow
-#   j04 recovery, j05 device flow: the authenticated prerequisites of both flows
-#   j07 projects list, j10 environments, j11 domains, j22 secrets: engine lists
-#   j14 audit log: the engine's audit entries
-#   j15 profile: Kratos whoami answers
+#   j04 recovery: the authenticated prerequisites of the flow
+#   j05 device flow: a device asks for a code, the validation identity approves it in a
+#     second client and the device gets a token the API accepts
+#   j07 projects list, j11 domains, j22 secrets: engine lists
+#   j10 environments: the list has each environment of a project once
+#   j14 audit log: the engine's audit entries, filtered by action and by time
+#   j15 profile: Kratos whoami answers, and the settings flow changes the profile name
 #   j18 status: the deep health, and the engine health through the proxy
 #   app-lifecycle: deploys a real app (fixtures/env-probe) to the project staging-validate
 #     of the validation tenant, then checks two secrets after a redeploy of the same
