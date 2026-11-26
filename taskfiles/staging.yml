@@ -70,6 +70,11 @@ vars:
   EDGE_APPS_DOMAIN: apps.staging.getloopscale.com
   EDGE_APPS_KVS: loopzero-staging-app-routes
   EDGE_HEALTH_URL: https://api.staging.getloopscale.com/api/v1/health/ready
+  # Custom domains: Caddy issues their certificates on demand after it asks the API's route
+  # lookup, and never for a name under the platform's own zone.
+  EDGE_PLATFORM_DOMAIN: getloopscale.com
+  EDGE_API_HOST: api.staging.getloopscale.com
+  EDGE_ASK_PORT: 9180
 
 tasks:
   host:
@@ -559,6 +564,7 @@ tasks:
       AWS_CA_BUNDLE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/ca.pem'
       AWS_ENDPOINT_URL: 'https://localhost:{{.EMULATOR_PORT}}'
       AWS_REGION: us-east-1
+      KUBECONFIG: '{{.STAGING_ROOT}}/kubeconfig'
     cmds:
       - |
         set -euo pipefail
@@ -598,7 +604,14 @@ tasks:
           EDGE_DNS_TOKEN_FILE=/etc/loopzero-edge/hostinger-api-token EDGE_CERT_EMAIL=ops@getloopscale.com \
           /usr/local/lib/loopzero-staging/apps-certificate.sh
         kvs_arn=$(aws cloudfront describe-key-value-store --name {{.EDGE_APPS_KVS}} --query KeyValueStore.ARN --output text)
-        EDGE_KVS_ARN="$kvs_arn" EDGE_CLUSTER_PREFIX=loopzero-staging- /usr/local/lib/loopzero-staging/apps-origins.sh
+        install -d -m 0755 /etc/loopzero-edge
+        EDGE_KVS_ARN="$kvs_arn" EDGE_CLUSTER_PREFIX=loopzero-staging- EDGE_ORIGINS_FILE=/etc/loopzero-edge/cell-origins \
+          /usr/local/lib/loopzero-staging/apps-origins.sh
+        # The bearer of the API's route lookup. A rebuild generates a new one, so it is read
+        # on every run; it reaches Caddy as a credential, never through edge.env.
+        kubectl --context core -n loopzero-system get secret loopzero-edge-route-token \
+          -o jsonpath='{.data.LOOPZERO_EDGE_ROUTE_TOKEN}' | base64 -d | install -m 0600 /dev/stdin /etc/loopzero-edge/route-token
+        [ -s /etc/loopzero-edge/route-token ] || { echo "the secret loopzero-edge-route-token holds no LOOPZERO_EDGE_ROUTE_TOKEN" >&2; exit 1; }
         # Caddy opens one site block for `{$EDGE_HOSTS}` and takes ", " between site
         # addresses, not a bare comma.
         hosts=$(echo "{{.EDGE_HOSTS}}" | sed 's/,/, /g')
@@ -612,6 +625,10 @@ tasks:
         EDGE_ORIGIN=https://{{.EMULATOR_ADDRESS}}:{{.EMULATOR_PORT}}
         EDGE_ORIGIN_CA=/etc/loopzero-edge/emulator-ca.pem
         EDGE_APPS_DOMAIN={{.EDGE_APPS_DOMAIN}}
+        EDGE_PLATFORM_DOMAIN={{.EDGE_PLATFORM_DOMAIN}}
+        EDGE_API_HOST={{.EDGE_API_HOST}}
+        EDGE_ASK_PORT={{.EDGE_ASK_PORT}}
+        EDGE_CELL_ORIGINS=/etc/loopzero-edge/cell-origins
         EOF
         # Read as systemd's EnvironmentFile reads it: the quoted host list stays one value.
         # Outside systemd there is no credentials directory, so the certificate is laid out as
@@ -620,6 +637,7 @@ tasks:
         trap 'rm -rf "$creds"' EXIT
         ln -s /var/lib/loopzero-edge-certificate/certificates/_.{{.EDGE_APPS_DOMAIN}}.crt "$creds/apps.crt"
         ln -s /var/lib/loopzero-edge-certificate/certificates/_.{{.EDGE_APPS_DOMAIN}}.key "$creds/apps.key"
+        ln -s /etc/loopzero-edge/route-token "$creds/route-token"
         (set -a; . /etc/loopzero-edge/edge.env; CREDENTIALS_DIRECTORY="$creds" caddy validate --config /etc/loopzero-edge/Caddyfile --adapter caddyfile >/dev/null)
         install -m 0644 infra/staging/systemd/loopzero-edge.service infra/staging/systemd/loopzero-edge-certificate.service \
           infra/staging/systemd/loopzero-edge-certificate.timer /etc/systemd/system/

@@ -9,6 +9,10 @@
 #   EDGE_ORIGIN         the emulator's endpoint, where that ALB is served
 #   EDGE_ORIGIN_CA      the emulator's CA, which signs the endpoint's certificate
 #   EDGE_APPS_DOMAIN    the domain tenant apps are served under
+#   EDGE_PLATFORM_DOMAIN  the platform's zone; no name under it gets a certificate on demand
+#   EDGE_API_HOST       the API's public hostname, where the route lookup is asked
+#   EDGE_ASK_PORT       the loopback port of the site that asks it
+#   EDGE_CELL_ORIGINS   a file with one "<cell> <DNSName of its ALB>" line per cell
 #
 # How a request reaches the right backend. The emulator serves an ALB at its own endpoint
 # for a request whose Host is the ALB's DNSName, so Host is rewritten to that name. The
@@ -19,8 +23,32 @@
 {
 	default_bind {$EDGE_BIND_ADDRESS}
 	email ops@getloopscale.com
-	# Only the hostnames below get a certificate. No on-demand TLS: the wildcard DNS
-	# record resolves every name under the zone here, and none of the others is public.
+	# A tenant's custom domain gets its certificate on demand, at the first request for it.
+	# Caddy asks first: the wildcard DNS record resolves every name under the platform's
+	# zone here, and anyone may point a name of their own at this host.
+	on_demand_tls {
+		ask http://127.0.0.1:{$EDGE_ASK_PORT}/ask
+	}
+}
+
+# Answers whether a host is a tenant's active custom domain: 200 with the cell that serves
+# it in X-LoopZero-Cell, or the API's refusal. Caddy asks it before it issues a certificate
+# (?domain=<host>), and the custom domain site asks it for every request.
+http://127.0.0.1:{$EDGE_ASK_PORT} {
+	bind 127.0.0.1
+	# The lookup also knows the platform's own hosts. Those have their sites above and
+	# below; a name under the zone that reaches this one is not public.
+	@platform expression `{query.domain}.endsWith(".{$EDGE_PLATFORM_DOMAIN}")`
+	respond @platform 404
+	rewrite * /internal/edge/route?{query}
+	reverse_proxy {$EDGE_ORIGIN} {
+		header_up Host {$EDGE_ALB_DNS_NAME}
+		header_up X-Forwarded-Host {$EDGE_API_HOST}
+		header_up Authorization "Bearer {file.{$CREDENTIALS_DIRECTORY}/route-token}"
+		transport http {
+			tls_trust_pool file {$EDGE_ORIGIN_CA}
+		}
+	}
 }
 
 {$EDGE_HOSTS} {
@@ -46,6 +74,32 @@
 			tls_trust_pool file {$EDGE_ORIGIN_CA}
 			# The viewer's host is not a name the emulator's certificate covers.
 			tls_server_name localhost
+		}
+	}
+}
+
+# Tenants' custom domains: every host no site above names. No alias of the app-router
+# distribution claims such a host, so the request goes to the cell's ALB directly. The
+# emulator serves that ALB for a request whose Host is its DNSName, and the ALB hands the
+# viewer's host to Traefik, as it does for the core cluster above.
+https:// {
+	tls {
+		on_demand
+	}
+	forward_auth 127.0.0.1:{$EDGE_ASK_PORT} {
+		uri /ask?domain={host}
+		copy_headers X-LoopZero-Cell
+	}
+	map {http.request.header.X-LoopZero-Cell} {cell_origin} {
+		import {$EDGE_CELL_ORIGINS}
+		default cell-without-a-load-balancer.invalid
+	}
+	reverse_proxy {$EDGE_ORIGIN} {
+		header_up Host {cell_origin}
+		header_up X-Forwarded-Host {host}
+		header_up -X-LoopZero-Cell
+		transport http {
+			tls_trust_pool file {$EDGE_ORIGIN_CA}
 		}
 	}
 }
