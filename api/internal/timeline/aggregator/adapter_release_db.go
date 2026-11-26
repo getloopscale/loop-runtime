@@ -143,3 +143,11 @@ func releaseStateProjection(state string) (phase, status string, terminal bool) 
 	}
 	return p.phase, p.status, p.terminal
 }
+
+// TimelineEventType names the event a state is written as:
+// "deploy_timeline.<phase>.<status>". It is how a reader tells which states a
+// stream already holds.
+func TimelineEventType(state string) string {
+	phase, status, _ := releaseStateProjection(state)
+	return "deploy_timeline." + phase + "." + status
+}

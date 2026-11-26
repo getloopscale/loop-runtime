@@ -28,6 +28,11 @@ type EventSink interface {
 	AppendDeployTimelineEvent(ctx context.Context, deployID, eventType string, data json.RawMessage) (int64, error)
 }
 
+// AggregatorDegradedEventType is the event an aggregator writes when it is in
+// trouble itself: a panic, a source that failed, a transition the state machine
+// refused. It reports an occurrence, so one stream can hold several.
+const AggregatorDegradedEventType = "deploy_timeline.aggregator.degraded"
+
 // ScrubFunc removes internal terms from an event and reports how many
 // replacements it made (fed to loopzero_deploy_timeline_scrub_replacements_total).
 // Production passes scrub.ScrubEventWithCount; tests may inject another.
@@ -262,7 +267,7 @@ func (a *Aggregator) emitAggregatorDegraded(ctx context.Context, reason string) 
 		"timestamp":       time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	data, _ := json.Marshal(payload)
-	if _, err := a.sink.AppendDeployTimelineEvent(ctx, a.deployID, "deploy_timeline.aggregator.degraded", data); err != nil {
+	if _, err := a.sink.AppendDeployTimelineEvent(ctx, a.deployID, AggregatorDegradedEventType, data); err != nil {
 		a.logger.Error("emit DEGRADED failed", "err", err)
 	}
 	metrics.DeployTimelineAggregatorPanicTotal.WithLabelValues("aggregator").Inc()
