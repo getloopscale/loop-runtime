@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,11 +23,13 @@ type fakeStatusMetrics struct {
 	errPct     *float64
 	errPctErr  error
 	gotEnv     []string
+	gotApps    []string
 	gotWindows []time.Duration
 }
 
-func (f *fakeStatusMetrics) ReadyReplicas(_ context.Context, _, _, env string) (*int, error) {
+func (f *fakeStatusMetrics) ReadyReplicas(_ context.Context, _, _, env string, apps []string) (*int, error) {
 	f.gotEnv = append(f.gotEnv, env)
+	f.gotApps = apps
 	return f.ready, f.readyErr
 }
 
@@ -271,5 +274,20 @@ func TestStatus_Get_ScalingOmitsTargetsOfAFixedScale(t *testing.T) {
 	}
 	if _, sent := scaling["target_memory"]; sent {
 		t.Errorf("scaling = %v, want no target_memory for a fixed count", scaling)
+	}
+}
+
+// Ready replicas are counted over the apps of the active release, so an app a
+// rollback or a deploy removed stops counting at once.
+func TestStatus_Get_CountsReadyReplicasOverTheAppsOfTheActiveRelease(t *testing.T) {
+	h := deployedHandler("production", time.Now())
+	metrics := &fakeStatusMetrics{ready: intPtr(1)}
+	h.SetMetricsSource(metrics)
+	h.SetScaleReader(&fakeStatusScale{apps: []StatusAppScale{{App: "web", Replicas: 2}, {App: "worker", Replicas: 1}}})
+
+	getStatus(t, h, "production")
+
+	if got := strings.Join(metrics.gotApps, ","); got != "web,worker" {
+		t.Errorf("apps counted = %q, want web,worker", got)
 	}
 }

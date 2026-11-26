@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"regexp"
+	"strings"
 	"time"
 
 	promapi "github.com/prometheus/client_golang/api"
@@ -51,9 +53,20 @@ func environmentMatcher(tenantID, project, environment string) string {
 }
 
 // ReadyReplicas implements statushttp.StatusMetricsSource. The sum folds the
-// environment's apps, and the cells that serve it, into one count.
-func (s *PrometheusStatusMetrics) ReadyReplicas(ctx context.Context, tenantID, project, environment string) (*int, error) {
-	query := fmt.Sprintf("sum(%s{%s})", appReadyReplicasSeries, environmentMatcher(tenantID, project, environment))
+// environment's apps, and the cells that serve it, into one count. With apps,
+// only those are counted: the series of an app that left the environment keeps
+// its last sample until Prometheus marks it stale, on the cell and again on
+// the core that federates it.
+func (s *PrometheusStatusMetrics) ReadyReplicas(ctx context.Context, tenantID, project, environment string, apps []string) (*int, error) {
+	matcher := environmentMatcher(tenantID, project, environment)
+	if len(apps) > 0 {
+		quoted := make([]string, 0, len(apps))
+		for _, app := range apps {
+			quoted = append(quoted, regexp.QuoteMeta(app))
+		}
+		matcher += fmt.Sprintf(",app=~%q", strings.Join(quoted, "|"))
+	}
+	query := fmt.Sprintf("sum(%s{%s})", appReadyReplicasSeries, matcher)
 	value, err := s.scalar(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("query ready replicas: %w", err)
