@@ -7,16 +7,16 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/k8s/secretsync"
-	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
-	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
-	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/secretsync"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/workload"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets/secretshttp"
 )
 
 // K8sDeps holds Kubernetes client managers used by the API server.

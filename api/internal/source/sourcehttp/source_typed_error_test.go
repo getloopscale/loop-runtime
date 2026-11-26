@@ -14,9 +14,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
-	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
 )
 
 // Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3 — handler-level discriminator

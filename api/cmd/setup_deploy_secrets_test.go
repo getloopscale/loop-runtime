@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s/secretsync"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/secretsync"
 )
 
 // The delivery waits for the environment's secrets only when it is given the

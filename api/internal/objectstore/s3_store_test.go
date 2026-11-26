@@ -198,7 +198,7 @@ func TestUploadStreamsAReaderOfUnknownLength(t *testing.T) {
 }
 
 // The SBOM download reads the object through the API, in place of handing the
-// browser a presigned URL to the storage endpoint (getloopscale/loopzero#104).
+// browser a presigned URL to the storage endpoint (getloopscale/loop-runtime#104).
 func TestOpenReturnsTheObjectContent(t *testing.T) {
 	const content = `{"bomFormat":"CycloneDX"}`
 	var gotPath string

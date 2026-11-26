@@ -33,7 +33,7 @@ const violatingServiceFile = `package placement
 import (
 	"context"
 
-	gen "github.com/getloopscale/loopzero/api/internal/db/generated"
+	gen "github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 
 func Do(ctx context.Context) { _ = gen.Queries{} }
@@ -84,7 +84,7 @@ const dotImportServiceFile = `package placement
 import (
 	"context"
 
-	. "github.com/getloopscale/loopzero/api/internal/db/generated"
+	. "github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 
 func Do(ctx context.Context) { _ = Queries{} }
@@ -211,7 +211,7 @@ func mkGo(t *testing.T, root, dir, imported string) {
 	}
 }
 
-const handWritten = "github.com/getloopscale/loopzero/api/internal/db"
+const handWritten = "github.com/getloopscale/loop-runtime/api/internal/db"
 
 // slice-4 T1.3: the server layer was measured at ZERO importers of the
 // hand-written persistence package, so the fence lands there green.

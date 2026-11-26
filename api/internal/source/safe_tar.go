@@ -4,7 +4,7 @@
 package source
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/archive"
+	"github.com/getloopscale/loop-runtime/api/internal/archive"
 )
 
 // Re-export error types for backward compatibility with existing tests.

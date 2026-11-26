@@ -12,9 +12,9 @@ package integration
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/argo"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/argo"
 )
 
 func TestRuntimeStrategyEndToEnd(t *testing.T) {

@@ -26,8 +26,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/infra/scripts/bootstrapuser"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/infra/scripts/bootstrapuser"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 const (

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 type fakeEvictor struct {

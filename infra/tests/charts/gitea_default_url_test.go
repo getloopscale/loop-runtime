@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 // Issue #354. Gitea is installed into loopzero-system in every environment, and the

@@ -7,14 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
 	"log/slog"
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/pkg/domain"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // DomainPlanLimiter is the plan question a new custom domain asks, answered

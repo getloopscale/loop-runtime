@@ -380,7 +380,7 @@ func beginAsWorker(t *testing.T, ctx context.Context, pool *pgxpool.Pool) pgx.Tx
 	// current_user is checked after it. Both skips below are a missing
 	// precondition of the database, not of the code: without a way to act as
 	// loopzero_worker the test cannot seed under production's role split
-	// (https://github.com/getloopscale/loopzero/issues/387).
+	// (https://github.com/getloopscale/loop-runtime/issues/387).
 	if _, err := tx.Exec(ctx, "SET LOCAL ROLE loopzero_worker"); err != nil {
 		t.Skipf("T3.1 RLS test skipped: SET ROLE loopzero_worker failed (set LOOPZERO_WORKER_DATABASE_URL, or grant membership: GRANT loopzero_worker TO loopzero;): %v", err)
 	}
@@ -388,7 +388,7 @@ func beginAsWorker(t *testing.T, ctx context.Context, pool *pgxpool.Pool) pgx.Tx
 		t.Fatalf("current_user: %v", err)
 	}
 	if currentUser != "loopzero_worker" {
-		// Same missing precondition (https://github.com/getloopscale/loopzero/issues/387).
+		// Same missing precondition (https://github.com/getloopscale/loop-runtime/issues/387).
 		t.Skipf("T3.1 RLS test skipped: SET ROLE no-op (current_user=%q); set LOOPZERO_WORKER_DATABASE_URL, or grant membership: GRANT loopzero_worker TO loopzero;", currentUser)
 	}
 	return tx

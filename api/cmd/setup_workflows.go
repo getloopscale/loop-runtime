@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/backgroundloops"
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/gitops"
-	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
+	"github.com/getloopscale/loop-runtime/api/internal/backgroundloops"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/gitops"
+	"github.com/getloopscale/loop-runtime/api/internal/orchestrationbreaker"
 )
 
 // WorkflowDeps holds the workflow submitter, the sync client and the gitops pusher.

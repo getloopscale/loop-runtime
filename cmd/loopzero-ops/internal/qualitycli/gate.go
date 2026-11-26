@@ -27,9 +27,9 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/cliout"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Invocation is what a gate's check receives: the resolved repository root

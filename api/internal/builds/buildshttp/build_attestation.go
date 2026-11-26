@@ -10,11 +10,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // T1.3 of deep-review-remediation-plan (closes find_arch_001 partial):

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // scriptedDBTX is a DBTX fake that scripts Exec RowsAffected and Query row

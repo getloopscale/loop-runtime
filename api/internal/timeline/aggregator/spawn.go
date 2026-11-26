@@ -7,7 +7,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/scrub"
+	"github.com/getloopscale/loop-runtime/api/internal/scrub"
 )
 
 // SpawnFor is the canonical spawn helper for the per-deploy aggregator

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
 )
 
 // The activation and build-failure callbacks (the GitHub commit status) read

@@ -23,7 +23,7 @@ func writeFile(t *testing.T, path, content string) {
 func TestCheck_SkipWithURL_Pass(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a_test.go"),
-		"package a\nfunc TestX(t *testing.T) {\n  // https://github.com/getloopscale/loopzero/issues/42\n  t.Skip(\"pending\")\n}\n")
+		"package a\nfunc TestX(t *testing.T) {\n  // https://github.com/getloopscale/loop-runtime/issues/42\n  t.Skip(\"pending\")\n}\n")
 	o, err := Check(Config{TargetDir: root, IgnoreBaseline: true})
 	if err != nil {
 		t.Fatalf("Check: %v", err)

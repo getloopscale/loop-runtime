@@ -24,7 +24,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/lock"
+	"github.com/getloopscale/loop-runtime/api/internal/lock"
 )
 
 // dbURL returns the PostgreSQL connection string for tests.

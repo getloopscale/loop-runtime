@@ -6,7 +6,7 @@ package builds
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
 func TestWorkflowFailureReason_NamesTheStepAndItsMessage(t *testing.T) {

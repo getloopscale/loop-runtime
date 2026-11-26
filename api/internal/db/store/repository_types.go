@@ -12,10 +12,10 @@ package store
 // here.
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // ErrRepositoryNotLinked is returned by UnlinkRepository when no

@@ -10,8 +10,8 @@ package integration
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/manifests"
-	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loop-runtime/api/internal/manifests"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
 )
 
 const v2ServicesJSON = `{

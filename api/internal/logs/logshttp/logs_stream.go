@@ -13,15 +13,15 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/logs"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/logs"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/sse"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // StreamLogQuerier — alias to ports.StreamLogQuerier (T1.3 of

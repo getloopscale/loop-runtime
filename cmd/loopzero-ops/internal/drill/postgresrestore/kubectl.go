@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/shellrun"
 )
 
 // ErrNotBackedUp: the cluster is not configured to archive through the plugin, so there

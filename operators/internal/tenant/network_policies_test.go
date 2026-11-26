@@ -29,8 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/operatortest"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/operatortest"
 )
 
 var _ = Describe("Golden: Network Policies", Ordered, func() {

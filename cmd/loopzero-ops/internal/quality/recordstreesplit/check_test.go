@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // fixture builds a two-tree layout under a temp root and returns the root.

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
 	"github.com/jackc/pgx/v5"
 )

@@ -11,10 +11,10 @@ import (
 	"net/http"
 	"time"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 	"github.com/go-chi/chi/v5"
 )
 

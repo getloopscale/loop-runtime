@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // The two ways a scan can fail to establish a verdict. Both are typed so the

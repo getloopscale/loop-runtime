@@ -19,7 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	cb "github.com/getloopscale/loopzero/pkg/circuitbreaker"
+	cb "github.com/getloopscale/loop-runtime/pkg/circuitbreaker"
 )
 
 var (

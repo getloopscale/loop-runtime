@@ -45,17 +45,17 @@ func TestAuthGroupIsFoundThroughAnImportAlias(t *testing.T) {
 	}{
 		{
 			name:       "concern package under an alias",
-			importSpec: "\tmwauth \"github.com/getloopscale/loopzero/api/internal/middleware/auth\"",
+			importSpec: "\tmwauth \"github.com/getloopscale/loop-runtime/api/internal/middleware/auth\"",
 			qualifier:  "mwauth",
 		},
 		{
 			name:       "concern package under its own name",
-			importSpec: "\t\"github.com/getloopscale/loopzero/api/internal/middleware/auth\"",
+			importSpec: "\t\"github.com/getloopscale/loop-runtime/api/internal/middleware/auth\"",
 			qualifier:  "auth",
 		},
 		{
 			name:       "the flat package this split replaced",
-			importSpec: "\t\"github.com/getloopscale/loopzero/api/internal/middleware\"",
+			importSpec: "\t\"github.com/getloopscale/loop-runtime/api/internal/middleware\"",
 			qualifier:  "middleware",
 		},
 	} {
@@ -86,7 +86,7 @@ func TestAuthGroupIsFoundThroughAnImportAlias(t *testing.T) {
 func TestAuthGroupIsNotFoundThroughAnUnrelatedPackage(t *testing.T) {
 	root := tree(t, map[string]string{
 		routerPath: routerWithImport(
-			"\tauth \"github.com/getloopscale/loopzero/api/internal/routes/auth\"", "auth",
+			"\tauth \"github.com/getloopscale/loop-runtime/api/internal/routes/auth\"", "auth",
 			"\t\tr.With(rateLimit...).Post(\"/api/v1/builds\", h)\n",
 		),
 	})

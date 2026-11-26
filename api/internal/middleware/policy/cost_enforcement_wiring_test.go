@@ -11,9 +11,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // The metric must be FED by the real path, not merely exist.

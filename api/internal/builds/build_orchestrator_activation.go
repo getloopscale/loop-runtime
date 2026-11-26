@@ -11,10 +11,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/events"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/events"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // build_orchestrator_activation.go — M9 Step 6 P0: the two *BuildOrchestrator

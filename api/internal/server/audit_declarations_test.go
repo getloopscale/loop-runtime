@@ -15,8 +15,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	mwaudit "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
 )
 
 // auditIdentity is what the audit row records for a mutation: a stable

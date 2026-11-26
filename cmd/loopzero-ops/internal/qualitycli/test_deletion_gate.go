@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/testdeletion"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/testdeletion"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {

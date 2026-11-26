@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // LoadAllowlist reads the allowlist markdown at path.

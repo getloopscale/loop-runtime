@@ -182,7 +182,7 @@ func TestTheTiltAPIEnablesTheAdminRoutesItTurnsOn(t *testing.T) {
 		t.Fatalf("parse the Tilt values: %v", err)
 	}
 	if values.Config.LoopZeroAdminAPI != "true" {
-		t.Skip("the Tilt values do not enable the admin API — https://github.com/getloopscale/loopzero/issues/413")
+		t.Skip("the Tilt values do not enable the admin API — https://github.com/getloopscale/loop-runtime/issues/413")
 	}
 	if values.Secrets.AdminServiceAuthSecret == "" {
 		t.Error("loopzeroAdminApi is \"true\" but secrets.loopzeroAdminServiceAuthSecret is empty: every admin route answers 403")

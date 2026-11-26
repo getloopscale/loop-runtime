@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 // scriptedDBTX is a DBTX fake that lets each test script the next

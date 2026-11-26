@@ -6,8 +6,8 @@ package app
 import (
 	"fmt"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // routeObservation is what one ExposedRoute reconcile saw.

@@ -19,8 +19,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
 // cellFactory routes each cellID to its own client, the way the production

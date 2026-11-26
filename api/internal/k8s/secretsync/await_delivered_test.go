@@ -17,8 +17,8 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // A deploy waits until External Secrets has refreshed the environment's

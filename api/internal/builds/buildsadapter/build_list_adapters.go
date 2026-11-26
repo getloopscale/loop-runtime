@@ -10,9 +10,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 
 // BuildListStoreAdapter implements routes.BuildListStore using db.BuildStore.

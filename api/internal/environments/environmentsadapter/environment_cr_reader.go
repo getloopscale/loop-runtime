@@ -33,7 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/getloopscale/loopzero/api/internal/environments"
+	"github.com/getloopscale/loop-runtime/api/internal/environments"
 )
 
 // environmentCRGVR — same Group/Version as Tenant CR, different Resource.

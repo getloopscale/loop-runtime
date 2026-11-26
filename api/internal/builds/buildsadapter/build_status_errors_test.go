@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // A build whose apps cannot be read must not be reported as a build with no

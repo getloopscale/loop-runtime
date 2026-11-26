@@ -6,8 +6,8 @@ package repositoriesadapter
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/github"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
 )
 
 // RepoLookupAdapter bridges store.PostgresRepositoryStore → github.RepositoryLookup.

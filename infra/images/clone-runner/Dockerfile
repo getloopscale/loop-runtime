@@ -47,7 +47,7 @@ FROM mirror.gcr.io/library/alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039
 ARG MC_TAG=RELEASE.2025-08-13T08-35-41Z
 ARG MC_COMMIT=7394ce0dd2a80935aded936b09fa12cbb3cb8096
 
-LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero" \
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime" \
       org.opencontainers.image.title="loopzero-clone-runner" \
       io.loopzero.mc.release="${MC_TAG}" \
       io.loopzero.mc.revision="${MC_COMMIT}"

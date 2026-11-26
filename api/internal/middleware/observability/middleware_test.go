@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"testing"
 
-	observability "github.com/getloopscale/loopzero/api/internal/middleware/observability"
+	observability "github.com/getloopscale/loop-runtime/api/internal/middleware/observability"
 )
 
 func TestCorrelationIDMiddleware(t *testing.T) {

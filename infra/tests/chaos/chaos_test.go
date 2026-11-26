@@ -17,7 +17,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	livechaos "github.com/getloopscale/loopzero/infra/tests/livetest/chaos"
+	livechaos "github.com/getloopscale/loop-runtime/infra/tests/livetest/chaos"
 )
 
 // Container ports — these must match the Deployment spec exactly. Drift

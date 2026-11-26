@@ -36,7 +36,7 @@ spec:
           annotations:
             summary: "cosign signing failures detected"
             description: {{ printf "{{ $value }} cosign sign failures/sec sustained over 5m. Builds are producing unsigned (or wrongly-signed) images. Check Fulcio reachability + signing key validity. Runbook: docs/runbooks.md + ADR-2026-05-27-T2.2-OFFLINE-TUF." | quote }}
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md"
 
         # ─────────────────────────────────────────────────────────────────
         # Alert 2: Fulcio cert issuance latency (Fulcio-native histogram)
@@ -56,7 +56,7 @@ spec:
           annotations:
             summary: "Fulcio cert issuance p99 > 30s"
             description: {{ printf "Fulcio cert issuance p99 has been above 30s for 10m. Build pipeline signing step will hit activeDeadlineSeconds (180s) if latency continues to grow. Check Fulcio pod health + upstream OIDC issuer availability." | quote }}
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md"
 
         # ─────────────────────────────────────────────────────────────────
         # Alert 3: Rekor log append failures (Rekor-native counter)
@@ -72,7 +72,7 @@ spec:
           annotations:
             summary: "Rekor log append failures detected"
             description: {{ printf "Rekor transparency log append failures: {{ $value }}/sec. Build attestations may not reach the log → SLSA L3 verification chain broken. Check Trillian backend + storage capacity (PV alerts in sigstore-storage-alerts.yaml)." | quote }}
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md"
 
         # ─────────────────────────────────────────────────────────────────
         # Alert 4: TUF root expiry countdown
@@ -90,7 +90,7 @@ spec:
           annotations:
             summary: "TUF root expires in < 30 days"
             description: {{ printf "TUF root key expires in {{ $value }} days. Schedule offline TUF ceremony before expiry — see docs/runbooks.md. Quorum (3-of-5) required; minimum 2 weeks lead time." | quote }}
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md"
 
         - alert: LoopZeroTufRootExpiryCritical
           expr: |
@@ -103,7 +103,7 @@ spec:
           annotations:
             summary: "TUF root expires in < 7 days — URGENT"
             description: "TUF root key expires in less than 7 days. Sigstore signing chain will BREAK at expiry. Execute emergency rotation OR rollback to keyed mode via ConfigMap loopzero-cosign-config."
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md"
 
         # Stale-metric alert: if TUF expiry CronJob (T1.2.b) stops emitting,
         # Pushgateway TTL expires the metric → Alert 4 stops firing →
@@ -119,5 +119,5 @@ spec:
           annotations:
             summary: "TUF expiry metric absent > 72h"
             description: "Metric tuf_root_expiry_timestamp has been absent for 72h. The daily CronJob tuf-expiry-emitter is likely failing — check its CronJob status in argo-ci-namespace OR sigstore-system. Without this metric, TUF expiry alerts (LoopZeroTufRootExpirySoon, LoopZeroTufRootExpiryCritical) cannot fire."
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md"
 {{- end }}

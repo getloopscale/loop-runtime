@@ -352,7 +352,7 @@ jobs:
         env:
           IMAGE_REF: ${{ steps.resolve-registry.outputs.registry }}/${{ inputs.image }}@${{ steps.build.outputs.digest }}
           # A certificate issued inside a reusable workflow names the REUSABLE in its SAN
-          # (this file, in getloopscale/loopzero) and the CALLER in its source-repository claim, so
+          # (this file, in getloopscale/loop-runtime) and the CALLER in its source-repository claim, so
           # each half is pinned to the right thing (#460). The SAN alone would accept a
           # signature any org repository produced by calling this workflow; the caller alone
           # would accept one from any workflow of the caller. Together they are the

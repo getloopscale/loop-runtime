@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/qualitycli"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/qualitycli"
 )
 
 const helpText = `loopzero-ops — LoopZero operator toolbox (Phase 0 minimal skeleton)

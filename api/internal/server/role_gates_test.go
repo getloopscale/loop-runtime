@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
 )
 
 // roleMembership authenticates every request as a member of tn-fixed with one

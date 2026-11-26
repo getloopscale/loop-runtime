@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 type fixedEnvironments struct {

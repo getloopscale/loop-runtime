@@ -18,8 +18,8 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // TenantK8sEvictor performs the K8s cluster teardown portion of bulk tenant

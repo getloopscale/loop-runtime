@@ -34,7 +34,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ForbiddenCLI lists CLIs that have mature Go SDK alternatives. Shell-wrap of

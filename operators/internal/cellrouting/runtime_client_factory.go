@@ -16,8 +16,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
 // kubeconfigKey is the Secret data key holding a cell's kubeconfig.

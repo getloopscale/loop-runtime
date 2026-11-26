@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	loopzerodb "github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	loopzerodb "github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 )
 
 // The request pool runs as loopzero_api, and every tenant table is under
@@ -98,7 +98,7 @@ func requireIsolatedRequestRole(t *testing.T) {
 		t.Fatalf("read the request role's RLS posture: %v", err)
 	}
 	if bypasses {
-		// A role that bypasses RLS cannot reproduce https://github.com/getloopscale/loopzero/issues/384:
+		// A role that bypasses RLS cannot reproduce https://github.com/getloopscale/loop-runtime/issues/384:
 		// it sees every tenant's rows whether or not the connection is scoped.
 		t.Skip("DATABASE_URL is not the isolated request role (it bypasses RLS); point it at loopzero_api")
 	}

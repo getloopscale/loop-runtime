@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // scopeRecordingDeletionStore records the database scope each call ran under.

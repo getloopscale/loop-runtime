@@ -15,7 +15,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 func TestIsRolloutBackedRelease_ServerAppReturnsTrue(t *testing.T) {

@@ -10,7 +10,7 @@ package loopzerobuildcwts_test
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/getloopscale/loop-runtime/infra/tests/helm/chartrender"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )

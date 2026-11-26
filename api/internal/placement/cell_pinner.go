@@ -28,9 +28,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // TenantCRPatcher moves a tenant's Tenant CR to a cell (spec.cellID).

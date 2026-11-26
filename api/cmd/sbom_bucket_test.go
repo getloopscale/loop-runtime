@@ -6,7 +6,7 @@ package main
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
 )
 
 // The build uploads SBOMs to STATIC_ASSETS_BUCKET. The download link was presigned

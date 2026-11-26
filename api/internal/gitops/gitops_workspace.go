@@ -11,8 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 const (

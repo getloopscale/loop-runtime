@@ -31,9 +31,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/shellrun"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Pair is a single added-or-modified line, keyed by file path.

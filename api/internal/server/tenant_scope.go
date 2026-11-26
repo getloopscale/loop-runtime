@@ -6,8 +6,8 @@ package server
 import (
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	mwauth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 // scopeDatabaseToCaller confines the request's database work to the tenant the

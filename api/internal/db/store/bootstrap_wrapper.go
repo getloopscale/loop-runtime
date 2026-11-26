@@ -31,12 +31,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // PostgresBootstrapStore implements ports.BootstrapStore using

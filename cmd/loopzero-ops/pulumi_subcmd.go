@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/pulumi/archive"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/pulumi/archive"
 )
 
 const pulumiHelp = `loopzero-ops pulumi — Pulumi operational tooling

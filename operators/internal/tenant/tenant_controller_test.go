@@ -21,10 +21,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/operatortest"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/operatortest"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 func newTenant(name string, plan loopzerov1.PlanTier, envs []string) *loopzerov1.Tenant {

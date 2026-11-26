@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // fakeScalingStore is a stub implementing store.ScalingStore for tests.

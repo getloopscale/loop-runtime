@@ -23,14 +23,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/gitea"
-	"github.com/getloopscale/loopzero/operators/internal/httpclient"
-	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
-	"github.com/getloopscale/loopzero/pkg/correlation"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/gitea"
+	"github.com/getloopscale/loop-runtime/operators/internal/httpclient"
+	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // platformBootstrapRequeueDelay uses the centralized constant.

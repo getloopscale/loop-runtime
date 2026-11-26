@@ -6,7 +6,7 @@ package logsadapter
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/logs/logshttp"
 )
 
 // LogBuildStoreAdapter implements routes.LogBuildStore using db.BuildStore.

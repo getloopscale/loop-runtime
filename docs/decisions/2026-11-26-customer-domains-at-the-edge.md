@@ -54,11 +54,11 @@ by us, and nothing was created on AWS to test option C.
   inside Let's Encrypt's rate limits.
 - The loopback site that answers Caddy's question must name no host. `forward_auth` passes
   the viewer's Host along, and Caddy answers a Host no site names with an empty 200
-  (getloopscale/loopzero#177).
+  (getloopscale/loop-runtime#177).
 - Production's fleet is not built yet. Its Terraform, the load balancer and the shared
   storage are work that follows this record.
 
 ## Related
 
-- getloopscale/loopzero#173, #174: the provisioner and the staging edge.
+- getloopscale/loop-runtime#173, #174: the provisioner and the staging edge.
 - `infra/staging/edge/Caddyfile`: the configuration staging runs.

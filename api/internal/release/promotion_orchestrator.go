@@ -10,15 +10,15 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
 	sigsyaml "sigs.k8s.io/yaml"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/id"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/id"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // PromotionReleaseStore abstracts release persistence for the promotion orchestrator (DIP).

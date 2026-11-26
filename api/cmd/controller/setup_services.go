@@ -9,17 +9,17 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/getloopscale/loopzero/api/internal/backgroundloops"
-	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
-	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
-	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
-	"github.com/getloopscale/loopzero/api/internal/lock"
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/backgroundloops"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/cfzone"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/workload"
+	"github.com/getloopscale/loop-runtime/api/internal/lock"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 )
 
 // setupServices builds the stores and cluster clients the controller needs and

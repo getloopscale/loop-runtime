@@ -23,7 +23,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 const (

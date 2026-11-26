@@ -9,7 +9,7 @@ import (
 // (infra/helm/monitoring/values-tenant-app-recording-rules.yaml) and the core
 // Prometheus federates. A tenant app is an Argo Rollout that LoopScale does not
 // instrument, so kube_deployment_status_replicas_ready and http_requests_total
-// hold nothing for it (getloopscale/loopzero#107).
+// hold nothing for it (getloopscale/loop-runtime#107).
 func TestBuildPromQL_ReadsTheSeriesRecordedPerTenantApp(t *testing.T) {
 	const labels = `tenant_id="tn-1",project="shop"`
 	cases := map[string]string{

@@ -28,8 +28,8 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qgshell"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qgshell"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 const archiveCronRel = "infra/helm/monitoring/manifests/cronjob-loki-vault-audit-archive.yaml"

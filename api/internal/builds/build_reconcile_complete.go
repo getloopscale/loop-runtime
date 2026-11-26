@@ -9,13 +9,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/scrub"
+	"github.com/getloopscale/loop-runtime/api/internal/scrub"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/manifests"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/manifests"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // onWorkflowSucceeded handles a completed build workflow by creating a release

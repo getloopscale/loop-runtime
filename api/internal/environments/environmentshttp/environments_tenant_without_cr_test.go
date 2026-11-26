@@ -11,9 +11,9 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // A tenant that has signed up but not created a project has no Tenant CR yet.

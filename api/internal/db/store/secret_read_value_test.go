@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // The broker External Secrets Operator calls reads one secret through the

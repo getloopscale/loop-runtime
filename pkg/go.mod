@@ -1,4 +1,4 @@
-module github.com/getloopscale/loopzero/pkg
+module github.com/getloopscale/loop-runtime/pkg
 
 go 1.26.1
 

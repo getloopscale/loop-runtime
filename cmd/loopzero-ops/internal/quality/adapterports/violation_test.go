@@ -7,8 +7,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/adapterports"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/adapterports"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // violationOf folds the check's two channels into one error for the

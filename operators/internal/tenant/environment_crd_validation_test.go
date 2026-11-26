@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // TestProjectFieldHasRFC1123PatternAndRequired (RED 2 / EC-2) — schema

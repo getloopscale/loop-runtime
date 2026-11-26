@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // M4 T3.1 — when the store rejects creation with the per-Account cap typed error

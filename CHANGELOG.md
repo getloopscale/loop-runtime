@@ -113,6 +113,7 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+- The repository is `getloopscale/loop-runtime`, and the Go modules are `github.com/getloopscale/loop-runtime/...`. The name LoopZero belongs to the agent framework. The staging scripts, the reusable `build-publish.yml` workflow and every link point at the new address. Image names, namespaces, the `LOOPZERO_` variables and the `loopzero.io` API group are unchanged in this step.
 
 - The platform's PostgreSQL on staging runs PostgreSQL 19.0 (`ghcr.io/cloudnative-pg/postgresql:19.0-minimal-trixie`), up from 16.14 (#177).
 - Staging runs the CloudNativePG operator 1.31.0-rc1, installed from the manifest of its release (`infra/helm/cloudnative-pg`) instead of the upstream chart. `platform-postgres` resizes a running instance in place when its CPU or memory change, and with standbys takes the synchronous one from another zone (#177).

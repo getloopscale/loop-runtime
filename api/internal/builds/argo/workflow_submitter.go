@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
 
 	forge "github.com/getloopscale/argo-workflows-go"
 	forgemodel "github.com/getloopscale/argo-workflows-go/model"

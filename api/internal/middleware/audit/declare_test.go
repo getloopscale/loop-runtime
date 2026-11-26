@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 type recordedRow struct{ action, resourceType string }

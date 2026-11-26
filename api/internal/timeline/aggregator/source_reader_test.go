@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // TestSourceID_String validates the canonical 5-source enum values.

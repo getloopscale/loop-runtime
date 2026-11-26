@@ -22,8 +22,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Tx is an alias for pgx.Tx, exposed so callers don't need to import pgx directly.

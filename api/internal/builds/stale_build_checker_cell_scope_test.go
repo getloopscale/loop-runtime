@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // Roadmap 03 — the reapers must scope their Find* queries to a single cell.

@@ -57,7 +57,7 @@ FROM mirror.gcr.io/library/alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039
 ARG COSIGN_TAG=v2.6.5
 ARG COSIGN_COMMIT=3e82f50a2839855693aacf7b3d0e7e2f30774cb4
 
-LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero" \
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime" \
       org.opencontainers.image.title="loopzero-cosign-signer" \
       org.opencontainers.image.description="Cosign image signer for LoopZero build pipeline, built from sigstore/cosign@${COSIGN_COMMIT}" \
       io.loopzero.cosign.release="${COSIGN_TAG}" \

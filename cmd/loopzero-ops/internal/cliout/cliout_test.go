@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exitcode"
 )
 
 var errClosed = errors.New("closed pipe")

@@ -9,7 +9,7 @@ package authtest
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 // Context returns a context holding the UserContext the auth middleware

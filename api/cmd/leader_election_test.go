@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
 )
 
 // scriptedAcquirer answers Acquire and Heartbeat from queues and records

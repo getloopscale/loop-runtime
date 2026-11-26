@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/getloopscale/loopzero/infra/scripts/bootstrapuser"
+	"github.com/getloopscale/loop-runtime/infra/scripts/bootstrapuser"
 )
 
 const sqlHelpText = `loopzero-ops sql — render a seed script for psql

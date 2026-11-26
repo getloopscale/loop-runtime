@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 	"gopkg.in/yaml.v3"
 )
 

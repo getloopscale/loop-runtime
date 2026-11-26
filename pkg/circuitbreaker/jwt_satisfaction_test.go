@@ -16,7 +16,7 @@ package circuitbreaker_test
 
 import (
 	"github.com/getloopscale/contracts/jwt"
-	"github.com/getloopscale/loopzero/pkg/circuitbreaker"
+	"github.com/getloopscale/loop-runtime/pkg/circuitbreaker"
 )
 
 // Compile-time guard: if a future signature drift breaks structural

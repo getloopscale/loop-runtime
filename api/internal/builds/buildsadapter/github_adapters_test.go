@@ -9,9 +9,9 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/github"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
 )
 
 // The push webhook's commit SHA is untrusted input. A short or empty one must be

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -82,8 +82,8 @@ func TestRun_MissingProfileFiles_SkipsSilently(t *testing.T) {
 
 func TestRun_FreshBaseline_GoProfileOnly(t *testing.T) {
 	goPath := writeGoProfile(t, `mode: atomic
-github.com/getloopscale/loopzero/pkg/foo/bar.go:1.0,2.0 10 8
-github.com/getloopscale/loopzero/pkg/bar/baz.go:1.0,2.0 10 5
+github.com/getloopscale/loop-runtime/pkg/foo/bar.go:1.0,2.0 10 8
+github.com/getloopscale/loop-runtime/pkg/bar/baz.go:1.0,2.0 10 5
 `)
 	out := filepath.Join(t.TempDir(), "baseline.json")
 	res, err := Run(Config{
@@ -130,7 +130,7 @@ end_of_record
 
 func TestRun_FreshBaseline_BothSources_Combined(t *testing.T) {
 	goPath := writeGoProfile(t, `mode: atomic
-github.com/getloopscale/loopzero/pkg/foo/bar.go:1.0,2.0 10 8
+github.com/getloopscale/loop-runtime/pkg/foo/bar.go:1.0,2.0 10 8
 `)
 	lcovPath := writeLCOV(t, `SF:src/cli/auth/login.ts
 LF:100
@@ -158,15 +158,15 @@ func TestRun_ExistingBaseline_PreservesMinRequired(t *testing.T) {
 	// Seed existing baseline with min_required=75 for foo pkg.
 	require.NoError(t, os.WriteFile(out, []byte(`{
   "packages": {
-    "github.com/getloopscale/loopzero/pkg/foo": { "line": 70, "min_required": 75 }
+    "github.com/getloopscale/loop-runtime/pkg/foo": { "line": 70, "min_required": 75 }
   }
 }`), 0o600))
 
 	// New measurement: 9 covered + 1 uncovered = 90% — min_required
 	// stays 75 (preserved across re-run).
 	goPath := writeGoProfile(t, `mode: atomic
-github.com/getloopscale/loopzero/pkg/foo/bar.go:1.0,2.0 9 1
-github.com/getloopscale/loopzero/pkg/foo/bar.go:3.0,4.0 1 0
+github.com/getloopscale/loop-runtime/pkg/foo/bar.go:1.0,2.0 9 1
+github.com/getloopscale/loop-runtime/pkg/foo/bar.go:3.0,4.0 1 0
 `)
 	_, err := Run(Config{
 		GoProfilePath: goPath,
@@ -179,7 +179,7 @@ github.com/getloopscale/loopzero/pkg/foo/bar.go:3.0,4.0 1 0
 	var loaded map[string]any
 	require.NoError(t, json.Unmarshal(body, &loaded))
 	pkgs := loaded["packages"].(map[string]any)
-	foo := pkgs["github.com/getloopscale/loopzero/pkg/foo"].(map[string]any)
+	foo := pkgs["github.com/getloopscale/loop-runtime/pkg/foo"].(map[string]any)
 	assert.Equal(t, 90.0, foo["line"])
 	assert.Equal(t, 75.0, foo["min_required"], "min_required preserved (idempotent)")
 }
@@ -187,7 +187,7 @@ github.com/getloopscale/loopzero/pkg/foo/bar.go:3.0,4.0 1 0
 func TestRun_CriticalPackage_PinsTo90(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "baseline.json")
 	goPath := writeGoProfile(t, `mode: atomic
-github.com/getloopscale/loopzero/pkg/errors/foo.go:1.0,2.0 10 9
+github.com/getloopscale/loop-runtime/pkg/errors/foo.go:1.0,2.0 10 9
 `)
 	_, err := Run(Config{
 		GoProfilePath: goPath,
@@ -200,7 +200,7 @@ github.com/getloopscale/loopzero/pkg/errors/foo.go:1.0,2.0 10 9
 	var loaded map[string]any
 	require.NoError(t, json.Unmarshal(body, &loaded))
 	pkgs := loaded["packages"].(map[string]any)
-	errPkg := pkgs["github.com/getloopscale/loopzero/pkg/errors"].(map[string]any)
+	errPkg := pkgs["github.com/getloopscale/loop-runtime/pkg/errors"].(map[string]any)
 	assert.Equal(t, 90.0, errPkg["min_required"], "critical pkg pinned to 90 even on fresh install")
 }
 
@@ -210,7 +210,7 @@ github.com/getloopscale/loopzero/pkg/errors/foo.go:1.0,2.0 10 9
 
 func TestRun_DryRun_DoesNotWriteFile(t *testing.T) {
 	goPath := writeGoProfile(t, `mode: atomic
-github.com/getloopscale/loopzero/pkg/foo/x.go:1.0,2.0 10 10
+github.com/getloopscale/loop-runtime/pkg/foo/x.go:1.0,2.0 10 10
 `)
 	out := filepath.Join(t.TempDir(), "baseline.json")
 	res, err := Run(Config{
@@ -231,7 +231,7 @@ github.com/getloopscale/loopzero/pkg/foo/x.go:1.0,2.0 10 10
 
 func TestRun_DryRun_JSONShapeValid(t *testing.T) {
 	goPath := writeGoProfile(t, `mode: atomic
-github.com/getloopscale/loopzero/pkg/foo/x.go:1.0,2.0 10 10
+github.com/getloopscale/loop-runtime/pkg/foo/x.go:1.0,2.0 10 10
 `)
 	res, err := Run(Config{
 		GoProfilePath: goPath,
@@ -259,7 +259,7 @@ func TestRun_MalformedExistingBaseline_OpsUsage(t *testing.T) {
 	require.NoError(t, os.WriteFile(out, []byte("{not valid json"), 0o600))
 
 	goPath := writeGoProfile(t, `mode: atomic
-github.com/getloopscale/loopzero/pkg/foo/x.go:1.0,2.0 10 10
+github.com/getloopscale/loop-runtime/pkg/foo/x.go:1.0,2.0 10 10
 `)
 	_, err := Run(Config{
 		GoProfilePath: goPath,
@@ -275,7 +275,7 @@ func TestRun_DefaultClockUsedWhenNil(t *testing.T) {
 	// Just verify nil clock doesn't crash; the actual timestamp is
 	// time.Now() — non-deterministic, asserted only as RFC3339-ish.
 	goPath := writeGoProfile(t, `mode: atomic
-github.com/getloopscale/loopzero/pkg/x/y.go:1.0,2.0 10 10
+github.com/getloopscale/loop-runtime/pkg/x/y.go:1.0,2.0 10 10
 `)
 	out := filepath.Join(t.TempDir(), "baseline.json")
 	_, err := Run(Config{

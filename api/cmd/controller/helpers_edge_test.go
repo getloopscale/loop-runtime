@@ -16,9 +16,9 @@ import (
 
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/leader"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 // ---------------------------------------------------------------------------

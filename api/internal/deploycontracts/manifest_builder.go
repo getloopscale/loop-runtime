@@ -7,9 +7,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/manifests"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/manifests"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // BuildManifestAppsInput holds the parameters for building manifest app inputs.

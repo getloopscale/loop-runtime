@@ -10,27 +10,27 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
-	"github.com/getloopscale/loopzero/api/internal/preview/previewadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/preview/previewadapter"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/preview"
+	"github.com/getloopscale/loop-runtime/api/internal/preview"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/github"
-	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
-	"github.com/getloopscale/loopzero/api/internal/integrations/integrationsadapter"
-	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositoriesadapter"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
+	ghwebhook "github.com/getloopscale/loop-runtime/api/internal/github/webhook"
+	"github.com/getloopscale/loop-runtime/api/internal/integrations/integrationsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositoriesadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // GitHubDeps holds GitHub App integration components.

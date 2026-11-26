@@ -8,9 +8,9 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // applicationSM is the LoopZeroApplication lifecycle machine. Every phase change

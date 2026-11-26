@@ -6,7 +6,7 @@ package argo
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
 // The Dockerfile step name was a real VARIATION POINT: the

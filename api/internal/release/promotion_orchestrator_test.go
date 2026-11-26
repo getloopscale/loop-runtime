@@ -12,14 +12,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	pkgid "github.com/getloopscale/loopzero/pkg/id"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	pkgid "github.com/getloopscale/loop-runtime/pkg/id"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- Test doubles for PromotionOrchestrator ---

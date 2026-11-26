@@ -27,7 +27,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exitcode"
 )
 
 // Thresholds mirror run-scenario.sh:231-233 + the post-drift 100ms (line 250).

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
 	"log/slog"
 )

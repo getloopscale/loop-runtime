@@ -29,8 +29,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 )
 
 // WriteJSON writes data as a JSON body with the given status.

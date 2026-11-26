@@ -15,8 +15,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // tenantCRNamespace is the canonical namespace holding every Tenant CR. Mirrors

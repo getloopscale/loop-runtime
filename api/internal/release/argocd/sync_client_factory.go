@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
 )
 
 // SyncClientInterface abstracts ArgoCD sync operations.

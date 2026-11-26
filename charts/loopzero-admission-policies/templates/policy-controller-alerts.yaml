@@ -120,6 +120,6 @@ spec:
             loopzero_gate: T2.3
           annotations:
             summary: "image-digest VAP saw warn-mode violations"
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#image-digest-admission-warnings"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#image-digest-admission-warnings"
             description: {{ printf "{{ $value }} pod admission(s) used :tag instead of @sha256:<digest> in the last 15m. Investigate before sponsor flips requireImageDigestEnforce=true (would Deny these admissions)." | quote }}
 {{- end }}

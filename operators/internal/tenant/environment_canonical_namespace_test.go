@@ -30,7 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // canonicalNamespaceEnvironment constructs an Environment CR in the `default`

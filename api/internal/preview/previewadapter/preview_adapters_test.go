@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // previewBuildStore serves one SUCCEEDED build and its stored apps; every other

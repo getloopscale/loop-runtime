@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/scrub"
+	"github.com/getloopscale/loop-runtime/api/internal/scrub"
 )
 
 // The scrub the aggregator is constructed with is the one it applies; a test

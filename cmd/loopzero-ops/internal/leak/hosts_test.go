@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/leak"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/leak"
 )
 
 var realInventory = filepath.Join("..", "..", "..", "..", "infra", "quality", "proxy-exposure.txt")

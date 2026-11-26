@@ -6,8 +6,8 @@ package domains_test
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
 // fakeGitOpsPusher implements deploycontracts.GitOpsPusher.

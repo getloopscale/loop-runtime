@@ -161,8 +161,8 @@ func authRanges(fset *token.FileSet, file *ast.File) (authStart, authEnd, protSt
 // B-059 split that one into five. Both are listed so this gate reads a tree
 // from either side of that split.
 var authPackagePaths = map[string]bool{
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth": true,
-	"github.com/getloopscale/loopzero/api/internal/middleware":      true,
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth": true,
+	"github.com/getloopscale/loop-runtime/api/internal/middleware":      true,
 }
 
 // authQualifiers returns the local names under which router.go imports the

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 // countingBody wraps a request body and records how many times the middleware

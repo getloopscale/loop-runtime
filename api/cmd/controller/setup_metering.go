@@ -27,12 +27,12 @@ import (
 	"k8s.io/client-go/rest"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/leader"
-	"github.com/getloopscale/loopzero/api/internal/metering"
-	"github.com/getloopscale/loopzero/api/internal/placement"
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/api/internal/metering"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 const (

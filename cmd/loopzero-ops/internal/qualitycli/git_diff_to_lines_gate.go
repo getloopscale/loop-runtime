@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/gitdiff"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/gitdiff"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/shellrun"
 )
 
 func init() {

@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"testing"
 
-	gh "github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
+	gh "github.com/getloopscale/loop-runtime/api/internal/github"
+	"github.com/getloopscale/loop-runtime/api/internal/integrations/integrationshttp"
 )
 
 type fakeUserInstallations struct {

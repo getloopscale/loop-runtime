@@ -15,11 +15,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/planentitlements"
-	"github.com/getloopscale/loopzero/operators/internal/tenantpolicy"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/planentitlements"
+	"github.com/getloopscale/loop-runtime/operators/internal/tenantpolicy"
 )
 
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist in the namespace.

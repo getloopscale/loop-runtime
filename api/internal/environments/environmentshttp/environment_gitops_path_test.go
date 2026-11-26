@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 type recordingPathPreparer struct {
@@ -32,7 +32,7 @@ func createEnvironment(h *EnvironmentHandler, body string) *httptest.ResponseRec
 	return w
 }
 
-// getloopscale/loopzero#134: the directory the Application reads is written when
+// getloopscale/loop-runtime#134: the directory the Application reads is written when
 // the environment is created, not by its first release.
 func TestCreatePreparesTheGitOpsPathOfTheNewEnvironment(t *testing.T) {
 	preparer := &recordingPathPreparer{}

@@ -9,7 +9,7 @@ import (
 	"net/http/pprof"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
 )
 
 // startPprofServer serves the pprof endpoints on cfg.PprofAddr when

@@ -51,7 +51,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultauthfailureratehigh"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#vaultauthfailureratehigh"
             summary: "Vault auth failure rate > 10/min on {{ $labels.path }}"
             description: |
               The Vault auth method at path `{{ $labels.path }}` is rejecting
@@ -75,7 +75,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultpolicydenialratehigh"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#vaultpolicydenialratehigh"
             summary: "Vault policy denial rate > 5/min for {{ $labels.request_path }}"
             description: |
               Policy denials at `{{ $labels.request_path }}` exceed 5/min over
@@ -98,7 +98,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultsealedordown"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#vaultsealedordown"
             summary: "OpenBao Vault is sealed OR scrape down"
             description: |
               vault_core_unsealed=0 (sealed) OR the metrics scrape itself is
@@ -129,7 +129,7 @@ spec:
             domain: vault
             invariant: "audit-log-must-flow"
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultauditlogstalled"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#vaultauditlogstalled"
             summary: "OpenBao audit log silent > 10min despite active traffic"
             description: |
               Vault is processing requests (vault_audit_log_request_count > 0)

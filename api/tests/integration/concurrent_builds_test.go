@@ -18,8 +18,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
-	"github.com/getloopscale/loopzero/api/internal/lock"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/lock"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -27,19 +27,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/pkg/logging"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/server"
+	"github.com/getloopscale/loop-runtime/pkg/logging"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // --- Route-level adapter: bridges build.BuildOrchestrator to routes.BuildOrchestratorService ---

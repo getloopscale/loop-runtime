@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // TestCheck_RealRepoPasses is the primary sanity check: the actual repo

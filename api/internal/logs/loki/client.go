@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/logs"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/logs"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // Client queries Grafana Loki for build logs via the HTTP API.

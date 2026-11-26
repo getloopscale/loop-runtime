@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
 )
 
 // TestNewWorkerLoop_ThreadsTunablesAndLease — the assembly wires the lease

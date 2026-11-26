@@ -90,9 +90,9 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     # The `ldflag-symbols` gate resolves these paths against the go.mod files and the
     # AST, so the next package move fails the gate instead of breaking silently.
     LDFLAGS="-s -w \
-      -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionTag=${LOOPZERO_VERSION} \
-      -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionCommit=${LOOPZERO_COMMIT} \
-      -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionBuildDate=${LOOPZERO_BUILD_DATE}" \
+      -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionTag=${LOOPZERO_VERSION} \
+      -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionCommit=${LOOPZERO_COMMIT} \
+      -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionBuildDate=${LOOPZERO_BUILD_DATE}" \
     && cd api && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-api ./cmd/ \
     && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-controller ./cmd/controller/
 
@@ -105,7 +105,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
 
 FROM alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039b444be8e5d638f7abbada189971eb2
 
-LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime"
 LABEL org.opencontainers.image.title="loopzero-api"
 LABEL org.opencontainers.image.description="LoopZero PaaS API server"
 

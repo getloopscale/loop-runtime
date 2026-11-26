@@ -11,7 +11,7 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // fixedCell is a TenantCellLookup that places every tenant on one cell.

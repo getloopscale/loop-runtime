@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/scrub"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/scrub"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // EventSink is the minimal subset of EventStore the aggregator needs.

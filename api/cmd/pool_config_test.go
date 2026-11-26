@@ -6,7 +6,7 @@ package main
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
 )
 
 // The request pool is the only one that serves a caller, so it is the only one

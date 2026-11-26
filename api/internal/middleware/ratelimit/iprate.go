@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
-	"github.com/getloopscale/loopzero/api/internal/middleware/slidingwindow"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/clientip"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/slidingwindow"
 )
 
 // IPRateLimiter is a sliding-window rate limiter keyed by client IP. Mounted

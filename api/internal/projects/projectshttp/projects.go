@@ -17,24 +17,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/projects"
-	"github.com/getloopscale/loopzero/api/internal/validation"
+	"github.com/getloopscale/loop-runtime/api/internal/projects"
+	"github.com/getloopscale/loop-runtime/api/internal/validation"
 	"log/slog"
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/pagination"
-	"github.com/getloopscale/loopzero/api/internal/plantier"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/pagination"
+	"github.com/getloopscale/loop-runtime/api/internal/plantier"
+	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/correlation"
-	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/correlation"
+	auditctx "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 var (

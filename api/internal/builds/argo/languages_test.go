@@ -6,7 +6,7 @@ package argo
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
 	forge "github.com/getloopscale/argo-workflows-go"
 )

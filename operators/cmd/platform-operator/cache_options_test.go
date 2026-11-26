@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/getloopscale/loopzero/operators/operatortest"
+	"github.com/getloopscale/loop-runtime/operators/operatortest"
 )
 
 // The chart grants this operator Secret access in two namespaces only, each

@@ -29,8 +29,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/featurefence"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/featurefence"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // errorWriters are the functions whose argument reaches the response BODY.

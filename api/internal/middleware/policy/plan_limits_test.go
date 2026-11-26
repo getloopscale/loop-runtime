@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // planLimitsStore is an in-memory enforcement.LimitsStore.

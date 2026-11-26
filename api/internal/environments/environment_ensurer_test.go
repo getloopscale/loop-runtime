@@ -7,13 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 type stubLister struct {

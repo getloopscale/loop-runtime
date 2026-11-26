@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 )
 
 func TestAPIErrorCodesAnswerTheirRegisteredStatus(t *testing.T) {

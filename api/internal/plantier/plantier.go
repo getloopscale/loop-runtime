@@ -16,8 +16,8 @@ import (
 	"context"
 	"log/slog"
 
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Resolve returns the tenant's canonical plan tier.

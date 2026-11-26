@@ -16,7 +16,7 @@
 # and alarm. A failed drill fails this run, after everything above has been done.
 set -euo pipefail
 
-REMOTE="${DEPLOY_REMOTE:-https://github.com/getloopscale/loopzero.git}"
+REMOTE="${DEPLOY_REMOTE:-https://github.com/getloopscale/loop-runtime.git}"
 BRANCH="${DEPLOY_BRANCH:-develop}"
 STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loopzero-staging/deploy}"
 UP_CMD="${REBUILD_UP_CMD:-task staging:up}"

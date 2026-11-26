@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	sm "github.com/getloopscale/loopzero/pkg/statemachine"
+	sm "github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // machines is the canonical state-machine registry. Add new entries here

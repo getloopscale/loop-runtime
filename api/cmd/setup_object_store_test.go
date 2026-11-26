@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
 )
 
 func silentObjectStoreLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }

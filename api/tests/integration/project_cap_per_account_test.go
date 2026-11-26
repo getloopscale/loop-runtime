@@ -12,17 +12,17 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // violationCount reads the per-plan project-cap violation counter (M4 metric).

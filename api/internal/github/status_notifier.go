@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // RepositoryLookup finds the linked repo for a project (DIP).

@@ -46,7 +46,7 @@ func TestAnotherModuleCannotImportThisPackage(t *testing.T) {
 	}
 	write("go.mod", "module probe\n\ngo 1.26.1\n")
 	write("go.work", "go 1.26.11\n\nuse (\n\t.\n\t"+filepath.Join(repo, "api")+"\n)\n")
-	write("probe.go", "package probe\n\nimport _ \"github.com/getloopscale/loopzero/api/internal/events\"\n")
+	write("probe.go", "package probe\n\nimport _ \"github.com/getloopscale/loop-runtime/api/internal/events\"\n")
 
 	cmd := exec.Command("go", "build", "./...")
 	cmd.Dir = dir

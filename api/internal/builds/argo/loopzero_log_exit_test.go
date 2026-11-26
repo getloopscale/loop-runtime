@@ -10,7 +10,7 @@ import (
 
 	forge "github.com/getloopscale/argo-workflows-go"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
 // runInContainerShell executes the wrapped script with `sh`, which is what the build

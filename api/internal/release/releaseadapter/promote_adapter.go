@@ -6,9 +6,9 @@ package releaseadapter
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/promotehttp"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 )
 
 // PromoteServiceAdapter bridges the promotion orchestrator to the route handler interface.

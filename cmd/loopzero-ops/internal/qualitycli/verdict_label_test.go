@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exitcode"
 )
 
 // A gate whose chart is absent could not verify anything: it exits
@@ -119,7 +119,7 @@ func TestARouterWithNoEnumeratedRouteIsIncompleteNotAFailure(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	router := "package server\n\nimport \"github.com/getloopscale/loopzero/api/internal/middleware\"\n\n" +
+	router := "package server\n\nimport \"github.com/getloopscale/loop-runtime/api/internal/middleware\"\n\n" +
 		"func Router() {\n\tr.Group(func(r chi.Router) {\n" +
 		"\t\tr.Use(middleware.Auth(cfg.TokenValidator, cfg.MemberStore))\n" +
 		"\t\tprojects.Register(r, cfg)\n\t})\n}\n\n" +

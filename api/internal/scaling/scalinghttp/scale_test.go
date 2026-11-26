@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // fakePlanTierStore satisfies ports.PlanTierStore so the handler's

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFixture(t *testing.T, body string) string {
@@ -32,8 +32,8 @@ const canonicalRouter = `package server
 
 import (
 	"github.com/go-chi/chi/v5"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware"
 )
 
 func NewRouter() *chi.Mux {
@@ -94,7 +94,7 @@ func TestCheck_MissingAuthGroupFails(t *testing.T) {
 
 import (
 	"github.com/go-chi/chi/v5"
-	"github.com/getloopscale/loopzero/api/internal/middleware"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware"
 )
 
 func NewRouter() *chi.Mux {
@@ -166,7 +166,7 @@ func synthRouter(t *testing.T, insideAuth, insideProtected, outsideBoth string) 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	body := "package server\n\nimport \"github.com/getloopscale/loopzero/api/internal/middleware\"\n\n" +
+	body := "package server\n\nimport \"github.com/getloopscale/loop-runtime/api/internal/middleware\"\n\n" +
 		"func Router() {\n" +
 		"\tr.Group(func(r chi.Router) {\n" +
 		"\t\tr.Use(middleware.Auth(cfg.TokenValidator, cfg.MemberStore))\n" +

@@ -6,7 +6,7 @@ package observability
 import (
 	"net/http"
 
-	"github.com/getloopscale/loopzero/pkg/logging"
+	"github.com/getloopscale/loop-runtime/pkg/logging"
 )
 
 // RequestLogger is HTTP middleware that constructs a request-scoped

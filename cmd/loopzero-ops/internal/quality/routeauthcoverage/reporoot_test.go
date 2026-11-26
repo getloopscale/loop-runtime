@@ -3,7 +3,7 @@
 
 package routeauthcoverage
 
-import "github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+import "github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 
 // repoRoot is the location-independent monorepo root — the same helper the sibling
 // gates use, so a relocation does not silently turn a real-tree assertion into a

@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/events"
-	cloudmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/events"
+	cloudmetrics "github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
 )
 
 // ArgoNodePhase enumerates the Argo Workflow node phases we react to.

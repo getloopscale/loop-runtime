@@ -17,9 +17,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/drill/cost"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/drill/postgresrestore"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/drill/cost"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/drill/postgresrestore"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/shellrun"
 )
 
 const drillHelpText = `loopzero-ops drill — pure-logic helpers for the drill/DR orchestrators

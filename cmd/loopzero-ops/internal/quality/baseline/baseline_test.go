@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +27,7 @@ func TestIsCritical_KnownPackages(t *testing.T) {
 
 func TestIsCritical_NonCritical(t *testing.T) {
 	for _, p := range []string{
-		"github.com/getloopscale/loopzero/pkg/randompkg",
+		"github.com/getloopscale/loop-runtime/pkg/randompkg",
 		"some/other/path",
 		"",
 	} {
@@ -38,7 +38,7 @@ func TestIsCritical_NonCritical(t *testing.T) {
 func TestInitialMinRequired_CriticalPinned90(t *testing.T) {
 	// Even with low/high coverage, critical pkgs pin to 90.
 	for _, cov := range []float64{0, 50, 75, 95, 100} {
-		got := InitialMinRequired("github.com/getloopscale/loopzero/pkg/errors", cov)
+		got := InitialMinRequired("github.com/getloopscale/loop-runtime/pkg/errors", cov)
 		assert.Equal(t, 90.0, got, "critical pkg @ coverage=%.0f", cov)
 	}
 }
@@ -70,16 +70,16 @@ func TestLoad_HappyPath(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), "baseline.json")
 	require.NoError(t, os.WriteFile(tmp, []byte(`{
   "packages": {
-    "github.com/getloopscale/loopzero/pkg/errors": { "line": 92.0, "min_required": 90 },
-    "github.com/getloopscale/loopzero/pkg/random":  { "line": 75.0, "min_required": 70 }
+    "github.com/getloopscale/loop-runtime/pkg/errors": { "line": 92.0, "min_required": 90 },
+    "github.com/getloopscale/loop-runtime/pkg/random":  { "line": 75.0, "min_required": 70 }
   }
 }`), 0o600))
 
 	b, err := Load(tmp)
 	require.NoError(t, err)
 	assert.Len(t, b.Packages, 2)
-	assert.Equal(t, 92.0, b.Packages["github.com/getloopscale/loopzero/pkg/errors"].Coverage)
-	assert.Equal(t, 70.0, b.Packages["github.com/getloopscale/loopzero/pkg/random"].MinRequired)
+	assert.Equal(t, 92.0, b.Packages["github.com/getloopscale/loop-runtime/pkg/errors"].Coverage)
+	assert.Equal(t, 70.0, b.Packages["github.com/getloopscale/loop-runtime/pkg/random"].MinRequired)
 }
 
 func TestLoad_MissingFile_OpsUsage(t *testing.T) {
@@ -318,24 +318,24 @@ func TestMergeUpdate_NewPackage_SeedsMinFromCoverage(t *testing.T) {
 
 func TestMergeUpdate_CriticalPackage_PinsTo90(t *testing.T) {
 	base := &Baseline{Packages: map[string]PackageBaseline{
-		"github.com/getloopscale/loopzero/pkg/errors": {Coverage: 95, MinRequired: 75 /* drifted */},
+		"github.com/getloopscale/loop-runtime/pkg/errors": {Coverage: 95, MinRequired: 75 /* drifted */},
 	}}
 	current := &Baseline{Packages: map[string]PackageBaseline{
-		"github.com/getloopscale/loopzero/pkg/errors": {Coverage: 92},
+		"github.com/getloopscale/loop-runtime/pkg/errors": {Coverage: 92},
 	}}
 	merged := base.MergeUpdate(current)
-	assert.Equal(t, 90.0, merged.Packages["github.com/getloopscale/loopzero/pkg/errors"].MinRequired,
+	assert.Equal(t, 90.0, merged.Packages["github.com/getloopscale/loop-runtime/pkg/errors"].MinRequired,
 		"critical pkg drifted min_required pinned back to 90")
 }
 
 func TestMergeUpdate_NewCriticalPackage_StartsAt90(t *testing.T) {
 	base := &Baseline{Packages: map[string]PackageBaseline{}}
 	current := &Baseline{Packages: map[string]PackageBaseline{
-		"github.com/getloopscale/loopzero/pkg/errors": {Coverage: 88},
+		"github.com/getloopscale/loop-runtime/pkg/errors": {Coverage: 88},
 	}}
 	merged := base.MergeUpdate(current)
 	// Critical pkg, even with low coverage, starts at 90.
-	assert.Equal(t, 90.0, merged.Packages["github.com/getloopscale/loopzero/pkg/errors"].MinRequired)
+	assert.Equal(t, 90.0, merged.Packages["github.com/getloopscale/loop-runtime/pkg/errors"].MinRequired)
 }
 
 func TestMergeUpdate_NilCurrent_ReturnsCopyOfBase(t *testing.T) {

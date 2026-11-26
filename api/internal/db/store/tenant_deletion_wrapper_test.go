@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // TestTenantDeletionStoreSqlc_SatisfiesTheDomainInterface is the assertion whose

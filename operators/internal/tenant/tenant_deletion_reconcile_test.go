@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // T3.5 of plan 2026-06-11-code-review-remediation v1.2 — closes #128

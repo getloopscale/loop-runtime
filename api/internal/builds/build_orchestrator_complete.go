@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/events"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/events"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // OnBuildCompleted handles the callback from the build system when a build finishes.

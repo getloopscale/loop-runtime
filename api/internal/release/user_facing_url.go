@@ -3,7 +3,7 @@
 
 package release
 
-import "github.com/getloopscale/loopzero/pkg/naming"
+import "github.com/getloopscale/loop-runtime/pkg/naming"
 
 // UserFacingDomain is the domain a URL shown to the user is composed on: the
 // operator's public wildcard when one is configured, the base domain otherwise.

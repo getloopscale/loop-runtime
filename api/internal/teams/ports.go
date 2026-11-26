@@ -9,7 +9,7 @@ package teams
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // TeamStore abstracts team member persistence (DIP).

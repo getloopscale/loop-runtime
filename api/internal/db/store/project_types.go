@@ -6,7 +6,7 @@ package store
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // project_types.go — public struct for the projects domain that

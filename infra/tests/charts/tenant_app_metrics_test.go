@@ -17,7 +17,7 @@ import (
 // The project Status tab and the readiness badges read four signals per tenant app:
 // ready replicas, request rate, error rate and latency. A tenant app is an Argo Rollout
 // that LoopScale does not instrument, so no series described it
-// (getloopscale/loopzero#107). Each cell now builds them: kube-state-metrics exports the
+// (getloopscale/loop-runtime#107). Each cell now builds them: kube-state-metrics exports the
 // loopzero.io labels of pods and Services, the cell's Prometheus records one series per
 // app from pod readiness and from the ingress, and the core Prometheus federates those.
 

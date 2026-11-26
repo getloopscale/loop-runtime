@@ -6,7 +6,7 @@ package slo
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exitcode"
 )
 
 func ip(n int) *int { return &n }

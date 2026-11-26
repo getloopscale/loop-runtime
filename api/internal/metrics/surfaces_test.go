@@ -10,7 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/surfaces"
+	"github.com/getloopscale/loop-runtime/api/internal/surfaces"
 )
 
 func TestPublishSurfaces_ZeroForDisabledOneForEnabled(t *testing.T) {

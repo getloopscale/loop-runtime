@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/bootstrap/bootstraphttp"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/bootstrap/bootstraphttp"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // recordingStore answers every Bootstrap with err and keeps the request it saw.

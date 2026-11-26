@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // TestRLSGuard_AcceptsRequestRole — loopzero_api is non-owner and non-bypassing,
@@ -42,7 +42,7 @@ func TestRLSGuard_RefusesOwner(t *testing.T) {
 		// Same class as the audit suite: the assertion needs a privileged role the
 		// default environment does not provide, so the control goes unmeasured
 		// rather than green-by-accident.
-		// Tracked: https://github.com/getloopscale/loopzero/issues/289
+		// Tracked: https://github.com/getloopscale/loop-runtime/issues/289
 		t.Skipf("DATABASE_URL is not the table owner (%s) — nothing to assert here", posture)
 	}
 
@@ -69,7 +69,7 @@ func TestRLSGuard_RefusesBypassRole(t *testing.T) {
 	octx, super := auditPool(t, "LOOPZERO_RLS_AUDIT_SUPERUSER_URL", "superuser")
 
 	if _, err := super.Exec(octx, `ALTER ROLE loopzero_api BYPASSRLS`); err != nil {
-		// Tracked: https://github.com/getloopscale/loopzero/issues/289
+		// Tracked: https://github.com/getloopscale/loop-runtime/issues/289
 		t.Skipf("cannot grant BYPASSRLS on loopzero_api (needs SUPERUSER): %v", err)
 	}
 	t.Cleanup(func() {

@@ -12,10 +12,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
-	"github.com/getloopscale/loopzero/api/internal/validation"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/validation"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- Fake BuildOrchestratorService ---
@@ -247,11 +247,11 @@ func TestEnvironmentRegex_AcceptsCanonicalNames(t *testing.T) {
 // TestSyncCallbackParser_GrandfatheredHyphenEnv_KnownLimitation —
 // EC-9 of the plan: documents the bounded limitation explicitly via
 // t.Skip so CI stays green while preserving the known-issue audit
-// trail. Tracked as https://github.com/getloopscale/loopzero/issues/290 (was the
+// trail. Tracked as https://github.com/getloopscale/loop-runtime/issues/290 (was the
 // tracker-less internal reference code-005 until the family split made the
 // skip-link gate ask for a URL).
 func TestSyncCallbackParser_GrandfatheredHyphenEnv_KnownLimitation(t *testing.T) {
-	t.Skip("known parser limitation; https://github.com/getloopscale/loopzero/issues/290. sync_callback_activator.go LastIndex(\"-\") parser is ambiguous for env names containing hyphens. T3.2 regex tightening reverted 2026-06-02 to keep trio GREEN. Re-attempt requires e2e fixture migration first (see MEET-ASYNC-AMENDMENT-2026-06-02-002).")
+	t.Skip("known parser limitation; https://github.com/getloopscale/loop-runtime/issues/290. sync_callback_activator.go LastIndex(\"-\") parser is ambiguous for env names containing hyphens. T3.2 regex tightening reverted 2026-06-02 to keep trio GREEN. Re-attempt requires e2e fixture migration first (see MEET-ASYNC-AMENDMENT-2026-06-02-002).")
 }
 
 func TestBuilds_Create_Unauthenticated(t *testing.T) {

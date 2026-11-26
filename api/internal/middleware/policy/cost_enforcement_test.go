@@ -14,8 +14,8 @@ import (
 	"testing"
 
 	planpkg "github.com/getloopscale/contracts/plan"
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // fakeCostStore implements enforcement.CostStore in-memory.

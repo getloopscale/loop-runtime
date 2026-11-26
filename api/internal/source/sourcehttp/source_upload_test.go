@@ -16,9 +16,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth/authtest"
-	"github.com/getloopscale/loopzero/api/internal/source"
-	sourceroutes "github.com/getloopscale/loopzero/api/internal/source/sourcehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth/authtest"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
+	sourceroutes "github.com/getloopscale/loop-runtime/api/internal/source/sourcehttp"
 )
 
 // fakeSourceStore is a test-only SourceStore that stores bundles in memory.

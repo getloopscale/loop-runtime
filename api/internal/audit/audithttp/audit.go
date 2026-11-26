@@ -23,11 +23,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/audit"
-	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/audit"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // The platform sets PORT on the app's container itself, and that value wins

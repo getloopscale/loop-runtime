@@ -26,8 +26,8 @@ package projectstatus_test
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/projectstatus"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/projectstatus"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // TestMapProjectStatus_ActiveReleaseTrumpsCancelledBuild is the direct

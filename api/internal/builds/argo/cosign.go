@@ -9,7 +9,7 @@ import (
 	forge "github.com/getloopscale/argo-workflows-go"
 	"github.com/getloopscale/argo-workflows-go/model"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // orImage returns configured, or fallback when nothing was configured.

@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // errApplicationNameUnknown is returned when a LoopZeroApplication carries neither

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/vault"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/vault"
 )
 
 // Per-tenant Transit key provisioning is **api-side** — decided in

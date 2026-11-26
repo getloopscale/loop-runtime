@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // newHTTPTestSyncClient creates a SyncClient pointing at a test server.

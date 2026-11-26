@@ -13,7 +13,7 @@
 // + kstatus summary/retry helpers here.
 package conditions
 
-import apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+import apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 
 // --- CR-status condition TYPE vocabulary (re-exported from operators/api/v1) ---
 // The canonical definitions live in operators/api/v1/conditions.go (M6). These

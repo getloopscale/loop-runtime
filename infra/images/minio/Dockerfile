@@ -62,7 +62,7 @@ FROM mirror.gcr.io/library/alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039
 ARG MINIO_TAG=RELEASE.2025-10-15T17-29-55Z
 ARG MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
 
-LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero" \
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime" \
       org.opencontainers.image.title="loopzero-minio" \
       org.opencontainers.image.version="${MINIO_TAG}" \
       org.opencontainers.image.revision="${MINIO_COMMIT}" \

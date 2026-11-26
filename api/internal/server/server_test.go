@@ -13,8 +13,8 @@ import (
 	"os"
 	"testing"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/server"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/server"
 )
 
 // fakeTokenValidator implements auth.TokenValidator for server tests.

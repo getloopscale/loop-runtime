@@ -15,7 +15,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/getloopscale/loop-runtime/infra/tests/helm/chartrender"
 )
 
 // helmfileRun is the one place in this package that executes helmfile without a

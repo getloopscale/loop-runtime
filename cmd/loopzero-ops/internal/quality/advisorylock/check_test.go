@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/scanresult"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/scanresult"
 )
 
 func write(t *testing.T, root, rel, content string) {

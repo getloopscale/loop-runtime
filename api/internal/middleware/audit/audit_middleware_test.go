@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 // --- Audit middleware tests ---

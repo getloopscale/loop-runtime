@@ -9,7 +9,7 @@
 // HTTPStatus field has been REMOVED from LoopZeroError. Callers that
 // need the HTTP status code MUST use:
 //
-//	import errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+//	import errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 //	status := errorshttp.Status(err)
 //
 // See CLAUDE.md Rule 8.
@@ -21,7 +21,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 // stackDepth bounds frame capture in WrapWithStack — 32 frames is

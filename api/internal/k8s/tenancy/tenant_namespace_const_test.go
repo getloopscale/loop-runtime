@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
 )
 
 // T-01 (MEET-ADR-0018 / change-validation-planner) — assert that the

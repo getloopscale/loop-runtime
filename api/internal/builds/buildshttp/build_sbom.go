@@ -15,8 +15,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // AppSBOMSummary is one entry in the /builds/:id/sbom response array.
@@ -57,7 +57,7 @@ type AppSBOMStore interface {
 
 // SBOMObjectReader opens a stored SBOM. The API streams the file itself: a
 // presigned URL carries the storage endpoint, which a browser cannot always
-// reach (getloopscale/loopzero#104).
+// reach (getloopscale/loop-runtime#104).
 type SBOMObjectReader interface {
 	Open(ctx context.Context, bucket, key string) (io.ReadCloser, error)
 }

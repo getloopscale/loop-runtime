@@ -13,14 +13,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/correlation"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/correlation"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // RollbackService abstracts the rollback orchestrator for the handler (DIP).

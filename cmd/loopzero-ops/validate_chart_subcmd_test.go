@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/shellrun"
 )
 
 // realHelm runs helm for real and answers kubeconform with a pass, so these

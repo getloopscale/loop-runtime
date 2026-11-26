@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/rollbackhttp"
 )
 
 // rollbackLookupWindow is how many of the environment's newest releases the

@@ -10,8 +10,8 @@ package planentitlements
 import (
 	corev1 "k8s.io/api/core/v1"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
 // Entitlements is what one plan tier grants.

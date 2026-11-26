@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 func writeFile(t *testing.T, path, body string) {

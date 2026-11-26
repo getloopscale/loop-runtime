@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/chartpairs"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/chartpairs"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // chart describes one fixture chart: its Chart.yaml name and its templates.

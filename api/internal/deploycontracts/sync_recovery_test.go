@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // scriptedRecoveryClient answers TriggerSync from a script, one error per call (nil = success),

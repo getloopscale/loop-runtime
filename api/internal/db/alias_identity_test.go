@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
 )
 
 // The port moved to db/dbtx and db re-exports it. These MUST be aliases — the

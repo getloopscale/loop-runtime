@@ -6,7 +6,7 @@ package builds
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // AttestationStore is the minimal contract for reading attestation data.

@@ -19,15 +19,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/operators/internal/app"
-	"github.com/getloopscale/loopzero/operators/internal/argocd"
-	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/gitea"
-	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
-	"github.com/getloopscale/loopzero/operators/internal/platform"
-	"github.com/getloopscale/loopzero/operators/internal/preview"
-	"github.com/getloopscale/loopzero/operators/internal/tenant"
+	"github.com/getloopscale/loop-runtime/operators/internal/app"
+	"github.com/getloopscale/loop-runtime/operators/internal/argocd"
+	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/gitea"
+	miniop "github.com/getloopscale/loop-runtime/operators/internal/minio"
+	"github.com/getloopscale/loop-runtime/operators/internal/platform"
+	"github.com/getloopscale/loop-runtime/operators/internal/preview"
+	"github.com/getloopscale/loop-runtime/operators/internal/tenant"
 )
 
 // GitRepoProvisioner is the interface for Git repository provisioning.

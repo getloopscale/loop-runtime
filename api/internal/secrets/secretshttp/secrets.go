@@ -25,8 +25,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 
 	"fmt"
 	"log/slog"
@@ -35,21 +35,21 @@ import (
 	"slices"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/manifests"
-	"github.com/getloopscale/loopzero/api/internal/secrets"
-	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/manifests"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets"
+	loopzerovault "github.com/getloopscale/loop-runtime/pkg/vault"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/correlation"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/correlation"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	auditctx "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.

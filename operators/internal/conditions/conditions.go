@@ -6,7 +6,7 @@ package conditions
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // SetCondition sets or updates a condition on a slice of conditions.

@@ -13,9 +13,9 @@ package argo
 import (
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/shellgen"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/shellgen"
 )
 
 // ---------------------------------------------------------------------------

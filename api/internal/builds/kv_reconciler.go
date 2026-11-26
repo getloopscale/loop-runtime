@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // KVRoutingSource provides the expected set of KV routing keys from the database.

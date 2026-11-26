@@ -8,14 +8,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/pagination"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/pagination"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // BuildListItem is the route-level representation of a build for listing.

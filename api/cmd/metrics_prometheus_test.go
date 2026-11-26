@@ -6,7 +6,7 @@ package main
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
 )
 
 // The Status page's metrics are queried by the API itself, so they need the Prometheus

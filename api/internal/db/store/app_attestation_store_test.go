@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // app_attestation_store_test.go — RESHAPED in T1.3b of plan

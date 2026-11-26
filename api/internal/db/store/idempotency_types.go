@@ -3,7 +3,7 @@
 
 package store
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 // idempotency_types.go — public types for the idempotency_keys
 // domain that survive the T2.1 (Batch A) deletion of the legacy

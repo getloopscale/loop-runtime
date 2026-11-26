@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/scrub"
-	"github.com/getloopscale/loopzero/api/internal/timeline/aggregator"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/scrub"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline/aggregator"
 )
 
 // timelineResumeStore is what the resumer needs from the event journal: the

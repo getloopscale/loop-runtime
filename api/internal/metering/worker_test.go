@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/getloopscale/loopzero/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
 )
 
 // --- fakes ---

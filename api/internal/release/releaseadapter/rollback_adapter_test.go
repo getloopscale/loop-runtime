@@ -6,11 +6,11 @@ package releaseadapter
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/rollbackhttp"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // Quality-Gate Phase 2: Rollback method removed; test exercises the type

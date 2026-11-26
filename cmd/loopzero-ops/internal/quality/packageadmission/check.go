@@ -56,7 +56,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrForeignDomain means a top-level file of the plumbing package names a responsibility.

@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
 )
 
 // tenantGVR is the GroupVersionResource for the Tenant CR. Hardcoded here

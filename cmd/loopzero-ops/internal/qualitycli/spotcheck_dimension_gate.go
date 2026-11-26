@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/spotcheck"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/spotcheck"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {

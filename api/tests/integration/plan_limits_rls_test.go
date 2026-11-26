@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 )
 
 // The plan every gate enforces is read by store.PlanLimitsStore, and
@@ -84,7 +84,7 @@ func TestPlanLimitsStoreOnTheRequestRoleCannotSeeTheSubscription(t *testing.T) {
 		t.Fatalf("read the request role's RLS posture: %v", err)
 	}
 	if bypasses {
-		// A role that bypasses RLS cannot reproduce https://github.com/getloopscale/loopzero/issues/382:
+		// A role that bypasses RLS cannot reproduce https://github.com/getloopscale/loop-runtime/issues/382:
 		// every row is visible to it, so the test would pass whatever the wiring.
 		t.Skip("DATABASE_URL is not the isolated request role (it bypasses RLS); point it at loopzero_api")
 	}

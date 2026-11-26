@@ -50,7 +50,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrSuitesFailed means at least one skill suite is red.

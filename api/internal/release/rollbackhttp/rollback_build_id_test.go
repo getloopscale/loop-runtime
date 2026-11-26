@@ -11,11 +11,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 type fakeReleaseLookup struct {

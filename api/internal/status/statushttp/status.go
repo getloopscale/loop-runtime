@@ -19,16 +19,16 @@ import (
 	"sort"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/plantier"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/plantier"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // StatusBuildStore abstracts build retrieval for the status handler (DIP).

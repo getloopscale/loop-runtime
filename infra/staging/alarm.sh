@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopZero Authors
 #
-# Staging's alarms, raised as GitHub issues on getloopscale/loopzero with the
+# Staging's alarms, raised as GitHub issues on getloopscale/loop-runtime with the
 # staging-alarm label: GitHub notifies the repository's watchers, and the issue keeps the
 # history. One open issue per alarm; raising it again comments on it, and clearing it
 # comments and closes it.
@@ -15,7 +15,7 @@
 # The token is the host's status token, with Issues read and write added.
 set -euo pipefail
 
-REPO="${DEPLOY_REPO:-getloopscale/loopzero}"
+REPO="${DEPLOY_REPO:-getloopscale/loop-runtime}"
 GITHUB_API="${DEPLOY_GITHUB_API:-https://api.github.com}"
 TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loopzero-staging/github-status-token}"
 DISK_PATH="${ALARM_DISK_PATH:-/}"

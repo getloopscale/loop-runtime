@@ -25,7 +25,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/revrange"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/revrange"
 )
 
 // Spec is what a dangling-reference gate looks for.

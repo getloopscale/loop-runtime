@@ -20,11 +20,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
-	"github.com/getloopscale/loopzero/operators/operatortest"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/operatorboot"
+	"github.com/getloopscale/loop-runtime/operators/operatortest"
 )
 
 // operatorIdentity is the ServiceAccount the operator charts bind their RBAC to.

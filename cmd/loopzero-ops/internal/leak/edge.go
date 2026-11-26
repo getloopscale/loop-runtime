@@ -34,8 +34,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/credshape"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exposure"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/credshape"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exposure"
 )
 
 // Verdict is the outcome of probing one path.

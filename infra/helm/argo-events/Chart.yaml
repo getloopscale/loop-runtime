@@ -11,7 +11,7 @@ keywords:
   - eventbus
 maintainers:
   - name: loopzero-platform
-home: https://github.com/getloopscale/loopzero
+home: https://github.com/getloopscale/loop-runtime
 dependencies:
   # Pinned upstream chart version. Renovate auto-bumps patches.
   # 2.4.x is the stable line as of 2026-05.

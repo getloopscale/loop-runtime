@@ -9,12 +9,12 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/github"
-	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/preview"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
+	ghwebhook "github.com/getloopscale/loop-runtime/api/internal/github/webhook"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/preview"
 )
 
 // linkedRepoLookup finds the project a GitHub repository is linked to.

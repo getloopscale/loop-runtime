@@ -28,7 +28,7 @@ package tenancy
 import (
 	"testing"
 
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 func entries(pairs ...[2]string) []apiv1.TenantEnvironmentEntry {

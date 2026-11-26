@@ -24,11 +24,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/pkg/vault"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/pkg/vault"
 )
 
 // compile-time guarantee: fakeTransit satisfies the same vault.Transit

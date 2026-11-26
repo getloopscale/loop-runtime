@@ -26,7 +26,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 var (

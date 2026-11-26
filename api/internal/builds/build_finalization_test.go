@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 func finalizerOver(bs *fakeBuildStoreOrch, es *fakeEventStoreContainer) buildFinalizer {

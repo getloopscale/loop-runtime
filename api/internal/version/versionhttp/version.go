@@ -32,9 +32,9 @@ import (
 // Dockerfile (which gets the org wrong, not the path).
 //
 //	go build -ldflags "\
-//	  -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionTag=$(git describe --tags) \
-//	  -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionCommit=$(git rev-parse HEAD) \
-//	  -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+//	  -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionTag=$(git describe --tags) \
+//	  -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionCommit=$(git rev-parse HEAD) \
+//	  -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 var (
 	versionTag       = "dev"
 	versionCommit    = "unknown"

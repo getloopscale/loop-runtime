@@ -6,8 +6,8 @@ package release
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
 // GitCommit and ID are load-bearing for the delivery (Apps, which the sync

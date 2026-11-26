@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/builds/argo"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/release"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/argo"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 
 	forge "github.com/getloopscale/argo-workflows-go"
 )

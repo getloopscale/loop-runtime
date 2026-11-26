@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
 )
 
 // TestAPI_NoBackgroundLoops — roadmap 02 DoD.

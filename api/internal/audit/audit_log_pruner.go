@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // AuditLogPruner removes audit_log rows older than the retention window.

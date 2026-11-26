@@ -9,9 +9,9 @@ import (
 	"errors"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
-	"github.com/getloopscale/loopzero/api/internal/timeline"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline"
 )
 
 type fakeBuildLookup struct {

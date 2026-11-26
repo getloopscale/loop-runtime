@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // StaleReleaseRow is a release that has sat in READY or PENDING past a cutoff.

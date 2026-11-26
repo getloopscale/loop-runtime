@@ -27,7 +27,7 @@ spec:
             severity: warning
             loopzero_component: supply-chain
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#loopzerounsignedreleasepushed"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#loopzerounsignedreleasepushed"
             summary: "Unsigned release pushed to registry"
             description: |
               `loopzero_release_signed_total{signed="false"}` is incrementing,
@@ -61,7 +61,7 @@ spec:
             severity: warning
             loopzero_component: supply-chain
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#loopzeroattestationsavefailing"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#loopzeroattestationsavefailing"
             summary: "Per-app attestation persistence failing"
             description: |
               loopzero_release_attestation_save_fail_total > 0 in the last 5m.
@@ -86,7 +86,7 @@ spec:
             severity: warning
             loopzero_component: secrets
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#loopzerosecretesosyncskipped"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#loopzerosecretesosyncskipped"
             summary: "loopzero secret set silently no-ops (ESO sync disabled)"
             description: |
               loopzero_secret_externalsecret_total{result="skip"} > 0 means the
@@ -103,7 +103,7 @@ spec:
             severity: warning
             loopzero_component: secrets
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#loopzerosecretesosyncfailing"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#loopzerosecretesosyncfailing"
             summary: "ExternalSecret CR creation failing >5%"
             description: |
               loopzero_secret_externalsecret_total{result="fail"} rate > 0.05/s

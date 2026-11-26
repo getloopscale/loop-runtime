@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // B-013 RED test. A citation that points at something deleted is followed by
@@ -96,14 +96,14 @@ func TestCommitSHAsCitedInWorkflowsAreReachable(t *testing.T) {
 	// unverified supply chain as a clean one. Locally it stays a skip — failing a
 	// developer's shallow clone would claim a defect where there is only a missing input.
 	// Verifying without history is tracked at:
-	// https://github.com/getloopscale/loopzero/issues/365
+	// https://github.com/getloopscale/loop-runtime/issues/365
 	underCI := os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("CI") == "true"
 	cannotMeasure := func(format string, args ...any) {
 		t.Helper()
 		if underCI {
 			t.Fatalf(format+" — CI must check out with fetch-depth: 0", args...)
 		}
-		// https://github.com/getloopscale/loopzero/issues/365
+		// https://github.com/getloopscale/loop-runtime/issues/365
 		t.Skipf(format, args...)
 	}
 	if err := exec.Command("git", "-C", root, "rev-parse", "--git-dir").Run(); err != nil {

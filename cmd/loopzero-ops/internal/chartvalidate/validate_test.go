@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/shellrun"
 )
 
 const twoObjects = "---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: a\n---\n# a comment-only document\n---\napiVersion: v1\nkind: Secret\nmetadata:\n  name: b\n"

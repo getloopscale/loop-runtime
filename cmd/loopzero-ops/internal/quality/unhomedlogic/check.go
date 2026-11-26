@@ -26,7 +26,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/shellscript"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/shellscript"
 )
 
 // Disposition is the homed-ness of a script.

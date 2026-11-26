@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // BuildPlan contains resolved build instructions for all apps in a deploy.

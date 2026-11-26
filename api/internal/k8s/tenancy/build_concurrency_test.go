@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // The Tenant CR's maxBuildConcurrency is the same per-tenant limit the API

@@ -14,8 +14,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/cliout"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/exitcode"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/cliout"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/exitcode"
 )
 
 // taskWiredWord captures the gate name in a `loopzero-ops quality <gate>` invocation.

@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // TestDomainsCreateDeclaresProjectAsResourceID — B-059 FR-002.

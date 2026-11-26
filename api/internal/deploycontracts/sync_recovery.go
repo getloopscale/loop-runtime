@@ -22,7 +22,7 @@ import (
 	"log/slog"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // SyncRecoveryClient is the part of the sync client the recovery policy drives. Both methods

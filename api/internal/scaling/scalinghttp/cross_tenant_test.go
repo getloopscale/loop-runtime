@@ -18,9 +18,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // Fixtures for this package's isolation tests, duplicated from the parent's

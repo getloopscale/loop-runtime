@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 func env(m map[string]string) func(string) string {

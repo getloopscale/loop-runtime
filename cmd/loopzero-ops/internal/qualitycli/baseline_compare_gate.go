@@ -7,8 +7,8 @@ import (
 	"flag"
 	"os"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/baselinecompare"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/baselinecompare"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 func init() {

@@ -27,7 +27,7 @@ import (
 // answered by git, and the fallback never runs.
 func TestAbsentTokenIsAnsweredByGitNotByWalking(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not on PATH — this test is about preferring git's answer over a walk; https://github.com/getloopscale/loopzero/issues/369")
+		t.Skip("git is not on PATH — this test is about preferring git's answer over a walk; https://github.com/getloopscale/loop-runtime/issues/369")
 	}
 	root := t.TempDir()
 	mustRun(t, root, "git", "init", "-q")
@@ -47,7 +47,7 @@ func TestAbsentTokenIsAnsweredByGitNotByWalking(t *testing.T) {
 // And a token that IS in the tree is still found.
 func TestPresentTokenIsFound(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not on PATH; https://github.com/getloopscale/loopzero/issues/369")
+		t.Skip("git is not on PATH; https://github.com/getloopscale/loop-runtime/issues/369")
 	}
 	root := t.TempDir()
 	mustRun(t, root, "git", "init", "-q")

@@ -23,25 +23,25 @@ import (
 	"os"
 	"sort"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // CriticalPackages — D11 list — Min_required pinned to 90, never
 // auto-downgraded by baseline-update. Order is alphabetical for
 // deterministic test fixtures.
 var CriticalPackages = []string{
-	"github.com/getloopscale/loopzero/pkg/circuitbreaker",
-	"github.com/getloopscale/loopzero/pkg/conditions",
-	"github.com/getloopscale/loopzero/pkg/enforcement",
-	"github.com/getloopscale/loopzero/pkg/errors",
-	"github.com/getloopscale/loopzero/pkg/errors/http",
-	"github.com/getloopscale/loopzero/pkg/healthcheck",
-	"github.com/getloopscale/loopzero/pkg/id",
+	"github.com/getloopscale/loop-runtime/pkg/circuitbreaker",
+	"github.com/getloopscale/loop-runtime/pkg/conditions",
+	"github.com/getloopscale/loop-runtime/pkg/enforcement",
+	"github.com/getloopscale/loop-runtime/pkg/errors",
+	"github.com/getloopscale/loop-runtime/pkg/errors/http",
+	"github.com/getloopscale/loop-runtime/pkg/healthcheck",
+	"github.com/getloopscale/loop-runtime/pkg/id",
 	"github.com/getloopscale/contracts/jwt",
-	"github.com/getloopscale/loopzero/pkg/lock",
-	"github.com/getloopscale/loopzero/pkg/logging",
-	"github.com/getloopscale/loopzero/pkg/naming",
-	"github.com/getloopscale/loopzero/pkg/statemachine",
+	"github.com/getloopscale/loop-runtime/pkg/lock",
+	"github.com/getloopscale/loop-runtime/pkg/logging",
+	"github.com/getloopscale/loop-runtime/pkg/naming",
+	"github.com/getloopscale/loop-runtime/pkg/statemachine",
 }
 
 // Default thresholds (bash defaults preserved).

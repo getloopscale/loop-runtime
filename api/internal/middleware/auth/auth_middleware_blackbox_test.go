@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 type fakeTokenValidator struct {

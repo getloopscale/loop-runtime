@@ -8,14 +8,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // BuildOrchestratorAdapter implements routes.BuildOrchestratorService by

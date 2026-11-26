@@ -38,9 +38,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/coverageparse"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/coverageparse"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Config holds the merger inputs.

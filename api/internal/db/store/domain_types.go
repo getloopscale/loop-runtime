@@ -24,8 +24,8 @@ package store
 import (
 	"regexp"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // PostgresDomainStore implements ports.DomainStore (the request path) and

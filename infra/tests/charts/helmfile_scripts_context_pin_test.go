@@ -48,7 +48,7 @@
 //	is a deliberate raw bypass used by mechanism (1) itself.
 //
 // Cross-references:
-//   - Issues: getloopscale/loopzero#117 (this sweep), #115 (the single-script precursor)
+//   - Issues: getloopscale/loop-runtime#117 (this sweep), #115 (the single-script precursor)
 //   - Sibling single-script guard: generate_secrets_context_pin_test.go
 //   - Canonical reference implementation: infra/helmfile/scripts/generate-secrets.sh
 package charts

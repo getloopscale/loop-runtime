@@ -7,7 +7,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/pkg/circuitbreaker"
+	"github.com/getloopscale/loop-runtime/pkg/circuitbreaker"
 )
 
 // Compile-time interface compliance check.

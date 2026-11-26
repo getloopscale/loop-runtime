@@ -4,8 +4,8 @@
 package qualitycli
 
 import (
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/liveprobescript"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/liveprobescript"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // liveProbeScriptCheck runs one live probe script contract

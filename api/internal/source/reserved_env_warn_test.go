@@ -11,7 +11,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // In warn mode a reserved key is accepted, so the acceptance must be seen:

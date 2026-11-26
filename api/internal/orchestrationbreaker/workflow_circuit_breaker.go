@@ -13,8 +13,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/pkg/circuitbreaker"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/pkg/circuitbreaker"
 )
 
 // CircuitBreakerWorkflowSubmitter wraps a WorkflowSubmitter with circuit breaker

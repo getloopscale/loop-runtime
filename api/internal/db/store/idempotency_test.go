@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtest"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtest"
 )
 
 func TestIdempotencyStore_Get_QueryError(t *testing.T) {

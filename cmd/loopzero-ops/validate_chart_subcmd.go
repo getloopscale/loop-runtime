@@ -15,10 +15,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/chartvalidate"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/kubeconformschema"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/shellrun"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/chartvalidate"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/kubeconformschema"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/shellrun"
 )
 
 const validateChartHelpText = `loopzero-ops validate-chart — render one Helm chart and schema-validate the render

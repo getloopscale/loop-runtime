@@ -5,13 +5,13 @@ package server
 
 import (
 	"context"
-	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	mwauth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 )
 
 // Every /api/v1/admin/* route must pass through the ONE admin gate

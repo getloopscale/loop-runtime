@@ -17,15 +17,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	auditctx "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.

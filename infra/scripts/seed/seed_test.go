@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // A spec.environments the seed cannot read must stop the seed. Proceeding

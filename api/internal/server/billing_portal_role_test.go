@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loop-runtime/api/internal/billing/billinghttp"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
 )
 
 type roleMember struct{ role string }

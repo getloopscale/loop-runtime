@@ -39,14 +39,14 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/plantier"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/plantier"
 
 	planpkg "github.com/getloopscale/contracts/plan"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // StripeCustomerStore is the port for the tenant's billing customer id.

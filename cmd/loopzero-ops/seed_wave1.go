@@ -3,7 +3,7 @@
 
 package main
 
-import "github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/seed"
+import "github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/seed"
 
 // init registers Wave 1 (K8s-Secret) + Wave 2 (HTTP-API port-forward) seeds.
 // Registration order = execution order for `seed all` (deterministic, D3).

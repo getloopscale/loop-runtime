@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 // recordingGitea answers the repository API from status codes and records the

@@ -12,7 +12,7 @@ import (
 
 	forge "github.com/getloopscale/argo-workflows-go"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
 // runFailStep runs the container's script in a fresh directory and returns its

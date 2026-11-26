@@ -6,7 +6,7 @@ package previewadapter
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // The build and release stores declare 17 and 15 methods; each adapter here

@@ -14,8 +14,8 @@ package kubeconformschemasync
 import (
 	"path/filepath"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/kubeconformschema"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/kubeconformschema"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Fix is the remediation the gate prints on a failure.

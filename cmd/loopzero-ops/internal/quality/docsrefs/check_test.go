@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // writeTree lays out a synthetic repo. Keys are repo-relative paths.

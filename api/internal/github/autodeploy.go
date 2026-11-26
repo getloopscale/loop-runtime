@@ -17,10 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/archive"
-	"github.com/getloopscale/loopzero/api/internal/gitclient"
+	"github.com/getloopscale/loop-runtime/api/internal/archive"
+	"github.com/getloopscale/loop-runtime/api/internal/gitclient"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

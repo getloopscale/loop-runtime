@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
 	forge "github.com/getloopscale/argo-workflows-go"
 	"github.com/getloopscale/argo-workflows-go/model"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // InfraParams holds infrastructure-level parameters that are injected into every workflow.

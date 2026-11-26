@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
 )
 
 // modulePrefix is the only prefix the watched paths use. Deriving the directory
 // from the import path is valid only while this holds, and the test's first
 // assertion is precisely that it still does.
-const modulePrefix = "github.com/getloopscale/loopzero/"
+const modulePrefix = "github.com/getloopscale/loop-runtime/"
 
 // This gate watches by IMPORT PATH. A path that stops existing — a package
 // moved, renamed or deleted — produces no error: the key simply stops matching,

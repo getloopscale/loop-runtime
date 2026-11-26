@@ -10,9 +10,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/lock"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/lock"
 )
 
 // loopzero_worker is the one role that may cross tenants, and migration 000023
@@ -44,7 +44,7 @@ func requireTheWorkerRolesOwnPrivileges(t *testing.T) {
 		t.Fatalf("read the worker role's posture: %v", err)
 	}
 	if unconstrained {
-		// Such a role cannot reproduce https://github.com/getloopscale/loopzero/issues/385.
+		// Such a role cannot reproduce https://github.com/getloopscale/loop-runtime/issues/385.
 		t.Skip("LOOPZERO_WORKER_DATABASE_URL is not the constrained cross-tenant role; point it at loopzero_worker")
 	}
 }

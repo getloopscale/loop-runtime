@@ -24,7 +24,7 @@ import (
 	"net/http"
 	"sync"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // registry is the code → status table: the pkg/errors codes below plus the

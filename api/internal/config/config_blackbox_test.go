@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 // LOOPZERO_CLUSTER_ISSUER is seeded for every test in this binary by TestMain

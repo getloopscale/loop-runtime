@@ -23,7 +23,7 @@ import (
 	forge "github.com/getloopscale/argo-workflows-go"
 	"github.com/getloopscale/argo-workflows-go/model"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // CosignAttestParams configures the attestation step. AppName + ImageTag

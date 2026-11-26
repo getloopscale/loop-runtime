@@ -7,9 +7,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/manifests"
-	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/manifests"
+	"github.com/getloopscale/loop-runtime/api/internal/status/statushttp"
 )
 
 // buildApps reads the apps a build declared.

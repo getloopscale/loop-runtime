@@ -16,7 +16,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/getloopscale/loopzero/infra/scripts/seed"
+	"github.com/getloopscale/loop-runtime/infra/scripts/seed"
 )
 
 var _ = Describe("Journey 05: Promote", Ordered, Label("journey"), func() {

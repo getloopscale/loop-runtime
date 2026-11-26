@@ -24,14 +24,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
-	"github.com/getloopscale/loopzero/pkg/correlation"
-	"github.com/getloopscale/loopzero/pkg/naming"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 const previewFinalizer = constants.FinalizerPreview

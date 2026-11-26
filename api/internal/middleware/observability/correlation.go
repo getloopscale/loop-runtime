@@ -6,7 +6,7 @@ package observability
 import (
 	"net/http"
 
-	"github.com/getloopscale/loopzero/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
 )
 
 // CorrelationID is an HTTP middleware that ensures every request has a Correlation-ID.

@@ -10,7 +10,7 @@ import (
 
 // An environment with no release left its Argo CD Application in
 // ComparisonError, "app path does not exist", until the first deploy
-// (getloopscale/loopzero#134).
+// (getloopscale/loop-runtime#134).
 func TestEnsureEnvironmentPathCreatesTheDirectoryTheApplicationReads(t *testing.T) {
 	root := newLocalRemote(t, "acme", map[string]string{"production/web/manifests.yaml": testManifests})
 	pusher := newLocalPusher(localRepoManager{root: root}, nil)

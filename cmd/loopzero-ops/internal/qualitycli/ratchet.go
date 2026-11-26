@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/deadlineratchet"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ratchetLabels are the words a deadline-ratchet gate reports with.

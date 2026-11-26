@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // The move was byte for byte, and these assert the rendered shape rather than

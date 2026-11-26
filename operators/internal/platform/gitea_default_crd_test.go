@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 // giteaInternalURLDefault captures the kubebuilder default rendered for the

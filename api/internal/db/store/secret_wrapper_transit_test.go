@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // mockVault implements VaultTransitClient for unit tests.

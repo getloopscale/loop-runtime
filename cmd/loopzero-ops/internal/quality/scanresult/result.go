@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // ErrNothingScanned means the gate reached no input at all. Finding nothing is

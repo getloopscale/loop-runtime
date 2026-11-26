@@ -6,7 +6,7 @@ package main
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
 )
 
 // A push deploy uploads the repository's source bundle to the same bucket a CLI

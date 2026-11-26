@@ -4,17 +4,17 @@
 package domainshttp
 
 import (
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 	"log/slog"
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Verify checks DNS TXT records for domain ownership (POST /api/v1/domains/{domain}/verify).

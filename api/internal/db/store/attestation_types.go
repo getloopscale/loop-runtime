@@ -3,7 +3,7 @@
 
 package store
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 // attestation_types.go — public struct + constructor for the
 // supply-chain attestation summary store that survives the T2.1

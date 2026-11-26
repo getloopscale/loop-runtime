@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/operatorboot"
 )
 
 // config is everything the tenant-operator reads from its environment,

@@ -24,8 +24,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 // TenantCellQuerier abstracts tenant-to-cell lookups against the DB.

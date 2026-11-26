@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth/authtest"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth/authtest"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/status/statushttp"
 
 	"github.com/go-chi/chi/v5"
 )

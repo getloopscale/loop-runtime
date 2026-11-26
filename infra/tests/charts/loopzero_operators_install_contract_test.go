@@ -201,7 +201,7 @@ func binaryReadDirs(t *testing.T, opsRoot, cmdPath string) []string {
 	if err != nil {
 		t.Fatalf("go list -deps ./%s (in %s): %v", cmdPath, opsRoot, err)
 	}
-	const prefix = "github.com/getloopscale/loopzero/operators/"
+	const prefix = "github.com/getloopscale/loop-runtime/operators/"
 	dirs := []string{cmdPath}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		line = strings.TrimSpace(line)

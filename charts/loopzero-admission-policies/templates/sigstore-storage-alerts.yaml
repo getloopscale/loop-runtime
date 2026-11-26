@@ -36,7 +36,7 @@ spec:
           annotations:
             summary: "Sigstore PV usage > 80%"
             description: {{ printf "PV {{ $labels.persistentvolumeclaim }} in sigstore-system at {{ $value | humanizePercentage }} usage. The log is append-only and nothing archives it: expand the volume before it fills. See docs/runbooks.md § Sigstore storage." | quote }}
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#sigstore-storage"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#sigstore-storage"
 
         - alert: LoopZeroSigstorePVUsageCritical
           expr: |
@@ -53,5 +53,5 @@ spec:
           annotations:
             summary: "Sigstore PV usage > 95% — URGENT"
             description: {{ printf "PV {{ $labels.persistentvolumeclaim }} in sigstore-system at {{ $value | humanizePercentage }} usage. Rekor will stop accepting new entries when PV full → builds stall. Expand the volume now (docs/runbooks.md § Sigstore storage)." | quote }}
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#sigstore-storage"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#sigstore-storage"
 {{- end }}

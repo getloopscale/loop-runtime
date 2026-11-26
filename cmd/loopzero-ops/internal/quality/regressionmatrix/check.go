@@ -36,7 +36,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // EntryResult is the resolution category of a single matrix row.

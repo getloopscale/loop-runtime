@@ -21,7 +21,7 @@ spec:
           annotations:
             summary: "Weekly soak test failed"
             description: "The k6 soak test Job failed. Check logs: kubectl logs -n loopzero-system -l app.kubernetes.io/name=k6-soak"
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/infra/tests/performance/k6/README.md#alerts-soak"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/infra/tests/performance/k6/README.md#alerts-soak"
 
         - alert: LoopZeroAPIMemoryLeak
           expr: |

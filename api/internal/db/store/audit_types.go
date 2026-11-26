@@ -25,7 +25,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // AuditEntry represents a single audit log entry.

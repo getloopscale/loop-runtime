@@ -19,12 +19,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	k "github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
-	"github.com/getloopscale/loopzero/operators/internal/tenantpolicy"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	k "github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
+	"github.com/getloopscale/loop-runtime/operators/internal/tenantpolicy"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // errSecretTypeMismatch is returned when a Secret exists with the wrong type

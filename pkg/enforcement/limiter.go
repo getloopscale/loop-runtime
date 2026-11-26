@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // PlanLimiter checks if a tenant's operation is within their plan limits.

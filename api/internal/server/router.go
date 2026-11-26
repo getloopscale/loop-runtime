@@ -17,22 +17,22 @@ package server
 import (
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/auth/authhttp"
-	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
-	"github.com/getloopscale/loopzero/api/internal/release/releasehttp"
-	"github.com/getloopscale/loopzero/api/internal/version/versionhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/auth/authhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/placement/placementhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/releasehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/version/versionhttp"
 
 	"github.com/go-chi/chi/v5"
 
 	planpkg "github.com/getloopscale/contracts/plan"
-	"github.com/getloopscale/loopzero/api/internal/bootstrap/bootstraphttp"
-	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	audit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	observability "github.com/getloopscale/loopzero/api/internal/middleware/observability"
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	"github.com/getloopscale/loopzero/api/internal/surfaces"
+	"github.com/getloopscale/loop-runtime/api/internal/bootstrap/bootstraphttp"
+	"github.com/getloopscale/loop-runtime/api/internal/health/healthhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	audit "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	mwauth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	observability "github.com/getloopscale/loop-runtime/api/internal/middleware/observability"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	"github.com/getloopscale/loop-runtime/api/internal/surfaces"
 )
 
 // enforcementMetricBuildMinutes is the canonical metric label for the cost

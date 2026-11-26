@@ -6,7 +6,7 @@ package auth
 import (
 	"context"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/clientip"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"

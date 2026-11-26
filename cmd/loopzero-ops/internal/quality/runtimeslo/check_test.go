@@ -107,8 +107,8 @@ func TestParseTestLine(t *testing.T) {
 
 // TestParseSuiteLine — extracts suite + duration.
 func TestParseSuiteLine(t *testing.T) {
-	suite, dur, ok := parseSuiteLine("ok  github.com/getloopscale/loopzero/pkg/x  3.21s")
-	if !ok || suite != "github.com/getloopscale/loopzero/pkg/x" || dur != 3.21 {
+	suite, dur, ok := parseSuiteLine("ok  github.com/getloopscale/loop-runtime/pkg/x  3.21s")
+	if !ok || suite != "github.com/getloopscale/loop-runtime/pkg/x" || dur != 3.21 {
 		t.Errorf("got suite=%q dur=%v ok=%v", suite, dur, ok)
 	}
 	// "ok ... (cached)" has no duration → no match

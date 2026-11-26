@@ -28,7 +28,7 @@
 # GitHub, the registry and the platform task.
 set -euo pipefail
 
-REPO="${DEPLOY_REPO:-getloopscale/loopzero}"
+REPO="${DEPLOY_REPO:-getloopscale/loop-runtime}"
 REMOTE="${DEPLOY_REMOTE:-https://github.com/${REPO}.git}"
 BRANCH="${DEPLOY_BRANCH:-develop}"
 GITHUB_API="${DEPLOY_GITHUB_API:-https://api.github.com}"

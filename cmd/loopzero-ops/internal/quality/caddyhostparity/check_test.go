@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/caddyhostparity"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/caddyhostparity"
 )
 
 // tree writes a minimal repo: the verifier's host list and the Caddyfile.

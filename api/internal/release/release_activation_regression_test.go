@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	releasesvc "github.com/getloopscale/loopzero/api/internal/release"
+	releasesvc "github.com/getloopscale/loop-runtime/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // --- BUG-03: SetGitCommit failure is fatal ---

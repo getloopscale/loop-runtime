@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // busyThenFreeSubmitter refuses with DEPLOY_IN_PROGRESS a number of times,

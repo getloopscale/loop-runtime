@@ -12,7 +12,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // Environment target kinds (D2 of plan 2026-06-07-preview-as-category).

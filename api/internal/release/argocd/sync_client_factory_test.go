@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
 )
 
 // noopSyncClient is a minimal SyncClient for factory tests.

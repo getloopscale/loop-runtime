@@ -48,7 +48,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // scanRoots are the trees where an ArgoCD Application name can legitimately be needed.

@@ -1,4 +1,4 @@
-module github.com/getloopscale/loopzero/api
+module github.com/getloopscale/loop-runtime/api
 
 go 1.26.11
 
@@ -10,7 +10,7 @@ require (
 	github.com/exaring/otelpgx v0.10.0
 	github.com/getkin/kin-openapi v0.144.0
 	github.com/getloopscale/argo-workflows-go v0.8.0
-	github.com/getloopscale/loopzero/pkg v0.0.0
+	github.com/getloopscale/loop-runtime/pkg v0.0.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
@@ -71,7 +71,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/getloopscale/contracts v0.6.0
-	github.com/getloopscale/loopzero/operators/api v0.0.0
+	github.com/getloopscale/loop-runtime/operators/api v0.0.0
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.22.5 // indirect
@@ -128,6 +128,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 )
 
-replace github.com/getloopscale/loopzero/pkg => ../pkg
+replace github.com/getloopscale/loop-runtime/pkg => ../pkg
 
-replace github.com/getloopscale/loopzero/operators/api => ../operators/api
+replace github.com/getloopscale/loop-runtime/operators/api => ../operators/api

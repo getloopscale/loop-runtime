@@ -7,12 +7,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // M5 T2.1 — the HERMETIC per-Account project cap on the DEPLOY path

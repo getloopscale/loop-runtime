@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // Every field a build persists must survive the trip back to an AppSpec. A

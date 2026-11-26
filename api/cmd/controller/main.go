@@ -55,12 +55,12 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver for sql.Open
 
-	"github.com/getloopscale/loopzero/pkg/logging"
+	"github.com/getloopscale/loop-runtime/pkg/logging"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/leader"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 func main() {

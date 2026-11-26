@@ -8,7 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	cb "github.com/getloopscale/loopzero/pkg/circuitbreaker"
+	cb "github.com/getloopscale/loop-runtime/pkg/circuitbreaker"
 )
 
 // A breaker's state change is visible on /metrics, not only in the log.

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
 // CHG-2026-04-25-ATTESTATION-WIRE Phase 4 (AC-4.1):

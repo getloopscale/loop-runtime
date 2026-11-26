@@ -6,7 +6,7 @@ package manifests
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // secretRefOf returns the container's envFrom entry for the Secret named name.

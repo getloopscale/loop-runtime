@@ -18,7 +18,7 @@ import (
 // measurement is the opposite of the invisible skip that same rule forbids — the debt
 // shows up in every run, and the issue below is where it is tracked.
 //
-// Tracked at: https://github.com/getloopscale/loopzero/issues/363
+// Tracked at: https://github.com/getloopscale/loop-runtime/issues/363
 // The defect: the vacuity floor is one aggregate across every resolver, so a resolver
 // enumerating zero references hides behind those that enumerate some.
 //
@@ -29,7 +29,7 @@ import (
 func skipUnlessPerResolverFloorArmed(t *testing.T) {
 	t.Helper()
 	if os.Getenv("LOOPZERO_RUN_PER_RESOLVER_FLOOR") == "" {
-		// https://github.com/getloopscale/loopzero/issues/363
+		// https://github.com/getloopscale/loop-runtime/issues/363
 		t.Skip("known debt: the docsrefs vacuity counter is a single aggregate, so a resolver " +
 			"that enumerates zero references is invisible behind those that enumerate some. " +
 			"Run with LOOPZERO_RUN_PER_RESOLVER_FLOOR=1 to see the measurement.")

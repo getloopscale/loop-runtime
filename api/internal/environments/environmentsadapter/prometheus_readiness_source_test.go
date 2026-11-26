@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/environments"
+	"github.com/getloopscale/loop-runtime/api/internal/environments"
 )
 
 // servePrometheus answers /api/v1/query with body and records the PromQL.
@@ -64,7 +64,7 @@ func TestPrometheusReplicasReadySource_ReadsOneSamplePerLabelledEnvironment(t *t
 
 // Tenant workloads are Argo Rollouts and kube-state-metrics exports no ReplicaSet
 // labels, so the poller reads the ready replicas each cell records per app and
-// folds a project's apps into its environment (getloopscale/loopzero#107).
+// folds a project's apps into its environment (getloopscale/loop-runtime#107).
 func TestReplicasReadyQuery_SumsTheRecordedSeriesPerEnvironment(t *testing.T) {
 	const want = `sum by (tenant_id, project, environment) (loopzero_app:kube_pod_status_ready:sum)`
 	if ReplicasReadyQuery != want {

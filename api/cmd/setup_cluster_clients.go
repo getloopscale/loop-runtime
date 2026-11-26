@@ -11,11 +11,11 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
-	"github.com/getloopscale/loopzero/api/internal/builds/stepwatch"
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/stepwatch"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
 )
 
 // Cluster clients the API server wires outside the background loop graph:

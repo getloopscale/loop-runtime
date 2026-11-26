@@ -41,7 +41,7 @@ func TestAcyclicGraph_SyntheticUpwardImport_Fails(t *testing.T) {
 	parent := filepath.Dir(engine)
 	// loopzero-contracts illegally imports an engine-internal package.
 	writeGo(t, filepath.Join(parent, "loopzero-contracts"), "jwt/validator.go",
-		"package jwt\nimport _ \"github.com/getloopscale/loopzero/pkg/logging\"\n")
+		"package jwt\nimport _ \"github.com/getloopscale/loop-runtime/pkg/logging\"\n")
 
 	out, err := Check(Config{RepoRoot: engine})
 	if err != nil {
@@ -77,7 +77,7 @@ func TestAcyclicGraph_CloudImportsEngineInternal_Fails(t *testing.T) {
 	engine := layout(t)
 	parent := filepath.Dir(engine)
 	writeGo(t, filepath.Join(parent, "loopzero-cloud"), "internal/auth/x.go",
-		"package auth\nimport _ \"github.com/getloopscale/loopzero/pkg/enforcement\"\n")
+		"package auth\nimport _ \"github.com/getloopscale/loop-runtime/pkg/enforcement\"\n")
 
 	out, err := Check(Config{RepoRoot: engine})
 	if err != nil {
@@ -141,7 +141,7 @@ func TestAcyclicGraph_OperatorsApiImportsInternal_Fails(t *testing.T) {
 	engine := layout(t)
 	// operators/api illegally imports an engine-internal package.
 	writeGo(t, filepath.Join(engine, "operators", "api"), "v1/leak.go",
-		"package v1\nimport _ \"github.com/getloopscale/loopzero/operators/internal/conditions\"\n")
+		"package v1\nimport _ \"github.com/getloopscale/loop-runtime/operators/internal/conditions\"\n")
 
 	out, err := Check(Config{RepoRoot: engine})
 	if err != nil {

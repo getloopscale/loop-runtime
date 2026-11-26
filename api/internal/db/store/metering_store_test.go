@@ -14,14 +14,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // meteringPool opens a pgxpool on LOOPZERO_E2E_DATABASE_URL (owner — the happy-path

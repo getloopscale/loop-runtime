@@ -29,7 +29,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // constraintCase — one (table, constraint, expectedStates) tuple.

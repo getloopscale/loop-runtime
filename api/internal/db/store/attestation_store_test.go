@@ -31,7 +31,7 @@ import (
 	"errors"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // TestAttestationStore_GetBuildAttestationForTenant_EmptyTenant —

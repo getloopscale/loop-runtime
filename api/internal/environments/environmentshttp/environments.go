@@ -16,22 +16,22 @@ import (
 	"errors"
 
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/validation"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/validation"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/pagination"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/pagination"
 
 	"github.com/go-chi/chi/v5"
 
-	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auditctx "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // reservedEnvironmentNames contains names that cannot be used for environments.

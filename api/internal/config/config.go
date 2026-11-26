@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 // T1.3 (plan 2026-05-21-deep-review-remediation): dev-default sentinels are

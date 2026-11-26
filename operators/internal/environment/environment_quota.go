@@ -14,10 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
-	"github.com/getloopscale/loopzero/operators/internal/tenantpolicy"
+	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
+	"github.com/getloopscale/loop-runtime/operators/internal/tenantpolicy"
 )
 
 // reconcileNamespace ensures the namespace exists via CreateOrUpdate.

@@ -3,7 +3,7 @@
 
 package sse
 
-import "github.com/getloopscale/loopzero/api/internal/ports"
+import "github.com/getloopscale/loop-runtime/api/internal/ports"
 
 // SSEEvent and EventStore are the journal contract the streams read. They are
 // declared in ports so the Postgres implementation can live in db/store with

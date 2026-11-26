@@ -4,7 +4,7 @@
 package qualitycli
 
 import (
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/deadlineratchet"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/deadlineratchet"
 )
 
 func init() {

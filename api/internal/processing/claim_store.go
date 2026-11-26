@@ -47,7 +47,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // ErrClaimHeld is returned by Claim when another live worker already

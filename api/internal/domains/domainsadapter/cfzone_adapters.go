@@ -6,9 +6,9 @@ package domainsadapter
 import (
 	"context"
 
-	domainsvc "github.com/getloopscale/loopzero/api/internal/domains"
-	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
-	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
+	domainsvc "github.com/getloopscale/loop-runtime/api/internal/domains"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/cfzone"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainshttp"
 )
 
 // CFZoneAdapter bridges cfzone.Client → domains.CFZoneManager.

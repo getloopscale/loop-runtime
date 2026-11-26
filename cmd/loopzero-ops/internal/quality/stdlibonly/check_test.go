@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/qtestutil"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/stdlibonly"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/qtestutil"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/stdlibonly"
 )
 
 func portsPackage(t *testing.T, body string) string {
@@ -77,7 +77,7 @@ var _ = prometheus.NewCounter
 func TestStdlibOnly_InternalImportIsAlsoRefused(t *testing.T) {
 	root := portsPackage(t, `package domain
 
-import "github.com/getloopscale/loopzero/pkg/errors"
+import "github.com/getloopscale/loop-runtime/pkg/errors"
 
 var _ = errors.New
 `)

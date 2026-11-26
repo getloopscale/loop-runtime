@@ -7,8 +7,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // setupBackgroundDatabase builds the pool the background loops run on, and

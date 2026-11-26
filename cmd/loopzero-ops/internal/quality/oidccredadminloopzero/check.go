@@ -17,8 +17,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/linescan"
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/linescan"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 var forbiddenPattern = regexp.MustCompile(`paulo@loopzero\.test|LoopZeroDev2026!`)

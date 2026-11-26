@@ -6,9 +6,9 @@ package tenancy
 import (
 	"sort"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // resolveEnvEntry picks the Tenant CR environment entry that answers a lookup

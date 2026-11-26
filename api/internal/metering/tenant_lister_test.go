@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // meteringScheme registers the loopzero.io Tenant types on a fresh scheme for the

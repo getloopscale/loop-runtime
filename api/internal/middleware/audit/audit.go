@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/middleware/observability"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/observability"
 )
 
 // AuditWriter writes audit entries to persistent storage.

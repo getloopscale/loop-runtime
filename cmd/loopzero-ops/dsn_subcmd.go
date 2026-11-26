@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/dsn"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/dsn"
 )
 
 const dsnHelpText = `loopzero-ops dsn — read one part of a Postgres DSN

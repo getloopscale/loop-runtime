@@ -11,7 +11,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // NewScheme builds a runtime.Scheme with the loopzero.io/v1 CRD types registered

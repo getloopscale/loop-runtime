@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
 )
 
 // idempotencyKeyRequired lists the mutations whose client MUST send an

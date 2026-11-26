@@ -14,7 +14,7 @@ import (
 
 // The core Prometheus labels the series it federates from build and the cells with
 // `cluster`, but its own series come from the chart's default scrape jobs and carry no
-// such label (getloopscale/loopzero#41). A panel that groups by cluster names core
+// such label (getloopscale/loop-runtime#41). A panel that groups by cluster names core
 // through label_replace, so core shows as "core" instead of a blank series.
 func TestMonitoring_PanelsGroupedByClusterNameTheCoreCluster(t *testing.T) {
 	files, err := filepath.Glob("../../helm/monitoring/dashboards/*.json")

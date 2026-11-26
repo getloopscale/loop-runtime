@@ -244,7 +244,7 @@ func TestCheck_PostEnforcement_AESRelocatedToPkgVault_FAILS(t *testing.T) {
 	seedNonAPIRoots(t, tmp)
 	writeGo(t, tmp, "api/internal/db/store/secret_wrapper.go", `package store
 
-import vaultpkg "github.com/getloopscale/loopzero/pkg/vault"
+import vaultpkg "github.com/getloopscale/loop-runtime/pkg/vault"
 
 func (s *PostgresSecretStore) decrypt(b, aad []byte) ([]byte, error) {
 	return vaultpkg.LegacyAESOpen(s.encryptionKey, b, aad)

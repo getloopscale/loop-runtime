@@ -39,8 +39,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 // EC-08 MUST FIX P1: secret_name regex validation uses the same

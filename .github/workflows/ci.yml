@@ -110,9 +110,9 @@ on:
   # stops nothing until branch protection marks it required, and on 2026-09-06
   # that setting was not merely unset — it is unavailable:
   #
-  #     gh api repos/getloopscale/loopzero/branches/develop/protection  -> 403
-  #     gh api repos/getloopscale/loopzero/branches/main/protection     -> 403
-  #     gh api repos/getloopscale/loopzero/rulesets                     -> 403
+  #     gh api repos/getloopscale/loop-runtime/branches/develop/protection  -> 403
+  #     gh api repos/getloopscale/loop-runtime/branches/main/protection     -> 403
+  #     gh api repos/getloopscale/loop-runtime/rulesets                     -> 403
   #     "Upgrade to GitHub Pro or make this repository public to enable this
   #      feature."
   #

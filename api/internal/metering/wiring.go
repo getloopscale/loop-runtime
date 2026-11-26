@@ -14,12 +14,12 @@ package metering
 import (
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
 )
 
 // SystemClock is the production Clock — the real wall clock.

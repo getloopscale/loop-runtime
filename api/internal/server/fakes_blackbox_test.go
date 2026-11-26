@@ -6,7 +6,7 @@ package server_test
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets/secretshttp"
 )
 
 // fakeSecretStore implements secrets.SecretStore for testing.

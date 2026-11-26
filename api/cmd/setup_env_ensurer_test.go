@@ -6,7 +6,7 @@ package main
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 func TestAnAbsentEnvironmentReadsAsAbsentToTheEnsurer(t *testing.T) {

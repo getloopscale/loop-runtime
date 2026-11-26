@@ -38,7 +38,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/getloopscale/loopzero/cmd/loopzero-ops/internal/quality/verdict"
+	"github.com/getloopscale/loop-runtime/cmd/loopzero-ops/internal/quality/verdict"
 )
 
 // Config controls the gate.
@@ -74,7 +74,7 @@ var ErrNothingScanned = errors.New("no sqlc-backed function with a db.DBTX param
 
 const (
 	defaultStoreDir     = "api/internal/db/store"
-	generatedImportPath = "github.com/getloopscale/loopzero/api/internal/db/generated"
+	generatedImportPath = "github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 
 // Check is the gate entry point.

@@ -9,9 +9,9 @@ import (
 	"errors"
 	"fmt"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
-	"github.com/getloopscale/loopzero/api/internal/timeline"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline"
 )
 
 // SSEReader is the minimal read surface from sse.EventStore the deploy

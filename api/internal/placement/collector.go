@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // CellMetricsQuerier abstracts the DB query for cell tenant counts.

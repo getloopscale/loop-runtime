@@ -11,8 +11,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/leader"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 // cellID() must default to domain.DefaultCellID when the env var is unset,

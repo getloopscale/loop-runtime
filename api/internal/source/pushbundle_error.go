@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/scrub"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/scrub"
+	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // MaxBundleBytes is the size ceiling for source bundles. Larger payloads

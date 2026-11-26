@@ -6,11 +6,11 @@ package lock
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // PoolEnvironmentLocker implements shared.EnvironmentLocker using a real pgxpool.Pool.
