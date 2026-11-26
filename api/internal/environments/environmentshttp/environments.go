@@ -165,6 +165,20 @@ type EnvironmentHandler struct {
 	slotLookup   PreviewSlotLookup      // optional — nil → preview block omitted from List response
 	projectStore EnvProjectLookup       // M2: cross-tenant project gate (EC-1)
 	relLookup    EnvActiveReleaseLookup // M2: EC-7 orphan-warning lookup
+	gitopsPaths  GitOpsPathPreparer     // optional: nil leaves the directory to the first release
+}
+
+// GitOpsPathPreparer writes the directory the Argo CD Application of an
+// environment reads, so the Application compares clean before the first release.
+type GitOpsPathPreparer interface {
+	EnsureEnvironmentPath(ctx context.Context, tenantID, project, environment string) error
+}
+
+// WithGitOpsPathPreparer makes Create prepare the GitOps path of each new
+// environment.
+func (h *EnvironmentHandler) WithGitOpsPathPreparer(p GitOpsPathPreparer) *EnvironmentHandler {
+	h.gitopsPaths = p
+	return h
 }
 
 // NewEnvironmentHandler creates a new EnvironmentHandler.
@@ -477,6 +491,20 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		)
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
+	}
+
+	// The environment exists from here on. A path that cannot be written is
+	// logged and not returned: an error would make a retry answer
+	// ENV_ALREADY_EXISTS, and the first release writes the directory.
+	if h.gitopsPaths != nil {
+		if err := h.gitopsPaths.EnsureEnvironmentPath(ctx, uc.TenantID, req.Project, req.Name); err != nil {
+			slog.Error("environment created, but its GitOps path could not be prepared",
+				"tenant_id", uc.TenantID,
+				"project", req.Project,
+				"environment", req.Name,
+				"error", err.Error(),
+			)
+		}
 	}
 
 	httpio.WriteJSON(w, http.StatusCreated, map[string]interface{}{

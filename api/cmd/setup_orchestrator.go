@@ -38,6 +38,8 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/logs/loki"
 	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
 	"github.com/getloopscale/loopzero/pkg/enforcement"
+
+	"github.com/getloopscale/loopzero/api/internal/gitops"
 )
 
 // planLimiterCapAdapter bridges *enforcement.PlanLimiter to the
@@ -133,6 +135,8 @@ type OrchestratorDeps struct {
 	BuildStatsHandler   *buildshttp.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
 	ProjectDeleter      projects.Deleter
 	ArgoCallbackHandler *argocdhttp.ArgoCallbackHandler
+	// GitOpsPusher is nil in a boot that has no GitOps repository.
+	GitOpsPusher *gitops.GiteaGitOpsPusher
 }
 
 // setupOrchestrator creates the build orchestrator, logs, rollback, status,
@@ -512,6 +516,7 @@ func setupOrchestrator(
 	argoCallbackHandler := argocdhttp.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
 	return &OrchestratorDeps{
+		GitOpsPusher:        workflows.GitOpsPusher,
 		Orchestrator:        orch,
 		BuildOrchestrator:   buildOrchestrator,
 		LogsHandler:         logsHandler,

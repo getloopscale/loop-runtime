@@ -174,6 +174,9 @@ func newEnvironmentHandler(w serverWiring) *environmentshttp.EnvironmentHandler 
 	if w.dbDeps != nil {
 		h = h.WithProjectLookup(&environmentsadapter.EnvProjectLookupAdapter{Store: w.dbDeps.ProjectStore})
 	}
+	if w.orchDeps != nil && w.orchDeps.GitOpsPusher != nil {
+		h = h.WithGitOpsPathPreparer(w.orchDeps.GitOpsPusher)
+	}
 	return h
 }
 
