@@ -472,6 +472,22 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The path goes first: adding the environment creates its Argo CD
+	// Application, and an Application that reads a missing directory stays in
+	// ComparisonError until the next reconciliation, minutes later. A path that
+	// cannot be written is logged and does not refuse the environment, because
+	// the first release writes the directory.
+	if h.gitopsPaths != nil {
+		if err := h.gitopsPaths.EnsureEnvironmentPath(ctx, uc.TenantID, req.Project, req.Name); err != nil {
+			slog.Error("the GitOps path of a new environment could not be prepared",
+				"tenant_id", uc.TenantID,
+				"project", req.Project,
+				"environment", req.Name,
+				"error", err.Error(),
+			)
+		}
+	}
+
 	if err := h.envMgr.AddEnvironment(ctx, uc.TenantID, req.Project, req.Name); err != nil {
 		// M2 v1.2 T4.1 EC-5 — duplicate (project, name) tuple MUST
 		// surface as 409 CONFLICT, not 201 silent. The user needs to
@@ -491,20 +507,6 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		)
 		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
 		return
-	}
-
-	// The environment exists from here on. A path that cannot be written is
-	// logged and not returned: an error would make a retry answer
-	// ENV_ALREADY_EXISTS, and the first release writes the directory.
-	if h.gitopsPaths != nil {
-		if err := h.gitopsPaths.EnsureEnvironmentPath(ctx, uc.TenantID, req.Project, req.Name); err != nil {
-			slog.Error("environment created, but its GitOps path could not be prepared",
-				"tenant_id", uc.TenantID,
-				"project", req.Project,
-				"environment", req.Name,
-				"error", err.Error(),
-			)
-		}
 	}
 
 	httpio.WriteJSON(w, http.StatusCreated, map[string]interface{}{
