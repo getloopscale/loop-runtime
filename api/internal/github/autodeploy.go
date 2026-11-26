@@ -55,6 +55,9 @@ type AutoDeployConfig struct {
 	// BranchHead reads the commit at the head of the pushed branch. Nil reads
 	// it from GitHub through AppClient.
 	BranchHead func(ctx context.Context, req PushRequest) (string, error)
+	// BuildQuota gates a push on the plan's builds per month, the limit the
+	// deploy route enforces. Nil builds every push.
+	BuildQuota BuildQuota
 }
 
 const (
@@ -145,6 +148,15 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, req PushRequest) error {
 	owner, repo, err := splitRepoFullName(req.RepoFullName)
 	if err != nil {
 		return err
+	}
+	refused, err := d.refusedByBuildQuota(ctx, log, req, owner, repo)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if refused {
+		return nil
 	}
 	src, err := d.downloadSource(ctx, req.InstallationID, owner, repo, req.CommitSHA)
 	if err != nil {

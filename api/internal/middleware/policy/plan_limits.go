@@ -77,14 +77,21 @@ func PlanLimits(
 func planLimitExceededBody(result enforcement.LimitResult, upgradeURL string) map[string]interface{} {
 	return map[string]interface{}{
 		"code": "PLAN_LIMIT_EXCEEDED",
-		"message": fmt.Sprintf("Plan limit reached: %s allows %d %s (current: %d). Upgrade your plan to continue.",
-			domain.PlanTier(result.Plan).DisplayName(), result.Limit, limitMetricDisplayName(result.Metric), result.Current),
+		"message":     PlanLimitMessage(result),
 		"plan":        result.Plan,
 		"limit":       result.Metric,
 		"current":     result.Current,
 		"max":         result.Limit,
 		"upgrade_url": upgradeURL,
 	}
+}
+
+// PlanLimitMessage is the refusal a person reads when a plan limit is reached:
+// the limit, the usage and what to do. The 402 body and the commit status of a
+// refused push carry the same sentence.
+func PlanLimitMessage(result enforcement.LimitResult) string {
+	return fmt.Sprintf("Plan limit reached: %s allows %d %s (current: %d). Upgrade your plan to continue.",
+		domain.PlanTier(result.Plan).DisplayName(), result.Limit, limitMetricDisplayName(result.Metric), result.Current)
 }
 
 // limitMetricDisplayName is the product wording of a plan-limit metric.

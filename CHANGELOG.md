@@ -411,6 +411,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A push to a connected repository respects the plan's builds per month, as the deploy route does. Over the limit nothing is built, and the commit gets a `loopzero/deploy` failure status with the limit, the usage and the advice to upgrade (#159).
 - Creating an environment writes its GitOps path before the environment itself. Written afterwards, the path arrived after the Argo CD Application had read a missing directory, and the Application stayed in `ComparisonError` for about three minutes (#134).
 - Creating an environment writes its directory to the tenant's GitOps repository, so its Argo CD Application compares clean before the first release. The Application reported `ComparisonError`, "app path does not exist", until something was deployed (#134).
 - The plan cap on environments counts every permanent environment a tenant has. It counted only the ones that had received a deploy, so `POST /api/v1/environments` never answered 402 for environments created and left empty (#153).
