@@ -1,12 +1,12 @@
 # Helmfile environment: standalone (self-hosting single cluster)
 # CHG-2026-04-28-LAYERED-BOOTSTRAP — ADR D6
 #
-# `loopzero platform install -f values.yaml` (without --provider) uses this
+# `loop-runtime platform install -f values.yaml` (without --provider) uses this
 # environment. ALL releases (mgmt + build + runtime) install into a single
 # customer-provided K8s cluster.
 
-domain: loopzero.local
-dnsZone: loopzero.local
+domain: loop-runtime.local
+dnsZone: loop-runtime.local
 
 clusterRole: standalone
 
@@ -61,7 +61,7 @@ underlyingStorageClass: ""
 velero:
   bucket: velero-backups
   region: us-east-1
-  s3Url: http://minio.loopzero-system.svc:9000
+  s3Url: http://minio.loop-runtime-system.svc:9000
 
 # Plan v1.2 T2.3 / D4 — kratos+hydra UI base URL placeholder
 uiBaseUrl: "http://localhost:4455"
@@ -75,11 +75,11 @@ profile:
   managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
-  loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone
+  loopRuntimeCloud: true               # install the control plane (loop-console), unless clusterRole is standalone
   smokeTest: true               # run the post-install smoke-test release
   localObjectStore: true        # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
   inClusterObjectStore: true    # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
   awsSecretsManager: false      # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
   awsLoadBalancerController: false  # install the AWS Load Balancer Controller and publish the edge through an ALB
-  localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
-  secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public
+  localRegistry: false          # cells admit images from the local k3d registry (k3d-loop-runtime-registry:5000)
+  secretFetchBroker: false      # install the ESO secret-fetch broker (loop-runtime-broker) on the cells; its chart allows a plaintext bearer only in dev-public

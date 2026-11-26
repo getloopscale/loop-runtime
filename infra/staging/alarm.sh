@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # Staging's alarms, raised as GitHub issues on getloopscale/loop-runtime with the
 # staging-alarm label: GitHub notifies the repository's watchers, and the issue keeps the
@@ -17,12 +17,12 @@ set -euo pipefail
 
 REPO="${DEPLOY_REPO:-getloopscale/loop-runtime}"
 GITHUB_API="${DEPLOY_GITHUB_API:-https://api.github.com}"
-TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loopzero-staging/github-status-token}"
+TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loop-runtime-staging/github-status-token}"
 DISK_PATH="${ALARM_DISK_PATH:-/}"
 DISK_LIMIT_PERCENT="${ALARM_DISK_LIMIT_PERCENT:-80}"
 # The GitHub tokens the host keeps: a file holds the token itself, or a JSON file holds it
 # as "password" (ghcr-pull.json). GitHub caps their lifetime, so one of them always expires.
-TOKEN_FILES="${ALARM_TOKEN_FILES:-$TOKEN_FILE /etc/loopzero-staging/ghcr-pull.json}"
+TOKEN_FILES="${ALARM_TOKEN_FILES:-$TOKEN_FILE /etc/loop-runtime-staging/ghcr-pull.json}"
 TOKEN_WARN_DAYS="${ALARM_TOKEN_WARN_DAYS:-14}"
 LABEL=staging-alarm
 HOST="$(hostname)"

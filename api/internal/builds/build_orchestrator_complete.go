@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -12,7 +12,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/db"
 	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 	"github.com/getloopscale/loop-runtime/api/internal/events"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
@@ -42,7 +42,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 
 	// Validation before acquiring lock (stateless check)
 	if result.Status == "succeeded" && len(result.Apps) == 0 {
-		return loopzeroerrors.NewLoopZeroError(
+		return loopruntimeerrors.NewLoopRuntimeError(
 			"INVALID_CALLBACK",
 			"build callback reported success but provided no apps")
 	}

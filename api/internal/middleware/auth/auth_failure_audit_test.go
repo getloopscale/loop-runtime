@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package auth
 
@@ -132,7 +132,7 @@ func TestAuthFailureAuditor_EnrichesMetadata(t *testing.T) {
 
 	req := makeReq("203.0.113.42")
 	req.Header.Set("Correlation-ID", "req-12345")
-	req.Header.Set("User-Agent", "loopzero-cli/0.13.0")
+	req.Header.Set("User-Agent", "loop-runtime-cli/0.13.0")
 
 	auditor.Emit(context.Background(), req, AuthFailureServiceMismatch, "shared secret mismatch", map[string]any{"extra_key": "extra_value"})
 
@@ -146,7 +146,7 @@ func TestAuthFailureAuditor_EnrichesMetadata(t *testing.T) {
 	if m["correlation_id"] != "req-12345" {
 		t.Errorf("expected correlation_id in metadata, got %v", m["correlation_id"])
 	}
-	if m["user_agent"] != "loopzero-cli/0.13.0" {
+	if m["user_agent"] != "loop-runtime-cli/0.13.0" {
 		t.Errorf("expected user_agent in metadata, got %v", m["user_agent"])
 	}
 	if m["extra_key"] != "extra_value" {

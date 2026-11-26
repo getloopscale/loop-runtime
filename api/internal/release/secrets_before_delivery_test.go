@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -89,7 +89,7 @@ func TestActivate_DeliversTheRolloutOnlyAfterTheSecretsAreInTheCluster(t *testin
 func TestActivate_UndeliveredSecretsStopTheDeployBeforeAnyPodIsReplaced(t *testing.T) {
 	log := &stepLog{}
 	undelivered := &deploycontracts.SecretsNotDeliveredError{
-		Store: "loopzero-broker", Namespace: "loopzero-tn-1-shop-production",
+		Store: "loop-runtime-broker", Namespace: "loop-runtime-tn-1-shop-production",
 		ExternalSecret: "user-secrets-tn-1-shop-production-api", Reason: "no refresh after the deploy asked for one",
 	}
 	activator, releases, sync := secretsActivator(log, &orderedSecrets{log: log, err: undelivered})
@@ -97,7 +97,7 @@ func TestActivate_UndeliveredSecretsStopTheDeployBeforeAnyPodIsReplaced(t *testi
 	err := activator.Activate(context.Background(), secretsBuild, secretsResult)
 
 	var got *deploycontracts.SecretsNotDeliveredError
-	if !errors.As(err, &got) || got.Store != "loopzero-broker" {
+	if !errors.As(err, &got) || got.Store != "loop-runtime-broker" {
 		t.Fatalf("err = %v, want a SecretsNotDeliveredError naming the store", err)
 	}
 	if errors.Is(err, deploycontracts.ErrActivationAlreadyHandled) {

@@ -4,36 +4,36 @@
 #
 # Hypothesis: when one cell's ArgoCD crashes, tenants in other cells
 # (or in the same cell's existing Applications) continue operating.
-# The loopzero-api falls back to the circuit breaker pattern: new syncs
+# The loop-runtime-api falls back to the circuit breaker pattern: new syncs
 # return ErrDeployServiceAuthFailed (503) or ErrPlatformDegraded, but
 # existing Applications continue running on the workload cluster
 # because ArgoCD is a reconciliation layer, not a data path.
 #
 # Steady-state SLO:
 #   - Workload pods in the runtime cluster continue Running
-#   - Other cells' loopzero_deploy_success_total continues incrementing
+#   - Other cells' loop_runtime_deploy_success_total continues incrementing
 #   - Circuit breaker records the degradation (metric increments)
 ---
 apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:
   name: argocd-crash
-  namespace: loopzero-system
+  namespace: loop-runtime-system
   annotations:
-    loopzero.io/roadmap: "08"
-    loopzero.io/hypothesis: "ArgoCD crash does not affect running workloads; breaker records degradation"
+    runtime.getloopscale.com/roadmap: "08"
+    runtime.getloopscale.com/hypothesis: "ArgoCD crash does not affect running workloads; breaker records degradation"
     # SLO query post-decomposition (2026-06-29). Legacy
-    # loopzero_deploy_circuit_breaker_state renamed to
-    # loopzero_argocd_circuit_state when deploy pkg split from
+    # loop_runtime_deploy_circuit_breaker_state renamed to
+    # loop_runtime_argocd_circuit_state when deploy pkg split from
     # ArgoCD sync client.
-    loopzero.io/slo-query: |
-      (max_over_time(loopzero_argocd_circuit_state[3m]) >= 0) and on() ((sum(increase(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*"}[3m])) or vector(0)) >= 0)
+    runtime.getloopscale.com/slo-query: |
+      (max_over_time(loop_runtime_argocd_circuit_state[3m]) >= 0) and on() ((sum(increase(kube_pod_container_status_restarts_total{namespace=~"loop-runtime-.*"}[3m])) or vector(0)) >= 0)
 spec:
   action: pod-failure
   mode: all
   selector:
     namespaces:
-      - loopzero-system
+      - loop-runtime-system
     labelSelectors:
       "app.kubernetes.io/name": "argocd-server"
   duration: "90s"

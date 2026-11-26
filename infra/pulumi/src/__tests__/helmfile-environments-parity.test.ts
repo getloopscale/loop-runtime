@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // CHG-2026-04-30-INFRA-PARITY / T4.1 — Helmfile environments parity (ADR D4).
 //
-// Self-hosting (standalone) and LoopZero Cloud (prod) MUST share the same set of
+// Self-hosting (standalone) and LoopRuntime Cloud (prod) MUST share the same set of
 // Helm releases. Differences allowed only in env-specific values:
 //   (a) replicas
 //   (b) cert-issuer

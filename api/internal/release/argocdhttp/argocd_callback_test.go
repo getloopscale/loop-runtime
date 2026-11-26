@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argocdhttp
 
@@ -33,7 +33,7 @@ func TestArgoCallback_SyncedHealthy(t *testing.T) {
 	h := NewArgoCallbackHandler(activator, slog.Default(), "")
 
 	payload := ArgoCallbackPayload{
-		AppName:      "tn-loopzero-production",
+		AppName:      "tn-loop-runtime-production",
 		SyncStatus:   "Synced",
 		HealthStatus: "Healthy",
 		Revision:     "abc123",
@@ -50,8 +50,8 @@ func TestArgoCallback_SyncedHealthy(t *testing.T) {
 	if !activator.called {
 		t.Fatal("want activator.OnSyncCompleted to be called")
 	}
-	if activator.appName != "tn-loopzero-production" {
-		t.Fatalf("want app_name tn-loopzero-production, got %s", activator.appName)
+	if activator.appName != "tn-loop-runtime-production" {
+		t.Fatalf("want app_name tn-loop-runtime-production, got %s", activator.appName)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestArgoCallback_NotSynced_Ignored(t *testing.T) {
 	h := NewArgoCallbackHandler(activator, slog.Default(), "")
 
 	payload := ArgoCallbackPayload{
-		AppName:      "tn-loopzero-production",
+		AppName:      "tn-loop-runtime-production",
 		SyncStatus:   "OutOfSync",
 		HealthStatus: "Progressing",
 		Revision:     "abc123",

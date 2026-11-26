@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package gitclient
 
@@ -93,12 +93,12 @@ func TestGitRunner_SanitizeOutput_EmptyToken(t *testing.T) {
 }
 
 func TestGitRunner_WithEnv(t *testing.T) {
-	r := NewGitRunner("", WithEnv("GIT_AUTHOR_NAME=LoopZero", "GIT_AUTHOR_EMAIL=loopzero@test.com"))
+	r := NewGitRunner("", WithEnv("GIT_AUTHOR_NAME=LoopRuntime", "GIT_AUTHOR_EMAIL=loop-runtime@test.com"))
 
 	env := r.buildEnv()
 	found := 0
 	for _, e := range env {
-		if e == "GIT_AUTHOR_NAME=LoopZero" || e == "GIT_AUTHOR_EMAIL=loopzero@test.com" {
+		if e == "GIT_AUTHOR_NAME=LoopRuntime" || e == "GIT_AUTHOR_EMAIL=loop-runtime@test.com" {
 			found++
 		}
 	}

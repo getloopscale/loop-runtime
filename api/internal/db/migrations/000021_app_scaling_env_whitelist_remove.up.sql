@@ -8,11 +8,11 @@
 --   - lowercase alphanumeric + dash
 --   - 1-63 chars (DNS label limit)
 --
--- LoopZero's product surface supports tenant-created envs. Existence is enforced
+-- LoopRuntime's product surface supports tenant-created envs. Existence is enforced
 -- by withEnvironmentLock at route level; the DB CHECK should only enforce
 -- syntactic correctness for FK-friendly storage.
 --
--- Forward-only migration (LoopZero convention).
+-- Forward-only migration (LoopRuntime convention).
 
 ALTER TABLE app_scaling_config
   DROP CONSTRAINT IF EXISTS app_scaling_config_environment_check;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package db
 
@@ -64,7 +64,7 @@ import (
 // Per matrix § "Per-phase action plan" Phase 2 (T2.1-T2.4 batches):
 // additional KEEP-INVARIANT subset reshape for build store belongs to
 // Phase 2 when a real-PG-gated unit test harness is wired (pgxmock or
-// LOOPZERO_E2E_DATABASE_URL).
+// LOOP_RUNTIME_E2E_DATABASE_URL).
 // =============================================================================
 // Release Store tests — DELETED in T1.1c2c of plan
 // 2026-05-29-sqlc-migration v1.3
@@ -104,7 +104,7 @@ import (
 // Per matrix § "Per-phase action plan" Phase 2 (T2.1-T2.4 batches):
 // additional KEEP-INVARIANT subset reshape for release belongs to Phase
 // 2 when a real-PG-gated unit test harness is wired (pgxmock or
-// LOOPZERO_E2E_DATABASE_URL).
+// LOOP_RUNTIME_E2E_DATABASE_URL).
 
 // =============================================================================
 // =============================================================================
@@ -132,7 +132,7 @@ import (
 //   - FindPendingForAutoVerify cell-scoped JOIN to tenants
 //
 // Per matrix § Phase 2 reshape window: behavioral subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness
 // is wired.
 
 // =============================================================================
@@ -159,7 +159,7 @@ import (
 //     pattern; tenant predicate in SQL)
 //
 // Per matrix § Phase 2 reshape window: behavioral subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness
 // is wired.
 
 // =============================================================================
@@ -198,7 +198,7 @@ import (
 //     helper that no longer exists). sqlc compile-time replaces.
 //
 // Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness is
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness is
 // wired.
 
 // =============================================================================
@@ -223,7 +223,7 @@ import (
 //   - ListMembers returns empty slice (not nil) for consistent JSON
 //
 // Per matrix § Phase 2 reshape window: behavioral subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness
 // is wired.
 
 // CHG-2026-04-23-AUDIT-7: TestStripGitHubPrefix removed along with the
@@ -255,7 +255,7 @@ import (
 //   - ListByProject empty → empty slice (make([]T, 0, len(rows)))
 //
 // Per matrix § Phase 2 reshape window: behavioral subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness
 // is wired.
 
 // =============================================================================
@@ -280,7 +280,7 @@ import (
 //   - 24-hour TTL applied at Store-time via idempotencyTTL constant
 //
 // Per matrix § Phase 2 reshape window: behavioral subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness
 // is wired.
 
 // =============================================================================

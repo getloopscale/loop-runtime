@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -24,12 +24,12 @@ func TestLatestReleaseStatuses_NoBuildsAsksNothing(t *testing.T) {
 }
 
 // TestLatestReleaseStatuses_RealPG runs the query against a Postgres loaded
-// with schema.gen.sql (LOOPZERO_E2E_DATABASE_URL), inside a transaction it
+// with schema.gen.sql (LOOP_RUNTIME_E2E_DATABASE_URL), inside a transaction it
 // rolls back.
 func TestLatestReleaseStatuses_RealPG(t *testing.T) {
-	dsn := os.Getenv("LOOPZERO_E2E_DATABASE_URL")
+	dsn := os.Getenv("LOOP_RUNTIME_E2E_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("LOOPZERO_E2E_DATABASE_URL not set: real-PG query test skipped")
+		t.Skip("LOOP_RUNTIME_E2E_DATABASE_URL not set: real-PG query test skipped")
 	}
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, dsn)

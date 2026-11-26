@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -22,7 +22,7 @@ func TestSBOMDownloadPresignsInTheStaticAssetsBucket(t *testing.T) {
 func TestSBOMDownloadUsesTheBuildDefaultBucketWhenNoneIsConfigured(t *testing.T) {
 	cfg := config.Config{SourceBucket: "example-builds"}
 
-	if got := sbomBucket(cfg); got != "loopzero-static-assets" {
+	if got := sbomBucket(cfg); got != "loop-runtime-static-assets" {
 		t.Errorf("sbomBucket = %q, want the bucket the build uploads to by default", got)
 	}
 }

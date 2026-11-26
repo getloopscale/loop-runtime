@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import { BaseLabels } from "../core/types";
@@ -29,7 +29,7 @@ export interface ObjectStorageOutput {
 }
 
 export interface CdnSpec {
-  /** Origin: bucket domain name (e.g., "loopzero-static-assets.sfo3.digitaloceanspaces.com") */
+  /** Origin: bucket domain name (e.g., "loop-runtime-static-assets.sfo3.digitaloceanspaces.com") */
   readonly origin: pulumi.Input<string>;
   /** Edge cache TTL in seconds */
   readonly ttl: number;

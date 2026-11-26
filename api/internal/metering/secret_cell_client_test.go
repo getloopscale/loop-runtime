@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metering
 
@@ -69,12 +69,12 @@ func (f fakeCellResolver) Resolve(_ context.Context, cellID string) (*placement.
 }
 
 func resolverWith(cellID, secretName string) fakeCellResolver {
-	return fakeCellResolver{cellID: {CellID: cellID, SecretRefName: secretName, SecretRefNamespace: "loopzero-system"}}
+	return fakeCellResolver{cellID: {CellID: cellID, SecretRefName: secretName, SecretRefNamespace: "loop-runtime-system"}}
 }
 
 func kubeconfigSecret(name string, data map[string][]byte) *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "loop-runtime-system"},
 		Data:       data,
 	}
 }

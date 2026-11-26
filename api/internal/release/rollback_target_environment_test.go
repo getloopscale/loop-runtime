@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loop-runtime/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
@@ -40,7 +40,7 @@ func TestRollback_RefusesATargetOutsideTheEnvironment(t *testing.T) {
 			})
 			orch.Wait()
 
-			if !errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
+			if !errors.Is(err, loopruntimeerrors.ErrReleaseNotFound) {
 				t.Fatalf("err = %v, want ErrReleaseNotFound", err)
 			}
 			if active.Status != string(statemachine.ReleaseActive) {

@@ -1,0 +1,143 @@
+global:
+  registry: registry.digitalocean.com/loop-runtime-system
+  imagePullSecrets: []
+
+image:
+  repository: loop-runtime-preview-operator
+  tag: dev
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+revisionHistoryLimit: 3
+priorityClassName: system-cluster-critical
+
+nameOverride: ""
+fullnameOverride: ""
+
+podLabels: {}
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  healthPort: 8081
+  metricsPort: 8443
+
+# Operator configuration (environment variables via ConfigMap)
+config:
+  ingressNamespace: "traefik"
+  loopRuntimePprofAddr: ""
+  loopRuntimePprofEnabled: "false"
+  otelExporterOtlpEndpoint: ""
+  loopRuntimeEnv: "production"
+  loopRuntimeTracingEnabled: "false"
+
+kubeconfig:
+  cell0:
+    existingConfigMap: ""
+
+# Operator binary arguments
+args:
+  leaderElect: true
+  healthProbeBindAddress: ":8081"
+  metricsBindAddress: ":8443"
+
+reloader:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+serviceAccount:
+  create: true
+  # FIXED on purpose, against the Helm convention of deriving the name from the release
+  # (B-096, B-047). Two literal allowlists name this identity as a string, and neither
+  # moves when the release name does:
+  #   - the admission policies' system-actor exemption, at
+  #     charts/loop-runtime-admission-policies/values.yaml (systemActorExemptions.platformServiceAccounts)
+  #   - OpenBao's boundServiceAccountNames, on mount k8s-core, in
+  #     infra/helm/openbao-init/values.yaml
+  # With name: "" this chart rendered <release>-loop-runtime-preview-operator, so an install under any release
+  # name other than the chart name put the operator outside both lists — and that failure
+  # appears as Forbidden during reconciliation, never as a failed install, which is why
+  # B-096 survived review.
+  # Widening the allowlist to a pattern was considered and rejected; the reason is
+  # recorded once, at charts/loop-runtime-api/values.yaml:202 — it turns a release name into a
+  # credential.
+  name: "loop-runtime-preview-operator"
+  automountServiceAccountToken: true
+
+rbac:
+  create: true
+  # Cutover escape hatch, OFF by default. The operator reads Secrets only in
+  # loop-runtime-system, granted by a namespaced Role (templates/role-secret-access.yaml),
+  # and its manager caches Secrets in that namespace alone. An operator image
+  # built before that scoping lists Secrets in every namespace and fails
+  # without a cluster-wide grant; set this to true only while such an image
+  # runs against this chart, and back to false once it is replaced. It adds
+  # cluster-wide Secret READ to the ClusterRole — never write, never ConfigMaps.
+  legacyClusterWideSecrets: false
+
+startupProbe:
+  enabled: true
+  path: /healthz
+  port: health
+  failureThreshold: 30
+  periodSeconds: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: health
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: health
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+
+metrics:
+  serviceMonitor:
+    enabled: false
+    port: metrics
+    interval: 30s
+    scrapeTimeout: 10s
+
+networkPolicy:
+  enabled: true
+  ingress:
+    # Prometheus scraping metrics
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8443
+  extraEgress:
+    # Kubernetes API server.
+    # Bug #24 LIVE fix (2026-05-17 iter 17): DOKS exposes K8s API on port
+    # 443 (ClusterIP 10.245.0.1:443), NOT 6443. Local k3d uses 6443.
+    # Allow BOTH so this chart works on k3d, DOKS, EKS, GKE uniformly.
+    - ports:
+        - protocol: TCP
+          port: 6443
+        - protocol: TCP
+          port: 443
+
+topologySpreadConstraints:
+  enabled: false
+
+affinity: {}
+
+tolerations: []
+nodeSelector: {}

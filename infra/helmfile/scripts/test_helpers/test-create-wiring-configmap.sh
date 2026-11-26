@@ -18,16 +18,16 @@ ORIG_PATH="$PATH"
 export PATH="${MOCK_BIN}:$PATH"
 trap "rm -rf $MOCK_LOG $MOCK_BIN" EXIT
 
-export LOOPZERO_DB_HOST="db.example.com"
-export LOOPZERO_DB_USER="loopzero"
-export LOOPZERO_DB_NAME="loopzero"
-export LOOPZERO_REGISTRY_ENDPOINT="registry.digitalocean.com/loopzero"
-export LOOPZERO_BUCKET_NAME="loopzero-static"
-export LOOPZERO_BUCKET_ENDPOINT="https://sfo3.digitaloceanspaces.com"
-export LOOPZERO_CF_KV_NAMESPACE="abc123"
-export LOOPZERO_DOMAIN="dev.getloopscale.com"
-export LOOPZERO_MGMT_INGRESS_IP="1.2.3.4"
-export LOOPZERO_RUNTIME_INGRESS_IP="1.2.3.5"
+export LOOP_RUNTIME_DB_HOST="db.example.com"
+export LOOP_RUNTIME_DB_USER="loop_runtime"
+export LOOP_RUNTIME_DB_NAME="loop_runtime"
+export LOOP_RUNTIME_REGISTRY_ENDPOINT="registry.digitalocean.com/loop-runtime"
+export LOOP_RUNTIME_BUCKET_NAME="loop-runtime-static"
+export LOOP_RUNTIME_BUCKET_ENDPOINT="https://sfo3.digitaloceanspaces.com"
+export LOOP_RUNTIME_CF_KV_NAMESPACE="abc123"
+export LOOP_RUNTIME_DOMAIN="dev.getloopscale.com"
+export LOOP_RUNTIME_MGMT_INGRESS_IP="1.2.3.4"
+export LOOP_RUNTIME_RUNTIME_INGRESS_IP="1.2.3.5"
 
 log "Running create-wiring-configmap.sh dev..."
 bash "$WIRING_SCRIPT" dev 2>/dev/null
@@ -41,10 +41,10 @@ else
   fail "ConfigMap" "no ConfigMap kind in stdin"
 fi
 
-if grep -q "loopzero-platform-topology" "$MOCK_LOG"; then
-  ok "loopzero-platform-topology ConfigMap name correct"
+if grep -q "loop-runtime-platform-topology" "$MOCK_LOG"; then
+  ok "loop-runtime-platform-topology ConfigMap name correct"
 else
-  fail "name" "loopzero-platform-topology not in args"
+  fail "name" "loop-runtime-platform-topology not in args"
 fi
 
 # Verify the data section includes all expected fields

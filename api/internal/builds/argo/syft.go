@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -41,7 +41,7 @@ const (
 //   - Outputs are written to the container's OWN /tmp filesystem; they
 //     are not shared with other containers in the pod.
 //
-// SEC-006: Uses pre-built loopzero-syft-scanner image with syft baked in.
+// SEC-006: Uses pre-built loop-runtime-syft-scanner image with syft baked in.
 // No runtime binary downloads.
 //
 // CHG-2026-04-22-001 (B7): RegistryInsecure mirrors BuildKit's flag for
@@ -84,7 +84,7 @@ func syftScanTemplate(
 	// 4. Upload to S3 (MinIO/DO Spaces) using aws-cli already in image.
 	// 5. Write Argo workflow output files.
 	//
-	// Bucket: loopzero-static-assets (s3BucketStaticAssets) by default, or the
+	// Bucket: loop-runtime-static-assets (s3BucketStaticAssets) by default, or the
 	// configured StaticAssetsBucket; SBOMs live under the sbom/ prefix.
 	//
 	// AWS_ENDPOINT_URL is set via env (workflow level) for MinIO local

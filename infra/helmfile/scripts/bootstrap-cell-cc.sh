@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # Canonical bootstrap-cell-cc — consolidates 6 prior scripts into 1
 # parameterized by --cell <id> --env <name>.
@@ -13,8 +13,8 @@
 #
 #   | Cell ID  | k3d local           | drill DOKS                   |
 #   |----------|---------------------|------------------------------|
-#   | cell-0   | k3d-loopzero-cell-0     | runtimeCluster (pulumi key)  |
-#   | cell-1   | k3d-loopzero-cell-1     | runtimeCluster2 (pulumi key) |
+#   | cell-0   | k3d-loop-runtime-cell-0     | runtimeCluster (pulumi key)  |
+#   | cell-1   | k3d-loop-runtime-cell-1     | runtimeCluster2 (pulumi key) |
 #
 # THIS HEADER WAS LYING, and the way it lied is the clearest record of the risk
 # that `B-001` names (*"blind global substitution destroys the repository"*). A
@@ -36,7 +36,7 @@
 #   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell <0|1> --env <dev|drill|prod|standalone|standalone-multi> [--dry-run]
 #
 # Examples:
-#   # Local k3d, cell-0 → cluster loopzero-cell-0:
+#   # Local k3d, cell-0 → cluster loop-runtime-cell-0:
 #   bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 0 --env standalone-multi
 #
 #   # Drill DOKS, cell-1 → runtimeCluster2:

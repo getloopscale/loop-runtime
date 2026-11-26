@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package cleanroom
 
@@ -16,9 +16,9 @@ import (
 // behind build tag `live`.
 
 func TestDefaultOptions_SetsCanonicalDefaults(t *testing.T) {
-	opts := DefaultOptions("/repo/loopzero")
-	if opts.RepoRoot != "/repo/loopzero" {
-		t.Errorf("RepoRoot = %q, want /repo/loopzero", opts.RepoRoot)
+	opts := DefaultOptions("/repo/loop-runtime")
+	if opts.RepoRoot != "/repo/loop-runtime" {
+		t.Errorf("RepoRoot = %q, want /repo/loop-runtime", opts.RepoRoot)
 	}
 	if opts.TaskCmd != "task" {
 		t.Errorf("TaskCmd = %q, want task", opts.TaskCmd)

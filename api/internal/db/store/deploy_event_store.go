@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -17,7 +17,7 @@ import (
 // the SAME tx as the state transition, so the event is captured atomically with
 // the deploy — no lost/duplicate events on crash (Option C, MEET-2026-07-03-005).
 //
-// There is deliberately NO read method here: loopzero-cloud drains the outbox
+// There is deliberately NO read method here: loop-console drains the outbox
 // (a cross-tenant system query outside this engine), the engine only writes.
 type DeployEventStore interface {
 	AppendDeployEvent(ctx context.Context, tx db.DBTX, ev DeployEvent) error

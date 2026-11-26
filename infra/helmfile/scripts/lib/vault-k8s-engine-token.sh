@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # T7.3 of plan 2026-06-02-openbao-adoption v1.4 — Vault kubernetes engine
 # token fetcher for scoped-kubeconfig.sh.

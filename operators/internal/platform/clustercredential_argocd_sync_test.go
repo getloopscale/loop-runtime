@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package platform
 
@@ -13,7 +13,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
@@ -43,28 +43,28 @@ users:
 // Scope.ArgoCD.
 func TestClusterCredential_ArgoCDSecretSyncFailureIsVisibleInStatus(t *testing.T) {
 	s := bootstrapScheme(t)
-	cr := &loopzerov1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopzero-system", Generation: 2,
+	cr := &loopruntimev1.ClusterCredential{
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loop-runtime-system", Generation: 2,
 			Finalizers: []string{clusterCredentialFinalizer}},
-		Spec: loopzerov1.ClusterCredentialSpec{
-			ClusterName: "loopzero-cell-1", APIServer: "https://127.0.0.1:1", CellID: "cell-1",
-			SecretRef: loopzerov1.SecretReference{Name: "cell-1-kubeconfig", Namespace: "loopzero-system"},
-			Scope:     loopzerov1.CredentialScope{ArgoCD: true},
+		Spec: loopruntimev1.ClusterCredentialSpec{
+			ClusterName: "loop-runtime-cell-1", APIServer: "https://127.0.0.1:1", CellID: "cell-1",
+			SecretRef: loopruntimev1.SecretReference{Name: "cell-1-kubeconfig", Namespace: "loop-runtime-system"},
+			Scope:     loopruntimev1.CredentialScope{ArgoCD: true},
 		},
 	}
 	kubeconfig := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "loop-runtime-system"},
 		Data:       map[string][]byte{"kubeconfig": []byte(execOnlyKubeconfig)},
 	}
 	c := fake.NewClientBuilder().WithScheme(s).WithObjects(cr, kubeconfig).
-		WithStatusSubresource(&loopzerov1.ClusterCredential{}).Build()
+		WithStatusSubresource(&loopruntimev1.ClusterCredential{}).Build()
 	r := &ClusterCredentialReconciler{Client: c, ArgoCDNamespace: "argocd"}
 
 	_, _ = r.Reconcile(context.Background(),
-		ctrl.Request{NamespacedName: types.NamespacedName{Name: "cell-1", Namespace: "loopzero-system"}})
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: "cell-1", Namespace: "loop-runtime-system"}})
 
-	var got loopzerov1.ClusterCredential
-	if err := c.Get(context.Background(), types.NamespacedName{Name: "cell-1", Namespace: "loopzero-system"}, &got); err != nil {
+	var got loopruntimev1.ClusterCredential
+	if err := c.Get(context.Background(), types.NamespacedName{Name: "cell-1", Namespace: "loop-runtime-system"}, &got); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	synced := conditions.GetCondition(got.Status.Conditions, conditions.TypeArgoCDSecretSynced)
@@ -77,8 +77,8 @@ func TestClusterCredential_ArgoCDSecretSyncFailureIsVisibleInStatus(t *testing.T
 }
 
 func TestClusterCredential_DetailTypesIncludeTheArgoCDSyncOnlyForArgoCDScope(t *testing.T) {
-	withArgo := clusterCredentialDetailTypes(&loopzerov1.ClusterCredential{Spec: loopzerov1.ClusterCredentialSpec{Scope: loopzerov1.CredentialScope{ArgoCD: true}}})
-	without := clusterCredentialDetailTypes(&loopzerov1.ClusterCredential{})
+	withArgo := clusterCredentialDetailTypes(&loopruntimev1.ClusterCredential{Spec: loopruntimev1.ClusterCredentialSpec{Scope: loopruntimev1.CredentialScope{ArgoCD: true}}})
+	without := clusterCredentialDetailTypes(&loopruntimev1.ClusterCredential{})
 
 	if len(withArgo) != 2 || withArgo[1] != conditions.TypeArgoCDSecretSynced {
 		t.Fatalf("detail types with ArgoCD scope = %v, want Connected + ArgoCDSecretSynced", withArgo)

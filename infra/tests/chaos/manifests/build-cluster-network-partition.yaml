@@ -18,10 +18,10 @@ metadata:
   name: build-cluster-network-partition
   namespace: argo
   annotations:
-    loopzero.io/roadmap: "08"
-    loopzero.io/dod-test: "TestChaos_BuildClusterPartition"
-    loopzero.io/hypothesis: "Build workflows stall during partition, resume after healing"
-    loopzero.io/slo-query: |
+    runtime.getloopscale.com/roadmap: "08"
+    runtime.getloopscale.com/dod-test: "TestChaos_BuildClusterPartition"
+    runtime.getloopscale.com/hypothesis: "Build workflows stall during partition, resume after healing"
+    runtime.getloopscale.com/slo-query: |
       # Argo controller should not crash during partition
       kube_pod_container_status_restarts_total{
         namespace="argo",

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T1.2 of plan k3d-host-published-vault-reach (ADR D6, sponsor 2026-06-20).
 //
 // TestHostK3dInternalCanonical asserts the canonical contract for the
 // `setup-cross-cluster-networking.sh` script: mgmt CoreDNS `host.k3d.internal`
-// MUST resolve to the docker bridge GATEWAY of the `k3d-loopzero` network, NEVER
-// to the `k3d-loopzero-cell-0-serverlb` container IP.
+// MUST resolve to the docker bridge GATEWAY of the `k3d-loop-runtime` network, NEVER
+// to the `k3d-loop-runtime-cell-0-serverlb` container IP.
 //
 // Why this gate exists:
 //
@@ -65,11 +65,11 @@ func TestHostK3dInternalCanonical(t *testing.T) {
 	body := string(b)
 
 	// (a) Script MUST NOT derive the host.k3d.internal target from the
-	//     k3d-loopzero-cell-0-serverlb container — that's the F-2 hijack of the
-	//     T0.1 SPIKE. `docker inspect k3d-loopzero-cell-0-serverlb` for the
+	//     k3d-loop-runtime-cell-0-serverlb container — that's the F-2 hijack of the
+	//     T0.1 SPIKE. `docker inspect k3d-loop-runtime-cell-0-serverlb` for the
 	//     PURPOSE of populating host.k3d.internal is FORBIDDEN.
-	if regexp.MustCompile(`(?s)docker\s+inspect\s+k3d-loopzero-cell-0-serverlb`).MatchString(body) {
-		t.Errorf("(a) script still derives host.k3d.internal from k3d-loopzero-cell-0-serverlb — the wrong target per ADR D6 (probe-proved RST on every host-publish port). Replace with docker network inspect gateway derivation.")
+	if regexp.MustCompile(`(?s)docker\s+inspect\s+k3d-loop-runtime-cell-0-serverlb`).MatchString(body) {
+		t.Errorf("(a) script still derives host.k3d.internal from k3d-loop-runtime-cell-0-serverlb — the wrong target per ADR D6 (probe-proved RST on every host-publish port). Replace with docker network inspect gateway derivation.")
 	}
 	// Also forbid the literal pollution line shape from the legacy script.
 	if regexp.MustCompile(`(?m)^\s*\S*\$WORKLOAD_LB_IP\s+host\.k3d\.internal\s*['"]?\s*$`).MatchString(body) ||
@@ -77,19 +77,19 @@ func TestHostK3dInternalCanonical(t *testing.T) {
 		t.Errorf("(a) script still writes `$WORKLOAD_LB_IP host.k3d.internal` to NodeHosts — the canonical target is the bridge gateway per ADR D6.")
 	}
 
-	// (b) Script MUST derive the docker bridge GATEWAY of the k3d-loopzero
+	// (b) Script MUST derive the docker bridge GATEWAY of the k3d-loop-runtime
 	//     network via `docker network inspect <network>` honoring the
-	//     Gateway field. We accept either the literal `k3d-loopzero` or a
+	//     Gateway field. We accept either the literal `k3d-loop-runtime` or a
 	//     variable expansion (e.g. `"${SHARED_NETWORK}"`) PROVIDED that the
-	//     resolved network name is `k3d-loopzero` (asserted by the presence of
-	//     a `SHARED_NETWORK="k3d-loopzero"` assignment OR the literal token).
-	hasInspectLiteral := regexp.MustCompile(`docker\s+network\s+inspect\s+k3d-loopzero\b`).MatchString(body)
+	//     resolved network name is `k3d-loop-runtime` (asserted by the presence of
+	//     a `SHARED_NETWORK="k3d-loop-runtime"` assignment OR the literal token).
+	hasInspectLiteral := regexp.MustCompile(`docker\s+network\s+inspect\s+k3d-loop-runtime\b`).MatchString(body)
 	hasInspectVar := regexp.MustCompile(`docker\s+network\s+inspect\s+"?\$\{?[A-Z_]+\}?"?`).MatchString(body) &&
-		regexp.MustCompile(`SHARED_NETWORK="?k3d-loopzero"?`).MatchString(body)
+		regexp.MustCompile(`SHARED_NETWORK="?k3d-loop-runtime"?`).MatchString(body)
 	hasGatewayKey := strings.Contains(body, ".Gateway") || strings.Contains(body, "Gateway")
 	hasIPAMConfig := strings.Contains(body, ".IPAM.Config") || strings.Contains(body, "IPAM.Config")
 	if (!hasInspectLiteral && !hasInspectVar) || !hasGatewayKey || !hasIPAMConfig {
-		t.Errorf("(b) script does NOT derive the k3d-loopzero bridge gateway via `docker network inspect k3d-loopzero -f '{{(index .IPAM.Config 0).Gateway}}'` per ADR D6 — required for canonical host.k3d.internal resolution.")
+		t.Errorf("(b) script does NOT derive the k3d-loop-runtime bridge gateway via `docker network inspect k3d-loop-runtime -f '{{(index .IPAM.Config 0).Gateway}}'` per ADR D6 — required for canonical host.k3d.internal resolution.")
 	}
 
 	// (c) The NodeHosts line written to mgmt CoreDNS MUST be `<gateway>

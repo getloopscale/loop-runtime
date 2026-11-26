@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -43,13 +43,13 @@ func TestApplicationPhase_AreDistinct(t *testing.T) {
 	}
 }
 
-func TestLoopZeroApplication_SpecFields(t *testing.T) {
-	app := LoopZeroApplication{
+func TestLoopRuntimeApplication_SpecFields(t *testing.T) {
+	app := LoopRuntimeApplication{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-app",
-			Namespace: "loopzero-acme-production",
+			Namespace: "loop-runtime-acme-production",
 		},
-		Spec: LoopZeroApplicationSpec{
+		Spec: LoopRuntimeApplicationSpec{
 			TenantRef:   "acme",
 			Project:     "web",
 			Environment: "production",
@@ -83,9 +83,9 @@ func TestLoopZeroApplication_SpecFields(t *testing.T) {
 	}
 }
 
-func TestLoopZeroApplication_SpecDefaults(t *testing.T) {
-	app := LoopZeroApplication{
-		Spec: LoopZeroApplicationSpec{
+func TestLoopRuntimeApplication_SpecDefaults(t *testing.T) {
+	app := LoopRuntimeApplication{
+		Spec: LoopRuntimeApplicationSpec{
 			TenantRef:   "acme",
 			Project:     "api",
 			Environment: "staging",
@@ -104,9 +104,9 @@ func TestLoopZeroApplication_SpecDefaults(t *testing.T) {
 	}
 }
 
-func TestLoopZeroApplication_StatusFields(t *testing.T) {
-	app := LoopZeroApplication{
-		Status: LoopZeroApplicationStatus{
+func TestLoopRuntimeApplication_StatusFields(t *testing.T) {
+	app := LoopRuntimeApplication{
+		Status: LoopRuntimeApplicationStatus{
 			Phase:              ApplicationPhaseReachable,
 			EndpointsReady:     true,
 			Reachable:          true,
@@ -132,8 +132,8 @@ func TestLoopZeroApplication_StatusFields(t *testing.T) {
 	}
 }
 
-func TestLoopZeroApplication_SetCondition(t *testing.T) {
-	app := LoopZeroApplication{}
+func TestLoopRuntimeApplication_SetCondition(t *testing.T) {
+	app := LoopRuntimeApplication{}
 
 	SetCondition(&app.Status.Conditions, TypeServiceResolved, metav1.ConditionTrue, "Resolved", "service found", 1)
 
@@ -148,8 +148,8 @@ func TestLoopZeroApplication_SetCondition(t *testing.T) {
 	}
 }
 
-func TestLoopZeroApplication_GetCondition(t *testing.T) {
-	app := LoopZeroApplication{}
+func TestLoopRuntimeApplication_GetCondition(t *testing.T) {
+	app := LoopRuntimeApplication{}
 
 	SetCondition(&app.Status.Conditions, TypeServiceResolved, metav1.ConditionTrue, "Resolved", "ok", 1)
 	SetCondition(&app.Status.Conditions, TypeIngressReady, metav1.ConditionFalse, "Pending", "creating", 1)
@@ -168,7 +168,7 @@ func TestLoopZeroApplication_GetCondition(t *testing.T) {
 	}
 }
 
-func TestLoopZeroApplication_ConditionTypes_AreDistinct(t *testing.T) {
+func TestLoopRuntimeApplication_ConditionTypes_AreDistinct(t *testing.T) {
 	types := []string{
 		TypeServiceResolved,
 		TypeIngressReady,
@@ -185,9 +185,9 @@ func TestLoopZeroApplication_ConditionTypes_AreDistinct(t *testing.T) {
 	}
 }
 
-func TestLoopZeroApplicationList_ContainsItems(t *testing.T) {
-	list := LoopZeroApplicationList{
-		Items: []LoopZeroApplication{
+func TestLoopRuntimeApplicationList_ContainsItems(t *testing.T) {
+	list := LoopRuntimeApplicationList{
+		Items: []LoopRuntimeApplication{
 			{ObjectMeta: metav1.ObjectMeta{Name: "app-1"}},
 			{ObjectMeta: metav1.ObjectMeta{Name: "app-2"}},
 			{ObjectMeta: metav1.ObjectMeta{Name: "app-3"}},

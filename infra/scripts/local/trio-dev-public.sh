@@ -82,7 +82,7 @@ phase() {
 # matches what the canonical config should produce.
 soft_cleanroom() {
   local cfg
-  cfg=$(kubectl --context k3d-loopzero-core -n loopzero-auth get configmap ory-kratos-config \
+  cfg=$(kubectl --context k3d-loop-runtime-core -n loop-runtime-auth get configmap ory-kratos-config \
     -o "jsonpath={.data.kratos\.yaml}" 2>/dev/null || echo "")
   [[ -n "$cfg" ]] || { log "  ConfigMap ory-kratos-config missing"; return 1; }
   # No REPLACE_VIA_PULUMI placeholders

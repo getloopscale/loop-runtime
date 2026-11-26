@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package projectshttp serves the project endpoints under /api/v1/projects: create,
 // list, read and delete, plus the tenant-CR side effects a project carries.
@@ -34,7 +34,7 @@ import (
 	auditctx "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 var (
@@ -131,7 +131,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -139,7 +139,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 	// switched to the summary variant so the dashboard /projects table
 	// renders M2-accurate "Live envs" count + status-derived StatusDot
 	// without an N+1 client-side fanout. Response is wire-format
-	// additive — legacy consumers (CLI `loopzero project list`) ignore the
+	// additive — legacy consumers (CLI `loopscale project list`) ignore the
 	// extra fields per Rule 5.
 	projects, err := h.store.ListByTenantWithSummary(ctx, uc.TenantID)
 	if err != nil {
@@ -147,7 +147,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 			"tenant_id", uc.TenantID,
 			"error", err.Error(),
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
@@ -184,13 +184,13 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -201,7 +201,7 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"project", name,
 			"error", err.Error(),
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	for i := range summaries {
@@ -210,7 +210,7 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+	httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 }
 
 // createProjectRequest is the JSON request body for POST /api/v1/projects.
@@ -226,19 +226,19 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	var req createProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInvalidRequest)
 		return
 	}
 
 	// Validate name (RFC 1123)
 	if !validation.IsRFC1123Name(req.Name) {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("project name must be lowercase, alphanumeric, and may contain hyphens"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInvalidName.Wrap("project name must be lowercase, alphanumeric, and may contain hyphens"))
 		return
 	}
 
@@ -254,18 +254,18 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, ErrProjectExists) {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrProjectExists)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrProjectExists)
 			return
 		}
-		// M4: a typed *LoopZeroError from the store (e.g. PROJECTS_EXCEED_PLAN → 422)
+		// M4: a typed *LoopRuntimeError from the store (e.g. PROJECTS_EXCEED_PLAN → 422)
 		// must surface as-is, not be collapsed to a 500. The store already counted
 		// the cap atomically + incremented the violation metric.
-		var te *loopzeroerrors.LoopZeroError
+		var te *loopruntimeerrors.LoopRuntimeError
 		if errors.As(err, &te) {
-			httpio.WriteLoopZeroError(w, te)
+			httpio.WriteLoopRuntimeError(w, te)
 			return
 		}
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
@@ -289,14 +289,14 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	//   - any other store error      → 503 PLATFORM_DEGRADED
 	planTier, terr := plantier.Resolve(ctx, h.planTierStore, uc.TenantID)
 	if terr != nil {
-		httpio.WriteLoopZeroError(w, terr)
+		httpio.WriteLoopRuntimeError(w, terr)
 		return
 	}
 	planValue := planTier.String()
 	cellID, cerr := h.tenantCell(ctx, uc.TenantID)
 	if cerr != nil {
 		slog.Error("failed to resolve the tenant's cell", "tenant_id", uc.TenantID, "error", cerr.Error())
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPlatformDegraded.Wrap(
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrPlatformDegraded.Wrap(
 			fmt.Sprintf("tenant placement unavailable for %s — retry or contact support", uc.TenantID),
 		))
 		return
@@ -306,7 +306,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 			"tenant_id", uc.TenantID,
 			"error", err.Error(),
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPlatformDegraded.Wrap(
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrPlatformDegraded.Wrap(
 			fmt.Sprintf("tenant infrastructure provisioning failed for %s — retry or contact support", uc.TenantID),
 		))
 		return
@@ -324,7 +324,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Tenant.Spec.Environments (TenantEnvironmentEntry.Project=req.Name,
 	// Name="production"). TenantController then cascades into Environment
 	// CR creation; EnvironmentController.reconcileNamespace (T3.1) computes
-	// the canonical M2 namespace `loopzero-<tenant>-<project>-production`.
+	// the canonical M2 namespace `loop-runtime-<tenant>-<project>-production`.
 	//
 	// EC-5 / R8 honest disclosure: the strict PG-tx-first/K8s-after
 	// ordering described in the plan TDD body (lines 569-579) would
@@ -360,7 +360,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 						"project", req.Name,
 						"error", err.Error(),
 					)
-					httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPlatformDegraded.Wrap(
+					httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrPlatformDegraded.Wrap(
 						fmt.Sprintf("production environment auto-create failed for project %q — retry or contact support", req.Name),
 					))
 					return
@@ -386,19 +386,19 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	if h.deleter == nil {
 		slog.Error("project delete handler called but deleter is not configured")
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -406,11 +406,11 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	project, err := h.store.GetByName(ctx, uc.TenantID, name)
 	if err != nil {
 		slog.Error("project lookup failed", "project", name, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -426,7 +426,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		slog.Error("project delete failed", "project", name, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
@@ -441,20 +441,20 @@ func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Reques
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	if h.deleter == nil {
 		slog.Error("project delete environment handler called but deleter is not configured")
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	env := chi.URLParam(r, "env")
 	if name == "" || env == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name and environment are required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name and environment are required"))
 		return
 	}
 
@@ -462,11 +462,11 @@ func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Reques
 	project, err := h.store.GetByName(ctx, uc.TenantID, name)
 	if err != nil {
 		slog.Error("project lookup failed", "project", name, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -482,7 +482,7 @@ func (h *ProjectHandler) DeleteEnvironment(w http.ResponseWriter, r *http.Reques
 	})
 	if err != nil {
 		slog.Error("project delete failed", "project", name, "env", env, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 

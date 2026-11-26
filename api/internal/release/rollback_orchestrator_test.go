@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -15,7 +15,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- Test doubles for RollbackOrchestrator ---
@@ -224,7 +224,7 @@ func TestRollback_NoActiveRelease(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for no active release")
 	}
-	if err != loopzeroerrors.ErrNoActiveRelease {
+	if err != loopruntimeerrors.ErrNoActiveRelease {
 		t.Errorf("expected ErrNoActiveRelease, got %v", err)
 	}
 }
@@ -257,7 +257,7 @@ func TestRollback_NoPreviousRelease(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for no previous release")
 	}
-	if err != loopzeroerrors.ErrNoPreviousRelease {
+	if err != loopruntimeerrors.ErrNoPreviousRelease {
 		t.Errorf("expected ErrNoPreviousRelease, got %v", err)
 	}
 }
@@ -402,7 +402,7 @@ func TestRollback_SpecificReleaseNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-existent target release")
 	}
-	if err != loopzeroerrors.ErrReleaseNotFound {
+	if err != loopruntimeerrors.ErrReleaseNotFound {
 		t.Errorf("expected ErrReleaseNotFound, got %v", err)
 	}
 }
@@ -445,7 +445,7 @@ func TestRollback_URLGeneration(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// The canonical host the IngressRoute serves (naming.AppURL), not the legacy
-	// "{project}-{env}.{domain}" that Traefik answered with 404 (loopzero-cloud#159).
+	// "{project}-{env}.{domain}" that Traefik answered with 404 (loop-console#159).
 	expected := "https://tn-1-proj-1-web-staging.dev.getloopscale.com"
 	if result.URL != expected {
 		t.Errorf("URL = %q, want %q", result.URL, expected)
@@ -611,7 +611,7 @@ func TestRollback_URLPrefersThePublicDomain(t *testing.T) {
 
 	result, err := orch.Rollback(context.Background(), RollbackRequest{
 		TenantID: "tn-1", ProjectID: "proj-1", ProjectName: "my-app",
-		Environment: "production", BaseDomain: "loopzero.local",
+		Environment: "production", BaseDomain: "loop-runtime.local",
 	})
 	orch.Wait()
 

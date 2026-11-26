@@ -15,7 +15,7 @@ image:
 # S3 backend configuration. Defaults match standalone-multi (mgmt cluster MinIO
 # reached via docker bridge IP + NodePort). Override per environment.
 s3:
-  bucket: loopzero-static-assets
+  bucket: loop-runtime-static-assets
   server: 172.18.0.3
   port: 32000
   proto: http
@@ -27,9 +27,9 @@ s3:
   corsEnabled: "true"
 
 # Credentials: by default we expect a Secret called `static-assets-s3` to
-# exist in the chart's namespace (loopzero-system). For standalone-multi this is
+# exist in the chart's namespace (loop-runtime-system). For standalone-multi this is
 # created by `generate-runtime-secrets.sh` from the same source as
-# loopzero-minio-credentials in the build cluster. ESO replaces this in dev/prod.
+# loop-runtime-minio-credentials in the build cluster. ESO replaces this in dev/prod.
 credentialsSecret:
   name: static-assets-s3
   accessKeyIdKey: AWS_ACCESS_KEY_ID

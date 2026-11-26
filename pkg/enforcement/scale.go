@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package enforcement
 
@@ -27,7 +27,7 @@ import (
 //   - Upper bound 95 (CPU) / 90 (memory) leaves headroom for transient
 //     spikes that would otherwise pin the pod at 100% and OOM.
 //
-// Matches the recommended canonical Kubernetes HPA practice + LoopZero plan v1.1
+// Matches the recommended canonical Kubernetes HPA practice + LoopRuntime plan v1.1
 // EC-4 SHOULD TEST coverage.
 const (
 	HPACPUTargetMin    = 10
@@ -123,7 +123,7 @@ func AssertHPATargetBounds(cpuTarget, memoryTarget int) error {
 }
 
 // Scaling defaults. They are product rules — what a plan buys and what a
-// `loopzero scale` without explicit targets means — so they live here with the
+// `loopscale scale` without explicit targets means — so they live here with the
 // bounds and the cost formula, not in the HTTP handler that applies them.
 const (
 	// DefaultPodCostPerHour is the conservative per-pod hourly cost used when

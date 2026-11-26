@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -20,7 +20,7 @@ const (
 	// compatibility with rollup native binaries (Alpine + musl breaks them
 	// per npm bug #4828). Every `set -<flags>o pipefail` form — the one
 	// shellgen.SetE emits and the ones scripts.go writes by hand — is sanitised
-	// in wrapWithLoopZeroMarkers (loopzero_log.go) to run under /bin/sh -> dash on Debian.
+	// in wrapWithLoopRuntimeMarkers (loop_runtime_log.go) to run under /bin/sh -> dash on Debian.
 	//
 	// The previous statement covered only shellgen.SetE's literal form, and was
 	// therefore false: scripts.go writes `set -uo pipefail` without the `e`, that
@@ -35,18 +35,18 @@ const (
 	imageBuildKit = "moby/buildkit:v0.18.2-rootless"
 	imageAWSCLI   = "amazon/aws-cli:2.22.35"
 
-	// loopzero-cosign-signer: Pre-built Alpine image with cosign binary baked in.
+	// loop-runtime-cosign-signer: Pre-built Alpine image with cosign binary baked in.
 	// SEC-006: No runtime downloads — cosign is checksum-verified at image build time.
 	// Built from: infra/images/cosign-signer/Dockerfile — CI builds via build-images.yml.
-	imageCosignSigner = "registry.digitalocean.com/loopzero-system/loopzero-cosign-signer:v0.1.0"
+	imageCosignSigner = "registry.digitalocean.com/loop-runtime-system/loop-runtime-cosign-signer:v0.1.0"
 
-	// loopzero-syft-scanner: Pre-built Alpine image with syft binary baked in.
+	// loop-runtime-syft-scanner: Pre-built Alpine image with syft binary baked in.
 	// SEC-006: No runtime downloads — syft is checksum-verified at image build time.
 	// Built from: infra/images/syft-scanner/Dockerfile — CI builds via build-images.yml.
 	// Sprint 6 / T0.2 — used by sbom-{app} step to generate CycloneDX SBOMs.
-	imageSyftScanner = "registry.digitalocean.com/loopzero-system/loopzero-syft-scanner:v0.1.0"
-	// T4.1 (plan simplify-deploy-loopzerokit-only v2.0): imageLoopZeroPacks +
-	// imageDockerfileLint removed — loopzero-packs generation (T2.1) and the
+	imageSyftScanner = "registry.digitalocean.com/loop-runtime-system/loop-runtime-syft-scanner:v0.1.0"
+	// T4.1 (plan simplify-deploy-loopzerokit-only v2.0): imageLoopRuntimePacks +
+	// imageDockerfileLint removed — loop-runtime-packs generation (T2.1) and the
 	// BYO-Dockerfile lint path (T2.2) are gone. The build uses canonical
 	// platform Dockerfiles generated in-process (canonical_dockerfile.go).
 )
@@ -57,7 +57,7 @@ const (
 
 const (
 	workflowParallelism = 4
-	serviceAccountName  = "loopzero-build-sa"
+	serviceAccountName  = "loop-runtime-build-sa"
 	entrypointName      = "build-pipeline"
 	onExitDAGName       = "finalize"
 )
@@ -80,8 +80,8 @@ const (
 	volumeWorkspace      = "workspace"
 	workspacePVCSize     = "5Gi"
 	workspaceMountPath   = "/workspace"
-	secretRegistryConfig = "buildkit-registry-config"   //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
-	secretMinIOCreds     = "loopzero-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
+	secretRegistryConfig = "buildkit-registry-config"       //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
+	secretMinIOCreds     = "loop-runtime-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 	secretCosignKey      = "cosign-signing-key"
 	cosignKeyMountPath   = "/cosign"
 	// Sigstore keyless mode: workflow-level projected SA token volume + mount.
@@ -89,7 +89,7 @@ const (
 	// Added pod-level via buildVolumes() when CosignKeyless=true.
 	sigstoreTokenVolumeName = "sigstore-token"
 	sigstoreTokenMountPath  = "/var/run/secrets/sigstore" //nolint:gosec // G101 filesystem PATH, not credential value
-	s3BucketStaticAssets    = "loopzero-static-assets"
+	s3BucketStaticAssets    = "loop-runtime-static-assets"
 )
 
 // ---------------------------------------------------------------------------
@@ -113,9 +113,9 @@ const rootlessUID = int64(1000)
 // ---------------------------------------------------------------------------
 
 const (
-	labelTenant      = "loopzero.io/tenant"
-	labelProject     = "loopzero.io/project"
-	labelEnvironment = "loopzero.io/environment"
-	labelBuildID     = "loopzero.io/build-id"
-	labelLanguage    = "loopzero.io/language"
+	labelTenant      = "runtime.getloopscale.com/tenant"
+	labelProject     = "runtime.getloopscale.com/project"
+	labelEnvironment = "runtime.getloopscale.com/environment"
+	labelBuildID     = "runtime.getloopscale.com/build-id"
+	labelLanguage    = "runtime.getloopscale.com/language"
 )

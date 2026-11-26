@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -7,7 +7,7 @@ package secrets
 // test-debt-plan.md v1.1 — regression tests for V9 L20 fix
 // (secret resync on first deploy).
 //
-// L20 bug recap: `loopzero secret set --env <new>` BEFORE the first deploy
+// L20 bug recap: `loopscale secret set --env <new>` BEFORE the first deploy
 // silently failed the K8s sync at POST /api/v1/secrets time because the
 // workload namespace did not yet exist. Pods later failed to start with
 // CreateContainerConfigError because the K8s Secret was never created on
@@ -259,7 +259,7 @@ func TestSecretResyncer_NamespaceTerminating_Retries(t *testing.T) {
 			defer mu.Unlock()
 			callsByName[c.Name]++
 			if callsByName[c.Name] == 1 {
-				return fmt.Errorf("create external secret on runtime: %w", namespaceTerminatingErr("loopzero-e2e-tenant-j-secrets"))
+				return fmt.Errorf("create external secret on runtime: %w", namespaceTerminatingErr("loop-runtime-e2e-tenant-j-secrets"))
 			}
 			return nil // succeed on retry
 		},
@@ -289,7 +289,7 @@ func TestSecretResyncer_NamespaceTerminating_TimeoutFailsExplicit(t *testing.T) 
 	// K8s mock that ALWAYS returns terminating error.
 	k8s := &fakeSecretK8sCreator{
 		errFor: func(c secretCall) error {
-			return namespaceTerminatingErr("loopzero-e2e-tenant-j-secrets")
+			return namespaceTerminatingErr("loop-runtime-e2e-tenant-j-secrets")
 		},
 	}
 	store := &fakeSecretResyncStore{

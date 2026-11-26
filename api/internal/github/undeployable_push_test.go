@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -79,8 +79,8 @@ func TestHandlePush_AnInvalidDescriptorMarksTheCommitFailedWithTheReason(t *test
 		t.Fatalf("commit statuses = %+v, want exactly one", statuses)
 	}
 	got := statuses[0]
-	if got.State != "failure" || got.Context != "loopzero/deploy" {
-		t.Errorf("status = %+v, want failure on loopzero/deploy", got)
+	if got.State != "failure" || got.Context != "loop-runtime/deploy" {
+		t.Errorf("status = %+v, want failure on loop-runtime/deploy", got)
 	}
 	if !strings.HasPrefix(got.Description, `loopzero.yaml app "web" needs `+"`start`") {
 		t.Errorf("description = %q, want the descriptor's own reason", got.Description)

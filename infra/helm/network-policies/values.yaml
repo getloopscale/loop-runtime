@@ -2,29 +2,29 @@
 defaultDenyIngress: true
 
 # T8.5b of deep-review-remediation-plan (find_infra_007 MEDIUM).
-# Egress posture for loopzero-system. Controlled in three layers:
+# Egress posture for loop-runtime-system. Controlled in three layers:
 #
-#   defaultDenyEgress: when true, ALL outbound from loopzero-system is rejected
+#   defaultDenyEgress: when true, ALL outbound from loop-runtime-system is rejected
 #                      unless explicitly allowed by per-component policies.
 #                      Default OFF until T8.5c staging soak validates the
 #                      allow-list inventory.
 #
-#   loopzeroSystemAllowEgress: per-component allow-egress policies. SAFE to enable
+#   loopRuntimeSystemAllowEgress: per-component allow-egress policies. SAFE to enable
 #                          NOW (additive — adding allow rules to a namespace that
 #                          does not yet have default-deny is a no-op for non-affected
 #                          pods; the inventory in the runbook is the source of truth).
 #
 # Apply order per EC-5 of edge-case review:
-#   1. loopzeroSystemAllowEgress=true (no breakage; tests do not change behavior).
+#   1. loopRuntimeSystemAllowEgress=true (no breakage; tests do not change behavior).
 #   2. T8.5c staging soak — operator manually flips defaultDenyEgress=true on
 #      cell-0, observes 1h.
 #   3. After staging clean, flip defaultDenyEgress=true in production cells
 #      one-at-a-time per PR.
 defaultDenyEgress: false
-loopzeroSystemAllowEgress: false
+loopRuntimeSystemAllowEgress: false
 
 # Namespaces enforced by these policies.
 namespaces:
-  - loopzero-system
-  - loopzero-auth
-  - loopzero-build
+  - loop-runtime-system
+  - loop-runtime-auth
+  - loop-runtime-build

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
@@ -37,8 +37,8 @@ var _ = Describe("J-14 Audit Log — query + filter", Label("live", "dogfood", "
 
 	Context("Scenario A — audit log default page", func() {
 		It("GET /engine/api/v1/audit returns 200 with entries + pagination", func() {
-			// The audit log is loopzero-api's GET /api/v1/audit (entries, total, limit,
-			// offset), reached through loopzero-cloud's /engine proxy. loopzero-cloud
+			// The audit log is loop-runtime-api's GET /api/v1/audit (entries, total, limit,
+			// offset), reached through loop-console's /engine proxy. loop-console
 			// serves no /api/v1/audit-log, so the path this spec used answered 404.
 			status, body, err := CurlJSON(ctx, env, "GET",
 				env.CloudBaseURL+"/engine/api/v1/audit?limit=10", jwt, nil)

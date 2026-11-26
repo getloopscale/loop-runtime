@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -26,7 +26,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // aes256TestKey returns a deterministic 32-byte key. Only the legacy read path
@@ -106,7 +106,7 @@ func TestEncryptForStore_ProducesOnlyTransitCiphertextOrRefuses(t *testing.T) {
 				if got != nil {
 					t.Errorf("a refused write must return no ciphertext, got %q", got)
 				}
-				if !errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+				if !errors.Is(err, loopruntimeerrors.ErrSecretsBackendUnavailable) {
 					t.Errorf("refusal must wrap ErrSecretsBackendUnavailable so the HTTP boundary answers 503, got %v", err)
 				}
 				return

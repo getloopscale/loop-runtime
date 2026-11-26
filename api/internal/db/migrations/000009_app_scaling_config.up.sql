@@ -1,8 +1,8 @@
 -- CHG-2026-05-03-SCALE-REAL — Plan T2.1.
--- Persist per-app scaling configuration so `loopzero scale` becomes real (no longer 202 stub).
+-- Persist per-app scaling configuration so `loopscale scale` becomes real (no longer 202 stub).
 -- Replaces "edit loopzero.yaml + redeploy" workflow for replica + autoscaling changes.
 --
--- Forward-only migration (LoopZero convention). No .down.sql.
+-- Forward-only migration (LoopRuntime convention). No .down.sql.
 
 CREATE TABLE app_scaling_config (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -28,7 +28,7 @@ CREATE TABLE app_scaling_config (
     UNIQUE (tenant_id, project_id, environment, app_name)
 );
 
--- Lookup index for the hot path: GetByApp (called on every loopzero status / scale).
+-- Lookup index for the hot path: GetByApp (called on every loop_runtime status / scale).
 CREATE INDEX idx_app_scaling_config_lookup
     ON app_scaling_config (tenant_id, project_id, environment);
 

@@ -1,6 +1,0 @@
-dependencies:
-- name: loopzero-common
-  repository: file://../loopzero-common
-  version: 0.3.0
-digest: sha256:5fb8cecbef535214a79b549ea03d1798fa0b0b18512a0acd3002a5076cf5836c
-generated: "2026-11-21T09:04:00.167401234-03:00"

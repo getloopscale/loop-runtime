@@ -2,7 +2,7 @@
 #
 # Applied by infra/scripts/ci/branch-protection-update.sh (BRANCH=develop, then
 # BRANCH=main). Each name MUST be the exact `name:` of a job in .github/workflows —
-# cmd/loopzero-ops/branch_protection_checks_test.go fails otherwise.
+# cmd/loop-runtime-ops/branch_protection_checks_test.go fails otherwise.
 #
 # ONE required check: `CI gate`, the aggregation job of ci.yml. It asserts the result
 # of every other CI job itself (a SKIPPED required check reports as passing, so the

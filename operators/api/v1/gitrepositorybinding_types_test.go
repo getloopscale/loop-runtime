@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -13,14 +13,14 @@ func TestGitRepositoryBinding_SpecFields(t *testing.T) {
 	grb := GitRepositoryBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "acme-gitops-binding",
-			Namespace: "loopzero-system",
+			Namespace: "loop-runtime-system",
 		},
 		Spec: GitRepositoryBindingSpec{
-			RepoURL: "http://gitea-http.loopzero-system.svc.cluster.local:3000/loopzero/acme-gitops.git",
+			RepoURL: "http://gitea-http.loop-runtime-system.svc.cluster.local:3000/loop-runtime/acme-gitops.git",
 			CredentialSecretRef: CredentialSecretRef{
 				Name:      "acme-git-token",
 				Key:       "token",
-				Namespace: "loopzero-system",
+				Namespace: "loop-runtime-system",
 			},
 			Consumer: ConsumerSpec{
 				Type:      "argocd",
@@ -29,7 +29,7 @@ func TestGitRepositoryBinding_SpecFields(t *testing.T) {
 		},
 	}
 
-	if grb.Spec.RepoURL != "http://gitea-http.loopzero-system.svc.cluster.local:3000/loopzero/acme-gitops.git" {
+	if grb.Spec.RepoURL != "http://gitea-http.loop-runtime-system.svc.cluster.local:3000/loop-runtime/acme-gitops.git" {
 		t.Errorf("expected RepoURL to match, got %q", grb.Spec.RepoURL)
 	}
 	if grb.Spec.CredentialSecretRef.Name != "acme-git-token" {
@@ -38,8 +38,8 @@ func TestGitRepositoryBinding_SpecFields(t *testing.T) {
 	if grb.Spec.CredentialSecretRef.Key != "token" {
 		t.Errorf("expected CredentialSecretRef.Key %q, got %q", "token", grb.Spec.CredentialSecretRef.Key)
 	}
-	if grb.Spec.CredentialSecretRef.Namespace != "loopzero-system" {
-		t.Errorf("expected CredentialSecretRef.Namespace %q, got %q", "loopzero-system", grb.Spec.CredentialSecretRef.Namespace)
+	if grb.Spec.CredentialSecretRef.Namespace != "loop-runtime-system" {
+		t.Errorf("expected CredentialSecretRef.Namespace %q, got %q", "loop-runtime-system", grb.Spec.CredentialSecretRef.Namespace)
 	}
 	if grb.Spec.Consumer.Type != "argocd" {
 		t.Errorf("expected Consumer.Type %q, got %q", "argocd", grb.Spec.Consumer.Type)

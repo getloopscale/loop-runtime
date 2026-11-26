@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -61,9 +61,9 @@ func TestAllLanguageStrategiesImplementDockerfileStep(t *testing.T) {
 // dockerfile-lint step (BYO path removed in T2.2).
 func TestWorkflowBuilder_NodeApp_EmitsPacksNotLint(t *testing.T) {
 	b := NewWorkflowBuilder(InfraParams{
-		RegistryURL:      "k3d-loopzero-registry:5000",
+		RegistryURL:      "k3d-loop-runtime-registry:5000",
 		RegistryInsecure: true,
-		BaseDomain:       "loopzero.local",
+		BaseDomain:       "loop-runtime.local",
 	})
 	apps := []deploycontracts.AppSpec{
 		{Name: "api", Path: ".", Runtime: "node", Build: "", Type: "server", Port: 3000},
@@ -92,7 +92,7 @@ func TestWorkflowBuilder_NodeApp_EmitsPacksNotLint(t *testing.T) {
 		}
 	}
 	if !hasPacks {
-		t.Errorf("expected generate-dockerfile (loopzero-packs) for node app, not found")
+		t.Errorf("expected generate-dockerfile (loop-runtime-packs) for node app, not found")
 	}
 	if hasLint {
 		t.Errorf("expected NO dockerfile-lint for non-build:dockerfile node app, but found one")

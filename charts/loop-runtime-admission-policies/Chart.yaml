@@ -1,0 +1,12 @@
+apiVersion: v2
+name: loop-runtime-admission-policies
+description: LoopRuntime platform ValidatingAdmissionPolicies for workload security
+type: application
+version: 0.3.0
+appVersion: "dev"
+home: https://github.com/getloopscale/loop-runtime
+sources:
+  - https://github.com/getloopscale/loop-runtime
+maintainers:
+  - name: LoopRuntime Team
+    url: https://getloopscale.com

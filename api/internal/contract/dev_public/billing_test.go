@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package devpublic
 
@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockCloudBillingHandler emulates the loopzero-cloud /v1/billing surface.
+// mockCloudBillingHandler emulates the loop-console /v1/billing surface.
 func mockCloudBillingHandler(t *testing.T, stripeConfigured bool, priceIDs map[string]string) http.Handler {
 	t.Helper()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +31,7 @@ func mockCloudBillingHandler(t *testing.T, stripeConfigured bool, priceIDs map[s
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"code":    "AUTH_REQUIRED",
-				"message": "Not authenticated. Run: loopzero login",
+				"message": "Not authenticated. Run: loop-runtime login",
 			})
 			return
 		}
@@ -217,7 +217,7 @@ func TestDevPublic_Billing_StripePriceIDsSeed(t *testing.T) {
 // TestDevPublic_Billing_StripeSeedRestartsCloud migrated from
 // infra/tests/e2e/dev-public-billing-stripe-seed-restarts-cloud_test.sh (Red Team #154).
 func TestDevPublic_Billing_StripeSeedRestartsCloud(t *testing.T) {
-	// #154 root cause: loopzero-cloud boot before Stripe Secret materialized → cfg.StripeAPIKey.Value() == "" →
+	// #154 root cause: loop-console boot before Stripe Secret materialized → cfg.StripeAPIKey.Value() == "" →
 	// billingHandler == nil → /v1/billing* routes NEVER registered → 404 crus do Caddy.
 	// Post-fix (rollout restart pattern): STRIPE_API_KEY populated → billingHandler wired →
 	// /v1/billing routes registered → 401 JSON (not 404 text/plain crude).

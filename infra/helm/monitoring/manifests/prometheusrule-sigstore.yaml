@@ -6,81 +6,81 @@
 # These alerts give 3 AM pages a signal when Sigstore is browning out
 # instead of forcing operators to diff build counts.
 #
-# EC-6 fix (plan v1.1): NO LoopZeroSigstoreCircuitBreakerOpen alert — no
+# EC-6 fix (plan v1.1): NO LoopRuntimeSigstoreCircuitBreakerOpen alert — no
 # circuit breaker exists yet (Production Design Review flagged as
 # separate workstream). Re-add when the circuit breaker lands.
-# EC-7 fix (plan v1.1): error-rate alerts reference loopzero_cosign_*_total
+# EC-7 fix (plan v1.1): error-rate alerts reference loop_runtime_cosign_*_total
 # denominators added in T4.1.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-sigstore-alerts
+  name: loop-runtime-sigstore-alerts
   namespace: monitoring
   labels:
     release: monitoring
-    loopzero.io/domain: sigstore
-    loopzero.io/plan: 2026-05-28-meet-001-engineering-closure
+    runtime.getloopscale.com/domain: sigstore
+    runtime.getloopscale.com/plan: 2026-05-28-meet-001-engineering-closure
 spec:
   groups:
-    - name: loopzero.sigstore
+    - name: loop-runtime.sigstore
       rules:
         # 1. Sign step P99 latency. The cosign sign duration histogram
         # uses LinearBuckets(1, 5, 12) so the realistic worst-case bin
         # is 56s; alert fires when P99 exceeds 60s for 10 minutes.
         # Operators investigate Fulcio cert issuance or Rekor record
         # latency (the two components inside the sign step) using the
-        # loopzero_cosign_sign_errors_total{component} counter for
+        # loop_runtime_cosign_sign_errors_total{component} counter for
         # attribution.
-        - alert: LoopZeroCosignSignSlow
+        - alert: LoopRuntimeCosignSignSlow
           expr: |
             histogram_quantile(
               0.99,
-              rate(loopzero_cosign_sign_duration_seconds_bucket[10m])
+              rate(loop_runtime_cosign_sign_duration_seconds_bucket[10m])
             ) > 60
           for: 10m
           labels:
             severity: critical
             domain: sigstore
-            loopzero.io/plan: 2026-05-28-meet-001-engineering-closure
+            runtime.getloopscale.com/plan: 2026-05-28-meet-001-engineering-closure
           annotations:
             summary: "Cosign sign P99 latency > 60s"
             description: "Cosign sign step P99 latency exceeded 60s over the last 10m. Investigate Fulcio cert-issue or Rekor-record subcalls."
-            runbook: "https://docs.getloopscale.com/runbooks/alerts/LoopZeroCosignSignSlow"
+            runbook: "https://docs.getloopscale.com/runbooks/alerts/LoopRuntimeCosignSignSlow"
 
         # 2. Sign error rate. Denominator (sign_total) added in T4.1
         # specifically as part of EC-7. Threshold 1% over 10m of 5m
         # rate windows.
-        - alert: LoopZeroCosignSignErrorRate
+        - alert: LoopRuntimeCosignSignErrorRate
           expr: |
             (
-              sum(rate(loopzero_cosign_sign_errors_total[5m]))
+              sum(rate(loop_runtime_cosign_sign_errors_total[5m]))
               /
-              clamp_min(sum(rate(loopzero_cosign_sign_total[5m])), 0.01)
+              clamp_min(sum(rate(loop_runtime_cosign_sign_total[5m])), 0.01)
             ) > 0.01
           for: 10m
           labels:
             severity: critical
             domain: sigstore
-            loopzero.io/plan: 2026-05-28-meet-001-engineering-closure
+            runtime.getloopscale.com/plan: 2026-05-28-meet-001-engineering-closure
           annotations:
             summary: "Cosign sign error rate > 1%"
-            description: "Cosign sign error rate exceeded 1% over 10m. Group by `component` (fulcio|rekor|ctlog) to root-cause via loopzero_cosign_sign_errors_total."
-            runbook: "https://docs.getloopscale.com/runbooks/alerts/LoopZeroCosignSignErrorRate"
+            description: "Cosign sign error rate exceeded 1% over 10m. Group by `component` (fulcio|rekor|ctlog) to root-cause via loop_runtime_cosign_sign_errors_total."
+            runbook: "https://docs.getloopscale.com/runbooks/alerts/LoopRuntimeCosignSignErrorRate"
 
         # 3. Rekor URL null rate. This is the SLI for the LIVE
         # 2026-05-28 3-layer bug class: cosign attest succeeded but
         # the URL silently dropped. The new
-        # loopzero_release_attestation_rekor_url_null_total{result} counter
+        # loop_runtime_release_attestation_rekor_url_null_total{result} counter
         # (T4.1 metric 7) bucketed every persist call. > 1% null over
         # 10m means the attestation persistence pipeline is degraded.
-        - alert: LoopZeroReleaseAttestationRekorURLNullRate
+        - alert: LoopRuntimeReleaseAttestationRekorURLNullRate
           expr: |
             (
-              rate(loopzero_release_attestation_rekor_url_null_total{result="null"}[5m])
+              rate(loop_runtime_release_attestation_rekor_url_null_total{result="null"}[5m])
               /
               clamp_min(
-                rate(loopzero_release_attestation_rekor_url_null_total{result="null"}[5m])
-                + rate(loopzero_release_attestation_rekor_url_null_total{result="populated"}[5m]),
+                rate(loop_runtime_release_attestation_rekor_url_null_total{result="null"}[5m])
+                + rate(loop_runtime_release_attestation_rekor_url_null_total{result="populated"}[5m]),
                 0.01
               )
             ) > 0.01
@@ -88,8 +88,8 @@ spec:
           labels:
             severity: critical
             domain: sigstore
-            loopzero.io/plan: 2026-05-28-meet-001-engineering-closure
+            runtime.getloopscale.com/plan: 2026-05-28-meet-001-engineering-closure
           annotations:
             summary: "Release attestation Rekor-URL null rate > 1%"
             description: "More than 1% of releases over 10m landed with null image_attestation_rekor_url. Inspect attest step output extraction (cosign_attest.go) + release_store.go enrichment path."
-            runbook: "https://docs.getloopscale.com/runbooks/alerts/LoopZeroReleaseAttestationRekorURLNullRate"
+            runbook: "https://docs.getloopscale.com/runbooks/alerts/LoopRuntimeReleaseAttestationRekorURLNullRate"

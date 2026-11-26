@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -42,7 +42,7 @@ import (
 )
 
 // CellTenantCounts returns the number of tenants per cell_id.
-// Used by CellMetricsCollector to emit loopzero_cell_tenant_count gauge.
+// Used by CellMetricsCollector to emit loop_runtime_cell_tenant_count gauge.
 func (s *PostgresCellStore) CellTenantCounts(ctx context.Context) (map[string]int, error) {
 	bridge := s.bridge()
 	q := generated.New()

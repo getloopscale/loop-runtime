@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package admission
 
@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // The route adapter's job is to translate a BuildGate Decision into the
@@ -52,8 +52,8 @@ func TestRouteAdapter_RejectCellAtCapacity_ReturnsCELL_AT_CAPACITY(t *testing.T)
 	if admitted {
 		t.Error("expected admitted=false")
 	}
-	if code != loopzeroerrors.ErrCellAtCapacity.Code {
-		t.Errorf("code = %q, want %q", code, loopzeroerrors.ErrCellAtCapacity.Code)
+	if code != loopruntimeerrors.ErrCellAtCapacity.Code {
+		t.Errorf("code = %q, want %q", code, loopruntimeerrors.ErrCellAtCapacity.Code)
 	}
 	if retryAfter <= 0 {
 		t.Error("expected positive retryAfter")
@@ -85,8 +85,8 @@ func TestRouteAdapter_RejectTenantQuota_ReturnsTENANT_BUILD_QUOTA(t *testing.T) 
 	if admitted {
 		t.Error("expected admitted=false for noisy tenant")
 	}
-	if code != loopzeroerrors.ErrTenantBuildQuota.Code {
-		t.Errorf("code = %q, want %q", code, loopzeroerrors.ErrTenantBuildQuota.Code)
+	if code != loopruntimeerrors.ErrTenantBuildQuota.Code {
+		t.Errorf("code = %q, want %q", code, loopruntimeerrors.ErrTenantBuildQuota.Code)
 	}
 }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -361,11 +361,11 @@ func TestReleaseAppsToActivationApps_NilApps(t *testing.T) {
 
 // TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61 is the
 // release-blockers-2026-06-25-set v1.1 #61 RED test. When both baseDomain
-// ("loopzero.local" — internal, non-resolvable) AND publicDomain
+// ("loop-runtime.local" — internal, non-resolvable) AND publicDomain
 // ("prod-dev.getloopscale.app" — canonical public wildcard) are set, the URL
 // emitted on deploy.completed MUST use publicDomain — the SAME URL that
-// `loopzero status` returns. Pre-#61 the function only accepted baseDomain →
-// `loopzero deploy` announced `.loopzero.local` while `loopzero status` returned
+// `loopscale status` returns. Pre-#61 the function only accepted baseDomain →
+// `loopscale deploy` announced `.loop-runtime.local` while `loopscale status` returned
 // `.prod-dev.getloopscale.app`. The mismatch is the bug.
 func TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61(t *testing.T) {
 	appsJSON, _ := json.Marshal([]deploycontracts.AppRelease{
@@ -377,18 +377,18 @@ func TestReleaseAppsToActivationApps_PublicDomainPreferredOverBase_M61(t *testin
 		Environment: "preview",
 		Apps:        appsJSON,
 	}
-	apps := releaseAppsToActivationApps(release, "loopzero.local", "prod-dev.getloopscale.app")
+	apps := releaseAppsToActivationApps(release, "loop-runtime.local", "prod-dev.getloopscale.app")
 	if len(apps) != 1 {
 		t.Fatalf("expected 1 app, got %d", len(apps))
 	}
 	wantURL := "https://tn-cb13ca5299a9391a-loopzerokit-example-app-preview.prod-dev.getloopscale.app"
 	if apps[0].URL != wantURL {
-		t.Errorf("#61 regression: got URL %q, want %q (publicDomain MUST be preferred over .loopzero.local)",
+		t.Errorf("#61 regression: got URL %q, want %q (publicDomain MUST be preferred over .loop-runtime.local)",
 			apps[0].URL, wantURL)
 	}
-	// Critical anti-regression: NEVER announce the internal .loopzero.local hostname.
-	if strings.Contains(apps[0].URL, ".loopzero.local") {
-		t.Fatalf("#61 regression: URL %q must NOT contain the internal .loopzero.local hostname", apps[0].URL)
+	// Critical anti-regression: NEVER announce the internal .loop-runtime.local hostname.
+	if strings.Contains(apps[0].URL, ".loop-runtime.local") {
+		t.Fatalf("#61 regression: URL %q must NOT contain the internal .loop-runtime.local hostname", apps[0].URL)
 	}
 }
 

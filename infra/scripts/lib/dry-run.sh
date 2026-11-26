@@ -28,10 +28,10 @@
 # observability, not validation). Real errors still surface.
 
 # Idempotent source guard
-if [[ "${_LOOPZERO_DRY_RUN_LIB_LOADED:-}" == "1" ]]; then
+if [[ "${_LOOP_RUNTIME_DRY_RUN_LIB_LOADED:-}" == "1" ]]; then
   return 0
 fi
-_LOOPZERO_DRY_RUN_LIB_LOADED=1
+_LOOP_RUNTIME_DRY_RUN_LIB_LOADED=1
 
 # Default to not-dry-run. Caller can override before sourcing OR
 # set via parse_dry_run_flag from $@.

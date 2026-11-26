@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -9,7 +9,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
@@ -38,7 +38,7 @@ func TestDeletionBackoff_ExponentialGrowth(t *testing.T) {
 }
 
 func TestGetSetDeletionRetryCount(t *testing.T) {
-	tenant := &loopzerov1.Tenant{
+	tenant := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-tenant"},
 	}
 
@@ -61,7 +61,7 @@ func TestGetSetDeletionRetryCount(t *testing.T) {
 }
 
 func TestGetDeletionRetryCount_InvalidAnnotation(t *testing.T) {
-	tenant := &loopzerov1.Tenant{
+	tenant := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "test-tenant",
 			Annotations: map[string]string{constants.AnnotationDeletionRetryCount: "notanumber"},
@@ -113,7 +113,7 @@ func TestDeletionStuckPath_AtMaxRetriesAnnotationPersists(t *testing.T) {
 	// Verify that retry count is correctly persisted in tenant annotations.
 	// When retryCount reaches DeletionMaxAttempts, the annotation must hold that value
 	// so the controller knows to use RequeueDeletionStuck on next reconcile.
-	tenant := &loopzerov1.Tenant{
+	tenant := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{Name: "stuck-tenant"},
 	}
 

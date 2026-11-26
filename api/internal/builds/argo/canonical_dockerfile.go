@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package argo — canonical Dockerfile generation.
 //
-// Plan simplify-deploy-loopzerokit-only v2.0 (T1.1): replaces loopzero-packs (an
+// Plan simplify-deploy-loopzerokit-only v2.0 (T1.1): replaces loop-runtime-packs (an
 // 11-language heuristic Dockerfile generator) with two platform-controlled
 // multi-stage Dockerfiles for the fixed LoopZeroKit stack (python + node).
 //
@@ -51,7 +51,7 @@ func canonicalDockerfile(runtime string, app deploycontracts.AppSpec) (string, e
 	case "python":
 		return renderDockerfile(imagePythonBase, pythonInstall, "", app, appDir), nil
 	default:
-		return "", fmt.Errorf("E-011: unsupported runtime %q — LoopZeroCloud deploys the fixed LoopZeroKit stack (python, node) only", runtime)
+		return "", fmt.Errorf("E-011: unsupported runtime %q — LoopConsole deploys the fixed LoopZeroKit stack (python, node) only", runtime)
 	}
 }
 
@@ -61,14 +61,14 @@ const nodeInstall = `RUN set -eu; \
 	if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; \
 	elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable; \
 	elif [ -f package-lock.json ]; then npm ci; \
-	else echo "loopzero: no lockfile (pnpm-lock.yaml / yarn.lock / package-lock.json) found in $(pwd) — dependencies are installed from the repository root, not from the app directory. Commit one of these files at the root, or move the app so its lockfile is there" >&2; exit 1; fi`
+	else echo "loop-runtime: no lockfile (pnpm-lock.yaml / yarn.lock / package-lock.json) found in $(pwd) — dependencies are installed from the repository root, not from the app directory. Commit one of these files at the root, or move the app so its lockfile is there" >&2; exit 1; fi`
 
 // pythonInstall — frozen install with build-time manager detection (C2).
 const pythonInstall = `RUN set -eu; \
 	if [ -f poetry.lock ]; then pip install --no-cache-dir poetry && poetry install --no-root --only main; \
 	elif [ -f uv.lock ]; then pip install --no-cache-dir uv && uv sync --frozen; \
 	elif [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; \
-	else echo "loopzero: no lockfile (requirements.txt / poetry.lock / uv.lock) found in $(pwd) — dependencies are installed from the repository root, not from the app directory. Commit one of these files at the root, or move the app so its lockfile is there" >&2; exit 1; fi`
+	else echo "loop-runtime: no lockfile (requirements.txt / poetry.lock / uv.lock) found in $(pwd) — dependencies are installed from the repository root, not from the app directory. Commit one of these files at the root, or move the app so its lockfile is there" >&2; exit 1; fi`
 
 // nodeBuild runs the project's build script if one is declared, in the target
 // app directory (monorepo-aware, EC-1). Pure build-time shell — no API-side
@@ -118,10 +118,10 @@ func renderDockerfile(base, install, build string, app deploycontracts.AppSpec, 
 
 // canonicalDockerfileStep returns the `generate-dockerfile` build step. It
 // writes each app's canonical Dockerfile to its workspace path via a QUOTED
-// heredoc (`<<'LOOPZERO_DF'`) so the Dockerfile body (incl. `$VAR`) is written
+// heredoc (`<<'LOOP_RUNTIME_DF'`) so the Dockerfile body (incl. `$VAR`) is written
 // verbatim — never expanded by the writer shell. Uses imageAlpine (minimal),
-// NOT loopzero-packs. The step name is preserved for log-marker compatibility
-// (loopzero_log.go:112). Per D4, the canonical file is written AFTER the source is
+// NOT loop-runtime-packs. The step name is preserved for log-marker compatibility
+// (loop_runtime_log.go:112). Per D4, the canonical file is written AFTER the source is
 // in place, overwriting any user Dockerfile at the same path.
 func canonicalDockerfileStep(runtime string, apps []deploycontracts.AppSpec, totalApps int) (*forge.Container, error) {
 	var script strings.Builder
@@ -132,9 +132,9 @@ func canonicalDockerfileStep(runtime string, apps []deploycontracts.AppSpec, tot
 	// `--opt filename`. Warn so the user knows their file had no effect. This is
 	// observability, not the control — the control is the truncating `cat >` +
 	// the explicit BuildKit filename.
-	script.WriteString("for __loopzero_df in $(find " + workspaceMountPath +
+	script.WriteString("for __loop_runtime_df in $(find " + workspaceMountPath +
 		" -maxdepth 3 \\( -iname 'Dockerfile' -o -iname 'Containerfile' -o -iname '*.dockerfile' \\) 2>/dev/null); do\n")
-	script.WriteString("  echo \"::loopzero:: phase=build step=generate-dockerfile level=warn message=ignored user Dockerfile ${__loopzero_df} (LoopZeroCloud uses a managed build)\" >&2\n")
+	script.WriteString("  echo \"::loop-runtime:: phase=build step=generate-dockerfile level=warn message=ignored user Dockerfile ${__loop_runtime_df} (LoopConsole uses a managed build)\" >&2\n")
 	script.WriteString("done\n")
 	for _, app := range apps {
 		df, err := canonicalDockerfile(runtime, app)
@@ -143,8 +143,8 @@ func canonicalDockerfileStep(runtime string, apps []deploycontracts.AppSpec, tot
 		}
 		out := dockerfilePathForApp(app.Name, totalApps)
 		// %q shell-quotes the path (CODE-001 defense). The quoted heredoc
-		// delimiter 'LOOPZERO_DF' disables expansion of the Dockerfile body.
-		fmt.Fprintf(&script, "cat > %q <<'LOOPZERO_DF'\n%s\nLOOPZERO_DF\n", out, df)
+		// delimiter 'LOOP_RUNTIME_DF' disables expansion of the Dockerfile body.
+		fmt.Fprintf(&script, "cat > %q <<'LOOP_RUNTIME_DF'\n%s\nLOOP_RUNTIME_DF\n", out, df)
 	}
 	return buildContainer("generate-dockerfile", imageAlpine, forge.ResourcesTiny(), script.String()), nil
 }
@@ -159,7 +159,7 @@ func canonicalDockerfileStep(runtime string, apps []deploycontracts.AppSpec, tot
 func canonicalDockerfileStepOrFail(runtime string, apps []deploycontracts.AppSpec, totalApps int) *forge.Container {
 	c, err := canonicalDockerfileStep(runtime, apps, totalApps)
 	if err != nil {
-		msg := "loopzero: canonical Dockerfile generation failed: " + err.Error()
+		msg := "loop-runtime: canonical Dockerfile generation failed: " + err.Error()
 		return buildContainer("generate-dockerfile", imageAlpine, forge.ResourcesTiny(), failScript(msg))
 	}
 	return c

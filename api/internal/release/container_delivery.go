@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -17,7 +17,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/db"
 	"github.com/getloopscale/loop-runtime/api/internal/events"
 	"github.com/getloopscale/loop-runtime/api/internal/metrics"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/naming"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
@@ -150,7 +150,7 @@ func (c *ContainerDeliveryActivator) Activate(ctx context.Context, build deployc
 		// MEET-2026-04-04-029 P3: 404 (app not found) is recoverable — the TenantController
 		// may not have created the ArgoCD Application yet. Leave release in PENDING and let
 		// the convergence loop retrigger sync once the Application CR exists.
-		if errors.Is(err, deploycontracts.ErrSyncApplicationNotFound) || errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
+		if errors.Is(err, deploycontracts.ErrSyncApplicationNotFound) || errors.Is(err, loopruntimeerrors.ErrDeployServiceAuthFailed) {
 			slog.Warn("argocd sync trigger failed (recoverable) — release stays PENDING for convergence loop retry",
 				"build_id", build.ID, "app", argoAppName, "error", err,
 				"hint", "If this persists, verify the environment exists for this tenant and ArgoCD credentials are valid")
@@ -327,7 +327,7 @@ func (c *ContainerDeliveryActivator) phaseACreateRelease(ctx context.Context, bu
 			// T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
 			// Per ADR D1: SLSA L3 attestation chain — Rekor URL of
 			// cosign-attest step persisted alongside signature for
-			// downstream verification (loopzero deploy --verify-attestation).
+			// downstream verification (loop-runtime deploy --verify-attestation).
 			// Empty when CosignAttestEnabled=false (default) or attest
 			// step never ran. Empty release column stays NULL.
 			if first.ImageAttestationRekorURL != "" {
@@ -540,7 +540,7 @@ func (c *ContainerDeliveryActivator) phaseEFinalize(ctx context.Context, build d
 			failedData := events.SafeJSONMarshal(map[string]interface{}{
 				"deploy_id": deriveDeployID(release.ID),
 				"status":    "failed",
-				"reason":    "Deploy verification failed. The service did not become healthy after sync. Run `loopzero logs` to check application errors.",
+				"reason":    "Deploy verification failed. The service did not become healthy after sync. Run `loopscale logs` to check application errors.",
 			})
 			if _, err := c.eventStore.Append(ctx, build.ID, "deploy.sync_failed", failedData); err != nil {
 				return fmt.Errorf("activate release: emit deploy.sync_failed: %w", err)

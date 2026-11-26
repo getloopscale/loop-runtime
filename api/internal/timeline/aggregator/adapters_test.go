@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package aggregator
 
@@ -248,15 +248,15 @@ func TestArgoCDAppReader_DegradedTerminal(t *testing.T) {
 	}
 }
 
-// --- loopzeroapp_informer --------------------------------------------------
+// --- loopruntimeapp_informer --------------------------------------------------
 
-type fakeLoopZeroQ struct {
-	phases []*LoopZeroAppPhase
+type fakeLoopRuntimeQ struct {
+	phases []*LoopRuntimeAppPhase
 	called int
 	mu     sync.Mutex
 }
 
-func (f *fakeLoopZeroQ) QueryLoopZeroAppPhase(ctx context.Context, deployID string) (*LoopZeroAppPhase, error) {
+func (f *fakeLoopRuntimeQ) QueryLoopRuntimeAppPhase(ctx context.Context, deployID string) (*LoopRuntimeAppPhase, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.called >= len(f.phases) {
@@ -267,12 +267,12 @@ func (f *fakeLoopZeroQ) QueryLoopZeroAppPhase(ctx context.Context, deployID stri
 	return p, nil
 }
 
-func TestLoopZeroAppInformerReader_ProgressingToReachable(t *testing.T) {
-	q := &fakeLoopZeroQ{phases: []*LoopZeroAppPhase{
+func TestLoopRuntimeAppInformerReader_ProgressingToReachable(t *testing.T) {
+	q := &fakeLoopRuntimeQ{phases: []*LoopRuntimeAppPhase{
 		{Phase: "PROGRESSING", UpdatedAt: time.Now()},
 		{Phase: "REACHABLE", UpdatedAt: time.Now()},
 	}}
-	r := NewLoopZeroAppInformerReader(q)
+	r := NewLoopRuntimeAppInformerReader(q)
 	r.PollInterval = 10 * time.Millisecond
 	out := make(chan PhaseEvent, 8)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

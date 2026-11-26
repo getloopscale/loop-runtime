@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package preview_test
 
@@ -15,7 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
@@ -34,14 +34,14 @@ import (
 //   - Finalizer added on creation, removed after namespace gone
 //   - bumpCleanupAttempts persists annotation across reconciles
 
-func newPreviewCR(name, tenantSlug, projectSlug string, prNumber int, ttl time.Duration) *loopzerov1.PreviewEnvironment {
+func newPreviewCR(name, tenantSlug, projectSlug string, prNumber int, ttl time.Duration) *loopruntimev1.PreviewEnvironment {
 	expires := metav1.NewTime(time.Now().Add(ttl))
-	return &loopzerov1.PreviewEnvironment{
+	return &loopruntimev1.PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
 		},
-		Spec: loopzerov1.PreviewEnvironmentSpec{
+		Spec: loopruntimev1.PreviewEnvironmentSpec{
 			TenantID:  tenantSlug,
 			ProjectID: projectSlug,
 			PRNumber:  prNumber,
@@ -73,9 +73,9 @@ var _ = Describe("PreviewController", Ordered, func() {
 			// J-23 canonical namespace formula 2026-06-07 (the sponsor
 			// asked for every environment, previews included, to be
 			// separated by project rather than special-cased): uniformly
-			// `loopzero-<tenant>-<project>-<env>` for all envs including
+			// `loop-runtime-<tenant>-<project>-<env>` for all envs including
 			// preview-pr-N (was `<tenant>-<project>-pr-N` pre-refactor).
-			expectedNS = "loopzero-acme-api-preview-pr-101"
+			expectedNS = "loop-runtime-acme-api-preview-pr-101"
 		)
 
 		BeforeAll(func() {
@@ -88,7 +88,7 @@ var _ = Describe("PreviewController", Ordered, func() {
 				var ns corev1.Namespace
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: expectedNS}, &ns)).To(Succeed())
 				g.Expect(ns.Labels).To(HaveKeyWithValue("pod-security.kubernetes.io/enforce", "restricted"))
-				g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/preview", fmt.Sprintf("pr%d", prNumber)))
+				g.Expect(ns.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/preview", fmt.Sprintf("pr%d", prNumber)))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -149,36 +149,36 @@ var _ = Describe("PreviewController", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		// J-23 2026-06-07: the `loopzero-app` ServiceAccount that rendered
+		// J-23 2026-06-07: the `loop-runtime-app` ServiceAccount that rendered
 		// pods reference (renderer_deployment.go:146 + renderer_rollout.go
 		// :400). Without it ArgoCD sync succeeds but pods CrashLoop with
-		// "serviceaccount loopzero-app not found".
-		It("creates the loopzero-app ServiceAccount with AutomountServiceAccountToken=false", func() {
+		// "serviceaccount loop-runtime-app not found".
+		It("creates the loop-runtime-app ServiceAccount with AutomountServiceAccountToken=false", func() {
 			Eventually(func(g Gomega) {
 				var sa corev1.ServiceAccount
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-app", Namespace: expectedNS,
+					Name: "loop-runtime-app", Namespace: expectedNS,
 				}, &sa)).To(Succeed())
 				g.Expect(sa.AutomountServiceAccountToken).NotTo(BeNil())
 				g.Expect(*sa.AutomountServiceAccountToken).To(BeFalse())
-				// constants.LabelManagedBy == "loopzero.io/managed-by"
-				// (LoopZero's namespaced label, NOT k8s standard
+				// constants.LabelManagedBy == "runtime.getloopscale.com/managed-by"
+				// (LoopRuntime's namespaced label, NOT k8s standard
 				// "app.kubernetes.io/managed-by").
-				g.Expect(sa.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "preview-controller"))
+				g.Expect(sa.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/managed-by", "preview-controller"))
 			}, timeout, interval).Should(Succeed())
 		})
 
 		It("adds the cleanup finalizer to the CR", func() {
 			Eventually(func(g Gomega) {
-				var pe loopzerov1.PreviewEnvironment
+				var pe loopruntimev1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &pe)).To(Succeed())
-				g.Expect(pe.Finalizers).To(ContainElement("loopzero.io/preview-cleanup"))
+				g.Expect(pe.Finalizers).To(ContainElement("runtime.getloopscale.com/preview-cleanup"))
 			}, timeout, interval).Should(Succeed())
 		})
 
 		It("sets NamespaceReady, NetworkPolicyReady, ResourceQuotaReady, LimitRangeReady conditions to True", func() {
 			Eventually(func(g Gomega) {
-				var pe loopzerov1.PreviewEnvironment
+				var pe loopruntimev1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &pe)).To(Succeed())
 
 				for _, condType := range []string{
@@ -196,7 +196,7 @@ var _ = Describe("PreviewController", Ordered, func() {
 
 		It("reports the public URL the API computed on Status", func() {
 			Eventually(func(g Gomega) {
-				var pe loopzerov1.PreviewEnvironment
+				var pe loopruntimev1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &pe)).To(Succeed())
 				g.Expect(pe.Status.URL).To(Equal(pe.Spec.PublicURL))
 			}, timeout, interval).Should(Succeed())
@@ -208,9 +208,9 @@ var _ = Describe("PreviewController", Ordered, func() {
 			// period (default 90s). To keep envtest fast, we wait up to
 			// 2 minutes — well above the grace window.
 			Eventually(func(g Gomega) {
-				var pe loopzerov1.PreviewEnvironment
+				var pe loopruntimev1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &pe)).To(Succeed())
-				g.Expect(pe.Status.Phase).To(Equal(loopzerov1.PreviewPhaseActive),
+				g.Expect(pe.Status.Phase).To(Equal(loopruntimev1.PreviewPhaseActive),
 					"expected Active after grace period (current=%s, conditions=%+v)",
 					pe.Status.Phase, pe.Status.Conditions)
 			}, 2*time.Minute, 5*time.Second).Should(Succeed())
@@ -231,7 +231,7 @@ var _ = Describe("PreviewController", Ordered, func() {
 
 			// Wait until the controller has applied namespace + NP + Quota.
 			Eventually(func(g Gomega) {
-				var fresh loopzerov1.PreviewEnvironment
+				var fresh loopruntimev1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &fresh)).To(Succeed())
 				g.Expect(findCondition(fresh.Status.Conditions, conditions.TypePreviewResourceQuotaReady)).NotTo(BeNil())
 			}, timeout, interval).Should(Succeed())
@@ -240,7 +240,7 @@ var _ = Describe("PreviewController", Ordered, func() {
 			// directly on the CR Status. The controller observes these and
 			// transitions to Failed on next reconcile.
 			Eventually(func(g Gomega) {
-				var fresh loopzerov1.PreviewEnvironment
+				var fresh loopruntimev1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &fresh)).To(Succeed())
 				now := metav1.Now()
 				fresh.Status.Conditions = append(fresh.Status.Conditions,
@@ -259,9 +259,9 @@ var _ = Describe("PreviewController", Ordered, func() {
 
 		It("transitions phase to Failed", func() {
 			Eventually(func(g Gomega) {
-				var pe loopzerov1.PreviewEnvironment
+				var pe loopruntimev1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &pe)).To(Succeed())
-				g.Expect(pe.Status.Phase).To(Equal(loopzerov1.PreviewPhaseFailed))
+				g.Expect(pe.Status.Phase).To(Equal(loopruntimev1.PreviewPhaseFailed))
 			}, 90*time.Second, 5*time.Second).Should(Succeed())
 		})
 	})
@@ -273,7 +273,7 @@ var _ = Describe("PreviewController", Ordered, func() {
 			projectSlug = "api"
 			prNumber    = 303
 			// J-23 canonical namespace 2026-06-07.
-			expectedNS = "loopzero-acme-api-preview-pr-303"
+			expectedNS = "loop-runtime-acme-api-preview-pr-303"
 		)
 
 		BeforeAll(func() {
@@ -295,7 +295,7 @@ var _ = Describe("PreviewController", Ordered, func() {
 			// the CR Delete, has issued a namespace Delete (visible via
 			// non-nil deletionTimestamp on the namespace). That proves
 			// the cleanup path runs in the right order.
-			var pe loopzerov1.PreviewEnvironment
+			var pe loopruntimev1.PreviewEnvironment
 			Expect(k8sClient.Get(ctx, previewKey(crName), &pe)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, &pe)).To(Succeed())
 
@@ -330,7 +330,7 @@ var _ = Describe("PreviewController", Ordered, func() {
 			// Context #1 above). To keep this fast, we manually set the
 			// readiness conditions so evaluateWorkloadGate proceeds.
 			Eventually(func(g Gomega) {
-				var fresh loopzerov1.PreviewEnvironment
+				var fresh loopruntimev1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &fresh)).To(Succeed())
 				g.Expect(findCondition(fresh.Status.Conditions, conditions.TypePreviewResourceQuotaReady)).NotTo(BeNil())
 
@@ -346,11 +346,11 @@ var _ = Describe("PreviewController", Ordered, func() {
 
 		It("transitions Active → Expiring after the TTL elapses", func() {
 			Eventually(func(g Gomega) {
-				var pe loopzerov1.PreviewEnvironment
+				var pe loopruntimev1.PreviewEnvironment
 				g.Expect(k8sClient.Get(ctx, previewKey(crName), &pe)).To(Succeed())
 				// Phase advances Active → Expiring → (Delete cascades).
 				// We accept any post-Active phase for this assertion.
-				g.Expect(pe.Status.Phase).NotTo(Equal(loopzerov1.PreviewPhaseCreating))
+				g.Expect(pe.Status.Phase).NotTo(Equal(loopruntimev1.PreviewPhaseCreating))
 			}, 3*time.Minute, 5*time.Second).Should(Succeed())
 		})
 	})

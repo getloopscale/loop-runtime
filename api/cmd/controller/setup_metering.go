@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -55,7 +55,7 @@ const (
 // leader, registered on bgWg. Observe-only + non-fatal (see file header).
 func startMeteringLoop(shutdownCtx context.Context, bgWg *sync.WaitGroup, cfg config.Config, lease leader.Lease, logger *slog.Logger) {
 	// Dedicated bounded worker pool (ADR-10) — physically separate from the API
-	// pool, connected as loopzero_worker so the SET LOCAL app.tenant_id='' RLS bypass
+	// pool, connected as loop_runtime_worker so the SET LOCAL app.tenant_id='' RLS bypass
 	// in the money-writer is load-bearing, not incidental.
 	poolCfg, err := pgxpool.ParseConfig(cfg.EffectiveWorkerDatabaseURL())
 	if err != nil {
@@ -71,8 +71,8 @@ func startMeteringLoop(shutdownCtx context.Context, bgWg *sync.WaitGroup, cfg co
 
 	// Mgmt-cluster client: reads Tenant CRs (enumeration) and the cells'
 	// kubeconfig Secrets (per-cell pod listing). The scheme carries BOTH
-	// the loopzero.io CRD types AND corev1 (for the kubeconfig Secret GET) — the k8s
-	// package's NewScheme is loopzero.io-only, so this client is built here.
+	// the runtime.getloopscale.com CRD types AND corev1 (for the kubeconfig Secret GET) — the k8s
+	// package's NewScheme is runtime.getloopscale.com-only, so this client is built here.
 	mgmtRest, err := k8s.RestConfig(cfg.MgmtKubeconfig, cfg.MgmtKubeContext)
 	if err != nil {
 		pool.Close()
@@ -123,15 +123,15 @@ func startMeteringLoop(shutdownCtx context.Context, bgWg *sync.WaitGroup, cfg co
 
 // tenantCRNamespace is the canonical namespace for Tenant + ClusterCredential CRs
 // (ADR-0018 — mirrors k8s.tenantNamespace, which is unexported).
-const tenantCRNamespace = "loopzero-system"
+const tenantCRNamespace = "loop-runtime-system"
 
 // meteringMgmtClient builds a controller-runtime client for the mgmt cluster whose
-// scheme includes the loopzero.io CRD types (Tenant, ClusterCredential) AND corev1
+// scheme includes the runtime.getloopscale.com CRD types (Tenant, ClusterCredential) AND corev1
 // (the kubeconfig Secret), over the rest config k8s.RestConfig resolved.
 func meteringMgmtClient(restCfg *rest.Config) (ctrlclient.Client, error) {
 	scheme := runtime.NewScheme()
 	if err := apiv1.AddToScheme(scheme); err != nil {
-		return nil, fmt.Errorf("metering: register loopzero.io scheme: %w", err)
+		return nil, fmt.Errorf("metering: register runtime.getloopscale.com scheme: %w", err)
 	}
 	if err := corev1.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("metering: register corev1 scheme: %w", err)

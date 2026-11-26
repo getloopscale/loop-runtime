@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package app_test
 
@@ -15,25 +15,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 	"github.com/getloopscale/loop-runtime/operators/operatortest"
 )
 
-func newExposedRouteCR(name, appRef, hostname, serviceName string, servicePort int32, tlsEnabled bool) *loopzerov1.ExposedRoute {
-	return &loopzerov1.ExposedRoute{
+func newExposedRouteCR(name, appRef, hostname, serviceName string, servicePort int32, tlsEnabled bool) *loopruntimev1.ExposedRoute {
+	return &loopruntimev1.ExposedRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
 		},
-		Spec: loopzerov1.ExposedRouteSpec{
+		Spec: loopruntimev1.ExposedRouteSpec{
 			ApplicationRef: appRef,
 			Hostname:       hostname,
-			ServiceRef: loopzerov1.ServiceRef{
+			ServiceRef: loopruntimev1.ServiceRef{
 				Name: serviceName,
 				Port: servicePort,
 			},
-			TLS: loopzerov1.TLSConfig{
+			TLS: loopruntimev1.TLSConfig{
 				Enabled: tlsEnabled,
 			},
 		},
@@ -56,8 +56,8 @@ var _ = Describe("ExposureController", Ordered, func() {
 		})
 
 		It("should add the route-cleanup finalizer on creation", func() {
-			withRoute(routeName, func(g Gomega, route *loopzerov1.ExposedRoute) {
-				g.Expect(route.Finalizers).To(ContainElement("loopzero.io/route-cleanup"))
+			withRoute(routeName, func(g Gomega, route *loopruntimev1.ExposedRoute) {
+				g.Expect(route.Finalizers).To(ContainElement("runtime.getloopscale.com/route-cleanup"))
 			})
 		})
 
@@ -80,15 +80,15 @@ var _ = Describe("ExposureController", Ordered, func() {
 
 			// Wait for finalizer to be added
 			Eventually(func(g Gomega) {
-				var r loopzerov1.ExposedRoute
+				var r loopruntimev1.ExposedRoute
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: routeName, Namespace: "default",
 				}, &r)).To(Succeed())
-				g.Expect(r.Finalizers).To(ContainElement("loopzero.io/route-cleanup"))
+				g.Expect(r.Finalizers).To(ContainElement("runtime.getloopscale.com/route-cleanup"))
 			}, timeout, interval).Should(Succeed())
 
 			// Delete the route
-			var toDelete loopzerov1.ExposedRoute
+			var toDelete loopruntimev1.ExposedRoute
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: routeName, Namespace: "default",
 			}, &toDelete)).To(Succeed())
@@ -96,13 +96,13 @@ var _ = Describe("ExposureController", Ordered, func() {
 
 			// Route should be fully deleted (finalizer removed immediately by controller)
 			Eventually(func(g Gomega) {
-				var deleted loopzerov1.ExposedRoute
+				var deleted loopruntimev1.ExposedRoute
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: routeName, Namespace: "default",
 				}, &deleted)
 				if err == nil {
 					// Still exists — check finalizer is gone
-					g.Expect(deleted.Finalizers).ToNot(ContainElement("loopzero.io/route-cleanup"))
+					g.Expect(deleted.Finalizers).ToNot(ContainElement("runtime.getloopscale.com/route-cleanup"))
 				}
 				// Either NotFound or finalizer removed is success
 			}, timeout, interval).Should(Succeed())
@@ -120,26 +120,26 @@ var _ = Describe("ExposureController", Ordered, func() {
 		BeforeAll(func() {
 			// #277: the Secret lives in the workload's cell, in the tenant namespace, under
 			// the name the renderer creates — tls-{project}-{app} — NOT one derived from
-			// the hostname. The chain is ExposedRoute -> LoopZeroApplication -> Tenant ->
+			// the hostname. The chain is ExposedRoute -> LoopRuntimeApplication -> Tenant ->
 			// cellID -> namespace.
-			tenant := &loopzerov1.Tenant{
+			tenant := &loopruntimev1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{Name: "tn-cert", Namespace: "default"},
-				Spec: loopzerov1.TenantSpec{
+				Spec: loopruntimev1.TenantSpec{
 					CellID:      "cell-0",
 					DisplayName: "cert test tenant",
-					Plan:        loopzerov1.PlanStarter,
-					GitOps:      loopzerov1.GitOpsSpec{RepoName: "loopzero-tn-cert", Branch: "main"},
-					Limits:      loopzerov1.ResourceLimits{MaxBuildConcurrency: 1},
-					Environments: []loopzerov1.TenantEnvironmentEntry{
+					Plan:        loopruntimev1.PlanStarter,
+					GitOps:      loopruntimev1.GitOpsSpec{RepoName: "loop-runtime-tn-cert", Branch: "main"},
+					Limits:      loopruntimev1.ResourceLimits{MaxBuildConcurrency: 1},
+					Environments: []loopruntimev1.TenantEnvironmentEntry{
 						{Name: "production", Cluster: "workload", Project: "certproj"},
 					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
-			loopzeroApp := &loopzerov1.LoopZeroApplication{
+			loopRuntimeApp := &loopruntimev1.LoopRuntimeApplication{
 				ObjectMeta: metav1.ObjectMeta{Name: appRef, Namespace: "default"},
-				Spec: loopzerov1.LoopZeroApplicationSpec{
+				Spec: loopruntimev1.LoopRuntimeApplicationSpec{
 					TenantRef:   "tn-cert",
 					Project:     "certproj",
 					Environment: "production",
@@ -147,17 +147,17 @@ var _ = Describe("ExposureController", Ordered, func() {
 					AppName:     serviceName,
 				},
 			}
-			Expect(k8sClient.Create(ctx, loopzeroApp)).To(Succeed())
+			Expect(k8sClient.Create(ctx, loopRuntimeApp)).To(Succeed())
 
 			certNS := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{Name: "loopzero-tn-cert-certproj-production"},
+				ObjectMeta: metav1.ObjectMeta{Name: "loop-runtime-tn-cert-certproj-production"},
 			}
 			_ = k8sClient.Create(ctx, certNS) // idempotent across suite runs
 
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tls-certproj-" + serviceName,
-					Namespace: "loopzero-tn-cert-certproj-production",
+					Namespace: "loop-runtime-tn-cert-certproj-production",
 				},
 				Type: corev1.SecretTypeTLS,
 				Data: map[string][]byte{
@@ -173,7 +173,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 
 		It("should set certificateReady to true", func() {
 			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
+				var route loopruntimev1.ExposedRoute
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: routeName, Namespace: "default",
 				}, &route)).To(Succeed())
@@ -189,7 +189,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 			deleteRouteWithFinalizer(routeName)
 			secret := &corev1.Secret{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{
-				Name: "tls-certproj-" + serviceName, Namespace: "loopzero-tn-cert-certproj-production",
+				Name: "tls-certproj-" + serviceName, Namespace: "loop-runtime-tn-cert-certproj-production",
 			}, secret); err == nil {
 				_ = k8sClient.Delete(ctx, secret)
 			}
@@ -212,18 +212,18 @@ var _ = Describe("ExposureController", Ordered, func() {
 
 		It("should stay in Pending phase with certificateReady false", func() {
 			// Wait for at least one reconcile to set the phase
-			withRoute(routeName, func(g Gomega, route *loopzerov1.ExposedRoute) {
-				g.Expect(route.Status.Phase).To(Equal(loopzerov1.ExposedRoutePhasePending))
+			withRoute(routeName, func(g Gomega, route *loopruntimev1.ExposedRoute) {
+				g.Expect(route.Status.Phase).To(Equal(loopruntimev1.ExposedRoutePhasePending))
 			})
 
 			// Then verify it stays Pending (use Consistently to assert non-change over 3s)
 			Consistently(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
+				var route loopruntimev1.ExposedRoute
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: routeName, Namespace: "default",
 				}, &route)).To(Succeed())
 				g.Expect(route.Status.CertificateReady).To(BeFalse())
-				g.Expect(route.Status.Phase).To(Equal(loopzerov1.ExposedRoutePhasePending))
+				g.Expect(route.Status.Phase).To(Equal(loopruntimev1.ExposedRoutePhasePending))
 			}, "3s", interval).Should(Succeed())
 		})
 
@@ -250,7 +250,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 		})
 
 		It("should set certificateReady to true (TLS not required)", func() {
-			withRoute(routeName, func(g Gomega, route *loopzerov1.ExposedRoute) {
+			withRoute(routeName, func(g Gomega, route *loopruntimev1.ExposedRoute) {
 				g.Expect(route.Status.CertificateReady).To(BeTrue())
 			})
 		})
@@ -279,18 +279,18 @@ var _ = Describe("ExposureController", Ordered, func() {
 				route := newExposedRouteCR(routeName, appRef, server.URL, serviceName, 80, false)
 				// Use annotation to override probe URL for testing
 				route.Annotations = map[string]string{
-					"loopzero.io/probe-url-override": server.URL,
+					"runtime.getloopscale.com/probe-url-override": server.URL,
 				}
 				Expect(k8sClient.Create(ctx, route)).To(Succeed())
 			})
 
 			It("should reach Reachable phase", func() {
 				Eventually(func(g Gomega) {
-					var route loopzerov1.ExposedRoute
+					var route loopruntimev1.ExposedRoute
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 						Name: routeName, Namespace: "default",
 					}, &route)).To(Succeed())
-					g.Expect(route.Status.Phase).To(Equal(loopzerov1.ExposedRoutePhaseReachable))
+					g.Expect(route.Status.Phase).To(Equal(loopruntimev1.ExposedRoutePhaseReachable))
 					g.Expect(route.Status.ConsecutiveFailures).To(Equal(int32(0)))
 				}, timeout, interval).Should(Succeed())
 			})
@@ -319,14 +319,14 @@ var _ = Describe("ExposureController", Ordered, func() {
 
 				route := newExposedRouteCR(routeName, appRef, server.URL, serviceName, 80, false)
 				route.Annotations = map[string]string{
-					"loopzero.io/probe-url-override": server.URL,
+					"runtime.getloopscale.com/probe-url-override": server.URL,
 				}
 				Expect(k8sClient.Create(ctx, route)).To(Succeed())
 			})
 
 			It("should increment consecutiveFailures", func() {
 				Eventually(func(g Gomega) {
-					var route loopzerov1.ExposedRoute
+					var route loopruntimev1.ExposedRoute
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 						Name: routeName, Namespace: "default",
 					}, &route)).To(Succeed())
@@ -336,7 +336,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 
 			It("should set lastProbeResult to 503", func() {
 				Eventually(func(g Gomega) {
-					var route loopzerov1.ExposedRoute
+					var route loopruntimev1.ExposedRoute
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 						Name: routeName, Namespace: "default",
 					}, &route)).To(Succeed())
@@ -346,7 +346,7 @@ var _ = Describe("ExposureController", Ordered, func() {
 
 			AfterAll(func() {
 				server.Close()
-				route := &loopzerov1.ExposedRoute{}
+				route := &loopruntimev1.ExposedRoute{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
 					_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
 						route.Finalizers = nil

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package auth
 
@@ -93,9 +93,9 @@ func TestAuthFailureAudit_Wire_RequireAdminService_MissingHeader(t *testing.T) {
 }
 
 // TestRequireAdminService_RejectsLegacySecret asserts the qa-sprint2-cleanup-2026-06-24
-// EC-1 narrow (closes loopzero-cloud#16): post-T1.0 the middleware accepts ONLY the
-// canonical LOOPZERO_ADMIN_SERVICE_AUTH_SECRET (+ its _PREVIOUS rotation sibling) — NOT
-// the legacy LOOPZERO_SERVICE_AUTH_SECRET that the cloud /engine/* proxy carries on every
+// EC-1 narrow (closes loop-console#16): post-T1.0 the middleware accepts ONLY the
+// canonical LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET (+ its _PREVIOUS rotation sibling) — NOT
+// the legacy LOOP_RUNTIME_SERVICE_AUTH_SECRET that the cloud /engine/* proxy carries on every
 // forwarded user-JWT request. Before T1.0 the middleware also matched `legacy`, so
 // any tenant-owner JWT routed via the proxy passed the admin auth gate; the QA Red
 // Team filed #16 against that bypass.
@@ -295,7 +295,7 @@ func TestAuthFailureAudit_Wire_Bearer_NonMemberTenant(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/x", nil)
 	req.Header.Set("Authorization", "Bearer valid")
-	req.Header.Set("X-LoopZero-Tenant", "tn-attacker")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-attacker")
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
@@ -323,8 +323,8 @@ func TestAuthFailureAudit_Wire_ServiceAuth_NonMemberTenant(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/x", nil)
 	req.Header.Set("X-Service-Auth", "valid-secret")
-	req.Header.Set("X-LoopZero-User-ID", "u-1")
-	req.Header.Set("X-LoopZero-Tenant", "tn-attacker") // user is not in this tenant
+	req.Header.Set("X-Loop-Runtime-User-ID", "u-1")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-attacker") // user is not in this tenant
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 

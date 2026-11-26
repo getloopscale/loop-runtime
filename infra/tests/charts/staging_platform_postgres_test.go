@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -22,8 +22,8 @@ func TestStaging_PlatformPostgresRendersOneClusterOnAPinnedImage(t *testing.T) {
 		t.Fatalf("staging renders %d CloudNativePG Clusters, want 1", len(clusters))
 	}
 	cluster := clusters[0]
-	if got := dig(cluster, "metadata", "namespace"); got != nil && got != "loopzero-data-plane" {
-		t.Errorf("Cluster namespace = %v, want loopzero-data-plane", got)
+	if got := dig(cluster, "metadata", "namespace"); got != nil && got != "loop-runtime-data-plane" {
+		t.Errorf("Cluster namespace = %v, want loop-runtime-data-plane", got)
 	}
 	image, _ := dig(cluster, "spec", "imageName").(string)
 	if !regexp.MustCompile(`^ghcr\.io/cloudnative-pg/postgresql:19\.\d+[a-z-]*@sha256:[0-9a-f]{64}$`).MatchString(image) {
@@ -113,12 +113,12 @@ func TestStaging_PlatformPostgresBacksUpToItsBucketAsItsRole(t *testing.T) {
 	if store == nil {
 		t.Fatal("staging renders no ObjectStore for platform-postgres")
 	}
-	if got := dig(store, "spec", "configuration", "destinationPath"); got != "s3://loopzero-staging-postgres-backups-000000000000/" {
+	if got := dig(store, "spec", "configuration", "destinationPath"); got != "s3://loop-runtime-staging-postgres-backups-000000000000/" {
 		t.Errorf("destinationPath = %v", got)
 	}
 	cluster := renderedObject(t, out, "Cluster", "platform-postgres")
 	role := dig(cluster, "spec", "serviceAccountTemplate", "metadata", "annotations", "eks.amazonaws.com/role-arn")
-	if role != "arn:aws:iam::000000000000:role/loopzero-staging-core-platform-postgres" {
+	if role != "arn:aws:iam::000000000000:role/loop-runtime-staging-core-platform-postgres" {
 		t.Errorf("the instances assume %v", role)
 	}
 	if renderedObject(t, out, "ScheduledBackup", "platform-postgres") == nil {

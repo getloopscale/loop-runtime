@@ -1,32 +1,32 @@
 ---
 # ServiceAccount for the PlatformBootstrap controller.
-# Runs in loopzero-system namespace with least-privilege RBAC.
+# Runs in loop-runtime-system namespace with least-privilege RBAC.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: platformbootstrap-controller
-  namespace: loopzero-system
+  namespace: loop-runtime-system
   labels:
     app.kubernetes.io/name: platformbootstrap-controller
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: operator
 
 ---
-# Role: loopzero-system namespace permissions.
+# Role: loop-runtime-system namespace permissions.
 # Grants access to PlatformBootstrap CRs (namespaced), Secrets, ConfigMaps, and Events.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: platformbootstrap-controller
-  namespace: loopzero-system
+  namespace: loop-runtime-system
   labels:
     app.kubernetes.io/name: platformbootstrap-controller
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: operator
 rules:
   # PlatformBootstrap CR — full reconcile access (no delete).
   - apiGroups:
-      - loopzero.io
+      - runtime.getloopscale.com
     resources:
       - platformbootstraps
     verbs:
@@ -36,14 +36,14 @@ rules:
       - update
   # PlatformBootstrap status subresource — controller updates phase/conditions.
   - apiGroups:
-      - loopzero.io
+      - runtime.getloopscale.com
     resources:
       - platformbootstraps/status
     verbs:
       - get
       - update
       - patch
-  # Secrets — read and write for loopzero-platform-tokens, gitea-repo-creds, etc.
+  # Secrets — read and write for loop-runtime-platform-tokens, gitea-repo-creds, etc.
   # No delete: controller creates and updates credentials, never removes them.
   - apiGroups:
       - ""
@@ -71,15 +71,15 @@ rules:
       - patch
 
 ---
-# RoleBinding: bind the Role to the ServiceAccount in loopzero-system.
+# RoleBinding: bind the Role to the ServiceAccount in loop-runtime-system.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: platformbootstrap-controller
-  namespace: loopzero-system
+  namespace: loop-runtime-system
   labels:
     app.kubernetes.io/name: platformbootstrap-controller
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: operator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -88,7 +88,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: platformbootstrap-controller
-    namespace: loopzero-system
+    namespace: loop-runtime-system
 
 ---
 # Role: argocd namespace permissions.
@@ -100,7 +100,7 @@ metadata:
   namespace: argocd
   labels:
     app.kubernetes.io/name: platformbootstrap-controller
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: operator
 rules:
   # Secrets — manage argocd-repo-* credential secrets.
@@ -123,7 +123,7 @@ metadata:
   namespace: argocd
   labels:
     app.kubernetes.io/name: platformbootstrap-controller
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: operator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -132,7 +132,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: platformbootstrap-controller
-    namespace: loopzero-system
+    namespace: loop-runtime-system
 
 ---
 # ClusterRole: cluster-scoped access to PlatformBootstrap CRD.
@@ -144,11 +144,11 @@ metadata:
   name: platformbootstrap-controller
   labels:
     app.kubernetes.io/name: platformbootstrap-controller
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: operator
 rules:
   - apiGroups:
-      - loopzero.io
+      - runtime.getloopscale.com
     resources:
       - platformbootstraps
     verbs:
@@ -164,7 +164,7 @@ metadata:
   name: platformbootstrap-controller
   labels:
     app.kubernetes.io/name: platformbootstrap-controller
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: operator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -173,4 +173,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: platformbootstrap-controller
-    namespace: loopzero-system
+    namespace: loop-runtime-system

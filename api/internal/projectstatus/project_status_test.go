@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package projectstatus_test
 
@@ -151,7 +151,7 @@ func TestMapProjectStatus_SupersededReleaseFallsBackToBuild(t *testing.T) {
 }
 
 // TestMapProjectStatus_RedTeam41_PreviewOnlyProject — Red Team
-// loopzero-cloud#41 absorption (2026-06-27). A project with 12 successful
+// loop-console#41 absorption (2026-06-27). A project with 12 successful
 // builds, all environment=preview, AND zero active production releases
 // previously rendered "Live" badge with "URL PENDING" hint across 4
 // surfaces. With the latestBuildEnv signal, the canonical aggregator

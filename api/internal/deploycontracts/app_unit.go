@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package deploycontracts is the leaf shared-kernel of the services contexts:
 // cross-context deploy DTOs and consumer-defined DIP ports. It is the sink of the

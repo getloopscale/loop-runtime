@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statusadapter
 
@@ -22,9 +22,9 @@ import (
 // Prometheus federates (infra/helm/monitoring/values-tenant-app-recording-rules.yaml).
 // Each carries tenant_id, project, app and environment.
 const (
-	appReadyReplicasSeries      = "loopzero_app:kube_pod_status_ready:sum"
-	appRequestRateSeries        = "loopzero_app:traefik_service_requests:rate5m"
-	appRequestRateByClassSeries = "loopzero_app_status_class:traefik_service_requests:rate5m"
+	appReadyReplicasSeries      = "loop_runtime_app:kube_pod_status_ready:sum"
+	appRequestRateSeries        = "loop_runtime_app:traefik_service_requests:rate5m"
+	appRequestRateByClassSeries = "loop_runtime_app_status_class:traefik_service_requests:rate5m"
 )
 
 // PrometheusStatusMetrics reads the live numbers of the status answer with one

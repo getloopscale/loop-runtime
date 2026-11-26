@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T4.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md —
 // property-based extension for PlanLimiter invariants. Closes M04 LOW

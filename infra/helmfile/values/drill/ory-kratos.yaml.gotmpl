@@ -2,7 +2,7 @@
 # Plan: 2026-05-16-drill-l2-unlock-phase2 T3.1 + T3.0 (EC-3 resolution).
 #
 # Bug #10 (iter 14 LIVE): kratos chart had hardcoded
-# `postgresql.loopzero-system.svc.cluster.local` DSN. Drill uses managed PG
+# `postgresql.loop-runtime-system.svc.cluster.local` DSN. Drill uses managed PG
 # per D4 ADR but base values don't template PG_HOST.
 #
 # Fix: override DSN with per-service env var (KRATOS_DSN exported by

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 05: Promote staging → production
 //
@@ -50,7 +50,7 @@ var _ = Describe("Journey 05: Promote", Ordered, Label("journey"), func() {
 		initGitRepo(workDir)
 
 		// Create staging environment (idempotent).
-		runLoopZeroInDir(workDir, "env", "create", "staging", "--json")
+		runLoopRuntimeInDir(workDir, "env", "create", "staging", "--json")
 	})
 
 	AfterAll(func() {
@@ -91,11 +91,11 @@ var _ = Describe("Journey 05: Promote", Ordered, Label("journey"), func() {
 			exitCode       int
 		)
 		Eventually(func() int {
-			stdout, stderr, exitCode = runLoopZeroInDir(workDir, "promote",
+			stdout, stderr, exitCode = runLoopRuntimeInDir(workDir, "promote",
 				"--from", "staging", "--to", "production", "--yes", "--json")
 			return exitCode
 		}, promoteTimeout, 5*time.Second).Should(Equal(0),
-			"loopzero promote should eventually exit 0\nlast stdout: %s\nlast stderr: %s", stdout, stderr)
+			"loopscale promote should eventually exit 0\nlast stdout: %s\nlast stderr: %s", stdout, stderr)
 
 		// Verify promote response has expected fields per
 		// api/internal/routes/promote.go:64 PromotionResponse.NewRelease.
@@ -130,7 +130,7 @@ var _ = Describe("Journey 05: Promote", Ordered, Label("journey"), func() {
 
 		// Project delete removes labeled resources from EVERY environment
 		// it lived in (production + staging here). Tenant-level namespaces
-		// (loopzero-{tenant}-{env}) are shared across projects and survive a
+		// (loop-runtime-{tenant}-{env}) are shared across projects and survive a
 		// project delete — only the Tenant CR teardown removes them. So
 		// Prova de Morte asserts "no resources for this project" per env,
 		// NOT "namespace gone".

@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- Migration 000048 — pure-UTC billing-period functions (plan metering-compute-loop
 -- T2.3; the ADR-4/ADR-9 `period_start()`/`period_end()`/`period_of()` made concrete).

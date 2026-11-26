@@ -16,17 +16,17 @@ import (
 	"time"
 )
 
-// PprofEnabled checks LOOPZERO_PPROF_ENABLED. Default: false (safe for production).
-// Set LOOPZERO_PPROF_ENABLED=true explicitly to enable (dev/debug only).
+// PprofEnabled checks LOOP_RUNTIME_PPROF_ENABLED. Default: false (safe for production).
+// Set LOOP_RUNTIME_PPROF_ENABLED=true explicitly to enable (dev/debug only).
 func PprofEnabled() bool {
-	v := os.Getenv("LOOPZERO_PPROF_ENABLED")
+	v := os.Getenv("LOOP_RUNTIME_PPROF_ENABLED")
 	return v == "true" || v == "1"
 }
 
 // StartPprofServer starts the pprof HTTP server on the given address.
 // Uses a dedicated ServeMux (never http.DefaultServeMux). Runs in a goroutine.
 func StartPprofServer() {
-	pprofAddr := os.Getenv("LOOPZERO_PPROF_ADDR")
+	pprofAddr := os.Getenv("LOOP_RUNTIME_PPROF_ADDR")
 	if pprofAddr == "" {
 		pprofAddr = ":6061"
 	}
@@ -36,7 +36,7 @@ func StartPprofServer() {
 	// nobody meant is worse than not starting one.
 	host, port, err := net.SplitHostPort(pprofAddr)
 	if err != nil {
-		slog.Error("pprof server NOT started: LOOPZERO_PPROF_ADDR is not a valid host:port", "error", err)
+		slog.Error("pprof server NOT started: LOOP_RUNTIME_PPROF_ADDR is not a valid host:port", "error", err)
 		return
 	}
 	mux := http.NewServeMux()

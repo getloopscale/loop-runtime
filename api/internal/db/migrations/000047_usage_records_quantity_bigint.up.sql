@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- Migration 000047 — widen usage_records.quantity INTEGER -> BIGINT
 -- (plan metering-compute-loop T2.2).

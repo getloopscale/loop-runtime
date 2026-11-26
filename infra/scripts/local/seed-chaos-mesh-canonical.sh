@@ -2,7 +2,7 @@
 # seed-chaos-mesh-canonical.sh
 #
 # T1.1 of plan m2-promote-11-canonical-seeds (v1.1 SHIPPABLE 95.2).
-# Canonical chaos-mesh helm install in k3d-loopzero-core cluster.
+# Canonical chaos-mesh helm install in k3d-loop-runtime-core cluster.
 #
 # Idempotent: helm upgrade --install is upgrade-no-op when chart already
 # installed at same version. Pre-check `helm list` avoids round-trip on warm.
@@ -19,7 +19,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-CORE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-core}"
+CORE_CONTEXT="${KUBE_CONTEXT:-k3d-loop-runtime-core}"
 VERIFY=0
 DRY_RUN=0
 for arg in "$@"; do

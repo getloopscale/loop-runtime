@@ -91,7 +91,7 @@ def validate(path: str) -> int:
 
 
 def main() -> int:
-    root = os.environ.get("LOOPZERO_ROOT", os.getcwd())
+    root = os.environ.get("LOOP_RUNTIME_ROOT", os.getcwd())
     pattern = os.path.join(root, "infra", "sloth", "*.yaml")
     files = sorted(glob.glob(pattern))
     if not files:

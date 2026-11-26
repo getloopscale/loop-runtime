@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package bootstraphttp_test
 
@@ -38,8 +38,8 @@ func TestBootstrapRoute(t *testing.T) {
 		body := map[string]string{
 			"admin_github_id":     "123456",
 			"admin_login":         "paulo",
-			"tenant_slug":         "loopzero",
-			"tenant_display_name": "loopzero",
+			"tenant_slug":         "loop-runtime",
+			"tenant_display_name": "loop-runtime",
 			"plan":                "starter",
 		}
 		b, _ := json.Marshal(body)
@@ -64,8 +64,8 @@ func TestBootstrapRoute(t *testing.T) {
 		if result.UserID != "github-paulo" {
 			t.Errorf("expected user_id=github-paulo, got %q", result.UserID)
 		}
-		if result.TenantID != "tn-loopzero" {
-			t.Errorf("expected tenant_id=tn-loopzero, got %q", result.TenantID)
+		if result.TenantID != "tn-loop-runtime" {
+			t.Errorf("expected tenant_id=tn-loop-runtime, got %q", result.TenantID)
 		}
 		if result.Created != true {
 			t.Errorf("expected created=true, got %v", result.Created)
@@ -79,8 +79,8 @@ func TestBootstrapRoute(t *testing.T) {
 		body := map[string]string{
 			"admin_github_id":     "123456",
 			"admin_login":         "paulo",
-			"tenant_slug":         "loopzero",
-			"tenant_display_name": "loopzero",
+			"tenant_slug":         "loop-runtime",
+			"tenant_display_name": "loop-runtime",
 			"plan":                "starter",
 		}
 		b, _ := json.Marshal(body)
@@ -121,8 +121,8 @@ func TestBootstrapRoute(t *testing.T) {
 
 		body := map[string]string{
 			"admin_login":         "paulo",
-			"tenant_slug":         "loopzero",
-			"tenant_display_name": "loopzero",
+			"tenant_slug":         "loop-runtime",
+			"tenant_display_name": "loop-runtime",
 			"plan":                "starter",
 		}
 		b, _ := json.Marshal(body)
@@ -153,8 +153,8 @@ func TestBootstrapRoute(t *testing.T) {
 
 		body := map[string]string{
 			"admin_github_id":     "123456",
-			"tenant_slug":         "loopzero",
-			"tenant_display_name": "loopzero",
+			"tenant_slug":         "loop-runtime",
+			"tenant_display_name": "loop-runtime",
 			"plan":                "starter",
 		}
 		b, _ := json.Marshal(body)
@@ -176,7 +176,7 @@ func TestBootstrapRoute(t *testing.T) {
 		body := map[string]string{
 			"admin_github_id":     "123456",
 			"admin_login":         "paulo",
-			"tenant_display_name": "loopzero",
+			"tenant_display_name": "loop-runtime",
 			"plan":                "starter",
 		}
 		b, _ := json.Marshal(body)
@@ -247,8 +247,8 @@ func TestBootstrapRoute(t *testing.T) {
 		body := map[string]string{
 			"admin_github_id":     "123456",
 			"admin_login":         "paulo",
-			"tenant_slug":         "loopzero",
-			"tenant_display_name": "loopzero",
+			"tenant_slug":         "loop-runtime",
+			"tenant_display_name": "loop-runtime",
 		}
 		b, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPost, "/internal/bootstrap", bytes.NewReader(b))

@@ -16,7 +16,7 @@
 # What the generated routes actually reference: `traefik-rate-limit@kubernetescrd`
 # and `traefik-body-limit@kubernetescrd`, by name.
 #
-# The invariant is locked by `loopzero-ops quality tenant-csp-passthrough`.
+# The invariant is locked by `loop-runtime-ops quality tenant-csp-passthrough`.
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware

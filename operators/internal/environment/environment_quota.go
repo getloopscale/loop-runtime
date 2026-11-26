@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environment
 
@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
 	"github.com/getloopscale/loop-runtime/operators/internal/tenantpolicy"
@@ -22,7 +22,7 @@ import (
 
 // reconcileNamespace ensures the namespace exists via CreateOrUpdate.
 // fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
-func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, runtimeClient client.Client, env *loopzerov1.Environment, nsName, tenantName string) error {
+func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, runtimeClient client.Client, env *loopruntimev1.Environment, nsName, tenantName string) error {
 	ctx, span := reconcileloop.StartChildSpan(ctx, "environment.namespace.ensure")
 	defer span.End()
 	ns := &corev1.Namespace{
@@ -52,7 +52,7 @@ func (r *EnvironmentReconciler) reconcileNamespace(ctx context.Context, runtimeC
 
 // reconcileQuota ensures ResourceQuota and LimitRange exist if configured.
 // fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
-func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, runtimeClient client.Client, env *loopzerov1.Environment, nsName string) error {
+func (r *EnvironmentReconciler) reconcileQuota(ctx context.Context, runtimeClient client.Client, env *loopruntimev1.Environment, nsName string) error {
 	// ResourceQuota (only if spec.resourceQuota is set)
 	if env.Spec.ResourceQuota != nil {
 		cpuQty, err := resource.ParseQuantity(env.Spec.ResourceQuota.CPU)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package projectmetricshttp serves /api/v1/projects/{name}/metrics: the proxy that answers
 // a project's metrics query, and the Prometheus client behind it.
@@ -23,7 +23,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // T1.2 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1.
@@ -102,13 +102,13 @@ type metricsRangeResponse struct {
 func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -125,11 +125,11 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// status.go:191.
 	project, err := h.projects.GetByName(r.Context(), uc.TenantID, name)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -200,10 +200,10 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Rollout that LoopScale does not instrument, so its replicas come from pod
 // readiness and its traffic from the cell's ingress (getloopscale/loop-runtime#107).
 const (
-	appReadyReplicasSeries         = "loopzero_app:kube_pod_status_ready:sum"
-	appRequestRateSeries           = "loopzero_app:traefik_service_requests:rate5m"
-	appRequestRateByClassSeries    = "loopzero_app_status_class:traefik_service_requests:rate5m"
-	appRequestDurationBucketSeries = "loopzero_app_le:traefik_service_request_duration_seconds_bucket:rate5m"
+	appReadyReplicasSeries         = "loop_runtime_app:kube_pod_status_ready:sum"
+	appRequestRateSeries           = "loop_runtime_app:traefik_service_requests:rate5m"
+	appRequestRateByClassSeries    = "loop_runtime_app_status_class:traefik_service_requests:rate5m"
+	appRequestDurationBucketSeries = "loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m"
 )
 
 // buildPromQL injects mandatory tenant_id + project labels into the Prometheus
@@ -226,7 +226,7 @@ func buildPromQL(signal, tenantID, projectName string) string {
 	case "p95_latency":
 		return fmt.Sprintf("histogram_quantile(0.95, sum by (le) (%s{%s}))", appRequestDurationBucketSeries, labels)
 	case "error_rate":
-		// loopzero#170: error_rate is displayed as a PERCENTAGE by the dashboard
+		// loop-runtime#170: error_rate is displayed as a PERCENTAGE by the dashboard
 		// (SignalGrid fmtPercent). It must be the ratio of 5xx to total requests
 		// ×100, NOT a raw 5xx req/s rate. An app that answered no 5xx has no 5xx
 		// series, so the numerator falls back to 0 and the app reads 0%. With no
@@ -237,11 +237,11 @@ func buildPromQL(signal, tenantID, projectName string) string {
 	case "rps":
 		return fmt.Sprintf("sum(%s{%s})", appRequestRateSeries, labels)
 	case "status_terminal":
-		return fmt.Sprintf("loopzero_release_status_terminal{%s}", labels)
+		return fmt.Sprintf("loop_runtime_release_status_terminal{%s}", labels)
 	case "alerts_active":
 		return fmt.Sprintf("ALERTS{alertstate=%q,%s}", "firing", labels)
 	case "last_deploy_time":
-		return fmt.Sprintf("loopzero_release_last_deploy_timestamp_seconds{%s}", labels)
+		return fmt.Sprintf("loop_runtime_release_last_deploy_timestamp_seconds{%s}", labels)
 	default:
 		return fmt.Sprintf("up{%s}", labels)
 	}

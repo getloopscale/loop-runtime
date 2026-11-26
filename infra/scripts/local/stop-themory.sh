@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # stop-themory.sh — graceful shutdown of TheMemory native process via PID file.
 #
-# Per plan v1.3 § Phase 1 / T1.1 of loopzero-cloud-themory-e2e-finalize-plan.md.
+# Per plan v1.3 § Phase 1 / T1.1 of loop-console-themory-e2e-finalize-plan.md.
 # Companion to start-themory.sh.
 #
 # Sequence:

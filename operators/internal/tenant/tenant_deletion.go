@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 	"github.com/getloopscale/loop-runtime/operators/internal/metrics"
@@ -30,7 +30,7 @@ import (
 // waits for child Environment CRs to disappear (they handle namespace deletion),
 // then cleans up tenant-level resources (ArgoCD, Gitea, build namespaces), and
 // releases the finalizer only once the build namespaces are verified gone.
-func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzerov1.Tenant) (ctrl.Result, error) {
+func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopruntimev1.Tenant) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(tenant, tenantFinalizer) {
 		return ctrl.Result{}, nil
 	}
@@ -73,8 +73,8 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *loopzero
 
 // enterDeletingPhase moves the tenant to Deleting through the state machine
 // (idempotent once there) and persists it.
-func (r *TenantReconciler) enterDeletingPhase(ctx context.Context, tenant, base *loopzerov1.Tenant) error {
-	if tenant.Status.Phase != loopzerov1.TenantPhaseDeleting {
+func (r *TenantReconciler) enterDeletingPhase(ctx context.Context, tenant, base *loopruntimev1.Tenant) error {
+	if tenant.Status.Phase != loopruntimev1.TenantPhaseDeleting {
 		currentPhase := statemachine.TenantPhase(tenant.Status.Phase)
 		if currentPhase == "" {
 			currentPhase = statemachine.TPhEmpty
@@ -84,7 +84,7 @@ func (r *TenantReconciler) enterDeletingPhase(ctx context.Context, tenant, base 
 			log.FromContext(ctx).Error(err, "invalid state transition for delete", "phase", tenant.Status.Phase)
 			return err
 		}
-		tenant.Status.Phase = loopzerov1.TenantPhase(next)
+		tenant.Status.Phase = loopruntimev1.TenantPhase(next)
 	}
 	return r.patchStatus(ctx, tenant, base)
 }
@@ -93,9 +93,9 @@ func (r *TenantReconciler) enterDeletingPhase(ctx context.Context, tenant, base 
 // to wait while any remains. Every child is attempted; a failed delete is
 // recorded on the EnvironmentCleanup condition and returned, so the reconcile
 // retries with controller-runtime's backoff (CODE-006 / VAL-005 / T2.4).
-func (r *TenantReconciler) deleteChildEnvironments(ctx context.Context, tenant, base *loopzerov1.Tenant) (ctrl.Result, error) {
+func (r *TenantReconciler) deleteChildEnvironments(ctx context.Context, tenant, base *loopruntimev1.Tenant) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	var envList loopzerov1.EnvironmentList
+	var envList loopruntimev1.EnvironmentList
 	if err := r.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing child Environment CRs: %w", err)
 	}
@@ -141,7 +141,7 @@ func (r *TenantReconciler) deleteChildEnvironments(ctx context.Context, tenant, 
 	return ctrl.Result{}, nil
 }
 
-func ownedBy(refs []metav1.OwnerReference, tenant *loopzerov1.Tenant) bool {
+func ownedBy(refs []metav1.OwnerReference, tenant *loopruntimev1.Tenant) bool {
 	for _, ref := range refs {
 		if ref.UID == tenant.UID {
 			return true
@@ -153,7 +153,7 @@ func ownedBy(refs []metav1.OwnerReference, tenant *loopzerov1.Tenant) bool {
 // cleanupTenantResources runs every tenant-level cleanup step, each timed
 // into the step-duration metric, and returns one entry per failed step. A
 // failing step does not stop the ones after it.
-func (r *TenantReconciler) cleanupTenantResources(ctx context.Context, tenant *loopzerov1.Tenant) []string {
+func (r *TenantReconciler) cleanupTenantResources(ctx context.Context, tenant *loopruntimev1.Tenant) []string {
 	logger := log.FromContext(ctx)
 	var failures []string
 	run := func(stepName, errPrefix string, fn func() error) {
@@ -192,7 +192,7 @@ func (r *TenantReconciler) cleanupTenantResources(ctx context.Context, tenant *l
 }
 
 // deleteBuildNamespaces deletes the tenant's namespaces on the build cluster.
-func (r *TenantReconciler) deleteBuildNamespaces(ctx context.Context, tenant *loopzerov1.Tenant) error {
+func (r *TenantReconciler) deleteBuildNamespaces(ctx context.Context, tenant *loopruntimev1.Tenant) error {
 	var buildNsList corev1.NamespaceList
 	if err := r.BuildClient.List(ctx, &buildNsList, client.MatchingLabels{constants.LabelTenant: tenant.Name}); err != nil {
 		return err
@@ -211,7 +211,7 @@ func (r *TenantReconciler) deleteBuildNamespaces(ctx context.Context, tenant *lo
 // backOffDeletion records one more failed cleanup attempt on the tenant and
 // requeues with exponential backoff (MEET-052); after DeletionMaxAttempts it
 // reports the deletion stuck and requeues on the slow stuck interval.
-func (r *TenantReconciler) backOffDeletion(ctx context.Context, tenant *loopzerov1.Tenant, failures []string) (ctrl.Result, error) {
+func (r *TenantReconciler) backOffDeletion(ctx context.Context, tenant *loopruntimev1.Tenant, failures []string) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	retryCount := getDeletionRetryCount(tenant) + 1
 	setDeletionRetryCount(tenant, retryCount)
@@ -237,7 +237,7 @@ func (r *TenantReconciler) backOffDeletion(ctx context.Context, tenant *loopzero
 // verifyBuildNamespacesGone asks to wait while a build namespace remains. A
 // build cluster that cannot be read is returned as an error, so it reaches
 // controller-runtime's error metrics and backoff instead of a silent requeue.
-func (r *TenantReconciler) verifyBuildNamespacesGone(ctx context.Context, tenant *loopzerov1.Tenant) (ctrl.Result, error) {
+func (r *TenantReconciler) verifyBuildNamespacesGone(ctx context.Context, tenant *loopruntimev1.Tenant) (ctrl.Result, error) {
 	var remainingBuild corev1.NamespaceList
 	if err := r.BuildClient.List(ctx, &remainingBuild, client.MatchingLabels{constants.LabelTenant: tenant.Name}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("phase 3: verify build namespaces of %s are deleted: %w", tenant.Name, err)
@@ -263,7 +263,7 @@ func timedCleanupStep(step string, fn func() error) error {
 }
 
 // getDeletionRetryCount reads the deletion retry count from the tenant annotation.
-func getDeletionRetryCount(tenant *loopzerov1.Tenant) int {
+func getDeletionRetryCount(tenant *loopruntimev1.Tenant) int {
 	annotations := tenant.GetAnnotations()
 	if annotations == nil {
 		return 0
@@ -280,7 +280,7 @@ func getDeletionRetryCount(tenant *loopzerov1.Tenant) int {
 }
 
 // setDeletionRetryCount writes the deletion retry count to the tenant annotation.
-func setDeletionRetryCount(tenant *loopzerov1.Tenant, count int) {
+func setDeletionRetryCount(tenant *loopruntimev1.Tenant, count int) {
 	annotations := tenant.GetAnnotations()
 	if annotations == nil {
 		annotations = make(map[string]string)

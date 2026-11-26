@@ -18,7 +18,7 @@
       },
       "targets": [
         {
-          "expr": "loopzero_cell_tenant_count",
+          "expr": "loop_runtime_cell_tenant_count",
           "legendFormat": "{{ cell_id }}"
         }
       ],
@@ -66,7 +66,7 @@
       },
       "targets": [
         {
-          "expr": "loopzero_cell_tenant_count / 500 * 100",
+          "expr": "loop_runtime_cell_tenant_count / 500 * 100",
           "legendFormat": "{{ cell_id }}"
         }
       ],
@@ -112,7 +112,7 @@
       },
       "targets": [
         {
-          "expr": "label_replace(count(kube_pod_info{namespace=~\"loopzero-.*\"}) by (cluster), \"cluster\", \"core\", \"cluster\", \"\")",
+          "expr": "label_replace(count(kube_pod_info{namespace=~\"loop-runtime-.*\"}) by (cluster), \"cluster\", \"core\", \"cluster\", \"\")",
           "legendFormat": "{{ cluster }}"
         }
       ],
@@ -196,7 +196,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_gitops_operation_duration_seconds_bucket[15m])) by (le, tenant, environment))",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_gitops_operation_duration_seconds_bucket[15m])) by (le, tenant, environment))",
           "legendFormat": "{{ tenant }}/{{ environment }}"
         }
       ],
@@ -216,7 +216,7 @@
   ],
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loop-runtime",
     "cell",
     "adr-0008"
   ],
@@ -243,5 +243,5 @@
     "to": "now"
   },
   "title": "Cell Health — ADR-0008",
-  "uid": "loopzero-cell-health"
+  "uid": "loop-runtime-cell-health"
 }

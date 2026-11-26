@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environment
 
@@ -12,9 +12,9 @@ import (
 // CHG-2026-04-29-DOGFOOD-FB — Helper tests for ingressNS() (Environment side).
 //
 // Background: the operator-generated `allow-ingress-traefik` NetworkPolicy
-// MUST allow traffic from the namespace where Traefik runs. LoopZero's helmfile
+// MUST allow traffic from the namespace where Traefik runs. LoopRuntime's helmfile
 // installs Traefik in `traefik` for ALL environments. The previous default
-// (`loopzero-system`) silently blocked Traefik from reaching tenant pods,
+// (`loop-runtime-system`) silently blocked Traefik from reaching tenant pods,
 // surfacing as HTTP 502 in any deploy. Tests pin both the default and the
 // env-var override path.
 //

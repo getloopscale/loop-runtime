@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
@@ -11,8 +11,8 @@
 // Build with: go test -tags=live ./infra/tests/livetest/dogfood/... -run J17
 //
 // LIVE pre-conditions:
-//   - dev-public infra UP (task setup with LOOPZERO_HELMFILE_ENV=dev-public)
-//   - JWT seeded at ~/.loopzero/local-dogfood-token.txt
+//   - dev-public infra UP (task setup with LOOP_RUNTIME_HELMFILE_ENV=dev-public)
+//   - JWT seeded at ~/.loop-runtime/local-dogfood-token.txt
 //   - cloud-dev.getloopscale.com reachable
 
 package dogfood
@@ -65,7 +65,7 @@ var _ = Describe("J-17 Deployments + Realtime Logs", Label("live", "dogfood", "j
 		})
 	})
 
-	Context("Scenario C — Loki ::loopzero:: marker coverage", func() {
+	Context("Scenario C — Loki ::loop-runtime:: marker coverage", func() {
 		It("LokiQuery returns markers for clone/install/build phases", func() {
 			Skip("Loki coverage spec — implementation in T3.2 follow-up commit")
 		})

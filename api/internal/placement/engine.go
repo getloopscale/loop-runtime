@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package placement implements the Cell placement and routing layer.
 // ADR-0008 Phase 1+: Multi-cell only — no DefaultEngine / single-cell mode.
@@ -16,7 +16,7 @@
 // interface, ConstraintEngine and CellLabelQuerier, all unused in production
 // paths. ExtractRegion (below) was kept: it feeds CellStatus.Region. The
 // default cell id itself is domain.DefaultCellID (pkg/domain), shared with
-// operators and cmd/loopzero-ops. The cell-0 value of tenants.cell_id remains as the SQL DEFAULT — this
+// operators and cmd/loop-runtime-ops. The cell-0 value of tenants.cell_id remains as the SQL DEFAULT — this
 // is data, not code, and has its own comment in 000001_initial_schema.up.sql.
 package placement
 
@@ -78,7 +78,7 @@ type Serializer func(ctx context.Context, fn func(ctx context.Context) error) er
 
 // PlacementLockID is the Postgres advisory lock id used by production
 // Serializer implementations. Chosen from the user-reserved lock space so
-// it never collides with built-in Postgres locks or with LoopZero's environment
+// it never collides with built-in Postgres locks or with LoopRuntime's environment
 // lock family (which uses hashes of (tenant, project, env)).
 // "plcmtlck" in hex. The value is declared once, in dbtx, because the admin
 // cell pin must take the same lock (see dbtx.PlacementLockID).

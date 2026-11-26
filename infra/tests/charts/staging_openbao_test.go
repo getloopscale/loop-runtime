@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
 // Staging encrypts tenant secrets the way production does (ADR 2026-11-25 tenant
-// secrets on OpenBao): loopzero-api on core uses OpenBao's transit engine, and OpenBao
+// secrets on OpenBao): loop-runtime-api on core uses OpenBao's transit engine, and OpenBao
 // runs on the dedicated secrets cluster, unsealed by the awskms seal under an IRSA role.
 
 import (
@@ -13,7 +13,7 @@ import (
 )
 
 func TestStagingAPIEncryptsTenantSecretsWithOpenBaoTransit(t *testing.T) {
-	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-api", stagingOutputs...)
+	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "staging", "loop-runtime-api", stagingOutputs...)
 	if got := dig(values, "config", "openbaoTransitEnabled"); got != "true" {
 		t.Errorf("config.openbaoTransitEnabled = %v, want \"true\": the API refuses every tenant secret write without transit", got)
 	}
@@ -36,7 +36,7 @@ func TestStagingOpenBaoUnsealsWithTheKMSKeyUnderItsOwnRole(t *testing.T) {
 			t.Errorf("the staging OpenBao config lacks %s:\n%s", want, config)
 		}
 	}
-	if got := dig(values, "server", "serviceAccount", "annotations", "eks.amazonaws.com/role-arn"); got != "arn:aws:iam::000000000000:role/loopzero-staging-secrets-openbao" {
+	if got := dig(values, "server", "serviceAccount", "annotations", "eks.amazonaws.com/role-arn"); got != "arn:aws:iam::000000000000:role/loop-runtime-staging-secrets-openbao" {
 		t.Errorf("OpenBao's ServiceAccount role = %v, want infra-live's identity/secrets-openbao", got)
 	}
 	if got := dig(values, "server", "service", "nodePort"); got != float64(30200) && got != 30200 {

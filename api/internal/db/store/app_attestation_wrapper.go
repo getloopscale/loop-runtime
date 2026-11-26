@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -43,7 +43,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/id"
 )
 
@@ -109,10 +109,10 @@ func (s *AppAttestationStoreSqlc) saveOn(
 	ctx context.Context, tx db.DBTX, releaseID, tenantID string, atts []AppAttestation,
 ) error {
 	if releaseID == "" || tenantID == "" {
-		// Audit gap M02 #13 fix: typed LoopZeroError so the validation
+		// Audit gap M02 #13 fix: typed LoopRuntimeError so the validation
 		// surfaces with a stable code in audit logs + HTTP error
 		// mapping.
-		return loopzeroerrors.ErrMissingField.Wrap("app_attestation_store: release_id and tenant_id are required")
+		return loopruntimeerrors.ErrMissingField.Wrap("app_attestation_store: release_id and tenant_id are required")
 	}
 	if len(atts) == 0 {
 		return nil
@@ -165,7 +165,7 @@ func (s *AppAttestationStoreSqlc) GetBuildAppAttestations(
 	ctx context.Context, tenantID, buildID string,
 ) ([]AppAttestationInfo, error) {
 	if tenantID == "" || buildID == "" {
-		return nil, loopzeroerrors.ErrBuildNotFound
+		return nil, loopruntimeerrors.ErrBuildNotFound
 	}
 
 	rows, err := s.q.GetBuildAppAttestationsForTenant(ctx, s.gen(nil), generated.GetBuildAppAttestationsForTenantParams{
@@ -222,7 +222,7 @@ func (s *AppAttestationStoreSqlc) FindSignedImages(
 	ctx context.Context, tx db.DBTX, tenantID, projectID, commitSHA string,
 ) (map[string]db.ReusedImage, error) {
 	if tenantID == "" || projectID == "" || commitSHA == "" {
-		return nil, loopzeroerrors.ErrMissingField.Wrap("app_attestation_store: tenant_id, project_id and commit_sha are required")
+		return nil, loopruntimeerrors.ErrMissingField.Wrap("app_attestation_store: tenant_id, project_id and commit_sha are required")
 	}
 	rows, err := s.q.ListSignedAppImagesForCommit(ctx, s.gen(tx), generated.ListSignedAppImagesForCommitParams{
 		TenantID:  tenantID,
@@ -266,8 +266,8 @@ func (s *AppAttestationStoreSqlc) UpdateAppSBOM(
 	ctx context.Context, releaseID, appName, s3Key, format string, componentCount int,
 ) error {
 	if releaseID == "" || appName == "" {
-		// Audit gap M02 #13 fix: typed LoopZeroError for input validation.
-		return loopzeroerrors.ErrMissingField.Wrap("app_attestation_store: release_id and app_name are required")
+		// Audit gap M02 #13 fix: typed LoopRuntimeError for input validation.
+		return loopruntimeerrors.ErrMissingField.Wrap("app_attestation_store: release_id and app_name are required")
 	}
 	if format != SBOMFormatCycloneDXJSON && format != SBOMFormatSPDXJSON {
 		return fmt.Errorf("app_attestation_store: invalid sbom_format %q", format)

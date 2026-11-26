@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts
 
@@ -28,24 +28,24 @@ func endpointsHarness(t *testing.T, preset map[string]string) map[string]string 
 	bin := t.TempDir()
 	fake := `#!/usr/bin/env bash
 case "$*" in
-  *"get secret loopzero-db-credentials"*"password"*) printf 'ZGItcHc=' ;;          # db-pw
-  *"get secret loopzero-api-internal"*"LOOPZERO_BOOTSTRAP_SECRET"*) printf 'YnMtdmFsdWU=' ;; # bs-value
+  *"get secret loop-runtime-db-credentials"*"password"*) printf 'ZGItcHc=' ;;          # db-pw
+  *"get secret loop-runtime-api-internal"*"LOOP_RUNTIME_BOOTSTRAP_SECRET"*) printf 'YnMtdmFsdWU=' ;; # bs-value
   *) exit 1 ;;
 esac`
 	if err := os.WriteFile(filepath.Join(bin, "kubectl"), []byte(fake), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	harness := `set -uo pipefail
-CORE_CONTEXT=k3d-loopzero-core
+CORE_CONTEXT=k3d-loop-runtime-core
 log() { :; }
 FORWARDS=""
 port_forward() { FORWARDS="$FORWARDS $2=$3"; return 0; }
 ` + strings.Join(fns, "\n") + `
 ensure_seed_endpoints
 printf 'KRATOS_ADMIN_URL=%s\n' "${KRATOS_ADMIN_URL:-}"
-printf 'LOOPZERO_ADMIN_HYDRA_PG_URL=%s\n' "${LOOPZERO_ADMIN_HYDRA_PG_URL:-}"
-printf 'LOOPZERO_API_URL=%s\n' "${LOOPZERO_API_URL:-}"
-printf 'LOOPZERO_BOOTSTRAP_SECRET=%s\n' "${LOOPZERO_BOOTSTRAP_SECRET:-}"
+printf 'LOOP_RUNTIME_ADMIN_HYDRA_PG_URL=%s\n' "${LOOP_RUNTIME_ADMIN_HYDRA_PG_URL:-}"
+printf 'LOOP_RUNTIME_API_URL=%s\n' "${LOOP_RUNTIME_API_URL:-}"
+printf 'LOOP_RUNTIME_BOOTSTRAP_SECRET=%s\n' "${LOOP_RUNTIME_BOOTSTRAP_SECRET:-}"
 printf 'FORWARDS=%s\n' "$FORWARDS"`
 	cmd := exec.Command("bash", "-c", harness)
 	env := []string{"PATH=" + bin + ":" + os.Getenv("PATH"), "HOME=" + t.TempDir()}
@@ -74,15 +74,15 @@ func TestTheChainOpensTheEndpointsItsSeedsNeed(t *testing.T) {
 	if got["KRATOS_ADMIN_URL"] == "" || !strings.Contains(got["FORWARDS"], "ory-kratos-admin=") {
 		t.Errorf("Kratos admin not forwarded/exported: %v", got)
 	}
-	if got["LOOPZERO_ADMIN_HYDRA_PG_URL"] != "postgres://loopzero:db-pw@127.0.0.1:15432/loopzero?sslmode=disable" ||
+	if got["LOOP_RUNTIME_ADMIN_HYDRA_PG_URL"] != "postgres://loop_runtime:db-pw@127.0.0.1:15432/loop_runtime?sslmode=disable" ||
 		!strings.Contains(got["FORWARDS"], "postgresql=15432:5432") {
 		t.Errorf("Postgres not forwarded with the real credentials: %v", got)
 	}
-	if got["LOOPZERO_API_URL"] == "" {
-		t.Error("LOOPZERO_API_URL not exported")
+	if got["LOOP_RUNTIME_API_URL"] == "" {
+		t.Error("LOOP_RUNTIME_API_URL not exported")
 	}
-	if got["LOOPZERO_BOOTSTRAP_SECRET"] != "bs-value" {
-		t.Errorf("bootstrap secret not read from loopzero-api-internal: %q", got["LOOPZERO_BOOTSTRAP_SECRET"])
+	if got["LOOP_RUNTIME_BOOTSTRAP_SECRET"] != "bs-value" {
+		t.Errorf("bootstrap secret not read from loop-runtime-api-internal: %q", got["LOOP_RUNTIME_BOOTSTRAP_SECRET"])
 	}
 }
 
@@ -90,13 +90,13 @@ func TestTheChainOpensTheEndpointsItsSeedsNeed(t *testing.T) {
 // overwritten and no port-forward is opened for it.
 func TestTheChainKeepsEndpointsTheOperatorSet(t *testing.T) {
 	got := endpointsHarness(t, map[string]string{
-		"KRATOS_ADMIN_URL":            "http://kratos.example",
-		"LOOPZERO_ADMIN_HYDRA_PG_URL": "postgres://elsewhere",
-		"LOOPZERO_API_URL":            "http://api.example",
-		"LOOPZERO_BOOTSTRAP_SECRET":   "operator-value",
+		"KRATOS_ADMIN_URL":                "http://kratos.example",
+		"LOOP_RUNTIME_ADMIN_HYDRA_PG_URL": "postgres://elsewhere",
+		"LOOP_RUNTIME_API_URL":            "http://api.example",
+		"LOOP_RUNTIME_BOOTSTRAP_SECRET":   "operator-value",
 	})
-	if got["KRATOS_ADMIN_URL"] != "http://kratos.example" || got["LOOPZERO_ADMIN_HYDRA_PG_URL"] != "postgres://elsewhere" ||
-		got["LOOPZERO_API_URL"] != "http://api.example" || got["LOOPZERO_BOOTSTRAP_SECRET"] != "operator-value" {
+	if got["KRATOS_ADMIN_URL"] != "http://kratos.example" || got["LOOP_RUNTIME_ADMIN_HYDRA_PG_URL"] != "postgres://elsewhere" ||
+		got["LOOP_RUNTIME_API_URL"] != "http://api.example" || got["LOOP_RUNTIME_BOOTSTRAP_SECRET"] != "operator-value" {
 		t.Errorf("a preset endpoint was overwritten: %v", got)
 	}
 	if strings.TrimSpace(got["FORWARDS"]) != "" {

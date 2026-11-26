@@ -1,0 +1,24 @@
+# Standalone-multi (k3d 3-cluster local) overrides for loop-runtime-preview-operator.
+#
+# CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C12 (4 charts × 4
+# environments = 16 cells; this is the standalone-multi cell).
+#
+# k3d uses an in-cluster registry (`k3d-loop-runtime-registry:5000`) accessible
+# without auth — empty imagePullSecrets is correct. Image repository
+# overridden to point at the local registry instead of DOCR. Mirrors
+# pattern from `infra/helm/tenant-controller/values-standalone-multi.yaml`.
+global:
+  registry: k3d-loop-runtime-registry:5000
+  imagePullSecrets: []
+
+image:
+  repository: loop-runtime-preview-operator
+  pullPolicy: IfNotPresent   # FB-#1 (MEET-070): k3d image import populates node crictl cache; pullPolicy=Always cycles ImagePullBackOff because registry HTTP returns 404
+
+# FB-#3 partial fix (MEET-070): preview-operator needs CELL_0_KUBECONFIG.
+# Kubeconfig path comes from a mounted ConfigMap (loop-runtime-cell-0-kubeconfig
+# populated by bootstrap scripts). It no longer needs BASE_DOMAIN: the preview
+# URL is the one the API computes and writes to spec.publicURL.
+kubeconfig:
+  cell0:
+    existingConfigMap: loop-runtime-cell-0-kubeconfig

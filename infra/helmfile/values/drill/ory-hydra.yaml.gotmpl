@@ -14,9 +14,9 @@ hydra:
     # marked as "LOCAL DEV — production overridden by Pulumi" but Pulumi NEVER
     # overrides (verified via grep across all infra/pulumi*/). Drift caused
     # 11/12 dogfood-drill journeys 401 — JWT.iss claim was "http://localhost:4444/"
-    # which couldn't match loopzero-api JWT_ISSUER (also unset, see values-loopzero-api-drill).
-    # Fix: set issuer to internal cluster FQDN that matches what loopzero-api validates against.
-    # Cross-namespace: Hydra is in loopzero-auth, loopzero-api in loopzero-system — FQDN works.
+    # which couldn't match loop-runtime-api JWT_ISSUER (also unset, see values-loop-runtime-api-drill).
+    # Fix: set issuer to internal cluster FQDN that matches what loop-runtime-api validates against.
+    # Cross-namespace: Hydra is in loop-runtime-auth, loop-runtime-api in loop-runtime-system — FQDN works.
     urls:
       self:
-        issuer: "http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444/"
+        issuer: "http://ory-hydra-public.loop-runtime-auth.svc.cluster.local:4444/"

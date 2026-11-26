@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environmentshttp
 
@@ -625,8 +625,8 @@ func TestEnvs_Delete_WarnsOnActiveRelease(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"warnings":`) {
 		t.Errorf("EC-7 expected warnings[] array, got %s", w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), `loopzero platform status`) {
-		t.Errorf("EC-7 warning should suggest 'loopzero platform status' check, got %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), `loop-runtime platform status`) {
+		t.Errorf("EC-7 warning should suggest 'loop-runtime platform status' check, got %s", w.Body.String())
 	}
 }
 
@@ -646,7 +646,7 @@ func TestEnvs_Delete_WarnsWhenTheActiveReleaseLookupFails(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200 (the delete itself succeeded), got %d", w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "loopzero platform status") {
+	if !strings.Contains(w.Body.String(), "loop-runtime platform status") {
 		t.Errorf("a failed release lookup dropped the cleanup warning: %s", w.Body.String())
 	}
 }
@@ -751,7 +751,7 @@ func TestEnvs_List_ReturnsProjectInEachEntry(t *testing.T) {
 	}
 }
 
-// Red Team loopzero-cloud#48 regression-protector — A01:2021 Broken Access
+// Red Team loop-console#48 regression-protector — A01:2021 Broken Access
 // Control / CWE-639. The Red Team verbatim reproduction:
 //
 //	GET /api/v1/environments?project=zzz-does-not-exist-999

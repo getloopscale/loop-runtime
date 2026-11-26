@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenancy
 
@@ -22,17 +22,17 @@ import (
 )
 
 const (
-	testMgmtNS  = "loopzero-system"
+	testMgmtNS  = "loop-runtime-system"
 	testBuildNS = "argo"
 )
 
 var listKinds = map[schema.GroupVersionResource]string{
 	argoWorkflowGVR: "WorkflowList",
-	{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}:   "ApplicationList",
-	{Group: "loopzero.io", Version: "v1", Resource: "exposedroutes"}:        "ExposedRouteList",
-	{Group: "loopzero.io", Version: "v1", Resource: "loopzeroapplications"}: "LoopZeroApplicationList",
-	{Group: "loopzero.io", Version: "v1", Resource: "environments"}:         "EnvironmentList",
-	{Group: "loopzero.io", Version: "v1", Resource: "tenants"}:              "TenantList",
+	{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}:                   "ApplicationList",
+	{Group: "runtime.getloopscale.com", Version: "v1", Resource: "exposedroutes"}:           "ExposedRouteList",
+	{Group: "runtime.getloopscale.com", Version: "v1", Resource: "loopruntimeapplications"}: "LoopRuntimeApplicationList",
+	{Group: "runtime.getloopscale.com", Version: "v1", Resource: "environments"}:            "EnvironmentList",
+	{Group: "runtime.getloopscale.com", Version: "v1", Resource: "tenants"}:                 "TenantList",
 }
 
 func labelled(apiVersion, kind, ns, name, tenant string) *unstructured.Unstructured {
@@ -42,13 +42,13 @@ func labelled(apiVersion, kind, ns, name, tenant string) *unstructured.Unstructu
 	u.SetNamespace(ns)
 	u.SetName(name)
 	u.SetLabels(map[string]string{naming.LabelTenant: tenant})
-	u.SetFinalizers([]string{"loopzero.io/finalizer"})
+	u.SetFinalizers([]string{"runtime.getloopscale.com/finalizer"})
 	return u
 }
 
 func tenantCR(name string) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
-	u.SetAPIVersion("loopzero.io/v1")
+	u.SetAPIVersion("runtime.getloopscale.com/v1")
 	u.SetKind("Tenant")
 	u.SetNamespace(testMgmtNS)
 	u.SetName(name)
@@ -57,7 +57,7 @@ func tenantCR(name string) *unstructured.Unstructured {
 
 func environmentCR(name, tenant string) *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
-	u.SetAPIVersion("loopzero.io/v1")
+	u.SetAPIVersion("runtime.getloopscale.com/v1")
 	u.SetKind("Environment")
 	u.SetNamespace(testMgmtNS)
 	u.SetName(name)
@@ -71,8 +71,8 @@ func objectsFor(tenantID string) []runtime.Object {
 	return []runtime.Object{
 		labelled("argoproj.io/v1alpha1", "Workflow", testBuildNS, tenantID+"-build-1", tenantID),
 		labelled("argoproj.io/v1alpha1", "Application", testMgmtNS, tenantID+"-web-production", tenantID),
-		labelled("loopzero.io/v1", "ExposedRoute", testMgmtNS, tenantID+"-web-route", tenantID),
-		labelled("loopzero.io/v1", "LoopZeroApplication", testMgmtNS, tenantID+"-web-production", tenantID),
+		labelled("runtime.getloopscale.com/v1", "ExposedRoute", testMgmtNS, tenantID+"-web-route", tenantID),
+		labelled("runtime.getloopscale.com/v1", "LoopRuntimeApplication", testMgmtNS, tenantID+"-web-production", tenantID),
 		environmentCR(tenantID+"-web-production", tenantID),
 		tenantCR(tenantID),
 	}
@@ -98,7 +98,7 @@ func newEvictorFixture(tenants ...string) evictorFixture {
 	var namespaces []runtime.Object
 	for _, id := range tenants {
 		objs = append(objs, objectsFor(id)...)
-		namespaces = append(namespaces, terminatingNamespace("loopzero-"+id+"-web-production", id))
+		namespaces = append(namespaces, terminatingNamespace("loop-runtime-"+id+"-web-production", id))
 	}
 	scheme := runtime.NewScheme()
 	mgmt := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, objs...)
@@ -178,8 +178,8 @@ func TestEvictionFinalizesOnlyTheEvictedTenantsNamespaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvictTenantsFromClusters: %v", err)
 	}
-	if len(finalized) != 1 || finalized[0] != "loopzero-tn-a-web-production" {
-		t.Fatalf("finalized namespaces = %v, want only loopzero-tn-a-web-production", finalized)
+	if len(finalized) != 1 || finalized[0] != "loop-runtime-tn-a-web-production" {
+		t.Fatalf("finalized namespaces = %v, want only loop-runtime-tn-a-web-production", finalized)
 	}
 	if counts.NamespacesFinalized != 1 {
 		t.Errorf("NamespacesFinalized = %d, want 1", counts.NamespacesFinalized)
@@ -220,7 +220,7 @@ func TestOwnerOfReadsTheIdentityEachKindCarries(t *testing.T) {
 	}{
 		{"tenant CR is owned by its name", tenantsGVR, tenantCR("tn-a"), "tn-a"},
 		{"environment CR is owned by spec.tenantRef", environmentsGVR, environmentCR("tn-a-web-prod", "tn-a"), "tn-a"},
-		{"labelled kinds are owned by loopzero.io/tenant", argoWorkflowGVR, labelled("argoproj.io/v1alpha1", "Workflow", testBuildNS, "anything", "tn-z"), "tn-z"},
+		{"labelled kinds are owned by runtime.getloopscale.com/tenant", argoWorkflowGVR, labelled("argoproj.io/v1alpha1", "Workflow", testBuildNS, "anything", "tn-z"), "tn-z"},
 		{"unlabelled resource has no owner", argoWorkflowGVR, tenantCR("tn-a"), ""},
 	}
 	for _, tc := range tests {

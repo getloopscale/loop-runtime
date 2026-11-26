@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T2.2 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap — Cosign keyless
 // infrastructure (Fulcio + Rekor + CTLog + TUF). Engineering-ready
@@ -164,7 +164,7 @@ export interface SigstoreArgs {
  *   - cert-manager (this chart provisions Certificate CRs for the hostnames)
  *   - ClusterIssuer named "letsencrypt-prod" or "self-signed-ca-issuer"
  *
- * **After enabling, charts/loopzero-admission-policies/values.yaml MUST set:**
+ * **After enabling, charts/loop-runtime-admission-policies/values.yaml MUST set:**
  *   `clusterImagePolicyKeyless.enabled: true`
  *   `clusterImagePolicyKeyless.fulcioURL: https://<fulcioHostname>`
  *   `clusterImagePolicyKeyless.rekorURL: https://<rekorHostname>`
@@ -179,7 +179,7 @@ export class Sigstore extends pulumi.ComponentResource {
   public readonly ready: pulumi.Output<boolean>;
 
   constructor(name: string, args: SigstoreArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopzero:platform:Sigstore", name, {}, opts);
+    super("loop-runtime:platform:Sigstore", name, {}, opts);
 
     const enabled = args.enabled ?? false;
 

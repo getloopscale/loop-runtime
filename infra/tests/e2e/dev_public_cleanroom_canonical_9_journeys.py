@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 """JSON report builder for dev-public-cleanroom-canonical-9-journeys_test.sh
 (de-costumed from the inline python3 heredoc per plan
 home-unhomed-logic-suspect-keeps T3.3).

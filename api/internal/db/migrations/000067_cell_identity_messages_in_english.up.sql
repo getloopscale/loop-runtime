@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- Rewrites in English the text migration 000061 left in the database (#380).
 --
@@ -28,19 +28,19 @@ END;
 $$;
 
 UPDATE cells
-   SET notes = 'First cell. 1:1 with the loopzero-cell-0 cluster. Absorbed cell-default '
+   SET notes = 'First cell. 1:1 with the loop-runtime-cell-0 cluster. Absorbed cell-default '
             || '(which was the sentinel for "not resolved yet", not a cell) and cell-1 '
             || '(which named this same machine). ADR 2026-08-09.'
  WHERE cell_id = 'cell-0'
-   AND notes = 'Primeira cell. 1:1 com o cluster loopzero-cell-0. Absorveu cell-default ' -- english-only: matches the verbatim Portuguese text migration 000061 wrote
+   AND notes = 'Primeira cell. 1:1 com o cluster loop-runtime-cell-0. Absorveu cell-default ' -- english-only: matches the verbatim Portuguese text migration 000061 wrote
             || '(que era sentinela de "ainda nao resolvido", nao uma cell) e cell-1 ' -- english-only: matches the verbatim Portuguese text migration 000061 wrote
             || '(que nomeava esta mesma maquina). ADR 2026-08-09.'; -- english-only: matches the verbatim Portuguese text migration 000061 wrote
 
 UPDATE cells
-   SET notes = 'Second cell. 1:1 with the loopzero-cell-1 cluster. Was cell-2; renumbered '
+   SET notes = 'Second cell. 1:1 with the loop-runtime-cell-1 cluster. Was cell-2; renumbered '
             || 'when the merge freed the number. The status does not change here — whether it '
             || 'admits traffic is still decided by the canary. ADR 2026-08-09.'
  WHERE cell_id = 'cell-1'
-   AND notes = 'Segunda cell. 1:1 com o cluster loopzero-cell-1. Era cell-2; renumerada ' -- english-only: matches the verbatim Portuguese text migration 000061 wrote
+   AND notes = 'Segunda cell. 1:1 com o cluster loop-runtime-cell-1. Era cell-2; renumerada ' -- english-only: matches the verbatim Portuguese text migration 000061 wrote
             || 'quando a fusao liberou o numero. O status nao muda aqui — quem admite ' -- english-only: matches the verbatim Portuguese text migration 000061 wrote
             || 'trafego continua sendo decidido pelo canary. ADR 2026-08-09.'; -- english-only: matches the verbatim Portuguese text migration 000061 wrote

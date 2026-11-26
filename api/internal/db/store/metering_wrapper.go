@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -45,7 +45,7 @@ type MeterInput struct {
 }
 
 // MeteringStore owns a dedicated bounded pgxpool (ADR-10), physically separate
-// from the API pool, connected as loopzero_worker (EffectiveWorkerDatabaseURL) so the
+// from the API pool, connected as loop_runtime_worker (EffectiveWorkerDatabaseURL) so the
 // SET LOCAL app.tenant_id=” RLS bypass is load-bearing, not incidental.
 type MeteringStore struct {
 	pool *pgxpool.Pool
@@ -218,7 +218,7 @@ func (s *MeteringStore) GetMeteringCursor(ctx context.Context, tenantID, metric,
 // each namespace via the SAME canonical builder as tenant_cr_manager + the
 // manifest renderer, so the metered namespaces byte-match the real ones (a
 // mismatch would list pods in a nonexistent namespace → under-bill). This closes
-// v1.1's single-namespace bug (metering only loopzero-<tenant> systematically
+// v1.1's single-namespace bug (metering only loop-runtime-<tenant> systematically
 // under-billed multi-project tenants). No RLS on the read (control-plane pool).
 //
 // Edge cases: zero projects → empty slice, nil error (an Active CR whose PG rows

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package environments is the environment feature: the environments of a
 // project, created on first deploy (EnvironmentEnsurer) and served by
@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // EnvironmentLister is the read side of the EnvironmentManager contract:
@@ -45,7 +45,7 @@ type EnvironmentLister interface {
 //
 // M2 v1.2 (2026-06-07): `project` is propagated end-to-end so the Tenant CR
 // spec.environments entry carries the field expected by the canonical
-// 3-segment namespace `loopzero-<tenant>-<project>-<env>`. Empty project
+// 3-segment namespace `loop-runtime-<tenant>-<project>-<env>`. Empty project
 // preserves the legacy 2-segment behaviour (ADR D2 — production legacy).
 type EnvironmentAdder interface {
 	AddEnvironment(ctx context.Context, tenantID, project, envName string) error
@@ -69,9 +69,9 @@ type EnvironmentAdder interface {
 // environmentsadapter.EnvironmentCRReader for the Kubernetes implementation.
 type EnvironmentReadinessChecker interface {
 	// M2 v1.2: `project` selects the canonical 3-segment namespace
-	// `loopzero-<tenant>-<project>-<env>` whose Environment CR
+	// `loop-runtime-<tenant>-<project>-<env>` whose Environment CR
 	// `status.phase` is probed. Empty project preserves the legacy
-	// 2-segment lookup (`loopzero-<tenant>-<env>`) for production-legacy
+	// 2-segment lookup (`loop-runtime-<tenant>-<env>`) for production-legacy
 	// tuples (ADR D2).
 	IsReady(ctx context.Context, tenantID, project, envName string) (bool, error)
 }
@@ -102,17 +102,17 @@ type EnvironmentEnsurer struct {
 
 // ErrEnvironmentEnsurerMisconfigured is returned by an ensurer wired without
 // its Lister or Adder.
-var ErrEnvironmentEnsurerMisconfigured = &loopzeroerrors.LoopZeroError{
-	Code:    loopzeroerrors.ErrInternalError.Code,
+var ErrEnvironmentEnsurerMisconfigured = &loopruntimeerrors.LoopRuntimeError{
+	Code:    loopruntimeerrors.ErrInternalError.Code,
 	Message: "environment ensurer: Lister and Adder are required",
 }
 
 // EnsureEnvironment checks if the environment exists; creates + waits if not.
 //
 // Errors:
-//   - LoopZeroError(INVALID_ENV_NAME) if the name fails defensive validation
-//   - LoopZeroError(ENV_PROVISION_TIMEOUT) if operator doesn't reconcile in WaitTimeout
-//   - LoopZeroError(ENV_PROVISION_FAILED) wrapping the underlying error otherwise
+//   - LoopRuntimeError(INVALID_ENV_NAME) if the name fails defensive validation
+//   - LoopRuntimeError(ENV_PROVISION_TIMEOUT) if operator doesn't reconcile in WaitTimeout
+//   - LoopRuntimeError(ENV_PROVISION_FAILED) wrapping the underlying error otherwise
 func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, project, envName string) error {
 	// Callers skip an ensurer that is not wired at all (a nil interface). One
 	// that IS wired but lacks a dependency is a wiring bug, and reporting
@@ -153,7 +153,7 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 		if errors.Is(err, ports.ErrEnvironmentExists) {
 			return nil
 		}
-		return loopzeroerrors.NewLoopZeroError(
+		return loopruntimeerrors.NewLoopRuntimeError(
 			"ENV_PROVISION_FAILED",
 			fmt.Sprintf("Failed to create environment %q: %s", envName, err.Error()))
 	}
@@ -177,11 +177,11 @@ func (e *EnvironmentEnsurer) EnsureEnvironment(ctx context.Context, tenantID, pr
 	for {
 		select {
 		case <-waitCtx.Done():
-			return loopzeroerrors.NewLoopZeroError(
+			return loopruntimeerrors.NewLoopRuntimeError(
 				"ENV_PROVISION_TIMEOUT",
 				fmt.Sprintf(
 					"Environment %q was created but is not yet ready after %s. "+
-						"Run `loopzero env list` to check status, then retry `loopzero deploy`.",
+						"Run `loopscale env list` to check status, then retry `loopscale deploy`.",
 					envName, timeout,
 				))
 

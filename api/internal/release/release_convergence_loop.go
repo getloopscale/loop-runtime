@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -523,7 +523,7 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 
 	// T0.3 of deep-review-remediation-plan (closes find_flow_001 CRITICAL).
 	// Per CLAUDE.md, Argo Rollouts is the default workload primitive when
-	// LOOPZERO_PROGRESSIVE_DELIVERY=true (the default). For Rollout-backed
+	// LOOP_RUNTIME_PROGRESSIVE_DELIVERY=true (the default). For Rollout-backed
 	// releases, the canonical terminal SSE event is rollout.aborted (not
 	// deploy.sync_failed). The CLI deploy command handles both as terminal
 	// (cli/src/commands/deploy.ts:603), so emitting both is safe — but the
@@ -551,7 +551,7 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 // isRolloutBackedRelease — true if the release was rendered with progressive
 // delivery (Argo Rollouts), as opposed to a static-only release. Heuristic:
 // any app in the release whose Rendering is not "static" is assumed Rollout-backed
-// when LOOPZERO_PROGRESSIVE_DELIVERY is enabled (default per CLAUDE.md).
+// when LOOP_RUNTIME_PROGRESSIVE_DELIVERY is enabled (default per CLAUDE.md).
 //
 // Per ADR T0.3: emitting an extra rollout.aborted on edge cases (e.g.,
 // progressive delivery disabled but app non-static) is benign — CLI treats
@@ -698,7 +698,7 @@ func (r *ReleaseConvergenceLoop) healthCheckActiveReleases(ctx context.Context) 
 			continue
 		}
 
-		// loopzero-cloud#242 (Fix A): only evaluate post-activation health when the
+		// loop-console#242 (Fix A): only evaluate post-activation health when the
 		// ArgoCD status is DETERMINATE (synced). During the controller's
 		// reconcile-rewrite window the app status is transiently empty/Unknown →
 		// GetAppStatus returns synced=false, healthy=false (no workload resources

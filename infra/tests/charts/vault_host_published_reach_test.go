@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T1.1 of plan k3d-host-published-vault-reach (sponsor 2026-06-20).
 //
 // TestVaultHostPublishedReach locks the canonical host-publish topology
-// for the loopzero-secrets k3d cluster + openbao helmfile release onto the
+// for the loop-runtime-secrets k3d cluster + openbao helmfile release onto the
 // mechanism the T0.1 LIVE spike proved end-to-end (2026-06-20):
 //
 //	mgmt pod
 //	   → docker bridge gateway (172.18.0.1) :8200
-//	   → docker DNAT (k3d-loopzero-secrets-serverlb 8200:30200@loadbalancer)
+//	   → docker DNAT (k3d-loop-runtime-secrets-serverlb 8200:30200@loadbalancer)
 //	   → nginx stream{} L4 passthrough  (TLS bytes intact)
-//	   → k3d-loopzero-secrets-server-0 :30200  (kube-proxy NodePort)
+//	   → k3d-loop-runtime-secrets-server-0 :30200  (kube-proxy NodePort)
 //	   → openbao-0 pod :8200
 //	   → OpenBao /v1/sys/health → 200 + JSON, no x509, no decode_error
 //
@@ -103,10 +103,10 @@ func extractServiceBlock(rendered, name string) string {
 //
 // To skip when helmfile is not on PATH (CI without helmfile):
 //
-//	LOOPZERO_TEST_SKIP_HELMFILE=1 go test ./...
+//	LOOP_RUNTIME_TEST_SKIP_HELMFILE=1 go test ./...
 func TestVaultHostPublishedReach(t *testing.T) {
-	if os.Getenv("LOOPZERO_TEST_SKIP_HELMFILE") == "1" {
-		t.Skip("LOOPZERO_TEST_SKIP_HELMFILE=1 — helmfile-template assertions skipped")
+	if os.Getenv("LOOP_RUNTIME_TEST_SKIP_HELMFILE") == "1" {
+		t.Skip("LOOP_RUNTIME_TEST_SKIP_HELMFILE=1 — helmfile-template assertions skipped")
 	}
 	if _, err := exec.LookPath("helmfile"); err != nil {
 		t.Skip("helmfile not on PATH — skipping render assertions")
@@ -118,7 +118,7 @@ func TestVaultHostPublishedReach(t *testing.T) {
 
 	clusterYAML := mustRead(t, filepath.Join(root, "infra/k3d/secrets-cluster.yaml"))
 	helmfileGotmpl := mustRead(t, filepath.Join(root, "infra/helmfile/secrets.helmfile.yaml.gotmpl"))
-	cssYAML := mustRead(t, filepath.Join(root, "infra/manifests/cluster-secret-stores/loopzero-secrets-secrets.yaml"))
+	cssYAML := mustRead(t, filepath.Join(root, "infra/manifests/cluster-secret-stores/loop-runtime-secrets-secrets.yaml"))
 
 	// --- Render -------------------------------------------------------------
 

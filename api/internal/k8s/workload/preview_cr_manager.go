@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package workload
 
@@ -36,7 +36,7 @@ type PreviewCRSpec struct {
 // the api is the second Go consumer of the operators/api contract module,
 // so the compiler checks every CR field at build time (was unstructured
 // map pre-M8). Shares the typed Client used by TenantCRManager — both
-// target loopzero-system on the mgmt cluster.
+// target loop-runtime-system on the mgmt cluster.
 //
 // LIVE catch 2026-06-07 J-23 bug #4: PreviewCRCreator interface in
 // services had no production implementation. Adapter lives here (next to
@@ -114,7 +114,7 @@ func (m *PreviewCRManager) GetPhases(ctx context.Context, previewIDs []string) (
 // tried `Delete("<tenant>-<project>-pr-<N>")` which ALWAYS returned
 // NotFound, silently swallowed, leaving the CR + namespace + ArgoCD App
 // orphaned forever after PR close. Fix: lookup by the
-// `loopzero.io/tenant + loopzero.io/project + loopzero.io/pr-number` label selector
+// `runtime.getloopscale.com/tenant + runtime.getloopscale.com/project + runtime.getloopscale.com/pr-number` label selector
 // that EnsurePreviewCR sets at creation time. Deletes every CR that
 // matches (typically one).
 func (m *PreviewCRManager) DeletePreviewCR(ctx context.Context, tenantID, projectID string, prNumber int) error {
@@ -122,9 +122,9 @@ func (m *PreviewCRManager) DeletePreviewCR(ctx context.Context, tenantID, projec
 	if err := m.Client.List(ctx, &list,
 		client.InNamespace(k8s.ControlPlaneNamespace),
 		client.MatchingLabels{
-			"loopzero.io/tenant":    tenantID,
-			"loopzero.io/project":   projectID,
-			"loopzero.io/pr-number": fmt.Sprintf("%d", prNumber),
+			"runtime.getloopscale.com/tenant":    tenantID,
+			"runtime.getloopscale.com/project":   projectID,
+			"runtime.getloopscale.com/pr-number": fmt.Sprintf("%d", prNumber),
 		},
 	); err != nil {
 		return fmt.Errorf("preview CR list: %w", err)
@@ -151,10 +151,10 @@ func buildPreviewCR(spec PreviewCRSpec) *apiv1.PreviewEnvironment {
 			Name:      spec.Name,
 			Namespace: k8s.ControlPlaneNamespace,
 			Labels: map[string]string{
-				"loopzero.io/tenant":     spec.TenantID,
-				"loopzero.io/project":    spec.ProjectID,
-				"loopzero.io/pr-number":  fmt.Sprintf("%d", spec.PRNumber),
-				"loopzero.io/managed-by": "loopzero-api",
+				"runtime.getloopscale.com/tenant":     spec.TenantID,
+				"runtime.getloopscale.com/project":    spec.ProjectID,
+				"runtime.getloopscale.com/pr-number":  fmt.Sprintf("%d", spec.PRNumber),
+				"runtime.getloopscale.com/managed-by": "loop-runtime-api",
 			},
 		},
 		Spec: apiv1.PreviewEnvironmentSpec{

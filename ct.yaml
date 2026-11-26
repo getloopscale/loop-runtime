@@ -4,7 +4,7 @@
 chart-dirs:
   - charts
 
-# Repos required by published charts (loopzero-* charts depend on loopzero-common file://).
+# Repos required by published charts (loop-runtime-* charts depend on loop-runtime-common file://).
 chart-repos: []
 
 # Test values overlay (optional).

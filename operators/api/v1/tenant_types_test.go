@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -119,8 +119,8 @@ func TestPlanTier_Values(t *testing.T) {
 }
 
 func TestGroupVersion(t *testing.T) {
-	if GroupVersion.Group != "loopzero.io" {
-		t.Errorf("expected group %q, got %q", "loopzero.io", GroupVersion.Group)
+	if GroupVersion.Group != "runtime.getloopscale.com" {
+		t.Errorf("expected group %q, got %q", "runtime.getloopscale.com", GroupVersion.Group)
 	}
 	if GroupVersion.Version != "v1" {
 		t.Errorf("expected version %q, got %q", "v1", GroupVersion.Version)
@@ -129,8 +129,8 @@ func TestGroupVersion(t *testing.T) {
 
 func TestResource(t *testing.T) {
 	gr := Resource("tenants")
-	if gr.Group != "loopzero.io" {
-		t.Errorf("expected group %q, got %q", "loopzero.io", gr.Group)
+	if gr.Group != "runtime.getloopscale.com" {
+		t.Errorf("expected group %q, got %q", "runtime.getloopscale.com", gr.Group)
 	}
 	if gr.Resource != "tenants" {
 		t.Errorf("expected resource %q, got %q", "tenants", gr.Resource)

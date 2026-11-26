@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 """Structural JSON diff for baseline-diff.sh (de-costumed from the inline
 python3 heredoc per plan home-unhomed-logic-suspect-keeps T1.2).
 

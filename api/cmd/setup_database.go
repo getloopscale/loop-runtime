@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -63,8 +63,8 @@ type DatabaseDeps struct {
 //     product, it erases three quarters of it — while `/api/v1/health` keeps
 //     answering 200, because that probe is the shallow one.
 //   - It has happened, and this repository records the damage: B35, 2026-04-28
-//     (`infra/helm/loopzero-api/templates/deployment.yaml`) — the secret stored the
-//     key as `uri`, the mapping was missing, and loopzero-api "runs without DB",
+//     (`infra/helm/loop-runtime-api/templates/deployment.yaml`) — the secret stored the
+//     key as `uri`, the mapping was missing, and loop-runtime-api "runs without DB",
 //     found by someone investigating something else.
 //
 // The distinction the old code collapsed is boot PRECONDITION vs runtime
@@ -99,7 +99,7 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 	// survived review precisely because nothing observable changed.
 	//
 	// Failing to start is loud and fixed in seconds by pointing DATABASE_URL at
-	// loopzero_api. Serving cross-tenant data is neither.
+	// loop_runtime_api. Serving cross-tenant data is neither.
 	if err := db.AssertRequestPoolIsolated(context.Background(), poolCfg.Pool); err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func setupDatabase(cfg config.Config, logger *slog.Logger) (*DatabaseDeps, error
 	}
 
 	// Plan enforcement and the per-Account project cap are wired in main, once
-	// the cross-tenant (loopzero_worker) connection they read through exists — see
+	// the cross-tenant (loop_runtime_worker) connection they read through exists — see
 	// wirePlanEnforcement and projectCapEnforcement.
 	return deps, nil
 }

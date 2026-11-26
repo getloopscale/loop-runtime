@@ -16,7 +16,7 @@
       "targetBlank": false,
       "title": "← Home",
       "type": "link",
-      "url": "/d/loopzero-home/loopzero-system-home"
+      "url": "/d/loop-runtime-home/loop-runtime-system-home"
     }
   ],
   "liveNow": false,
@@ -33,7 +33,7 @@
       "description": "Requires GitHub App webhook to be active. Shows push events received and processed.",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_webhook_push_total[5m])) by (result) or vector(0)",
+          "expr": "sum(rate(loop_runtime_webhook_push_total[5m])) by (result) or vector(0)",
           "legendFormat": "{{result}}"
         }
       ],
@@ -59,11 +59,11 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_build_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_build_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95"
         },
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopzero_build_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_build_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p50"
         }
       ],
@@ -88,11 +88,11 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[5m])) or vector(0)",
+          "expr": "sum(rate(loop_runtime_builds_total{status=\"succeeded\"}[5m])) or vector(0)",
           "legendFormat": "Succeeded"
         },
         {
-          "expr": "sum(rate(loopzero_builds_total{status=\"failed\"}[5m])) or vector(0)",
+          "expr": "sum(rate(loop_runtime_builds_total{status=\"failed\"}[5m])) or vector(0)",
           "legendFormat": "Failed"
         }
       ],
@@ -112,15 +112,15 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(loopzero_release_revision_mismatch_total[5m]))",
+          "expr": "sum(rate(loop_runtime_release_revision_mismatch_total[5m]))",
           "legendFormat": "Mismatches"
         },
         {
-          "expr": "sum(rate(loopzero_release_revision_resync_total[5m]))",
+          "expr": "sum(rate(loop_runtime_release_revision_resync_total[5m]))",
           "legendFormat": "Re-syncs"
         },
         {
-          "expr": "sum(rate(loopzero_release_revision_resync_failure_total[5m]))",
+          "expr": "sum(rate(loop_runtime_release_revision_resync_failure_total[5m]))",
           "legendFormat": "Re-sync Failures"
         }
       ],
@@ -130,7 +130,7 @@
       }
     },
     {
-      "title": "LoopZeroApplication CR Ensures",
+      "title": "LoopRuntimeApplication CR Ensures",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -140,7 +140,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(loopzero_application_cr_ensure_total[5m])) by (result)",
+          "expr": "sum(rate(loop_runtime_application_cr_ensure_total[5m])) by (result)",
           "legendFormat": "{{result}}"
         }
       ],
@@ -160,11 +160,11 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_gitops_operation_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_gitops_operation_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95"
         },
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopzero_gitops_operation_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_gitops_operation_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p50"
         }
       ],
@@ -182,7 +182,7 @@
   "refresh": "30s",
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loop-runtime",
     "github",
     "autodeploy"
   ],
@@ -208,6 +208,6 @@
     "from": "now-6h",
     "to": "now"
   },
-  "title": "LoopZero — GitHub Auto-Deploy",
-  "uid": "loopzero-github-autodeploy"
+  "title": "LoopRuntime — GitHub Auto-Deploy",
+  "uid": "loop-runtime-github-autodeploy"
 }

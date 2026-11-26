@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T1.1 of plan 2026-06-01-p1-security-hardening (sec-010 / CR-7 of
 // MEET-2026-05-28-001) — per-tenant Fulcio audience for projected SA

@@ -113,6 +113,18 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+- The engine is named loop-runtime everywhere, because LoopZero is the name of the agent framework. Platform components follow one pattern, `loop-{name}`, written with a hyphen wherever the syntax allows one. What an operator has to change:
+  - Images, charts and the ops binary: `loopzero-api` is `loop-runtime-api`, and so on for every `loopzero-*` name.
+  - The console's images and charts: `loopzero-cloud` is `loop-console` and `loopzero-dashboard` is `loop-console-dashboard`.
+  - Namespaces and resource names: `loopzero-system` is `loop-runtime-system`, tenant namespaces start with `loop-runtime-`.
+  - Environment variables: every `LOOPZERO_*` variable is `LOOP_RUNTIME_*`.
+  - The API group of the CRDs, labels, annotations and finalizers: `loopzero.io` is `runtime.getloopscale.com`. The kind `LoopZeroApplication` is `LoopRuntimeApplication`. Resources of the old group are not migrated; a cluster has to be rebuilt.
+  - HTTP headers: `X-LoopZero-*` is `X-Loop-Runtime-*`.
+  - Metrics: the `loopzero_` prefix is `loop_runtime_`, and labels derived from the group read `label_runtime_getloopscale_com_*`.
+  - PostgreSQL: databases, roles and settings named `loopzero*` are `loop_runtime*`, and the console's database is `loop_console`.
+  - Helm values written in camelCase follow: `loopzeroOpsImage` is `loopRuntimeOpsImage`.
+  The deploy descriptor a repository may carry is `loopscale.yaml`, then `loopzero.yaml`.
+- The dashboard chart writes its runtime configuration to `window.__LOOPSCALE_CONFIG__`. A dashboard image older than this one reads the previous global and finds nothing.
 - The repository is `getloopscale/loop-runtime`, and the Go modules are `github.com/getloopscale/loop-runtime/...`. The name LoopZero belongs to the agent framework. The staging scripts, the reusable `build-publish.yml` workflow and every link point at the new address. Image names, namespaces, the `LOOPZERO_` variables and the `loopzero.io` API group are unchanged in this step.
 
 - The platform's PostgreSQL on staging runs PostgreSQL 19.0 (`ghcr.io/cloudnative-pg/postgresql:19.0-minimal-trixie`), up from 16.14 (#177).
@@ -344,6 +356,7 @@ to [Semantic Versioning](https://semver.org/).
   correct. Names present in exactly one tree are unaffected (#B-002)
 
 ### Removed
+- A repository's deploy descriptor is no longer read from `theo.yaml`. Rename the file to `loopscale.yaml`.
 
 - `render` in `loopzero.yaml` is refused unless it is `server`, and static delivery is gone: every app is served by its container (#78)
 - `task images:push:platform:dev-public` and its pull-secret task: they pushed to and authenticated against a DigitalOcean registry that no longer exists (#435).
@@ -477,7 +490,7 @@ to [Semantic Versioning](https://semver.org/).
 - The commit status of a push deploy links the app on `LOOPZERO_PUBLIC_DOMAIN`, where it answers, instead of `BASE_DOMAIN` (#92)
 - Connecting a repository refuses a `loopzero.yaml` app without `runtime: node|python` or without `start`, naming the app and the field. Such a repository used to connect, and then every push failed in the build (#93)
 - A push to a connected repository uploads its source to the bucket `SOURCE_BUCKET` names, as a CLI upload does. The auto-deployer used its default `loopzero-builds`, so every push deploy failed where that bucket does not exist (#87)
-- The dashboard reads the runtime config the chart renders. `__config.js` wrote `window.__LOOPZERO_CONFIG__`, which the dashboard never read, and it now writes `window.__THEO_CONFIG__` with `API_URL`, `AUTH_URL`, `ACCOUNTS_URL` and `OAUTH_URL`. `viteCloudUrl` and `baseDomain` are removed (#83)
+- The dashboard reads the runtime config the chart renders. `__config.js` wrote `window.__LOOPZERO_CONFIG__`, which the dashboard never read, and it now writes `window.__LOOPSCALE_CONFIG__` with `API_URL`, `AUTH_URL`, `ACCOUNTS_URL` and `OAUTH_URL`. `viteCloudUrl` and `baseDomain` are removed (#83)
 - Server-Sent Events (`.../stream`, the CLI's deploy log) reach the client as they happen. The edge's body-limit middleware held each stream until it ended, so one longer than 60 s failed with 504 (#79)
 - A seed that restarts a workload (loopzero-api, loopzero-cloud, CoreDNS) waits until the old pod is gone; it used to report the rollout settled while the old pod was still the one answering and the new one was not ready (#470)
 

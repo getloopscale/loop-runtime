@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -14,8 +14,8 @@ import (
 func TestWorkflowUsesTheConfiguredSignerAndScannerImages(t *testing.T) {
 	// Arrange
 	infra := testInfraParams()
-	infra.CosignImage = "reg.local/loopzero-cosign-signer:test"
-	infra.SyftImage = "reg.local/loopzero-syft-scanner:test"
+	infra.CosignImage = "reg.local/loop-runtime-cosign-signer:test"
+	infra.SyftImage = "reg.local/loop-runtime-syft-scanner:test"
 	infra.CosignAttestEnabled = true
 
 	// Act

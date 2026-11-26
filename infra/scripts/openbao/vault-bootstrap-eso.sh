@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# vault-bootstrap-eso.sh — Bootstrap ESO ClusterSecretStore against loopzero-secrets.
+# vault-bootstrap-eso.sh — Bootstrap ESO ClusterSecretStore against loop-runtime-secrets.
 #
 # Runbook P1 steps 2-4 codified: apply SA + ClusterRoleBinding + extract Vault
-# CA cert from openbao-tls Secret + create loopzero-secrets-ca ConfigMap em
+# CA cert from openbao-tls Secret + create loop-runtime-secrets-ca ConfigMap em
 # external-secrets NS + apply ClusterSecretStore CR + wait for status=Ready.
 #
 # Failure modes prevented:
@@ -10,13 +10,13 @@
 # - Wrong namespace for ConfigMap (must be external-secrets where ESO operator
 #   reads caProvider.configMap.name; D11 architecture)
 # - ClusterSecretStore applied BEFORE ConfigMap → CR stuck NotReady "configmap
-#   loopzero-secrets-ca not found"
+#   loop-runtime-secrets-ca not found"
 # - Idempotent ConfigMap create (dry-run=client | apply -f -)
 #
 # Usage:
 #   bash infra/scripts/openbao/vault-bootstrap-eso.sh \
-#     --mgmt-context k3d-loopzero-core \
-#     --vault-context k3d-loopzero-secrets \
+#     --mgmt-context k3d-loop-runtime-core \
+#     --vault-context k3d-loop-runtime-secrets \
 #     [--vault-secret-name openbao-tls] \
 #     [--vault-secret-namespace secrets-system] \
 #     [--eso-namespace external-secrets] \
@@ -30,7 +30,7 @@
 #   2 — apply failure (kubectl returned non-zero)
 #   3 — ClusterSecretStore did NOT reach Ready=True within timeout
 #
-# Plan: 2026-06-02-loopzero-api-vault-integration v1.8 P1 codification (iter 13).
+# Plan: 2026-06-02-loop-runtime-api-vault-integration v1.8 P1 codification (iter 13).
 # Runbook reference: docs/runbooks.md P1.
 # SPDX-License-Identifier: Apache-2.0
 
@@ -39,8 +39,8 @@ set -uo pipefail
 # ----------------------------------------------------------------------------
 # CLI args
 # ----------------------------------------------------------------------------
-CORE_CONTEXT="${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}"
-SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
+CORE_CONTEXT="${LOOP_RUNTIME_CORE_CONTEXT:-k3d-loop-runtime-core}"
+SECRETS_CONTEXT="${LOOP_RUNTIME_SECRETS_CONTEXT:-k3d-loop-runtime-secrets}"
 VAULT_SECRET_NAME="openbao-tls"
 VAULT_SECRET_NAMESPACE="secrets-system"
 ESO_NAMESPACE="external-secrets"
@@ -56,8 +56,8 @@ USAGE
   $0 [options]
 
 OPTIONS
-  --mgmt-context <ctx>           kubectl context for mgmt cluster (default: k3d-loopzero-core)
-  --vault-context <ctx>          kubectl context for vault cluster (default: k3d-loopzero-secrets)
+  --mgmt-context <ctx>           kubectl context for mgmt cluster (default: k3d-loop-runtime-core)
+  --vault-context <ctx>          kubectl context for vault cluster (default: k3d-loop-runtime-secrets)
   --vault-secret-name <name>     Vault TLS Secret name (default: openbao-tls)
   --vault-secret-namespace <ns>  Vault TLS Secret NS (default: secrets-system)
   --eso-namespace <ns>           ESO operator namespace (default: external-secrets)
@@ -69,16 +69,16 @@ OPTIONS
 WORKFLOW (per Runbook P1 steps 2-4)
   1. Apply eso-vault-reader SA + ClusterRoleBinding em mgmt
   2. Extract Vault CA cert from openbao-tls Secret em vault cluster
-  3. Create/update ConfigMap loopzero-secrets-ca em mgmt:external-secrets NS
+  3. Create/update ConfigMap loop-runtime-secrets-ca em mgmt:external-secrets NS
   4. Apply ClusterSecretStore CR em mgmt
   5. Wait for ClusterSecretStore status.conditions[Ready]=True
 
 EXAMPLES
   # Standalone-multi (local k3d):
-  $0 --mgmt-context k3d-loopzero-core --vault-context k3d-loopzero-secrets
+  $0 --mgmt-context k3d-loop-runtime-core --vault-context k3d-loop-runtime-secrets
 
   # Production (DOKS):
-  $0 --mgmt-context loopzero-core-prod --vault-context loopzero-secrets-prod
+  $0 --mgmt-context loop-runtime-core-prod --vault-context loop-runtime-secrets-prod
 
   # Dry-run preflight check:
   $0 --dry-run
@@ -112,7 +112,7 @@ if ! [[ "$WAIT_TIMEOUT" =~ ^[0-9]+$ ]]; then
 fi
 
 SA_MANIFEST="$MANIFEST_DIR/eso-vault-reader-sa.yaml"
-CSS_MANIFEST="$MANIFEST_DIR/loopzero-secrets-secrets.yaml"
+CSS_MANIFEST="$MANIFEST_DIR/loop-runtime-secrets-secrets.yaml"
 
 for f in "$SA_MANIFEST" "$CSS_MANIFEST"; do
   if [ ! -f "$f" ]; then
@@ -174,12 +174,12 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# Step 3: Create/update ConfigMap loopzero-secrets-ca em mgmt
+# Step 3: Create/update ConfigMap loop-runtime-secrets-ca em mgmt
 # ----------------------------------------------------------------------------
 echo "" >&2
-echo "[STEP 3/4] Create/update ConfigMap loopzero-secrets-ca em $CORE_CONTEXT:$ESO_NAMESPACE" >&2
+echo "[STEP 3/4] Create/update ConfigMap loop-runtime-secrets-ca em $CORE_CONTEXT:$ESO_NAMESPACE" >&2
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "  [DRY-RUN] kubectl --context $CORE_CONTEXT -n $ESO_NAMESPACE create configmap loopzero-secrets-ca --from-literal=ca.crt=<CA> --dry-run=client -o yaml | kubectl apply -f -" >&2
+  echo "  [DRY-RUN] kubectl --context $CORE_CONTEXT -n $ESO_NAMESPACE create configmap loop-runtime-secrets-ca --from-literal=ca.crt=<CA> --dry-run=client -o yaml | kubectl apply -f -" >&2
 else
   # Ensure namespace exists (idempotent)
   kubectl --context "$CORE_CONTEXT" create namespace "$ESO_NAMESPACE" \
@@ -187,10 +187,10 @@ else
 
   # Apply ConfigMap via dry-run | apply -f - pattern (idempotent update)
   if echo "$VAULT_CA" | kubectl --context "$CORE_CONTEXT" -n "$ESO_NAMESPACE" \
-      create configmap loopzero-secrets-ca --from-file=ca.crt=/dev/stdin \
+      create configmap loop-runtime-secrets-ca --from-file=ca.crt=/dev/stdin \
       --dry-run=client -o yaml \
       | kubectl --context "$CORE_CONTEXT" apply -f - >/dev/null 2>&1; then
-    echo "  [OK] ConfigMap loopzero-secrets-ca synced" >&2
+    echo "  [OK] ConfigMap loop-runtime-secrets-ca synced" >&2
   else
     echo "  [FAIL] ConfigMap apply failed" >&2
     exit 2
@@ -201,10 +201,10 @@ fi
 # Step 4: Apply ClusterSecretStore CR em mgmt
 # ----------------------------------------------------------------------------
 echo "" >&2
-echo "[STEP 4/4] Apply ClusterSecretStore loopzero-secrets-secrets em mgmt" >&2
+echo "[STEP 4/4] Apply ClusterSecretStore loop-runtime-secrets-secrets em mgmt" >&2
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "  [DRY-RUN] kubectl --context $CORE_CONTEXT apply -f $CSS_MANIFEST" >&2
-  echo "  [DRY-RUN] kubectl wait clustersecretstore loopzero-secrets-secrets --for=condition=Ready --timeout=${WAIT_TIMEOUT}s" >&2
+  echo "  [DRY-RUN] kubectl wait clustersecretstore loop-runtime-secrets-secrets --for=condition=Ready --timeout=${WAIT_TIMEOUT}s" >&2
 else
   if kubectl --context "$CORE_CONTEXT" apply -f "$CSS_MANIFEST" >/dev/null 2>&1; then
     echo "  [OK] ClusterSecretStore applied" >&2
@@ -215,12 +215,12 @@ else
 
   # Wait for Ready=True (status condition reconcile)
   echo "  [INFO] waiting up to ${WAIT_TIMEOUT}s for status.conditions[Ready]=True" >&2
-  if kubectl --context "$CORE_CONTEXT" wait clustersecretstore loopzero-secrets-secrets \
+  if kubectl --context "$CORE_CONTEXT" wait clustersecretstore loop-runtime-secrets-secrets \
       --for=condition=Ready --timeout="${WAIT_TIMEOUT}s" >/dev/null 2>&1; then
     echo "  [OK] ClusterSecretStore Ready=True" >&2
   else
     echo "  [FAIL] ClusterSecretStore did NOT reach Ready within ${WAIT_TIMEOUT}s" >&2
-    echo "  [DIAG] kubectl --context $CORE_CONTEXT describe clustersecretstore loopzero-secrets-secrets" >&2
+    echo "  [DIAG] kubectl --context $CORE_CONTEXT describe clustersecretstore loop-runtime-secrets-secrets" >&2
     exit 3
   fi
 fi
@@ -235,7 +235,7 @@ else
   echo "[COMPLETE] ESO ClusterSecretStore bootstrapped + Ready" >&2
   echo "" >&2
   echo "Next step (P1 step 5): seed Vault with initial secrets" >&2
-  echo "  bash infra/scripts/openbao/seed-loopzero-secrets.sh \\" >&2
+  echo "  bash infra/scripts/openbao/seed-loop-runtime-secrets.sh \\" >&2
   echo "    --env <env> --secret-values-file <path>" >&2
 fi
 exit 0

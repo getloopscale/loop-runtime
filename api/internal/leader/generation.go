@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package leader implements the generation-based fencing primitive used by
 // every extracted background loop (roadmap 02 — API Loop Extraction).
@@ -49,7 +49,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/db"
 	"github.com/getloopscale/loop-runtime/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // BackgroundLoopsLeaseName is the lease that owns the platform's background
@@ -57,7 +57,7 @@ import (
 // binary and the API take the SAME lease, so the two can never run the loops
 // at once. The value predates the API using it and is kept so existing
 // leader_generations rows keep their meaning.
-const BackgroundLoopsLeaseName = "loopzero-controller"
+const BackgroundLoopsLeaseName = "loop-runtime-controller"
 
 // ErrFenced is returned by Heartbeat or Validate when the lease has been
 // taken over by another holder (a higher generation exists in PG, or the
@@ -179,9 +179,9 @@ RETURNING generation_id, acquired_at
 // the caller MUST exit.
 func (a *Acquirer) Heartbeat(ctx context.Context, lease *Lease) error {
 	if lease == nil {
-		// Audit gap M02 #13 fix: typed LoopZeroError — `nil lease` is a programming
+		// Audit gap M02 #13 fix: typed LoopRuntimeError — `nil lease` is a programming
 		// error in the heartbeat goroutine wiring, not a runtime business condition.
-		return loopzeroerrors.ErrInternalError.Wrap("leader heartbeat: nil lease")
+		return loopruntimeerrors.ErrInternalError.Wrap("leader heartbeat: nil lease")
 	}
 	const query = `
 UPDATE leader_generations
@@ -206,8 +206,8 @@ UPDATE leader_generations
 // fast before issuing a larger write.
 func (a *Acquirer) Validate(ctx context.Context, lease *Lease) error {
 	if lease == nil {
-		// Audit gap M02 #13 fix: typed LoopZeroError — `nil lease` is programming.
-		return loopzeroerrors.ErrInternalError.Wrap("leader validate: nil lease")
+		// Audit gap M02 #13 fix: typed LoopRuntimeError — `nil lease` is programming.
+		return loopruntimeerrors.ErrInternalError.Wrap("leader validate: nil lease")
 	}
 	const query = `
 SELECT generation_id, holder

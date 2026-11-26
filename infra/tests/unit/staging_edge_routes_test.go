@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -13,8 +13,8 @@ import (
 // The API publishes the host to cell routes of tenant apps to the CloudFront
 // KeyValueStore that infra-live's edge/app-routes unit creates (#68). Its ARN carries a
 // random id, so it travels like the other infra-live outputs: `task staging:outputs`
-// exports it, the staging overlay of loopzero-api reads it, and the chart hands it to the
-// API as LOOPZERO_EDGE_KVS_ARN.
+// exports it, the staging overlay of loop-runtime-api reads it, and the chart hands it to the
+// API as LOOP_RUNTIME_EDGE_KVS_ARN.
 
 func readRepoFile(t *testing.T, parts ...string) string {
 	t.Helper()
@@ -27,19 +27,19 @@ func readRepoFile(t *testing.T, parts ...string) string {
 
 func TestStagingOutputsExportTheEdgeRouteStore(t *testing.T) {
 	task := readRepoFile(t, "taskfiles", "staging.yml")
-	re := regexp.MustCompile(`printf 'export LOOPZERO_EDGE_KVS_ARN="%s"\\n' "\$\(out edge/app-routes arn\)"`)
+	re := regexp.MustCompile(`printf 'export LOOP_RUNTIME_EDGE_KVS_ARN="%s"\\n' "\$\(out edge/app-routes arn\)"`)
 	if !re.MatchString(task) {
-		t.Error("staging:outputs does not export LOOPZERO_EDGE_KVS_ARN from the edge/app-routes arn output")
+		t.Error("staging:outputs does not export LOOP_RUNTIME_EDGE_KVS_ARN from the edge/app-routes arn output")
 	}
 }
 
 func TestTheStagingAPIGetsTheEdgeRouteStore(t *testing.T) {
-	values := readRepoFile(t, "infra", "helmfile", "values", "staging", "loopzero-api.yaml.gotmpl")
-	if !regexp.MustCompile(`(?m)^\s+edgeKvsArn: \{\{ requiredEnv "LOOPZERO_EDGE_KVS_ARN" \| quote \}\}$`).MatchString(values) {
-		t.Error("the staging overlay of loopzero-api does not set config.edgeKvsArn from LOOPZERO_EDGE_KVS_ARN")
+	values := readRepoFile(t, "infra", "helmfile", "values", "staging", "loop-runtime-api.yaml.gotmpl")
+	if !regexp.MustCompile(`(?m)^\s+edgeKvsArn: \{\{ requiredEnv "LOOP_RUNTIME_EDGE_KVS_ARN" \| quote \}\}$`).MatchString(values) {
+		t.Error("the staging overlay of loop-runtime-api does not set config.edgeKvsArn from LOOP_RUNTIME_EDGE_KVS_ARN")
 	}
-	configmap := readRepoFile(t, "charts", "loopzero-api", "templates", "configmap.yaml")
-	if !regexp.MustCompile(`(?m)^\s+LOOPZERO_EDGE_KVS_ARN: \{\{ \.Values\.config\.edgeKvsArn \| quote \}\}$`).MatchString(configmap) {
-		t.Error("the loopzero-api chart does not pass config.edgeKvsArn as LOOPZERO_EDGE_KVS_ARN")
+	configmap := readRepoFile(t, "charts", "loop-runtime-api", "templates", "configmap.yaml")
+	if !regexp.MustCompile(`(?m)^\s+LOOP_RUNTIME_EDGE_KVS_ARN: \{\{ \.Values\.config\.edgeKvsArn \| quote \}\}$`).MatchString(configmap) {
+		t.Error("the loop-runtime-api chart does not pass config.edgeKvsArn as LOOP_RUNTIME_EDGE_KVS_ARN")
 	}
 }

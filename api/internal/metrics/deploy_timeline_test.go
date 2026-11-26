@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metrics
 
@@ -25,21 +25,21 @@ func TestDeployTimelineMetrics_Registered(t *testing.T) {
 		got  func() float64
 	}{
 		{
-			name: "loopzero_deploy_timeline_events_total",
+			name: "loop_runtime_deploy_timeline_events_total",
 			want: 1.0,
 			got: func() float64 {
 				return testutil.ToFloat64(DeployTimelineEventsTotal.WithLabelValues("build", "in_progress", "loki_markers"))
 			},
 		},
 		{
-			name: "loopzero_deploy_timeline_scrub_replacements_total",
+			name: "loop_runtime_deploy_timeline_scrub_replacements_total",
 			want: 1.0,
 			got: func() float64 {
 				return testutil.ToFloat64(DeployTimelineScrubReplacementsTotal.WithLabelValues("deploy"))
 			},
 		},
 		{
-			name: "loopzero_deploy_timeline_aggregator_panic_total",
+			name: "loop_runtime_deploy_timeline_aggregator_panic_total",
 			want: 1.0,
 			got: func() float64 {
 				return testutil.ToFloat64(DeployTimelineAggregatorPanicTotal.WithLabelValues("loki_markers"))
@@ -56,17 +56,17 @@ func TestDeployTimelineMetrics_Registered(t *testing.T) {
 }
 
 // TestDeployTimelineMetrics_NameConvention asserts every metric follows
-// the loopzero_deploy_timeline_ prefix per spec §15.2 naming convention.
+// the loop_runtime_deploy_timeline_ prefix per spec §15.2 naming convention.
 func TestDeployTimelineMetrics_NameConvention(t *testing.T) {
 	names := []string{
-		"loopzero_deploy_timeline_events_total",
-		"loopzero_deploy_timeline_phase_duration_seconds",
-		"loopzero_deploy_timeline_scrub_replacements_total",
-		"loopzero_deploy_timeline_aggregator_panic_total",
+		"loop_runtime_deploy_timeline_events_total",
+		"loop_runtime_deploy_timeline_phase_duration_seconds",
+		"loop_runtime_deploy_timeline_scrub_replacements_total",
+		"loop_runtime_deploy_timeline_aggregator_panic_total",
 	}
 	for _, n := range names {
-		if !strings.HasPrefix(n, "loopzero_deploy_timeline_") {
-			t.Errorf("metric %q does not match loopzero_deploy_timeline_ prefix", n)
+		if !strings.HasPrefix(n, "loop_runtime_deploy_timeline_") {
+			t.Errorf("metric %q does not match loop_runtime_deploy_timeline_ prefix", n)
 		}
 	}
 }

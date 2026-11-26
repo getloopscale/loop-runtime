@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package main is the entrypoint for the LoopZero API server.
+// Package main is the entrypoint for the LoopRuntime API server.
 package main
 
 import (
@@ -52,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tracingShutdown, err := tracing.Init(context.Background(), "loopzero-api", tracing.Options{Enabled: cfg.TracingEnabled, Endpoint: cfg.OTelEndpoint, Environment: cfg.Env})
+	tracingShutdown, err := tracing.Init(context.Background(), "loop-runtime-api", tracing.Options{Enabled: cfg.TracingEnabled, Endpoint: cfg.OTelEndpoint, Environment: cfg.Env})
 	if err != nil {
 		logger.Warn("tracing disabled", "error", err)
 	} else {
@@ -165,7 +165,7 @@ func main() {
 		// project-creating stores (this API store and the orchestrator's deploy
 		// store) count through the background pool. Measured: an account with 2
 		// tenants and 1 project each read 1 through the request pool and 2
-		// through loopzero_worker. See internal/db/store/project_wrapper.go.
+		// through loop_runtime_worker. See internal/db/store/project_wrapper.go.
 		wireCrossTenantLookups(dbDeps, bgAdapter)
 		wirePlanEnforcement(dbDeps, bgAdapter, logger)
 		projectCap := newProjectCapEnforcement(dbDeps.PlanLimiter, bgAdapter)
@@ -256,8 +256,8 @@ func main() {
 	})
 	srvCfg.Guards.IPRateLimit = ipRateLimiter
 	srvCfg.Auth = authenticator
-	srvCfg.Admin.APIEnabled = os.Getenv("LOOPZERO_ADMIN_API") == "true"
-	srvCfg.Maintenance = policy.ParseMaintenanceSetting(os.Getenv("LOOPZERO_MAINTENANCE_MODE"))
+	srvCfg.Admin.APIEnabled = os.Getenv("LOOP_RUNTIME_ADMIN_API") == "true"
+	srvCfg.Maintenance = policy.ParseMaintenanceSetting(os.Getenv("LOOP_RUNTIME_MAINTENANCE_MODE"))
 
 	// M3 of qa-readiness-roadmap-2026-06-23 — J11D7 LOCKED ADR:
 	// per-(tenant, domain) rate-limit for POST /api/v1/domains/{domain}/verify
@@ -271,7 +271,7 @@ func main() {
 	srvCfg.EdgeRoute = newEdgeRoute(cfg, bgAdapter, shutdownCtx, &bgWg, logger)
 	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: ADR D4 —
 	// every project gets a `production` env auto-created on POST
-	// /api/v1/projects. Same EnvironmentEnsurer that powers loopzero deploy
+	// /api/v1/projects. Same EnvironmentEnsurer that powers loop-runtime deploy
 	// --env <novo> (T2.2 D5); zero new infrastructure. nil-safe — when
 	// projectEnvEnsurer is nil (k8sDeps unavailable or test boot), the
 	// project Create handler falls back to pre-T4.1 behavior.
@@ -345,7 +345,7 @@ func leaseHolder() string {
 	if n, err := os.Hostname(); err == nil {
 		return n
 	}
-	return "loopzero-api"
+	return "loop-runtime-api"
 }
 
 // validateProductionEnv refuses to boot a production API without the secrets
@@ -355,10 +355,10 @@ func validateProductionEnv(cfg config.Config, logger *slog.Logger) error {
 		return nil
 	}
 	return server.ValidateProductionEnv(logger, map[string]string{
-		"DATABASE_URL":                  os.Getenv("DATABASE_URL"),
-		"LOOPZERO_ARGO_CALLBACK_SECRET": os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET"),
-		"GITEA_TOKEN":                   cfg.GiteaToken,
-		"ARGOCD_TOKEN":                  cfg.ArgocdToken,
+		"DATABASE_URL":                      os.Getenv("DATABASE_URL"),
+		"LOOP_RUNTIME_ARGO_CALLBACK_SECRET": os.Getenv("LOOP_RUNTIME_ARGO_CALLBACK_SECRET"),
+		"GITEA_TOKEN":                       cfg.GiteaToken,
+		"ARGOCD_TOKEN":                      cfg.ArgocdToken,
 	})
 }
 

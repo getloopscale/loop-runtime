@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://loopzero.platform/schemas/argo-workflows/values.schema.json",
-  "title": "Argo Workflows LoopZero wrapper values schema",
+  "$id": "https://loop-runtime.platform/schemas/argo-workflows/values.schema.json",
+  "title": "Argo Workflows LoopRuntime wrapper values schema",
   "description": "Plan 2026-05-20 T2.5 ext — fail-fast on Argo Workflows build cluster config drift. Protects controller scale (workflowWorkers/podWorkers under 50+ concurrent build load), images.cloneRunner SHA pin (supply chain), sourceBucket (S3 build artifact location).",
   "type": "object",
   "properties": {
@@ -13,7 +13,7 @@
           "type": "string",
           "minLength": 5,
           "pattern": "^[a-z0-9][a-z0-9.-]*(/[a-z0-9._-]+)+:[a-zA-Z0-9._-]+$",
-          "description": "Clone-runner image (LoopZero custom). MUST be registry+repo+tag format. Empty/garbage = workflow can't start init container."
+          "description": "Clone-runner image (LoopRuntime custom). MUST be registry+repo+tag format. Empty/garbage = workflow can't start init container."
         }
       }
     },
@@ -21,7 +21,7 @@
       "type": "string",
       "minLength": 1,
       "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$",
-      "description": "S3 bucket name (LoopZero SOURCE_BUCKET). MUST match Pulumi-created bucket + loopzero-api env var. RFC 1123: lowercase + dashes, no leading/trailing dash."
+      "description": "S3 bucket name (LoopRuntime SOURCE_BUCKET). MUST match Pulumi-created bucket + loop-runtime-api env var. RFC 1123: lowercase + dashes, no leading/trailing dash."
     },
     "controller": {
       "type": "object",

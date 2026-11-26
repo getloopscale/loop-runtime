@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Memory Webhook Delivery plan, T5.2 + T5.3.
 // Structural validation of migrations 000029 (ADD COLUMN secret) +

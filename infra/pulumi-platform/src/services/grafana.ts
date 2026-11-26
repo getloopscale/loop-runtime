@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
@@ -18,7 +18,7 @@ export interface GrafanaArgs {
 }
 
 /**
- * Grafana — dashboards and visualization with auto-provisioned LoopZero dashboards.
+ * Grafana — dashboards and visualization with auto-provisioned LoopRuntime dashboards.
  * Datasources: Prometheus + Tempo.
  * Dashboards: loaded from infra/helm/monitoring/dashboards/ via ConfigMap sidecar.
  */
@@ -27,7 +27,7 @@ export class Grafana extends pulumi.ComponentResource {
   public readonly ready: pulumi.Output<boolean>;
 
   constructor(name: string, args: GrafanaArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopzero:platform:Grafana", name, {}, opts);
+    super("loop-runtime:platform:Grafana", name, {}, opts);
 
     this.release = new k8s.helm.v3.Release(
       "grafana",
@@ -64,7 +64,7 @@ export class Grafana extends pulumi.ComponentResource {
                       datasourceUid: "loki",
                       filterByTraceID: false,
                       customQuery: true,
-                      query: `{job="loopzero-api"} |= "\${__trace.traceId}"`,
+                      query: `{job="loop-runtime-api"} |= "\${__trace.traceId}"`,
                     },
                   },
                 },
@@ -80,7 +80,7 @@ export class Grafana extends pulumi.ComponentResource {
               provider: {
                 name: "sidecar",
                 orgId: 1,
-                folder: "LoopZero",
+                folder: "LoopRuntime",
                 type: "file",
                 disableDeletion: false,
                 editable: true,
@@ -131,7 +131,7 @@ export class Grafana extends pulumi.ComponentResource {
       { provider: args.provider, parent: this, dependsOn: [args.prometheus.release] },
     );
 
-    // Auto-provision LoopZero dashboards via ConfigMap sidecar
+    // Auto-provision LoopRuntime dashboards via ConfigMap sidecar
     this.provisionDashboards(args.provider, args.namespace);
 
     this.ready = this.release.status.apply((s) => s.status === "deployed");

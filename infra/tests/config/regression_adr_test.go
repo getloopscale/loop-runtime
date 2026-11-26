@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package config — regression suite for B1-B18 (CHG-2026-04-28-LAYERED-BOOTSTRAP T8.1).
 //
@@ -8,7 +8,7 @@
 //
 // Run:
 //
-//	LOOPZERO_REGRESSION=1 go test ./infra/tests/performance/load/ -run TestRegression -v
+//	LOOP_RUNTIME_REGRESSION=1 go test ./infra/tests/performance/load/ -run TestRegression -v
 package config
 
 import (
@@ -25,8 +25,8 @@ func TestADR0018C1_NoEnvVarOverride(t *testing.T) {
 		t.Fatalf("read tenant_cr_manager.go: %v", err)
 	}
 	s := string(data)
-	if !strings.Contains(s, `const tenantNamespace = "loopzero-system"`) {
-		t.Error("ADR-0018 C1 regression: tenant_cr_manager.go must declare `const tenantNamespace = \"loopzero-system\"`")
+	if !strings.Contains(s, `const tenantNamespace = "loop-runtime-system"`) {
+		t.Error("ADR-0018 C1 regression: tenant_cr_manager.go must declare `const tenantNamespace = \"loop-runtime-system\"`")
 	}
 	if strings.Contains(s, `os.Getenv("TENANT_NAMESPACE")`) {
 		t.Error("ADR-0018 C1 regression: tenant_cr_manager.go must NOT read TENANT_NAMESPACE env")
@@ -35,7 +35,7 @@ func TestADR0018C1_NoEnvVarOverride(t *testing.T) {
 
 // TestADR0018C5_MisplacedTenantMetricDeclared asserts the ADR-0018 C5 metric
 // surface: the operators metrics package exports MisplacedTenantTotal under the
-// name `loopzero_misplaced_tenant_total`, which is the series the
+// name `loop_runtime_misplaced_tenant_total`, which is the series the
 // MisplacedTenantDetected alert queries.
 //
 // B-184 -- WHAT THIS TEST USED TO BE, AND WHY ONLY HALF OF IT CAME BACK. It was
@@ -64,12 +64,12 @@ func TestADR0018C1_NoEnvVarOverride(t *testing.T) {
 //
 //   - the C1 constant, no TENANT_NAMESPACE override -- TestADR0018C1_NoEnvVarOverride
 //     above, live;
-//   - the C9 cache scoping, which makes a Tenant outside loopzero-system invisible to
+//   - the C9 cache scoping, which makes a Tenant outside loop-runtime-system invisible to
 //     the operator -- infra/tests/unit/cache_scoping_test.go and
 //     operators/cmd/cache_scoping_test.go, both live;
 //   - the C2 SCAN is tenant.MisplacedTenantScanner (operators/internal/tenant),
 //     wired in operators/cmd/tenant-operator and covered by that package's unit
-//     tests; it is the writer of loopzero_misplaced_tenant_total. Until it existed
+//     tests; it is the writer of loop_runtime_misplaced_tenant_total. Until it existed
 //     the metric had no writer and the two alerts querying it could never fire
 //     (B-189). This test still asserts only that the metric is DECLARED, and
 //     says so in its name.
@@ -81,14 +81,14 @@ func TestADR0018C5_MisplacedTenantMetricDeclared(t *testing.T) {
 	s := string(metricsData)
 	// Each want is DECLARATION-SHAPED on purpose. The assertions this test
 	// inherited were bare substring checks for "MisplacedTenantTotal" and
-	// "loopzero_misplaced_tenant_total", and a mutation run during B-184 measured the
+	// "loop_runtime_misplaced_tenant_total", and a mutation run during B-184 measured the
 	// first one surviving: renaming the exported variable left the identifier in
 	// its own doc comment and in the MustRegister list, so the check passed over a
 	// package that no longer declared it. A test that its own subject's prose can
 	// satisfy is not asserting the subject.
 	for _, w := range []struct{ want, why string }{
 		{"MisplacedTenantTotal = prometheus.NewGaugeVec(", "metrics package must DECLARE exported MisplacedTenantTotal as a GaugeVec"},
-		{`Name: "loopzero_misplaced_tenant_total",`, "the GaugeVec opts must carry metric name loopzero_misplaced_tenant_total"},
+		{`Name: "loop_runtime_misplaced_tenant_total",`, "the GaugeVec opts must carry metric name loop_runtime_misplaced_tenant_total"},
 		{"\t\tMisplacedTenantTotal,\n", "MisplacedTenantTotal must be registered in the controller-runtime registry"},
 	} {
 		if !strings.Contains(s, w.want) {
@@ -98,7 +98,7 @@ func TestADR0018C5_MisplacedTenantMetricDeclared(t *testing.T) {
 }
 
 func TestADR0018T32_VAPTemplateExists(t *testing.T) {
-	const path = "../../../charts/loopzero-admission-policies/templates/vap-tenant-namespace.yaml"
+	const path = "../../../charts/loop-runtime-admission-policies/templates/vap-tenant-namespace.yaml"
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ADR-0018 T3.2 regression: VAP template missing: %v", err)
@@ -114,12 +114,12 @@ func TestADR0018T32_VAPTemplateExists(t *testing.T) {
 	if !strings.Contains(s, `request.subResource == ""`) {
 		t.Error("ADR-0018 C6 regression: matchConditions must skip when subResource != \"\" (status subresource bypass)")
 	}
-	// Validation expression check loopzero-system namespace.
-	if !strings.Contains(s, `object.metadata.namespace == "loopzero-system"`) {
-		t.Error("ADR-0018 T3.2 regression: validation expression must enforce namespace=loopzero-system")
+	// Validation expression check loop-runtime-system namespace.
+	if !strings.Contains(s, `object.metadata.namespace == "loop-runtime-system"`) {
+		t.Error("ADR-0018 T3.2 regression: validation expression must enforce namespace=loop-runtime-system")
 	}
 	// Default values.yaml: opt-out.
-	values, err := os.ReadFile("../../../charts/loopzero-admission-policies/values.yaml")
+	values, err := os.ReadFile("../../../charts/loop-runtime-admission-policies/values.yaml")
 	if err != nil {
 		t.Fatalf("read values: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestADR0018T32_VAPTemplateExists(t *testing.T) {
 	}
 }
 
-// B-095: loopzero-tenant-namespace-policy matches CREATE **and UPDATE**, and removing a finalizer is
+// B-095: loop-runtime-tenant-namespace-policy matches CREATE **and UPDATE**, and removing a finalizer is
 // an UPDATE. Without exempting the platform's own controllers, a CR whose namespace fails the
 // validation becomes IMPOSSIBLE TO DELETE — the operator never finishes the deletion and the
 // requeue never converges. Same trap the header of the sibling `vap-tenant-cr-shape` describes.
@@ -137,10 +137,10 @@ func TestADR0018T32_VAPTemplateExists(t *testing.T) {
 // apply to every identity and deny everything — a CEL trap recorded in `CLAUDE.md`. So this test
 // requires the names, not just the presence of the matchCondition.
 //
-// The exemption is rendered by the loopzero-admission.systemActorExemptions helper from
+// The exemption is rendered by the loop-runtime-admission.systemActorExemptions helper from
 // `systemActorExemptions.platformServiceAccounts`, so only the RENDERED policy carries the names.
 func TestVAPTenantNamespaceExemptsItsOwnControllers(t *testing.T) {
-	out, err := exec.Command("helm", "template", "ap", "../../../charts/loopzero-admission-policies",
+	out, err := exec.Command("helm", "template", "ap", "../../../charts/loop-runtime-admission-policies",
 		"--set", "vaps.tenantNamespace=true",
 		"--show-only", "templates/vap-tenant-namespace.yaml").CombinedOutput()
 	if err != nil {
@@ -152,9 +152,9 @@ func TestVAPTenantNamespaceExemptsItsOwnControllers(t *testing.T) {
 			"removal and makes the CR undeletable")
 	}
 	for _, sa := range []string{
-		"system:serviceaccount:loopzero-system:loopzero-api",
-		"system:serviceaccount:loopzero-system:loopzero-tenant-operator",
-		"system:serviceaccount:loopzero-system:tenant-operator",
+		"system:serviceaccount:loop-runtime-system:loop-runtime-api",
+		"system:serviceaccount:loop-runtime-system:loop-runtime-tenant-operator",
+		"system:serviceaccount:loop-runtime-system:tenant-operator",
 		"system:kube-controller-manager",
 		"system:masters",
 	} {

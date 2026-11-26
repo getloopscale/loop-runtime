@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package manifests
 
@@ -127,9 +127,9 @@ func TestRenderDeployment_WithHPA(t *testing.T) {
 	if hpa.Metadata.Name != "webapp-api" {
 		t.Errorf("HPA name: got %q, want webapp-api", hpa.Metadata.Name)
 	}
-	// Canonical refactor 2026-06-07: namespace = loopzero-<tenant>-<project>-<env>.
-	if hpa.Metadata.Namespace != "loopzero-acme-webapp-production" {
-		t.Errorf("HPA namespace: got %q, want loopzero-acme-webapp-production", hpa.Metadata.Namespace)
+	// Canonical refactor 2026-06-07: namespace = loop-runtime-<tenant>-<project>-<env>.
+	if hpa.Metadata.Namespace != "loop-runtime-acme-webapp-production" {
+		t.Errorf("HPA namespace: got %q, want loop-runtime-acme-webapp-production", hpa.Metadata.Namespace)
 	}
 	if hpa.Spec.MinReplicas != 2 {
 		t.Errorf("HPA minReplicas: got %d, want 2", hpa.Spec.MinReplicas)
@@ -331,15 +331,15 @@ func TestRenderDeployment_HPA_HasLabels(t *testing.T) {
 
 	// Achado #17: `app` label carries the project-scoped resource name so
 	// Service.spec.selector matches only this project's pods. The raw app
-	// name remains available via `loopzero.io/app-name`.
+	// name remains available via `runtime.getloopscale.com/app-name`.
 	if hpa.Metadata.Labels["app"] != "webapp-api" {
 		t.Errorf("HPA label 'app': got %q, want webapp-api", hpa.Metadata.Labels["app"])
 	}
-	if hpa.Metadata.Labels["loopzero.io/app-name"] != "api" {
-		t.Errorf("HPA label 'loopzero.io/app-name': got %q, want api", hpa.Metadata.Labels["loopzero.io/app-name"])
+	if hpa.Metadata.Labels["runtime.getloopscale.com/app-name"] != "api" {
+		t.Errorf("HPA label 'runtime.getloopscale.com/app-name': got %q, want api", hpa.Metadata.Labels["runtime.getloopscale.com/app-name"])
 	}
-	if hpa.Metadata.Labels["loopzero.io/tenant"] != "acme" {
-		t.Errorf("HPA label 'loopzero.io/tenant': got %q, want acme", hpa.Metadata.Labels["loopzero.io/tenant"])
+	if hpa.Metadata.Labels["runtime.getloopscale.com/tenant"] != "acme" {
+		t.Errorf("HPA label 'runtime.getloopscale.com/tenant': got %q, want acme", hpa.Metadata.Labels["runtime.getloopscale.com/tenant"])
 	}
 }
 

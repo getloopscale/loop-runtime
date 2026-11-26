@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loop-runtime/api/internal/routestest"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Basis paths of BuildHandler.Create that nothing covered: environment
@@ -85,9 +85,9 @@ func codeOf(t *testing.T, w *httptest.ResponseRecorder) string {
 
 func TestCreate_ProvisionFailureWithTypedErrorAnswersThatError(t *testing.T) {
 	h := NewBuildHandler(submittingOrch(), slog.Default()).
-		WithEnvironmentEnsurer(&recordingEnsurer{err: loopzeroerrors.ErrCellAtCapacity})
+		WithEnvironmentEnsurer(&recordingEnsurer{err: loopruntimeerrors.ErrCellAtCapacity})
 	w := postBuild(h, validBuildBody)
-	if codeOf(t, w) != loopzeroerrors.ErrCellAtCapacity.Code {
+	if codeOf(t, w) != loopruntimeerrors.ErrCellAtCapacity.Code {
 		t.Fatalf("want the ensurer's typed error, got %d %s", w.Code, w.Body.String())
 	}
 }

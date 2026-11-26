@@ -1,1 +1,0 @@
-{{- include "loopzero-common.networkpolicy" . }}

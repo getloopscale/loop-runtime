@@ -3,14 +3,14 @@
 #
 # Per EC-09 amendment: MUST be CronJob (NOT one-shot Job). cert-manager
 # auto-renews Vault TLS cert every 60-90d; without periodic re-extraction,
-# loopzero-api pins stale SPKI and Vault auth fails when cert rotates.
+# loop-runtime-api pins stale SPKI and Vault auth fails when cert rotates.
 #
 # Behavior:
 #   1. Mount openbao-tls Secret (tls.crt key)
 #   2. openssl extract SPKI hash from cert
-#   3. bao kv put secret/data/loopzero/<env>/platform/secrets/vault-spki-pin/spki_hash
+#   3. bao kv put secret/data/loop-runtime/<env>/platform/secrets/vault-spki-pin/spki_hash
 #   4. ESO mgmt-side reads path → materializes K8s Secret vault-spki-pin
-#      in loopzero-system NS → loopzero-api consumes via LOOPZERO_VAULT_SPKI_PIN env
+#      in loop-runtime-system NS → loop-runtime-api consumes via LOOP_RUNTIME_VAULT_SPKI_PIN env
 #
 # Idempotent: re-running with same cert produces same hash (KV-v2 bumps
 # version but content-identity preserved). Operator can scale schedule via
@@ -107,11 +107,11 @@ spec:
 
                   # 3. Write to Vault KV
                   ENV_NAME="{{ .Values.spkiExtractor.envName }}"
-                  KV_PATH="secret/data/loopzero/${ENV_NAME}/platform/secrets/vault-spki-pin/spki_hash"
+                  KV_PATH="secret/data/loop-runtime/${ENV_NAME}/platform/secrets/vault-spki-pin/spki_hash"
                   echo "[SPKI-EXTRACTOR] writing to ${KV_PATH}"
 
                   if bao kv put \
-                      "secret/loopzero/${ENV_NAME}/platform/secrets/vault-spki-pin/spki_hash" \
+                      "secret/loop-runtime/${ENV_NAME}/platform/secrets/vault-spki-pin/spki_hash" \
                       "spki_hash=${SPKI_HASH}" \
                       "extracted_at=$(date -Is)" >/dev/null; then
                     echo "[SPKI-EXTRACTOR] write OK"

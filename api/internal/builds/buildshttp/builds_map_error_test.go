@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -13,12 +13,12 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/builds"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
-// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loopzero-cloud#34):
+// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loop-console#34):
 // mapBuildError ladder regression + discrimination tests. The ladder order
-// MUST stay: (1) typed *LoopZeroError dispatch including DEPLOY_IN_PROGRESS
+// MUST stay: (1) typed *LoopRuntimeError dispatch including DEPLOY_IN_PROGRESS
 // short-circuit; (2) NEW build.AsSubmitBuildError dispatch with the
 // reason-specific message; (3) fallback to ErrInternalError for genuinely
 // unexpected errors only.
@@ -127,7 +127,7 @@ func TestMapBuildError_DispatchesViaAsSubmitBuildError(t *testing.T) {
 // existing ladder order at routes/builds.go:549-557).
 func TestMapBuildError_PreservesDeployInProgressShortCircuit(t *testing.T) {
 	w := httptest.NewRecorder()
-	mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), loopzeroerrors.ErrDeployInProgress)
+	mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), loopruntimeerrors.ErrDeployInProgress)
 	if w.Code != http.StatusConflict {
 		t.Errorf("HTTP status = %d, want 409 (DEPLOY_IN_PROGRESS)", w.Code)
 	}
@@ -137,15 +137,15 @@ func TestMapBuildError_PreservesDeployInProgressShortCircuit(t *testing.T) {
 	}
 }
 
-// T3.1 — typed *LoopZeroError that is NOT DEPLOY_IN_PROGRESS dispatches with its
+// T3.1 — typed *LoopRuntimeError that is NOT DEPLOY_IN_PROGRESS dispatches with its
 // own code (e.g., ScalingAmbiguous) — regression-protector for the existing
 // ladder order at routes/builds.go:547-559.
-func TestMapBuildError_PreservesTypedLoopZeroErrorDispatch(t *testing.T) {
+func TestMapBuildError_PreservesTypedLoopRuntimeErrorDispatch(t *testing.T) {
 	w := httptest.NewRecorder()
-	mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), loopzeroerrors.ErrScalingAmbiguous)
+	mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), loopruntimeerrors.ErrScalingAmbiguous)
 	body := decodeBody(t, w)
-	if code, _ := body["code"].(string); code != loopzeroerrors.ErrScalingAmbiguous.Code {
-		t.Errorf("code = %q, want %q", code, loopzeroerrors.ErrScalingAmbiguous.Code)
+	if code, _ := body["code"].(string); code != loopruntimeerrors.ErrScalingAmbiguous.Code {
+		t.Errorf("code = %q, want %q", code, loopruntimeerrors.ErrScalingAmbiguous.Code)
 	}
 }
 
@@ -154,7 +154,7 @@ func TestMapBuildError_PreservesTypedLoopZeroErrorDispatch(t *testing.T) {
 // own code, NOT a generic 500. Mirrors the scale-cap #101 surfacing and is the
 // mechanical oracle for the M5 DoD "typed 422 surfaced through the deploy path".
 func TestMapBuildError_ProjectsExceedPlan_SurfacesAs422(t *testing.T) {
-	capErr := loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-m5")
+	capErr := loopruntimeerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-m5")
 	w := httptest.NewRecorder()
 	mapBuildError(w, httptest.NewRequest(http.MethodPost, "/api/v1/builds", nil), capErr)
 

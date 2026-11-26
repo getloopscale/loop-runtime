@@ -6,7 +6,7 @@
 # Uses raw SLI because probe_success is a gauge (0/1 per scrape), not a counter.
 # error_ratio = (failed probes) / (total probes) over the window.
 version: "prometheus/v1"
-service: "loopzero-tenant-availability"
+service: "loop-runtime-tenant-availability"
 labels:
   owner: "platform-team"
   tier: "product"
@@ -18,12 +18,12 @@ slos:
       raw:
         error_ratio_query: |
           1 - (
-            sum(avg_over_time(probe_success{job=~".*loopzero-api-probe.*"}[{{.window}}]))
+            sum(avg_over_time(probe_success{job=~".*loop-runtime-api-probe.*"}[{{.window}}]))
             /
-            count(avg_over_time(probe_success{job=~".*loopzero-api-probe.*"}[{{.window}}]))
+            count(avg_over_time(probe_success{job=~".*loop-runtime-api-probe.*"}[{{.window}}]))
           )
     alerting:
-      name: LoopZeroTenantAvailabilityBudgetBurn
+      name: LoopRuntimeTenantAvailabilityBudgetBurn
       labels:
         category: availability
       annotations:

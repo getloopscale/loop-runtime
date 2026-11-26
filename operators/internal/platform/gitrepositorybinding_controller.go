@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package platform
 
@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 	"github.com/getloopscale/loop-runtime/operators/internal/gitea"
@@ -36,10 +36,10 @@ const (
 //
 // ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers.
 //
-// +kubebuilder:rbac:groups=loopzero.io,resources=gitrepositorybindings,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=gitrepositorybindings/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=gitrepositorybindings/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=gitrepositorybindings,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=gitrepositorybindings/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=gitrepositorybindings/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",namespace=argocd,resources=secrets,verbs=get;list;watch;create;update;delete
 type GitRepositoryBindingReconciler struct {
 	client.Client
@@ -70,7 +70,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 
 	logger := log.FromContext(ctx)
 
-	var binding loopzerov1.GitRepositoryBinding
+	var binding loopruntimev1.GitRepositoryBinding
 	if err := r.Get(ctx, req.NamespacedName, &binding); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -80,7 +80,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
 	// correlation-id from CR annotation into reconcile context (no-op when absent).
-	ctx = correlation.WithID(ctx, binding.GetAnnotations()["loopzero.io/correlation-id"])
+	ctx = correlation.WithID(ctx, binding.GetAnnotations()["runtime.getloopscale.com/correlation-id"])
 
 	// Handle deletion with finalizer pattern.
 	if !binding.DeletionTimestamp.IsZero() {
@@ -162,7 +162,7 @@ func (r *GitRepositoryBindingReconciler) Reconcile(ctx context.Context, req ctrl
 
 // resolveCredential reads the token from the referenced Secret.
 // Sets CredentialsResolved condition on the binding status.
-func (r *GitRepositoryBindingReconciler) resolveCredential(ctx context.Context, binding *loopzerov1.GitRepositoryBinding, gen int64) (string, error) {
+func (r *GitRepositoryBindingReconciler) resolveCredential(ctx context.Context, binding *loopruntimev1.GitRepositoryBinding, gen int64) (string, error) {
 	ref := binding.Spec.CredentialSecretRef
 	secretKey := client.ObjectKey{
 		Name:      ref.Name,
@@ -212,7 +212,7 @@ func (r *GitRepositoryBindingReconciler) resolveCredential(ctx context.Context, 
 // False with ReasonFailed + msg + gen, and returns the (zero-token, err)
 // tuple expected by the caller. Phase 3 helper: collapses 2 inline 7-line
 // copies (missing key + empty value) in gitrepositorybinding_controller.go.
-func failCredentialsResolved(binding *loopzerov1.GitRepositoryBinding, gen int64, msg string, err error) (string, error) {
+func failCredentialsResolved(binding *loopruntimev1.GitRepositoryBinding, gen int64, msg string, err error) (string, error) {
 	conditions.SetCondition(&binding.Status.Conditions, conditions.TypeCredentialsResolved,
 		metav1.ConditionFalse, conditions.ReasonFailed, msg, gen)
 	return "", err
@@ -225,7 +225,7 @@ func computeCredentialHash(token string) string {
 }
 
 // ensureArgoCDSecret creates or updates the ArgoCD repository Secret in the consumer namespace.
-func (r *GitRepositoryBindingReconciler) ensureArgoCDSecret(ctx context.Context, binding *loopzerov1.GitRepositoryBinding, token, hash string, gen int64) error {
+func (r *GitRepositoryBindingReconciler) ensureArgoCDSecret(ctx context.Context, binding *loopruntimev1.GitRepositoryBinding, token, hash string, gen int64) error {
 	secretName := constants.ArgoCDRepoSecretName(binding.Name)
 	consumerNs := binding.Spec.Consumer.Namespace
 
@@ -273,7 +273,7 @@ func (r *GitRepositoryBindingReconciler) ensureArgoCDSecret(ctx context.Context,
 }
 
 // checkReachability performs an HTTP GET to the Gitea API to verify the repository is reachable.
-func (r *GitRepositoryBindingReconciler) checkReachability(ctx context.Context, binding *loopzerov1.GitRepositoryBinding, token string, gen int64) {
+func (r *GitRepositoryBindingReconciler) checkReachability(ctx context.Context, binding *loopruntimev1.GitRepositoryBinding, token string, gen int64) {
 	logger := log.FromContext(ctx)
 
 	apiURL, err := gitea.RepoAPIURL(binding.Spec.RepoURL)
@@ -330,7 +330,7 @@ func (r *GitRepositoryBindingReconciler) checkReachability(ctx context.Context, 
 }
 
 // reconcileDelete handles cleanup when a GitRepositoryBinding is being deleted.
-func (r *GitRepositoryBindingReconciler) reconcileDelete(ctx context.Context, binding *loopzerov1.GitRepositoryBinding) (ctrl.Result, error) {
+func (r *GitRepositoryBindingReconciler) reconcileDelete(ctx context.Context, binding *loopruntimev1.GitRepositoryBinding) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	if !controllerutil.ContainsFinalizer(binding, repoBindingFinalizer) {
@@ -368,7 +368,7 @@ func (r *GitRepositoryBindingReconciler) reconcileDelete(ctx context.Context, bi
 // SetupGitRepositoryBindingController registers the GitRepositoryBindingController with the manager.
 func SetupGitRepositoryBindingController(mgr ctrl.Manager, httpClient *http.Client) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.GitRepositoryBinding{}, reconcileloop.ForOption()).
+		For(&loopruntimev1.GitRepositoryBinding{}, reconcileloop.ForOption()).
 		Named("gitrepositorybinding").
 		Complete(&GitRepositoryBindingReconciler{
 			Client:     mgr.GetClient(),
@@ -380,7 +380,7 @@ func SetupGitRepositoryBindingController(mgr ctrl.Manager, httpClient *http.Clie
 // kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
 // with a merge patch off base, so every write carries a Ready condition that
 // agrees with the conditions written beside it.
-func (r *GitRepositoryBindingReconciler) patchStatus(ctx context.Context, binding, base *loopzerov1.GitRepositoryBinding) error {
+func (r *GitRepositoryBindingReconciler) patchStatus(ctx context.Context, binding, base *loopruntimev1.GitRepositoryBinding) error {
 	conditions.SetReadinessSummaryViaPkg(&binding.Status.Conditions, binding.Generation, gitRepositoryBindingDetailTypes)
 	return r.Status().Patch(ctx, binding, client.MergeFrom(base))
 }

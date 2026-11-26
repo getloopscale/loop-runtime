@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package projectstatus maps a project's latest build and release state to the
 // deploy status the /projects list shows (the dashboard's StatusDot). It is
@@ -31,10 +31,10 @@ const (
 	ProjectStatusFailed   = plan.ProjectStatusFailed
 	ProjectStatusIdle     = plan.ProjectStatusIdle
 	ProjectStatusQueued   = plan.ProjectStatusQueued
-	// Red Team loopzero-cloud#41 (2026-06-27) — preview-only project status.
+	// Red Team loop-console#41 (2026-06-27) — preview-only project status.
 	// Declared as a local typed string to avoid pinning the engine on a
-	// not-yet-published loopzero-contracts v0.2 (the canonical constant lives
-	// at loopzero-contracts/plan.ProjectStatusPreview — see follow-up
+	// not-yet-published loop-runtime-contracts v0.2 (the canonical constant lives
+	// at loop-runtime-contracts/plan.ProjectStatusPreview — see follow-up
 	// version-pin cutover runbook). Wire-format identical: "preview".
 	ProjectStatusPreview plan.ProjectStatus = "preview"
 )
@@ -97,7 +97,7 @@ func MapBuildStatusToProjectStatus(state statemachine.State) ProjectStatus {
 //     release is not the current truth, the latest build attempt is.
 //
 // latestBuildEnv is the latest build's `environment` column. Red Team
-// loopzero-cloud#41 absorption (2026-06-27): when no release decides the status
+// loop-console#41 absorption (2026-06-27): when no release decides the status
 // and the latest build SUCCEEDED in a preview-only environment, return
 // ProjectStatusPreview — the project is preview-only, so the dashboard
 // renders a "Preview" badge instead of "Live" with a confusing

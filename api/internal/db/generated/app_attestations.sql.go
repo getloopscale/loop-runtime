@@ -243,7 +243,7 @@ type UpsertAppAttestationParams struct {
 //
 // Multi-tenant SELECT / UPDATE / DELETE carries `tenant_id` predicate
 // per platform-security-engineer condition 1 + M-1 + M-2 (enforced by
-// cmd/loopzero-ops/internal/quality/tenantpredicate gate). Cross-tenant queries marked
+// cmd/loop-runtime-ops/internal/quality/tenantpredicate gate). Cross-tenant queries marked
 // `-- tenantpredicate:exempt` IMMEDIATELY ABOVE `-- name:`.
 //
 // The UPSERT shape preserves the "ALL-signed contract" — every app row

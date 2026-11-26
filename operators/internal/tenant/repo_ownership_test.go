@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -87,14 +87,14 @@ func TestAssertRepoNameOwnedByTenant_RejectsPrefixCollision(t *testing.T) {
 }
 
 func TestAssertRepoNameOwnedByTenant_AcceptsTestFixturePattern(t *testing.T) {
-	// The operator-test fixtures historically use `loopzero-tenant-<name>`
-	// (e.g., `loopzero-tenant-tn-acme`). That embeds `tn-acme` as a suffix
+	// The operator-test fixtures historically use `loop-runtime-tenant-<name>`
+	// (e.g., `loop-runtime-tenant-tn-acme`). That embeds `tn-acme` as a suffix
 	// component (`-tn-acme`), so it must be accepted — otherwise this
 	// change would break the existing envtest harness for every tenant
 	// spec that didn't switch to the canonical pattern.
 	cases := []string{
-		"loopzero-tenant-tn-acme",
-		"loopzero-tenant-empty",
+		"loop-runtime-tenant-tn-acme",
+		"loop-runtime-tenant-empty",
 	}
 	for i, name := range cases {
 		var tenant string

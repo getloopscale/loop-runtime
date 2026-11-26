@@ -1,16 +1,16 @@
 config:
-  loopzero-platform:environment: dev
-  loopzero-platform:domain: dev.getloopscale.com
-  loopzero-platform:region: sfo3
-  loopzero-platform:dnsZone: getloopscale.com
+  loop-runtime-platform:environment: dev
+  loop-runtime-platform:domain: dev.getloopscale.com
+  loop-runtime-platform:region: sfo3
+  loop-runtime-platform:dnsZone: getloopscale.com
   # Cloudflare
-  loopzero-platform:cfAccountId: "362767409c4de7fda7990c10103efdd9"
-  loopzero-platform:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
+  loop-runtime-platform:cfAccountId: "362767409c4de7fda7990c10103efdd9"
+  loop-runtime-platform:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
   # Cross-cluster observability
-  loopzero-platform:lokiPushUrl: "http://10.20.0.6:30100"
+  loop-runtime-platform:lokiPushUrl: "http://10.20.0.6:30100"
   # Secrets — set via: pulumi config set --secret <key> <value>
-  # loopzero-platform:spacesAccessKeyId
-  # loopzero-platform:spacesSecretAccessKey
-  # loopzero-platform:cfApiToken
-  # loopzero-platform:giteaAdminPassword
-  # loopzero-platform:minioRootPassword
+  # loop-runtime-platform:spacesAccessKeyId
+  # loop-runtime-platform:spacesSecretAccessKey
+  # loop-runtime-platform:cfApiToken
+  # loop-runtime-platform:giteaAdminPassword
+  # loop-runtime-platform:minioRootPassword

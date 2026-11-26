@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
  * Cloudflare observability — log export and analytics.
@@ -35,7 +35,7 @@ export function createLogpushJobs(config: CfObservabilityConfig): void {
   // HTTP request logs — the most valuable dataset for platform operators
   new cloudflare.LogpushJob(`logpush-http-${config.environment}`, {
     zoneId: config.zoneId,
-    name: `loopzero-${config.environment}-http-logs`,
+    name: `loop-runtime-${config.environment}-http-logs`,
     enabled: true,
     dataset: "http_requests",
     destinationConf: `s3://${config.logsBucketEndpoint}/cf-logs/http?region=us-east-1&access-key-id=${config.spacesAccessKeyId}&secret-access-key=${config.spacesSecretAccessKey}&endpoint=https://sfo3.digitaloceanspaces.com`,
@@ -62,7 +62,7 @@ export function createLogpushJobs(config: CfObservabilityConfig): void {
   // Firewall events — WAF blocks, rate limit triggers
   new cloudflare.LogpushJob(`logpush-firewall-${config.environment}`, {
     zoneId: config.zoneId,
-    name: `loopzero-${config.environment}-firewall-logs`,
+    name: `loop-runtime-${config.environment}-firewall-logs`,
     enabled: true,
     dataset: "firewall_events",
     destinationConf: `s3://${config.logsBucketEndpoint}/cf-logs/firewall?region=us-east-1&access-key-id=${config.spacesAccessKeyId}&secret-access-key=${config.spacesSecretAccessKey}&endpoint=https://sfo3.digitaloceanspaces.com`,

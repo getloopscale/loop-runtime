@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environment
 
@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
@@ -41,37 +41,37 @@ func (f cellFactory) For(_ context.Context, cellID string) (client.Client, error
 	return c, nil
 }
 
-const routedNamespace = "loopzero-tn-cell-loja-production"
+const routedNamespace = "loop-runtime-tn-cell-loja-production"
 
-func routedTenant(cellID string) *loopzerov1.Tenant {
-	return &loopzerov1.Tenant{
+func routedTenant(cellID string) *loopruntimev1.Tenant {
+	return &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{Name: "tn-cell", Namespace: "default"},
-		Spec:       loopzerov1.TenantSpec{CellID: cellID},
+		Spec:       loopruntimev1.TenantSpec{CellID: cellID},
 	}
 }
 
-func routedEnvironment() *loopzerov1.Environment {
-	return &loopzerov1.Environment{
+func routedEnvironment() *loopruntimev1.Environment {
+	return &loopruntimev1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "env-cell",
 			Namespace:  "default",
 			Finalizers: []string{environmentFinalizer},
 		},
-		Spec: loopzerov1.EnvironmentCRSpec{
-			TenantRef:   loopzerov1.TenantRef{Name: "tn-cell"},
+		Spec: loopruntimev1.EnvironmentCRSpec{
+			TenantRef:   loopruntimev1.TenantRef{Name: "tn-cell"},
 			Environment: "production",
 			Project:     "loja",
-			Namespace:   loopzerov1.NamespaceSpec{Name: routedNamespace},
+			Namespace:   loopruntimev1.NamespaceSpec{Name: routedNamespace},
 		},
 	}
 }
 
-func deletingRoutedEnvironment(recordedCell, provisionedNamespace string) *loopzerov1.Environment {
+func deletingRoutedEnvironment(recordedCell, provisionedNamespace string) *loopruntimev1.Environment {
 	env := routedEnvironment()
 	now := metav1.NewTime(time.Now())
 	env.DeletionTimestamp = &now
-	env.Status = loopzerov1.EnvironmentCRStatus{
-		Phase:     loopzerov1.EnvironmentPhaseDeleting,
+	env.Status = loopruntimev1.EnvironmentCRStatus{
+		Phase:     loopruntimev1.EnvironmentPhaseDeleting,
 		CellID:    recordedCell,
 		Namespace: provisionedNamespace,
 	}
@@ -96,7 +96,7 @@ func TestEnvironmentReconcile_ProvisionsNamespaceInTheTenantCell(t *testing.T) {
 	s := environmentTestScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedTenant("cell-1"), routedEnvironment()).
-		WithStatusSubresource(&loopzerov1.Environment{}).Build()
+		WithStatusSubresource(&loopruntimev1.Environment{}).Build()
 	cell0 := fake.NewClientBuilder().WithScheme(s).Build()
 	cell1 := fake.NewClientBuilder().WithScheme(s).Build()
 	r := &EnvironmentReconciler{Client: mgmt, Scheme: s,
@@ -118,7 +118,7 @@ func TestEnvironmentReconcile_RecordsTheCellItProvisionedIn(t *testing.T) {
 	s := environmentTestScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedTenant("cell-1"), routedEnvironment()).
-		WithStatusSubresource(&loopzerov1.Environment{}).Build()
+		WithStatusSubresource(&loopruntimev1.Environment{}).Build()
 	cell1 := fake.NewClientBuilder().WithScheme(s).Build()
 	r := &EnvironmentReconciler{Client: mgmt, Scheme: s,
 		RuntimeFactory: cellFactory{cells: map[string]client.Client{"cell-1": cell1}}}
@@ -127,7 +127,7 @@ func TestEnvironmentReconcile_RecordsTheCellItProvisionedIn(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 
-	var env loopzerov1.Environment
+	var env loopruntimev1.Environment
 	if err := mgmt.Get(context.Background(), types.NamespacedName{Name: "env-cell", Namespace: "default"}, &env); err != nil {
 		t.Fatalf("get env: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestEnvironmentReconcile_FailsWhenTheCellClientCannotBeResolved(t *testing.
 	s := environmentTestScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedTenant("cell-1"), routedEnvironment()).
-		WithStatusSubresource(&loopzerov1.Environment{}).Build()
+		WithStatusSubresource(&loopruntimev1.Environment{}).Build()
 	cell0 := fake.NewClientBuilder().WithScheme(s).Build()
 	factoryErr := errors.New("ClusterCredential secret unreadable")
 	r := &EnvironmentReconciler{Client: mgmt, Scheme: s,
@@ -160,7 +160,7 @@ func TestEnvironmentReconcile_FailsWhenTheTenantIsUnreadable(t *testing.T) {
 	s := environmentTestScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedEnvironment()).
-		WithStatusSubresource(&loopzerov1.Environment{}).Build()
+		WithStatusSubresource(&loopruntimev1.Environment{}).Build()
 	cell0 := fake.NewClientBuilder().WithScheme(s).Build()
 	r := &EnvironmentReconciler{Client: mgmt, Scheme: s,
 		RuntimeFactory: cellFactory{cells: map[string]client.Client{"": cell0}}}
@@ -179,7 +179,7 @@ func TestEnvironmentDelete_DeletesTheNamespaceInTheRecordedCell(t *testing.T) {
 	// still lives where it was created.
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedTenant("cell-2"), deletingRoutedEnvironment("cell-1", routedNamespace)).
-		WithStatusSubresource(&loopzerov1.Environment{}).Build()
+		WithStatusSubresource(&loopruntimev1.Environment{}).Build()
 	cell1 := fake.NewClientBuilder().WithScheme(s).WithObjects(tenantNamespace("tn-cell")).Build()
 	cell2 := fake.NewClientBuilder().WithScheme(s).Build()
 	r := &EnvironmentReconciler{Client: mgmt, Scheme: s,
@@ -199,7 +199,7 @@ func TestEnvironmentDelete_KeepsTheFinalizerWhenTheNamespaceLookupFails(t *testi
 	s := environmentTestScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(routedTenant("cell-1"), deletingRoutedEnvironment("cell-1", routedNamespace)).
-		WithStatusSubresource(&loopzerov1.Environment{}).Build()
+		WithStatusSubresource(&loopruntimev1.Environment{}).Build()
 	lookupErr := errors.New("runtime apiserver timeout")
 	cell1 := interceptor.NewClient(fake.NewClientBuilder().WithScheme(s).WithObjects(tenantNamespace("tn-cell")).Build(),
 		interceptor.Funcs{Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
@@ -216,7 +216,7 @@ func TestEnvironmentDelete_KeepsTheFinalizerWhenTheNamespaceLookupFails(t *testi
 	if !errors.Is(err, lookupErr) {
 		t.Fatalf("Reconcile error = %v, want the namespace lookup error", err)
 	}
-	var env loopzerov1.Environment
+	var env loopruntimev1.Environment
 	if gerr := mgmt.Get(context.Background(), types.NamespacedName{Name: "env-cell", Namespace: "default"}, &env); gerr != nil {
 		t.Fatalf("the Environment must still exist: %v", gerr)
 	}
@@ -231,7 +231,7 @@ func TestEnvironmentDelete_FailsWhenAProvisionedNamespaceHasNoKnownCell(t *testi
 	// namespace: it exists somewhere this controller can no longer locate.
 	mgmt := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(deletingRoutedEnvironment("", routedNamespace)).
-		WithStatusSubresource(&loopzerov1.Environment{}).Build()
+		WithStatusSubresource(&loopruntimev1.Environment{}).Build()
 	r := &EnvironmentReconciler{Client: mgmt, Scheme: s,
 		RuntimeFactory: cellFactory{cells: map[string]client.Client{}}}
 

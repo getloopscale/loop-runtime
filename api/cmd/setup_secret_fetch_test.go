@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Unit tests for the broker endpoint composer + bearer middleware. T1.1
 // (Phase 1) + T3.1 (Phase 3) of plan 2026-06-10-j22-layer2-code-review-fixes
@@ -104,7 +104,7 @@ func (c *fakeCellQuerier) GetTenantCellID(_ context.Context, tenantID string) (s
 // binding control in routes/internal_secret_fetch.go line 143 calls
 // `deps.TenantBinding.GetTenantCellID(ctx, tenantID)` and compares to
 // `identity.CellID`. If the middleware trusted X-Cell-ID, any holder of
-// LOOPZERO_BROKER_TOKEN could spoof any cell and read every tenant's secrets.
+// LOOP_RUNTIME_BROKER_TOKEN could spoof any cell and read every tenant's secrets.
 // Server-side derivation makes the spoof structurally impossible for the
 // dev-public single-cluster path. A multi-cluster path would use a per-cell
 // TokenReview against the cell's K8s API (separate follow-up plan).

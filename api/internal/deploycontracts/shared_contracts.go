@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package deploycontracts
 
@@ -118,7 +118,7 @@ type WorkflowStatus struct {
 	// workflow declared no outputs (legacy or non-build workflows).
 	Outputs map[string]map[string]string
 
-	// Red Team loopzero-cloud#133: pod-level stuck-state signal. When Argo reports
+	// Red Team loop-console#133: pod-level stuck-state signal. When Argo reports
 	// the workflow Phase as "Running" but the underlying pod is wedged in
 	// ImagePullBackOff / ErrImagePull / CreateContainerError sustained past
 	// the RunningTimeout window, the reaper's M-03 "skip if workflow still

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package devpublic
 
@@ -8,8 +8,8 @@ package devpublic
 //   1. dev-public-engine-large-header-not-431_test.sh (Red Team #64)
 //   2. dev-public-engine-project-cap-rls-independent_test.sh (Red Team #111)
 //   3. dev-public-engine-redeploy-empty-source-message_test.sh (Red Team #126)
-//   4. dev-public-loopzero-cloud-memory-exports-race-deterministic_test.sh (Red Team #104)
-//   5. dev-public-loopzero-cloud-billing-seats-from-tenant-members_test.sh (Red Team #42)
+//   4. dev-public-loop-console-memory-exports-race-deterministic_test.sh (Red Team #104)
+//   5. dev-public-loop-console-billing-seats-from-tenant-members_test.sh (Red Team #42)
 //   6. dev-public-info-disclosure-scrub_test.sh (#35)
 //   7. dev-public-customer-app-respondingtimeouts_test.sh (Red Team #107)
 //   8. dev-public-preview-flow_test.sh (J-23 #64-#69)
@@ -258,7 +258,7 @@ func TestDevPublic_EngineContract_InfoDisclosureScrub(t *testing.T) {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 	// Rule 9 canonical forbidden internal terms.
-	for _, term := range []string{"argo", "argoproj", "serviceaccount", "namespace", "/tmp/loopzero-source-",
+	for _, term := range []string{"argo", "argoproj", "serviceaccount", "namespace", "/tmp/loop-runtime-source-",
 		"Kubernetes", "ArgoCD", "kubebuilder", "envtest", "Kaniko", "Gitea", "MinIO"} {
 		require.NotContains(t, string(body), term,
 			"error response MUST NOT leak internal term %q per #35 CWE-209 + Rule 9 scrubber", term)

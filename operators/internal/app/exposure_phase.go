@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package app
 
 import (
 	"fmt"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
@@ -60,7 +60,7 @@ func nextRouteEvent(phase statemachine.ExposedRouteState, obs routeObservation) 
 // advanceRoutePhase walks the ExposedRoute machine from phase, one declared
 // transition per observed event, until the observation is explained. A phase
 // the machine does not know is an error, never force-set.
-func advanceRoutePhase(phase loopzerov1.ExposedRoutePhase, obs routeObservation) (loopzerov1.ExposedRoutePhase, error) {
+func advanceRoutePhase(phase loopruntimev1.ExposedRoutePhase, obs routeObservation) (loopruntimev1.ExposedRoutePhase, error) {
 	state := statemachine.ExposedRouteState(phase)
 	if !knownRoutePhases[state] {
 		return "", fmt.Errorf("exposed route phase %q is not an ExposedRoute state", phase)
@@ -68,7 +68,7 @@ func advanceRoutePhase(phase loopzerov1.ExposedRoutePhase, obs routeObservation)
 	for step := 0; step < maxRouteSteps; step++ {
 		event := nextRouteEvent(state, obs)
 		if event == "" {
-			return loopzerov1.ExposedRoutePhase(state), nil
+			return loopruntimev1.ExposedRoutePhase(state), nil
 		}
 		next, err := exposedRouteSM.TryTransition(state, event)
 		if err != nil {
@@ -79,5 +79,5 @@ func advanceRoutePhase(phase loopzerov1.ExposedRoutePhase, obs routeObservation)
 	if nextRouteEvent(state, obs) != "" {
 		return "", fmt.Errorf("exposed route phase did not settle within %d transitions (at %q)", maxRouteSteps, state)
 	}
-	return loopzerov1.ExposedRoutePhase(state), nil
+	return loopruntimev1.ExposedRoutePhase(state), nil
 }

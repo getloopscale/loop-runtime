@@ -1,4 +1,4 @@
--- LoopZero PaaS — Consolidated initial schema.
+-- LoopRuntime PaaS — Consolidated initial schema.
 -- Replaces 37 incremental migrations into a single idempotent schema.
 -- Generated from pg_dump of production-equivalent database (2026-04-24).
 --
@@ -8,7 +8,7 @@
 -- Extensions
 -- pg_stat_statements is pre-loaded by Postgres via shared_preload_libraries
 -- (see infra/helm/postgresql/values.yaml + production DOKS PG configuration).
--- CREATE EXTENSION here would require superuser; the application user `loopzero`
+-- CREATE EXTENSION here would require superuser; the application user `loop_runtime`
 -- does NOT have CREATE EXTENSION privilege. Removed in
 -- dogfood-2026-05-08-fixes T1.2 (golang-migrate adoption) — legacy psql
 -- loop silently swallowed the permission error; golang-migrate marks the

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey: Team Add (T3.2 of deep-review-remediation-plan)
 //
-// Validates the `loopzero team add` + `loopzero team list` + `loopzero team remove`
+// Validates the `loop-runtime team add` + `loop-runtime team list` + `loop-runtime team remove`
 // CLI commands against the API. Each command is its own JSON contract
 // per CLAUDE.md (CLI stability contract).
 //
@@ -34,19 +34,19 @@ var _ = Describe("Journey: Team Add", Ordered, Label("journey"), func() {
 		skipIfNotE2E()
 		seedE2E()
 		// Idempotent pre-cleanup — drop any leftover from a previous run.
-		_, _, _ = runLoopZero("team", "remove", teammate, "--yes", "--json")
+		_, _, _ = runLoopRuntime("team", "remove", teammate, "--yes", "--json")
 	})
 
 	AfterAll(func() {
 		// Best-effort cleanup so this journey is idempotent.
-		_, _, _ = runLoopZero("team", "remove", teammate, "--yes", "--json")
+		_, _, _ = runLoopRuntime("team", "remove", teammate, "--yes", "--json")
 	})
 
 	It("team list returns valid JSON", func() {
-		stdout, stderr, exitCode := runLoopZero("team", "list", "--json")
+		stdout, stderr, exitCode := runLoopRuntime("team", "list", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopzero team list should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime team list should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"team list stdout": stdout,
@@ -59,17 +59,17 @@ var _ = Describe("Journey: Team Add", Ordered, Label("journey"), func() {
 	})
 
 	It("team add returns valid contract (success or USER_NOT_FOUND)", func() {
-		stdout, stderr, exitCode := runLoopZero("team", "add", teammate,
+		stdout, stderr, exitCode := runLoopRuntime("team", "add", teammate,
 			"--role", "member", "--json")
 
-		// API contract per CLAUDE.md (CLI stability contract): loopzero team add returns:
+		// API contract per CLAUDE.md (CLI stability contract): loop-runtime team add returns:
 		//   - exit 0 + member entry on success
 		//   - exit 1 + code=USER_NOT_FOUND when the target has not yet
-		//     logged in (LoopZero cannot add users it doesn't know about).
+		//     logged in (LoopRuntime cannot add users it doesn't know about).
 		// Both are stable contract paths. The journey asserts the
 		// exit-code surface + Rule-3 compliance.
 		Expect(exitCode).To(Or(Equal(0), Equal(1)),
-			"loopzero team add: unexpected exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)
+			"loop-runtime team add: unexpected exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"team add stdout": stdout,
@@ -82,21 +82,21 @@ var _ = Describe("Journey: Team Add", Ordered, Label("journey"), func() {
 	})
 
 	It("team role contract surface", func() {
-		stdout, stderr, exitCode := runLoopZero("team", "role", teammate,
+		stdout, stderr, exitCode := runLoopRuntime("team", "role", teammate,
 			"--role", "admin", "--json")
 
 		// Same dual-path contract: 0 if member exists, 1 otherwise.
 		Expect(exitCode).To(Or(Equal(0), Equal(1)),
-			"loopzero team role: unexpected exit\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime team role: unexpected exit\nstdout: %s\nstderr: %s", stdout, stderr)
 	})
 
 	It("team remove is idempotent", func() {
-		stdout, stderr, exitCode := runLoopZero("team", "remove", teammate,
+		stdout, stderr, exitCode := runLoopRuntime("team", "remove", teammate,
 			"--yes", "--json")
 
 		// Remove of a non-existent member must NOT crash — return 0 with
 		// "not member" or 1 with NOT_FOUND. Both are stable contracts.
 		Expect(exitCode).To(Or(Equal(0), Equal(1)),
-			"loopzero team remove: unexpected exit\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime team remove: unexpected exit\nstdout: %s\nstderr: %s", stdout, stderr)
 	})
 })

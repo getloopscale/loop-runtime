@@ -146,12 +146,12 @@ redis:
 
 configs:
   rbac:
-    # LoopZero API service account: sync + get + action (terminate stuck operations).
+    # LoopRuntime API service account: sync + get + action (terminate stuck operations).
     # MEET-2026-03-29-019: action/* needed for TerminateOperation on stuck syncs.
     policy.csv: |
-      p, loopzero-api, applications, sync, */*, allow
-      p, loopzero-api, applications, get, */*, allow
-      p, loopzero-api, applications, action/*, */*, allow
+      p, loop-runtime-api, applications, sync, */*, allow
+      p, loop-runtime-api, applications, get, */*, allow
+      p, loop-runtime-api, applications, action/*, */*, allow
   params:
     server.insecure: true
     # Manual sync only — API controls when to sync, not ArgoCD auto-sync
@@ -174,14 +174,14 @@ configs:
     # Gitea repository credentials for tenant GitOps repos.
     # ArgoCD uses these to clone tenant repos from the internal Gitea instance.
     gitea-internal:
-      url: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+      url: "http://gitea-http.loop-runtime-system.svc.cluster.local:3000"
       type: git
       # Credentials managed via ArgoCD repo-creds secret (provisioned by TenantController)
   cm:
-    # Dedicated service account for LoopZero API — apiKey only, no login (cannot access UI).
+    # Dedicated service account for LoopRuntime API — apiKey only, no login (cannot access UI).
     # Tokens generated with `argocd account generate-token` never expire by default.
     # This replaces the old pattern of using admin session tokens which expire in 24h.
-    accounts.loopzero-api: apiKey
+    accounts.loop-runtime-api: apiKey
     # Health assessment settings
     resource.customizations.health.argoproj.io_Application: |
       hs = {}
@@ -269,28 +269,28 @@ configs:
 notificationsController:
   enabled: true
 notifications:
-  # Webhook service: calls LoopZero API internal endpoint
+  # Webhook service: calls LoopRuntime API internal endpoint
   # IMPORTANT: argo-cd chart v7.x uses "notifiers" key (not "services")
   notifiers:
-    service.webhook.loopzero-api: |
-      # NOTE (infra-arch-012): This URL uses loopzero-system namespace which is correct for
-      # production (where ArgoCD and loopzero-api share the namespace). In local dev (k3d),
+    service.webhook.loop-runtime-api: |
+      # NOTE (infra-arch-012): This URL uses loop-runtime-system namespace which is correct for
+      # production (where ArgoCD and loop-runtime-api share the namespace). In local dev (k3d),
       # ArgoCD lives in the 'argocd' namespace so this cross-namespace DNS name still
       # resolves correctly — K8s DNS handles {svc}.{ns}.svc.cluster.local across namespaces.
-      url: http://loopzero-api.loopzero-system.svc.cluster.local:8080/internal/argocd-callback
+      url: http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/internal/argocd-callback
       headers:
       - name: Content-Type
         value: application/json
-      # MEET-2026-04-04-029 P0: Must match LOOPZERO_ARGO_CALLBACK_SECRET.
+      # MEET-2026-04-04-029 P0: Must match LOOP_RUNTIME_ARGO_CALLBACK_SECRET.
       # Production: overridden by Pulumi with RandomPassword-generated secret.
       # Dev: uses this default. NEVER use this value in production.
       - name: Authorization
-        value: "Bearer cb-loopzero-dev-local-only"
+        value: "Bearer cb-loop-runtime-dev-local-only"
   # Template: sends sync status as JSON payload
   templates:
     template.sync-completed: |
       webhook:
-        loopzero-api:
+        loop-runtime-api:
           method: POST
           body: |
             {"app_name": "{{.app.metadata.name}}", "sync_status": "{{.app.status.sync.status}}", "health_status": "{{.app.status.health.status}}", "revision": "{{.app.status.sync.revision}}"}

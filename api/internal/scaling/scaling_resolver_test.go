@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
-// Tests for ScalingResolver — see docs/plans/loopzero-scale-end-to-end-plan.md T1.1.
+// Tests for ScalingResolver — see docs/plans/loop-runtime-scale-end-to-end-plan.md T1.1.
 // RED tests written FIRST per TDD; implementation in scaling_resolver.go.
 
 package scaling

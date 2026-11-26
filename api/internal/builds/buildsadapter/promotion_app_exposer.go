@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildsadapter
 
@@ -17,7 +17,7 @@ type PromotionAppExposer struct {
 }
 
 func (a *PromotionAppExposer) ExposeApp(ctx context.Context, in release.AppExposure) error {
-	return a.Ensurer.EnsureLoopZeroApplication(ctx, builds.ApplicationCRInput{
+	return a.Ensurer.EnsureLoopRuntimeApplication(ctx, builds.ApplicationCRInput{
 		TenantID:    in.TenantID,
 		Project:     in.Project,
 		Environment: in.Environment,

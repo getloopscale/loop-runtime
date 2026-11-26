@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Red Team loopzero-cloud#68 + #43 post-fix-verification regression-protector
+# Red Team loop-console#68 + #43 post-fix-verification regression-protector
 # LIVE test. Reproduces the EXACT attack vector the Red Team used on 2026-06-27
 # AFTER my first round of fixes (which only covered `/self-service/{login,
 # registration}/methods/*`, missing the canonical browser-flow submit paths

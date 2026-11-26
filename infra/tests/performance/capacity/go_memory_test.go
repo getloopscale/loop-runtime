@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package capacity
 
@@ -17,7 +17,7 @@ import (
 
 // TestCapacityGoMemory validates the cell-budget.md assumption:
 //
-//	"Go runtime memory under load. LoopZero-api at idle is 15 Mi. The projection
+//	"Go runtime memory under load. LoopRuntime-api at idle is 15 Mi. The projection
 //	 of 200-300 Mi under burst is an educated guess based on typical pgx pool
 //	 + buffered JSON encoding working set."
 //
@@ -25,32 +25,32 @@ import (
 //   - Gap 1 (sustained load): Runs multiple waves of builds over time to
 //     detect memory leaks, not just burst peak.
 //   - Gap 2 (multi-replica): Uses kubectl top to measure TOTAL memory across
-//     all loopzero-api replicas, not just the one behind the port-forward.
+//     all loop-runtime-api replicas, not just the one behind the port-forward.
 //   - Gap 3 (GC pressure): Tracks go_memstats_sys_bytes alongside heap_inuse
 //     to capture the true OS-level memory footprint including GC overhead.
 //
 // Run:
 //
-//	kubectl --context=$LOOPZERO_CORE_CONTEXT -n loopzero-system port-forward svc/loopzero-api-metrics 19090:9090 &
+//	kubectl --context=$LOOP_RUNTIME_CORE_CONTEXT -n loop-runtime-system port-forward svc/loop-runtime-api-metrics 19090:9090 &
 //
-//	LOOPZERO_CAPACITY=1 \
-//	LOOPZERO_API_URL=https://api.dev.getloopscale.com \
-//	LOOPZERO_API_METRICS_URL=http://localhost:19090 \
-//	LOOPZERO_SERVICE_AUTH=... \
-//	LOOPZERO_APP_DOMAIN=dev.getloopscale.com \
-//	LOOPZERO_CORE_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-mgmt \
+//	LOOP_RUNTIME_CAPACITY=1 \
+//	LOOP_RUNTIME_API_URL=https://api.dev.getloopscale.com \
+//	LOOP_RUNTIME_API_METRICS_URL=http://localhost:19090 \
+//	LOOP_RUNTIME_SERVICE_AUTH=... \
+//	LOOP_RUNTIME_APP_DOMAIN=dev.getloopscale.com \
+//	LOOP_RUNTIME_CORE_CONTEXT=do-sfo3-loop-runtime-infra-dev-sfo3-mgmt \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityGoMemory -v -timeout 45m \
 //	  -args -workers=10
 func TestCapacityGoMemory(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
-	metricsURL := os.Getenv("LOOPZERO_API_METRICS_URL")
-	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
-	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
-	mgmtCtx := os.Getenv("LOOPZERO_CORE_CONTEXT")
+	apiURL := os.Getenv("LOOP_RUNTIME_API_URL")
+	metricsURL := os.Getenv("LOOP_RUNTIME_API_METRICS_URL")
+	serviceAuth := os.Getenv("LOOP_RUNTIME_SERVICE_AUTH")
+	appDomain := os.Getenv("LOOP_RUNTIME_APP_DOMAIN")
+	mgmtCtx := os.Getenv("LOOP_RUNTIME_CORE_CONTEXT")
 	if apiURL == "" || metricsURL == "" || serviceAuth == "" || appDomain == "" {
-		t.Fatal("LOOPZERO_API_URL, LOOPZERO_API_METRICS_URL, LOOPZERO_SERVICE_AUTH, LOOPZERO_APP_DOMAIN required")
+		t.Fatal("LOOP_RUNTIME_API_URL, LOOP_RUNTIME_API_METRICS_URL, LOOP_RUNTIME_SERVICE_AUTH, LOOP_RUNTIME_APP_DOMAIN required")
 	}
 
 	const (
@@ -61,7 +61,7 @@ func TestCapacityGoMemory(t *testing.T) {
 
 	// Sustained load: number of build waves (Gap 1).
 	waves := 3
-	if s := os.Getenv("LOOPZERO_SUSTAINED_WAVES"); s != "" {
+	if s := os.Getenv("LOOP_RUNTIME_SUSTAINED_WAVES"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
 			waves = n
 		}
@@ -77,7 +77,7 @@ func TestCapacityGoMemory(t *testing.T) {
 	defer cancel()
 
 	// --- Step 1: Create deploy harness ---
-	fixturePath := os.Getenv("LOOPZERO_FIXTURE_PATH")
+	fixturePath := os.Getenv("LOOP_RUNTIME_FIXTURE_PATH")
 	if fixturePath == "" {
 		fixturePath = "../../e2e/fixtures/hello-server"
 	}
@@ -99,12 +99,12 @@ func TestCapacityGoMemory(t *testing.T) {
 	}
 	// Gap 3: Track sys_bytes (includes GC overhead, stack, etc.)
 	beforeSys, _ := ScrapePrometheusMetric(metricsURL, "go_memstats_sys_bytes")
-	beforePGConns, _ := ScrapePrometheusMetric(metricsURL, "loopzero_postgres_connections_active")
+	beforePGConns, _ := ScrapePrometheusMetric(metricsURL, "loop_runtime_postgres_connections_active")
 
 	// Gap 2: Multi-replica baseline via kubectl top.
 	var baselineKubeMi int64
 	if mgmtCtx != "" {
-		pods, err := KubectlTopPods(ctx, mgmtCtx, "loopzero-system", "app=loopzero-api")
+		pods, err := KubectlTopPods(ctx, mgmtCtx, "loop-runtime-system", "app=loop-runtime-api")
 		if err != nil {
 			t.Logf("  warning: kubectl top baseline: %v (continuing with metrics-only)", err)
 		} else {
@@ -159,7 +159,7 @@ func TestCapacityGoMemory(t *testing.T) {
 					atomicMax(&peakSys, int64(sys))
 				}
 				// PG connections correlation.
-				if pg, err := ScrapePrometheusMetric(metricsURL, "loopzero_postgres_connections_active"); err == nil {
+				if pg, err := ScrapePrometheusMetric(metricsURL, "loop_runtime_postgres_connections_active"); err == nil {
 					atomicMax(&peakPGConns, int64(pg))
 				}
 			}
@@ -214,7 +214,7 @@ func TestCapacityGoMemory(t *testing.T) {
 	// Gap 2: Multi-replica post-load via kubectl top.
 	var postKubeMi int64
 	if mgmtCtx != "" {
-		pods, err := KubectlTopPods(ctx, mgmtCtx, "loopzero-system", "app=loopzero-api")
+		pods, err := KubectlTopPods(ctx, mgmtCtx, "loop-runtime-system", "app=loop-runtime-api")
 		if err == nil {
 			postKubeMi = TotalMemoryMi(pods)
 			t.Logf("  kubectl top post-load: %d Mi across %d replicas", postKubeMi, len(pods))

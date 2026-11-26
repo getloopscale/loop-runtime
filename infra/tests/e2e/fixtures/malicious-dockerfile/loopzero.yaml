@@ -3,7 +3,7 @@ project: malicious-dockerfile
 
 # build-mode-dispatch-and-dockerfile-security-plan T4.4 fixture.
 #
-# This fixture intentionally contains a Dockerfile that violates LoopZero's
+# This fixture intentionally contains a Dockerfile that violates LoopRuntime's
 # hard rejection rules (FROM_REGISTRY_NOT_ALLOWED). The journey spec
 # T4.4 deploys this fixture and asserts the build FAILS at the
 # `dockerfile-lint` workflow step BEFORE BuildKit is invoked.

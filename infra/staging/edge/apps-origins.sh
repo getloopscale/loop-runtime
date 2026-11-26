@@ -5,7 +5,7 @@
 # rebuild, so `task staging:edge` runs this after the cells are up.
 #
 #   EDGE_KVS_ARN         the routes store (infra-live edge/app-routes)
-#   EDGE_CLUSTER_PREFIX  the EKS cluster names' prefix; loopzero-staging-cell-0 is cell-0
+#   EDGE_CLUSTER_PREFIX  the EKS cluster names' prefix; loop-runtime-staging-cell-0 is cell-0
 #   EDGE_ORIGINS_FILE    optional: also write one "<cell> <DNSName>" line per cell there, for
 #                        Caddy, which sends a custom domain to its cell without the app router
 # The aws CLI reaches the emulator through the AWS_* variables the caller exports.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T2.1 + T2.3 of plan 2026-05-27-tenant-build-pipeline-gaps-closure-plan.md.
 // Tests for cosignAttestTemplate + DAG wiring + idempotency assertion.
@@ -50,7 +50,7 @@ func TestCosignAttestTemplate_HasActiveDeadlineSeconds180(t *testing.T) {
 }
 
 // ADR D1: predicate type MUST be in-toto v1.0 CycloneDX standard URI.
-// NOT custom LoopZero-specific type (compliance auditors recognize standards).
+// NOT custom LoopRuntime-specific type (compliance auditors recognize standards).
 func TestCosignAttestTemplate_UsesCycloneDXPredicateType(t *testing.T) {
 	tmpl := cosignAttestTemplate(CosignAttestParams{
 		AppName:       "api",

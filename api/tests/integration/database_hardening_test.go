@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package integration tests database hardening (MEET-2026-03-31-024 Phase 1).
 //
 // These tests verify:
-// 1. Role separation: loopzero_api cannot execute DDL
+// 1. Role separation: loop_runtime_api cannot execute DDL
 // 2. RLS is enabled AND forced on every tenant-scoped table
 // 3. CHECK constraints and indexes from the hardening migration exist
 // 4. audit_log is append-only
-// 5. Reconciliation reaches every tenant as loopzero_worker, via the named policy
+// 5. Reconciliation reaches every tenant as loop_runtime_worker, via the named policy
 //
 // Item 3 used to read "RLS bypass: system queries (no tenant_id set) see all
 // rows". That was the exposure, not a feature: migration 000062 made the
 // policies fail-closed, and cross-tenant work now goes through an explicit
-// policy granted to loopzero_worker instead of an unset session variable.
+// policy granted to loop_runtime_worker instead of an unset session variable.
 //
 // Tenant-isolation behaviour itself is covered in tenant_isolation_rls_audit_test.go,
 // which runs over the request-path role rather than the owner.
 //
 // These tests require a real PostgreSQL instance with the schema and migration
 // 000062 applied. They skip when DATABASE_URL is unreachable — set
-// LOOPZERO_RLS_AUDIT_REQUIRE=1 in CI so a missing database fails instead.
+// LOOP_RUNTIME_RLS_AUDIT_REQUIRE=1 in CI so a missing database fails instead.
 package integration
 
 import (
@@ -68,7 +68,7 @@ func setupHardeningTestDB(t *testing.T) *pgxpool.Pool {
 // reported green for five months over a control nobody had measured.
 //
 // Its coverage now lives in tenant_isolation_rls_audit_test.go, which runs over
-// LOOPZERO_API_DATABASE_URL (the real request-path role), refuses to run at all on a
+// LOOP_RUNTIME_API_DATABASE_URL (the real request-path role), refuses to run at all on a
 // role that can bypass RLS, and additionally covers the write direction and the
 // worker's cross-tenant reach:
 //
@@ -157,10 +157,10 @@ func TestCheckConstraintsOnStatus(t *testing.T) {
 // TestRolesExist verifies that the roles the platform connects as exist, and
 // that none of them can escape Row Level Security.
 //
-// The inventory is the one the code and the migrations use: loopzero_api (the
-// request path), loopzero_worker (the background loops, migration 000023) and
-// loopzero_cloud (the control plane, migration 000063). It used to name
-// loopzero_migrate and loopzero_readonly, which no migration, chart or connection in
+// The inventory is the one the code and the migrations use: loop_runtime_api (the
+// request path), loop_runtime_worker (the background loops, migration 000023) and
+// loop_console (the control plane, migration 000063). It used to name
+// loop_runtime_migrate and loop_runtime_readonly, which no migration, chart or connection in
 // this repository creates or uses — the test-roles fixture created them only so
 // this test would pass, and a database built by the migrations failed it
 // (issue #387).
@@ -168,7 +168,7 @@ func TestRolesExist(t *testing.T) {
 	pool := setupHardeningTestDB(t)
 	ctx := context.Background()
 
-	roles := []string{"loopzero_api", "loopzero_worker", "loopzero_cloud"}
+	roles := []string{"loop_runtime_api", "loop_runtime_worker", "loop_console"}
 	for _, role := range roles {
 		t.Run(fmt.Sprintf("role %s exists and is bound by RLS", role), func(t *testing.T) {
 			var super, bypass bool
@@ -187,17 +187,17 @@ func TestRolesExist(t *testing.T) {
 	}
 }
 
-// TestLoopZeroApiCannotDDL verifies the loopzero_api role cannot execute DDL operations.
-// This test requires connecting as loopzero_api via LOOPZERO_API_DATABASE_URL env var.
+// TestLoopRuntimeApiCannotDDL verifies the loop_runtime_api role cannot execute DDL operations.
+// This test requires connecting as loop_runtime_api via LOOP_RUNTIME_API_DATABASE_URL env var.
 // Skips if the env var is not set or connection fails.
-func TestLoopZeroApiCannotDDL(t *testing.T) {
+func TestLoopRuntimeApiCannotDDL(t *testing.T) {
 	ctx := context.Background()
 
-	// Use a dedicated env var for the loopzero_api connection string.
+	// Use a dedicated env var for the loop_runtime_api connection string.
 	// This avoids overwriting with the admin URL from DATABASE_URL.
-	apiURL := os.Getenv("LOOPZERO_API_DATABASE_URL")
+	apiURL := os.Getenv("LOOP_RUNTIME_API_DATABASE_URL")
 	if apiURL == "" {
-		t.Skip("skipping: LOOPZERO_API_DATABASE_URL not set (needed to test loopzero_api role)")
+		t.Skip("skipping: LOOP_RUNTIME_API_DATABASE_URL not set (needed to test loop_runtime_api role)")
 	}
 
 	connCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -205,7 +205,7 @@ func TestLoopZeroApiCannotDDL(t *testing.T) {
 
 	pool, err := pgxpool.New(connCtx, apiURL)
 	if err != nil {
-		t.Skipf("skipping: cannot connect as loopzero_api: %v", err)
+		t.Skipf("skipping: cannot connect as loop_runtime_api: %v", err)
 	}
 	defer pool.Close()
 
@@ -324,14 +324,14 @@ func TestReconciliationQueriesWithRLS(t *testing.T) {
 	tenantA, tenantB, buildA, buildB := seedTwoTenants(t, ctx, pool)
 
 	// The reconciliation loop legitimately scans every tenant. Since migration
-	// 000062 it earns that reach through a named policy on loopzero_worker, not by
+	// 000062 it earns that reach through a named policy on loop_runtime_worker, not by
 	// leaving the context unset and falling through a permissive disjunct.
 	//
 	// The distinction matters operationally: a named grant is visible in
 	// pg_policy and shows up in an audit; an empty string that happens to
 	// disable the predicate looks like ordinary application code.
-	t.Run("FindActiveBuilds pattern reaches both tenants as loopzero_worker", func(t *testing.T) {
-		wctx, worker := auditPool(t, "LOOPZERO_WORKER_DATABASE_URL", "worker (loopzero_worker)")
+	t.Run("FindActiveBuilds pattern reaches both tenants as loop_runtime_worker", func(t *testing.T) {
+		wctx, worker := auditPool(t, "LOOP_RUNTIME_WORKER_DATABASE_URL", "worker (loop_runtime_worker)")
 
 		rows, err := worker.Query(wctx,
 			`SELECT id, tenant_id FROM builds
@@ -353,7 +353,7 @@ func TestReconciliationQueriesWithRLS(t *testing.T) {
 		}
 
 		if !seen[tenantA] || !seen[tenantB] {
-			t.Errorf("reconciliation must reach both tenants as loopzero_worker, saw: %v.\n"+
+			t.Errorf("reconciliation must reach both tenants as loop_runtime_worker, saw: %v.\n"+
 				"Check the *_worker_cross_tenant policies from migration 000062.", seen)
 		}
 	})

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -61,7 +61,7 @@ printf '%s\n' "-----BEGIN PUBLIC KEY-----" "fake-public" "-----END PUBLIC KEY---
 func (s *cosignSeed) run(t *testing.T) string {
 	t.Helper()
 	cmd := exec.Command("bash", filepath.Join(repoRoot(), "infra", "helmfile", "scripts", "seed-aws-cosign-key.sh"),
-		"loopzero/staging/cosign-signing-key")
+		"loop-runtime/staging/cosign-signing-key")
 	cmd.Env = append(os.Environ(), "PATH="+filepath.Join(s.dir, "bin")+":"+os.Getenv("PATH"))
 	out, err := cmd.CombinedOutput()
 	if err != nil {

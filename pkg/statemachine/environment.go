@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
-// Environment states as defined in the CRD (loopzero.io/v1 Environment).
+// Environment states as defined in the CRD (runtime.getloopscale.com/v1 Environment).
 // EnvironmentEmpty represents the initial zero-value before first reconcile.
 const (
 	EnvironmentEmpty    State = ""

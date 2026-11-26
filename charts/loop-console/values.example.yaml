@@ -1,0 +1,49 @@
+# loop-console — example install values (install-config-contract Slice 1)
+#
+# Copy, replace every !!changeme!! sentinel, then:
+#   helm install loop-console oci://ghcr.io/getloopscale/charts/loop-console \
+#     -f values.example.yaml --set existingSecret=loop-console-secrets
+#
+# Secrets are NOT here — they go in the Secret named by existingSecret (see SECRETS.md).
+# This file is validated by values.schema.json at `helm install` (additionalProperties:false),
+# so a typo'd key fails fast instead of silently rendering a broken pod.
+
+# --- Secret reference (anti-lock-in floor — see SECRETS.md) ---------------------
+# Name of the K8s Secret you populate (via ESO / CSI / sops / kubectl) with the
+# keys listed in SECRETS.md. Empty = legacy (secrets injected by overlay/seed).
+existingSecret: "loop-console-secrets"
+
+# --- Image ---------------------------------------------------------------------
+image:
+  repository: ghcr.io/getloopscale/loop-console
+  # Pin by digest in production for reproducibility (recommended over a floating tag):
+  #   digest: "sha256:!!changeme!!"
+  tag: "!!changeme-image-tag!!"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+# --- Non-secret config (URLs the cloud-API needs; per-environment) -------------
+# These render into a ConfigMap. Public URLs are browser-facing (https);
+# internal URLs are cluster-DNS (http). Keep the public/internal split correct.
+config:
+  kratosPublicUrl: "https://!!changeme-auth-host!!"
+  kratosAdminUrl: "http://ory-kratos-admin.loop-runtime-system:80"
+  hydraPublicUrl: "https://!!changeme-auth-host!!"
+  hydraAdminUrl: "http://ory-hydra-admin.loop-runtime-system:4445"
+  engineApiUrl: "http://loop-runtime-api.loop-runtime-system:8080"
+  appPublicUrl: "https://!!changeme-app-host!!"
+  loopRuntimeEnv: "prod"           # prod = fail-fast on missing required secrets/URLs
+
+# --- Exposure ------------------------------------------------------------------
+# The chart ships a ClusterIP Service (port `service.port`) and no Ingress: route
+# to it with the ingress controller or gateway your cluster already runs.
+
+# --- Sizing (optional; defaults are sane) --------------------------------------
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

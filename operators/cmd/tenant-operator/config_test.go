@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -46,7 +46,7 @@ func TestLoadConfig_AppliesTheDefaults(t *testing.T) {
 }
 
 // Issue #354: unset, GITEA_URL falls back to the Gitea the platform installs
-// (loopzero-system), the same address the api falls back to.
+// (loop-runtime-system), the same address the api falls back to.
 func TestLoadConfig_DefaultGiteaURLIsThePlatformGitea(t *testing.T) {
 	cfg, err := loadConfig(env(requiredEnv()))
 	if err != nil {
@@ -70,14 +70,14 @@ func TestLoadConfig_NamesEveryMissingRequiredVariable(t *testing.T) {
 }
 
 func TestLoadConfig_RefusesAMalformedConcurrency(t *testing.T) {
-	if _, err := loadConfig(env(with(map[string]string{"LOOPZERO_TENANT_MAX_CONCURRENT": "lots"}))); err == nil ||
-		!strings.Contains(err.Error(), "LOOPZERO_TENANT_MAX_CONCURRENT") {
-		t.Fatalf("error = %v, want a refusal naming LOOPZERO_TENANT_MAX_CONCURRENT", err)
+	if _, err := loadConfig(env(with(map[string]string{"LOOP_RUNTIME_TENANT_MAX_CONCURRENT": "lots"}))); err == nil ||
+		!strings.Contains(err.Error(), "LOOP_RUNTIME_TENANT_MAX_CONCURRENT") {
+		t.Fatalf("error = %v, want a refusal naming LOOP_RUNTIME_TENANT_MAX_CONCURRENT", err)
 	}
 }
 
 func TestLoadConfig_ReadsTheConcurrency(t *testing.T) {
-	cfg, err := loadConfig(env(with(map[string]string{"LOOPZERO_TENANT_MAX_CONCURRENT": "8"})))
+	cfg, err := loadConfig(env(with(map[string]string{"LOOP_RUNTIME_TENANT_MAX_CONCURRENT": "8"})))
 	if err != nil || cfg.TenantMaxConcurrent != 8 {
 		t.Fatalf("got (%d, %v), want 8", cfg.TenantMaxConcurrent, err)
 	}

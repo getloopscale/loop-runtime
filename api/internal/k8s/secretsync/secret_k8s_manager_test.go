@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secretsync
 
@@ -59,7 +59,7 @@ func TestCreateSecret_OnError_DoesNotLogValue(t *testing.T) {
 
 		dynFake := newRuntimeFake()
 
-		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loopzero-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
+		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loop-runtime-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
 		err := mgr.CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: env, App: app, Name: secretName}, secretValue)
 		if err == nil {
 			t.Fatal("expected error")
@@ -89,7 +89,7 @@ func TestCreateSecret_OnError_DoesNotLogValue(t *testing.T) {
 			return true, nil, errors.New("runtime ExternalSecret create failed")
 		})
 
-		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loopzero-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
+		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loop-runtime-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
 		err := mgr.CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: env, App: app, Name: secretName}, secretValue)
 		if err == nil {
 			t.Fatal("expected error")

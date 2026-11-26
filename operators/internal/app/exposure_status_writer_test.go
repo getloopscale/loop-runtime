@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // The single-status-writer contract for the app package.
 //
@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
@@ -276,14 +276,14 @@ func TestExposedRoute_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testing.T) 
 func assertAnchoredPatches(t *testing.T, tlsEnabled bool) {
 	t.Helper()
 	scheme := runtime.NewScheme()
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
+	if err := loopruntimev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	seed := &loopzerov1.ExposedRoute{
-		ObjectMeta: metav1.ObjectMeta{Name: "r1", Namespace: "loopzero-system", Generation: 7},
-		Spec: loopzerov1.ExposedRouteSpec{
+	seed := &loopruntimev1.ExposedRoute{
+		ObjectMeta: metav1.ObjectMeta{Name: "r1", Namespace: "loop-runtime-system", Generation: 7},
+		Spec: loopruntimev1.ExposedRouteSpec{
 			Hostname: "probe.example.invalid",
-			TLS:      loopzerov1.TLSConfig{Enabled: tlsEnabled},
+			TLS:      loopruntimev1.TLSConfig{Enabled: tlsEnabled},
 		},
 	}
 
@@ -291,7 +291,7 @@ func assertAnchoredPatches(t *testing.T, tlsEnabled bool) {
 	var lost []string
 	c := interceptor.NewClient(
 		fake.NewClientBuilder().WithScheme(scheme).WithObjects(seed).
-			WithStatusSubresource(&loopzerov1.ExposedRoute{}).Build(),
+			WithStatusSubresource(&loopruntimev1.ExposedRoute{}).Build(),
 		interceptor.Funcs{
 			SubResourcePatch: func(ctx context.Context, cl client.Client, sub string, obj client.Object,
 				patch client.Patch, opts ...client.SubResourcePatchOption) error {
@@ -300,11 +300,11 @@ func assertAnchoredPatches(t *testing.T, tlsEnabled bool) {
 					return err
 				}
 				bodies = append(bodies, string(data))
-				want, _ := json.Marshal(obj.(*loopzerov1.ExposedRoute).Status)
+				want, _ := json.Marshal(obj.(*loopruntimev1.ExposedRoute).Status)
 				if err := cl.Status().Patch(ctx, obj, patch, opts...); err != nil {
 					return err
 				}
-				var got loopzerov1.ExposedRoute
+				var got loopruntimev1.ExposedRoute
 				if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), &got); err != nil {
 					return err
 				}
@@ -388,19 +388,19 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 // Decision: MEET-ASYNC-AMENDMENT-2026-08-14-application-status-anchor
 func TestApplicationController_ConcurrentStatusWriteSurvivesThePatch(t *testing.T) {
 	scheme := runtime.NewScheme()
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
+	if err := loopruntimev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	seed := &loopzerov1.LoopZeroApplication{
-		ObjectMeta: metav1.ObjectMeta{Name: "app1", Namespace: "loopzero-system", Generation: 7},
-		Spec: loopzerov1.LoopZeroApplicationSpec{
+	seed := &loopruntimev1.LoopRuntimeApplication{
+		ObjectMeta: metav1.ObjectMeta{Name: "app1", Namespace: "loop-runtime-system", Generation: 7},
+		Spec: loopruntimev1.LoopRuntimeApplicationSpec{
 			TenantRef: "tn-x", Project: "p", Environment: "e",
 			ServiceName: "svc", Hostname: "app1.example.invalid",
 		},
 	}
 
 	inner := fake.NewClientBuilder().WithScheme(scheme).WithObjects(seed).
-		WithStatusSubresource(&loopzerov1.LoopZeroApplication{}).Build()
+		WithStatusSubresource(&loopruntimev1.LoopRuntimeApplication{}).Build()
 
 	var bodies []string
 	c := interceptor.NewClient(inner, interceptor.Funcs{
@@ -408,7 +408,7 @@ func TestApplicationController_ConcurrentStatusWriteSurvivesThePatch(t *testing.
 			patch client.Patch, opts ...client.SubResourcePatchOption) error {
 			// A DIFFERENT writer lands a scalar status field between the
 			// controller's read and its patch — the race the anchor decides.
-			var live loopzerov1.LoopZeroApplication
+			var live loopruntimev1.LoopRuntimeApplication
 			if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), &live); err == nil {
 				live.Status.EndpointsReady = true
 				_ = cl.Status().Update(ctx, &live)
@@ -440,7 +440,7 @@ func TestApplicationController_ConcurrentStatusWriteSurvivesThePatch(t *testing.
 	// (2) The concurrent write survived. Under the old anchor the diff carried
 	// endpointsReady:false — the value from the pre-refetch composite — and
 	// reverted it.
-	var got loopzerov1.LoopZeroApplication
+	var got loopruntimev1.LoopRuntimeApplication
 	if err := c.Get(context.Background(), client.ObjectKeyFromObject(seed), &got); err != nil {
 		t.Fatal(err)
 	}
@@ -467,18 +467,18 @@ func TestApplicationController_ConcurrentStatusWriteSurvivesThePatch(t *testing.
 // last status mutation even on early return.
 func TestApplicationController_ErrorPathPersistsAFreshReadinessSummary(t *testing.T) {
 	scheme := runtime.NewScheme()
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
+	if err := loopruntimev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
 
 	const staleGen, currentGen = 6, 7
-	seed := &loopzerov1.LoopZeroApplication{
-		ObjectMeta: metav1.ObjectMeta{Name: "app-err", Namespace: "loopzero-system", Generation: currentGen},
-		Spec: loopzerov1.LoopZeroApplicationSpec{
+	seed := &loopruntimev1.LoopRuntimeApplication{
+		ObjectMeta: metav1.ObjectMeta{Name: "app-err", Namespace: "loop-runtime-system", Generation: currentGen},
+		Spec: loopruntimev1.LoopRuntimeApplicationSpec{
 			TenantRef: "tn-x", Project: "p", Environment: "e",
 			ServiceName: "svc", Hostname: "app-err.example.invalid",
 		},
-		Status: loopzerov1.LoopZeroApplicationStatus{
+		Status: loopruntimev1.LoopRuntimeApplicationStatus{
 			Conditions: []metav1.Condition{{
 				Type:               conditions.TypeReady,
 				Status:             metav1.ConditionTrue,
@@ -491,14 +491,14 @@ func TestApplicationController_ErrorPathPersistsAFreshReadinessSummary(t *testin
 	}
 
 	inner := fake.NewClientBuilder().WithScheme(scheme).WithObjects(seed).
-		WithStatusSubresource(&loopzerov1.LoopZeroApplication{}).Build()
+		WithStatusSubresource(&loopruntimev1.LoopRuntimeApplication{}).Build()
 
 	// Deny the ExposedRoute write so reconcileExposedRoute takes its failure
 	// branch — the branch that persists status and returns.
 	c := interceptor.NewClient(inner, interceptor.Funcs{
 		Create: func(ctx context.Context, cl client.WithWatch, obj client.Object,
 			opts ...client.CreateOption) error {
-			if _, isRoute := obj.(*loopzerov1.ExposedRoute); isRoute {
+			if _, isRoute := obj.(*loopruntimev1.ExposedRoute); isRoute {
 				return fmt.Errorf("denied by the guard")
 			}
 			return cl.Create(ctx, obj, opts...)
@@ -513,7 +513,7 @@ func TestApplicationController_ErrorPathPersistsAFreshReadinessSummary(t *testin
 			"result here would prove nothing")
 	}
 
-	var got loopzerov1.LoopZeroApplication
+	var got loopruntimev1.LoopRuntimeApplication
 	if err := c.Get(context.Background(), client.ObjectKeyFromObject(seed), &got); err != nil {
 		t.Fatal(err)
 	}
@@ -697,7 +697,7 @@ func findStatusPersistSites(t *testing.T) []statusPersistSite {
 //
 // # The SIX-package guard exists now, and it is the authoritative one (B-138)
 //
-// `cmd/loopzero-ops/internal/quality/readinesssummary` covers the six packages by
+// `cmd/loop-runtime-ops/internal/quality/readinesssummary` covers the six packages by
 // AST and FOLLOWS THE CALL: a persist inside a helper counts as covered when
 // the helper folds the summary. That is what the count above could not see —
 // measured on 2026-08-19, the "19 without summary" were ALL artefacts of

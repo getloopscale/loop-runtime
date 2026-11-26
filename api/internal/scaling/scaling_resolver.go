@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // ScalingResolver — closes B40 gap: app_scaling_config table is read by the
-// deploy path. See loopzero-scale-end-to-end-plan (T1.1, D1, D2).
+// deploy path. See loop-runtime-scale-end-to-end-plan (T1.1, D1, D2).
 //
 // Precedence (D1): if app_scaling_config has a row for (tenant, project, env, app),
 // that row OVERRIDES the value from loopzero.yaml. Otherwise loopzero.yaml is preserved
@@ -18,7 +18,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // ScalingResolver merges yaml-supplied AppSpecs with persisted scaling
@@ -48,7 +48,7 @@ type dbScalingResolver struct {
 // silently ignore every persisted scaling config.
 func NewDBScalingResolver(store ScalingConfigReader) (ScalingResolver, error) {
 	if store == nil {
-		return nil, &loopzeroerrors.LoopZeroError{Code: loopzeroerrors.ErrInternalError.Code, Message: "scaling resolver: store is required"}
+		return nil, &loopruntimeerrors.LoopRuntimeError{Code: loopruntimeerrors.ErrInternalError.Code, Message: "scaling resolver: store is required"}
 	}
 	return &dbScalingResolver{store: store}, nil
 }

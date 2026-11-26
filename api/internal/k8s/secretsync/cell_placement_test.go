@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secretsync
 
@@ -33,7 +33,7 @@ func newPlacedManager(lookup TenantCellLookup) (*SecretK8sManager, *fake.Clients
 	mgmt := fake.NewClientset()
 	dyn := newRuntimeFake()
 	return &SecretK8sManager{
-		mgmtClient: mgmt, runtimeDynamic: dyn, mgmtNamespace: "loopzero-system",
+		mgmtClient: mgmt, runtimeDynamic: dyn, mgmtNamespace: "loop-runtime-system",
 		tenantCells: lookup, runtimeCellID: "cell-0",
 	}, mgmt, dyn
 }

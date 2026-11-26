@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -24,7 +24,7 @@ import (
 // written in the placement transaction. These tests run it against the
 // migrated schema, wired the way main wires it (on the cross-tenant pool).
 //
-//	DATABASE_URL=<loopzero_api> LOOPZERO_WORKER_DATABASE_URL=<loopzero_worker> \
+//	DATABASE_URL=<loop_runtime_api> LOOP_RUNTIME_WORKER_DATABASE_URL=<loop_runtime_worker> \
 //	  go test ./tests/integration/ -run Bootstrap -v
 const bootstrapTestSecret = "bootstrap-test-secret"
 

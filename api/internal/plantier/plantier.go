@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package plantier is the one policy the HTTP layer applies when it needs the
 // plan a tenant is on. A leaf: it serves no route.
@@ -17,7 +17,7 @@ import (
 	"log/slog"
 
 	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Resolve returns the tenant's canonical plan tier.
@@ -27,14 +27,14 @@ import (
 // error, or a plan value the enum does not know — it returns
 // ErrPlatformDegraded: a decision about a paying tenant is never made on a
 // guessed Starter (ADR D4, the H7 silent-downgrade closure).
-func Resolve(ctx context.Context, store pkgdomain.PlanTierStore, tenantID string) (pkgdomain.PlanTier, *loopzeroerrors.LoopZeroError) {
+func Resolve(ctx context.Context, store pkgdomain.PlanTierStore, tenantID string) (pkgdomain.PlanTier, *loopruntimeerrors.LoopRuntimeError) {
 	if store == nil {
 		return pkgdomain.PlanTierStarter, nil
 	}
 	tier, err := pkgdomain.ResolvePlanTier(ctx, store, tenantID)
 	if err != nil {
 		slog.ErrorContext(ctx, "plan tier resolution failed", "tenant_id", tenantID, "error", err)
-		return pkgdomain.PlanTierUnknown, loopzeroerrors.ErrPlatformDegraded.Wrap(
+		return pkgdomain.PlanTierUnknown, loopruntimeerrors.ErrPlatformDegraded.Wrap(
 			"plan tier resolution failed — retry or contact support")
 	}
 	return tier, nil

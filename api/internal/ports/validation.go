@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Custom domain validation rules. MEET-2026-04-05-033 §6.4. The DNS TXT
 // verifier that used to live here is infrastructure and moved to

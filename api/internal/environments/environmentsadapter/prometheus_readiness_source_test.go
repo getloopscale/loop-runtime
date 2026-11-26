@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environmentsadapter
 
@@ -66,7 +66,7 @@ func TestPrometheusReplicasReadySource_ReadsOneSamplePerLabelledEnvironment(t *t
 // labels, so the poller reads the ready replicas each cell records per app and
 // folds a project's apps into its environment (getloopscale/loop-runtime#107).
 func TestReplicasReadyQuery_SumsTheRecordedSeriesPerEnvironment(t *testing.T) {
-	const want = `sum by (tenant_id, project, environment) (loopzero_app:kube_pod_status_ready:sum)`
+	const want = `sum by (tenant_id, project, environment) (loop_runtime_app:kube_pod_status_ready:sum)`
 	if ReplicasReadyQuery != want {
 		t.Errorf("ReplicasReadyQuery =\n %s\nwant\n %s", ReplicasReadyQuery, want)
 	}

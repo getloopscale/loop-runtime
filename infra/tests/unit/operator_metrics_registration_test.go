@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C17.
 // Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
@@ -8,7 +8,7 @@
 // `operators/internal/metrics` package via blank-import side-effect.
 // Without this, controller-runtime metrics registry stays empty in the
 // split binary, breaking observability dashboards/alerts that pre-date
-// the split (e.g., loopzero_misplaced_tenant_total from ADR-0018).
+// the split (e.g., loop_runtime_misplaced_tenant_total from ADR-0018).
 //
 // Lives in infra/tests/unit because each operators/cmd/{op}-operator
 // is its own `package main` and can't host a test file from a

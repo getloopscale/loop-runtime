@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package events contains the canonical event payload schemas for SSE
 // streams. Backend serializers + frontend TS types both reference these

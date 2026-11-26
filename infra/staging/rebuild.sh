@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
-# The nightly rebuild of staging, run by loopzero-staging-rebuild.timer: everything is
+# The nightly rebuild of staging, run by loop-runtime-staging-rebuild.timer: everything is
 # torn down and built again from the head of develop (`task staging:up`), so staging
 # never drifts from what the code describes.
 #
@@ -18,9 +18,9 @@ set -euo pipefail
 
 REMOTE="${DEPLOY_REMOTE:-https://github.com/getloopscale/loop-runtime.git}"
 BRANCH="${DEPLOY_BRANCH:-develop}"
-STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loopzero-staging/deploy}"
+STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loop-runtime-staging/deploy}"
 UP_CMD="${REBUILD_UP_CMD:-task staging:up}"
-ALARM="${REBUILD_ALARM_CMD:-/usr/local/lib/loopzero-staging/alarm.sh}"
+ALARM="${REBUILD_ALARM_CMD:-/usr/local/lib/loop-runtime-staging/alarm.sh}"
 # The restore drill, given the rebuilt commit. Empty: the checkout's restore-drill.sh.
 RESTORE_DRILL_CMD="${REBUILD_RESTORE_DRILL_CMD:-}"
 

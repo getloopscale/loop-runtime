@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package enforcement
 
@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loop-runtime/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 var errStoreDown = errors.New("connection refused")
@@ -21,11 +21,11 @@ func requireNoLimitErr(t *testing.T, err error) {
 	}
 }
 
-// requireDegraded asserts err is the PLATFORM_DEGRADED LoopZeroError and still
+// requireDegraded asserts err is the PLATFORM_DEGRADED LoopRuntimeError and still
 // carries its cause.
 func requireDegraded(t *testing.T, err, cause error) {
 	t.Helper()
-	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+	if !errors.Is(err, loopruntimeerrors.ErrPlatformDegraded) {
 		t.Fatalf("err = %v, want PLATFORM_DEGRADED", err)
 	}
 	if cause != nil && !errors.Is(err, cause) {

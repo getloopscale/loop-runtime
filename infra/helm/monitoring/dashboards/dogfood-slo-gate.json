@@ -4,14 +4,14 @@
       {
         "name": "Phase 6 gate window",
         "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "expr": "loopzero_dogfood_gate_window_active == 1",
+        "expr": "loop_runtime_dogfood_gate_window_active == 1",
         "iconColor": "rgba(255, 96, 96, 1)",
         "enable": true,
         "tagKeys": "phase"
       }
     ]
   },
-  "description": "§6.A.4 Phase 6 Dogfood Gate — 4h soak monitoring. Operator opens the gate by creating ConfigMap loopzero-dogfood-gate-window with annotation loopzero.io/dogfood-window=active; starts k6 traffic; waits 4h watching this dashboard. Auto-fail criteria: rollback P95 > 705ms (audit baseline) OR API P95 > 500ms OR any SEV-1 firing OR traffic generator dies for > 10min.",
+  "description": "§6.A.4 Phase 6 Dogfood Gate — 4h soak monitoring. Operator opens the gate by creating ConfigMap loop-runtime-dogfood-gate-window with annotation runtime.getloopscale.com/dogfood-window=active; starts k6 traffic; waits 4h watching this dashboard. Auto-fail criteria: rollback P95 > 705ms (audit baseline) OR API P95 > 500ms OR any SEV-1 firing OR traffic generator dies for > 10min.",
   "editable": false,
   "graphTooltip": 1,
   "panels": [
@@ -21,7 +21,7 @@
       "title": "Gate window status",
       "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [{ "expr": "max(loopzero_dogfood_gate_window_active)", "refId": "A" }],
+      "targets": [{ "expr": "max(loop_runtime_dogfood_gate_window_active)", "refId": "A" }],
       "fieldConfig": {
         "defaults": {
           "mappings": [
@@ -45,7 +45,7 @@
       "title": "Rollback P95 (4h window)",
       "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [{ "expr": "max(loopzero_phase6_rollback_p95_4h_ms)", "refId": "A" }],
+      "targets": [{ "expr": "max(loop_runtime_phase6_rollback_p95_4h_ms)", "refId": "A" }],
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
@@ -70,7 +70,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_api_request_duration_seconds_bucket[1h])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_api_request_duration_seconds_bucket[1h])) by (le)) * 1000",
           "refId": "A"
         }
       ],
@@ -98,7 +98,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(rate(loopzero_phase6_reads_total[5m])) + sum(rate(loopzero_phase6_writes_total[5m]))",
+          "expr": "sum(rate(loop_runtime_phase6_reads_total[5m])) + sum(rate(loop_runtime_phase6_writes_total[5m]))",
           "refId": "A"
         }
       ],
@@ -124,7 +124,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_rollback_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_rollback_duration_seconds_bucket[5m])) by (le)) * 1000",
           "legendFormat": "rollback p95 (5m)",
           "refId": "A"
         },
@@ -149,17 +149,17 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopzero_api_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le)) * 1000",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_api_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le)) * 1000",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(loopzero_api_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "expr": "histogram_quantile(0.99, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le)) * 1000",
           "legendFormat": "p99",
           "refId": "C"
         },
@@ -184,17 +184,17 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(rate(loopzero_phase6_reads_total[5m]))",
+          "expr": "sum(rate(loop_runtime_phase6_reads_total[5m]))",
           "legendFormat": "reads/s",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(loopzero_phase6_writes_total[5m]))",
+          "expr": "sum(rate(loop_runtime_phase6_writes_total[5m]))",
           "legendFormat": "writes/s",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(loopzero_phase6_errors_total[5m]))",
+          "expr": "sum(rate(loop_runtime_phase6_errors_total[5m]))",
           "legendFormat": "errors/s",
           "refId": "C"
         }
@@ -235,15 +235,15 @@
       "gridPos": { "x": 0, "y": 18, "w": 24, "h": 10 },
       "options": {
         "mode": "markdown",
-        "content": "## §6.A.4 Phase 6 Dogfood Gate — operator decision tree\n\n**Gate criteria (ALL must be true at t=4h):**\n\n- Panel 1: gate window status OPEN sustained 4h\n- Panel 2: rollback P95 (4h) ≤ 705ms (audit baseline)\n- Panel 3: API P95 (1h) ≤ 500ms\n- Panel 4: traffic RPS ≥ 30 (k6 active throughout)\n- Panel 8: ZERO non-Phase6 SEV-1 alerts firing during window\n- Chaos Mesh: at least one chaos experiment ran successfully during window (verify via `kubectl get podchaos,networkchaos,iochaos -A` count > 0)\n\n**ABORT triggers (any one):**\n\n- Panel 5 spikes > 705ms sustained 5m → Phase6RollbackLatencyExceeds705ms alert fires → ABORT\n- Panel 6 P95 spikes > 500ms sustained 10m → Phase6APILatencyExceeds500ms → ABORT\n- Panel 7 errors/s spikes (>1/s sustained) → traffic gen seeing 5xx; investigate before continuing\n- Panel 8 shows any non-Phase6 SEV-1 firing → Phase6SEV1Detected → ABORT\n- Panel 4 drops below 5/s for 10m → traffic gen died; restart k6 OR ABORT (SLOs become meaningless)\n\n**On ABORT:**\n\n1. Close the gate window: `kubectl annotate cm loopzero-dogfood-gate-window -n loopzero-system loopzero.io/dogfood-window-` (removes annotation)\n2. Stop k6: kill the running process (Ctrl-C if foreground; `pkill k6` otherwise)\n3. File abort artifact: see dogfood-slo-gate-runbook.md § Phase 5 (abort variant) for the audit template\n4. Diagnose: which panel pointed at the failure? Spec the remediation; restart the gate from Phase 0 after fix lands\n\n**On SUCCESS (t=4h, all panels GREEN):**\n\n1. Close the gate window (same kubectl annotate command)\n2. Stop k6\n3. File the SUCCESS audit artifact (template in runbook § Phase 5)\n4. Path-to-maturity 4.0 advances: §6.A.4 gate is the last engineering-side criterion before the customer day-trial gate (§6.A.2 — out of scope for §6.A.4)"
+        "content": "## §6.A.4 Phase 6 Dogfood Gate — operator decision tree\n\n**Gate criteria (ALL must be true at t=4h):**\n\n- Panel 1: gate window status OPEN sustained 4h\n- Panel 2: rollback P95 (4h) ≤ 705ms (audit baseline)\n- Panel 3: API P95 (1h) ≤ 500ms\n- Panel 4: traffic RPS ≥ 30 (k6 active throughout)\n- Panel 8: ZERO non-Phase6 SEV-1 alerts firing during window\n- Chaos Mesh: at least one chaos experiment ran successfully during window (verify via `kubectl get podchaos,networkchaos,iochaos -A` count > 0)\n\n**ABORT triggers (any one):**\n\n- Panel 5 spikes > 705ms sustained 5m → Phase6RollbackLatencyExceeds705ms alert fires → ABORT\n- Panel 6 P95 spikes > 500ms sustained 10m → Phase6APILatencyExceeds500ms → ABORT\n- Panel 7 errors/s spikes (>1/s sustained) → traffic gen seeing 5xx; investigate before continuing\n- Panel 8 shows any non-Phase6 SEV-1 firing → Phase6SEV1Detected → ABORT\n- Panel 4 drops below 5/s for 10m → traffic gen died; restart k6 OR ABORT (SLOs become meaningless)\n\n**On ABORT:**\n\n1. Close the gate window: `kubectl annotate cm loop-runtime-dogfood-gate-window -n loop-runtime-system runtime.getloopscale.com/dogfood-window-` (removes annotation)\n2. Stop k6: kill the running process (Ctrl-C if foreground; `pkill k6` otherwise)\n3. File abort artifact: see dogfood-slo-gate-runbook.md § Phase 5 (abort variant) for the audit template\n4. Diagnose: which panel pointed at the failure? Spec the remediation; restart the gate from Phase 0 after fix lands\n\n**On SUCCESS (t=4h, all panels GREEN):**\n\n1. Close the gate window (same kubectl annotate command)\n2. Stop k6\n3. File the SUCCESS audit artifact (template in runbook § Phase 5)\n4. Path-to-maturity 4.0 advances: §6.A.4 gate is the last engineering-side criterion before the customer day-trial gate (§6.A.2 — out of scope for §6.A.4)"
       }
     }
   ],
   "refresh": "30s",
   "schemaVersion": 38,
-  "tags": ["loopzero", "phase6", "dogfood-gate", "audit-M03", "audit-M09", "slo"],
+  "tags": ["loop-runtime", "phase6", "dogfood-gate", "audit-M03", "audit-M09", "slo"],
   "time": { "from": "now-4h", "to": "now" },
   "title": "Phase 6 Dogfood Gate",
-  "uid": "loopzero-dogfood-slo-gate",
+  "uid": "loop-runtime-dogfood-slo-gate",
   "version": 1
 }

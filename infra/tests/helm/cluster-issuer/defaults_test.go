@@ -93,7 +93,7 @@ func TestClusterIssuer_SelfSignedAliasesCarryTheNamesGiven(t *testing.T) {
 	}
 	require.Contains(t, specs, "letsencrypt-prod")
 	require.Contains(t, specs["letsencrypt-prod"], "selfSigned")
-	require.Contains(t, specs, "loopzero-ca-issuer", "the chart's own issuer is still emitted")
+	require.Contains(t, specs, "loop-runtime-ca-issuer", "the chart's own issuer is still emitted")
 }
 
 func TestClusterIssuer_NoAliasByDefault(t *testing.T) {

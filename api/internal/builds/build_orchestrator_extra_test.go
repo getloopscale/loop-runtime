@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -12,7 +12,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/db"
 	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 	"github.com/getloopscale/loop-runtime/api/internal/release"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
@@ -67,7 +67,7 @@ func (f *fakeBuildStoreOrch) Create(_ context.Context, _ db.DBTX, b *db.Build) e
 func (f *fakeBuildStoreOrch) GetByID(_ context.Context, id string) (*db.Build, error) {
 	b, ok := f.builds[id]
 	if !ok {
-		return nil, loopzeroerrors.ErrBuildNotFound
+		return nil, loopruntimeerrors.ErrBuildNotFound
 	}
 	return b, nil
 }
@@ -215,7 +215,7 @@ func TestBuildOrchestrator_SubmitBuild_DeployInProgress(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for concurrent build")
 	}
-	if err != loopzeroerrors.ErrDeployInProgress {
+	if err != loopruntimeerrors.ErrDeployInProgress {
 		t.Errorf("expected ErrDeployInProgress, got: %v", err)
 	}
 }
@@ -263,7 +263,7 @@ func TestBuildOrchestrator_CancelBuild_AlreadyTerminal(t *testing.T) {
 	})
 
 	err := orch.CancelBuild(context.Background(), "bld-done")
-	if err != loopzeroerrors.ErrBuildAlreadyCompleted {
+	if err != loopruntimeerrors.ErrBuildAlreadyCompleted {
 		t.Errorf("expected ErrBuildAlreadyCompleted, got: %v", err)
 	}
 }
@@ -382,7 +382,7 @@ func TestBuildOrchestrator_RetryReleaseActivation_WrongState(t *testing.T) {
 // The orchestrator keeps the configured registry as given: the local k3d default belongs to
 // config.Load in development, and nowhere else may a build silently push to it.
 func TestNewBuildOrchestrator_KeepsTheConfiguredRegistryURL(t *testing.T) {
-	const registry = "123456789012.dkr.ecr.us-east-1.amazonaws.com/loopzero-tenants"
+	const registry = "123456789012.dkr.ecr.us-east-1.amazonaws.com/loop-runtime-tenants"
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore:   newFakeBuildStoreOrch(),
 		ReleaseStore: newFakeReleaseStoreContainer(),
@@ -624,16 +624,16 @@ func TestBuildOrchestrator_SubmitBuild_WithProjectEnsurer(t *testing.T) {
 }
 
 // M5 review F2 (orchestrator half): when the deploy-path project-ensure returns
-// the per-Account cap rejection (*LoopZeroError PROJECTS_EXCEED_PLAN), SubmitBuild
+// the per-Account cap rejection (*LoopRuntimeError PROJECTS_EXCEED_PLAN), SubmitBuild
 // MUST propagate that typed error UNCHANGED — wrapSubmitBuildError's EC-3 guard
-// passes *LoopZeroError through instead of collapsing it into a generic
+// passes *LoopRuntimeError through instead of collapsing it into a generic
 // SubmitBuildError. This is what lets the route ladder map it to HTTP 422 rather
 // than a silent build-failure/500 (DoD #1: "typed rejection surfaced to the
-// deploy flow, not a silent 500"). A refactor that stopped passing *LoopZeroError
+// deploy flow, not a silent 500"). A refactor that stopped passing *LoopRuntimeError
 // through would fail here.
 func TestBuildOrchestrator_SubmitBuild_ProjectCapRejection_PropagatesTypedError(t *testing.T) {
 	bs := newFakeBuildStoreOrch()
-	capErr := loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-cap")
+	capErr := loopruntimeerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-cap")
 	pe := &fakeProjectEnsurer{ensureErr: capErr}
 
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
@@ -654,7 +654,7 @@ func TestBuildOrchestrator_SubmitBuild_ProjectCapRejection_PropagatesTypedError(
 	if err == nil {
 		t.Fatal("expected a cap-rejection error, got nil")
 	}
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
 		t.Fatalf("SubmitBuild must propagate the typed PROJECTS_EXCEED_PLAN error unchanged; got %v", err)
 	}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -13,7 +13,7 @@ import (
 
 // The request and worker roles must exist BEFORE the migrations run: 000062 and
 // 000068 grant to them only if they are already there (#396). And every consumer
-// of the database on the local path must connect as them, or loopzero-api refuses to
+// of the database on the local path must connect as them, or loop-runtime-api refuses to
 // boot on a pool that can bypass RLS.
 
 func setupSteps(t *testing.T) []string {
@@ -65,29 +65,29 @@ func TestSetupProvisionsTheRolesBeforeTheMigrations(t *testing.T) {
 }
 
 func TestTheTiltAPIConnectsThroughTheRoleSplit(t *testing.T) {
-	raw, err := os.ReadFile("../../tilt/loopzero-api-values.yaml")
+	raw, err := os.ReadFile("../../tilt/loop-runtime-api-values.yaml")
 	if err != nil {
 		t.Fatalf("read the Tilt values: %v", err)
 	}
 	var values struct {
 		Secrets struct {
 			DatabaseURL       string `yaml:"databaseUrl"`
-			WorkerDatabaseURL string `yaml:"loopzeroWorkerDatabaseUrl"`
+			WorkerDatabaseURL string `yaml:"loopRuntimeWorkerDatabaseUrl"`
 		} `yaml:"secrets"`
 	}
 	if err := yaml.Unmarshal(raw, &values); err != nil {
 		t.Fatalf("parse the Tilt values: %v", err)
 	}
-	if !strings.HasPrefix(values.Secrets.DatabaseURL, "postgres://loopzero_api:") {
-		t.Errorf("Tilt's DATABASE_URL does not connect as loopzero_api: %q", values.Secrets.DatabaseURL)
+	if !strings.HasPrefix(values.Secrets.DatabaseURL, "postgres://loop_runtime_api:") {
+		t.Errorf("Tilt's DATABASE_URL does not connect as loop_runtime_api: %q", values.Secrets.DatabaseURL)
 	}
-	if !strings.HasPrefix(values.Secrets.WorkerDatabaseURL, "postgres://loopzero_worker:") {
-		t.Errorf("Tilt's LOOPZERO_WORKER_DATABASE_URL does not connect as loopzero_worker: %q", values.Secrets.WorkerDatabaseURL)
+	if !strings.HasPrefix(values.Secrets.WorkerDatabaseURL, "postgres://loop_runtime_worker:") {
+		t.Errorf("Tilt's LOOP_RUNTIME_WORKER_DATABASE_URL does not connect as loop_runtime_worker: %q", values.Secrets.WorkerDatabaseURL)
 	}
 }
 
 // The secrets cluster is optional (#398), and when it exists nothing handed
-// OpenBao's AppRole to loopzero-api: vault-bootstrap-dev.sh does the whole chain and
+// OpenBao's AppRole to loop-runtime-api: vault-bootstrap-dev.sh does the whole chain and
 // had no caller. Setup wires it after networking, which is the step that makes
 // the secrets cluster resolvable from core.
 func TestSetupWiresOpenBaoAfterNetworking(t *testing.T) {
@@ -131,7 +131,7 @@ func secretsWireBody(t *testing.T) string {
 
 func TestTheOpenBaoWiringRunsTheBootstrapOnlyWhenTheClusterExists(t *testing.T) {
 	text := secretsWireBody(t)
-	for _, want := range []string{"loopzero-secrets", "SKIP", "infra/scripts/local/vault-bootstrap-dev.sh"} {
+	for _, want := range []string{"loop-runtime-secrets", "SKIP", "infra/scripts/local/vault-bootstrap-dev.sh"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("k3d:secrets:wire does not mention %q; it must skip without the cluster and run the bootstrap with it", want)
 		}
@@ -139,7 +139,7 @@ func TestTheOpenBaoWiringRunsTheBootstrapOnlyWhenTheClusterExists(t *testing.T) 
 }
 
 // The bootstrap issues a NEW AppRole role_id every run and writes only the secret_id.
-// loopzero-api refuses to boot with transit on and no role_id, and the dev loop turns
+// loop-runtime-api refuses to boot with transit on and no role_id, and the dev loop turns
 // transit on — so the wiring that runs the bootstrap must sync the role_id right after
 // it, not leave it to a seed that runs once the cleanroom is already over (#405).
 func TestTheOpenBaoWiringSyncsTheRoleIDTheBootstrapIssued(t *testing.T) {
@@ -148,7 +148,7 @@ func TestTheOpenBaoWiringSyncsTheRoleIDTheBootstrapIssued(t *testing.T) {
 	boot := strings.Index(text, "vault-bootstrap-dev.sh")
 	sync := strings.Index(text, "seed vault-role-id-sync")
 	if sync < 0 {
-		t.Fatalf("k3d:secrets:wire never runs `loopzero-ops seed vault-role-id-sync`; body:\n%s", text)
+		t.Fatalf("k3d:secrets:wire never runs `loop-runtime-ops seed vault-role-id-sync`; body:\n%s", text)
 	}
 	if boot < 0 || sync < boot {
 		t.Errorf("the role-id sync (offset %d) must run after vault-bootstrap-dev.sh (offset %d)", sync, boot)
@@ -166,25 +166,25 @@ func TestTheOpenBaoWiringSyncsTheRoleIDTheBootstrapIssued(t *testing.T) {
 // flag on and no secret, the admin routes answer 403 to everyone, so evict, pin and
 // inspect cannot be exercised on the dev loop at all (#413).
 func TestTheTiltAPIEnablesTheAdminRoutesItTurnsOn(t *testing.T) {
-	raw, err := os.ReadFile("../../tilt/loopzero-api-values.yaml")
+	raw, err := os.ReadFile("../../tilt/loop-runtime-api-values.yaml")
 	if err != nil {
 		t.Fatalf("read the Tilt values: %v", err)
 	}
 	var values struct {
 		Config struct {
-			LoopZeroAdminAPI string `yaml:"loopzeroAdminApi"`
+			LoopRuntimeAdminAPI string `yaml:"loopRuntimeAdminApi"`
 		} `yaml:"config"`
 		Secrets struct {
-			AdminServiceAuthSecret string `yaml:"loopzeroAdminServiceAuthSecret"`
+			AdminServiceAuthSecret string `yaml:"loopRuntimeAdminServiceAuthSecret"`
 		} `yaml:"secrets"`
 	}
 	if err := yaml.Unmarshal(raw, &values); err != nil {
 		t.Fatalf("parse the Tilt values: %v", err)
 	}
-	if values.Config.LoopZeroAdminAPI != "true" {
+	if values.Config.LoopRuntimeAdminAPI != "true" {
 		t.Skip("the Tilt values do not enable the admin API — https://github.com/getloopscale/loop-runtime/issues/413")
 	}
 	if values.Secrets.AdminServiceAuthSecret == "" {
-		t.Error("loopzeroAdminApi is \"true\" but secrets.loopzeroAdminServiceAuthSecret is empty: every admin route answers 403")
+		t.Error("loopRuntimeAdminApi is \"true\" but secrets.loopRuntimeAdminServiceAuthSecret is empty: every admin route answers 403")
 	}
 }

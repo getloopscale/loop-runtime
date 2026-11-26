@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # Validates a commit deployed to staging, and reports the staging/validate commit status.
 # infra/staging/deploy.sh runs it after every successful deploy, from the checkout of the
@@ -28,11 +28,11 @@ set -euo pipefail
 
 REPO="${DEPLOY_REPO:-getloopscale/loop-runtime}"
 GITHUB_API="${DEPLOY_GITHUB_API:-https://api.github.com}"
-STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loopzero-staging/deploy}"
-TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loopzero-staging/github-status-token}"
+STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/loop-runtime-staging/deploy}"
+TOKEN_FILE="${DEPLOY_STATUS_TOKEN_FILE:-/etc/loop-runtime-staging/github-status-token}"
 STATUS_URL_BASE="${DEPLOY_STATUS_URL_BASE:-https://staging.getloopscale.com}"
 CHECKOUT="${VALIDATE_CHECKOUT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-KUBECONFIG_FILE="${VALIDATE_KUBECONFIG:-/var/lib/loopzero-staging/kubeconfig}"
+KUBECONFIG_FILE="${VALIDATE_KUBECONFIG:-/var/lib/loop-runtime-staging/kubeconfig}"
 EMULATOR_DIR="${VALIDATE_EMULATOR_DIR:-/var/lib/aws-emulator/.aws/emulator/9597}"
 # The commands of steps 2, 3 and 4, replaced by a test. Each runs from the checkout's root.
 TOKEN_CMD="${VALIDATE_TOKEN_CMD:-seed_token}"
@@ -41,17 +41,17 @@ PLAN="${VALIDATE_PLAN:-pro}"
 SUITE_CMD="${VALIDATE_SUITE_CMD:-run_suite}"
 
 # The staging hostnames the suite is pointed at (infra/tests/livetest/dogfood/helpers.go).
-export LOOPZERO_DOGFOOD_CLOUD_URL="${LOOPZERO_DOGFOOD_CLOUD_URL:-https://cloud.staging.getloopscale.com}"
-export LOOPZERO_DOGFOOD_APP_URL="${LOOPZERO_DOGFOOD_APP_URL:-https://app.staging.getloopscale.com}"
-export LOOPZERO_DOGFOOD_AUTH_URL="${LOOPZERO_DOGFOOD_AUTH_URL:-https://auth.staging.getloopscale.com}"
-# The deep health of staging is loopzero-api's: database, Argo CD, Gitea and the cells.
-# loopzero-cloud has no deep health (it answers 404 on /health/deep).
-export LOOPZERO_DOGFOOD_DEEP_HEALTH_URL="${LOOPZERO_DOGFOOD_DEEP_HEALTH_URL:-https://api.staging.getloopscale.com/api/v1/health/deep}"
-export LOOPZERO_DOGFOOD_JWT_PATH="$STATE_DIR/validate/jwt"
+export LOOP_RUNTIME_DOGFOOD_CLOUD_URL="${LOOP_RUNTIME_DOGFOOD_CLOUD_URL:-https://cloud.staging.getloopscale.com}"
+export LOOP_RUNTIME_DOGFOOD_APP_URL="${LOOP_RUNTIME_DOGFOOD_APP_URL:-https://app.staging.getloopscale.com}"
+export LOOP_RUNTIME_DOGFOOD_AUTH_URL="${LOOP_RUNTIME_DOGFOOD_AUTH_URL:-https://auth.staging.getloopscale.com}"
+# The deep health of staging is loop-runtime-api's: database, Argo CD, Gitea and the cells.
+# loop-console has no deep health (it answers 404 on /health/deep).
+export LOOP_RUNTIME_DOGFOOD_DEEP_HEALTH_URL="${LOOP_RUNTIME_DOGFOOD_DEEP_HEALTH_URL:-https://api.staging.getloopscale.com/api/v1/health/deep}"
+export LOOP_RUNTIME_DOGFOOD_JWT_PATH="$STATE_DIR/validate/jwt"
 # The Kratos session of the validation identity, for the journeys that act as its browser.
-export LOOPZERO_DOGFOOD_SESSION_PATH="$STATE_DIR/validate/session"
+export LOOP_RUNTIME_DOGFOOD_SESSION_PATH="$STATE_DIR/validate/session"
 
-# The journeys that exercise what staging runs: loopzero-api, loopzero-cloud and its
+# The journeys that exercise what staging runs: loop-runtime-api, loop-console and its
 # /engine proxy, and Kratos. Every journey checks the deep health before its scenarios.
 #   j01 login: a seeded session authenticates against an engine route, and choosing
 #     GitHub or Google redirects to the provider with a client id
@@ -78,8 +78,8 @@ export LOOPZERO_DOGFOOD_SESSION_PATH="$STATE_DIR/validate/session"
 #   j06 j08 j09 j17 j19 j20 j21 j23 j25: read the canonical `sample` project, which the
 #     dev seed connects to a fixture GitHub repository; staging has no GitHub App, no
 #     fixture repository and no such project
-#   j13 billing: Stripe is not configured on staging (loopzero-cloud mounts no /v1/billing)
-#   j26 storage: loopzero-cloud runs with storage disabled (no /v1/storage)
+#   j13 billing: Stripe is not configured on staging (loop-console mounts no /v1/billing)
+#   j26 storage: loop-console runs with storage disabled (no /v1/storage)
 #   dp-memory dp-rag dp-lens: the data-plane products are not deployed on staging
 # A scenario that is still a sketch calls Skip; Ginkgo reports it as skipped, not passed.
 JOURNEYS="${VALIDATE_JOURNEYS:-j01 || j02 || j04 || j05 || j07 || j10 || j11 || j14 || j15 || j18 || j22 || app-lifecycle}"
@@ -126,19 +126,19 @@ kube_env() {
     AWS_ENDPOINT_URL=https://localhost:9597 AWS_REGION=us-east-1
 }
 
-# seed_token: the validation identity in Kratos (loopzero-ops seed admin-loopzero-dev,
-# the dev seed pointed at staging), then its session exchanged at loopzero-cloud for the
-# bearer token the suite sends, written to $LOOPZERO_DOGFOOD_JWT_PATH.
+# seed_token: the validation identity in Kratos (loop-runtime-ops seed admin-loop-runtime-dev,
+# the dev seed pointed at staging), then its session exchanged at loop-console for the
+# bearer token the suite sends, written to $LOOP_RUNTIME_DOGFOOD_JWT_PATH.
 #
 # It runs in a subshell inside an `if`, where bash ignores errexit: every step that can
 # fail returns on its own.
 seed_token() {
   kube_env
   local dir="$STATE_DIR/validate" port password code
-  (cd cmd/loopzero-ops && GOWORK=off go build -o "$dir/loopzero-ops" .) || return 1
+  (cd cmd/loop-runtime-ops && GOWORK=off go build -o "$dir/loop-runtime-ops" .) || return 1
   # The Kratos admin API is never exposed; it is reached through a port-forward.
   port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])') || return 1
-  kubectl --context core -n loopzero-auth port-forward svc/ory-kratos-admin "$port:80" >/dev/null 2>&1 &
+  kubectl --context core -n loop-runtime-auth port-forward svc/ory-kratos-admin "$port:80" >/dev/null 2>&1 &
   # shellcheck disable=SC2064 # the pid of this port-forward, in the subshell that runs the step
   trap "kill $! 2>/dev/null || true" EXIT
   for _ in $(seq 30); do
@@ -147,24 +147,24 @@ seed_token() {
   done
   password=$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 40)
   CORE_CONTEXT=core KRATOS_ADMIN_URL="http://127.0.0.1:$port" EMAIL=staging-validate@getloopscale.com \
-    SEED_PASSWORD="$password" PUBLIC_KRATOS_URL="$LOOPZERO_DOGFOOD_AUTH_URL" PUBLIC_CLOUD_URL="$LOOPZERO_DOGFOOD_APP_URL" \
-    SESSION_FILE="$dir/session" LOOPZERO_DEV_CREDENTIALS="$dir/no-dev-credentials.json" \
-    "$dir/loopzero-ops" seed admin-loopzero-dev || return 1
+    SEED_PASSWORD="$password" PUBLIC_KRATOS_URL="$LOOP_RUNTIME_DOGFOOD_AUTH_URL" PUBLIC_CLOUD_URL="$LOOP_RUNTIME_DOGFOOD_APP_URL" \
+    SESSION_FILE="$dir/session" LOOP_RUNTIME_DEV_CREDENTIALS="$dir/no-dev-credentials.json" \
+    "$dir/loop-runtime-ops" seed admin-loop-runtime-dev || return 1
   # The session cookie goes to curl through a file, never on a command line.
   printf 'Cookie: ory_kratos_session=%s\n' "$(<"$dir/session")" >"$dir/session-header" || return 1
   code=$(curl -sS --max-time 30 -o "$dir/exchange.json" -w '%{http_code}' -X POST \
-    -H @"$dir/session-header" "$LOOPZERO_DOGFOOD_CLOUD_URL/v1/auth/session/token") || code=000
+    -H @"$dir/session-header" "$LOOP_RUNTIME_DOGFOOD_CLOUD_URL/v1/auth/session/token") || code=000
   rm -f "$dir/session-header"
   if [[ "$code" != 200 ]]; then
     echo "POST /v1/auth/session/token answered HTTP $code" >&2
     rm -f "$dir/exchange.json"
     return 1
   fi
-  jq -r '.access_token // empty' "$dir/exchange.json" >"$LOOPZERO_DOGFOOD_JWT_PATH" || return 1
+  jq -r '.access_token // empty' "$dir/exchange.json" >"$LOOP_RUNTIME_DOGFOOD_JWT_PATH" || return 1
   rm -f "$dir/exchange.json"
-  chmod 600 "$LOOPZERO_DOGFOOD_JWT_PATH"
-  [[ -s "$LOOPZERO_DOGFOOD_JWT_PATH" ]] || { echo "the session exchange returned no access_token" >&2; return 1; }
-  echo "validation identity seeded; token written to $LOOPZERO_DOGFOOD_JWT_PATH"
+  chmod 600 "$LOOP_RUNTIME_DOGFOOD_JWT_PATH"
+  [[ -s "$LOOP_RUNTIME_DOGFOOD_JWT_PATH" ]] || { echo "the session exchange returned no access_token" >&2; return 1; }
+  echo "validation identity seeded; token written to $LOOP_RUNTIME_DOGFOOD_JWT_PATH"
 }
 
 # set_plan: puts the validation tenant on $PLAN. A tenant starts on Starter, whose 50
@@ -172,7 +172,7 @@ seed_token() {
 # refused with HTTP 402 and the app lifecycle journey fails on a healthy staging.
 #
 # No API changes a plan without a payment, so the subscription is written to the database
-# the way the dev seed writes it (loopzero-ops seed tenant-fixture). The address of the
+# the way the dev seed writes it (loop-runtime-ops seed tenant-fixture). The address of the
 # worker role comes from the cluster and reaches psql in the environment, never on a
 # command line.
 set_plan() {
@@ -180,11 +180,11 @@ set_plan() {
   local tenant uri row
   local -a conn
   tenant=$(jq -Rr 'split(".")[1] | gsub("-"; "+") | gsub("_"; "/") | @base64d | fromjson | .tenant_id // empty' \
-    "$LOOPZERO_DOGFOOD_JWT_PATH") || return 1
+    "$LOOP_RUNTIME_DOGFOOD_JWT_PATH") || return 1
   [[ -n "$tenant" ]] || { echo "the validation token names no tenant" >&2; return 1; }
-  uri=$(kubectl --context core -n loopzero-system get secret loopzero-db-credentials \
+  uri=$(kubectl --context core -n loop-runtime-system get secret loop-runtime-db-credentials \
     -o jsonpath='{.data.worker-uri}' | base64 -d) || return 1
-  [[ -n "$uri" ]] || { echo "the secret loopzero-db-credentials has no worker-uri" >&2; return 1; }
+  [[ -n "$uri" ]] || { echo "the secret loop-runtime-db-credentials has no worker-uri" >&2; return 1; }
   mapfile -t conn < <(DB_URI="$uri" python3 -c '
 import os
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -218,16 +218,16 @@ run_suite() {
   kube_env
   local port
   port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])') || return 1
-  kubectl --context core -n loopzero-auth port-forward svc/ory-kratos-admin "$port:80" >/dev/null 2>&1 &
+  kubectl --context core -n loop-runtime-auth port-forward svc/ory-kratos-admin "$port:80" >/dev/null 2>&1 &
   # shellcheck disable=SC2064 # the pid of this port-forward, in the subshell that runs the step
   trap "kill $! 2>/dev/null || true" EXIT
   for _ in $(seq 30); do
     curl -fsS -o /dev/null "http://127.0.0.1:$port/health/ready" 2>/dev/null && break
     sleep 1
   done
-  export LOOPZERO_DOGFOOD_KRATOS_ADMIN_URL="http://127.0.0.1:$port"
+  export LOOP_RUNTIME_DOGFOOD_KRATOS_ADMIN_URL="http://127.0.0.1:$port"
   cd infra/tests || return 1
-  LOOPZERO_DOGFOOD_CELL_CONTEXTS="$CELL_CONTEXTS" GOWORK=off go test -v -tags=live -count=1 -timeout 30m ./livetest/dogfood/ -run TestDogfoodLive \
+  LOOP_RUNTIME_DOGFOOD_CELL_CONTEXTS="$CELL_CONTEXTS" GOWORK=off go test -v -tags=live -count=1 -timeout 30m ./livetest/dogfood/ -run TestDogfoodLive \
     -args -ginkgo.label-filter="$JOURNEYS" -ginkgo.fail-on-empty -ginkgo.v -ginkgo.no-color
 }
 

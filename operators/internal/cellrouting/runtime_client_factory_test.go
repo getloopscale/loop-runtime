@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Unit tests for CellAwareRuntimeClientFactory + StaticRuntimeClientFactory.
 // cell-1-activation-plan iter 4 BUG-FIX. These tests use fake clients (no envtest).
@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 func newSchemeForTest(t *testing.T) *runtime.Scheme {
@@ -26,8 +26,8 @@ func newSchemeForTest(t *testing.T) *runtime.Scheme {
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatalf("add corev1 to scheme: %v", err)
 	}
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add loopzerov1 to scheme: %v", err)
+	if err := loopruntimev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add loopruntimev1 to scheme: %v", err)
 	}
 	return scheme
 }
@@ -69,7 +69,7 @@ func TestCellAwareFactory_ErrorWhenNoCCFound(t *testing.T) {
 	scheme := newSchemeForTest(t)
 	mgmt := fake.NewClientBuilder().WithScheme(scheme).Build() // empty
 	def := fake.NewClientBuilder().WithScheme(scheme).Build()
-	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loopzero-system")
+	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loop-runtime-system")
 
 	_, err := f.For(context.Background(), "cell-1")
 	if err == nil {
@@ -79,21 +79,21 @@ func TestCellAwareFactory_ErrorWhenNoCCFound(t *testing.T) {
 
 func TestCellAwareFactory_ErrorWhenSecretMissing(t *testing.T) {
 	scheme := newSchemeForTest(t)
-	cc := &loopzerov1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopzero-system"},
-		Spec: loopzerov1.ClusterCredentialSpec{
-			ClusterName: "loopzero-cell-1",
+	cc := &loopruntimev1.ClusterCredential{
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loop-runtime-system"},
+		Spec: loopruntimev1.ClusterCredentialSpec{
+			ClusterName: "loop-runtime-cell-1",
 			APIServer:   "https://172.18.0.10:6443",
 			CellID:      "cell-1",
-			SecretRef: loopzerov1.SecretReference{
+			SecretRef: loopruntimev1.SecretReference{
 				Name:      "cell-1-kubeconfig",
-				Namespace: "loopzero-system",
+				Namespace: "loop-runtime-system",
 			},
 		},
 	}
 	mgmt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cc).Build()
 	def := fake.NewClientBuilder().WithScheme(scheme).Build()
-	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loopzero-system")
+	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loop-runtime-system")
 
 	_, err := f.For(context.Background(), "cell-1")
 	if err == nil {
@@ -103,25 +103,25 @@ func TestCellAwareFactory_ErrorWhenSecretMissing(t *testing.T) {
 
 func TestCellAwareFactory_ErrorWhenSecretLacksKubeconfig(t *testing.T) {
 	scheme := newSchemeForTest(t)
-	cc := &loopzerov1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopzero-system"},
-		Spec: loopzerov1.ClusterCredentialSpec{
-			ClusterName: "loopzero-cell-1",
+	cc := &loopruntimev1.ClusterCredential{
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loop-runtime-system"},
+		Spec: loopruntimev1.ClusterCredentialSpec{
+			ClusterName: "loop-runtime-cell-1",
 			APIServer:   "https://172.18.0.10:6443",
 			CellID:      "cell-1",
-			SecretRef: loopzerov1.SecretReference{
+			SecretRef: loopruntimev1.SecretReference{
 				Name:      "cell-1-kubeconfig",
-				Namespace: "loopzero-system",
+				Namespace: "loop-runtime-system",
 			},
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "loop-runtime-system"},
 		Data:       map[string][]byte{"other": []byte("not-kubeconfig")},
 	}
 	mgmt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cc, secret).Build()
 	def := fake.NewClientBuilder().WithScheme(scheme).Build()
-	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loopzero-system")
+	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loop-runtime-system")
 
 	_, err := f.For(context.Background(), "cell-1")
 	if err == nil {
@@ -134,21 +134,21 @@ func TestCellAwareFactory_LookupByCellIDNotCRName(t *testing.T) {
 	// The CR name might be "workload" with cellID="cell-0", or "cell-1"
 	// with cellID="cell-1"; either should be found.
 	scheme := newSchemeForTest(t)
-	cc := &loopzerov1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "workload-not-matching-cellid", Namespace: "loopzero-system"},
-		Spec: loopzerov1.ClusterCredentialSpec{
-			ClusterName: "loopzero-cell-0",
+	cc := &loopruntimev1.ClusterCredential{
+		ObjectMeta: metav1.ObjectMeta{Name: "workload-not-matching-cellid", Namespace: "loop-runtime-system"},
+		Spec: loopruntimev1.ClusterCredentialSpec{
+			ClusterName: "loop-runtime-cell-0",
 			APIServer:   "https://172.18.0.7:6443",
 			CellID:      "cell-0",
-			SecretRef: loopzerov1.SecretReference{
+			SecretRef: loopruntimev1.SecretReference{
 				Name:      "workload-not-matching-cellid-kubeconfig",
-				Namespace: "loopzero-system",
+				Namespace: "loop-runtime-system",
 			},
 		},
 	}
 	mgmt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cc).Build()
 	def := fake.NewClientBuilder().WithScheme(scheme).Build()
-	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loopzero-system")
+	f := NewCellAwareRuntimeClientFactory(mgmt, def, "loop-runtime-system")
 
 	// Lookup by spec.cellID, NOT by metadata.name.
 	_, err := f.For(context.Background(), "cell-0")
@@ -233,13 +233,13 @@ func TestUnavailableFactory_ReturnsTheTypedErrorForEveryCell(t *testing.T) {
 // was never meant to reach.
 func TestCellAwareFactory_RefusesAKubeconfigSecretOutsideThePlatformNamespace(t *testing.T) {
 	scheme := newSchemeForTest(t)
-	cc := &loopzerov1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopzero-system"},
-		Spec: loopzerov1.ClusterCredentialSpec{
-			ClusterName: "loopzero-cell-1",
+	cc := &loopruntimev1.ClusterCredential{
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loop-runtime-system"},
+		Spec: loopruntimev1.ClusterCredentialSpec{
+			ClusterName: "loop-runtime-cell-1",
 			APIServer:   "https://172.18.0.10:6443",
 			CellID:      "cell-1",
-			SecretRef:   loopzerov1.SecretReference{Name: "cell-1-kubeconfig", Namespace: "kube-system"},
+			SecretRef:   loopruntimev1.SecretReference{Name: "cell-1-kubeconfig", Namespace: "kube-system"},
 		},
 	}
 	secret := &corev1.Secret{
@@ -247,7 +247,7 @@ func TestCellAwareFactory_RefusesAKubeconfigSecretOutsideThePlatformNamespace(t 
 		Data:       map[string][]byte{"kubeconfig": kubeconfigFor("https://172.18.0.10:6443", "t")},
 	}
 	mgmt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cc, secret).Build()
-	f := NewCellAwareRuntimeClientFactory(mgmt, nil, "loopzero-system")
+	f := NewCellAwareRuntimeClientFactory(mgmt, nil, "loop-runtime-system")
 
 	_, err := f.For(context.Background(), "cell-1")
 	if !errors.Is(err, ErrKubeconfigSecretOutsidePlatformNamespace) {

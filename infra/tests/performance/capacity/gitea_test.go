@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package capacity
 
@@ -28,18 +28,18 @@ import (
 //
 // Run:
 //
-//	LOOPZERO_CAPACITY=1 LOOPZERO_GITEA_URL=http://.../ \
-//	LOOPZERO_GITEA_USER=loopzero-admin LOOPZERO_GITEA_PASS=... \
+//	LOOP_RUNTIME_CAPACITY=1 LOOP_RUNTIME_GITEA_URL=http://.../ \
+//	LOOP_RUNTIME_GITEA_USER=loop-runtime-admin LOOP_RUNTIME_GITEA_PASS=... \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityGiteaAuth -v \
 //	  -args -rps=100 -duration=60s -workers=50
 func TestCapacityGiteaAuth(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	giteaURL := os.Getenv("LOOPZERO_GITEA_URL")
-	user := os.Getenv("LOOPZERO_GITEA_USER")
-	pass := os.Getenv("LOOPZERO_GITEA_PASS")
+	giteaURL := os.Getenv("LOOP_RUNTIME_GITEA_URL")
+	user := os.Getenv("LOOP_RUNTIME_GITEA_USER")
+	pass := os.Getenv("LOOP_RUNTIME_GITEA_PASS")
 	if giteaURL == "" || user == "" || pass == "" {
-		t.Fatal("LOOPZERO_GITEA_URL, LOOPZERO_GITEA_USER, LOOPZERO_GITEA_PASS required")
+		t.Fatal("LOOP_RUNTIME_GITEA_URL, LOOP_RUNTIME_GITEA_USER, LOOP_RUNTIME_GITEA_PASS required")
 	}
 
 	cfg := NewConfig("gitea-auth")

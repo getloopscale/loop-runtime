@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // RED test for the remaining half of issue #61 — the half that was a product
 // decision rather than a race.
@@ -11,10 +11,10 @@
 //
 // # The decision
 //
-// LoopZero promises a WebSocket **graceful reconnection**, not **survival**.
+// LoopRuntime promises a WebSocket **graceful reconnection**, not **survival**.
 //
 // Survival would mean a connection outlives the process that owns it, which
-// requires handing session state between pods. LoopZero does not do that, and
+// requires handing session state between pods. LoopRuntime does not do that, and
 // building it would be an architecture change, not a config value. Promising
 // survival and delivering a severed socket is worse than promising reconnection
 // and delivering it.
@@ -30,7 +30,7 @@
 //
 // Deliberately NOT done: a multi-minute grace period. It would delay every
 // rollout AND every rollback — including the rollback you reach for when a
-// canary is actively serving errors — to extend a promise LoopZero cannot keep
+// canary is actively serving errors — to extend a promise LoopRuntime cannot keep
 // anyway. The cost lands on the incident path, where seconds matter most.
 package manifests
 
@@ -63,14 +63,14 @@ func TestRolloutHasScaleDownDelay(t *testing.T) {
 	}
 	if *got > 120 {
 		t.Errorf("scaleDownDelaySeconds = %d, too long. The old ReplicaSet holds quota and delays the\n"+
-			"    NEXT rollout — including a rollback during an incident. LoopZero promises reconnection,\n"+
+			"    NEXT rollout — including a rollback during an incident. LoopRuntime promises reconnection,\n"+
 			"    not survival; a multi-minute window buys a guarantee it does not make.", *got)
 	}
 }
 
 // TestDeploymentUnaffectedByScaleDownDelay keeps the change scoped to the
 // progressive-delivery path. `scaleDownDelaySeconds` is a Rollout field; the
-// legacy Deployment path (LOOPZERO_PROGRESSIVE_DELIVERY=false) has no equivalent
+// legacy Deployment path (LOOP_RUNTIME_PROGRESSIVE_DELIVERY=false) has no equivalent
 // and must not have acquired stray config.
 func TestDeploymentUnaffectedByScaleDownDelay(t *testing.T) {
 	ps := buildAppPodSpec(k8sContainer{Name: "app", Image: "example/app:v1"})

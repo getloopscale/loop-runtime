@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -45,12 +45,12 @@ func TestEnvironment_SpecFields(t *testing.T) {
 	env := Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "acme-production",
-			Namespace: "loopzero-system",
+			Namespace: "loop-runtime-system",
 		},
 		Spec: EnvironmentCRSpec{
 			TenantRef:   TenantRef{Name: "acme"},
 			Environment: "production",
-			Namespace:   NamespaceSpec{Name: "loopzero-acme-production"},
+			Namespace:   NamespaceSpec{Name: "loop-runtime-acme-production"},
 			ResourceQuota: &ResourceQuotaSpec{
 				CPU:     "8",
 				Memory:  "16Gi",
@@ -67,8 +67,8 @@ func TestEnvironment_SpecFields(t *testing.T) {
 	if env.Spec.Environment != "production" {
 		t.Errorf("expected Environment %q, got %q", "production", env.Spec.Environment)
 	}
-	if env.Spec.Namespace.Name != "loopzero-acme-production" {
-		t.Errorf("expected Namespace.Name %q, got %q", "loopzero-acme-production", env.Spec.Namespace.Name)
+	if env.Spec.Namespace.Name != "loop-runtime-acme-production" {
+		t.Errorf("expected Namespace.Name %q, got %q", "loop-runtime-acme-production", env.Spec.Namespace.Name)
 	}
 	if env.Spec.ResourceQuota == nil {
 		t.Fatal("expected ResourceQuota to be set")
@@ -95,7 +95,7 @@ func TestEnvironment_SpecWithoutResourceQuota(t *testing.T) {
 		Spec: EnvironmentCRSpec{
 			TenantRef:     TenantRef{Name: "acme"},
 			Environment:   "staging",
-			Namespace:     NamespaceSpec{Name: "loopzero-acme-staging"},
+			Namespace:     NamespaceSpec{Name: "loop-runtime-acme-staging"},
 			NetworkPolicy: NetworkPolicyConfig{Isolate: false},
 			Plan:          PlanGrowth,
 		},
@@ -113,7 +113,7 @@ func TestEnvironment_StatusFields(t *testing.T) {
 	env := Environment{
 		Status: EnvironmentCRStatus{
 			Phase:              EnvironmentPhaseActive,
-			Namespace:          "loopzero-acme-production",
+			Namespace:          "loop-runtime-acme-production",
 			ObservedGeneration: 5,
 		},
 	}
@@ -121,8 +121,8 @@ func TestEnvironment_StatusFields(t *testing.T) {
 	if env.Status.Phase != EnvironmentPhaseActive {
 		t.Errorf("expected Phase %q, got %q", EnvironmentPhaseActive, env.Status.Phase)
 	}
-	if env.Status.Namespace != "loopzero-acme-production" {
-		t.Errorf("expected Namespace %q, got %q", "loopzero-acme-production", env.Status.Namespace)
+	if env.Status.Namespace != "loop-runtime-acme-production" {
+		t.Errorf("expected Namespace %q, got %q", "loop-runtime-acme-production", env.Status.Namespace)
 	}
 	if env.Status.ObservedGeneration != 5 {
 		t.Errorf("expected ObservedGeneration %d, got %d", 5, env.Status.ObservedGeneration)

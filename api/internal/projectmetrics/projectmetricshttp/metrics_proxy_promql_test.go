@@ -13,11 +13,11 @@ import (
 func TestBuildPromQL_ReadsTheSeriesRecordedPerTenantApp(t *testing.T) {
 	const labels = `tenant_id="tn-1",project="shop"`
 	cases := map[string]string{
-		"replicas_ready": `sum(loopzero_app:kube_pod_status_ready:sum{` + labels + `})`,
-		"p95_latency":    `histogram_quantile(0.95, sum by (le) (loopzero_app_le:traefik_service_request_duration_seconds_bucket:rate5m{` + labels + `}))`,
-		"rps":            `sum(loopzero_app:traefik_service_requests:rate5m{` + labels + `})`,
-		"error_rate": `(sum(loopzero_app_status_class:traefik_service_requests:rate5m{status_class="5xx",` + labels + `}) or vector(0))` +
-			` / sum(loopzero_app:traefik_service_requests:rate5m{` + labels + `}) * 100`,
+		"replicas_ready": `sum(loop_runtime_app:kube_pod_status_ready:sum{` + labels + `})`,
+		"p95_latency":    `histogram_quantile(0.95, sum by (le) (loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m{` + labels + `}))`,
+		"rps":            `sum(loop_runtime_app:traefik_service_requests:rate5m{` + labels + `})`,
+		"error_rate": `(sum(loop_runtime_app_status_class:traefik_service_requests:rate5m{status_class="5xx",` + labels + `}) or vector(0))` +
+			` / sum(loop_runtime_app:traefik_service_requests:rate5m{` + labels + `}) * 100`,
 	}
 	for signal, want := range cases {
 		if got := buildPromQL(signal, "tn-1", "shop"); got != want {
@@ -39,7 +39,7 @@ func TestBuildPromQL_TenantAppSignalsAggregateToOneSeries(t *testing.T) {
 	}
 }
 
-// loopzero#170: the dashboard formats error_rate as a percentage, so it is the
+// loop-runtime#170: the dashboard formats error_rate as a percentage, so it is the
 // ratio of 5xx to all requests times 100. An app that served traffic and no 5xx
 // has no 5xx series at all; it reads 0, not an empty result.
 func TestBuildPromQL_ErrorRate_IsAPercentageThatReadsZeroWithoutErrors(t *testing.T) {
@@ -71,8 +71,8 @@ func TestBuildPromQL_QuotesLabelValues(t *testing.T) {
 func TestBuildPromQL_OtherSignalsIntact(t *testing.T) {
 	cases := map[string]string{
 		"uptime_24h":       "avg_over_time(up{",
-		"status_terminal":  "loopzero_release_status_terminal{",
-		"last_deploy_time": "loopzero_release_last_deploy_timestamp_seconds{",
+		"status_terminal":  "loop_runtime_release_status_terminal{",
+		"last_deploy_time": "loop_runtime_release_last_deploy_timestamp_seconds{",
 	}
 	for signal, want := range cases {
 		if q := buildPromQL(signal, "t", "p"); !strings.Contains(q, want) {

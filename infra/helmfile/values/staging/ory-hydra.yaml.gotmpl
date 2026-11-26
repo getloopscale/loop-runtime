@@ -4,7 +4,7 @@
 # The issuer is the public one, https://auth.staging.getloopscale.com/ (publicAuthUrl in
 # environments/staging.yaml; the base values derive urls.self from it). The public-routes
 # release serves it through Traefik, and the edge terminates TLS in front of it.
-# loopzero-api validates tokens against that issuer and fetches the keys in-cluster.
+# loop-runtime-api validates tokens against that issuer and fetches the keys in-cluster.
 secret:
   enabled: false
   nameOverride: ory-hydra-credentials

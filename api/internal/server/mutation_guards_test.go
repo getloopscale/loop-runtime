@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -18,7 +18,7 @@ import (
 
 // idempotencyKeyRequired lists the mutations whose client MUST send an
 // Idempotency-Key: each one creates something a retry would duplicate, and
-// every client of each sends the key (loopzero-cli deploy and domain add).
+// every client of each sends the key (loop-runtime-cli deploy and domain add).
 var idempotencyKeyRequired = map[string]bool{
 	"POST /api/v1/builds":                      true,
 	"POST /api/v1/domains":                     true,
@@ -27,7 +27,7 @@ var idempotencyKeyRequired = map[string]bool{
 
 // idempotencyKeyNotRequired records, per mutation, the decision NOT to
 // require an Idempotency-Key and what it rests on. The shared basis: no
-// client of these routes sends the header (loopzero-cli sends it only for deploy
+// client of these routes sends the header (loop-runtime-cli sends it only for deploy
 // and domain add), so requiring it would refuse every call; each is rate
 // limited instead, and the reason says what makes a retry tolerable.
 var idempotencyKeyNotRequired = map[string]string{

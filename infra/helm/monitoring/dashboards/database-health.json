@@ -77,7 +77,7 @@
       "targetBlank": false,
       "title": "System Home",
       "type": "link",
-      "url": "/d/loopzero-home"
+      "url": "/d/loop-runtime-home"
     },
     {
       "asDropdown": false,
@@ -88,7 +88,7 @@
       "targetBlank": false,
       "title": "Platform Overview",
       "type": "link",
-      "url": "/d/loopzero-platform-overview"
+      "url": "/d/loop-runtime-platform-overview"
     }
   ],
   "panels": [
@@ -205,17 +205,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(loopzero_postgres_connections_active) or vector(0)",
+          "expr": "sum(loop_runtime_postgres_connections_active) or vector(0)",
           "legendFormat": "Active",
           "refId": "A"
         },
         {
-          "expr": "sum(loopzero_postgres_connections_idle) or vector(0)",
+          "expr": "sum(loop_runtime_postgres_connections_idle) or vector(0)",
           "legendFormat": "Idle",
           "refId": "B"
         },
         {
-          "expr": "sum(loopzero_postgres_connections_total) or vector(0)",
+          "expr": "sum(loop_runtime_postgres_connections_total) or vector(0)",
           "legendFormat": "Total",
           "refId": "C"
         }
@@ -281,7 +281,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopzero_postgres_connections_active) / max(loopzero_postgres_pool_max_conns) * 100 or vector(0)",
+          "expr": "sum(loop_runtime_postgres_connections_active) / max(loop_runtime_postgres_pool_max_conns) * 100 or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -340,7 +340,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopzero_postgres_connections_active) or vector(0)",
+          "expr": "sum(loop_runtime_postgres_connections_active) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -390,7 +390,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopzero_postgres_connections_idle) or vector(0)",
+          "expr": "sum(loop_runtime_postgres_connections_idle) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -440,7 +440,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopzero_postgres_connections_total) or vector(0)",
+          "expr": "sum(loop_runtime_postgres_connections_total) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -501,12 +501,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_api_requests_total[5m])) or vector(0)",
+          "expr": "sum(rate(loop_runtime_api_requests_total[5m])) or vector(0)",
           "legendFormat": "Total req/s",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(loopzero_api_requests_total[5m])) by (method) or vector(0)",
+          "expr": "sum(rate(loop_runtime_api_requests_total[5m])) by (method) or vector(0)",
           "legendFormat": "{{method}}",
           "refId": "B"
         }
@@ -568,7 +568,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "topk(10, loopzero_postgres_pool_acquire_duration_seconds_sum / loopzero_postgres_pool_acquire_duration_seconds_count) or vector(0)",
+          "expr": "topk(10, loop_runtime_postgres_pool_acquire_duration_seconds_sum / loop_runtime_postgres_pool_acquire_duration_seconds_count) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -629,17 +629,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopzero_lock_hold_duration_seconds_bucket[5m])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_lock_hold_duration_seconds_bucket[5m])) by (le)) or vector(0)",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_lock_hold_duration_seconds_bucket[5m])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_lock_hold_duration_seconds_bucket[5m])) by (le)) or vector(0)",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(loopzero_lock_hold_duration_seconds_bucket[5m])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.99, sum(rate(loop_runtime_lock_hold_duration_seconds_bucket[5m])) by (le)) or vector(0)",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -700,7 +700,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_lock_acquired_total{result=\"conflict\"}[5m])) or vector(0)",
+          "expr": "sum(rate(loop_runtime_lock_acquired_total{result=\"conflict\"}[5m])) or vector(0)",
           "legendFormat": "Conflicts/s",
           "refId": "A"
         }
@@ -759,7 +759,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopzero_lock_acquired_total{result=\"conflict\"}) or vector(0)",
+          "expr": "sum(loop_runtime_lock_acquired_total{result=\"conflict\"}) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -894,7 +894,7 @@
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loop-runtime",
     "database",
     "postgresql"
   ],
@@ -923,6 +923,6 @@
   "timepicker": {},
   "timezone": "browser",
   "title": "Database Health",
-  "uid": "loopzero-database-health",
+  "uid": "loop-runtime-database-health",
   "version": 1
 }

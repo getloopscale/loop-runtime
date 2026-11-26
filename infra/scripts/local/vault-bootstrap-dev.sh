@@ -11,32 +11,32 @@
 #
 # SPLIT-CONTEXT contract (T1.1 / Approach A canonical sponsor mandate
 # UNBREAKABLE 2026-06-19, issue #111): OpenBao runs in a SEPARATE
-# k3d-loopzero-secrets cluster (NOT mgmt). This script splits the kubectl
+# k3d-loop-runtime-secrets cluster (NOT mgmt). This script splits the kubectl
 # fan-out into:
-#   - OPENBAO_CONTEXT (default k3d-loopzero-secrets) → bao operator init /
+#   - OPENBAO_CONTEXT (default k3d-loop-runtime-secrets) → bao operator init /
 #     auth/approle / SPKI read — the secrets-cluster side
-#   - TARGET_CONTEXT  (default k3d-loopzero-core)  → loopzero-openbao-approle +
-#     openbao-spki-pin Secret apply (where loopzero-api Deployment envFrom
+#   - TARGET_CONTEXT  (default k3d-loop-runtime-core)  → loop-runtime-openbao-approle +
+#     openbao-spki-pin Secret apply (where loop-runtime-api Deployment envFrom
 #     reads from) — the core-cluster side
 # Legacy single-context invocations (everything against mgmt) were
 # canonical only under the superseded `task k3d:secrets:bootstrap-in-core`
 # shortcut. Approach A UNBREAKABLE forbids that shortcut.
 #
 # Per ADR D2: idempotent aggregator (re-run no-ops on already-initialized
-# state). Stores Shamir shards + root token at ~/.loopzero/cleanroom-unseal.json
+# state). Stores Shamir shards + root token at ~/.loop-runtime/cleanroom-unseal.json
 # (mode 0600) for re-unseal after Cleanroom OR pod restart.
 #
 # 10 canonical steps:
 #   1. Pre-flight: assert OpenBao pod running + sealed
-#   2. bao operator init -key-shares=5 -key-threshold=3 → ~/.loopzero/cleanroom-unseal.json
+#   2. bao operator init -key-shares=5 -key-threshold=3 → ~/.loop-runtime/cleanroom-unseal.json
 #   3. bao operator unseal × 3 (shards from cleanroom-unseal.json)
 #   4. kubectl create secret openbao-init-token (root token)
 #   5. helmfile sync --selector name=openbao-init (T5.1-T5.9 provisioning)
 #   6. bao auth enable approle
-#   7. bao write auth/approle/role/loopzero-api (policy + token_ttl=24h)
-#   8. bao read auth/approle/role/loopzero-api/role-id → capture
-#   9. bao write auth/approle/role/loopzero-api/secret-id → capture
-#   10. kubectl create secret loopzero-openbao-approle (external-secrets ns) +
+#   7. bao write auth/approle/role/loop-runtime-api (policy + token_ttl=24h)
+#   8. bao read auth/approle/role/loop-runtime-api/role-id → capture
+#   9. bao write auth/approle/role/loop-runtime-api/secret-id → capture
+#   10. kubectl create secret loop-runtime-openbao-approle (external-secrets ns) +
 #       kubectl create secret openbao-spki-pin from openbao-tls cert SPKI
 #
 # Wired in: taskfiles/k3d.yml as `task k3d:secrets:bootstrap-dev`.
@@ -46,16 +46,16 @@ set -uo pipefail
 
 # SPLIT-CONTEXT (T1.1 — Approach A UNBREAKABLE — issue #111).
 # OPENBAO_CONTEXT is the secrets-cluster side (bao init/unseal/approle/SPKI).
-# TARGET_CONTEXT is the core-cluster side (Secret apply that loopzero-api
-# Deployment envFrom reads from loopzero-system ns).
-OPENBAO_CONTEXT="${OPENBAO_CONTEXT:-k3d-loopzero-secrets}"
-TARGET_CONTEXT="${TARGET_CONTEXT:-k3d-loopzero-core}"
+# TARGET_CONTEXT is the core-cluster side (Secret apply that loop-runtime-api
+# Deployment envFrom reads from loop-runtime-system ns).
+OPENBAO_CONTEXT="${OPENBAO_CONTEXT:-k3d-loop-runtime-secrets}"
+TARGET_CONTEXT="${TARGET_CONTEXT:-k3d-loop-runtime-core}"
 # Backwards-compat alias preserved for inline log lines + helmfile sync
 # selectors that pre-date the T1.1 split. New code MUST use one of the
 # two split variables above.
 NS="${OPENBAO_NAMESPACE:-secrets-system}"
 POD="${OPENBAO_POD:-openbao-0}"
-UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
+UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loop-runtime/cleanroom-unseal.json}"
 # T2.1 of plan dev-public-cross-cluster-secrets (issue #111).
 # AUTO_UNSEAL_MODE selects between the legacy Shamir init/unseal/shard
 # chain (default — preserves backwards compat) and the new Transit
@@ -74,16 +74,16 @@ UNSEAL_FILE="${UNSEAL_FILE:-$HOME/.loopzero/cleanroom-unseal.json}"
 AUTO_UNSEAL_MODE="${AUTO_UNSEAL_MODE:-shamir}"
 OPENBAO_TRANSIT_ADDR="${OPENBAO_TRANSIT_ADDR:-http://openbao-transit.secrets-system.svc.cluster.local:8200}"
 # Cleanroom mandate run 2026-06-18 caught Finding #2 (issue #91): the
-# legacy default external-secrets ns put the loopzero-openbao-approle
-# Secret out of reach of loopzero-api Deployment (envFrom reads from
-# loopzero-system ns), so a fresh Cleanroom seed left loopzero-api in
+# legacy default external-secrets ns put the loop-runtime-openbao-approle
+# Secret out of reach of loop-runtime-api Deployment (envFrom reads from
+# loop-runtime-system ns), so a fresh Cleanroom seed left loop-runtime-api in
 # CrashLoopBackOff with "OPENBAO_VAULT_SECRET_ID required" and the
-# downstream master seed Step 2 (`loopzero-ops seed minio` (M15 W1) Layer 4 timed
-# out waiting for loopzero-api rollout. Default now points at the
-# canonical consumer ns (loopzero-system) so the chain converges on first
+# downstream master seed Step 2 (`loop-runtime-ops seed minio` (M15 W1) Layer 4 timed
+# out waiting for loop-runtime-api rollout. Default now points at the
+# canonical consumer ns (loop-runtime-system) so the chain converges on first
 # run. Operators with workloads still bound to external-secrets ns
 # (pre-canonical setup) override via ESO_TARGET_NS env var.
-TARGET_NS="${ESO_TARGET_NS:-loopzero-system}"
+TARGET_NS="${ESO_TARGET_NS:-loop-runtime-system}"
 DRY_RUN="${DRY_RUN:-0}"
 
 log() { printf '[vault-bootstrap-dev] %s\n' "$*" >&2; }
@@ -261,7 +261,7 @@ fi
 # undefined function — `bao_auth auth list` produced no stdout, the
 # Python check evaluated `'k8s-core/' in {}` → False every iteration,
 # the 180s wait loop ALWAYS timed out, and `auth/k8s-core/config` was
-# NEVER written. Downstream consequence: CSS loopzero-secrets-secrets stayed
+# NEVER written. Downstream consequence: CSS loop-runtime-secrets-secrets stayed
 # `Ready=False reason=InvalidProviderConfig` (1b-vault-bootstrap-eso
 # FAIL), and ESO cross-cluster workload-identity path silently
 # broke. Define bao_auth NOW (after ROOT_TOKEN is set, before Step 5.5
@@ -280,7 +280,7 @@ fi
 # === Step 5.5: R3 — canonical TokenReview config for auth/k8s-core ===
 # R3 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
 # 2026-06-19). The openbao-init Job (Step 5) provisions the `k8s-core`
-# auth mount + the `eso` role bound to eso-vault-reader@loopzero-system.
+# auth mount + the `eso` role bound to eso-vault-reader@loop-runtime-system.
 # But the mount needs `auth/k8s-core/config` (kubernetes_host + CA +
 # token_reviewer_jwt) for OpenBao to validate mgmt-issued SA tokens
 # via the TokenReview API. The canonical operator runbook documented
@@ -373,16 +373,16 @@ TR_EOF
       # Extract MGMT API server URL + CA bundle.
       MGMT_HOST=$(kubectl --context "$TARGET_CONTEXT" config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)
       MGMT_CA=$(kubectl --context "$TARGET_CONTEXT" -n default get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}' 2>/dev/null || true)
-      # CANONICAL FIX 2026-06-20 (revised, loopzero commit 7c255524) — rewrite the
+      # CANONICAL FIX 2026-06-20 (revised, loop-runtime commit 7c255524) — rewrite the
       # host-scoped kubeconfig URL to a SAN-aligned name reachable from the OpenBao
       # pod's network namespace. Regression-locked by
       # infra/tests/charts/vault_bootstrap_san_aligned_host_test.go (F1 guard).
       # Two requirements MUST hold simultaneously:
-      #   (a) reachability — from the vault pod (in loopzero-secrets cluster), the URL
+      #   (a) reachability — from the vault pod (in loop-runtime-secrets cluster), the URL
       #       must resolve to + connect to the mgmt API server on the host.
       #   (b) TLS hostname/SAN — OpenBao's Go HTTP client verifies the server cert
       #       strictly. The k3d-mgmt API cert SAN list is:
-      #         DNS: k3d-loopzero-core-server-0, k3d-loopzero-core-serverlb,
+      #         DNS: k3d-loop-runtime-core-server-0, k3d-loop-runtime-core-serverlb,
       #              kubernetes(.default(.svc(.cluster.local))), localhost
       #         IP : 0.0.0.0, 10.43.0.1, 127.0.0.1, <mgmt-server-0-IP>
       #       `host.k3d.internal` is NOT in the SAN list — using it triggers
@@ -392,15 +392,15 @@ TR_EOF
       #
       # The canonical SAN-aligned + cross-cluster-reachable name is the k3d
       # serverlb docker container name `k3d-${cluster_name}-serverlb`, derived
-      # from TARGET_CONTEXT (e.g., `k3d-loopzero-core` → `k3d-loopzero-core-serverlb`).
+      # from TARGET_CONTEXT (e.g., `k3d-loop-runtime-core` → `k3d-loop-runtime-core-serverlb`).
       # k3d injects this name into every cluster's CoreDNS NodeHosts via the
-      # shared docker network, so it resolves canonically from loopzero-secrets.
+      # shared docker network, so it resolves canonically from loop-runtime-secrets.
       MGMT_HOST_ORIG="$MGMT_HOST"
-      CORE_CLUSTER="${TARGET_CONTEXT#k3d-}"  # k3d-loopzero-core → loopzero-core
+      CORE_CLUSTER="${TARGET_CONTEXT#k3d-}"  # k3d-loop-runtime-core → loop-runtime-core
       SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"
       MGMT_HOST=$(echo "$MGMT_HOST" | sed -E "s|//(0\\.0\\.0\\.0\|127\\.0\\.0\\.1\|localhost\|host\\.k3d\\.internal)(:[0-9]+)?|//${SERVERLB_HOST}\\2|")
       if [[ "$MGMT_HOST" != "$MGMT_HOST_ORIG" ]]; then
-        log "  Rewrote MGMT_HOST: $MGMT_HOST_ORIG → $MGMT_HOST (SAN-aligned, reachable from loopzero-secrets)"
+        log "  Rewrote MGMT_HOST: $MGMT_HOST_ORIG → $MGMT_HOST (SAN-aligned, reachable from loop-runtime-secrets)"
       fi
       if [[ -z "$MGMT_HOST" || -z "$MGMT_CA" ]]; then
         log "  WARN: could not extract MGMT_HOST or MGMT_CA — skipping R3"
@@ -425,7 +425,7 @@ else
 fi
 
 # === Step 6+7: approle (the policy belongs to the chart) ===
-log "Step 6+7: approle loopzero-api (policy comes from the openbao-init chart)"
+log "Step 6+7: approle loop-runtime-api (policy comes from the openbao-init chart)"
 export BAO_TOKEN="$ROOT_TOKEN"
 # `bao_auth` is now defined right after ROOT_TOKEN is set (Step 4) so
 # Step 5.5's auth/k8s-core wait-loop can actually call it. The legacy
@@ -437,7 +437,7 @@ bao_auth auth enable approle 2>/dev/null || log "Skip: approle already enabled"
 # The policy is NOT written here. It is declared in the infra/helm/openbao-init chart
 # and applied by helmfile in step 5, just above.
 #
-# Until 2026-08-13 this block ran `bao policy write loopzero-api` with
+# Until 2026-08-13 this block ran `bao policy write loop-runtime-api` with
 # transit/keys/* including delete and list — minutes AFTER the chart applied a
 # policy of the same name. Last writer wins, so the versioned version, which is the
 # one that goes through review, never reached any runtime: the B-072 fix
@@ -446,7 +446,7 @@ bao_auth auth enable approle 2>/dev/null || log "Skip: approle already enabled"
 # at all.
 #
 # Measured before removing it: the TransitClient builds exactly three paths, all
-# under loopzero-tenants-<id> (encrypt, keys, decrypt), plus the AppRole login.
+# under loop-runtime-tenants-<id> (encrypt, keys, decrypt), plus the AppRole login.
 # No LIST, no DELETE, no KV. The chart's set covers all three.
 #
 # What stays here is the CREDENTIAL lifecycle — create the AppRole, generate the
@@ -455,8 +455,8 @@ bao_auth auth enable approle 2>/dev/null || log "Skip: approle already enabled"
 #
 # Decision: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-13-vault-policy-ownership.md
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  bao_auth write auth/approle/role/loopzero-api \
-    token_policies=loopzero-api \
+  bao_auth write auth/approle/role/loop-runtime-api \
+    token_policies=loop-runtime-api \
     token_ttl=24h \
     token_max_ttl=72h || true
 fi
@@ -465,27 +465,27 @@ fi
 log "Step 8+9: capture role_id + secret_id"
 if [[ "$DRY_RUN" -eq 0 ]]; then
   # The role_id is NOT captured here: what syncs it is step 7b of
-  # seed-post-cleanroom-all.sh (`loopzero-ops seed vault-role-id-sync`), which runs
-  # AFTER this script and writes the value where loopzero-api reads it. The capture that
+  # seed-post-cleanroom-all.sh (`loop-runtime-ops seed vault-role-id-sync`), which runs
+  # AFTER this script and writes the value where loop-runtime-api reads it. The capture that
   # used to exist here was assigned and discarded — it gave the impression that this
   # script owned the artifact when it does not.
-  SECRET_ID=$(bao_auth write -f -format=json auth/approle/role/loopzero-api/secret-id 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['secret_id'])" 2>/dev/null || true)
+  SECRET_ID=$(bao_auth write -f -format=json auth/approle/role/loop-runtime-api/secret-id 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['secret_id'])" 2>/dev/null || true)
 fi
 
-# === Step 10: loopzero-openbao-approle + openbao-spki-pin Secrets ===
+# === Step 10: loop-runtime-openbao-approle + openbao-spki-pin Secrets ===
 # T1.1 split-context: writes target the MGMT cluster (TARGET_CONTEXT)
-# where loopzero-api Deployment envFrom reads from. EC-4 absorption:
+# where loop-runtime-api Deployment envFrom reads from. EC-4 absorption:
 # ensure target ns exists BEFORE the Secret apply — fail-fast if
 # the mgmt-side ESO target namespace was never provisioned.
-log "Step 10: loopzero-openbao-approle Secret in $TARGET_CONTEXT/$TARGET_NS + openbao-spki-pin"
+log "Step 10: loop-runtime-openbao-approle Secret in $TARGET_CONTEXT/$TARGET_NS + openbao-spki-pin"
 if [[ "$DRY_RUN" -eq 0 && -n "${SECRET_ID:-}" ]]; then
   # EC-4: idempotent namespace ensure on TARGET_CONTEXT side BEFORE Secret apply.
   kubectl --context "$TARGET_CONTEXT" create namespace "$TARGET_NS" --dry-run=client -o yaml | \
     kubectl --context "$TARGET_CONTEXT" apply -f - >/dev/null
-  kubectl --context "$TARGET_CONTEXT" -n "$TARGET_NS" create secret generic loopzero-openbao-approle \
+  kubectl --context "$TARGET_CONTEXT" -n "$TARGET_NS" create secret generic loop-runtime-openbao-approle \
     --from-literal=OPENBAO_VAULT_SECRET_ID="$SECRET_ID" \
     --dry-run=client -o yaml | kubectl --context "$TARGET_CONTEXT" -n "$TARGET_NS" apply -f - || \
-    log "WARN: loopzero-openbao-approle creation failed in $TARGET_CONTEXT/$TARGET_NS"
+    log "WARN: loop-runtime-openbao-approle creation failed in $TARGET_CONTEXT/$TARGET_NS"
 fi
 
 # Extract SPKI pin from openbao-tls cert (catch #7 — dynamic extraction)
@@ -493,21 +493,21 @@ log "Step 10b: extract SPKI pin from openbao-tls cert"
 if [[ "$DRY_RUN" -eq 0 ]]; then
   # Read openbao-tls from the VAULT cluster (where cert-manager issued
   # the Secret), then write the SPKI pin to the MGMT cluster (where
-  # loopzero-api chart envFrom reads from).
+  # loop-runtime-api chart envFrom reads from).
   TLS_CRT=$(kubectl --context "$OPENBAO_CONTEXT" -n "$NS" get secret openbao-tls -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d 2>/dev/null || true)
   if [[ -n "$TLS_CRT" ]]; then
     # CANONICAL FIX 2026-06-15: pkg/vault/transit_client.go:199 expects
     # HEX-encoded SHA-256 (via hex.DecodeString). Previous base64url
-    # encoding (`base64 | tr ...`) caused loopzero-api to crash on startup
+    # encoding (`base64 | tr ...`) caused loop-runtime-api to crash on startup
     # with "openbao transit client: vault: SPKIPinSHA256 hex decode:
     # encoding/hex: invalid byte: U+0073 's'". `openssl dgst -sha256`
     # with no `-binary` flag emits "SHA256(stdin)= <hex>" so we
     # post-process to strip the prefix; equivalently use `-binary | xxd`.
     SPKI=$(echo "$TLS_CRT" | openssl x509 -pubkey -noout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl dgst -sha256 -binary 2>/dev/null | xxd -p -c 999 | tr -d '\n' || true)
     if [[ -n "$SPKI" ]]; then
-      kubectl --context "$TARGET_CONTEXT" -n loopzero-system create secret generic openbao-spki-pin \
+      kubectl --context "$TARGET_CONTEXT" -n loop-runtime-system create secret generic openbao-spki-pin \
         --from-literal=OPENBAO_SPKI_PIN_SHA256="$SPKI" \
-        --dry-run=client -o yaml | kubectl --context "$TARGET_CONTEXT" -n loopzero-system apply -f -
+        --dry-run=client -o yaml | kubectl --context "$TARGET_CONTEXT" -n loop-runtime-system apply -f -
       log "OK: openbao-spki-pin Secret created with extracted SPKI"
     fi
   fi
@@ -516,5 +516,5 @@ fi
 log ""
 log "════════════════════════════════════════════════════════"
 log "  vault-bootstrap-dev COMPLETE"
-log "  Next: trigger ESO refresh or loopzero-api restart to pick up Secret"
+log "  Next: trigger ESO refresh or loop-runtime-api restart to pick up Secret"
 log "════════════════════════════════════════════════════════"

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C11.
 // Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
@@ -32,10 +32,10 @@ func TestSplitOperators_OnlyTenantOpGrantsClusterRoleEscalation(t *testing.T) {
 		mayGrantCR bool
 	}
 	cases := []chartCheck{
-		{"loopzero-tenant-operator", true}, // legitimate
-		{"loopzero-app-operator", false},
-		{"loopzero-preview-operator", false},
-		{"loopzero-platform-operator", false},
+		{"loop-runtime-tenant-operator", true}, // legitimate
+		{"loop-runtime-app-operator", false},
+		{"loop-runtime-preview-operator", false},
+		{"loop-runtime-platform-operator", false},
 	}
 
 	for _, c := range cases {

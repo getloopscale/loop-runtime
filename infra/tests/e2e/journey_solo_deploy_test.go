@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 01: Solo Deploy + Proof of Life + Proof of Death
 //
@@ -54,10 +54,10 @@ var _ = Describe("Journey 01: Solo Deploy", Ordered, Label("journey", "smoke"), 
 	})
 
 	It("validates project structure", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "validate", "--json")
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "validate", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopzero validate should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime validate should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"validate stdout": stdout,
@@ -97,10 +97,10 @@ var _ = Describe("Journey 01: Solo Deploy", Ordered, Label("journey", "smoke"), 
 	})
 
 	It("project delete succeeds", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "project", "delete", project, "--yes", "--json")
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "project", "delete", project, "--yes", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopzero project delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale project delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"delete stdout": stdout,

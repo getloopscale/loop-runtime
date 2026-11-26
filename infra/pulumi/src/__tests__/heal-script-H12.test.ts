@@ -5,8 +5,8 @@
 //   (1) Detection queries by spec.cellID, NOT CR name — because
 //       K8sCellStore lookup uses spec.cellID per MEET-053 B9.
 //   (2) cluster-name=cell-0, NOT runtime — because k3d local cluster is
-//       loopzero-cell-0; cluster-name=cell-0 would resolve docker container
-//       k3d-loopzero-cell-0-server-0 which doesn't exist (B82 fallback to
+//       loop-runtime-cell-0; cluster-name=cell-0 would resolve docker container
+//       k3d-loop-runtime-cell-0-server-0 which doesn't exist (B82 fallback to
 //       0.0.0.0:6444 unreachable).
 //
 // Test catches drift like 'someone tidied the script back to runtime' or
@@ -44,7 +44,7 @@ describe("k3d-cross-cluster-heal.sh H12 invariants (matrix #153)", () => {
 
   it("cluster-name argument is 'workload' (NOT 'runtime')", () => {
     // The cc-create call: clustercredential-create.sh cell-0 <name> <kc>
-    // Must be 'workload' (matches k3d-loopzero-cell-0-server-0 container).
+    // Must be 'workload' (matches k3d-loop-runtime-cell-0-server-0 container).
     expect(h12Block).toMatch(/cell-0\s+workload\b/);
     // Defensive: the buggy form (cell-0 runtime) MUST NOT appear inside H12.
     expect(h12Block).not.toMatch(/cc-create.*cell-0\s+runtime\b/);
@@ -52,7 +52,7 @@ describe("k3d-cross-cluster-heal.sh H12 invariants (matrix #153)", () => {
 
   it("scoped-kubeconfig.sh argument is 'workload' too", () => {
     // The scoped-kubeconfig.sh first arg becomes CLUSTER_ID and resolves
-    // docker container k3d-loopzero-${CLUSTER_ID}-server-0.
+    // docker container k3d-loop-runtime-${CLUSTER_ID}-server-0.
     expect(h12Block).toMatch(/SCOPED_LIB.*\bworkload\b/);
   });
 
@@ -63,8 +63,8 @@ describe("k3d-cross-cluster-heal.sh H12 invariants (matrix #153)", () => {
     expect(h12Block).not.toMatch(/trap\s+["'][^"']+["']\s+RETURN/);
   });
 
-  it("k3d kubeconfig source is loopzero-cell-0 (the real cluster)", () => {
-    expect(h12Block).toMatch(/k3d\s+kubeconfig\s+get\s+loopzero-cell-0/);
+  it("k3d kubeconfig source is loop-runtime-cell-0 (the real cluster)", () => {
+    expect(h12Block).toMatch(/k3d\s+kubeconfig\s+get\s+loop-runtime-cell-0/);
   });
 
   it("references CC_LIB and SCOPED_LIB to lib helpers", () => {
@@ -103,7 +103,7 @@ describe("k3d-cross-cluster-heal.sh H13 invariants (matrix #154)", () => {
     expect(h13Block).toMatch(/items\[\?\(@\.spec\.cellID==["']cell-0["']\)\]/);
   });
 
-  it("mints fresh SA token via 'kubectl create token loopzero-system/default'", () => {
+  it("mints fresh SA token via 'kubectl create token loop-runtime-system/default'", () => {
     expect(h13Block).toMatch(/create token default --duration=24h/);
   });
 

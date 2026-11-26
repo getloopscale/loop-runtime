@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -14,7 +14,7 @@ import (
 )
 
 // TestCacheScopingCongruence_Static enforces AP-5 from the operators
-// improvement roadmap: each LoopZero CRD type appears in EXACTLY ONE binary's
+// improvement roadmap: each LoopRuntime CRD type appears in EXACTLY ONE binary's
 // cache scoping (cache.Options.ByObject map). Detects:
 //   - Overlap: same CRD scoped in two binaries (wasteful + race risk)
 //   - Orphan:  CRD reconciled by a binary but missing from its cache scope
@@ -86,7 +86,7 @@ func TestCacheScopingCongruence_Static(t *testing.T) {
 // parseCacheByObjectKeys returns the CRD type names found as keys in any
 // cache.Options.ByObject literal in the given main.go file.
 //
-// Recognizes: &loopzerov1.<TypeName>{}: {...}
+// Recognizes: &loopruntimev1.<TypeName>{}: {...}
 func parseCacheByObjectKeys(t *testing.T, mainPath string) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -102,7 +102,7 @@ func parseCacheByObjectKeys(t *testing.T, mainPath string) []string {
 			return true
 		}
 		// Match: cache.Options{ByObject: map[client.Object]cache.ByObject{...}}
-		// We look for any map literal whose key pattern is &loopzerov1.X{}
+		// We look for any map literal whose key pattern is &loopruntimev1.X{}
 		mapType, ok := composite.Type.(*ast.MapType)
 		if !ok {
 			return true
@@ -115,7 +115,7 @@ func parseCacheByObjectKeys(t *testing.T, mainPath string) []string {
 			if !ok {
 				continue
 			}
-			// Key is &loopzerov1.<TypeName>{}
+			// Key is &loopruntimev1.<TypeName>{}
 			unary, ok := kv.Key.(*ast.UnaryExpr)
 			if !ok || unary.Op != token.AND {
 				continue
@@ -132,9 +132,9 @@ func parseCacheByObjectKeys(t *testing.T, mainPath string) []string {
 			if !ok {
 				continue
 			}
-			// Accept loopzerov1.X (most CRDs live there); future package
+			// Accept loopruntimev1.X (most CRDs live there); future package
 			// expansions can add aliases here.
-			if ident.Name == "loopzerov1" {
+			if ident.Name == "loopruntimev1" {
 				keys = append(keys, sel.Sel.Name)
 			}
 		}
@@ -158,8 +158,8 @@ func parseReconciledTypes(t *testing.T, mainPath string, binName string) []strin
 	reconcileMap := map[string]string{
 		"SetupTenantController":                 "Tenant",
 		"SetupEnvironmentControllerWithFactory": "Environment",
-		"SetupApplicationController":            "LoopZeroApplication",
-		"SetupApplicationControllerWithFactory": "LoopZeroApplication",
+		"SetupApplicationController":            "LoopRuntimeApplication",
+		"SetupApplicationControllerWithFactory": "LoopRuntimeApplication",
 		"SetupExposureController":               "ExposedRoute",
 		"SetupPreviewController":                "PreviewEnvironment",
 		"SetupPlatformBootstrapController":      "PlatformBootstrap",
@@ -187,7 +187,7 @@ func parseReconciledTypes(t *testing.T, mainPath string, binName string) []strin
 	return found
 }
 
-// TestCacheScopingCongruence_Coverage ensures all 8 known LoopZero reconcileable
+// TestCacheScopingCongruence_Coverage ensures all 8 known LoopRuntime reconcileable
 // CRDs are wired by AT LEAST ONE binary. Catches "binary forgot to wire X"
 // at the matrix level (T1.3 catches per-binary; this catches inter-binary).
 //
@@ -198,7 +198,7 @@ func TestCacheScopingCongruence_Coverage(t *testing.T) {
 	expected := []string{
 		"Tenant",
 		"Environment",
-		"LoopZeroApplication",
+		"LoopRuntimeApplication",
 		"ExposedRoute",
 		"PreviewEnvironment",
 		"PlatformBootstrap",

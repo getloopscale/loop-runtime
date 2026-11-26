@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -22,8 +22,8 @@ import (
 // inspector found no release (issue #386). These tests pin which connection
 // can answer — the composition root builds all three on the cross-tenant pool.
 //
-//	DATABASE_URL=<loopzero_api> LOOPZERO_WORKER_DATABASE_URL=<loopzero_worker> \
-//	LOOPZERO_OWNER_DATABASE_URL=<loopzero> go test ./tests/integration/ -run Admin -v
+//	DATABASE_URL=<loop_runtime_api> LOOP_RUNTIME_WORKER_DATABASE_URL=<loop_runtime_worker> \
+//	LOOP_RUNTIME_OWNER_DATABASE_URL=<loop-runtime> go test ./tests/integration/ -run Admin -v
 const (
 	adminOwner   = "rls-admin-uid"
 	adminTenantA = "tn-rls-admin-a"

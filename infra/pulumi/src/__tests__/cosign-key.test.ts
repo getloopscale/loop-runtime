@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // T1.2 mitigation #1 of MEET-2026-05-12 — unit tests for the Pulumi-owned
 // cosign key component. Pure helpers (computeGenerationMarker, render
@@ -79,7 +79,7 @@ describe("renderExternalSecretYaml", () => {
       stackName: "production",
       namespace: "argo",
       secretName: "cosign-signing-key",
-      storeName: "loopzero-pulumi-secrets",
+      storeName: "loop-runtime-pulumi-secrets",
       refreshInterval: "5m",
       generationMarker: "abc123def456",
     });
@@ -89,7 +89,7 @@ describe("renderExternalSecretYaml", () => {
     expect(yaml).toContain("name: cosign-signing-key");
     expect(yaml).toContain("namespace: argo");
     expect(yaml).toContain("refreshInterval: 5m");
-    expect(yaml).toContain("name: loopzero-pulumi-secrets");
+    expect(yaml).toContain("name: loop-runtime-pulumi-secrets");
     expect(yaml).toContain("kind: ClusterSecretStore");
   });
 
@@ -98,12 +98,12 @@ describe("renderExternalSecretYaml", () => {
       stackName: "drill",
       namespace: "argo",
       secretName: "cosign-signing-key",
-      storeName: "loopzero-pulumi-secrets",
+      storeName: "loop-runtime-pulumi-secrets",
       refreshInterval: "10m",
       generationMarker: "deadbeef0042",
     });
-    expect(yaml).toContain("loopzero.io/generation-marker: deadbeef0042");
-    expect(yaml).toContain("loopzero.io/stack: drill");
+    expect(yaml).toContain("runtime.getloopscale.com/generation-marker: deadbeef0042");
+    expect(yaml).toContain("runtime.getloopscale.com/stack: drill");
   });
 
   it("emits both cosign.key and cosign.password data keys (required by build pipeline)", () => {
@@ -111,7 +111,7 @@ describe("renderExternalSecretYaml", () => {
       stackName: "x",
       namespace: "argo",
       secretName: "cosign-signing-key",
-      storeName: "loopzero-pulumi-secrets",
+      storeName: "loop-runtime-pulumi-secrets",
       refreshInterval: "5m",
       generationMarker: "x",
     });
@@ -126,7 +126,7 @@ describe("renderExternalSecretYaml", () => {
       stackName: "x",
       namespace: "argo",
       secretName: "cosign-signing-key",
-      storeName: "loopzero-pulumi-secrets",
+      storeName: "loop-runtime-pulumi-secrets",
       refreshInterval: "5m",
       generationMarker: "x",
     });
@@ -192,7 +192,7 @@ describe("createCosignKey", () => {
     const outputs = createCosignKey({ stackName: "test" });
     const manifest = await unwrapOutput(outputs.externalSecretManifest);
     expect(manifest).toContain("namespace: argo");
-    expect(manifest).toContain("name: loopzero-pulumi-secrets");
+    expect(manifest).toContain("name: loop-runtime-pulumi-secrets");
     expect(manifest).toContain("name: cosign-signing-key");
   });
 

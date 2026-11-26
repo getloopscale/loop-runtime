@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domain
 
@@ -8,7 +8,7 @@ import (
 	"errors"
 )
 
-// PlanTier is the canonical LoopZero subscription-plan identifier per ADR D4
+// PlanTier is the canonical LoopRuntime subscription-plan identifier per ADR D4
 // (decisions/2026-06-11-plan-tier-canonical-resolution.md).
 //
 // Replaces the unconstrained string literals (`"starter"`, `"pro"`, ...)

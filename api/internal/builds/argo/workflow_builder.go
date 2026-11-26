@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -25,7 +25,7 @@ import (
 // after detecting workflow completion. The workflow only builds images.
 //
 // BLOCKER-2 fix: GiteaURL and GiteaToken removed. The clone CWT now reads
-// credentials from K8s Secret (loopzero-gitea-credentials) via envFrom. No more
+// credentials from K8s Secret (loop-runtime-gitea-credentials) via envFrom. No more
 // plaintext tokens in Workflow CRs.
 //
 // Build engine: BuildKit with sidecar pattern (buildkitd + buildctl).
@@ -33,25 +33,25 @@ import (
 // RegistryInsecure is conditionally applied; Config.Validate() ensures false in production.
 //
 // Note: MinIO credentials are injected via K8s Secret (envFrom) in the CWT,
-// not as workflow parameters. See loopzero-minio-credentials secret in build cluster.
+// not as workflow parameters. See loop-runtime-minio-credentials secret in build cluster.
 type InfraParams struct {
 	// ObjectStoreIRSA: build steps reach S3 as the IRSA role of the workflow
-	// ServiceAccount (the AWS profile), so none reads the loopzero-minio-credentials
+	// ServiceAccount (the AWS profile), so none reads the loop-runtime-minio-credentials
 	// Secret, which only the MinIO profiles have.
 	ObjectStoreIRSA bool
 	// StaticAssetsBucket is where SBOMs are uploaded (config STATIC_ASSETS_BUCKET,
 	// named for the static app delivery that was removed). Empty selects
-	// loopzero-static-assets.
+	// loop-runtime-static-assets.
 	StaticAssetsBucket string
 	RegistryURL        string
 	RegistryInsecure   bool   // true for local dev registries without TLS
-	BaseDomain         string // Base domain for app hostnames (e.g., "loopzero.local")
+	BaseDomain         string // Base domain for app hostnames (e.g., "loop-runtime.local")
 	// WorkspaceStorageClass is the StorageClass of the build's workspace PVC
-	// (config LOOPZERO_BUILD_WORKSPACE_STORAGE_CLASS). Empty selects the build
+	// (config LOOP_RUNTIME_BUILD_WORKSPACE_STORAGE_CLASS). Empty selects the build
 	// cluster's default class, which is what an EKS cluster needs.
 	WorkspaceStorageClass string
 	// CosignImage and SyftImage override the signer and SBOM scanner images
-	// (config LOOPZERO_COSIGN_IMAGE / LOOPZERO_SYFT_IMAGE; local k3d points them at
+	// (config LOOP_RUNTIME_COSIGN_IMAGE / LOOP_RUNTIME_SYFT_IMAGE; local k3d points them at
 	// its registry). Empty means the built-in imageCosignSigner/imageSyftScanner.
 	CosignImage string
 	SyftImage   string
@@ -88,7 +88,7 @@ type InfraParams struct {
 	// Config.Validate() rejects InsecureSkipSCT=true && IsProduction() &&
 	// !TUFRootPinned. Wired via Config.CosignInsecureSkipSCT.
 	CosignInsecureSkipSCT bool
-	// Env is the canonical LOOPZERO_ENV value ("development" / "staging" /
+	// Env is the canonical LOOP_RUNTIME_ENV value ("development" / "staging" /
 	// "production"). T1.1 of plan 2026-06-01-p1-security-hardening
 	// (sec-010 / CR-7): drives per-tenant Fulcio audience via D4
 	// dev-fallback — development → legacy shared "sigstore" audience
@@ -113,7 +113,7 @@ type WorkflowBuilder struct {
 // bucket they write.
 type objectStore struct {
 	// IRSA: the workflow ServiceAccount's IRSA role, injected into the pod by EKS.
-	// Otherwise the keys and endpoint come from the loopzero-minio-credentials Secret.
+	// Otherwise the keys and endpoint come from the loop-runtime-minio-credentials Secret.
 	IRSA bool
 	// StaticAssetsBucket holds SBOMs. Empty selects s3BucketStaticAssets.
 	StaticAssetsBucket string
@@ -283,7 +283,7 @@ func (b *WorkflowBuilder) workflowTemplates(spec deploycontracts.WorkflowSpec, g
 // support): each group gets its own validate/install/build/scan/dockerfile.
 // `DockerfileStep` dispatches per strategy — the orchestrator has no
 // `if app.Build == "dockerfile"`; every strategy now generates the Dockerfile
-// (the `loopzero-dockerfile-lint` path left in T2.2, B-157).
+// (the `loop-runtime-dockerfile-lint` path left in T2.2, B-157).
 func languageTemplates(groups []languageGroup, totalApps int) []forge.Templatable {
 	var templates []forge.Templatable
 	for _, g := range groups {
@@ -343,7 +343,7 @@ func (b *WorkflowBuilder) appDeliveryTemplates(spec deploycontracts.WorkflowSpec
 // newWorkflowCR assembles the Workflow resource around its templates.
 func (b *WorkflowBuilder) newWorkflowCR(spec deploycontracts.WorkflowSpec, templates []forge.Templatable, onExitName, language string, volumes []forge.VolumeBuilder) *forge.Workflow {
 	return &forge.Workflow{
-		GenerateName:       fmt.Sprintf("loopzero-build-%s-", spec.BuildID),
+		GenerateName:       fmt.Sprintf("loop-runtime-build-%s-", spec.BuildID),
 		Entrypoint:         entrypointName,
 		OnExit:             onExitName,
 		ServiceAccountName: serviceAccountName,
@@ -381,7 +381,7 @@ func (b *WorkflowBuilder) newWorkflowCR(spec deploycontracts.WorkflowSpec, templ
 			// can be cross-referenced with a single Loki query
 			// `{correlation_id="X"}`. Operator already reads this
 			// annotation in application_controller.go:99.
-			"loopzero.io/correlation-id": spec.CorrelationID,
+			"runtime.getloopscale.com/correlation-id": spec.CorrelationID,
 		},
 		Templates: templates,
 		// Workspace uses a dynamically provisioned PVC shared across all DAG steps.
@@ -409,7 +409,7 @@ func (b *WorkflowBuilder) newWorkflowCR(spec deploycontracts.WorkflowSpec, templ
 			RunAsUser:  forge.Ptr(rootlessUID),
 			RunAsGroup: forge.Ptr(rootlessUID),
 		},
-		// PVC multi-attach is handled upstream as of loopzero-forge v0.4.0
+		// PVC multi-attach is handled upstream as of loop-runtime-forge v0.4.0
 		// (issue getloopscale/argo-workflows-go#11): Workflow.Build() injects the
 		// canonical podAffinity term automatically when
 		// VolumeClaimTemplates is non-empty (as above), so all DAG steps
@@ -430,7 +430,7 @@ func (b *WorkflowBuilder) buildMainDAG(spec deploycontracts.WorkflowSpec, groups
 	// (local dev): build-id is the commit SHA for the MinIO path, project-id
 	// the Gitea repo name. One clone is shared by every language.
 	tasks := []*forge.Task{
-		cwtTask("clone-repo", "loopzero-clone", "clone-repo", nil, map[string]string{
+		cwtTask("clone-repo", "loop-runtime-clone", "clone-repo", nil, map[string]string{
 			"tenant-id":  spec.TenantID,
 			"project-id": spec.ProjectID,
 			"build-id":   spec.CommitSHA,
@@ -463,7 +463,7 @@ func languageTasks(spec deploycontracts.WorkflowSpec, g languageGroup) []*forge.
 	restoreName := "clone-repo"
 	if g.Strategy.CacheKey() != "" {
 		restoreName = "restore-cache" + suffix
-		tasks = append(tasks, cwtTask(restoreName, "loopzero-cache-restore", "restore-cache",
+		tasks = append(tasks, cwtTask(restoreName, "loop-runtime-cache-restore", "restore-cache",
 			[]string{"clone-repo"}, map[string]string{
 				"tenant-id":  spec.TenantID,
 				"project-id": spec.ProjectID,
@@ -530,7 +530,7 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec deploycontracts.WorkflowSpec, grou
 	for _, g := range groups {
 		if g.Strategy.CacheKey() != "" {
 			taskName := "save-cache" + g.Suffix
-			tasks = append(tasks, cwtTask(taskName, "loopzero-cache-save", "save-cache", nil, map[string]string{
+			tasks = append(tasks, cwtTask(taskName, "loop-runtime-cache-save", "save-cache", nil, map[string]string{
 				"tenant-id":  spec.TenantID,
 				"project-id": spec.ProjectID,
 				"cache-key":  g.Strategy.CacheKey(),
@@ -555,7 +555,7 @@ func (b *WorkflowBuilder) buildOnExitDAG(spec deploycontracts.WorkflowSpec, grou
 // When CosignKeyless=true, a projected ServiceAccountToken volume with a
 // per-tenant audience (D1 of plan 2026-06-01-p1-security-hardening) is
 // added so cosign-sign + cosign-attest can present the SA token to Fulcio
-// (loopzero-forge v0.6.0+, PR #20).
+// (loop-runtime-forge v0.6.0+, PR #20).
 //
 // sec-010 / CR-7 of MEET-2026-05-28-001: prior to T1.1 the audience was the
 // shared literal "sigstore" across all tenants. A pod in tenant-A's

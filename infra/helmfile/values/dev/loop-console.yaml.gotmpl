@@ -1,0 +1,7 @@
+# dev overlay for charts/loop-console, layered on charts/loop-console/values-bootstrap.yaml.
+#
+# The dev environment installs loop-console (profile.loopRuntimeCloud: true) and the release
+# in core.helmfile.yaml.gotmpl layers values/<environment>/loop-console.yaml.gotmpl.
+# Until this file existed, `helmfile -e dev` could not resolve that layer, so every
+# dev render or sync of the core helmfile failed on it (found with #391). dev has
+# no override of its own: the bootstrap values stand, as they do for its loop-runtime-api.

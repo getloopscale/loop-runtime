@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package app implements the Application + Exposure controllers
-// (operator binary `loopzero-app-operator` per ADR-0023). Owns
-// reconciliation of LoopZeroApplication + ExposedRoute CRs — the
+// (operator binary `loop-runtime-app-operator` per ADR-0023). Owns
+// reconciliation of LoopRuntimeApplication + ExposedRoute CRs — the
 // workload-plane resources that materialize a user's deploy onto
 // the runtime cluster.
 package app
@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
@@ -39,18 +39,18 @@ const applicationFinalizer = constants.FinalizerApplication
 // rest API roundtrips, short enough to avoid blocking the reconcile loop.
 const workloadReadyTimeout = 5 * time.Second
 
-// ApplicationReconciler reconciles a LoopZeroApplication object.
+// ApplicationReconciler reconciles a LoopRuntimeApplication object.
 // It manages hostname assignment, ExposedRoute creation, and phase tracking.
 //
 // ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers.
 //
-// +kubebuilder:rbac:groups=loopzero.io,resources=loopzeroapplications,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=loopzeroapplications/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=loopzeroapplications/finalizers,verbs=update
-// +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch
-// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=loopruntimeapplications,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=loopruntimeapplications/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=loopruntimeapplications/finalizers,verbs=update
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=exposedroutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants,verbs=get;list;watch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch
 type ApplicationReconciler struct {
 	client.Client
 	Scheme     *runtime.Scheme
@@ -72,7 +72,7 @@ var applicationDetailTypes = []string{
 	conditions.TypeApplicationHealthy,
 }
 
-// Reconcile handles the reconciliation loop for LoopZeroApplication resources.
+// Reconcile handles the reconciliation loop for LoopRuntimeApplication resources.
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	ctx, span := reconcileloop.StartReconcileSpan(ctx, "application", req.Name, req.Namespace)
 	defer span.End()
@@ -88,7 +88,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	logger := log.FromContext(ctx)
 
-	var app loopzerov1.LoopZeroApplication
+	var app loopruntimev1.LoopRuntimeApplication
 	if err := r.Get(ctx, req.NamespacedName, &app); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -97,14 +97,14 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Audit gap M08 #10 / §6.C.1b: when the CR carries the
-	// `loopzero.io/correlation-id` annotation (set by the API during
-	// `EnsureLoopZeroApplication` for HTTP-driven flows), inject it into the
+	// `runtime.getloopscale.com/correlation-id` annotation (set by the API during
+	// `EnsureLoopRuntimeApplication` for HTTP-driven flows), inject it into the
 	// reconcile context so downstream audit_log writes + structured logs
 	// trace back to the originating HTTP request. Background reconciles
 	// (re-queue, watch event from non-API source) leave the annotation
 	// empty and the ctx unchanged — `correlation.WithID` is a no-op on
 	// empty string.
-	ctx = correlation.WithID(ctx, app.GetAnnotations()["loopzero.io/correlation-id"])
+	ctx = correlation.WithID(ctx, app.GetAnnotations()["runtime.getloopscale.com/correlation-id"])
 
 	// T5.1 of deep-review-2026-05-10-remediation-plan
 	// (find_arch_app_controller_double_write MEDIUM): the deferred
@@ -158,7 +158,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6): fast-path Healthy.
 	// Mark EndpointsReady=true the moment the workload Pod is Ready in
 	// the tenant's cell, independent of ExposedRoute Reachable. Local k3d
-	// has no public DNS for *.loopzero.local so ExposedRoute may stay Pending
+	// has no public DNS for *.loop-runtime.local so ExposedRoute may stay Pending
 	// forever; production may take 60+s for DNS+cert+Traefik propagation.
 	// EndpointsReady=true unblocks phase=Serving.
 	r.reconcileWorkloadStatus(ctx, &app)
@@ -203,7 +203,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // flapping conditions and 409s, and the rest followed.
 //
 // Decision: MEET-ASYNC-AMENDMENT-2026-08-14-application-status-persist-encapsulation
-func (r *ApplicationReconciler) patchStatus(ctx context.Context, app, base *loopzerov1.LoopZeroApplication) error {
+func (r *ApplicationReconciler) patchStatus(ctx context.Context, app, base *loopruntimev1.LoopRuntimeApplication) error {
 	// observedGeneration belongs to the write, not to the happy path. It used to be
 	// set only just before the final patch, so the failure branch persisted a Ready
 	// condition stamped with the CURRENT generation next to a
@@ -221,7 +221,7 @@ func (r *ApplicationReconciler) patchStatus(ctx context.Context, app, base *loop
 
 // reconcileHostname persists the routed hostname when spec.hostname is unset or
 // still holds the controller's old default (see hostnameToAssign).
-func (r *ApplicationReconciler) reconcileHostname(ctx context.Context, req ctrl.Request, app *loopzerov1.LoopZeroApplication) error {
+func (r *ApplicationReconciler) reconcileHostname(ctx context.Context, req ctrl.Request, app *loopruntimev1.LoopRuntimeApplication) error {
 	hostname, assign, err := hostnameToAssign(app, r.BaseDomain)
 	if err != nil {
 		return fmt.Errorf("computing hostname: %w", err)
@@ -237,14 +237,14 @@ func (r *ApplicationReconciler) reconcileHostname(ctx context.Context, req ctrl.
 }
 
 // reconcileExposedRoute ensures the ExposedRoute CR exists with correct spec.
-func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app, base *loopzerov1.LoopZeroApplication) error {
+func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app, base *loopruntimev1.LoopRuntimeApplication) error {
 	ctx, span := reconcileloop.StartChildSpan(ctx, "application.exposed_route.ensure")
 	defer span.End()
 
 	logger := log.FromContext(ctx)
 	routeName := constants.ExposedRouteName(app.Name)
 
-	route := &loopzerov1.ExposedRoute{
+	route := &loopruntimev1.ExposedRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      routeName,
 			Namespace: app.Namespace,
@@ -253,14 +253,14 @@ func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app, 
 	result, err := controllerutil.CreateOrUpdate(ctx, r.Client, route, func() error {
 		route.Spec.ApplicationRef = app.Name
 		route.Spec.Hostname = app.Spec.Hostname
-		route.Spec.ServiceRef = loopzerov1.ServiceRef{
+		route.Spec.ServiceRef = loopruntimev1.ServiceRef{
 			Name: app.Spec.ServiceName,
 			Port: app.Spec.ServicePort,
 		}
-		route.Spec.TLS = loopzerov1.TLSConfig{Enabled: true}
+		route.Spec.TLS = loopruntimev1.TLSConfig{Enabled: true}
 		// Audit gap M10 F2 / §6.E.4b: propagate tenant scope from parent
-		// LoopZeroApplication into child labels. Without this, Loki/Prometheus
-		// queries that filter by `loopzero.io/tenant` on ExposedRoute resources
+		// LoopRuntimeApplication into child labels. Without this, Loki/Prometheus
+		// queries that filter by `runtime.getloopscale.com/tenant` on ExposedRoute resources
 		// silently return empty results, OPA webhooks scoped per tenant
 		// have no signal to gate on, and operator self-audit traces cannot
 		// correlate child events back to the originating tenant. Re-applied
@@ -293,9 +293,9 @@ func (r *ApplicationReconciler) reconcileExposedRoute(ctx context.Context, app, 
 }
 
 // reconcileRouteStatus reads the ExposedRoute status and updates reachability conditions.
-func (r *ApplicationReconciler) reconcileRouteStatus(ctx context.Context, app *loopzerov1.LoopZeroApplication) {
+func (r *ApplicationReconciler) reconcileRouteStatus(ctx context.Context, app *loopruntimev1.LoopRuntimeApplication) {
 	routeName := constants.ExposedRouteName(app.Name)
-	route := &loopzerov1.ExposedRoute{}
+	route := &loopruntimev1.ExposedRoute{}
 	routeKey := client.ObjectKey{Name: routeName, Namespace: app.Namespace}
 
 	if err := r.Get(ctx, routeKey, route); err != nil {
@@ -313,7 +313,7 @@ func (r *ApplicationReconciler) reconcileRouteStatus(ctx context.Context, app *l
 		return
 	}
 
-	app.Status.Reachable = route.Status.Phase == loopzerov1.ExposedRoutePhaseReachable
+	app.Status.Reachable = route.Status.Phase == loopruntimev1.ExposedRoutePhaseReachable
 
 	setReadyOrWaitingCondition(&app.Status.Conditions, conditions.TypeCertificateIssued,
 		route.Status.CertificateReady, app.Generation,
@@ -338,8 +338,8 @@ func setReadyOrWaitingCondition(conds *[]metav1.Condition, condType string, read
 }
 
 // reconcileHealthCondition sets the ApplicationHealthy condition based on phase.
-func (r *ApplicationReconciler) reconcileHealthCondition(app *loopzerov1.LoopZeroApplication) {
-	if app.Status.Phase == loopzerov1.ApplicationPhaseReachable || app.Status.Phase == loopzerov1.ApplicationPhaseServing {
+func (r *ApplicationReconciler) reconcileHealthCondition(app *loopruntimev1.LoopRuntimeApplication) {
+	if app.Status.Phase == loopruntimev1.ApplicationPhaseReachable || app.Status.Phase == loopruntimev1.ApplicationPhaseServing {
 		conditions.SetCondition(&app.Status.Conditions, conditions.TypeApplicationHealthy,
 			metav1.ConditionTrue, conditions.ReasonReady,
 			"application is healthy", app.Generation)
@@ -351,7 +351,7 @@ func (r *ApplicationReconciler) reconcileHealthCondition(app *loopzerov1.LoopZer
 }
 
 // reconcileDelete handles the verify-then-remove finalizer pattern for Application deletion.
-func (r *ApplicationReconciler) reconcileDelete(ctx context.Context, app *loopzerov1.LoopZeroApplication) (ctrl.Result, error) {
+func (r *ApplicationReconciler) reconcileDelete(ctx context.Context, app *loopruntimev1.LoopRuntimeApplication) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	if !controllerutil.ContainsFinalizer(app, applicationFinalizer) {
@@ -360,7 +360,7 @@ func (r *ApplicationReconciler) reconcileDelete(ctx context.Context, app *loopze
 
 	logger.Info("application is being deleted", "application", app.Name)
 
-	var routeList loopzerov1.ExposedRouteList
+	var routeList loopruntimev1.ExposedRouteList
 	if err := r.List(ctx, &routeList, client.InNamespace(app.Namespace)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("listing child ExposedRoute CRs: %w", err)
 	}
@@ -403,11 +403,11 @@ func (r *ApplicationReconciler) reconcileDelete(ctx context.Context, app *loopze
 //     RequeueAfter is implicit (controller-runtime resync cycle).
 //   - Pod list returns 0 matches: leave EndpointsReady at current value.
 //   - Pod list returns ≥1 with PodReady=True: set EndpointsReady=true.
-func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app *loopzerov1.LoopZeroApplication) {
+func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app *loopruntimev1.LoopRuntimeApplication) {
 	logger := log.FromContext(ctx)
 
 	// Resolve tenant cellID via Tenant CR (mgmt cluster).
-	var tenant loopzerov1.Tenant
+	var tenant loopruntimev1.Tenant
 	tenantKey := client.ObjectKey{Name: app.Spec.TenantRef, Namespace: app.Namespace}
 	if err := r.Get(ctx, tenantKey, &tenant); err != nil {
 		// NotFound is normal during early reconcile or post-tenant-delete.
@@ -430,8 +430,8 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 
 	// Compute the workload namespace from the (tenant, project, env) triple — the real
 	// isolation boundary. The previous helper dropped the project and produced
-	// loopzero-{tenant}-{env}, a namespace that exists in no cluster: List returned empty
-	// without erroring, so readyReplicas was never counted and every LoopZeroApplication sat
+	// loop-runtime-{tenant}-{env}, a namespace that exists in no cluster: List returned empty
+	// without erroring, so readyReplicas was never counted and every LoopRuntimeApplication sat
 	// in Progressing forever (measured: 26 days on app-dev). Issue #274.
 	ns, err := naming.Namespace(tenant.Name, app.Spec.Project, app.Spec.Environment)
 	if err != nil {
@@ -441,21 +441,21 @@ func (r *ApplicationReconciler) reconcileWorkloadStatus(ctx context.Context, app
 	}
 
 	// List Pods using the renderer's canonical labels:
-	//   loopzero.io/project       = app.Spec.Project
-	//   loopzero.io/app-name      = app.Spec.ServiceName
-	//   loopzero.io/environment   = app.Spec.Environment
+	//   runtime.getloopscale.com/project       = app.Spec.Project
+	//   runtime.getloopscale.com/app-name      = app.Spec.ServiceName
+	//   runtime.getloopscale.com/environment   = app.Spec.Environment
 	//
-	// (loopzero.io/tenant is implicit via namespace filtering; namespace itself
-	// is loopzero-{tenantRef}-{project}-{environment}.)
+	// (runtime.getloopscale.com/tenant is implicit via namespace filtering; namespace itself
+	// is loop-runtime-{tenantRef}-{project}-{environment}.)
 	//
 	// Source of truth for these labels: api/internal/manifests/renderer_*.go.
 	var pods corev1.PodList
 	if err := workloadClient.List(cellCtx, &pods,
 		client.InNamespace(ns),
 		client.MatchingLabels{
-			constants.LabelProject:     app.Spec.Project,
-			"loopzero.io/app-name":     app.Spec.ServiceName,
-			constants.LabelEnvironment: app.Spec.Environment,
+			constants.LabelProject:              app.Spec.Project,
+			"runtime.getloopscale.com/app-name": app.Spec.ServiceName,
+			constants.LabelEnvironment:          app.Spec.Environment,
 		},
 	); err != nil {
 		logger.V(1).Info("workload-status: pod list failed (graceful degrade)",
@@ -483,8 +483,8 @@ func SetupApplicationControllerWithFactory(mgr ctrl.Manager, baseDomain string, 
 		return fmt.Errorf("application controller: a runtime client factory is required")
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.LoopZeroApplication{}, reconcileloop.ForOption()).
-		Owns(&loopzerov1.ExposedRoute{}).
+		For(&loopruntimev1.LoopRuntimeApplication{}, reconcileloop.ForOption()).
+		Owns(&loopruntimev1.ExposedRoute{}).
 		Named("application").
 		Complete(&ApplicationReconciler{
 			Client:         mgr.GetClient(),

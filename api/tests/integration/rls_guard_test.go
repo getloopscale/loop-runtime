@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Boot guard — db.AssertRequestPoolIsolated.
 //
@@ -17,14 +17,14 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
-// TestRLSGuard_AcceptsRequestRole — loopzero_api is non-owner and non-bypassing,
+// TestRLSGuard_AcceptsRequestRole — loop_runtime_api is non-owner and non-bypassing,
 // so the guard must let the process start.
 func TestRLSGuard_AcceptsRequestRole(t *testing.T) {
-	ctx, pool := auditPool(t, "LOOPZERO_API_DATABASE_URL", "request path (loopzero_api)")
+	ctx, pool := auditPool(t, "LOOP_RUNTIME_API_DATABASE_URL", "request path (loop_runtime_api)")
 
 	if err := db.AssertRequestPoolIsolated(ctx, pool); err != nil {
 		t.Errorf("the guard rejected the intended request role: %v\n"+
-			"If this fails, either loopzero_api regained a bypass or it became the table owner.", err)
+			"If this fails, either loop_runtime_api regained a bypass or it became the table owner.", err)
 	}
 }
 
@@ -66,22 +66,22 @@ func TestRLSGuard_RefusesBypassRole(t *testing.T) {
 	// Granting BYPASSRLS requires SUPERUSER — CREATEROLE is not enough — so
 	// this one case needs a superuser DSN. Provided in CI; absent locally the
 	// test skips rather than pretending to have covered the attribute.
-	octx, super := auditPool(t, "LOOPZERO_RLS_AUDIT_SUPERUSER_URL", "superuser")
+	octx, super := auditPool(t, "LOOP_RUNTIME_RLS_AUDIT_SUPERUSER_URL", "superuser")
 
-	if _, err := super.Exec(octx, `ALTER ROLE loopzero_api BYPASSRLS`); err != nil {
+	if _, err := super.Exec(octx, `ALTER ROLE loop_runtime_api BYPASSRLS`); err != nil {
 		// Tracked: https://github.com/getloopscale/loop-runtime/issues/289
-		t.Skipf("cannot grant BYPASSRLS on loopzero_api (needs SUPERUSER): %v", err)
+		t.Skipf("cannot grant BYPASSRLS on loop_runtime_api (needs SUPERUSER): %v", err)
 	}
 	t.Cleanup(func() {
-		if _, err := super.Exec(octx, `ALTER ROLE loopzero_api NOBYPASSRLS`); err != nil {
-			t.Fatalf("could not restore NOBYPASSRLS on loopzero_api: %v — "+
+		if _, err := super.Exec(octx, `ALTER ROLE loop_runtime_api NOBYPASSRLS`); err != nil {
+			t.Fatalf("could not restore NOBYPASSRLS on loop_runtime_api: %v — "+
 				"the test database is left with a request role that bypasses RLS", err)
 		}
 	})
 
 	// A fresh pool: rolbypassrls is resolved per session, so an existing
 	// connection would still report the old attribute.
-	ctx, pool := auditPool(t, "LOOPZERO_API_DATABASE_URL", "request path with BYPASSRLS")
+	ctx, pool := auditPool(t, "LOOP_RUNTIME_API_DATABASE_URL", "request path with BYPASSRLS")
 
 	err := db.AssertRequestPoolIsolated(ctx, pool)
 	if err == nil {

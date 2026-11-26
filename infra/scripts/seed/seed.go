@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package seed provides idempotent E2E test data seeding for LoopZero.
+// Package seed provides idempotent E2E test data seeding for LoopRuntime.
 //
 // It can be used from E2E BeforeEach blocks or as a standalone setup step.
 // All operations are idempotent: running multiple times produces the same result.
@@ -10,7 +10,7 @@
 //
 //	seed.Run(seed.Config{
 //	    DatabaseURL: "postgres://...",
-//	    KubeContext: "k3d-loopzero-core",
+//	    KubeContext: "k3d-loop-runtime-core",
 //	})
 package seed
 
@@ -54,8 +54,8 @@ const (
 	// DEPRECATED for HTTP API tests since dogfood-2026-05-08-fixes T0.2:
 	// `e2e-token-dev` is only valid in dev-mode API stub; against real
 	// Hydra-minted JWT API it returns 401. Use `resolveToken()` from
-	// helpers_test.go which prioritizes process env LOOPZERO_TOKEN, then
-	// ~/.loopzero/local-dogfood-token.txt, and falls back to AuthToken last.
+	// helpers_test.go which prioritizes process env LOOP_RUNTIME_TOKEN, then
+	// ~/.loop-runtime/local-dogfood-token.txt, and falls back to AuthToken last.
 	// AuthToken kept here as that final fallback only.
 	AuthToken = "e2e-token-dev"
 	// Username is the unique handle for the E2E user (users.username NOT NULL).
@@ -69,8 +69,8 @@ const (
 // seed leaves it a member of the E2E tenant only; the rule is the shared one
 // the local and drill seeds apply (infra/scripts/bootstrapuser).
 var bootstrapUser = bootstrapuser.User{
-	ID:          "loopzero-bootstrap",
-	Email:       "bootstrap@loopzero.local",
+	ID:          "loop-runtime-bootstrap",
+	Email:       "bootstrap@loop-runtime.local",
 	DisplayName: "Bootstrap User",
 	Username:    "bootstrap",
 	AccountID:   "acct-bootstrap",
@@ -82,7 +82,7 @@ var bootstrapUser = bootstrapuser.User{
 type Config struct {
 	// DatabaseURL is the PostgreSQL connection string.
 	DatabaseURL string
-	// KubeContext is the kubectl context to use (default: k3d-loopzero-core).
+	// KubeContext is the kubectl context to use (default: k3d-loop-runtime-core).
 	KubeContext string
 	// ReconcileTimeout is how long to wait for namespace reconciliation (default: 60s).
 	ReconcileTimeout time.Duration
@@ -92,20 +92,20 @@ type Config struct {
 //
 // DatabaseURL resolution order (first non-empty wins):
 //  1. Config.DatabaseURL (programmatic override)
-//  2. LOOPZERO_E2E_DATABASE_URL env var (operator override — Tilt port-forward
-//     uses 127.0.0.1:15432 with password "loopzero-dev-password")
-//  3. fallback "postgres://loopzero:loopzero@localhost:5432/loopzero?sslmode=disable"
+//  2. LOOP_RUNTIME_E2E_DATABASE_URL env var (operator override — Tilt port-forward
+//     uses 127.0.0.1:15432 with password "loop-runtime-dev-password")
+//  3. fallback "postgres://loop_runtime:loop_runtime@localhost:5432/loop_runtime?sslmode=disable"
 //     (legacy default; matches the old in-process PG that no longer exists)
 func (c *Config) defaults() {
 	if c.DatabaseURL == "" {
-		if env := os.Getenv("LOOPZERO_E2E_DATABASE_URL"); env != "" {
+		if env := os.Getenv("LOOP_RUNTIME_E2E_DATABASE_URL"); env != "" {
 			c.DatabaseURL = env
 		} else {
-			c.DatabaseURL = "postgres://loopzero:loopzero@localhost:5432/loopzero?sslmode=disable"
+			c.DatabaseURL = "postgres://loop_runtime:loop_runtime@localhost:5432/loop_runtime?sslmode=disable"
 		}
 	}
 	if c.KubeContext == "" {
-		c.KubeContext = "k3d-loopzero-core"
+		c.KubeContext = "k3d-loop-runtime-core"
 	}
 	if c.ReconcileTimeout == 0 {
 		c.ReconcileTimeout = 60 * time.Second
@@ -140,10 +140,10 @@ func SeedDatabase(dbURL string) error {
 	if err != nil {
 		return err
 	}
-	// Use pgx directly (same driver as loopzero-api) instead of `psql` binary.
+	// Use pgx directly (same driver as loop-runtime-api) instead of `psql` binary.
 	// Plan 2026-05-19-drill-skills-rigor-restoration: drill validation uses
 	// managed DOKS PG (no psql binary needed on host). Eliminates dependency
-	// on system psql client — matches production posture (loopzero-api uses pgx,
+	// on system psql client — matches production posture (loop-runtime-api uses pgx,
 	// not psql shell-out).
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -160,8 +160,8 @@ func SeedDatabase(dbURL string) error {
 
 // seedSQL is the script SeedDatabase runs, in foreign-key order.
 //
-// LoopZero's CLI does not yet support the X-LoopZero-Tenant header (T2 — see plan
-// MEET-ASYNC-AMENDMENT-002). Therefore the JWT subject (loopzero-bootstrap) MUST
+// LoopRuntime's CLI does not yet support the X-Loop-Runtime-Tenant header (T2 — see plan
+// MEET-ASYNC-AMENDMENT-002). Therefore the JWT subject (loop-runtime-bootstrap) MUST
 // resolve to a single tenant or every deploy fails with TENANT_REQUIRED. That
 // rule is appended last, once the E2E tenant it points at exists; the dogfood
 // seed-local-user.sh re-creates the tn-e2etest membership on demand, so moving
@@ -190,7 +190,7 @@ INSERT INTO accounts (id, display_name, plan, owner_id)
 VALUES ('%s', '%s', 'starter', '%s')
 ON CONFLICT (owner_id) DO NOTHING;
 
--- COALESCE on conflict preserves any manual pin (e.g., from loopzero admin
+-- COALESCE on conflict preserves any manual pin (e.g., from loop-runtime admin
 -- tenants pin) on re-seed (EC-11). account_id is resolved by owner so the
 -- tenant lands on whichever account the E2E user owns.
 INSERT INTO tenants (id, display_name, slug, owner_id, cell_id, account_id)
@@ -239,7 +239,7 @@ ON CONFLICT (id) DO NOTHING;
 //
 // Per-cluster kubeconfig resolution (drill multi-cluster):
 //   - mgmt: $DRILL_KUBECONFIG (default for any context not in DRILL_KUBECONFIG_DIR)
-//   - k3d-loopzero-build / k3d-loopzero-cell-0: $DRILL_KUBECONFIG_DIR/build.yaml /
+//   - k3d-loop-runtime-build / k3d-loop-runtime-cell-0: $DRILL_KUBECONFIG_DIR/build.yaml /
 //     $DRILL_KUBECONFIG_DIR/runtime.yaml if DRILL_KUBECONFIG_DIR set, else
 //     defaults to mgmt kubeconfig.
 func kubectlArgs(kubeContext string) []string {
@@ -247,11 +247,11 @@ func kubectlArgs(kubeContext string) []string {
 	if dir != "" {
 		// Map well-known local k3d contexts to drill cluster kubeconfigs.
 		switch kubeContext {
-		case "k3d-loopzero-build":
+		case "k3d-loop-runtime-build":
 			return []string{"kubectl", "--kubeconfig", dir + "/build.yaml", "--insecure-skip-tls-verify"}
-		case "k3d-loopzero-cell-0":
+		case "k3d-loop-runtime-cell-0":
 			return []string{"kubectl", "--kubeconfig", dir + "/runtime.yaml", "--insecure-skip-tls-verify"}
-		case "k3d-loopzero-core", "":
+		case "k3d-loop-runtime-core", "":
 			return []string{"kubectl", "--kubeconfig", dir + "/mgmt.yaml", "--insecure-skip-tls-verify"}
 		}
 	}
@@ -263,7 +263,7 @@ func kubectlArgs(kubeContext string) []string {
 
 // EnsureTenantCR creates the Tenant CR if absent, OR merges baseline envs
 // (production + staging) into an existing CR without stripping envs added
-// dynamically via the API (`loopzero deploy --env <jX>` → AddEnvironment).
+// dynamically via the API (`loopscale deploy --env <jX>` → AddEnvironment).
 //
 // Sprint A trio-fix 2026-06-02 (continuation of c892e355): seedE2E is called
 // from every journey's BeforeAll. Pre-fix, this `kubectl apply` overwrote
@@ -292,15 +292,15 @@ func EnsureTenantCR(kubeContext string) error {
 
 	envs := mergeEnvs(existingEnvs)
 	tenantCR := map[string]interface{}{
-		"apiVersion": "loopzero.io/v1",
+		"apiVersion": "runtime.getloopscale.com/v1",
 		"kind":       "Tenant",
 		"metadata": map[string]interface{}{
 			"name": TenantID,
-			// Tenant-operator only reconciles CRs in loopzero-system namespace;
+			// Tenant-operator only reconciles CRs in loop-runtime-system namespace;
 			// "default" is invisible to its watch (verified empirically
 			// 2026-05-06 — Tenant in "default" stays with empty PHASE while
-			// tenants in "loopzero-system" reconcile to Active within seconds).
-			"namespace": "loopzero-system",
+			// tenants in "loop-runtime-system" reconcile to Active within seconds).
+			"namespace": "loop-runtime-system",
 		},
 		"spec": map[string]interface{}{
 			"displayName":  DisplayName,
@@ -344,7 +344,7 @@ func EnsureTenantCR(kubeContext string) error {
 // or (nil, false, err) on unexpected error.
 func getExistingEnvs(kubeContext string) ([]map[string]string, bool, error) {
 	args := append(kubectlArgs(kubeContext),
-		"get", "tenant", TenantID, "-n", "loopzero-system",
+		"get", "tenant", TenantID, "-n", "loop-runtime-system",
 		"-o", "jsonpath={.spec.environments}",
 	)
 	cmd := exec.Command(args[0], args[1:]...)
@@ -426,8 +426,8 @@ type expectedNamespace struct {
 // WaitForReconciliation polls for namespace existence with the given timeout.
 //
 // The TenantController materializes namespaces across multiple clusters:
-//   - workload cluster: loopzero-{tenant}-{project}-production and -staging
-//     (canonical naming pkg adds "loopzero-" prefix per ADR-0018)
+//   - workload cluster: loop-runtime-{tenant}-{project}-production and -staging
+//     (canonical naming pkg adds "loop-runtime-" prefix per ADR-0018)
 //   - build cluster:    build-{tenant}
 //
 // The kubeContext arg is kept for back-compat (was the mgmt context) but is
@@ -470,13 +470,13 @@ func ExpectedNamespacesByContext() ([]expectedNamespace, error) {
 		if err != nil {
 			return nil, fmt.Errorf("expected %s namespace: %w", env, err)
 		}
-		expected = append(expected, expectedNamespace{context: "k3d-loopzero-cell-0", name: ns})
+		expected = append(expected, expectedNamespace{context: "k3d-loop-runtime-cell-0", name: ns})
 	}
 	build, err := naming.BuildNamespace(TenantID)
 	if err != nil {
 		return nil, fmt.Errorf("expected build namespace: %w", err)
 	}
-	return append(expected, expectedNamespace{context: "k3d-loopzero-build", name: build}), nil
+	return append(expected, expectedNamespace{context: "k3d-loop-runtime-build", name: build}), nil
 }
 
 // findMissingNamespacesByContext returns "ctx/name" identifiers for any

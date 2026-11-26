@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package config
 
@@ -16,7 +16,7 @@ import (
 
 func setIRSARole(t *testing.T) {
 	t.Helper()
-	t.Setenv("AWS_ROLE_ARN", "arn:aws:iam::000000000000:role/loopzero-staging-core-loopzero-api")
+	t.Setenv("AWS_ROLE_ARN", "arn:aws:iam::000000000000:role/loop-runtime-staging-core-loop-runtime-api")
 	t.Setenv("AWS_WEB_IDENTITY_TOKEN_FILE", "/var/run/secrets/eks.amazonaws.com/serviceaccount/token")
 	t.Setenv("MINIO_ENDPOINT", "")
 	t.Setenv("MINIO_ACCESS_KEY", "")
@@ -79,7 +79,7 @@ func TestLoad_WithoutARoleTheObjectStoreKeepsTheInClusterDefaults(t *testing.T) 
 
 func TestValidate_ProductionAcceptsTheAWSCredentialChainWithoutStaticKeys(t *testing.T) {
 	setIRSARole(t)
-	t.Setenv("LOOPZERO_ENV", "production")
+	t.Setenv("LOOP_RUNTIME_ENV", "production")
 
 	err := Load().validateProductionCredentials()
 
@@ -90,7 +90,7 @@ func TestValidate_ProductionAcceptsTheAWSCredentialChainWithoutStaticKeys(t *tes
 
 func TestValidate_ProductionStillRefusesTheDevDefaultsWithoutARole(t *testing.T) {
 	clearIRSARole(t)
-	t.Setenv("LOOPZERO_ENV", "production")
+	t.Setenv("LOOP_RUNTIME_ENV", "production")
 
 	err := Load().validateProductionCredentials()
 

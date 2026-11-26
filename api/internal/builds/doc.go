@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package builds owns the build lifecycle: submitting a build
 // (BuildOrchestrator), driving it to a terminal state from the workflow's

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 
@@ -28,7 +28,7 @@ export type ComponentName =
   | "mgmtGitea"
   | "mgmtPrometheus"
   | "mgmtGrafana"
-  | "mgmtLoopZeroApi"
+  | "mgmtLoopRuntimeApi"
   | "mgmtTenantController"
   | "mgmtTls"
   | "buildArgoWorkflows"
@@ -97,7 +97,7 @@ export function buildExecutionState(args: {
       "mgmtGitea",
       "mgmtPrometheus",
       "mgmtGrafana",
-      "mgmtLoopZeroApi",
+      "mgmtLoopRuntimeApi",
       "mgmtTenantController",
       "mgmtTls",
       "buildArgoWorkflows",

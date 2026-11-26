@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -33,7 +33,7 @@ func (a *scriptedAcquirer) Acquire(context.Context, string, string, string) (*le
 		return nil, err
 	}
 	a.acquired++
-	return &leader.Lease{Name: "loopzero-controller", GenerationID: int64(a.acquired)}, nil
+	return &leader.Lease{Name: "loop-runtime-controller", GenerationID: int64(a.acquired)}, nil
 }
 
 func (a *scriptedAcquirer) Heartbeat(context.Context, *leader.Lease) error {
@@ -63,7 +63,7 @@ func TestLoopsElection_AFenceStopsTheLoopsAndReentersTheElection(t *testing.T) {
 		heartbeats: []error{nil, leader.ErrFenced},
 	}
 	tick := make(chan time.Time)
-	e := &loopsElection{acquirer: acq, name: "loopzero-controller", cellID: "cell-0", holder: "pod-a", tick: tick, logger: discardLogger}
+	e := &loopsElection{acquirer: acq, name: "loop-runtime-controller", cellID: "cell-0", holder: "pod-a", tick: tick, logger: discardLogger}
 
 	started := make(chan context.Context, 2)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -92,7 +92,7 @@ func TestLoopsElection_AFenceStopsTheLoopsAndReentersTheElection(t *testing.T) {
 func TestLoopsElection_NoLeaseNoLoops(t *testing.T) {
 	acq := &scriptedAcquirer{} // always ErrNotLeader
 	tick := make(chan time.Time)
-	e := &loopsElection{acquirer: acq, name: "loopzero-controller", cellID: "cell-0", holder: "pod-b", tick: tick, logger: discardLogger}
+	e := &loopsElection{acquirer: acq, name: "loop-runtime-controller", cellID: "cell-0", holder: "pod-b", tick: tick, logger: discardLogger}
 
 	startedLoops := false
 	ctx, cancel := context.WithCancel(context.Background())

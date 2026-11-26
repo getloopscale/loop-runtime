@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package manifests
 
@@ -77,13 +77,13 @@ func TestRender_NoCollisionBetweenProjectsWithSameAppName(t *testing.T) {
 		t.Errorf("project bravo must use selector 'app: bravo-api', got:\n%s", out2)
 	}
 
-	// `loopzero.io/app-name` label must remain the raw user-declared name in
+	// `runtime.getloopscale.com/app-name` label must remain the raw user-declared name in
 	// BOTH projects so CLI queries (logs, status, scale) keep working.
-	if !strings.Contains(out1, "loopzero.io/app-name: api") {
-		t.Errorf("project alpha must keep label 'loopzero.io/app-name: api'")
+	if !strings.Contains(out1, "runtime.getloopscale.com/app-name: api") {
+		t.Errorf("project alpha must keep label 'runtime.getloopscale.com/app-name: api'")
 	}
-	if !strings.Contains(out2, "loopzero.io/app-name: api") {
-		t.Errorf("project bravo must keep label 'loopzero.io/app-name: api'")
+	if !strings.Contains(out2, "runtime.getloopscale.com/app-name: api") {
+		t.Errorf("project bravo must keep label 'runtime.getloopscale.com/app-name: api'")
 	}
 }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Environments domain types — moved from routes/environments.go per T1.3
 // of deep-review-remediation-plan (closes find_arch_001 partial). The

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domains
 
@@ -358,10 +358,10 @@ func (p *DomainProvisioner) processVerified(ctx context.Context) {
 // F-002 fix: Lock (fetch + render) → Unlock → Push → Update status.
 // Pattern matches deploy flow in ContainerDeliveryActivator.
 func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomDomain) {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.ports.provision",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.ports.provision",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", d.TenantID),
-			attribute.String("loopzero.domain", d.Domain),
+			attribute.String("loop-runtime.tenant", d.TenantID),
+			attribute.String("loop-runtime.domain", d.Domain),
 		))
 	defer span.End()
 
@@ -534,10 +534,10 @@ func (p *DomainProvisioner) processRemoving(ctx context.Context) {
 // removeDomain re-renders manifests WITHOUT the removed domain, pushes to gitops,
 // then deletes the DB row. F-002 fix: uses withEnvironmentLock for render phase.
 func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDomain) {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.ports.remove",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.ports.remove",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", d.TenantID),
-			attribute.String("loopzero.domain", d.Domain),
+			attribute.String("loop-runtime.tenant", d.TenantID),
+			attribute.String("loop-runtime.domain", d.Domain),
 		))
 	defer span.End()
 

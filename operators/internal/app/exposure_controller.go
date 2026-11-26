@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package app
 
@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
@@ -59,9 +59,9 @@ const (
 //
 // ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers.
 //
-// +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=exposedroutes/finalizers,verbs=update
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=exposedroutes,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=exposedroutes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=exposedroutes/finalizers,verbs=update
 // +kubebuilder:rbac:groups=traefik.io,resources=ingressroutes;middlewares,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
 type ExposureReconciler struct {
@@ -78,7 +78,7 @@ type ExposureReconciler struct {
 	// ProbePublicDomain, when set, makes the reachability probe ask for the URL users
 	// reach — the hostname's first label under this domain, over TLS — instead of the
 	// route hostname itself. For an environment whose route hostnames are an internal
-	// SNI the edge rewrites to (dev-public's *.loopzero.local), which resolves nowhere and
+	// SNI the edge rewrites to (dev-public's *.loop-runtime.local), which resolves nowhere and
 	// failed the probe for every app (#447). Empty where the hostname is public.
 	ProbePublicDomain string
 }
@@ -106,7 +106,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 
 	logger := log.FromContext(ctx)
 
-	var route loopzerov1.ExposedRoute
+	var route loopruntimev1.ExposedRoute
 	if err := r.Get(ctx, req.NamespacedName, &route); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -116,7 +116,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
 	// correlation-id from CR annotation into reconcile context (no-op when absent).
-	ctx = correlation.WithID(ctx, route.GetAnnotations()["loopzero.io/correlation-id"])
+	ctx = correlation.WithID(ctx, route.GetAnnotations()["runtime.getloopscale.com/correlation-id"])
 
 	if !route.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, r.reconcileDelete(ctx, &route)
@@ -171,7 +171,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	// Use a longer interval when the route is stable (Reachable) to reduce
 	// reconcile load. Unstable routes get probed more frequently.
 	requeueInterval := constants.RequeueProbeInterval
-	if route.Status.Phase == loopzerov1.ExposedRoutePhaseReachable {
+	if route.Status.Phase == loopruntimev1.ExposedRoutePhaseReachable {
 		requeueInterval = constants.RequeueProbeStableInterval
 	}
 	return ctrl.Result{RequeueAfter: requeueInterval}, nil
@@ -180,7 +180,7 @@ func (r *ExposureReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 // reconcileDelete removes the finalizer immediately: an ExposedRoute owns no
 // external resources (namespace deletion removes the IngressRoute and
 // Certificate).
-func (r *ExposureReconciler) reconcileDelete(ctx context.Context, route *loopzerov1.ExposedRoute) error {
+func (r *ExposureReconciler) reconcileDelete(ctx context.Context, route *loopruntimev1.ExposedRoute) error {
 	if !controllerutil.ContainsFinalizer(route, exposureFinalizer) {
 		return nil
 	}
@@ -190,7 +190,7 @@ func (r *ExposureReconciler) reconcileDelete(ctx context.Context, route *loopzer
 
 // recordCertificate checks the TLS certificate and records the outcome on the
 // route's status and CertificateIssued condition.
-func (r *ExposureReconciler) recordCertificate(ctx context.Context, route *loopzerov1.ExposedRoute) bool {
+func (r *ExposureReconciler) recordCertificate(ctx context.Context, route *loopruntimev1.ExposedRoute) bool {
 	ready := r.checkCertificateReady(ctx, route)
 	route.Status.CertificateReady = ready
 	if ready {
@@ -204,7 +204,7 @@ func (r *ExposureReconciler) recordCertificate(ctx context.Context, route *loopz
 }
 
 // probeRoute performs the reachability probe inside its own span.
-func (r *ExposureReconciler) probeRoute(ctx context.Context, route *loopzerov1.ExposedRoute) (int32, error) {
+func (r *ExposureReconciler) probeRoute(ctx context.Context, route *loopruntimev1.ExposedRoute) (int32, error) {
 	probeURL := r.resolveProbeURL(route)
 	probeCtx, probeSpan := reconcileloop.StartChildSpan(ctx, "exposure.probe",
 		attribute.String("probe.url", probeURL))
@@ -219,7 +219,7 @@ func (r *ExposureReconciler) probeRoute(ctx context.Context, route *loopzerov1.E
 // recordProbe records a probe outcome on the route's status and RouteReachable
 // condition, and reports whether it succeeded and whether the consecutive
 // failure budget is exhausted.
-func (r *ExposureReconciler) recordProbe(route *loopzerov1.ExposedRoute, result int32, probeErr error) (ok, exhausted bool) {
+func (r *ExposureReconciler) recordProbe(route *loopruntimev1.ExposedRoute, result int32, probeErr error) (ok, exhausted bool) {
 	now := metav1.Now()
 	route.Status.LastProbeTime = &now
 	route.Status.LastProbeResult = result
@@ -264,7 +264,7 @@ func (r *ExposureReconciler) recordProbe(route *loopzerov1.ExposedRoute, result 
 // advanceAndPatch moves the route's phase through the ExposedRoute machine,
 // folds the readiness summary in as the last mutation (ADR-0025 D3) and
 // persists the status with a merge patch off base.
-func (r *ExposureReconciler) advanceAndPatch(ctx context.Context, route, base *loopzerov1.ExposedRoute, obs routeObservation) error {
+func (r *ExposureReconciler) advanceAndPatch(ctx context.Context, route, base *loopruntimev1.ExposedRoute, obs routeObservation) error {
 	phase, err := advanceRoutePhase(route.Status.Phase, obs)
 	if err != nil {
 		return err
@@ -284,7 +284,7 @@ func (r *ExposureReconciler) advanceAndPatch(ctx context.Context, route, base *l
 // # WHERE IT LOOKS, AND WHY THAT WAS WRONG
 //
 // It used to call r.Get on route.Namespace with a name derived from the hostname. Both
-// were wrong: the ExposedRoute lives in loopzero-system on the MGMT cluster, while the Secret
+// were wrong: the ExposedRoute lives in loop-runtime-system on the MGMT cluster, while the Secret
 // is created by the manifest renderer in the tenant namespace on the WORKLOAD cluster,
 // under the name tls-{project}-{app}. A Get against a Secret that cannot exist returns
 // NotFound, the function returned false, and the route logged "certificate not ready,
@@ -292,25 +292,25 @@ func (r *ExposureReconciler) advanceAndPatch(ctx context.Context, route, base *l
 // the pods (issue #277).
 //
 // The lookup now walks the same chain reconcileWorkloadStatus already walks:
-// ExposedRoute -> LoopZeroApplication -> Tenant -> cellID -> runtime client -> tenant namespace.
+// ExposedRoute -> LoopRuntimeApplication -> Tenant -> cellID -> runtime client -> tenant namespace.
 //
 // Every failure along that chain logs. The previous silence is what let a wrong lookup
 // look like a pending certificate for four weeks.
-func (r *ExposureReconciler) checkCertificateReady(ctx context.Context, route *loopzerov1.ExposedRoute) bool {
+func (r *ExposureReconciler) checkCertificateReady(ctx context.Context, route *loopruntimev1.ExposedRoute) bool {
 	if !route.Spec.TLS.Enabled {
 		return true
 	}
 	logger := log.FromContext(ctx)
 
-	var app loopzerov1.LoopZeroApplication
+	var app loopruntimev1.LoopRuntimeApplication
 	appKey := types.NamespacedName{Name: route.Spec.ApplicationRef, Namespace: route.Namespace}
 	if err := r.Get(ctx, appKey, &app); err != nil {
-		logger.Info("cert check: LoopZeroApplication not readable",
+		logger.Info("cert check: LoopRuntimeApplication not readable",
 			"route", route.Name, "application", route.Spec.ApplicationRef, "error", err)
 		return false
 	}
 
-	var tenant loopzerov1.Tenant
+	var tenant loopruntimev1.Tenant
 	if err := r.Get(ctx, types.NamespacedName{Name: app.Spec.TenantRef, Namespace: route.Namespace}, &tenant); err != nil {
 		logger.Info("cert check: Tenant not readable",
 			"route", route.Name, "tenant", app.Spec.TenantRef, "error", err)
@@ -347,9 +347,9 @@ func (r *ExposureReconciler) checkCertificateReady(ctx context.Context, route *l
 }
 
 // resolveProbeURL determines the URL to probe for reachability.
-// The loopzero.io/probe-url-override annotation is only respected when AllowProbeURLOverride
+// The runtime.getloopscale.com/probe-url-override annotation is only respected when AllowProbeURLOverride
 // is true (test environments only). In production this annotation is ignored to prevent SSRF.
-func (r *ExposureReconciler) resolveProbeURL(route *loopzerov1.ExposedRoute) string {
+func (r *ExposureReconciler) resolveProbeURL(route *loopruntimev1.ExposedRoute) string {
 	if r.AllowProbeURLOverride {
 		if override, ok := route.Annotations[probeURLOverrideAnnotation]; ok && override != "" {
 			return override
@@ -388,7 +388,7 @@ func (r *ExposureReconciler) performProbe(ctx context.Context, url string) (int3
 
 // ExposureControllerConfig holds optional configuration for the ExposureController.
 type ExposureControllerConfig struct {
-	// AllowProbeURLOverride enables the loopzero.io/probe-url-override annotation.
+	// AllowProbeURLOverride enables the runtime.getloopscale.com/probe-url-override annotation.
 	// Must only be true in test environments (SEC-005: prevents SSRF).
 	AllowProbeURLOverride bool
 
@@ -408,7 +408,7 @@ func SetupExposureController(mgr ctrl.Manager, cfg ExposureControllerConfig) err
 		return fmt.Errorf("exposure controller: a runtime client factory is required")
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.ExposedRoute{}, reconcileloop.ForOption()).
+		For(&loopruntimev1.ExposedRoute{}, reconcileloop.ForOption()).
 		Named("exposure").
 		Complete(&ExposureReconciler{
 			Client:                mgr.GetClient(),

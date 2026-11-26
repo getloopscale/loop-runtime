@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package raw is the escape hatch for sqlc-unparseable SQL queries
-// in the LoopZero API db layer. See README.md for scope (≤5% of all
+// in the LoopRuntime API db layer. See README.md for scope (≤5% of all
 // queries), forbidden tables, and contribution rules.
 //
 // T4.1 of plan 2026-05-29-sqlc-migration-plan v1.3.
@@ -14,7 +14,7 @@
 package raw
 
 // SensitiveTables is the committed exclusion list of tables that
-// raw queries CANNOT touch. Enforced by the cmd/loopzero-ops/internal/quality/tenantpredicate/
+// raw queries CANNOT touch. Enforced by the cmd/loop-runtime-ops/internal/quality/tenantpredicate/
 // gate which scans every .go file under this package for references
 // to these table names.
 //

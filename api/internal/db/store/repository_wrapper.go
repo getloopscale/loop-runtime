@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -147,8 +147,8 @@ func (s *PostgresRepositoryStore) DeleteInstallation(ctx context.Context, instal
 	return nil
 }
 
-// LinkRepository connects a LoopZero project to a GitHub repository.
-// Idempotent re-link per `loopzero connect` CLI contract.
+// LinkRepository connects a LoopRuntime project to a GitHub repository.
+// Idempotent re-link per `loop-runtime connect` CLI contract.
 //
 // Plan J-09 T3.2 (2026-06-05) — autoDeploy parameter (was hardcoded true
 // in the SQL). Caller passes the user's choice; default true at the route
@@ -207,7 +207,7 @@ func (s *PostgresRepositoryStore) GetByRepo(ctx context.Context, repoFullName st
 	return generatedProjectRepoToProjectRepo(row), nil
 }
 
-// GetByProject finds the repository linked to a LoopZero project
+// GetByProject finds the repository linked to a LoopRuntime project
 // (tenant-scoped API path). Returns (nil, nil) when not linked.
 func (s *PostgresRepositoryStore) GetByProject(ctx context.Context, tenantID, projectName string) (*ProjectRepository, error) {
 	gdb := db.Generated(s.DB)

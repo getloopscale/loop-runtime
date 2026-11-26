@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -23,7 +23,7 @@ issuer: https://auth.example.test/
 publicOrigin: https://app.example.test
 jwks:
   service: ory-hydra-public
-  namespace: loopzero-auth
+  namespace: loop-runtime-auth
   port: 4444
   path: /.well-known/jwks.json
 gateway:
@@ -31,7 +31,7 @@ gateway:
 servers:
   - name: memory
     path: /mcp/memory
-    host: loopzero-memory.loopzero-data-plane.svc.cluster.local
+    host: loop-runtime-memory.loop-runtime-data-plane.svc.cluster.local
     port: 8080
     upstreamPath: /mcp
 `
@@ -100,7 +100,7 @@ func TestMCPGatewayRoutesTheServerAndItsDiscoveryDocuments(t *testing.T) {
 		t.Fatalf("backend targets = %v, want one", targets)
 	}
 	static, _ := dig(targets[0].(map[string]any), "static").(map[string]any)
-	want := map[string]any{"host": "loopzero-memory.loopzero-data-plane.svc.cluster.local", "port": 8080, "path": "/mcp", "protocol": "StreamableHTTP"}
+	want := map[string]any{"host": "loop-runtime-memory.loop-runtime-data-plane.svc.cluster.local", "port": 8080, "path": "/mcp", "protocol": "StreamableHTTP"}
 	for k, v := range want {
 		if static[k] != v {
 			t.Errorf("backend static.%s = %v, want %v", k, static[k], v)

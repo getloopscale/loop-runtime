@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // setup_transit.go — T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync
 // v1.2. Constructs the production *vault.TransitClient at boot time when

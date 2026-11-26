@@ -2,42 +2,42 @@
 # ClusterIssuer for bootstrapping the local dev CA.
 # This is local-dev-only; production uses DO Container Registry (managed TLS)
 # and does not need a self-signed CA.
-# LOCAL ONLY (LP-001): cert-manager letsencrypt-prod does not issue *.loopzero.local; this self-signed CA fills the gap locally. Production uses CF-managed TLS.
+# LOCAL ONLY (LP-001): cert-manager letsencrypt-prod does not issue *.loop-runtime.local; this self-signed CA fills the gap locally. Production uses CF-managed TLS.
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
-  name: loopzero-local-selfsigned
+  name: loop-runtime-local-selfsigned
   labels:
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: registry-tls
 spec:
   selfSigned: {}
 ---
 # Root CA — signs the registry server cert.
 # Private key stays in Secret; only the public cert is distributed to clusters
-# via ConfigMap (loopzero-local-ca-bundle, see argo-workflows chart).
+# via ConfigMap (loop-runtime-local-ca-bundle, see argo-workflows chart).
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: loopzero-local-ca
+  name: loop-runtime-local-ca
   namespace: cert-manager
   labels:
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: registry-tls
 spec:
   isCA: true
-  commonName: loopzero-local-ca
+  commonName: loop-runtime-local-ca
   subject:
     organizations:
-      - LoopZero (local dev)
-  secretName: loopzero-local-ca-key
+      - LoopRuntime (local dev)
+  secretName: loop-runtime-local-ca-key
   duration: 43800h   # 5 years
   renewBefore: 8760h # 1 year
   privateKey:
     algorithm: RSA
     size: 4096
   issuerRef:
-    name: loopzero-local-selfsigned
+    name: loop-runtime-local-selfsigned
     kind: ClusterIssuer
     group: cert-manager.io
 ---
@@ -45,10 +45,10 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
-  name: loopzero-local-ca-issuer
+  name: loop-runtime-local-ca-issuer
   labels:
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
     app.kubernetes.io/component: registry-tls
 spec:
   ca:
-    secretName: loopzero-local-ca-key
+    secretName: loop-runtime-local-ca-key

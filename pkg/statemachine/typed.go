@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
@@ -41,7 +41,7 @@ func (m *Typed[S, E]) TryTransition(current S, event E) (S, error) {
 
 // SafeTransition is TryTransition under the name the status stores use. It
 // is kept as a separate entry point because the MA-7 gate
-// (cmd/loopzero-ops ma7statuslocality) restricts SafeTransition calls to
+// (cmd/loop-runtime-ops ma7statuslocality) restricts SafeTransition calls to
 // api/internal/db/store, where status writes are serialized.
 func (m *Typed[S, E]) SafeTransition(current S, event E) (S, error) {
 	return m.TryTransition(current, event)

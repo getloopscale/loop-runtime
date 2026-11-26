@@ -1,0 +1,66 @@
+# Values for the ConfigMap and Secret the Tilt-owned loop-runtime-api Deployment
+# (infra/tilt/api-deployment.yaml) mounts through envFrom. The Tiltfile renders ONLY
+# charts/loop-runtime-api/templates/{configmap,secret}.yaml with this file — the same chart
+# Helmfile and ArgoCD install, so a key the API reads has one spelling everywhere
+# (ADR D1, decisions/2026-06-11-tilt-yaml-configmap-mount.md).
+#
+# These were runtimeConfig/runtimeSecrets of infra/helm/loop-runtime-api/values-dev.yaml until
+# that bootstrap copy of the chart was deleted (docs/decisions.md, "One chart per
+# bootstrap/published pair"). Dev-only credentials: every value is a local default,
+# none of them works against anything but the local k3d topology.
+#
+# The kubeconfig paths are not here: they name mounts of the Tilt Deployment, so they
+# live in that manifest next to the mounts they point into.
+
+config:
+  logLevel: "debug"
+  loopRuntimeTracingEnabled: "false"
+  loopRuntimeDisableLegacyLoops: "false"
+  # The binary's default is false; this chart's default is true.
+  argocdInsecure: "false"
+  minioEndpoint: "http://minio.loop-runtime-system.svc.cluster.local:9000"
+  minioCrossClusterEndpoint: "http://172.18.0.3:32000"
+  giteaUrl: "http://gitea-http.loop-runtime-system.svc.cluster.local:3000"
+  giteaCrossClusterUrl: "http://172.18.0.3:30000"
+  apiCrossClusterUrl: "http://172.18.0.3:30001"
+  argocdUrl: "http://argocd-server.argocd.svc.cluster.local:80"
+  buildKubeContext: "build"
+  runtimeKubeContext: "in-cluster"
+  # The build cluster's Loki on the port infra/k3d/build-cluster.yaml publishes (30120),
+  # through the docker network gateway host.k3d.internal names in the core CoreDNS — the
+  # same address the helmfile environments render (crossCluster.lokiNodePort). The
+  # `loki-cross-cluster` seed used to patch it onto this Deployment.
+  lokiUrl: "http://host.k3d.internal:30120"
+  registryUrl: "k3d-loop-runtime-registry:5000"
+  registryInsecure: "true"
+  loopRuntimeSyftImage: "k3d-loop-runtime-registry:5000/loop-runtime-syft-scanner:v0.1.0"
+  loopRuntimeCosignImage: "k3d-loop-runtime-registry:5000/loop-runtime-cosign-signer:v0.1.0"
+  loopRuntimeAdminApi: "true"
+  githubAppId: "3319955"
+  workloadIngressUrl: "http://172.18.0.12:80"
+  baseDomain: "loop-runtime.local"
+  loopRuntimePublicDomain: "prod-dev.getloopscale.app"
+  jwksUrl: "http://ory-hydra-public.loop-runtime-auth.svc.cluster.local:4444/.well-known/jwks.json"
+  jwtIssuer: "http://ory-hydra-public.loop-runtime-auth.svc.cluster.local:4444/"
+  loopRuntimeClusterIssuer: "loop-runtime-ca-issuer"
+  openbaoTransitEnabled: "true"
+  openbaoVaultAddr: "https://openbao.secrets-system.svc.cluster.local:8200"
+
+secrets:
+  create: true
+  # No OPENBAO_VAULT_ROLE_ID here: OpenBao issues a new role_id at every vault bootstrap,
+  # and `loop-runtime-ops seed vault-role-id-sync` writes it into Secret loop-runtime-openbao-approle. The
+  # Tilt Deployment lists this Secret AFTER that one in envFrom, so a literal here would
+  # silently win with a stale value.
+  minioAccessKey: "loop-runtime-admin"
+  # #396 — the request pool connects as the non-owner loop_runtime_api role and the
+  # cross-tenant loops as loop_runtime_worker; loop-runtime-api refuses to boot on the owner. Both
+  # passwords are the standalone default `task db:roles` sets.
+  databaseUrl: "postgres://loop_runtime_api:loop-runtime-dev-password@postgresql.loop-runtime-system.svc.cluster.local:5432/loop_runtime?sslmode=disable"
+  loopRuntimeWorkerDatabaseUrl: "postgres://loop_runtime_worker:loop-runtime-dev-password@postgresql.loop-runtime-system.svc.cluster.local:5432/loop_runtime?sslmode=disable"
+  loopRuntimeArgoCallbackSecret: "dev-callback-secret"
+  minioSecretKey: "loop-runtime-dev-password"
+  loopRuntimeServiceAuthSecret: "cleanroom-service-auth-secret-do-not-use-in-prod"
+  # #413 — config.loopRuntimeAdminApi is on, and every /api/v1/admin/* route is gated by this
+  # secret alone; without it the admin routes answer 403 to everyone. Dev-only value.
+  loopRuntimeAdminServiceAuthSecret: "cleanroom-admin-service-auth-do-not-use-in-prod"

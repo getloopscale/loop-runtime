@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package sourcehttp serves the bundle upload endpoint: the LoopZeroKit ↔ LoopZeroCloud
+// Package sourcehttp serves the bundle upload endpoint: the LoopZeroKit ↔ LoopConsole
 // seam, where the CLI hands over `.loopzero/services.json` plus the source bundle.
 //
 // The LAST family to leave the flat `routes` package (B-080), and with it the
@@ -10,7 +10,7 @@
 //
 // # Why moving it needed a decision
 //
-// `CLAUDE.md` locks this file: any change to the LoopZeroKit ↔ LoopZeroCloud seam must be
+// `CLAUDE.md` locks this file: any change to the LoopZeroKit ↔ LoopConsole seam must be
 // preceded by reading `docs/loopzerokit-loopzerocloud-seam.md`, which
 // is the ONLY surviving copy of the contract — the LoopZeroKit-side mirror is gone.
 //
@@ -44,7 +44,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/correlation"
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	"github.com/getloopscale/loop-runtime/api/internal/source"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // maxBundleSize is the maximum allowed bundle size (500MB).
@@ -71,7 +71,7 @@ type ObjectUploader interface {
 type SourceHandler struct {
 	store        source.SourceStore
 	objStore     ObjectUploader // optional: upload bundle to object storage for build cluster access
-	sourceBucket string         // S3 bucket for source bundles (default: "loopzero-builds")
+	sourceBucket string         // S3 bucket for source bundles (default: "loop-runtime-builds")
 	// envBlocklist is how a reserved services.json env key is handled. The
 	// zero value enforces (fail-closed); WithEnvBlocklistMode sets it from
 	// config.Config.EnvBlocklistMode.
@@ -80,7 +80,7 @@ type SourceHandler struct {
 
 // NewSourceHandler creates a new SourceHandler.
 func NewSourceHandler(store source.SourceStore, opts ...func(*SourceHandler)) *SourceHandler {
-	h := &SourceHandler{store: store, sourceBucket: "loopzero-builds"}
+	h := &SourceHandler{store: store, sourceBucket: "loop-runtime-builds"}
 	for _, opt := range opts {
 		opt(h)
 	}
@@ -115,7 +115,7 @@ func WithObjectUploader(u ObjectUploader) func(*SourceHandler) {
 // Upload handles POST /api/v1/source/upload.
 // Plan B v3.1 T-B.3 (2026-06-05): accepts a multipart form whose first part
 // is "services_json" (file or text field) followed by "bundle" (file). The
-// legacy "loopzero_yaml" field is rejected with actionable E-009 error per ADR D4
+// legacy "loop_runtime_yaml" field is rejected with actionable E-009 error per ADR D4
 // + blueprint D8.
 func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// C-02: Enforce request deadline so handlers don't hang indefinitely.
@@ -124,13 +124,13 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	// Check Content-Length before parsing body (fast reject for oversized requests).
 	if r.ContentLength > maxBundleSize {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrPayloadTooLarge)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrPayloadTooLarge)
 		return
 	}
 
@@ -142,9 +142,9 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	form, rej := readUploadForm(r, h.envBlocklist)
 	if rej != nil {
 		if len(rej.fields) > 0 {
-			httpio.WriteLoopZeroErrorWithFieldErrors(w, rej.err, rej.fields)
+			httpio.WriteLoopRuntimeErrorWithFieldErrors(w, rej.err, rej.fields)
 		} else {
-			httpio.WriteLoopZeroError(w, rej.err)
+			httpio.WriteLoopRuntimeError(w, rej.err)
 		}
 		return
 	}
@@ -154,7 +154,7 @@ func (h *SourceHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	projectName := source.ProjectNameFromManifest(form.manifest)
 	sourceID, perr := publisher.publish(ctx, uc.TenantID, projectName, form.bundle, correlation.Read(r))
 	if perr != nil {
-		httpio.WriteLoopZeroError(w, perr)
+		httpio.WriteLoopRuntimeError(w, perr)
 		return
 	}
 

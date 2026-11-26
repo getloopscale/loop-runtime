@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -36,7 +36,7 @@ import (
 //     — sqlc compile-time + sqlcsync gate replace.
 //
 // Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves
-// to real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL
+// to real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL
 // harness is wired (out of T2.2 #3 scope).
 
 // =============================================================================
@@ -68,7 +68,7 @@ import (
 //     compile-time + sqlcsync gate replace.
 //
 // Per matrix § Phase 2 reshape window: KEEP-INVARIANT subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness is
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness is
 // wired.
 
 // TestStores_Getters_NotFoundAndQueryError consolidates the canonical
@@ -122,7 +122,7 @@ import (
 //   - GetByProject tenant-scoped (gate enforces tenant_id predicate)
 //
 // Per matrix § Phase 2 reshape window: behavioral subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness
 // is wired.
 //
 // TestGenerateRepoID_HasPrefix + TestGenerateRepoID_IsUnique below

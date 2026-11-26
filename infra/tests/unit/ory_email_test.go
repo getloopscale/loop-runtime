@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -52,7 +52,7 @@ func TestEmailTemplatesNoInternalTerms(t *testing.T) {
 func TestEmailTemplatesHaveBranding(t *testing.T) {
 	dir := filepath.Join(helmDir(), "ory-kratos", "email-templates")
 
-	// Body templates must mention "LoopZero"
+	// Body templates must mention "LoopRuntime"
 	bodyTemplates := []string{
 		"verification.valid.body.gotmpl",
 		"verification.invalid.body.gotmpl",
@@ -64,12 +64,12 @@ func TestEmailTemplatesHaveBranding(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		if !strings.Contains(string(data), "LoopZero") {
-			t.Errorf("template %s missing LoopZero branding", tmpl)
+		if !strings.Contains(string(data), "LoopRuntime") {
+			t.Errorf("template %s missing LoopRuntime branding", tmpl)
 		}
 	}
 
-	// Subject templates must mention "LoopZero"
+	// Subject templates must mention "LoopRuntime"
 	subjectTemplates := []string{
 		"verification.valid.subject.gotmpl",
 		"recovery.valid.subject.gotmpl",
@@ -79,8 +79,8 @@ func TestEmailTemplatesHaveBranding(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		if !strings.Contains(string(data), "LoopZero") {
-			t.Errorf("subject template %s missing LoopZero branding", tmpl)
+		if !strings.Contains(string(data), "LoopRuntime") {
+			t.Errorf("subject template %s missing LoopRuntime branding", tmpl)
 		}
 	}
 }

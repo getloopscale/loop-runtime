@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package portable_tests contains golden behavioral tests derived from Capsule
-// (https://projectcapsule.dev) and normalized for the LoopZero PaaS operator suite.
+// (https://projectcapsule.dev) and normalized for the LoopRuntime PaaS operator suite.
 //
 // These tests are PORTABLE — they test observable behavior (namespace labels,
 // RBAC resources, conditions, phase transitions) and make no assumptions about
@@ -15,7 +15,7 @@
 // Source mapping:
 //   - Capsule: e2e/new_namespace_test.go, e2e/tenant_resources_test.go
 //   - Behavioral contract: Capsule BC-001 (namespace + RoleBinding creation)
-//   - Translated to: LoopZero TenantController + EnvironmentController behaviors
+//   - Translated to: LoopRuntime TenantController + EnvironmentController behaviors
 package tenant_test
 
 import (
@@ -32,7 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/operatortest"
 	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
@@ -42,7 +42,7 @@ import (
 // Quality-Gate Phase 3: delegate to newTenant + apply Golden-specific overrides
 // (was 30-line near-clone of newTenant). Golden vs Test only differ in display
 // name + tighter preview policy (2 envs / 24h instead of 3 envs / 48h).
-func newGoldenTenant(name string, plan loopzerov1.PlanTier, envs []string) *loopzerov1.Tenant {
+func newGoldenTenant(name string, plan loopruntimev1.PlanTier, envs []string) *loopruntimev1.Tenant {
 	t := newTenant(name, plan, envs)
 	t.Spec.DisplayName = "Golden Test Tenant " + name
 	t.Spec.Preview.MaxEnvironments = 2
@@ -54,7 +54,7 @@ func newGoldenTenant(name string, plan loopzerov1.PlanTier, envs []string) *loop
 // Must be called in AfterAll to avoid envtest state leaking between suites.
 func cleanupGoldenTenant(tenantName string, envNames []string) {
 	// Remove finalizers so the Tenant can be garbage-collected.
-	t := &loopzerov1.Tenant{}
+	t := &loopruntimev1.Tenant{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: tenantName, Namespace: "default"}, t); err == nil {
 		_ = operatortest.UpdateWithRetry(ctx, k8sClient, t, func() {
 			t.Finalizers = nil
@@ -64,7 +64,7 @@ func cleanupGoldenTenant(tenantName string, envNames []string) {
 
 	// Clean up Environment CRs.
 	for _, env := range envNames {
-		envCR := &loopzerov1.Environment{}
+		envCR := &loopruntimev1.Environment{}
 		envKey := types.NamespacedName{Name: tenantName + "-default-project-" + env, Namespace: "default"}
 		if err := k8sClient.Get(ctx, envKey, envCR); err == nil {
 			_ = operatortest.UpdateWithRetry(ctx, k8sClient, envCR, func() {
@@ -76,7 +76,7 @@ func cleanupGoldenTenant(tenantName string, envNames []string) {
 
 	// Delete all namespaces with this tenant label.
 	var nsList corev1.NamespaceList
-	if err := k8sClient.List(ctx, &nsList, client.MatchingLabels{"loopzero.io/tenant": tenantName}); err == nil {
+	if err := k8sClient.List(ctx, &nsList, client.MatchingLabels{"runtime.getloopscale.com/tenant": tenantName}); err == nil {
 		for i := range nsList.Items {
 			_ = k8sClient.Delete(ctx, &nsList.Items[i])
 		}
@@ -85,7 +85,7 @@ func cleanupGoldenTenant(tenantName string, envNames []string) {
 
 // --- GOLDEN TEST: golden_tenant_isolation_build_namespace_created ---
 // Source: src_tenant_isolation_namespace_created_with_rolebindings
-// BC: Capsule BC-001 (namespace + owner binding) → LoopZero build namespace provisioning
+// BC: Capsule BC-001 (namespace + owner binding) → LoopRuntime build namespace provisioning
 
 var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
@@ -93,7 +93,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		const tenantName = "golden-iso-build"
 
 		BeforeAll(func() {
-			createGoldenTenantAndWaitPhaseSet(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			createGoldenTenantAndWaitPhaseSet(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 		})
 
 		It("should create build-{tenantName} namespace on the build cluster", func() {
@@ -104,20 +104,20 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should set loopzero.io/tenant label on the build namespace", func() {
-			expectNamespaceLabel("build-"+tenantName, "loopzero.io/tenant", tenantName)
+		It("should set runtime.getloopscale.com/tenant label on the build namespace", func() {
+			expectNamespaceLabel("build-"+tenantName, "runtime.getloopscale.com/tenant", tenantName)
 		})
 
-		It("should set loopzero.io/component=build label on the build namespace", func() {
-			expectNamespaceLabel("build-"+tenantName, "loopzero.io/component", "build")
+		It("should set runtime.getloopscale.com/component=build label on the build namespace", func() {
+			expectNamespaceLabel("build-"+tenantName, "runtime.getloopscale.com/component", "build")
 		})
 
-		It("should set loopzero.io/managed-by=tenant-controller label on the build namespace", func() {
-			expectNamespaceLabel("build-"+tenantName, "loopzero.io/managed-by", "tenant-controller")
+		It("should set runtime.getloopscale.com/managed-by=tenant-controller label on the build namespace", func() {
+			expectNamespaceLabel("build-"+tenantName, "runtime.getloopscale.com/managed-by", "tenant-controller")
 		})
 
 		It("should NOT set ownerReference on build namespace (cross-cluster limitation)", func() {
-			// Normalizer note: Capsule used ownerRef for cleanup. LoopZero cannot — the build
+			// Normalizer note: Capsule used ownerRef for cleanup. LoopRuntime cannot — the build
 			// namespace lives on a different physical cluster. Label-based cleanup + finalizer
 			// pattern is used instead. This is a behavioral difference, not a missing feature.
 			buildNs := "build-" + tenantName
@@ -135,18 +135,18 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_runtime_namespace_labels ---
 	// Source: src_tenant_isolation_namespace_created_with_rolebindings
-	// BC: Capsule BC-001 → LoopZero runtime namespace per-environment provisioning
+	// BC: Capsule BC-001 → LoopRuntime runtime namespace per-environment provisioning
 
 	Context("golden_tenant_isolation_runtime_namespace_labels", func() {
 		const tenantName = "golden-iso-rt"
 
 		BeforeAll(func() {
-			createGoldenTenantAndWaitPhaseSet(tenantName, loopzerov1.PlanStarter, []string{"production", "staging"})
+			createGoldenTenantAndWaitPhaseSet(tenantName, loopruntimev1.PlanStarter, []string{"production", "staging"})
 		})
 
-		It("should create loopzero-{tenant}-{env} namespace for each declared environment", func() {
+		It("should create loop-runtime-{tenant}-{env} namespace for each declared environment", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env)
+				nsName := fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env)
 				Eventually(func(g Gomega) {
 					var ns corev1.Namespace
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
@@ -154,25 +154,25 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			}
 		})
 
-		It("should set loopzero.io/tenant label on every runtime namespace", func() {
+		It("should set runtime.getloopscale.com/tenant label on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				expectNamespaceLabel(fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env), "loopzero.io/tenant", tenantName)
+				expectNamespaceLabel(fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env), "runtime.getloopscale.com/tenant", tenantName)
 			}
 		})
 
-		It("should set loopzero.io/environment label on every runtime namespace", func() {
+		It("should set runtime.getloopscale.com/environment label on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				expectNamespaceLabel(fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env), "loopzero.io/environment", env)
+				expectNamespaceLabel(fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env), "runtime.getloopscale.com/environment", env)
 			}
 		})
 
-		It("should set loopzero.io/managed-by=environment-controller on every runtime namespace", func() {
+		It("should set runtime.getloopscale.com/managed-by=environment-controller on every runtime namespace", func() {
 			for _, env := range []string{"production", "staging"} {
-				nsName := fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env)
+				nsName := fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env)
 				Eventually(func(g Gomega) {
 					var ns corev1.Namespace
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
-					g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "environment-controller"))
+					g.Expect(ns.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/managed-by", "environment-controller"))
 				}, timeout, interval).Should(Succeed())
 			}
 		})
@@ -184,7 +184,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_cross_tenant_namespace_no_shared_labels ---
 	// Source: src_tenant_isolation_non_owner_cannot_select_foreign_tenant
-	// BC: Capsule BC-001 → LoopZero label-based tenant isolation (each namespace belongs to exactly one tenant)
+	// BC: Capsule BC-001 → LoopRuntime label-based tenant isolation (each namespace belongs to exactly one tenant)
 
 	Context("golden_tenant_isolation_cross_tenant_namespace_no_shared_labels", func() {
 		const (
@@ -194,13 +194,13 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 		BeforeAll(func() {
 			for _, name := range []string{tenantA, tenantB} {
-				tenant := newGoldenTenant(name, loopzerov1.PlanStarter, []string{"production"})
+				tenant := newGoldenTenant(name, loopruntimev1.PlanStarter, []string{"production"})
 				Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 			}
 			// Wait for both tenants to have their phase set.
 			for _, name := range []string{tenantA, tenantB} {
 				Eventually(func(g Gomega) {
-					var t loopzerov1.Tenant
+					var t loopruntimev1.Tenant
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 						Name: name, Namespace: "default",
 					}, &t)).To(Succeed())
@@ -210,33 +210,33 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 		})
 
 		It("should give each tenant a distinct namespace that the other cannot claim", func() {
-			nsA := fmt.Sprintf("loopzero-%s-default-project-production", tenantA)
-			nsB := fmt.Sprintf("loopzero-%s-default-project-production", tenantB)
+			nsA := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantA)
+			nsB := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantB)
 
 			Eventually(func(g Gomega) {
 				var a, b corev1.Namespace
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsA}, &a)).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsB}, &b)).To(Succeed())
 
-				g.Expect(a.Labels).To(HaveKeyWithValue("loopzero.io/tenant", tenantA))
-				g.Expect(a.Labels).NotTo(HaveKeyWithValue("loopzero.io/tenant", tenantB))
+				g.Expect(a.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/tenant", tenantA))
+				g.Expect(a.Labels).NotTo(HaveKeyWithValue("runtime.getloopscale.com/tenant", tenantB))
 
-				g.Expect(b.Labels).To(HaveKeyWithValue("loopzero.io/tenant", tenantB))
-				g.Expect(b.Labels).NotTo(HaveKeyWithValue("loopzero.io/tenant", tenantA))
+				g.Expect(b.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/tenant", tenantB))
+				g.Expect(b.Labels).NotTo(HaveKeyWithValue("runtime.getloopscale.com/tenant", tenantA))
 
 				g.Expect(a.Name).NotTo(Equal(b.Name))
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should list only its own namespaces when querying by loopzero.io/tenant label", func() {
+		It("should list only its own namespaces when querying by runtime.getloopscale.com/tenant label", func() {
 			for _, name := range []string{tenantA, tenantB} {
 				Eventually(func(g Gomega) {
 					var nsList corev1.NamespaceList
 					g.Expect(k8sClient.List(ctx, &nsList, client.MatchingLabels{
-						"loopzero.io/tenant": name,
+						"runtime.getloopscale.com/tenant": name,
 					})).To(Succeed())
 					for _, ns := range nsList.Items {
-						g.Expect(ns.Labels["loopzero.io/tenant"]).To(Equal(name),
+						g.Expect(ns.Labels["runtime.getloopscale.com/tenant"]).To(Equal(name),
 							"namespace %s should belong exclusively to tenant %s", ns.Name, name)
 					}
 				}, timeout, interval).Should(Succeed())
@@ -251,23 +251,23 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_tenant_reaches_active_phase ---
 	// Source: src_tenant_isolation_namespace_lifecycle_status_tracking
-	// BC: Capsule BC-001 → LoopZero TenantController state machine (Provisioning → Active)
+	// BC: Capsule BC-001 → LoopRuntime TenantController state machine (Provisioning → Active)
 
 	Context("golden_tenant_isolation_tenant_reaches_active_phase", func() {
 		const tenantName = "golden-phase-active"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			tenant := newGoldenTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 		})
 
 		It("should transition to Active phase after provisioning completes", func() {
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var t loopruntimev1.Tenant
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName, Namespace: "default",
 				}, &t)).To(Succeed())
-				g.Expect(t.Status.Phase).To(Equal(loopzerov1.TenantPhaseActive))
+				g.Expect(t.Status.Phase).To(Equal(loopruntimev1.TenantPhaseActive))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -278,23 +278,23 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_finalizer_prevents_premature_deletion ---
 	// Source: src_tenant_isolation_namespace_lifecycle_status_tracking
-	// BC: Capsule BC-001 → LoopZero finalizer-based cleanup contract
+	// BC: Capsule BC-001 → LoopRuntime finalizer-based cleanup contract
 
 	Context("golden_tenant_isolation_finalizer_prevents_premature_deletion", func() {
 		const tenantName = "golden-finalizer"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			tenant := newGoldenTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 		})
 
-		It("should add the loopzero.io/tenant-cleanup finalizer after reconciliation", func() {
+		It("should add the runtime.getloopscale.com/tenant-cleanup finalizer after reconciliation", func() {
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var t loopruntimev1.Tenant
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName, Namespace: "default",
 				}, &t)).To(Succeed())
-				g.Expect(t.Finalizers).To(ContainElement("loopzero.io/tenant-cleanup"))
+				g.Expect(t.Finalizers).To(ContainElement("runtime.getloopscale.com/tenant-cleanup"))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -305,18 +305,18 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_idempotent_reconciliation ---
 	// Source: src_tenant_isolation_additional_rolebindings_propagated
-	// BC: Capsule BC-001 (reconcile loop idempotency) → LoopZero CreateOrUpdate semantics
+	// BC: Capsule BC-001 (reconcile loop idempotency) → LoopRuntime CreateOrUpdate semantics
 
 	Context("golden_tenant_isolation_idempotent_reconciliation", func() {
 		const tenantName = "golden-idempotent"
 
 		BeforeAll(func() {
-			createGoldenTenantAndWaitActive(tenantName, loopzerov1.PlanStarter, []string{"production", "staging"})
+			createGoldenTenantAndWaitActive(tenantName, loopruntimev1.PlanStarter, []string{"production", "staging"})
 		})
 
 		It("should not duplicate namespaces after a spec update triggers re-reconcile", func() {
 			// Trigger re-reconcile by updating a non-critical field.
-			var t loopzerov1.Tenant
+			var t loopruntimev1.Tenant
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
@@ -325,7 +325,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			})).To(Succeed())
 
 			// Wait for the update to propagate.
-			withTenant(tenantName, func(g Gomega, updated *loopzerov1.Tenant) {
+			withTenant(tenantName, func(g Gomega, updated *loopruntimev1.Tenant) {
 				g.Expect(updated.Spec.DisplayName).To(Equal("Golden Idempotency Verified"))
 			})
 
@@ -333,25 +333,25 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			Eventually(func(g Gomega) {
 				var nsList corev1.NamespaceList
 				g.Expect(k8sClient.List(ctx, &nsList, client.MatchingLabels{
-					"loopzero.io/tenant": tenantName,
+					"runtime.getloopscale.com/tenant": tenantName,
 				})).To(Succeed())
 				g.Expect(nsList.Items).To(HaveLen(3),
 					"expected exactly 3 namespaces: production, staging, build — no duplicates")
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should not duplicate the loopzero-deployer ServiceAccount after re-reconcile", func() {
-			nsName := fmt.Sprintf("loopzero-%s-default-project-production", tenantName)
+		It("should not duplicate the loop-runtime-deployer ServiceAccount after re-reconcile", func() {
+			nsName := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName)
 			Eventually(func(g Gomega) {
 				var saList corev1.ServiceAccountList
 				g.Expect(k8sClient.List(ctx, &saList, client.InNamespace(nsName))).To(Succeed())
 				count := 0
 				for _, sa := range saList.Items {
-					if sa.Name == "loopzero-deployer" {
+					if sa.Name == "loop-runtime-deployer" {
 						count++
 					}
 				}
-				g.Expect(count).To(Equal(1), "exactly one loopzero-deployer SA should exist — no duplicates")
+				g.Expect(count).To(Equal(1), "exactly one loop-runtime-deployer SA should exist — no duplicates")
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -362,17 +362,17 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_rolebinding_deployer ---
 	// Source: src_tenant_isolation_namespace_created_with_rolebindings
-	// BC: Capsule BC-001 (owner RoleBinding) → LoopZero loopzero-deployer RoleBinding in runtime namespace
+	// BC: Capsule BC-001 (owner RoleBinding) → LoopRuntime loop-runtime-deployer RoleBinding in runtime namespace
 
 	Context("golden_tenant_isolation_rolebinding_deployer", func() {
 		const tenantName = "golden-rb-test"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			tenant := newGoldenTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var t loopruntimev1.Tenant
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName, Namespace: "default",
 				}, &t)).To(Succeed())
@@ -380,12 +380,12 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should create loopzero-deployer ServiceAccount in the runtime namespace", func() {
-			expectServiceAccountExists("loopzero-deployer", fmt.Sprintf("loopzero-%s-default-project-production", tenantName))
+		It("should create loop-runtime-deployer ServiceAccount in the runtime namespace", func() {
+			expectServiceAccountExists("loop-runtime-deployer", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
-		It("should create loopzero-deployer RoleBinding that binds the SA to a Role", func() {
-			expectDeployerRoleBinding(fmt.Sprintf("loopzero-%s-default-project-production", tenantName))
+		It("should create loop-runtime-deployer RoleBinding that binds the SA to a Role", func() {
+			expectDeployerRoleBinding(fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
 		AfterAll(func() {
@@ -395,13 +395,13 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_env_cr_created_for_each_environment ---
 	// Source: src_tenant_isolation_namespace_created_with_rolebindings
-	// BC: Capsule BC-001 → LoopZero Environment CR as the delegation unit for namespace/RBAC/NP provisioning
+	// BC: Capsule BC-001 → LoopRuntime Environment CR as the delegation unit for namespace/RBAC/NP provisioning
 
 	Context("golden_tenant_isolation_env_cr_created_for_each_environment", func() {
 		const tenantName = "golden-env-cr"
 
 		BeforeAll(func() {
-			createGoldenTenantAndWaitPhaseSet(tenantName, loopzerov1.PlanStarter, []string{"production", "staging"})
+			createGoldenTenantAndWaitPhaseSet(tenantName, loopruntimev1.PlanStarter, []string{"production", "staging"})
 		})
 
 		It("should create an Environment CR for each declared environment", func() {
@@ -409,7 +409,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 				envCRName, nerr := naming.EnvironmentCRName(tenantName, "default-project", env)
 				Expect(nerr).NotTo(HaveOccurred())
 				Eventually(func(g Gomega) {
-					var envCR loopzerov1.Environment
+					var envCR loopruntimev1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 						Name: envCRName, Namespace: "default",
 					}, &envCR)).To(Succeed())
@@ -422,7 +422,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 				envCRName, nerr := naming.EnvironmentCRName(tenantName, "default-project", env)
 				Expect(nerr).NotTo(HaveOccurred())
 				Eventually(func(g Gomega) {
-					var envCR loopzerov1.Environment
+					var envCR loopruntimev1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 						Name: envCRName, Namespace: "default",
 					}, &envCR)).To(Succeed())
@@ -437,9 +437,9 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			for _, env := range []string{"production", "staging"} {
 				envCRName, nerr := naming.EnvironmentCRName(tenantName, "default-project", env)
 				Expect(nerr).NotTo(HaveOccurred())
-				expectedNS := fmt.Sprintf("loopzero-%s-default-project-%s", tenantName, env)
+				expectedNS := fmt.Sprintf("loop-runtime-%s-default-project-%s", tenantName, env)
 				Eventually(func(g Gomega) {
-					var envCR loopzerov1.Environment
+					var envCR loopruntimev1.Environment
 					g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 						Name: envCRName, Namespace: "default",
 					}, &envCR)).To(Succeed())
@@ -457,31 +457,31 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_empty_environments_rejected ---
 	// Source: src_tenant_isolation_missing_tenant_namespace_creation_fails
-	// BC: Capsule BC-003 (spec validation) → LoopZero CRD kubebuilder:validation:MinItems=1
+	// BC: Capsule BC-003 (spec validation) → LoopRuntime CRD kubebuilder:validation:MinItems=1
 
 	Context("golden_tenant_isolation_empty_environments_accepted", func() {
 		It("should ACCEPT a Tenant CR with an empty environments list (CRD MinItems: 0 by design)", func() {
-			// environments is MinItems=0 BY DESIGN (config/crd/bases/loopzero.io_tenants.yaml
+			// environments is MinItems=0 BY DESIGN (config/crd/bases/runtime.getloopscale.com_tenants.yaml
 			// schema comment: forcing MinItems=1 required factories to pre-populate).
 			// An empty list is accepted at admission. (This spec previously asserted a
 			// minItems:1 rejection — stale after the deliberate MinItems 1→0 change.)
-			tenant := &loopzerov1.Tenant{
+			tenant := &loopruntimev1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "golden-empty-envs",
 					Namespace: "default",
 				},
-				Spec: loopzerov1.TenantSpec{
+				Spec: loopruntimev1.TenantSpec{
 					DisplayName:  "Golden Empty Envs",
-					Plan:         loopzerov1.PlanStarter,
-					Environments: []loopzerov1.TenantEnvironmentEntry{},
-					GitOps: loopzerov1.GitOpsSpec{
-						RepoName: "loopzero-tenant-golden-empty-envs",
+					Plan:         loopruntimev1.PlanStarter,
+					Environments: []loopruntimev1.TenantEnvironmentEntry{},
+					GitOps: loopruntimev1.GitOpsSpec{
+						RepoName: "loop-runtime-tenant-golden-empty-envs",
 						Branch:   "main",
 					},
-					Preview: loopzerov1.PreviewSpec{},
+					Preview: loopruntimev1.PreviewSpec{},
 					// Valid Limits (maxBuildConcurrency CRD minimum is 1) so the CR is
 					// otherwise-valid and only the empty environments list is under test.
-					Limits: loopzerov1.ResourceLimits{
+					Limits: loopruntimev1.ResourceLimits{
 						MaxCPU:              resource.MustParse("8"),
 						MaxMemory:           resource.MustParse("16Gi"),
 						MaxStorage:          resource.MustParse("50Gi"),
@@ -496,7 +496,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 		AfterAll(func() {
 			// No-op: tenant was never created.
-			t := &loopzerov1.Tenant{}
+			t := &loopruntimev1.Tenant{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: "golden-empty-envs", Namespace: "default"}, t); err == nil {
 				if !errors.IsNotFound(err) {
 					_ = operatortest.UpdateWithRetry(ctx, k8sClient, t, func() {
@@ -510,17 +510,17 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_build_executor_rbac ---
 	// Source: src_tenant_isolation_namespace_created_with_rolebindings
-	// BC: Capsule BC-001 (owner binding) → LoopZero argo-workflow-executor RBAC in build namespace
+	// BC: Capsule BC-001 (owner binding) → LoopRuntime argo-workflow-executor RBAC in build namespace
 
 	Context("golden_tenant_isolation_build_executor_rbac", func() {
 		const tenantName = "golden-exec-rbac"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			tenant := newGoldenTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var t loopruntimev1.Tenant
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName, Namespace: "default",
 				}, &t)).To(Succeed())
@@ -548,7 +548,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should bind the loopzero-build-sa ServiceAccount to the executor Role", func() {
+		It("should bind the loop-runtime-build-sa ServiceAccount to the executor Role", func() {
 			buildNs := "build-" + tenantName
 			Eventually(func(g Gomega) {
 				var rb rbacv1.RoleBinding
@@ -557,7 +557,7 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 				}, &rb)).To(Succeed())
 				g.Expect(rb.RoleRef.Name).To(Equal("argo-workflow-executor"))
 				g.Expect(rb.Subjects).To(HaveLen(1))
-				g.Expect(rb.Subjects[0].Name).To(Equal("loopzero-build-sa"))
+				g.Expect(rb.Subjects[0].Name).To(Equal("loop-runtime-build-sa"))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -568,17 +568,17 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_build_submitter_rbac ---
 	// Source: src_tenant_isolation_namespace_created_with_rolebindings
-	// BC: Capsule BC-001 → LoopZero API workflow-submitter RBAC (cross-namespace subject from argo ns)
+	// BC: Capsule BC-001 → LoopRuntime API workflow-submitter RBAC (cross-namespace subject from argo ns)
 
 	Context("golden_tenant_isolation_build_submitter_rbac", func() {
 		const tenantName = "golden-sub-rbac"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			tenant := newGoldenTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var t loopruntimev1.Tenant
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName, Namespace: "default",
 				}, &t)).To(Succeed())
@@ -586,17 +586,17 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 		})
 
-		It("should create loopzero-workflow-submitter RoleBinding with subject from the argo namespace", func() {
+		It("should create loop-runtime-workflow-submitter RoleBinding with subject from the argo namespace", func() {
 			buildNs := "build-" + tenantName
 			Eventually(func(g Gomega) {
 				var rb rbacv1.RoleBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-workflow-submitter", Namespace: buildNs,
+					Name: "loop-runtime-workflow-submitter", Namespace: buildNs,
 				}, &rb)).To(Succeed())
-				g.Expect(rb.RoleRef.Name).To(Equal("loopzero-workflow-submitter"))
+				g.Expect(rb.RoleRef.Name).To(Equal("loop-runtime-workflow-submitter"))
 				g.Expect(rb.Subjects).To(HaveLen(1))
 				g.Expect(rb.Subjects[0].Kind).To(Equal("ServiceAccount"))
-				g.Expect(rb.Subjects[0].Name).To(Equal("loopzero-workflow-submitter"))
+				g.Expect(rb.Subjects[0].Name).To(Equal("loop-runtime-workflow-submitter"))
 				g.Expect(rb.Subjects[0].Namespace).To(Equal("argo"),
 					"workflow submitter must be in the argo namespace so the API can submit builds")
 			}, timeout, interval).Should(Succeed())
@@ -609,13 +609,13 @@ var _ = Describe("Golden: Tenant Isolation", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_tenant_isolation_build_namespace_condition ---
 	// Source: src_resource_quotas_limitrange_and_quota_replicated_to_namespaces
-	// BC: Capsule BC-002 (quota condition) → LoopZero BuildNamespaceReady + QuotaEnforced conditions
+	// BC: Capsule BC-002 (quota condition) → LoopRuntime BuildNamespaceReady + QuotaEnforced conditions
 
 	Context("golden_tenant_isolation_build_namespace_condition", func() {
 		const tenantName = "golden-cond-build"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			tenant := newGoldenTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 		})
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Command gen-service-auth-ed25519 generates an Ed25519 keypair for the
 // service-auth dual-control feature (ADR 2026-05-13-service-auth-

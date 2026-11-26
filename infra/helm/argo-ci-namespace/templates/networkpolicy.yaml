@@ -12,7 +12,7 @@ metadata:
   labels:
     app.kubernetes.io/name: argo-ci-namespace
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
-    loopzero.io/component: ci
+    runtime.getloopscale.com/component: ci
 spec:
   podSelector: {}
   policyTypes:
@@ -37,7 +37,7 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: loopzero-system
+              kubernetes.io/metadata.name: loop-runtime-system
           podSelector:
             matchLabels:
               app: gitea

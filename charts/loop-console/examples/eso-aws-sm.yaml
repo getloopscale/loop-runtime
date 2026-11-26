@@ -1,0 +1,50 @@
+# loop-console secrets via External Secrets Operator → AWS Secrets Manager
+# (install-config-contract Slice 1, ADR D2). Auth via IRSA — NO static AWS keys.
+#
+# Prereq: ESO installed + the ESO service account annotated with an IAM role (IRSA) that has
+#         secretsmanager:GetSecretValue on the loop-runtime/cloud/* secrets.
+# Apply:  kubectl apply -f eso-aws-sm.yaml
+# Then:   helm install loop-console … --set existingSecret=loop-console-secrets
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: loop-console-aws-sm
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: "!!changeme-region!!"     # e.g. us-east-1
+      auth:
+        # IRSA: the ESO controller's ServiceAccount carries the IAM role via OIDC.
+        jwt:
+          serviceAccountRef:
+            name: external-secrets
+            namespace: external-secrets
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: loop-console-secrets
+  namespace: loop-runtime-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: loop-console-aws-sm
+    kind: ClusterSecretStore
+  target:
+    name: loop-console-secrets        # MUST equal the chart's existingSecret value
+    creationPolicy: Owner
+  data:
+    # Each AWS secret stored as a JSON document at key "loop-runtime/cloud" with these properties,
+    # OR use separate secret names — adjust remoteRef.key per your layout.
+    - secretKey: STRIPE_API_KEY
+      remoteRef: { key: "loop-runtime/cloud", property: "stripe_api_key" }
+    - secretKey: STRIPE_WEBHOOK_SECRET
+      remoteRef: { key: "loop-runtime/cloud", property: "stripe_webhook_secret" }
+    - secretKey: SESSION_TOKEN_SECRET
+      remoteRef: { key: "loop-runtime/cloud", property: "session_token_secret" }
+    - secretKey: LOOP_RUNTIME_SERVICE_AUTH_SECRET
+      remoteRef: { key: "loop-runtime/cloud", property: "service_auth_secret" }
+    - secretKey: THEMORY_API_KEY
+      remoteRef: { key: "loop-runtime/cloud", property: "themory_api_key" }

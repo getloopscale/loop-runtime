@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -30,7 +30,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
 	"github.com/getloopscale/loop-runtime/api/internal/db"
 
@@ -148,14 +148,14 @@ func NewPostgresSecretStoreWithVault(db db.DBTX, vaultClient VaultTransitClient,
 // Post-fix, tenantAAD is included in Seal+Open so cross-tenant ciphertext
 // transplant fails the authentication tag → decrypt returns error rather
 // than wrong-tenant plaintext. The AAD is NOT secret (it's the canonical
-// label `loopzero-secret-v1|tenant=<id>`); secrecy comes from the AES key,
+// label `loop-runtime-secret-v1|tenant=<id>`); secrecy comes from the AES key,
 // integrity from the AAD-bound tag.
 //
 // Format chosen for forward extensibility — future iterations may extend
 // to bind project/env/app/name; the `v1` prefix lets decrypt detect format
 // versions when migrating ciphertexts.
 func tenantAAD(tenantID string) []byte {
-	return []byte("loopzero-secret-v1|tenant=" + tenantID)
+	return []byte("loop-runtime-secret-v1|tenant=" + tenantID)
 }
 
 // decrypt reads the legacy AES-256-GCM format. Reads nonce || ciphertext as written
@@ -184,7 +184,7 @@ func tenantAAD(tenantID string) []byte {
 func (s *PostgresSecretStore) decrypt(encrypted, aad []byte) ([]byte, error) {
 	if s.encryptionKey == nil {
 		return nil, fmt.Errorf("secret_store: no legacy AES key configured to read a non-transit row: %w",
-			loopzeroerrors.ErrSecretsBackendUnavailable)
+			loopruntimeerrors.ErrSecretsBackendUnavailable)
 	}
 	block, err := aes.NewCipher(s.encryptionKey)
 	if err != nil {
@@ -236,18 +236,18 @@ func (s *PostgresSecretStore) encryptForStore(ctx context.Context, tenantID stri
 		// would have kept it under a key the platform stopped managing.
 		return nil, fmt.Errorf(
 			"secret_store: no transit client wired, refusing to write secret for tenant %s: %w",
-			tenantID, loopzeroerrors.ErrSecretsBackendUnavailable)
+			tenantID, loopruntimeerrors.ErrSecretsBackendUnavailable)
 	}
 	ct, err := s.vault.Encrypt(ctx, tenantID, plaintext)
 	if err != nil {
 		// #138 — tag the failure so the HTTP boundary can answer
 		// SECRETS_BACKEND_UNAVAILABLE (503) instead of a generic 500.
 		// Before this, an unreachable backend was indistinguishable from a
-		// database outage and `loopzero secret set` said only "Something went
+		// database outage and `loopscale secret set` said only "Something went
 		// wrong", leaving the operator to guess which subsystem refused.
 		// The original error stays in the chain for the logs.
 		return nil, fmt.Errorf("secret_store: vault transit encrypt: %w: %w",
-			loopzeroerrors.ErrSecretsBackendUnavailable, err)
+			loopruntimeerrors.ErrSecretsBackendUnavailable, err)
 	}
 	return []byte(ct), nil
 }
@@ -281,7 +281,7 @@ func (s *PostgresSecretStore) decryptFromStore(ctx context.Context, tenantID str
 		if s.vault == nil {
 			metrics.SecretDecryptFailedTotal.WithLabelValues("vault_transit_error").Inc()
 			return nil, fmt.Errorf("secret_store: transit row for tenant %s but no transit client wired: %w",
-				tenantID, loopzeroerrors.ErrSecretsBackendUnavailable)
+				tenantID, loopruntimeerrors.ErrSecretsBackendUnavailable)
 		}
 		plain, err := s.vault.Decrypt(ctx, tenantID, string(ciphertext))
 		if err != nil {

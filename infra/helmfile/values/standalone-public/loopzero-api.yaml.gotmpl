@@ -1,9 +1,0 @@
-# standalone-public overlay for charts/loopzero-api, layered on charts/loopzero-api/values-bootstrap.yaml.
-
-config:
-  # The build cluster's Loki: the port the environment publishes on the build serverlb
-  # (crossCluster.lokiNodePort), reached through the docker network gateway that
-  # host.k3d.internal names in the core CoreDNS. The chart default names a Loki in the
-  # core cluster, where this topology runs none; the `loki-cross-cluster` seed patched the
-  # Deployment env until the value moved here.
-  lokiUrl: "http://host.k3d.internal:{{ .Values.crossCluster.lokiNodePort }}"

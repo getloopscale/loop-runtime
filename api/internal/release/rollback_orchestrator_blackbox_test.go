@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release_test
 
@@ -155,7 +155,7 @@ func TestRollbackOrchestrator_DeliveryFailureReturnsErrorAndKeepsTheActiveReleas
 		Environment:   "production",
 		CorrelationID: "corr-rb-1",
 		UserID:        "user-1",
-		BaseDomain:    "loopzero.local",
+		BaseDomain:    "loop-runtime.local",
 	}
 
 	// Act
@@ -215,7 +215,7 @@ func TestRollbackOrchestrator_SyncSuccessCompletes(t *testing.T) {
 		Environment:   "production",
 		CorrelationID: "corr-rb-2",
 		UserID:        "user-1",
-		BaseDomain:    "loopzero.local",
+		BaseDomain:    "loop-runtime.local",
 	}
 
 	// Act

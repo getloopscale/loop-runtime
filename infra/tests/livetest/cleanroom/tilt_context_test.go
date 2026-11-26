@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package cleanroom
 
@@ -12,9 +12,9 @@ import (
 )
 
 // Tilt deploys into the CURRENT kube context, and nothing in the chain set it: the
-// droplet's was left on k3d-loopzero-secrets, so Tilt applied the platform into the
+// droplet's was left on k3d-loop-runtime-secrets, so Tilt applied the platform into the
 // secrets cluster ("namespaces \"argocd\" not found") and its local resources ran
-// against a kubeconfig holding only that context ("context \"k3d-loopzero-core\" does
+// against a kubeconfig holding only that context ("context \"k3d-loop-runtime-core\" does
 // not exist"). `allow_k8s_contexts` never stopped it: every k3d-* context is
 // already treated as local.
 

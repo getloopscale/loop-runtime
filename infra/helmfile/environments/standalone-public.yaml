@@ -51,10 +51,10 @@
 # + `port-forward:public-dashboard` running) demoing the dashboard flow end-to-end
 # without DOKS provisioning costs.
 
-domain: loopzero.local
-dnsZone: loopzero.local
+domain: loop-runtime.local
+dnsZone: loop-runtime.local
 
-# clusterRole=cloud-local: triggers loopzero-cloud + loopzero-api install via helmfile
+# clusterRole=cloud-local: triggers loop-console + loop-runtime-api install via helmfile
 # (rather than tilt local). The local Caddy edge proxies their services to
 # the public app/cloud/auth.getloopscale.com hostnames. T3.1 of plan.
 clusterRole: cloud-local
@@ -81,7 +81,7 @@ certIssuer:
 
 registries:
   additionalPrefixes:
-    - "k3d-loopzero-registry:5000/"
+    - "k3d-loop-runtime-registry:5000/"
 
 loki:
   maxGlobalStreamsPerUser: 50000
@@ -98,7 +98,7 @@ crossCluster:
   argoApi: "http://host.k3d.internal:30093"
   # The build cluster's Loki, published on the build serverlb (infra/k3d/build-cluster.yaml
   # `30120:30120`). build.helmfile renders the NodePort Service on this port and the
-  # loopzero-api overlay reads Loki at host.k3d.internal:<this port>. Declared here so the
+  # loop-runtime-api overlay reads Loki at host.k3d.internal:<this port>. Declared here so the
   # three agree by construction; the `loki-cross-cluster` seed used to compute the
   # pair at runtime and patch it onto live objects.
   lokiNodePort: 30120
@@ -108,7 +108,7 @@ crossCluster:
 velero:
   bucket: velero-backups
   region: us-east-1
-  s3Url: http://minio.loopzero-system.svc:9000
+  s3Url: http://minio.loop-runtime-system.svc:9000
 
 # UI: dashboard served by vite dev (5173) behind Caddy on https://app.getloopscale.com
 uiBaseUrl: "https://app.getloopscale.com"
@@ -117,7 +117,7 @@ dashboardOrigin: "https://cloud.getloopscale.com"
 # T2.2 — public-flow canonical values for the local-Caddy demo droplet.
 # The Caddy edge maps:
 #   https://app.getloopscale.com   → localhost:5173 (vite dev)
-#   https://cloud.getloopscale.com → localhost:13002 (kubectl port-forward loopzero-cloud)
+#   https://cloud.getloopscale.com → localhost:13002 (kubectl port-forward loop-console)
 #   https://auth.getloopscale.com  → localhost:14433 (kubectl port-forward ory-kratos-public)
 publicAuthUrl: "https://auth.getloopscale.com"
 publicCloudUrl: "https://cloud.getloopscale.com"
@@ -146,11 +146,11 @@ profile:
   managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
-  loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone
+  loopRuntimeCloud: true               # install the control plane (loop-console), unless clusterRole is standalone
   smokeTest: true               # run the post-install smoke-test release
   localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
   inClusterObjectStore: true    # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
   awsSecretsManager: false      # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
   awsLoadBalancerController: false  # install the AWS Load Balancer Controller and publish the edge through an ALB
-  localRegistry: true           # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
-  secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public
+  localRegistry: true           # cells admit images from the local k3d registry (k3d-loop-runtime-registry:5000)
+  secretFetchBroker: false      # install the ESO secret-fetch broker (loop-runtime-broker) on the cells; its chart allows a plaintext bearer only in dev-public

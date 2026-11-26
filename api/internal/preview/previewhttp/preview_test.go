@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package previewhttp
 
@@ -18,7 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // withChiParams sets multiple chi URL parameters at once. Unlike
@@ -58,7 +58,7 @@ func (f *fakePreviewStore) GetByID(ctx context.Context, tenantID, previewID stri
 	if f.getByIDFn != nil {
 		return f.getByIDFn(ctx, tenantID, previewID)
 	}
-	return nil, loopzeroerrors.ErrPreviewNotFound
+	return nil, loopruntimeerrors.ErrPreviewNotFound
 }
 func (f *fakePreviewStore) RequestDeletion(ctx context.Context, tenantID, previewID string) error {
 	if f.requestDeleteFn != nil {
@@ -192,7 +192,7 @@ func TestPreviewHandler_Get_HappyPath(t *testing.T) {
 func TestPreviewHandler_Get_NotFound(t *testing.T) {
 	store := &fakePreviewStore{
 		getByIDFn: func(_ context.Context, _, _ string) (*ports.Preview, error) {
-			return nil, loopzeroerrors.ErrPreviewNotFound
+			return nil, loopruntimeerrors.ErrPreviewNotFound
 		},
 	}
 	h := NewPreviewHandler(store, nil, nil)
@@ -262,7 +262,7 @@ func TestPreviewHandler_Delete_HappyPath(t *testing.T) {
 func TestPreviewHandler_Delete_NotFound(t *testing.T) {
 	store := &fakePreviewStore{
 		getByIDFn: func(_ context.Context, _, _ string) (*ports.Preview, error) {
-			return nil, loopzeroerrors.ErrPreviewNotFound
+			return nil, loopruntimeerrors.ErrPreviewNotFound
 		},
 	}
 	h := NewPreviewHandler(store, nil, nil)
@@ -380,7 +380,7 @@ func TestPreviewHandler_Construction(t *testing.T) {
 }
 
 // =============================================================================
-// Red Team loopzero-cloud#92 regression-protector (2026-06-27): missing-parent-guard.
+// Red Team loop-console#92 regression-protector (2026-06-27): missing-parent-guard.
 // When a PreviewProjectChecker is wired, every preview handler MUST refuse
 // to operate on non-existent projects with 404 PROJECT_NOT_FOUND instead
 // of 200 + empty list.

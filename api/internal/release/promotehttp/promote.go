@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package promotehttp serves the promotion endpoint: moving a release from one
 // environment to the next.
@@ -29,7 +29,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/correlation"
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // PromoteService abstracts the promotion orchestrator for the handler (DIP).
@@ -96,7 +96,7 @@ type PromoteHandler struct {
 	projects   PromoteProjectStore
 	service    PromoteService
 	baseDomain string
-	// envEnsurer closes Red Team loopzero-cloud#158 — the promote path was
+	// envEnsurer closes Red Team loop-console#158 — the promote path was
 	// missing the m37/#37 EnsureEnvironment retrofit that builds.go had.
 	// Without it, promoting to a not-yet-existing production env leaves
 	// the Tenant CR spec.environments[] short of the (project, env)
@@ -119,7 +119,7 @@ func NewPromoteHandler(projects PromoteProjectStore, service PromoteService, bas
 // auto-creates the target (production/staging/…) Environment CR before
 // attempting the release-target creation. Nil ensurer (default) preserves
 // legacy behavior (target env must pre-exist). Mirrors
-// BuildHandler.WithEnvironmentEnsurer. Closes Red Team loopzero-cloud#158.
+// BuildHandler.WithEnvironmentEnsurer. Closes Red Team loop-console#158.
 func (h *PromoteHandler) WithEnvironmentEnsurer(e EnvironmentEnsurer) *PromoteHandler {
 	h.envEnsurer = e
 	return h
@@ -132,40 +132,40 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
 	// Parse request body
 	var req promoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("invalid request body"))
 		return
 	}
 
 	if req.From == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("'from' environment is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("'from' environment is required"))
 		return
 	}
 	if req.To == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("'to' environment is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("'to' environment is required"))
 		return
 	}
 
 	// Look up project
 	project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -175,7 +175,7 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// one release cycle (helper emits a deprecation WARN on legacy hits).
 	correlationID := correlation.Read(r)
 
-	// Red Team loopzero-cloud#158: auto-create the target env before the release
+	// Red Team loop-console#158: auto-create the target env before the release
 	// row is created. Symptomatic pre-fix state: promote → SetDesired created
 	// the env_target row + release row, but the Tenant CR spec.environments[]
 	// was missing (project, ToEnv) → AppProject destinations never extended
@@ -188,16 +188,16 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// on already-existing envs. Failure surfaces as a typed error → JSON.
 	if h.envEnsurer != nil {
 		if ensureErr := h.envEnsurer.EnsureEnvironment(ctx, uc.TenantID, name, req.To); ensureErr != nil {
-			var loopzeroErr *loopzeroerrors.LoopZeroError
-			if errors.As(ensureErr, &loopzeroErr) {
-				httpio.WriteLoopZeroError(w, loopzeroErr)
+			var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+			if errors.As(ensureErr, &loopRuntimeErr) {
+				httpio.WriteLoopRuntimeError(w, loopRuntimeErr)
 				return
 			}
 			slog.Error("promote: EnsureEnvironment failed",
 				"error", ensureErr.Error(), "tenant_id", uc.TenantID,
 				"project", name, "to", req.To,
 			)
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 			return
 		}
 	}
@@ -213,9 +213,9 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		UserID:        uc.UserID,
 	})
 	if err != nil {
-		var loopzeroErr *loopzeroerrors.LoopZeroError
-		if errors.As(err, &loopzeroErr) {
-			httpio.WriteLoopZeroError(w, loopzeroErr)
+		var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+		if errors.As(err, &loopRuntimeErr) {
+			httpio.WriteLoopRuntimeError(w, loopRuntimeErr)
 			return
 		}
 		// Mirror mapBuildError at builds.go:402 — log unexpected errors for diagnosis.
@@ -228,7 +228,7 @@ func (h *PromoteHandler) Create(w http.ResponseWriter, r *http.Request) {
 			"from", req.From,
 			"to", req.To,
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T6.2 of deep-review-remediation-plan (closes find_code_006 / CODE-006 MEDIUM).
 

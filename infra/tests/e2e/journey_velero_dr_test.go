@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 12: Velero Backup & Disaster Recovery
 //
@@ -10,7 +10,7 @@
 // invariants the plan promised would hold.
 //
 // Skip semantics:
-//   - Skipped when LOOPZERO_E2E unset (suite-level gate).
+//   - Skipped when LOOP_RUNTIME_E2E unset (suite-level gate).
 //   - Skipped when the velero-system namespace is missing — Velero is
 //     installed via Helmfile mgmt Wave -1 but is not part of the
 //     bare-minimum standalone bootstrap; running the rest of the suite
@@ -23,10 +23,10 @@
 //
 //   * V-1: velero-system pod healthy
 //   * V-2: BackupStorageLocation `default` phase=Available
-//   * V-3: 5 loopzero-* Schedules exist + Enabled
-//   * V-4: loopzero-crds-backup template includes all 10 loopzero.io CRDs
-//   * V-5: PrometheusRule loopzero-velero-alerts has 4 alerts
-//   * V-6: ORPHAN LoopZeroGiteaBackupStale removed from
+//   * V-3: 5 loop-runtime-* Schedules exist + Enabled
+//   * V-4: loop-runtime-crds-backup template includes all 10 runtime.getloopscale.com CRDs
+//   * V-5: PrometheusRule loop-runtime-velero-alerts has 4 alerts
+//   * V-6: ORPHAN LoopRuntimeGiteaBackupStale removed from
 //          prometheusrule-critical.yaml (regression guard)
 //   * V-7: DR drill --dry-run passes (when velero CLI present)
 //   * V-8: On-demand backup completes (when velero CLI present)
@@ -89,24 +89,24 @@ func veleroNs(args ...string) *exec.Cmd {
 // schedules MUST be added here AND to infra/helm/velero/values-schedules.yaml
 // in the same commit — divergence is a regression caught by V-3.
 var expectedSchedules = []string{
-	"velero-loopzero-argocd-backup",
-	"velero-loopzero-crds-backup",
-	"velero-loopzero-full-backup",
-	"velero-loopzero-gitea-backup",
-	"velero-loopzero-secrets-backup",
+	"velero-loop-runtime-argocd-backup",
+	"velero-loop-runtime-crds-backup",
+	"velero-loop-runtime-full-backup",
+	"velero-loop-runtime-gitea-backup",
+	"velero-loop-runtime-secrets-backup",
 }
 
-// expectedLoopZeroCRDs is the canonical list of loopzero.io CRD plural names
+// expectedLoopRuntimeCRDs is the canonical list of runtime.getloopscale.com CRD plural names
 // the crds-backup schedule MUST capture. Sourced from operators/config/.
-var expectedLoopZeroCRDs = []string{
-	"tenants.loopzero.io",
-	"environments.loopzero.io",
-	"loopzeroapplications.loopzero.io",
-	"exposedroutes.loopzero.io",
-	"platformbootstraps.loopzero.io",
-	"gitrepositorybindings.loopzero.io",
-	"clustercredentials.loopzero.io",
-	"previewenvironments.loopzero.io",
+var expectedLoopRuntimeCRDs = []string{
+	"tenants.runtime.getloopscale.com",
+	"environments.runtime.getloopscale.com",
+	"loopruntimeapplications.runtime.getloopscale.com",
+	"exposedroutes.runtime.getloopscale.com",
+	"platformbootstraps.runtime.getloopscale.com",
+	"gitrepositorybindings.runtime.getloopscale.com",
+	"clustercredentials.runtime.getloopscale.com",
+	"previewenvironments.runtime.getloopscale.com",
 }
 
 var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
@@ -145,7 +145,7 @@ var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
 		)
 	})
 
-	It("V-3: 5 loopzero-* schedules exist and are Enabled", func() {
+	It("V-3: 5 loop-runtime-* schedules exist and are Enabled", func() {
 		// One pass per schedule for clearer failure messages.
 		for _, name := range expectedSchedules {
 			// Fully-qualify schedules.velero.io: when chaos-mesh is also
@@ -169,29 +169,29 @@ var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
 		}
 	})
 
-	It("V-4: loopzero-crds-backup template includes all 10 loopzero.io CRDs", func() {
-		cmd := veleroNs("get", "schedules.velero.io", "velero-loopzero-crds-backup",
+	It("V-4: loop-runtime-crds-backup template includes all 10 runtime.getloopscale.com CRDs", func() {
+		cmd := veleroNs("get", "schedules.velero.io", "velero-loop-runtime-crds-backup",
 			"-o", "jsonpath={.spec.template.includedResources}")
 		out, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(),
-			"velero-loopzero-crds-backup must exist (got: %s)", string(out))
+			"velero-loop-runtime-crds-backup must exist (got: %s)", string(out))
 
 		rendered := string(out)
-		for _, crd := range expectedLoopZeroCRDs {
+		for _, crd := range expectedLoopRuntimeCRDs {
 			Expect(rendered).To(
 				ContainSubstring(crd),
-				"loopzero-crds-backup must include CRD %q (got: %s)", crd, rendered,
+				"loop-runtime-crds-backup must include CRD %q (got: %s)", crd, rendered,
 			)
 		}
 	})
 
-	It("V-5: PrometheusRule loopzero-velero-alerts has 4 alerts", func() {
+	It("V-5: PrometheusRule loop-runtime-velero-alerts has 4 alerts", func() {
 		// The PrometheusRule may live under monitoring or velero-system —
 		// the exact namespace depends on the helmfile values. We probe the
 		// rules via a label selector instead of hard-coding the namespace.
 		cmd := kubectlMgmt("get", "prometheusrule",
 			"-A",
-			"-l", "loopzero.io/component=velero-alerts",
+			"-l", "runtime.getloopscale.com/component=velero-alerts",
 			"-o", "jsonpath={.items[*].spec.groups[*].rules[*].alert}")
 		out, _ := cmd.CombinedOutput()
 		alerts := strings.Fields(strings.TrimSpace(string(out)))
@@ -218,14 +218,14 @@ var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
 		Expect(alerts).To(HaveLen(4),
 			"prometheusrule-velero must define exactly 4 alerts (got %v)", alerts)
 		Expect(alerts).To(ContainElements(
-			"LoopZeroVeleroBackupStale",
-			"LoopZeroVeleroBackupFailing",
-			"LoopZeroVeleroServerDown",
-			"LoopZeroVeleroBackupPartial",
+			"LoopRuntimeVeleroBackupStale",
+			"LoopRuntimeVeleroBackupFailing",
+			"LoopRuntimeVeleroServerDown",
+			"LoopRuntimeVeleroBackupPartial",
 		), "alert names must match the canonical set")
 	})
 
-	It("V-6: ORPHAN LoopZeroGiteaBackupStale is removed (regression guard)", func() {
+	It("V-6: ORPHAN LoopRuntimeGiteaBackupStale is removed (regression guard)", func() {
 		// The orphan rule was deleted by the velero-backup-dr plan T3.1.
 		// This guard ensures it does not return — a future PR adding the
 		// rule back would fail this spec immediately.
@@ -233,9 +233,9 @@ var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
 			"../../helm/monitoring/manifests/prometheusrule-critical.yaml")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(data)).NotTo(
-			ContainSubstring("alert: LoopZeroGiteaBackupStale"),
-			"ORPHAN LoopZeroGiteaBackupStale rule must NOT be reintroduced — "+
-				"replaced by LoopZeroVeleroBackupStale per plan T3.1",
+			ContainSubstring("alert: LoopRuntimeGiteaBackupStale"),
+			"ORPHAN LoopRuntimeGiteaBackupStale rule must NOT be reintroduced — "+
+				"replaced by LoopRuntimeVeleroBackupStale per plan T3.1",
 		)
 	})
 
@@ -271,7 +271,7 @@ var _ = Describe("Journey 12: Velero Backup & DR", Label("journey"), func() {
 			"--kubecontext", mgmtKubeContext,
 			"-n", veleroNamespace,
 			"backup", "create", backupName,
-			"--include-resources", "tenants.loopzero.io",
+			"--include-resources", "tenants.runtime.getloopscale.com",
 			"--wait")
 		out, err := create.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(),

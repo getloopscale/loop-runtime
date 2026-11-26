@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package sourcehttp
 
@@ -20,8 +20,8 @@ import (
 
 func TestNewSourceHandler_DefaultBucket(t *testing.T) {
 	h := NewSourceHandler(nil)
-	if h.sourceBucket != "loopzero-builds" {
-		t.Errorf("expected default bucket 'loopzero-builds', got %q", h.sourceBucket)
+	if h.sourceBucket != "loop-runtime-builds" {
+		t.Errorf("expected default bucket 'loop-runtime-builds', got %q", h.sourceBucket)
 	}
 	if h.objStore != nil {
 		t.Error("expected nil objStore by default")
@@ -37,7 +37,7 @@ func TestWithSourceBucket_OverridesDefault(t *testing.T) {
 
 func TestWithSourceBucket_EmptyKeepsDefault(t *testing.T) {
 	h := NewSourceHandler(nil, WithSourceBucket(""))
-	if h.sourceBucket != "loopzero-builds" {
+	if h.sourceBucket != "loop-runtime-builds" {
 		t.Errorf("expected default bucket when empty string, got %q", h.sourceBucket)
 	}
 }

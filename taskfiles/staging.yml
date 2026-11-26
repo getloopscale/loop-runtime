@@ -21,7 +21,7 @@
 version: '3'
 
 vars:
-  STAGING_ROOT: /var/lib/loopzero-staging
+  STAGING_ROOT: /var/lib/loop-runtime-staging
   # The emulator's home and port, where its CLI configuration, keys and CA are written.
   EMULATOR_HOME: /var/lib/aws-emulator
   EMULATOR_PORT: 9597
@@ -53,7 +53,7 @@ vars:
   # infra/staging/deploy.sh reads the image pins of the staging environment with it.
   YQ_VERSION: v4.54.1
   # seed-aws-cosign-key.sh generates the build's signing key pair with it; the version the
-  # loopzero-cosign-signer image signs with.
+  # loop-runtime-cosign-signer image signs with.
   COSIGN_VERSION: v2.6.5
   # The emulator listens on the gateway of its own Docker network; each VPC Terraform
   # creates gets a Docker network with the VPC's CIDR, which falls in 10.0.0.0/8.
@@ -63,12 +63,12 @@ vars:
   # The public edge (`staging:edge`): the hostnames it serves, one Let's Encrypt
   # certificate each, and the cluster whose ALB it passes requests to. Only the hostnames
   # with a route are public: the API, login (auth., the public-routes release) and the
-  # console (app. and cloud., routed once profile.loopzeroCloud is on; until then Traefik
+  # console (app. and cloud., routed once profile.loopRuntimeCloud is on; until then Traefik
   # answers them 404). Grafana, ArgoCD and Gitea never are.
   EDGE_HOSTS: api.staging.getloopscale.com,auth.staging.getloopscale.com,app.staging.getloopscale.com,cloud.staging.getloopscale.com
-  EDGE_CLUSTER: loopzero-staging-core
+  EDGE_CLUSTER: loop-runtime-staging-core
   EDGE_APPS_DOMAIN: apps.staging.getloopscale.com
-  EDGE_APPS_KVS: loopzero-staging-app-routes
+  EDGE_APPS_KVS: loop-runtime-staging-app-routes
   EDGE_HEALTH_URL: https://api.staging.getloopscale.com/api/v1/health/ready
   # Custom domains: Caddy issues their certificates on demand after it asks the API's route
   # lookup, and never for a name under the platform's own zone.
@@ -191,7 +191,7 @@ tasks:
     desc: The inotify limits a multi-node kind cluster with the whole platform needs
     cmds:
       - |
-        cat >/etc/sysctl.d/90-loopzero-staging.conf <<'EOF'
+        cat >/etc/sysctl.d/90-loop-runtime-staging.conf <<'EOF'
         # kind runs every node's kubelet and every pod on this kernel; the defaults (128
         # instances) make pods fail with "too many open files".
         fs.inotify.max_user_instances = 8192
@@ -319,8 +319,8 @@ tasks:
       AWS_ENDPOINT_URL: 'https://localhost:{{.EMULATOR_PORT}}'
       AWS_REGION: us-east-1
       # Each helmfile's own kubeContext reads these, so no invocation passes --kube-context.
-      LOOPZERO_CORE_CONTEXT: core
-      LOOPZERO_BUILD_CONTEXT: build
+      LOOP_RUNTIME_CORE_CONTEXT: core
+      LOOP_RUNTIME_BUILD_CONTEXT: build
     cmds:
       # The every-commit deploy runs this task alone, so the tools it calls install here;
       # host:tools only downloads what is missing or at another version.
@@ -329,8 +329,8 @@ tasks:
       - |
         set -euo pipefail
         eval "$(task staging:platform:outputs)"
-        bash infra/helmfile/scripts/seed-aws-platform-secret.sh loopzero/staging/platform
-        bash infra/helmfile/scripts/seed-aws-cosign-key.sh loopzero/staging/cosign-signing-key
+        bash infra/helmfile/scripts/seed-aws-platform-secret.sh loop-runtime/staging/platform
+        bash infra/helmfile/scripts/seed-aws-cosign-key.sh loop-runtime/staging/cosign-signing-key
         # Secrets no script can generate, kept on the host only (mode 0600), and written
         # into the emulator's Secrets Manager again after every rebuild empties it.
         #   ghcr-pull.json: {"username", "password"}, a classic token with read:packages for
@@ -339,28 +339,28 @@ tasks:
         #   (aws.resendSecret).
         #   stripe.json: {"api-key", "webhook-secret", "price-starter", "price-pro",
         #   "price-team"}, Stripe test-mode keys and plan prices for
-        #   loopzero-cloud (aws.stripeSecret).
+        #   loop-console (aws.stripeSecret).
         #   github-app.json: {"app-id", "private-key", "webhook-secret", "client-id",
-        #   "client-secret"}, the staging GitHub App loopzero-api deploys from
+        #   "client-secret"}, the staging GitHub App loop-runtime-api deploys from
         #   (aws.githubAppSecret).
         for name in ghcr-pull resend stripe github-app; do
-          kept=/etc/loopzero-staging/$name.json
-          [ -f "$kept" ] || { echo "warning: no $kept, loopzero/staging/$name is not seeded" >&2; continue; }
-          if aws secretsmanager describe-secret --secret-id "loopzero/staging/$name" >/dev/null 2>&1; then
-            aws secretsmanager put-secret-value --secret-id "loopzero/staging/$name" --secret-string "file://$kept" >/dev/null
+          kept=/etc/loop-runtime-staging/$name.json
+          [ -f "$kept" ] || { echo "warning: no $kept, loop-runtime/staging/$name is not seeded" >&2; continue; }
+          if aws secretsmanager describe-secret --secret-id "loop-runtime/staging/$name" >/dev/null 2>&1; then
+            aws secretsmanager put-secret-value --secret-id "loop-runtime/staging/$name" --secret-string "file://$kept" >/dev/null
           else
-            aws secretsmanager create-secret --name "loopzero/staging/$name" --kms-key-id alias/loopzero-staging \
+            aws secretsmanager create-secret --name "loop-runtime/staging/$name" --kms-key-id alias/loop-runtime-staging \
               --secret-string "file://$kept" >/dev/null
           fi
         done
-        # The App's OAuth client id is public, and loopzero-cloud takes it as plain
-        # configuration (values/staging/loopzero-cloud.yaml.gotmpl). Nothing else is read
+        # The App's OAuth client id is public, and loop-console takes it as plain
+        # configuration (values/staging/loop-console.yaml.gotmpl). Nothing else is read
         # from the file here; without the file the console's connect flow stays off.
-        LOOPZERO_GITHUB_APP_CLIENT_ID=""
-        if [ -f /etc/loopzero-staging/github-app.json ]; then
-          LOOPZERO_GITHUB_APP_CLIENT_ID="$(jq -r '."client-id" // ""' /etc/loopzero-staging/github-app.json)"
+        LOOP_RUNTIME_GITHUB_APP_CLIENT_ID=""
+        if [ -f /etc/loop-runtime-staging/github-app.json ]; then
+          LOOP_RUNTIME_GITHUB_APP_CLIENT_ID="$(jq -r '."client-id" // ""' /etc/loop-runtime-staging/github-app.json)"
         fi
-        export LOOPZERO_GITHUB_APP_CLIENT_ID
+        export LOOP_RUNTIME_GITHUB_APP_CLIENT_ID
         bash infra/helmfile/scripts/bootstrap-aws-clusters.sh pre-core
         # The ServiceMonitor, PodMonitor and PrometheusRule CRDs every cluster's charts
         # create objects of, from the same manifests infra:install:monitoring-crds applies.
@@ -385,7 +385,7 @@ tasks:
         # Staging only: a pod with an IRSA role that the emulator's EKS layer never wired to
         # the emulator calls the real AWS and fails; nothing replaces it by itself.
         bash infra/staging/restart-uninjected-pods.sh core build cell-0 cell-1 secrets
-        # OpenBao on the secrets cluster before the core sync: loopzero-api encrypts
+        # OpenBao on the secrets cluster before the core sync: loop-runtime-api encrypts
         # tenant secrets with its transit engine and reads the AppRole this writes.
         # The seal user's access key goes to that script alone, not into this shell.
         (eval "$(task staging:platform:openbao-seal-key)"; bash infra/staging/openbao.sh)
@@ -396,7 +396,7 @@ tasks:
         # deploy published is read first, so the core Prometheus keeps federating during
         # the syncs; a rebuild has none yet.
         eval "$(bash infra/staging/monitoring-addresses.sh metrics)"
-        # loopzero-api reads the build cluster's Loki through the same ALB as Promtail.
+        # loop-runtime-api reads the build cluster's Loki through the same ALB as Promtail.
         eval "$(bash infra/staging/monitoring-addresses.sh loki)"
         # infra/staging/deploy.sh pins the images of the commit it deploys through
         # STAGING_STATE_VALUES, a values file layered over the staging environment.
@@ -404,15 +404,15 @@ tasks:
         helmfile --selector 'name!=promtail' -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         eval "$(bash infra/staging/monitoring-addresses.sh loki --wait 600)"
-        # The cells' broker store calls loopzero-api's secret-fetch endpoint through core's
+        # The cells' broker store calls loop-runtime-api's secret-fetch endpoint through core's
         # internal ALB, which the core sync above made.
         eval "$(bash infra/staging/monitoring-addresses.sh core-api --wait 600)"
         for cell in cell-0 cell-1; do
-          LOOPZERO_CELL_CONTEXT=$cell helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
+          LOOP_RUNTIME_CELL_CONTEXT=$cell helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         done
         eval "$(bash infra/staging/monitoring-addresses.sh metrics --wait 600)"
-        # loopzero-api again, for a rebuild: its first core sync ran before the Loki ALB existed.
-        helmfile --selector name=promtail --selector name=prometheus --selector name=loopzero-api -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
+        # loop-runtime-api again, for a rebuild: its first core sync ran before the Loki ALB existed.
+        helmfile --selector name=promtail --selector name=prometheus --selector name=loop-runtime-api -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         # The middlewares the routes name (traefik-rate-limit, traefik-body-limit), which
         # are not a release: infra:install:cell applies the same file after its sync.
         # Traefik disables a route whose middleware does not exist.
@@ -421,7 +421,7 @@ tasks:
         done
         bash infra/helmfile/scripts/bootstrap-aws-clusters.sh post-core
       - task: platform:verify
-      # One secret-fetch broker token per cell, for loopzero-api and each cell's broker
+      # One secret-fetch broker token per cell, for loop-runtime-api and each cell's broker
       # store. After platform:verify: the seed restarts the API and waits for it to be
       # Ready. Tokens already issued are kept, so a redeploy does not rotate them.
       - bash infra/helmfile/scripts/bootstrap-aws-clusters.sh broker-tokens
@@ -440,7 +440,7 @@ tasks:
       - |
         set -euo pipefail
         for cluster in core build cell-0 cell-1 secrets; do
-          aws eks update-kubeconfig --name "loopzero-staging-$cluster" --alias "$cluster" \
+          aws eks update-kubeconfig --name "loop-runtime-staging-$cluster" --alias "$cluster" \
             --kubeconfig {{.STAGING_ROOT}}/kubeconfig >/dev/null
         done
         chmod 600 {{.STAGING_ROOT}}/kubeconfig
@@ -460,15 +460,15 @@ tasks:
       - |
         set -euo pipefail
         out() { (cd "{{.IAC_DIR}}/$1" && terragrunt output -raw "$2" 2>/dev/null); }
-        printf 'export LOOPZERO_DB_HOST="%s"\n' "$(out data/rds address)"
-        printf 'export LOOPZERO_DB_PORT="%s"\n' "$(out data/rds port)"
-        printf 'export LOOPZERO_DB_NAME="%s"\n' "$(out data/rds db_name)"
-        printf 'export LOOPZERO_DB_MASTER_SECRET="%s"\n' "$(out data/rds master_user_secret_arn)"
-        printf 'export LOOPZERO_CACHE_HOST="%s"\n' "$(out data/valkey primary_endpoint_address)"
-        printf 'export LOOPZERO_CACHE_PORT="%s"\n' "$(out data/valkey port)"
-        printf 'export LOOPZERO_CACHE_AUTH_SECRET="%s"\n' "$(out data/valkey auth_token_secret_arn)"
-        printf 'export LOOPZERO_VPC_ID="%s"\n' "$(out networking/vpc vpc_id)"
-        printf 'export LOOPZERO_EDGE_KVS_ARN="%s"\n' "$(out edge/app-routes arn)"
+        printf 'export LOOP_RUNTIME_DB_HOST="%s"\n' "$(out data/rds address)"
+        printf 'export LOOP_RUNTIME_DB_PORT="%s"\n' "$(out data/rds port)"
+        printf 'export LOOP_RUNTIME_DB_NAME="%s"\n' "$(out data/rds db_name)"
+        printf 'export LOOP_RUNTIME_DB_MASTER_SECRET="%s"\n' "$(out data/rds master_user_secret_arn)"
+        printf 'export LOOP_RUNTIME_CACHE_HOST="%s"\n' "$(out data/valkey primary_endpoint_address)"
+        printf 'export LOOP_RUNTIME_CACHE_PORT="%s"\n' "$(out data/valkey port)"
+        printf 'export LOOP_RUNTIME_CACHE_AUTH_SECRET="%s"\n' "$(out data/valkey auth_token_secret_arn)"
+        printf 'export LOOP_RUNTIME_VPC_ID="%s"\n' "$(out networking/vpc vpc_id)"
+        printf 'export LOOP_RUNTIME_EDGE_KVS_ARN="%s"\n' "$(out edge/app-routes arn)"
         printf 'export OPENBAO_AWS_KMS_KEY_ID="%s"\n' "$(out security/kms-openbao-unseal key_arn)"
 
   platform:openbao-seal-key:
@@ -490,7 +490,7 @@ tasks:
 
   platform:verify:
     internal: true
-    desc: loopzero-api Ready on core, connected to RDS, its health endpoint answering
+    desc: loop-runtime-api Ready on core, connected to RDS, its health endpoint answering
     env:
       KUBECONFIG: '{{.STAGING_ROOT}}/kubeconfig'
       AWS_CONFIG_FILE: '{{.EMULATOR_HOME}}/.aws/emulator/{{.EMULATOR_PORT}}/config'
@@ -504,11 +504,11 @@ tasks:
       # the nanosecond: `kubectl rollout restart` stamps the second, and refuses a restart
       # in the same second as the one the argocd-token seed has just made.
       - >-
-        kubectl --context core -n loopzero-system patch deployment/loopzero-api --type merge
+        kubectl --context core -n loop-runtime-system patch deployment/loop-runtime-api --type merge
         -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"kubectl.kubernetes.io/restartedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)\"}}}}}"
-      - kubectl --context core -n loopzero-system rollout status deployment/loopzero-api --timeout=10m
-      - kubectl --context core -n loopzero-system get externalsecret loopzero-db-credentials
-      - kubectl --context core -n loopzero-system exec deploy/loopzero-api -- wget -qO- http://127.0.0.1:3001/api/v1/health/ready
+      - kubectl --context core -n loop-runtime-system rollout status deployment/loop-runtime-api --timeout=10m
+      - kubectl --context core -n loop-runtime-system get externalsecret loop-runtime-db-credentials
+      - kubectl --context core -n loop-runtime-system exec deploy/loop-runtime-api -- wget -qO- http://127.0.0.1:3001/api/v1/health/ready
 
   deploy:
     desc: Install the timer that deploys every new head of develop (infra/staging/deploy.sh)
@@ -517,18 +517,18 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        token=/etc/loopzero-staging/github-status-token
+        token=/etc/loop-runtime-staging/github-status-token
         if [ ! -s "$token" ]; then
           echo "no status token at $token: create a fine-grained token on getloopscale/loop-runtime with Commit statuses read and write, and write it there (mode 0600)" >&2
           exit 1
         fi
         chmod 600 "$token"
-        install -d -m 0755 /usr/local/lib/loopzero-staging
-        install -m 0755 infra/staging/deploy.sh /usr/local/lib/loopzero-staging/deploy.sh
-        install -m 0644 infra/staging/systemd/loopzero-staging-deploy.service infra/staging/systemd/loopzero-staging-deploy.timer /etc/systemd/system/
+        install -d -m 0755 /usr/local/lib/loop-runtime-staging
+        install -m 0755 infra/staging/deploy.sh /usr/local/lib/loop-runtime-staging/deploy.sh
+        install -m 0644 infra/staging/systemd/loop-runtime-staging-deploy.service infra/staging/systemd/loop-runtime-staging-deploy.timer /etc/systemd/system/
         systemctl daemon-reload
-        systemctl enable --now loopzero-staging-deploy.timer
-        systemctl list-timers loopzero-staging-deploy.timer --no-pager
+        systemctl enable --now loop-runtime-staging-deploy.timer
+        systemctl list-timers loop-runtime-staging-deploy.timer --no-pager
 
   nightly:
     desc: Install the nightly rebuild, the hourly disk check and the daily token check, all alarming through GitHub issues
@@ -539,19 +539,19 @@ tasks:
     cmds:
       - |
         set -euo pipefail
-        token=/etc/loopzero-staging/github-status-token
+        token=/etc/loop-runtime-staging/github-status-token
         if [ ! -s "$token" ]; then
           echo "no token at $token: see the deploy task" >&2
           exit 1
         fi
-        install -d -m 0755 /usr/local/lib/loopzero-staging
-        install -m 0755 infra/staging/rebuild.sh infra/staging/alarm.sh /usr/local/lib/loopzero-staging/
-        install -m 0644 infra/staging/systemd/loopzero-staging-rebuild.service infra/staging/systemd/loopzero-staging-rebuild.timer \
-          infra/staging/systemd/loopzero-staging-disk.service infra/staging/systemd/loopzero-staging-disk.timer \
-          infra/staging/systemd/loopzero-staging-tokens.service infra/staging/systemd/loopzero-staging-tokens.timer /etc/systemd/system/
+        install -d -m 0755 /usr/local/lib/loop-runtime-staging
+        install -m 0755 infra/staging/rebuild.sh infra/staging/alarm.sh /usr/local/lib/loop-runtime-staging/
+        install -m 0644 infra/staging/systemd/loop-runtime-staging-rebuild.service infra/staging/systemd/loop-runtime-staging-rebuild.timer \
+          infra/staging/systemd/loop-runtime-staging-disk.service infra/staging/systemd/loop-runtime-staging-disk.timer \
+          infra/staging/systemd/loop-runtime-staging-tokens.service infra/staging/systemd/loop-runtime-staging-tokens.timer /etc/systemd/system/
         systemctl daemon-reload
-        systemctl enable --now loopzero-staging-rebuild.timer loopzero-staging-disk.timer loopzero-staging-tokens.timer
-        systemctl list-timers 'loopzero-staging-*' --no-pager
+        systemctl enable --now loop-runtime-staging-rebuild.timer loop-runtime-staging-disk.timer loop-runtime-staging-tokens.timer
+        systemctl list-timers 'loop-runtime-staging-*' --no-pager
 
   edge:
     desc: Serve the public hostnames on this host's public address, through the core ALB
@@ -598,53 +598,53 @@ tasks:
         fi
         # Their wildcard certificate (kept across rebuilds; lego renews it only when due), and
         # the cells' ALBs as the origins the app router's function sends them to.
-        install -d -m 0755 /usr/local/lib/loopzero-staging
-        install -m 0755 infra/staging/edge/apps-certificate.sh infra/staging/edge/apps-origins.sh /usr/local/lib/loopzero-staging/
-        EDGE_APPS_DOMAIN={{.EDGE_APPS_DOMAIN}} EDGE_LEGO_DIR=/var/lib/loopzero-edge-certificate \
-          EDGE_DNS_TOKEN_FILE=/etc/loopzero-edge/hostinger-api-token EDGE_CERT_EMAIL=ops@getloopscale.com \
-          /usr/local/lib/loopzero-staging/apps-certificate.sh
+        install -d -m 0755 /usr/local/lib/loop-runtime-staging
+        install -m 0755 infra/staging/edge/apps-certificate.sh infra/staging/edge/apps-origins.sh /usr/local/lib/loop-runtime-staging/
+        EDGE_APPS_DOMAIN={{.EDGE_APPS_DOMAIN}} EDGE_LEGO_DIR=/var/lib/loop-runtime-edge-certificate \
+          EDGE_DNS_TOKEN_FILE=/etc/loop-runtime-edge/hostinger-api-token EDGE_CERT_EMAIL=ops@getloopscale.com \
+          /usr/local/lib/loop-runtime-staging/apps-certificate.sh
         kvs_arn=$(aws cloudfront describe-key-value-store --name {{.EDGE_APPS_KVS}} --query KeyValueStore.ARN --output text)
-        install -d -m 0755 /etc/loopzero-edge
-        EDGE_KVS_ARN="$kvs_arn" EDGE_CLUSTER_PREFIX=loopzero-staging- EDGE_ORIGINS_FILE=/etc/loopzero-edge/cell-origins \
-          /usr/local/lib/loopzero-staging/apps-origins.sh
+        install -d -m 0755 /etc/loop-runtime-edge
+        EDGE_KVS_ARN="$kvs_arn" EDGE_CLUSTER_PREFIX=loop-runtime-staging- EDGE_ORIGINS_FILE=/etc/loop-runtime-edge/cell-origins \
+          /usr/local/lib/loop-runtime-staging/apps-origins.sh
         # The bearer of the API's route lookup. A rebuild generates a new one, so it is read
         # on every run; it reaches Caddy as a credential, never through edge.env.
-        kubectl --context core -n loopzero-system get secret loopzero-edge-route-token \
-          -o jsonpath='{.data.LOOPZERO_EDGE_ROUTE_TOKEN}' | base64 -d | install -m 0600 /dev/stdin /etc/loopzero-edge/route-token
-        [ -s /etc/loopzero-edge/route-token ] || { echo "the secret loopzero-edge-route-token holds no LOOPZERO_EDGE_ROUTE_TOKEN" >&2; exit 1; }
+        kubectl --context core -n loop-runtime-system get secret loop-runtime-edge-route-token \
+          -o jsonpath='{.data.LOOP_RUNTIME_EDGE_ROUTE_TOKEN}' | base64 -d | install -m 0600 /dev/stdin /etc/loop-runtime-edge/route-token
+        [ -s /etc/loop-runtime-edge/route-token ] || { echo "the secret loop-runtime-edge-route-token holds no LOOP_RUNTIME_EDGE_ROUTE_TOKEN" >&2; exit 1; }
         # Caddy opens one site block for `{$EDGE_HOSTS}` and takes ", " between site
         # addresses, not a bare comma.
         hosts=$(echo "{{.EDGE_HOSTS}}" | sed 's/,/, /g')
-        install -d -m 0755 /etc/loopzero-edge
-        install -m 0644 "$AWS_CA_BUNDLE" /etc/loopzero-edge/emulator-ca.pem
-        install -m 0644 infra/staging/edge/Caddyfile /etc/loopzero-edge/Caddyfile
-        cat >/etc/loopzero-edge/edge.env <<EOF
+        install -d -m 0755 /etc/loop-runtime-edge
+        install -m 0644 "$AWS_CA_BUNDLE" /etc/loop-runtime-edge/emulator-ca.pem
+        install -m 0644 infra/staging/edge/Caddyfile /etc/loop-runtime-edge/Caddyfile
+        cat >/etc/loop-runtime-edge/edge.env <<EOF
         EDGE_BIND_ADDRESS=$public
         EDGE_HOSTS="$hosts"
         EDGE_ALB_DNS_NAME=$alb_dns
         EDGE_ORIGIN=https://{{.EMULATOR_ADDRESS}}:{{.EMULATOR_PORT}}
-        EDGE_ORIGIN_CA=/etc/loopzero-edge/emulator-ca.pem
+        EDGE_ORIGIN_CA=/etc/loop-runtime-edge/emulator-ca.pem
         EDGE_APPS_DOMAIN={{.EDGE_APPS_DOMAIN}}
         EDGE_PLATFORM_DOMAIN={{.EDGE_PLATFORM_DOMAIN}}
         EDGE_API_HOST={{.EDGE_API_HOST}}
         EDGE_ASK_PORT={{.EDGE_ASK_PORT}}
-        EDGE_CELL_ORIGINS=/etc/loopzero-edge/cell-origins
+        EDGE_CELL_ORIGINS=/etc/loop-runtime-edge/cell-origins
         EOF
         # Read as systemd's EnvironmentFile reads it: the quoted host list stays one value.
         # Outside systemd there is no credentials directory, so the certificate is laid out as
         # the unit's LoadCredential= lines lay it out.
         creds=$(mktemp -d)
         trap 'rm -rf "$creds"' EXIT
-        ln -s /var/lib/loopzero-edge-certificate/certificates/_.{{.EDGE_APPS_DOMAIN}}.crt "$creds/apps.crt"
-        ln -s /var/lib/loopzero-edge-certificate/certificates/_.{{.EDGE_APPS_DOMAIN}}.key "$creds/apps.key"
-        ln -s /etc/loopzero-edge/route-token "$creds/route-token"
-        (set -a; . /etc/loopzero-edge/edge.env; CREDENTIALS_DIRECTORY="$creds" caddy validate --config /etc/loopzero-edge/Caddyfile --adapter caddyfile >/dev/null)
-        install -m 0644 infra/staging/systemd/loopzero-edge.service infra/staging/systemd/loopzero-edge-certificate.service \
-          infra/staging/systemd/loopzero-edge-certificate.timer /etc/systemd/system/
+        ln -s /var/lib/loop-runtime-edge-certificate/certificates/_.{{.EDGE_APPS_DOMAIN}}.crt "$creds/apps.crt"
+        ln -s /var/lib/loop-runtime-edge-certificate/certificates/_.{{.EDGE_APPS_DOMAIN}}.key "$creds/apps.key"
+        ln -s /etc/loop-runtime-edge/route-token "$creds/route-token"
+        (set -a; . /etc/loop-runtime-edge/edge.env; CREDENTIALS_DIRECTORY="$creds" caddy validate --config /etc/loop-runtime-edge/Caddyfile --adapter caddyfile >/dev/null)
+        install -m 0644 infra/staging/systemd/loop-runtime-edge.service infra/staging/systemd/loop-runtime-edge-certificate.service \
+          infra/staging/systemd/loop-runtime-edge-certificate.timer /etc/systemd/system/
         systemctl daemon-reload
-        systemctl enable loopzero-edge.service >/dev/null
-        systemctl enable --now loopzero-edge-certificate.timer >/dev/null
-        systemctl restart loopzero-edge.service
+        systemctl enable loop-runtime-edge.service >/dev/null
+        systemctl enable --now loop-runtime-edge-certificate.timer >/dev/null
+        systemctl restart loop-runtime-edge.service
         echo "edge: {{.EDGE_HOSTS}} on $public -> $alb_dns"
       - task: edge:verify
 

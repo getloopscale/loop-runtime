@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package e2e provides shared test helpers for all E2E test suites.
 package e2e
@@ -62,14 +62,14 @@ func waitBuildTerminal(buildID string, timeout time.Duration) string {
 	return finalStatus
 }
 
-// deployAndWaitSuccess runs loopzero deploy --json in the given directory, waits for
+// deployAndWaitSuccess runs loop-runtime deploy --json in the given directory, waits for
 // the build to reach SUCCEEDED, and returns the build ID and full JSON response.
 func deployAndWaitSuccess(dir, env string, timeout time.Duration) (buildID string, result map[string]interface{}) {
-	stdout, stderr, exitCode := execLoopZero(loopzeroInvocation{dir: dir},
+	stdout, stderr, exitCode := execLoopRuntime(loopRuntimeInvocation{dir: dir},
 		"deploy", "--env", env, "--no-wait", "--json")
 
 	Expect(exitCode).To(Equal(0),
-		"loopzero deploy failed with exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)
+		"loopscale deploy failed with exit %d\nstdout: %s\nstderr: %s", exitCode, stdout, stderr)
 
 	// Parse JSON to extract build_id.
 	result = make(map[string]interface{})

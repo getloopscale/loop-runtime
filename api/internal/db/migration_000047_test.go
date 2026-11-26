@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package db
 
@@ -18,9 +18,9 @@ import (
 // bigint column stores up to 2^63-1 by definition, well past 2^31. Skips when
 // the real-PG harness is not wired.
 func TestMigration000047_UsageQuantityBigint(t *testing.T) {
-	dsn := os.Getenv("LOOPZERO_E2E_DATABASE_URL")
+	dsn := os.Getenv("LOOP_RUNTIME_E2E_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("LOOPZERO_E2E_DATABASE_URL not set — real-PG migration test skipped")
+		t.Skip("LOOP_RUNTIME_E2E_DATABASE_URL not set — real-PG migration test skipped")
 	}
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, dsn)

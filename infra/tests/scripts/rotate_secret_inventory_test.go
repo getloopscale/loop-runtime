@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts
 
@@ -13,7 +13,7 @@ import (
 )
 
 // rotate-secret.sh resolves which ExternalSecrets to refresh from the chart
-// inventory (infra/helm/loopzero-external-secrets/values.yaml), honouring each
+// inventory (infra/helm/loop-runtime-external-secrets/values.yaml), honouring each
 // key's vaultBinaryOverride. The tenant operator's GITEA_TOKEN carries
 // `vaultBinaryOverride: api`, so it reads api/secrets/gitea/token — the same
 // path as the api's gitea-admin Secret. Rotating that path must refresh BOTH,
@@ -66,11 +66,11 @@ func TestRotateSecret_RefreshesEveryExternalSecretThatReadsThePath(t *testing.T)
 	if code != 0 {
 		t.Fatalf("exit = %d\n%s", code, out)
 	}
-	if got := infoLine(out, "[INFO] ExternalSecrets to force-refresh:"); got != "gitea-admin,loopzero-tenant-operator" {
-		t.Errorf("ExternalSecrets = %q, want gitea-admin,loopzero-tenant-operator", got)
+	if got := infoLine(out, "[INFO] ExternalSecrets to force-refresh:"); got != "gitea-admin,loop-runtime-tenant-operator" {
+		t.Errorf("ExternalSecrets = %q, want gitea-admin,loop-runtime-tenant-operator", got)
 	}
-	if got := infoLine(out, "[INFO] binaries to restart:"); got != "loopzero-api,loopzero-tenant-operator" {
-		t.Errorf("binaries = %q, want loopzero-api,loopzero-tenant-operator", got)
+	if got := infoLine(out, "[INFO] binaries to restart:"); got != "loop-runtime-api,loop-runtime-tenant-operator" {
+		t.Errorf("binaries = %q, want loop-runtime-api,loop-runtime-tenant-operator", got)
 	}
 }
 

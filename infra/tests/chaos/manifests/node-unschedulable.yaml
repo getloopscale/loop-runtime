@@ -20,9 +20,9 @@ metadata:
   name: build-node-failure
   namespace: argo
   annotations:
-    loopzero.io/roadmap: "08"
-    loopzero.io/dod-test: "TestChaos_BuildNodeFailure"
-    loopzero.io/hypothesis: "Workflows reschedule when build node fails"
+    runtime.getloopscale.com/roadmap: "08"
+    runtime.getloopscale.com/dod-test: "TestChaos_BuildNodeFailure"
+    runtime.getloopscale.com/hypothesis: "Workflows reschedule when build node fails"
 spec:
   action: pod-kill
   mode: fixed-percent

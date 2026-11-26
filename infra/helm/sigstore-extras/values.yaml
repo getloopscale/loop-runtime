@@ -8,7 +8,7 @@
 # Discovery: M07 plan 2026-05-28 Ralph iter 4 via LIVE iptables-save.
 
 # Source namespace (caller pods that need to reach Sigstore).
-# In LoopZero: build workflows run in `argo` namespace.
+# In LoopRuntime: build workflows run in `argo` namespace.
 sourceNamespace: argo
 
 # Pod-level discriminator inside sourceNamespace.

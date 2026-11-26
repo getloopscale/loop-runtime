@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package rollbackhttp
 
@@ -14,7 +14,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
 	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- Fake RollbackService ---
@@ -126,7 +126,7 @@ func TestRollback_NoActiveRelease(t *testing.T) {
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakeRollbackService{
-		err: loopzeroerrors.ErrNoActiveRelease,
+		err: loopruntimeerrors.ErrNoActiveRelease,
 	}
 	h := NewRollbackHandler(projects, svc, "dev.getloopscale.com")
 
@@ -163,7 +163,7 @@ func TestRollback_LockTimeout(t *testing.T) {
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakeRollbackService{
-		err: loopzeroerrors.ErrLockTimeout,
+		err: loopruntimeerrors.ErrLockTimeout,
 	}
 	h := NewRollbackHandler(projects, svc, "dev.getloopscale.com")
 

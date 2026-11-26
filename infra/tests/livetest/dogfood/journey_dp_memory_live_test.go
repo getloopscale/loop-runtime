@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
-// DP9 — loopzero-memory LIVE journey.
+// DP9 — loop-runtime-memory LIVE journey.
 //
-// Anchor spec (`loopzero/.claude/rules/dogfood-golden-rule.md § 1`) requires
+// Anchor spec (`loop-runtime/.claude/rules/dogfood-golden-rule.md § 1`) requires
 // exercising the RAG capability end-to-end through the unified edge. The
 // memory + lens siblings ship the same discipline for their surfaces: prove
 // (a) the edge fail-closed contract (401 for un-keyed prefix hits — the M1
@@ -15,7 +15,7 @@
 //
 // Why direct-host + edge fail-closed both matter (Rule 3 — honesty):
 //   - The Model B customer-key exchange through the edge broker is currently
-//     under investigation (see loopzero-workspace/README-QA-REDTEAM.md
+//     under investigation (see loop-runtime-workspace/README-QA-REDTEAM.md
 //     § "Known edge behavior" — a platform-admin key returns 404 on customer
 //     paths). Until that quirk resolves, direct-host proves the product; the
 //     edge fail-closed assertion proves the M1 canonical fix is intact.
@@ -34,7 +34,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("DP-memory loopzero-memory LIVE", Label("live", "dogfood", "dp-memory"), func() {
+var _ = Describe("DP-memory loop-runtime-memory LIVE", Label("live", "dogfood", "dp-memory"), func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -56,7 +56,7 @@ var _ = Describe("DP-memory loopzero-memory LIVE", Label("live", "dogfood", "dp-
 
 	Context("Scenario A — edge fail-closed contract", func() {
 		It("GET app-dev /v1/memory/v1/health without a bearer returns 401", func() {
-			// Regression protector for the M1 canonical fix (loopzero-cloud edge
+			// Regression protector for the M1 canonical fix (loop-console edge
 			// fail-closed 401×3 restored 2026-07-14 04:17 UTC per
 			// dev-credentials.json § data_plane.memory.edge_status).
 			status, _, err := CurlJSON(ctx, env, "GET", env.AppBaseURL+ep.EdgePath+"v1/health", "", nil)
@@ -72,9 +72,9 @@ var _ = Describe("DP-memory loopzero-memory LIVE", Label("live", "dogfood", "dp-
 			Expect(key).ToNot(BeEmpty())
 
 			// (1) POST /v1/remember — scope is inline single-tier per RememberBody
-			//     (loopzero-memory/packages/api/src/server/schemas.ts:48-63); "agent"
+			//     (loop-runtime-memory/packages/api/src/server/schemas.ts:48-63); "agent"
 			//     is the writable tier we can round-trip on the list surface.
-			//     Text is nanosecond-stamped because loopzero-memory dedupes by
+			//     Text is nanosecond-stamped because loop-runtime-memory dedupes by
 			//     content hash: identical text across re-runs returns
 			//     {"items":[]} (silent dedup, LIVE-caught 2026-07-14).
 			uniq := fmt.Sprintf("%d", time.Now().UnixNano())
@@ -121,11 +121,11 @@ var _ = Describe("DP-memory loopzero-memory LIVE", Label("live", "dogfood", "dp-
 
 // mintMemoryCustomerKey provisions a per-tenant memory:{read,write} key via
 // the direct-host bootstrap token OR falls back to the pre-minted key stashed
-// in env LOOPZERO_DP9_MEMORY_KEY. Fail-fast per Rule 8.
+// in env LOOP_RUNTIME_DP9_MEMORY_KEY. Fail-fast per Rule 8.
 func mintMemoryCustomerKey(ctx context.Context, env Env, ep DataPlaneEndpoint) string {
 	// Prefer an operator-provided cached key (rotation-friendly + avoids
 	// bootstrap single-use exhaustion mid-run).
-	if k := envKey("LOOPZERO_DP9_MEMORY_KEY"); k != "" {
+	if k := envKey("LOOP_RUNTIME_DP9_MEMORY_KEY"); k != "" {
 		return k
 	}
 	// memory:delete is required by the scoped DELETE surface
@@ -133,7 +133,7 @@ func mintMemoryCustomerKey(ctx context.Context, env Env, ep DataPlaneEndpoint) s
 	key, err := MintDataPlaneCustomerKey(env, ep, "", "dp9-probe", "default",
 		[]string{"memory:read", "memory:write", "memory:delete"})
 	Expect(err).ToNot(HaveOccurred(),
-		"memory bootstrap mint failed AND no LOOPZERO_DP9_MEMORY_KEY fallback in env — set the env or reset admin_bootstrap")
+		"memory bootstrap mint failed AND no LOOP_RUNTIME_DP9_MEMORY_KEY fallback in env — set the env or reset admin_bootstrap")
 	_ = ctx
 	return key
 }

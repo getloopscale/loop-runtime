@@ -1,15 +1,15 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
--- M135 — a lens alert rule may reference a loopzero-lens guard.
+-- M135 — a lens alert rule may reference a loop-runtime-lens guard.
 --
 -- Approved T2 per MEET-2026-07-21-M135 (change-governor + api-domain-architect +
 -- distributed-systems-engineer + sre-engineer/absolute-veto).
 --
 -- A guard-backed rule (metric = 'guard_breach') thresholds the number of traces that breached the
 -- guard in the window, instead of a workspace-wide observability aggregate. No FK: guards live in
--- loopzero-lens, a separate service and database. The evaluator treats an unknown guard the same way it
--- treats an unreachable one — absence, never a zero (loopzero-cloud#247).
+-- loop-runtime-lens, a separate service and database. The evaluator treats an unknown guard the same way it
+-- treats an unreachable one — absence, never a zero (loop-console#247).
 --
 -- LOCK PROFILE. The risk here is lock ACQUISITION, not scan duration. ACCESS EXCLUSIVE queues
 -- behind every open transaction on these tables and blocks all new readers behind it, FIFO — and

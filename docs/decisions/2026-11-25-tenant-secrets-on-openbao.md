@@ -4,7 +4,7 @@ Status: accepted, 2026-11-25, by the maintainer.
 
 ## Context
 
-loopzero-api encrypts every tenant secret (environment variables a customer sets for an
+loop-runtime-api encrypts every tenant secret (environment variables a customer sets for an
 app) with OpenBao's transit engine, one key per tenant, so that deleting a tenant's key
 makes its secrets unreadable. Without a transit client the API refuses every secret write
 (`SECRETS_BACKEND_UNAVAILABLE`), which is what staging did until this decision
@@ -33,7 +33,7 @@ Prices are AWS list prices for us-east-1 as published in November 2026.
    either.
 2. LoopScale's own installations (production and staging) run OpenBao on a dedicated
    `secrets` cluster, HA Raft (three voters in production, one in staging), HTTPS, reached
-   from core by loopzero-api only.
+   from core by loop-runtime-api only.
 3. OpenBao unseals itself with the `awskms` seal on AWS. The seal is the one AWS-specific
    piece, and OpenBao's seal is pluggable: GCP KMS, Azure Key Vault, PKCS#11 or Shamir
    replace it with a configuration change.
@@ -49,7 +49,7 @@ Prices are AWS list prices for us-east-1 as published in November 2026.
   `kms:Encrypt`, `kms:Decrypt` and `kms:DescribeKey` on the unseal key and nothing else.
 - `secrets.helmfile.yaml.gotmpl` serves the `staging` and `prod` environments from one
   block. On staging, `infra/staging/openbao.sh` initialises the vault with recovery keys
-  after every rebuild and wires loopzero-api through a selector-less Service on core whose
+  after every rebuild and wires loop-runtime-api through a selector-less Service on core whose
   endpoints are the secrets cluster's nodes, so the certificate's
   `openbao.secrets-system.svc.cluster.local` name holds end to end.
 - The `openbao-bootstrap-in-core-task` gate keeps refusing an OpenBao install on core in

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -22,8 +22,8 @@ import (
 // the build-cluster Argo step watcher and the mgmt-cluster dynamic client.
 
 // buildMgmtDynamicClient builds a dynamic client for the mgmt cluster through
-// k8s.RestConfig (in-cluster first, so the loopzero-api ServiceAccount's RBAC on
-// loopzero.io/tenants applies; then the CORE kubeconfig/context). CellPinner uses
+// k8s.RestConfig (in-cluster first, so the loop-runtime-api ServiceAccount's RBAC on
+// runtime.getloopscale.com/tenants applies; then the CORE kubeconfig/context). CellPinner uses
 // it to patch tenant.spec.cellID after the DB update; the readiness checker
 // and the Argo app label reader use it too.
 //
@@ -48,7 +48,7 @@ func buildMgmtDynamicClient(cfg config.Config, logger *slog.Logger) dynamic.Inte
 // events to the SSE journal (sse_events table). Without this goroutine
 // the dashboard's BuildTimelineLive shows zero step events even though
 // the workflow is running — the LIVE bug caught 2026-06-06 J-17 dogfood
-// (image loopzero-api:j17-iter1 missed this wiring on first roll-out).
+// (image loop-runtime-api:j17-iter1 missed this wiring on first roll-out).
 //
 // Failure modes are non-fatal: the watcher logs + skips a tick. EC-1
 // surfaces 401/403 to the dedicated counter so Grafana alerts fire
@@ -80,7 +80,7 @@ func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse
 	// pod restart.
 	//
 	// The token resolved above is a VALUE captured at process start. When the
-	// operator rotates `loopzero-cluster-kubeconfigs.build.kubeconfig`, the mounted
+	// operator rotates `loop-runtime-cluster-kubeconfigs.build.kubeconfig`, the mounted
 	// file changes and this client does not: every poll keeps authenticating
 	// with a credential that was already replaced, and the only recovery is
 	// deleting the pod. The watcher already noticed (`ReportWatchError` → the
@@ -107,14 +107,14 @@ func startArgoStepWatcher(ctx context.Context, cfg config.Config, eventStore sse
 		return
 	}
 
-	// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T2.1 (closes loopzero-cloud#37):
+	// Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T2.1 (closes loop-console#37):
 	// scope the workflow watcher to the `argo` namespace specifically. The
 	// pre-Sprint-8 empty namespace `""` was interpreted by kubernetes as
 	// cluster-scope LIST, which the Sprint 7 RBAC fix (namespace-scoped Role
-	// for argo/loopzero-workflow-submitter) does NOT grant. The watcher then 403'd
+	// for argo/loop-runtime-workflow-submitter) does NOT grant. The watcher then 403'd
 	// every poll → couldn't observe workflow state → reconcile loop blocked
 	// → release stuck in SYNC_FAILED → `active_release: null` (#37 root cause).
-	// All LoopZero Workflow CRs are created in the `argo` namespace by the build
+	// All LoopRuntime Workflow CRs are created in the `argo` namespace by the build
 	// orchestrator (workflow_submitter.go); the pre-Sprint-8 comment about
 	// per-tenant namespaces was incorrect — workflows have ALWAYS lived in
 	// argo, only the build PODS run per-tenant. KISS + least privilege.

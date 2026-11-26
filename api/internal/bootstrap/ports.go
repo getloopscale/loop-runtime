@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package bootstrap is the platform-bootstrap feature: placing a new tenant in a
 // cell and creating it there. Its handler lives in bootstraphttp.

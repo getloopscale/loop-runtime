@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenancy
 
@@ -26,7 +26,7 @@ import (
 // eviction (T-02 phase 2). It replaces steps 1-4 of tools/admin-evict-tenants.sh:
 //
 //	step 1: delete Argo workflows in the build cluster
-//	step 2: delete mgmt CRs (tenants, environments, loopzeroapplications,
+//	step 2: delete mgmt CRs (tenants, environments, loopruntimeapplications,
 //	        exposedroutes, applications.argoproj.io)
 //	step 3: force-null finalizers on stuck mgmt CRs (3-pass retry)
 //	step 4: force-finalize the tenant's runtime namespaces
@@ -48,19 +48,19 @@ type TenantK8sEvictor struct {
 }
 
 // Resource types this evictor knows how to purge. Listed in deletion order:
-// ArgoCD Applications first (they reference the other CRs), then the loopzero.io
+// ArgoCD Applications first (they reference the other CRs), then the runtime.getloopscale.com
 // CRs.
 var (
-	argoApplicationsGVR     = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}
-	exposedRoutesGVR        = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "exposedroutes"}
-	loopzeroApplicationsGVR = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "loopzeroapplications"}
-	environmentsGVR         = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "environments"}
-	tenantsGVR              = schema.GroupVersionResource{Group: "loopzero.io", Version: "v1", Resource: "tenants"}
-	argoWorkflowGVR         = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "workflows"}
+	argoApplicationsGVR        = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "applications"}
+	exposedRoutesGVR           = schema.GroupVersionResource{Group: "runtime.getloopscale.com", Version: "v1", Resource: "exposedroutes"}
+	loopRuntimeApplicationsGVR = schema.GroupVersionResource{Group: "runtime.getloopscale.com", Version: "v1", Resource: "loopruntimeapplications"}
+	environmentsGVR            = schema.GroupVersionResource{Group: "runtime.getloopscale.com", Version: "v1", Resource: "environments"}
+	tenantsGVR                 = schema.GroupVersionResource{Group: "runtime.getloopscale.com", Version: "v1", Resource: "tenants"}
+	argoWorkflowGVR            = schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "workflows"}
 )
 
 var mgmtCRTypes = []schema.GroupVersionResource{
-	argoApplicationsGVR, exposedRoutesGVR, loopzeroApplicationsGVR, environmentsGVR, tenantsGVR,
+	argoApplicationsGVR, exposedRoutesGVR, loopRuntimeApplicationsGVR, environmentsGVR, tenantsGVR,
 }
 
 const (
@@ -276,7 +276,7 @@ func (s tenantSet) owns(tenantID string) bool {
 // ownerOf returns the tenant ID a resource belongs to, read from the identity
 // the platform writes on it: the Tenant CR is named after its tenant, an
 // Environment carries spec.tenantRef.name, and every other kind carries the
-// loopzero.io/tenant label. It returns "" when the resource carries no identity —
+// runtime.getloopscale.com/tenant label. It returns "" when the resource carries no identity —
 // such a resource is never evicted.
 func ownerOf(gvr schema.GroupVersionResource, obj *unstructured.Unstructured) string {
 	switch gvr {
@@ -384,7 +384,7 @@ func (e *TenantK8sEvictor) forceNullFinalizers(
 // `kubectl replace --raw /api/v1/namespaces/{name}/finalize`. Stuck-Terminating
 // namespaces don't release until their .spec.finalizers is emptied via the
 // finalize subresource — this cannot be done through the normal Patch/Update
-// API. Namespaces are selected by the loopzero.io/tenant label the environment
+// API. Namespaces are selected by the runtime.getloopscale.com/tenant label the environment
 // controller writes on them.
 func (e *TenantK8sEvictor) forceFinalizeRuntimeNamespaces(ctx context.Context, scope tenantSet) (int, []error, error) {
 	list, err := e.runtimeTyped.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})

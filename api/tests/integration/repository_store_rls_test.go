@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -23,7 +23,7 @@ import (
 // connection can answer — the composition root builds the repository store on
 // the cross-tenant pool.
 //
-//	DATABASE_URL=<loopzero_api> LOOPZERO_WORKER_DATABASE_URL=<loopzero_worker> \
+//	DATABASE_URL=<loop_runtime_api> LOOP_RUNTIME_WORKER_DATABASE_URL=<loop_runtime_worker> \
 //	  go test ./tests/integration/ -run RepositoryStore -v
 const (
 	repoOwnerTenant, repoOtherTenant = "tn-rls-repo-a", "tn-rls-repo-b"

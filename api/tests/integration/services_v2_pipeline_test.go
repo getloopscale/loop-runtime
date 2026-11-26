@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Plan v1.2 T2.4 (cutover-deep-review-hardening): cross-product integration
 // gate. v2 services.json flows through ValidateServicesJSON with its project

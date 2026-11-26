@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Stress test — find the break point.
 //
@@ -31,12 +31,12 @@ import {
   healthCheck,
   admissionReject,
   lockConflict,
-} from './lib/loopzero-api.js';
+} from './lib/loop-runtime-api.js';
 import { Counter } from 'k6/metrics';
 import { loadBundleBytes } from '../fixtures/bundle-builder.js';
 
-const serverErrors = new Counter('loopzero_stress_5xx_total');
-const connectionErrors = new Counter('loopzero_stress_conn_error_total');
+const serverErrors = new Counter('loop_runtime_stress_5xx_total');
+const connectionErrors = new Counter('loop_runtime_stress_conn_error_total');
 
 export const options = {
   scenarios: {
@@ -64,8 +64,8 @@ export const options = {
   // Only enforce the "no crashes" rule.
   // Latency is expected to blow up past the break point.
   thresholds: {
-    'loopzero_stress_5xx_total':     ['count<1'],   // ZERO server errors allowed
-    'loopzero_stress_conn_error_total': ['count<5'], // a few connection hiccups ok
+    'loop_runtime_stress_5xx_total':     ['count<1'],   // ZERO server errors allowed
+    'loop_runtime_stress_conn_error_total': ['count<5'], // a few connection hiccups ok
     'http_req_failed': ['rate<0.60'],           // < 60% overall (429s are expected)
   },
   summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
@@ -86,7 +86,7 @@ export default function (data) {
   const iter = __ITER + __VU * 10000; // unique ID across all VUs/iters
   const tenantID = `k6-stress-tn-${iter % 50}`; // 50 tenants, stress per-tenant quota too
   const userID = `k6-stress-user-${iter % 50}`;
-  const email = `k6-stress-${iter % 50}@loopzero.test`;
+  const email = `k6-stress-${iter % 50}@loop-runtime.test`;
   const projectName = `k6-stress-app-${iter % 50}`;
 
   // First visit to a tenant creates the project.
@@ -136,10 +136,10 @@ export function teardown() {
 export function handleSummary(data) {
   const m = data.metrics;
   const http = (m.http_req_duration || {}).values || {};
-  const admission = (m.loopzero_admission_reject_total || {}).values || {};
-  const lock = (m.loopzero_lock_conflict_total || {}).values || {};
-  const s5xx = (m.loopzero_stress_5xx_total || {}).values || {};
-  const connErr = (m.loopzero_stress_conn_error_total || {}).values || {};
+  const admission = (m.loop_runtime_admission_reject_total || {}).values || {};
+  const lock = (m.loop_runtime_lock_conflict_total || {}).values || {};
+  const s5xx = (m.loop_runtime_stress_5xx_total || {}).values || {};
+  const connErr = (m.loop_runtime_stress_conn_error_total || {}).values || {};
 
   const text = `
 ═════════════════════════════════════════════════════════

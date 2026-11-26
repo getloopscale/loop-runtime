@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scrub
 
@@ -29,9 +29,9 @@ func TestTextRemovesEveryRule3InternalTerm(t *testing.T) {
 		{"Kaniko build failed", "Kaniko"},
 		{"cosign verify failed", "cosign"},
 		{"sync to cell-0 failed", "cell-0"},
-		{"dial postgresql.loopzero-system.svc.cluster.local", "svc.cluster.local"},
-		{"system:serviceaccount:loopzero-system:default forbidden", "serviceaccount"},
-		{`in namespace "loopzero-system" forbidden`, "loopzero-system"},
+		{"dial postgresql.loop-runtime-system.svc.cluster.local", "svc.cluster.local"},
+		{"system:serviceaccount:loop-runtime-system:default forbidden", "serviceaccount"},
+		{`in namespace "loop-runtime-system" forbidden`, "loop-runtime-system"},
 		{"Authorization: Bearer ghp_secret1234567890abcd", "ghp_secret"},
 	}
 	for _, tc := range cases {

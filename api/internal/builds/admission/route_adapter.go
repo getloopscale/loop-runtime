@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package admission
 
@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // RouteAdapter wraps a BuildGate to satisfy the minimal contract the
@@ -37,8 +37,8 @@ func NewRouteAdapter(gate *BuildGate) *RouteAdapter {
 // gate decisions to typed error codes so the handler can build a
 // consistent HTTP 429 response:
 //
-//   - RejectCellAtCapacity  → loopzeroerrors.ErrCellAtCapacity
-//   - RejectTenantQuotaExceeded → loopzeroerrors.ErrTenantBuildQuota
+//   - RejectCellAtCapacity  → loopruntimeerrors.ErrCellAtCapacity
+//   - RejectTenantQuotaExceeded → loopruntimeerrors.ErrTenantBuildQuota
 //
 // The reason string from the gate is included in the message so
 // operators and end users get a concrete "X / Y builds in flight"
@@ -62,13 +62,13 @@ func (a *RouteAdapter) Check(ctx context.Context, cellID, tenantID string) (
 		return true, 0, "", "", nil
 	case RejectCellAtCapacity:
 		return false, res.RetryAfter,
-			loopzeroerrors.ErrCellAtCapacity.Code,
-			loopzeroerrors.ErrCellAtCapacity.Message + " (" + res.Reason + ")",
+			loopruntimeerrors.ErrCellAtCapacity.Code,
+			loopruntimeerrors.ErrCellAtCapacity.Message + " (" + res.Reason + ")",
 			nil
 	case RejectTenantQuotaExceeded:
 		return false, res.RetryAfter,
-			loopzeroerrors.ErrTenantBuildQuota.Code,
-			loopzeroerrors.ErrTenantBuildQuota.Message + " (" + res.Reason + ")",
+			loopruntimeerrors.ErrTenantBuildQuota.Code,
+			loopruntimeerrors.ErrTenantBuildQuota.Message + " (" + res.Reason + ")",
 			nil
 	default:
 		// Unknown decision — fail-open with a clear log hook. The

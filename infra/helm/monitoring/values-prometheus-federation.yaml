@@ -12,7 +12,7 @@
 #
 # `task staging:platform` reads the ALB's DNSName from this Ingress' status once the
 # cells are synced (infra/staging/monitoring-addresses.sh) and syncs the core Prometheus
-# with it (LOOPZERO_METRICS_ALB_DNS_NAMES).
+# with it (LOOP_RUNTIME_METRICS_ALB_DNS_NAMES).
 alertmanager:
   enabled: false
 prometheus-pushgateway:

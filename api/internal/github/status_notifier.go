@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -77,7 +77,7 @@ func (n *StatusNotifier) OnBuildSucceeded(ctx context.Context, tenantID, project
 		State:       "success",
 		TargetURL:   deployURL,
 		Description: fmt.Sprintf("Deployed to %s", environment),
-		Context:     "loopzero/deploy",
+		Context:     "loop-runtime/deploy",
 	}); err != nil {
 		n.logger.Warn("github status: failed to set success", "error", err, "sha", commitSHA)
 	} else {
@@ -142,7 +142,7 @@ func (n *StatusNotifier) OnDeployFailed(ctx context.Context, tenantID, projectNa
 	if err := n.appClient.SetCommitStatus(ctx, installationID, owner, repo, commitSHA, CommitStatus{
 		State:       state,
 		Description: description,
-		Context:     "loopzero/deploy",
+		Context:     "loop-runtime/deploy",
 	}); err != nil {
 		n.logger.Warn("github status: failed to set the failed deploy", "error", err, "sha", commitSHA, "state", state)
 		return
@@ -170,7 +170,7 @@ func (n *StatusNotifier) OnBuildFailed(ctx context.Context, tenantID, projectNam
 	if err := n.appClient.SetCommitStatus(ctx, installationID, owner, repo, commitSHA, CommitStatus{
 		State:       "failure",
 		Description: "Build failed",
-		Context:     "loopzero/deploy",
+		Context:     "loop-runtime/deploy",
 	}); err != nil {
 		n.logger.Warn("github status: failed to set failure", "error", err, "sha", commitSHA)
 	} else {

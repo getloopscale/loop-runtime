@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T1.6 of deep-review-remediation-plan (closes find_billing_route_not_wired HIGH)
 // + T2.7 of maturity-3-62-to-4-0-roadmap (Stripe Portal SDK).
 //
 // Wires GET /api/v1/billing and POST /api/v1/billing/portal so the CLI's
-// `loopzero billing` and `loopzero billing portal` commands actually have an
+// `loop-runtime billing` and `loop-runtime billing portal` commands actually have an
 // endpoint to call. Pre-T1.6 the CLI hit silent 404 because the routes
 // were declared in the spec but no handler existed in router.go.
 //
@@ -46,7 +46,7 @@ import (
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
 	"github.com/getloopscale/loop-runtime/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // StripeCustomerStore is the port for the tenant's billing customer id.
@@ -130,7 +130,7 @@ type BillingResponse struct {
 // `cost_counters` holds zero rows, and every metric used to be served as
 // `{"used": 0}` — a protection that has never evaluated anything, rendered as
 // a customer who has consumed nothing. The gate already tells operators apart
-// via `loopzero_cost_cap_decisions_total{reason="unmeasured"}`; this tells the
+// via `loop_runtime_cost_cap_decisions_total{reason="unmeasured"}`; this tells the
 // reader of the response.
 //
 // Polarity is deliberate: Go's zero value is `false`, so any decoder that
@@ -157,17 +157,17 @@ type PortalResponse struct {
 func (h *BillingHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 	if uc.TenantID == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrForbidden)
 		return
 	}
 
 	tier, terr := plantier.Resolve(r.Context(), h.plans, uc.TenantID)
 	if terr != nil {
-		httpio.WriteLoopZeroError(w, terr)
+		httpio.WriteLoopRuntimeError(w, terr)
 		return
 	}
 	plan := tier.String()
@@ -246,18 +246,18 @@ func (h *BillingHandler) buildUsage(ctx context.Context, tenantID, plan string) 
 func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 	if uc.TenantID == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrForbidden)
 		return
 	}
 
 	customerID, err := h.customers.StripeCustomerID(r.Context(), uc.TenantID)
 	if err != nil {
 		h.logger.ErrorContext(r.Context(), "billing: customer lookup failed", "tenant", uc.TenantID, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if customerID == "" {
@@ -274,9 +274,9 @@ func (h *BillingHandler) Portal(w http.ResponseWriter, r *http.Request) {
 	//
 	// Not hypothetical. Measured on app-dev 2026-08-11: the provider Secret is
 	// `optional: true` and absent, so this was the ACTIVE path — every
-	// `loopzero billing portal` returned the assembled URL.
+	// `loop-runtime billing portal` returned the assembled URL.
 	//
-	// Per ADR 2026-08-11, loopzero-cloud is the only portal-session issuer. When the
+	// Per ADR 2026-08-11, loop-console is the only portal-session issuer. When the
 	// engine cannot issue, it FAILS saying where to go — a URL that looks like it
 	// works hides the problem until someone investigates why the portal did not open.
 	if h.portalCreator == nil {

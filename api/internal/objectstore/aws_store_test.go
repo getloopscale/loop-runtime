@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package objectstore
 
@@ -82,7 +82,7 @@ func TestAWSStoreSignsWithTheWebIdentityCredentialsWhenNoStaticKeyIsConfigured(t
 	if err := os.WriteFile(tokenFile, []byte("projected-sa-token"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("AWS_ROLE_ARN", "arn:aws:iam::000000000000:role/loopzero-staging-core-loopzero-api")
+	t.Setenv("AWS_ROLE_ARN", "arn:aws:iam::000000000000:role/loop-runtime-staging-core-loop-runtime-api")
 	t.Setenv("AWS_WEB_IDENTITY_TOKEN_FILE", tokenFile)
 	t.Setenv("AWS_REGION", "us-east-1")
 	t.Setenv("AWS_ENDPOINT_URL", srv.URL)
@@ -93,13 +93,13 @@ func TestAWSStoreSignsWithTheWebIdentityCredentialsWhenNoStaticKeyIsConfigured(t
 	}
 
 	// Act
-	err = store.Upload(context.Background(), "loopzero-staging-builds-000000000000", "tn-1/source/a.bundle", strings.NewReader("payload"))
+	err = store.Upload(context.Background(), "loop-runtime-staging-builds-000000000000", "tn-1/source/a.bundle", strings.NewReader("payload"))
 
 	// Assert
 	if err != nil {
 		t.Fatalf("Upload: %v", err)
 	}
-	if fake.webIdentityToken != "projected-sa-token" || fake.roleARN != "arn:aws:iam::000000000000:role/loopzero-staging-core-loopzero-api" {
+	if fake.webIdentityToken != "projected-sa-token" || fake.roleARN != "arn:aws:iam::000000000000:role/loop-runtime-staging-core-loop-runtime-api" {
 		t.Errorf("STS got token %q role %q, want the projected token and AWS_ROLE_ARN", fake.webIdentityToken, fake.roleARN)
 	}
 	if !strings.HasPrefix(fake.putAuth, "AWS4-HMAC-SHA256 Credential=ASIAWEBIDENTITY/") || !strings.Contains(fake.putAuth, "/us-east-1/s3/aws4_request") {
@@ -108,7 +108,7 @@ func TestAWSStoreSignsWithTheWebIdentityCredentialsWhenNoStaticKeyIsConfigured(t
 	if fake.putSessionToken != "web-identity-session-token" {
 		t.Errorf("X-Amz-Security-Token = %q, want the web identity session token", fake.putSessionToken)
 	}
-	if fake.putPath != "/loopzero-staging-builds-000000000000/tn-1/source/a.bundle" {
+	if fake.putPath != "/loop-runtime-staging-builds-000000000000/tn-1/source/a.bundle" {
 		t.Errorf("path = %q, want a path-style PUT to the endpoint", fake.putPath)
 	}
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // B-077 / ADR 2026-08-13-tenant-cr-fence-placement.
 //
-// `loopzero-tenant-cr-shape` is a ValidatingAdmissionPolicy over `loopzero.io/v1 tenants`
+// `loop-runtime-tenant-cr-shape` is a ValidatingAdmissionPolicy over `runtime.getloopscale.com/v1 tenants`
 // — the only fence the platform has on its own CRs, since it runs no admission
 // webhook on them. Measured 2026-08-13: it rendered on the CELL clusters, which
 // install no `tenants` CRD at all, and NOT on mgmt, where every Tenant lives.
@@ -32,14 +32,14 @@ import (
 )
 
 const (
-	fenceName = "loopzero-tenant-cr-shape"
+	fenceName = "loop-runtime-tenant-cr-shape"
 	// The one admission-policies chart. Helmfile installs it on core (with
 	// values-mgmt.yaml) and on every cell (base values); ArgoCD consumes the
 	// same chart. There used to be a bootstrap copy under infra/helm, and a test
 	// here asserted the two agreed on the fence's default — the B-046 class, a
 	// template copied without the value that enables it. One chart cannot
 	// disagree with itself, so that comparison left with the copy.
-	admissionChart = "loopzero-admission-policies"
+	admissionChart = "loop-runtime-admission-policies"
 )
 
 // render renders the named chart with the given values files (relative to the
@@ -60,12 +60,12 @@ func render(t *testing.T, chartName string, valuesFiles ...string) string {
 	return chartrender.RenderTemplate(t, opts, chartDir, "fence-probe", nil)
 }
 
-// The fence must render where the Tenant CRs live. `loopzero-crds` is installed by
+// The fence must render where the Tenant CRs live. `loop-runtime-crds` is installed by
 // core.helmfile only; cell.helmfile does not reference it.
 func TestTenantCrFence_RendersOnMgmt(t *testing.T) {
 	got := render(t, admissionChart, "values.yaml", "values-mgmt.yaml")
 	if !strings.Contains(got, fenceName) {
-		t.Errorf("%s is ABSENT from the mgmt render. Every loopzero.io Tenant lives in loopzero-system on "+
+		t.Errorf("%s is ABSENT from the mgmt render. Every runtime.getloopscale.com Tenant lives in loop-runtime-system on "+
 			"mgmt, and this is the platform's only fence on its own CRs — there is no admission "+
 			"webhook behind it (B-077).", fenceName)
 	}
@@ -78,7 +78,7 @@ func TestTenantCrFence_DoesNotRenderOnCells(t *testing.T) {
 	got := render(t, admissionChart, "values.yaml")
 	if strings.Contains(got, fenceName) {
 		t.Errorf("%s renders from the base values, which is what the CELL clusters receive — and "+
-			"they install no `tenants` CRD (loopzero-crds appears 0 times in cell.helmfile). A policy "+
+			"they install no `tenants` CRD (loop-runtime-crds appears 0 times in cell.helmfile). A policy "+
 			"matching a resource that does not exist can never fire, and reads as coverage (B-077).",
 			fenceName)
 	}
@@ -98,7 +98,7 @@ func TestTenantCrFence_RendersAreNotEmpty(t *testing.T) {
 	}
 }
 
-// The two policies that guard loopzero.io platform CRs must exempt the SAME platform
+// The two policies that guard runtime.getloopscale.com platform CRs must exempt the SAME platform
 // identities. They match the same resources against the same actors, and a
 // divergence means one of them denies a controller the other trusts.
 //
@@ -116,8 +116,8 @@ func TestTenantCrFence_ExemptsTheSameIdentitiesAsItsSibling(t *testing.T) {
 
 	// Rendered together, so both policies are in one document set.
 	for _, sa := range []string{
-		"system:serviceaccount:loopzero-system:loopzero-api",
-		"system:serviceaccount:loopzero-system:loopzero-tenant-operator",
+		"system:serviceaccount:loop-runtime-system:loop-runtime-api",
+		"system:serviceaccount:loop-runtime-system:loop-runtime-tenant-operator",
 	} {
 		shape := policySection(t, out, fenceName)
 		if !strings.Contains(shape, sa) {

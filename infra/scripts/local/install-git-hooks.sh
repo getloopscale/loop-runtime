@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotent installer for loopzero git hooks (M8 1.5). Git hooks live in .git/
+# Idempotent installer for loop-runtime git hooks (M8 1.5). Git hooks live in .git/
 # (not versioned), so this copies the in-repo sources into .git/hooks/.
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
@@ -14,7 +14,7 @@ for hook in pre-push; do
   echo "installed: .git/hooks/$hook"
 done
 
-# loopzero#256 — keep the SSH connection alive while pre-push runs.
+# loop-runtime#256 — keep the SSH connection alive while pre-push runs.
 #
 # git opens the connection to the remote BEFORE running pre-push, and only
 # transfers objects after the hook returns. `task quality:gates` takes minutes
@@ -37,4 +37,4 @@ done
 # --local so this stays inside the clone and never edits the operator's
 # ~/.ssh/config or global git config.
 git config --local core.sshCommand "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20"
-echo "configured: core.sshCommand keepalive (loopzero#256 — pre-push outlives the idle timeout)"
+echo "configured: core.sshCommand keepalive (loop-runtime#256 — pre-push outlives the idle timeout)"

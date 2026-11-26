@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Plan v1.2 T2.1 (cutover-deep-review-hardening): services.json v2 project
 // field tests. v1 retained as deprecated with services-bundle fallback per
@@ -62,7 +62,7 @@ func TestValidateServicesJSON_V2_Project_OK(t *testing.T) {
 }
 
 // EC-2 absorbed: v1 fallback MUST stay "services-bundle" so live tenants
-// keep their Gitea repos intact (loopzero-source-{tenant}-services-bundle).
+// keep their Gitea repos intact (loop-runtime-source-{tenant}-services-bundle).
 func TestValidateServicesJSON_V1_NoProject_FallbackServicesBundle(t *testing.T) {
 	m, err := ValidateServicesJSONNative(validV1ServicesJSON(), EnvBlocklistEnforce)
 	if err != nil {

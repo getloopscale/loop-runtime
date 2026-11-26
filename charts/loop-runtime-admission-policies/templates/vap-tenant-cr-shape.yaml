@@ -1,0 +1,89 @@
+{{- if .Values.vaps.tenantCrShape }}
+# M14 gap #2 — validate the shape + immutability of runtime.getloopscale.com Tenant CRs at the
+# Kubernetes API-server boundary (plan ADR D1, blueprint Q8).
+#
+# loop-runtime has zero admission webhooks on its own CRDs today (blueprint Q8 confirmed
+# `grep SetupWebhookWithManager operators/` is empty), so a hand-authored
+# `kubectl apply` of a malformed Tenant bypasses the REST-layer validation —
+# the exact class of the M2 legacy-namespace incident. This CEL VAP restores a
+# fail-closed boundary WITHOUT a webhook server or cert (which the loop-runtime VAP
+# fleet already avoids; see vap-argocd-managed-by.yaml).
+#
+# EC-1: every field access is has()-guarded so a CR missing `spec.environments`
+# is DENIED cleanly with a product message, not aborted with an opaque CEL
+# runtime error under failurePolicy: Fail.
+#
+# EC/B33: system controllers are excluded via matchConditions so the policy
+# never deadlocks namespace deletion or controller-manager operations.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: loop-runtime-tenant-cr-shape
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["runtime.getloopscale.com"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["tenants"]
+  matchConditions:
+    # Anti-B33: never gate the platform's own controllers / kube system actors.
+    #
+    # THE TENANT OPERATOR IS HERE BECAUSE IT WRITES THIS RESOURCE. Added
+    # 2026-08-13 after an independent review measured four sites the first
+    # enumeration missed — they are `r.Update(ctx, tenant)` (no `&`) and one sits
+    # behind a helper, so a grep for `&loopruntimev1.Tenant` found none of them:
+    #
+    #   tenant_controller.go:200 -> reconcileloop.EnsureFinalizer -> c.Update
+    #   tenant_deletion.go:185, :196  (retry-count annotation)
+    #   tenant_deletion.go:215        (Update AFTER RemoveFinalizer)
+    #
+    # The last one is the write that COMPLETES DELETION. Denying it leaves the
+    # Tenant permanently undeletable — the finalizer can never be removed and the
+    # operator's requeue never converges. That is the B33 deadlock class this very
+    # header claims the policy avoids, and it would have been reached by any
+    # Tenant whose stored shape no longer satisfies the CEL.
+    #
+    # The identity list mirrors vap-protect-platform-deletes.yaml, which already
+    # exempted the operators. Two names because the SA differs by install path:
+    # `loop-runtime-tenant-operator` in prod/ArgoCD, `tenant-operator` under Tilt.
+    # vap-pinpath-exemption: also exempt the loop-runtime-api control-plane SA — it is the
+    # ONLY sanctioned cell-move writer (`loop-runtime admin tenants pin` →
+    # api/internal/services/placement/cell_pinner.go patchTenantCR runs as this SA
+    # via rest.InClusterConfig()). Without this, the immutability validation below
+    # Denies the sanctioned pin and the DB/CR split-brain (retries treat Deny as
+    # transient). Mirrors the kube-controller-manager exemption: the control-plane
+    # writer is trusted; the policy targets human `kubectl edit', not the pin path.
+    {{- include "loop-runtime-admission.systemActorExemptions" . | nindent 4 }}
+  validations:
+    # EC-1: has()-guard before iterating so a missing field denies cleanly.
+    - expression: >
+        has(object.spec) && has(object.spec.environments) &&
+        object.spec.environments.all(e,
+          has(e.name) && e.name.matches('^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'))
+      message: >
+        Each environment name must be a valid DNS label (lowercase letters,
+        digits, hyphens; must start and end alphanumeric). Set 'spec.environments'
+        with valid names, then re-apply.
+      reason: Invalid
+    # Immutability: cellID pins a tenant's placement and must never change on
+    # UPDATE (moving a tenant is an operator-only 'loop-runtime admin tenants pin').
+    - expression: >
+        request.operation != 'UPDATE' ||
+        !has(oldObject.spec.cellID) ||
+        (has(object.spec.cellID) && object.spec.cellID == oldObject.spec.cellID)
+      message: >
+        A team's placement cannot be changed by editing the resource directly.
+        Use 'loop-runtime admin tenants pin' to move a team.
+      reason: Invalid
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: loop-runtime-tenant-cr-shape
+spec:
+  policyName: loop-runtime-tenant-cr-shape
+  validationActions:
+    - Deny
+{{- end }}

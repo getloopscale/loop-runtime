@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -21,11 +21,11 @@ import (
 // neither accepts the other's.
 const DeployDescriptorPath = "loopscale.yaml"
 
-// DeployDescriptorPaths lists every name the descriptor has had, in the order
-// they are looked up. The names after the first are the ones earlier releases
-// of the API and of the CLI wrote; a repository that still carries one keeps
-// deploying. When a repository has more than one, the first in this list wins.
-var DeployDescriptorPaths = []string{DeployDescriptorPath, "loopzero.yaml", "theo.yaml"}
+// DeployDescriptorPaths lists the names the descriptor is looked up under, in
+// order. The second is the one earlier releases of the API wrote; a repository
+// that still carries it keeps deploying. When a repository has both, the first
+// in this list wins.
+var DeployDescriptorPaths = []string{DeployDescriptorPath, "loopzero.yaml"}
 
 // InvalidDeployDescriptorError says why a descriptor cannot be deployed. The
 // message is written for the person who owns the repository.
@@ -45,7 +45,7 @@ func (e *InvalidDeployDescriptorError) Error() string {
 
 // ParseDeployDescriptorFile applies ParseDeployDescriptor to the content of
 // path, so that a refusal names the file the repository has.
-func ParseDeployDescriptorFile(path string, content []byte) (*LoopZeroYamlMinimal, error) {
+func ParseDeployDescriptorFile(path string, content []byte) (*LoopRuntimeYamlMinimal, error) {
 	descriptor, err := ParseDeployDescriptor(content)
 	var invalid *InvalidDeployDescriptorError
 	if errors.As(err, &invalid) {
@@ -62,7 +62,7 @@ func ParseDeployDescriptorFile(path string, content []byte) (*LoopZeroYamlMinima
 // A deployable descriptor is a YAML mapping that declares at least one app
 // under `apps`, each app itself a mapping: the build is made from those apps
 // and from nothing else.
-func ParseDeployDescriptor(content []byte) (*LoopZeroYamlMinimal, error) {
+func ParseDeployDescriptor(content []byte) (*LoopRuntimeYamlMinimal, error) {
 	if len(bytes.TrimSpace(content)) == 0 {
 		return nil, &InvalidDeployDescriptorError{Reason: "is empty. Declare the apps to deploy under `apps:`."}
 	}
@@ -73,7 +73,7 @@ func ParseDeployDescriptor(content []byte) (*LoopZeroYamlMinimal, error) {
 	if _, isMapping := document.(map[string]interface{}); !isMapping {
 		return nil, &InvalidDeployDescriptorError{Reason: "must be a mapping of fields, with the apps to deploy under `apps:`."}
 	}
-	var descriptor LoopZeroYamlMinimal
+	var descriptor LoopRuntimeYamlMinimal
 	if err := yaml.Unmarshal(content, &descriptor); err != nil {
 		return nil, &InvalidDeployDescriptorError{Reason: "must declare `apps:` as a mapping of app name to its settings."}
 	}

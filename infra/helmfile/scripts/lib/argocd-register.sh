@@ -25,7 +25,7 @@ KUBECONFIG_PATH="${2:?usage: $0 <cluster-name> <kubeconfig-path>}"
 # while that context pointed at the runtime cluster wrote the Secret into the
 # workload cluster — ArgoCD never saw it, and the failure surfaced much later
 # as a cluster missing from `argocd cluster list`.
-KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loop-runtime-core}"
 kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 
 log() { printf '[argocd-register] %s\n' "$*" >&2; }
@@ -101,7 +101,7 @@ metadata:
   namespace: argocd
   labels:
     argocd.argoproj.io/secret-type: cluster
-    loopzero.io/managed-by: loopzero-platform
+    runtime.getloopscale.com/managed-by: loop-runtime-platform
 type: Opaque
 stringData:
   name: ${CLUSTER_NAME}

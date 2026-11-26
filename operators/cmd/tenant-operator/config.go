@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -74,7 +74,7 @@ func loadConfig(getenv func(string) string) (config, error) {
 		WorkloadClusterURL:   getenv("WORKLOAD_CLUSTER_URL"),
 	}
 
-	maxConcurrent, err := operatorboot.PositiveInt(getenv, "LOOPZERO_TENANT_MAX_CONCURRENT", 0)
+	maxConcurrent, err := operatorboot.PositiveInt(getenv, "LOOP_RUNTIME_TENANT_MAX_CONCURRENT", 0)
 	if err != nil {
 		problems = append(problems, err)
 	}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -25,7 +25,7 @@ func TestClassifyRenderFailureSeparatesNetworkFromContent(t *testing.T) {
 		// configuration, not connectivity. Calling it network would send the next
 		// person looking for a connection defect over a file error.
 		{"undeclared repo is NOT network", "Error: repo openbao not found", false},
-		{"template error", "Error: template: loopzero-cloud/templates/svc.yaml:12: nil pointer", false},
+		{"template error", "Error: template: loop-console/templates/svc.yaml:12: nil pointer", false},
 		{"schema", "values don't meet the specifications of the schema(s)", false},
 	}
 	for _, c := range cases {
@@ -48,15 +48,15 @@ func TestClassifyRenderFailureSeparatesNetworkFromContent(t *testing.T) {
 // EXECUTE `helmfile`, and how many of them no longer contact the network.
 //
 // Measured 2026-08-19: of the 8 mentions of "helmfile" in the tests, only TWO are
-// executions (`loopzero_cloud_edge_nodeport_test.go` and
+// executions (`loop_console_edge_nodeport_test.go` and
 // `vault_host_published_reach_test.go`); the rest are file paths or literals
-// inside assertions about scripts. Of the two, `loopzero-cloud` renders a LOCAL chart
+// inside assertions about scripts. Of the two, `loop-console` renders a LOCAL chart
 // and uses `--skip-deps` (0s, zero repos); `openbao` renders a REMOTE chart and
 // cannot.
 //
 // Since 2026-09-25 the network-free execution lives in ONE helper,
 // `helmfile_render_test.go`, which forces `--skip-deps` on every call and offers
-// `template` for local charts and `write-values` for remote ones; `loopzero-cloud`
+// `template` for local charts and `write-values` for remote ones; `loop-console`
 // and every later render go through it. The count stays at two files.
 //
 // This test exists so the next execution added is a conscious decision: it fails

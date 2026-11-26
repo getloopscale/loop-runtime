@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -37,7 +37,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
 	"github.com/getloopscale/loop-runtime/api/internal/projectstatus"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
@@ -118,7 +118,7 @@ func resolveAccountAndLock(ctx context.Context, tx db.DBTX, tenantID string) (st
 
 // enforceProjectCapTx counts the Account's projects under the already-held
 // advisory lock and, if creating one more would exceed cap, increments the
-// violation metric and returns a *LoopZeroError(PROJECTS_EXCEED_PLAN). cap == 0
+// violation metric and returns a *LoopRuntimeError(PROJECTS_EXCEED_PLAN). cap == 0
 // (misconfigured) fails closed (count >= 0 always). The caller MUST have called
 // resolveAccountAndLock on the same tx first. Shared by createProjectCapped (API)
 // and ensureProjectCapped (deploy) so the cap rule + the count SQL live once.
@@ -130,19 +130,19 @@ func resolveAccountAndLock(ctx context.Context, tx db.DBTX, tenantID string) (st
 // sets `app.tenant_id = <deploying tenant>` on the submit path). Until
 // 2026-08-14 the request pool held BYPASSRLS, so the policy never applied and
 // the count saw every tenant. Migration 000062 plus the boot guard
-// `AssertRequestPoolIsolated` moved that pool to `loopzero_api` — non-owner, no
+// `AssertRequestPoolIsolated` moved that pool to `loop_runtime_api` — non-owner, no
 // BYPASSRLS — and the count silently became per-TENANT.
 //
 // Measured on a real database: one account, two tenants, one project each.
 //
-//	loopzero_api  (context = tenant 1)  -> 1   <= cap, creation allowed
-//	loopzero_worker                     -> 2
+//	loop_runtime_api  (context = tenant 1)  -> 1   <= cap, creation allowed
+//	loop_runtime_worker                     -> 2
 //
 // A plan capped at N projects became N per tenant, unbounded across tenants.
 // Nothing errored and nothing logged; the cap simply stopped being the cap.
 //
 // `crossTenant` is the fix: a handle on the connection that legitimately spans
-// tenants (loopzero_worker, whose reach is the named *_worker_cross_tenant policies
+// tenants (loop_runtime_worker, whose reach is the named *_worker_cross_tenant policies
 // of migration 000062). It is used for the COUNT only — the lock, the checks and
 // the write all stay on the caller's transaction.
 //
@@ -172,7 +172,7 @@ func enforceProjectCapTx(ctx context.Context, tx db.DBTX, crossTenant db.DBTX, a
 	// Block-new-only (ADR-M4-4): creating one more would make count+1 > cap.
 	if count >= cap {
 		metrics.PlanLimitViolations.WithLabelValues("max_projects_per_account", plan).Inc()
-		return loopzeroerrors.NewProjectsExceedPlan(plan, cap, count, accountID)
+		return loopruntimeerrors.NewProjectsExceedPlan(plan, cap, count, accountID)
 	}
 	return nil
 }
@@ -231,7 +231,7 @@ func (s *PostgresProjectStore) createProjectCapped(ctx context.Context, input po
 //
 // M5 (hermetic project-cap, #106): when a ProjectCapChecker is wired and the
 // plan is bounded (cap >= 0), the deploy-time auto-create enforces the SAME
-// per-Account cap as CreateProject — closing the bypass where `loopzero deploy
+// per-Account cap as CreateProject — closing the bypass where `loopscale deploy
 // <new-name>` created a project past the cap. Unlimited (cap < 0) and the
 // nil-checker dev/test path keep the original unenforced idempotent insert.
 //
@@ -398,7 +398,7 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			CreatedBy:          r.CreatedBy,
 			EnvironmentCount:   r.EnvironmentCount,
 			ProductionEnvCount: r.ProductionEnvCount,
-			// Red Team loopzero-cloud#134 (2026-07-02): "LIVE ENVS" counter must
+			// Red Team loop-console#134 (2026-07-02): "LIVE ENVS" counter must
 			// reflect envs with a currently-serving ACTIVE release (preview
 			// or permanent), not the legacy production_env_count subset.
 			ActiveEnvCount: r.ActiveEnvCount,
@@ -435,7 +435,7 @@ func (s *PostgresProjectStore) ListByTenantWithSummary(ctx context.Context, tena
 			out.LastDeployAt = &t
 		}
 		// T3.2 of plan dashboard-badge-data-plane-poller (Red Team
-		// loopzero-cloud#128). Both pgtype fields carry .Valid=false when
+		// loop-console#128). Both pgtype fields carry .Valid=false when
 		// the environment_targets row has no data-plane snapshot yet
 		// (Cleanroom warm-up window before the first readiness-poller
 		// tick OR the poller is disabled via the env-gate). Nil pointers

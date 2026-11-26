@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -15,7 +15,7 @@ import (
 // in EDGE_HOSTS through `{$EDGE_HOSTS} {`. Caddy expands the variable before it parses
 // the file, and refuses a site address with a bare comma ("Site addresses cannot contain
 // a comma"), so the value must separate the hostnames with ", ". `task staging:edge`
-// writes it into /etc/loopzero-edge/edge.env, which both systemd (EnvironmentFile) and
+// writes it into /etc/loop-runtime-edge/edge.env, which both systemd (EnvironmentFile) and
 // the task's own `caddy validate` read; a value with spaces must be quoted for the shell
 // and must not go through `env $(cat ...)`, which splits it into words.
 
@@ -58,10 +58,10 @@ func TestStagingEdgeWritesTheHostsAsACaddySiteAddressList(t *testing.T) {
 func TestStagingEdgeValidatesWithTheEnvironmentFileAsSystemdReadsIt(t *testing.T) {
 	task := stagingEdgeTask(t)
 
-	if strings.Contains(task, "env $(cat /etc/loopzero-edge/edge.env)") {
+	if strings.Contains(task, "env $(cat /etc/loop-runtime-edge/edge.env)") {
 		t.Error("caddy validate reads edge.env through `env $(cat ...)`, which splits a value with spaces into words")
 	}
-	if !strings.Contains(task, ". /etc/loopzero-edge/edge.env") {
+	if !strings.Contains(task, ". /etc/loop-runtime-edge/edge.env") {
 		t.Error("caddy validate does not source edge.env")
 	}
 }

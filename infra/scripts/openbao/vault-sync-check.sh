@@ -2,20 +2,20 @@
 # vault-sync-check.sh — Operator validation for Phase 9 T9.1 acceptance criteria.
 #
 # D11 ESO supersedes original Provider-chain metric
-# `loopzero_config_secret_source{source="vault"}` from plan v1.0-v1.6 (which depended
+# `loop_runtime_config_secret_source{source="vault"}` from plan v1.0-v1.6 (which depended
 # on pkg/secrets Provider chain that was never created per D11). The ESO-native
-# equivalent for "is loopzero-api consuming from Vault SoT?" is the per-CR status
+# equivalent for "is loop-runtime-api consuming from Vault SoT?" is the per-CR status
 # condition `Ready=True` + `Reason=SecretSynced` on each ExternalSecret.
 #
 # This script enumerates ExternalSecret CRs from the canonical inventory
-# (`infra/helm/loopzero-external-secrets/values.yaml` via yq) and asserts each is
+# (`infra/helm/loop-runtime-external-secrets/values.yaml` via yq) and asserts each is
 # Ready=True. Provides Phase 9 LIVE evidence that >= N keys are syncing from
 # Vault.
 #
 # Usage:
 #   bash infra/scripts/openbao/vault-sync-check.sh \
-#     --context k3d-loopzero-core \
-#     [--namespace loopzero-system] \
+#     --context k3d-loop-runtime-core \
+#     [--namespace loop-runtime-system] \
 #     [--threshold 10] \
 #     [--inventory <path>] \
 #     [--json]
@@ -30,8 +30,8 @@
 #   - kubectl context reachable
 #   - external-secrets operator installed in cluster
 #
-# Plan: 2026-06-02-loopzero-api-vault-integration v1.8 Phase 9 T9.1.
-# Replaces (per D11): loopzero_config_secret_source metric concept.
+# Plan: 2026-06-02-loop-runtime-api-vault-integration v1.8 Phase 9 T9.1.
+# Replaces (per D11): loop_runtime_config_secret_source metric concept.
 # SPDX-License-Identifier: Apache-2.0
 
 set -uo pipefail
@@ -39,10 +39,10 @@ set -uo pipefail
 # ----------------------------------------------------------------------------
 # CLI args
 # ----------------------------------------------------------------------------
-CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
-NAMESPACE="loopzero-system"
+CONTEXT="${KUBECTL_CONTEXT:-k3d-loop-runtime-core}"
+NAMESPACE="loop-runtime-system"
 THRESHOLD=10
-INVENTORY="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}/infra/helm/loopzero-external-secrets/values.yaml"
+INVENTORY="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}/infra/helm/loop-runtime-external-secrets/values.yaml"
 JSON_OUTPUT=0
 
 usage() {
@@ -53,25 +53,25 @@ USAGE
   $0 [options]
 
 OPTIONS
-  --context <ctx>      kubectl context (default: k3d-loopzero-core; env KUBECTL_CONTEXT)
-  --namespace <ns>     ExternalSecret CR namespace (default: loopzero-system)
+  --context <ctx>      kubectl context (default: k3d-loop-runtime-core; env KUBECTL_CONTEXT)
+  --namespace <ns>     ExternalSecret CR namespace (default: loop-runtime-system)
   --threshold <N>      Min synced count to PASS (default: 10 — per Phase 9 acceptance "5+/10 keys")
-  --inventory <path>   Override inventory path (default: loopzero-external-secrets/values.yaml)
+  --inventory <path>   Override inventory path (default: loop-runtime-external-secrets/values.yaml)
   --json               Emit JSON summary to stdout (instead of human-readable)
   --help               Show this help
 
 EXAMPLES
   # Standalone-multi (local k3d) sync check, threshold 10/13:
-  $0 --context k3d-loopzero-core --threshold 10
+  $0 --context k3d-loop-runtime-core --threshold 10
 
   # Prod-like smoke (T9.3): assert all 13 Ready=True (strict prod gate):
-  $0 --context loopzero-core-prod --threshold 13
+  $0 --context loop-runtime-core-prod --threshold 13
 
   # JSON for CI pipeline ingestion:
   $0 --threshold 5 --json | jq '.synced'
 
 REPLACES (per D11 ESO supersedes original Provider-chain design):
-  Original plan v1.0-v1.6 acceptance: loopzero_config_secret_source{source="vault"}>0
+  Original plan v1.0-v1.6 acceptance: loop_runtime_config_secret_source{source="vault"}>0
   ESO equivalent: per-CR status.conditions[Ready]=True (counted here).
 EOF
 }

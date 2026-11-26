@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placement
 
@@ -16,14 +16,14 @@ import (
 
 // ExposedRouteGVR is the GroupVersionResource for ExposedRoute CRDs.
 var ExposedRouteGVR = schema.GroupVersionResource{
-	Group:    "loopzero.io",
+	Group:    "runtime.getloopscale.com",
 	Version:  "v1",
 	Resource: "exposedroutes",
 }
 
 // labelTenant is the label the app operator stamps on every ExposedRoute
 // (operators/internal/app/application_controller.go).
-const labelTenant = "loopzero.io/tenant"
+const labelTenant = "runtime.getloopscale.com/tenant"
 
 // K8sEdgeRouteSource lists ExposedRoutes on the management cluster, where the app
 // operator keeps them for every cell.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -12,7 +12,7 @@ import (
 //
 // Helpers that derive what the upload handler needs (project name + sorted
 // app names) directly from the native *ServicesManifest, so routes/source.go
-// no longer depends on the deprecated ValidateServicesJSON *LoopZeroYAML bridge.
+// no longer depends on the deprecated ValidateServicesJSON *LoopRuntimeYAML bridge.
 // The bridge previously flattened every service to Type:"server" (C7 mislabel);
 // the native manifest preserves the declared type — these helpers never touch
 // per-service type, so nothing is flattened.
@@ -21,7 +21,7 @@ import (
 //
 //   - v2: the schema requires + DNS-1123-validates the `project` field.
 //   - v1: `project` is absent; fall back to the legacy "services-bundle"
-//     (ADR D10 — preserves Gitea repo lineage loopzero-source-{tenant}-services-bundle)
+//     (ADR D10 — preserves Gitea repo lineage loop-runtime-source-{tenant}-services-bundle)
 //     and emit a structured deprecation warning.
 func ProjectNameFromManifest(m *ServicesManifest) string {
 	if m == nil {

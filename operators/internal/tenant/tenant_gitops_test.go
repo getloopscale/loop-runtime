@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -12,7 +12,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/argocd"
 	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
@@ -52,9 +52,9 @@ func (f *fakeArgoListDelete) DeleteApplication(_ context.Context, appName string
 // J-23 LIVE catch 2026-06-07 #69 (the sponsor asked for #69 to be fixed in
 // tenant_gitops and the CRD): the renderer canonical refactor (commit
 // a567cdbb5) emits manifests with the three-segment namespace
-// `loopzero-<tenant>-<project>-<env>`. Before this helper, tenant_gitops.go
+// `loop-runtime-<tenant>-<project>-<env>`. Before this helper, tenant_gitops.go
 // emitted destinations via the legacy two-segment formula
-// `loopzero-<tenant>-<env>`, causing ArgoCD destination mismatch and
+// `loop-runtime-<tenant>-<env>`, causing ArgoCD destination mismatch and
 // OutOfSync forever on every production deploy.
 //
 // T2.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: empty
@@ -63,7 +63,7 @@ func (f *fakeArgoListDelete) DeleteApplication(_ context.Context, appName string
 // (TenantEnvironmentEntry.Project required + RFC 1123 Pattern) so every
 // production caller (tenant_gitops.go:143, :186 + tenant_controller.go:337)
 // passes a non-empty project. The two "fallback legacy" cases that
-// previously asserted `loopzero-acme-{env}` were flipped to expect error —
+// previously asserted `loop-runtime-acme-{env}` were flipped to expect error —
 // the silent fallback was the smoking gun behind all 4 M2 LIVE workarounds
 // documented in feedback_m2_canonical_drift_operator_renderer.
 func TestCanonicalDestNamespace_UsesTheThreeSegmentFormula(t *testing.T) {
@@ -80,14 +80,14 @@ func TestCanonicalDestNamespace_UsesTheThreeSegmentFormula(t *testing.T) {
 			tenant:  "tn-08fa2ecedc3c7e77",
 			project: "sample",
 			env:     "production",
-			want:    "loopzero-tn-08fa2ecedc3c7e77-sample-production",
+			want:    "loop-runtime-tn-08fa2ecedc3c7e77-sample-production",
 		},
 		{
 			name:    "canonical: preview env name (preview-pr-N)",
 			tenant:  "acme",
 			project: "webapp",
 			env:     "preview-pr-42",
-			want:    "loopzero-acme-webapp-preview-pr-42",
+			want:    "loop-runtime-acme-webapp-preview-pr-42",
 		},
 		{
 			// T2.1 RED: empty project must error (was M1 fallback pre-T2.1).
@@ -177,63 +177,63 @@ func TestCanonicalDestNamespaceRejectsEmptyProject(t *testing.T) {
 //	Given a Tenant with 2 projects each having a production env
 //	when TenantController.reconcileArgoCDApp runs
 //	then the AppProject spec.destinations contains both M2 namespaces
-//	     (loopzero-tn-X-A-production AND loopzero-tn-X-B-production), never the
+//	     (loop-runtime-tn-X-A-production AND loop-runtime-tn-X-B-production), never the
 //	     M1 2-seg form.
 func TestBuildAppProjectDestNamespaces(t *testing.T) {
 	cases := []struct {
 		name     string
-		envs     []loopzerov1.TenantEnvironmentEntry
-		previews []loopzerov1.PreviewEnvironment
+		envs     []loopruntimev1.TenantEnvironmentEntry
+		previews []loopruntimev1.PreviewEnvironment
 		want     []string
 		wantErr  string
 	}{
 		{
 			name: "single project + production — one canonical M2 destination",
-			envs: []loopzerov1.TenantEnvironmentEntry{
+			envs: []loopruntimev1.TenantEnvironmentEntry{
 				{Name: "production", Cluster: "workload", Project: "myproject"},
 			},
-			want: []string{"loopzero-tn-test-myproject-production"},
+			want: []string{"loop-runtime-tn-test-myproject-production"},
 		},
 		{
 			name: "two projects each with production — Cartesian emits 2 M2 destinations (LIVE T6.1 workaround codified)",
-			envs: []loopzerov1.TenantEnvironmentEntry{
+			envs: []loopruntimev1.TenantEnvironmentEntry{
 				{Name: "production", Cluster: "workload", Project: "proj-a"},
 				{Name: "production", Cluster: "workload", Project: "proj-b"},
 			},
 			want: []string{
-				"loopzero-tn-test-proj-a-production",
-				"loopzero-tn-test-proj-b-production",
+				"loop-runtime-tn-test-proj-a-production",
+				"loop-runtime-tn-test-proj-b-production",
 			},
 		},
 		{
 			name: "one project + 3 envs — 3 M2 destinations",
-			envs: []loopzerov1.TenantEnvironmentEntry{
+			envs: []loopruntimev1.TenantEnvironmentEntry{
 				{Name: "production", Cluster: "workload", Project: "myapp"},
 				{Name: "staging", Cluster: "workload", Project: "myapp"},
 				{Name: "dev", Cluster: "workload", Project: "myapp"},
 			},
 			want: []string{
-				"loopzero-tn-test-myapp-production",
-				"loopzero-tn-test-myapp-staging",
-				"loopzero-tn-test-myapp-dev",
+				"loop-runtime-tn-test-myapp-production",
+				"loop-runtime-tn-test-myapp-staging",
+				"loop-runtime-tn-test-myapp-dev",
 			},
 		},
 		{
 			name: "environments + preview — both contribute destinations in canonical M2",
-			envs: []loopzerov1.TenantEnvironmentEntry{
+			envs: []loopruntimev1.TenantEnvironmentEntry{
 				{Name: "production", Cluster: "workload", Project: "myapp"},
 			},
-			previews: []loopzerov1.PreviewEnvironment{
-				{Spec: loopzerov1.PreviewEnvironmentSpec{ProjectID: "myapp", PRNumber: 7}},
+			previews: []loopruntimev1.PreviewEnvironment{
+				{Spec: loopruntimev1.PreviewEnvironmentSpec{ProjectID: "myapp", PRNumber: 7}},
 			},
 			want: []string{
-				"loopzero-tn-test-myapp-production",
-				"loopzero-tn-test-myapp-preview-pr-7",
+				"loop-runtime-tn-test-myapp-production",
+				"loop-runtime-tn-test-myapp-preview-pr-7",
 			},
 		},
 		{
 			name: "empty Project on env — fail-loud per T2.1 canonicalDestNamespace contract",
-			envs: []loopzerov1.TenantEnvironmentEntry{
+			envs: []loopruntimev1.TenantEnvironmentEntry{
 				{Name: "production", Cluster: "workload", Project: ""},
 			},
 			wantErr: "Project is required",
@@ -241,8 +241,8 @@ func TestBuildAppProjectDestNamespaces(t *testing.T) {
 		{
 			name: "empty ProjectID on preview — fail-loud per EnvRef contract (ADR D2)",
 			envs: nil,
-			previews: []loopzerov1.PreviewEnvironment{
-				{Spec: loopzerov1.PreviewEnvironmentSpec{ProjectID: "", PRNumber: 9}},
+			previews: []loopruntimev1.PreviewEnvironment{
+				{Spec: loopruntimev1.PreviewEnvironmentSpec{ProjectID: "", PRNumber: 9}},
 			},
 			// Preview namespace derivation migrated to pkg/domain.NewEnvRef (ADR D2);
 			// the EnvRef constructor rejects an empty project with "project empty".
@@ -258,9 +258,9 @@ func TestBuildAppProjectDestNamespaces(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tenant := &loopzerov1.Tenant{
+			tenant := &loopruntimev1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{Name: "tn-test"},
-				Spec:       loopzerov1.TenantSpec{Environments: tc.envs},
+				Spec:       loopruntimev1.TenantSpec{Environments: tc.envs},
 			}
 			got, err := buildAppProjectDestNamespaces(tenant, tc.previews)
 			if tc.wantErr != "" {
@@ -388,18 +388,18 @@ func TestPruneOrphanPreviewApps_RemovesAppsNoEnvironmentOrPreviewClaims(t *testi
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &fakeArgoListDelete{existing: tc.existing}
 			r := &TenantReconciler{ArgoCDProvisioner: fake}
-			tenant := &loopzerov1.Tenant{
+			tenant := &loopruntimev1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{Name: tc.tenant},
-				Spec:       loopzerov1.TenantSpec{},
+				Spec:       loopruntimev1.TenantSpec{},
 			}
 			for _, env := range tc.envs {
 				tenant.Spec.Environments = append(tenant.Spec.Environments,
-					loopzerov1.TenantEnvironmentEntry{Name: env, Cluster: "workload", Project: "default-project"})
+					loopruntimev1.TenantEnvironmentEntry{Name: env, Cluster: "workload", Project: "default-project"})
 			}
-			previews := make([]loopzerov1.PreviewEnvironment, 0, len(tc.activePreview))
+			previews := make([]loopruntimev1.PreviewEnvironment, 0, len(tc.activePreview))
 			for _, pr := range tc.activePreview {
-				previews = append(previews, loopzerov1.PreviewEnvironment{
-					Spec: loopzerov1.PreviewEnvironmentSpec{PRNumber: pr, ProjectID: "default-project"},
+				previews = append(previews, loopruntimev1.PreviewEnvironment{
+					Spec: loopruntimev1.PreviewEnvironmentSpec{PRNumber: pr, ProjectID: "default-project"},
 				})
 			}
 			err := r.pruneOrphanPreviewApps(context.Background(), tenant, previews, "http://gitea/x.git")
@@ -430,7 +430,7 @@ func TestPruneOrphanPreviewApps_RemovesAppsNoEnvironmentOrPreviewClaims(t *testi
 func TestPruneOrphanPreviewApps_ListErrorBubbles(t *testing.T) {
 	fake := &fakeArgoListDelete{listErr: errors.New("argocd unreachable")}
 	r := &TenantReconciler{ArgoCDProvisioner: fake}
-	tenant := &loopzerov1.Tenant{
+	tenant := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{Name: "tn-acme"},
 	}
 	err := r.pruneOrphanPreviewApps(context.Background(), tenant, nil, "http://gitea/x.git")
@@ -450,13 +450,13 @@ func TestPruneOrphanPreviewApps_ListErrorBubbles(t *testing.T) {
 // writes in 5 minutes). Plan:
 // knowledge-base/plans/argocd-app-identity-canonical-plan.md
 
-func tenantWithEnvs(envs ...loopzerov1.TenantEnvironmentEntry) *loopzerov1.Tenant {
-	return &loopzerov1.Tenant{
+func tenantWithEnvs(envs ...loopruntimev1.TenantEnvironmentEntry) *loopruntimev1.Tenant {
+	return &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{Name: "tn-test"},
-		Spec: loopzerov1.TenantSpec{
+		Spec: loopruntimev1.TenantSpec{
 			CellID:       "cell-0",
 			Environments: envs,
-			GitOps:       loopzerov1.GitOpsSpec{Branch: "main"},
+			GitOps:       loopruntimev1.GitOpsSpec{Branch: "main"},
 		},
 	}
 }
@@ -466,8 +466,8 @@ func tenantWithEnvs(envs ...loopzerov1.TenantEnvironmentEntry) *loopzerov1.Tenan
 func TestBuildApplicationSpecs_DistinctProjectsDoNotCollide(t *testing.T) {
 	r := &TenantReconciler{WorkloadClusterURL: "https://workload:6443"}
 	tenant := tenantWithEnvs(
-		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "alpha"},
-		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
+		loopruntimev1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "alpha"},
+		loopruntimev1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
 	)
 
 	specs, err := r.buildApplicationSpecs(tenant, nil, "http://gitea/tn-test-gitops.git")
@@ -500,7 +500,7 @@ func TestBuildApplicationSpecs_DistinctProjectsDoNotCollide(t *testing.T) {
 func TestBuildApplicationSpecs_EmptyProjectFailsLoud(t *testing.T) {
 	r := &TenantReconciler{WorkloadClusterURL: "https://workload:6443"}
 	tenant := tenantWithEnvs(
-		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: ""},
+		loopruntimev1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: ""},
 	)
 
 	if _, err := r.buildApplicationSpecs(tenant, nil, "http://gitea/x.git"); err == nil {
@@ -517,8 +517,8 @@ func TestBuildApplicationSpecs_EmptyProjectFailsLoud(t *testing.T) {
 func TestPruneExpectedMatchesWhatEnsureCreates(t *testing.T) {
 	r := &TenantReconciler{WorkloadClusterURL: "https://workload:6443"}
 	tenant := tenantWithEnvs(
-		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: "alpha"},
-		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
+		loopruntimev1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: "alpha"},
+		loopruntimev1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
 	)
 
 	specs, err := r.buildApplicationSpecs(tenant, nil, "http://gitea/tn-test-gitops.git")
@@ -558,8 +558,8 @@ func TestPruneExpectedMatchesWhatEnsureCreates(t *testing.T) {
 
 func TestBuildEnvironmentCRNames_DistinctProjectsDoNotCollide(t *testing.T) {
 	tenant := tenantWithEnvs(
-		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "alpha"},
-		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
+		loopruntimev1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "alpha"},
+		loopruntimev1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
 	)
 
 	names, err := buildEnvironmentCRNames(tenant)
@@ -577,7 +577,7 @@ func TestBuildEnvironmentCRNames_DistinctProjectsDoNotCollide(t *testing.T) {
 
 func TestBuildEnvironmentCRNames_EmptyProjectFailsLoud(t *testing.T) {
 	tenant := tenantWithEnvs(
-		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: ""},
+		loopruntimev1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: ""},
 	)
 	if _, err := buildEnvironmentCRNames(tenant); err == nil {
 		t.Fatal("an empty Project must return an error, not a degenerate name")
@@ -592,8 +592,8 @@ func TestBuildEnvironmentCRNames_EmptyProjectFailsLoud(t *testing.T) {
 // Both readings must come from the same function.
 func TestEnvironmentCRDesiredMatchesWhatIsCreated(t *testing.T) {
 	tenant := tenantWithEnvs(
-		loopzerov1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: "alpha"},
-		loopzerov1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
+		loopruntimev1.TenantEnvironmentEntry{Name: "production", Cluster: "workload", Project: "alpha"},
+		loopruntimev1.TenantEnvironmentEntry{Name: "preview", Cluster: "workload", Project: "beta"},
 	)
 
 	desired, err := buildEnvironmentCRNames(tenant)

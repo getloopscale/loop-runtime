@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Cell isolation chaos test (T1.1 of MEET-2026-05-12 chaos plan, now §3.B.1
 // of active-execution-plan).
@@ -12,7 +12,7 @@
 //
 // This is a pragmatic deviation from the CRD-only chaos pattern,
 // justified by k3d's Docker networking limitations. Test gated by
-// LOOPZERO_CHAOS_TEST=1 (skipUnlessChaos).
+// LOOP_RUNTIME_CHAOS_TEST=1 (skipUnlessChaos).
 
 package chaos
 
@@ -30,37 +30,37 @@ import (
 //
 // Scenario:
 //  1. Pre-condition: mgmt + workload both up; API serving health.
-//  2. `k3d cluster stop loopzero-cell-0` — pauses worker containers; state preserved.
+//  2. `k3d cluster stop loop-runtime-cell-0` — pauses worker containers; state preserved.
 //  3. Within 60s: verify API on mgmt still serves /healthz.
 //  4. Within 90s: verify cell-0 tenant workloads (in mgmt) still reachable.
-//  5. Cleanup: `k3d cluster start loopzero-cell-0` — resumes.
+//  5. Cleanup: `k3d cluster start loop-runtime-cell-0` — resumes.
 //
 // SLO claims validated:
 //   - Blast radius: 1 cell (workload), 0 cells (mgmt control plane).
 //   - Recovery: API health stays GREEN throughout workload outage window.
 //
-// Run: LOOPZERO_CHAOS_TEST=1 go test ./infra/tests/chaos/... -run TestCellIsolation_K3dStop
+// Run: LOOP_RUNTIME_CHAOS_TEST=1 go test ./infra/tests/chaos/... -run TestCellIsolation_K3dStop
 func TestCellIsolation_K3dStop(t *testing.T) {
-	if os.Getenv("LOOPZERO_CHAOS_TEST") != "1" {
-		t.Skip("LOOPZERO_CHAOS_TEST not set; skipping LIVE k3d chaos test")
+	if os.Getenv("LOOP_RUNTIME_CHAOS_TEST") != "1" {
+		t.Skip("LOOP_RUNTIME_CHAOS_TEST not set; skipping LIVE k3d chaos test")
 	}
 
 	// Pre-condition: workload cluster must be UP.
-	if !k3dClusterIsRunning(t, "loopzero-cell-0") {
-		t.Skip("k3d cluster loopzero-cell-0 is not running; skipping (re-run after task setup)")
+	if !k3dClusterIsRunning(t, "loop-runtime-cell-0") {
+		t.Skip("k3d cluster loop-runtime-cell-0 is not running; skipping (re-run after task setup)")
 	}
 
 	// Stop the workload cluster.
-	t.Logf("Stopping k3d cluster loopzero-cell-0...")
-	if err := runCmd(t, 60*time.Second, "k3d", "cluster", "stop", "loopzero-cell-0"); err != nil {
+	t.Logf("Stopping k3d cluster loop-runtime-cell-0...")
+	if err := runCmd(t, 60*time.Second, "k3d", "cluster", "stop", "loop-runtime-cell-0"); err != nil {
 		t.Fatalf("k3d cluster stop failed: %v", err)
 	}
 
 	// MUST always attempt to restart, even on test failure (otherwise
 	// subsequent runs of any test will fail since cluster is down).
 	t.Cleanup(func() {
-		t.Logf("Cleanup: restarting k3d cluster loopzero-cell-0...")
-		if err := runCmd(t, 120*time.Second, "k3d", "cluster", "start", "loopzero-cell-0"); err != nil {
+		t.Logf("Cleanup: restarting k3d cluster loop-runtime-cell-0...")
+		if err := runCmd(t, 120*time.Second, "k3d", "cluster", "start", "loop-runtime-cell-0"); err != nil {
 			t.Errorf("CRITICAL cleanup failed: k3d cluster start: %v -- manual recovery required", err)
 		}
 	})
@@ -69,15 +69,15 @@ func TestCellIsolation_K3dStop(t *testing.T) {
 	// completely independent of workload cluster state.
 	deadline := time.Now().Add(60 * time.Second)
 	for {
-		out, _ := runCmdOutput(t, 5*time.Second, "kubectl", "--context", "k3d-loopzero-core",
-			"get", "deployment", "-n", "loopzero-system", "loopzero-api",
+		out, _ := runCmdOutput(t, 5*time.Second, "kubectl", "--context", "k3d-loop-runtime-core",
+			"get", "deployment", "-n", "loop-runtime-system", "loop-runtime-api",
 			"-o", "jsonpath={.status.readyReplicas}")
 		if strings.TrimSpace(out) != "" && strings.TrimSpace(out) != "0" {
-			t.Logf("✓ mgmt loopzero-api readyReplicas=%s during workload outage", strings.TrimSpace(out))
+			t.Logf("✓ mgmt loop-runtime-api readyReplicas=%s during workload outage", strings.TrimSpace(out))
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("mgmt loopzero-api unhealthy 60s after workload stop — blast radius violation")
+			t.Fatalf("mgmt loop-runtime-api unhealthy 60s after workload stop — blast radius violation")
 		}
 		// intentional-sleep: chaos synchronization window
 		time.Sleep(5 * time.Second)
@@ -87,7 +87,7 @@ func TestCellIsolation_K3dStop(t *testing.T) {
 	// stopped it). This is the inverse-positive: ensure the chaos actually
 	// happened. Without this, the test could pass trivially if k3d stop
 	// silently no-op'd.
-	out, _ := runCmdOutput(t, 10*time.Second, "kubectl", "--context", "k3d-loopzero-cell-0",
+	out, _ := runCmdOutput(t, 10*time.Second, "kubectl", "--context", "k3d-loop-runtime-cell-0",
 		"get", "nodes", "-o", "jsonpath={.items[0].metadata.name}")
 	if !strings.Contains(out, "error") && !strings.Contains(out, "refused") && strings.TrimSpace(out) != "" {
 		// Workload responded — means k3d stop didn't actually stop. Test
@@ -109,7 +109,7 @@ func k3dClusterIsRunning(t *testing.T, name string) bool {
 	}
 	// Quick substring check — full JSON parsing would require json package
 	// + struct. The output format is stable enough that substring works.
-	// Looking for `"name":"loopzero-cell-0"` with non-zero running serverCount.
+	// Looking for `"name":"loop-runtime-cell-0"` with non-zero running serverCount.
 	if !strings.Contains(out, `"name":"`+name+`"`) {
 		return false
 	}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -19,7 +19,7 @@ import (
 // the owner's standing `*_owner_maintenance` bypass. A fixture that seeds two
 // tenants to prove a cross-tenant property is doing cross-tenant work by
 // definition — the same job the background loops do — so it connects the same
-// way they do: as `loopzero_worker`, whose reach is the NAMED
+// way they do: as `loop_runtime_worker`, whose reach is the NAMED
 // `*_worker_cross_tenant` policies (migration 000062).
 //
 // The alternative would be to restore a broad standing privilege for the owner
@@ -32,7 +32,7 @@ import (
 // Falls back to DATABASE_URL when the worker DSN is unset, so a developer
 // machine without the role split still runs the suite.
 func seedDBURL() string {
-	if url := os.Getenv("LOOPZERO_WORKER_DATABASE_URL"); url != "" {
+	if url := os.Getenv("LOOP_RUNTIME_WORKER_DATABASE_URL"); url != "" {
 		return url
 	}
 	return dbURL()
@@ -56,10 +56,10 @@ func seedPool(t *testing.T) *pgxpool.Pool {
 // the owner also keeps every fixture independent of the grants the tests in
 // worker_role_grants_test.go are there to prove.
 //
-// Falls back to seedDBURL when LOOPZERO_OWNER_DATABASE_URL is unset, which is
+// Falls back to seedDBURL when LOOP_RUNTIME_OWNER_DATABASE_URL is unset, which is
 // correct on a machine without the role split.
 func ownerDBURL() string {
-	if url := os.Getenv("LOOPZERO_OWNER_DATABASE_URL"); url != "" {
+	if url := os.Getenv("LOOP_RUNTIME_OWNER_DATABASE_URL"); url != "" {
 		return url
 	}
 	return seedDBURL()

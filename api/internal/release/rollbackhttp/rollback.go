@@ -20,7 +20,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/correlation"
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // RollbackService abstracts the rollback orchestrator for the handler (DIP).
@@ -132,7 +132,7 @@ func (h *RollbackHandler) WithHistory(history RollbackHistory) *RollbackHandler 
 // List handles GET /api/v1/projects/{name}/rollbacks.
 func (h *RollbackHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h.history == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("rollback history not configured"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError.Wrap("rollback history not configured"))
 		return
 	}
 	h.history.List(w, r)
@@ -145,43 +145,43 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
 	// Parse request body
 	var req rollbackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("invalid request body"))
 		return
 	}
 
 	env := req.Environment
 	if env == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("environment is required"))
 		return
 	}
 
 	// Resolve dashboard sugar: build_id → to_release_id.
 	if req.BuildID != "" && req.ToReleaseID == "" {
 		if h.releases == nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("rollback by build_id not configured"))
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError.Wrap("rollback by build_id not configured"))
 			return
 		}
 		relID, lookupErr := h.releases.GetReleaseForBuild(ctx, uc.TenantID, name, env, req.BuildID)
 		if lookupErr != nil {
 			slog.Error("rollback: build_id lookup failed", "build_id", req.BuildID, "err", lookupErr)
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 			return
 		}
 		if relID == "" {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("no release found for build_id"))
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("no release found for build_id"))
 			return
 		}
 		req.ToReleaseID = relID
@@ -190,11 +190,11 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Look up project
 	project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -217,9 +217,9 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 		BaseDomain:    h.baseDomain,
 	})
 	if err != nil {
-		var loopzeroErr *loopzeroerrors.LoopZeroError
-		if errors.As(err, &loopzeroErr) {
-			httpio.WriteLoopZeroError(w, loopzeroErr)
+		var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+		if errors.As(err, &loopRuntimeErr) {
+			httpio.WriteLoopRuntimeError(w, loopRuntimeErr)
 			return
 		}
 		// Mirror mapBuildError at builds.go:402 — log unexpected errors for diagnosis.
@@ -231,7 +231,7 @@ func (h *RollbackHandler) Create(w http.ResponseWriter, r *http.Request) {
 			"env", env,
 			"to_release", req.ToReleaseID,
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 

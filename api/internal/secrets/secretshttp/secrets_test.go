@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T0.1 of plan 2026-06-01-p1-security-hardening (Plano A) — regression tests
 // for comp-001 (CRITICAL): SecretHandler.locker MUST be non-nil at runtime
@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loop-runtime/api/internal/routestest"
-	loopzerovault "github.com/getloopscale/loop-runtime/pkg/vault"
+	loopruntimevault "github.com/getloopscale/loop-runtime/pkg/vault"
 
 	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
@@ -976,7 +976,7 @@ func TestSecretBulk_HandsTheUserValueToTheStore(t *testing.T) {
 // still written (EC-01 continue-best-effort).
 func TestSecretBulk_StoreTransitDenialReadsAsDenied(t *testing.T) {
 	store := &recordingStore{failWith: map[string]error{
-		"BAD_SECRET": fmt.Errorf("secret_store: encrypt: %w", loopzerovault.ErrTransitKeyCreateFailed),
+		"BAD_SECRET": fmt.Errorf("secret_store: encrypt: %w", loopruntimevault.ErrTransitKeyCreateFailed),
 	}}
 	h := NewSecretHandler(store, &lockCountingFake{})
 
@@ -1042,7 +1042,7 @@ func TestSecretBulk_CrossTenantAndNonexistentResponsesByteIdentical(t *testing.T
 	}
 }
 
-// Red Team loopzero-cloud#92 regression-protector (2026-06-27): the
+// Red Team loop-console#92 regression-protector (2026-06-27): the
 // /api/v1/secrets?project=<name> List endpoint MUST refuse non-existent
 // projects with 404 PROJECT_NOT_FOUND instead of 200 + empty list.
 // Without this, the dashboard's Secrets page rendered functional UI
@@ -1099,7 +1099,7 @@ func TestSecretHandler_List_ExistingProject_AllowsThrough(t *testing.T) {
 // separates them shipped untested in its first version — an independent review
 // measured that no test asserted "denied".
 func TestTransitFailureStatus_SeparatesDenialFromTransient(t *testing.T) {
-	if got := transitFailureStatus(fmt.Errorf("wrapped: %w", loopzerovault.ErrTransitKeyCreateFailed)); got != "denied" {
+	if got := transitFailureStatus(fmt.Errorf("wrapped: %w", loopruntimevault.ErrTransitKeyCreateFailed)); got != "denied" {
 		t.Errorf("policy denial classified as %q; it is PERMANENT and needs an operator, so it must "+
 			"not read like a timeout that clears itself (Rule 8)", got)
 	}

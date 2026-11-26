@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -27,7 +27,7 @@ import (
 //   - a table entry naming no inventory ExternalSecret: no rotation reaches it, and
 //     a restart list that outlived its secret describes a platform that is gone.
 
-const externalSecretsInventory = "../../helm/loopzero-external-secrets/values.yaml"
+const externalSecretsInventory = "../../helm/loop-runtime-external-secrets/values.yaml"
 
 func TestRotationRestartTableMatchesTheExternalSecretInventory(t *testing.T) {
 	inventory := inventoryTargets(t)

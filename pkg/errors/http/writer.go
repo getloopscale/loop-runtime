@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package http
 
@@ -8,7 +8,7 @@ import (
 	stderrors "errors"
 	"net/http"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // ProblemTypeBase is the URI prefix for RFC 9457 "type" fields.
@@ -48,7 +48,7 @@ type problemDetails struct {
 
 // FieldError is one field-level violation surfaced in the response body's
 // `errors[]` array. Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T2.4 closes
-// loopzero-cloud#29 multi-field error aggregation. The field name `errors` (NOT
+// loop-console#29 multi-field error aggregation. The field name `errors` (NOT
 // `details`) was chosen to avoid collision with the canonical RFC 9457 scalar
 // `detail` field. RFC 9457 § 3.2 explicitly permits extension members.
 //
@@ -68,7 +68,7 @@ type FieldError struct {
 // HTTP status code (via Status). When r is non-nil, populates the
 // "instance" field with r.URL.Path.
 //
-// For non-LoopZeroError values, emits a generic INTERNAL_ERROR payload at
+// For non-LoopRuntimeError values, emits a generic INTERNAL_ERROR payload at
 // status 500. This is safe and consistent — no stack traces or
 // internal strings leak.
 //
@@ -78,7 +78,7 @@ func WriteJSON(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // WriteJSONWithErrors is the multi-field variant of WriteJSON. Sprint 4 T2.4
-// (closes loopzero-cloud#29) — when the caller has aggregated multiple field-level
+// (closes loop-console#29) — when the caller has aggregated multiple field-level
 // violations from a validator (jsonschema Causes walk), pass them via
 // fieldErrors and they will be serialized into the response body's `errors[]`
 // extension member (RFC 9457 § 3.2). Pass nil/empty for the single-error case
@@ -88,14 +88,14 @@ func WriteJSONWithErrors(w http.ResponseWriter, r *http.Request, err error, fiel
 	status := Status(err)
 	w.WriteHeader(status)
 
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	stderrors.As(err, &loopzeroErr)
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	stderrors.As(err, &loopRuntimeErr)
 
 	code := "INTERNAL_ERROR"
 	detail := "An internal error occurred."
-	if loopzeroErr != nil {
-		code = loopzeroErr.Code
-		detail = loopzeroErr.Message
+	if loopRuntimeErr != nil {
+		code = loopRuntimeErr.Code
+		detail = loopRuntimeErr.Message
 	}
 
 	pd := problemDetails{

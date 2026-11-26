@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -41,11 +41,11 @@ type RepoLookup interface {
 // build orchestrator (resolves LanguageStrategy to language-aware
 // step names; LIVE catch 2026-06-07 J-23 bug #3).
 //
-// nil LoopZeroYamlMinimal returned = no loopzero.yaml in repo (preview build
+// nil LoopRuntimeYamlMinimal returned = no loopzero.yaml in repo (preview build
 // will fail noisily — log + warn upstream).
 // Subset of AutoDeployer; kept narrow for testability.
 type SourceBundlePreparer interface {
-	PrepareSourceBundle(ctx context.Context, repoFullName, commitSHA string, installationID int64, tenantID string) (*LoopZeroYamlMinimal, error)
+	PrepareSourceBundle(ctx context.Context, repoFullName, commitSHA string, installationID int64, tenantID string) (*LoopRuntimeYamlMinimal, error)
 }
 
 // PreviewDeployer handles GitHub `pull_request` webhook events.
@@ -188,7 +188,7 @@ func (d *PreviewDeployer) handleCreate(
 	// ALSO returns the parsed loopzero.yaml so we can hand framework/path/build
 	// to the orchestrator (drives LanguageStrategy step naming).
 	if d.bundlePrep != nil {
-		loopzeroYaml, prepErr := d.bundlePrep.PrepareSourceBundle(ctx,
+		loopRuntimeYaml, prepErr := d.bundlePrep.PrepareSourceBundle(ctx,
 			event.Repository.FullName, commit, event.Installation.ID, repo.TenantID,
 		)
 		if prepErr != nil {
@@ -196,9 +196,9 @@ func (d *PreviewDeployer) handleCreate(
 			return fmt.Errorf("preview deploy bundle: %w", prepErr)
 		}
 		log.Info("preview deploy: source bundle uploaded", "commit", short(commit))
-		if loopzeroYaml != nil {
-			req.LoopZeroYamlApps = loopzeroYaml.Apps
-			log.Info("preview deploy: loopzero.yaml apps inherited", "apps", len(loopzeroYaml.Apps))
+		if loopRuntimeYaml != nil {
+			req.LoopRuntimeYamlApps = loopRuntimeYaml.Apps
+			log.Info("preview deploy: loopzero.yaml apps inherited", "apps", len(loopRuntimeYaml.Apps))
 		}
 	} else {
 		log.Warn("preview deploy: no bundle preparer wired; build will likely fail at clone-repo")

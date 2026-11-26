@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package policy
 
@@ -26,7 +26,7 @@ func TestMaintenanceMode_PassthroughWhenUnset(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusOK {
-			t.Errorf("%s: expected 200 when LOOPZERO_MAINTENANCE_MODE is unset, got %d", method, rec.Code)
+			t.Errorf("%s: expected 200 when LOOP_RUNTIME_MAINTENANCE_MODE is unset, got %d", method, rec.Code)
 		}
 	}
 }
@@ -141,8 +141,8 @@ func TestMaintenanceMode_RetryAfterHeader(t *testing.T) {
 	}
 }
 
-// The published chart renders LOOPZERO_MAINTENANCE_MODE="false" by default
-// (charts/loopzero-api values.yaml). "false" and "0" mean off: read as an operator
+// The published chart renders LOOP_RUNTIME_MAINTENANCE_MODE="false" by default
+// (charts/loop-runtime-api values.yaml). "false" and "0" mean off: read as an operator
 // message they put every mutation of a default install behind a 503 whose
 // message is the word "false".
 func TestMaintenanceMode_FalseAndZeroMeanOff(t *testing.T) {
@@ -151,7 +151,7 @@ func TestMaintenanceMode_FalseAndZeroMeanOff(t *testing.T) {
 			rec := httptest.NewRecorder()
 			newMaintenanceHandler(raw).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/deploy", nil))
 			if rec.Code != http.StatusOK {
-				t.Fatalf("LOOPZERO_MAINTENANCE_MODE=%q blocked a mutation (%d): it means off", raw, rec.Code)
+				t.Fatalf("LOOP_RUNTIME_MAINTENANCE_MODE=%q blocked a mutation (%d): it means off", raw, rec.Code)
 			}
 		})
 	}

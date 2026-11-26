@@ -1,0 +1,259 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.5
+  name: platformbootstraps.runtime.getloopscale.com
+spec:
+  group: runtime.getloopscale.com
+  names:
+    kind: PlatformBootstrap
+    listKind: PlatformBootstrapList
+    plural: platformbootstraps
+    shortNames:
+    - pbs
+    singular: platformbootstrap
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          PlatformBootstrap describes the desired state of the platform's bootstrap process.
+          It replaces the imperative shell scripts in the CI/CD pipeline with a declarative,
+          reconciled, idempotent controller.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PlatformBootstrapSpec defines the desired bootstrap configuration.
+            properties:
+              api:
+                description: API configures the API bootstrap endpoint for DB seeding.
+                properties:
+                  bootstrapEndpoint:
+                    default: http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/internal/bootstrap
+                    description: |-
+                      BootstrapEndpoint is the internal URL for the bootstrap endpoint.
+                      SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
+                    pattern: ^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$
+                    type: string
+                  bootstrapSecretRef:
+                    description: |-
+                      BootstrapSecretRef references the Secret containing the bootstrap auth token.
+                      The Secret must contain a key "bootstrap-secret" with the Bearer token value
+                      matching LOOP_RUNTIME_BOOTSTRAP_SECRET on the API side (SEC-003).
+                      B1: Without this, callBootstrapEndpoint fails 401 when SEC-003 is enabled.
+                    properties:
+                      name:
+                        description: Name is the Secret name.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  healthEndpoint:
+                    default: http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/api/v1/health
+                    description: |-
+                      HealthEndpoint is the internal URL for the API health check.
+                      SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
+                    pattern: ^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$
+                    type: string
+                type: object
+              argocd:
+                description: ArgoCD configures the ArgoCD bootstrap.
+                properties:
+                  adminSecretName:
+                    default: argocd-initial-admin-secret
+                    description: |-
+                      AdminSecretName is the name of the Secret containing ArgoCD admin password.
+                      Created automatically by the ArgoCD Helm chart.
+                    type: string
+                  internalURL:
+                    default: https://argocd-server.argocd.svc.cluster.local
+                    description: |-
+                      InternalURL is the cluster-internal URL for ArgoCD API.
+                      SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
+                    pattern: ^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$
+                    type: string
+                  namespace:
+                    default: argocd
+                    description: Namespace is where ArgoCD is installed.
+                    type: string
+                  repoCredentials:
+                    description: RepoCredentials defines the repo credential secrets
+                      to create for ArgoCD.
+                    items:
+                      description: ArgoCDRepoCredential defines a repo credential
+                        to register in ArgoCD.
+                      properties:
+                        name:
+                          description: Name is the Secret name in the ArgoCD namespace.
+                          type: string
+                        url:
+                          description: URL is the Git server URL pattern.
+                          type: string
+                      required:
+                      - name
+                      - url
+                      type: object
+                    type: array
+                type: object
+              gitea:
+                description: Gitea configures the Gitea git server bootstrap.
+                properties:
+                  adminSecretRef:
+                    description: |-
+                      AdminSecretRef references the Secret containing Gitea admin credentials.
+                      The Secret must contain 'username' and 'password' keys, OR a 'token' key
+                      with a pre-existing admin API token.
+                    properties:
+                      name:
+                        description: Name is the Secret name.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  internalURL:
+                    default: http://gitea-http.loop-runtime-system.svc.cluster.local:3000
+                    description: |-
+                      InternalURL is the cluster-internal URL for Gitea HTTP API.
+                      SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
+                    pattern: ^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$
+                    type: string
+                  organizations:
+                    description: Organizations is the list of Gitea organizations
+                      to create.
+                    items:
+                      type: string
+                    type: array
+                  tokenName:
+                    default: platform-bootstrap-token
+                    description: |-
+                      TokenName is the name for the admin API token to create.
+                      Used for idempotent token creation (check by name before creating).
+                    type: string
+                  tokenScopes:
+                    description: TokenScopes defines the minimum required scopes for
+                      the admin token.
+                    items:
+                      type: string
+                    type: array
+                required:
+                - adminSecretRef
+                type: object
+              maxRetries:
+                default: 10
+                description: MaxRetries is the maximum number of retries per phase
+                  before transitioning to Failed.
+                type: integer
+            required:
+            - api
+            - argocd
+            - gitea
+            type: object
+          status:
+            description: PlatformBootstrapStatus defines the observed state of PlatformBootstrap.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the bootstrap's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              lastTransitionTime:
+                description: LastTransitionTime is when the phase last changed.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the current phase of the bootstrap process.
+                type: string
+              retryCount:
+                description: RetryCount tracks how many retries have been attempted
+                  in the current phase.
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

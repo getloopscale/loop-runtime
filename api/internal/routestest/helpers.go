@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package routestest holds the request-shaping helpers every route family's
 // tests need — injecting a UserContext, setting a chi URL param, building the

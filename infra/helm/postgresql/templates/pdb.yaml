@@ -2,11 +2,11 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: postgresql
-  namespace: loopzero-system
+  namespace: loop-runtime-system
   labels:
     app.kubernetes.io/name: postgresql
     app.kubernetes.io/instance: postgresql
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
 spec:
   minAvailable: 1
   selector:

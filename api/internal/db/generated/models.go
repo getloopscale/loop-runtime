@@ -252,7 +252,7 @@ type LensSavedView struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
-type LoopzeroApiKey struct {
+type LoopruntimeApiKey struct {
 	ID          string             `json:"id"`
 	Subject     string             `json:"subject"`
 	TenantID    string             `json:"tenant_id"`

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package audithttp serves the audit-log endpoints under /api/v1/audit: the
 // tenant-scoped read side of what the platform recorded about itself.

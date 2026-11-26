@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -21,7 +21,7 @@ package store
 //   - GetByApp NoRows → ErrScalingConfigNotFound (legacy sentinel)
 //   - Delete idempotent (silent on missing row)
 //   - DeleteByProject nil-tx fallback to s.db preserved
-//   - Validate runs BEFORE any DB call (LoopZeroError actionable
+//   - Validate runs BEFORE any DB call (LoopRuntimeError actionable
 //     feedback)
 //   - CanonicalHash deterministic format preserved verbatim in
 //     scaling_types.go

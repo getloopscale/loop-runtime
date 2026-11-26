@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package tenant_test — T1.1 of plan 2026-06-09-m2-operator-canonical-fix.
 //
@@ -27,12 +27,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // TestProjectFieldHasRFC1123PatternAndRequired (RED 2 / EC-2) — schema
 // contract test. Asserts the generated CRD YAML at
-// `../../config/crd/bases/loopzero.io_tenants.yaml` declares:
+// `../../config/crd/bases/runtime.getloopscale.com_tenants.yaml` declares:
 //  1. The TenantEnvironmentEntry.project field has the canonical RFC 1123
 //     DNS-label Pattern (^[a-z0-9]([-a-z0-9]*[a-z0-9])?$).
 //  2. The field has minLength: 1.
@@ -43,7 +43,7 @@ import (
 // YAML IS the contract; any conformant K8s API server (dev-public, prod)
 // enforces the Pattern.
 func TestProjectFieldHasRFC1123PatternAndRequired(t *testing.T) {
-	const crdPath = "../../config/crd/bases/loopzero.io_tenants.yaml"
+	const crdPath = "../../config/crd/bases/runtime.getloopscale.com_tenants.yaml"
 	const expectedPattern = "pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
 	const expectedMinLength = "minLength: 1"
 
@@ -90,19 +90,19 @@ func TestProjectFieldHasRFC1123PatternAndRequired(t *testing.T) {
 //   - "" (empty) exercises the required-field gate.
 //   - any non-RFC-1123 string exercises the Pattern gate.
 //   - a valid slug ("sample") proves the happy path Create succeeds.
-func makeTenantSpec(project string) loopzerov1.TenantSpec {
-	return loopzerov1.TenantSpec{
+func makeTenantSpec(project string) loopruntimev1.TenantSpec {
+	return loopruntimev1.TenantSpec{
 		DisplayName: "T1.1 CRD validation tenant",
-		Plan:        loopzerov1.PlanStarter,
-		Environments: []loopzerov1.TenantEnvironmentEntry{
+		Plan:        loopruntimev1.PlanStarter,
+		Environments: []loopruntimev1.TenantEnvironmentEntry{
 			{Name: "production", Cluster: "workload", Project: project},
 		},
-		GitOps: loopzerov1.GitOpsSpec{
-			RepoName: "loopzero-tenant-t11",
+		GitOps: loopruntimev1.GitOpsSpec{
+			RepoName: "loop-runtime-tenant-t11",
 			Branch:   "main",
 		},
-		Preview: loopzerov1.PreviewSpec{MaxEnvironments: 2, TTLHours: 24},
-		Limits: loopzerov1.ResourceLimits{
+		Preview: loopruntimev1.PreviewSpec{MaxEnvironments: 2, TTLHours: 24},
+		Limits: loopruntimev1.ResourceLimits{
 			MaxCPU:              resource.MustParse("8"),
 			MaxMemory:           resource.MustParse("16Gi"),
 			MaxStorage:          resource.MustParse("50Gi"),
@@ -114,7 +114,7 @@ func makeTenantSpec(project string) loopzerov1.TenantSpec {
 var _ = Describe("TenantEnvironmentEntry.Project CRD validation", func() {
 	Context("required-field gate (RED 1)", func() {
 		It("rejects Tenant CR whose Environments entry has empty Project", func() {
-			tenant := &loopzerov1.Tenant{
+			tenant := &loopruntimev1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "t11-required-gate",
 					Namespace: "default",
@@ -144,7 +144,7 @@ var _ = Describe("TenantEnvironmentEntry.Project CRD validation", func() {
 
 	Context("happy path (sanity)", func() {
 		It("accepts Tenant CR with valid RFC-1123 Project slug", func() {
-			tenant := &loopzerov1.Tenant{
+			tenant := &loopruntimev1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "t11-happy",
 					Namespace: "default",

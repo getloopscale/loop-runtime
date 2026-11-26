@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T3.2 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 — slog.Handler
 // wrapper that redacts sensitive patterns (vault:v1: ciphertext, Vault/AppRole

@@ -21,8 +21,8 @@ image:
 # probe. Smoke-test asserts every Deployment/StatefulSet here has all replicas
 # Ready before declaring success.
 namespaces:
-  - loopzero-system
-  - loopzero-auth
+  - loop-runtime-system
+  - loop-runtime-auth
   - argocd
   - monitoring
   - traefik
@@ -31,15 +31,15 @@ namespaces:
 # Endpoints to probe (rendered into the Job script).
 # Use service-DNS to keep the test cluster-internal.
 endpoints:
-  - name: loopzero-api
-    # B40: loopzero-api Service port is 3001 (was 8080 — fixed).
-    url: http://loopzero-api.loopzero-system.svc.cluster.local:3001/api/v1/health
+  - name: loop-runtime-api
+    # B40: loop-runtime-api Service port is 3001 (was 8080 — fixed).
+    url: http://loop-runtime-api.loop-runtime-system.svc.cluster.local:3001/api/v1/health
   - name: gitea
-    url: http://gitea-http.loopzero-system.svc.cluster.local:3000/api/v1/version
+    url: http://gitea-http.loop-runtime-system.svc.cluster.local:3000/api/v1/version
   - name: argocd
     # B48 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — ArgoCD `server.insecure: true`
     # serves HTTP on port 80 (TLS termination at Traefik IngressRoute, not
-    # ArgoCD itself). Probing https:// triggers TLS handshake reset. In LoopZero
+    # ArgoCD itself). Probing https:// triggers TLS handshake reset. In LoopRuntime
     # Cloud the same Service is fronted by Traefik with proper TLS.
     url: http://argocd-server.argocd.svc.cluster.local/api/version
 

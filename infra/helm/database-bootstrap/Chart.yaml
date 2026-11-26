@@ -2,8 +2,8 @@
 apiVersion: v2
 name: database-bootstrap
 description: |
-  Brings a managed PostgreSQL (RDS) to the state loopzero-api boots against: the identity
-  and Gitea databases, the non-owner roles the API and loopzero-cloud connect as, and the
+  Brings a managed PostgreSQL (RDS) to the state loop-runtime-api boots against: the identity
+  and Gitea databases, the non-owner roles the API and loop-console connect as, and the
   schema at the latest migration. Runs as a Job on every sync; each step is idempotent.
 type: application
 version: 0.1.0

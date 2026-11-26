@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package cloudfrontkvs writes the edge's routing entries to a CloudFront KeyValueStore,
 // which the CloudFront Function in front of the cells reads to send a request to the

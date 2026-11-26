@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -11,7 +11,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // BuildDayCount is the route-level per-day build (deploy) count. Route-level
@@ -82,13 +82,13 @@ func (h *BuildStatsHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	// (the #106/#111 class — RLS is not a backstop). 401, never an empty/global scan.
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	windowDays, ok := windowDaysFor(r.URL.Query().Get("window"))
 	if !ok {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest.Wrap("window must be one of: 7d, 30d, 90d"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInvalidRequest.Wrap("window must be one of: 7d, 30d, 90d"))
 		return
 	}
 
@@ -98,7 +98,7 @@ func (h *BuildStatsHandler) Stats(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.stats.BuildStatsByDay(ctx, uc.TenantID, firstDay)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 

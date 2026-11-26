@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import { CloudProvider, Environment, NodeClass } from "../core/types";
@@ -73,10 +73,10 @@ export interface PlatformStackConfig {
   readonly minioRootPassword?: pulumi.Output<string>;
 
   // Database role separation (MEET-2026-03-31-024)
-  // When set, the API connects as loopzero_api role (DML only, no DDL).
+  // When set, the API connects as loop_runtime_api role (DML only, no DDL).
   // Migrations continue using the admin user.
-  // Set via: pulumi config set --secret loopzeroApiDbPassword <password>
-  readonly loopzeroApiDbPassword?: pulumi.Output<string>;
+  // Set via: pulumi config set --secret loopRuntimeApiDbPassword <password>
+  readonly loopRuntimeApiDbPassword?: pulumi.Output<string>;
 
   // Observability — Tempo trace storage (MEET-2026-03-30-020)
   // S3 bucket for Tempo trace data in production. Omit for local filesystem (dev).
@@ -221,33 +221,33 @@ export function loadStackConfig(): PlatformStackConfig {
     minioRootPassword: config.getSecret("minioRootPassword") ?? undefined,
 
     // Database role separation (MEET-2026-03-31-024)
-    loopzeroApiDbPassword: config.getSecret("loopzeroApiDbPassword") ?? undefined,
+    loopRuntimeApiDbPassword: config.getSecret("loopRuntimeApiDbPassword") ?? undefined,
 
     // Observability — Tempo trace storage (MEET-020)
     tempoStorageBucket: config.get("tempoStorageBucket") ?? undefined,
 
     // Stripe Billing (Sprint 11, Phase 5)
     // Reads from env vars (GitHub Actions secrets) or Pulumi config (local dev).
-    stripeApiKey: secretFromEnvOrConfig("LOOPZERO_STRIPE_API_KEY", "stripeApiKey", secrets),
-    stripeWebhookSecret: secretFromEnvOrConfig("LOOPZERO_STRIPE_WEBHOOK_SECRET", "stripeWebhookSecret", secrets),
+    stripeApiKey: secretFromEnvOrConfig("LOOP_RUNTIME_STRIPE_API_KEY", "stripeApiKey", secrets),
+    stripeWebhookSecret: secretFromEnvOrConfig("LOOP_RUNTIME_STRIPE_WEBHOOK_SECRET", "stripeWebhookSecret", secrets),
     stripePriceProId: config.get("stripePriceProId") ?? undefined,
     stripePriceTeamId: config.get("stripePriceTeamId") ?? undefined,
-    sessionTokenSecret: secretFromEnvOrConfig("LOOPZERO_SESSION_TOKEN_SECRET", "sessionTokenSecret", secrets),
+    sessionTokenSecret: secretFromEnvOrConfig("LOOP_RUNTIME_SESSION_TOKEN_SECRET", "sessionTokenSecret", secrets),
 
     // Cloud→Engine service auth secret (MEET-2026-04-07-039)
-    serviceAuthSecret: secretFromEnvOrConfig("LOOPZERO_SERVICE_AUTH_SECRET", "serviceAuthSecret", secrets),
+    serviceAuthSecret: secretFromEnvOrConfig("LOOP_RUNTIME_SERVICE_AUTH_SECRET", "serviceAuthSecret", secrets),
 
     // Resend API key for email delivery (MEET-036: HTTP API, not SMTP)
-    resendApiKey: secretFromEnvOrConfig("LOOPZERO_RESEND_API_KEY", "resendApiKey", secrets),
+    resendApiKey: secretFromEnvOrConfig("LOOP_RUNTIME_RESEND_API_KEY", "resendApiKey", secrets),
 
     // Ory Social Login — GitHub OAuth (Sprint 11, Phase 3)
     // Reads from env vars (GitHub Actions secrets) or Pulumi config (local dev).
-    githubOAuthClientId: secretFromEnvOrConfig("LOOPZERO_GITHUB_CLIENT_ID", "githubOAuthClientId", secrets),
-    githubOAuthClientSecret: secretFromEnvOrConfig("LOOPZERO_GITHUB_CLIENT_SECRET", "githubOAuthClientSecret", secrets),
+    githubOAuthClientId: secretFromEnvOrConfig("LOOP_RUNTIME_GITHUB_CLIENT_ID", "githubOAuthClientId", secrets),
+    githubOAuthClientSecret: secretFromEnvOrConfig("LOOP_RUNTIME_GITHUB_CLIENT_SECRET", "githubOAuthClientSecret", secrets),
 
     // Ory Social Login — Google OAuth (Sprint 11, Phase 3)
-    googleOAuthClientId: secretFromEnvOrConfig("LOOPZERO_GOOGLE_CLIENT_ID", "googleOAuthClientId", secrets),
-    googleOAuthClientSecret: secretFromEnvOrConfig("LOOPZERO_GOOGLE_CLIENT_SECRET", "googleOAuthClientSecret", secrets),
+    googleOAuthClientId: secretFromEnvOrConfig("LOOP_RUNTIME_GOOGLE_CLIENT_ID", "googleOAuthClientId", secrets),
+    googleOAuthClientSecret: secretFromEnvOrConfig("LOOP_RUNTIME_GOOGLE_CLIENT_SECRET", "googleOAuthClientSecret", secrets),
 
     // Cross-cluster observability — Loki push URL for runtime Promtail
     lokiPushUrl: config.get("lokiPushUrl") ?? undefined,

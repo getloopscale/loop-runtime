@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -19,7 +19,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // =============================================================================
@@ -93,7 +93,7 @@ func TestBuildSBOMHandler_ReturnsAllAppsWithDownloadPath(t *testing.T) {
 			},
 		},
 	}
-	h := NewBuildSBOMHandler(store, &fakeSBOMReader{}, "loopzero-static-assets", slog.Default())
+	h := NewBuildSBOMHandler(store, &fakeSBOMReader{}, "loop-runtime-static-assets", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/build-1/sbom", nil)
 	req = routestest.WithChiParam(req, "id", "build-1")
@@ -133,7 +133,7 @@ func TestBuildSBOMHandler_ReturnsAllAppsWithDownloadPath(t *testing.T) {
 // =============================================================================
 
 func TestBuildSBOMHandler_NoBuildReturns404(t *testing.T) {
-	store := &fakeSBOMStore{err: loopzeroerrors.ErrBuildNotFound}
+	store := &fakeSBOMStore{err: loopruntimeerrors.ErrBuildNotFound}
 	h := NewBuildSBOMHandler(store, &fakeSBOMReader{}, "bucket", slog.Default())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/builds/missing/sbom", nil)
@@ -330,7 +330,7 @@ func TestBuildSBOMDownload_Refusals(t *testing.T) {
 	}{
 		{"an app the build does not have", &fakeSBOMStore{infos: twoAppSBOMs}, &fakeSBOMReader{objects: objects}, "tn-1", "ghost", http.StatusNotFound},
 		{"an app with no SBOM", &fakeSBOMStore{infos: twoAppSBOMs}, &fakeSBOMReader{objects: objects}, "tn-1", "legacy", http.StatusNotFound},
-		{"a build of another tenant", &fakeSBOMStore{err: loopzeroerrors.ErrBuildNotFound}, &fakeSBOMReader{objects: objects}, "tn-2", "api", http.StatusNotFound},
+		{"a build of another tenant", &fakeSBOMStore{err: loopruntimeerrors.ErrBuildNotFound}, &fakeSBOMReader{objects: objects}, "tn-2", "api", http.StatusNotFound},
 		{"no session", &fakeSBOMStore{infos: twoAppSBOMs}, &fakeSBOMReader{objects: objects}, "", "api", http.StatusUnauthorized},
 		{"no object store in this boot", &fakeSBOMStore{infos: twoAppSBOMs}, nil, "tn-1", "api", http.StatusNotFound},
 		{"the object store fails", &fakeSBOMStore{infos: twoAppSBOMs}, &fakeSBOMReader{err: errors.New("s3 unreachable")}, "tn-1", "api", http.StatusBadGateway},

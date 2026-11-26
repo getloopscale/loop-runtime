@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Pulumi L1 — Cloud infrastructure ONLY.
 // CHG-2026-04-28-LAYERED-BOOTSTRAP — Phase 1 / T1.1.
 //
-// This stack manages the cloud-side resources of the LoopZero platform:
+// This stack manages the cloud-side resources of the LoopRuntime platform:
 //   - DigitalOcean: VPC, DOKS clusters (mgmt + build + runtime + runtime-2),
 //     PostgreSQL, Spaces, Container Registry
 //   - Cloudflare API: Tunnel resource + ingress config + DNS, Worker, KV
@@ -46,10 +46,10 @@ let orphans: OrphanLookupResult = {};
 if (config.cfAccountId && config.cfZoneId) {
   orphans = resolveOrphans({
     vpcName: `${baseName}-net`,
-    tunnelName: `loopzero-${config.environment}`,
-    kvTitle: `loopzero-routing-${config.environment}`,
+    tunnelName: `loop-runtime-${config.environment}`,
+    kvTitle: `loop-runtime-routing-${config.environment}`,
     dnsWildcard: `*.${config.domain}`,
-    workerScriptName: `loopzero-static-delivery-${config.environment}`,
+    workerScriptName: `loop-runtime-static-delivery-${config.environment}`,
     workerRoutePattern: `*.${config.domain}/*`,
     cfAccountId: config.cfAccountId,
     cfZoneId: config.cfZoneId,
@@ -74,7 +74,7 @@ if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
     zoneId: config.cfZoneId,
     environment: config.environment,
     baseDomain: config.domain,
-    traefikService: "https://runtime-traefik.loopzero-system.svc:443",
+    traefikService: "https://runtime-traefik.loop-runtime-system.svc:443",
     importIds: {
       tunnel: orphans.tunnelImportId,
       dnsRecord: orphans.dnsRecordImportId,
@@ -97,7 +97,7 @@ if (config.cfAccountId && config.cfApiToken && config.cfZoneId) {
 }
 
 // ---------------------------------------------------------------------------
-// Stack Outputs (stable contract consumed by Helmfile L2 + loopzero-api wiring)
+// Stack Outputs (stable contract consumed by Helmfile L2 + loop-runtime-api wiring)
 // ---------------------------------------------------------------------------
 export const provider = config.provider;
 export const environment = config.environment;

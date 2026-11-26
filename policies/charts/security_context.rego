@@ -1,6 +1,6 @@
-# Conftest Rego — security context enforcement for LoopZero charts.
+# Conftest Rego — security context enforcement for LoopRuntime charts.
 # Plan T7.3 — charts-sota-implementation-plan Phase 7.
-# Verifies that all Deployments use loopzero-common.containerSecurityContext defaults.
+# Verifies that all Deployments use loop-runtime-common.containerSecurityContext defaults.
 package main
 
 # Deployments must run as non-root.
@@ -16,7 +16,7 @@ deny[msg] {
   input.kind == "Deployment"
   c := input.spec.template.spec.containers[_]
   not c.securityContext.capabilities.drop
-  msg := sprintf("Container %s in %s/%s does not drop capabilities (loopzero-common.containerSecurityContext)", [c.name, input.metadata.namespace, input.metadata.name])
+  msg := sprintf("Container %s in %s/%s does not drop capabilities (loop-runtime-common.containerSecurityContext)", [c.name, input.metadata.namespace, input.metadata.name])
 }
 
 deny[msg] {

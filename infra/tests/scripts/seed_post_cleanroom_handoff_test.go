@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts
 
@@ -37,59 +37,59 @@ func runBash(t *testing.T, env []string, script string) string {
 // (#453). The admin seed reports the tenant in its result; the chain hands it on.
 func TestTheChainHandsTheAdminTenantToLaterSeeds(t *testing.T) {
 	logf := filepath.Join(t.TempDir(), "seed-3.log")
-	line := "seed admin-loopzero-dev: PASS — identity 7c9e (tenant tn-admin) + session cookie persisted (428 bytes) to /x\n"
+	line := "seed admin-loop-runtime-dev: PASS — identity 7c9e (tenant tn-admin) + session cookie persisted (428 bytes) to /x\n"
 	if err := os.WriteFile(logf, []byte(line), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	got := runBash(t, []string{"PATH=" + os.Getenv("PATH")},
-		scriptFunction(t, "export_admin_tenant_id")+"\nexport_admin_tenant_id "+logf+"\nprintf '%s' \"${LOOPZERO_TENANT_ID:-}\"")
+		scriptFunction(t, "export_admin_tenant_id")+"\nexport_admin_tenant_id "+logf+"\nprintf '%s' \"${LOOP_RUNTIME_TENANT_ID:-}\"")
 	if got != "tn-admin" {
-		t.Errorf("LOOPZERO_TENANT_ID = %q, want tn-admin", got)
+		t.Errorf("LOOP_RUNTIME_TENANT_ID = %q, want tn-admin", got)
 	}
 }
 
 func TestTheChainKeepsATenantTheOperatorSet(t *testing.T) {
 	logf := filepath.Join(t.TempDir(), "seed-3.log")
-	_ = os.WriteFile(logf, []byte("seed admin-loopzero-dev: PASS — identity x (tenant tn-admin)\n"), 0o600)
-	got := runBash(t, []string{"PATH=" + os.Getenv("PATH"), "LOOPZERO_TENANT_ID=tn-operator"},
-		scriptFunction(t, "export_admin_tenant_id")+"\nexport_admin_tenant_id "+logf+"\nprintf '%s' \"$LOOPZERO_TENANT_ID\"")
+	_ = os.WriteFile(logf, []byte("seed admin-loop-runtime-dev: PASS — identity x (tenant tn-admin)\n"), 0o600)
+	got := runBash(t, []string{"PATH=" + os.Getenv("PATH"), "LOOP_RUNTIME_TENANT_ID=tn-operator"},
+		scriptFunction(t, "export_admin_tenant_id")+"\nexport_admin_tenant_id "+logf+"\nprintf '%s' \"$LOOP_RUNTIME_TENANT_ID\"")
 	if got != "tn-operator" {
-		t.Errorf("LOOPZERO_TENANT_ID = %q, want the operator's tn-operator", got)
+		t.Errorf("LOOP_RUNTIME_TENANT_ID = %q, want the operator's tn-operator", got)
 	}
 }
 
 // The fixture step creates the project through the CLI, and a cold droplet has none: the
 // earlier rounds used one installed by hand (#453). The chain installs the published CLI —
-// what a user gets — into a cache and points LOOPZERO_BIN at it.
+// what a user gets — into a cache and points LOOP_RUNTIME_BIN at it.
 func TestTheChainInstallsThePublishedCLIWhenNoneIsPresent(t *testing.T) {
 	bin := t.TempDir()
 	record := filepath.Join(t.TempDir(), "npm.args")
 	fakeNpm := `#!/usr/bin/env bash
 printf '%s\n' "$*" > "` + record + `"
 prefix=""; while [ $# -gt 0 ]; do [ "$1" = "--prefix" ] && prefix="$2"; shift; done
-mkdir -p "$prefix/node_modules/.bin" && printf '#!/bin/sh\n' > "$prefix/node_modules/.bin/loopzero" && chmod +x "$prefix/node_modules/.bin/loopzero"`
+mkdir -p "$prefix/node_modules/.bin" && printf '#!/bin/sh\n' > "$prefix/node_modules/.bin/loop-runtime" && chmod +x "$prefix/node_modules/.bin/loop-runtime"`
 	if err := os.WriteFile(filepath.Join(bin, "npm"), []byte(fakeNpm), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	home := t.TempDir()
 	got := runBash(t, []string{"PATH=" + bin + ":/usr/bin:/bin", "HOME=" + home},
-		scriptFunction(t, "ensure_loopzero_cli")+"\nensure_loopzero_cli\nprintf '%s' \"${LOOPZERO_BIN:-}\"")
+		scriptFunction(t, "ensure_loop_runtime_cli")+"\nensure_loop_runtime_cli\nprintf '%s' \"${LOOP_RUNTIME_BIN:-}\"")
 	args, _ := os.ReadFile(record)
-	if !strings.Contains(string(args), "@loopzero/cli@") {
+	if !strings.Contains(string(args), "@loop-runtime/cli@") {
 		t.Errorf("npm was not asked for the published CLI: %q", args)
 	}
-	if !strings.HasPrefix(got, home) || !strings.HasSuffix(got, "/node_modules/.bin/loopzero") {
-		t.Errorf("LOOPZERO_BIN = %q, want the installed CLI under HOME", got)
+	if !strings.HasPrefix(got, home) || !strings.HasSuffix(got, "/node_modules/.bin/loop-runtime") {
+		t.Errorf("LOOP_RUNTIME_BIN = %q, want the installed CLI under HOME", got)
 	}
 }
 
 func TestTheChainUsesTheCLIAlreadyOnPath(t *testing.T) {
 	bin := t.TempDir()
-	_ = os.WriteFile(filepath.Join(bin, "loopzero"), []byte("#!/bin/sh\n"), 0o755)
+	_ = os.WriteFile(filepath.Join(bin, "loop-runtime"), []byte("#!/bin/sh\n"), 0o755)
 	_ = os.WriteFile(filepath.Join(bin, "npm"), []byte("#!/bin/sh\necho npm-called >&2; exit 1\n"), 0o755)
 	got := runBash(t, []string{"PATH=" + bin + ":/usr/bin:/bin", "HOME=" + t.TempDir()},
-		scriptFunction(t, "ensure_loopzero_cli")+"\nensure_loopzero_cli\nprintf '%s' \"${LOOPZERO_BIN:-}\"")
-	if got != filepath.Join(bin, "loopzero") {
-		t.Errorf("LOOPZERO_BIN = %q, want the CLI already on PATH", got)
+		scriptFunction(t, "ensure_loop_runtime_cli")+"\nensure_loop_runtime_cli\nprintf '%s' \"${LOOP_RUNTIME_BIN:-}\"")
+	if got != filepath.Join(bin, "loop-runtime") {
+		t.Errorf("LOOP_RUNTIME_BIN = %q, want the CLI already on PATH", got)
 	}
 }

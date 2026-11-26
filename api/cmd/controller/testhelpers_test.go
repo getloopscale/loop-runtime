@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -39,6 +39,6 @@ type fakeRow struct {
 func (r fakeRow) Scan(dest ...any) error { return r.scan(dest...) }
 
 // stubConfig returns a zero-value config.Config. The cellID helper only
-// reads the LOOPZERO_CELL_ID env var so the config value is unused; this
+// reads the LOOP_RUNTIME_CELL_ID env var so the config value is unused; this
 // exists to keep the test call sites readable.
 func stubConfig() config.Config { return config.Config{} }

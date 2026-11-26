@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package manifests
 
@@ -426,7 +426,7 @@ type k8sTrafficRouting struct {
 	//   - Traefik v2 (legacy traefik.containo.us) requires controller flags
 	//     --traefik-api-group=traefik.containo.us
 	//     --traefik-api-version=traefik.containo.us/v1alpha1
-	// LoopZero runs Traefik v3 so no flags needed.
+	// LoopRuntime runs Traefik v3 so no flags needed.
 	Traefik *k8sTraefikRouting `json:"traefik,omitempty"`
 }
 

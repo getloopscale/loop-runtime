@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argocd
 
@@ -93,7 +93,7 @@ func (f *fakeArgoCD) handler() http.Handler {
 		}
 		// Default success: produce a token with the configured exp.
 		now := time.Now().Unix()
-		tok := mintTokenJWT(f.t, "loopzero-api:apiKey", mintExp, now)
+		tok := mintTokenJWT(f.t, "loop-runtime-api:apiKey", mintExp, now)
 		_ = json.NewEncoder(w).Encode(map[string]string{"token": tok})
 	})
 	return mux
@@ -115,8 +115,8 @@ func newProvider(t *testing.T, baseURL string, secrets ...*corev1.Secret) *KubeM
 	clientset := fake.NewClientset(objs...)
 	p, err := NewKubeMintingTokenProvider(KubeMintingConfig{
 		ArgoCDBaseURL:             baseURL,
-		AccountName:               "loopzero-api",
-		Namespace:                 "loopzero-system",
+		AccountName:               "loop-runtime-api",
+		Namespace:                 "loop-runtime-system",
 		KubeClient:                clientset,
 		ProactiveRefreshThreshold: 6 * time.Hour,
 		PollInterval:              50 * time.Millisecond, // fast tick for tests
@@ -139,7 +139,7 @@ func credsSecret(bearer, user, pass string) *corev1.Secret {
 		data["argocd-password"] = []byte(pass)
 	}
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "argocd-refresh-credentials", Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "argocd-refresh-credentials", Namespace: "loop-runtime-system"},
 		Type:       corev1.SecretTypeOpaque,
 		Data:       data,
 	}
@@ -147,7 +147,7 @@ func credsSecret(bearer, user, pass string) *corev1.Secret {
 
 func tokenSecret(token string) *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "loopzero-api-tokens", Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "loop-runtime-api-tokens", Namespace: "loop-runtime-system"},
 		Type:       corev1.SecretTypeOpaque,
 		Data:       map[string][]byte{"argocd-token": []byte(token)},
 	}
@@ -200,7 +200,7 @@ func TestJwtIsValid_ExpiringSoonInvalid(t *testing.T) {
 
 func TestProvider_SeedsFromExistingSecret(t *testing.T) {
 	_, srv := newFakeArgoCD(t)
-	existing := mintTokenJWT(t, "loopzero-api:apiKey", 0, time.Now().Unix())
+	existing := mintTokenJWT(t, "loop-runtime-api:apiKey", 0, time.Now().Unix())
 	p := newProvider(t, srv.URL, tokenSecret(existing), credsSecret("bearer-x", "", ""))
 	if got := currentToken(p); got != existing {
 		t.Fatalf("expected seeded token, got %q", got)
@@ -238,7 +238,7 @@ func TestProvider_OnAuthFailure_TriggersReactiveMint(t *testing.T) {
 	// guard `jwtIsValid(_, 6h threshold)` returns false and we proceed
 	// to mint. A non-expiring token would be classified valid and
 	// skipped — that's tested in TestProvider_SingleFlight_*.
-	expiring := mintTokenJWT(t, "loopzero-api:apiKey", time.Now().Add(1*time.Hour).Unix(), time.Now().Unix())
+	expiring := mintTokenJWT(t, "loop-runtime-api:apiKey", time.Now().Add(1*time.Hour).Unix(), time.Now().Unix())
 	p := newProvider(t, srv.URL, tokenSecret(expiring), credsSecret("bearer-x", "", ""))
 	// Don't start the proactive loop in this test — we only want to
 	// observe the reactive path. mintsBefore captures any incidental
@@ -265,7 +265,7 @@ func TestProvider_ProactiveRefresh_WhenTokenNearExpiry(t *testing.T) {
 	fa, srv := newFakeArgoCD(t)
 	// Token expires in 1h — well below the 6h threshold.
 	soon := time.Now().Add(1 * time.Hour).Unix()
-	expiring := mintTokenJWT(t, "loopzero-api:apiKey", soon, time.Now().Unix())
+	expiring := mintTokenJWT(t, "loop-runtime-api:apiKey", soon, time.Now().Unix())
 	p := newProvider(t, srv.URL, tokenSecret(expiring), credsSecret("bearer-x", "", ""))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -305,8 +305,8 @@ func TestProvider_PersistsMintedTokenToSecret(t *testing.T) {
 		}
 	}
 
-	sec, err := p.cfg.KubeClient.CoreV1().Secrets("loopzero-system").Get(
-		context.Background(), "loopzero-api-tokens", metav1.GetOptions{})
+	sec, err := p.cfg.KubeClient.CoreV1().Secrets("loop-runtime-system").Get(
+		context.Background(), "loop-runtime-api-tokens", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Secret not created: %v", err)
 	}
@@ -485,7 +485,7 @@ func TestKubeMintingProvider_TimeoutReturnsAnError(t *testing.T) {
 // cost would compound under load.
 func TestKubeMintingProvider_PostMint_NonBlocking(t *testing.T) {
 	_, srv := newFakeArgoCD(t)
-	existing := mintTokenJWT(t, "loopzero-api:apiKey", 0, time.Now().Unix())
+	existing := mintTokenJWT(t, "loop-runtime-api:apiKey", 0, time.Now().Unix())
 	p := newProvider(t, srv.URL, tokenSecret(existing), credsSecret("bearer-x", "", ""))
 	// Seeded token short-circuits firstMint at constructor time.
 

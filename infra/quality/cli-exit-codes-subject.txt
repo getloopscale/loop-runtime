@@ -19,7 +19,7 @@
 #   - no CLI source tree is found and NOTHING here declares that;
 #   - a subject listed here is FOUND — either the SUBJECT path on the line
 #     exists (stat'd against this repository's root, every run), or a CLI
-#     source tree turned up in this tree or in the loopzero-cli checkout beside it.
+#     source tree turned up in this tree or in the loop-runtime-cli checkout beside it.
 #     Either way the absence closed, the line is stale prose, and the gate must
 #     go back to scanning instead of declaring.
 #

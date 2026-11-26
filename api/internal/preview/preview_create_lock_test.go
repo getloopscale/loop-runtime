@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package preview
 
@@ -101,9 +101,9 @@ func submittedApps(t *testing.T, req ports.CreatePreviewRequest, lookup PreviewB
 	return got.Apps, got.Environment
 }
 
-func TestCreatePreview_BuildUsesAppsFromThePRLoopZeroYaml(t *testing.T) {
+func TestCreatePreview_BuildUsesAppsFromThePRLoopRuntimeYaml(t *testing.T) {
 	req := newRequest()
-	req.LoopZeroYamlApps = map[string]map[string]interface{}{"web": {"type": "server", "port": 3000}}
+	req.LoopRuntimeYamlApps = map[string]map[string]interface{}{"web": {"type": "server", "port": 3000}}
 
 	apps, env := submittedApps(t, req, fakeBuildApps{apps: []deploycontracts.AppSpec{{Name: "stale"}}})
 

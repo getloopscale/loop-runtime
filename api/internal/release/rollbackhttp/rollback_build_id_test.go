@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package rollbackhttp
 
@@ -51,7 +51,7 @@ func (f *capturingRollbackService) Rollback(_ context.Context, in RollbackInput)
 }
 
 func newRollbackTestServer(svc RollbackService, lookup RollbackReleaseLookup, projects RollbackProjectStore) *httptest.Server {
-	h := NewRollbackHandler(projects, svc, "loopzero.local")
+	h := NewRollbackHandler(projects, svc, "loop-runtime.local")
 	if lookup != nil {
 		h.WithReleaseLookup(lookup)
 	}

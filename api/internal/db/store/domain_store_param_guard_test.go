@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T2.6 of deep-review-remediation-plan (closes find_sec_005 / SEC-005 MEDIUM).
 // Unit tests for the runtime SQL parameterization guard.

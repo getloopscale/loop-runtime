@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Migration 000013 regression test — text-level invariants for the BRIN
 // time-index on audit_log. Closes find_data_005 partial regression guard.

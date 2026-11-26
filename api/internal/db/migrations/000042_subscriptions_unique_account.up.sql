@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- M2: retire one-subscription-per-tenant; enforce one-subscription-per-Account.
 -- account_id is fully backfilled by 000041, so UNIQUE(account_id) holds.

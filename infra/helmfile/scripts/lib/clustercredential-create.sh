@@ -27,8 +27,8 @@
 #   KUBECONFIG         must point at the MGMT cluster (where the CC + Secret live)
 #
 # Optional env:
-#   LOOPZERO_NS            namespace for ClusterCredential + Secret (default: loopzero-system)
-#   INGRESS_DOMAIN     loopzero.io/ingress-domain label value (default: empty)
+#   LOOP_RUNTIME_NS            namespace for ClusterCredential + Secret (default: loop-runtime-system)
+#   INGRESS_DOMAIN     runtime.getloopscale.com/ingress-domain label value (default: empty)
 #   ARGOCD_SCOPE       "true" | "false" (default: true) — enables CC.spec.scope.argocd
 #   OPERATORS_SCOPE    "true" | "false" (default: true)
 #   TLS_INSECURE       "true" | "false" (default: false). Sets
@@ -75,7 +75,7 @@ KUBECONFIG_PATH="${3:-}"
 # a clean machine, silently wrong on a box carrying context residue. A
 # ClusterCredential written to the wrong cluster is invisible to the operator
 # reconcile loop, so the cell simply never comes up and nothing reports why.
-KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loop-runtime-core}"
 MGMT_KUBECONFIG="${MGMT_KUBECONFIG:-}"
 if [[ -n "$MGMT_KUBECONFIG" ]]; then
   # Drill: MGMT is reached through its own kubeconfig file, pinned to the context
@@ -88,7 +88,7 @@ kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 log() { printf '[cc-create] %s\n' "$*" >&2; }
 fail() { log "ERROR: $*"; exit "${2:-1}"; }
 
-LOOPZERO_NS="${LOOPZERO_NS:-loopzero-system}"
+LOOP_RUNTIME_NS="${LOOP_RUNTIME_NS:-loop-runtime-system}"
 INGRESS_DOMAIN="${INGRESS_DOMAIN:-}"
 MANAGED_BY="${MANAGED_BY:-}"
 ARGOCD_SCOPE="${ARGOCD_SCOPE:-true}"
@@ -157,11 +157,11 @@ APISERVER="${API_SERVER:-$(read_apiserver)}"
 SECRET_NAME="${CLUSTER_NAME}-kubeconfig"
 CC_NAME="${CLUSTER_NAME}"
 
-# The canonical label set: loopzero.io/cell always (the multi-cell runbook selects
+# The canonical label set: runtime.getloopscale.com/cell always (the multi-cell runbook selects
 # on it), the ingress domain and the manager when the caller names them.
-LABELS="    loopzero.io/cell: ${CELL_ID}"
+LABELS="    runtime.getloopscale.com/cell: ${CELL_ID}"
 if [[ -n "$INGRESS_DOMAIN" ]]; then
-  LABELS+=$'\n'"    loopzero.io/ingress-domain: ${INGRESS_DOMAIN}"
+  LABELS+=$'\n'"    runtime.getloopscale.com/ingress-domain: ${INGRESS_DOMAIN}"
 fi
 if [[ -n "$MANAGED_BY" ]]; then
   LABELS+=$'\n'"    app.kubernetes.io/managed-by: ${MANAGED_BY}"
@@ -174,7 +174,7 @@ SECRET_MANIFEST="apiVersion: v1
 kind: Secret
 metadata:
   name: ${SECRET_NAME}
-  namespace: ${LOOPZERO_NS}
+  namespace: ${LOOP_RUNTIME_NS}
   labels:
 ${LABELS}
 type: Opaque
@@ -187,11 +187,11 @@ data:
 # spec.scope.argocd: forwards kubeconfig to ArgoCD as a managed cluster.
 # spec.scope.operators: makes kubeconfig accessible to operators (the
 #   tenant-controller etc. read it to provision tenant resources).
-CC_MANIFEST="apiVersion: loopzero.io/v1
+CC_MANIFEST="apiVersion: runtime.getloopscale.com/v1
 kind: ClusterCredential
 metadata:
   name: ${CC_NAME}
-  namespace: ${LOOPZERO_NS}
+  namespace: ${LOOP_RUNTIME_NS}
   labels:
 ${LABELS}
 spec:
@@ -200,7 +200,7 @@ spec:
   cellID: ${CELL_ID}
   secretRef:
     name: ${SECRET_NAME}
-    namespace: ${LOOPZERO_NS}
+    namespace: ${LOOP_RUNTIME_NS}
   scope:
     argocd: ${ARGOCD_SCOPE}
     operators: ${OPERATORS_SCOPE}
@@ -212,15 +212,15 @@ if [[ "$DRY_RUN" == "true" ]]; then
   exit 0
 fi
 
-log "applying Secret ${LOOPZERO_NS}/${SECRET_NAME} from ${KUBECONFIG_PATH}"
+log "applying Secret ${LOOP_RUNTIME_NS}/${SECRET_NAME} from ${KUBECONFIG_PATH}"
 printf '%s\n' "$SECRET_MANIFEST" | kubectl apply -f - >/dev/null \
   || fail "failed to apply Secret $SECRET_NAME" 4
 
-log "applying ClusterCredential ${LOOPZERO_NS}/${CC_NAME} (cellID=${CELL_ID})"
+log "applying ClusterCredential ${LOOP_RUNTIME_NS}/${CC_NAME} (cellID=${CELL_ID})"
 printf '%s\n' "$CC_MANIFEST" | kubectl apply -f - >/dev/null \
   || fail "failed to apply ClusterCredential $CC_NAME" 4
 
 log "applied — controller will probe within 60s; check via:"
-log "  kubectl get clustercredential -n ${LOOPZERO_NS} ${CC_NAME} -o jsonpath='{.status.connected}'"
+log "  kubectl get clustercredential -n ${LOOP_RUNTIME_NS} ${CC_NAME} -o jsonpath='{.status.connected}'"
 log "DONE"
 exit 0

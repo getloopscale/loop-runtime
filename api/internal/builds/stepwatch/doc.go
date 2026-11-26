@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package stepwatch turns Argo Workflow node phases into the per-step build
 // events the CLI streams (build.step.*), and classifies a failed step into

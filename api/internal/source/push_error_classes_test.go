@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -37,7 +37,7 @@ func TestPushErrorTextContainingEofInsideAWordIsNotNetwork(t *testing.T) {
 }
 
 func TestPushErrorClassifiesATypedGiteaStatus(t *testing.T) {
-	err := fmt.Errorf("ensure repo: %w", &gitearepo.StatusError{Op: "create", Repo: "loopzero/acme-api-source", StatusCode: 403})
+	err := fmt.Errorf("ensure repo: %w", &gitearepo.StatusError{Op: "create", Repo: "loop-runtime/acme-api-source", StatusCode: 403})
 	if got := reasonOf(t, err); got != ReasonSourceBackendAuthFailure {
 		t.Errorf("reason = %v, want auth failure", got)
 	}

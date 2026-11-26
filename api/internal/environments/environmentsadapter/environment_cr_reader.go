@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Sprint A trio-fix 2026-06-01 — EnvironmentCRReader queries the Environment
 // CR `status.phase` to gate `EnvironmentEnsurer` poll loop. Without this,
@@ -39,7 +39,7 @@ import (
 // environmentCRGVR — same Group/Version as Tenant CR, different Resource.
 // Mirrors the operator-side definition in operators/api/v1/environment_types.go.
 var environmentCRGVR = schema.GroupVersionResource{
-	Group:    "loopzero.io",
+	Group:    "runtime.getloopscale.com",
 	Version:  "v1",
 	Resource: "environments",
 }
@@ -49,16 +49,16 @@ var environmentCRGVR = schema.GroupVersionResource{
 // a shallow check that returns true before reconciliation completes).
 type EnvironmentCRReader struct {
 	Client    dynamic.Interface
-	Namespace string // canonical "loopzero-system" (matches operators/internal/tenant)
+	Namespace string // canonical "loop-runtime-system" (matches operators/internal/tenant)
 }
 
 var _ environments.EnvironmentReadinessChecker = (*EnvironmentCRReader)(nil)
 
 // NewEnvironmentCRReader constructs a reader bound to the core-cluster
-// dynamic client. Namespace defaults to "loopzero-system" if empty.
+// dynamic client. Namespace defaults to "loop-runtime-system" if empty.
 func NewEnvironmentCRReader(client dynamic.Interface, namespace string) *EnvironmentCRReader {
 	if namespace == "" {
-		namespace = "loopzero-system"
+		namespace = "loop-runtime-system"
 	}
 	return &EnvironmentCRReader{Client: client, Namespace: namespace}
 }
@@ -73,8 +73,8 @@ func NewEnvironmentCRReader(client dynamic.Interface, namespace string) *Environ
 // CR naming convention (M2 v1.2, 2026-06-07):
 //   - canonical (post-M2): `<tenantID>-<project>-<envName>` — when
 //     project is non-empty. Per `pkg/naming.Namespace` semantics, this
-//     matches the cell-0-cluster namespace `loopzero-<tenant>-<project>-<env>`
-//     once the `loopzero-` prefix is stripped (CR names live in mgmt, no prefix).
+//     matches the cell-0-cluster namespace `loop-runtime-<tenant>-<project>-<env>`
+//     once the `loop-runtime-` prefix is stripped (CR names live in mgmt, no prefix).
 //   - legacy (pre-M2 / production): `<tenantID>-<envName>` — when
 //     project is empty (ADR D2 — backward compatibility for tenants whose
 //     production env was provisioned before the M2 migration).

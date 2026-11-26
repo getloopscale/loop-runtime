@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package reconcileloop
 
@@ -15,7 +15,7 @@ import (
 
 func TestStartReconcileSpan_ReturnsContextAndSpan(t *testing.T) {
 	ctx := context.Background()
-	ctx, span := StartReconcileSpan(ctx, "tenant", "my-tenant", "loopzero-system")
+	ctx, span := StartReconcileSpan(ctx, "tenant", "my-tenant", "loop-runtime-system")
 	defer span.End()
 
 	if ctx == nil {

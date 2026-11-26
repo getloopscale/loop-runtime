@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
@@ -47,7 +47,7 @@ type CellAwareRuntimeClientFactory struct {
 	MgmtClient client.Client
 	// DefaultClient is returned only for cellID="" (legacy path).
 	DefaultClient client.Client
-	// MgmtNamespace is where ClusterCredential CRs live (default: loopzero-system).
+	// MgmtNamespace is where ClusterCredential CRs live (default: loop-runtime-system).
 	MgmtNamespace string
 
 	mu      sync.RWMutex
@@ -112,11 +112,11 @@ func (f *CellAwareRuntimeClientFactory) For(ctx context.Context, cellID string) 
 // whose spec.cellID matches. Lookup is by spec.cellID, NOT metadata.name
 // (MEET-053 B9) — the same rule as the API's K8sCellStore.
 func (f *CellAwareRuntimeClientFactory) kubeconfigSecret(ctx context.Context, cellID string) (*corev1.Secret, error) {
-	var ccList loopzerov1.ClusterCredentialList
+	var ccList loopruntimev1.ClusterCredentialList
 	if err := f.MgmtClient.List(ctx, &ccList, client.InNamespace(f.MgmtNamespace)); err != nil {
 		return nil, fmt.Errorf("runtime-client-factory: list ClusterCredentials: %w", err)
 	}
-	var match *loopzerov1.ClusterCredential
+	var match *loopruntimev1.ClusterCredential
 	for i := range ccList.Items {
 		if ccList.Items[i].Spec.CellID == cellID {
 			match = &ccList.Items[i]

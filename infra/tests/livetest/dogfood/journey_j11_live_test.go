@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
@@ -54,7 +54,7 @@ var _ = Describe("J-11 Domains", Label("live", "dogfood", "j11"), func() {
 			// A fresh name under the test zone has no TXT record, so the lookup is
 			// real and its answer is "not found". The engine refuses reserved names
 			// such as example.com.
-			domain := fmt.Sprintf("journey-%d.%s", time.Now().UnixNano(), envOr("LOOPZERO_DOGFOOD_TEST_DOMAIN", "theokit.dev"))
+			domain := fmt.Sprintf("journey-%d.%s", time.Now().UnixNano(), envOr("LOOP_RUNTIME_DOGFOOD_TEST_DOMAIN", "theokit.dev"))
 			engine := NewEngine(env, jwt)
 			call := func(ctx context.Context, method, path string, in any) map[string]any {
 				out := map[string]any{}
@@ -72,9 +72,9 @@ var _ = Describe("J-11 Domains", Label("live", "dogfood", "j11"), func() {
 			})
 			Expect(created["status"]).To(Equal("pending_verification"))
 			verification, _ := created["verification"].(map[string]any)
-			record := "_loopzero-verify." + domain
+			record := "_loop-runtime-verify." + domain
 			Expect(verification["txt_name"]).To(Equal(record))
-			Expect(verification["txt_value"]).To(HavePrefix("loopzero-verify="))
+			Expect(verification["txt_value"]).To(HavePrefix("loop-runtime-verify="))
 			Expect(created["cname_target"]).ToNot(BeEmpty())
 
 			verified := call(ctx, "POST", "/api/v1/domains/"+domain+"/verify", nil)

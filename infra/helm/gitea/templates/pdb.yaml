@@ -2,11 +2,11 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: gitea
-  namespace: loopzero-system
+  namespace: loop-runtime-system
   labels:
     app.kubernetes.io/name: gitea
     app.kubernetes.io/instance: gitea
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
 spec:
   minAvailable: 1
   selector:

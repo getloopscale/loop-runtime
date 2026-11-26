@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# bootstrap-themory-key.sh — mint the loopzero-cloud-dev-bridge API key via TheMemory CLI,
-# materialize as K8s Secret `themory-dev-key` in `loopzero-system` ns for cloud Pod consumption.
+# bootstrap-themory-key.sh — mint the loop-console-dev-bridge API key via TheMemory CLI,
+# materialize as K8s Secret `themory-dev-key` in `loop-runtime-system` ns for cloud Pod consumption.
 #
-# Per plan v1.3 § Phase 2 / T2.1 of loopzero-cloud-themory-e2e-finalize-plan.md.
+# Per plan v1.3 § Phase 2 / T2.1 of loop-console-themory-e2e-finalize-plan.md.
 # v1.2 absorption: real CLI signature is `keys create --name X --scope memory:read|write|delete`
 # (NOT --scope admin which doesn't exist; admin access via THEMEMORY_ADMIN_BOOTSTRAP_TOKEN env).
 # CLI output is structured stdout text (NOT --json which doesn't exist).
@@ -12,12 +12,12 @@
 #   - --rotate: mint NEW key, replace Secret value
 #
 # Sequence:
-#   1. EC-5: loopzero-system ns existence guard
+#   1. EC-5: loop-runtime-system ns existence guard
 #   2. TheMemory /v1/health probe (refuse if not 200)
 #   3. Read bootstrap token from .themory-bootstrap-token (refuse if missing/empty)
 #   4. Read existing Secret; skip if present + no --rotate
-#   5. Invoke `themory keys create --name loopzero-cloud-dev-bridge --scope memory:{read,write,delete}`
-#      with Bearer = bootstrap token; parse `loopzero_live_*` from stdout via grep
+#   5. Invoke `themory keys create --name loop-console-dev-bridge --scope memory:{read,write,delete}`
+#      with Bearer = bootstrap token; parse `loop_runtime_live_*` from stdout via grep
 #   6. kubectl apply Secret via stdin (dry-run + apply pattern; idempotent)
 #   7. Optional local backup to .themory-key.txt (chmod 600) when THEMORY_KEY_LOCAL_BACKUP=true
 
@@ -35,12 +35,12 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
-readonly THEMORY_CLI="${THEMORY_CLI:-$(realpath -m "${SCRIPT_DIR}/../../../../../loopzero-memory/dist/agent-tools/cli.js")}"
+readonly THEMORY_CLI="${THEMORY_CLI:-$(realpath -m "${SCRIPT_DIR}/../../../../../loop-runtime-memory/dist/agent-tools/cli.js")}"
 readonly THEMORY_URL="${THEMORY_URL:-http://localhost:8080}"
-readonly K8S_NAMESPACE="${K8S_NAMESPACE:-loopzero-system}"
+readonly K8S_NAMESPACE="${K8S_NAMESPACE:-loop-runtime-system}"
 readonly K8S_SECRET_NAME="${K8S_SECRET_NAME:-themory-dev-key}"
 readonly K8S_SECRET_KEY="${K8S_SECRET_KEY:-api-key}"
-readonly KEY_NAME="${KEY_NAME:-loopzero-cloud-dev-bridge}"
+readonly KEY_NAME="${KEY_NAME:-loop-console-dev-bridge}"
 
 ROTATE=false
 for arg in "$@"; do
@@ -104,9 +104,9 @@ mint_key() {
       --scope memory:delete 2>&1)" \
     || log_fatal "themory keys create FAILED — output: $stdout"
   local token
-  token="$(echo "$stdout" | grep -oE 'loopzero_live_[a-zA-Z0-9_-]+' | head -1)"
+  token="$(echo "$stdout" | grep -oE 'loop_runtime_live_[a-zA-Z0-9_-]+' | head -1)"
   [ -n "$token" ] \
-    || log_fatal "Could not extract loopzero_live_* token from CLI output. Raw: $stdout"
+    || log_fatal "Could not extract loop_runtime_live_* token from CLI output. Raw: $stdout"
   echo "$token"
 }
 
@@ -144,7 +144,7 @@ main() {
 
   local new_token
   new_token="$(mint_key "$bootstrap_token")"
-  log_info "Minted loopzero_live_* key (length ${#new_token})"
+  log_info "Minted loop_runtime_live_* key (length ${#new_token})"
 
   apply_secret "$new_token"
   optional_local_backup "$new_token"

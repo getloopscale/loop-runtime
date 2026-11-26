@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environment
 
@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 	"github.com/getloopscale/loop-runtime/operators/internal/planentitlements"
@@ -24,7 +24,7 @@ import (
 
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist in the namespace.
 // fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
-func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient client.Client, env *loopzerov1.Environment, nsName string) error {
+func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient client.Client, env *loopruntimev1.Environment, nsName string) error {
 	// ServiceAccount
 	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -56,7 +56,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 		return fmt.Errorf("role %s/%s: %w", nsName, constants.RoleDeployer, err)
 	}
 
-	// RoleBinding — bind loopzero-deployer SA to loopzero-deployer Role.
+	// RoleBinding — bind loop-runtime-deployer SA to loop-runtime-deployer Role.
 	if err := tenantpolicy.ApplySingleSARoleBinding(ctx, runtimeClient, nsName, constants.RoleBindingDeployer, constants.RoleDeployer, constants.SADeployer); err != nil {
 		return fmt.Errorf("rolebinding %s/%s: %w", nsName, constants.RoleBindingDeployer, err)
 	}
@@ -65,9 +65,9 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 	// Pods use this SA with automountServiceAccountToken=false.
 	//
 	// imagePullSecrets provisioning (bug #24 fix — L2 race condition):
-	//   1. Copy the docker config from loopzero-system-source in loopzero-system
-	//      (seeded once at platform bootstrap) into this namespace as loopzero-system.
-	//   2. Attach it to loopzero-app SA.
+	//   1. Copy the docker config from loop-runtime-system-source in loop-runtime-system
+	//      (seeded once at platform bootstrap) into this namespace as loop-runtime-system.
+	//   2. Attach it to loop-runtime-app SA.
 	// F-09 (CHG-2026-04-29-DOGFOOD T4.1 / drift-baseline.md port #2):
 	// when the source pull secret does not exist (standalone-multi, local k3d
 	// with a public registry), this path used to log "pull secret ensure
@@ -83,7 +83,7 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 		// Source absent: a profile with no private registry. Not a runtime failure.
 		conditions.SetCondition(&env.Status.Conditions, conditions.TypePullSecretReady,
 			metav1.ConditionFalse, "SourceMissing",
-			"Source registry pull secret not present in loopzero-system; pods will rely on public images or external auto-mount.",
+			"Source registry pull secret not present in loop-runtime-system; pods will rely on public images or external auto-mount.",
 			env.Generation)
 	default:
 		log.FromContext(ctx).Info("pull secret ensure failed (non-fatal)", "error", err.Error(), "namespace", nsName)
@@ -129,13 +129,13 @@ func (r *EnvironmentReconciler) reconcileRBAC(ctx context.Context, runtimeClient
 	return nil
 }
 
-// ensurePullSecret copies the registry pull secret from loopzero-system into the tenant namespace.
+// ensurePullSecret copies the registry pull secret from loop-runtime-system into the tenant namespace.
 // fix-all-platform-issues-plan T1.1 — writes through the cell client Reconcile resolved.
 func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, runtimeClient client.Client, nsName string) error {
 	var src corev1.Secret
 	srcKey := client.ObjectKey{Namespace: constants.NamespacePlatformSystem, Name: constants.SecretRegistryPull}
 	if err := r.Get(ctx, srcKey, &src); err != nil {
-		return fmt.Errorf("source pull secret loopzero-system/loopzero-system: %w", err)
+		return fmt.Errorf("source pull secret loop-runtime-system/loop-runtime-system: %w", err)
 	}
 
 	dst := &corev1.Secret{
@@ -154,7 +154,7 @@ func (r *EnvironmentReconciler) ensurePullSecret(ctx context.Context, runtimeCli
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("destination pull secret %s/loopzero-system: %w", nsName, err)
+		return fmt.Errorf("destination pull secret %s/loop-runtime-system: %w", nsName, err)
 	}
 	return nil
 }
@@ -194,7 +194,7 @@ func (r *EnvironmentReconciler) kickStuckPullBackoffPods(ctx context.Context, ru
 }
 
 // rbacRulesForPlan returns the RBAC rules for a given plan tier.
-func rbacRulesForPlan(plan loopzerov1.PlanTier) []rbacv1.PolicyRule {
+func rbacRulesForPlan(plan loopruntimev1.PlanTier) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},

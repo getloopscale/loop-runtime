@@ -1,0 +1,9 @@
+{{- /* The Deployment skeleton is loop-runtime-common.operatorDeployment; this chart
+     supplies only its hooks (templates/_deployment_hooks.tpl). */ -}}
+{{- include "loop-runtime-common.operatorDeployment" (dict
+      "root" .
+      "checksum" "loop-runtime-common.checksumAnnotationsConfigOnly"
+      "envFrom" (include "loop-runtime-preview-operator.envFrom" .)
+      "env" (include "loop-runtime-preview-operator.env" .)
+      "volumeMounts" (include "loop-runtime-preview-operator.volumeMounts" .)
+      "volumes" (include "loop-runtime-preview-operator.volumes" .)) }}

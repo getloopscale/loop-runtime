@@ -1,4 +1,4 @@
-# OpenCost LoopZero wrapper — defaults for cost attribution per tenant.
+# OpenCost LoopRuntime wrapper — defaults for cost attribution per tenant.
 #
 # Plan T7.2 of 2026-05-22-shell-script-strategic-plan.md v1.3.
 #
@@ -7,7 +7,7 @@
 #   - One central instance covers all cells via Prometheus federation
 #     (NOT per-cell — that would multiply cost without ROI)
 #   - Cost source: DigitalOcean on-demand pricing (free, public)
-#   - Attribution: via namespace label `loopzero.io/tenant` (LoopZero already emits)
+#   - Attribution: via namespace label `runtime.getloopscale.com/tenant` (LoopRuntime already emits)
 
 opencost:
   # Use the existing Prometheus deployed at monitoring/prometheus
@@ -16,7 +16,7 @@ opencost:
       external:
         enabled: true
         url: http://prometheus-server.monitoring.svc.cluster.local
-      # We use LoopZero's existing Prometheus — disable internal
+      # We use LoopRuntime's existing Prometheus — disable internal
       internal:
         enabled: false
 
@@ -56,7 +56,7 @@ opencost:
   serviceAccount:
     create: true
 
-  # Security: non-root, drop ALL caps (LoopZero platform standard)
+  # Security: non-root, drop ALL caps (LoopRuntime platform standard)
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 1001

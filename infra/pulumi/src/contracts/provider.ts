@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import { NetworkSpec, NetworkOutput } from "./network";
 import { KubernetesClusterSpec, KubernetesClusterOutput } from "./kubernetes";
@@ -12,7 +12,7 @@ import { ContainerRegistrySpec, ContainerRegistryOutput } from "./registry";
  * CloudProviderFactory composes them all.
  *
  * This stack is AS-IS legacy retired at AM10 and implements DigitalOcean only;
- * no provider is added here (new infrastructure is Terraform, ../loopzero-infra-live).
+ * no provider is added here (new infrastructure is Terraform, ../loop-runtime-infra-live).
  */
 
 export interface IProviderNetwork {

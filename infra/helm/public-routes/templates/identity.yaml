@@ -27,7 +27,7 @@ spec:
         - name: {{ .hydra.service }}
           port: {{ .hydra.port }}
 {{- if $.Values.console.enabled }}
-    # Registration goes through loopzero-cloud, which answers an existing and a new
+    # Registration goes through loop-console, which answers an existing and a new
     # email the same way.
     - match: Host(`{{ $host }}`) && {{ $registration }}
       kind: Rule

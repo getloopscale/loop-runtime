@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package gitops implements the GitOps pusher that commits manifests to Gitea
 // tenant repos. This is the Step 6 architectural fix: the API now owns the
@@ -30,9 +30,9 @@ import (
 
 // GiteaGitOpsPusherConfig holds configuration for connecting to Gitea GitOps repos.
 type GiteaGitOpsPusherConfig struct {
-	BaseURL string // e.g., "http://gitea-http.loopzero-system.svc:3000"
+	BaseURL string // e.g., "http://gitea-http.loop-runtime-system.svc:3000"
 	Token   string // Gitea access token for push authentication
-	OrgName string // e.g., "loopzero"
+	OrgName string // e.g., "loop-runtime"
 }
 
 // GiteaGitOpsPusher implements deploycontracts.GitOpsPusher by committing manifests
@@ -96,11 +96,11 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts deploycontracts.GitOp
 		metrics.GitOpsOperationDuration.WithLabelValues("push").Observe(time.Since(pushStart).Seconds())
 	}()
 
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.gitops.push_manifests",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.gitops.push_manifests",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", opts.TenantID),
-			attribute.String("loopzero.project", opts.ProjectID),
-			attribute.String("loopzero.environment", opts.Environment),
+			attribute.String("loop-runtime.tenant", opts.TenantID),
+			attribute.String("loop-runtime.project", opts.ProjectID),
+			attribute.String("loop-runtime.environment", opts.Environment),
 		))
 	defer span.End()
 
@@ -132,7 +132,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts deploycontracts.GitOp
 	if err != nil {
 		return "", err
 	}
-	span.SetAttributes(attribute.String("loopzero.gitops.commit_sha", sha))
+	span.SetAttributes(attribute.String("loop-runtime.gitops.commit_sha", sha))
 	return sha, nil
 }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package config
 
@@ -107,7 +107,7 @@ func TestEnvLoaderDurationRecordsAnInvalidValue(t *testing.T) {
 func TestValidate_ProductionRejectsDefaultArgoCallbackSecret(t *testing.T) {
 	cfg := Config{
 		Env:                "production",
-		ArgoCallbackSecret: "loopzero-dev-callback-secret",
+		ArgoCallbackSecret: "loop-runtime-dev-callback-secret",
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -129,8 +129,8 @@ func TestValidate_ProductionRejectsSSLModeDisable(t *testing.T) {
 func TestValidate_DevelopmentAcceptsDefaultCredentials(t *testing.T) {
 	cfg := Config{
 		Env:            "development",
-		MinIOAccessKey: "loopzero-admin",
-		ClusterIssuer:  "loopzero-ca-issuer", // B14
+		MinIOAccessKey: "loop-runtime-admin",
+		ClusterIssuer:  "loop-runtime-ca-issuer", // B14
 	}
 	err := cfg.Validate()
 	if err != nil {
@@ -173,6 +173,6 @@ func TestLoad_CustomPort(t *testing.T) {
 }
 
 // CHG-2026-04-30-DELETE-SINGLE-CELL: TestLoad_SingleCell removed —
-// LOOPZERO_SINGLE_CELL env var + cfg.SingleCell field deleted. Multi-cell
-// is the only architecture; LOOPZERO_SINGLE_CELL=true is now ignored
+// LOOP_RUNTIME_SINGLE_CELL env var + cfg.SingleCell field deleted. Multi-cell
+// is the only architecture; LOOP_RUNTIME_SINGLE_CELL=true is now ignored
 // silently (env vars without consumers are no-ops in our config style).

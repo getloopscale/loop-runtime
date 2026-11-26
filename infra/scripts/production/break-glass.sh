@@ -8,11 +8,11 @@
 # - Time-boxed (default 4h, configurable)
 # - Audit trail (logged to stdout + K8s events)
 # - Auto-expiry via K8s Job that deletes the SA after TTL
-# - Prometheus metric emitted via annotation (LoopZeroBreakGlassAccess alert fires)
+# - Prometheus metric emitted via annotation (LoopRuntimeBreakGlassAccess alert fires)
 #
 # Usage:
 #   ./infra/scripts/production/break-glass.sh [context] [ttl_hours] [reason]
-#   ./infra/scripts/production/break-glass.sh do-nyc3-loopzero-infra-homolog-nyc3-mgmt 4 "hotfix: PG connection timeout"
+#   ./infra/scripts/production/break-glass.sh do-nyc3-loop-runtime-infra-homolog-nyc3-mgmt 4 "hotfix: PG connection timeout"
 #
 # The script outputs a kubeconfig that expires after TTL.
 # All actions taken with this kubeconfig should be reconciled into Pulumi within 24h.
@@ -22,13 +22,13 @@ set -euo pipefail
 CONTEXT=${1:?Usage: break-glass.sh <kubectl-context> [ttl_hours] [reason]}
 TTL_HOURS=${2:-4}
 REASON=${3:-"no reason provided"}
-NAMESPACE="loopzero-system"
+NAMESPACE="loop-runtime-system"
 SA_NAME="break-glass-$(date +%s)"
 TTL_SECONDS=$((TTL_HOURS * 3600))
 OPERATOR=$(whoami)
 
 echo "========================================="
-echo "  LOOPZERO BREAK-GLASS ACCESS"
+echo "  LOOP_RUNTIME BREAK-GLASS ACCESS"
 echo "========================================="
 echo "  Context:  $CONTEXT"
 echo "  TTL:      ${TTL_HOURS}h (${TTL_SECONDS}s)"
@@ -61,10 +61,10 @@ kubectl --context="$CONTEXT" create clusterrolebinding "$SA_NAME" \
 
 # Annotate with metadata for audit
 kubectl --context="$CONTEXT" -n "$NAMESPACE" annotate serviceaccount "$SA_NAME" \
-  "loopzero.io/break-glass-operator=$OPERATOR" \
-  "loopzero.io/break-glass-reason=$REASON" \
-  "loopzero.io/break-glass-ttl=${TTL_HOURS}h" \
-  "loopzero.io/break-glass-expires=$(date -u -d "+${TTL_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v+${TTL_HOURS}H +%Y-%m-%dT%H:%M:%SZ)" \
+  "runtime.getloopscale.com/break-glass-operator=$OPERATOR" \
+  "runtime.getloopscale.com/break-glass-reason=$REASON" \
+  "runtime.getloopscale.com/break-glass-ttl=${TTL_HOURS}h" \
+  "runtime.getloopscale.com/break-glass-expires=$(date -u -d "+${TTL_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v+${TTL_HOURS}H +%Y-%m-%dT%H:%M:%SZ)" \
   --overwrite 2>&1
 
 # Create cleanup Job (auto-deletes SA + CRB after TTL)
@@ -75,7 +75,7 @@ metadata:
   name: break-glass-cleanup-${SA_NAME}
   namespace: $NAMESPACE
   labels:
-    loopzero.io/component: break-glass-cleanup
+    runtime.getloopscale.com/component: break-glass-cleanup
 spec:
   ttlSecondsAfterFinished: 300
   template:
@@ -138,7 +138,7 @@ echo "  SA:         $SA_NAME"
 echo ""
 echo "  Usage:"
 echo "    export KUBECONFIG=$KUBECONFIG_FILE"
-echo "    kubectl get pods -n loopzero-system"
+echo "    kubectl get pods -n loop-runtime-system"
 echo ""
 echo "  ⚠️  Reconcile ALL changes into Pulumi within 24h"
 echo "  ⚠️  Auto-cleanup Job will revoke access in ${TTL_HOURS}h"

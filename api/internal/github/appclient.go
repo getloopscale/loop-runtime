@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package github provides clients for the GitHub API.
 // AppClient authenticates as a GitHub App using JWT + installation tokens.
@@ -208,9 +208,9 @@ func (c *AppClient) DownloadSource(ctx context.Context, installationID int64, ow
 // CommitStatus represents a GitHub commit status.
 type CommitStatus struct {
 	State       string // "pending", "success", "failure", "error"
-	TargetURL   string // URL to LoopZero deploy/logs
+	TargetURL   string // URL to LoopRuntime deploy/logs
 	Description string // Short description (max 140 chars)
-	Context     string // "loopzero/deploy" or "loopzero/preview"
+	Context     string // "loop-runtime/deploy" or "loop-runtime/preview"
 }
 
 // SetCommitStatus updates the commit status on GitHub.

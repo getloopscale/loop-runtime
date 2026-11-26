@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // The single-status-writer contract for the platform package.
 //
@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // notYetConverted are the controllers in this package still holding bare
@@ -213,10 +213,10 @@ func assertMergePatchShape(t *testing.T, name, src string) {
 //
 // Both are the same fix: capture what the controller actually emits.
 func TestPlatformBootstrap_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testing.T) {
-	bodies := capturedStatusPatches(t, &loopzerov1.PlatformBootstrap{
+	bodies := capturedStatusPatches(t, &loopruntimev1.PlatformBootstrap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "platform",
-			Namespace: "loopzero-system",
+			Namespace: "loop-runtime-system",
 			// Non-zero on purpose. With Generation at its zero value, a mutation
 			// like `Status.ObservedGeneration = pb.Generation` writes 0, omitempty
 			// drops it, and the lost-write comparison below cannot see the very
@@ -263,11 +263,11 @@ func TestPlatformBootstrap_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testin
 //
 // The interceptor sits where the write actually goes, so it cannot be satisfied
 // by a helper, a rename, or a synthetic object built to match.
-func capturedStatusPatches(t *testing.T, seed *loopzerov1.PlatformBootstrap) []string {
+func capturedStatusPatches(t *testing.T, seed *loopruntimev1.PlatformBootstrap) []string {
 	t.Helper()
 
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{loopzerov1.AddToScheme, corev1.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{loopruntimev1.AddToScheme, corev1.AddToScheme} {
 		if err := add(scheme); err != nil {
 			t.Fatal(err)
 		}
@@ -278,7 +278,7 @@ func capturedStatusPatches(t *testing.T, seed *loopzerov1.PlatformBootstrap) []s
 	base := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(seed).
-		WithStatusSubresource(&loopzerov1.PlatformBootstrap{}).
+		WithStatusSubresource(&loopruntimev1.PlatformBootstrap{}).
 		Build()
 
 	c := interceptor.NewClient(base, interceptor.Funcs{
@@ -290,7 +290,7 @@ func capturedStatusPatches(t *testing.T, seed *loopzerov1.PlatformBootstrap) []s
 			}
 			bodies = append(bodies, string(data))
 			// What the controller HOLDS at write time, before the round trip.
-			want, _ := json.Marshal(obj.(*loopzerov1.PlatformBootstrap).Status)
+			want, _ := json.Marshal(obj.(*loopruntimev1.PlatformBootstrap).Status)
 			if err := cl.Status().Patch(ctx, obj, patch, opts...); err != nil {
 				return err
 			}
@@ -298,7 +298,7 @@ func capturedStatusPatches(t *testing.T, seed *loopzerov1.PlatformBootstrap) []s
 			// both base and obj, so the diff omits it and it never reaches the
 			// server — with no error anywhere. The patch body cannot show that;
 			// only this comparison can.
-			var got loopzerov1.PlatformBootstrap
+			var got loopruntimev1.PlatformBootstrap
 			if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), &got); err != nil {
 				return err
 			}
@@ -333,28 +333,28 @@ func capturedStatusPatches(t *testing.T, seed *loopzerov1.PlatformBootstrap) []s
 // read than one generic one with a type-parameter dance.
 func TestClusterCredential_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testing.T) {
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{loopzerov1.AddToScheme, corev1.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{loopruntimev1.AddToScheme, corev1.AddToScheme} {
 		if err := add(scheme); err != nil {
 			t.Fatal(err)
 		}
 	}
-	seed := &loopzerov1.ClusterCredential{
+	seed := &loopruntimev1.ClusterCredential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cell-0",
-			Namespace: "loopzero-system",
+			Namespace: "loop-runtime-system",
 			// Non-zero for the same reason as the sibling test: with Generation at
 			// zero a lost write of ObservedGeneration is erased by omitempty and
 			// the comparison below sees nothing.
 			Generation: 7,
 		},
-		Spec: loopzerov1.ClusterCredentialSpec{CellID: "cell-0"},
+		Spec: loopruntimev1.ClusterCredentialSpec{CellID: "cell-0"},
 	}
 
 	var bodies []string
 	var lost []string
 	c := interceptor.NewClient(
 		fake.NewClientBuilder().WithScheme(scheme).WithObjects(seed).
-			WithStatusSubresource(&loopzerov1.ClusterCredential{}).Build(),
+			WithStatusSubresource(&loopruntimev1.ClusterCredential{}).Build(),
 		interceptor.Funcs{
 			SubResourcePatch: func(ctx context.Context, cl client.Client, sub string, obj client.Object,
 				patch client.Patch, opts ...client.SubResourcePatchOption) error {
@@ -363,11 +363,11 @@ func TestClusterCredential_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testin
 					return err
 				}
 				bodies = append(bodies, string(data))
-				want, _ := json.Marshal(obj.(*loopzerov1.ClusterCredential).Status)
+				want, _ := json.Marshal(obj.(*loopruntimev1.ClusterCredential).Status)
 				if err := cl.Status().Patch(ctx, obj, patch, opts...); err != nil {
 					return err
 				}
-				var got loopzerov1.ClusterCredential
+				var got loopruntimev1.ClusterCredential
 				if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), &got); err != nil {
 					return err
 				}
@@ -413,17 +413,17 @@ func TestClusterCredential_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testin
 // status field without omitempty, so the class does not arise.
 func TestGitRepositoryBinding_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *testing.T) {
 	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{loopzerov1.AddToScheme, corev1.AddToScheme} {
+	for _, add := range []func(*runtime.Scheme) error{loopruntimev1.AddToScheme, corev1.AddToScheme} {
 		if err := add(scheme); err != nil {
 			t.Fatal(err)
 		}
 	}
-	seed := &loopzerov1.GitRepositoryBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: "gh", Namespace: "loopzero-system", Generation: 7},
-		Spec: loopzerov1.GitRepositoryBindingSpec{
+	seed := &loopruntimev1.GitRepositoryBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: "gh", Namespace: "loop-runtime-system", Generation: 7},
+		Spec: loopruntimev1.GitRepositoryBindingSpec{
 			RepoURL: "https://example.invalid/x.git",
-			CredentialSecretRef: loopzerov1.CredentialSecretRef{
-				Name: "creds", Key: "token", Namespace: "loopzero-system",
+			CredentialSecretRef: loopruntimev1.CredentialSecretRef{
+				Name: "creds", Key: "token", Namespace: "loop-runtime-system",
 			},
 		},
 	}
@@ -436,7 +436,7 @@ func TestGitRepositoryBinding_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *tes
 	// slice showed can vanish from a merge patch. A guard that never reaches the
 	// site it most needs to watch is a guard by name. Review of slice-24.
 	creds := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "creds", Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "creds", Namespace: "loop-runtime-system"},
 		Data:       map[string][]byte{"token": []byte("ghp_probe")},
 	}
 
@@ -444,7 +444,7 @@ func TestGitRepositoryBinding_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *tes
 	var lost []string
 	c := interceptor.NewClient(
 		fake.NewClientBuilder().WithScheme(scheme).WithObjects(seed, creds).
-			WithStatusSubresource(&loopzerov1.GitRepositoryBinding{}).Build(),
+			WithStatusSubresource(&loopruntimev1.GitRepositoryBinding{}).Build(),
 		interceptor.Funcs{
 			SubResourcePatch: func(ctx context.Context, cl client.Client, sub string, obj client.Object,
 				patch client.Patch, opts ...client.SubResourcePatchOption) error {
@@ -453,11 +453,11 @@ func TestGitRepositoryBinding_ReconcileEmitsAPatchThatIsCorrectlyAnchored(t *tes
 					return err
 				}
 				bodies = append(bodies, string(data))
-				want, _ := json.Marshal(obj.(*loopzerov1.GitRepositoryBinding).Status)
+				want, _ := json.Marshal(obj.(*loopruntimev1.GitRepositoryBinding).Status)
 				if err := cl.Status().Patch(ctx, obj, patch, opts...); err != nil {
 					return err
 				}
-				var got loopzerov1.GitRepositoryBinding
+				var got loopruntimev1.GitRepositoryBinding
 				if err := cl.Get(ctx, client.ObjectKeyFromObject(obj), &got); err != nil {
 					return err
 				}

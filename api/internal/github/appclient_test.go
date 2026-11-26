@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -380,7 +380,7 @@ func TestSetCommitStatus_Success(t *testing.T) {
 	err := client.SetCommitStatus(context.Background(), 1, "owner", "repo", "sha123", CommitStatus{
 		State:       "success",
 		Description: "Deployed",
-		Context:     "loopzero/deploy",
+		Context:     "loop-runtime/deploy",
 	})
 
 	// Assert
@@ -390,8 +390,8 @@ func TestSetCommitStatus_Success(t *testing.T) {
 	if !strings.Contains(receivedBody, `"success"`) {
 		t.Errorf("expected 'success' in body, got: %s", receivedBody)
 	}
-	if !strings.Contains(receivedBody, `"loopzero/deploy"`) {
-		t.Errorf("expected 'loopzero/deploy' in body, got: %s", receivedBody)
+	if !strings.Contains(receivedBody, `"loop-runtime/deploy"`) {
+		t.Errorf("expected 'loop-runtime/deploy' in body, got: %s", receivedBody)
 	}
 }
 
@@ -455,7 +455,7 @@ func TestSetCommitStatusSendsTheDescriptionAsValidJSON(t *testing.T) {
 	defer server.Close()
 	client := newTestAppClient(t, server)
 	client.httpClient = redirectingClient(server.URL)
-	want := CommitStatus{State: "failure", TargetURL: "https://x.example", Description: description, Context: "loopzero/deploy"}
+	want := CommitStatus{State: "failure", TargetURL: "https://x.example", Description: description, Context: "loop-runtime/deploy"}
 
 	// Act
 	err := client.SetCommitStatus(context.Background(), 1, "owner", "repo", "sha123", want)

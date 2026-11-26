@@ -15,11 +15,11 @@ service:
   nodePort: 30030
   servicePort: 8080
 
-# The loopzero.io labels the manifest renderer puts on a tenant app's pods and Services,
-# exported as kube_pod_labels and kube_service_labels (label_loopzero_io_tenant, ...).
+# The runtime.getloopscale.com labels the manifest renderer puts on a tenant app's pods and Services,
+# exported as kube_pod_labels and kube_service_labels (label_runtime_getloopscale_com_tenant, ...).
 # kube-state-metrics exports no object label unless it is listed. The cell's Prometheus
 # joins on them to record each app's ready replicas and request rate by tenant, project,
 # app and environment (values-tenant-app-recording-rules.yaml).
 metricLabelsAllowlist:
-  - pods=[loopzero.io/tenant,loopzero.io/project,loopzero.io/app-name,loopzero.io/environment]
-  - services=[loopzero.io/tenant,loopzero.io/project,loopzero.io/app-name,loopzero.io/environment]
+  - pods=[runtime.getloopscale.com/tenant,runtime.getloopscale.com/project,runtime.getloopscale.com/app-name,runtime.getloopscale.com/environment]
+  - services=[runtime.getloopscale.com/tenant,runtime.getloopscale.com/project,runtime.getloopscale.com/app-name,runtime.getloopscale.com/environment]

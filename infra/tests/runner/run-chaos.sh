@@ -11,7 +11,7 @@
 # The script:
 #   1. Runs the safety guard (refuses prod).
 #   2. Checks Chaos Mesh is installed (chaos-mesh namespace exists).
-#   3. Extracts the `loopzero.io/slo-query` annotation from the manifest.
+#   3. Extracts the `runtime.getloopscale.com/slo-query` annotation from the manifest.
 #   4. Applies the experiment.
 #   5. Waits for the experiment duration.
 #   6. Queries Prometheus with the SLO expression.
@@ -26,7 +26,7 @@ PROMETHEUS_URL="${PROMETHEUS_URL:-http://prometheus-server.monitoring.svc.cluste
 
 # shellcheck source=./safety.sh
 . "$SCRIPT_DIR/safety.sh"
-loopzero_safety_check
+loop_runtime_safety_check
 
 MANIFEST="${1:-}"
 if [[ -z "$MANIFEST" ]]; then
@@ -52,7 +52,7 @@ if ! kubectl get ns chaos-mesh >/dev/null 2>&1; then
 fi
 
 # --- Extract hypothesis + SLO query from the manifest ---------------
-HYPOTHESIS=$(grep -E '^\s*loopzero\.io/hypothesis:' "$MANIFEST_PATH" | sed 's/.*hypothesis: *//; s/^"//; s/"$//' || true)
+HYPOTHESIS=$(grep -E '^\s*runtime\.getloopscale\.com/hypothesis:' "$MANIFEST_PATH" | sed 's/.*hypothesis: *//; s/^"//; s/"$//' || true)
 DURATION=$(grep -E '^\s*duration:' "$MANIFEST_PATH" | head -1 | sed 's/.*duration: *//; s/"//g' || true)
 DURATION_SEC=$(echo "$DURATION" | sed 's/s$//')
 
@@ -89,7 +89,7 @@ sleep "$DURATION_SEC"
 # windows should have at least 4 data points.
 echo "[3/4] Querying Prometheus steady-state SLO..."
 SLO_QUERY=$(awk '
-  /loopzero\.io\/slo-query:/ {capture=1; next}
+  /runtime\.getloopscale\.com\/slo-query:/ {capture=1; next}
   capture && /^\s*[|>]/ {next}
   capture && /^spec:/ {exit}
   capture && NF {
@@ -99,7 +99,7 @@ SLO_QUERY=$(awk '
 ' "$MANIFEST_PATH" | head -c 2000)
 
 if [[ -z "$SLO_QUERY" ]]; then
-  echo "⚠ No loopzero.io/slo-query annotation found — skipping validation"
+  echo "⚠ No runtime.getloopscale.com/slo-query annotation found — skipping validation"
   echo "✓ Experiment completed (no assertions)"
   exit 0
 fi
@@ -110,7 +110,7 @@ echo
 
 # Run the query via kubectl proxy (simpler than port-forward)
 PROM_RESULT=$(kubectl run prom-query-$$ --rm -i --restart=Never \
-  --image=curlimages/curl:latest -n loopzero-system -- \
+  --image=curlimages/curl:latest -n loop-runtime-system -- \
   sh -c "curl -sG --data-urlencode 'query=${SLO_QUERY}' '${PROMETHEUS_URL}'" \
   2>&1 | tail -1)
 

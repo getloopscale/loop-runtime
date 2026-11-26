@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -91,7 +91,7 @@ func TestStreamEndpointsOfTheCloudHostSkipTheBufferingMiddleware(t *testing.T) {
     - name: rate-limit
       namespace: traefik
 `)
-	out := renderChart(t, uniqueChart(t, "loopzero-cloud"), "loopzero-cloud", nil, values)
+	out := renderChart(t, uniqueChart(t, "loop-console"), "loop-console", nil, values)
 
 	irs := ingressRoutesIn(t, out)
 	if len(irs) != 1 {
@@ -120,7 +120,7 @@ func TestStreamEndpointsOfTheCloudHostSkipTheBufferingMiddleware(t *testing.T) {
 }
 
 func TestACloudHostWithoutStreamMiddlewaresKeepsOneRoute(t *testing.T) {
-	out := renderChart(t, uniqueChart(t, "loopzero-cloud"), "loopzero-cloud", nil, writeValues(t, cloudRouteValues))
+	out := renderChart(t, uniqueChart(t, "loop-console"), "loop-console", nil, writeValues(t, cloudRouteValues))
 
 	irs := ingressRoutesIn(t, out)
 	if len(irs) != 1 || len(irs[0].Spec.Routes) != 1 {
@@ -162,8 +162,8 @@ console:
 	if stream.Priority <= cloudPriority {
 		t.Errorf("stream route priority %d does not win over the cloud route's %d", stream.Priority, cloudPriority)
 	}
-	if len(stream.Services) != 1 || stream.Services[0].Name != "loopzero-cloud" {
-		t.Errorf("stream route goes to %+v, want loopzero-cloud", stream.Services)
+	if len(stream.Services) != 1 || stream.Services[0].Name != "loop-console" {
+		t.Errorf("stream route goes to %+v, want loop-console", stream.Services)
 	}
 	for _, name := range middlewareNames(*stream) {
 		if name == "body-limit" {
@@ -179,8 +179,8 @@ console:
 func TestInstallsWithTheBodyLimitDeclareStreamMiddlewares(t *testing.T) {
 	block := regexp.MustCompile(`(?m)^  streamMiddlewares:\n((?:    .*\n)+)`)
 	for _, path := range []string{
-		"../../../charts/loopzero-api/values-bootstrap.yaml",
-		"../../helmfile/values/staging/loopzero-cloud.yaml.gotmpl",
+		"../../../charts/loop-runtime-api/values-bootstrap.yaml",
+		"../../helmfile/values/staging/loop-console.yaml.gotmpl",
 	} {
 		content, err := os.ReadFile(path)
 		if err != nil {

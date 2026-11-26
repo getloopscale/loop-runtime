@@ -1,11 +1,11 @@
-# loopzero-api on the AWS emulator: in a pod of an EKS cluster, on an RDS for PostgreSQL
+# loop-runtime-api on the AWS emulator: in a pod of an EKS cluster, on an RDS for PostgreSQL
 # instance, behind an ALB that the AWS Load Balancer Controller makes from an Ingress.
 #
 # The emulator is a public release of github.com/paulohenriquevn/aws-emulator, pinned below
 # with its SHA-256. Its own harness (fork/kubernetes/run.sh, same tag) creates the EKS cluster
 # as a kind cluster whose nodes are EC2 instances, installs the controller, and leaves
 # everything up (KEEP_CLUSTER=1) with an environment.sh for this job. The test then creates the
-# RDS instance, runs the roles script and the migrations from pods, installs charts/loopzero-api
+# RDS instance, runs the roles script and the migrations from pods, installs charts/loop-runtime-api
 # with the image built here, and checks the deep health check through the ALB. It is
 # infra/tests/awsemulator (build tag awsemulator).
 #
@@ -23,9 +23,9 @@ on:
     paths:
       - .github/workflows/aws-emulator-e2e.yml
       - infra/tests/awsemulator/**
-      - charts/loopzero-api/**
-      - charts/loopzero-crds/**
-      - charts/loopzero-common/**
+      - charts/loop-runtime-api/**
+      - charts/loop-runtime-crds/**
+      - charts/loop-runtime-common/**
       - api/Dockerfile
       - api/internal/db/migrations/**
       - infra/scripts/production/provision-db-roles.sql
@@ -45,8 +45,8 @@ env:
   EMULATOR_SHA256: 300901753741d0f47ac2632a62d8b0f081b02f4a3983f0a6ef60d7fd3f35865a
 
 jobs:
-  loopzero-api:
-    name: loopzero-api on EKS, RDS and an ALB in the AWS emulator
+  loop-runtime-api:
+    name: loop-runtime-api on EKS, RDS and an ALB in the AWS emulator
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -91,29 +91,29 @@ jobs:
 
       # The same Dockerfile and the same deploy key as build-publish.yml; the image stays
       # local and goes into the kind cluster only.
-      - name: Build the loopzero-api image
+      - name: Build the loop-runtime-api image
         env:
           GOMOD_SSH_KEY: ${{ secrets.GOMOD_SSH_KEY }}
         run: |
           set -euo pipefail
           docker buildx build -f api/Dockerfile --secret id=gomod_ssh_key,env=GOMOD_SSH_KEY \
-            --build-arg LOOPZERO_VERSION=e2e --build-arg "LOOPZERO_COMMIT=$GITHUB_SHA" \
-            -t localhost/loopzero-api:e2e --load .
+            --build-arg LOOP_RUNTIME_VERSION=e2e --build-arg "LOOP_RUNTIME_COMMIT=$GITHUB_SHA" \
+            -t localhost/loop-runtime-api:e2e --load .
 
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0 (SHA-pin; issue #233)
         with:
           go-version-file: infra/tests/go.mod
           cache-dependency-path: infra/tests/go.sum
 
-      - name: loopzero-api on RDS, through the ALB
+      - name: loop-runtime-api on RDS, through the ALB
         env:
           GOWORK: "off"
-          LOOPZERO_API_IMAGE: localhost/loopzero-api:e2e
+          LOOP_RUNTIME_API_IMAGE: localhost/loop-runtime-api:e2e
         run: |
           set -euo pipefail
           # shellcheck source=/dev/null
           source "$RUNNER_TEMP/kubernetes/environment.sh"
-          kind load docker-image "$LOOPZERO_API_IMAGE" --name "$KIND_CLUSTER"
+          kind load docker-image "$LOOP_RUNTIME_API_IMAGE" --name "$KIND_CLUSTER"
           cd infra/tests
           go test -tags=awsemulator -count=1 -v -timeout 40m ./awsemulator/
 

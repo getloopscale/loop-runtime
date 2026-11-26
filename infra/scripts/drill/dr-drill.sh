@@ -13,7 +13,7 @@
 #
 # Captures RTO/RPO timeline as evidence per EC-NEW-10.
 # Isolated by SEPARATE Pulumi project (pulumi-drill) + SEPARATE CF Zone
-# (drill.getloopscale.com) + SEPARATE DO project (loopzero-drill) — see D9 conditions.
+# (drill.getloopscale.com) + SEPARATE DO project (loop-runtime-drill) — see D9 conditions.
 #
 # Usage:
 #   ./dr-drill.sh [--stage STAGE] [--skip-teardown]
@@ -105,7 +105,7 @@ preflight() {
   # Verify CF API token is scoped to drill.getloopscale.com only
   echo "  Pulumi stack: $CURRENT_STACK ✓"
   echo "  Domain scope: drill.getloopscale.com (separate from prod getloopscale.com) ✓"
-  echo "  DO project:   loopzero-drill (separate from prod) ✓"
+  echo "  DO project:   loop-runtime-drill (separate from prod) ✓"
 
   mkdir -p "$EVIDENCE_DIR"
   echo ""
@@ -137,9 +137,9 @@ stage_smoke() {
   pulumi stack output --stack drill clusterKubeconfig --show-secrets > /tmp/drill-kubeconfig
   export KUBECONFIG=/tmp/drill-kubeconfig
 
-  # Deploy fixture (uses loopzero CLI against drill cluster)
+  # Deploy fixture (uses loop-runtime CLI against drill cluster)
   echo "  Deploying fixture tenant app..."
-  apply loopzero deploy --project drill-fixture --env production || {
+  apply loop-runtime deploy --project drill-fixture --env production || {
     echo "  ✗ Fixture deploy failed (may indicate drill cluster not fully ready)"
     return 1
   }
@@ -154,7 +154,7 @@ stage_disaster() {
   echo ""
   echo "DESTRUCTIVE: This will destroy ALL drill resources."
   echo "Domain: drill.getloopscale.com"
-  echo "DO project: loopzero-drill"
+  echo "DO project: loop-runtime-drill"
   echo ""
   echo "Verifying we're in drill stack (last chance to abort)..."
   cd "$DRILL_DIR"

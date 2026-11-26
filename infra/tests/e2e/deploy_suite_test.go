@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// E2E test suite for the LoopZero platform.
+// E2E test suite for the LoopRuntime platform.
 //
 // This suite covers:
 //   - Deploy happy path (existing tests)
@@ -16,7 +16,7 @@
 //	ginkgo --label-filter="edge-case" # Edge cases
 //	ginkgo                           # Everything
 //
-// Requires: LOOPZERO_E2E=1, running k3d clusters, seeded E2E data.
+// Requires: LOOP_RUNTIME_E2E=1, running k3d clusters, seeded E2E data.
 package e2e
 
 import (
@@ -41,7 +41,7 @@ func TestDeployHappyPath(t *testing.T) {
 		reporterConfig.JUnitReport = junitPath
 	}
 
-	RunSpecs(t, "LoopZero E2E Suite", suiteConfig, reporterConfig)
+	RunSpecs(t, "LoopRuntime E2E Suite", suiteConfig, reporterConfig)
 }
 
 // loudSkip prints an unmissable banner to stderr before skipping the whole
@@ -52,9 +52,9 @@ func TestDeployHappyPath(t *testing.T) {
 func loudSkip(reason string) {
 	banner := "\n" +
 		"════════════════════════════════════════════════════════════════════\n" +
-		"  ⚠  LOOPZERO E2E SUITE SKIPPED — 0 specs ran. THIS IS NOT A PASS.\n" +
+		"  ⚠  LOOP_RUNTIME E2E SUITE SKIPPED — 0 specs ran. THIS IS NOT A PASS.\n" +
 		"     " + reason + "\n" +
-		"     (set LOOPZERO_E2E=1 with a reachable cluster to actually run the suite)\n" +
+		"     (set LOOP_RUNTIME_E2E=1 with a reachable cluster to actually run the suite)\n" +
 		"════════════════════════════════════════════════════════════════════\n"
 	fmt.Fprint(os.Stderr, banner)
 	GinkgoWriter.Print(banner)
@@ -64,20 +64,20 @@ func loudSkip(reason string) {
 var _ = SynchronizedBeforeSuite(func() []byte {
 	// First process: verify infrastructure health and seed data.
 	//
-	// LOOPZERO_E2E unset -> intentional hermetic skip (no cluster expected).
-	if os.Getenv("LOOPZERO_E2E") == "" {
-		loudSkip("LOOPZERO_E2E unset")
+	// LOOP_RUNTIME_E2E unset -> intentional hermetic skip (no cluster expected).
+	if os.Getenv("LOOP_RUNTIME_E2E") == "" {
+		loudSkip("LOOP_RUNTIME_E2E unset")
 	}
 
-	// Past this point LOOPZERO_E2E IS set -> the operator asked for the E2E suite
+	// Past this point LOOP_RUNTIME_E2E IS set -> the operator asked for the E2E suite
 	// to run. Infra problems here are FAILURES, not silent skips. The old
-	// behavior (Skip on unreachable API / down cluster even with LOOPZERO_E2E=1)
+	// behavior (Skip on unreachable API / down cluster even with LOOP_RUNTIME_E2E=1)
 	// was the false-green trap: a broken cluster reported SUCCESS running 0
-	// specs. Fail loud instead so LOOPZERO_E2E=1 + broken infra is unmistakably RED.
+	// specs. Fail loud instead so LOOP_RUNTIME_E2E=1 + broken infra is unmistakably RED.
 	Expect(verifyAPIHealth()).To(Succeed(),
-		"LOOPZERO_E2E=1 but API not reachable — infra must be up for the E2E suite (not a skip)")
+		"LOOP_RUNTIME_E2E=1 but API not reachable — infra must be up for the E2E suite (not a skip)")
 	Expect(clusterRunning()).To(BeTrue(),
-		"LOOPZERO_E2E=1 but clusters not running (kubectl cluster-info failed) — infra must be up (not a skip)")
+		"LOOP_RUNTIME_E2E=1 but clusters not running (kubectl cluster-info failed) — infra must be up (not a skip)")
 
 	// Seed E2E data (idempotent).
 	err := seed.Run(seed.Config{})
@@ -85,17 +85,17 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 	// T2 amendment 2026-05-13 (finding-2026-05-13-e2e-token-refresh-divergence):
 	// populate per-suite XDG_CONFIG_HOME with a freshly-issued JWT via
-	// `loopzero login --token`. After this, all CLI subprocesses spawned by
-	// runLoopZero* read the token from configStore (matching the production
-	// path) instead of LOOPZERO_TOKEN env injection. The on401 → ensureFreshToken
+	// `loopscale login --token`. After this, all CLI subprocesses spawned by
+	// runLoopRuntime* read the token from configStore (matching the production
+	// path) instead of LOOP_RUNTIME_TOKEN env injection. The on401 → ensureFreshToken
 	// pipeline now has access to the same configStore the CLI would use in
 	// production (Rule 10 — local equals production).
 	//
 	// XDG_CONFIG_HOME isolation prevents the test from clobbering the
-	// operator's real ~/.loopzero/config.json. The directory is recreated each
+	// operator's real ~/.loop-runtime/config.json. The directory is recreated each
 	// run for hermeticity. Set BEFORE the login subprocess starts so the
 	// CLI writes into this isolated location.
-	xdgDir, err := os.MkdirTemp("", "loopzero-e2e-config-")
+	xdgDir, err := os.MkdirTemp("", "loop-runtime-e2e-config-")
 	Expect(err).NotTo(HaveOccurred(), "create XDG_CONFIG_HOME tempdir")
 	Expect(os.Setenv("XDG_CONFIG_HOME", xdgDir)).To(Succeed())
 	GinkgoWriter.Printf("XDG_CONFIG_HOME=%s\n", xdgDir)
@@ -106,20 +106,20 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	// was too short — drill full suite runs 4h+ and token expired mid-suite,
 	// causing all post-1h specs to fail AUTH_REQUIRED. Use 86400 (24h) matching
 	// JWT actual TTL from Hydra client_credentials grant.
-	loginOut, loginErrOut, loginCode := execLoopZero(
-		loopzeroInvocation{env: []string{"XDG_CONFIG_HOME=" + xdgDir}},
+	loginOut, loginErrOut, loginCode := execLoopRuntime(
+		loopRuntimeInvocation{env: []string{"XDG_CONFIG_HOME=" + xdgDir}},
 		"login", "--token", token, "--expires-in", "86400", "--json")
 	Expect(loginCode).To(Equal(0),
-		"loopzero login --token failed (exit %d): %s%s", loginCode, loginOut, loginErrOut)
+		"loopscale login --token failed (exit %d): %s%s", loginCode, loginOut, loginErrOut)
 	// Sanity: configStore file exists at expected path.
-	cfgPath := filepath.Join(xdgDir, "loopzero", "config.json")
+	cfgPath := filepath.Join(xdgDir, "loop-runtime", "config.json")
 	if _, statErr := os.Stat(cfgPath); statErr != nil {
-		// Fallback path (non-XDG mode would write to baseDir/.loopzero).
-		cfgPath = filepath.Join(xdgDir, ".loopzero", "config.json")
+		// Fallback path (non-XDG mode would write to baseDir/.loop-runtime).
+		cfgPath = filepath.Join(xdgDir, ".loop-runtime", "config.json")
 	}
 	Expect(cfgPath).To(BeAnExistingFile(),
-		fmt.Sprintf("loopzero login completed but configStore file missing under %s", xdgDir))
-	GinkgoWriter.Printf("loopzero login wrote config to %s\n", cfgPath)
+		fmt.Sprintf("loopscale login completed but configStore file missing under %s", xdgDir))
+	GinkgoWriter.Printf("loopscale login wrote config to %s\n", cfgPath)
 
 	return nil
 }, func(_ []byte) {

@@ -32,7 +32,7 @@ type CountTenantsByCellIDRow struct {
 //
 // ADR-0008 + MEET-053: CountByCell + GetTenantCellID feed the
 // PlacementEngine (RoundRobinEngine.AssignAndExecute).
-// PinTenantToCell wires `loopzero admin tenants pin` (CHG-2026-04-30-
+// PinTenantToCell wires `loop-runtime admin tenants pin` (CHG-2026-04-30-
 // DELETE-SINGLE-CELL) — atomic 4-step sequence:
 //  1. validate tenant exists (lookup)
 //  2. validate cell exists + is active
@@ -45,7 +45,7 @@ type CountTenantsByCellIDRow struct {
 // predicate.
 // Returns (cell_id, count) for every cell that has at least one
 // tenant assigned. Used by CellMetricsCollector to emit
-// loopzero_cell_tenant_count gauges + PlacementEngine for round-robin
+// loop_runtime_cell_tenant_count gauges + PlacementEngine for round-robin
 // bin-packing.
 // tenantpredicate:exempt — aggregated across all tenants by design;
 // routing/metrics paths are admin-scope.
@@ -94,7 +94,7 @@ SELECT cell_id FROM tenants WHERE id = $1
 `
 
 // Returns the cell_id assigned to a specific tenant. Used by the API
-// routes (loopzero deploy, loopzero status, etc.) to dispatch through
+// routes (loop-runtime deploy, loop-runtime status, etc.) to dispatch through
 // DynamicRouter. pgx.ErrNoRows surfaces as a typed error in the
 // wrapper (not transparently nil, so the caller can distinguish
 // missing tenant from cross-cluster fault).

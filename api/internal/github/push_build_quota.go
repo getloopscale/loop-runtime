@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -54,7 +54,7 @@ func (d *AutoDeployer) markCommitOverBuildQuota(log *slog.Logger, req PushReques
 	status := CommitStatus{
 		State:       "failure",
 		Description: fitCommitStatusDescription(result.Message),
-		Context:     "loopzero/deploy",
+		Context:     "loop-runtime/deploy",
 	}
 	// GitHub accepts only an absolute link.
 	if strings.HasPrefix(result.UpgradeURL, "https://") || strings.HasPrefix(result.UpgradeURL, "http://") {

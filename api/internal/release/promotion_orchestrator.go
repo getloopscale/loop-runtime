@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -16,7 +16,7 @@ import (
 	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/getloopscale/loop-runtime/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/id"
 	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
@@ -91,8 +91,8 @@ type PromotionOrchestratorDeps struct {
 	// precedence over BaseDomain in the response URL — mirroring the post-#61
 	// retrofit applied to ReleaseConvergenceLoop + SyncCallbackActivator
 	// (setup_orchestrator.go:296-302). BaseDomain is the internal cluster
-	// domain (e.g., "loopzero.local") and was previously leaking into the promote
-	// response — Red Team loopzero-cloud#120 sub-finding 3 (regression of #61 on
+	// domain (e.g., "loop-runtime.local") and was previously leaking into the promote
+	// response — Red Team loop-console#120 sub-finding 3 (regression of #61 on
 	// the promote path which was missed during the original retrofit).
 	PublicDomain string
 	Logger       *slog.Logger
@@ -148,7 +148,7 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 
 	// Validate from != to
 	if req.FromEnv == req.ToEnv {
-		return nil, loopzeroerrors.ErrSameEnvironment
+		return nil, loopruntimeerrors.ErrSameEnvironment
 	}
 
 	// Validate source environment has an ACTIVE release (outside lock — read-only)
@@ -157,7 +157,7 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 		return nil, fmt.Errorf("promote: get active release from %s: %w", req.FromEnv, err)
 	}
 	if sourceRelease == nil {
-		return nil, loopzeroerrors.ErrNoActiveRelease
+		return nil, loopruntimeerrors.ErrNoActiveRelease
 	}
 
 	if sourceRelease.GitCommit == "" {
@@ -186,7 +186,7 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 		// hardening; the canonical lifecycle is READY → (push) →
 		// GitMirrorCompleted → PENDING → (sync) → SyncCompleted → ACTIVE.
 		newRelease = &db.Release{
-			// 2026-06-30 (closes Red Team loopzero-cloud#120 sub-finding 2):
+			// 2026-06-30 (closes Red Team loop-console#120 sub-finding 2):
 			// id.GenerateReleaseID() ALREADY includes the canonical "rel-"
 			// prefix per pkg/id/id.go:40 ("rel-{16hex}"). The manual prefix
 			// concatenation here produced "rel-rel-{16hex}" — failing
@@ -278,16 +278,16 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 			return fmt.Errorf("promote: re-fetch target release inside Lock2: %w", fetchErr)
 		}
 		if fresh == nil {
-			return loopzeroerrors.NewInvalidTransition("READY", fmt.Sprintf(
+			return loopruntimeerrors.NewInvalidTransition("READY", fmt.Sprintf(
 				"CONCURRENT_PROMOTE: release %s deleted between Lock1 and Lock2", newRelease.ID))
 		}
 		if fresh.Status != "READY" {
-			return loopzeroerrors.NewInvalidTransition(fresh.Status, fmt.Sprintf(
+			return loopruntimeerrors.NewInvalidTransition(fresh.Status, fmt.Sprintf(
 				"CONCURRENT_PROMOTE: release %s no longer READY (current: %s); another promote raced",
 				newRelease.ID, fresh.Status))
 		}
 		if fresh.GitCommit != "" && commitSHA != "" && fresh.GitCommit != commitSHA {
-			return loopzeroerrors.NewInvalidTransition("READY", fmt.Sprintf(
+			return loopruntimeerrors.NewInvalidTransition("READY", fmt.Sprintf(
 				"CONCURRENT_PROMOTE: release %s GitCommit already set to %s; another Lock2 holder advanced first",
 				newRelease.ID, fresh.GitCommit))
 		}
@@ -330,15 +330,15 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 
 	o.exposeApps(ctx, logger, req, newRelease)
 
-	// 2026-06-30 (closes Red Team loopzero-cloud#120 sub-finding 3 — #61 regression
+	// 2026-06-30 (closes Red Team loop-console#120 sub-finding 3 — #61 regression
 	// on promote path): prefer PublicDomain over BaseDomain so the response URL
 	// is the canonical user-facing Live URL ("prod-dev.getloopscale.app") not the
-	// internal cluster placeholder ("loopzero.local"). Fallback to BaseDomain
-	// preserves back-compat for setups (local Tilt dev) where LOOPZERO_PUBLIC_DOMAIN
+	// internal cluster placeholder ("loop-runtime.local"). Fallback to BaseDomain
+	// preserves back-compat for setups (local Tilt dev) where LOOP_RUNTIME_PUBLIC_DOMAIN
 	// is unset. Mirrors the canonical pattern at setup_orchestrator.go:296-302
 	// already applied to ReleaseConvergenceLoop + SyncCallbackActivator.
 	//
-	// 2026-07-01 (closes Red Team loopzero-cloud#159): switch from the simplified
+	// 2026-07-01 (closes Red Team loop-console#159): switch from the simplified
 	// legacy formula `{ProjectName}-{ToEnv}.{domain}` (which produced hostnames
 	// like `loopzerokit-example-production.prod-dev.getloopscale.app` that Traefik 404'd
 	// because they lacked the tenant + entryApp segments) to the FAANG canonical
@@ -374,11 +374,11 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 // rewriteManifestsForEnv transforms the env-specific fields embedded in
 // rendered manifests so they target `toEnv` instead of `fromEnv`. The renderer
 // (api/internal/manifests) bakes the environment into:
-//   - metadata.namespace (canonical `loopzero-{tenant}-{project}-{env}` since the
-//     2026-06-07 multi-project refactor; legacy fixtures use `loopzero-{tenant}-{env}`)
+//   - metadata.namespace (canonical `loop-runtime-{tenant}-{project}-{env}` since the
+//     2026-06-07 multi-project refactor; legacy fixtures use `loop-runtime-{tenant}-{env}`)
 //   - hostnames in IngressRoute spec.routes[].match (`Host(...)`) and
 //     Certificate spec.dnsNames (`{tenant}-{project}-{app}-{env}.{baseDomain}`)
-//   - the `loopzero.io/environment` label on every Deployment/Service/IngressRoute.
+//   - the `runtime.getloopscale.com/environment` label on every Deployment/Service/IngressRoute.
 //
 // We parse each YAML document, walk it recursively, and apply two rules:
 //  1. any string equal to the canonical OR legacy namespace for fromEnv
@@ -386,7 +386,7 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 //  2. any string ending in "-{fromEnv}.{baseDomain}" has the env suffix
 //     swapped to toEnv (only when baseDomain is non-empty);
 //  3. any string equal to fromEnv when nested under a key named
-//     "loopzero.io/environment" becomes toEnv.
+//     "runtime.getloopscale.com/environment" becomes toEnv.
 //
 // Match() route lines in IngressRoute use the full hostname, which rule 2
 // covers. We deliberately do NOT do free-form regex over the YAML text so
@@ -396,7 +396,7 @@ func (o *PromotionOrchestrator) Promote(ctx context.Context, req PromotionReques
 // Sponsor LIVE-caught 2026-06-18 (Staff-level Phase 2 troubleshooting):
 // before this commit the rewriter only knew the legacy namespace format
 // (no project segment). After the 2026-06-07 multi-project refactor the
-// renderer started emitting `loopzero-{tenant}-{project}-{env}` but the
+// renderer started emitting `loop-runtime-{tenant}-{project}-{env}` but the
 // rewriter's exact-match string comparison was never updated to match.
 // Result: rewrite was silently a no-op on real renderer output; manifests
 // shipped to gitops with the FromEnv namespace verbatim; resources
@@ -470,14 +470,14 @@ func splitYAMLDocs(manifests string) []string {
 
 // rewriteEnvFields walks the YAML node and rewrites:
 //   - exact namespace strings (matching ANY of the oldNs candidates —
-//     canonical "loopzero-{t}-{p}-{e}" + legacy "loopzero-{t}-{e}");
+//     canonical "loop-runtime-{t}-{p}-{e}" + legacy "loop-runtime-{t}-{e}");
 //   - hostname strings (-{fromEnv}.{baseDomain} suffix);
-//   - values nested under "loopzero.io/environment" key (set inEnvLabel=true when descending).
+//   - values nested under "runtime.getloopscale.com/environment" key (set inEnvLabel=true when descending).
 func rewriteEnvFields(node interface{}, oldNs []string, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv string, inEnvLabel bool) {
 	switch v := node.(type) {
 	case map[string]interface{}:
 		for k, child := range v {
-			childInLabel := inEnvLabel || k == "loopzero.io/environment"
+			childInLabel := inEnvLabel || k == "runtime.getloopscale.com/environment"
 			if s, ok := child.(string); ok {
 				v[k] = rewriteString(s, oldNs, newNs, oldHostSuffix, newHostSuffix, fromEnv, toEnv, childInLabel)
 				continue
@@ -513,7 +513,7 @@ func rewriteString(s string, oldNs []string, newNs, oldHostSuffix, newHostSuffix
 // rewriteHostInMatch handles the IngressRoute Match expression where the
 // hostname is embedded in a Traefik rule string like:
 //
-//	Host(`tn-foo-app-staging.loopzero.local`)
+//	Host(`tn-foo-app-staging.loop-runtime.local`)
 //
 // rewriteString cannot match this directly because the hostname is wrapped.
 // We do a substring replace ONLY on -{fromEnv}.{baseDomain} suffix occurrences

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -21,7 +21,7 @@ type undeliveredSecretsDelivery struct {
 }
 
 var errUndeliveredSecrets = &deploycontracts.SecretsNotDeliveredError{
-	Store: "loopzero-broker", Namespace: "loopzero-tn-1-proj-1-production",
+	Store: "loop-runtime-broker", Namespace: "loop-runtime-tn-1-proj-1-production",
 	ExternalSecret: "user-secrets-tn-1-proj-1-production-api", Reason: "no refresh after the deploy asked for one",
 }
 
@@ -64,7 +64,7 @@ func TestOnBuildCompleted_UndeliveredSecretsFailTheBuildNamingTheStore(t *testin
 	if build.Status != string(statemachine.BuildFailed) {
 		t.Fatalf("build status = %s, want FAILED", build.Status)
 	}
-	if reason := builds.errorMessages["bld-1"]; !strings.Contains(reason, `"loopzero-broker"`) {
+	if reason := builds.errorMessages["bld-1"]; !strings.Contains(reason, `"loop-runtime-broker"`) {
 		t.Errorf("build error = %q, want it to name the secret store", reason)
 	}
 	failed := 0

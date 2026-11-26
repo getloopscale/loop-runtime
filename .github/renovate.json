@@ -5,7 +5,7 @@
     ":dependencyDashboard",
     ":semanticCommits"
   ],
-  "description": "Renovate config for loopzero. INF-G18 mandates SHA pinning for all GitHub Actions; this config enforces pinDigests + helpful PR descriptions with SHA -> version mapping.",
+  "description": "Renovate config for loop-runtime. INF-G18 mandates SHA pinning for all GitHub Actions; this config enforces pinDigests + helpful PR descriptions with SHA -> version mapping.",
 
   "pinDigests": true,
 

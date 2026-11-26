@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Migration 000069 text-level invariants: a GitHub App installation records
 // when GitHub confirmed its owner and which user that was, and no installation

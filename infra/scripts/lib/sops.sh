@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # Plan v1.2 T7.1 / D6 — SOPS + age wrappers for secrets-in-git encryption.
 #
 # Per ADR D6 (REJECT Infisical, ADOPT SOPS):
-#   - LoopZero already has External Secrets Operator (ESO) for runtime sync.
+#   - LoopRuntime already has External Secrets Operator (ESO) for runtime sync.
 #   - SOPS + age fills the gap of secrets-IN-GIT safely encrypted at rest.
 #   - No new stateful service (vs Vault/Infisical which need their own DB).
 #

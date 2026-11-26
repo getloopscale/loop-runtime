@@ -38,7 +38,7 @@ KUBE_VERSION="${KUBE_VERSION:-1.32}"
 #   - keda.sh (ScaledObject, ScaledJob, TriggerAuthentication, ClusterTriggerAuthentication, CloudEventSource)  [iter 13]
 #   - apiextensions.k8s.io/v1 CustomResourceDefinition
 #   - velero.io (Schedule, BackupStorageLocation, Backup, Restore, ...) — generated
-#     by `loopzero-ops kubeconform-schemas --chart infra/helm/velero` from the CRDs the
+#     by `loop-runtime-ops kubeconform-schemas --chart infra/helm/velero` from the CRDs the
 #     chart version pinned in infra/helm/velero/Chart.lock ships (#391)
 # Still skipped (no local schema yet):
 #   - prometheus monitoring.coreos.com (ServiceMonitor, PrometheusRule, Probe)
@@ -63,16 +63,16 @@ LOCAL_SCHEMA_TPL='{{.ResourceKind}}-{{.Group}}-{{.ResourceAPIVersion}}.json'
 # `dev` environment and its releases are gated off by default.
 HELMFILES=(core build cell)
 
-# cell.helmfile declares `kubeContext: requiredEnv "LOOPZERO_CELL_CONTEXT"`.
+# cell.helmfile declares `kubeContext: requiredEnv "LOOP_RUNTIME_CELL_CONTEXT"`.
 # Rendering contacts no cluster, so any cell context satisfies it.
-export LOOPZERO_CELL_CONTEXT="${LOOPZERO_CELL_CONTEXT:-k3d-loopzero-cell-0}"
+export LOOP_RUNTIME_CELL_CONTEXT="${LOOP_RUNTIME_CELL_CONTEXT:-k3d-loop-runtime-cell-0}"
 
-# The ory-kratos and ory-hydra values call `requiredEnv "LOOPZERO_DB_PASSWORD"` to
+# The ory-kratos and ory-hydra values call `requiredEnv "LOOP_RUNTIME_DB_PASSWORD"` to
 # build their DSNs. This render is offline and only schema-checked, so it must
 # never need the real secret: a fixed, render-only placeholder is set
 # unconditionally — an operator's real value in the environment is deliberately
 # NOT used, so it never reaches the rendered stream (#391).
-export LOOPZERO_DB_PASSWORD="render-only-placeholder-not-a-secret"
+export LOOP_RUNTIME_DB_PASSWORD="render-only-placeholder-not-a-secret"
 
 FAIL=0
 for hf in "${HELMFILES[@]}"; do

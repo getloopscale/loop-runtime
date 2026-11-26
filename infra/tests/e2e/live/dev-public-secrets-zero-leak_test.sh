@@ -8,7 +8,7 @@
 # UUID sentinel makes the grep precise — coincidental match probability
 # is ~0.
 #
-# OPERATOR HARD STOP: requires real OpenBao + ESO controller + loopzero-api
+# OPERATOR HARD STOP: requires real OpenBao + ESO controller + loop-runtime-api
 # wired with the transit chain. CI invocation uses --skip-live to validate
 # only the script shape via the hermetic companion test.
 
@@ -21,24 +21,24 @@ REHEARSAL_MODE=0
 JSON_MODE=0
 SCENARIO_FILTER=""
 # CANONICAL FIX 2026-06-15 (FAANG, NO WORKAROUND): tenant_id is the
-# LoopZero internal opaque ID (e.g., `tn-dc7f25705bbba5b3`), NOT a slug
-# derived from email/username. Test default `admin-loopzero-dev` (slug
-# guess) produced ns `loopzero-admin-loopzero-dev-sample-production` that
+# LoopRuntime internal opaque ID (e.g., `tn-dc7f25705bbba5b3`), NOT a slug
+# derived from email/username. Test default `admin-loop-runtime-dev` (slug
+# guess) produced ns `loop-runtime-admin-loop-runtime-dev-sample-production` that
 # NEVER exists in any cluster — canonical ns is
-# `loopzero-<tenant_id>-<project>-<env>` (pkg/naming.TenantNamespace).
+# `loop-runtime-<tenant_id>-<project>-<env>` (pkg/naming.TenantNamespace).
 # Extract real tenant_id from session JWT claim (HMAC session JWT
 # carries `tenant_id` per pkg/jwt/validator.go), the canonical SoT.
-if [ -z "${LOOPZERO_TEST_TENANT_ID:-}" ] && [ -f "${HOME}/.loopzero/local-dogfood-session-jwt.txt" ]; then
-  LOOPZERO_TEST_TENANT_ID=$(cut -d. -f2 < "${HOME}/.loopzero/local-dogfood-session-jwt.txt" \
+if [ -z "${LOOP_RUNTIME_TEST_TENANT_ID:-}" ] && [ -f "${HOME}/.loop-runtime/local-dogfood-session-jwt.txt" ]; then
+  LOOP_RUNTIME_TEST_TENANT_ID=$(cut -d. -f2 < "${HOME}/.loop-runtime/local-dogfood-session-jwt.txt" \
     | { read -r p; printf '%s' "${p}=="; } | tr '_-' '/+' | base64 -d 2>/dev/null \
     | python3 -c "import json,sys; sys.stdout.write(json.load(sys.stdin).get('tenant_id',''))" 2>/dev/null || echo "")
 fi
-TENANT_ID="${LOOPZERO_TEST_TENANT_ID:-admin-loopzero-dev}"
-PROJECT_NAME="${LOOPZERO_TEST_PROJECT:-sample}"
-ENV_NAME="${LOOPZERO_TEST_ENV:-production}"
-DEV_PUBLIC_BASE="${LOOPZERO_DEV_PUBLIC_BASE:-https://app-dev.getloopscale.com}"
-KUBE_CONTEXT="${LOOPZERO_KUBE_CONTEXT:-k3d-loopzero-core}"
-CELL_0_CONTEXT="${LOOPZERO_CELL_0_CONTEXT:-k3d-loopzero-cell-0}"
+TENANT_ID="${LOOP_RUNTIME_TEST_TENANT_ID:-admin-loop-runtime-dev}"
+PROJECT_NAME="${LOOP_RUNTIME_TEST_PROJECT:-sample}"
+ENV_NAME="${LOOP_RUNTIME_TEST_ENV:-production}"
+DEV_PUBLIC_BASE="${LOOP_RUNTIME_DEV_PUBLIC_BASE:-https://app-dev.getloopscale.com}"
+KUBE_CONTEXT="${LOOP_RUNTIME_KUBE_CONTEXT:-k3d-loop-runtime-core}"
+CELL_0_CONTEXT="${LOOP_RUNTIME_CELL_0_CONTEXT:-k3d-loop-runtime-cell-0}"
 
 usage() {
   cat <<EOF
@@ -69,12 +69,12 @@ Flags:
   --help, -h            Show this help
 
 Env overrides:
-  LOOPZERO_TEST_TENANT_ID    Tenant ID (default admin-loopzero-dev)
-  LOOPZERO_TEST_PROJECT      Project (default sample)
-  LOOPZERO_TEST_ENV          Env (default production)
-  LOOPZERO_DEV_PUBLIC_BASE   Cloud base URL (default https://cloud-dev.getloopscale.com)
-  LOOPZERO_KUBE_CONTEXT      Mgmt cluster context (default k3d-loopzero-core)
-  LOOPZERO_CELL_0_CONTEXT  Workload cluster context (default k3d-loopzero-cell-0)
+  LOOP_RUNTIME_TEST_TENANT_ID    Tenant ID (default admin-loop-runtime-dev)
+  LOOP_RUNTIME_TEST_PROJECT      Project (default sample)
+  LOOP_RUNTIME_TEST_ENV          Env (default production)
+  LOOP_RUNTIME_DEV_PUBLIC_BASE   Cloud base URL (default https://cloud-dev.getloopscale.com)
+  LOOP_RUNTIME_KUBE_CONTEXT      Mgmt cluster context (default k3d-loop-runtime-core)
+  LOOP_RUNTIME_CELL_0_CONTEXT  Workload cluster context (default k3d-loop-runtime-cell-0)
 
 Exit codes:
   0  All 6 scenarios PASS (or all rehearsal probes PASS under --rehearsal)
@@ -144,9 +144,9 @@ cleanup() {
   # Best-effort: delete the probe secret + ExternalSecret CR + K8s Secret
   # so failed runs do not leave the sentinel orphaned in PG.
   kubectl --context="$CELL_0_CONTEXT" delete secret "$SECRET_NAME" \
-    -n "loopzero-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}" --ignore-not-found=true >/dev/null 2>&1 || true
+    -n "loop-runtime-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}" --ignore-not-found=true >/dev/null 2>&1 || true
   kubectl --context="$CELL_0_CONTEXT" delete externalsecret "$SECRET_NAME" \
-    -n "loopzero-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}" --ignore-not-found=true >/dev/null 2>&1 || true
+    -n "loop-runtime-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}" --ignore-not-found=true >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 
@@ -165,7 +165,7 @@ fi
 # === Rehearsal mode (iter 26 productive-idle) ===
 # LIVE preflight probes ONLY — no probe-secret POST, no encrypt path.
 # Operator runs this BEFORE the sponsor walkthrough to catch misconfig
-# (CSS not Ready, Secret missing, ESO down, loopzero-api env vars
+# (CSS not Ready, Secret missing, ESO down, loop-runtime-api env vars
 # unflipped) WITHOUT producing a sentinel row in PG or exercising
 # OpenBao under partial wire.
 do_rehearsal() {
@@ -192,18 +192,18 @@ do_rehearsal() {
   rehearsal_check "R2 ClusterSecretStore openbao-transit Ready=True" \
     "[ \"\$(kubectl --context='$KUBE_CONTEXT' get clustersecretstore openbao-transit -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}' 2>/dev/null)\" = 'True' ]"
 
-  # R3: Secret loopzero-openbao-approle exists in external-secrets ns (CSS read source)
-  rehearsal_check "R3 Secret loopzero-openbao-approle in external-secrets ns" \
-    "kubectl --context='$KUBE_CONTEXT' -n external-secrets get secret loopzero-openbao-approle -o jsonpath='{.data.OPENBAO_VAULT_SECRET_ID}' | head -c 1 | grep -q ."
+  # R3: Secret loop-runtime-openbao-approle exists in external-secrets ns (CSS read source)
+  rehearsal_check "R3 Secret loop-runtime-openbao-approle in external-secrets ns" \
+    "kubectl --context='$KUBE_CONTEXT' -n external-secrets get secret loop-runtime-openbao-approle -o jsonpath='{.data.OPENBAO_VAULT_SECRET_ID}' | head -c 1 | grep -q ."
 
-  # R4: Secret loopzero-openbao-approle exists in loopzero-system ns (loopzero-api envFrom source)
-  rehearsal_check "R4 Secret loopzero-openbao-approle in loopzero-system ns" \
-    "kubectl --context='$KUBE_CONTEXT' -n loopzero-system get secret loopzero-openbao-approle -o jsonpath='{.data.OPENBAO_VAULT_SECRET_ID}' | head -c 1 | grep -q ."
+  # R4: Secret loop-runtime-openbao-approle exists in loop-runtime-system ns (loop-runtime-api envFrom source)
+  rehearsal_check "R4 Secret loop-runtime-openbao-approle in loop-runtime-system ns" \
+    "kubectl --context='$KUBE_CONTEXT' -n loop-runtime-system get secret loop-runtime-openbao-approle -o jsonpath='{.data.OPENBAO_VAULT_SECRET_ID}' | head -c 1 | grep -q ."
 
-  # R5: loopzero-api runs with OPENBAO_TRANSIT_ENABLED=true. charts/loopzero-api carries it in
+  # R5: loop-runtime-api runs with OPENBAO_TRANSIT_ENABLED=true. charts/loop-runtime-api carries it in
   # its ConfigMap (config.openbaoTransitEnabled), mounted through envFrom.
-  rehearsal_check "R5 loopzero-api OPENBAO_TRANSIT_ENABLED=true in its ConfigMap" \
-    "kubectl --context='$KUBE_CONTEXT' -n loopzero-system get configmap loopzero-api -o jsonpath='{.data.OPENBAO_TRANSIT_ENABLED}' | grep -q '^true$'"
+  rehearsal_check "R5 loop-runtime-api OPENBAO_TRANSIT_ENABLED=true in its ConfigMap" \
+    "kubectl --context='$KUBE_CONTEXT' -n loop-runtime-system get configmap loop-runtime-api -o jsonpath='{.data.OPENBAO_TRANSIT_ENABLED}' | grep -q '^true$'"
 
   # Emit results
   if [ $JSON_MODE -eq 1 ]; then
@@ -238,14 +238,14 @@ fi
 # === LIVE invocation ===
 # JWT mint from the canonical seed (admin@getloopscale.com per project_canonical_dev_user).
 # CANONICAL 2026-06-15: prefer HMAC session JWT (carries tenant_id;
-# passes loopzero-cloud /engine proxy). Falls back to bootstrap RSA JWT.
-if [ -f "${HOME}/.loopzero/local-dogfood-session-jwt.txt" ]; then
-  JWT_PATH="${HOME}/.loopzero/local-dogfood-session-jwt.txt"
+# passes loop-console /engine proxy). Falls back to bootstrap RSA JWT.
+if [ -f "${HOME}/.loop-runtime/local-dogfood-session-jwt.txt" ]; then
+  JWT_PATH="${HOME}/.loop-runtime/local-dogfood-session-jwt.txt"
 else
-  JWT_PATH="${HOME}/.loopzero/local-dogfood-token.txt"
+  JWT_PATH="${HOME}/.loop-runtime/local-dogfood-token.txt"
 fi
 if [ ! -f "$JWT_PATH" ]; then
-  echo "FATAL: JWT seed file $JWT_PATH not found — run seed-admin-loopzero-dev.sh first" >&2
+  echo "FATAL: JWT seed file $JWT_PATH not found — run seed-admin-loop-runtime-dev.sh first" >&2
   exit 1
 fi
 JWT="$(cat "$JWT_PATH")"
@@ -261,7 +261,7 @@ JWT="$(cat "$JWT_PATH")"
 # BEFORE creating a new sentinel. Also clean stale PG rows (rotated
 # secrets from prior runs) so the broker only finds the current run's
 # fresh sentinel. Idempotent — no-ops when state is already clean.
-WORKLOAD_NS_CLEANUP="loopzero-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
+WORKLOAD_NS_CLEANUP="loop-runtime-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
 TARGET_SECRET="user-secrets-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
 kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" \
   delete externalsecret -l '!nonexistent' --field-selector="metadata.name!=does-not-exist" 2>/dev/null \
@@ -272,8 +272,8 @@ kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" \
   | xargs -r kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" delete >/dev/null 2>&1 || true
 kubectl --context="$CELL_0_CONTEXT" -n "$WORKLOAD_NS_CLEANUP" \
   delete secret "$TARGET_SECRET" >/dev/null 2>&1 || true
-kubectl --context="$KUBE_CONTEXT" -n loopzero-system exec postgresql-0 -c postgresql \
-  -- env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -c \
+kubectl --context="$KUBE_CONTEXT" -n loop-runtime-system exec postgresql-0 -c postgresql \
+  -- env PGPASSWORD=loop-runtime-dev-password psql -U loop_runtime -d loop_runtime -c \
   "DELETE FROM secrets WHERE name LIKE 'ZEROLEAK%';" >/dev/null 2>&1 || true
 
 # Step 1: POST the probe secret via the J-22 Bulk endpoint.
@@ -294,11 +294,11 @@ sleep 35
 # === Scenario A: PG encrypted_value has vault:v1: prefix (NOT plaintext) ===
 if run_scenario A; then
   # CANONICAL FIX 2026-06-15: postgresql is a StatefulSet (NOT Deployment).
-  # Also uses `loopzero` user (not `postgres`); auth via PGPASSWORD per
+  # Also uses `loop-runtime` user (not `postgres`); auth via PGPASSWORD per
   # canonical chart values. Use pod-direct exec to avoid the deploy
   # NotFound + auth mismatch.
-  PG_BYTES="$(kubectl --context="$KUBE_CONTEXT" -n loopzero-system exec postgresql-0 -c postgresql -- \
-    env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -tAc \
+  PG_BYTES="$(kubectl --context="$KUBE_CONTEXT" -n loop-runtime-system exec postgresql-0 -c postgresql -- \
+    env PGPASSWORD=loop-runtime-dev-password psql -U loop_runtime -d loop_runtime -tAc \
     "SELECT encode(encrypted_value, 'escape') FROM secrets WHERE name='$SECRET_NAME' LIMIT 1" 2>/dev/null || echo "")"
   if echo "$PG_BYTES" | grep -q '^vault:v1:'; then
     record A PASS
@@ -316,9 +316,9 @@ fi
 # (named after the sentinel), which never matches the canonical
 # materialization. The sentinel value is at `.data.<SECRET_NAME>` within
 # the shared Secret. ESO needs ~30s refresh interval to materialize after
-# loopzero-api emits the ExternalSecret CR; allow up to 60s with poll.
+# loop-runtime-api emits the ExternalSecret CR; allow up to 60s with poll.
 if run_scenario B; then
-  WORKLOAD_NS="loopzero-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
+  WORKLOAD_NS="loop-runtime-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
   CANONICAL_SECRET="user-secrets-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
   # CANONICAL FIX 2026-06-15 (FAANG, NO WORKAROUND): broker returns
   # plaintext_b64 (per internal_secret_fetch.go:200 response shape), ESO
@@ -420,7 +420,7 @@ fi
 if run_scenario F; then
   # Decode every Secret in every ns, search for sentinel, verify all
   # matches are in the workload ns.
-  WORKLOAD_NS="loopzero-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
+  WORKLOAD_NS="loop-runtime-${TENANT_ID}-${PROJECT_NAME}-${ENV_NAME}"
   ALL_MATCHES="$(kubectl --context="$CELL_0_CONTEXT" get secret -A -o json 2>/dev/null | \
     python3 -c "
 import json, sys, base64

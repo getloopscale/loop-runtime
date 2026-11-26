@@ -1,4 +1,4 @@
-# The tools the cmd/loopzero-ops suite declares as prerequisites, pinned.
+# The tools the cmd/loop-runtime-ops suite declares as prerequisites, pinned.
 #
 # Two tests in that suite fail loudly when a declared tool is absent, and on purpose — a
 # skip would erase the guard on exactly the machine that lacks it:
@@ -16,7 +16,7 @@
 # through $GITHUB_PATH: a step that edits the environment file of the steps after it is the
 # pattern zizmor's github-env audit flags, and nothing here needs it.
 name: Test prerequisites
-description: Install the pinned go-task and trufflehog the cmd/loopzero-ops suite requires.
+description: Install the pinned go-task and trufflehog the cmd/loop-runtime-ops suite requires.
 
 runs:
   using: composite

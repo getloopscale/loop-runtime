@@ -3,9 +3,9 @@ go 1.26.11
 toolchain go1.26.11
 
 use (
-	../loopzero-contracts
+	../loop-runtime-contracts
 	./api
-	./cmd/loopzero-ops
+	./cmd/loop-runtime-ops
 	./infra/scripts
 	./infra/tests
 	./operators

@@ -5,7 +5,7 @@
 # Region and VPC are set rather than discovered: discovery reads the instance metadata
 # service, which a pod reaches only when the node allows a second IMDSv2 hop.
 region: {{ .Values.aws.region | quote }}
-vpcId: {{ env "LOOPZERO_VPC_ID" | quote }}
+vpcId: {{ env "LOOP_RUNTIME_VPC_ID" | quote }}
 
 replicaCount: 1
 

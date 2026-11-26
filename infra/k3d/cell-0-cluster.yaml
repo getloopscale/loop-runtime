@@ -1,7 +1,7 @@
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
-  name: loopzero-cell-0
+  name: loop-runtime-cell-0
 # Pin to match production DOKS 1.32.13 (Rule 10: local equals production).
 # end-to-end-deploy-validation-plan T0.2 — sized for ~3GB total memory
 # (1 server + 1 agent) so 3-cluster local topology fits in 16GB.
@@ -25,12 +25,12 @@ ports:
   - port: 30091:30091
     nodeFilters:
       - loadbalancer
-network: k3d-loopzero
+network: k3d-loop-runtime
 registries:
   use:
-    - k3d-loopzero-registry:5000
+    - k3d-loop-runtime-registry:5000
   # B6 fix (cleanroom iter 6, 2026-05-05): mirror docker.io via pull-through
-  # cache in k3d-loopzero-registry. See core-cluster.yaml for full rationale.
+  # cache in k3d-loop-runtime-registry. See core-cluster.yaml for full rationale.
   config: |
     mirrors:
       "docker.io":

@@ -62,7 +62,7 @@ func TestPrometheusClient_QueryRange_ParsesMatrix(t *testing.T) {
 	}
 }
 
-// loopzero#180: Prometheus encodes NaN/Inf samples as the strings "NaN"/"+Inf",
+// loop-runtime#180: Prometheus encodes NaN/Inf samples as the strings "NaN"/"+Inf",
 // and strconv.ParseFloat parses them WITHOUT error (returning NaN/Inf) — so the
 // client must skip non-finite samples explicitly, else error_rate (0/0 for an
 // idle-but-has-history tenant) surfaces a NaN data point that the handler's

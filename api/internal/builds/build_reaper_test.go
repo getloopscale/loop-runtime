@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -295,13 +295,13 @@ func TestBuildReaper_SkipsActiveWorkflow(t *testing.T) {
 	}
 }
 
-// TestBuildReaper_ReapsRunningBuildWhenPodsStuckInImagePullBackOff — Red Team loopzero-cloud#133.
+// TestBuildReaper_ReapsRunningBuildWhenPodsStuckInImagePullBackOff — Red Team loop-console#133.
 //
 // Root cause: reaper.reap() M-03 defensive check (build_reaper.go:189-200) short-circuits
 // on wfStatus.Phase == "Running", designed to protect legitimately slow builds. But when
 // workflow pods are wedged in ImagePullBackOff / ErrImagePull / CreateContainerError for
 // the entire RunningTimeout window (Red Team scenario: 29+ min in ImagePullBackOff pulling
-// registry.digitalocean.com/loopzero-system/loopzero-cosign-signer:v0.1.0 that never authorizes),
+// registry.digitalocean.com/loop-runtime-system/loop-runtime-cosign-signer:v0.1.0 that never authorizes),
 // Argo still reports Phase=Running while the workflow makes zero real progress. Result:
 // build stays RUNNING forever until the CLI's 40s connection timeout mis-blames "connection".
 //
@@ -328,7 +328,7 @@ func TestBuildReaper_ReapsRunningBuildWhenPodsStuckInImagePullBackOff(t *testing
 		statuses: map[string]*deploycontracts.WorkflowStatus{
 			"wf-133": {
 				Phase:          "Running",
-				StuckPodReason: `ImagePullBackOff: Back-off pulling image "registry.digitalocean.com/loopzero-system/loopzero-cosign-signer:v0.1.0"`,
+				StuckPodReason: `ImagePullBackOff: Back-off pulling image "registry.digitalocean.com/loop-runtime-system/loop-runtime-cosign-signer:v0.1.0"`,
 			},
 		},
 	}

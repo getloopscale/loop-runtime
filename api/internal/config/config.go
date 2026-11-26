@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package config centralizes all environment-based configuration for the LoopZero API.
+// Package config centralizes all environment-based configuration for the LoopRuntime API.
 // Every value has a sensible default for local k3d development.
-// In production (LOOPZERO_ENV=production), security-sensitive values MUST be set explicitly.
+// In production (LOOP_RUNTIME_ENV=production), security-sensitive values MUST be set explicitly.
 package config
 
 import (
@@ -28,21 +28,21 @@ import (
 //
 // These ARE credential values, not names, so gosec G101 is not a false positive.
 // What makes them safe is not their content: it is that
-// validateProductionCredentials REFUSES TO START when LOOPZERO_ENV is production and
+// validateProductionCredentials REFUSES TO START when LOOP_RUNTIME_ENV is production and
 // any of them survived. Dev is the only environment where they are reachable.
 //
 // (A previous version of this comment also claimed a "no-hardcoded-credentials
 // gate exempts this file by name". No such gate exists — grep over
-// cmd/loopzero-ops/internal/quality/ finds neither this path nor `devDefault`. The
+// cmd/loop-runtime-ops/internal/quality/ finds neither this path nor `devDefault`. The
 // claim was removed rather than left to be trusted.)
 const (
-	devDefaultMinIOAccessKey = "loopzero-admin"
+	devDefaultMinIOAccessKey = "loop-runtime-admin"
 	//nolint:gosec // G101: dev default, refused in production by validateProductionCredentials
-	devDefaultMinIOSecretKey = "loopzero-dev-password"
+	devDefaultMinIOSecretKey = "loop-runtime-dev-password"
 	//nolint:gosec // G101: dev default, refused in production by validateProductionCredentials
-	devDefaultArgoCallbackSecret = "loopzero-dev-callback-secret"
+	devDefaultArgoCallbackSecret = "loop-runtime-dev-callback-secret"
 	//nolint:gosec // G101: dev default, refused in production by validateProductionCredentials
-	devDefaultBootstrapSecret = "loopzero-dev-bootstrap-secret"
+	devDefaultBootstrapSecret = "loop-runtime-dev-bootstrap-secret"
 )
 
 // Config holds all API server configuration, read from environment variables at startup.
@@ -55,7 +55,7 @@ type Config struct {
 	MetricsPort string
 	Env         string // "development" or "production"
 
-	// TracingEnabled turns OpenTelemetry export on (LOOPZERO_TRACING_ENABLED,
+	// TracingEnabled turns OpenTelemetry export on (LOOP_RUNTIME_TRACING_ENABLED,
 	// default true); OTelEndpoint is the collector (OTEL_EXPORTER_OTLP_ENDPOINT,
 	// empty = the tracing package default).
 	TracingEnabled bool
@@ -71,15 +71,15 @@ type Config struct {
 	GitHubWebBaseURL string
 
 	// CosignImage and SyftImage override the build's signer and SBOM scanner
-	// images (LOOPZERO_COSIGN_IMAGE / LOOPZERO_SYFT_IMAGE); empty = built-in images.
+	// images (LOOP_RUNTIME_COSIGN_IMAGE / LOOP_RUNTIME_SYFT_IMAGE); empty = built-in images.
 	CosignImage string
 	// BuildWorkspaceStorageClass is the StorageClass of the build workspace PVC
-	// (LOOPZERO_BUILD_WORKSPACE_STORAGE_CLASS); empty = the build cluster's default.
+	// (LOOP_RUNTIME_BUILD_WORKSPACE_STORAGE_CLASS); empty = the build cluster's default.
 	BuildWorkspaceStorageClass string
 	SyftImage                  string
 
 	// EnvBlocklistMode is how services.json env keys on the reserved blocklist
-	// are handled (LOOPZERO_ENV_BLOCKLIST_MODE): "enforce" (default) or "warn".
+	// are handled (LOOP_RUNTIME_ENV_BLOCKLIST_MODE): "enforce" (default) or "warn".
 	// Warn is refused in production.
 	EnvBlocklistMode string
 
@@ -95,14 +95,14 @@ type Config struct {
 	// WorkerDatabaseURL — T3.1 of plan 2026-06-01-p3-infra-observability-
 	// test-debt v1.1 ADR D3. Connection string for background loops
 	// (reconcile, convergence, reapers, idempotency cleaner). When set,
-	// background loops use this URL with the `loopzero_worker` non-owner
-	// role so RLS policies apply (the `loopzero` owner bypasses RLS by
+	// background loops use this URL with the `loop_runtime_worker` non-owner
+	// role so RLS policies apply (the `loop-runtime` owner bypasses RLS by
 	// design — see migration 000023 header). When EMPTY, background
 	// loops fall back to DatabaseURL (legacy behavior; RLS bypass via
 	// owner — works but loses defense-in-depth). Validation requires
 	// the URL to be non-empty in IsProduction() once migration 000023
 	// has shipped (operator-controlled rollout via env var).
-	WorkerDatabaseURL string // LOOPZERO_WORKER_DATABASE_URL
+	WorkerDatabaseURL string // LOOP_RUNTIME_WORKER_DATABASE_URL
 	// Database Pool
 	DBMaxConns         int32
 	DBMinConns         int32
@@ -128,17 +128,17 @@ type Config struct {
 	GiteaURL             string
 	GiteaCrossClusterURL string
 	// B77 (end-to-end-deploy-validation-plan iter 11) — Gitea organization
-	// where tenant gitops repos live. Default "loopzero" preserves prior behavior;
+	// where tenant gitops repos live. Default "loop-runtime" preserves prior behavior;
 	// configurable via GITEA_ORG env var.
 	GiteaOrg                  string
 	APICrossClusterURL        string
 	ArgocdURL                 string
 	MinIOEndpoint             string
 	MinIOCrossClusterEndpoint string // Used by build cluster workflows to reach MinIO
-	SourceBucket              string // S3 bucket for source bundles (default: "loopzero-builds")
+	SourceBucket              string // S3 bucket for source bundles (default: "loop-runtime-builds")
 	// StaticAssetsBucket holds the build SBOMs (STATIC_ASSETS_BUCKET, named for the
 	// static app delivery that was removed); empty selects the build pipeline's
-	// default, loopzero-static-assets.
+	// default, loop-runtime-static-assets.
 	StaticAssetsBucket string
 	RegistryURL        string
 	RegistryInsecure   bool // true for local dev registries without TLS
@@ -157,7 +157,7 @@ type Config struct {
 	// T1.2 of plan 2026-05-28-meet-001-engineering-closure v1.1.
 	// CR-1 fix from MEET-2026-05-28-001: `--insecure-skip-verify` was hardcoded
 	// unconditionally in cosign sign + attest scripts. Single env var flip
-	// (LOOPZERO_COSIGN_KEYLESS=true) bypassed SCT verification globally.
+	// (LOOP_RUNTIME_COSIGN_KEYLESS=true) bypassed SCT verification globally.
 	//
 	// CosignInsecureSkipSCT: render `--insecure-skip-verify` flag in cosign
 	// sign/attest commands. ONLY for LOCAL k3d with self-hosted CTLog whose
@@ -172,13 +172,13 @@ type Config struct {
 	CosignTUFRootPinned   bool
 
 	WorkloadIngressURL string
-	BaseDomain         string // Base domain for app hostnames (e.g., "loopzero.local", "loopzero.cloud")
+	BaseDomain         string // Base domain for app hostnames (e.g., "loop-runtime.local", "loop-runtime.cloud")
 	// PreviewPublicDomain is the wildcard domain used to compose public
 	// preview URLs surfaced to users. When empty, falls back to BaseDomain
 	// (legacy behavior). Set to the Caddy/CF wildcard root in environments
 	// where previews are exposed via an edge proxy distinct from the
 	// internal IngressRoute SNI domain (e.g., dev-public:
-	// `preview-dev.getloopscale.app` while BaseDomain stays `loopzero.local`).
+	// `preview-dev.getloopscale.app` while BaseDomain stays `loop-runtime.local`).
 	//
 	// URL convention: <tenant>-<project>-<entryApp>-preview-pr-N.<PreviewPublicDomain>
 	// where <entryApp> is the first server/frontend app in loopzero.yaml — this
@@ -193,7 +193,7 @@ type Config struct {
 	// Set to the Caddy/CF wildcard root in environments where apps are
 	// exposed via an edge proxy distinct from the internal IngressRoute
 	// SNI domain (e.g., dev-public: `prod-dev.getloopscale.app` while
-	// BaseDomain stays `loopzero.local`).
+	// BaseDomain stays `loop-runtime.local`).
 	//
 	// URL convention: <tenant>-<project>-<entryApp>-<env>.<PublicDomain>
 	// where <entryApp> is the first server/frontend app in loopzero.yaml — this
@@ -206,15 +206,15 @@ type Config struct {
 	// GrafanaBaseURL is the deep-link root for Grafana dashboards surfaced from
 	// the J-18 Status / Runtime Health page. Templated by StatusHandler into
 	// statusResponse.MetricsRangeURL as
-	// `<GrafanaBaseURL>/d/loopzero-project?var-project=<name>&var-env=<env>`.
+	// `<GrafanaBaseURL>/d/loop-runtime-project?var-project=<name>&var-env=<env>`.
 	// Empty disables the affordance — dashboard renders "Open in Grafana" as
 	// disabled (honest, per ADR D2 of plan 2026-06-06-dashboard-journey-j18-
 	// status-runtime-health v1.1).
-	// Set via LOOPZERO_GRAFANA_BASE_URL env var.
+	// Set via LOOP_RUNTIME_GRAFANA_BASE_URL env var.
 	GrafanaBaseURL string
 	// B14 (MEET-2026-04-23-058): cert-manager ClusterIssuer used for all app TLS
-	// Certificates. REQUIRED per-environment (prod: letsencrypt-prod; dev: loopzero-ca-issuer).
-	// Set via LOOPZERO_CLUSTER_ISSUER env var. Empty = Validate() fatal at startup.
+	// Certificates. REQUIRED per-environment (prod: letsencrypt-prod; dev: loop-runtime-ca-issuer).
+	// Set via LOOP_RUNTIME_CLUSTER_ISSUER env var. Empty = Validate() fatal at startup.
 	ClusterIssuer string
 
 	// argo-rollouts-progressive-delivery-plan T1.2 (D6) — Prometheus URL for
@@ -228,18 +228,18 @@ type Config struct {
 
 	// ProgressiveDelivery selects Rollout (canary) manifests over the legacy
 	// Deployment (argo-rollouts-progressive-delivery D8). On by default; set
-	// LOOPZERO_PROGRESSIVE_DELIVERY to "false" or "0" to revert to the legacy
+	// LOOP_RUNTIME_PROGRESSIVE_DELIVERY to "false" or "0" to revert to the legacy
 	// Deployment during an incident rollback.
 	ProgressiveDelivery bool
 
 	// LeanResources halves the renderer's fallback resource defaults (T-08
 	// contingency: fit 100 apps in the DO dev runtime cluster). Off by
-	// default; LOOPZERO_LEAN_RESOURCES "true" or "1" turns it on.
+	// default; LOOP_RUNTIME_LEAN_RESOURCES "true" or "1" turns it on.
 	LeanResources bool
 
 	// Data-plane readiness poller (environments.ReadinessPoller,
-	// loopzero-cloud#128): records per-environment ready replicas for the
-	// dashboard badge. Off unless LOOPZERO_DATA_PLANE_POLLER_ENABLED; when on,
+	// loop-console#128): records per-environment ready replicas for the
+	// dashboard badge. Off unless LOOP_RUNTIME_DATA_PLANE_POLLER_ENABLED; when on,
 	// DataPlanePollerPrometheusURL is the Prometheus the api queries — the
 	// one holding kube-state-metrics for the cells, reachable from the api
 	// pod (unlike PrometheusAddress, which workload pods must reach).
@@ -328,7 +328,7 @@ type Config struct {
 	// JWKS endpoint for validating tokens issued by the platform sign-up flow
 	// (https://app.<domain> account registration). Earlier prototypes
 	// referenced GitHub PAT validation; that path was removed — platform
-	// tokens are the only accepted credential for `loopzero login --token`.
+	// tokens are the only accepted credential for `loopscale login --token`.
 	// Env: JWKS_ENDPOINT (e.g., "http://ory-hydra-public.ory.svc.cluster.local:4444/.well-known/jwks.json")
 	JWKSEndpoint string
 	// JWTIssuer is the expected issuer in JWT tokens (must match Hydra config).
@@ -349,33 +349,33 @@ type Config struct {
 	// true on the API Deployment and the controller Deployment runs the loops.
 	// Setting it back to false is the documented rollback path.
 	//
-	// Env: LOOPZERO_DISABLE_LEGACY_LOOPS ("true" to disable loops in the API).
+	// Env: LOOP_RUNTIME_DISABLE_LEGACY_LOOPS ("true" to disable loops in the API).
 	DisableLegacyLoops bool
 
 	// API process switches, read here once rather than ad hoc in main.
 	//
-	// PprofEnabled starts the pprof server (LOOPZERO_PPROF_ENABLED "true" or "1";
-	// default off, dev/debug only) on PprofAddr (LOOPZERO_PPROF_ADDR, default
+	// PprofEnabled starts the pprof server (LOOP_RUNTIME_PPROF_ENABLED "true" or "1";
+	// default off, dev/debug only) on PprofAddr (LOOP_RUNTIME_PPROF_ADDR, default
 	// ":6060"), reachable by port-forward and never by the public ingress.
 	PprofEnabled bool
 	PprofAddr    string
 	// EnvReadinessChecker makes EnsureEnvironment poll the Environment CR
-	// until status.phase is Active (LOOPZERO_ENV_READINESS_CHECKER "true").
+	// until status.phase is Active (LOOP_RUNTIME_ENV_READINESS_CHECKER "true").
 	EnvReadinessChecker bool
 	// BrokerToken is the bearer the ESO secret-fetch broker requires
-	// (LOOPZERO_BROKER_TOKEN); empty disables the broker endpoint.
+	// (LOOP_RUNTIME_BROKER_TOKEN); empty disables the broker endpoint.
 	BrokerToken string
-	// BrokerTokens is LOOPZERO_BROKER_TOKENS: the broker's bearer per cell, as comma-separated
+	// BrokerTokens is LOOP_RUNTIME_BROKER_TOKENS: the broker's bearer per cell, as comma-separated
 	// cell=token pairs. Read through BrokerCellTokens (#456).
 	BrokerTokens string
 	// EdgeRouteToken is the bearer the edge presents to /internal/edge/route
-	// (LOOPZERO_EDGE_ROUTE_TOKEN); empty disables the route.
+	// (LOOP_RUNTIME_EDGE_ROUTE_TOKEN); empty disables the route.
 	EdgeRouteToken string
 	// EdgeKVSARN is the CloudFront KeyValueStore the edge's CloudFront Function reads
-	// the host to cell routes from (LOOPZERO_EDGE_KVS_ARN); empty publishes none there.
+	// the host to cell routes from (LOOP_RUNTIME_EDGE_KVS_ARN); empty publishes none there.
 	EdgeKVSARN string
 	// TrustedProxyCIDRs lists the proxies whose X-Forwarded-For the pre-auth
-	// IP rate limit honours (LOOPZERO_TRUSTED_PROXY_CIDRS, comma-separated).
+	// IP rate limit honours (LOOP_RUNTIME_TRUSTED_PROXY_CIDRS, comma-separated).
 	TrustedProxyCIDRs string
 	// BillingUpgradeURL is the upgrade link a quota refusal points to
 	// (BILLING_UPGRADE_URL).
@@ -386,7 +386,7 @@ type Config struct {
 	// When AdmissionControl is true, the API consults the build admission
 	// gate and pg-pool circuit breaker. At capacity returns HTTP 429 or 503.
 	// Default: false — preserves pre-roadmap-07 behavior.
-	// Env: LOOPZERO_ADMISSION_CONTROL
+	// Env: LOOP_RUNTIME_ADMISSION_CONTROL
 	AdmissionControl bool
 
 	// MaxConcurrentBuildsPerCell: cell-level concurrent build limit.
@@ -414,7 +414,7 @@ type Config struct {
 	// and convergence loops (Phase 0.2, scale-50k-plan). When true, both
 	// loops use ClaimStore.Claim/Release in addition to sync.Map for
 	// cross-replica dedup visibility.
-	// Env: LOOPZERO_USE_PG_CLAIMS
+	// Env: LOOP_RUNTIME_USE_PG_CLAIMS
 	UsePGClaims bool
 
 	// CHG-2026-04-30-DELETE-SINGLE-CELL: removed cfg.DynamicRouter and
@@ -424,10 +424,10 @@ type Config struct {
 
 	// ServiceAuthSecretCreatedAt is the ISO 8601 timestamp of when the
 	// current service auth secret was created. Used to compute the age
-	// metric (loopzero_service_auth_secret_age_seconds). If unset, the
+	// metric (loop_runtime_service_auth_secret_age_seconds). If unset, the
 	// process start time is used as a fallback (less accurate but still
 	// triggers rotation alerts on long-running processes).
-	// Env: LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT
+	// Env: LOOP_RUNTIME_SERVICE_AUTH_SECRET_CREATED_AT
 	ServiceAuthSecretCreatedAt time.Time
 
 	// KEDAEnabled is a feature gate for KEDA-based scale-to-zero support.
@@ -437,7 +437,7 @@ type Config struct {
 	// When true, the API allows min:0 and expects KEDA ScaledObjects
 	// to manage the zero-to-one scaling transition.
 	//
-	// Env: LOOPZERO_KEDA_ENABLED
+	// Env: LOOP_RUNTIME_KEDA_ENABLED
 	KEDAEnabled bool
 }
 
@@ -454,16 +454,16 @@ func Load() Config {
 		// Server
 		Port:        envOr("PORT", "3001"),
 		MetricsPort: envOr("METRICS_PORT", "9090"),
-		Env:         envOr("LOOPZERO_ENV", "development"),
+		Env:         envOr("LOOP_RUNTIME_ENV", "development"),
 
-		TracingEnabled:             envBool("LOOPZERO_TRACING_ENABLED", true),
+		TracingEnabled:             envBool("LOOP_RUNTIME_TRACING_ENABLED", true),
 		OTelEndpoint:               os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		GitHubAPIBaseURL:           envOr("GITHUB_API_BASE_URL", "https://api.github.com"),
 		GitHubWebBaseURL:           envOr("GITHUB_WEB_BASE_URL", "https://github.com"),
-		CosignImage:                os.Getenv("LOOPZERO_COSIGN_IMAGE"),
-		BuildWorkspaceStorageClass: os.Getenv("LOOPZERO_BUILD_WORKSPACE_STORAGE_CLASS"),
-		SyftImage:                  os.Getenv("LOOPZERO_SYFT_IMAGE"),
-		EnvBlocklistMode:           strings.ToLower(strings.TrimSpace(envOr("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce"))),
+		CosignImage:                os.Getenv("LOOP_RUNTIME_COSIGN_IMAGE"),
+		BuildWorkspaceStorageClass: os.Getenv("LOOP_RUNTIME_BUILD_WORKSPACE_STORAGE_CLASS"),
+		SyftImage:                  os.Getenv("LOOP_RUNTIME_SYFT_IMAGE"),
+		EnvBlocklistMode:           strings.ToLower(strings.TrimSpace(envOr("LOOP_RUNTIME_ENV_BLOCKLIST_MODE", "enforce"))),
 
 		// HTTP Server Timeouts
 		ReadHeaderTimeout:    l.duration("SERVER_READ_HEADER_TIMEOUT", 10*time.Second),
@@ -473,7 +473,7 @@ func Load() Config {
 
 		// Database
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
-		WorkerDatabaseURL: os.Getenv("LOOPZERO_WORKER_DATABASE_URL"),
+		WorkerDatabaseURL: os.Getenv("LOOP_RUNTIME_WORKER_DATABASE_URL"),
 		// Database Pool
 		DBMaxConns:         int32(l.int("DB_MAX_CONNS", 25)),
 		DBMinConns:         int32(l.int("DB_MIN_CONNS", 5)),
@@ -489,17 +489,17 @@ func Load() Config {
 
 		// Kubernetes Contexts
 		MgmtKubeconfig:     envOr("CORE_KUBECONFIG", defaultKubeconfig),
-		MgmtKubeContext:    envOr("CORE_KUBE_CONTEXT", "k3d-loopzero-core"),
+		MgmtKubeContext:    envOr("CORE_KUBE_CONTEXT", "k3d-loop-runtime-core"),
 		BuildKubeconfig:    envOr("BUILD_KUBECONFIG", defaultKubeconfig),
-		BuildKubeContext:   envOr("BUILD_KUBE_CONTEXT", "k3d-loopzero-build"),
+		BuildKubeContext:   envOr("BUILD_KUBE_CONTEXT", "k3d-loop-runtime-build"),
 		RuntimeKubeconfig:  envOr("CELL_0_KUBECONFIG", defaultKubeconfig),
-		RuntimeKubeContext: envOr("CELL_0_KUBE_CONTEXT", "k3d-loopzero-cell-0"),
+		RuntimeKubeContext: envOr("CELL_0_KUBE_CONTEXT", "k3d-loop-runtime-cell-0"),
 
 		// Service URLs
 		GiteaURL:             envOr("GITEA_URL", gitearepo.DefaultInternalURL),
 		GiteaCrossClusterURL: envOr("GITEA_CROSS_CLUSTER_URL", ""),
-		GiteaOrg:             envOr("GITEA_ORG", "loopzero"),
-		APICrossClusterURL:   envOr("API_CROSS_CLUSTER_URL", "http://loopzero-api.loopzero-system.svc.cluster.local:3001"),
+		GiteaOrg:             envOr("GITEA_ORG", "loop-runtime"),
+		APICrossClusterURL:   envOr("API_CROSS_CLUSTER_URL", "http://loop-runtime-api.loop-runtime-system.svc.cluster.local:3001"),
 		ArgocdURL:            envOr("ARGOCD_URL", "http://argocd-server.argocd.svc.cluster.local:80"),
 		// CHG-2026-04-29-DOGFOOD iter 9 — MUST include scheme. The s3
 		// uploader composes the URL as "<endpoint>/<bucket>/<key>" and
@@ -508,45 +508,45 @@ func Load() Config {
 		// dogfood discovered this when the API silently swallowed the
 		// upload error and returned 200 to the CLI, then the build
 		// pipeline failed downstream because the bundle was missing.
-		MinIOEndpoint:             envOr("MINIO_ENDPOINT", objectStoreDefault(awsRole, "http://minio.loopzero-system.svc.cluster.local:9000")),
+		MinIOEndpoint:             envOr("MINIO_ENDPOINT", objectStoreDefault(awsRole, "http://minio.loop-runtime-system.svc.cluster.local:9000")),
 		MinIOCrossClusterEndpoint: envOr("MINIO_CROSS_CLUSTER_ENDPOINT", ""),
-		SourceBucket:              envOr("SOURCE_BUCKET", "loopzero-builds"),
+		SourceBucket:              envOr("SOURCE_BUCKET", "loop-runtime-builds"),
 		StaticAssetsBucket:        os.Getenv("STATIC_ASSETS_BUCKET"),
 		RegistryURL:               os.Getenv("REGISTRY_URL"),
 		RegistryInsecure:          os.Getenv("REGISTRY_INSECURE") == "true",
 
 		// Cosign keyless config (M2 T8.0, v1.1 EC-3 of plan 2026-05-27-M07-to-3-85)
-		// Defaults preserve keyed mode (safe regression). Operator sets LOOPZERO_COSIGN_KEYLESS=true
+		// Defaults preserve keyed mode (safe regression). Operator sets LOOP_RUNTIME_COSIGN_KEYLESS=true
 		// AFTER Sigstore stack provisioned em build cluster.
-		CosignKeyless:       envBool("LOOPZERO_COSIGN_KEYLESS", false),
-		CosignAttestEnabled: envBool("LOOPZERO_COSIGN_ATTEST_ENABLED", false),
+		CosignKeyless:       envBool("LOOP_RUNTIME_COSIGN_KEYLESS", false),
+		CosignAttestEnabled: envBool("LOOP_RUNTIME_COSIGN_ATTEST_ENABLED", false),
 		// T1.2 CR-1 fix: explicit env opt-in for SCT-skip flag (LOCAL only)
-		CosignInsecureSkipSCT: envBool("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY", false),
-		CosignTUFRootPinned:   envBool("LOOPZERO_COSIGN_TUF_ROOT_PINNED", false),
-		CosignFulcioURL:       os.Getenv("LOOPZERO_FULCIO_URL"),
-		CosignRekorURL:        os.Getenv("LOOPZERO_REKOR_URL"),
+		CosignInsecureSkipSCT: envBool("LOOP_RUNTIME_COSIGN_INSECURE_SKIP_SCT_VERIFY", false),
+		CosignTUFRootPinned:   envBool("LOOP_RUNTIME_COSIGN_TUF_ROOT_PINNED", false),
+		CosignFulcioURL:       os.Getenv("LOOP_RUNTIME_FULCIO_URL"),
+		CosignRekorURL:        os.Getenv("LOOP_RUNTIME_REKOR_URL"),
 		WorkloadIngressURL:    os.Getenv("WORKLOAD_INGRESS_URL"),
-		BaseDomain:            envOr("BASE_DOMAIN", "loopzero.local"),
-		PreviewPublicDomain:   os.Getenv("LOOPZERO_PREVIEW_PUBLIC_DOMAIN"),
-		PublicDomain:          os.Getenv("LOOPZERO_PUBLIC_DOMAIN"),
-		GrafanaBaseURL:        os.Getenv("LOOPZERO_GRAFANA_BASE_URL"),
-		ClusterIssuer:         os.Getenv("LOOPZERO_CLUSTER_ISSUER"),
-		PrometheusAddress:     os.Getenv("LOOPZERO_PROMETHEUS_ADDRESS"),
-		ProgressiveDelivery:   progressiveDeliveryEnabled(os.Getenv("LOOPZERO_PROGRESSIVE_DELIVERY")),
-		LeanResources:         leanResourcesEnabled(os.Getenv("LOOPZERO_LEAN_RESOURCES")),
+		BaseDomain:            envOr("BASE_DOMAIN", "loop-runtime.local"),
+		PreviewPublicDomain:   os.Getenv("LOOP_RUNTIME_PREVIEW_PUBLIC_DOMAIN"),
+		PublicDomain:          os.Getenv("LOOP_RUNTIME_PUBLIC_DOMAIN"),
+		GrafanaBaseURL:        os.Getenv("LOOP_RUNTIME_GRAFANA_BASE_URL"),
+		ClusterIssuer:         os.Getenv("LOOP_RUNTIME_CLUSTER_ISSUER"),
+		PrometheusAddress:     os.Getenv("LOOP_RUNTIME_PROMETHEUS_ADDRESS"),
+		ProgressiveDelivery:   progressiveDeliveryEnabled(os.Getenv("LOOP_RUNTIME_PROGRESSIVE_DELIVERY")),
+		LeanResources:         leanResourcesEnabled(os.Getenv("LOOP_RUNTIME_LEAN_RESOURCES")),
 
-		DataPlanePollerEnabled:       envBool("LOOPZERO_DATA_PLANE_POLLER_ENABLED", false),
-		DataPlanePollerPrometheusURL: os.Getenv("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL"),
-		DataPlanePollerInterval:      l.duration("LOOPZERO_DATA_PLANE_POLLER_INTERVAL", 30*time.Second),
+		DataPlanePollerEnabled:       envBool("LOOP_RUNTIME_DATA_PLANE_POLLER_ENABLED", false),
+		DataPlanePollerPrometheusURL: os.Getenv("LOOP_RUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL"),
+		DataPlanePollerInterval:      l.duration("LOOP_RUNTIME_DATA_PLANE_POLLER_INTERVAL", 30*time.Second),
 
 		// Credentials
 		GiteaToken:          os.Getenv("GITEA_TOKEN"),
 		ArgocdToken:         os.Getenv("ARGOCD_TOKEN"),
 		MinIOAccessKey:      envOr("MINIO_ACCESS_KEY", objectStoreDefault(awsRole, devDefaultMinIOAccessKey)),
 		MinIOSecretKey:      envOr("MINIO_SECRET_KEY", objectStoreDefault(awsRole, devDefaultMinIOSecretKey)),
-		ArgoCallbackSecret:  envOr("LOOPZERO_ARGO_CALLBACK_SECRET", devDefaultArgoCallbackSecret),
-		BootstrapSecret:     envOr("LOOPZERO_BOOTSTRAP_SECRET", devDefaultBootstrapSecret),
-		SecretEncryptionKey: os.Getenv("LOOPZERO_SECRET_ENCRYPTION_KEY"), // SEC-001: empty = no encryption (dev only)
+		ArgoCallbackSecret:  envOr("LOOP_RUNTIME_ARGO_CALLBACK_SECRET", devDefaultArgoCallbackSecret),
+		BootstrapSecret:     envOr("LOOP_RUNTIME_BOOTSTRAP_SECRET", devDefaultBootstrapSecret),
+		SecretEncryptionKey: os.Getenv("LOOP_RUNTIME_SECRET_ENCRYPTION_KEY"), // SEC-001: empty = no encryption (dev only)
 
 		// T2.5 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 —
 		// OpenBao transit credentials (per D6 ADR fail-loud refusal).
@@ -616,20 +616,20 @@ func Load() Config {
 
 		// Roadmap 02 — API Loop Extraction. When true, the API does not run
 		// any background loops (controller binary runs them instead).
-		DisableLegacyLoops: os.Getenv("LOOPZERO_DISABLE_LEGACY_LOOPS") == "true",
+		DisableLegacyLoops: os.Getenv("LOOP_RUNTIME_DISABLE_LEGACY_LOOPS") == "true",
 
-		PprofEnabled:        pprofEnabled(os.Getenv("LOOPZERO_PPROF_ENABLED")),
-		PprofAddr:           envOr("LOOPZERO_PPROF_ADDR", ":6060"),
-		EnvReadinessChecker: os.Getenv("LOOPZERO_ENV_READINESS_CHECKER") == "true",
-		BrokerToken:         os.Getenv("LOOPZERO_BROKER_TOKEN"),
-		BrokerTokens:        os.Getenv("LOOPZERO_BROKER_TOKENS"),
-		EdgeRouteToken:      os.Getenv("LOOPZERO_EDGE_ROUTE_TOKEN"),
-		EdgeKVSARN:          os.Getenv("LOOPZERO_EDGE_KVS_ARN"),
-		TrustedProxyCIDRs:   os.Getenv("LOOPZERO_TRUSTED_PROXY_CIDRS"),
+		PprofEnabled:        pprofEnabled(os.Getenv("LOOP_RUNTIME_PPROF_ENABLED")),
+		PprofAddr:           envOr("LOOP_RUNTIME_PPROF_ADDR", ":6060"),
+		EnvReadinessChecker: os.Getenv("LOOP_RUNTIME_ENV_READINESS_CHECKER") == "true",
+		BrokerToken:         os.Getenv("LOOP_RUNTIME_BROKER_TOKEN"),
+		BrokerTokens:        os.Getenv("LOOP_RUNTIME_BROKER_TOKENS"),
+		EdgeRouteToken:      os.Getenv("LOOP_RUNTIME_EDGE_ROUTE_TOKEN"),
+		EdgeKVSARN:          os.Getenv("LOOP_RUNTIME_EDGE_KVS_ARN"),
+		TrustedProxyCIDRs:   os.Getenv("LOOP_RUNTIME_TRUSTED_PROXY_CIDRS"),
 		BillingUpgradeURL:   os.Getenv("BILLING_UPGRADE_URL"),
 
 		// Roadmap 07 — Backpressure & Admission Control.
-		AdmissionControl:             os.Getenv("LOOPZERO_ADMISSION_CONTROL") == "true",
+		AdmissionControl:             os.Getenv("LOOP_RUNTIME_ADMISSION_CONTROL") == "true",
 		MaxConcurrentBuildsPerCell:   l.int("MAX_CONCURRENT_BUILDS_PER_CELL", 20),
 		MaxTenantsPerCell:            l.int("MAX_TENANTS_PER_CELL", 5000),
 		MaxConcurrentBuildsPerTenant: l.int("MAX_CONCURRENT_BUILDS_PER_TENANT", 3),
@@ -637,13 +637,13 @@ func Load() Config {
 
 		// Scale 50k plan — Phase 0.2 feature flag (Phase 0.3 multi-cell is
 		// no longer toggle-gated; see CHG-2026-04-30-DELETE-SINGLE-CELL).
-		UsePGClaims: os.Getenv("LOOPZERO_USE_PG_CLAIMS") == "true",
+		UsePGClaims: os.Getenv("LOOP_RUNTIME_USE_PG_CLAIMS") == "true",
 
 		// WS.1: Service auth secret rotation monitoring.
-		ServiceAuthSecretCreatedAt: envTime("LOOPZERO_SERVICE_AUTH_SECRET_CREATED_AT"),
+		ServiceAuthSecretCreatedAt: envTime("LOOP_RUNTIME_SERVICE_AUTH_SECRET_CREATED_AT"),
 
 		// KEDA scale-to-zero feature gate.
-		KEDAEnabled: os.Getenv("LOOPZERO_KEDA_ENABLED") == "true",
+		KEDAEnabled: os.Getenv("LOOP_RUNTIME_KEDA_ENABLED") == "true",
 	}
 	if legacy := os.Getenv("MAX_BUILDS_PER_TENANT"); legacy != "" {
 		if n := l.int("MAX_BUILDS_PER_TENANT", 0); n != 0 && n != cfg.MaxConcurrentBuildsPerTenant {
@@ -656,7 +656,7 @@ func Load() Config {
 	// The local k3d registry exists only in development; elsewhere an unset REGISTRY_URL
 	// is an error in Validate, not a push to a host that does not exist.
 	if cfg.RegistryURL == "" && cfg.Env == "development" {
-		cfg.RegistryURL = "k3d-loopzero-registry:5000"
+		cfg.RegistryURL = "k3d-loop-runtime-registry:5000"
 	}
 	cfg.loadErrors = l.errs
 	return cfg
@@ -681,10 +681,10 @@ func objectStoreDefault(awsRole bool, inCluster string) string {
 // Validate logs warnings about insecure defaults and returns an error for
 // security violations in production that must not be ignored.
 // Called after Load() to surface non-production configuration (C-03).
-// validEnvs is the canonical LOOPZERO_ENV allowlist. Sprint A T2.1 (closes
-// sec-008 / CR-1 partial of MEET-2026-05-28-001): any LOOPZERO_ENV value not
+// validEnvs is the canonical LOOP_RUNTIME_ENV allowlist. Sprint A T2.1 (closes
+// sec-008 / CR-1 partial of MEET-2026-05-28-001): any LOOP_RUNTIME_ENV value not
 // in this set is rejected at startup. Prevents case-bypass like
-// LOOPZERO_ENV=Production silently degrading to non-prod IsProduction()
+// LOOP_RUNTIME_ENV=Production silently degrading to non-prod IsProduction()
 // behavior (case-sensitive == compare). EC-8 ordering: this check runs
 // EARLY in Validate() so all subsequent IsProduction() gates can assume
 // a canonical value.
@@ -694,7 +694,7 @@ var validEnvs = map[string]bool{
 	"production":  true,
 }
 
-// isValidEnv returns true iff s is a canonical LOOPZERO_ENV value. Exact
+// isValidEnv returns true iff s is a canonical LOOP_RUNTIME_ENV value. Exact
 // string match — NO case-fold, NO trim. A typo or case variant
 // (Production, prod, " production") fails fast at startup. Adding a new
 // env (e.g. "drill") requires updating this map + Validate() tests +
@@ -768,24 +768,24 @@ func (c Config) validateDataPlanePoller() error {
 		return nil
 	}
 	if c.DataPlanePollerPrometheusURL == "" {
-		return fmt.Errorf("LOOPZERO_DATA_PLANE_POLLER_ENABLED=true requires LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL")
+		return fmt.Errorf("LOOP_RUNTIME_DATA_PLANE_POLLER_ENABLED=true requires LOOP_RUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL")
 	}
 	u, err := url.Parse(c.DataPlanePollerPrometheusURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return fmt.Errorf("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL=%q must be an absolute http(s) URL", c.DataPlanePollerPrometheusURL)
+		return fmt.Errorf("LOOP_RUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL=%q must be an absolute http(s) URL", c.DataPlanePollerPrometheusURL)
 	}
 	if c.DataPlanePollerInterval <= 0 {
-		return fmt.Errorf("LOOPZERO_DATA_PLANE_POLLER_INTERVAL=%s must be positive", c.DataPlanePollerInterval)
+		return fmt.Errorf("LOOP_RUNTIME_DATA_PLANE_POLLER_INTERVAL=%s must be positive", c.DataPlanePollerInterval)
 	}
 	return nil
 }
 
-// validateEnv enforces the LOOPZERO_ENV allowlist (Sprint A T2.1, closes
+// validateEnv enforces the LOOP_RUNTIME_ENV allowlist (Sprint A T2.1, closes
 // sec-008). MUST run first — all downstream IsProduction() checks
 // trust c.Env after this gate.
 func (c Config) validateEnv() error {
 	if !isValidEnv(c.Env) {
-		return fmt.Errorf("LOOPZERO_ENV=%q invalid; allowed: development, staging, production", c.Env)
+		return fmt.Errorf("LOOP_RUNTIME_ENV=%q invalid; allowed: development, staging, production", c.Env)
 	}
 	return nil
 }
@@ -802,11 +802,11 @@ func (c Config) validateEnvBlocklistMode() error {
 		return nil
 	case "warn":
 		if c.IsProduction() {
-			return fmt.Errorf("config: LOOPZERO_ENV_BLOCKLIST_MODE=warn is not allowed in production")
+			return fmt.Errorf("config: LOOP_RUNTIME_ENV_BLOCKLIST_MODE=warn is not allowed in production")
 		}
 		return nil
 	default:
-		return fmt.Errorf("config: LOOPZERO_ENV_BLOCKLIST_MODE=%q must be enforce or warn", c.EnvBlocklistMode)
+		return fmt.Errorf("config: LOOP_RUNTIME_ENV_BLOCKLIST_MODE=%q must be enforce or warn", c.EnvBlocklistMode)
 	}
 }
 
@@ -820,12 +820,12 @@ func (c Config) validateRegistryURLs() error {
 	return nil
 }
 
-// validateClusterIssuer requires an explicit LOOPZERO_CLUSTER_ISSUER per
+// validateClusterIssuer requires an explicit LOOP_RUNTIME_CLUSTER_ISSUER per
 // MEET-2026-04-23-058 B14 — no in-code default to avoid the invisible-
 // default footgun.
 func (c Config) validateClusterIssuer() error {
 	if c.ClusterIssuer == "" {
-		return fmt.Errorf("LOOPZERO_CLUSTER_ISSUER is required (prod: letsencrypt-prod, dev: loopzero-ca-issuer)")
+		return fmt.Errorf("LOOP_RUNTIME_CLUSTER_ISSUER is required (prod: letsencrypt-prod, dev: loop-runtime-ca-issuer)")
 	}
 	return nil
 }
@@ -857,14 +857,14 @@ func (c Config) validateTimeouts() error {
 // mandatory in production. Also warns when dev callback secret is in
 // use outside production.
 func (c Config) validateSecretEncryptionKey() error {
-	if c.ArgoCallbackSecret == "loopzero-dev-callback-secret" && !c.IsProduction() {
+	if c.ArgoCallbackSecret == "loop-runtime-dev-callback-secret" && !c.IsProduction() {
 		slog.Warn("using default callback secret — only acceptable for local development")
 	}
 	if c.SecretEncryptionKey == "" {
 		if c.IsProduction() {
-			return fmt.Errorf("LOOPZERO_SECRET_ENCRYPTION_KEY is required in production — secrets must be encrypted at rest")
+			return fmt.Errorf("LOOP_RUNTIME_SECRET_ENCRYPTION_KEY is required in production — secrets must be encrypted at rest")
 		}
-		slog.Warn("LOOPZERO_SECRET_ENCRYPTION_KEY not set — secrets stored in plaintext (only acceptable for local development)")
+		slog.Warn("LOOP_RUNTIME_SECRET_ENCRYPTION_KEY not set — secrets stored in plaintext (only acceptable for local development)")
 	}
 	return nil
 }
@@ -880,7 +880,7 @@ func (c Config) validateTLSPosture() error {
 		return fmt.Errorf("REGISTRY_INSECURE=true is forbidden in production — registry TLS verification must be enabled")
 	}
 	if c.CosignInsecureSkipSCT && c.IsProduction() && !c.CosignTUFRootPinned {
-		return fmt.Errorf("LOOPZERO_COSIGN_INSECURE_SKIP_SCT_VERIFY=true requires LOOPZERO_COSIGN_TUF_ROOT_PINNED=true in production — SCT verification skip without TUF root is a supply-chain compromise vector")
+		return fmt.Errorf("LOOP_RUNTIME_COSIGN_INSECURE_SKIP_SCT_VERIFY=true requires LOOP_RUNTIME_COSIGN_TUF_ROOT_PINNED=true in production — SCT verification skip without TUF root is a supply-chain compromise vector")
 	}
 	return nil
 }
@@ -902,10 +902,10 @@ func (c Config) validateProductionCredentials() error {
 		return fmt.Errorf("MINIO_SECRET_KEY using default dev credentials in production — override via MINIO_SECRET_KEY env var")
 	}
 	if c.BootstrapSecret == devDefaultBootstrapSecret {
-		return fmt.Errorf("LOOPZERO_BOOTSTRAP_SECRET using default dev value in production — override via LOOPZERO_BOOTSTRAP_SECRET env var")
+		return fmt.Errorf("LOOP_RUNTIME_BOOTSTRAP_SECRET using default dev value in production — override via LOOP_RUNTIME_BOOTSTRAP_SECRET env var")
 	}
 	if c.ArgoCallbackSecret == devDefaultArgoCallbackSecret {
-		return fmt.Errorf("LOOPZERO_ARGO_CALLBACK_SECRET using default dev value in production — override via LOOPZERO_ARGO_CALLBACK_SECRET env var")
+		return fmt.Errorf("LOOP_RUNTIME_ARGO_CALLBACK_SECRET using default dev value in production — override via LOOP_RUNTIME_ARGO_CALLBACK_SECRET env var")
 	}
 	return nil
 }
@@ -935,7 +935,7 @@ func (c Config) validateCORS() error {
 }
 
 // validateDatabaseSSL rejects sslmode=disable in DATABASE_URL +
-// LOOPZERO_WORKER_DATABASE_URL in production (H1 + ADR D3 of
+// LOOP_RUNTIME_WORKER_DATABASE_URL in production (H1 + ADR D3 of
 // 2026-06-01-p3-infra-observability-test-debt v1.1).
 func (c Config) validateDatabaseSSL() error {
 	if !c.IsProduction() {
@@ -945,7 +945,7 @@ func (c Config) validateDatabaseSSL() error {
 		return fmt.Errorf("DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
 	}
 	if c.WorkerDatabaseURL != "" && strings.Contains(c.WorkerDatabaseURL, "sslmode=disable") {
-		return fmt.Errorf("LOOPZERO_WORKER_DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
+		return fmt.Errorf("LOOP_RUNTIME_WORKER_DATABASE_URL contains sslmode=disable which is forbidden in production — use sslmode=require or sslmode=verify-full")
 	}
 	return nil
 }
@@ -999,12 +999,12 @@ func (c Config) logCryptoMode() {
 		slog.Warn("crypto_mode=plaintext",
 			"openbao_transit_enabled", false,
 			"aes_key_set", false,
-			"reason", "neither OPENBAO_TRANSIT_ENABLED nor LOOPZERO_SECRET_ENCRYPTION_KEY set — dev-only")
+			"reason", "neither OPENBAO_TRANSIT_ENABLED nor LOOP_RUNTIME_SECRET_ENCRYPTION_KEY set — dev-only")
 	}
 }
 
 // CryptoMode returns the active secrets encryption strategy: "transit"
-// (OpenBao transit), "aes-local" (LOOPZERO_SECRET_ENCRYPTION_KEY AES path),
+// (OpenBao transit), "aes-local" (LOOP_RUNTIME_SECRET_ENCRYPTION_KEY AES path),
 // or "plaintext" (neither configured — dev-only).
 //
 // Precedence: transit > aes-local > plaintext. EC-05 absorption: caller
@@ -1021,14 +1021,14 @@ func (c *Config) CryptoMode() string {
 }
 
 // EffectiveWorkerDatabaseURL returns the connection string background
-// loops MUST use. When LOOPZERO_WORKER_DATABASE_URL is set (the
-// loopzero_worker non-owner role per migration 000023), RLS policies apply
+// loops MUST use. When LOOP_RUNTIME_WORKER_DATABASE_URL is set (the
+// loop_runtime_worker non-owner role per migration 000023), RLS policies apply
 // to background queries. When empty (legacy), falls back to
-// DatabaseURL (loopzero owner role; RLS bypass — defense-in-depth gap).
+// DatabaseURL (loop-runtime owner role; RLS bypass — defense-in-depth gap).
 //
 // T3.1 of plan 2026-06-01-p3-infra-observability-test-debt v1.1 ADR D3.
 // Operator-controlled rollout: ship migration first, then flip the env
-// var on loopzero-api Deployment. Falling back to DatabaseURL keeps the
+// var on loop-runtime-api Deployment. Falling back to DatabaseURL keeps the
 // system functional in either state.
 func (c Config) EffectiveWorkerDatabaseURL() string {
 	if c.WorkerDatabaseURL != "" {
@@ -1038,8 +1038,8 @@ func (c Config) EffectiveWorkerDatabaseURL() string {
 }
 
 // WorkerRoleEnabled reports whether background loops are configured to
-// run as the `loopzero_worker` non-owner role (true) vs falling back to
-// the `loopzero` owner role (false). Used by observability to log the
+// run as the `loop_runtime_worker` non-owner role (true) vs falling back to
+// the `loop-runtime` owner role (false). Used by observability to log the
 // active RLS-bypass posture at startup.
 func (c Config) WorkerRoleEnabled() bool {
 	return c.WorkerDatabaseURL != "" && c.WorkerDatabaseURL != c.DatabaseURL
@@ -1130,7 +1130,7 @@ func pprofEnabled(v string) bool {
 	return v == "true" || v == "1"
 }
 
-// progressiveDeliveryEnabled reports whether LOOPZERO_PROGRESSIVE_DELIVERY leaves
+// progressiveDeliveryEnabled reports whether LOOP_RUNTIME_PROGRESSIVE_DELIVERY leaves
 // progressive delivery on: everything but an explicit "false" or "0"
 // (case-insensitive, trimmed) does, so the default is on.
 func progressiveDeliveryEnabled(v string) bool {
@@ -1138,7 +1138,7 @@ func progressiveDeliveryEnabled(v string) bool {
 	return v != "false" && v != "0"
 }
 
-// leanResourcesEnabled reports whether LOOPZERO_LEAN_RESOURCES turns lean resource
+// leanResourcesEnabled reports whether LOOP_RUNTIME_LEAN_RESOURCES turns lean resource
 // defaults on: only "true" or "1" (case-insensitive, trimmed) does.
 func leanResourcesEnabled(v string) bool {
 	v = strings.ToLower(strings.TrimSpace(v))
@@ -1147,7 +1147,7 @@ func leanResourcesEnabled(v string) bool {
 
 // envBool parses an environment variable as bool. Accepts "true", "1", "yes" (case-insensitive)
 // as true; everything else (including unset) returns defaultValue.
-// Used by M2 T8.0 (v1.1 EC-3) for LOOPZERO_COSIGN_KEYLESS + LOOPZERO_COSIGN_ATTEST_ENABLED.
+// Used by M2 T8.0 (v1.1 EC-3) for LOOP_RUNTIME_COSIGN_KEYLESS + LOOP_RUNTIME_COSIGN_ATTEST_ENABLED.
 func envBool(key string, defaultValue bool) bool {
 	v := os.Getenv(key)
 	if v == "" {

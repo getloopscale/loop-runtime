@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
-// Schema + structure tests for loopzero-drill (PROD-IDENTICAL 4-CLUSTER TOPOLOGY).
+// Schema + structure tests for loop-runtime-drill (PROD-IDENTICAL 4-CLUSTER TOPOLOGY).
 //
 // Plan 2026-05-16 T1.1 + T1.1.bis + T1.2 + T1.3 + edge cases EC-01..EC-10.
 // CTO directive 2026-05-16: "drill IGUAL prod 100% fiel".
@@ -24,22 +24,22 @@ const SRC = path.resolve(__dirname, "..");
 const ROOT = path.resolve(__dirname, "../..");
 const INDEX = path.join(SRC, "index.ts");
 
-describe("loopzero-drill — Pulumi.yaml", () => {
+describe("loop-runtime-drill — Pulumi.yaml", () => {
   const pulumiYaml = yaml.load(
     fs.readFileSync(path.join(ROOT, "Pulumi.yaml"), "utf-8"),
   ) as Record<string, unknown>;
 
   it("declares stack name + main entry", () => {
-    expect(pulumiYaml.name).toBe("loopzero-drill");
+    expect(pulumiYaml.name).toBe("loop-runtime-drill");
     expect(pulumiYaml.runtime).toBeDefined();
   });
 });
 
-describe("loopzero-drill — config schema (4-cluster topology)", () => {
+describe("loop-runtime-drill — config schema (4-cluster topology)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
-  it("scoped under namespace `loopzero-drill` (NOT loopzero-platform/loopzero-infra)", () => {
-    expect(src).toContain('new pulumi.Config("loopzero-drill")');
+  it("scoped under namespace `loop-runtime-drill` (NOT loop-runtime-platform/loop-runtime-infra)", () => {
+    expect(src).toContain('new pulumi.Config("loop-runtime-drill")');
   });
 
   it("requires stack-wide config keys (D1 — 4-cluster mirroring prod)", () => {
@@ -74,7 +74,7 @@ describe("loopzero-drill — config schema (4-cluster topology)", () => {
   });
 });
 
-describe("loopzero-drill — 4-cluster topology (D1)", () => {
+describe("loop-runtime-drill — 4-cluster topology (D1)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("provisions 4 KubernetesCluster resources (mgmt + build + runtime + runtime-2)", () => {
@@ -111,7 +111,7 @@ describe("loopzero-drill — 4-cluster topology (D1)", () => {
   });
 });
 
-describe("loopzero-drill — VPC (D5 + EC-06)", () => {
+describe("loop-runtime-drill — VPC (D5 + EC-06)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("provisions a single shared VPC", () => {
@@ -131,7 +131,7 @@ describe("loopzero-drill — VPC (D5 + EC-06)", () => {
   });
 });
 
-describe("loopzero-drill — Managed PG mgmt-tier (D4)", () => {
+describe("loop-runtime-drill — Managed PG mgmt-tier (D4)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("PG uses mgmt-tier (db-s-2vcpu-4gb) — regression from mini tier", () => {
@@ -150,7 +150,7 @@ describe("loopzero-drill — Managed PG mgmt-tier (D4)", () => {
   });
 });
 
-describe("loopzero-drill — Managed Valkey/Redis (Bug #15 LIVE fix)", () => {
+describe("loop-runtime-drill — Managed Valkey/Redis (Bug #15 LIVE fix)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("provisions DatabaseCluster drill-redis with valkey 8", () => {
@@ -190,7 +190,7 @@ describe("loopzero-drill — Managed Valkey/Redis (Bug #15 LIVE fix)", () => {
   });
 });
 
-describe("loopzero-drill — Spaces buckets (D8)", () => {
+describe("loop-runtime-drill — Spaces buckets (D8)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("provisions 3 Spaces buckets (builds + artifacts + static)", () => {
@@ -204,13 +204,13 @@ describe("loopzero-drill — Spaces buckets (D8)", () => {
   });
 
   it("bucket names include region suffix", () => {
-    expect(src).toMatch(/loopzero-drill-builds-\$\{region\}/);
-    expect(src).toMatch(/loopzero-drill-artifacts-\$\{region\}/);
-    expect(src).toMatch(/loopzero-drill-static-\$\{region\}/);
+    expect(src).toMatch(/loop-runtime-drill-builds-\$\{region\}/);
+    expect(src).toMatch(/loop-runtime-drill-artifacts-\$\{region\}/);
+    expect(src).toMatch(/loop-runtime-drill-static-\$\{region\}/);
   });
 });
 
-describe("loopzero-drill — CF Zone (EC-03 fix)", () => {
+describe("loop-runtime-drill — CF Zone (EC-03 fix)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("CF Zone is NOT protected (EC-03: protect:true blocked teardown)", () => {
@@ -233,7 +233,7 @@ describe("loopzero-drill — CF Zone (EC-03 fix)", () => {
   });
 });
 
-describe("loopzero-drill — Tags + expires-at (T4.1 watchdog support)", () => {
+describe("loop-runtime-drill — Tags + expires-at (T4.1 watchdog support)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("computes expires-at ISO timestamp", () => {
@@ -241,9 +241,9 @@ describe("loopzero-drill — Tags + expires-at (T4.1 watchdog support)", () => {
     expect(src).toMatch(/new Date\(Date\.now\(\) \+ expiresInHours \* 3600 \* 1000\)/);
   });
 
-  it("tags resources with loopzero-drill base + expires-at variant", () => {
-    expect(src).toMatch(/"loopzero-drill"/);
-    expect(src).toMatch(/loopzero-drill-expires-at-/);
+  it("tags resources with loop-runtime-drill base + expires-at variant", () => {
+    expect(src).toMatch(/"loop-runtime-drill"/);
+    expect(src).toMatch(/loop-runtime-drill-expires-at-/);
   });
 
   it("tag values sanitized for DO tag rules (lowercase alphanumeric + dashes)", () => {
@@ -252,7 +252,7 @@ describe("loopzero-drill — Tags + expires-at (T4.1 watchdog support)", () => {
   });
 });
 
-describe("loopzero-drill — Outputs schema v2 (L2-unlock plan D1 named exports)", () => {
+describe("loop-runtime-drill — Outputs schema v2 (L2-unlock plan D1 named exports)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   // ==========================================================================
@@ -383,7 +383,7 @@ describe("loopzero-drill — Outputs schema v2 (L2-unlock plan D1 named exports)
 // Phase 2 plan T1.1 + T1.2 + T1.3 + T1.4 — per-app DBs + users + DSN exports
 // ============================================================================
 
-describe("loopzero-drill — Per-app DatabaseDb resources (Phase 2 T1.1)", () => {
+describe("loop-runtime-drill — Per-app DatabaseDb resources (Phase 2 T1.1)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("provisions exactly 4 DatabaseDb resources", () => {
@@ -391,11 +391,11 @@ describe("loopzero-drill — Per-app DatabaseDb resources (Phase 2 T1.1)", () =>
     expect(matches.length).toBe(4);
   });
 
-  it("declares 4 DBs with kratos/hydra/gitea/loopzero names", () => {
+  it("declares 4 DBs with kratos/hydra/gitea/loop-runtime names", () => {
     expect(src).toMatch(/new digitalocean\.DatabaseDb\("drill-pg-kratos"/);
     expect(src).toMatch(/new digitalocean\.DatabaseDb\("drill-pg-hydra"/);
     expect(src).toMatch(/new digitalocean\.DatabaseDb\("drill-pg-gitea"/);
-    expect(src).toMatch(/new digitalocean\.DatabaseDb\("drill-pg-loopzero"/);
+    expect(src).toMatch(/new digitalocean\.DatabaseDb\("drill-pg-loop-runtime"/);
   });
 
   it("each DatabaseDb references drillPG.id for clusterId", () => {
@@ -406,15 +406,15 @@ describe("loopzero-drill — Per-app DatabaseDb resources (Phase 2 T1.1)", () =>
     }
   });
 
-  it("database names exactly: kratos, hydra, gitea, loopzero", () => {
+  it("database names exactly: kratos, hydra, gitea, loop-runtime", () => {
     expect(src).toMatch(/name:\s*"kratos"/);
     expect(src).toMatch(/name:\s*"hydra"/);
     expect(src).toMatch(/name:\s*"gitea"/);
-    expect(src).toMatch(/name:\s*"loopzero"/);
+    expect(src).toMatch(/name:\s*"loop-runtime"/);
   });
 });
 
-describe("loopzero-drill — Per-app DatabaseUser resources (Phase 2 T1.2)", () => {
+describe("loop-runtime-drill — Per-app DatabaseUser resources (Phase 2 T1.2)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("provisions exactly 4 DatabaseUser resources", () => {
@@ -422,20 +422,20 @@ describe("loopzero-drill — Per-app DatabaseUser resources (Phase 2 T1.2)", () 
     expect(matches.length).toBe(4);
   });
 
-  it("declares 4 Users with kratos/hydra/gitea/loopzero-api Pulumi resource names", () => {
+  it("declares 4 Users with kratos/hydra/gitea/loop-runtime-api Pulumi resource names", () => {
     expect(src).toMatch(/new digitalocean\.DatabaseUser\("drill-pg-kratos-user"/);
     expect(src).toMatch(/new digitalocean\.DatabaseUser\("drill-pg-hydra-user"/);
     expect(src).toMatch(/new digitalocean\.DatabaseUser\("drill-pg-gitea-user"/);
-    expect(src).toMatch(/new digitalocean\.DatabaseUser\("drill-pg-loopzero-api-user"/);
+    expect(src).toMatch(/new digitalocean\.DatabaseUser\("drill-pg-loop-runtime-api-user"/);
   });
 
-  it("user names match pulumi-infra: kratos, hydra, gitea, loopzero_api", () => {
+  it("user names match pulumi-infra: kratos, hydra, gitea, loop_runtime_api", () => {
     const userBlocks = src.match(/new digitalocean\.DatabaseUser\([^)]+\{[^}]+\}/g) ?? [];
     const userNames = userBlocks
       .map((b) => b.match(/name:\s*"([^"]+)"/)?.[1])
       .filter(Boolean)
       .sort();
-    expect(userNames).toEqual(["gitea", "hydra", "kratos", "loopzero_api"]);
+    expect(userNames).toEqual(["gitea", "hydra", "kratos", "loop_runtime_api"]);
   });
 
   it("each DatabaseUser references drillPG.id for clusterId", () => {
@@ -447,7 +447,7 @@ describe("loopzero-drill — Per-app DatabaseUser resources (Phase 2 T1.2)", () 
   });
 });
 
-describe("loopzero-drill — DatabaseFirewall (Phase 2 Bug #11 LIVE fix)", () => {
+describe("loop-runtime-drill — DatabaseFirewall (Phase 2 Bug #11 LIVE fix)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("declares 2 DatabaseFirewall (drill-pg-firewall + drill-redis-firewall via Bug #15)", () => {
@@ -474,21 +474,21 @@ describe("loopzero-drill — DatabaseFirewall (Phase 2 Bug #11 LIVE fix)", () =>
   });
 });
 
-describe("loopzero-drill — Per-service DSN named exports (Phase 2 T1.3)", () => {
+describe("loop-runtime-drill — Per-service DSN named exports (Phase 2 T1.3)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
-  it("declares 4 DSN exports (kratosDsn, hydraDsn, giteaDsn, loopzeroApiDsn)", () => {
+  it("declares 4 DSN exports (kratosDsn, hydraDsn, giteaDsn, loopRuntimeApiDsn)", () => {
     expect(src).toMatch(/^export const kratosDsn\s*=/m);
     expect(src).toMatch(/^export const hydraDsn\s*=/m);
     expect(src).toMatch(/^export const giteaDsn\s*=/m);
-    expect(src).toMatch(/^export const loopzeroApiDsn\s*=/m);
+    expect(src).toMatch(/^export const loopRuntimeApiDsn\s*=/m);
   });
 
   it("DSN exports use pulumi.interpolate for Output<T> handling", () => {
     expect(src).toMatch(/export const kratosDsn\s*=\s*pulumi\.interpolate/);
     expect(src).toMatch(/export const hydraDsn\s*=\s*pulumi\.interpolate/);
     expect(src).toMatch(/export const giteaDsn\s*=\s*pulumi\.interpolate/);
-    expect(src).toMatch(/export const loopzeroApiDsn\s*=\s*pulumi\.interpolate/);
+    expect(src).toMatch(/export const loopRuntimeApiDsn\s*=\s*pulumi\.interpolate/);
   });
 
   it("DSN format: postgres://USER:PASS@HOST:PORT/DB?sslmode=require", () => {
@@ -506,7 +506,7 @@ describe("loopzero-drill — Per-service DSN named exports (Phase 2 T1.3)", () =
     expect(src).toMatch(/kratosDsn[\s\S]*?\$\{drillPG\.user\}[\s\S]*?\/\$\{drillPgKratos\.name\}/);
     expect(src).toMatch(/hydraDsn[\s\S]*?\$\{drillPG\.user\}[\s\S]*?\/\$\{drillPgHydra\.name\}/);
     expect(src).toMatch(/giteaDsn[\s\S]*?\$\{drillPG\.user\}[\s\S]*?\/\$\{drillPgGitea\.name\}/);
-    expect(src).toMatch(/loopzeroApiDsn[\s\S]*?\$\{drillPG\.user\}[\s\S]*?\/\$\{drillPgLoopZero\.name\}/);
+    expect(src).toMatch(/loopRuntimeApiDsn[\s\S]*?\$\{drillPG\.user\}[\s\S]*?\/\$\{drillPgLoopRuntime\.name\}/);
   });
 
   it("documents Bug #12 root cause in source comment", () => {
@@ -520,7 +520,7 @@ describe("loopzero-drill — Per-service DSN named exports (Phase 2 T1.3)", () =
   });
 });
 
-describe("loopzero-drill — Isolation invariants (D7 + MEET-ASYNC-AMENDMENT-2026-05-16-001)", () => {
+describe("loop-runtime-drill — Isolation invariants (D7 + MEET-ASYNC-AMENDMENT-2026-05-16-001)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   it("does NOT import from pulumi-shared (isolation: no cross-project type leak)", () => {
@@ -538,35 +538,35 @@ describe("loopzero-drill — Isolation invariants (D7 + MEET-ASYNC-AMENDMENT-202
   });
 });
 
-describe("loopzero-drill — Pulumi.drill.yaml config (T1.1)", () => {
+describe("loop-runtime-drill — Pulumi.drill.yaml config (T1.1)", () => {
   const drillYamlPath = path.join(ROOT, "Pulumi.drill.yaml");
   const drillYaml = yaml.load(fs.readFileSync(drillYamlPath, "utf-8")) as Record<string, unknown>;
   const conf = drillYaml.config as Record<string, unknown>;
 
   it("declares all 4-cluster sizing config keys", () => {
-    expect(conf["loopzero-drill:mgmtK8sVersion"]).toBeDefined();
-    expect(conf["loopzero-drill:mgmtNodeSize"]).toBeDefined();
-    expect(conf["loopzero-drill:mgmtNodeCount"]).toBeDefined();
-    expect(conf["loopzero-drill:buildNodeSize"]).toBeDefined();
-    expect(conf["loopzero-drill:buildNodeCount"]).toBeDefined();
-    expect(conf["loopzero-drill:runtimeNodeSize"]).toBeDefined();
-    expect(conf["loopzero-drill:runtimeNodeCount"]).toBeDefined();
+    expect(conf["loop-runtime-drill:mgmtK8sVersion"]).toBeDefined();
+    expect(conf["loop-runtime-drill:mgmtNodeSize"]).toBeDefined();
+    expect(conf["loop-runtime-drill:mgmtNodeCount"]).toBeDefined();
+    expect(conf["loop-runtime-drill:buildNodeSize"]).toBeDefined();
+    expect(conf["loop-runtime-drill:buildNodeCount"]).toBeDefined();
+    expect(conf["loop-runtime-drill:runtimeNodeSize"]).toBeDefined();
+    expect(conf["loop-runtime-drill:runtimeNodeCount"]).toBeDefined();
   });
 
   it("declares expiresInHours config key", () => {
-    expect(conf["loopzero-drill:expiresInHours"]).toBeDefined();
+    expect(conf["loop-runtime-drill:expiresInHours"]).toBeDefined();
   });
 
   it("defaults mgmt to medium tier (s-4vcpu-8gb-amd)", () => {
-    expect(conf["loopzero-drill:mgmtNodeSize"]).toBe("s-4vcpu-8gb-amd");
+    expect(conf["loop-runtime-drill:mgmtNodeSize"]).toBe("s-4vcpu-8gb-amd");
   });
 
   it("defaults runtime to small tier (s-2vcpu-4gb)", () => {
-    expect(conf["loopzero-drill:runtimeNodeSize"]).toBe("s-2vcpu-4gb");
+    expect(conf["loop-runtime-drill:runtimeNodeSize"]).toBe("s-2vcpu-4gb");
   });
 
   it("CF account ID is encrypted secret", () => {
-    const cfId = conf["loopzero-drill:cfAccountId"] as Record<string, unknown>;
+    const cfId = conf["loop-runtime-drill:cfAccountId"] as Record<string, unknown>;
     expect(cfId).toBeDefined();
     expect(cfId.secure).toBeDefined();
   });

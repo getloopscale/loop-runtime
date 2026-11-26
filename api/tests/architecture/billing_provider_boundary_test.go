@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package architecture
 
@@ -15,7 +15,7 @@ import (
 	"testing"
 )
 
-// loopzero-cloud is the only component that talks to Stripe. Who issues the
+// loop-console is the only component that talks to Stripe. Who issues the
 // portal session is an OPEN entry in docs/decisions.md (2026-08-11, not yet
 // ratified); until it is decided otherwise, the engine must not regain the
 // capability by default. While the Stripe library is imported here, seeding a
@@ -66,7 +66,7 @@ func TestEngineDoesNotImportTheStripeLibrary(t *testing.T) {
 	sort.Strings(offenders)
 	if len(offenders) > 0 {
 		t.Errorf("the engine imports the Stripe library in %d file(s): %s\n"+
-			"loopzero-cloud is the only portal-session issuer; keeping the library here keeps the "+
+			"loop-console is the only portal-session issuer; keeping the library here keeps the "+
 			"capability one Secret away from coming back.", len(offenders), strings.Join(offenders, ", "))
 	}
 }

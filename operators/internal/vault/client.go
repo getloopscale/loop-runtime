@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package vault provides the minimal Vault Transit key management
 // interface used by tenant-controller (T3.3 of openbao-adoption v1.3).
@@ -37,7 +37,7 @@ import (
 // The key path helper and the typed quota/unreachable errors that used to live here
 // were removed: nothing read them, the errors' doc claimed a tenant_controller branch
 // that never existed, and the path helper formatted `transit/keys/tenant-<id>` while
-// the api creates `loopzero-tenants-<id>`, so it named a key nobody creates. Whoever
+// the api creates `loop-runtime-tenants-<id>`, so it named a key nobody creates. Whoever
 // implements the shredder takes the key name from pkg/vault.TenantKeyName, the one
 // the api encrypts with, not from a second formula.
 type TenantTransitClient interface {

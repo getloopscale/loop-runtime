@@ -4,39 +4,39 @@
 apiVersion: monitoring.coreos.com/v1
 kind: Probe
 metadata:
-  name: loopzero-api-probe
+  name: loop-runtime-api-probe
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   prober:
-    url: blackbox-exporter.loopzero-system.svc:9115
+    url: blackbox-exporter.loop-runtime-system.svc:9115
   module: http_2xx
   targets:
     staticConfig:
       static:
-        - http://loopzero-api.loopzero-system.svc:3000/api/v1/health
-        # B-022: `loopzero-cloud` is the engine's authenticating proxy — `r.Route("/engine")` strips the
+        - http://loop-runtime-api.loop-runtime-system.svc:3000/api/v1/health
+        # B-022: `loop-console` is the engine's authenticating proxy — `r.Route("/engine")` strips the
         # prefix, applies requireJWT and forwards. When it goes down, `/engine/*` and `/v1/*` return
-        # 502 TOGETHER, even with `loopzero-api` healthy (measured on 2026-08-10). It was the only
+        # 502 TOGETHER, even with `loop-runtime-api` healthy (measured on 2026-08-10). It was the only
         # component with that coupling that nobody probed: with no series, the B-022 bullet that
         # asks for measured unavailability had no way to be answered.
-        - http://loopzero-cloud.loopzero-system.svc:13002/health
-        - http://gitea-http.loopzero-system.svc:3000/api/v1/version
-        - http://traefik.loopzero-system.svc:9000/ping
+        - http://loop-console.loop-runtime-system.svc:13002/health
+        - http://gitea-http.loop-runtime-system.svc:3000/api/v1/version
+        - http://traefik.loop-runtime-system.svc:9000/ping
   interval: 30s
   scrapeTimeout: 15s
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: Probe
 metadata:
-  name: loopzero-infra-probe
+  name: loop-runtime-infra-probe
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   prober:
-    url: blackbox-exporter.loopzero-system.svc:9115
+    url: blackbox-exporter.loop-runtime-system.svc:9115
   module: http_2xx
   targets:
     staticConfig:

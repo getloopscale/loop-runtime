@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // T0.4 (plan 2026-05-21-deep-review-remediation) — guard test asserting
 // that every Pulumi output embedding a sensitive Output<string>
 // (specifically: drillPG.password in DSNs) is wrapped in `pulumi.secret()`.
 //
 // Background: prior to commit applied 2026-05-21, the drill DSN exports
-// kratosDsn / hydraDsn / giteaDsn / loopzeroApiDsn were declared as plain
+// kratosDsn / hydraDsn / giteaDsn / loopRuntimeApiDsn were declared as plain
 // `pulumi.interpolate` — the DB password leaked in plaintext to
 // `pulumi stack output` and to the state file.
 //
@@ -23,11 +23,11 @@ import * as path from "path";
 const SRC = path.resolve(__dirname, "..");
 const INDEX = path.join(SRC, "index.ts");
 
-describe("loopzero-drill — DSN exports must be pulumi.secret-wrapped (T0.4)", () => {
+describe("loop-runtime-drill — DSN exports must be pulumi.secret-wrapped (T0.4)", () => {
   const src = fs.readFileSync(INDEX, "utf-8");
 
   // The 4 DSN exports that embed ${drillPG.password}
-  const sensitiveExports = ["kratosDsn", "hydraDsn", "giteaDsn", "loopzeroApiDsn"];
+  const sensitiveExports = ["kratosDsn", "hydraDsn", "giteaDsn", "loopRuntimeApiDsn"];
 
   for (const exportName of sensitiveExports) {
     it(`exports ${exportName} wrapped in pulumi.secret()`, () => {

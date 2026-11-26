@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -72,7 +72,7 @@ func TestEveryStreamOfTheCloudHostSkipsTheBufferingMiddleware(t *testing.T) {
     - name: rate-limit
       namespace: traefik
 `)
-	out := renderChart(t, uniqueChart(t, "loopzero-cloud"), "loopzero-cloud", nil, values)
+	out := renderChart(t, uniqueChart(t, "loop-console"), "loop-console", nil, values)
 	irs := ingressRoutesIn(t, out)
 	if len(irs) != 1 {
 		t.Fatalf("want 1 IngressRoute, got %d", len(irs))

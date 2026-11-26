@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // app_attestation_store_test.go — RESHAPED in T1.3b of plan
@@ -36,7 +36,7 @@ import (
 //     — these required real SQL execution against a fake DBTX (now
 //     incompatible with the SqlcBridge requirement). DELETED here;
 //     reshape obligation logged for Phase 2 (T2.x) when pgxmock or
-//     LOOPZERO_E2E_DATABASE_URL harness is wired.
+//     LOOP_RUNTIME_E2E_DATABASE_URL harness is wired.
 //
 // KEEP-INVARIANT coverage of validation invariants (digest format,
 // non-empty app_name, non-empty release/tenant, SBOM format whitelist)
@@ -96,10 +96,10 @@ func TestAppAttestationStoreSqlc_SaveAppAttestations_RejectsEmptyReleaseID(t *te
 	if err == nil {
 		t.Fatal("expected error for empty release_id, got nil")
 	}
-	// Audit gap M02 #13: typed LoopZeroError code surfaces in audit_log.
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if !errors.As(err, &loopzeroErr) {
-		t.Errorf("expected *loopzeroerrors.LoopZeroError, got %T: %v", err, err)
+	// Audit gap M02 #13: typed LoopRuntimeError code surfaces in audit_log.
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
+		t.Errorf("expected *loopruntimeerrors.LoopRuntimeError, got %T: %v", err, err)
 	}
 }
 
@@ -112,11 +112,11 @@ func TestAppAttestationStoreSqlc_GetBuildAppAttestations_EmptyInputsReturnsErrBu
 	// contract; preserved by wrapper guard).
 	store := &AppAttestationStoreSqlc{}
 	_, err := store.GetBuildAppAttestations(context.Background(), "", "build-1")
-	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+	if !errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
 		t.Errorf("expected ErrBuildNotFound for empty tenant, got %v", err)
 	}
 	_, err = store.GetBuildAppAttestations(context.Background(), "ten-1", "")
-	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+	if !errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
 		t.Errorf("expected ErrBuildNotFound for empty build, got %v", err)
 	}
 }
@@ -147,10 +147,10 @@ func TestAppAttestationStoreSqlc_UpdateAppSBOM_RejectsEmptyInputs(t *testing.T) 
 	if err == nil {
 		t.Fatal("expected error for empty app_name, got nil")
 	}
-	// Validates typed LoopZeroError surface for audit_log mapping.
+	// Validates typed LoopRuntimeError surface for audit_log mapping.
 	err = store.UpdateAppSBOM(context.Background(), "", "", "s3://...", SBOMFormatCycloneDXJSON, 42)
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if !errors.As(err, &loopzeroErr) {
-		t.Errorf("expected *loopzeroerrors.LoopZeroError, got %T: %v", err, err)
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
+		t.Errorf("expected *loopruntimeerrors.LoopRuntimeError, got %T: %v", err, err)
 	}
 }

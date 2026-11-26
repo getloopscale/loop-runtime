@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Coverage tests for the HTTP service checker, moved out of the parent package's
 // coverage_boost_test.go when the health family was extracted (B-080).

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package archtest holds architecture tests: assertions about how the packages
 // under api/internal depend on each other, not about what any of them does.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store_test
 
@@ -31,7 +31,7 @@ package store_test
 //     * Query errors wrap with "secret_store: list names:" prefix
 //
 // Per matrix § Phase 2 reshape window: behavioral subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness
 // is wired.
 
 // The compile-time assertion that PostgresSecretStore satisfies the secret

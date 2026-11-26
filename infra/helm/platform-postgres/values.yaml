@@ -45,7 +45,7 @@ network:
   metricsNamespace: monitoring
   # The pods, in this namespace, allowed to connect to PostgreSQL.
   clientPodLabels:
-    app.kubernetes.io/part-of: loopzero-data-plane
+    app.kubernetes.io/part-of: loop-runtime-data-plane
 
 # Base backups and the WAL archive, in S3, through the Barman Cloud plugin (a release of
 # its own in the operator's namespace). Empty bucket: no archive and no backup.

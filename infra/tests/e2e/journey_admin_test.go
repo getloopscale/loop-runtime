@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 11: Admin Commands
 //
 // Migrated from: infra/tests/dogfood/journeys/journey-11-admin.sh
 //
 // Tests: evict dry-run, broad pattern rejection, missing service auth rejection
-// Requires: LOOPZERO_SERVICE_AUTH environment variable
+// Requires: LOOP_RUNTIME_SERVICE_AUTH environment variable
 package e2e
 
 import (
@@ -26,12 +26,12 @@ var _ = Describe("Journey 11: Admin", Label("journey"), func() {
 		seedE2E()
 
 		// Load service auth from file or env.
-		serviceAuth = os.Getenv("LOOPZERO_SERVICE_AUTH")
+		serviceAuth = os.Getenv("LOOP_RUNTIME_SERVICE_AUTH")
 		if serviceAuth == "" {
-			authFile := os.ExpandEnv("${HOME}/.loopzero/local-service-auth.txt")
+			authFile := os.ExpandEnv("${HOME}/.loop-runtime/local-service-auth.txt")
 			data, err := os.ReadFile(authFile)
 			if err != nil {
-				Skip("LOOPZERO_SERVICE_AUTH not set and " + authFile + " not found")
+				Skip("LOOP_RUNTIME_SERVICE_AUTH not set and " + authFile + " not found")
 			}
 			serviceAuth = strings.TrimSpace(string(data))
 		}
@@ -40,7 +40,7 @@ var _ = Describe("Journey 11: Admin", Label("journey"), func() {
 	It("dry-run with no-match pattern returns queued=0", func() {
 		noMatchPattern := fmt.Sprintf("tn-ginkgo-nomatch-%s-%%", uniqueSuffix())
 
-		stdout, stderr, exitCode := runLoopZeroAdmin(serviceAuth, "admin", "tenants", "evict",
+		stdout, stderr, exitCode := runLoopRuntimeAdmin(serviceAuth, "admin", "tenants", "evict",
 			"--pattern", noMatchPattern, "--dry-run", "--json")
 
 		Expect(exitCode).To(Equal(0),
@@ -54,7 +54,7 @@ var _ = Describe("Journey 11: Admin", Label("journey"), func() {
 	})
 
 	It("rejects too-broad pattern", func() {
-		stdout, stderr, _ := runLoopZeroAdmin(serviceAuth, "admin", "tenants", "evict",
+		stdout, stderr, _ := runLoopRuntimeAdmin(serviceAuth, "admin", "tenants", "evict",
 			"--pattern", "%", "--dry-run", "--json")
 
 		combined := strings.ToLower(stdout + stderr)
@@ -65,8 +65,8 @@ var _ = Describe("Journey 11: Admin", Label("journey"), func() {
 	})
 
 	It("rejects missing service auth", func() {
-		// Deliberately no LOOPZERO_SERVICE_AUTH: removed from the inherited env too.
-		stdout, stderr, _ := execLoopZero(loopzeroInvocation{unset: []string{"LOOPZERO_SERVICE_AUTH"}},
+		// Deliberately no LOOP_RUNTIME_SERVICE_AUTH: removed from the inherited env too.
+		stdout, stderr, _ := execLoopRuntime(loopRuntimeInvocation{unset: []string{"LOOP_RUNTIME_SERVICE_AUTH"}},
 			"admin", "tenants", "evict", "--pattern", "tn-test-%", "--dry-run", "--json")
 
 		combined := strings.ToLower(stdout + stderr)
@@ -79,7 +79,7 @@ var _ = Describe("Journey 11: Admin", Label("journey"), func() {
 	})
 
 	It("dry-run with real tenant pattern shows match", func() {
-		stdout, stderr, exitCode := runLoopZeroAdmin(serviceAuth, "admin", "tenants", "evict",
+		stdout, stderr, exitCode := runLoopRuntimeAdmin(serviceAuth, "admin", "tenants", "evict",
 			"--pattern", "e2e-tenant", "--dry-run", "--json")
 
 		Expect(exitCode).To(Equal(0), "stdout: %s\nstderr: %s", stdout, stderr)
@@ -94,8 +94,8 @@ var _ = Describe("Journey 11: Admin", Label("journey"), func() {
 	})
 })
 
-// runLoopZeroAdmin runs an admin command authenticated by the operator's
+// runLoopRuntimeAdmin runs an admin command authenticated by the operator's
 // X-Service-Auth secret.
-func runLoopZeroAdmin(serviceAuth string, args ...string) (stdout, stderr string, exitCode int) {
-	return execLoopZero(loopzeroInvocation{env: []string{"LOOPZERO_SERVICE_AUTH=" + serviceAuth}}, args...)
+func runLoopRuntimeAdmin(serviceAuth string, args ...string) (stdout, stderr string, exitCode int) {
+	return execLoopRuntime(loopRuntimeInvocation{env: []string{"LOOP_RUNTIME_SERVICE_AUTH=" + serviceAuth}}, args...)
 }

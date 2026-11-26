@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T4.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md —
-// property-based extension for LoopZeroError invariants. Closes M04 LOW
+// property-based extension for LoopRuntimeError invariants. Closes M04 LOW
 // gap (property-based testing escopo limitado a naming + statemachine).
 
 package errors
@@ -14,16 +14,16 @@ import (
 	"testing/quick"
 )
 
-// TestProperty_LoopZeroErrorErrorContainsCode verifies that Error()
+// TestProperty_LoopRuntimeErrorErrorContainsCode verifies that Error()
 // output ALWAYS embeds the code field — downstream log parsers and
 // HTTP transports rely on this (pkg/errors/http extracts code from
 // the error chain).
-func TestProperty_LoopZeroErrorErrorContainsCode(t *testing.T) {
+func TestProperty_LoopRuntimeErrorErrorContainsCode(t *testing.T) {
 	f := func(code, message string) bool {
 		if code == "" {
 			return true // empty code is degenerate; caller must validate
 		}
-		err := NewLoopZeroError(code, message)
+		err := NewLoopRuntimeError(code, message)
 		return strings.Contains(err.Error(), code)
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 5000}); err != nil {
@@ -31,12 +31,12 @@ func TestProperty_LoopZeroErrorErrorContainsCode(t *testing.T) {
 	}
 }
 
-// TestProperty_LoopZeroErrorIsReflexive — every LoopZeroError MUST report
+// TestProperty_LoopRuntimeErrorIsReflexive — every LoopRuntimeError MUST report
 // itself as matching itself via errors.Is. Catches regressions where
 // the Is implementation drifts from comparing Code.
-func TestProperty_LoopZeroErrorIsReflexive(t *testing.T) {
+func TestProperty_LoopRuntimeErrorIsReflexive(t *testing.T) {
 	f := func(code, message string) bool {
-		err := NewLoopZeroError(code, message)
+		err := NewLoopRuntimeError(code, message)
 		return errors.Is(err, err)
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 1000}); err != nil {
@@ -44,17 +44,17 @@ func TestProperty_LoopZeroErrorIsReflexive(t *testing.T) {
 	}
 }
 
-// TestProperty_LoopZeroErrorIsMatchesByCode — TWO LoopZeroErrors with the
+// TestProperty_LoopRuntimeErrorIsMatchesByCode — TWO LoopRuntimeErrors with the
 // SAME code MUST match via errors.Is regardless of message
 // differences. This is the sentinel pattern callers rely on
 // (errors.Is(err, ErrSentinel) for typed-error checks).
-func TestProperty_LoopZeroErrorIsMatchesByCode(t *testing.T) {
+func TestProperty_LoopRuntimeErrorIsMatchesByCode(t *testing.T) {
 	f := func(code, msg1, msg2 string) bool {
 		if code == "" {
 			return true
 		}
-		a := NewLoopZeroError(code, msg1)
-		b := NewLoopZeroError(code, msg2)
+		a := NewLoopRuntimeError(code, msg1)
+		b := NewLoopRuntimeError(code, msg2)
 		return errors.Is(a, b) && errors.Is(b, a)
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 5000}); err != nil {
@@ -62,15 +62,15 @@ func TestProperty_LoopZeroErrorIsMatchesByCode(t *testing.T) {
 	}
 }
 
-// TestProperty_LoopZeroErrorIsDifferentCodes — different codes MUST NOT
+// TestProperty_LoopRuntimeErrorIsDifferentCodes — different codes MUST NOT
 // match via errors.Is. Catches accidental "always-true" Is impl.
-func TestProperty_LoopZeroErrorIsDifferentCodes(t *testing.T) {
+func TestProperty_LoopRuntimeErrorIsDifferentCodes(t *testing.T) {
 	f := func(code1, code2, msg string) bool {
 		if code1 == "" || code2 == "" || code1 == code2 {
 			return true
 		}
-		a := NewLoopZeroError(code1, msg)
-		b := NewLoopZeroError(code2, msg)
+		a := NewLoopRuntimeError(code1, msg)
+		b := NewLoopRuntimeError(code2, msg)
 		return !errors.Is(a, b)
 	}
 	if err := quick.Check(f, &quick.Config{MaxCount: 5000}); err != nil {
@@ -86,7 +86,7 @@ func TestProperty_WrapPreservesCode(t *testing.T) {
 		if code == "" {
 			return true
 		}
-		original := NewLoopZeroError(code, message)
+		original := NewLoopRuntimeError(code, message)
 		wrapped := original.Wrap(context)
 		return wrapped.Code == code
 	}
@@ -102,7 +102,7 @@ func TestProperty_WrapWithStackPreservesIs(t *testing.T) {
 		if code == "" {
 			return true
 		}
-		original := NewLoopZeroError(code, message)
+		original := NewLoopRuntimeError(code, message)
 		wrapped := original.WrapWithStack(context)
 		return errors.Is(wrapped, original)
 	}
@@ -115,7 +115,7 @@ func TestProperty_WrapWithStackPreservesIs(t *testing.T) {
 // always include code + message keys. Transport contracts rely on this.
 func TestProperty_ToJSONHasCodeAndMessage(t *testing.T) {
 	f := func(code, message string) bool {
-		err := NewLoopZeroError(code, message)
+		err := NewLoopRuntimeError(code, message)
 		m := err.ToJSON()
 		_, hasCode := m["code"]
 		_, hasMessage := m["message"]
@@ -136,7 +136,7 @@ func TestProperty_DeepWrapChainPreservesCode(t *testing.T) {
 		}
 		// Cap depth at 30 to stay below stackDepth=32 + leave room for runtime frames.
 		d := int(depth%30) + 1
-		original := NewLoopZeroError(code, "base")
+		original := NewLoopRuntimeError(code, "base")
 		current := original
 		for i := 0; i < d; i++ {
 			current = current.Wrap("layer")

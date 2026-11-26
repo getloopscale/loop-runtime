@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package config_test
 
@@ -12,11 +12,11 @@ import (
 
 // TestAPI_NoBackgroundLoops — roadmap 02 DoD.
 //
-// The LOOPZERO_DISABLE_LEGACY_LOOPS flag is the mechanism that makes the API
+// The LOOP_RUNTIME_DISABLE_LEGACY_LOOPS flag is the mechanism that makes the API
 // binary a stateless HTTP server while the controller binary runs the
 // loops. This test verifies the flag's behavior at the config layer:
 //
-//   - When LOOPZERO_DISABLE_LEGACY_LOOPS="true": DisableLegacyLoops=true
+//   - When LOOP_RUNTIME_DISABLE_LEGACY_LOOPS="true": DisableLegacyLoops=true
 //     → api/cmd/main.go skips all loop Start() calls (validated by
 //     the log assertion "API won leader election but loops will not
 //     run here; controller binary owns them" seen on live DO).
@@ -37,17 +37,17 @@ import (
 // closes and the controller binary is promoted to the stable path.
 
 func TestAPI_NoBackgroundLoops_FlagDisablesLoops(t *testing.T) {
-	t.Setenv("LOOPZERO_DISABLE_LEGACY_LOOPS", "true")
+	t.Setenv("LOOP_RUNTIME_DISABLE_LEGACY_LOOPS", "true")
 	cfg := config.Load()
 
 	if !cfg.DisableLegacyLoops {
-		t.Fatal("DisableLegacyLoops must be true when LOOPZERO_DISABLE_LEGACY_LOOPS=true")
+		t.Fatal("DisableLegacyLoops must be true when LOOP_RUNTIME_DISABLE_LEGACY_LOOPS=true")
 	}
 
 	// When DisableLegacyLoops is true, the main.go code path is:
 	//
 	//   if isLeader && cfg.DisableLegacyLoops {
-	//       logger.Info("LOOPZERO_DISABLE_LEGACY_LOOPS=true — loops will not run here")
+	//       logger.Info("LOOP_RUNTIME_DISABLE_LEGACY_LOOPS=true — loops will not run here")
 	//       metrics.LeaderStatus.Set(0)
 	//   }
 	//   if isLeader && !cfg.DisableLegacyLoops {
@@ -63,7 +63,7 @@ func TestAPI_NoBackgroundLoops_FlagDisablesLoops(t *testing.T) {
 }
 
 func TestAPI_NoBackgroundLoops_FlagDefaultAllowsLoops(t *testing.T) {
-	_ = os.Unsetenv("LOOPZERO_DISABLE_LEGACY_LOOPS")
+	_ = os.Unsetenv("LOOP_RUNTIME_DISABLE_LEGACY_LOOPS")
 	cfg := config.Load()
 
 	if cfg.DisableLegacyLoops {
@@ -74,8 +74,8 @@ func TestAPI_NoBackgroundLoops_FlagDefaultAllowsLoops(t *testing.T) {
 func TestAPI_NoBackgroundLoops_AdmissionFlagIndependent(t *testing.T) {
 	// The two roadmap flags (loops + admission) must be independently
 	// controllable. Enabling admission must NOT disable loops.
-	t.Setenv("LOOPZERO_ADMISSION_CONTROL", "true")
-	_ = os.Unsetenv("LOOPZERO_DISABLE_LEGACY_LOOPS")
+	t.Setenv("LOOP_RUNTIME_ADMISSION_CONTROL", "true")
+	_ = os.Unsetenv("LOOP_RUNTIME_DISABLE_LEGACY_LOOPS")
 	cfg := config.Load()
 
 	if cfg.DisableLegacyLoops {

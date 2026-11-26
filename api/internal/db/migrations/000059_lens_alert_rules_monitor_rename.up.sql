@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- M136 Phase 4b — finish the Guards → Monitors rename on the alert-rule side.
 --
@@ -8,7 +8,7 @@
 -- failure mode, no new coupling.
 --
 -- Leaving `guard_id` and `metric='guard_breach'` behind would split the vocabulary permanently
--- across the loopzero-lens / loopzero-cloud boundary, and the next reader could not tell whether a "guard"
+-- across the loop-runtime-lens / loop-console boundary, and the next reader could not tell whether a "guard"
 -- is a different concept from a "monitor". Half a rename is worse than none.
 --
 -- Same lock discipline as 000058: the risk is lock ACQUISITION behind an idle-in-transaction

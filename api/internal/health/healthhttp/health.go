@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package healthhttp serves /api/v1/health and the readiness probes behind it: the
 // database check, the per-service HTTP checks, and cell discovery.
@@ -88,9 +88,9 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	_, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.health.deep_check",
+	_, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.health.deep_check",
 		trace.WithAttributes(
-			attribute.String("loopzero.health.status", "pending"),
+			attribute.String("loop-runtime.health.status", "pending"),
 		))
 	defer span.End()
 
@@ -137,11 +137,11 @@ func (h *HealthHandler) DeepHealth(w http.ResponseWriter, r *http.Request) {
 
 	if degraded {
 		result["status"] = "degraded"
-		span.SetAttributes(attribute.String("loopzero.health.status", "degraded"))
+		span.SetAttributes(attribute.String("loop-runtime.health.status", "degraded"))
 		w.WriteHeader(http.StatusServiceUnavailable)
 	} else {
 		result["status"] = "ok"
-		span.SetAttributes(attribute.String("loopzero.health.status", "healthy"))
+		span.SetAttributes(attribute.String("loop-runtime.health.status", "healthy"))
 		w.WriteHeader(http.StatusOK)
 	}
 	_ = json.NewEncoder(w).Encode(result)

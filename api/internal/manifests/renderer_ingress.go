@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package manifests
 
@@ -142,7 +142,7 @@ func buildIngressResources(ri renderScope, app AppManifestInput, port int) ([]st
 					Namespace: ns,
 					Labels:    labels,
 					Annotations: map[string]string{
-						"loopzero.io/custom-domain": cd.Domain,
+						"runtime.getloopscale.com/custom-domain": cd.Domain,
 					},
 				},
 				Spec: certManagerCertificateSpec{
@@ -184,7 +184,7 @@ func buildIngressResources(ri renderScope, app AppManifestInput, port int) ([]st
 				Namespace: ns,
 				Labels:    labels,
 				Annotations: map[string]string{
-					"loopzero.io/custom-domain": cd.Domain,
+					"runtime.getloopscale.com/custom-domain": cd.Domain,
 				},
 			},
 			Spec: traefikIngressRouteSpec{

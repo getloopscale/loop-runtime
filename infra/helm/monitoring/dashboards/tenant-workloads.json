@@ -30,7 +30,7 @@
       "title": "← Home",
       "tooltip": "Back to System Home",
       "type": "link",
-      "url": "/d/loopzero-home/loopzero-system-home"
+      "url": "/d/loop-runtime-home/loop-runtime-system-home"
     },
     {
       "asDropdown": false,
@@ -42,7 +42,7 @@
       "title": "Per-Tenant Health",
       "tooltip": "Per-Tenant Health Dashboard",
       "type": "link",
-      "url": "/d/loopzero-per-tenant"
+      "url": "/d/loop-runtime-per-tenant"
     }
   ],
   "panels": [
@@ -113,7 +113,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_namespace_status_phase{namespace=~\"loopzero-tn-.*\",phase=\"Active\",job=\"runtime-kube-state-metrics\"})",
+          "expr": "count(kube_namespace_status_phase{namespace=~\"loop-runtime-tn-.*\",phase=\"Active\",job=\"runtime-kube-state-metrics\"})",
           "legendFormat": "Namespaces",
           "instant": true,
           "refId": "A"
@@ -171,7 +171,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_pod_status_phase{namespace=~\"loopzero-tn-.*\",phase=\"Running\",job=\"runtime-kube-state-metrics\"} == 1)",
+          "expr": "count(kube_pod_status_phase{namespace=~\"loop-runtime-tn-.*\",phase=\"Running\",job=\"runtime-kube-state-metrics\"} == 1)",
           "legendFormat": "Running",
           "instant": true,
           "refId": "A"
@@ -233,7 +233,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_pod_status_phase{namespace=~\"loopzero-tn-.*\",phase=\"Pending\",job=\"runtime-kube-state-metrics\"} == 1) or vector(0)",
+          "expr": "count(kube_pod_status_phase{namespace=~\"loop-runtime-tn-.*\",phase=\"Pending\",job=\"runtime-kube-state-metrics\"} == 1) or vector(0)",
           "legendFormat": "Pending",
           "instant": true,
           "refId": "A"
@@ -291,7 +291,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_pod_status_phase{namespace=~\"loopzero-tn-.*\",phase=\"Failed\",job=\"runtime-kube-state-metrics\"} == 1) or vector(0)",
+          "expr": "count(kube_pod_status_phase{namespace=~\"loop-runtime-tn-.*\",phase=\"Failed\",job=\"runtime-kube-state-metrics\"} == 1) or vector(0)",
           "legendFormat": "Failed",
           "instant": true,
           "refId": "A"
@@ -349,7 +349,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_pod_container_status_waiting_reason{namespace=~\"loopzero-tn-.*\",reason=\"CrashLoopBackOff\",job=\"runtime-kube-state-metrics\"} == 1) or vector(0)",
+          "expr": "count(kube_pod_container_status_waiting_reason{namespace=~\"loop-runtime-tn-.*\",reason=\"CrashLoopBackOff\",job=\"runtime-kube-state-metrics\"} == 1) or vector(0)",
           "legendFormat": "CrashLoop",
           "instant": true,
           "refId": "A"
@@ -411,7 +411,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"loopzero-tn-.*\",job=\"runtime-kube-state-metrics\"}[1h])) or vector(0)",
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"loop-runtime-tn-.*\",job=\"runtime-kube-state-metrics\"}[1h])) or vector(0)",
           "legendFormat": "Restarts",
           "instant": true,
           "refId": "A"
@@ -578,7 +578,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_pod_container_info{namespace=~\"loopzero-tn-.*\",job=\"runtime-kube-state-metrics\"}",
+          "expr": "kube_pod_container_info{namespace=~\"loop-runtime-tn-.*\",job=\"runtime-kube-state-metrics\"}",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -588,7 +588,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_pod_container_status_restarts_total{namespace=~\"loopzero-tn-.*\",job=\"runtime-kube-state-metrics\"}",
+          "expr": "kube_pod_container_status_restarts_total{namespace=~\"loop-runtime-tn-.*\",job=\"runtime-kube-state-metrics\"}",
           "format": "table",
           "instant": true,
           "refId": "B"
@@ -598,7 +598,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_pod_container_status_ready{namespace=~\"loopzero-tn-.*\",job=\"runtime-kube-state-metrics\"}",
+          "expr": "kube_pod_container_status_ready{namespace=~\"loop-runtime-tn-.*\",job=\"runtime-kube-state-metrics\"}",
           "format": "table",
           "instant": true,
           "refId": "C"
@@ -721,7 +721,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_deployment_spec_replicas{namespace=~\"loopzero-tn-.*\",job=\"runtime-kube-state-metrics\"}",
+          "expr": "kube_deployment_spec_replicas{namespace=~\"loop-runtime-tn-.*\",job=\"runtime-kube-state-metrics\"}",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -731,7 +731,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_deployment_status_replicas_ready{namespace=~\"loopzero-tn-.*\",job=\"runtime-kube-state-metrics\"}",
+          "expr": "kube_deployment_status_replicas_ready{namespace=~\"loop-runtime-tn-.*\",job=\"runtime-kube-state-metrics\"}",
           "format": "table",
           "instant": true,
           "refId": "B"
@@ -741,7 +741,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_deployment_status_replicas_available{namespace=~\"loopzero-tn-.*\",job=\"runtime-kube-state-metrics\"}",
+          "expr": "kube_deployment_status_replicas_available{namespace=~\"loop-runtime-tn-.*\",job=\"runtime-kube-state-metrics\"}",
           "format": "table",
           "instant": true,
           "refId": "C"
@@ -886,7 +886,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_pod_container_resource_requests{namespace=~\"loopzero-tn-.*\",resource=\"cpu\",job=\"runtime-kube-state-metrics\"}",
+          "expr": "kube_pod_container_resource_requests{namespace=~\"loop-runtime-tn-.*\",resource=\"cpu\",job=\"runtime-kube-state-metrics\"}",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -896,7 +896,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_pod_container_resource_requests{namespace=~\"loopzero-tn-.*\",resource=\"memory\",job=\"runtime-kube-state-metrics\"}",
+          "expr": "kube_pod_container_resource_requests{namespace=~\"loop-runtime-tn-.*\",resource=\"memory\",job=\"runtime-kube-state-metrics\"}",
           "format": "table",
           "instant": true,
           "refId": "B"
@@ -906,7 +906,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_pod_container_resource_limits{namespace=~\"loopzero-tn-.*\",resource=\"cpu\",job=\"runtime-kube-state-metrics\"}",
+          "expr": "kube_pod_container_resource_limits{namespace=~\"loop-runtime-tn-.*\",resource=\"cpu\",job=\"runtime-kube-state-metrics\"}",
           "format": "table",
           "instant": true,
           "refId": "C"
@@ -916,7 +916,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_pod_container_resource_limits{namespace=~\"loopzero-tn-.*\",resource=\"memory\",job=\"runtime-kube-state-metrics\"}",
+          "expr": "kube_pod_container_resource_limits{namespace=~\"loop-runtime-tn-.*\",resource=\"memory\",job=\"runtime-kube-state-metrics\"}",
           "format": "table",
           "instant": true,
           "refId": "D"
@@ -1068,7 +1068,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "increase(kube_pod_container_status_restarts_total{namespace=~\"loopzero-tn-.*\",job=\"runtime-kube-state-metrics\"}[5m])",
+          "expr": "increase(kube_pod_container_status_restarts_total{namespace=~\"loop-runtime-tn-.*\",job=\"runtime-kube-state-metrics\"}[5m])",
           "legendFormat": "{{namespace}} / {{pod}}",
           "refId": "A"
         }
@@ -1164,7 +1164,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count by (image) (kube_pod_container_info{namespace=~\"loopzero-tn-.*\",job=\"runtime-kube-state-metrics\"})",
+          "expr": "count by (image) (kube_pod_container_info{namespace=~\"loop-runtime-tn-.*\",job=\"runtime-kube-state-metrics\"})",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -1192,7 +1192,7 @@
   "refresh": "30s",
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loop-runtime",
     "tenants",
     "workloads",
     "runtime"
@@ -1221,7 +1221,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "LoopZero — Tenant Workloads",
-  "uid": "loopzero-tenant-workloads",
+  "title": "LoopRuntime — Tenant Workloads",
+  "uid": "loop-runtime-tenant-workloads",
   "version": 1
 }

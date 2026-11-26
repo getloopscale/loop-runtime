@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package aggregator
 
@@ -212,7 +212,7 @@ func TestAggregator_OutOfOrderTransitionEmitsDegraded(t *testing.T) {
 func TestAggregator_SourceFieldStamped(t *testing.T) {
 	store := &memoryStore{}
 	reader := &scriptedReader{
-		id: SourceLoopZeroAppInformer,
+		id: SourceLoopRuntimeAppInformer,
 		events: []PhaseEvent{
 			{Phase: "build", Status: "in_progress", Timestamp: now()},
 		},
@@ -230,8 +230,8 @@ func TestAggregator_SourceFieldStamped(t *testing.T) {
 	if err := json.Unmarshal(got[0].Data, &payload); err != nil {
 		t.Fatalf("payload unmarshal: %v", err)
 	}
-	if payload["source"] != string(SourceLoopZeroAppInformer) {
-		t.Fatalf("payload.source = %v; want %v", payload["source"], SourceLoopZeroAppInformer)
+	if payload["source"] != string(SourceLoopRuntimeAppInformer) {
+		t.Fatalf("payload.source = %v; want %v", payload["source"], SourceLoopRuntimeAppInformer)
 	}
 }
 

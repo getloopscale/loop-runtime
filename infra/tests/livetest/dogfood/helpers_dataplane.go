@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
 // DP9 — data-plane helpers.
 //
-// Bridges the dogfood LIVE suite with the loopzero-data-plane products
-// (loopzero-memory, loopzero-rag, loopzero-lens) provisioned per the DP series and pinned
+// Bridges the dogfood LIVE suite with the loop-runtime-data-plane products
+// (loop-runtime-memory, loop-runtime-rag, loop-runtime-lens) provisioned per the DP series and pinned
 // at README-QA-REDTEAM.md. Reads the platform-admin keys from
-// ~/.loopzero/dev-credentials.json § data_plane.{product}.platform_admin_key.
+// ~/.loop-runtime/dev-credentials.json § data_plane.{product}.platform_admin_key.
 //
 // Related:
 //   - Blueprint: knowledge-base/discoveries/blueprints/dp9-data-plane-dogfood-journeys-blueprint.md
-//   - Red Team doc: loopzero-workspace/README-QA-REDTEAM.md
-//   - Anchor spec:  loopzero/.claude/rules/dogfood-golden-rule.md § 1 (rag-edge-live)
+//   - Red Team doc: loop-runtime-workspace/README-QA-REDTEAM.md
+//   - Anchor spec:  loop-runtime/.claude/rules/dogfood-golden-rule.md § 1 (rag-edge-live)
 
 package dogfood
 
@@ -46,7 +46,7 @@ func envKey(name string) string {
 // error at helper time (fail-fast, Rule 8).
 type DataPlaneEndpoint struct {
 	Product          string // "memory" | "rag" | "lens"
-	PlatformAdminKey string // control-plane key held by the loopzero-cloud broker; NOT the customer bearer
+	PlatformAdminKey string // control-plane key held by the loop-console broker; NOT the customer bearer
 	HostPort         int    // e.g. 18081 (memory), 18082 (rag), 18084 (lens)
 	EdgePath         string // e.g. "/v1/memory/" — Traefik prefix owned by the ForwardAuth chain
 }
@@ -54,7 +54,7 @@ type DataPlaneEndpoint struct {
 // devCredsPath is the operator-owned canonical secret file (mode 0600) shared
 // with every dogfood helper. Kept in a const so a test that needs to reason
 // about the seed location does not silently accept a stale env override.
-const devCredsPath = ".loopzero/dev-credentials.json"
+const devCredsPath = ".loop-runtime/dev-credentials.json"
 
 // LoadDataPlaneEndpoint returns the full { key, host_port, edge_path } tuple
 // for one product. Used by DP-memory/DP-rag/DP-lens journeys to (a) probe the
@@ -122,11 +122,11 @@ func DataPlaneHostURL(ep DataPlaneEndpoint) string {
 
 // MintDataPlaneCustomerKey provisions a per-tenant customer key on the
 // direct-host process via the product's admin bootstrap token. Returns the
-// raw secret (loopzero_live_*/rag_live_*) suitable for use as a Bearer on the
+// raw secret (loop_runtime_live_*/rag_live_*) suitable for use as a Bearer on the
 // customer surface (/v1/*, NOT /v1/admin/*).
 //
 // bootstrapToken defaults to the canonical dev value declared in
-// loopzero-workspace README-QA-REDTEAM.md ("dev-bootstrap-token-change-me-min-32-chars")
+// loop-runtime-workspace README-QA-REDTEAM.md ("dev-bootstrap-token-change-me-min-32-chars")
 // when empty. The bootstrap admin table on rag is single-use — if the mint
 // returns "unauthorized", callers SHOULD fall back to the already-persisted
 // platform_admin_key (which carries the full scope set per dev/rag-up.sh:61)

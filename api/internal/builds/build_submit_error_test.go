@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -64,7 +64,7 @@ func TestSubmitBuildError_ScrubsInternalTermsInDetail(t *testing.T) {
 	}{
 		{
 			name:        "gitea + credential + 10/8 CIDR",
-			raw:         "Post \"https://gitea-http.loopzero-system.svc.cluster.local:3000\": Authorization: Bearer ghp_secret1234567890 dial tcp 10.43.0.5:3000",
+			raw:         "Post \"https://gitea-http.loop-runtime-system.svc.cluster.local:3000\": Authorization: Bearer ghp_secret1234567890 dial tcp 10.43.0.5:3000",
 			wantNotSubs: []string{"ghp_secret1234567890", "gitea-http", "10.43.0.5"},
 		},
 		{
@@ -89,9 +89,9 @@ func TestSubmitBuildError_ScrubsInternalTermsInDetail(t *testing.T) {
 			// Sprint 6 /review CODE-001 — pq driver leak coverage applied to the
 			// SubmitBuildError surface (not just PushBundleError).
 			name:        "pq driver internal hostname scrubbed (Sprint 6 CODE-001)",
-			raw:         "pq: could not connect to host postgresql.loopzero-system.svc.cluster.local",
+			raw:         "pq: could not connect to host postgresql.loop-runtime-system.svc.cluster.local",
 			wantSubs:    []string{"<internal service>"},
-			wantNotSubs: []string{"postgresql.loopzero-system", ".svc.cluster.local"},
+			wantNotSubs: []string{"postgresql.loop-runtime-system", ".svc.cluster.local"},
 		},
 	}
 	for _, tc := range cases {

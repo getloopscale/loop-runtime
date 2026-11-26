@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -19,16 +19,16 @@ import (
 // servicesJSONV1LegacyProject is the project name used when a v1 services.json
 // payload arrives without an explicit project field. Plan v1.2 T2.1 + ADR D10:
 // MUST remain "services-bundle" (NOT "default") to keep existing Gitea repos
-// loopzero-source-{tenant}-services-bundle and their ArgoCD App lineage intact.
+// loop-runtime-source-{tenant}-services-bundle and their ArgoCD App lineage intact.
 const servicesJSONV1LegacyProject = "services-bundle"
 
 // Plan B v3.1 T-B.3 (2026-06-05) — services.json validator.
 //
-// Replaces the legacy `ValidateLoopZeroYAML()` for the new wire-level contract.
+// Replaces the legacy `ValidateLoopRuntimeYAML()` for the new wire-level contract.
 // Embeds the JSON Schema 7 artifact (mirror of loopzerokit's
 // `ServicesManifest` interface from `packages/loopzero/src/services/adapters-bridge/manifest.ts`)
 // and uses `santhosh-tekuri/jsonschema/v5` to validate payload shape before
-// translating into the existing `LoopZeroYAML` struct shape (so downstream code
+// translating into the existing `LoopRuntimeYAML` struct shape (so downstream code
 // in `build_reconcile_complete.go` + cascade can consume unchanged during
 // the transition window per ADR D7).
 
@@ -94,7 +94,7 @@ func compileSchema() (*jsonschema.Schema, error) {
 // returns the native *ServicesManifest. Plan v1.2 T3.3 (M6): preferred
 // callsites should consume the native shape (carries dependsOn, openapi,
 // type, env fully typed). ValidateServicesJSON remains for legacy callers
-// that still need the *LoopZeroYAML adapter; it now delegates here.
+// that still need the *LoopRuntimeYAML adapter; it now delegates here.
 //
 // mode decides what a reserved env key does (see EnvBlocklistMode); callers
 // pass the validated config.Config.EnvBlocklistMode.
@@ -123,7 +123,7 @@ func ValidateServicesJSONNative(content string, mode EnvBlocklistMode) (*Service
 	}
 
 	if err := schema.Validate(raw); err != nil {
-		// Sprint 4 T2.2 (closes loopzero-cloud#29): walk the FULL Causes tree,
+		// Sprint 4 T2.2 (closes loop-console#29): walk the FULL Causes tree,
 		// collecting every leaf violation into a flat FieldError slice. Replaces
 		// the legacy `leaf := ve.Causes[0]` single-cause walk (which masked
 		// simultaneous violations and produced a cascading-retry trap for the
@@ -172,7 +172,7 @@ func ValidateServicesJSONNative(content string, mode EnvBlocklistMode) (*Service
 // flattenJSONSchemaCauses recursively walks the jsonschema.ValidationError
 // Causes tree and emits one FieldError per LEAF (a cause with no further
 // sub-causes). The InstanceLocation becomes Field; the schema message becomes
-// Message. Sprint 4 T2.2 closes loopzero-cloud#29 (multi-field error aggregation).
+// Message. Sprint 4 T2.2 closes loop-console#29 (multi-field error aggregation).
 //
 // Walk order is depth-first, left-to-right — matches the order jsonschema/v5
 // emits the Causes slice, which makes the first leaf deterministic and

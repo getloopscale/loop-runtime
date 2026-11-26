@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package preview is the preview-environment bounded context. M9 Step 6.
 package preview
@@ -18,7 +18,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/db"
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
@@ -42,7 +42,7 @@ type PreviewBuildSubmitter interface {
 // LIVE catch 2026-06-07: without this, preview build submissions hit
 // `WorkflowSpec.Plan must be non-nil with at least one app` because the
 // PR webhook handler doesn't parse loopzero.yaml from the PR branch source
-// (only push webhooks do, via WebhookBuildRequest.LoopZeroYaml).
+// (only push webhooks do, via WebhookBuildRequest.LoopRuntimeYaml).
 type PreviewBuildAppsLookup interface {
 	LatestSucceededApps(ctx context.Context, tenantID, projectID string) ([]deploycontracts.AppSpec, error)
 }
@@ -167,7 +167,7 @@ func (s *PreviewService) CreatePreview(ctx context.Context, req ports.CreatePrev
 	}
 	s.upsertSlot(ctx, rec)
 	s.ensureCR(ctx, rec)
-	s.submitPreviewBuild(ctx, rec, req.LoopZeroYamlApps)
+	s.submitPreviewBuild(ctx, rec, req.LoopRuntimeYamlApps)
 	return rec.ToDomain(), nil
 }
 
@@ -200,7 +200,7 @@ func (s *PreviewService) newPreviewRecord(req ports.CreatePreviewRequest) *store
 	// it surfaces a structurally valid public hostname but won't match an
 	// IngressRoute (proxy 404). Best-effort; the dashboard repolls if the
 	// app set updates after CR creation.
-	entryApp := entryAppFromLoopZeroYaml(req.LoopZeroYamlApps)
+	entryApp := entryAppFromLoopRuntimeYaml(req.LoopRuntimeYamlApps)
 	if url := s.previewURL(req.TenantID(), req.ProjectID, entryApp, req.PRNumber); url != "" {
 		rec.URL = &url
 	}
@@ -279,7 +279,7 @@ func (s *PreviewService) ensureCR(ctx context.Context, rec *store.PreviewRecord)
 // submitPreviewBuild triggers the preview's build and links it to the row.
 // Best-effort, but logged loudly: a missing build leaves the preview stuck in
 // 'creating'.
-func (s *PreviewService) submitPreviewBuild(ctx context.Context, rec *store.PreviewRecord, loopzeroYamlApps map[string]map[string]interface{}) {
+func (s *PreviewService) submitPreviewBuild(ctx context.Context, rec *store.PreviewRecord, loopRuntimeYamlApps map[string]map[string]interface{}) {
 	if s.deps.Builds == nil {
 		return
 	}
@@ -289,7 +289,7 @@ func (s *PreviewService) submitPreviewBuild(ctx context.Context, rec *store.Prev
 		Environment: previewEnvName(rec.PRNumber),
 		CommitSHA:   rec.CommitSHA,
 		CreatedBy:   "preview-service",
-		Apps:        s.resolvePreviewApps(ctx, rec, loopzeroYamlApps),
+		Apps:        s.resolvePreviewApps(ctx, rec, loopRuntimeYamlApps),
 	})
 	if err != nil {
 		s.deps.Logger.Error("preview service: build submission failed",
@@ -312,9 +312,9 @@ func (s *PreviewService) submitPreviewBuild(ctx context.Context, rec *store.Prev
 // LanguageStrategy). Otherwise the apps of the latest SUCCEEDED build are
 // reused; those lack framework/path/build. With neither, the build is
 // submitted without apps and the lookup outcome is logged.
-func (s *PreviewService) resolvePreviewApps(ctx context.Context, rec *store.PreviewRecord, loopzeroYamlApps map[string]map[string]interface{}) []deploycontracts.AppSpec {
-	if len(loopzeroYamlApps) > 0 {
-		apps := appsFromLoopZeroYaml(loopzeroYamlApps)
+func (s *PreviewService) resolvePreviewApps(ctx context.Context, rec *store.PreviewRecord, loopRuntimeYamlApps map[string]map[string]interface{}) []deploycontracts.AppSpec {
+	if len(loopRuntimeYamlApps) > 0 {
+		apps := appsFromLoopRuntimeYaml(loopRuntimeYamlApps)
 		s.deps.Logger.Info("preview service: apps inherited from PR loopzero.yaml",
 			"preview", rec.ID, "apps", len(apps))
 		return apps
@@ -397,19 +397,19 @@ func (s *PreviewService) DeletePreviewByPR(ctx context.Context, tenantID, projec
 // also safe.
 func (s *PreviewService) validate(req ports.CreatePreviewRequest) error {
 	if strings.TrimSpace(req.TenantID()) == "" {
-		return loopzeroerrors.ErrMissingField.Wrap("tenant_id is required")
+		return loopruntimeerrors.ErrMissingField.Wrap("tenant_id is required")
 	}
 	if strings.TrimSpace(req.ProjectID) == "" {
-		return loopzeroerrors.ErrMissingField.Wrap("project_id is required")
+		return loopruntimeerrors.ErrMissingField.Wrap("project_id is required")
 	}
 	if req.PRNumber <= 0 {
-		return loopzeroerrors.ErrMissingField.Wrap("pr_number must be positive")
+		return loopruntimeerrors.ErrMissingField.Wrap("pr_number must be positive")
 	}
 	if strings.TrimSpace(req.Branch) == "" {
-		return loopzeroerrors.ErrMissingField.Wrap("branch is required")
+		return loopruntimeerrors.ErrMissingField.Wrap("branch is required")
 	}
 	if strings.TrimSpace(req.CommitSHA) == "" {
-		return loopzeroerrors.ErrMissingField.Wrap("commit_sha is required")
+		return loopruntimeerrors.ErrMissingField.Wrap("commit_sha is required")
 	}
 	return nil
 }
@@ -449,7 +449,7 @@ func (s *PreviewService) previewURL(tenantID, projectID, entryApp string, prNumb
 	return naming.PreviewURL(tenantID, projectID, entryApp, publicDomain, prNumber)
 }
 
-// entryAppFromLoopZeroYaml picks the first server-class app from loopzero.yaml's
+// entryAppFromLoopRuntimeYaml picks the first server-class app from loopzero.yaml's
 // apps map — defined as the app that gets an IngressRoute (server or
 // frontend type, or unspecified type which defaults to server). Worker
 // apps are skipped because they receive no traffic. Returns "" when no
@@ -457,7 +457,7 @@ func (s *PreviewService) previewURL(tenantID, projectID, entryApp string, prNumb
 //
 // Ordering: iterates apps map in sorted key order so the choice is
 // deterministic across reconciles. Returns the first match.
-func entryAppFromLoopZeroYaml(apps map[string]map[string]interface{}) string {
+func entryAppFromLoopRuntimeYaml(apps map[string]map[string]interface{}) string {
 	if len(apps) == 0 {
 		return ""
 	}
@@ -486,20 +486,20 @@ func previewEnvName(prNumber int) string {
 // isPreviewNotFound matches only the typed store sentinel. A message that
 // merely reads like it is a different failure and must propagate.
 func isPreviewNotFound(err error) bool {
-	return errors.Is(err, loopzeroerrors.ErrPreviewNotFound)
+	return errors.Is(err, loopruntimeerrors.ErrPreviewNotFound)
 }
 
 // Compile-time assertion: PreviewService satisfies the route handler's
 // PreviewService interface.
 var _ PreviewCreator = (*PreviewService)(nil)
 
-// appsFromLoopZeroYaml — deprecated thin wrapper around the canonical
-// ConvertLoopZeroYamlApps. Kept for in-package call sites that still use
+// appsFromLoopRuntimeYaml — deprecated thin wrapper around the canonical
+// ConvertLoopRuntimeYamlApps. Kept for in-package call sites that still use
 // the short name; the implementation now delegates to the single source
 // of truth so push-flow and PR-flow can never drift again (sponsor
 // LIVE-caught 2026-06-18: this function had silently fallen out of sync
 // with autodeploy_adapters.go — losing the `start` field — breaking
 // preview builds with "no declared start command").
-func appsFromLoopZeroYaml(rawApps map[string]map[string]interface{}) []deploycontracts.AppSpec {
-	return deploycontracts.ConvertLoopZeroYamlApps(rawApps)
+func appsFromLoopRuntimeYaml(rawApps map[string]map[string]interface{}) []deploycontracts.AppSpec {
+	return deploycontracts.ConvertLoopRuntimeYamlApps(rawApps)
 }

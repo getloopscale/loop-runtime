@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Sprint 6 / T0.1 — Per-app attestation sidecar table tests.
 // Validates the SQL contract of the forward-only migration without

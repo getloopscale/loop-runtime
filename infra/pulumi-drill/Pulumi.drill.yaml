@@ -1,29 +1,29 @@
 encryptionsalt: v1:rwO+QhqlQiQ=:v1:u0zsfY7XeCS75A1o:gdx5mty+r8Ranl5FYyJPVaiSHC1YZQ==
 config:
   # === Stack-wide ===
-  loopzero-drill:domain: drill.getloopscale.com
-  loopzero-drill:doProject: loopzero-drill
-  loopzero-drill:region: sfo3
+  loop-runtime-drill:domain: drill.getloopscale.com
+  loop-runtime-drill:doProject: loop-runtime-drill
+  loop-runtime-drill:region: sfo3
   # === Lifecycle (T3.4.bis EC-01 fix) ===
   # Default 8h covers L0-L2 + Stage 1 cell2-soaks comfortably.
-  # Stage 2 cell2-soaks (24h soak) overrides via `pulumi config set loopzero-drill:expiresInHours 26`
+  # Stage 2 cell2-soaks (24h soak) overrides via `pulumi config set loop-runtime-drill:expiresInHours 26`
   # before `pulumi up` (cell2-soaks.yml workflow propagates this).
   # Max 48h enforced in code (src/index.ts:71).
-  loopzero-drill:expiresInHours: "8"
+  loop-runtime-drill:expiresInHours: "8"
   # === Mgmt cluster (medium per D2) ===
-  loopzero-drill:mgmtK8sVersion: 1.33.9-do.6
-  loopzero-drill:mgmtNodeSize: s-4vcpu-8gb-amd
-  loopzero-drill:mgmtNodeCount: "3"
+  loop-runtime-drill:mgmtK8sVersion: 1.33.9-do.6
+  loop-runtime-drill:mgmtNodeSize: s-4vcpu-8gb-amd
+  loop-runtime-drill:mgmtNodeCount: "3"
   # === Build cluster (small per D2) ===
-  loopzero-drill:buildK8sVersion: 1.33.9-do.6
-  loopzero-drill:buildNodeSize: s-2vcpu-4gb-amd
-  loopzero-drill:buildNodeCount: "2"
+  loop-runtime-drill:buildK8sVersion: 1.33.9-do.6
+  loop-runtime-drill:buildNodeSize: s-2vcpu-4gb-amd
+  loop-runtime-drill:buildNodeCount: "2"
   # === Runtime + Runtime-2 clusters (small per D2; cell mapping per D3) ===
-  loopzero-drill:runtimeK8sVersion: 1.33.9-do.6
-  loopzero-drill:runtimeNodeSize: s-2vcpu-4gb-amd
-  loopzero-drill:runtimeNodeCount: "2"
+  loop-runtime-drill:runtimeK8sVersion: 1.33.9-do.6
+  loop-runtime-drill:runtimeNodeSize: s-2vcpu-4gb-amd
+  loop-runtime-drill:runtimeNodeCount: "2"
   # === Secrets (drill-scoped per D7) ===
-  loopzero-drill:cfAccountId:
+  loop-runtime-drill:cfAccountId:
     secure: v1:OX3Yr/J8t9G06xUf:H7mS42qEH5IQamBRkyQjilMIl5pGXAMW+2EzxrPLcTAfivVEf+aQuJB3BZoEaO4k
   digitalocean:spacesAccessId:
     secure: v1:07uHlgqRVXJhVRO1:GUYSa/gTrTi1wc+fd62hLOFFS/WddOXYtKyfjNW3vw03PCoF

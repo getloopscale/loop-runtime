@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package capacity
 
@@ -21,7 +21,7 @@ import (
 // TestCapacityArgoCDMemoryPerApp validates the cell-budget.md assumption:
 //
 //	"ArgoCD memory vs Application count — ~500 kB/app is from community
-//	 discussions, not LoopZero profiling."
+//	 discussions, not LoopRuntime profiling."
 //
 // The test creates N synthetic ArgoCD Application CRs (manual sync, no
 // real repo) and measures go_memstats_heap_inuse_bytes before and after.
@@ -30,23 +30,23 @@ import (
 // Run:
 //
 //	# Port-forward ArgoCD metrics first:
-//	kubectl --context=$LOOPZERO_CORE_CONTEXT -n argocd port-forward svc/argocd-metrics 18082:8082 &
+//	kubectl --context=$LOOP_RUNTIME_CORE_CONTEXT -n argocd port-forward svc/argocd-metrics 18082:8082 &
 //
-//	LOOPZERO_CAPACITY=1 \
-//	LOOPZERO_ARGOCD_METRICS_URL=http://localhost:18082 \
-//	LOOPZERO_CORE_CONTEXT=do-sfo3-loopzero-infra-dev-sfo3-mgmt \
+//	LOOP_RUNTIME_CAPACITY=1 \
+//	LOOP_RUNTIME_ARGOCD_METRICS_URL=http://localhost:18082 \
+//	LOOP_RUNTIME_CORE_CONTEXT=do-sfo3-loop-runtime-infra-dev-sfo3-mgmt \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityArgoCDMemoryPerApp -v -timeout 15m
 func TestCapacityArgoCDMemoryPerApp(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	metricsURL := os.Getenv("LOOPZERO_ARGOCD_METRICS_URL")
-	mgmtContext := os.Getenv("LOOPZERO_CORE_CONTEXT")
+	metricsURL := os.Getenv("LOOP_RUNTIME_ARGOCD_METRICS_URL")
+	mgmtContext := os.Getenv("LOOP_RUNTIME_CORE_CONTEXT")
 	if metricsURL == "" || mgmtContext == "" {
-		t.Fatal("LOOPZERO_ARGOCD_METRICS_URL and LOOPZERO_CORE_CONTEXT required")
+		t.Fatal("LOOP_RUNTIME_ARGOCD_METRICS_URL and LOOP_RUNTIME_CORE_CONTEXT required")
 	}
 
 	controllerReplicas := 3 // ArgoCD controller replicas (T-05 sharding).
-	if s := os.Getenv("LOOPZERO_ARGOCD_REPLICAS"); s != "" {
+	if s := os.Getenv("LOOP_RUNTIME_ARGOCD_REPLICAS"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
 			controllerReplicas = n
 		}
@@ -55,7 +55,7 @@ func TestCapacityArgoCDMemoryPerApp(t *testing.T) {
 	const (
 		appCount    = 100
 		argoNS      = "argocd"
-		benchLabel  = "loopzero.dev/capacity-bench"
+		benchLabel  = "loop-runtime.dev/capacity-bench"
 		settleTime  = 60 * time.Second
 		projectedKB = 500 // cell-budget.md projection: ~500 kB/app
 	)

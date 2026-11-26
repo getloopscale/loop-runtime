@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// `task staging:platform:verify` replaces the loopzero-api pod that started before
+// `task staging:platform:verify` replaces the loop-runtime-api pod that started before
 // post-core ran. The argocd-token seed restarts the same Deployment a moment before, and
 // `kubectl rollout restart` stamps kubectl.kubernetes.io/restartedAt to the second: a
 // second restart within that second leaves the stamp unchanged, and kubectl refuses it
@@ -34,7 +34,7 @@ case " $* " in
 esac
 [ -n "$stamp" ] || { echo "fake kubectl: no restartedAt in: $*" >&2; exit 2; }
 if [ -f "$state" ] && [ "$(cat "$state")" = "$stamp" ]; then
-  echo "error: failed to create patch for loopzero-api: if restart has already been triggered within the past second, please wait before attempting to trigger another" >&2
+  echo "error: failed to create patch for loop-runtime-api: if restart has already been triggered within the past second, please wait before attempting to trigger another" >&2
   exit 1
 fi
 printf '%s' "$stamp" >"$state"
@@ -59,11 +59,11 @@ func stagingVerifyRestart(t *testing.T) string {
 		t.Fatal("no platform:verify task in taskfiles/staging.yml")
 	}
 	for _, cmd := range verify.Cmds {
-		if text, ok := cmd.(string); ok && strings.Contains(text, "deployment/loopzero-api") && !strings.Contains(text, "rollout status") {
+		if text, ok := cmd.(string); ok && strings.Contains(text, "deployment/loop-runtime-api") && !strings.Contains(text, "rollout status") {
 			return text
 		}
 	}
-	t.Fatal("platform:verify restarts no deployment/loopzero-api")
+	t.Fatal("platform:verify restarts no deployment/loop-runtime-api")
 	return ""
 }
 
@@ -74,7 +74,7 @@ func TestTheVerifyRestartSucceedsRightAfterAnotherRestart(t *testing.T) {
 	}
 	state := t.TempDir()
 	env := append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "FAKE_STATE="+state, "FAKE_NOW=2026-11-23T00:21:10Z")
-	seed := exec.Command(filepath.Join(bin, "kubectl"), "-n", "loopzero-system", "rollout", "restart", "deployment/loopzero-api")
+	seed := exec.Command(filepath.Join(bin, "kubectl"), "-n", "loop-runtime-system", "rollout", "restart", "deployment/loop-runtime-api")
 	seed.Env = env
 	if out, err := seed.CombinedOutput(); err != nil {
 		t.Fatalf("the seed's restart: %v\n%s", err, out)
@@ -96,9 +96,9 @@ func TestStagingSeedsTheThirdPartyCredentialsFromTheHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	loop := regexp.MustCompile(`for name in ([a-z -]+); do\s+kept=/etc/loopzero-staging/\$name\.json`).FindStringSubmatch(string(data))
+	loop := regexp.MustCompile(`for name in ([a-z -]+); do\s+kept=/etc/loop-runtime-staging/\$name\.json`).FindStringSubmatch(string(data))
 	if loop == nil {
-		t.Fatal("taskfiles/staging.yml seeds no secret from /etc/loopzero-staging")
+		t.Fatal("taskfiles/staging.yml seeds no secret from /etc/loop-runtime-staging")
 	}
 	for _, want := range []string{"ghcr-pull", "resend", "stripe"} {
 		if !strings.Contains(" "+loop[1]+" ", " "+want+" ") {
@@ -107,9 +107,9 @@ func TestStagingSeedsTheThirdPartyCredentialsFromTheHost(t *testing.T) {
 	}
 }
 
-// loopzero-api's Loki address is the build cluster's ALB, read from the Ingress status: a
+// loop-runtime-api's Loki address is the build cluster's ALB, read from the Ingress status: a
 // deploy reads the previous one before the core sync, and the core sync that runs after
-// the build one (with Promtail and Prometheus) re-renders loopzero-api with it, which is
+// the build one (with Promtail and Prometheus) re-renders loop-runtime-api with it, which is
 // what a rebuild, whose first core sync has no ALB yet, relies on.
 func TestStagingSyncsTheApiAgainOnceTheLokiALBIsKnown(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(), "taskfiles", "staging.yml"))
@@ -122,8 +122,8 @@ func TestStagingSyncsTheApiAgainOnceTheLokiALBIsKnown(t *testing.T) {
 	if firstCore < 0 || earlyLoki < 0 || earlyLoki > firstCore {
 		t.Errorf("the previous deploy's Loki ALB is not read before the first core sync (loki read at %d, core sync at %d)", earlyLoki, firstCore)
 	}
-	if !regexp.MustCompile(`helmfile( --selector name=[a-z-]+)*? --selector name=loopzero-api( --selector name=[a-z-]+)* -f infra/helmfile/core\.helmfile\.yaml\.gotmpl`).MatchString(text) {
-		t.Error("no core sync after the build one re-renders loopzero-api")
+	if !regexp.MustCompile(`helmfile( --selector name=[a-z-]+)*? --selector name=loop-runtime-api( --selector name=[a-z-]+)* -f infra/helmfile/core\.helmfile\.yaml\.gotmpl`).MatchString(text) {
+		t.Error("no core sync after the build one re-renders loop-runtime-api")
 	}
 }
 
@@ -144,7 +144,7 @@ func TestStagingReadsTheCoreAPIALBBetweenTheCoreAndCellSyncs(t *testing.T) {
 	}
 }
 
-// The per-cell broker tokens are seeded once loopzero-api is verified Ready (the seed
+// The per-cell broker tokens are seeded once loop-runtime-api is verified Ready (the seed
 // restarts it and waits for it to settle), in the platform task itself, so a rebuild
 // and every redeploy write them.
 func TestStagingSeedsTheBrokerTokensAfterTheAPIIsVerified(t *testing.T) {

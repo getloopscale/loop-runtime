@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environment
 
@@ -13,7 +13,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
 )
 
@@ -25,11 +25,11 @@ import (
 // Namespace it points at is already deleted.
 //
 // T2 record: knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-environment-delete-orphans-application.md
-func tenantWithTwoEnvironments() *loopzerov1.Tenant {
-	return &loopzerov1.Tenant{
+func tenantWithTwoEnvironments() *loopruntimev1.Tenant {
+	return &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{Name: "tn-shop", Namespace: "default"},
-		Spec: loopzerov1.TenantSpec{
-			Environments: []loopzerov1.TenantEnvironmentEntry{
+		Spec: loopruntimev1.TenantSpec{
+			Environments: []loopruntimev1.TenantEnvironmentEntry{
 				{Name: "production", Cluster: "cell-0", Project: "shop"},
 				{Name: "staging", Cluster: "cell-0", Project: "shop"},
 			},
@@ -37,22 +37,22 @@ func tenantWithTwoEnvironments() *loopzerov1.Tenant {
 	}
 }
 
-func environmentBeingDeleted() *loopzerov1.Environment {
+func environmentBeingDeleted() *loopruntimev1.Environment {
 	now := metav1.NewTime(time.Now())
-	return &loopzerov1.Environment{
+	return &loopruntimev1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "env-shop-staging",
 			Namespace:         "default",
 			DeletionTimestamp: &now,
 			Finalizers:        []string{environmentFinalizer},
 		},
-		Spec: loopzerov1.EnvironmentCRSpec{
-			TenantRef:   loopzerov1.TenantRef{Name: "tn-shop"},
+		Spec: loopruntimev1.EnvironmentCRSpec{
+			TenantRef:   loopruntimev1.TenantRef{Name: "tn-shop"},
 			Environment: "staging",
 			Project:     "shop",
-			Namespace:   loopzerov1.NamespaceSpec{Name: "loopzero-tn-shop-shop-staging"},
+			Namespace:   loopruntimev1.NamespaceSpec{Name: "loop-runtime-tn-shop-shop-staging"},
 		},
-		Status: loopzerov1.EnvironmentCRStatus{Phase: loopzerov1.EnvironmentPhaseDeleting},
+		Status: loopruntimev1.EnvironmentCRStatus{Phase: loopruntimev1.EnvironmentPhaseDeleting},
 	}
 }
 
@@ -61,7 +61,7 @@ func TestDeletingAnEnvironmentRemovesItsTupleSoTheReaperReachesTheApplication(t 
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
 		WithObjects(tenantWithTwoEnvironments(), environmentBeingDeleted()).
-		WithStatusSubresource(&loopzerov1.Environment{}, &loopzerov1.Tenant{}).
+		WithStatusSubresource(&loopruntimev1.Environment{}, &loopruntimev1.Tenant{}).
 		Build()
 
 	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
@@ -70,7 +70,7 @@ func TestDeletingAnEnvironmentRemovesItsTupleSoTheReaperReachesTheApplication(t 
 		t.Fatalf("Reconcile: %v", err)
 	}
 
-	var tn loopzerov1.Tenant
+	var tn loopruntimev1.Tenant
 	if err := cl.Get(context.Background(),
 		types.NamespacedName{Name: "tn-shop", Namespace: "default"}, &tn); err != nil {
 		t.Fatalf("reading the Tenant: %v", err)
@@ -99,7 +99,7 @@ func TestDeletingAnEnvironmentWithoutItsTenantDoesNotBlockTheDeletion(t *testing
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
 		WithObjects(environmentBeingDeleted()). // no Tenant
-		WithStatusSubresource(&loopzerov1.Environment{}).
+		WithStatusSubresource(&loopruntimev1.Environment{}).
 		Build()
 
 	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
@@ -108,7 +108,7 @@ func TestDeletingAnEnvironmentWithoutItsTenantDoesNotBlockTheDeletion(t *testing
 		t.Fatalf("Reconcile returned an error with no Tenant: %v — the finalizer never leaves and the CR is stuck", err)
 	}
 
-	var env loopzerov1.Environment
+	var env loopruntimev1.Environment
 	err := cl.Get(context.Background(),
 		types.NamespacedName{Name: "env-shop-staging", Namespace: "default"}, &env)
 	if err == nil && len(env.Finalizers) > 0 {

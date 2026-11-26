@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
@@ -7,9 +7,9 @@ package statemachine
 //
 // T2.1 / COMP-001: string values aligned with operators/api/v1
 // PreviewPhase constants ("Creating", "Active", etc.) so the cast
-// loopzerov1.PreviewPhase(sm.Transition(...)) used by PreviewController
+// loopruntimev1.PreviewPhase(sm.Transition(...)) used by PreviewController
 // works without a translation layer — matching the TenantMachine
-// pattern that already aligns with loopzerov1.TenantPhase.
+// pattern that already aligns with loopruntimev1.TenantPhase.
 const (
 	PreviewEmpty         State = ""
 	PreviewCreating      State = "Creating"
