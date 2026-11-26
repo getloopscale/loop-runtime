@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
 	"log/slog"
 	"net/http"
 
@@ -29,6 +30,21 @@ const customDomainsLimitMetric = "custom_domains_per_env"
 // planUpgradePath is where the console sends a person to change plan; the
 // plan gate of the other routes answers with the same path by default.
 const planUpgradePath = "/billing"
+
+// SetUpgradeURL sets where a plan limit refusal points the person: the address
+// the platform is configured with (BILLING_UPGRADE_URL). Empty keeps the
+// console's own path.
+func (h *DomainHandler) SetUpgradeURL(upgradeURL string) {
+	h.upgradeURL = upgradeURL
+}
+
+// planUpgradeURL is the address a plan limit refusal carries.
+func (h *DomainHandler) planUpgradeURL() string {
+	if h.upgradeURL == "" {
+		return planUpgradePath
+	}
+	return h.upgradeURL
+}
 
 // SetPlanLimiter makes Create refuse a domain the tenant's plan has no room
 // for. Without it no plan is enforced (no database: dev and tests).
@@ -72,13 +88,13 @@ func (h *DomainHandler) allowedByPlan(ctx context.Context, w http.ResponseWriter
 		"code": "PLAN_LIMIT_EXCEEDED",
 		// Read by a person in the console and in the CLI: the limit, the
 		// usage and what to do about it.
-		"message": fmt.Sprintf("Plan limit reached: %s allows %d custom domains per environment, and %s has %d. Upgrade your plan to continue.",
-			domain.PlanTier(result.Plan).DisplayName(), result.Limit, req.Environment, existing),
+		"message": fmt.Sprintf("Plan limit reached: %s allows %d custom domains per environment, and %s has %d. %s",
+			domain.PlanTier(result.Plan).DisplayName(), result.Limit, req.Environment, existing, policy.UpgradeAdvice(h.planUpgradeURL())),
 		"current":     existing,
 		"limit":       "custom_domains",
 		"max":         result.Limit,
 		"plan":        result.Plan,
-		"upgrade_url": planUpgradePath,
+		"upgrade_url": h.planUpgradeURL(),
 	})
 	return false
 }

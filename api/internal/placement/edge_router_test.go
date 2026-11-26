@@ -205,3 +205,41 @@ func TestEdgeRouterPublishesEachRefreshAndFlagsAnIncompleteOne(t *testing.T) {
 		t.Error("a round where every tenant resolved was reported incomplete")
 	}
 }
+
+// A custom domain has no ExposedRoute: the app operator publishes one route per
+// application, under the platform host. The domain store is a second source, and a
+// host from it resolves to its tenant's cell by its full name.
+func TestEdgeRouterResolvesACustomDomainFromASecondSource(t *testing.T) {
+	platform := &fakeEdgeRoutes{routes: []EdgeRoute{
+		{Hostname: "tn-admin-sample-app-production.loopzero.local", TenantID: "tn-admin"},
+	}}
+	custom := &fakeEdgeRoutes{routes: []EdgeRoute{
+		{Hostname: "Shop.Customer.com", TenantID: "tn-e2e"},
+	}}
+	r := newTestEdgeRouter(nil, fakeTenantCells{"tn-admin": "cell-1", "tn-e2e": "cell-0"})
+	r.source = EdgeRouteSources{platform, custom}
+
+	for host, want := range map[string]string{
+		"shop.customer.com": "cell-0",
+		"tn-admin-sample-app-production.prod-dev.getloopscale.app": "cell-1",
+	} {
+		got, err := r.Resolve(context.Background(), host)
+		if err != nil || got != want {
+			t.Errorf("Resolve(%q) = %q, %v; want %q", host, got, err, want)
+		}
+	}
+}
+
+// One source that cannot be read fails the whole listing: the router then keeps the
+// index it had, where a partial listing would drop every host of the failed source.
+func TestEdgeRouteSourcesFailWhenOneSourceFails(t *testing.T) {
+	failing := errors.New("database unreachable")
+	sources := EdgeRouteSources{
+		&fakeEdgeRoutes{routes: []EdgeRoute{{Hostname: "a.loopzero.local", TenantID: "tn-a"}}},
+		&fakeEdgeRoutes{err: failing},
+	}
+	routes, err := sources.ListEdgeRoutes(context.Background())
+	if !errors.Is(err, failing) || routes != nil {
+		t.Fatalf("ListEdgeRoutes = %v, %v; want no routes and the source's error", routes, err)
+	}
+}

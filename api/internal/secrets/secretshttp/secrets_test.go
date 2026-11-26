@@ -1110,3 +1110,36 @@ func TestTransitFailureStatus_SeparatesDenialFromTransient(t *testing.T) {
 		t.Errorf("an unclassified error became %q; the default must be the recoverable one", got)
 	}
 }
+
+// The gate of the other routes answers with the address the platform is configured
+// with (BILLING_UPGRADE_URL). This one answered "/billing" whatever was configured,
+// which a person at the CLI cannot open.
+func TestSecretBulk_PlanLimitNamesTheConfiguredUpgradeAddress(t *testing.T) {
+	h := NewSecretHandler(&fakeSecretStoreT01{}, &lockCountingFake{})
+	h.SetPlanLimiter(fakePlanLimiterDeny{})
+	h.SetUpgradeURL("https://app.example.com/billing")
+	body, _ := json.Marshal(map[string]any{
+		"project": "proj-x",
+		"secrets": []map[string]any{{"name": "API_KEY", "value": "y", "envs": []string{"production"}}},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Bulk(w, req)
+
+	var refusal struct {
+		Message    string `json:"message"`
+		UpgradeURL string `json:"upgrade_url"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &refusal); err != nil {
+		t.Fatalf("decode the 402 body: %v", err)
+	}
+	if refusal.UpgradeURL != "https://app.example.com/billing" {
+		t.Errorf("upgrade_url = %q, want the configured address", refusal.UpgradeURL)
+	}
+	if !strings.Contains(refusal.Message, "Upgrade your plan at https://app.example.com/billing to continue.") {
+		t.Errorf("message %q does not name the upgrade address", refusal.Message)
+	}
+}

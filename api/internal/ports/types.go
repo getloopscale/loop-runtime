@@ -44,6 +44,13 @@ func GenerateDomainID() string {
 	return "dom-" + hex.EncodeToString(b)
 }
 
+// DomainHost is an active custom domain and the tenant that owns it: what the edge
+// needs to route the host.
+type DomainHost struct {
+	Domain   string
+	TenantID string
+}
+
 // CustomDomain represents a custom domain record.
 type CustomDomain struct {
 	ID                       string     `json:"id"`

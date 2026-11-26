@@ -195,3 +195,127 @@ func TestTheHostInstallsAPinnedAndCheckedLego(t *testing.T) {
 		t.Error("the host task does not install lego from its release after checking the checksum")
 	}
 }
+
+// A custom domain reaches its cell without the app router: no alias of the distribution
+// claims the host. Caddy sends it to the cell's load balancer, whose name it reads from the
+// file apps-origins.sh writes beside the store.
+func TestTheCellsLoadBalancersAreWrittenForCaddyToo(t *testing.T) {
+	bin, log := t.TempDir(), filepath.Join(t.TempDir(), "calls")
+	fakeBin(t, bin, "aws", log, fakeELB)
+	origins := filepath.Join(t.TempDir(), "cell-origins")
+
+	out, err := runEdgeScript(t, "apps-origins.sh", bin, "EDGE_KVS_ARN=arn:kvs", "EDGE_CLUSTER_PREFIX=loopzero-staging-",
+		"EDGE_ORIGINS_FILE="+origins)
+	if err != nil {
+		t.Fatalf("apps-origins.sh: %v\n%s", err, out)
+	}
+	got, err := os.ReadFile(origins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "cell-0 cell0.us-east-1.elb.amazonaws.com\ncell-1 cell1.us-east-1.elb.amazonaws.com\n"
+	if string(got) != want {
+		t.Errorf("origins file:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func stagingCaddyfile(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "infra/staging/edge/Caddyfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+// caddySite returns the body of the site block that opens with address.
+func caddySite(t *testing.T, caddyfile, address string) string {
+	t.Helper()
+	start := strings.Index(caddyfile, "\n"+address+" {\n")
+	if start < 0 {
+		t.Fatalf("no site %q in the Caddyfile", address)
+	}
+	end := strings.Index(caddyfile[start:], "\n}\n")
+	if end < 0 {
+		t.Fatalf("site %q is not closed", address)
+	}
+	return caddyfile[start : start+end]
+}
+
+// Custom domains get their certificate on demand (#174). The wildcard DNS record sends every
+// name under the platform's zone to this host, so Caddy asks before it issues: the question
+// goes to a loopback site that refuses the platform's own names and passes the rest to the
+// API's route lookup with the edge token.
+func TestCustomDomainsGetACertificateOnlyAfterTheAPIAnswersForThem(t *testing.T) {
+	caddyfile := stagingCaddyfile(t)
+
+	if !regexp.MustCompile(`(?s)on_demand_tls \{\s*ask http://127\.0\.0\.1:\{\$EDGE_ASK_PORT\}/ask\s*\}`).MatchString(caddyfile) {
+		t.Error("the global options do not make on-demand TLS ask the loopback site")
+	}
+	ask := caddySite(t, caddyfile, "http://127.0.0.1:{$EDGE_ASK_PORT}")
+	for what, want := range map[string]string{
+		"binds to loopback only":                      "bind 127.0.0.1",
+		"refuses names under the platform's zone":     `.endsWith(".{$EDGE_PLATFORM_DOMAIN}")`,
+		"asks the API's route lookup":                 "rewrite * /internal/edge/route?{query}",
+		"reaches the API under its public name":       "header_up X-Forwarded-Host {$EDGE_API_HOST}",
+		"presents the edge token from its credential": `header_up Authorization "Bearer {file.{$CREDENTIALS_DIRECTORY}/route-token}"`,
+	} {
+		if !strings.Contains(ask, want) {
+			t.Errorf("the ask site %s: no %q", what, want)
+		}
+	}
+}
+
+func TestACustomDomainIsSentToTheCellTheLookupNames(t *testing.T) {
+	site := caddySite(t, stagingCaddyfile(t), "https://")
+	for what, want := range map[string]string{
+		"issues its certificate on demand":     "on_demand",
+		"asks which cell serves the host":      "uri /ask?domain={host}",
+		"takes the cell from the answer":       "copy_headers X-LoopZero-Cell",
+		"reads the cells' load balancers":      "import {$EDGE_CELL_ORIGINS}",
+		"addresses the cell's load balancer":   "header_up Host {cell_origin}",
+		"keeps the viewer's host for the cell": "header_up X-Forwarded-Host {host}",
+	} {
+		if !strings.Contains(site, want) {
+			t.Errorf("the custom domain site %s: no %q", what, want)
+		}
+	}
+}
+
+// The token is read from the cluster on every run: a rebuild generates a new one. It reaches
+// Caddy as a credential, as the wildcard certificate does, and never through edge.env.
+func TestTheEdgeTaskHandsCaddyTheRouteTokenAsACredential(t *testing.T) {
+	task := stagingEdgeTask(t)
+	for what, want := range map[string]string{
+		"reads the token from the API's secret": "get secret loopzero-edge-route-token",
+		"keeps it readable by root only":        "install -m 0600 /dev/stdin /etc/loopzero-edge/route-token",
+		"writes the cells' origins for Caddy":   "EDGE_ORIGINS_FILE=/etc/loopzero-edge/cell-origins",
+	} {
+		if !strings.Contains(task, want) {
+			t.Errorf("the edge task %s: no %q", what, want)
+		}
+	}
+	if regexp.MustCompile(`(?m)^\s*EDGE_ROUTE_TOKEN=`).MatchString(task) {
+		t.Error("the edge task writes the route token into edge.env, which is world readable")
+	}
+	unit, err := os.ReadFile(filepath.Join(repoRoot(), "infra/staging/systemd/loopzero-edge.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(unit), "LoadCredential=route-token:/etc/loopzero-edge/route-token") {
+		t.Error("the edge unit does not load the route token as a credential")
+	}
+}
+
+// A plan limit refusal names where the plan is changed. Without an address the API falls
+// back to the console's own path, which a person at the CLI cannot open.
+func TestTheStagingAPIPointsPlanLimitRefusalsAtTheConsolesBillingPage(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "infra/helmfile/values/staging/loopzero-api.yaml.gotmpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `billingUpgradeUrl: {{ printf "%s/billing" (.Values.uiBaseUrl | trimSuffix "/") | quote }}`
+	if !strings.Contains(string(data), want) {
+		t.Errorf("the staging API values do not set %s", want)
+	}
+}

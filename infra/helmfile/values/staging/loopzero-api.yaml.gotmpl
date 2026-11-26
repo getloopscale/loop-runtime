@@ -51,6 +51,8 @@ config:
   # to (infra-live edge/app-routes), exported by `task staging:platform:outputs` (#68).
   edgeKvsArn: {{ requiredEnv "LOOPZERO_EDGE_KVS_ARN" | quote }}
   corsAllowedOrigin: {{ .Values.dashboardOrigin | quote }}
+  # Where a plan limit refusal sends the person: the console's billing page.
+  billingUpgradeUrl: {{ printf "%s/billing" (.Values.uiBaseUrl | trimSuffix "/") | quote }}
   # Empty: with no static key and the IRSA role above, the API signs with the AWS
   # credential chain and takes the S3 endpoint from AWS_ENDPOINT_URL (the emulator, which
   # the EKS layer injects) or the region. The bucket is environments/staging.yaml

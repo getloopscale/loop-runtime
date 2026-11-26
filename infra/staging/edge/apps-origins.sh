@@ -6,6 +6,8 @@
 #
 #   EDGE_KVS_ARN         the routes store (infra-live edge/app-routes)
 #   EDGE_CLUSTER_PREFIX  the EKS cluster names' prefix; loopzero-staging-cell-0 is cell-0
+#   EDGE_ORIGINS_FILE    optional: also write one "<cell> <DNSName>" line per cell there, for
+#                        Caddy, which sends a custom domain to its cell without the app router
 # The aws CLI reaches the emulator through the AWS_* variables the caller exports.
 set -euo pipefail
 
@@ -23,10 +25,16 @@ if [ -z "$cells" ]; then
   exit 1
 fi
 
+origins=""
 etag=$(aws cloudfront-keyvaluestore describe-key-value-store --kvs-arn "$EDGE_KVS_ARN" --query ETag --output text)
 while read -r cell arn; do
   dns=$(aws elbv2 describe-load-balancers --load-balancer-arns "$arn" --query 'LoadBalancers[0].DNSName' --output text)
   etag=$(aws cloudfront-keyvaluestore put-key --kvs-arn "$EDGE_KVS_ARN" --key "origin:$cell" --value "$dns" \
     --if-match "$etag" --output json | jq -r .ETag)
+  origins+="$cell $dns"$'\n'
   echo "origin:$cell -> $dns"
 done <<<"$cells"
+if [ -n "${EDGE_ORIGINS_FILE:-}" ]; then
+  printf '%s' "$origins" | sort >"$EDGE_ORIGINS_FILE.tmp"
+  mv "$EDGE_ORIGINS_FILE.tmp" "$EDGE_ORIGINS_FILE"
+fi

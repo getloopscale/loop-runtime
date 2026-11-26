@@ -2,17 +2,50 @@
 # release). There is no default: a cluster that forgets it would follow the operator's.
 image: ""
 
-# One primary and instances-1 replicas. A single instance has no failover: staging runs 1.
+# One primary and instances-1 standbys. With one there is no failover. With more, the
+# operator spreads them (spread below), commits wait for one standby (synchronous below)
+# and a PodDisruptionBudget protects them.
 instances: 1
+
+# Where the instances are kept apart. Zones, so losing one leaves a standby to promote.
+# `preferred` still schedules when a zone is missing; `required` leaves the pod pending.
+spread:
+  topologyKey: topology.kubernetes.io/zone
+  type: preferred
+
+# With more than one instance. `required`: no commit is acknowledged before a standby has
+# it, and writes stop while none is available. `preferred` keeps writing alone and can
+# lose the last commits if the primary is then lost.
+synchronous:
+  dataDurability: required
 
 storage:
   size: 5Gi
   # Empty: the cluster's default StorageClass.
   storageClass: ""
 
+# A volume of its own for WAL, when sized. The operator cannot remove it later.
+walStorage:
+  size: ""
+  storageClass: ""
+
+# CPU and memory of each instance, as both request and limit.
 resources:
-  requests: { cpu: 100m, memory: 256Mi }
-  limits: { memory: 1Gi }
+  cpu: 500m
+  memory: 512Mi
+
+# postgresql.conf settings, NAME: "value". shared_buffers is PostgreSQL's 128MB unless
+# set; a quarter of resources.memory is the usual starting point.
+parameters: {}
+
+network:
+  # The namespace the CloudNativePG operator runs in.
+  operatorNamespace: cnpg-system
+  # The namespace Prometheus scrapes from (port 9187).
+  metricsNamespace: monitoring
+  # The pods, in this namespace, allowed to connect to PostgreSQL.
+  clientPodLabels:
+    app.kubernetes.io/part-of: loopzero-data-plane
 
 # One entry per service: a database `name`, owned by the login role `owner`, whose password
 # is the Secret `passwordSecret` (type kubernetes.io/basic-auth, keys username and password).

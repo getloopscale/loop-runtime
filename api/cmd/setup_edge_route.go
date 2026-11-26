@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/db/store"
 	"github.com/getloopscale/loopzero/api/internal/placement"
 	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
+	"github.com/getloopscale/loopzero/api/internal/ports"
 )
 
 const (
@@ -48,7 +50,8 @@ func newEdgeRoute(cfg config.Config, crossTenant *db.PgxAdapter, shutdownCtx con
 		return nil
 	}
 	cells := placement.NewRoundRobinEngine(nil, &store.PostgresCellStore{DB: crossTenant}, cfg.MaxTenantsPerCell)
-	handler, router := edgeRouteHandler(cfg, source, cells, publisher, logger)
+	routes := placement.EdgeRouteSources{source, customDomainRoutes{hosts: &store.PostgresDomainStore{DB: crossTenant}}}
+	handler, router := edgeRouteHandler(cfg, routes, cells, publisher, logger)
 	if router == nil {
 		return nil
 	}
@@ -58,6 +61,30 @@ func newEdgeRoute(cfg config.Config, crossTenant *db.PgxAdapter, shutdownCtx con
 		router.Start(shutdownCtx)
 	}()
 	return handler
+}
+
+// activeDomainHosts lists the active custom domains of every tenant.
+type activeDomainHosts interface {
+	ListActiveHosts(ctx context.Context) ([]ports.DomainHost, error)
+}
+
+// customDomainRoutes is the route source for custom domains. The app operator
+// publishes one ExposedRoute per application, under the platform host, so a custom
+// domain reaches the index only from the domain store.
+type customDomainRoutes struct {
+	hosts activeDomainHosts
+}
+
+func (c customDomainRoutes) ListEdgeRoutes(ctx context.Context) ([]placement.EdgeRoute, error) {
+	hosts, err := c.hosts.ListActiveHosts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("custom domain routes: %w", err)
+	}
+	routes := make([]placement.EdgeRoute, 0, len(hosts))
+	for _, h := range hosts {
+		routes = append(routes, placement.EdgeRoute{Hostname: h.Domain, TenantID: h.TenantID})
+	}
+	return routes, nil
 }
 
 // edgeRoutePublisher returns the store the edge reads the routes from: the CloudFront

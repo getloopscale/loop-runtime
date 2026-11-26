@@ -109,3 +109,27 @@ func TestEdgeRouteHandlerIsNotBuiltWithoutAToken(t *testing.T) {
 		t.Error("a handler was built with an empty token")
 	}
 }
+
+// An edge that issues certificates on demand asks with ?domain=<host>, and it reaches
+// the API through a proxy that sets X-Forwarded-Host to the API's own name. The query
+// names the host that is being asked about, so it wins.
+func TestEdgeRouteReadsTheHostFromTheDomainQuery(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/internal/edge/route?domain=app.prod-dev.getloopscale.app", nil)
+	req.Header.Set("X-Forwarded-Host", "api.example.com")
+	req.Header.Set("Authorization", "Bearer "+edgeToken)
+
+	rec := serveEdge(req)
+	if rec.Code != http.StatusOK || rec.Header().Get("X-LoopZero-Cell") != "cell-1" {
+		t.Errorf("status=%d cell=%q; want 200 and cell-1", rec.Code, rec.Header().Get("X-LoopZero-Cell"))
+	}
+}
+
+func TestEdgeRouteRefusesADomainQueryNoRouteOwns(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/internal/edge/route?domain=unknown.example", nil)
+	req.Header.Set("X-Forwarded-Host", "app.prod-dev.getloopscale.app")
+	req.Header.Set("Authorization", "Bearer "+edgeToken)
+
+	if rec := serveEdge(req); rec.Code != http.StatusNotFound {
+		t.Errorf("status=%d; want 404: the query names the host, not the header", rec.Code)
+	}
+}

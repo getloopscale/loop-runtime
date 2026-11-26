@@ -20,7 +20,8 @@ type EdgeResolver interface {
 }
 
 // EdgeRouteHandler serves GET /internal/edge/route: the edge's subrequest before it
-// forwards a user's request. It reads the host from X-Forwarded-Host and answers with
+// forwards a user's request, or before it issues a certificate for a host. It reads the
+// host from the domain query, else from X-Forwarded-Host, and answers with
 // the cell in X-LoopZero-Cell (200), or refuses (404 unknown host, 503 index unavailable).
 // A non-2xx answer is relayed to the user by the edge, so its body is product copy.
 type EdgeRouteHandler struct {
@@ -46,10 +47,16 @@ func (h *EdgeRouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	host := r.Header.Get("X-Forwarded-Host")
+	// An edge that issues certificates on demand asks with ?domain=<host> (Caddy's
+	// `ask`), and may reach this API through a proxy that sets X-Forwarded-Host to the
+	// API's own name. The query names the host being asked about, so it wins.
+	host := r.URL.Query().Get("domain")
+	if host == "" {
+		host = r.Header.Get("X-Forwarded-Host")
+	}
 	if host == "" {
 		metrics.EdgeRouteLookups.WithLabelValues("bad_request").Inc()
-		http.Error(w, "missing X-Forwarded-Host", http.StatusBadRequest)
+		http.Error(w, "missing host: send ?domain= or X-Forwarded-Host", http.StatusBadRequest)
 		return
 	}
 	cell, err := h.resolver.Resolve(r.Context(), host)
