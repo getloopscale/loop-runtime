@@ -14,6 +14,7 @@ import (
 	"github.com/getloopscale/loopzero/api/internal/manifests"
 	"github.com/getloopscale/loopzero/api/internal/metrics"
 	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loopzero/pkg/naming"
 	"github.com/getloopscale/loopzero/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
@@ -75,6 +76,36 @@ type DomainProvisioner struct {
 	interval       time.Duration
 	cfZone         CFZoneStatusChecker // nil = v1 only, non-nil = v2 CF Zone polling
 	savedScaling   SavedScaling        // nil = render the build's scaling
+	sync           SyncTrigger         // nil = push only; nothing reaches the cell until the next sync
+}
+
+// SyncTrigger starts the Argo CD sync of an Application.
+type SyncTrigger interface {
+	TriggerSync(ctx context.Context, appName string) error
+}
+
+// WithSync makes the provisioner sync the environment after each push. The
+// Application of an environment has no automated sync, so a push alone leaves
+// the cell as it was: the host a domain adds gets no route and no certificate,
+// and the one it removes keeps both.
+func (p *DomainProvisioner) WithSync(s SyncTrigger) *DomainProvisioner {
+	p.sync = s
+	return p
+}
+
+// syncEnvironment starts the sync of the domain's environment.
+func (p *DomainProvisioner) syncEnvironment(ctx context.Context, d ports.CustomDomain) error {
+	if p.sync == nil {
+		return nil
+	}
+	appName, err := naming.ArgoAppName(d.TenantID, d.ProjectName, d.Environment)
+	if err != nil {
+		return fmt.Errorf("argocd application name: %w", err)
+	}
+	if err := p.sync.TriggerSync(ctx, appName); err != nil {
+		return fmt.Errorf("sync %s: %w", appName, err)
+	}
+	return nil
 }
 
 // SavedScaling overlays the saved scaling configuration of an environment on
@@ -450,6 +481,11 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 		metrics.DomainProvisioningDuration.WithLabelValues("failure").Observe(time.Since(start).Seconds())
 		return // stay in provisioning — F-006 timeout handles permanent failures
 	}
+	if err := p.syncEnvironment(ctx, d); err != nil {
+		log.Warn("domain provisioner: sync after push failed", "error", err)
+		metrics.DomainProvisioningDuration.WithLabelValues("failure").Observe(time.Since(start).Seconds())
+		return // not active: the host is in the GitOps repository and not on the cell
+	}
 
 	// Phase C: CAS transition provisioning → active (HIGH-05 fix).
 	// If a concurrent Delete already moved to "removing", this CAS fails harmlessly.
@@ -590,6 +626,10 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDoma
 
 	if _, err := p.gitops.Push(pushCtx, pushOpts); err != nil {
 		log.Warn("domain provisioner: gitops push failed on remove, will retry", "error", err)
+		return // stay in removing, retry next tick
+	}
+	if err := p.syncEnvironment(ctx, d); err != nil {
+		log.Warn("domain provisioner: sync after push failed on remove, will retry", "error", err)
 		return // stay in removing, retry next tick
 	}
 
