@@ -42,3 +42,13 @@ federation:
 {{- end }}
 {{- else }} []
 {{- end }}
+{{- if .Values | get "platformPostgres.enabled" false }}
+# The platform's PostgreSQL: the namespace values-prometheus.yaml scrapes its instances in,
+# and its alert rules, read from the one file that defines them.
+platformPostgres:
+  namespace: loopzero-data-plane
+serverFiles:
+  alerting_rules.yml:
+    groups:
+{{ readFile "../../../helm/monitoring/manifests/prometheusrule-platform-postgres.yaml" | fromYaml | get "spec.groups" | toYaml | indent 6 }}
+{{- end }}
