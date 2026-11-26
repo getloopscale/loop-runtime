@@ -157,6 +157,7 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, req PushRequest) error {
 	if err != nil {
 		// Not deployable by the same rule Connect applies: nothing to build.
 		log.Warn("auto-deploy: repository is not deployable, skipping", "error", err)
+		d.markCommitUndeployable(log, req, owner, repo, err)
 		return nil
 	}
 	log.Info("auto-deploy: deploy descriptor found", "project_in_yaml", loopzeroYaml.Project, "apps", len(loopzeroYaml.Apps))
@@ -283,6 +284,33 @@ func (d *AutoDeployer) markCommitPending(log *slog.Logger, req PushRequest, owne
 			log.Info("auto-deploy: commit status set to pending")
 		}
 	}()
+}
+
+// markCommitUndeployable tells the person who pushed that nothing was built,
+// and why. Without it the push leaves no trace on GitHub: no build exists to
+// report on, so no later status would ever arrive.
+func (d *AutoDeployer) markCommitUndeployable(log *slog.Logger, req PushRequest, owner, repo string, cause error) {
+	if d.cfg.AppClient == nil {
+		return
+	}
+	description := DeployDescriptorPath + " was not found at the repository root, so nothing was deployed."
+	var invalid *InvalidDeployDescriptorError
+	if errors.As(cause, &invalid) {
+		description = invalid.Error()
+	}
+	// Detached for the reason markCommitPending gives; it waits, because
+	// HandlePush returns right after and there is nothing else to run.
+	statusCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := d.cfg.AppClient.SetCommitStatus(statusCtx, req.InstallationID, owner, repo, req.CommitSHA, CommitStatus{
+		State:       "failure",
+		Description: fitCommitStatusDescription(description),
+		Context:     "loopzero/deploy",
+	}); err != nil {
+		log.Warn("auto-deploy: set commit status failed", "error", err)
+		return
+	}
+	log.Info("auto-deploy: commit marked as failure, the repository is not deployable")
 }
 
 // PrepareSourceBundle downloads the repo tarball at the given commit,
