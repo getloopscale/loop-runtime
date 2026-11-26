@@ -79,3 +79,44 @@ func TestOnBuildSucceededDoesNotGuessAURLForSeveralApps(t *testing.T) {
 		t.Errorf("target_url = %q, want none — there is no single URL for several apps", (*got)["target_url"])
 	}
 }
+
+func TestOnDeployFailedMarksTheCommitOfTheBuildAsFailure(t *testing.T) {
+	client, got := statusCapture(t)
+	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{}, "getloopscale.app", slog.Default())
+
+	n.OnDeployFailed(context.Background(), "tn-1", "shop", "build-1", "Sync timeout: service did not become healthy within the time limit", false)
+
+	if (*got)["state"] != "failure" {
+		t.Errorf("state = %q, want failure", (*got)["state"])
+	}
+	if !strings.Contains((*got)["description"], "Sync timeout") {
+		t.Errorf("description = %q, want the reason the deploy failed", (*got)["description"])
+	}
+}
+
+// GitHub refuses a description over 140 characters, and the status would stay pending.
+func TestOnDeployFailedKeepsTheDescriptionWithinGitHubsLimit(t *testing.T) {
+	client, got := statusCapture(t)
+	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{}, "getloopscale.app", slog.Default())
+
+	n.OnDeployFailed(context.Background(), "tn-1", "shop", "build-1", strings.Repeat("x", 300), false)
+
+	if len((*got)["description"]) > 140 {
+		t.Errorf("description has %d characters, GitHub accepts 140", len((*got)["description"]))
+	}
+}
+
+// A deploy a newer one replaced did not fail on its own code: error, not failure.
+func TestOnDeployFailedMarksASupersededDeployAsError(t *testing.T) {
+	client, got := statusCapture(t)
+	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{}, "getloopscale.app", slog.Default())
+
+	n.OnDeployFailed(context.Background(), "tn-1", "shop", "build-1", "Superseded by a newer deploy of this environment (build-2)", true)
+
+	if (*got)["state"] != "error" {
+		t.Errorf("state = %q, want error", (*got)["state"])
+	}
+	if !strings.Contains((*got)["description"], "Superseded") {
+		t.Errorf("description = %q, want it to say the deploy was superseded", (*got)["description"])
+	}
+}

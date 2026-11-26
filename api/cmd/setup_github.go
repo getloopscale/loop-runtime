@@ -99,6 +99,9 @@ func setupGitHub(
 		if statusNotifier != nil {
 			release.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
 			release.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
+			release.RegisterDeployFailedCallback(func(ctx context.Context, failure release.DeployFailure) {
+				statusNotifier.OnDeployFailed(ctx, failure.TenantID, failure.ProjectName, failure.BuildID, failure.Reason, failure.Superseded)
+			})
 			logger.Info("github: commit status callbacks registered (global)")
 		}
 		// An installation is bound to a tenant by the claim endpoint, after

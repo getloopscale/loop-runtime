@@ -405,6 +405,8 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A pending release that a newer deploy of the same environment replaced is cancelled with the reason "Superseded by a newer deploy of this environment". It used to retrigger syncs, terminate the newer deploy's Argo CD operation and fail after the sync timeout as "service did not become healthy" (#148).
+- A push deploy that fails after its build sets the commit status on GitHub to `failure` with the reason, and one a newer deploy replaced to `error`. The status used to stay `pending` (#148).
 - `last_deploy_at` in the project status and `last_deploy` in the environments list are the time the active release became active. After a rollback they showed the creation time of the release rolled back to, hours before the change (#145).
 - `GET /api/v1/environments` reports `last_deploy` and `last_deploy_sha` per project and environment. Two projects with an environment of the same name both showed the most recent deploy of either (#144).
 - A build of an app with a saved autoscaling range is accepted. The scaling resolver produced a spec with both a replica count and a range, and the scaling gate refused every such build with `SCALING_AMBIGUOUS`, redeploys included (#142).

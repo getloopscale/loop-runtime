@@ -72,6 +72,43 @@ func NotifyBuildFailed(ctx context.Context, tenantID, projectName, commitSHA, bu
 	}()
 }
 
+// DeployFailure describes a deploy that ended without going live.
+type DeployFailure struct {
+	TenantID    string
+	ProjectName string
+	BuildID     string
+	// Reason is the sentence the user reads.
+	Reason string
+	// Superseded is true when a newer deploy of the same environment replaced
+	// this one before it converged. It did not fail on its own.
+	Superseded bool
+}
+
+// onDeployFailed is an optional callback invoked when a release that was
+// rolling out ends without becoming active. The GitHub status notifier uses
+// it: without it a push deploy that fails after its build leaves the commit
+// status pending for good.
+var onDeployFailed func(ctx context.Context, failure DeployFailure)
+
+// RegisterDeployFailedCallback sets the global callback for a failed deploy.
+func RegisterDeployFailedCallback(fn func(ctx context.Context, failure DeployFailure)) {
+	onDeployFailed = fn
+}
+
+// notifyDeployFailed invokes the deploy-failed callback, detached from the
+// caller's cancellation like NotifyBuildFailed.
+func notifyDeployFailed(ctx context.Context, failure DeployFailure) {
+	if onDeployFailed == nil {
+		return
+	}
+	parentCtx := callbackContext(ctx, failure.TenantID)
+	go func() {
+		cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
+		defer cancel()
+		onDeployFailed(cbCtx, failure)
+	}()
+}
+
 // callbackContext is the context a detached callback runs under: the caller's
 // values (trace, correlation ID) without its cancellation, scoped to the tenant
 // the event belongs to. The callbacks read that tenant's build through the
