@@ -306,3 +306,16 @@ func TestTheEdgeTaskHandsCaddyTheRouteTokenAsACredential(t *testing.T) {
 		t.Error("the edge unit does not load the route token as a credential")
 	}
 }
+
+// A plan limit refusal names where the plan is changed. Without an address the API falls
+// back to the console's own path, which a person at the CLI cannot open.
+func TestTheStagingAPIPointsPlanLimitRefusalsAtTheConsolesBillingPage(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(), "infra/helmfile/values/staging/loopzero-api.yaml.gotmpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `billingUpgradeUrl: {{ printf "%s/billing" (.Values.uiBaseUrl | trimSuffix "/") | quote }}`
+	if !strings.Contains(string(data), want) {
+		t.Errorf("the staging API values do not set %s", want)
+	}
+}

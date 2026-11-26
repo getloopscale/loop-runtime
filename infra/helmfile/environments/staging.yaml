@@ -111,7 +111,7 @@ platformImages:
     # getloopscale/console publishes these two (private on GHCR, pulled with
     # aws.imagePullSecret). Required while profile.loopzeroCloud is on.
     loopzero-cloud: "develop-9adbf29"
-    loopzero-dashboard: "develop-a31f979"
+    loopzero-dashboard: "develop-5b1003a"
     # getloopscale/looptrace publishes this one, public on GHCR.
     looptrace: "develop-1f7060f"
 
