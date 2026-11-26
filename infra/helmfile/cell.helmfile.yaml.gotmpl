@@ -110,6 +110,11 @@ releases:
     version: 28.3.0
     needs:
       - cert-manager/cert-manager
+{{- if .Values.profile.awsLoadBalancerController }}
+      # values-alb renders an Ingress. The controller's webhook refuses every
+      # Ingress until its pod serves, so Traefik goes after it.
+      - kube-system/aws-load-balancer-controller
+{{- end }}
     values:
       - ../helm/traefik/values.yaml
 {{- if .Values.profile.awsLoadBalancerController }}
