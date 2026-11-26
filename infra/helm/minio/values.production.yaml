@@ -45,11 +45,11 @@ podSecurityContext:
   runAsNonRoot: true
 
 # --- Buckets ---
-# Names MUST match CWT references: loopzero-builds (cache) and loopzero-artifacts (assets).
+# Names MUST match CWT references: loopruntime-builds (cache) and loopruntime-artifacts (assets).
 buckets:
-  - name: loopzero-artifacts
+  - name: loopruntime-artifacts
     policy: none
-  - name: loopzero-builds
+  - name: loopruntime-builds
     policy: none
 
 # --- Metrics ---

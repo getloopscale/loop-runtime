@@ -1,0 +1,16 @@
+apiVersion: v2
+name: loopruntime-api
+description: LoopRuntimeCloud API server
+type: application
+version: 0.2.0
+appVersion: "dev"
+home: https://github.com/getloopscale/loop-runtime
+sources:
+  - https://github.com/getloopscale/loop-runtime
+maintainers:
+  - name: LoopRuntime Team
+    url: https://getloopscale.com
+dependencies:
+  - name: loopruntime-common
+    version: ">=0.1.0 <1.0.0"
+    repository: "file://../loopruntime-common"

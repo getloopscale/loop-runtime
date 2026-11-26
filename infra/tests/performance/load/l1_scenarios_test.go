@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package load
 
@@ -18,23 +18,23 @@ import (
 // real app verification). Every deploy is verified with HTTP 200 on the
 // app URL.
 //
-// Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l1 (or "all").
+// Gated on LOOPRUNTIME_REAL_DEPLOY=1 + LOOPRUNTIME_LOAD_LEVEL=l1 (or "all").
 
 func requireL1Harness(t *testing.T) *RealDeployHarness {
 	t.Helper()
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
-	level := os.Getenv("LOOPZERO_LOAD_LEVEL")
+	level := os.Getenv("LOOPRUNTIME_LOAD_LEVEL")
 	if level != "l1" && level != "all" && level != "" {
-		t.Skipf("set LOOPZERO_LOAD_LEVEL=l1 (got %q)", level)
+		t.Skipf("set LOOPRUNTIME_LOAD_LEVEL=l1 (got %q)", level)
 	}
 
 	harness, err := NewRealDeployHarness(RealDeployConfig{
-		APIURL:      os.Getenv("LOOPZERO_API_URL"),
-		AppDomain:   os.Getenv("LOOPZERO_APP_DOMAIN"),
-		ServiceAuth: os.Getenv("LOOPZERO_SERVICE_AUTH"),
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
+		APIURL:      os.Getenv("LOOPRUNTIME_API_URL"),
+		AppDomain:   os.Getenv("LOOPRUNTIME_APP_DOMAIN"),
+		ServiceAuth: os.Getenv("LOOPRUNTIME_SERVICE_AUTH"),
+		FixturePath: envOr("LOOPRUNTIME_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -136,8 +136,8 @@ func TestL1_2_ConcurrentDeploys(t *testing.T) {
 // Validates that rollback works while builds are active.
 
 func TestL1_5_RollbackUnderLoad(t *testing.T) {
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
 	t.Log("L1.5 — Rollback under load")
 	t.Skip("TODO: requires rollback API integration in harness")

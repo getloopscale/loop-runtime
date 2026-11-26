@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Unit tests for the kubeRootCAFetcher (T1.1 of plan
 // 2026-05-25-live-ca-fetch-clustercredential).

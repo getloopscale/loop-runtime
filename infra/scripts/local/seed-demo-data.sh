@@ -24,8 +24,8 @@
 #   2  PG unreachable
 set -euo pipefail
 
-CONTEXT="${CONTEXT:-k3d-loopzero-core}"
-NAMESPACE="${NAMESPACE:-loopzero-system}"
+CONTEXT="${CONTEXT:-k3d-loopruntime-core}"
+NAMESPACE="${NAMESPACE:-loopruntime-system}"
 EMAIL="${EMAIL:-admin@getloopscale.com}"
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -40,16 +40,16 @@ log() { printf '[seed-demo-data] %s\n' "$*" >&2; }
 
 log "Resolving PG credentials"
 PG_PASS=$(kubectl --context="$CONTEXT" -n "$NAMESPACE" \
-  get secret loopzero-db-credentials -o jsonpath='{.data.postgres-password}' \
+  get secret loopruntime-db-credentials -o jsonpath='{.data.postgres-password}' \
   | base64 -d 2>/dev/null || true)
 if [ -z "$PG_PASS" ]; then
-  log "ERROR: loopzero-db-credentials Secret missing or unreadable"
+  log "ERROR: loopruntime-db-credentials Secret missing or unreadable"
   exit 2
 fi
 
 PSQL() {
   kubectl --context="$CONTEXT" -n "$NAMESPACE" exec -i postgresql-0 -c postgresql -- \
-    env PGPASSWORD="$PG_PASS" psql -U postgres -d loopzero -At "$@"
+    env PGPASSWORD="$PG_PASS" psql -U postgres -d loopruntime -At "$@"
 }
 
 log "Resolving tenant for $EMAIL"

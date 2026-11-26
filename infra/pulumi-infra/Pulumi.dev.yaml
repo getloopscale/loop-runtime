@@ -1,15 +1,15 @@
 config:
-  loopzero-infra:environment: dev
-  loopzero-infra:provider: digitalocean
-  loopzero-infra:region: sfo3
-  loopzero-infra:domain: dev.getloopscale.com
-  loopzero-infra:dnsZone: getloopscale.com
-  loopzero-infra:infraVersion: v3
+  loopruntime-infra:environment: dev
+  loopruntime-infra:provider: digitalocean
+  loopruntime-infra:region: sfo3
+  loopruntime-infra:domain: dev.getloopscale.com
+  loopruntime-infra:dnsZone: getloopscale.com
+  loopruntime-infra:infraVersion: v3
   # Management cluster
-  loopzero-infra:mgmtK8sVersion: "1.32.13-do.2"
-  loopzero-infra:mgmtNodeClass: small
-  loopzero-infra:mgmtMinNodes: "3"
-  loopzero-infra:mgmtMaxNodes: "3"
+  loopruntime-infra:mgmtK8sVersion: "1.32.13-do.2"
+  loopruntime-infra:mgmtNodeClass: small
+  loopruntime-infra:mgmtMinNodes: "3"
+  loopruntime-infra:mgmtMaxNodes: "3"
   # Runtime cluster
   # Sizing notes (2026-04-16, L2 validation):
   #   - s-2vcpu-4gb × 3 nodes = ~4.8 vCPU usable after system reserves.
@@ -17,32 +17,32 @@ config:
   #   - Previous maxNodes=3 → 9 pods Pending with NotTriggerScaleUp.
   #   - Bumped to 6 so autoscaler can reach ~9.6 vCPU for L2 headroom.
   # For L3+ (100+ tenants) this must be re-sized. See scale-50k-plan.
-  loopzero-infra:runtimeK8sVersion: "1.32.13-do.2"
-  loopzero-infra:runtimeNodeClass: small
-  loopzero-infra:runtimeMinNodes: "2"
-  loopzero-infra:runtimeMaxNodes: "6"
+  loopruntime-infra:runtimeK8sVersion: "1.32.13-do.2"
+  loopruntime-infra:runtimeNodeClass: small
+  loopruntime-infra:runtimeMinNodes: "2"
+  loopruntime-infra:runtimeMaxNodes: "6"
   # Build cluster
-  loopzero-infra:buildK8sVersion: "1.32.13-do.2"
-  loopzero-infra:buildNodeClass: medium
-  loopzero-infra:buildMinNodes: "2"
-  loopzero-infra:buildMaxNodes: "5"
+  loopruntime-infra:buildK8sVersion: "1.32.13-do.2"
+  loopruntime-infra:buildNodeClass: medium
+  loopruntime-infra:buildMinNodes: "2"
+  loopruntime-infra:buildMaxNodes: "5"
   # Database
-  loopzero-infra:dbNodeClass: small
-  loopzero-infra:dbVersion: "16"
-  loopzero-infra:dbNodeCount: "2"
+  loopruntime-infra:dbNodeClass: small
+  loopruntime-infra:dbVersion: "16"
+  loopruntime-infra:dbNodeCount: "2"
   # Cloudflare DNS zone (NS is Cloudflare)
-  loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
+  loopruntime-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
   # Secrets — set via: pulumi config set --secret <key> <value>
-  # loopzero-infra:spacesAccessKeyId
-  # loopzero-infra:spacesSecretAccessKey
-  # loopzero-infra:digitaloceanToken
+  # loopruntime-infra:spacesAccessKeyId
+  # loopruntime-infra:spacesSecretAccessKey
+  # loopruntime-infra:digitaloceanToken
 
-  loopzero-infra:spacesAccessKeyId:
+  loopruntime-infra:spacesAccessKeyId:
     secure: v1:4e0tzPc5wYsLbaJR:lzHZldHAEa1KrnuQrBde+irPDOM8dOH+BTxu7fgrEKgkArL+
-  loopzero-infra:spacesSecretAccessKey:
+  loopruntime-infra:spacesSecretAccessKey:
     secure: v1:824DDwLvLKLQTbNP:mKAG0UauASVH4vgL7GJxqeWxspG0wiy8xHv6oj2beKJqPMHJaoOicaDxfJEF5p9j66oPs7g3eZW2aKQ=
-  loopzero-infra:digitaloceanToken:
+  loopruntime-infra:digitaloceanToken:
     secure: v1:r5Z4EkPgYik8w8H1:9BaShlnRPe28gInymBvKRLjBEUZp9ZdH+5deNdAYis2C7eHm+nLg7vz8zb2N7XfLwhIi8hzp755vL5o7KO4WGNQ4H4ch0oDJqJbUQN+ZA64DxfJHvSQZ
-  loopzero-infra:cloudflareApiToken:
+  loopruntime-infra:cloudflareApiToken:
     secure: v1:J0XkAq6B7OQK5Z00:lFA6NVKAHji0Qa54Xdv4/sWVGxLlwA8tWsHygqCfw4STHYGcIZMOWb3JITgzbRpdNDMebbWmqO+z78lpI6HI6HEtzReO
 encryptionsalt: v1:F2R4BliFPX8=:v1:5AbmeX2GyEr2wYNt:HRSZ6WSPPsUwFe6uz9SNaCPoZklqyw==

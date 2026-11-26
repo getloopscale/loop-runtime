@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -14,7 +14,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
 	"github.com/getloopscale/loop-runtime/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
@@ -498,7 +498,7 @@ func TestContainerDelivery_Activate_SyncTriggerDNSNotFound_FailsRelease(t *testi
 
 func TestContainerDelivery_Activate_SyncTriggerAuthFailed_StaysPending(t *testing.T) {
 	rs := newFakeReleaseStoreContainer()
-	syncClient := &fakeSyncContainer{triggerErr: loopzeroerrors.ErrDeployServiceAuthFailed}
+	syncClient := &fakeSyncContainer{triggerErr: loopruntimeerrors.ErrDeployServiceAuthFailed}
 	activator := NewContainerDeliveryActivator(ContainerDeliveryDeps{
 		ReleaseStore:   rs,
 		EnvTargetStore: newFakeEnvTargetStoreContainer(),

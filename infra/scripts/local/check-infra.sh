@@ -10,7 +10,7 @@
 #   - `check:infra` checks "is the pod in the RIGHT cluster + the secret
 #      holds a REAL value, not the default placeholder?" — catches the
 #      class of bugs that fooled cleanroom 2026-06-04:
-#        (a) loopzero-cluster-kubeconfigs build slot pointing at mgmt
+#        (a) loopruntime-cluster-kubeconfigs build slot pointing at mgmt
 #            (kubernetes.default.svc) → Workflow CR submitted to
 #            cluster that has no Workflow CRD.
 #        (b) gitea-admin.token holding the 32-char chart default
@@ -18,7 +18,7 @@
 #        (c) minio-credentials.secretkey out of sync with MinIO
 #            rootPassword → SignatureDoesNotMatch.
 #        (d) operator chart networkPolicy.extraEgress pointing at
-#            namespace `gitea` when gitea is in `loopzero-system`.
+#            namespace `gitea` when gitea is in `loopruntime-system`.
 #
 # Each check has THREE possible outcomes:
 #   PASS — placement + config canonical
@@ -34,10 +34,10 @@ set -uo pipefail
 JSON_MODE=0
 [[ "${1:-}" == "--json" ]] && JSON_MODE=1
 
-MGMT_CTX="${MGMT_CTX:-k3d-loopzero-core}"
-BUILD_CTX="${BUILD_CTX:-k3d-loopzero-build}"
-WORKLOAD_CTX="${WORKLOAD_CTX:-k3d-loopzero-cell-0}"
-RUNTIME2_CTX="${RUNTIME2_CTX:-k3d-loopzero-cell-1}"
+MGMT_CTX="${MGMT_CTX:-k3d-loopruntime-core}"
+BUILD_CTX="${BUILD_CTX:-k3d-loopruntime-build}"
+WORKLOAD_CTX="${WORKLOAD_CTX:-k3d-loopruntime-cell-0}"
+RUNTIME2_CTX="${RUNTIME2_CTX:-k3d-loopruntime-cell-1}"
 
 PASS=0
 FAIL=0
@@ -71,17 +71,17 @@ check_in_cluster() {
   fi
 }
 
-# Mgmt cluster: control plane (loopzero-api, operators, gitea, kratos, hydra, postgres)
-check_in_cluster C1.1  "$MGMT_CTX" loopzero-system loopzero-api                 deploy
-check_in_cluster C1.2  "$MGMT_CTX" loopzero-system loopzero-tenant-operator     deploy
-check_in_cluster C1.3  "$MGMT_CTX" loopzero-system loopzero-app-operator        deploy
-check_in_cluster C1.4  "$MGMT_CTX" loopzero-system loopzero-platform-operator   deploy
-check_in_cluster C1.5  "$MGMT_CTX" loopzero-system loopzero-preview-operator    deploy
-check_in_cluster C1.6  "$MGMT_CTX" loopzero-system gitea                    deploy
-check_in_cluster C1.7  "$MGMT_CTX" loopzero-system minio                    deploy
-check_in_cluster C1.8  "$MGMT_CTX" loopzero-auth   ory-kratos               deploy
-check_in_cluster C1.9  "$MGMT_CTX" loopzero-auth   ory-hydra                deploy
-check_in_cluster C1.10 "$MGMT_CTX" loopzero-system postgresql               sts
+# Mgmt cluster: control plane (loopruntime-api, operators, gitea, kratos, hydra, postgres)
+check_in_cluster C1.1  "$MGMT_CTX" loopruntime-system loopruntime-api                 deploy
+check_in_cluster C1.2  "$MGMT_CTX" loopruntime-system loopruntime-tenant-operator     deploy
+check_in_cluster C1.3  "$MGMT_CTX" loopruntime-system loopruntime-app-operator        deploy
+check_in_cluster C1.4  "$MGMT_CTX" loopruntime-system loopruntime-platform-operator   deploy
+check_in_cluster C1.5  "$MGMT_CTX" loopruntime-system loopruntime-preview-operator    deploy
+check_in_cluster C1.6  "$MGMT_CTX" loopruntime-system gitea                    deploy
+check_in_cluster C1.7  "$MGMT_CTX" loopruntime-system minio                    deploy
+check_in_cluster C1.8  "$MGMT_CTX" loopruntime-auth   ory-kratos               deploy
+check_in_cluster C1.9  "$MGMT_CTX" loopruntime-auth   ory-hydra                deploy
+check_in_cluster C1.10 "$MGMT_CTX" loopruntime-system postgresql               sts
 check_in_cluster C1.11 "$MGMT_CTX" argocd      argocd-server            deploy
 
 # Build cluster: argo-workflows + argo-events + buildkit (clone/packs/cosign/syft via templates)
@@ -114,34 +114,34 @@ fi
 # -----------------------------------------------------------------------------
 heading "C3: Critical Secret/ConfigMap content (placeholder detection)"
 
-# C3.1 — loopzero-cluster-kubeconfigs build slot must point at REAL build cluster
-build_kc=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret loopzero-cluster-kubeconfigs \
+# C3.1 — loopruntime-cluster-kubeconfigs build slot must point at REAL build cluster
+build_kc=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret loopruntime-cluster-kubeconfigs \
   -o go-template='{{index .data "build.kubeconfig" | base64decode}}' 2>/dev/null || true)
 if [[ -z "$build_kc" ]]; then
-  record "C3.1" "FAIL" "loopzero-cluster-kubeconfigs.build.kubeconfig MISSING"
+  record "C3.1" "FAIL" "loopruntime-cluster-kubeconfigs.build.kubeconfig MISSING"
 elif printf '%s' "$build_kc" | grep -q "kubernetes.default.svc"; then
-  record "C3.1" "FAIL" "loopzero-cluster-kubeconfigs.build.kubeconfig holds default placeholder (kubernetes.default.svc) — run task k3d:heal"
+  record "C3.1" "FAIL" "loopruntime-cluster-kubeconfigs.build.kubeconfig holds default placeholder (kubernetes.default.svc) — run task k3d:heal"
 else
   server=$(printf '%s' "$build_kc" | grep -oE "server: https://[^ ]+" | head -1)
-  record "C3.1" "PASS" "loopzero-cluster-kubeconfigs.build.kubeconfig has real $server"
+  record "C3.1" "PASS" "loopruntime-cluster-kubeconfigs.build.kubeconfig has real $server"
 fi
 
 # C3.2 — same for runtime slot
-runtime_kc=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret loopzero-cluster-kubeconfigs \
+runtime_kc=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret loopruntime-cluster-kubeconfigs \
   -o go-template='{{index .data "cell-0.kubeconfig" | base64decode}}' 2>/dev/null || true)
 if [[ -z "$runtime_kc" ]]; then
-  record "C3.2" "FAIL" "loopzero-cluster-kubeconfigs.cell-0.kubeconfig MISSING"
+  record "C3.2" "FAIL" "loopruntime-cluster-kubeconfigs.cell-0.kubeconfig MISSING"
 elif printf '%s' "$runtime_kc" | grep -q "kubernetes.default.svc"; then
-  record "C3.2" "FAIL" "loopzero-cluster-kubeconfigs.cell-0.kubeconfig holds default placeholder — run task k3d:heal"
+  record "C3.2" "FAIL" "loopruntime-cluster-kubeconfigs.cell-0.kubeconfig holds default placeholder — run task k3d:heal"
 else
   server=$(printf '%s' "$runtime_kc" | grep -oE "server: https://[^ ]+" | head -1)
-  record "C3.2" "PASS" "loopzero-cluster-kubeconfigs.cell-0.kubeconfig has real $server"
+  record "C3.2" "PASS" "loopruntime-cluster-kubeconfigs.cell-0.kubeconfig has real $server"
 fi
 
 # C3.3 — gitea-admin.token must be a REAL 40-char API token with scopes (not 32-char placeholder)
-gitea_tok=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret gitea-admin \
+gitea_tok=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret gitea-admin \
   -o go-template='{{.data.token | base64decode}}' 2>/dev/null || true)
-gitea_user=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret gitea-admin \
+gitea_user=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret gitea-admin \
   -o go-template='{{.data.username | base64decode}}' 2>/dev/null || true)
 if [[ -z "$gitea_tok" ]]; then
   record "C3.3" "FAIL" "gitea-admin.token MISSING"
@@ -151,10 +151,10 @@ else
   # Live probe: token actually authenticates against Gitea. `kubectl run`
   # interleaves probe stdout with its own "pod ... deleted" message; first
   # extract only the 3-digit HTTP code (curl's `-w "%{http_code}"`).
-  raw=$(kubectl --context "$MGMT_CTX" -n loopzero-system run gitea-tok-probe-$$ \
+  raw=$(kubectl --context "$MGMT_CTX" -n loopruntime-system run gitea-tok-probe-$$ \
     --rm -i --image=curlimages/curl --restart=Never --timeout=10s -- \
     curl -sS -o /dev/null -w "%{http_code}" -H "Authorization: token $gitea_tok" \
-    http://gitea-http.loopzero-system.svc.cluster.local:3000/api/v1/users/$gitea_user 2>/dev/null || true)
+    http://gitea-http.loopruntime-system.svc.cluster.local:3000/api/v1/users/$gitea_user 2>/dev/null || true)
   http_code=$(printf '%s' "$raw" | grep -oE '^[0-9]{3}' | head -1)
   if [[ "$http_code" == "200" ]]; then
     record "C3.3" "PASS" "gitea-admin.token (${#gitea_tok} chars) authenticates against Gitea API"
@@ -164,9 +164,9 @@ else
 fi
 
 # C3.4 — MinIO rootPassword + minio-credentials.secretkey must MATCH
-minio_root=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret minio \
+minio_root=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret minio \
   -o go-template='{{.data.rootPassword | base64decode}}' 2>/dev/null || true)
-minio_cred=$(kubectl --context "$MGMT_CTX" -n loopzero-system get secret minio-credentials \
+minio_cred=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get secret minio-credentials \
   -o go-template='{{.data.secretkey | base64decode}}' 2>/dev/null || true)
 if [[ -z "$minio_root" || -z "$minio_cred" ]]; then
   record "C3.4" "FAIL" "MinIO root password OR minio-credentials.secretkey MISSING"
@@ -177,9 +177,9 @@ else
 fi
 
 # C3.5 — Kratos ConfigMap OIDC clients must have REAL client_id (not REPLACE_VIA_PULUMI)
-kratos_cm=$(kubectl --context "$MGMT_CTX" -n loopzero-auth get cm ory-kratos-config -o yaml 2>/dev/null || true)
+kratos_cm=$(kubectl --context "$MGMT_CTX" -n loopruntime-auth get cm ory-kratos-config -o yaml 2>/dev/null || true)
 if [[ -z "$kratos_cm" ]]; then
-  record "C3.5" "WARN" "ory-kratos-config ConfigMap not present (loopzero-auth namespace check)"
+  record "C3.5" "WARN" "ory-kratos-config ConfigMap not present (loopruntime-auth namespace check)"
 elif printf '%s' "$kratos_cm" | grep -q "client_id: REPLACE_VIA_PULUMI"; then
   record "C3.5" "FAIL" "Kratos OIDC client_id holds REPLACE_VIA_PULUMI — .env not exported when generate-secrets ran"
 else
@@ -189,20 +189,20 @@ fi
 # -----------------------------------------------------------------------------
 # C4 — NetworkPolicy cross-namespace egress correctness
 # -----------------------------------------------------------------------------
-heading "C4: NetworkPolicy egress targets (loopzero-system ns where gitea/minio actually live)"
+heading "C4: NetworkPolicy egress targets (loopruntime-system ns where gitea/minio actually live)"
 
-for op in loopzero-tenant-operator loopzero-app-operator loopzero-platform-operator loopzero-preview-operator; do
-  np=$(kubectl --context "$MGMT_CTX" -n loopzero-system get netpol "$op" -o yaml 2>/dev/null || true)
+for op in loopruntime-tenant-operator loopruntime-app-operator loopruntime-platform-operator loopruntime-preview-operator; do
+  np=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get netpol "$op" -o yaml 2>/dev/null || true)
   if [[ -z "$np" ]]; then
-    record "C4.${op#loopzero-}" "WARN" "NetworkPolicy $op not present (chart networkPolicy.enabled=false?)"
+    record "C4.${op#loopruntime-}" "WARN" "NetworkPolicy $op not present (chart networkPolicy.enabled=false?)"
   else
-    # Egress must allow port 3000 to namespace loopzero-system (where gitea lives)
-    if printf '%s' "$np" | grep -A6 "port: 3000" | grep -q "kubernetes.io/metadata.name: loopzero-system"; then
-      record "C4.${op#loopzero-}" "PASS" "$op NetworkPolicy allows egress to loopzero-system:3000 (gitea)"
+    # Egress must allow port 3000 to namespace loopruntime-system (where gitea lives)
+    if printf '%s' "$np" | grep -A6 "port: 3000" | grep -q "kubernetes.io/metadata.name: loopruntime-system"; then
+      record "C4.${op#loopruntime-}" "PASS" "$op NetworkPolicy allows egress to loopruntime-system:3000 (gitea)"
     elif printf '%s' "$np" | grep -A6 "port: 3000" | grep -q "kubernetes.io/metadata.name: gitea"; then
-      record "C4.${op#loopzero-}" "FAIL" "$op NetworkPolicy targets ns 'gitea' but gitea is in 'loopzero-system' (env override missing)"
+      record "C4.${op#loopruntime-}" "FAIL" "$op NetworkPolicy targets ns 'gitea' but gitea is in 'loopruntime-system' (env override missing)"
     else
-      record "C4.${op#loopzero-}" "WARN" "$op NetworkPolicy gitea egress rule shape not recognized"
+      record "C4.${op#loopruntime-}" "WARN" "$op NetworkPolicy gitea egress rule shape not recognized"
     fi
   fi
 done
@@ -213,7 +213,7 @@ done
 heading "C5: Multi-cell topology"
 
 for cell in cell-0 cell-1; do
-  status=$(kubectl --context "$MGMT_CTX" -n loopzero-system get clustercredential "$cell" \
+  status=$(kubectl --context "$MGMT_CTX" -n loopruntime-system get clustercredential "$cell" \
     -o jsonpath='{.status.connected}' 2>/dev/null || echo "")
   if [[ "$status" == "true" ]]; then
     record "C5.${cell#cell-}" "PASS" "ClusterCredential $cell connected=true"
@@ -223,9 +223,9 @@ for cell in cell-0 cell-1; do
 done
 
 # -----------------------------------------------------------------------------
-# C6 — loopzero-api deep health (live)
+# C6 — loopruntime-api deep health (live)
 # -----------------------------------------------------------------------------
-heading "C6: loopzero-api deep health"
+heading "C6: loopruntime-api deep health"
 
 # Find local probe port (k3d LB host port mapping)
 for port in 13001 3001; do
@@ -235,15 +235,15 @@ for port in 13001 3001; do
   if [[ "$http_code" == "200" ]] || [[ "$http_code" == "503" ]]; then
     json_body=$(printf '%s' "$body" | sed '$d')
     if [[ "$http_code" == "200" ]]; then
-      record "C6.1" "PASS" "loopzero-api /health/deep HTTP 200: $json_body"
+      record "C6.1" "PASS" "loopruntime-api /health/deep HTTP 200: $json_body"
     else
-      record "C6.1" "FAIL" "loopzero-api /health/deep HTTP 503 (degraded): $json_body"
+      record "C6.1" "FAIL" "loopruntime-api /health/deep HTTP 503 (degraded): $json_body"
     fi
     break
   fi
 done
 [[ "${http_code:-000}" != "200" && "${http_code:-000}" != "503" ]] && \
-  record "C6.1" "WARN" "loopzero-api /health/deep not reachable on localhost:13001 or :3001 (no port-forward / NodePort)"
+  record "C6.1" "WARN" "loopruntime-api /health/deep not reachable on localhost:13001 or :3001 (no port-forward / NodePort)"
 
 # =============================================================================
 # Summary

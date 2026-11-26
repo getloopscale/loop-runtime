@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package environmentshttp serves the environment endpoints under
 // /api/v1/environments: the per-project deploy targets and their readiness.
@@ -31,7 +31,7 @@ import (
 	auditctx "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // reservedEnvironmentNames contains names that cannot be used for environments.
@@ -41,7 +41,7 @@ import (
 var reservedEnvironmentNames = map[string]bool{
 	"default":                     true,
 	"kube-system":                 true,
-	"loopzero-system":             true,
+	"loopruntime-system":          true,
 	"argocd":                      true,
 	"monitoring":                  true,
 	pkgdomain.DefaultPermanentEnv: true, // M2 v1.2 — EC-8 cross-project reserved
@@ -52,7 +52,7 @@ var reservedEnvironmentNames = map[string]bool{
 // the operator side; the message uses product language (Rule 3 — no
 // "ArgoCD", "Gitea", "MinIO", etc. in user-facing strings).
 // Plan: 2026-06-15-code-review-49-findings-remediation T0.1 (R2-F1 BLOCKER).
-const envDeleteCleanupWarning = "environment removed but cleanup may take a few seconds; run 'loopzero platform status' to verify"
+const envDeleteCleanupWarning = "environment removed but cleanup may take a few seconds; run 'loopruntime platform status' to verify"
 
 // T1.3 of deep-review-remediation-plan (closes find_arch_001 + find_dep_routes_type_hub partial):
 // canonical types live in domain/. Aliases preserve back-compat with
@@ -68,7 +68,7 @@ type (
 //
 // M2 v1.2 (2026-06-07): the write/lookup methods carry an explicit
 // `project` argument. The canonical 3-segment namespace
-// `loopzero-<tenant>-<project>-<env>` is computed by `pkg/naming` and is
+// `loopruntime-<tenant>-<project>-<env>` is computed by `pkg/naming` and is
 // the source of truth for routing post-M2. Legacy callers (Phase 2/3
 // of the M2 plan) may pass `project=""` during the cascade; the
 // operator preserves backward compatibility for tuples that landed
@@ -151,7 +151,7 @@ type EnvProjectLookup interface {
 // triple still has a desired or active release row in env_targets. Used
 // by Delete to attach an EC-7 warning ("ArgoCD App may persist briefly")
 // so operators are informed about the eventual-consistency cleanup
-// instead of being surprised by a stale App in `loopzero platform status`.
+// instead of being surprised by a stale App in `loopruntime platform status`.
 //
 // Nil implementation = no warning surfaced (test fixtures + legacy).
 type EnvActiveReleaseLookup interface {
@@ -196,7 +196,7 @@ func (h *EnvironmentHandler) WithProjectLookup(p EnvProjectLookup) *EnvironmentH
 }
 
 // WithActiveReleaseLookup wires the EC-7 warning emitter for Delete.
-// Nil → no warning surfaced; operators rely on `loopzero platform status`
+// Nil → no warning surfaced; operators rely on `loopruntime platform status`
 // instead.
 func (h *EnvironmentHandler) WithActiveReleaseLookup(l EnvActiveReleaseLookup) *EnvironmentHandler {
 	h.relLookup = l
@@ -225,7 +225,7 @@ func (h *EnvironmentHandler) WithPreviewSlotLookup(lookup PreviewSlotLookup) *En
 //
 // M2 v1.2 (2026-06-07): `Project` is REQUIRED. Empty value → 400
 // INVALID_FIELD. The project is the user-friendly slug (`projects.name`),
-// NOT the UUID (`projects.id`) — same convention as `loopzero deploy`
+// NOT the UUID (`projects.id`) — same convention as `loopruntime deploy`
 // (EC-3 of plan v1.2; the canonical "Project name vs project ID" rule
 // in CLAUDE.md).
 type createEnvironmentRequest struct {
@@ -241,7 +241,7 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -251,11 +251,11 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 			"tenant_id", uc.TenantID,
 			"error", err.Error(),
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
-	// Red Team loopzero-cloud#48 closure — A01:2021 Broken Access Control / CWE-639.
+	// Red Team loopruntime-cloud#48 closure — A01:2021 Broken Access Control / CWE-639.
 	// `?project=` was silently ignored server-side, letting a caller probe
 	// for env names of projects outside their tenant. Canonical fix:
 	//   1) Cross-tenant gate via projectStore (same EC-1 SEPA-CRITICAL
@@ -274,11 +274,11 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 					"project", projectFilter,
 					"error", perr.Error(),
 				)
-				httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+				httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 				return
 			}
 			if !exists {
-				httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+				httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
 					"PROJECT_NOT_FOUND",
 					fmt.Sprintf("project %q not found in your account", projectFilter)))
 				return
@@ -408,19 +408,19 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	var req createEnvironmentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInvalidRequest)
 		return
 	}
 
 	// Validate name format (RFC 1123: lowercase alphanumeric + hyphens, no leading hyphen)
 	if err := validation.ValidateEnvironmentName(req.Name); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap(err.Error()))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInvalidName.Wrap(err.Error()))
 		return
 	}
 
@@ -429,13 +429,13 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// (no project, no API request) creates a `production` env. The user
 	// cannot create (web, production) — surprise prevention.
 	if reservedEnvironmentNames[req.Name] {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidName.Wrap("environment name is reserved and cannot be used"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInvalidName.Wrap("environment name is reserved and cannot be used"))
 		return
 	}
 
 	// M2 v1.2 T4.1 — `project` is REQUIRED.
 	if req.Project == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project is required: pass the project slug (not the project UUID) in the request body"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project is required: pass the project slug (not the project UUID) in the request body"))
 		return
 	}
 
@@ -459,13 +459,13 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 				"project", req.Project,
 				"error", perr.Error(),
 			)
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 			return
 		}
 		if !exists {
 			// 404 (not 403) — matches the existence-leak-prevention
 			// pattern already established for cross-tenant DELETE flows.
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
 				"PROJECT_NOT_FOUND",
 				fmt.Sprintf("project %q not found in your account", req.Project)))
 			return
@@ -494,7 +494,7 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		// know whether they actually created the env or it already
 		// existed (concurrent dev clients, retry on 5xx flake, etc).
 		if errors.Is(err, ports.ErrEnvironmentExists) {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
 				"ENV_ALREADY_EXISTS",
 				fmt.Sprintf("environment %q already exists in project %q", req.Name, req.Project)))
 			return
@@ -505,7 +505,7 @@ func (h *EnvironmentHandler) Create(w http.ResponseWriter, r *http.Request) {
 			"environment", req.Name,
 			"error", err.Error(),
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
@@ -524,13 +524,13 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("environment name is required"))
 		return
 	}
 
@@ -548,7 +548,7 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 		// projects so the next command can succeed.
 		var amb *ports.ErrAmbiguousEnvironment
 		if errors.As(err, &amb) {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
 				"ENVIRONMENT_AMBIGUOUS",
 				fmt.Sprintf("environment '%s' exists in more than one project (%s); specify the project",
 					name, strings.Join(amb.Projects, ", "))))
@@ -559,11 +559,11 @@ func (h *EnvironmentHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"environment", name,
 			"error", err.Error(),
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if detail == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewEnvironmentNotFound(name))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewEnvironmentNotFound(name))
 		return
 	}
 
@@ -578,19 +578,19 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("environment name is required"))
 		return
 	}
 
 	// Protect production environment from deletion
 	if name == pkgdomain.DefaultPermanentEnv {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden.Wrap("the production environment cannot be deleted"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrForbidden.Wrap("the production environment cannot be deleted"))
 		return
 	}
 
@@ -626,7 +626,7 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.envMgr.RemoveEnvironment(ctx, uc.TenantID, project, name); err != nil {
 		// AUDIT-12: map "not found" to 404 instead of silent success.
 		if errors.Is(err, ports.ErrEnvironmentNotFound) {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewEnvironmentNotFound(name))
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewEnvironmentNotFound(name))
 			return
 		}
 		slog.Error("failed to delete environment",
@@ -634,7 +634,7 @@ func (h *EnvironmentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			"environment", name,
 			"error", err.Error(),
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 

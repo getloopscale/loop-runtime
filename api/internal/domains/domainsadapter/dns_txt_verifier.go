@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domainsadapter
 
@@ -19,20 +19,20 @@ type txtResolver interface {
 }
 
 // DNSTXTVerifier implements domains.DomainVerifier with a DNS TXT lookup of
-// _loopzero-verify.{domain}. A nil Resolver uses net.DefaultResolver.
+// _loopruntime-verify.{domain}. A nil Resolver uses net.DefaultResolver.
 type DNSTXTVerifier struct {
 	Resolver txtResolver
 }
 
 // VerifyTXT reports whether the expected token is published at
-// _loopzero-verify.{domain}. A record that does not exist is (false, nil); any
+// _loopruntime-verify.{domain}. A record that does not exist is (false, nil); any
 // other lookup failure is an error.
 func (v *DNSTXTVerifier) VerifyTXT(ctx context.Context, domain, expectedToken string) (bool, error) {
 	resolver := v.Resolver
 	if resolver == nil {
 		resolver = net.DefaultResolver
 	}
-	txtName := "_loopzero-verify." + domain
+	txtName := "_loopruntime-verify." + domain
 	records, err := resolver.LookupTXT(ctx, txtName)
 	if err != nil {
 		if isDNSNotFound(err) {

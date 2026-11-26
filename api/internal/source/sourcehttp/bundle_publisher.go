@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package sourcehttp
 
@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 
 	"github.com/getloopscale/loop-runtime/api/internal/source"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // bundlePublisher stores a bundle that passed the wire contract: first in the
@@ -28,7 +28,7 @@ type bundlePublisher struct {
 }
 
 // publish returns the source id (commit SHA, or "ch-{hash}" for a tar.gz).
-func (p bundlePublisher) publish(ctx context.Context, tenantID, project string, bundle *os.File, correlationID string) (string, *loopzeroerrors.LoopZeroError) {
+func (p bundlePublisher) publish(ctx context.Context, tenantID, project string, bundle *os.File, correlationID string) (string, *loopruntimeerrors.LoopRuntimeError) {
 	result, err := p.store.PushBundle(ctx, tenantID, project, bundle)
 	if err != nil {
 		return "", pushFailure(err, tenantID, project, correlationID)
@@ -51,17 +51,17 @@ func (p bundlePublisher) publish(ctx context.Context, tenantID, project string, 
 // storage configured this is part of the build contract — a missing object
 // fails the clone step opaquely later — so a failure fails the request
 // (CHG-2026-04-29-DOGFOOD iter 9; Rule 10, local equals production).
-func (p bundlePublisher) uploadForBuild(ctx context.Context, tenantID string, result source.PushResult, uploaded *os.File) *loopzeroerrors.LoopZeroError {
+func (p bundlePublisher) uploadForBuild(ctx context.Context, tenantID string, result source.PushResult, uploaded *os.File) *loopruntimeerrors.LoopRuntimeError {
 	body, closeBody, err := buildBundleReader(result, uploaded)
 	if err != nil {
 		slog.Error("source upload: cannot read the bundle for object storage", "error", err)
-		return loopzeroerrors.ErrInternalError
+		return loopruntimeerrors.ErrInternalError
 	}
 	defer closeBody()
 	objectName := fmt.Sprintf("%s/source/%s.bundle", tenantID, result.SourceID)
 	if err := p.objects.Upload(ctx, p.bucket, objectName, body); err != nil {
 		slog.Error("object store upload failed", "error", err, "key", objectName)
-		return loopzeroerrors.ErrSourceUploadFailed
+		return loopruntimeerrors.ErrSourceUploadFailed
 	}
 	return nil
 }
@@ -91,16 +91,16 @@ func buildBundleReader(result source.PushResult, uploaded *os.File) (io.Reader, 
 //  3. a typed PushBundleError gets its reason-specific message, carrying the
 //     correlation id so a scrubbed detail still names a reference;
 //  4. anything else is the neutral SOURCE_UPLOAD_FAILED.
-func pushFailure(err error, tenantID, project, correlationID string) *loopzeroerrors.LoopZeroError {
+func pushFailure(err error, tenantID, project, correlationID string) *loopruntimeerrors.LoopRuntimeError {
 	if errors.Is(err, source.ErrInvalidTenantOrProject) {
 		slog.Info("source upload rejected: invalid tenant or project ID",
 			"team_id", tenantID, "project", project, "error", err.Error())
-		return &loopzeroerrors.LoopZeroError{Code: "INVALID_TENANT_OR_PROJECT", Message: err.Error()}
+		return &loopruntimeerrors.LoopRuntimeError{Code: "INVALID_TENANT_OR_PROJECT", Message: err.Error()}
 	}
 	if source.IsGiteaRaceCondition(err) {
 		slog.Info("source upload race resolved as DEPLOY_IN_PROGRESS",
 			"team_id", tenantID, "project", project, "error", err.Error())
-		return loopzeroerrors.ErrDeployInProgress
+		return loopruntimeerrors.ErrDeployInProgress
 	}
 	if pushErr, ok := source.AsPushBundleError(err); ok {
 		slog.Error("source upload failed (typed)",
@@ -109,5 +109,5 @@ func pushFailure(err error, tenantID, project, correlationID string) *loopzeroer
 		return pushErr.UserError(correlationID)
 	}
 	slog.Error("source upload failed", "error", err, "team_id", tenantID)
-	return loopzeroerrors.ErrSourceUploadFailed
+	return loopruntimeerrors.ErrSourceUploadFailed
 }

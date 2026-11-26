@@ -1,32 +1,32 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: loopzero-api
-  namespace: loopzero-system
+  name: loopruntime-api
+  namespace: loopruntime-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: loopzero-api
-  namespace: loopzero-system
+  name: loopruntime-api
+  namespace: loopruntime-system
   labels:
-    app: loopzero-api
+    app: loopruntime-api
 spec:
   replicas: 2
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: loopzero-api
+      app: loopruntime-api
   template:
     metadata:
       labels:
-        app: loopzero-api
-        loopzero.io/component: control-plane
+        app: loopruntime-api
+        runtime.getloopscale.com/component: control-plane
       annotations:
         checksum/config: tilt-managed-placeholder-T1.1.c
     spec:
-      serviceAccountName: loopzero-api
+      serviceAccountName: loopruntime-api
       # T8.4 of deep-review-remediation-plan (closes find_infra_006 MEDIUM):
       # Tilt deployment now matches Helm chart security posture by setting
       # seccompProfile: RuntimeDefault at pod level (was missing — Tilt had
@@ -40,39 +40,39 @@ spec:
           type: RuntimeDefault
       containers:
       - name: api
-        image: loopzero-api
+        image: loopruntime-api
         env:
         - name: GITEA_TOKEN
           valueFrom:
             secretKeyRef:
-              name: loopzero-api-tokens
+              name: loopruntime-api-tokens
               key: gitea-token
               optional: true
         - name: ARGOCD_TOKEN
           valueFrom:
             secretKeyRef:
-              name: loopzero-api-tokens
+              name: loopruntime-api-tokens
               key: argocd-token
               optional: true
         - name: GITHUB_WEBHOOK_SECRET
           valueFrom:
             secretKeyRef:
-              name: loopzero-github-webhook
+              name: loopruntime-github-webhook
               key: value
               optional: true
         - name: GITHUB_APP_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
-              name: loopzero-api-github
+              name: loopruntime-api-github
               key: GITHUB_APP_PRIVATE_KEY
               optional: true
         # Canonical FAANG 2026-06-16: mirror the chart's
         # OPENBAO_SPKI_PIN_SHA256 binding (the secrets.keyRefs entry of
-        # charts/loopzero-api/values-bootstrap.yaml). Closes
+        # charts/loopruntime-api/values-bootstrap.yaml). Closes
         # the Tilt-owned-vs-chart drift (per memory
         # feedback_tilt_owned_deployment_yaml_drift). Without this env
         # var, api/internal/config/config.go:429 reads empty SPKI pin,
-        # loopzero-api falls back to standard CA verification, fails with
+        # loopruntime-api falls back to standard CA verification, fails with
         # "x509: certificate signed by unknown authority" on every
         # OpenBao AppRole login → secret POST returns 500.
         - name: OPENBAO_SPKI_PIN_SHA256
@@ -83,22 +83,22 @@ spec:
               optional: true
         # Paths into the kubeconfig mounts declared below, so they live beside them.
         - name: BUILD_KUBECONFIG
-          value: /etc/loopzero/build-kubeconfig
+          value: /etc/loopruntime/build-kubeconfig
         - name: CELL_0_KUBECONFIG
-          value: /etc/loopzero/runtime/kubeconfig
+          value: /etc/loopruntime/runtime/kubeconfig
         envFrom:
         - secretRef:
-            name: loopzero-openbao-approle
+            name: loopruntime-openbao-approle
             optional: true
         - secretRef:
-            name: loopzero-broker-token
+            name: loopruntime-broker-token
             optional: true
-        # ConfigMap and Secret `loopzero-api`, rendered by the Tiltfile from charts/loopzero-api
-        # with infra/tilt/loopzero-api-values.yaml.
+        # ConfigMap and Secret `loopruntime-api`, rendered by the Tiltfile from charts/loopruntime-api
+        # with infra/tilt/loopruntime-api-values.yaml.
         - configMapRef:
-            name: loopzero-api
+            name: loopruntime-api
         - secretRef:
-            name: loopzero-api
+            name: loopruntime-api
         ports:
         - containerPort: 3001
           name: http
@@ -127,10 +127,10 @@ spec:
             memory: 64Mi
         volumeMounts:
         - name: build-kubeconfig
-          mountPath: /etc/loopzero
+          mountPath: /etc/loopruntime
           readOnly: true
         - name: runtime-kubeconfig
-          mountPath: /etc/loopzero/runtime
+          mountPath: /etc/loopruntime/runtime
           readOnly: true
         - name: tmp
           mountPath: /tmp
@@ -149,13 +149,13 @@ spec:
           sizeLimit: 512Mi
       - name: build-kubeconfig
         configMap:
-          name: loopzero-build-kubeconfig
+          name: loopruntime-build-kubeconfig
           items:
           - key: config
             path: build-kubeconfig
       - name: runtime-kubeconfig
         secret:
-          secretName: loopzero-cluster-kubeconfigs
+          secretName: loopruntime-cluster-kubeconfigs
           items:
           - key: cell-0.kubeconfig
             path: kubeconfig
@@ -163,14 +163,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: loopzero-api
-  namespace: loopzero-system
+  name: loopruntime-api
+  namespace: loopruntime-system
   labels:
-    app: loopzero-api
+    app: loopruntime-api
 spec:
   type: NodePort
   selector:
-    app: loopzero-api
+    app: loopruntime-api
   ports:
   - port: 3001
     targetPort: 3001

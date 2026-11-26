@@ -11,7 +11,7 @@
 #   CONFIG_FILE  — YAML config (default: .github/branch-protection-config.yml)
 #   BRANCH       — target branch (default: develop)
 #   DRY_RUN      — "1" → preview JSON, no API call
-#   REPO         — owner/name (default: loopzero/loopzero)
+#   REPO         — owner/name (default: loopruntime/loopruntime)
 
 set -euo pipefail
 
@@ -19,7 +19,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CONFIG_FILE="${CONFIG_FILE:-$REPO_ROOT/.github/branch-protection-config.yml}"
 BRANCH="${BRANCH:-develop}"
 DRY_RUN="${DRY_RUN:-0}"
-REPO="${REPO:-loopzero/loopzero}"
+REPO="${REPO:-loopruntime/loopruntime}"
 
 if [ ! -f "$CONFIG_FILE" ]; then
   echo "[branch-protection] ERROR: config not found: $CONFIG_FILE" >&2

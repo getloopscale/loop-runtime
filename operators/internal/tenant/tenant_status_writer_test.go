@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // B-085 / ADR 2026-08-12-status-writer-contract (D3).
 //
@@ -26,7 +26,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -183,19 +183,19 @@ func TestTenantController_FoldsTheReadinessSummaryIntoItsStatusPatch(t *testing.
 // bytes.
 func TestTenantStatusPatch_CarriesNoResourceVersion(t *testing.T) {
 	// The snapshot, as the controller takes it: after the finalizer write.
-	base := &loopzerov1.Tenant{
+	base := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "tn-probe",
-			Namespace:       "loopzero-system",
+			Namespace:       "loopruntime-system",
 			ResourceVersion: "101",
 			Finalizers:      []string{tenantFinalizer},
 		},
-		Status: loopzerov1.TenantStatus{Phase: loopzerov1.TenantPhase("Provisioning")},
+		Status: loopruntimev1.TenantStatus{Phase: loopruntimev1.TenantPhase("Provisioning")},
 	}
 
 	// The object as the controller holds it at write time: same RV, mutated status.
 	obj := base.DeepCopy()
-	obj.Status.Phase = loopzerov1.TenantPhase("Active")
+	obj.Status.Phase = loopruntimev1.TenantPhase("Active")
 
 	data, err := client.MergeFrom(base).Data(obj)
 	if err != nil {
@@ -218,14 +218,14 @@ func TestTenantStatusPatch_CarriesNoResourceVersion(t *testing.T) {
 // snapshot taken BEFORE the finalizer write does emit the resourceVersion. This
 // reproduces the defect, so the assertion above is measuring rather than hoping.
 func TestTenantStatusPatch_StaleSnapshotWouldCarryResourceVersion(t *testing.T) {
-	before := &loopzerov1.Tenant{
-		ObjectMeta: metav1.ObjectMeta{Name: "tn-probe", Namespace: "loopzero-system", ResourceVersion: "100"},
-		Status:     loopzerov1.TenantStatus{Phase: loopzerov1.TenantPhase("Provisioning")},
+	before := &loopruntimev1.Tenant{
+		ObjectMeta: metav1.ObjectMeta{Name: "tn-probe", Namespace: "loopruntime-system", ResourceVersion: "100"},
+		Status:     loopruntimev1.TenantStatus{Phase: loopruntimev1.TenantPhase("Provisioning")},
 	}
 	after := before.DeepCopy()
 	after.ResourceVersion = "101" // EnsureFinalizer's Update+Get
 	after.Finalizers = []string{tenantFinalizer}
-	after.Status.Phase = loopzerov1.TenantPhase("Active")
+	after.Status.Phase = loopruntimev1.TenantPhase("Active")
 
 	data, err := client.MergeFrom(before).Data(after)
 	if err != nil {
@@ -254,7 +254,7 @@ func TestTenantStatusPatch_StaleSnapshotWouldCarryResourceVersion(t *testing.T) 
 // snapshot below the phase mutation would have been caught by nothing here.
 func TestTenantDeletion_StatusPatchesAreCorrectlyAnchored(t *testing.T) {
 	sc := runtime.NewScheme()
-	if err := loopzerov1.AddToScheme(sc); err != nil {
+	if err := loopruntimev1.AddToScheme(sc); err != nil {
 		t.Fatal(err)
 	}
 	if err := corev1.AddToScheme(sc); err != nil {
@@ -262,21 +262,21 @@ func TestTenantDeletion_StatusPatchesAreCorrectlyAnchored(t *testing.T) {
 	}
 
 	now := metav1.Now()
-	seed := &loopzerov1.Tenant{
+	seed := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "tn-probe",
-			Namespace:         "loopzero-system",
+			Namespace:         "loopruntime-system",
 			Generation:        7,
 			Finalizers:        []string{tenantFinalizer},
 			DeletionTimestamp: &now,
 		},
-		Status: loopzerov1.TenantStatus{Phase: loopzerov1.TenantPhaseActive},
+		Status: loopruntimev1.TenantStatus{Phase: loopruntimev1.TenantPhaseActive},
 	}
 
 	var bodies []string
 	c := interceptor.NewClient(
 		fake.NewClientBuilder().WithScheme(sc).WithObjects(seed).
-			WithStatusSubresource(&loopzerov1.Tenant{}).Build(),
+			WithStatusSubresource(&loopruntimev1.Tenant{}).Build(),
 		interceptor.Funcs{
 			SubResourcePatch: func(ctx context.Context, cl client.Client, sub string, obj client.Object,
 				patch client.Patch, opts ...client.SubResourcePatchOption) error {

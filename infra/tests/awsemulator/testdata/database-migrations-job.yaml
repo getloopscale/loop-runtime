@@ -1,4 +1,4 @@
-# Runs the migrations with the migrate binary and the files the loopzero-api image carries.
+# Runs the migrations with the migrate binary and the files the loopruntime-api image carries.
 apiVersion: batch/v1
 kind: Job
 metadata:

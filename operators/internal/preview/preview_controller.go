@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package preview implements the PreviewEnvironment controller
-// (operator binary `loopzero-preview-operator` per ADR-0023). Owns
+// (operator binary `loopruntime-preview-operator` per ADR-0023). Owns
 // the preview-environment lifecycle: namespace creation +
 // NetworkPolicy + ResourceQuota + LimitRange + TTL expiry +
 // condition-wait + cleanup retry. State machine per CLAUDE.md §
@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
@@ -49,12 +49,12 @@ var previewSM = statemachine.NewPreviewTypedMachine()
 // (preview namespaces, NetworkPolicies, ResourceQuota, LimitRange) is
 // hand-maintained.
 //
-// +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=previewenvironments/finalizers,verbs=update
-// +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch
-// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=previewenvironments,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=previewenvironments/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=previewenvironments/finalizers,verbs=update
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants,verbs=get;list;watch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,verbs=get;list;watch
 type PreviewReconciler struct {
 	client.Client
 	// RuntimeFactory resolves the runtime cluster of a preview's cell. It is
@@ -78,11 +78,11 @@ type PreviewReconciler struct {
 // previewCell returns the cell a preview's runtime objects live in: its own
 // Spec.CellID, or its Tenant's for CRs created before that field existed. An
 // unreadable Tenant is an unknown cell, never a default one (EC-7).
-func (r *PreviewReconciler) previewCell(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (string, error) {
+func (r *PreviewReconciler) previewCell(ctx context.Context, preview *loopruntimev1.PreviewEnvironment) (string, error) {
 	if preview.Spec.CellID != "" {
 		return preview.Spec.CellID, nil
 	}
-	var tenant loopzerov1.Tenant
+	var tenant loopruntimev1.Tenant
 	key := client.ObjectKey{Name: preview.Spec.TenantID, Namespace: preview.Namespace}
 	if err := r.Get(ctx, key, &tenant); err != nil {
 		return "", fmt.Errorf("preview %s: read tenant %s to resolve its cell: %w", preview.Name, preview.Spec.TenantID, err)
@@ -92,7 +92,7 @@ func (r *PreviewReconciler) previewCell(ctx context.Context, preview *loopzerov1
 
 // runtimeClientForPreview resolves the runtime cluster client of the
 // preview's cell.
-func (r *PreviewReconciler) runtimeClientForPreview(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (client.Client, error) {
+func (r *PreviewReconciler) runtimeClientForPreview(ctx context.Context, preview *loopruntimev1.PreviewEnvironment) (client.Client, error) {
 	cellID, err := r.previewCell(ctx, preview)
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 
 	logger := log.FromContext(ctx)
 
-	var preview loopzerov1.PreviewEnvironment
+	var preview loopruntimev1.PreviewEnvironment
 	if err := r.Get(ctx, req.NamespacedName, &preview); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -153,7 +153,7 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
 	// correlation-id from CR annotation into reconcile context (no-op when absent).
-	ctx = correlation.WithID(ctx, preview.GetAnnotations()["loopzero.io/correlation-id"])
+	ctx = correlation.WithID(ctx, preview.GetAnnotations()["runtime.getloopscale.com/correlation-id"])
 
 	// Handle deletion
 	if !preview.DeletionTimestamp.IsZero() {
@@ -187,7 +187,7 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 
 	// A new CR enters the lifecycle through the state machine (T2.1 / COMP-002).
 	if preview.Status.Phase == "" {
-		preview.Status.Phase = loopzerov1.PreviewPhase(
+		preview.Status.Phase = loopruntimev1.PreviewPhase(
 			previewSM.Transition(statemachine.PPhEmpty, statemachine.PPEventCreate),
 		)
 		now := metav1.Now()
@@ -201,11 +201,11 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 	// per reconcile keeps tests deterministic and aligns with the pattern
 	// already established in evaluateWorkloadGate.
 	switch preview.Status.Phase {
-	case loopzerov1.PreviewPhaseCreating:
+	case loopruntimev1.PreviewPhaseCreating:
 		return r.reconcileCreating(ctx, &preview, base)
-	case loopzerov1.PreviewPhaseActive:
+	case loopruntimev1.PreviewPhaseActive:
 		return r.reconcileActive(ctx, &preview, base, start)
-	case loopzerov1.PreviewPhaseExpiring:
+	case loopruntimev1.PreviewPhaseExpiring:
 		return r.reconcileExpiring(ctx, &preview)
 	default:
 		logger.Info("preview in terminal phase, no action", "phase", preview.Status.Phase)
@@ -218,7 +218,7 @@ func (r *PreviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (re
 // A preview is not special at the naming layer: it is the (tenant, project, env) triple
 // like any other environment, with env = "preview-pr-{N}". Returns an error if any input
 // is invalid (T0.2 / D6).
-func (r *PreviewReconciler) previewNamespaceName(preview *loopzerov1.PreviewEnvironment) (string, error) {
+func (r *PreviewReconciler) previewNamespaceName(preview *loopruntimev1.PreviewEnvironment) (string, error) {
 	if preview.Spec.PRNumber <= 0 {
 		return "", fmt.Errorf("PR number must be positive, got %d", preview.Spec.PRNumber)
 	}
@@ -236,7 +236,7 @@ func (r *PreviewReconciler) previewNamespaceName(preview *loopzerov1.PreviewEnvi
 // across NamespaceReady/NetworkPolicyReady/ResourceQuotaReady error paths.
 // Returns the err untouched so the caller decides the controller-runtime
 // result envelope (some paths want Requeue, others want no-requeue).
-func (r *PreviewReconciler) failPreviewCondition(ctx context.Context, preview, base *loopzerov1.PreviewEnvironment, condType, reason, msg, statusLogContext string) {
+func (r *PreviewReconciler) failPreviewCondition(ctx context.Context, preview, base *loopruntimev1.PreviewEnvironment, condType, reason, msg, statusLogContext string) {
 	logger := log.FromContext(ctx)
 	conditions.SetCondition(&preview.Status.Conditions, condType,
 		metav1.ConditionFalse, reason, msg, preview.Generation)
@@ -250,7 +250,7 @@ func (r *PreviewReconciler) failPreviewCondition(ctx context.Context, preview, b
 }
 
 // reconcileCreating provisions the preview namespace and route.
-func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
+func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base *loopruntimev1.PreviewEnvironment) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	nsName, err := r.previewNamespaceName(preview)
 	if err != nil {
@@ -265,9 +265,9 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 		ObjectMeta: metav1.ObjectMeta{
 			Name: nsName,
 			Labels: map[string]string{
-				constants.LabelTenant:    preview.Spec.TenantID,
-				constants.LabelManagedBy: constants.ManagedByPreviewController,
-				"loopzero.io/preview":    fmt.Sprintf("pr%d", preview.Spec.PRNumber),
+				constants.LabelTenant:              preview.Spec.TenantID,
+				constants.LabelManagedBy:           constants.ManagedByPreviewController,
+				"runtime.getloopscale.com/preview": fmt.Sprintf("pr%d", preview.Spec.PRNumber),
 			},
 		},
 	}
@@ -306,17 +306,17 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewLimitRangeReady,
 		metav1.ConditionTrue, "Ready", "Preview limit range applied", preview.Generation)
 
-	// J-23 (2026-06-07) — pods rendered by the API reference SA `loopzero-app`
+	// J-23 (2026-06-07) — pods rendered by the API reference SA `loopruntime-app`
 	// in their spec. Create the SA right after the isolation primitives so
 	// ArgoCD sync finds it on first apply. Ordering matters: SA must exist
 	// before the first deploy, otherwise pods CrashLoop with "serviceaccount
-	// loopzero-app not found" and the workload-readiness gate keeps requeuing.
+	// loopruntime-app not found" and the workload-readiness gate keeps requeuing.
 	if saErr := r.reconcilePreviewServiceAccount(ctx, rtClient, nsName); saErr != nil {
 		r.failPreviewCondition(ctx, preview, base, conditions.TypePreviewServiceAccountReady, "ApplyFailed", saErr.Error(), "SA failure")
 		return ctrl.Result{}, saErr
 	}
 	conditions.SetCondition(&preview.Status.Conditions, conditions.TypePreviewServiceAccountReady,
-		metav1.ConditionTrue, "Ready", "Preview loopzero-app ServiceAccount provisioned", preview.Generation)
+		metav1.ConditionTrue, "Ready", "Preview loopruntime-app ServiceAccount provisioned", preview.Generation)
 
 	// Report the URL the API computed (pkg/naming.PreviewURL), eagerly so it
 	// is visible while the workload comes up. The controller holds no URL
@@ -350,7 +350,7 @@ func (r *PreviewReconciler) reconcileCreating(ctx context.Context, preview, base
 		return gateResult, nil
 	}
 
-	preview.Status.Phase = loopzerov1.PreviewPhase(
+	preview.Status.Phase = loopruntimev1.PreviewPhase(
 		previewSM.Transition(statemachine.PPhCreating, statemachine.PPEventCreationCompleted),
 	)
 
@@ -388,7 +388,7 @@ const (
 // machine if BuildCompleted=False. Caller is responsible for persisting
 // the Status with r.Status().Patch off the base snapshot — never Update
 // (ADR 2026-08-12-status-writer-contract).
-func (r *PreviewReconciler) evaluateWorkloadGate(preview *loopzerov1.PreviewEnvironment) (ctrl.Result, bool) {
+func (r *PreviewReconciler) evaluateWorkloadGate(preview *loopruntimev1.PreviewEnvironment) (ctrl.Result, bool) {
 	now := time.Now()
 
 	submitted := findCondition(preview.Status.Conditions, conditions.TypePreviewBuildSubmitted)
@@ -403,7 +403,7 @@ func (r *PreviewReconciler) evaluateWorkloadGate(preview *loopzerov1.PreviewEnvi
 	}
 	if submitted.Status != metav1.ConditionTrue {
 		// API set BuildSubmitted=False — surface as build failure.
-		preview.Status.Phase = loopzerov1.PreviewPhase(
+		preview.Status.Phase = loopruntimev1.PreviewPhase(
 			previewSM.Transition(statemachine.PPhCreating, statemachine.PPEventCreationFailed),
 		)
 		return ctrl.Result{}, true
@@ -414,7 +414,7 @@ func (r *PreviewReconciler) evaluateWorkloadGate(preview *loopzerov1.PreviewEnvi
 		return ctrl.Result{RequeueAfter: previewBuildCompletedRequeueWait}, true
 	}
 	if completed.Status != metav1.ConditionTrue {
-		preview.Status.Phase = loopzerov1.PreviewPhase(
+		preview.Status.Phase = loopruntimev1.PreviewPhase(
 			previewSM.Transition(statemachine.PPhCreating, statemachine.PPEventCreationFailed),
 		)
 		return ctrl.Result{}, true
@@ -433,7 +433,7 @@ func (r *PreviewReconciler) evaluateWorkloadGate(preview *loopzerov1.PreviewEnvi
 // the build-submission grace window. Anchored at preview.Status.CreatedAt
 // (set on first reconcile); falls back to ObjectMeta.CreationTimestamp
 // when CreatedAt is nil.
-func previewWithinGracePeriod(preview *loopzerov1.PreviewEnvironment, now time.Time) bool {
+func previewWithinGracePeriod(preview *loopruntimev1.PreviewEnvironment, now time.Time) bool {
 	anchor := time.Time{}
 	if preview.Status.CreatedAt != nil {
 		anchor = preview.Status.CreatedAt.Time
@@ -461,13 +461,13 @@ func findCondition(conds []metav1.Condition, name string) *metav1.Condition {
 // canonical "current time" for this reconcile pass — captured once at
 // Reconcile entry — so TTL comparison is deterministic under mock clocks
 // and consistent with other time-dependent decisions in the same pass.
-func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview, base *loopzerov1.PreviewEnvironment, now time.Time) (ctrl.Result, error) {
+func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview, base *loopruntimev1.PreviewEnvironment, now time.Time) (ctrl.Result, error) {
 	// Check TTL — transition Active -> Expiring via state machine.
 	if preview.Spec.ExpiresAt != nil && now.After(preview.Spec.ExpiresAt.Time) {
 		log.FromContext(ctx).Info("preview TTL expired, transitioning to Expiring",
 			"preview", preview.Name,
 			"expiresAt", preview.Spec.ExpiresAt.Time)
-		preview.Status.Phase = loopzerov1.PreviewPhase(
+		preview.Status.Phase = loopruntimev1.PreviewPhase(
 			previewSM.Transition(statemachine.PPhActive, statemachine.PPEventExpirationTriggered),
 		)
 		if err := r.patchStatus(ctx, preview, base); err != nil {
@@ -487,7 +487,7 @@ func (r *PreviewReconciler) reconcileActive(ctx context.Context, preview, base *
 // observable Deleted state because the CR vanishes before the controller
 // can set it. The state machine transition Expiring -> Deleted is
 // symbolic and applied at the end of reconcileDelete.
-func (r *PreviewReconciler) reconcileExpiring(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
+func (r *PreviewReconciler) reconcileExpiring(ctx context.Context, preview *loopruntimev1.PreviewEnvironment) (ctrl.Result, error) {
 
 	// Trigger deletion by removing the CR (finalizer will handle cleanup)
 	if err := r.Delete(ctx, preview); err != nil && !errors.IsNotFound(err) {
@@ -501,7 +501,7 @@ func (r *PreviewReconciler) reconcileExpiring(ctx context.Context, preview *loop
 // has made. After previewMaxCleanupAttempts the preview transitions to
 // CLEANUP_FAILED so the operator can intervene rather than loop forever.
 const (
-	previewCleanupAnnotation   = "loopzero.io/preview-cleanup-attempts"
+	previewCleanupAnnotation   = "runtime.getloopscale.com/preview-cleanup-attempts"
 	previewMaxCleanupAttempts  = 3
 	previewCleanupRequeueDelay = 5 * time.Second
 )
@@ -520,9 +520,9 @@ const (
 // Application CR for a preview is created by the API (PreviewService /
 // gitops flow). When it exists, the API is responsible for deleting it
 // before the controller drops the finalizer; here we only confirm the
-// LoopZero-side namespace is gone. (Per ADR D7 — controller owns operational
+// LoopRuntime-side namespace is gone. (Per ADR D7 — controller owns operational
 // state in the runtime cluster; API owns gitops + Application CRs.)
-func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
+func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopruntimev1.PreviewEnvironment) (ctrl.Result, error) {
 	// This path's own base. Reconcile branches here BEFORE the finalizer block,
 	// so the snapshot the normal path takes does not exist yet — and one taken at
 	// the top of Reconcile to serve both would be stale for the normal path.
@@ -592,7 +592,7 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 						logger.Error(smErr, "preview cleanup: invalid SM transition",
 							"phase", preview.Status.Phase)
 					} else {
-						preview.Status.Phase = loopzerov1.PreviewPhase(nextState)
+						preview.Status.Phase = loopruntimev1.PreviewPhase(nextState)
 					}
 					if statusErr := r.patchStatus(ctx, preview, base); statusErr != nil {
 						logger.Error(statusErr, "preview cleanup: failed to update CleanupFailed status")
@@ -625,7 +625,7 @@ func (r *PreviewReconciler) reconcileDelete(ctx context.Context, preview *loopze
 
 // completePreviewDeletion records that the preview's namespace is gone and
 // drops the finalizer.
-func (r *PreviewReconciler) completePreviewDeletion(ctx context.Context, preview, base *loopzerov1.PreviewEnvironment) (ctrl.Result, error) {
+func (r *PreviewReconciler) completePreviewDeletion(ctx context.Context, preview, base *loopruntimev1.PreviewEnvironment) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	// Phase 2 — namespace gone. Mark the conditions, drop the finalizer.
@@ -659,7 +659,7 @@ func (r *PreviewReconciler) completePreviewDeletion(ctx context.Context, preview
 // bumpCleanupAttempts increments the cleanup attempt counter stored on
 // the CR as an annotation and returns the new value. Annotations survive
 // reconcile restarts so the count is durable.
-func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopzerov1.PreviewEnvironment) int {
+func (r *PreviewReconciler) bumpCleanupAttempts(preview *loopruntimev1.PreviewEnvironment) int {
 	if preview.Annotations == nil {
 		preview.Annotations = make(map[string]string)
 	}
@@ -691,7 +691,7 @@ func SetupPreviewController(mgr ctrl.Manager, factory cellrouting.RuntimeClientF
 	}
 	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.PreviewEnvironment{}, reconcileloop.ForOption()).
+		For(&loopruntimev1.PreviewEnvironment{}, reconcileloop.ForOption()).
 		Named("preview").
 		Complete(&PreviewReconciler{
 			Client:           mgr.GetClient(),
@@ -705,7 +705,7 @@ func SetupPreviewController(mgr ctrl.Manager, factory cellrouting.RuntimeClientF
 // kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
 // with a merge patch off base, so every write carries a Ready condition that
 // agrees with the conditions written beside it.
-func (r *PreviewReconciler) patchStatus(ctx context.Context, preview, base *loopzerov1.PreviewEnvironment) error {
+func (r *PreviewReconciler) patchStatus(ctx context.Context, preview, base *loopruntimev1.PreviewEnvironment) error {
 	conditions.SetReadinessSummaryViaPkg(&preview.Status.Conditions, preview.Generation, previewDetailTypes)
 	return r.Status().Patch(ctx, preview, client.MergeFrom(base))
 }

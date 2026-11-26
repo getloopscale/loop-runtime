@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package chaos_test
 
@@ -12,7 +12,7 @@ import (
 // (infra/scripts/local/chaos-scenarios/c13-valid-destructive-config.sh) into a Go
 // (Ginkgo) chaos spec.
 //
-// c13 scenario: deploy a build-VALID but health-DESTRUCTIVE .loopzero/services.json
+// c13 scenario: deploy a build-VALID but health-DESTRUCTIVE .loopruntime/services.json
 // (a workload that BUILDS + SYNCS but never becomes HEALTHY — e.g. a readiness
 // path that always 404s) and assert the deploy pipeline FAILS LOUD (release ->
 // SYNC_FAILED, SSE deploy.sync_failed / rollout.aborted) within the SyncTimeout
@@ -42,7 +42,7 @@ var _ = Describe("c13: build-valid, health-destructive config fails loud (no cha
 	It("FAILs the release loud (SYNC_FAILED) within the 180s SyncTimeout, never a silent hang", func() {
 		// Expected LIVE flow (operator and sponsor together, on a live cluster):
 		//   1. deploy-path health preflight (NOT chaos-mesh).
-		//   2. deploy a build-valid but health-destructive .loopzero/services.json
+		//   2. deploy a build-valid but health-destructive .loopruntime/services.json
 		//      (readiness path always 404s).
 		//   3. EC-3 boundary guard: FIRST assert the build SUCCEEDED (or a release
 		//      row exists) so the scenario asserts on the RELEASE boundary, not the
@@ -53,7 +53,7 @@ var _ = Describe("c13: build-valid, health-destructive config fails loud (no cha
 		//
 		// Autonomous deterministic proof (hermetic, already GREEN in unit tests):
 		//   api/internal/release/release_convergence_loop_test.go
-		Skip("operator LIVE-only — real deploy of a destructive .loopzero/services.json required; " +
+		Skip("operator LIVE-only — real deploy of a destructive .loopruntime/services.json required; " +
 			"deterministic proof is api/internal/release/release_convergence_loop_test.go; " +
 			"flow documented in this It block")
 

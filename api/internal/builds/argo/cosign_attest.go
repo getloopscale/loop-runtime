@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T2.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure-plan.md.
 // Per ADR D1: `cosign attest --predicate <sbom>` creates SLSA L3 linked
@@ -40,7 +40,7 @@ type CosignAttestParams struct {
 	// --allow-http-registry --allow-insecure-registry flags for local
 	// k3d HTTP-only registries. Discovered LIVE 2026-05-27 (build v5):
 	// without these flags, cosign attest fails "http: server gave HTTP
-	// response to HTTPS client" against k3d-loopzero-registry:5000.
+	// response to HTTPS client" against k3d-loopruntime-registry:5000.
 	InsecureRegistry bool
 	// FulcioURL + RekorURL used when Keyless=true. Empty → cosign defaults
 	// (Sigstore public infra). Mirror CosignFulcioURL / CosignRekorURL InfraParams.

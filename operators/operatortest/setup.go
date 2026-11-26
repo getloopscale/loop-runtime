@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package operatortest exports operator setup functions for integration and E2E testing.
 //
@@ -86,7 +86,7 @@ func (f *FakeGitProvisioner) EnsureRepo(_ context.Context, name string, _ string
 	if url, ok := f.repos[name]; ok {
 		return url, nil
 	}
-	url := fmt.Sprintf("http://gitea-http.loopzero-system.svc.cluster.local:3000/loopzero/%s.git", name)
+	url := fmt.Sprintf("http://gitea-http.loopruntime-system.svc.cluster.local:3000/loopruntime/%s.git", name)
 	f.repos[name] = url
 	return url, nil
 }
@@ -280,7 +280,7 @@ func (f *FakeMinIOProvisioner) EnsureTenantCredentials(_ context.Context, tenant
 	if cred, ok := f.Credentials[tenantID]; ok {
 		return cred.AccessKey, "", nil // existing user, empty secret
 	}
-	accessKey := fmt.Sprintf("loopzero-build-%s", tenantID)
+	accessKey := fmt.Sprintf("loopruntime-build-%s", tenantID)
 	secretKey := fmt.Sprintf("fake-secret-%s", tenantID)
 	f.Credentials[tenantID] = struct{ AccessKey, SecretKey string }{accessKey, secretKey}
 	return accessKey, secretKey, nil

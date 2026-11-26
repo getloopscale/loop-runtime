@@ -76,7 +76,7 @@ jobs:
       - name: the delivery gate's observer is intact
         run: python3 .github/scripts/assert_gate_observers_intact.py
 
-      # actionlint goes HERE, and not in a workflow of its own as in loopzero-memory.
+      # actionlint goes HERE, and not in a workflow of its own as in loopruntime-memory.
       #
       # The two check the same thing — workflow correctness — and separating them would give two
       # surfaces with the same triggers and the same `paths: .github/**`, which diverge on the day
@@ -91,7 +91,7 @@ jobs:
       #
       # Neither catches what the other catches. Running only one leaves half.
       #
-      # The image is pinned by DIGEST, the same pattern as loopzero-memory: a `:latest` in a quality gate
+      # The image is pinned by DIGEST, the same pattern as loopruntime-memory: a `:latest` in a quality gate
       # is the same class of supply-chain risk the gate next to it exists to prevent.
       - name: "actionlint (workflows + shellcheck of run: blocks)"
         run: |

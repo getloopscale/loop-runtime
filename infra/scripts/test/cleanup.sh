@@ -9,8 +9,8 @@
 #
 # Usage:
 #   bash infra/scripts/test/cleanup.sh
-#   bash infra/scripts/test/cleanup.sh --target-context k3d-loopzero-build
-#   bash infra/scripts/test/cleanup.sh --all-contexts  # iterate all loopzero-* clusters
+#   bash infra/scripts/test/cleanup.sh --target-context k3d-loopruntime-build
+#   bash infra/scripts/test/cleanup.sh --all-contexts  # iterate all loopruntime-* clusters
 #
 # Exit codes:
 #   0 — cleanup complete; zero orphan chaos resources verified
@@ -21,7 +21,7 @@ set -euo pipefail
 
 set -uo pipefail
 
-TARGET_CTX="${TARGET_CONTEXT:-k3d-loopzero-core}"
+TARGET_CTX="${TARGET_CONTEXT:-k3d-loopruntime-core}"
 ALL_CONTEXTS=0
 
 while [[ $# -gt 0 ]]; do
@@ -102,7 +102,7 @@ cleanup_context() {
 }
 
 if [[ "$ALL_CONTEXTS" == "1" ]]; then
-  for ctx in k3d-loopzero-core k3d-loopzero-build k3d-loopzero-cell-0 k3d-loopzero-cell-1; do
+  for ctx in k3d-loopruntime-core k3d-loopruntime-build k3d-loopruntime-cell-0 k3d-loopruntime-cell-1; do
     cleanup_context "$ctx"
   done
 else

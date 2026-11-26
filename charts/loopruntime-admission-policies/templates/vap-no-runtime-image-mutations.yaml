@@ -1,0 +1,63 @@
+{{- if .Values.vaps.noRuntimeImageMutations }}
+# CHG-2026-04-30-INFRA-PARITY / T1.2 / ADR D3.
+# ValidatingAdmissionPolicy: blocks runtime mutations of the `image:` field on
+# LoopRuntime-managed Deployments. Hot-patching via `kubectl set image …:tag` is the
+# anti-pattern that produced the 49/52 sync-engine drift observed in the
+# 2026-04-30 audit (`/review`). Charts (Git) become the only source of truth.
+#
+# Allowed callers (exempt via match conditions):
+#   - argocd-application-controller   (Helm-driven UPDATE goes through ArgoCD SA)
+#   - loopruntime-controller (loopruntime-system)   (operator updates spec.template via owner ref)
+#   - kube-controller-manager         (replicaset rollouts)
+#
+# Failure mode: dev loop becomes "rebuild → push :latest → kubectl rollout
+# restart" instead of "kubectl set image". When tag=latest + pullPolicy=Always
+# this still produces a fresh pull on each rollout.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: loopruntime-no-runtime-image-mutations
+spec:
+  # Ignore: in-development. Switch to Fail in prod overlay once dev loop
+  # adapts (Phase 1 followup).
+  failurePolicy: {{ .Values.vaps.noRuntimeImageMutationsFailurePolicy | default "Ignore" }}
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["UPDATE"]
+        resources: ["deployments"]
+  matchConditions:
+    - name: only-loopruntime-managed
+      expression: >-
+        has(object.metadata.labels) &&
+        object.metadata.labels['runtime.getloopscale.com/managed-by'] == 'loopruntime'
+    - name: only-image-changed
+      # Skip the policy entirely when no container image actually changed —
+      # otherwise every spec.replicas update would be checked.
+      expression: >-
+        oldObject.spec.template.spec.containers.map(c, c.image) !=
+        object.spec.template.spec.containers.map(c, c.image)
+    - name: not-system-sa
+      # Exempt cluster automation: ArgoCD app-controller, kube-controller-manager,
+      # loopruntime-controller in loopruntime-system.
+      expression: >-
+        !(request.userInfo.username.startsWith('system:serviceaccount:argocd:')) &&
+        !(request.userInfo.username.startsWith('system:serviceaccount:kube-system:')) &&
+        !(request.userInfo.username.startsWith('system:serviceaccount:loopruntime-system:'))
+  validations:
+    - expression: "false"
+      message: >-
+        Image mutation on LoopRuntime-managed Deployment is forbidden (ADR D3).
+        Update the chart values and run `helmfile sync`. To override in
+        emergency: temporarily set vaps.noRuntimeImageMutations=false.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: loopruntime-no-runtime-image-mutations-binding
+spec:
+  policyName: loopruntime-no-runtime-image-mutations
+  validationActions:
+    - {{ .Values.vaps.noRuntimeImageMutationsAction | default "Warn" }}
+{{- end }}

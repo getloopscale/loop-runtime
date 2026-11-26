@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059): plan-limit + mutual-exclusion
 // enforcement in BuildOrchestrator.SubmitBuild. This is the authoritative gate
@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 )
 
@@ -78,14 +78,14 @@ func TestSubmitBuild_StarterPlan_ReplicasExceedCap_Returns422(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected ErrReplicasExceedPlan, got nil")
 	}
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if !errors.As(err, &loopzeroErr) {
-		t.Fatalf("expected *LoopZeroError, got: %T %v", err, err)
+	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopruntimeErr) {
+		t.Fatalf("expected *LoopRuntimeError, got: %T %v", err, err)
 	}
-	if loopzeroErr.Code != "REPLICAS_EXCEED_PLAN" {
-		t.Errorf("expected code REPLICAS_EXCEED_PLAN, got %q (msg: %s)", loopzeroErr.Code, loopzeroErr.Message)
+	if loopruntimeErr.Code != "REPLICAS_EXCEED_PLAN" {
+		t.Errorf("expected code REPLICAS_EXCEED_PLAN, got %q (msg: %s)", loopruntimeErr.Code, loopruntimeErr.Message)
 	}
-	if got := errorshttp.Status(loopzeroErr); got != 422 {
+	if got := errorshttp.Status(loopruntimeErr); got != 422 {
 		t.Errorf("expected HTTP 422, got %d", got)
 	}
 
@@ -127,12 +127,12 @@ func TestSubmitBuild_StarterPlan_AutoscalingMaxExceedsCap_Returns422(t *testing.
 	if err == nil {
 		t.Fatal("expected ErrReplicasExceedPlan for autoscaling.max=5 on starter (cap=2)")
 	}
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if !errors.As(err, &loopzeroErr) {
-		t.Fatalf("expected *LoopZeroError, got: %T %v", err, err)
+	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopruntimeErr) {
+		t.Fatalf("expected *LoopRuntimeError, got: %T %v", err, err)
 	}
-	if loopzeroErr.Code != "REPLICAS_EXCEED_PLAN" {
-		t.Errorf("expected REPLICAS_EXCEED_PLAN, got %q", loopzeroErr.Code)
+	if loopruntimeErr.Code != "REPLICAS_EXCEED_PLAN" {
+		t.Errorf("expected REPLICAS_EXCEED_PLAN, got %q", loopruntimeErr.Code)
 	}
 	if checker.recordedRequested != 5 {
 		t.Errorf("expected checker called with 5 (autoscaling.max), got %d", checker.recordedRequested)
@@ -234,8 +234,8 @@ func TestSubmitBuild_ProPlan_ReplicasOverCap_Returns422(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if !errors.As(err, &loopzeroErr) || loopzeroErr.Code != "REPLICAS_EXCEED_PLAN" {
+	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopruntimeErr) || loopruntimeErr.Code != "REPLICAS_EXCEED_PLAN" {
 		t.Errorf("expected REPLICAS_EXCEED_PLAN, got: %v", err)
 	}
 }
@@ -269,14 +269,14 @@ func TestSubmitBuild_ReplicasAndAutoscalingSet_Returns422Ambiguous(t *testing.T)
 	if err == nil {
 		t.Fatal("expected ErrScalingAmbiguous")
 	}
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if !errors.As(err, &loopzeroErr) {
-		t.Fatalf("expected *LoopZeroError, got %T: %v", err, err)
+	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopruntimeErr) {
+		t.Fatalf("expected *LoopRuntimeError, got %T: %v", err, err)
 	}
-	if loopzeroErr.Code != "SCALING_AMBIGUOUS" {
-		t.Errorf("expected SCALING_AMBIGUOUS, got %q (msg: %s)", loopzeroErr.Code, loopzeroErr.Message)
+	if loopruntimeErr.Code != "SCALING_AMBIGUOUS" {
+		t.Errorf("expected SCALING_AMBIGUOUS, got %q (msg: %s)", loopruntimeErr.Code, loopruntimeErr.Message)
 	}
-	if got := errorshttp.Status(loopzeroErr); got != 422 {
+	if got := errorshttp.Status(loopruntimeErr); got != 422 {
 		t.Errorf("expected HTTP 422, got %d", got)
 	}
 	if len(bs.builds) != 0 {
@@ -322,7 +322,7 @@ func TestSubmitBuild_ReplicaCapUnverifiable_RefusesWithPlatformDegraded(t *testi
 		Locker:     &fakeLockerContainer{},
 		Workflow:   &fakeWorkflowSubmitterOrch{workflowID: "wf-1"},
 		EventStore: &fakeEventStoreContainer{},
-		PlanCap:    &fakePlanCapChecker{err: loopzeroerrors.ErrPlatformDegraded.Wrap("limits store down")},
+		PlanCap:    &fakePlanCapChecker{err: loopruntimeerrors.ErrPlatformDegraded.Wrap("limits store down")},
 	})
 
 	_, err := orch.SubmitBuild(context.Background(), deploycontracts.SubmitBuildRequest{
@@ -334,7 +334,7 @@ func TestSubmitBuild_ReplicaCapUnverifiable_RefusesWithPlatformDegraded(t *testi
 		},
 	})
 
-	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+	if !errors.Is(err, loopruntimeerrors.ErrPlatformDegraded) {
 		t.Fatalf("err = %v, want PLATFORM_DEGRADED", err)
 	}
 	if len(bs.builds) != 0 {

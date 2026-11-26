@@ -1,0 +1,81 @@
+{{- if and .Values.alerts.enabled .Values.vaps.protectPlatformDeletes }}
+# Alerts for the D4 delete guardrail (plan d4-vap-delete-guardrail, T2.1).
+#
+# METRIC AND LABELS ARE MEASURED, NOT ASSUMED
+#
+# Verified against the live mgmt apiserver (k3s v1.32.13) on 2026-08-07 with
+# `kubectl get --raw /metrics`. The observed series is:
+#
+#   apiserver_validating_admission_policy_check_total{
+#     enforcement_action="deny",
+#     error_type="invalid_error",
+#     policy="loopruntime-protect-platform-deletes",
+#     policy_binding="loopruntime-protect-platform-deletes-binding"}
+#
+# The label is `policy` — NOT `policy_name`, which is what the plan originally assumed. An
+# expression built on the assumed label would have matched nothing and the alert would have
+# been silently dead, which is worse than no alert: it reads as coverage.
+#
+# WHY THE WARN-PHASE EXPRESSION DOES NOT FILTER enforcement_action (EC-5)
+#
+# During the Warn window the policy only warns, so every sample carries
+# enforcement_action="warn". An expression restricted to "deny" returns an empty series for
+# the entire window — and the flip criterion in T2.3 ("no legitimate identity was caught")
+# would then be satisfied by absence of instrument rather than absence of problem. So the
+# Warn-phase rule matches the policy without constraining the action, and the operator reads
+# WHO was caught. After the flip, the deny-specific rule below carries the page.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loopruntime-protect-platform-deletes-alerts
+  namespace: {{ .Values.alerts.namespace | quote }}
+  labels:
+    release: {{ .Values.alerts.prometheusReleaseLabel | quote }}
+    runtime.getloopscale.com/component: admission-policies
+    runtime.getloopscale.com/plan: d4-vap-delete-guardrail
+spec:
+  groups:
+    - name: loopruntime.protect-platform-deletes
+      interval: 60s
+      rules:
+        # Observation-window rule. Fires on ANY evaluation of the policy, whatever the
+        # enforcement action. This is what makes the Warn window produce evidence.
+        - alert: PlatformDeleteGuardrailTriggered
+          expr: |
+            sum by (policy, enforcement_action) (
+              increase(apiserver_validating_admission_policy_check_total{
+                policy="loopruntime-protect-platform-deletes"}[10m])
+            ) > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "A protected resource delete was intercepted ({{ `{{ $labels.enforcement_action }}` }})"
+            description: >-
+              The delete guardrail evaluated a request against a boundary resource. During the
+              Warn window this is the signal used to decide whether the exemption list is
+              complete: if the caught identity is a legitimate platform component, the list is
+              wrong and the flip to Deny must NOT happen until it is fixed.
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/main/docs/runbooks.md"
+
+        # Post-flip rule: an actual denial is a page. Someone or something is hitting a
+        # guardrail that, under BYOC, stands between a mistake and a customer's infrastructure.
+        - alert: PlatformDeleteGuardrailDenied
+          expr: |
+            sum by (policy) (
+              increase(apiserver_validating_admission_policy_check_total{
+                policy="loopruntime-protect-platform-deletes",
+                enforcement_action="deny"}[5m])
+            ) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Delete of a protected platform resource was denied"
+            description: >-
+              A delete against Application, AppProject, Tenant, Environment, ClusterCredential
+              or one of their definitions was refused. Either a real mistake was just
+              prevented, or a legitimate teardown path is missing from the exemption list and
+              is now blocked.
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/main/docs/runbooks.md"
+{{- end }}

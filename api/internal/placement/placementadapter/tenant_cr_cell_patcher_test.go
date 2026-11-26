@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placementadapter
 
@@ -20,7 +20,7 @@ func newFakeTenantClient(tenantID, namespace string, spec map[string]interface{}
 	objects := []runtime.Object{}
 	if tenantID != "" {
 		objects = append(objects, &unstructured.Unstructured{Object: map[string]interface{}{
-			"apiVersion": "loopzero.io/v1",
+			"apiVersion": "runtime.getloopscale.com/v1",
 			"kind":       "Tenant",
 			"metadata":   map[string]interface{}{"name": tenantID, "namespace": namespace},
 			"spec":       spec,
@@ -41,45 +41,45 @@ func tenantSpecField(t *testing.T, client *dynamicfake.FakeDynamicClient, namesp
 }
 
 func TestTenantCRCellPatcher_PatchesCellIDAndPreservesOtherFields(t *testing.T) {
-	client := newFakeTenantClient("tn-x", "loopzero-system",
+	client := newFakeTenantClient("tn-x", "loopruntime-system",
 		map[string]interface{}{"cellID": "cell-0", "displayName": "preserved-display"})
-	p := NewTenantCRCellPatcher(client, "loopzero-system")
+	p := NewTenantCRCellPatcher(client, "loopruntime-system")
 
 	if err := p.PatchTenantCellID(context.Background(), "tn-x", "cell-1"); err != nil {
 		t.Fatalf("PatchTenantCellID: %v", err)
 	}
 
-	if got := tenantSpecField(t, client, "loopzero-system", "tn-x", "cellID"); got != "cell-1" {
+	if got := tenantSpecField(t, client, "loopruntime-system", "tn-x", "cellID"); got != "cell-1" {
 		t.Errorf("spec.cellID = %q, want cell-1", got)
 	}
-	if got := tenantSpecField(t, client, "loopzero-system", "tn-x", "displayName"); got != "preserved-display" {
+	if got := tenantSpecField(t, client, "loopruntime-system", "tn-x", "displayName"); got != "preserved-display" {
 		t.Errorf("a merge patch must keep spec.displayName, got %q", got)
 	}
 }
 
 func TestTenantCRCellPatcher_RespectsCustomNamespace(t *testing.T) {
-	client := newFakeTenantClient("tn-x", "loopzero-prod", map[string]interface{}{"cellID": "cell-0"})
-	p := NewTenantCRCellPatcher(client, "loopzero-prod")
+	client := newFakeTenantClient("tn-x", "loopruntime-prod", map[string]interface{}{"cellID": "cell-0"})
+	p := NewTenantCRCellPatcher(client, "loopruntime-prod")
 
 	if err := p.PatchTenantCellID(context.Background(), "tn-x", "cell-1"); err != nil {
 		t.Fatalf("PatchTenantCellID: %v", err)
 	}
 
-	if got := tenantSpecField(t, client, "loopzero-prod", "tn-x", "cellID"); got != "cell-1" {
+	if got := tenantSpecField(t, client, "loopruntime-prod", "tn-x", "cellID"); got != "cell-1" {
 		t.Errorf("spec.cellID = %q, want cell-1", got)
 	}
 }
 
-func TestTenantCRCellPatcher_DefaultsToLoopZeroSystemNamespace(t *testing.T) {
+func TestTenantCRCellPatcher_DefaultsToLoopRuntimeSystemNamespace(t *testing.T) {
 	p := NewTenantCRCellPatcher(newFakeTenantClient("", "", nil), "")
 
-	if p.Namespace() != "loopzero-system" {
-		t.Errorf("Namespace() = %q, want loopzero-system", p.Namespace())
+	if p.Namespace() != "loopruntime-system" {
+		t.Errorf("Namespace() = %q, want loopruntime-system", p.Namespace())
 	}
 }
 
 func TestTenantCRCellPatcher_MissingTenantIsAnError(t *testing.T) {
-	p := NewTenantCRCellPatcher(newFakeTenantClient("", "", nil), "loopzero-system")
+	p := NewTenantCRCellPatcher(newFakeTenantClient("", "", nil), "loopruntime-system")
 
 	if err := p.PatchTenantCellID(context.Background(), "tn-missing", "cell-1"); err == nil {
 		t.Fatal("expected an error patching an absent Tenant CR")

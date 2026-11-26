@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // registry-mirror copies all container images from a source OCI registry to a
 // destination registry using the crane CLI tool.
@@ -16,8 +16,8 @@
 //
 // Usage:
 //
-//	SOURCE_REGISTRY=registry.digitalocean.com/loopzero-system \
-//	DEST_REGISTRY=registry.example.com/loopzero-platform \
+//	SOURCE_REGISTRY=registry.digitalocean.com/loopruntime-system \
+//	DEST_REGISTRY=registry.example.com/loopruntime-platform \
 //	go run infra/scripts/registry-mirror/main.go
 //
 // Exit codes:

@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: rekor
     app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/instance: {{ .Release.Name }}
-    loopzero.io/purpose: sigstore-ingress-from-{{ .Values.sourceNamespace }}
+    runtime.getloopscale.com/purpose: sigstore-ingress-from-{{ .Values.sourceNamespace }}
 spec:
   podSelector:
     matchLabels:

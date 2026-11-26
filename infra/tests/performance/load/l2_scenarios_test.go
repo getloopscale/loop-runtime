@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package load
 
@@ -24,8 +24,8 @@ import (
 // 10-concurrent on local k3d (the limit of a workstation). L2
 // validates 50-concurrent on a real cloud cluster (pulumi-drill).
 //
-// All scenarios use the RealDeployHarness. Gated on LOOPZERO_REAL_DEPLOY=1
-// + LOOPZERO_LOAD_LEVEL=l2 (or "all"). NEVER run against production or
+// All scenarios use the RealDeployHarness. Gated on LOOPRUNTIME_REAL_DEPLOY=1
+// + LOOPRUNTIME_LOAD_LEVEL=l2 (or "all"). NEVER run against production or
 // against the local k3d (you will OOM the workstation).
 //
 // EC-3 pre-flight (close-all-gaps): scenario asserts the cluster has
@@ -43,12 +43,12 @@ const (
 // t.Skip()s with an actionable message.
 func requireL2Harness(t *testing.T) *RealDeployHarness {
 	t.Helper()
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
-	level := os.Getenv("LOOPZERO_LOAD_LEVEL")
+	level := os.Getenv("LOOPRUNTIME_LOAD_LEVEL")
 	if level != "l2" && level != "all" {
-		t.Skipf("L2 scenarios are gated — set LOOPZERO_LOAD_LEVEL=l2 (got %q). "+
+		t.Skipf("L2 scenarios are gated — set LOOPRUNTIME_LOAD_LEVEL=l2 (got %q). "+
 			"L2 stresses 50-concurrent and MUST run against a real cloud "+
 			"cluster (pulumi-drill), NOT local k3d.", level)
 	}
@@ -57,23 +57,23 @@ func requireL2Harness(t *testing.T) *RealDeployHarness {
 	if err := l2EnsureClusterCapacity(t); err != nil {
 		t.Fatalf("L2 pre-flight FAILED: %v\n\n"+
 			"Either scale up the drill cluster OR override concurrency "+
-			"via LOOPZERO_L2_CONCURRENCY=<n>. Do NOT proceed against an "+
+			"via LOOPRUNTIME_L2_CONCURRENCY=<n>. Do NOT proceed against an "+
 			"under-provisioned cluster — pod schedule failures will "+
 			"mask real concurrency bugs.", err)
 	}
 
-	// Plan 2026-05-16 T3.1: prefer LOOPZERO_DRILL_API_URL when running against
+	// Plan 2026-05-16 T3.1: prefer LOOPRUNTIME_DRILL_API_URL when running against
 	// drill prod-identical stack (per skill /drill-test). Fallback to
-	// LOOPZERO_API_URL for backward compat with non-drill runs.
-	apiURL := os.Getenv("LOOPZERO_DRILL_API_URL")
+	// LOOPRUNTIME_API_URL for backward compat with non-drill runs.
+	apiURL := os.Getenv("LOOPRUNTIME_DRILL_API_URL")
 	if apiURL == "" {
-		apiURL = os.Getenv("LOOPZERO_API_URL")
+		apiURL = os.Getenv("LOOPRUNTIME_API_URL")
 	}
 	harness, err := NewRealDeployHarness(RealDeployConfig{
 		APIURL:      apiURL,
-		AppDomain:   os.Getenv("LOOPZERO_APP_DOMAIN"),
-		ServiceAuth: os.Getenv("LOOPZERO_SERVICE_AUTH"),
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
+		AppDomain:   os.Getenv("LOOPRUNTIME_APP_DOMAIN"),
+		ServiceAuth: os.Getenv("LOOPRUNTIME_SERVICE_AUTH"),
+		FixturePath: envOr("LOOPRUNTIME_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -89,23 +89,23 @@ func requireL2Harness(t *testing.T) *RealDeployHarness {
 // hide real bugs.
 //
 // Default budget: 2Gi per concurrent build × concurrency. Operator
-// can override via LOOPZERO_L2_PER_TENANT_GIB env var.
+// can override via LOOPRUNTIME_L2_PER_TENANT_GIB env var.
 func l2EnsureClusterCapacity(t *testing.T) error {
 	t.Helper()
 
 	concurrency := l2ConcurrencyDefault
-	if v := os.Getenv("LOOPZERO_L2_CONCURRENCY"); v != "" {
+	if v := os.Getenv("LOOPRUNTIME_L2_CONCURRENCY"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {
-			return fmt.Errorf("invalid LOOPZERO_L2_CONCURRENCY=%q (must be >=1)", v)
+			return fmt.Errorf("invalid LOOPRUNTIME_L2_CONCURRENCY=%q (must be >=1)", v)
 		}
 		concurrency = n
 	}
 	perTenant := l2PerTenantMemoryGib
-	if v := os.Getenv("LOOPZERO_L2_PER_TENANT_GIB"); v != "" {
+	if v := os.Getenv("LOOPRUNTIME_L2_PER_TENANT_GIB"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {
-			return fmt.Errorf("invalid LOOPZERO_L2_PER_TENANT_GIB=%q (must be >=1)", v)
+			return fmt.Errorf("invalid LOOPRUNTIME_L2_PER_TENANT_GIB=%q (must be >=1)", v)
 		}
 		perTenant = n
 	}
@@ -139,7 +139,7 @@ func l2EnsureClusterCapacity(t *testing.T) error {
 		return fmt.Errorf("cluster has %d Gi allocatable memory, "+
 			"need >= %d Gi for concurrency=%d (%d Gi per tenant). "+
 			"Either scale up the drill cluster OR reduce "+
-			"LOOPZERO_L2_CONCURRENCY", totalGib, requiredGib, concurrency, perTenant)
+			"LOOPRUNTIME_L2_CONCURRENCY", totalGib, requiredGib, concurrency, perTenant)
 	}
 	return nil
 }
@@ -189,7 +189,7 @@ func TestL2_1_FiftyConcurrentDeploys(t *testing.T) {
 	defer cancel()
 
 	n := l2ConcurrencyDefault
-	if v := os.Getenv("LOOPZERO_L2_CONCURRENCY"); v != "" {
+	if v := os.Getenv("LOOPRUNTIME_L2_CONCURRENCY"); v != "" {
 		n, _ = strconv.Atoi(v)
 	}
 	t.Logf("L2.1 — %d concurrent deploys (drill cluster)", n)

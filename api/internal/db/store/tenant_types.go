@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -40,7 +40,7 @@ type TenantDeletionCounts struct {
 
 // AdminTenantStore is the minimal contract consumed by the admin
 // eviction adapter (placementadapter.TenantDBDeleterAdapter) +
-// the LOOPZERO_ADMIN_API handler. Queries here intentionally bypass tenant
+// the LOOPRUNTIME_ADMIN_API handler. Queries here intentionally bypass tenant
 // scoping — the caller is authenticated as an operator and needs to
 // read/write across tenants.
 //

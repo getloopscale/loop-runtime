@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // SLO thresholds for k6 load tests.
 //
@@ -19,7 +19,7 @@
 //      prove linear scalability.
 //
 //   3. custom metrics — references to the Rate/Trend metrics defined
-//      in lib/loopzero-api.js. Scripts can opt-in per test.
+//      in lib/loopruntime-api.js. Scripts can opt-in per test.
 
 export const base = {
   // HTTP layer — measured by k6 automatically.
@@ -40,37 +40,37 @@ export const base = {
   // → use count< (a rate< form would be a silent no-op).
   'dropped_iterations': ['count<100'],
 
-  // Custom LoopZero metrics.
-  'loopzero_build_submit_success':   ['rate>0.99'],  // ≥ 99% submissions accepted
-  'loopzero_project_created':        ['rate>0.99'],  // ≥ 99% project creations succeed
-  'loopzero_build_succeeded':        ['rate>0.99'],  // ≥ 99% builds reach SUCCEEDED
-  'loopzero_app_verified':           ['rate>0.99'],  // ≥ 99% apps verified live (HTTP 200)
-  'loopzero_upload_duration_ms':     ['p(95)<10000'], // upload < 10s
-  'loopzero_build_submit_duration_ms': ['p(95)<2000'], // build submit < 2s
-  'loopzero_deploy_duration_ms':     ['p(95)<600000'], // deploy < 600s (CLAUDE.md budget)
-  'loopzero_app_verify_duration_ms': ['p(95)<120000'], // app live within 120s of build SUCCEEDED
+  // Custom LoopRuntime metrics.
+  'loopruntime_build_submit_success':   ['rate>0.99'],  // ≥ 99% submissions accepted
+  'loopruntime_project_created':        ['rate>0.99'],  // ≥ 99% project creations succeed
+  'loopruntime_build_succeeded':        ['rate>0.99'],  // ≥ 99% builds reach SUCCEEDED
+  'loopruntime_app_verified':           ['rate>0.99'],  // ≥ 99% apps verified live (HTTP 200)
+  'loopruntime_upload_duration_ms':     ['p(95)<10000'], // upload < 10s
+  'loopruntime_build_submit_duration_ms': ['p(95)<2000'], // build submit < 2s
+  'loopruntime_deploy_duration_ms':     ['p(95)<600000'], // deploy < 600s (CLAUDE.md budget)
+  'loopruntime_app_verify_duration_ms': ['p(95)<120000'], // app live within 120s of build SUCCEEDED
 };
 
 // Per-level tightenings. Merge into base to get the final thresholds.
 export const perLevel = {
   l1: {
-    'loopzero_deploy_duration_ms': ['p(99)<600000'], // L1: p99 < 10min
+    'loopruntime_deploy_duration_ms': ['p(99)<600000'], // L1: p99 < 10min
   },
   l2: {
-    'loopzero_deploy_duration_ms': ['p(99)<600000'], // L2: p99 < 10min
-    'loopzero_build_succeeded':    ['rate>0.99'],    // >= 99%
+    'loopruntime_deploy_duration_ms': ['p(99)<600000'], // L2: p99 < 10min
+    'loopruntime_build_succeeded':    ['rate>0.99'],    // >= 99%
   },
   l3: {
-    'loopzero_deploy_duration_ms': ['p(99)<900000'], // L3: p99 < 15min (more contention)
-    'loopzero_build_succeeded':    ['rate>0.995'],   // >= 99.5% per roadmap 08
+    'loopruntime_deploy_duration_ms': ['p(99)<900000'], // L3: p99 < 15min (more contention)
+    'loopruntime_build_succeeded':    ['rate>0.995'],   // >= 99.5% per roadmap 08
   },
   l4: {
-    'loopzero_deploy_duration_ms': ['p(99)<1200000'], // L4: p99 < 20min
-    'loopzero_build_succeeded':    ['rate>0.99'],     // >= 99% per roadmap 08
+    'loopruntime_deploy_duration_ms': ['p(99)<1200000'], // L4: p99 < 20min
+    'loopruntime_build_succeeded':    ['rate>0.99'],     // >= 99% per roadmap 08
   },
   l5: {
-    'loopzero_deploy_duration_ms': ['p(99)<1500000'], // L5: p99 < 25min
-    'loopzero_build_succeeded':    ['rate>0.99'],     // >= 99% per roadmap 08
+    'loopruntime_deploy_duration_ms': ['p(99)<1500000'], // L5: p99 < 25min
+    'loopruntime_build_succeeded':    ['rate>0.99'],     // >= 99% per roadmap 08
   },
 };
 

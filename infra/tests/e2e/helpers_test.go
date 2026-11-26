@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package e2e provides shared test helpers for all E2E test suites.
 package e2e
@@ -30,7 +30,7 @@ func fixturesPath() string {
 
 // apiURL returns the E2E API base URL from environment or default.
 func apiURL() string {
-	if url := os.Getenv("LOOPZERO_API_URL"); url != "" {
+	if url := os.Getenv("LOOPRUNTIME_API_URL"); url != "" {
 		return url
 	}
 	if url := os.Getenv("API_URL"); url != "" {
@@ -68,7 +68,7 @@ func uniqueSuffix() string {
 // the path. Each test gets its own copy to avoid cross-test contamination.
 func copyFixture(fixtureName string) string {
 	src := filepath.Join(fixturesPath(), fixtureName)
-	dst, err := os.MkdirTemp("", "loopzero-e2e-"+fixtureName+"-")
+	dst, err := os.MkdirTemp("", "loopruntime-e2e-"+fixtureName+"-")
 	Expect(err).NotTo(HaveOccurred())
 
 	cmd := exec.Command("cp", "-r", src+"/.", dst)
@@ -96,7 +96,7 @@ func verifyAPIHealth() error {
 
 // e2eBaseDomain returns the base domain for app hostnames in the current env.
 // Plan 2026-05-19-drill-skills-rigor-restoration: drill DOKS uses CF wildcard
-// (drill.getloopscale.com) while local k3d uses loopzero.local. DRILL_KUBECONFIG_DIR
+// (drill.getloopscale.com) while local k3d uses loopruntime.local. DRILL_KUBECONFIG_DIR
 // presence is the signal for drill mode.
 func e2eBaseDomain() string {
 	if os.Getenv("DRILL_KUBECONFIG_DIR") != "" {
@@ -108,21 +108,21 @@ func e2eBaseDomain() string {
 // ensureProjectDeleted idempotently deletes a project if it exists.
 // Used for cleanup before/after journey tests.
 //
-// LOOPZERO_API_TIMEOUT bumped to 120s (vs CLI default 30s) — project delete
+// LOOPRUNTIME_API_TIMEOUT bumped to 120s (vs CLI default 30s) — project delete
 // cascades through cancel builds + gitops remove + ArgoCD sync and exceeds
 // 30s on LIVE k3d (observed flakes in journey 73/75 run, 2026-05-06).
 func ensureProjectDeleted(project string) {
 	// The exit code is not checked: an absent project is the expected case.
 	// A CLI that never started is not, and would leave the project behind.
-	_, stderr, exitCode := execLoopZero(loopzeroInvocation{env: []string{longAPITimeout}},
+	_, stderr, exitCode := execLoopRuntime(loopruntimeInvocation{env: []string{longAPITimeout}},
 		"project", "delete", project, "--yes", "--json")
-	Expect(exitCode).NotTo(Equal(-1), "loopzero did not start: %s", stderr)
+	Expect(exitCode).NotTo(Equal(-1), "loopruntime did not start: %s", stderr)
 }
 
-// resolveToken returns the JWT to inject into spawned loopzero CLI processes.
+// resolveToken returns the JWT to inject into spawned loopruntime CLI processes.
 // Resolution order (first non-empty wins):
-//  1. process env LOOPZERO_TOKEN (CI/operator override — real Hydra-minted JWT)
-//  2. ~/.loopzero/local-dogfood-token.txt (dogfood-seeded JWT)
+//  1. process env LOOPRUNTIME_TOKEN (CI/operator override — real Hydra-minted JWT)
+//  2. ~/.loopruntime/local-dogfood-token.txt (dogfood-seeded JWT)
 //  3. seed.AuthToken (legacy placeholder; only valid in dev-mode API)
 //
 // 2026-05-09 fix: prefer the FILE over env when both exist. The file is
@@ -130,16 +130,16 @@ func ensureProjectDeleted(project string) {
 // is captured by the test process at boot and never re-read, so a long
 // suite that crosses the 1h Hydra TTL would 401 indefinitely. By
 // preferring the file, mid-run `bash infra/helmfile/scripts/seed-local-user.sh`
-// surfaces immediately to subsequent runLoopZero calls.
+// surfaces immediately to subsequent runLoopRuntime calls.
 func resolveToken() string {
 	if home, err := os.UserHomeDir(); err == nil {
-		if data, err := os.ReadFile(home + "/.loopzero/local-dogfood-token.txt"); err == nil {
+		if data, err := os.ReadFile(home + "/.loopruntime/local-dogfood-token.txt"); err == nil {
 			if s := strings.TrimSpace(string(data)); s != "" {
 				return s
 			}
 		}
 	}
-	if t := os.Getenv("LOOPZERO_TOKEN"); t != "" {
+	if t := os.Getenv("LOOPRUNTIME_TOKEN"); t != "" {
 		return t
 	}
 	return seed.AuthToken
@@ -147,8 +147,8 @@ func resolveToken() string {
 
 // skipIfNotE2E skips the current spec if E2E prerequisites are not met.
 func skipIfNotE2E() {
-	if os.Getenv("LOOPZERO_E2E") == "" {
-		Skip("Set LOOPZERO_E2E=1 to run E2E tests")
+	if os.Getenv("LOOPRUNTIME_E2E") == "" {
+		Skip("Set LOOPRUNTIME_E2E=1 to run E2E tests")
 	}
 	if !clusterRunning() {
 		Skip("kubectl cluster-info failed — clusters not running")

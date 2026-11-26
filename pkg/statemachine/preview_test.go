@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
@@ -108,7 +108,7 @@ func TestPreviewMachine_IsTerminal(t *testing.T) {
 }
 
 // A new PreviewEnvironment enters the lifecycle through the machine, like every
-// other LoopZero CRD, instead of the controller assigning Creating directly.
+// other LoopRuntime CRD, instead of the controller assigning Creating directly.
 func TestPreviewMachine_CreateMovesANewPreviewToCreating(t *testing.T) {
 	m := NewPreviewTypedMachine()
 

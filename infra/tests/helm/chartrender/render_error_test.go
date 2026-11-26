@@ -11,7 +11,7 @@ import (
 // needs the error back instead of a t.Fatal. Going through the facade keeps the
 // dependency resolution and the chart-name guard on that path too.
 func TestRenderTemplateE_returns_the_helm_error_instead_of_failing(t *testing.T) {
-	chartPath, err := PublishedChartPath("loopzero-api")
+	chartPath, err := PublishedChartPath("loopruntime-api")
 	if err != nil {
 		t.Fatalf("PublishedChartPath: %v", err)
 	}

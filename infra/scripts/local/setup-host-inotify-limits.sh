@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # setup-host-inotify-limits.sh — persist kernel inotify limits required for k3d multi-cluster topology.
 #
-# Why this exists (Finding 2026-05-13 — k3d loopzero-cell-0 agent timeout):
+# Why this exists (Finding 2026-05-13 — k3d loopruntime-cell-0 agent timeout):
 #
-# LoopZero's local dev topology runs 4 k3d clusters (mgmt + build + workload + runtime-2)
+# LoopRuntime's local dev topology runs 4 k3d clusters (mgmt + build + workload + runtime-2)
 # simultaneously. Each k3s server + agent runs an embedded containerd which uses
 # fsnotify watchers for the CRI plugin's CNI conf monitor, image registry watcher,
 # and snapshotter sync. Each cluster consumes ~5-10 inotify instances per user.
@@ -16,13 +16,13 @@
 #
 # Symptom: `k3d cluster create` times out at the agent registration step
 # (`Successfully registered node` never logged) — typically the 3rd cluster
-# (loopzero-cell-0) hits the wall after mgmt+build already consumed instances.
+# (loopruntime-cell-0) hits the wall after mgmt+build already consumed instances.
 #
 # CTO mandate 2026-05-13 Rule 0 (local fidedigno ao prod) + Rule 6 (zero workaround):
 # fix the kernel limit systematically, persist across reboots, and pre-flight gate
 # `task clusters:create` so the failure mode never recurs silently.
 #
-# Idempotency: writing the same /etc/sysctl.d/99-loopzero-cleanroom.conf is a no-op if
+# Idempotency: writing the same /etc/sysctl.d/99-loopruntime-cleanroom.conf is a no-op if
 # content matches; sysctl --system re-applies all .conf files (cheap).
 #
 # Usage:
@@ -45,7 +45,7 @@ set -euo pipefail
 REQUIRED_INSTANCES=1024
 REQUIRED_WATCHES=524288
 
-CONF_FILE="/etc/sysctl.d/99-loopzero-cleanroom.conf"
+CONF_FILE="/etc/sysctl.d/99-loopruntime-cleanroom.conf"
 
 if [[ "$EUID" -ne 0 ]]; then
   echo "ERROR: this script must run as root. Re-invoke with: sudo bash $0" >&2
@@ -54,13 +54,13 @@ fi
 
 # Backup any pre-existing file with a non-conflicting marker so we don't
 # silently overwrite a different policy.
-if [[ -f "$CONF_FILE" ]] && ! grep -q "loopzero-cleanroom" "$CONF_FILE" 2>/dev/null; then
+if [[ -f "$CONF_FILE" ]] && ! grep -q "loopruntime-cleanroom" "$CONF_FILE" 2>/dev/null; then
   cp -p "$CONF_FILE" "${CONF_FILE}.bak.$(date +%Y%m%d-%H%M%S)"
   echo "Backed up pre-existing $CONF_FILE"
 fi
 
 cat > "$CONF_FILE" <<EOF
-# loopzero-cleanroom: kernel inotify limits for 4 k3d clusters (mgmt + build + workload + runtime-2)
+# loopruntime-cleanroom: kernel inotify limits for 4 k3d clusters (mgmt + build + workload + runtime-2)
 # Managed by infra/scripts/setup-host-inotify-limits.sh — do not edit by hand.
 # Rationale: see .claude/knowledge-base/concepts/operations/finding-2026-05-13-k3d-agent-timeout.md
 fs.inotify.max_user_instances = $REQUIRED_INSTANCES

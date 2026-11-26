@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package projectshttp
 
@@ -17,7 +17,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
 	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // M4 T3.1 — when the store rejects creation with the per-Account cap typed error
@@ -25,7 +25,7 @@ import (
 // client gets the actionable upgrade message. Mirrors the #101 scale-cap 422.
 func TestProjects_Create_CapExceeded_Returns422(t *testing.T) {
 	store := &fakeProjectStore{
-		createErr: loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-x"),
+		createErr: loopruntimeerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-x"),
 	}
 	h := NewProjectHandler(store, &fakeTenantCRMgr{})
 

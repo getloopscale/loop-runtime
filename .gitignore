@@ -1,5 +1,5 @@
 # ============================================
-# LoopZero — .gitignore
+# LoopRuntime — .gitignore
 # Monorepo: TypeScript (CLI) + Go (API + Operators) + Infra
 # ============================================
 
@@ -48,7 +48,7 @@ dist/
 # sibling repo at M2, and no `build/` artifact directory exists in this worktree
 # at all. The pattern outlived its subject and kept only its side effect.
 #
-# Guarded by cmd/loopzero-ops/quality_gitignore_shadows_source_test.go, which asks
+# Guarded by cmd/loopruntime-ops/quality_gitignore_shadows_source_test.go, which asks
 # git which files it ignores and fails on any that look like source.
 
 # Dashboard build artifacts + vendored references (355MB, do not commit)
@@ -85,8 +85,8 @@ bin/
 
 # Compiled Go binaries (should never be committed)
 api/main
-api/loopzero-api
-api/loopzero-controller
+api/loopruntime-api
+api/loopruntime-controller
 api/controller
 operators/main
 # Per CHG-2026-04-30-INFRA-NORMALIZE D1: 4 split operator binaries
@@ -100,10 +100,10 @@ cloud/main
 # /cmd was previously fully-ignored — but per same lesson as /scripts (2026-05-20),
 # silently ignoring a whole top-level dir is catastrophic because CI/build paths
 # point inside. Phase 0 T0.1 of plan 2026-05-22-shell-script-strategic-plan.md
-# requires cmd/loopzero-ops to be a committed Go package. Allow source files; still
+# requires cmd/loopruntime-ops to be a committed Go package. Allow source files; still
 # block compiled binaries.
 !/cmd/
-/cmd/*/loopzero-ops
+/cmd/*/loopruntime-ops
 /cmd/*/main
 # /scripts — REMOVED 2026-05-20 (was catastrophically ignoring directory
 # containing 5+ CI-referenced scripts: audit-security-context.sh,
@@ -251,8 +251,8 @@ code-review-output/figures/
 code-review-output/findings/
 code-review-output/state/
 
-# compiled loopzero-ops binary (build artifact; source is cmd/loopzero-ops/)
-/loopzero-ops
+# compiled loopruntime-ops binary (build artifact; source is cmd/loopruntime-ops/)
+/loopruntime-ops
 
 # compiled helper binary (regenerable via go build)
 tools/gen-service-auth-ed25519/gen-service-auth-ed25519
@@ -274,7 +274,7 @@ system-design-output/
 .review-runs/
 
 # Build binaries that were versioned by mistake (B-051, 2026-08-11)
-tools/loopzero-dockerfile-lint/loopzero-dockerfile-lint
+tools/loopruntime-dockerfile-lint/loopruntime-dockerfile-lint
 operators/app-operator
 
 # Harness session artifacts — neither versioned nor visible to a `git add -A`.

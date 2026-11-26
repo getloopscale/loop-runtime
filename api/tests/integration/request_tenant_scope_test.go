@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -9,25 +9,25 @@ import (
 	"testing"
 	"time"
 
-	loopzerodb "github.com/getloopscale/loop-runtime/api/internal/db"
+	loopruntimedb "github.com/getloopscale/loop-runtime/api/internal/db"
 	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
 	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 )
 
-// The request pool runs as loopzero_api, and every tenant table is under
+// The request pool runs as loopruntime_api, and every tenant table is under
 // fail-closed Row Level Security (migration 000062): a statement sees only the
 // rows of the tenant named by `app.tenant_id`. Nothing on the request path set
 // that variable outside the environment lock, so every read of a tenant table
 // on an authenticated request saw nothing — measured on 2026-09-25 against the
-// migrated schema: a user's own membership row read 0 rows as loopzero_api and 1 as
-// loopzero_worker.
+// migrated schema: a user's own membership row read 0 rows as loopruntime_api and 1 as
+// loopruntime_worker.
 //
 // The request pool now scopes every connection it hands out to the tenant the
 // request context carries. These tests pin that behaviour over the real role:
 // the scoped tenant's rows are visible, another tenant's are not, and a
 // connection reused by an unscoped caller carries no tenant forward.
 //
-//	DATABASE_URL=<loopzero_api> LOOPZERO_WORKER_DATABASE_URL=<loopzero_worker> \
+//	DATABASE_URL=<loopruntime_api> LOOPRUNTIME_WORKER_DATABASE_URL=<loopruntime_worker> \
 //	  go test ./tests/integration/ -run RequestPool -v
 
 const requestScopeTenantA, requestScopeTenantB = "tn-rls-scope-a", "tn-rls-scope-b"
@@ -55,7 +55,7 @@ func requestScopeSeed(t *testing.T) {
 
 // scopedRequestPool builds the request pool the way setupDatabase does, over the
 // request role, with a single connection so every call reuses it.
-func scopedRequestPool(t *testing.T) *loopzerodb.PgxAdapter {
+func scopedRequestPool(t *testing.T) *loopruntimedb.PgxAdapter {
 	t.Helper()
 	requireIsolatedRequestRole(t)
 	return tenantScopedRequestPool(t, 1)
@@ -68,10 +68,10 @@ func scopedRequestPool(t *testing.T) *loopzerodb.PgxAdapter {
 // raw connection carries whatever `app.tenant_id` a previous user left on it,
 // which is how a fixture's scope leaked into the code under test and made
 // TestConcurrentBuildSubmission pass or fail by connection (issue #387).
-func tenantScopedRequestPool(t *testing.T, maxConns int32) *loopzerodb.PgxAdapter {
+func tenantScopedRequestPool(t *testing.T, maxConns int32) *loopruntimedb.PgxAdapter {
 	t.Helper()
 	_ = testPool(t) // skips when PostgreSQL is unreachable
-	adapter, err := loopzerodb.NewPool(context.Background(), dbURL(), loopzerodb.PoolConfig{
+	adapter, err := loopruntimedb.NewPool(context.Background(), dbURL(), loopruntimedb.PoolConfig{
 		MaxConns:          maxConns,
 		HealthCheckPeriod: time.Minute,
 		MaxConnLifetime:   time.Hour,
@@ -100,11 +100,11 @@ func requireIsolatedRequestRole(t *testing.T) {
 	if bypasses {
 		// A role that bypasses RLS cannot reproduce https://github.com/getloopscale/loop-runtime/issues/384:
 		// it sees every tenant's rows whether or not the connection is scoped.
-		t.Skip("DATABASE_URL is not the isolated request role (it bypasses RLS); point it at loopzero_api")
+		t.Skip("DATABASE_URL is not the isolated request role (it bypasses RLS); point it at loopruntime_api")
 	}
 }
 
-func projectsVisible(t *testing.T, ctx context.Context, adapter *loopzerodb.PgxAdapter) []string {
+func projectsVisible(t *testing.T, ctx context.Context, adapter *loopruntimedb.PgxAdapter) []string {
 	t.Helper()
 	rows, err := adapter.Query(ctx, `SELECT tenant_id FROM projects WHERE tenant_id IN ($1, $2) ORDER BY tenant_id`,
 		requestScopeTenantA, requestScopeTenantB)

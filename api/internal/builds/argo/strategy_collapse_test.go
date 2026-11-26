@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -12,7 +12,7 @@ import (
 
 // T2.1 (plan simplify-deploy-loopzerokit-only v2.0) — collapse to node/python.
 // The fixed LoopZeroKit stack supports only node + python. All other dispatch
-// targets are removed; unsupported runtimes fail closed (no loopzero-packs, no
+// targets are removed; unsupported runtimes fail closed (no loopruntime-packs, no
 // silent fallback).
 
 func TestResolveStrategy_NodePython_OK(t *testing.T) {
@@ -32,8 +32,8 @@ func TestResolveStrategy_UnsupportedRuntime_FailsClosed(t *testing.T) {
 			t.Fatalf("ResolveStrategy(%q).DockerfileStep returned nil", fw)
 		}
 		script := strings.Join(c.Args, "\n")
-		if strings.Contains(script, "loopzeropacks-generate") {
-			t.Errorf("runtime %q must NOT route to loopzero-packs after collapse", fw)
+		if strings.Contains(script, "loopruntimepacks-generate") {
+			t.Errorf("runtime %q must NOT route to loopruntime-packs after collapse", fw)
 		}
 		if !strings.Contains(script, "exit 1") {
 			t.Errorf("unsupported runtime %q must fail closed (exit 1); script:\n%s", fw, script)

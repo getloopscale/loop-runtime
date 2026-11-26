@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package conditions
 
@@ -29,7 +29,7 @@ const (
 
 // AggregateToPhase maps a Condition slice + observedGeneration +
 // currentGeneration to a single Phase. Designed for status reporting
-// surfaces (e.g., `loopzero status`, ArgoCD health, top-level CR phase
+// surfaces (e.g., `loopruntime status`, ArgoCD health, top-level CR phase
 // fields) that want a single string instead of three booleans.
 //
 // Algorithm:

@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- Reverts 000060. The order matters: the prompt-scoped rules must GO before
 -- the CHECK narrows, otherwise the ALTER itself fails validating rows the new

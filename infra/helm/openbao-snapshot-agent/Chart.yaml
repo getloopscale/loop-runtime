@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-# Phase 8 D12 of plan 2026-06-02-loopzero-api-vault-integration v1.8.
+# Phase 8 D12 of plan 2026-06-02-loopruntime-api-vault-integration v1.8.
 #
 # Wrapper for openbao-snapshot-agent v0.3.0 (upstream openbao org).
-# Deploys a CronJob on the loopzero-secrets cluster that runs `bao operator raft snapshot
+# Deploys a CronJob on the loopruntime-secrets cluster that runs `bao operator raft snapshot
 # save` periodically + an S3-compatible upload to DO Spaces.
 #
 # Pre-reqs (operator-time):
-#   1. loopzero-secrets cluster up + openbao-init Job completed (Vault role
+#   1. loopruntime-secrets cluster up + openbao-init Job completed (Vault role
 #      `bao-snapshot` provisioned via openbao-init authRoles extension)
 #   2. K8s Secret `openbao-snapshot-s3-creds` in the secrets-system NS containing
 #      AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (DO Spaces creds from

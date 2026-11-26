@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package release is the release-activation bounded context (activate, converge, promote, rollback, reap). M9 Step 6.
 package release
@@ -171,11 +171,11 @@ type ActivationKernel struct {
 func (k ActivationKernel) Activate(
 	ctx context.Context, tx db.DBTX, release *db.Release, apps []ActivationAppInfo, durationSecs int,
 ) error {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.release.activate",
+	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.release.activate",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", release.TenantID),
-			attribute.String("loopzero.environment", release.Environment),
-			attribute.String("loopzero.release_id", release.ID),
+			attribute.String("loopruntime.tenant", release.TenantID),
+			attribute.String("loopruntime.environment", release.Environment),
+			attribute.String("loopruntime.release_id", release.ID),
 		))
 	defer span.End()
 
@@ -285,7 +285,7 @@ func recordActivationMetrics(release *db.Release, durationSecs int) {
 
 // stageDeploySucceeded is step 5.5, the transactional outbox (Option C,
 // MEET-2026-07-03-005): the deploy.succeeded event is staged on the SAME tx.
-// loopzero-cloud drains deploy_events and fans out to the customer's webhooks; the
+// loopruntime-cloud drains deploy_events and fans out to the customer's webhooks; the
 // engine never references the webhook tables. FATAL by design: if the event
 // cannot be staged the activation rolls back and the convergence loop retries,
 // which is what makes delivery at-least-once. transition_id is a fresh UUID per
@@ -360,14 +360,14 @@ func (k ActivationKernel) emitCompleted(ctx context.Context, release *db.Release
 // F-03 fix: computes URL for server/frontend apps so deploy.completed SSE event includes it.
 //
 // Plan release-blockers-2026-06-25-set v1.1 #61 (2026-06-26):
-// Closes loopzero-cloud#61 ("loopzero deploy announces .loopzero.local URL not publicly
+// Closes loopruntime-cloud#61 ("loopruntime deploy announces .loopruntime.local URL not publicly
 // resolvable"). The deploy.completed SSE event URL composition is now the
-// SAME canonical that status.go uses — operator-configured LOOPZERO_PUBLIC_DOMAIN
+// SAME canonical that status.go uses — operator-configured LOOPRUNTIME_PUBLIC_DOMAIN
 // (e.g. `prod-dev.getloopscale.app`) preferred when set; falls back to BASE_DOMAIN
-// (legacy default `loopzero.local`) only when no public override is wired. This
+// (legacy default `loopruntime.local`) only when no public override is wired. This
 // mirrors the existing `StatusHandler.publicDomain` fallback ladder so
-// `loopzero deploy` and `loopzero status` emit byte-identical URLs (no more
-// "deploy says .loopzero.local, status says .prod-dev.getloopscale.app" mismatch).
+// `loopruntime deploy` and `loopruntime status` emit byte-identical URLs (no more
+// "deploy says .loopruntime.local, status says .prod-dev.getloopscale.app" mismatch).
 func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain string) []ActivationAppInfo {
 	var specs []db.BuildAppSpec
 	if release.Apps != nil {
@@ -377,7 +377,7 @@ func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain s
 		}
 	}
 	// Canonical: prefer the operator-configured public domain so the URL
-	// announced by `loopzero deploy` is the SAME URL `loopzero status` returns
+	// announced by `loopruntime deploy` is the SAME URL `loopruntime status` returns
 	// AND publicly resolvable. Empty publicDomain → fall back to baseDomain
 	// (preserves the pre-#61 behavior for envs without a public wildcard).
 	domain := UserFacingDomain(publicDomain, baseDomain)

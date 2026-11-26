@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -16,7 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // AppSBOMSummary is one entry in the /builds/:id/sbom response array.
@@ -65,7 +65,7 @@ type SBOMObjectReader interface {
 // BuildSBOMHandler serves GET /api/v1/builds/:id/sbom.
 //
 // Sprint 6 / T1.2 — exposes per-app SBOM metadata + presigned download
-// URLs. The SBOM blob itself lives in S3 (bucket: loopzero-static-assets);
+// URLs. The SBOM blob itself lives in S3 (bucket: loopruntime-static-assets);
 // the DB only stores the key + counts.
 type BuildSBOMHandler struct {
 	store      AppSBOMStore
@@ -114,7 +114,7 @@ func (h *BuildSBOMHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	infos, err := h.store.GetBuildAppSBOMs(r.Context(), tenantID, buildID)
 	if err != nil {
-		if errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+		if errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
 			http.Error(w, `{"error":"build not found"}`, http.StatusNotFound)
 			return
 		}
@@ -180,7 +180,7 @@ func (h *BuildSBOMHandler) Download(w http.ResponseWriter, r *http.Request) {
 	// to the caller: no key comes from the request.
 	infos, err := h.store.GetBuildAppSBOMs(r.Context(), uc.TenantID, buildID)
 	if err != nil {
-		if errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+		if errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
 			http.Error(w, `{"error":"build not found"}`, http.StatusNotFound)
 			return
 		}

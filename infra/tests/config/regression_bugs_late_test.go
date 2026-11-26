@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package config — regression suite for B1-B18 (CHG-2026-04-28-LAYERED-BOOTSTRAP T8.1).
 //
@@ -8,7 +8,7 @@
 //
 // Run:
 //
-//	LOOPZERO_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
+//	LOOPRUNTIME_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
 package config
 
 import (
@@ -20,20 +20,20 @@ import (
 )
 
 // runRegressionScript invokes regression-checks.sh and returns combined output.
-func TestB50LoopZeroCloudPort13002(t *testing.T) {
-	data, err := os.ReadFile("../../../charts/loopzero-cloud/values.yaml")
+func TestB50LoopRuntimeCloudPort13002(t *testing.T) {
+	data, err := os.ReadFile("../../../charts/loopruntime-cloud/values.yaml")
 	if err != nil {
-		t.Fatalf("read loopzero-cloud values.yaml: %v", err)
+		t.Fatalf("read loopruntime-cloud values.yaml: %v", err)
 	}
 	s := string(data)
 	if !strings.Contains(s, "port: 13002") {
-		t.Errorf("B50 regression: loopzero-cloud service.port must be 13002 (matches binary :13002)")
+		t.Errorf("B50 regression: loopruntime-cloud service.port must be 13002 (matches binary :13002)")
 	}
-	// The probes are values of the one loopzero-cloud chart, rendered by its
+	// The probes are values of the one loopruntime-cloud chart, rendered by its
 	// Deployment template; the bootstrap copy that spelled them in the
 	// template was deleted when the pair became one chart.
 	if !strings.Contains(s, "path: /health") {
-		t.Errorf("B50 regression: loopzero-cloud probes must use /health (not /)")
+		t.Errorf("B50 regression: loopruntime-cloud probes must use /health (not /)")
 	}
 }
 
@@ -152,7 +152,7 @@ func TestB64AdmissionPoliciesAlertsConditional(t *testing.T) {
 	}
 }
 
-func TestB77LoopZeroApiGiteaOrgConfigurable(t *testing.T) {
+func TestB77LoopRuntimeApiGiteaOrgConfigurable(t *testing.T) {
 	// The API and the controller build their GitOps pusher through one
 	// constructor, backgroundloops.NewGitOpsPusher; the org is set there.
 	files := []string{
@@ -174,8 +174,8 @@ func TestB77LoopZeroApiGiteaOrgConfigurable(t *testing.T) {
 			t.Fatalf("read %s: %v", f, err)
 		}
 		s := string(data)
-		if strings.Contains(s, `OrgName: "loopzero",`) {
-			t.Errorf("B77 regression: %s has OrgName hardcoded to \"loopzero\" — must use cfg.GiteaOrg", f)
+		if strings.Contains(s, `OrgName: "loopruntime",`) {
+			t.Errorf("B77 regression: %s has OrgName hardcoded to \"loopruntime\" — must use cfg.GiteaOrg", f)
 		}
 		if !strings.Contains(s, "cfg.GiteaOrg") {
 			t.Errorf("B77 regression: %s must reference cfg.GiteaOrg (configurable via GITEA_ORG env var)", f)
@@ -195,42 +195,42 @@ func TestB77LoopZeroApiGiteaOrgConfigurable(t *testing.T) {
 	}
 }
 
-func TestB78LoopZeroApiHasGiteaTokenEnv(t *testing.T) {
+func TestB78LoopRuntimeApiHasGiteaTokenEnv(t *testing.T) {
 	// Declared as a typed secrets.keyRefs entry of the values Helmfile installs
-	// the one loopzero-api chart with.
-	data, err := os.ReadFile("../../../charts/loopzero-api/values-bootstrap.yaml")
+	// the one loopruntime-api chart with.
+	data, err := os.ReadFile("../../../charts/loopruntime-api/values-bootstrap.yaml")
 	if err != nil {
-		t.Fatalf("read loopzero-api bootstrap values: %v", err)
+		t.Fatalf("read loopruntime-api bootstrap values: %v", err)
 	}
 	s := string(data)
 	if !strings.Contains(s, "name: GITEA_TOKEN") {
-		t.Error("B78 regression: loopzero-api Deployment must export env GITEA_TOKEN")
+		t.Error("B78 regression: loopruntime-api Deployment must export env GITEA_TOKEN")
 	}
 	if !strings.Contains(s, "secretName: gitea-admin") {
 		t.Error("B78 regression: GITEA_TOKEN must come from gitea-admin Secret")
 	}
 }
 
-func TestB79LoopZeroApiHasTmpVolume(t *testing.T) {
-	// The chart mounts the volume through the loopzero-common tmp helpers, so the
+func TestB79LoopRuntimeApiHasTmpVolume(t *testing.T) {
+	// The chart mounts the volume through the loopruntime-common tmp helpers, so the
 	// deployment template names them and the helpers carry the shape.
-	dep, err := os.ReadFile("../../../charts/loopzero-api/templates/deployment.yaml")
+	dep, err := os.ReadFile("../../../charts/loopruntime-api/templates/deployment.yaml")
 	if err != nil {
-		t.Fatalf("read loopzero-api deployment.yaml: %v", err)
+		t.Fatalf("read loopruntime-api deployment.yaml: %v", err)
 	}
-	for _, helper := range []string{`include "loopzero-common.tmpVolumeMount"`, `include "loopzero-common.tmpVolume"`} {
+	for _, helper := range []string{`include "loopruntime-common.tmpVolumeMount"`, `include "loopruntime-common.tmpVolume"`} {
 		if !strings.Contains(string(dep), helper) {
-			t.Errorf("B79 regression: loopzero-api Deployment must %s", helper)
+			t.Errorf("B79 regression: loopruntime-api Deployment must %s", helper)
 		}
 	}
-	data, err := os.ReadFile("../../../charts/loopzero-common/templates/_helpers.tpl")
+	data, err := os.ReadFile("../../../charts/loopruntime-common/templates/_helpers.tpl")
 	if err != nil {
-		t.Fatalf("read loopzero-common helpers: %v", err)
+		t.Fatalf("read loopruntime-common helpers: %v", err)
 	}
 	s := string(data)
 	// Must have a `name: tmp` volume with emptyDir
 	if !strings.Contains(s, "name: tmp") {
-		t.Error("B79 regression: loopzero-api Deployment must have a `tmp` volume")
+		t.Error("B79 regression: loopruntime-api Deployment must have a `tmp` volume")
 	}
 	if !strings.Contains(s, "emptyDir:") {
 		t.Error("B79 regression: tmp volume must be emptyDir (writable)")
@@ -241,7 +241,7 @@ func TestB79LoopZeroApiHasTmpVolume(t *testing.T) {
 }
 
 func TestB75MinioBucketsCompleteness(t *testing.T) {
-	required := []string{"loopzero-builds", "loopzero-artifacts", "loopzero-logs", "loopzero-static-assets"}
+	required := []string{"loopruntime-builds", "loopruntime-artifacts", "loopruntime-logs", "loopruntime-static-assets"}
 	for _, f := range []string{
 		"../../helm/minio/values.yaml",
 		"../../helm/minio/values-distributed.yaml",
@@ -257,7 +257,7 @@ func TestB75MinioBucketsCompleteness(t *testing.T) {
 			}
 		}
 	}
-	// Cross-reference: loopzero-static-assets must be named in the argo constants.
+	// Cross-reference: loopruntime-static-assets must be named in the argo constants.
 	//
 	// The path is SEARCHED, not hardcoded. It used to read
 	// `../../../api/internal/argo/constants.go` literally; commit 698fd507d moved
@@ -301,8 +301,8 @@ func TestB75MinioBucketsCompleteness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v", argoConstants[0], err)
 	}
-	if !strings.Contains(string(apiData), `"loopzero-static-assets"`) {
-		t.Error("B75 regression: api code must reference loopzero-static-assets bucket name")
+	if !strings.Contains(string(apiData), `"loopruntime-static-assets"`) {
+		t.Error("B75 regression: api code must reference loopruntime-static-assets bucket name")
 	}
 }
 
@@ -312,21 +312,21 @@ func TestB71BuildHelmfileHasCWTs(t *testing.T) {
 		t.Fatalf("read build helmfile: %v", err)
 	}
 	s := string(data)
-	if !strings.Contains(s, "name: loopzero-build-cwts") {
-		t.Error("B71 regression: build helmfile must declare loopzero-build-cwts release")
+	if !strings.Contains(s, "name: loopruntime-build-cwts") {
+		t.Error("B71 regression: build helmfile must declare loopruntime-build-cwts release")
 	}
-	if !strings.Contains(s, "../../charts/loopzero-build-cwts") {
-		t.Error("B71 regression: loopzero-build-cwts release must reference charts/loopzero-build-cwts")
+	if !strings.Contains(s, "../../charts/loopruntime-build-cwts") {
+		t.Error("B71 regression: loopruntime-build-cwts release must reference charts/loopruntime-build-cwts")
 	}
 	// Must depend on argo-workflows (CRDs prerequisite)
-	idx := strings.Index(s, "name: loopzero-build-cwts")
+	idx := strings.Index(s, "name: loopruntime-build-cwts")
 	end := strings.Index(s[idx:], "- name:")
 	if end < 0 {
 		end = len(s) - idx
 	}
 	block := s[idx : idx+end]
 	if !strings.Contains(block, "argo/argo-workflows") {
-		t.Error("B71 regression: loopzero-build-cwts must declare needs: argo/argo-workflows")
+		t.Error("B71 regression: loopruntime-build-cwts must declare needs: argo/argo-workflows")
 	}
 }
 
@@ -344,16 +344,16 @@ func TestB71BuildHelmfileHasCWTs(t *testing.T) {
 // the way that matters: the hardcode was not covered by the split, it MOVED with
 // the provisioner into operators/cmd/tenant-operator/main.go and stayed there.
 // Re-pointing this test at that file found it verbatim --
-// gitea.NewRealProvisioner(giteaURL, giteaToken, "loopzero") -- while the API side
-// had read envOr("GITEA_ORG", "loopzero") the whole time. A deployment that set the
+// gitea.NewRealProvisioner(giteaURL, giteaToken, "loopruntime") -- while the API side
+// had read envOr("GITEA_ORG", "loopruntime") the whole time. A deployment that set the
 // org got its repos CREATED in one organisation and PUSHED to another.
 //
 // MEASURED 2026-09-05: operators/cmd/main.go is absent from this tree, as are
 // both chart paths this test used to read (infra/helm/tenant-controller/ and
-// infra/helm/loopzero-controller/), so dropping the skip alone would have failed at
+// infra/helm/loopruntime-controller/), so dropping the skip alone would have failed at
 // the read rather than reviving anything. The assertions are re-pointed at what
 // owns the contract today: tenant-operator is the only split binary that
-// CONSTRUCTS the Gitea provisioner, and charts/loopzero-tenant-operator is what
+// CONSTRUCTS the Gitea provisioner, and charts/loopruntime-tenant-operator is what
 // deploys it.
 //
 // "Constructs", not "imports". An audit measured the earlier wording false on
@@ -372,7 +372,7 @@ func TestB69GiteaOrgConfigurable(t *testing.T) {
 	s := string(data)
 	// Assert the CALL SHAPE, not the absence of one literal. The assertion this
 	// test inherited was `!strings.Contains(s, "...NewRealProvisioner(giteaURL,
-	// giteaToken, \"loopzero\")")`, which any other literal walks past -- hardcoding
+	// giteaToken, \"loopruntime\")")`, which any other literal walks past -- hardcoding
 	// "acme" would have satisfied it. Requiring the variable in the third position
 	// is the same correction a mutation run forced on the ADR-0018 metric
 	// assertions in regression_adr_test.go: check the declaration, not a mention.
@@ -393,8 +393,8 @@ func TestB69GiteaOrgConfigurable(t *testing.T) {
 	// not configurable in any real install, which is what the (now absent)
 	// controller-chart half of this test was for.
 	for _, c := range []struct{ path, want, why string }{
-		{"../../../charts/loopzero-tenant-operator/templates/configmap.yaml", "GITEA_ORG:", "ConfigMap must carry the GITEA_ORG key"},
-		{"../../../charts/loopzero-tenant-operator/values.yaml", "giteaOrg:", "values.yaml must expose config.giteaOrg"},
+		{"../../../charts/loopruntime-tenant-operator/templates/configmap.yaml", "GITEA_ORG:", "ConfigMap must carry the GITEA_ORG key"},
+		{"../../../charts/loopruntime-tenant-operator/values.yaml", "giteaOrg:", "values.yaml must expose config.giteaOrg"},
 	} {
 		d, err := os.ReadFile(c.path)
 		if err != nil {
@@ -481,9 +481,9 @@ func TestB82StaticAssetsChartExists(t *testing.T) {
 	}
 	// Workload cluster needs an `allow-static-assets` NetworkPolicy so Traefik
 	// can reach the gateway through default-deny-ingress.
-	np, err := os.ReadFile("../../helm/network-policies/templates/loopzero-system.yaml")
+	np, err := os.ReadFile("../../helm/network-policies/templates/loopruntime-system.yaml")
 	if err != nil {
-		t.Fatalf("read network-policies loopzero-system.yaml: %v", err)
+		t.Fatalf("read network-policies loopruntime-system.yaml: %v", err)
 	}
 	npstr := string(np)
 	if !strings.Contains(npstr, "name: allow-static-assets") {
@@ -503,7 +503,7 @@ func TestB82ScopedKubeconfigK3dRewrite(t *testing.T) {
 	if !strings.Contains(s, `0\.0\.0\.0`) {
 		t.Error("B82 regression: scoped-kubeconfig.sh must detect 0.0.0.0/127.0.0.1 server URLs (k3d local) and rewrite")
 	}
-	if !strings.Contains(s, `k3d-loopzero-${CLUSTER_ID}-server-0`) {
+	if !strings.Contains(s, `k3d-loopruntime-${CLUSTER_ID}-server-0`) {
 		t.Error("B82 regression: scoped-kubeconfig.sh must derive the docker-bridge IP from the k3d server-0 container")
 	}
 	if !strings.Contains(s, "docker inspect") {

@@ -5,28 +5,28 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: preview-operator
-  namespace: loopzero-system
+  namespace: loopruntime-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: preview-operator
 rules:
-  # --- LoopZero CRDs: PreviewEnvironment lifecycle ---
-  - apiGroups: ["loopzero.io"]
+  # --- LoopRuntime CRDs: PreviewEnvironment lifecycle ---
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["previewenvironments"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["loopzero.io"]
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["previewenvironments/status"]
     verbs: ["get", "update", "patch"]
-  - apiGroups: ["loopzero.io"]
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["previewenvironments/finalizers"]
     verbs: ["update"]
 
   # --- Cell routing: resolve the runtime cluster of a preview's cell ---
-  # Mirrors charts/loopzero-preview-operator/templates/clusterrole.yaml. The
+  # Mirrors charts/loopruntime-preview-operator/templates/clusterrole.yaml. The
   # kubeconfig Secret itself is read through the Role below, not here.
-  - apiGroups: ["loopzero.io"]
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["tenants", "clustercredentials"]
     verbs: ["get", "list", "watch"]
 
@@ -66,16 +66,16 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: preview-operator
-    namespace: loopzero-system
+    namespace: loopruntime-system
 ---
-# Secret read in loopzero-system only: cell kubeconfigs. The operator's Secret
+# Secret read in loopruntime-system only: cell kubeconfigs. The operator's Secret
 # cache watches this namespace alone. Mirrors
-# charts/loopzero-preview-operator/templates/role-secret-access.yaml.
+# charts/loopruntime-preview-operator/templates/role-secret-access.yaml.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: preview-operator-secrets-loopzero-system
-  namespace: loopzero-system
+  name: preview-operator-secrets-loopruntime-system
+  namespace: loopruntime-system
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -84,36 +84,36 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: preview-operator-secrets-loopzero-system
-  namespace: loopzero-system
+  name: preview-operator-secrets-loopruntime-system
+  namespace: loopruntime-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: preview-operator-secrets-loopzero-system
+  name: preview-operator-secrets-loopruntime-system
 subjects:
   - kind: ServiceAccount
     name: preview-operator
-    namespace: loopzero-system
+    namespace: loopruntime-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: preview-operator
-  namespace: loopzero-system
+  namespace: loopruntime-system
   labels:
     app: preview-operator
-    app.kubernetes.io/component: loopzero-operator
+    app.kubernetes.io/component: loopruntime-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: preview-operator
-      app.kubernetes.io/component: loopzero-operator
+      app.kubernetes.io/component: loopruntime-operator
   template:
     metadata:
       labels:
         app: preview-operator
-        app.kubernetes.io/component: loopzero-operator
+        app.kubernetes.io/component: loopruntime-operator
     spec:
       serviceAccountName: preview-operator
       securityContext:
@@ -122,16 +122,16 @@ spec:
         fsGroup: 1000
       containers:
         - name: operator
-          image: loopzero-preview-operator
+          image: loopruntime-preview-operator
           args:
             - "--leader-elect=false"
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8080"
           env:
             - name: CELL_0_KUBECONFIG
-              value: "/etc/loopzero/runtime-kubeconfig"
+              value: "/etc/loopruntime/runtime-kubeconfig"
             - name: BASE_DOMAIN
-              value: "loopzero.local"
+              value: "loopruntime.local"
           ports:
             - containerPort: 8081
               name: health
@@ -162,7 +162,7 @@ spec:
             - name: tmp
               mountPath: /tmp
             - name: runtime-kubeconfig
-              mountPath: /etc/loopzero/runtime-kubeconfig
+              mountPath: /etc/loopruntime/runtime-kubeconfig
               subPath: runtime-kubeconfig
               readOnly: true
           securityContext:
@@ -179,7 +179,7 @@ spec:
           emptyDir: {}
         - name: runtime-kubeconfig
           configMap:
-            name: loopzero-cell-0-kubeconfig
+            name: loopruntime-cell-0-kubeconfig
             items:
               - key: config
                 path: runtime-kubeconfig

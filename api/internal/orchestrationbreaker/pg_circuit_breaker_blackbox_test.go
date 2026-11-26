@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package orchestrationbreaker_test
 
@@ -15,7 +15,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 var testLogger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -122,7 +122,7 @@ func TestCircuitBreaker_OpenState_RejectsTriggerSync(t *testing.T) {
 	err := cb.TriggerSync(context.Background(), "my-app")
 
 	// Assert
-	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+	if !errors.Is(err, loopruntimeerrors.ErrPlatformDegraded) {
 		t.Fatalf("expected ErrPlatformDegraded, got %v", err)
 	}
 	if inner.triggerCalls != 0 {
@@ -145,7 +145,7 @@ func TestCircuitBreaker_OpenState_RejectsWaitForSync(t *testing.T) {
 	err := cb.WaitForSync(context.Background(), "my-app", 30*time.Second, nil)
 
 	// Assert
-	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+	if !errors.Is(err, loopruntimeerrors.ErrPlatformDegraded) {
 		t.Fatalf("expected ErrPlatformDegraded, got %v", err)
 	}
 	if inner.waitCalls != 0 {
@@ -201,7 +201,7 @@ func TestCircuitBreaker_ClosedToOpen_AfterThresholdFailures(t *testing.T) {
 	inner.triggerCalls = 0
 	inner.triggerErr = nil
 	err := cb.TriggerSync(context.Background(), "my-app")
-	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+	if !errors.Is(err, loopruntimeerrors.ErrPlatformDegraded) {
 		t.Fatalf("expected circuit to be open (ErrPlatformDegraded), got %v", err)
 	}
 	if inner.triggerCalls != 0 {
@@ -264,14 +264,14 @@ func TestCircuitBreaker_InnerErrorPropagated(t *testing.T) {
 
 func TestCircuitBreaker_AuthFailure_DoesNotOpenCircuit(t *testing.T) {
 	// 401 errors MUST NOT count toward circuit breaker threshold (MEET-013)
-	inner := &fakeInnerSync{triggerErr: loopzeroerrors.ErrDeployServiceAuthFailed}
+	inner := &fakeInnerSync{triggerErr: loopruntimeerrors.ErrDeployServiceAuthFailed}
 	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Send 10 auth failures — more than the open threshold (3)
 	for i := 0; i < 10; i++ {
 		err := cb.TriggerSync(context.Background(), "my-app")
 		// Error should be propagated as-is (not ErrPlatformDegraded)
-		if !errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
+		if !errors.Is(err, loopruntimeerrors.ErrDeployServiceAuthFailed) {
 			t.Fatalf("iteration %d: expected ErrDeployServiceAuthFailed, got %v", i, err)
 		}
 	}
@@ -301,7 +301,7 @@ func TestCircuitBreaker_ServiceFailure_StillOpensCircuit(t *testing.T) {
 
 	// Circuit should be OPEN — next call should return ErrPlatformDegraded
 	err := cb.TriggerSync(context.Background(), "my-app")
-	if !errors.Is(err, loopzeroerrors.ErrPlatformDegraded) {
+	if !errors.Is(err, loopruntimeerrors.ErrPlatformDegraded) {
 		t.Fatalf("expected ErrPlatformDegraded (circuit open), got %v", err)
 	}
 }
@@ -337,13 +337,13 @@ func TestCircuitBreaker_GetSyncRevision_DelegatesToInner(t *testing.T) {
 func TestCircuitBreaker_SyncOperationInProgress_DoesNotOpenCircuit(t *testing.T) {
 	// 409 "operation in progress" MUST NOT count toward circuit breaker threshold (MEET-2026-03-29-019).
 	// A single stuck ArgoCD Application should not trip the circuit for the entire platform.
-	inner := &fakeInnerSync{triggerErr: loopzeroerrors.ErrSyncOperationInProgress}
+	inner := &fakeInnerSync{triggerErr: loopruntimeerrors.ErrSyncOperationInProgress}
 	cb := orchestrationbreaker.NewCircuitBreakerSyncClient(inner, defaultCBConfig(), testLogger)
 
 	// Send 10 x 409 — well above the open threshold (3)
 	for i := 0; i < 10; i++ {
 		err := cb.TriggerSync(context.Background(), "my-app")
-		if !errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress) {
+		if !errors.Is(err, loopruntimeerrors.ErrSyncOperationInProgress) {
 			t.Fatalf("iteration %d: expected ErrSyncOperationInProgress, got %v", i, err)
 		}
 	}

@@ -1,0 +1,46 @@
+# helm-unittest: PrometheusRule (alerts) rendering for loopruntime-admission-policies.
+# Plan T1.2 + T1.5.
+
+suite: PrometheusRule alerts rendering
+templates:
+  - policy-controller-alerts.yaml
+  - tenant-namespace-alerts.yaml
+
+tests:
+  - it: policy-controller-alerts does NOT render when disabled
+    template: policy-controller-alerts.yaml
+    set:
+      alerts.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: policy-controller-alerts renders PrometheusRule when enabled
+    template: policy-controller-alerts.yaml
+    set:
+      alerts.enabled: true
+    asserts:
+      - isKind:
+          of: PrometheusRule
+      - isAPIVersion:
+          of: monitoring.coreos.com/v1
+
+  - it: policy-controller-alerts has loopruntime.policy-controller group
+    template: policy-controller-alerts.yaml
+    set:
+      alerts.enabled: true
+    asserts:
+      - equal:
+          path: spec.groups[0].name
+          value: loopruntime.policy-controller
+
+  - it: tenant-namespace-alerts renders when enabled
+    template: tenant-namespace-alerts.yaml
+    set:
+      alerts.enabled: true
+    asserts:
+      - isKind:
+          of: PrometheusRule
+      - equal:
+          path: spec.groups[0].name
+          value: loopruntime.tenant-namespace

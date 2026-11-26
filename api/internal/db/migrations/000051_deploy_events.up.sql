@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- ============================================================================
 -- 000051_deploy_events
@@ -13,10 +13,10 @@
 -- change makes event capture atomic with the deploy — no lost or duplicate
 -- events on crash.
 --
--- loopzero-cloud (NOT the engine) drains this table and fans each event out to the
+-- loopruntime-cloud (NOT the engine) drains this table and fans each event out to the
 -- matching `workspace_webhooks` (migration 000050) as delivery rows. Per the
 -- decoupling invariant, the ENGINE never references `workspace_webhooks`; it
--- only emits a generic domain event here. The engine writes; loopzero-cloud reads
+-- only emits a generic domain event here. The engine writes; loopruntime-cloud reads
 -- and marks `drained_at`; a reaper deletes drained rows.
 --
 -- `transition_id` is the dedup key for the cloud fan-out — one value per ENTRY
@@ -30,9 +30,9 @@
 -- timestamp, event) — no internal terms (Rule 3), enforced at the emit site.
 --
 -- This migration is the schema foundation ONLY. The kernel INSERT (engine emit)
--- and the loopzero-cloud drain + delivery worker are separate slices gated on
+-- and the loopruntime-cloud drain + delivery worker are separate slices gated on
 -- MEET-2026-07-03-005's remaining conditions (SSRF guard already shipped via
--- loopzero-cloud#149, Security/SRE guardian sign-off).
+-- loopruntime-cloud#149, Security/SRE guardian sign-off).
 --
 -- Forward-only per CLAUDE.md convention.
 -- ============================================================================
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS deploy_events (
     correlation_id TEXT,                                                        -- forwarded engine → delivery (Correlation-ID invariant)
     payload        JSONB NOT NULL CHECK (jsonb_typeof(payload) = 'object'),     -- customer-safe fields only (Rule 3)
     occurred_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    drained_at     TIMESTAMPTZ                                                  -- loopzero-cloud sets after fan-out; reaper deletes drained rows
+    drained_at     TIMESTAMPTZ                                                  -- loopruntime-cloud sets after fan-out; reaper deletes drained rows
 );
 
 -- Cloud drain hot path: undrained events, oldest first.

@@ -22,4 +22,4 @@ export HOSTINGER_API_TOKEN
 install -d -m 0700 "$EDGE_LEGO_DIR"
 # lego 5 defines these flags on run, so they follow it.
 lego run --dns hostinger --domains "*.$EDGE_APPS_DOMAIN" --email "$EDGE_CERT_EMAIL" --accept-tos \
-  --path "$EDGE_LEGO_DIR" --deploy-hook "systemctl try-restart loopzero-edge.service"
+  --path "$EDGE_LEGO_DIR" --deploy-hook "systemctl try-restart loopruntime-edge.service"

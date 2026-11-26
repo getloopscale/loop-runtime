@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package constants
 
@@ -25,11 +25,11 @@ const (
 	// NamespaceDefault is the default namespace name.
 	NamespaceDefault = "default"
 
-	// NamespacePlatformSystem is the LoopZero platform system namespace.
-	NamespacePlatformSystem = "loopzero-system"
+	// NamespacePlatformSystem is the LoopRuntime platform system namespace.
+	NamespacePlatformSystem = "loopruntime-system"
 
 	// NamespaceIngress is the namespace where Traefik runs.
-	// LoopZero's helmfile (`infra/helmfile/{mgmt,runtime}.helmfile.yaml.gotmpl`)
+	// LoopRuntime's helmfile (`infra/helmfile/{mgmt,runtime}.helmfile.yaml.gotmpl`)
 	// installs Traefik in `traefik` for ALL environments (dev, prod,
 	// standalone-multi) — see lines 88 (runtime) and 135 (mgmt). The
 	// operator-generated `allow-ingress-traefik` NetworkPolicy MUST allow
@@ -37,7 +37,7 @@ const (
 	// pods → HTTP 502 in any deploy. Discovered live during
 	// CHG-2026-04-29-DOGFOOD-FB Phase 1: api pod Running 1/1 + cert ready
 	// + endpoints valid, but Traefik logged repeated 502s and "subset not
-	// found" because the deny-all + allow-ingress-from-loopzero-system policy
+	// found" because the deny-all + allow-ingress-from-loopruntime-system policy
 	// silently dropped traffic from the real Traefik namespace. Affects
 	// production identically — DOKS CNI may or may not enforce, but the
 	// guarantee should not depend on CNI choice.

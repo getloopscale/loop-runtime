@@ -364,7 +364,7 @@ type InsertBuildParams struct {
 //
 // Multi-tenant SELECT / UPDATE / DELETE carries `tenant_id` predicate per
 // platform-security-engineer condition 1 + M-1 + M-2 (enforced by
-// cmd/loopzero-ops/internal/quality/tenantpredicate gate). Cross-tenant queries are marked
+// cmd/loopruntime-ops/internal/quality/tenantpredicate gate). Cross-tenant queries are marked
 // `-- tenantpredicate:exempt` IMMEDIATELY ABOVE `-- name:`.
 //
 // Concurrent-build invariant (Rule 6 — pg_advisory_xact_lock):

@@ -1,5 +1,5 @@
 {
-  "note": "Set of ADJUDICATED trufflehog candidates. A candidate outside this set FAILS the gate until someone rewrites it with `loopzero-ops quality trufflehog-scan --write` — and the diff of that rewrite is the adjudication. `--write` REFUSES while any live finding exists: this list adjudicates \"this is not a secret\", never \"this secret may live here\". `id` is a truncated sha256(detector+raw) — no secret material lives in this file. See B-143.",
+  "note": "Set of ADJUDICATED trufflehog candidates. A candidate outside this set FAILS the gate until someone rewrites it with `loopruntime-ops quality trufflehog-scan --write` — and the diff of that rewrite is the adjudication. `--write` REFUSES while any live finding exists: this list adjudicates \"this is not a secret\", never \"this secret may live here\". `id` is a truncated sha256(detector+raw) — no secret material lives in this file. See B-143.",
   "entries": [
     {
       "id": "9caeb962635860e1",
@@ -179,12 +179,12 @@
     {
       "id": "a2178346a1b89310",
       "detector": "Postgres",
-      "first_seen_in": "infra/helmfile/values/dev-public/loopzero-app-operator.yaml.gotmpl"
+      "first_seen_in": "infra/helmfile/values/dev-public/loopruntime-app-operator.yaml.gotmpl"
     },
     {
       "id": "fbad722999310ac4",
       "detector": "Postgres",
-      "first_seen_in": "infra/helmfile/values/dev-public/loopzero-app-operator.yaml.gotmpl"
+      "first_seen_in": "infra/helmfile/values/dev-public/loopruntime-app-operator.yaml.gotmpl"
     },
     {
       "id": "5eb14252c7251332",
@@ -259,32 +259,32 @@
     {
       "id": "58f11604ca8770e1",
       "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
     },
     {
       "id": "76118ab9f6e7a8b9",
       "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
     },
     {
       "id": "89e3207386bd09e7",
       "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
     },
     {
       "id": "8f009e0552c35796",
       "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
     },
     {
       "id": "a982da9b26fd712f",
       "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
     },
     {
       "id": "abd38b5e3fb0e34e",
       "detector": "Postgres",
-      "first_seen_in": "infra/tilt/loopzero-api-values.yaml"
+      "first_seen_in": "infra/tilt/loopruntime-api-values.yaml"
     },
     {
       "id": "62283828d0b786e1",

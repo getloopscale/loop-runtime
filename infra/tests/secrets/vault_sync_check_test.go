@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -11,9 +11,9 @@ import (
 	"testing"
 )
 
-// vault-sync-check.sh (Phase 9 T9.1 of plan 2026-06-02-loopzero-api-vault-integration)
+// vault-sync-check.sh (Phase 9 T9.1 of plan 2026-06-02-loopruntime-api-vault-integration)
 // reads the ExternalSecret inventory with yq and asks the cluster whether each
-// target is Ready. It replaced the loopzero_config_secret_source metric, so a verdict it
+// target is Ready. It replaced the loopruntime_config_secret_source metric, so a verdict it
 // gets wrong is a sync failure nobody sees.
 
 const vaultSyncScript = openbaoScripts + "/vault-sync-check.sh"
@@ -123,19 +123,19 @@ func TestVaultSyncCheckRejectsAnInventoryWithNoTargets(t *testing.T) {
 
 func TestVaultSyncCheckPassesWhenEveryTargetIsReady(t *testing.T) {
 	r := runSyncCheck(t, syncInventory, readyStatuses("True", "True", "True"),
-		"--namespace", "loopzero-system", "--threshold", "3")
+		"--namespace", "loopruntime-system", "--threshold", "3")
 	expectExit(t, r, 0, "Verdict: PASS")
 }
 
 func TestVaultSyncCheckPassesWhenTheThresholdIsMetDespiteANotReadyTarget(t *testing.T) {
 	r := runSyncCheck(t, syncInventory, readyStatuses("True", "True", "False"),
-		"--namespace", "loopzero-system", "--threshold", "2")
+		"--namespace", "loopruntime-system", "--threshold", "2")
 	expectExit(t, r, 0, "Verdict: PASS")
 }
 
 func TestVaultSyncCheckFailsWhenFewerTargetsThanTheThresholdAreReady(t *testing.T) {
 	r := runSyncCheck(t, syncInventory, readyStatuses("True", "True", "False"),
-		"--namespace", "loopzero-system", "--threshold", "3")
+		"--namespace", "loopruntime-system", "--threshold", "3")
 	expectExit(t, r, 2, "Verdict: FAIL")
 }
 

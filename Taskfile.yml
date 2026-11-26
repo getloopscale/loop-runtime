@@ -54,16 +54,16 @@ includes:
     taskfile: ./taskfiles/staging.yml
 
 vars:
-  CORE_CONTEXT: k3d-loopzero-core
-  BUILD_CONTEXT: k3d-loopzero-build
-  CELL_0_CONTEXT: k3d-loopzero-cell-0
+  CORE_CONTEXT: k3d-loopruntime-core
+  BUILD_CONTEXT: k3d-loopruntime-build
+  CELL_0_CONTEXT: k3d-loopruntime-cell-0
   # cell-1-activation-plan T0.1 — second runtime cluster mapped to cells.cell_id='cell-1'.
-  # Provisioned by infra/k3d/cell-1-cluster.yaml. Cluster name `loopzero-cell-1`
-  # matches production wire-clusters.sh + Pulumi convention (LOOPZERO_RUNTIME2_KUBECONFIG).
-  # ClusterCredential CR is named `cell-1` with spec.clusterName=loopzero-cell-1.
+  # Provisioned by infra/k3d/cell-1-cluster.yaml. Cluster name `loopruntime-cell-1`
+  # matches production wire-clusters.sh + Pulumi convention (LOOPRUNTIME_RUNTIME2_KUBECONFIG).
+  # ClusterCredential CR is named `cell-1` with spec.clusterName=loopruntime-cell-1.
   # Status starts 'maintenance' in cells SQL table (migration 000006); migration
   # 000007 flips to 'active' after cell-1 activation invariants pass (now Ginkgo: ginkgo --label-filter=parity --focus='Cell-2 Activation', migrated from cell2-activation-gates.sh TB1.1 2026-05-24).
-  CELL_1_CONTEXT: k3d-loopzero-cell-1
+  CELL_1_CONTEXT: k3d-loopruntime-cell-1
   # The cell inventory, declared ONCE. Every per-cell step loops over this list
   # (`for: { var: CELL_CONTEXTS }`) instead of naming each cell by hand: the
   # hand-copied per-cell tasks drifted (F-21, D-FF-03 — a release added to one
@@ -78,9 +78,9 @@ vars:
   PG_HOST: localhost
   # DEV-ONLY credentials — safe for local k3d clusters, never used in production.
   # Override via .env.local (loaded by dotenv above) or environment variables.
-  PG_USER: '{{.PG_USER | default "loopzero"}}'
-  PG_PASS: '{{.PG_PASS | default "loopzero-dev-password"}}'
-  PG_DB: '{{.PG_DB | default "loopzero"}}'
+  PG_USER: '{{.PG_USER | default "loopruntime"}}'
+  PG_PASS: '{{.PG_PASS | default "loopruntime-dev-password"}}'
+  PG_DB: '{{.PG_DB | default "loopruntime"}}'
   API_PORT: 13001
   GRAFANA_PORT: 3002
   PROMETHEUS_PORT: 9090
@@ -153,25 +153,25 @@ tasks:
     # Runs the Go gate that replaced scripts/audit-security-context.sh (the
     # script was deleted; the task kept calling it and could only fail).
     cmds:
-      - cd cmd/loopzero-ops && go run . quality security-context --root "{{.ROOT_DIR}}" --gate
+      - cd cmd/loopruntime-ops && go run . quality security-context --root "{{.ROOT_DIR}}" --gate
 
   audit:divergence-matrix:
     desc: "Plan T5.2 audit — local↔prod divergence matrix integrity (matches infra-gates.yml CI gate)"
     # Per ADR D5: every code marker `LOCAL ONLY (LP-NNN)` must have a matrix entry.
     # T5.3 of plan 2026-05-22: migrated from check-divergence-matrix.sh to pure-Go gate.
     cmds:
-      - cd cmd/loopzero-ops && go run . quality divergence-matrix --root "{{.ROOT_DIR}}"
+      - cd cmd/loopruntime-ops && go run . quality divergence-matrix --root "{{.ROOT_DIR}}"
 
   audit:charts-schema-present:
     desc: "INF-G17 audit — values.schema.json presence on every OCI chart (matches infra-gates.yml CI gate)"
     # Mirrors infra-gates.yml 'INF-G17: Chart schema validation' step.
-    # Library chart loopzero-common is exempt (per CI convention).
+    # Library chart loopruntime-common is exempt (per CI convention).
     cmds:
       - |
         MISSING=()
         for chart in charts/*/; do
           chart_name=$(basename "$chart")
-          if [ "$chart_name" = "loopzero-common" ]; then continue; fi
+          if [ "$chart_name" = "loopruntime-common" ]; then continue; fi
           if [ ! -f "$chart/values.schema.json" ]; then
             MISSING+=("$chart_name")
           fi
@@ -181,7 +181,7 @@ tasks:
           for m in "${MISSING[@]}"; do echo "  - $m"; done
           exit 1
         fi
-        echo "[audit:charts-schema-present] ✓ All OCI charts (excl. loopzero-common library) have values.schema.json"
+        echo "[audit:charts-schema-present] ✓ All OCI charts (excl. loopruntime-common library) have values.schema.json"
 
   setup:
     desc: |
@@ -202,7 +202,7 @@ tasks:
       - task: images:build
       # Vendors dependencies BEFORE the install: `charts/*/charts/` is gitignored, so
       # a fresh clone has none. Without this step, `task setup` failed on a clean
-      # clone (measured 2026-08-10 on the app-dev droplet: loopzero-crds, then opencost).
+      # clone (measured 2026-08-10 on the app-dev droplet: loopruntime-crds, then opencost).
       - task: validate:helm-deps
       - task: infra:install
       - task: networking:setup
@@ -210,22 +210,22 @@ tasks:
       - task: crds:install
       # CANONICAL ORDER FIX 2026-06-15 (dev-public Cleanroom chain-gap closure):
       #
-      # ORIGINAL chain (broken): infra:install → db:migrate ❌ (loopzero-api in
+      # ORIGINAL chain (broken): infra:install → db:migrate ❌ (loopruntime-api in
       #   CrashLoopBackOff because Secrets missing) → dev:seed → tokens:provision
       #   → bootstrap:standalone (creates Secrets + CCs + seed-local-user).
       #
       # The reorder MUST split bootstrap:standalone into 2 phases:
       #   pre-db (Secrets + ClusterCredentials + ArgoCD wiring; no DB tables
-      #     needed) — these make loopzero-api Ready so db:migrate works.
+      #     needed) — these make loopruntime-api Ready so db:migrate works.
       #   post-db (seed-local-user + bootstrap-seed-tenant-cr) — these write
       #     to `users`/`tenants` tables which only exist after db:migrate.
       #
       # NEW chain (canonical):
       #   infra:install (wait:false on bootstrap-deps charts so helmfile
-      #     completes; loopzero-api/operators/cloud cycle CrashLoopBackOff until
+      #     completes; loopruntime-api/operators/cloud cycle CrashLoopBackOff until
       #     deps arrive)
-      #   bootstrap:standalone:pre-db (provisions Secrets + CCs → loopzero-api Ready)
-      #   db:migrate (kubectl exec loopzero-api works — Ready)
+      #   bootstrap:standalone:pre-db (provisions Secrets + CCs → loopruntime-api Ready)
+      #   db:migrate (kubectl exec loopruntime-api works — Ready)
       #   bootstrap:standalone:post-db (seed-local-user + tenant CR)
       #   dev:seed (extra dev fixtures)
       #   tokens:provision (idempotent — script already invoked inside pre-db)
@@ -240,7 +240,7 @@ tasks:
       # dev-public: reload the edge now that the edge-route token Secret and the core
       # cluster exist — the edge bootstrap runs before setup, so without this every
       # cleanroom served the previous token until a hand reload (#455).
-      - '[ "${LOOPZERO_HELMFILE_ENV:-}" != "dev-public" ] || task dev-public:caddy'
+      - '[ "${LOOPRUNTIME_HELMFILE_ENV:-}" != "dev-public" ] || task dev-public:caddy'
 
   bootstrap:standalone:
     desc: |
@@ -256,7 +256,7 @@ tasks:
     desc: |
       PRE-DB phase of standalone bootstrap (CANONICAL ORDER FIX 2026-06-15).
       Provisions Secrets + ClusterCredentials + ArgoCD wiring + Sigstore + cells
-      — everything that does NOT touch DB tables. Makes loopzero-api Ready so the
+      — everything that does NOT touch DB tables. Makes loopruntime-api Ready so the
       next step (db:migrate) can `kubectl exec` to apply migrations.
 
       Full B-patch index (B9-B82+) lives in CHANGELOG.md under
@@ -271,7 +271,7 @@ tasks:
       - task: k3d:bootstrap-cell
         vars: { CELL_CTX: '{{.CELL_0_CONTEXT}}' }
       - bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh
-      - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
+      - HYDRA_NAMESPACE=loopruntime-auth bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
       - bash infra/scripts/production/provision-api-tokens.sh
       # T5.3 (plan 2026-05-21-deep-review-remediation): extracted 4 inline
       # B-patches to named scripts so each can be re-run individually if
@@ -282,7 +282,7 @@ tasks:
       # Issue #117 — the switch-and-restore dance that used to wrap this call was
       # a ROOT CAUSE of the bug it was meant to serve. Under `set -e`, a failure
       # in the script skipped the restore line and left the operator pinned to
-      # k3d-loopzero-build; every later step in the chain then ran against the build
+      # k3d-loopruntime-build; every later step in the chain then ran against the build
       # cluster. That is verbatim the "residue from a prior session" repro of
       # #117 — `task setup` manufactured the condition that broke its own next
       # run. generate-build-secrets.sh now pins its own context by construction
@@ -293,8 +293,8 @@ tasks:
       # allow-list apply. Two scripts used to `helm upgrade` the same releases here with
       # only a registry --set, which rebuilt values from chart defaults and silently
       # flipped clusterImagePolicy.mode back to enforce.
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=policy-controller sync
-      - LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopzero-cell-0 --selector name=admission-policies sync
+      - LOOPRUNTIME_CELL_CONTEXT=k3d-loopruntime-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopruntime-cell-0 --selector name=policy-controller sync
+      - LOOPRUNTIME_CELL_CONTEXT=k3d-loopruntime-cell-0 helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context k3d-loopruntime-cell-0 --selector name=admission-policies sync
       # M07 LIVE keyless GREEN (Ralph iter 5 2026-05-28): Sigstore local stack
       # for cosign keyless signing (Fulcio + Rekor + CTLog + sigstore-extras
       # NetworkPolicies + dynamic K3s CACert config). Opt-out via env
@@ -327,7 +327,7 @@ tasks:
       schema (users, tenants, etc.). Idempotent: re-running on existing
       rows is safe (UPSERT semantics + ON CONFLICT).
     cmds:
-      - HYDRA_NAMESPACE=loopzero-auth bash infra/helmfile/scripts/seed-local-user.sh
+      - HYDRA_NAMESPACE=loopruntime-auth bash infra/helmfile/scripts/seed-local-user.sh
       - bash infra/scripts/local/bootstrap-seed-tenant-cr.sh
 
   dev:up:
@@ -344,7 +344,7 @@ tasks:
       `k3d cluster create` of a cell: without cert-manager and cluster-issuer,
       ArgoCD sync fails with "Certificate CRD not found" / "Referenced
       ClusterIssuer not found" (D-FF-03); without argo-rollouts every
-      `loopzero deploy` fails to apply its Rollout (F-21).
+      `loopruntime deploy` fails to apply its Rollout (F-21).
 
       One task for every cell, parameterised by CELL_CTX, replacing the
       hand-copied k3d:bootstrap-cell-0 / k3d:bootstrap-cell-1 pair whose
@@ -355,13 +355,13 @@ tasks:
       RELEASES: '{{.RELEASES | default .CELL_BOOTSTRAP_RELEASES}}'
     cmds:
       - for: { var: RELEASES }
-        cmd: LOOPZERO_CELL_CONTEXT={{.CELL_CTX}} helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context {{.CELL_CTX}} --selector name={{.ITEM}} sync
+        cmd: LOOPRUNTIME_CELL_CONTEXT={{.CELL_CTX}} helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e standalone-multi --kube-context {{.CELL_CTX}} --selector name={{.ITEM}} sync
 
   k3d:bootstrap-build-cert-manager:
     desc: |
-      Bootstrap cert-manager + cluster-issuer on the loopzero-build cluster.
+      Bootstrap cert-manager + cluster-issuer on the loopruntime-build cluster.
       Required BEFORE the Sigstore Pulumi stack (plan 2026-05-27-M07):
-      Fulcio/Rekor/CTLog need internal TLS through loopzero-ca-issuer.
+      Fulcio/Rekor/CTLog need internal TLS through loopruntime-ca-issuer.
       Idempotent — helmfile sync no-ops when already deployed.
     cmds:
       - task: k3d:bootstrap-cell
@@ -370,8 +370,8 @@ tasks:
   k3d:bootstrap-cells:
     desc: |
       Bootstrap the three ClusterCredential CRs (cell-0, cell-0, cell-1)
-      atomically. cell-0 + cell-0 map to k3d-loopzero-cell-0; cell-1 maps
-      to k3d-loopzero-cell-1 (real multi-cell placement).
+      atomically. cell-0 + cell-0 map to k3d-loopruntime-cell-0; cell-1 maps
+      to k3d-loopruntime-cell-1 (real multi-cell placement).
 
       Plan: 2026-05-14-dogfood-findings-and-multi-cell-coverage T0.1.
       Idempotent. Failures (cluster missing) abort early with clear msg.
@@ -396,23 +396,23 @@ tasks:
       - bash infra/helmfile/scripts/bootstrap-cell-cc.sh --cell 1 --env standalone-multi
       # Sprint A 2026-06-01 — refresh app-controller informer cache so all
       # 3 replicas see the final set of cluster Secrets at boot.
-      - kubectl --context k3d-loopzero-core -n argocd rollout restart statefulset/argocd-application-controller
-      - kubectl --context k3d-loopzero-core -n argocd rollout status statefulset/argocd-application-controller --timeout=180s
+      - kubectl --context k3d-loopruntime-core -n argocd rollout restart statefulset/argocd-application-controller
+      - kubectl --context k3d-loopruntime-core -n argocd rollout status statefulset/argocd-application-controller --timeout=180s
 
   k3d:heal:
     desc: |
       Idempotent recovery of cross-cluster connectivity in local k3d standalone-multi
       after `k3d cluster stop/start` cycles. Codifies the 9 manual workarounds
       (H1-H9) discovered LIVE during dogfood E2E unblock 2026-04-30:
-        H1 — reattach build/runtime nodes to shared k3d-loopzero network
-        H2 — refresh loopzero-api's peer kubeconfigs (loopzero-ops seed cluster-kubeconfigs)
+        H1 — reattach build/runtime nodes to shared k3d-loopruntime network
+        H2 — refresh loopruntime-api's peer kubeconfigs (loopruntime-ops seed cluster-kubeconfigs)
         H3 — recreate ArgoCD cluster Secrets (force discovery cache invalidate)
-        H4 — add k3d-loopzero-registry hostAlias to /etc/hosts on build + runtime nodes
+        H4 — add k3d-loopruntime-registry hostAlias to /etc/hosts on build + runtime nodes
         H5 — bind kube-system:default SA to cluster-admin in build + runtime (LOCAL-ONLY)
         H6 — empty buildkit-registry-config when DOCR creds absent
-        H7 — loopzero-minio-credentials with mgmt NodePort URL
-        H8 — LOOPZERO_*_IMAGE env overrides on loopzero-api Deployment
-        H9 — loopzero-build-cwts release with images.cloneRunner local registry override
+        H7 — loopruntime-minio-credentials with mgmt NodePort URL
+        H8 — LOOPRUNTIME_*_IMAGE env overrides on loopruntime-api Deployment
+        H9 — loopruntime-build-cwts release with images.cloneRunner local registry override
       Production has scoped SAs + permanent helmfile values; this is a LOCAL-DEV recovery only.
       Safe to re-run after every restart.
     cmds:
@@ -424,11 +424,11 @@ tasks:
   # failing with a raw `cd: cli: No such file or directory` for anyone who typed them. Nothing
   # invoked them, so nothing ever went red.
   #
-  # Deliberately NOT repointed at `../loopzero-cli`: a task here reaching across a repository
+  # Deliberately NOT repointed at `../loopruntime-cli`: a task here reaching across a repository
   # boundary reintroduces exactly the coupling M2 removed, and would silently no-op when the
   # sibling is not cloned. Build the CLI in the repo that owns it.
   #
-  # Guarded by cmd/loopzero-ops/quality_taskfile_dead_dir_test.go so the next `cd` into an
+  # Guarded by cmd/loopruntime-ops/quality_taskfile_dead_dir_test.go so the next `cd` into an
   # extracted directory fails at test time instead of in an operator's terminal.
 
   fulcio:diagnose:

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domains
 
@@ -346,7 +346,7 @@ func (h *DomainHealthChecker) checkProvisioningTimeout(ctx context.Context) {
 			continue
 		}
 		if err := h.store.UpdateFailure(ctx, d.Domain, failed,
-			"Provisioning timed out after 1 hour. Run `loopzero deploy` to retry."); err != nil {
+			"Provisioning timed out after 1 hour. Run `loopruntime deploy` to retry."); err != nil {
 			h.logger.Error("domain health: provisioning timeout transition failed", "error", err, "domain", d.Domain)
 		} else {
 			h.logger.Warn("domain health: domain provisioning timed out", "domain", d.Domain)
@@ -382,7 +382,7 @@ func (h *DomainHealthChecker) checkTLSExpiry(ctx context.Context) {
 // verifyTXT checks DNS TXT records.
 // CODE-007 fix: distinguishes NXDOMAIN from transient DNS errors.
 func verifyTXT(ctx context.Context, domain, expectedToken string) (bool, error) {
-	txtName := "_loopzero-verify." + domain
+	txtName := "_loopruntime-verify." + domain
 	records, err := net.DefaultResolver.LookupTXT(ctx, txtName)
 	if err != nil {
 		// CODE-007 fix: NXDOMAIN is not an error — record just doesn't exist yet

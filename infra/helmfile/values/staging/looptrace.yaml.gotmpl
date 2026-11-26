@@ -37,7 +37,7 @@ postgres:
   user: looptrace
   uriEnv: LOOPTRACE_PG_URI
   external:
-    host: platform-postgres-rw.loopzero-data-plane.svc.cluster.local
+    host: platform-postgres-rw.loopruntime-data-plane.svc.cluster.local
     port: 5432
     # The cluster refuses plaintext; this is the CA its certificate is signed by.
     caSecret: platform-postgres-ca

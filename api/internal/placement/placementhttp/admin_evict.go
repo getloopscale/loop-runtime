@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // admin_evict.go implements T-02 bulk tenant eviction endpoint from
 // 50k-immediate-focus.
 //
-// Gated behind LOOPZERO_ADMIN_API=true. Requires X-Service-Auth header
+// Gated behind LOOPRUNTIME_ADMIN_API=true. Requires X-Service-Auth header
 // (not user auth) since eviction is an operator primitive, not a tenant
 // capability.
 //
@@ -75,19 +75,19 @@ type TenantEvictor interface {
 // AdminEvictHandler implements POST /api/v1/admin/tenants/evict.
 //
 // Security:
-//   - LOOPZERO_ADMIN_API env must be "true" (feature flag off by default)
+//   - LOOPRUNTIME_ADMIN_API env must be "true" (feature flag off by default)
 //   - X-Service-Auth check is enforced by Authenticator.RequireAdminService
 //     at the router layer (qa-sprint2-cleanup-2026-06-24 T1.2 migration —
-//     closes loopzero-cloud#16). The middleware accepts ONLY the canonical
-//     LOOPZERO_ADMIN_SERVICE_AUTH_SECRET (+ _PREVIOUS rotation sibling); the
-//     legacy LOOPZERO_SERVICE_AUTH_SECRET that the cloud /engine/* proxy adds
+//     closes loopruntime-cloud#16). The middleware accepts ONLY the canonical
+//     LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET (+ _PREVIOUS rotation sibling); the
+//     legacy LOOPRUNTIME_SERVICE_AUTH_SECRET that the cloud /engine/* proxy adds
 //     to every user-JWT request is NOT honored for admin authorization.
 //
 // The handler validates input, resolves matches via evictor, and enqueues.
 // Actual FK-ordered DELETE + finalizer cleanup is in services layer.
 func AdminEvictHandler(evictor TenantEvictor, apiEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !apiEnabled { // LOOPZERO_ADMIN_API, read once at boot
+		if !apiEnabled { // LOOPRUNTIME_ADMIN_API, read once at boot
 			httpio.WriteCodeErrorJSON(w, http.StatusNotFound, "NOT_FOUND", "Endpoint not available.")
 			return
 		}

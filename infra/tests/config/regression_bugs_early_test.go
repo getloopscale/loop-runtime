@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package config — regression suite for B1-B18 (CHG-2026-04-28-LAYERED-BOOTSTRAP T8.1).
 //
@@ -8,7 +8,7 @@
 //
 // Run:
 //
-//	LOOPZERO_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
+//	LOOPRUNTIME_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
 package config
 
 import (
@@ -32,11 +32,11 @@ func TestB18RuntimeMaxNodesConfig(t *testing.T) {
 }
 
 func TestB16ClusterImagePolicyChartExists(t *testing.T) {
-	chartFile := "../../../charts/loopzero-admission-policies/Chart.yaml"
+	chartFile := "../../../charts/loopruntime-admission-policies/Chart.yaml"
 	if _, err := os.Stat(chartFile); err != nil {
 		t.Fatalf("B16 regression: %s missing — was T0.1 reverted? %v", chartFile, err)
 	}
-	tplFile := "../../../charts/loopzero-admission-policies/templates/cluster-image-policy.yaml"
+	tplFile := "../../../charts/loopruntime-admission-policies/templates/cluster-image-policy.yaml"
 	if _, err := os.Stat(tplFile); err != nil {
 		t.Fatalf("B16 regression: ClusterImagePolicy template missing: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestB22KratosNeedsPostgresConditional(t *testing.T) {
 	if !strings.Contains(s, "{{- if .Values.inClusterPostgres }}") {
 		t.Errorf("B22 regression: conditional `needs:` block missing for inClusterPostgres")
 	}
-	if !strings.Contains(s, "- loopzero-system/postgresql") {
+	if !strings.Contains(s, "- loopruntime-system/postgresql") {
 		t.Errorf("B22 regression: kratos/gitea must declare needs:postgresql")
 	}
 }
@@ -197,7 +197,7 @@ func TestB28GiteaHaConditional(t *testing.T) {
 }
 
 // assertHighAvailabilityOnlyInCloudProfiles checks the other half of the B25/B28 gate: the
-// helmfiles read `profile.highAvailability`, and only the LoopZero Cloud environments (dev, prod)
+// helmfiles read `profile.highAvailability`, and only the LoopRuntime Cloud environments (dev, prod)
 // set it. Self-hosting and local profiles run single-replica on commodity hardware.
 func assertHighAvailabilityOnlyInCloudProfiles(t *testing.T, bug string) {
 	t.Helper()
@@ -220,7 +220,7 @@ func assertHighAvailabilityOnlyInCloudProfiles(t *testing.T, bug string) {
 		}
 		want := env == "dev" || env == "prod"
 		if *doc.Profile.HighAvailability != want {
-			t.Errorf("%s regression: environments/%s.yaml sets profile.highAvailability=%v, want %v (HA is a LoopZero Cloud posture)",
+			t.Errorf("%s regression: environments/%s.yaml sets profile.highAvailability=%v, want %v (HA is a LoopRuntime Cloud posture)",
 				bug, env, *doc.Profile.HighAvailability, want)
 		}
 	}
@@ -247,16 +247,16 @@ func TestB29RedisServiceHostname(t *testing.T) {
 }
 
 func TestB31ImageTagsPinned(t *testing.T) {
-	// Path drift fix 2026-05-15 iter 5: `infra/helm/loopzero-controller/`
+	// Path drift fix 2026-05-15 iter 5: `infra/helm/loopruntime-controller/`
 	// and `infra/helm/tenant-controller/` were DELETED in T1.5 (commit
 	// 27cfe6cd, ADR-0023 operator-split). The same tag-pinning invariant
 	// is now enforced for the 4 split-binary charts via the OCI-published
-	// `charts/loopzero-*-operator/values.yaml` files. Re-targeted to loopzero-api
+	// `charts/loopruntime-*-operator/values.yaml` files. Re-targeted to loopruntime-api
 	// only; split-operator tag-pinning is covered by the Helm CI per chart.
-	// The loopzero-api bootstrap defaults moved from infra/helm/loopzero-api/values.yaml
+	// The loopruntime-api bootstrap defaults moved from infra/helm/loopruntime-api/values.yaml
 	// to the values Helmfile installs the one chart with.
 	files := []string{
-		"../../../charts/loopzero-api/values-bootstrap.yaml",
+		"../../../charts/loopruntime-api/values-bootstrap.yaml",
 	}
 	// The shape rules used to live here as four whole-file regexes. They moved
 	// into `imageTagVerdict`, which judges the tag VALUE and states its reason —
@@ -288,34 +288,34 @@ func TestB33B36GenerateSecretsStandaloneFallback(t *testing.T) {
 	}
 	s := string(data)
 	if !strings.Contains(s, "B33: standalone fallback") {
-		t.Errorf("B33 regression: generate-secrets.sh missing standalone fallback marker for loopzero-db-credentials")
+		t.Errorf("B33 regression: generate-secrets.sh missing standalone fallback marker for loopruntime-db-credentials")
 	}
 	// F26 (M23 audit 2026-07-10): B36 log-string canonicalized to
-	// "ensuring loopzero-cluster-kubeconfigs (per-slot idempotent)"; behavior
+	// "ensuring loopruntime-cluster-kubeconfigs (per-slot idempotent)"; behavior
 	// preserved. Assert the canonical form.
-	if !strings.Contains(s, "B36: standalone — ensuring loopzero-cluster-kubeconfigs") {
-		t.Errorf("B36 regression: generate-secrets.sh missing canonical loopzero-cluster-kubeconfigs ensure step")
+	if !strings.Contains(s, "B36: standalone — ensuring loopruntime-cluster-kubeconfigs") {
+		t.Errorf("B36 regression: generate-secrets.sh missing canonical loopruntime-cluster-kubeconfigs ensure step")
 	}
-	if !strings.Contains(s, "loopzero-cluster-kubeconfigs") {
-		t.Errorf("B36 regression: generate-secrets.sh must create loopzero-cluster-kubeconfigs Secret")
+	if !strings.Contains(s, "loopruntime-cluster-kubeconfigs") {
+		t.Errorf("B36 regression: generate-secrets.sh must create loopruntime-cluster-kubeconfigs Secret")
 	}
 }
 
 func TestB35DatabaseUrlMapping(t *testing.T) {
-	// Path drift fix 2026-05-15 iter 5: `loopzero-controller` + `tenant-
+	// Path drift fix 2026-05-15 iter 5: `loopruntime-controller` + `tenant-
 	// controller` charts DELETED in T1.5 (commit 27cfe6cd). The 4 split
 	// operators do NOT receive DATABASE_URL directly (they use the
-	// API's data-access layer); only loopzero-api and loopzero-cloud carry
+	// API's data-access layer); only loopruntime-api and loopruntime-cloud carry
 	// the env. See finding `concepts/operations/finding-2026-05-15-
 	// infra-tests-load-regression-obsolete.md`.
 	//
 	// B35 was DATABASE_URL pointing at nothing. The invariant is that it maps to a
-	// key the setup actually writes into loopzero-db-credentials — not a fixed key name:
-	// loopzero-api reads `api-uri` since the role split (#396) and loopzero-cloud reads `uri`.
+	// key the setup actually writes into loopruntime-db-credentials — not a fixed key name:
+	// loopruntime-api reads `api-uri` since the role split (#396) and loopruntime-cloud reads `uri`.
 	written := dbCredentialKeysWritten(t)
 	for _, f := range []string{
-		"../../../charts/loopzero-api/values-bootstrap.yaml",
-		"../../../charts/loopzero-cloud/values-bootstrap.yaml",
+		"../../../charts/loopruntime-api/values-bootstrap.yaml",
+		"../../../charts/loopruntime-cloud/values-bootstrap.yaml",
 	} {
 		data, err := os.ReadFile(f)
 		if err != nil {
@@ -339,8 +339,8 @@ func TestB35DatabaseUrlMapping(t *testing.T) {
 				continue
 			}
 			found = true
-			if ref.SecretName != "loopzero-db-credentials" {
-				t.Errorf("B35 regression: %s maps DATABASE_URL from %q, want loopzero-db-credentials", f, ref.SecretName)
+			if ref.SecretName != "loopruntime-db-credentials" {
+				t.Errorf("B35 regression: %s maps DATABASE_URL from %q, want loopruntime-db-credentials", f, ref.SecretName)
 			}
 			if !written[ref.Key] {
 				t.Errorf("B35 regression: %s maps DATABASE_URL to key %q, which generate-secrets.sh never writes (writes %v)", f, ref.Key, written)
@@ -353,7 +353,7 @@ func TestB35DatabaseUrlMapping(t *testing.T) {
 }
 
 // dbCredentialKeysWritten returns the keys generate-secrets.sh writes into
-// loopzero-db-credentials, read from its --from-literal flags.
+// loopruntime-db-credentials, read from its --from-literal flags.
 func dbCredentialKeysWritten(t *testing.T) map[string]bool {
 	t.Helper()
 	raw, err := os.ReadFile("../../../infra/helmfile/scripts/generate-secrets.sh")
@@ -364,7 +364,7 @@ func dbCredentialKeysWritten(t *testing.T) map[string]bool {
 	from := strings.Index(s, "DB_ROLE_LITERALS=(")
 	to := strings.Index(s, `"${DB_ROLE_LITERALS[@]}"`)
 	if from < 0 || to < from {
-		t.Fatal("generate-secrets.sh no longer builds loopzero-db-credentials the way this test reads it")
+		t.Fatal("generate-secrets.sh no longer builds loopruntime-db-credentials the way this test reads it")
 	}
 	keys := map[string]bool{}
 	for _, m := range regexp.MustCompile(`--from-literal=([a-z-]+)=`).FindAllStringSubmatch(s[from:to], -1) {
@@ -373,14 +373,14 @@ func dbCredentialKeysWritten(t *testing.T) map[string]bool {
 	return keys
 }
 
-func TestB40LoopZeroApiServicePort3001(t *testing.T) {
-	data, err := os.ReadFile("../../../charts/loopzero-api/values.yaml")
+func TestB40LoopRuntimeApiServicePort3001(t *testing.T) {
+	data, err := os.ReadFile("../../../charts/loopruntime-api/values.yaml")
 	if err != nil {
-		t.Fatalf("read loopzero-api values.yaml: %v", err)
+		t.Fatalf("read loopruntime-api values.yaml: %v", err)
 	}
 	s := string(data)
 	if !strings.Contains(s, "port: 3001") {
-		t.Errorf("B40 regression: loopzero-api service.port must be 3001 (matches binary listen)")
+		t.Errorf("B40 regression: loopruntime-api service.port must be 3001 (matches binary listen)")
 	}
 }
 
@@ -398,21 +398,21 @@ func TestB44SmokeTestImageHasCurl(t *testing.T) {
 	}
 }
 
-func TestB45LoopZeroCrdsRelease(t *testing.T) {
+func TestB45LoopRuntimeCrdsRelease(t *testing.T) {
 	data, err := os.ReadFile("../../helmfile/core.helmfile.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read mgmt helmfile: %v", err)
 	}
 	s := string(data)
-	if !strings.Contains(s, "- name: loopzero-crds") {
-		t.Errorf("B45 regression: mgmt helmfile must declare loopzero-crds release")
+	if !strings.Contains(s, "- name: loopruntime-crds") {
+		t.Errorf("B45 regression: mgmt helmfile must declare loopruntime-crds release")
 	}
-	if !strings.Contains(s, "../../charts/loopzero-crds") {
-		t.Errorf("B45 regression: loopzero-crds release must point to charts/loopzero-crds")
+	if !strings.Contains(s, "../../charts/loopruntime-crds") {
+		t.Errorf("B45 regression: loopruntime-crds release must point to charts/loopruntime-crds")
 	}
-	// Controllers must `needs: loopzero-crds`
-	if !strings.Contains(s, "- loopzero-system/loopzero-crds") {
-		t.Errorf("B45 regression: controllers must declare needs:loopzero-system/loopzero-crds")
+	// Controllers must `needs: loopruntime-crds`
+	if !strings.Contains(s, "- loopruntime-system/loopruntime-crds") {
+		t.Errorf("B45 regression: controllers must declare needs:loopruntime-system/loopruntime-crds")
 	}
 }
 
@@ -427,16 +427,16 @@ func TestB48SmokeArgocdHttp(t *testing.T) {
 	}
 }
 
-func TestB49LoopZeroCloudOryUrls(t *testing.T) {
-	data, err := os.ReadFile("../../../charts/loopzero-cloud/values-bootstrap.yaml")
+func TestB49LoopRuntimeCloudOryUrls(t *testing.T) {
+	data, err := os.ReadFile("../../../charts/loopruntime-cloud/values-bootstrap.yaml")
 	if err != nil {
-		t.Fatalf("read loopzero-cloud values.yaml: %v", err)
+		t.Fatalf("read loopruntime-cloud values.yaml: %v", err)
 	}
 	s := string(data)
-	if strings.Contains(s, "ory-hydra-admin.loopzero-system") {
-		t.Errorf("B49 regression: loopzero-cloud Hydra URL points to loopzero-system (Hydra deploys to loopzero-auth)")
+	if strings.Contains(s, "ory-hydra-admin.loopruntime-system") {
+		t.Errorf("B49 regression: loopruntime-cloud Hydra URL points to loopruntime-system (Hydra deploys to loopruntime-auth)")
 	}
-	if !strings.Contains(s, "ory-hydra-admin.loopzero-auth.svc.cluster.local") {
-		t.Errorf("B49 regression: loopzero-cloud must use ory-hydra-admin.loopzero-auth.svc.cluster.local")
+	if !strings.Contains(s, "ory-hydra-admin.loopruntime-auth.svc.cluster.local") {
+		t.Errorf("B49 regression: loopruntime-cloud must use ory-hydra-admin.loopruntime-auth.svc.cluster.local")
 	}
 }

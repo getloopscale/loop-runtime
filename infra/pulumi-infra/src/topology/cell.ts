@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
  * Cell — the logical unit of operation in multi-cell architecture.
@@ -8,7 +8,7 @@
  * and registers the cell in the control plane via ClusterCredential CRD metadata.
  *
  * Cells do NOT install bootstrap addons (Traefik, cert-manager, etc.) —
- * that's the responsibility of the role-based bootstrap in loopzero-platform.
+ * that's the responsibility of the role-based bootstrap in loopruntime-platform.
  * Cells add cell-specific metadata, labels, and registrations.
  *
  * Infra-topology-refactor.md Phase 6.
@@ -60,10 +60,10 @@ export interface CellOutput {
  * This is the logical composition that:
  * 1. Associates cellId with the runtime cluster
  * 2. Produces cell-scoped outputs for StackReference consumers
- * 3. Generates labels for ClusterCredential registration (done by loopzero-platform)
+ * 3. Generates labels for ClusterCredential registration (done by loopruntime-platform)
  *
  * Bootstrap addons (Traefik, cert-manager, ESO) are NOT installed here —
- * they are installed by the role-based bootstrap pipeline in loopzero-platform.
+ * they are installed by the role-based bootstrap pipeline in loopruntime-platform.
  */
 export function createCell(cfg: CellConfig): CellOutput {
   const spec = cfg.cluster.spec;
@@ -76,12 +76,12 @@ export function createCell(cfg: CellConfig): CellOutput {
     endpoint: cfg.cluster.endpoint,
     clusterName: cfg.cluster.clusterName,
     labels: {
-      "loopzero.io/cell-id": cfg.cellId,
-      "loopzero.io/cluster-id": spec.id,
-      "loopzero.io/role": "runtime",
-      "loopzero.io/environment": cfg.environment,
-      "loopzero.io/region": spec.region,
-      "loopzero.io/domain": cfg.domain,
+      "runtime.getloopscale.com/cell-id": cfg.cellId,
+      "runtime.getloopscale.com/cluster-id": spec.id,
+      "runtime.getloopscale.com/role": "runtime",
+      "runtime.getloopscale.com/environment": cfg.environment,
+      "runtime.getloopscale.com/region": spec.region,
+      "runtime.getloopscale.com/domain": cfg.domain,
     },
   };
 }

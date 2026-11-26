@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package chaos_test
 
@@ -19,14 +19,14 @@ import (
 // declarative Chaos Mesh CRD (manifests/c12-partition-mgmt-build.yaml) + Go assertion.
 //
 // c12 scenario: inject a NetworkChaos partition between the mgmt cluster
-// (loopzero-system) and the build cluster (argo-system) CONCURRENTLY with two
+// (loopruntime-system) and the build cluster (argo-system) CONCURRENTLY with two
 // simultaneous PR dispatches, then assert post-heal:
 //   - at least 1 release reaches ACTIVE
 //   - NO duplicate ACTIVE releases for the same commit_sha
 //     (proves withEnvironmentLock + pg_advisory_xact_lock hold under chaos)
 //
 // EC-6 (from the bash script) is the invariant this file locks HERMETICALLY:
-// the partition selector MUST be EXPLICITLY scoped to [loopzero-system, argo-system]
+// the partition selector MUST be EXPLICITLY scoped to [loopruntime-system, argo-system]
 // — never a blast-radius-spilling unscoped selector that would also cut operator
 // port-forwards + browser sessions.
 
@@ -42,7 +42,7 @@ type networkChaosManifest struct {
 	} `yaml:"spec"`
 }
 
-// TestC12Manifest_ScopedPartition is HERMETIC (no cluster, no LOOPZERO_CHAOS_TEST
+// TestC12Manifest_ScopedPartition is HERMETIC (no cluster, no LOOPRUNTIME_CHAOS_TEST
 // gate): it parses the c12 declarative manifest and locks the EC-6 scoped-selector
 // invariant so it can never silently regress to an unscoped, blast-radius-spilling
 // partition. This is the real GREEN value the reexpression adds beyond a skip.
@@ -79,13 +79,13 @@ func TestC12Manifest_ScopedPartition(t *testing.T) {
 	// EC-6: the partition MUST be explicitly scoped to exactly the mgmt + build
 	// namespaces. An empty namespaces list would mean an unscoped (all-namespace)
 	// blast radius — the exact foot-gun the bash script's EC-6 guarded against.
-	want := map[string]bool{"loopzero-system": true, "argo-system": true}
+	want := map[string]bool{"loopruntime-system": true, "argo-system": true}
 	got := map[string]bool{}
 	for _, ns := range found.Spec.Selector.Namespaces {
 		got[ns] = true
 	}
-	if len(found.Spec.Selector.Namespaces) != 2 || !got["loopzero-system"] || !got["argo-system"] {
-		t.Fatalf("c12 EC-6 scoped selector violated: spec.selector.namespaces = %v, want exactly [loopzero-system argo-system]",
+	if len(found.Spec.Selector.Namespaces) != 2 || !got["loopruntime-system"] || !got["argo-system"] {
+		t.Fatalf("c12 EC-6 scoped selector violated: spec.selector.namespaces = %v, want exactly [loopruntime-system argo-system]",
 			found.Spec.Selector.Namespaces)
 	}
 	_ = want
@@ -103,7 +103,7 @@ var _ = Describe("c12: simultaneous PRs during mgmt<->build network partition", 
 		// Expected LIVE flow (operator and sponsor together, on a live cluster):
 		//   1. checkAPIHealth() — API serving before chaos.
 		//   2. applyChaos("c12-partition-mgmt-build.yaml") — scoped NetworkChaos
-		//      partition [loopzero-system, argo-system], duration 180s (EC-6).
+		//      partition [loopruntime-system, argo-system], duration 180s (EC-6).
 		//   3. dispatch TWO PRs simultaneously (gh api repository_dispatch x2)
 		//      for the SAME (tenant, project, environment) → same commit_sha.
 		//   4. wait PARTITION_SECONDS (180s) for the partition to heal, then

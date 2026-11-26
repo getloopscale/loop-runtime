@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -8,7 +8,7 @@ import "context"
 // ArgoAppLabelReader reads the labels off an ArgoCD Application CR by name.
 //
 // SyncCallbackActivator resolves the Application's tenant and environment from
-// the loopzero.io/tenant and loopzero.io/environment labels the tenant operator sets.
+// the runtime.getloopscale.com/tenant and runtime.getloopscale.com/environment labels the tenant operator sets.
 // It is the only decoder: the Application name is naming.ArgoAppName's
 // "{tenant}-{project}-{env}", every segment of which may contain hyphens, so no
 // positional split of the name inverts it. (A LastIndex("-") parser of the

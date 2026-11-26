@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integrationshttp
 
@@ -14,7 +14,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Installation is a GitHub App installation as the console lists it.
@@ -77,7 +77,7 @@ func (h *IntegrationsGitHubHandler) ClaimInstallations(w http.ResponseWriter, r 
 	ctx := r.Context()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -140,7 +140,7 @@ func (h *IntegrationsGitHubHandler) ClaimInstallations(w http.ResponseWriter, r 
 func (h *IntegrationsGitHubHandler) ListInstallations(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 	if h.claims == nil {

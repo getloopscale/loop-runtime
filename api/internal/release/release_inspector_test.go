@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -77,7 +77,7 @@ func TestReleaseInspector_Inspect_HappyPath(t *testing.T) {
 	digest := "sha256:abc"
 	sig := "registry.example.com/x@" + digest
 	signedAt := time.Now().UTC()
-	url := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=42"
+	url := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=42"
 	rel.ImageDigest = &digest
 	rel.ImageSignature = &sig
 	rel.ImageSignedAt = &signedAt
@@ -88,7 +88,7 @@ func TestReleaseInspector_Inspect_HappyPath(t *testing.T) {
 		{Action: "release.attestation_url_set", Actor: "system:release-attestation", ResourceType: "release", ResourceID: "rel-001", CreatedAt: time.Now().UTC()},
 		{Action: "release.attestation_url_set", Actor: "system:release-attestation", ResourceType: "release", ResourceID: "rel-OTHER", CreatedAt: time.Now().UTC()},
 	}}
-	bs := &fakeBuildStore{wfID: "loopzero-build-001-xyz"}
+	bs := &fakeBuildStore{wfID: "loopruntime-build-001-xyz"}
 
 	insp := NewReleaseInspector(store, audit, bs)
 	got, err := insp.Inspect(context.Background(), "rel-001")
@@ -98,8 +98,8 @@ func TestReleaseInspector_Inspect_HappyPath(t *testing.T) {
 	if got.ReleaseID != "rel-001" {
 		t.Errorf("release_id = %q, want rel-001", got.ReleaseID)
 	}
-	if got.WorkflowID == nil || *got.WorkflowID != "loopzero-build-001-xyz" {
-		t.Errorf("workflow_id = %v, want loopzero-build-001-xyz", got.WorkflowID)
+	if got.WorkflowID == nil || *got.WorkflowID != "loopruntime-build-001-xyz" {
+		t.Errorf("workflow_id = %v, want loopruntime-build-001-xyz", got.WorkflowID)
 	}
 	if got.SigningPath != "keyless" {
 		t.Errorf("signing_path = %q, want keyless", got.SigningPath)
@@ -251,12 +251,12 @@ func TestReleaseInspector_TruncatedAuditWindowIsSignalled(t *testing.T) {
 	}
 }
 
-// The release store answers a missing id with loopzeroerrors.ErrReleaseNotFound, never
+// The release store answers a missing id with loopruntimeerrors.ErrReleaseNotFound, never
 // (nil, nil): the inspector only recognised the second form, so the admin inspect
 // of an unknown release answered 500 INSPECT_FAILED instead of 404 (#415).
 func TestReleaseInspector_Inspect_StoreNotFoundIsNotFound(t *testing.T) {
 	store := &fakeReleaseStore{get: func(_ context.Context, _ string) (*db.Release, error) {
-		return nil, loopzeroerrors.ErrReleaseNotFound
+		return nil, loopruntimeerrors.ErrReleaseNotFound
 	}}
 	insp := NewReleaseInspector(store, &fakeAudit{}, &fakeBuildStore{})
 

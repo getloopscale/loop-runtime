@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildsadapter
 
@@ -300,7 +300,7 @@ func (f *fakeBuildListStoreWithError) ListByProjectAndEnv(_ context.Context, _, 
 }
 
 // TestGetRedeploySource_PreservesRuntime — canonical regression-protector for
-// loopzero#185 (root cause found during Cleanroom-UP-LIVE mandate 2026-07-04):
+// loopruntime#185 (root cause found during Cleanroom-UP-LIVE mandate 2026-07-04):
 // `GetRedeploySource` copied Name/Type/Port/Path/Build/Start/Rendering/Secrets/
 // Replicas/Autoscaling but silently dropped `Runtime`. Cascading effect: redeployed
 // build had empty Runtime → build_plan resolveLanguageStrategy returned
@@ -339,6 +339,6 @@ func TestGetRedeploySource_PreservesRuntime(t *testing.T) {
 		t.Fatalf("expected 1 app, got %d", len(src.Apps))
 	}
 	if got := src.Apps[0].Runtime; got != "node" {
-		t.Fatalf("Runtime dropped by redeploy adapter: got=%q want=%q — reproduces loopzero#185 cascade", got, "node")
+		t.Fatalf("Runtime dropped by redeploy adapter: got=%q want=%q — reproduces loopruntime#185 cascade", got, "node")
 	}
 }

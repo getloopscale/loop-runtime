@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -36,7 +36,7 @@ func newTestGiteaStore(t *testing.T) *GiteaSourceStore {
 	store, err := NewGiteaSourceStore(GiteaSourceStoreConfig{
 		BaseURL: url,
 		Token:   token,
-		OrgName: "loopzero",
+		OrgName: "loopruntime",
 	})
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
@@ -48,7 +48,7 @@ func newTestGiteaStore(t *testing.T) *GiteaSourceStore {
 func createTestBundle(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 
-	tmpDir, err := os.MkdirTemp("", "loopzero-test-repo-*")
+	tmpDir, err := os.MkdirTemp("", "loopruntime-test-repo-*")
 	if err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
@@ -169,14 +169,14 @@ func TestGiteaSourceStore_ClonableAfterPush(t *testing.T) {
 	}
 
 	// Now verify the repo is cloneable from Gitea (with auth — private repo)
-	cloneDir, err := os.MkdirTemp("", "loopzero-clone-verify-*")
+	cloneDir, err := os.MkdirTemp("", "loopruntime-clone-verify-*")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.RemoveAll(cloneDir) }()
 
 	_, token := skipIfNoGitea(t)
-	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/loopzero-source-acme-clone-test.git"
+	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopruntime/loopruntime-source-acme-clone-test.git"
 	run(t, cloneDir, "git", "clone", cloneURL, filepath.Join(cloneDir, "repo"))
 
 	// Verify files exist

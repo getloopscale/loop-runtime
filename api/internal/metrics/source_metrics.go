@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metrics
 
@@ -9,10 +9,10 @@ import (
 )
 
 // ServicesReservedEnvKeyAccepted counts reserved env keys (LD_PRELOAD, PATH,
-// LOOPZERO_*...) that a services.json upload set and that were ACCEPTED because
+// LOOPRUNTIME_*...) that a services.json upload set and that were ACCEPTED because
 // the blocklist runs in warn mode. It is the signal an operator watches
 // before switching the blocklist to enforce.
 var ServicesReservedEnvKeyAccepted = promauto.NewCounter(prometheus.CounterOpts{
-	Name: "loopzero_services_reserved_env_key_accepted_total",
+	Name: "loopruntime_services_reserved_env_key_accepted_total",
 	Help: "Reserved env keys accepted from services.json because the blocklist is in warn mode.",
 })

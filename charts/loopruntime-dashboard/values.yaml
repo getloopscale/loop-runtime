@@ -1,0 +1,98 @@
+global:
+  registry: registry.digitalocean.com/loopruntime-system
+  imagePullSecrets: []
+
+image:
+  repository: loopruntime-dashboard
+  tag: dev
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+revisionHistoryLimit: 3
+
+# Dashboard is not critical path — no priorityClassName by default
+priorityClassName: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+podLabels: {}
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+
+config:
+  # Rendered into __config.js (window.__THEO_CONFIG__), mounted at
+  # /usr/share/nginx/html/__config.js and read by the SPA at page load. Empty is same-origin.
+  # The API (API_URL) and Kratos (AUTH_URL; empty falls back to the API's) the SPA calls,
+  # the host recovery starts on (ACCOUNTS_URL), and the OAuth2 server's public origin
+  # (OAUTH_URL, Hydra), where the CLI's device flow redirects the browser.
+  viteApiUrl: ""
+  viteAuthUrl: ""
+  viteAccountsUrl: ""
+  viteOauthUrl: ""
+  # The origins the image's Content-Security-Policy allows besides 'self', rendered into
+  # csp-origins.conf: connect-src (the Kratos public host the auth flows read, the
+  # control plane's) and form-action (the Kratos public host the forms post to).
+  cspConnectOrigins: []
+  cspFormOrigins: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: false
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 10
+
+# No startupProbe — static assets serve instantly
+startupProbe:
+  enabled: false
+
+metrics:
+  serviceMonitor:
+    enabled: false
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+      ports:
+        - protocol: TCP
+          port: 8080
+  # Zero egress — static assets, no backend calls from pods
+  extraEgress: []
+
+topologySpreadConstraints:
+  enabled: false
+
+affinity:
+  podAntiAffinity:
+    enabled: false
+
+tolerations: []
+nodeSelector: {}

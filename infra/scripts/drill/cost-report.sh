@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # Plan 2026-05-16 T4.3 — Drill cost report helper.
 #
@@ -104,15 +104,15 @@ fi
 
 # --- Compute + render: delegated to the Go pure-logic core (Track C TC2.1) ---
 # The duration/cost arithmetic + markdown moved to pkg/quality/drillcost
-# (`loopzero-ops drill cost`), parity-proven byte-identical vs this script's prior
+# (`loopruntime-ops drill cost`), parity-proven byte-identical vs this script's prior
 # heredoc. This bash now keeps ONLY the --auto Pulumi-state gathering above
 # (orchestration, ADR D1). Validation (invalid/missing/end<=start) is enforced
 # by the Go subcommand. See docs/operations.md.
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 OPS_ARGS=(drill cost --start "$START_TS" --end "$END_TS")
 [[ -n "$OUTPUT" ]] && OPS_ARGS+=(--output "$OUTPUT")
-if command -v loopzero-ops >/dev/null 2>&1; then
-  loopzero-ops "${OPS_ARGS[@]}"
+if command -v loopruntime-ops >/dev/null 2>&1; then
+  loopruntime-ops "${OPS_ARGS[@]}"
 else
-  ( cd "$REPO_ROOT/cmd/loopzero-ops" && go run . "${OPS_ARGS[@]}" )
+  ( cd "$REPO_ROOT/cmd/loopruntime-ops" && go run . "${OPS_ARGS[@]}" )
 fi

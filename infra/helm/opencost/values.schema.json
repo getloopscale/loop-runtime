@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "OpenCost LoopZero wrapper values",
+  "title": "OpenCost LoopRuntime wrapper values",
   "description": "Schema for infra/helm/opencost/values.yaml. Per T3.1 pattern (schema gate enforced via task validate:manifests).",
   "type": "object",
   "additionalProperties": true,
@@ -41,7 +41,7 @@
                 "provider": {
                   "type": "string",
                   "enum": ["custom", "aws", "gcp", "azure"],
-                  "description": "LoopZero uses 'custom' with DigitalOcean pricing overrides"
+                  "description": "LoopRuntime uses 'custom' with DigitalOcean pricing overrides"
                 }
               }
             }
@@ -60,7 +60,7 @@
             "runAsNonRoot": {
               "type": "boolean",
               "const": true,
-              "description": "MUST be true per LoopZero platform security standard"
+              "description": "MUST be true per LoopRuntime platform security standard"
             }
           }
         }

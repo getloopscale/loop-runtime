@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts_test
 
@@ -62,7 +62,7 @@ func TestMonitoringRules_EveryRuleFileIsApplied(t *testing.T) {
 // multiwindow burn-rate rules the production canary runbook tells an operator to
 // watch. The generated file was absent from the repository, its generator was a
 // manual task gated on a CLI the setup never installs, and it was not in the
-// apply list — so `loopzero:slo:deploy_burn_rate_5m`, named at
+// apply list — so `loopruntime:slo:deploy_burn_rate_5m`, named at
 // docs/operations/production-canary-stage4-runbook.md:50, was defined nowhere.
 //
 // An operator waiting on an alert that cannot fire reads the silence as budget
@@ -85,7 +85,7 @@ func TestMonitoringRules_BurnRateRulesExistAndAreApplied(t *testing.T) {
 
 	content := string(body)
 
-	// This asserted a `loopzero:slo` prefix in its first form, taken from the
+	// This asserted a `loopruntime:slo` prefix in its first form, taken from the
 	// runbook. That prefix was ALWAYS fiction: no rule ever emitted it, which is
 	// the finding. Sloth names recording rules `slo:*` and alerts after the spec,
 	// and the runbook was corrected the same day to name what actually exists.

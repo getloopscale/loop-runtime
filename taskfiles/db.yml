@@ -18,23 +18,23 @@ tasks:
         echo "Port-forwarding PostgreSQL to localhost:{{.PG_PORT}}"
         echo "Connect with: PGPASSWORD={{.PG_PASS}} psql -h {{.PG_HOST}} -p {{.PG_PORT}} -U {{.PG_USER}} -d {{.PG_DB}}"
         echo "Press Ctrl+C to stop."
-        kubectl --context {{.CORE_CONTEXT}} port-forward -n loopzero-system svc/postgresql {{.PG_PORT}}:5432
+        kubectl --context {{.CORE_CONTEXT}} port-forward -n loopruntime-system svc/postgresql {{.PG_PORT}}:5432
 
   db:shell:
     desc: Open an interactive psql shell to the database
     interactive: true
     cmds:
       - |
-        POD=$(kubectl --context "{{.CORE_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        kubectl --context "{{.CORE_CONTEXT}}" -n loopzero-system exec -it "$POD" -c postgresql -- \
+        POD=$(kubectl --context "{{.CORE_CONTEXT}}" -n loopruntime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        kubectl --context "{{.CORE_CONTEXT}}" -n loopruntime-system exec -it "$POD" -c postgresql -- \
           env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}"
 
   db:status:
     desc: Show database health — tables, row counts, connections, last migration
     cmds:
       - |
-        POD=$(kubectl --context "{{.CORE_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG="kubectl --context {{.CORE_CONTEXT}} -n loopzero-system exec -i $POD -c postgresql -- env PGPASSWORD={{.PG_PASS}} psql -U {{.PG_USER}} -d {{.PG_DB}}"
+        POD=$(kubectl --context "{{.CORE_CONTEXT}}" -n loopruntime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        PG="kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec -i $POD -c postgresql -- env PGPASSWORD={{.PG_PASS}} psql -U {{.PG_USER}} -d {{.PG_DB}}"
 
         echo "=== Database Connection ==="
         $PG -t -c "SELECT 'Connected to ' || current_database() || ' as ' || current_user || ' (version: ' || split_part(version(), ' ', 2) || ')';" 2>/dev/null \
@@ -78,8 +78,8 @@ tasks:
     prompt: This will DROP and recreate the '{{.PG_DB}}' database. Are you sure?
     cmds:
       - |
-        POD=$(kubectl --context "{{.CORE_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        PG="kubectl --context {{.CORE_CONTEXT}} -n loopzero-system exec -i $POD -c postgresql -- env PGPASSWORD={{.PG_PASS}} psql -U {{.PG_USER}}"
+        POD=$(kubectl --context "{{.CORE_CONTEXT}}" -n loopruntime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        PG="kubectl --context {{.CORE_CONTEXT}} -n loopruntime-system exec -i $POD -c postgresql -- env PGPASSWORD={{.PG_PASS}} psql -U {{.PG_USER}}"
 
         echo "Dropping and recreating database..."
         $PG -d postgres -c "
@@ -102,10 +102,10 @@ tasks:
       - task: db:reset
       - task: dev:seed
   db:roles:
-    desc: Create the non-owner roles loopzero-api and loopzero-cloud connect as (loopzero_api, loopzero_worker, loopzero_cloud) on the in-cluster Postgres
-    # #396 — no migration creates loopzero_api, and 000023 creates loopzero_worker WITH
+    desc: Create the non-owner roles loopruntime-api and loopruntime-cloud connect as (loopruntime_api, loopruntime_worker, loopruntime_cloud) on the in-cluster Postgres
+    # #396 — no migration creates loopruntime_api, and 000023 creates loopruntime_worker WITH
     # PASSWORD NULL, so on an in-cluster Postgres nothing could log in as either and
-    # loopzero-api refused to boot. Runs BEFORE db:migrate: 000062 and 000068 grant to
+    # loopruntime-api refused to boot. Runs BEFORE db:migrate: 000062 and 000068 grant to
     # these roles only if they exist. Passwords come from the credentials Secret
     # generate-secrets.sh wrote, and reach psql as variables, never as arguments.
     # A managed database gets these roles from its provider and never runs this.
@@ -114,7 +114,7 @@ tasks:
         set -euo pipefail
         CTX="{{.CORE_CONTEXT}}"
         secret_key() {
-          kubectl --context "$CTX" -n loopzero-system get secret loopzero-db-credentials \
+          kubectl --context "$CTX" -n loopruntime-system get secret loopruntime-db-credentials \
             -o go-template="{{"{{"}}index .data \"$1\" | base64decode{{"}}"}}"
         }
         SUPER_PASSWORD=$(secret_key postgres-password)
@@ -122,15 +122,15 @@ tasks:
         WORKER_PASSWORD=$(secret_key worker-password)
         CLOUD_PASSWORD=$(secret_key cloud-password)
         if [ -z "$API_PASSWORD" ] || [ -z "$WORKER_PASSWORD" ] || [ -z "$CLOUD_PASSWORD" ]; then
-          echo "ERROR: loopzero-db-credentials has no api-password/worker-password/cloud-password — run generate-secrets.sh <env> core first" >&2
+          echo "ERROR: loopruntime-db-credentials has no api-password/worker-password/cloud-password — run generate-secrets.sh <env> core first" >&2
           exit 1
         fi
-        POD=$(kubectl --context "$CTX" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        kubectl --context "$CTX" -n loopzero-system exec -i "$POD" -c postgresql -- \
+        POD=$(kubectl --context "$CTX" -n loopruntime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        kubectl --context "$CTX" -n loopruntime-system exec -i "$POD" -c postgresql -- \
           env PGPASSWORD="$SUPER_PASSWORD" psql -U postgres -d "{{.PG_DB}}" -q \
             -v api_password="$API_PASSWORD" -v worker_password="$WORKER_PASSWORD" -v cloud_password="$CLOUD_PASSWORD" \
           < infra/scripts/production/provision-db-roles.sql
-        echo "[db:roles] loopzero_api, loopzero_worker and loopzero_cloud provisioned"
+        echo "[db:roles] loopruntime_api, loopruntime_worker and loopruntime_cloud provisioned"
 
   db:migrate:
     desc: Run database migrations against PostgreSQL via golang-migrate canonical
@@ -138,7 +138,7 @@ tasks:
     # Replaces the previous `for f in *.up.sql; do psql < $f` loop that
     # lacked version tracking and silently re-applied migrations every run.
     # Calls infra/scripts/production/run-migrations.sh which uses the `migrate` binary
-    # already inside the loopzero-api image (api/Dockerfile copies migrations
+    # already inside the loopruntime-api image (api/Dockerfile copies migrations
     # to /migrations and installs migrate to /usr/local/bin/migrate).
     cmds:
       - CORE_CONTEXT={{.CORE_CONTEXT}} PG_USER={{.PG_USER}} PG_PASS={{.PG_PASS}} PG_DB={{.PG_DB}} bash infra/scripts/production/run-migrations.sh
@@ -156,8 +156,8 @@ tasks:
       PLAN: '{{.PLAN | default "starter"}}'
     cmds:
       - |
-        POD=$(kubectl --context "{{.CORE_CONTEXT}}" -n loopzero-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
-        kubectl --context "{{.CORE_CONTEXT}}" -n loopzero-system exec -i "$POD" -c postgresql -- \
+        POD=$(kubectl --context "{{.CORE_CONTEXT}}" -n loopruntime-system get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}')
+        kubectl --context "{{.CORE_CONTEXT}}" -n loopruntime-system exec -i "$POD" -c postgresql -- \
           env PGPASSWORD="{{.PG_PASS}}" psql -U "{{.PG_USER}}" -d "{{.PG_DB}}" <<SQL
         -- Set audit context for RLS and audit triggers (migration 000009)
         SELECT set_config('app.tenant_id', '{{.TENANT}}', false);
@@ -193,7 +193,7 @@ tasks:
   db:render-schema:
     desc: Render api/internal/db/schema.gen.sql via ephemeral PG 16 + golang-migrate replay (deterministic; EC-4 defer cleanup + EC-17 random port + EC-2 sqlc pre-flight). M-Migrate2 (2026-07-07) — replaced bash render-schema-gen-sql.sh with pure-logic Go pipeline.
     cmds:
-      - /tmp/loopzero-ops quality render-schema-gen-sql --render
+      - /tmp/loopruntime-ops quality render-schema-gen-sql --render
 
   db:generate:
     desc: Regenerate api/internal/db/generated/*.go from queries/*.sql via sqlc v1.31.1
@@ -214,7 +214,7 @@ tasks:
         echo "[PASS] sqlc generate completed; verify api/internal/db/generated/ and commit any diff"
 
   db:verify-sync:
-    desc: Verify committed api/internal/db/generated/ is in-sync with a fresh `sqlc generate` (cmd/loopzero-ops/internal/quality/sqlcsync gate; CI runs this too)
+    desc: Verify committed api/internal/db/generated/ is in-sync with a fresh `sqlc generate` (cmd/loopruntime-ops/internal/quality/sqlcsync gate; CI runs this too)
     cmds:
       - |
         if ! command -v sqlc >/dev/null; then
@@ -245,7 +245,7 @@ tasks:
     cmds:
       - |
         # E2E seed needs a Go script with DATABASE_URL — port-forward required
-        kubectl --context "{{.CORE_CONTEXT}}" port-forward -n loopzero-system svc/postgresql "{{.PG_PORT}}":5432 &
+        kubectl --context "{{.CORE_CONTEXT}}" port-forward -n loopruntime-system svc/postgresql "{{.PG_PORT}}":5432 &
         PF_PID=$!
         sleep 2
         DATABASE_URL="postgres://{{.PG_USER}}:{{.PG_PASS}}@{{.PG_HOST}}:{{.PG_PORT}}/{{.PG_DB}}?sslmode=disable" \

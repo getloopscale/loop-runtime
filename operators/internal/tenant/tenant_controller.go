@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package tenant implements the Tenant + Environment controllers
-// (operator binary `loopzero-tenant-operator` per ADR-0023). Owns the
+// (operator binary `loopruntime-tenant-operator` per ADR-0023). Owns the
 // per-tenant lifecycle: provisioning, multi-cell placement resolve
 // via cellrouting.RuntimeClientFactory, GitOps repo creation, credential
 // rotation, deletion (soft + grace + cleanup). Cross-cluster
@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/argocd"
 	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
@@ -69,24 +69,24 @@ var tenantSM = statemachine.NewTenantTypedMachine()
 // (mgmt cluster) RBAC. controller-gen rbac generates ClusterRole rules
 // from these. Cross-cluster RBAC (BuildClient, RuntimeFactory) is
 // hand-maintained per ADR-0026 condition #2 and lives in
-// charts/loopzero-tenant-operator/templates/cross-cluster-rbac.yaml.
+// charts/loopruntime-tenant-operator/templates/cross-cluster-rbac.yaml.
 //
-// +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=tenants/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=tenants/finalizers,verbs=update
-// +kubebuilder:rbac:groups=loopzero.io,resources=environments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants/finalizers,verbs=update
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=environments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=resourcequotas,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=scheduling.k8s.io,resources=priorityclasses,verbs=get;list;watch;create;update;patch
 //
 // FB-#4 (live boot iter 12): tenant-operator's cellrouting.RuntimeClientFactory
 // LISTs ClusterCredentials to resolve cell→runtime-cluster mapping.
-// Marker added to satisfy clustercredentials.loopzero.io list permission;
+// Marker added to satisfy clustercredentials.runtime.getloopscale.com list permission;
 // otherwise tenant-operator crashes with "User \"system:serviceaccount:
-// loopzero-system:loopzero-tenant-operator\" cannot list resource clustercredentials"
+// loopruntime-system:loopruntime-tenant-operator\" cannot list resource clustercredentials"
 // on every reconcile of any cell-aware Tenant.
 //
 // Vocabulary: the mapping named above relates two DIFFERENT things.
@@ -127,7 +127,7 @@ type TenantControllerConfig struct {
 }
 
 // runtimeClient resolves the runtime cluster of the tenant's cell.
-func (r *TenantReconciler) runtimeClient(ctx context.Context, tenant *loopzerov1.Tenant) (client.Client, error) {
+func (r *TenantReconciler) runtimeClient(ctx context.Context, tenant *loopruntimev1.Tenant) (client.Client, error) {
 	c, err := r.RuntimeFactory.For(ctx, tenant.Spec.CellID)
 	if err != nil {
 		return nil, fmt.Errorf("tenant %s (cellID=%q): runtime cluster client: %w", tenant.Name, tenant.Spec.CellID, err)
@@ -151,7 +151,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	logger := log.FromContext(ctx)
 
-	var tenant loopzerov1.Tenant
+	var tenant loopruntimev1.Tenant
 	if err := r.Get(ctx, req.NamespacedName, &tenant); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -160,11 +160,11 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: when the CR
-	// carries the `loopzero.io/correlation-id` annotation (set by the API for
+	// carries the `runtime.getloopscale.com/correlation-id` annotation (set by the API for
 	// HTTP-driven flows), inject it into the reconcile context so structured
 	// logs + audit_log writes trace back to the originating request. No-op
 	// for background reconciles (watch event without annotation).
-	ctx = correlation.WithID(ctx, tenant.GetAnnotations()["loopzero.io/correlation-id"])
+	ctx = correlation.WithID(ctx, tenant.GetAnnotations()["runtime.getloopscale.com/correlation-id"])
 
 	// Handle deletion with verify-then-remove finalizer pattern
 	if !tenant.DeletionTimestamp.IsZero() {
@@ -202,7 +202,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Set Phase to Provisioning if empty (via state machine)
 	if tenant.Status.Phase == "" {
-		tenant.Status.Phase = loopzerov1.TenantPhase(
+		tenant.Status.Phase = loopruntimev1.TenantPhase(
 			tenantSM.Transition(statemachine.TPhEmpty, statemachine.TPEventCreate),
 		)
 	}
@@ -215,8 +215,8 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 
 	// S1.7: Phase transition — Active when all conditions are True (via state machine)
-	if conditions.AllConditionsTrue(tenant.Status.Conditions, r.requiredProvisioningConditions()...) && tenant.Status.Phase == loopzerov1.TenantPhaseProvisioning {
-		tenant.Status.Phase = loopzerov1.TenantPhase(
+	if conditions.AllConditionsTrue(tenant.Status.Conditions, r.requiredProvisioningConditions()...) && tenant.Status.Phase == loopruntimev1.TenantPhaseProvisioning {
+		tenant.Status.Phase = loopruntimev1.TenantPhase(
 			tenantSM.Transition(statemachine.TPhProvisioning, statemachine.TPEventAllReady),
 		)
 	}
@@ -246,7 +246,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 // 2026-08-12-tenant-transit-key-ownership, B-042) — the api creates the key lazily on
 // the first encrypt 404, and this step never had a production implementation to run.
 // TestTransitKeyProvisioning_IsNotAnOperatorReconcileStep guards the absence.
-func (r *TenantReconciler) provisioningSteps(ctx context.Context, tenant *loopzerov1.Tenant) []reconcileStep {
+func (r *TenantReconciler) provisioningSteps(ctx context.Context, tenant *loopruntimev1.Tenant) []reconcileStep {
 	return []reconcileStep{
 		{conditions.TypeGitRepoReady, func() error { return r.reconcileGitRepo(ctx, tenant) }},
 		{conditions.TypeArgoCDAppReady, func() error { return r.reconcileArgoCDApp(ctx, tenant) }},
@@ -270,7 +270,7 @@ type reconcileStep struct {
 // `base` is the snapshot taken by Reconcile right after its Get. It is a
 // parameter rather than something re-derived here: deriving it inside would mean
 // a second read, which is the re-fetch this migration removed.
-func (r *TenantReconciler) runSteps(ctx context.Context, tenant, base *loopzerov1.Tenant, steps []reconcileStep) error {
+func (r *TenantReconciler) runSteps(ctx context.Context, tenant, base *loopruntimev1.Tenant, steps []reconcileStep) error {
 	logger := log.FromContext(ctx)
 	for _, step := range steps {
 		if err := step.fn(); err != nil {
@@ -336,7 +336,7 @@ func (r *TenantReconciler) requiredProvisioningConditions() []string {
 // sharing an env name collapsed onto a single CR through CreateOrUpdate, and the loser
 // silently received no namespace, RBAC or NetworkPolicy. Measured on app-dev 2026-08-08:
 // 5 of 9 declared (project, environment) tuples had no Environment CR at all (issue #273).
-func buildEnvironmentCRNames(tenant *loopzerov1.Tenant) (map[string]bool, error) {
+func buildEnvironmentCRNames(tenant *loopruntimev1.Tenant) (map[string]bool, error) {
 	names := make(map[string]bool, len(tenant.Spec.Environments))
 	for _, env := range tenant.Spec.Environments {
 		name, err := naming.EnvironmentCRName(tenant.Name, env.Project, env.Name)
@@ -349,7 +349,7 @@ func buildEnvironmentCRNames(tenant *loopzerov1.Tenant) (map[string]bool, error)
 }
 
 // The EnvironmentController watches these CRs and manages namespaces/RBAC/NetworkPolicy.
-func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *loopzerov1.Tenant) error {
+func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *loopruntimev1.Tenant) error {
 	logger := log.FromContext(ctx)
 
 	// Build the desired set of Environment CR names from spec.
@@ -377,7 +377,7 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 			return fmt.Errorf("invalid namespace name for env %s: %w", env.Name, err)
 		}
 
-		envCR := &loopzerov1.Environment{
+		envCR := &loopruntimev1.Environment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      envCRName,
 				Namespace: tenant.Namespace,
@@ -394,8 +394,8 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 			envCR.Spec.Project = env.Project
 			envCR.Spec.Namespace.Name = nsName
 			envCR.Spec.Plan = tenant.Spec.Plan
-			envCR.Spec.NetworkPolicy = loopzerov1.NetworkPolicyConfig{Isolate: true}
-			envCR.Spec.ResourceQuota = &loopzerov1.ResourceQuotaSpec{
+			envCR.Spec.NetworkPolicy = loopruntimev1.NetworkPolicyConfig{Isolate: true}
+			envCR.Spec.ResourceQuota = &loopruntimev1.ResourceQuotaSpec{
 				CPU:     tenant.Spec.Limits.MaxCPU.String(),
 				Memory:  tenant.Spec.Limits.MaxMemory.String(),
 				Storage: tenant.Spec.Limits.MaxStorage.String(),
@@ -420,7 +420,7 @@ func (r *TenantReconciler) reconcileEnvironmentCRs(ctx context.Context, tenant *
 	// GC: delete Environment CRs owned by this tenant that are no longer in spec.
 	// The EnvironmentController's finalizer handles namespace/RBAC/quota cleanup
 	// when its CR is deleted, so we only need to trigger the delete here.
-	var envList loopzerov1.EnvironmentList
+	var envList loopruntimev1.EnvironmentList
 	if err := r.List(ctx, &envList, client.InNamespace(tenant.Namespace)); err != nil {
 		return fmt.Errorf("gc: list environments: %w", err)
 	}
@@ -474,7 +474,7 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 	// Spec.TenantID, ensuring the ArgoCD App appears within one reconcile
 	// of the CR being Active.
 	mapPreviewToTenant := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-		pe, ok := obj.(*loopzerov1.PreviewEnvironment)
+		pe, ok := obj.(*loopruntimev1.PreviewEnvironment)
 		if !ok || pe.Spec.TenantID == "" {
 			return nil
 		}
@@ -485,9 +485,9 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 	})
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.Tenant{}, reconcileloop.ForOption()).
-		Owns(&loopzerov1.Environment{}).
-		Watches(&loopzerov1.PreviewEnvironment{}, mapPreviewToTenant).
+		For(&loopruntimev1.Tenant{}, reconcileloop.ForOption()).
+		Owns(&loopruntimev1.Environment{}).
+		Watches(&loopruntimev1.PreviewEnvironment{}, mapPreviewToTenant).
 		Named("tenant").
 		WithOptions(crcontroller.Options{MaxConcurrentReconciles: maxConcurrent}).
 		Complete(&TenantReconciler{
@@ -509,7 +509,7 @@ func SetupTenantController(mgr ctrl.Manager, gitProvisioner gitea.GitRepoProvisi
 // kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
 // with a merge patch off base, so every write carries a Ready condition that
 // agrees with the conditions written beside it.
-func (r *TenantReconciler) patchStatus(ctx context.Context, tenant, base *loopzerov1.Tenant) error {
+func (r *TenantReconciler) patchStatus(ctx context.Context, tenant, base *loopruntimev1.Tenant) error {
 	conditions.SetReadinessSummaryViaPkg(&tenant.Status.Conditions, tenant.Generation, r.requiredProvisioningConditions())
 	return r.Status().Patch(ctx, tenant, client.MergeFrom(base))
 }

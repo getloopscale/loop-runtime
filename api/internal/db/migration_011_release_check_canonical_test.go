@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Migration 000011 regression test — text-level invariants.
 // Closes find_data_001 (CRITICAL) + find_data_002 (CRITICAL) regression

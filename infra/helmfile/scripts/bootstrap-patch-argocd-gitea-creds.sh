@@ -8,7 +8,7 @@
 #
 # Problem:
 #   generate-secrets.sh creates `gitea-credentials-template` with a
-#   random GITEA_TOKEN and username `loopzero` (org name, not user). When
+#   random GITEA_TOKEN and username `loopruntime` (org name, not user). When
 #   ArgoCD picks this template (URL prefix matches), HTTP basic auth
 #   to Gitea fails with 401. provision-api-tokens.sh creates
 #   `argocd-creds-gitea` with the real registered token and username
@@ -27,7 +27,7 @@
 
 set -euo pipefail
 
-CONTEXT="${KUBECONTEXT:-k3d-loopzero-core}"
+CONTEXT="${KUBECONTEXT:-k3d-loopruntime-core}"
 
 REAL_PWD=$(kubectl --context "$CONTEXT" -n argocd get secret argocd-creds-gitea -o jsonpath='{.data.password}' 2>/dev/null | base64 -d)
 REAL_USER=$(kubectl --context "$CONTEXT" -n argocd get secret argocd-creds-gitea -o jsonpath='{.data.username}' 2>/dev/null | base64 -d)

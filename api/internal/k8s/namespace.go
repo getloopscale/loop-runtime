@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package k8s
 
-// ControlPlaneNamespace is the one namespace every loopzero.io CR lives in.
+// ControlPlaneNamespace is the one namespace every runtime.getloopscale.com CR lives in.
 //
 // It is an ADDRESS, not a policy. Both k8s/tenancy and k8s/workload write CRs
 // there, so it belongs to the plumbing they share rather than to either of them —
@@ -15,4 +15,4 @@ package k8s
 // from a second reader disagreeing with the first. Its guards are
 // k8s/tenancy/tenant_namespace_const_test.go and
 // infra/tests/config/regression_adr_test.go.
-const ControlPlaneNamespace = "loopzero-system"
+const ControlPlaneNamespace = "loopruntime-system"

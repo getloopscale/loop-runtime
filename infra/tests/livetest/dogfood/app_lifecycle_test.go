@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package dogfood
 
@@ -55,7 +55,7 @@ func TestProbeAppBundle_CarriesTheAppAndItsManifest(t *testing.T) {
 
 	entries := bundleEntries(t, bundle)
 
-	for _, name := range []string{"package.json", "package-lock.json", "server.js", ".loopzero/services.json"} {
+	for _, name := range []string{"package.json", "package-lock.json", "server.js", ".loopruntime/services.json"} {
 		if entries[name] == "" {
 			t.Errorf("the bundle has no %s; it has %v", name, keysOf(entries))
 		}
@@ -140,7 +140,7 @@ func TestProbeAppManifest_NamesTheProjectItIsDeployedTo(t *testing.T) {
 		t.Fatalf("ProbeAppBundle: %v", err)
 	}
 
-	for where, raw := range map[string]string{"the upload's manifest": string(manifest), "the bundle's manifest": bundleEntries(t, bundle)[".loopzero/services.json"]} {
+	for where, raw := range map[string]string{"the upload's manifest": string(manifest), "the bundle's manifest": bundleEntries(t, bundle)[".loopruntime/services.json"]} {
 		var parsed struct {
 			Project  string           `json:"project"`
 			Services []map[string]any `json:"services"`
@@ -441,7 +441,7 @@ func TestRolloutReplicas_FailsWhenNoCellHasTheRollout(t *testing.T) {
 }
 
 func TestTenantNamespace_IsTheEnvironmentsNamespaceOnTheCell(t *testing.T) {
-	if got := TenantNamespace("tn-550e0845313d5feb", "loop-app", "production"); got != "loopzero-tn-550e0845313d5feb-loop-app-production" {
+	if got := TenantNamespace("tn-550e0845313d5feb", "loop-app", "production"); got != "loopruntime-tn-550e0845313d5feb-loop-app-production" {
 		t.Errorf("TenantNamespace = %s", got)
 	}
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metering
 
@@ -47,7 +47,7 @@ type cellPodLister struct {
 // slice — that would advance the cursor over an unmeasured interval). EC-9:
 // single-page List; the tenant namespace pod count is small, so paging (limit /
 // continue) is deferred to the ADR-11 informer migration keyed off the
-// loopzero_metering_pass_duration_seconds ceiling.
+// loopruntime_metering_pass_duration_seconds ceiling.
 func (l *cellPodLister) ListPods(ctx context.Context, namespace string) ([]corev1.Pod, error) {
 	list, err := l.client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {

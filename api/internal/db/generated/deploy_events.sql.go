@@ -33,7 +33,7 @@ type InsertDeployEventParams struct {
 //
 // J-16 Settings slice 3 foundation (MEET-2026-07-03-005, Option C). The ENGINE
 // emits one row per terminal deploy transition, INSIDE the release-activation /
-// build-failed tx (atomic event capture). loopzero-cloud drains + fans out; the
+// build-failed tx (atomic event capture). loopruntime-cloud drains + fans out; the
 // engine never reads this table (the drain is a cloud-side, cross-tenant system
 // query, not an engine sqlc query), so no ListDeployEvents lives here.
 //

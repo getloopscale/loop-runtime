@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 // SD-15.8 (infrastructure system-design audit, 2026-09-07, as corrected).
 //
 // The audit first reported that source bundles were never expired. That was
-// false: infra/helm/minio/lifecycle-job.yaml expires the loopzero-builds bucket at
+// false: infra/helm/minio/lifecycle-job.yaml expires the loopruntime-builds bucket at
 // 30 days, applied by `task infra:install:core`.
 //
 // What survived the correction is narrower and real. That ILM rule is applied

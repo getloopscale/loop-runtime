@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -12,22 +12,22 @@ const stagingManifestSample = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: versioned-app-api
-  namespace: loopzero-tn-e2etest-myproject-staging
+  namespace: loopruntime-tn-e2etest-myproject-staging
   labels:
     app: versioned-app-api
-    loopzero.io/environment: staging
-    loopzero.io/tenant: tn-e2etest
+    runtime.getloopscale.com/environment: staging
+    runtime.getloopscale.com/tenant: tn-e2etest
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: versioned-app-api
-      loopzero.io/environment: staging
+      runtime.getloopscale.com/environment: staging
   template:
     metadata:
       labels:
         app: versioned-app-api
-        loopzero.io/environment: staging
+        runtime.getloopscale.com/environment: staging
     spec:
       containers:
         - name: app
@@ -37,11 +37,11 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: versioned-app-api
-  namespace: loopzero-tn-e2etest-myproject-staging
+  namespace: loopruntime-tn-e2etest-myproject-staging
 spec:
   routes:
     - kind: Rule
-      match: Host(` + "`" + `tn-e2etest-versioned-app-api-staging.loopzero.local` + "`" + `)
+      match: Host(` + "`" + `tn-e2etest-versioned-app-api-staging.loopruntime.local` + "`" + `)
       services:
         - name: versioned-app-api
           port: 80
@@ -50,10 +50,10 @@ spec:
 // CHG-2026-04-29-DOGFOOD-REAL-E2E iter 13 — promote cross-env rewrite
 // regression. Without rewriting, the production ArgoCD App ends up
 // reporting resources in the staging namespace because the manifest body
-// hardcodes namespace, hostname suffix and loopzero.io/environment label.
+// hardcodes namespace, hostname suffix and runtime.getloopscale.com/environment label.
 func TestRewriteManifestsForEnv_RewritesNamespaceHostAndLabel(t *testing.T) {
 	// Empty projectID == legacy call site / pre-refactor fixture (the
-	// stagingManifestSample uses the old "loopzero-{tenant}-{env}" format).
+	// stagingManifestSample uses the old "loopruntime-{tenant}-{env}" format).
 	// The rewriter anchors on the canonical namespace (tenant, project, env). The
 	// legacy two-segment candidate was deleted together with the empty-projectID fallback.
 	out, err := rewriteManifestsForEnv(
@@ -62,16 +62,16 @@ func TestRewriteManifestsForEnv_RewritesNamespaceHostAndLabel(t *testing.T) {
 		"myproject",
 		"staging",
 		"production",
-		"loopzero.local",
+		"loopruntime.local",
 	)
 	if err != nil {
 		t.Fatalf("rewriteManifestsForEnv failed: %v", err)
 	}
 
 	mustContain := []string{
-		"namespace: loopzero-tn-e2etest-myproject-production",
-		"loopzero.io/environment: production",
-		"tn-e2etest-versioned-app-api-production.loopzero.local",
+		"namespace: loopruntime-tn-e2etest-myproject-production",
+		"runtime.getloopscale.com/environment: production",
+		"tn-e2etest-versioned-app-api-production.loopruntime.local",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(out, want) {
@@ -79,9 +79,9 @@ func TestRewriteManifestsForEnv_RewritesNamespaceHostAndLabel(t *testing.T) {
 		}
 	}
 	mustNotContain := []string{
-		"loopzero-tn-e2etest-staging",
-		"loopzero.io/environment: staging",
-		"-staging.loopzero.local",
+		"loopruntime-tn-e2etest-staging",
+		"runtime.getloopscale.com/environment: staging",
+		"-staging.loopruntime.local",
 	}
 	for _, bad := range mustNotContain {
 		if strings.Contains(out, bad) {
@@ -91,8 +91,8 @@ func TestRewriteManifestsForEnv_RewritesNamespaceHostAndLabel(t *testing.T) {
 }
 
 // Sponsor LIVE-caught 2026-06-18 (Staff-level Phase 1 troubleshooting):
-// the canonical namespace format moved from "loopzero-{tenant}-{env}" to
-// "loopzero-{tenant}-{project}-{env}" at the 2026-06-07 multi-project refactor
+// the canonical namespace format moved from "loopruntime-{tenant}-{env}" to
+// "loopruntime-{tenant}-{project}-{env}" at the 2026-06-07 multi-project refactor
 // ("TUDO DEVERIA esta separado por projeto"). The renderer was updated.
 // rewriteManifestsForEnv was NOT — its oldNamespace/newNamespace strings
 // stayed in the legacy format, so the rewriter's exact-match check
@@ -111,23 +111,23 @@ const previewToProductionMultiProjectSample = `apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: sample-app
-  namespace: loopzero-tn-e9bb8ad57e7f3c21-sample-preview-pr-1
+  namespace: loopruntime-tn-e9bb8ad57e7f3c21-sample-preview-pr-1
   labels:
     app: sample-app
-    loopzero.io/environment: preview-pr-1
-    loopzero.io/project: sample
-    loopzero.io/tenant: tn-e9bb8ad57e7f3c21
+    runtime.getloopscale.com/environment: preview-pr-1
+    runtime.getloopscale.com/project: sample
+    runtime.getloopscale.com/tenant: tn-e9bb8ad57e7f3c21
 spec:
   replicas: 2
   selector:
     matchLabels:
       app: sample-app
-      loopzero.io/environment: preview-pr-1
+      runtime.getloopscale.com/environment: preview-pr-1
   template:
     metadata:
       labels:
         app: sample-app
-        loopzero.io/environment: preview-pr-1
+        runtime.getloopscale.com/environment: preview-pr-1
     spec:
       containers:
         - name: app
@@ -137,11 +137,11 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: sample-app
-  namespace: loopzero-tn-e9bb8ad57e7f3c21-sample-preview-pr-1
+  namespace: loopruntime-tn-e9bb8ad57e7f3c21-sample-preview-pr-1
 spec:
   routes:
     - kind: Rule
-      match: Host(` + "`" + `tn-e9bb8ad57e7f3c21-sample-app-preview-pr-1.loopzero.local` + "`" + `)
+      match: Host(` + "`" + `tn-e9bb8ad57e7f3c21-sample-app-preview-pr-1.loopruntime.local` + "`" + `)
       services:
         - name: sample-app
           port: 80
@@ -158,16 +158,16 @@ func TestRewriteManifestsForEnv_MultiProjectCanonicalNamespace(t *testing.T) {
 		"sample",
 		"preview-pr-1",
 		"production",
-		"loopzero.local",
+		"loopruntime.local",
 	)
 	if err != nil {
 		t.Fatalf("rewriteManifestsForEnv failed: %v", err)
 	}
 
 	mustContain := []string{
-		"namespace: loopzero-tn-e9bb8ad57e7f3c21-sample-production",
-		"loopzero.io/environment: production",
-		"tn-e9bb8ad57e7f3c21-sample-app-production.loopzero.local",
+		"namespace: loopruntime-tn-e9bb8ad57e7f3c21-sample-production",
+		"runtime.getloopscale.com/environment: production",
+		"tn-e9bb8ad57e7f3c21-sample-app-production.loopruntime.local",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(out, want) {
@@ -175,9 +175,9 @@ func TestRewriteManifestsForEnv_MultiProjectCanonicalNamespace(t *testing.T) {
 		}
 	}
 	mustNotContain := []string{
-		"loopzero-tn-e9bb8ad57e7f3c21-sample-preview-pr-1",
-		"loopzero.io/environment: preview-pr-1",
-		"-preview-pr-1.loopzero.local",
+		"loopruntime-tn-e9bb8ad57e7f3c21-sample-preview-pr-1",
+		"runtime.getloopscale.com/environment: preview-pr-1",
+		"-preview-pr-1.loopruntime.local",
 	}
 	for _, bad := range mustNotContain {
 		if strings.Contains(out, bad) {
@@ -193,9 +193,9 @@ func TestRewriteManifestsForEnv_NoOps(t *testing.T) {
 		name              string
 		from, to, baseDom string
 	}{
-		{"same env", "staging", "staging", "loopzero.local"},
-		{"empty from", "", "production", "loopzero.local"},
-		{"empty to", "staging", "", "loopzero.local"},
+		{"same env", "staging", "staging", "loopruntime.local"},
+		{"empty from", "", "production", "loopruntime.local"},
+		{"empty to", "staging", "", "loopruntime.local"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -218,17 +218,17 @@ func TestRewriteManifestsForEnv_DoesNotMutateUnrelatedSubstrings(t *testing.T) {
 kind: ConfigMap
 metadata:
   name: app-config
-  namespace: loopzero-tn-e2etest-myproject-staging
+  namespace: loopruntime-tn-e2etest-myproject-staging
 data:
   ENVIRONMENT_NOTE: "this app runs in staging mode"
   WEBSITE_URL: "https://staging.example.com"
 `
-	out, err := rewriteManifestsForEnv(in, "tn-e2etest", "myproject", "staging", "production", "loopzero.local")
+	out, err := rewriteManifestsForEnv(in, "tn-e2etest", "myproject", "staging", "production", "loopruntime.local")
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 	// Namespace MUST change.
-	if !strings.Contains(out, "namespace: loopzero-tn-e2etest-myproject-production") {
+	if !strings.Contains(out, "namespace: loopruntime-tn-e2etest-myproject-production") {
 		t.Errorf("namespace was not rewritten: %s", out)
 	}
 	// Free-form data values that only mention "staging" must NOT change.
@@ -241,12 +241,12 @@ data:
 }
 
 // TestRewriteManifestsForEnv_EmptyProjectIDFailsLoud — the fallback to the two-segment
-// "loopzero-{tenant}-{env}" format was deleted. Measured 2026-08-08: ZERO namespaces in that
+// "loopruntime-{tenant}-{env}" format was deleted. Measured 2026-08-08: ZERO namespaces in that
 // format exist in any cluster, and the promote route always fills ProjectID from the path
 // param. The fallback protected a state that does not exist — and its price was silently
 // rewriting the manifests to a namespace that does not exist, sending the deploy nowhere.
 func TestRewriteManifestsForEnv_EmptyProjectIDFailsLoud(t *testing.T) {
-	_, err := rewriteManifestsForEnv(stagingManifestSample, "tn-e2etest", "", "staging", "production", "loopzero.local")
+	_, err := rewriteManifestsForEnv(stagingManifestSample, "tn-e2etest", "", "staging", "production", "loopruntime.local")
 	if err == nil {
 		t.Fatal("an empty projectID must fail loud: rewriting to a two-segment " +
 			"namespace sends the deploy to a namespace that does not exist")

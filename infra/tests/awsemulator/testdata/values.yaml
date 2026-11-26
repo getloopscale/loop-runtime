@@ -1,19 +1,19 @@
-# charts/loopzero-api on the AWS emulator: one replica on an RDS database, no Argo, ArgoCD,
+# charts/loopruntime-api on the AWS emulator: one replica on an RDS database, no Argo, ArgoCD,
 # Gitea, MinIO or other cell. The image is set on the command line.
 replicaCount: 1
 priorityClassName: ""
 service:
   type: NodePort
 config:
-  loopzeroEnv: development
-  loopzeroDisableLegacyLoops: "true"
+  loopruntimeEnv: development
+  loopruntimeDisableLegacyLoops: "true"
   buildKubeContext: build
 secrets:
   create: false
-  existingSecret: loopzero-api-env
+  existingSecret: loopruntime-api-env
 kubeconfig:
   build:
-    existingConfigMap: loopzero-api-build-kubeconfig
+    existingConfigMap: loopruntime-api-build-kubeconfig
 # /api/v1/health/ready also checks ArgoCD and Gitea, which are not installed here, and
 # would keep the pod unready. The test reads the deep check itself.
 readinessProbe:

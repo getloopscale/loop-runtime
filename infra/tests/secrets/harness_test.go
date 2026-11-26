@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package secrets holds the hermetic tests for the OpenBao secret-lifecycle
 // scripts: seeding, rotation, sync checks, the ESO bootstrap, snapshot backup and
@@ -35,7 +35,7 @@ const openbaoScripts = "../../scripts/openbao"
 // fakeProfileEnv names the set of fakes a re-entered binary answers with. Each
 // script under test gets its own profile, because `kubectl get secret` means one
 // thing to the ESO bootstrap and nothing at all to the sync check.
-const fakeProfileEnv = "LOOPZERO_FAKE_PROFILE"
+const fakeProfileEnv = "LOOPRUNTIME_FAKE_PROFILE"
 
 // fakeTool is a stand-in for one CLI. It receives the arguments the script passed
 // and returns the exit code the script sees. It runs in its own process, so it

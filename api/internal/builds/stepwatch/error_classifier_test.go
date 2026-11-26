@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package stepwatch
 
@@ -76,7 +76,7 @@ func TestSuggestionFor_AllClassesHaveText(t *testing.T) {
 	classes := []ErrorClass{
 		ErrorClassOOM, ErrorClassBuildTimeout, ErrorClassImagePullFail,
 		ErrorClassCosignFailed, ErrorClassRegistryAuth, ErrorClassDockerfileLint,
-		ErrorClassLoopZeroYAMLInvalid, ErrorClassCancelledByUser, ErrorClassWorkflowDeleted,
+		ErrorClassLoopRuntimeYAMLInvalid, ErrorClassCancelledByUser, ErrorClassWorkflowDeleted,
 		ErrorClassUnknown,
 	}
 	for _, c := range classes {
@@ -94,20 +94,20 @@ func TestSuggestionFor_UnknownClassFallsBack(t *testing.T) {
 	}
 }
 
-// Red Team loopzero-cloud#123 — the LOOPZERO_YAML_INVALID suggestion (the only
+// Red Team loopruntime-cloud#123 — the LOOPRUNTIME_YAML_INVALID suggestion (the only
 // user-facing string in this map that named a manifest) must guide the
-// customer to the canonical `.loopzero/services.json`, not the legacy
-// `loopzero.yaml`. ErrorClassLoopZeroYAMLInvalid stays as an internal class name
+// customer to the canonical `.loopruntime/services.json`, not the legacy
+// `loopzero.yaml`. ErrorClassLoopRuntimeYAMLInvalid stays as an internal class name
 // (engine-side errors may still mention "loopzero.yaml" during the v2
 // transition; Classify() still matches that substring upstream); the
 // SUGGESTION the dashboard renders is what must be honest.
-func TestSuggestionFor_LoopZeroYAMLInvalid_CanonicalManifest_123(t *testing.T) {
-	got := SuggestionFor(ErrorClassLoopZeroYAMLInvalid)
+func TestSuggestionFor_LoopRuntimeYAMLInvalid_CanonicalManifest_123(t *testing.T) {
+	got := SuggestionFor(ErrorClassLoopRuntimeYAMLInvalid)
 	if strings.Contains(got, "loopzero.yaml") {
 		t.Fatalf("RED #123: suggestion must NOT reference legacy loopzero.yaml; got %q", got)
 	}
-	if !strings.Contains(got, ".loopzero/services.json") {
-		t.Fatalf("RED #123: suggestion MUST reference canonical .loopzero/services.json; got %q", got)
+	if !strings.Contains(got, ".loopruntime/services.json") {
+		t.Fatalf("RED #123: suggestion MUST reference canonical .loopruntime/services.json; got %q", got)
 	}
 }
 

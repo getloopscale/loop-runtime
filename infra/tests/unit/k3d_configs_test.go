@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -83,9 +83,9 @@ func TestK3dClusterNamesAreUnique(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
 	expectedNames := map[string]bool{
-		"loopzero-core":   false,
-		"loopzero-build":  false,
-		"loopzero-cell-0": false,
+		"loopruntime-core":   false,
+		"loopruntime-build":  false,
+		"loopruntime-cell-0": false,
 	}
 
 	for _, cfg := range configs {
@@ -111,9 +111,9 @@ func TestK3dKubeAPIPorts(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
 	expectedPorts := map[string]string{
-		"loopzero-core":   "6443",
-		"loopzero-build":  "6445",
-		"loopzero-cell-0": "6444",
+		"loopruntime-core":   "6443",
+		"loopruntime-build":  "6445",
+		"loopruntime-cell-0": "6444",
 	}
 
 	seen := make(map[string]string) // port -> cluster name
@@ -135,12 +135,12 @@ func TestK3dKubeAPIPorts(t *testing.T) {
 // TestK3dAgentCount enforces the per-cluster agent capacity each cluster
 // actually needs.
 //
-//   - loopzero-core   — 2 agents: hosts CRDs + 4 controllers + ArgoCD + Gitea HA
+//   - loopruntime-core   — 2 agents: hosts CRDs + 4 controllers + ArgoCD + Gitea HA
 //   - Kratos + Hydra + Postgres + Traefik + cert-manager.
 //     1 agent OOM's mid-bootstrap (Achado #131, T5.1 run 4).
-//   - loopzero-build  — 1 agent:  only runs Argo Workflows + BuildKit; concurrency
+//   - loopruntime-build  — 1 agent:  only runs Argo Workflows + BuildKit; concurrency
 //     is bounded by the workflow controller, not node count.
-//   - loopzero-cell-0 — 1 agent: tenant pods scale horizontally, but the
+//   - loopruntime-cell-0 — 1 agent: tenant pods scale horizontally, but the
 //     cluster itself doesn't need a second node for HA in dev.
 //
 // Tightening this beyond actual need wastes ~1.7 GiB RAM per cluster on
@@ -149,9 +149,9 @@ func TestK3dAgentCount(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
 	expected := map[string]int{
-		"loopzero-core":   2,
-		"loopzero-build":  1,
-		"loopzero-cell-0": 1,
+		"loopruntime-core":   2,
+		"loopruntime-build":  1,
+		"loopruntime-cell-0": 1,
 	}
 
 	for _, cfg := range configs {
@@ -170,10 +170,10 @@ func TestK3dAgentCount(t *testing.T) {
 func TestK3dRegistryConfiguration(t *testing.T) {
 	configs := loadK3dConfigs(t)
 
-	expectedRegistry := "k3d-loopzero-registry:5000"
+	expectedRegistry := "k3d-loopruntime-registry:5000"
 	clustersWithRegistry := map[string]bool{
-		"loopzero-core":  true,
-		"loopzero-build": true,
+		"loopruntime-core":  true,
+		"loopruntime-build": true,
 	}
 
 	for _, cfg := range configs {

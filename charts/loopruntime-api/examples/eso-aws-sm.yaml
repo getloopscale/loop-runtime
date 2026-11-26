@@ -1,0 +1,90 @@
+# loopruntime-api secrets via External Secrets Operator -> aws-sm
+# Prereq: ESO installed + backend reachable. Apply: kubectl apply -f eso-aws-sm.yaml
+# Then: helm install loopruntime-api ... --set secrets.existingSecret=loopruntime-api-secrets
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: loopruntime-api-aws-sm
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: !!changeme-region!!
+      auth:
+        jwt:
+          serviceAccountRef:
+            name: loopruntime-api
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: loopruntime-api-secrets
+  namespace: loopruntime-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: loopruntime-api-aws-sm
+    kind: ClusterSecretStore
+  target:
+    name: loopruntime-api-secrets
+    creationPolicy: Owner
+  data:
+    - secretKey: DATABASE_URL
+      remoteRef: { key: "loopruntime/api", property: "database_url" }
+    - secretKey: LOOPRUNTIME_WORKER_DATABASE_URL
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_worker_database_url" }
+    - secretKey: LOOPRUNTIME_API_DATABASE_URL
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_api_database_url" }
+    - secretKey: GITEA_TOKEN
+      remoteRef: { key: "loopruntime/api", property: "gitea_token" }
+    - secretKey: ARGOCD_TOKEN
+      remoteRef: { key: "loopruntime/api", property: "argocd_token" }
+    - secretKey: MINIO_ACCESS_KEY
+      remoteRef: { key: "loopruntime/api", property: "minio_access_key" }
+    - secretKey: MINIO_SECRET_KEY
+      remoteRef: { key: "loopruntime/api", property: "minio_secret_key" }
+    - secretKey: LOOPRUNTIME_ARGO_CALLBACK_SECRET
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_argo_callback_secret" }
+    - secretKey: LOOPRUNTIME_BOOTSTRAP_SECRET
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_bootstrap_secret" }
+    - secretKey: LOOPRUNTIME_SECRET_ENCRYPTION_KEY
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_secret_encryption_key" }
+    - secretKey: OPENBAO_VAULT_ROLE_ID
+      remoteRef: { key: "loopruntime/api", property: "openbao_vault_role_id" }
+    - secretKey: OPENBAO_VAULT_SECRET_ID
+      remoteRef: { key: "loopruntime/api", property: "openbao_vault_secret_id" }
+    - secretKey: CF_API_TOKEN
+      remoteRef: { key: "loopruntime/api", property: "cf_api_token" }
+    - secretKey: CORE_KUBECONFIG
+      remoteRef: { key: "loopruntime/api", property: "mgmt_kubeconfig" }
+    - secretKey: BUILD_KUBECONFIG
+      remoteRef: { key: "loopruntime/api", property: "build_kubeconfig" }
+    - secretKey: CELL_0_KUBECONFIG
+      remoteRef: { key: "loopruntime/api", property: "runtime_kubeconfig" }
+    - secretKey: STRIPE_SECRET_KEY
+      remoteRef: { key: "loopruntime/api", property: "stripe_secret_key" }
+    - secretKey: GITHUB_APP_PRIVATE_KEY
+      remoteRef: { key: "loopruntime/api", property: "github_app_private_key" }
+    - secretKey: GITHUB_WEBHOOK_SECRET
+      remoteRef: { key: "loopruntime/api", property: "github_webhook_secret" }
+    - secretKey: LOOPRUNTIME_ADMIN_API_KEY
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_admin_api_key" }
+    - secretKey: LOOPRUNTIME_ADMIN_API_KEY_PREVIOUS
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_admin_api_key_previous" }
+    - secretKey: LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_admin_service_auth_secret" }
+    - secretKey: LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_admin_service_auth_secret_previous" }
+    - secretKey: LOOPRUNTIME_BROKER_TOKEN
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_broker_token" }
+    - secretKey: LOOPRUNTIME_BROKER_TOKENS
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_broker_tokens" }
+    - secretKey: LOOPRUNTIME_EDGE_ROUTE_TOKEN
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_edge_route_token" }
+    - secretKey: LOOPRUNTIME_SERVICE_AUTH_SECRET
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_service_auth_secret" }
+    - secretKey: LOOPRUNTIME_SERVICE_AUTH_SECRET_PREVIOUS
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_service_auth_secret_previous" }
+    - secretKey: LOOPRUNTIME_SERVICE_AUTH_NONCE_REDIS_PASSWORD
+      remoteRef: { key: "loopruntime/api", property: "loopruntime_service_auth_nonce_redis_password" }

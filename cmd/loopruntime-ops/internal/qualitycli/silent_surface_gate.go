@@ -1,0 +1,63 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 The LoopRuntime Authors
+
+package qualitycli
+
+import (
+	"flag"
+
+	"github.com/getloopscale/loop-runtime/cmd/loopruntime-ops/internal/quality/silentsurface"
+	"github.com/getloopscale/loop-runtime/cmd/loopruntime-ops/internal/quality/verdict"
+)
+
+func init() {
+	register(Gate{
+		Name:    "silent-surface",
+		Summary: "Ratchet: refuses a NEW router surface guarded by `if cfg.X != nil` that does not report whether it was registered (B-104). Baseline may fall, never rise.",
+		Setup:   setupSilentSurface,
+	})
+}
+
+// setupSilentSurface refuses NEW HTTP surfaces that vanish without saying so.
+//
+// The router decides fifty times whether to register a surface and, until B-104,
+// threw every decision away — measured on the droplet as a 404 on the GitHub
+// webhook while /health answered 405, with nothing anywhere reporting it.
+//
+// Converting all fifty in one commit was refused: router.go is the single
+// surface where the route set is read (Unbreakable Rule 5), so an error in any
+// one edit would be indistinguishable from the other forty-nine. This gate does
+// what unhomed-logic does instead — counts the debt and forbids it from growing.
+//
+// Decision: MEET-ASYNC-AMENDMENT-2026-08-16-observable-silent-surfaces
+func setupSilentSurface(fs *flag.FlagSet) Check {
+	// --report lists the debt instead of gating it. Same affordance
+	// `unhomed-logic` carries, and for the same reason: a monotonic baseline is
+	// only actionable if somebody can see WHICH items compose it. Without it the
+	// only way to read the list is to make the gate fail.
+	report := fs.Bool("report", false, "list the mute surfaces (no gate)")
+	return func(inv Invocation) (verdict.Result, error) {
+		v, err := silentsurface.Check(silentsurface.Config{Root: inv.Root})
+		if err != nil {
+			return nil, err
+		}
+		if *report {
+			inv.Stdout.Printf("%d silent surface(s) in %d route guard(s) (baseline %d):\n",
+				len(v.Silent), v.Guarded, v.Baseline)
+			for _, s := range v.Silent {
+				inv.Stdout.Printf("  %s:%d  cfg.%s\n", silentsurface.RouterPath, s.Line, s.Field)
+			}
+			return v, nil
+		}
+		inv.Stdout.Println(v.Summary())
+		if v.Verdict() == verdict.Fail {
+			for _, s := range v.Silent {
+				inv.Stdout.Printf("  %s:%d — cfg.%s registers a route and does not report the decision\n",
+					silentsurface.RouterPath, s.Line, s.Field)
+			}
+			inv.Stderr.Println(silentsurface.ActionableFix)
+			return v, nil
+		}
+		return v, nil
+	}
+}

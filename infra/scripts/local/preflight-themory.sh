@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # preflight-themory.sh — verify all prerequisites for the TheMemory native-process dev loop.
 #
-# Per plan v1.1 § Phase 0 / T0.1 of loopzero-cloud-themory-e2e-finalize-plan.md.
+# Per plan v1.1 § Phase 0 / T0.1 of loopruntime-cloud-themory-e2e-finalize-plan.md.
 # Refuses to proceed if any pre-condition fails (per workflow.md 95% Confidence Rule).
 #
 # Checks (5 total):
@@ -9,18 +9,18 @@
 #   2. PostgreSQL reachable on localhost:5432 via libpq URL (EC-2 portable form)
 #   3. pgvector extension creatable (CREATE EXTENSION IF NOT EXISTS vector)
 #   4. TheMemory CLI built + reachable via THEMORY_CLI env var (EC-1 portable)
-#   5. loopzero-system namespace exists (EC-5 fail-fast)
+#   5. loopruntime-system namespace exists (EC-5 fail-fast)
 #
 # Run BEFORE: bash infra/scripts/local/start-themory.sh
 #
 # Env overrides (operator-customizable):
 #   PGURL          — PostgreSQL connection string (default postgresql://localhost:5432/postgres)
-#   THEMORY_CLI    — path to TheMemory CLI (default $(realpath ../loopzero-memory)/dist/agent-tools/cli.js)
+#   THEMORY_CLI    — path to TheMemory CLI (default $(realpath ../loopruntime-memory)/dist/agent-tools/cli.js)
 
 set -euo pipefail
 
 readonly PGURL="${PGURL:-postgresql://localhost:5432/postgres}"
-readonly THEMORY_CLI="${THEMORY_CLI:-$(realpath -m "$(dirname "${BASH_SOURCE[0]}")/../../../../../loopzero-memory/dist/agent-tools/cli.js")}"
+readonly THEMORY_CLI="${THEMORY_CLI:-$(realpath -m "$(dirname "${BASH_SOURCE[0]}")/../../../../../loopruntime-memory/dist/agent-tools/cli.js")}"
 
 # Color codes for human-readable output
 readonly C_RED='\033[0;31m'
@@ -42,7 +42,7 @@ main() {
   # task doctor's summary line is `PASS: <N>  |  WARN: ...  |  FAIL: ...`
   # Empirical at plan-author's machine 2026-06-07: PASS=35 with cluster missing
   # cells + runtime-2. Adjusted baseline to 30 (above which subsystems required
-  # by THIS plan — PG + loopzero-system ns + loopzero-memory CLI — are reachable; below
+  # by THIS plan — PG + loopruntime-system ns + loopruntime-memory CLI — are reachable; below
   # which something more fundamental is broken).
   local doctor_out
   doctor_out="$(task doctor 2>&1 || true)"
@@ -74,15 +74,15 @@ main() {
 
   # Check 4: TheMemory CLI built + reachable (EC-1 portable)
   if [ ! -f "$THEMORY_CLI" ]; then
-    fail "TheMemory CLI not found at $THEMORY_CLI" "Run 'cd ../loopzero-memory && npm run build' OR set THEMORY_CLI env var to your build path"
+    fail "TheMemory CLI not found at $THEMORY_CLI" "Run 'cd ../loopruntime-memory && npm run build' OR set THEMORY_CLI env var to your build path"
   fi
   pass "TheMemory CLI built: $THEMORY_CLI"
 
-  # Check 5: loopzero-system namespace exists (EC-5 fail-fast)
-  if ! kubectl get ns loopzero-system >/dev/null 2>&1; then
-    fail "loopzero-system namespace missing" "Run 'task setup' to bootstrap K8s namespaces"
+  # Check 5: loopruntime-system namespace exists (EC-5 fail-fast)
+  if ! kubectl get ns loopruntime-system >/dev/null 2>&1; then
+    fail "loopruntime-system namespace missing" "Run 'task setup' to bootstrap K8s namespaces"
   fi
-  pass "loopzero-system namespace exists"
+  pass "loopruntime-system namespace exists"
 
   printf "\n%b✓ All 5 preflight checks passed%b\n" "$C_GREEN" "$C_RESET"
   printf "Next: bash infra/scripts/local/start-themory.sh\n"

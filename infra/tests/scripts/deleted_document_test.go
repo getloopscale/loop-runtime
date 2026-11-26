@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts
 
@@ -24,7 +24,7 @@ import (
 // asserting about the past while the present disagreed.
 //
 // The revision is the parent of the commit that deleted the file, found by asking git
-// rather than written down: the history was rewritten once (the rename to LoopZero), and
+// rather than written down: the history was rewritten once (the rename to LoopRuntime), and
 // every hash a test had pinned stopped existing.
 //
 // Failing loudly when NEITHER answers is the point. This is a fallback for a document that

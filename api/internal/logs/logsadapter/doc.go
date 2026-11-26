@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package logsadapter holds the driven adapters of the build-log feature: the code that satisfies
 // the log handlers' build lookup with persistence, Kubernetes or another feature's service. Only the

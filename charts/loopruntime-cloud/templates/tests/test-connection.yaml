@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "loopruntime-common.fullname" . }}-test-connection"
+  labels:
+    {{- include "loopruntime-common.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+    - name: curl
+      # Pinned by digest, not by tag: a tag is mutable in the registry, and the next
+      # `helm test` would pull different content under the same name. Pinning here does
+      # not age — the third-party version was already pinned (8.7.1), so the digest
+      # does not move either. Resolved with `docker buildx imagetools inspect` on
+      # 2026-08-17 (B-119).
+      image: curlimages/curl@sha256:25d29daeb9b14b89e2fa8cc17c70e4b188bca1466086907c2d9a4b56b59d8e21
+      command:
+        - sh
+        - -c
+        - |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --timeout 10 \
+            "http://{{ include "loopruntime-common.fullname" . }}:{{ .Values.service.port }}/health")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "FAIL: /health returned $HTTP_CODE (expected 200)"
+            exit 1
+          fi
+          echo "PASS: health check returned 200"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+  restartPolicy: Never
+  automountServiceAccountToken: false

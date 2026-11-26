@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package aggregator
 
@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// LokiMarker represents one ::loopzero:: marker log line surfaced by the
+// LokiMarker represents one ::loopruntime:: marker log line surfaced by the
 // Loki query (workload+build clusters). The adapter is decoupled from
 // the HTTP client behind LokiQuerier.
 type LokiMarker struct {

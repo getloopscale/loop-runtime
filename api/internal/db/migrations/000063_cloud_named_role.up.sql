@@ -1,8 +1,8 @@
 -- A named, auditable role for the control plane — replacing an implicit owner bypass.
 --
--- loopzero-cloud shares this database with the engine ("The cloud service shares the
+-- loopruntime-cloud shares this database with the engine ("The cloud service shares the
 -- database with the engine API. It does NOT run migrations", cmd/main.go:359) and
--- connects as `loopzero` — the OWNER. That predates migration 000062 and survives it,
+-- connects as `loopruntime` — the OWNER. That predates migration 000062 and survives it,
 -- because 000062 gave the owner a maintenance policy so migrations keep working.
 --
 -- The result is that the control plane reads every tenant, and does so through a
@@ -11,7 +11,7 @@
 --
 -- WHAT THIS CHANGES, AND WHAT IT DOES NOT
 --
--- It changes WHO and HOW VISIBLY, not HOW MUCH. `loopzero_cloud` gets the same
+-- It changes WHO and HOW VISIBLY, not HOW MUCH. `loopruntime_cloud` gets the same
 -- cross-tenant reach the owner already had — the control plane genuinely needs
 -- it: listing an account's tenants, aggregating billing, evaluating alerts
 -- across workspaces. What improves is that the reach is now
@@ -31,11 +31,11 @@
 -- on the cross-tenant routes and read as an outage.
 --
 -- So: this is a real reduction in blast radius and a real gain in auditability.
--- It is not tenant isolation for loopzero-cloud, and calling it that would misreport
+-- It is not tenant isolation for loopruntime-cloud, and calling it that would misreport
 -- the posture.
 --
 -- OPERATIONAL PRE-CONDITION: after applying this, point the control plane's
--- DATABASE_URL at `loopzero_cloud`. Until that happens it still runs as the owner
+-- DATABASE_URL at `loopruntime_cloud`. Until that happens it still runs as the owner
 -- and none of the above applies — db.AssertControlPlaneRole refuses to boot on
 -- the owner so the gap cannot pass unnoticed.
 
@@ -43,11 +43,11 @@ BEGIN;
 
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'loopzero_cloud') THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'loopruntime_cloud') THEN
         BEGIN
-            CREATE ROLE loopzero_cloud WITH LOGIN PASSWORD NULL NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+            CREATE ROLE loopruntime_cloud WITH LOGIN PASSWORD NULL NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
         EXCEPTION WHEN insufficient_privilege THEN
-            RAISE NOTICE 'could not create loopzero_cloud — runner lacks CREATEROLE (expected in local dev)';
+            RAISE NOTICE 'could not create loopruntime_cloud — runner lacks CREATEROLE (expected in local dev)';
         END;
     END IF;
 END $$;
@@ -63,25 +63,25 @@ DECLARE
         'metering_cursor', 'preview_environments', 'preview_slot',
         'project_repositories', 'projects', 'release_app_attestations',
         'releases', 'secrets', 'subscriptions', 'tenant_members',
-        'tenant_tombstones', 'tenants_pending_deletion', 'loopzero_api_keys',
+        'tenant_tombstones', 'tenants_pending_deletion', 'loopruntime_api_keys',
         'usage_records', 'workspace_webhook_deliveries', 'workspace_webhooks',
         'tenants'
     ];
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'loopzero_cloud') THEN
-        RAISE NOTICE 'loopzero_cloud absent — skipping its policies';
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'loopruntime_cloud') THEN
+        RAISE NOTICE 'loopruntime_cloud absent — skipping its policies';
         RETURN;
     END IF;
 
-    -- current_database(), not a literal: the database is named `loopzero` in
+    -- current_database(), not a literal: the database is named `loopruntime` in
     -- production and something else in every CI job and audit replay. A
-    -- hardcoded name makes the migration fail with `database "loopzero" does not
+    -- hardcoded name makes the migration fail with `database "loopruntime" does not
     -- exist` exactly where the isolation is being measured.
-    EXECUTE format('GRANT CONNECT ON DATABASE %I TO loopzero_cloud', current_database());
-    EXECUTE 'GRANT USAGE ON SCHEMA public TO loopzero_cloud';
-    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO loopzero_cloud';
-    EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO loopzero_cloud';
-    EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO loopzero_cloud';
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO loopruntime_cloud', current_database());
+    EXECUTE 'GRANT USAGE ON SCHEMA public TO loopruntime_cloud';
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO loopruntime_cloud';
+    EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO loopruntime_cloud';
+    EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO loopruntime_cloud';
 
     FOREACH t IN ARRAY tenant_tables LOOP
         IF NOT EXISTS (
@@ -94,7 +94,7 @@ BEGIN
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_cloud_cross_tenant', t);
         EXECUTE format($f$
             CREATE POLICY %I ON public.%I
-              TO loopzero_cloud
+              TO loopruntime_cloud
               USING (true) WITH CHECK (true)
         $f$, t || '_cloud_cross_tenant', t);
     END LOOP;

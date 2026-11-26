@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environments
 
@@ -47,7 +47,7 @@ type ReadinessSnapshotStore interface {
 
 // ReadinessPoller records, per environment target, how many replicas the data
 // plane is serving, so the dashboard's project badge can tell a deploy that
-// is ACTIVE and serving from one that is ACTIVE and down (loopzero-cloud#128).
+// is ACTIVE and serving from one that is ACTIVE and down (loopruntime-cloud#128).
 //
 // It lives in the api because the api owns environment_targets: the
 // app-operator used to run it and write the table through raw SQL over a

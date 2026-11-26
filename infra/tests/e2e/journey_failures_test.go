@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 10: Failure Modes
 //
@@ -24,8 +24,8 @@ var _ = Describe("Journey 10: Failure Modes", Label("journey"), func() {
 		It("returns exit code 4 for invalid token", func() {
 			skipIfNotE2E()
 
-			stdout, stderr, exitCode := execLoopZero(
-				loopzeroInvocation{env: []string{"LOOPZERO_TOKEN=garbage-not-a-real-jwt"}},
+			stdout, stderr, exitCode := execLoopRuntime(
+				loopruntimeInvocation{env: []string{"LOOPRUNTIME_TOKEN=garbage-not-a-real-jwt"}},
 				"whoami", "--json")
 
 			Expect(exitCode).To(Equal(4),
@@ -62,7 +62,7 @@ var _ = Describe("Journey 10: Failure Modes", Label("journey"), func() {
 		})
 
 		It("submits deploy and build fails", func() {
-			stdout, stderr, exitCode := runLoopZeroDeploy(workDir, "--env", "production", "--no-wait", "--json")
+			stdout, stderr, exitCode := runLoopRuntimeDeploy(workDir, "--env", "production", "--no-wait", "--json")
 
 			// Deploy submission should succeed (exit 0) since --no-wait.
 			Expect(exitCode).To(Equal(0),
@@ -89,7 +89,7 @@ var _ = Describe("Journey 10: Failure Modes", Label("journey"), func() {
 		})
 
 		It("status output has no internal terms", func() {
-			stdout, stderr, exitCode := runLoopZeroInDir(workDir, "status", "--env", "production")
+			stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "status", "--env", "production")
 
 			expectAllowedExitCode(exitCode, "status after failed build")
 			assertNoForbiddenTermsInAll(map[string]string{

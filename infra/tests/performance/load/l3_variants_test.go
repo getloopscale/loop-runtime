@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // CHG-2026-04-28-LAYERED-BOOTSTRAP — T8.3 + iter 17
 // L3 test variants for regression coverage:
@@ -29,24 +29,24 @@ import (
 // HTTP 200. Covers B11 (gitops archived) + B17 (repo-server cache stale after
 // delete+recreate).
 func TestRealDeploy_L3RealisticWithChurn(t *testing.T) {
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
-	level := os.Getenv("LOOPZERO_LOAD_LEVEL")
+	level := os.Getenv("LOOPRUNTIME_LOAD_LEVEL")
 	if level != "l3-churn" && level != "all" {
-		t.Skip("set LOOPZERO_LOAD_LEVEL=l3-churn or all")
+		t.Skip("set LOOPRUNTIME_LOAD_LEVEL=l3-churn or all")
 	}
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
-	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
-	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
+	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
+	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
 	if apiURL == "" || appDomain == "" || serviceAuth == "" {
-		t.Fatal("LOOPZERO_API_URL, LOOPZERO_APP_DOMAIN, LOOPZERO_SERVICE_AUTH required")
+		t.Fatal("LOOPRUNTIME_API_URL, LOOPRUNTIME_APP_DOMAIN, LOOPRUNTIME_SERVICE_AUTH required")
 	}
 
 	const tenantCount = 100
 	churnPct := 10
-	if v := os.Getenv("LOOPZERO_CHURN_PCT"); v != "" {
+	if v := os.Getenv("LOOPRUNTIME_CHURN_PCT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n < 100 {
 			churnPct = n
 		}
@@ -60,7 +60,7 @@ func TestRealDeploy_L3RealisticWithChurn(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/dogfood-monorepo"),
+		FixturePath: envOr("LOOPRUNTIME_FIXTURE_PATH", "../../e2e/fixtures/dogfood-monorepo"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -145,19 +145,19 @@ func TestRealDeploy_L3RealisticWithChurn(t *testing.T) {
 // same tenant. Validates Rule 6 (concurrent-build rejection): exactly 1 build
 // must succeed, 9 must return 409 Conflict. Detects B-C git push race.
 func TestRealDeploy_L3NoisyNeighbor(t *testing.T) {
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
-	level := os.Getenv("LOOPZERO_LOAD_LEVEL")
+	level := os.Getenv("LOOPRUNTIME_LOAD_LEVEL")
 	if level != "l3-noisy" && level != "all" {
-		t.Skip("set LOOPZERO_LOAD_LEVEL=l3-noisy or all")
+		t.Skip("set LOOPRUNTIME_LOAD_LEVEL=l3-noisy or all")
 	}
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
-	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
-	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
+	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
+	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
 	if apiURL == "" || appDomain == "" || serviceAuth == "" {
-		t.Fatal("LOOPZERO_API_URL, LOOPZERO_APP_DOMAIN, LOOPZERO_SERVICE_AUTH required")
+		t.Fatal("LOOPRUNTIME_API_URL, LOOPRUNTIME_APP_DOMAIN, LOOPRUNTIME_SERVICE_AUTH required")
 	}
 
 	const concurrency = 10
@@ -168,7 +168,7 @@ func TestRealDeploy_L3NoisyNeighbor(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/dogfood-monorepo"),
+		FixturePath: envOr("LOOPRUNTIME_FIXTURE_PATH", "../../e2e/fixtures/dogfood-monorepo"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)

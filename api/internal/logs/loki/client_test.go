@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package loki
 
@@ -10,11 +10,11 @@ import (
 
 // TestBuildRuntimeLogQL_M2CanonicalAndLegacyMatched — T2.2 of plan
 // 2026-06-11-code-review-remediation. Post-M2 (2026-06-09) the canonical
-// namespace formula is `loopzero-{tenant}-{project}-{env}` per
+// namespace formula is `loopruntime-{tenant}-{project}-{env}` per
 // pkg/naming.Namespace (sponsor verbatim 2026-06-07, meaning "EVERYTHING
 // SHOULD be separated by project": "TUDO DEVERIA esta separado por projeto"). // english-only: verbatim sponsor quote, kept as evidence
 // The Loki client was emitting the legacy
-// 3-segment form `loopzero-{tenant}-{env}`, so logs for any M2-shaped
+// 3-segment form `loopruntime-{tenant}-{env}`, so logs for any M2-shaped
 // namespace silently disappeared from /logs queries.
 //
 // T2.2.a backward-compat: the LogQL selector MUST cover BOTH shapes via
@@ -26,8 +26,8 @@ func TestBuildRuntimeLogQL_M2CanonicalAndLegacyMatched(t *testing.T) {
 		t.Fatalf("legacy form rejected: %v", err)
 	}
 	// Anchored regex `^(M2|legacy)$` avoids prefix collisions with other
-	// namespaces (e.g. `loopzero-tn-acme-production-canary`).
-	want := `{namespace="loopzero-tn-acme-my-project-production", container=~".+"}`
+	// namespaces (e.g. `loopruntime-tn-acme-production-canary`).
+	want := `{namespace="loopruntime-tn-acme-my-project-production", container=~".+"}`
 	if got != want {
 		t.Errorf("LogQL drift (T2.2 + T2.2.a):\n  got:  %q\n  want: %q", got, want)
 	}
@@ -41,7 +41,7 @@ func TestBuildRuntimeLogQL_FiveSegmentFormWithApp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("5-segment form rejected: %v", err)
 	}
-	want := `{namespace="loopzero-tn-acme-my-project-production", app="web", container=~".+"}`
+	want := `{namespace="loopruntime-tn-acme-my-project-production", app="web", container=~".+"}`
 	if got != want {
 		t.Errorf("5-segment LogQL drift:\n  got:  %q\n  want: %q", got, want)
 	}
@@ -60,14 +60,14 @@ func TestBuildRuntimeLogQL_FiveSegmentFormWithEmptyApp(t *testing.T) {
 	if strings.Contains(got, `app=""`) {
 		t.Errorf("empty app must not produce an empty filter clause: %q", got)
 	}
-	want := `{namespace="loopzero-tn-acme-my-project-production", container=~".+"}`
+	want := `{namespace="loopruntime-tn-acme-my-project-production", container=~".+"}`
 	if got != want {
 		t.Errorf("empty-app LogQL drift:\n  got:  %q\n  want: %q", got, want)
 	}
 }
 
 // TestBuildRuntimeLogQL_M2CanonicalShapeIsCorrect_T22 — direct assertion
-// that the M2 form `loopzero-{tenant}-{project}-{env}` is the FIRST
+// that the M2 form `loopruntime-{tenant}-{project}-{env}` is the FIRST
 // alternative in the regex (so an exact equality on canonical
 // namespaces is fast-path-matched by Loki before falling through to
 // the legacy alternative).
@@ -77,7 +77,7 @@ func TestBuildRuntimeLogQL_M2CanonicalShapeIsCorrect_T22(t *testing.T) {
 		t.Fatalf("regression: %v", err)
 	}
 	// Canonical M2 namespace must be the FIRST alternative.
-	expectedM2 := "loopzero-tn-x-my-frontend-staging-eu-1"
+	expectedM2 := "loopruntime-tn-x-my-frontend-staging-eu-1"
 	if !strings.Contains(got, expectedM2) {
 		t.Errorf("expected M2 namespace %q in LogQL: got %q", expectedM2, got)
 	}
@@ -85,7 +85,7 @@ func TestBuildRuntimeLogQL_M2CanonicalShapeIsCorrect_T22(t *testing.T) {
 	// default 168h retention (only secrets-system has the 90-day stream) and the M2 rename
 	// dates from 2026-06-12 — those logs expired weeks ago. The selector must be an exact
 	// match, and must not reintroduce the old form.
-	deletedLegacy := `"loopzero-tn-x-staging-eu-1"`
+	deletedLegacy := `"loopruntime-tn-x-staging-eu-1"`
 	if strings.Contains(got, deletedLegacy) {
 		t.Errorf("the legacy two-segment selector is back: %q", got)
 	}

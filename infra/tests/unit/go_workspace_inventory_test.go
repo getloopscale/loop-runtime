@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // B-170: every module on disk must be listed in `go.work`.
 //
@@ -29,7 +29,7 @@
 // itself instead of being absorbed as a green run.
 //
 // Scope: modules INSIDE this repository. `use` entries that leave the repo
-// (`../loopzero-contracts`) belong to a sibling repo with its own gates and are
+// (`../loopruntime-contracts`) belong to a sibling repo with its own gates and are
 // deliberately not audited from here.
 //
 // KNOWN TENSION, recorded rather than silently settled. Two taskfile comments

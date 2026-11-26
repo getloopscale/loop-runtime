@@ -68,4 +68,4 @@ securityContext:
 
 # C8: PriorityClass lower than core platform services (PG, ArgoCD, API, operators)
 # Telemetry is first-to-shed under resource pressure.
-# priorityClassName: loopzero-observability  # Uncomment when PriorityClass is created
+# priorityClassName: loopruntime-observability  # Uncomment when PriorityClass is created

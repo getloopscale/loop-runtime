@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Audit gap M08 #18 / §6.C.4b — regression suite for the Loki cross-cluster
 // push URL wiring.

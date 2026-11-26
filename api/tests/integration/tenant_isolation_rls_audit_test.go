@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Tenant isolation — the enforcement contract.
 //
@@ -18,18 +18,18 @@
 // Three roles, three different jobs — the tests use the same split as production:
 //
 //	DATABASE_URL              owner        DDL and fixtures only, never a request
-//	LOOPZERO_API_DATABASE_URL     loopzero_api     the HTTP request path — must be isolated
-//	LOOPZERO_WORKER_DATABASE_URL  loopzero_worker  background loops — cross-tenant by policy
+//	LOOPRUNTIME_API_DATABASE_URL     loopruntime_api     the HTTP request path — must be isolated
+//	LOOPRUNTIME_WORKER_DATABASE_URL  loopruntime_worker  background loops — cross-tenant by policy
 //
-// Set LOOPZERO_RLS_AUDIT_REQUIRE=1 (CI, compliance runs) and a missing database or
+// Set LOOPRUNTIME_RLS_AUDIT_REQUIRE=1 (CI, compliance runs) and a missing database or
 // missing DSN is a FAILURE, not a skip. A control that reports green because it
 // did not run is worse than no control: it produces an audit artefact asserting
 // a property nobody measured.
 //
-//	DATABASE_URL=postgres://loopzero:loopzero@localhost:55432/loopzero_test?sslmode=disable \
-//	LOOPZERO_API_DATABASE_URL=postgres://loopzero_api:x@localhost:55432/loopzero_test?sslmode=disable \
-//	LOOPZERO_WORKER_DATABASE_URL=postgres://loopzero_worker:w@localhost:55432/loopzero_test?sslmode=disable \
-//	LOOPZERO_RLS_AUDIT_REQUIRE=1 \
+//	DATABASE_URL=postgres://loopruntime:loopruntime@localhost:55432/loopruntime_test?sslmode=disable \
+//	LOOPRUNTIME_API_DATABASE_URL=postgres://loopruntime_api:x@localhost:55432/loopruntime_test?sslmode=disable \
+//	LOOPRUNTIME_WORKER_DATABASE_URL=postgres://loopruntime_worker:w@localhost:55432/loopruntime_test?sslmode=disable \
+//	LOOPRUNTIME_RLS_AUDIT_REQUIRE=1 \
 //	go test ./tests/integration/ -run TenantIsolation -count=1 -v
 package integration
 
@@ -46,9 +46,9 @@ import (
 )
 
 // auditRequired reports whether a missing database must fail instead of skip.
-func auditRequired() bool { return os.Getenv("LOOPZERO_RLS_AUDIT_REQUIRE") == "1" }
+func auditRequired() bool { return os.Getenv("LOOPRUNTIME_RLS_AUDIT_REQUIRE") == "1" }
 
-// auditPool opens the DSN in envVar, or fails/skips per LOOPZERO_RLS_AUDIT_REQUIRE.
+// auditPool opens the DSN in envVar, or fails/skips per LOOPRUNTIME_RLS_AUDIT_REQUIRE.
 func auditPool(t *testing.T, envVar, role string) (context.Context, *pgxpool.Pool) {
 	t.Helper()
 
@@ -57,12 +57,12 @@ func auditPool(t *testing.T, envVar, role string) (context.Context, *pgxpool.Poo
 		if envVar == "DATABASE_URL" {
 			dsn = dbURL() // shared default with the rest of the suite
 		} else if auditRequired() {
-			t.Fatalf("LOOPZERO_RLS_AUDIT_REQUIRE=1 but %s is unset — the %s path would go unmeasured", envVar, role)
+			t.Fatalf("LOOPRUNTIME_RLS_AUDIT_REQUIRE=1 but %s is unset — the %s path would go unmeasured", envVar, role)
 		} else {
 			// Skipped when the role's DSN is absent, which is the honest answer —
 			// but it means this compliance evidence is NOT collected by default.
 			// Tracked: https://github.com/getloopscale/loop-runtime/issues/289
-			t.Skipf("%s not set — %s path skipped (set LOOPZERO_RLS_AUDIT_REQUIRE=1 to make this a failure)", envVar, role)
+			t.Skipf("%s not set — %s path skipped (set LOOPRUNTIME_RLS_AUDIT_REQUIRE=1 to make this a failure)", envVar, role)
 		}
 	}
 
@@ -76,7 +76,7 @@ func auditPool(t *testing.T, envVar, role string) (context.Context, *pgxpool.Poo
 	}
 	if err != nil {
 		if auditRequired() {
-			t.Fatalf("LOOPZERO_RLS_AUDIT_REQUIRE=1 and the %s connection failed: %v\n"+
+			t.Fatalf("LOOPRUNTIME_RLS_AUDIT_REQUIRE=1 and the %s connection failed: %v\n"+
 				"This test is compliance evidence — a skip here would report a tenant-isolation "+
 				"control as green without measuring it.", role, err)
 		}
@@ -246,7 +246,7 @@ func visibleTenants(t *testing.T, ctx context.Context, pool *pgxpool.Pool, asTen
 // role would be theatre, which is precisely how the previous control passed.
 func requestPool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
-	ctx, pool := auditPool(t, "LOOPZERO_API_DATABASE_URL", "request path (loopzero_api)")
+	ctx, pool := auditPool(t, "LOOPRUNTIME_API_DATABASE_URL", "request path (loopruntime_api)")
 	posture := measurePosture(t, ctx, pool)
 	if !posture.canBeIsolated() {
 		t.Fatalf("the request-path role cannot be isolated: %s\n"+
@@ -345,7 +345,7 @@ func TestTenantIsolation_CannotWriteForAnotherTenant(t *testing.T) {
 
 		// The refusal must also mean the row does not exist — checked with
 		// cross-tenant reach so a policy-filtered read cannot fake success.
-		wctx, worker := auditPool(t, "LOOPZERO_WORKER_DATABASE_URL", "worker (loopzero_worker)")
+		wctx, worker := auditPool(t, "LOOPRUNTIME_WORKER_DATABASE_URL", "worker (loopruntime_worker)")
 		var found int
 		if err := worker.QueryRow(wctx, `SELECT count(*) FROM builds WHERE id = $1`, forged).Scan(&found); err != nil {
 			t.Fatalf("verify absence: %v", err)
@@ -395,7 +395,7 @@ func TestTenantIsolation_CannotWriteForAnotherTenant(t *testing.T) {
 // TestTenantIsolation_WorkerRole_KeepsCrossTenantReach guards the other side of
 // the change. Reconcile loops, reapers and metering legitimately scan every
 // tenant; before 000062 they did it by exploiting the fail-open disjunct. They
-// now do it through a named policy granted only to loopzero_worker.
+// now do it through a named policy granted only to loopruntime_worker.
 //
 // If this test fails, the isolation work broke the background loops — which is
 // the failure mode that made migration 000012 disable FORCE in the first place.
@@ -403,11 +403,11 @@ func TestTenantIsolation_WorkerRole_KeepsCrossTenantReach(t *testing.T) {
 	ctx, owner := auditPool(t, "DATABASE_URL", "owner")
 	_, _, buildA, buildB := seedTwoTenants(t, ctx, owner)
 
-	wctx, worker := auditPool(t, "LOOPZERO_WORKER_DATABASE_URL", "worker (loopzero_worker)")
+	wctx, worker := auditPool(t, "LOOPRUNTIME_WORKER_DATABASE_URL", "worker (loopruntime_worker)")
 
 	posture := measurePosture(t, wctx, worker)
 	if posture.bypassRLS {
-		t.Fatalf("loopzero_worker has BYPASSRLS (%s) — cross-tenant reach must come from the named "+
+		t.Fatalf("loopruntime_worker has BYPASSRLS (%s) — cross-tenant reach must come from the named "+
 			"policy, not an instance-wide privilege that also covers tables nobody reviewed", posture)
 	}
 

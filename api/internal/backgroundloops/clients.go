@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package backgroundloops builds the platform's background loops (build
 // reconcile, reapers, release convergence, pruners, domain lifecycle) and the
@@ -69,7 +69,7 @@ func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*orchestratio
 func NewSyncClient(cfg config.Config, transport *http.Transport, logger *slog.Logger) (*orchestrationbreaker.CircuitBreakerSyncClient, error) {
 	httpClient := &http.Client{Timeout: cfg.ArgocdClientTimeout}
 	if cfg.ArgocdInsecure {
-		// Local k3d only: cert-manager cannot issue for *.loopzero.local. Production
+		// Local k3d only: cert-manager cannot issue for *.loopruntime.local. Production
 		// sets ArgocdInsecure=false (audit SEC-101).
 		httpClient.Transport = &http.Transport{
 			MaxIdleConns:        100,

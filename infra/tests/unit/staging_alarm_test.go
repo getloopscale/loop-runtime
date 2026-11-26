@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -308,14 +308,14 @@ func TestTheTokenCheckIsInstalledAndRunsEveryDay(t *testing.T) {
 		}
 		return string(data)
 	}
-	if service := read("infra/staging/systemd/loopzero-staging-tokens.service"); !strings.Contains(service, "ExecStart=/usr/local/lib/loopzero-staging/alarm.sh check-tokens") {
-		t.Errorf("loopzero-staging-tokens.service does not run alarm.sh check-tokens:\n%s", service)
+	if service := read("infra/staging/systemd/loopruntime-staging-tokens.service"); !strings.Contains(service, "ExecStart=/usr/local/lib/loopruntime-staging/alarm.sh check-tokens") {
+		t.Errorf("loopruntime-staging-tokens.service does not run alarm.sh check-tokens:\n%s", service)
 	}
-	if timer := read("infra/staging/systemd/loopzero-staging-tokens.timer"); !strings.Contains(timer, "OnCalendar=daily") || !strings.Contains(timer, "Persistent=true") {
-		t.Errorf("loopzero-staging-tokens.timer does not run once a day, catching up after downtime:\n%s", timer)
+	if timer := read("infra/staging/systemd/loopruntime-staging-tokens.timer"); !strings.Contains(timer, "OnCalendar=daily") || !strings.Contains(timer, "Persistent=true") {
+		t.Errorf("loopruntime-staging-tokens.timer does not run once a day, catching up after downtime:\n%s", timer)
 	}
 	task := read("taskfiles/staging.yml")
-	if !strings.Contains(task, "infra/staging/systemd/loopzero-staging-tokens.timer") || !strings.Contains(task, "loopzero-staging-disk.timer loopzero-staging-tokens.timer") {
-		t.Errorf("staging:nightly does not install and enable loopzero-staging-tokens.timer")
+	if !strings.Contains(task, "infra/staging/systemd/loopruntime-staging-tokens.timer") || !strings.Contains(task, "loopruntime-staging-disk.timer loopruntime-staging-tokens.timer") {
+		t.Errorf("staging:nightly does not install and enable loopruntime-staging-tokens.timer")
 	}
 }

@@ -31,7 +31,7 @@
       "title": "← Home",
       "tooltip": "Back to System Home",
       "type": "link",
-      "url": "/d/loopzero-home/loopzero-system-home"
+      "url": "/d/loopruntime-home/loopruntime-system-home"
     }
   ],
   "panels": [
@@ -113,7 +113,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_deploys_total{status=\"succeeded\"}[30m])) / sum(rate(loopzero_deploys_total[30m])) or vector(1)",
+          "expr": "sum(rate(loopruntime_deploys_total{status=\"succeeded\"}[30m])) / sum(rate(loopruntime_deploys_total[30m])) or vector(1)",
           "legendFormat": "Success Rate",
           "refId": "A"
         }
@@ -181,7 +181,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "1 - (sum(rate(loopzero_api_requests_total{status=~\"5..\"}[30m])) / sum(rate(loopzero_api_requests_total[30m]))) or vector(1)",
+          "expr": "1 - (sum(rate(loopruntime_api_requests_total{status=~\"5..\"}[30m])) / sum(rate(loopruntime_api_requests_total[30m]))) or vector(1)",
           "legendFormat": "Error Budget",
           "refId": "A"
         }
@@ -456,7 +456,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[30m])) / sum(rate(loopzero_builds_total[30m])) or vector(1)",
+          "expr": "sum(rate(loopruntime_builds_total{status=\"succeeded\"}[30m])) / sum(rate(loopruntime_builds_total[30m])) or vector(1)",
           "legendFormat": "Success Rate",
           "refId": "A"
         }
@@ -587,17 +587,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_deploys_total{status=\"failed\"}[30m])) / sum(rate(loopzero_deploys_total[30m])) or vector(0)",
+          "expr": "sum(rate(loopruntime_deploys_total{status=\"failed\"}[30m])) / sum(rate(loopruntime_deploys_total[30m])) or vector(0)",
           "legendFormat": "deploy-error-rate",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(loopzero_api_requests_total{status=~\"5..\"}[30m])) / sum(rate(loopzero_api_requests_total[30m])) or vector(0)",
+          "expr": "sum(rate(loopruntime_api_requests_total{status=~\"5..\"}[30m])) / sum(rate(loopruntime_api_requests_total[30m])) or vector(0)",
           "legendFormat": "api-error-rate",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(loopzero_builds_total{status=\"failed\"}[30m])) / sum(rate(loopzero_builds_total[30m])) or vector(0)",
+          "expr": "sum(rate(loopruntime_builds_total{status=\"failed\"}[30m])) / sum(rate(loopruntime_builds_total[30m])) or vector(0)",
           "legendFormat": "build-error-rate",
           "refId": "C"
         }
@@ -671,7 +671,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_deploys_total{status=\"success\"}[1h])) / sum(rate(loopzero_deploys_total[1h]))",
+          "expr": "sum(rate(loopruntime_deploys_total{status=\"success\"}[1h])) / sum(rate(loopruntime_deploys_total[1h]))",
           "legendFormat": "Success Rate",
           "refId": "A"
         }
@@ -716,17 +716,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopzero_deploy_lead_time_seconds_bucket[1h])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(loopruntime_deploy_lead_time_seconds_bucket[1h])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_deploy_lead_time_seconds_bucket[1h])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loopruntime_deploy_lead_time_seconds_bucket[1h])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(loopzero_deploy_lead_time_seconds_bucket[1h])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(loopruntime_deploy_lead_time_seconds_bucket[1h])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -787,7 +787,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_release_revision_mismatch_total[1h])) or vector(0)",
+          "expr": "sum(rate(loopruntime_release_revision_mismatch_total[1h])) or vector(0)",
           "legendFormat": "Revision Mismatches",
           "refId": "A"
         }
@@ -832,7 +832,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_release_revision_resync_total[5m])) or vector(0)",
+          "expr": "sum(rate(loopruntime_release_revision_resync_total[5m])) or vector(0)",
           "legendFormat": "Resyncs",
           "refId": "A"
         }
@@ -842,7 +842,7 @@
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loopruntime",
     "executive",
     "slo"
   ],
@@ -870,7 +870,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "LoopZero — Executive Summary",
-  "uid": "loopzero-exec-summary",
+  "title": "LoopRuntime — Executive Summary",
+  "uid": "loopruntime-exec-summary",
   "version": 1
 }

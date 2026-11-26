@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -13,14 +13,14 @@ func TestClusterCredential_SpecFields(t *testing.T) {
 	cc := ClusterCredential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cell-0-cluster-01",
-			Namespace: "loopzero-system",
+			Namespace: "loopruntime-system",
 		},
 		Spec: ClusterCredentialSpec{
 			ClusterName: "workload-01",
 			APIServer:   "https://10.0.0.1:6443",
 			SecretRef: SecretReference{
 				Name:      "workload-01-kubeconfig",
-				Namespace: "loopzero-system",
+				Namespace: "loopruntime-system",
 			},
 			Scope: CredentialScope{
 				ArgoCD:    true,
@@ -38,8 +38,8 @@ func TestClusterCredential_SpecFields(t *testing.T) {
 	if cc.Spec.SecretRef.Name != "workload-01-kubeconfig" {
 		t.Errorf("expected SecretRef.Name %q, got %q", "workload-01-kubeconfig", cc.Spec.SecretRef.Name)
 	}
-	if cc.Spec.SecretRef.Namespace != "loopzero-system" {
-		t.Errorf("expected SecretRef.Namespace %q, got %q", "loopzero-system", cc.Spec.SecretRef.Namespace)
+	if cc.Spec.SecretRef.Namespace != "loopruntime-system" {
+		t.Errorf("expected SecretRef.Namespace %q, got %q", "loopruntime-system", cc.Spec.SecretRef.Namespace)
 	}
 }
 

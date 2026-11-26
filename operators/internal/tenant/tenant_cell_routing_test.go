@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
@@ -38,19 +38,19 @@ func cellScheme(t *testing.T) *runtime.Scheme {
 	if err := clientgoscheme.AddToScheme(s); err != nil {
 		t.Fatalf("client-go scheme: %v", err)
 	}
-	if err := loopzerov1.AddToScheme(s); err != nil {
-		t.Fatalf("loopzero scheme: %v", err)
+	if err := loopruntimev1.AddToScheme(s); err != nil {
+		t.Fatalf("loopruntime scheme: %v", err)
 	}
 	return s
 }
 
-func pinnedTenant(cellID string) *loopzerov1.Tenant {
-	return &loopzerov1.Tenant{
+func pinnedTenant(cellID string) *loopruntimev1.Tenant {
+	return &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{Name: "tn-pinned", Namespace: "default"},
-		Spec: loopzerov1.TenantSpec{
+		Spec: loopruntimev1.TenantSpec{
 			CellID: cellID,
-			Plan:   loopzerov1.PlanStarter,
-			Environments: []loopzerov1.TenantEnvironmentEntry{
+			Plan:   loopruntimev1.PlanStarter,
+			Environments: []loopruntimev1.TenantEnvironmentEntry{
 				{Name: "production", Cluster: "workload", Project: "shop"},
 			},
 		},

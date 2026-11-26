@@ -1,4 +1,4 @@
-# Chaos Experiment: kill loopzero-api leader pod
+# Chaos Experiment: kill loopruntime-api leader pod
 #
 # Roadmap 01 D/F: non-leader pod must survive leader kill and take
 # over without being killed by its own liveness probe during election.
@@ -12,31 +12,31 @@
 #
 # Steady-state SLO:
 #   - /api/v1/health returns 200 during the entire experiment
-#   - pod restart count does NOT increase for loopzero-api pods
-#   - new leader's loopzero_leader_status=1 within 90s
+#   - pod restart count does NOT increase for loopruntime-api pods
+#   - new leader's loopruntime_leader_status=1 within 90s
 ---
 apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:
-  name: kill-loopzero-api-leader
-  namespace: loopzero-system
+  name: kill-loopruntime-api-leader
+  namespace: loopruntime-system
   annotations:
-    loopzero.io/roadmap: "01"
-    loopzero.io/dod-test: "Non-leader pod restart count = 0 during 30 min"
-    loopzero.io/hypothesis: "Killing leader pod elects new leader within 90s; surviving pod never restarts"
+    runtime.getloopscale.com/roadmap: "01"
+    runtime.getloopscale.com/dod-test: "Non-leader pod restart count = 0 during 30 min"
+    runtime.getloopscale.com/hypothesis: "Killing leader pod elects new leader within 90s; surviving pod never restarts"
     # No pod restarts during the experiment window AND API health stays
     # 200. `and on()` is the canonical join across heterogeneous vectors
     # (pod metric vs blackbox probe instance label set differ); without
     # the explicit `on()` modifier the implicit set-intersection returns
     # empty even when both conditions hold.
-    loopzero.io/slo-query: |
-      ((sum(increase(kube_pod_container_status_restarts_total{pod=~"loopzero-api-.*"}[5m])) or vector(0)) == 0) and on() (max(probe_success{job="loopzero-api-health"}) == 1)
+    runtime.getloopscale.com/slo-query: |
+      ((sum(increase(kube_pod_container_status_restarts_total{pod=~"loopruntime-api-.*"}[5m])) or vector(0)) == 0) and on() (max(probe_success{job="loopruntime-api-health"}) == 1)
 spec:
   action: pod-kill
   mode: one
   selector:
     namespaces:
-      - loopzero-system
+      - loopruntime-system
     labelSelectors:
-      "app": "loopzero-api"
+      "app": "loopruntime-api"
   duration: "30s"

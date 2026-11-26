@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package platform_test
 
@@ -17,24 +17,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/operatortest"
 )
 
-func newGitRepositoryBinding(name, namespace, repoURL, secretName, secretKey, secretNamespace, consumerType, consumerNamespace string) *loopzerov1.GitRepositoryBinding {
-	return &loopzerov1.GitRepositoryBinding{
+func newGitRepositoryBinding(name, namespace, repoURL, secretName, secretKey, secretNamespace, consumerType, consumerNamespace string) *loopruntimev1.GitRepositoryBinding {
+	return &loopruntimev1.GitRepositoryBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: loopzerov1.GitRepositoryBindingSpec{
+		Spec: loopruntimev1.GitRepositoryBindingSpec{
 			RepoURL: repoURL,
-			CredentialSecretRef: loopzerov1.CredentialSecretRef{
+			CredentialSecretRef: loopruntimev1.CredentialSecretRef{
 				Name:      secretName,
 				Key:       secretKey,
 				Namespace: secretNamespace,
 			},
-			Consumer: loopzerov1.ConsumerSpec{
+			Consumer: loopruntimev1.ConsumerSpec{
 				Type:      consumerType,
 				Namespace: consumerNamespace,
 			},
@@ -72,7 +72,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			// Start a real HTTP server that simulates a reachable Gitea API.
 			reachableServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write([]byte(`{"id":1,"name":"test-gitops","full_name":"loopzero/test-gitops"}`))
+				_, _ = w.Write([]byte(`{"id":1,"name":"test-gitops","full_name":"loopruntime/test-gitops"}`))
 			}))
 		})
 
@@ -93,7 +93,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, credSecret)).To(Succeed())
 
-			repoURL := fmt.Sprintf("%s/loopzero/test-gitops.git", reachableServer.URL)
+			repoURL := fmt.Sprintf("%s/loopruntime/test-gitops.git", reachableServer.URL)
 
 			binding := newGitRepositoryBinding(
 				"grb-happy", bindingNamespace,
@@ -105,7 +105,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 
 			// Assert: CredentialsResolved=True
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.GitRepositoryBinding
+				var fetched loopruntimev1.GitRepositoryBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "grb-happy", Namespace: bindingNamespace,
 				}, &fetched)).To(Succeed())
@@ -117,7 +117,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 
 			// Assert: RepositoryRegistered=True (ArgoCD Secret created)
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.GitRepositoryBinding
+				var fetched loopruntimev1.GitRepositoryBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "grb-happy", Namespace: bindingNamespace,
 				}, &fetched)).To(Succeed())
@@ -140,20 +140,20 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 				}, &argoSecret)).To(Succeed())
 
 				g.Expect(argoSecret.Labels).To(HaveKeyWithValue("argocd.argoproj.io/secret-type", "repository"))
-				g.Expect(argoSecret.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "gitrepositorybinding-controller"))
+				g.Expect(argoSecret.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/managed-by", "gitrepositorybinding-controller"))
 				g.Expect(argoSecret.Data).To(HaveKey("type"))
 				g.Expect(argoSecret.Data).To(HaveKey("url"))
 				g.Expect(argoSecret.Data).To(HaveKey("username"))
 				g.Expect(argoSecret.Data).To(HaveKey("password"))
 				g.Expect(string(argoSecret.Data["type"])).To(Equal("git"))
 				g.Expect(string(argoSecret.Data["url"])).To(Equal(repoURL))
-				g.Expect(string(argoSecret.Data["username"])).To(Equal("loopzero-platform"))
+				g.Expect(string(argoSecret.Data["username"])).To(Equal("loopruntime-platform"))
 				g.Expect(string(argoSecret.Data["password"])).To(Equal(testToken))
 			}, timeout, interval).Should(Succeed())
 
 			// Assert: RepositoryReachable=True
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.GitRepositoryBinding
+				var fetched loopruntimev1.GitRepositoryBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "grb-happy", Namespace: bindingNamespace,
 				}, &fetched)).To(Succeed())
@@ -169,14 +169,14 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 		It("should set CredentialsResolved=False and requeue", func() {
 			binding := newGitRepositoryBinding(
 				"grb-no-cred", bindingNamespace,
-				"http://gitea.example.com/loopzero/missing-gitops.git",
+				"http://gitea.example.com/loopruntime/missing-gitops.git",
 				"nonexistent-cred-secret", credentialKey, bindingNamespace,
 				"argocd", argoCDNs,
 			)
 			Expect(k8sClient.Create(ctx, binding)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.GitRepositoryBinding
+				var fetched loopruntimev1.GitRepositoryBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "grb-no-cred", Namespace: bindingNamespace,
 				}, &fetched)).To(Succeed())
@@ -216,7 +216,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, credSecret)).To(Succeed())
 
-			repoURL := fmt.Sprintf("%s/loopzero/rotation-gitops.git", rotationServer.URL)
+			repoURL := fmt.Sprintf("%s/loopruntime/rotation-gitops.git", rotationServer.URL)
 
 			binding := newGitRepositoryBinding(
 				"grb-rotation", bindingNamespace,
@@ -229,7 +229,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			// Wait for initial reconciliation to complete.
 			var initialHash string
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.GitRepositoryBinding
+				var fetched loopruntimev1.GitRepositoryBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "grb-rotation", Namespace: bindingNamespace,
 				}, &fetched)).To(Succeed())
@@ -252,7 +252,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			})).To(Succeed())
 
 			// Trigger a reconcile by updating the binding's annotation.
-			var bindingCR loopzerov1.GitRepositoryBinding
+			var bindingCR loopruntimev1.GitRepositoryBinding
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: "grb-rotation", Namespace: bindingNamespace,
 			}, &bindingCR)).To(Succeed())
@@ -262,12 +262,12 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 				if bindingCR.Annotations == nil {
 					bindingCR.Annotations = make(map[string]string)
 				}
-				bindingCR.Annotations["platform.loopzero.io/force-reconcile"] = "true"
+				bindingCR.Annotations["platform.runtime.getloopscale.com/force-reconcile"] = "true"
 			})).To(Succeed())
 
 			// Assert: hash changed and ArgoCD Secret updated.
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.GitRepositoryBinding
+				var fetched loopruntimev1.GitRepositoryBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "grb-rotation", Namespace: bindingNamespace,
 				}, &fetched)).To(Succeed())
@@ -316,7 +316,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, credSecret)).To(Succeed())
 
-			repoURL := fmt.Sprintf("%s/loopzero/delete-gitops.git", deleteServer.URL)
+			repoURL := fmt.Sprintf("%s/loopruntime/delete-gitops.git", deleteServer.URL)
 
 			binding := newGitRepositoryBinding(
 				"grb-delete", bindingNamespace,
@@ -337,7 +337,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 
 			// Act: delete the binding.
-			var toDelete loopzerov1.GitRepositoryBinding
+			var toDelete loopruntimev1.GitRepositoryBinding
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: "grb-delete", Namespace: bindingNamespace,
 			}, &toDelete)).To(Succeed())
@@ -355,7 +355,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 
 			// Assert: the CR itself should be gone.
 			Eventually(func(g Gomega) {
-				var gone loopzerov1.GitRepositoryBinding
+				var gone loopruntimev1.GitRepositoryBinding
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: "grb-delete", Namespace: bindingNamespace,
 				}, &gone)
@@ -390,7 +390,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, credSecret)).To(Succeed())
 
-			repoURL := fmt.Sprintf("%s/loopzero/idempotent-gitops.git", idempotentServer.URL)
+			repoURL := fmt.Sprintf("%s/loopruntime/idempotent-gitops.git", idempotentServer.URL)
 
 			binding := newGitRepositoryBinding(
 				"grb-idempotent", bindingNamespace,
@@ -402,7 +402,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 
 			// Wait for first reconciliation to complete.
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.GitRepositoryBinding
+				var fetched loopruntimev1.GitRepositoryBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "grb-idempotent", Namespace: bindingNamespace,
 				}, &fetched)).To(Succeed())
@@ -415,7 +415,7 @@ var _ = Describe("GitRepositoryBindingController", Ordered, func() {
 			// Assert: state remains stable over multiple reconciliation cycles.
 			argoSecretName := fmt.Sprintf("repo-%s-gitops", "grb-idempotent")
 			Consistently(func(g Gomega) {
-				var fetched loopzerov1.GitRepositoryBinding
+				var fetched loopruntimev1.GitRepositoryBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "grb-idempotent", Namespace: bindingNamespace,
 				}, &fetched)).To(Succeed())

@@ -18,11 +18,11 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(loopzero_deploys_total[5m])) * 60 or vector(0)",
+          "expr": "sum(rate(loopruntime_deploys_total[5m])) * 60 or vector(0)",
           "legendFormat": "Submitted/min"
         },
         {
-          "expr": "sum(rate(loopzero_builds_total[5m])) * 60 or vector(0)",
+          "expr": "sum(rate(loopruntime_builds_total[5m])) * 60 or vector(0)",
           "legendFormat": "Completed/min"
         }
       ],
@@ -52,11 +52,11 @@
       },
       "targets": [
         {
-          "expr": "loopzero_build_queue_depth or vector(0)",
+          "expr": "loopruntime_build_queue_depth or vector(0)",
           "legendFormat": "Queue Depth"
         },
         {
-          "expr": "loopzero_releasing_builds or vector(0)",
+          "expr": "loopruntime_releasing_builds or vector(0)",
           "legendFormat": "Releasing"
         }
       ],
@@ -103,15 +103,15 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(loopzero_api_request_duration_seconds_bucket[5m])) or vector(0)",
+          "expr": "histogram_quantile(0.50, rate(loopruntime_api_request_duration_seconds_bucket[5m])) or vector(0)",
           "legendFormat": "p50"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(loopzero_api_request_duration_seconds_bucket[5m])) or vector(0)",
+          "expr": "histogram_quantile(0.95, rate(loopruntime_api_request_duration_seconds_bucket[5m])) or vector(0)",
           "legendFormat": "p95"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(loopzero_api_request_duration_seconds_bucket[5m])) or vector(0)",
+          "expr": "histogram_quantile(0.99, rate(loopruntime_api_request_duration_seconds_bucket[5m])) or vector(0)",
           "legendFormat": "p99"
         }
       ],
@@ -157,15 +157,15 @@
       },
       "targets": [
         {
-          "expr": "loopzero_postgres_connections_active or vector(0)",
+          "expr": "loopruntime_postgres_connections_active or vector(0)",
           "legendFormat": "Active"
         },
         {
-          "expr": "loopzero_postgres_connections_idle or vector(0)",
+          "expr": "loopruntime_postgres_connections_idle or vector(0)",
           "legendFormat": "Idle"
         },
         {
-          "expr": "loopzero_postgres_connections_total or vector(0)",
+          "expr": "loopruntime_postgres_connections_total or vector(0)",
           "legendFormat": "Total"
         }
       ],
@@ -213,11 +213,11 @@
       },
       "targets": [
         {
-          "expr": "rate(loopzero_lock_acquired_total[5m]) * 60 or vector(0)",
+          "expr": "rate(loopruntime_lock_acquired_total[5m]) * 60 or vector(0)",
           "legendFormat": "Acquired/min"
         },
         {
-          "expr": "rate(loopzero_lock_acquired_total{result=\"conflict\"}[5m]) * 60 or vector(0)",
+          "expr": "rate(loopruntime_lock_acquired_total{result=\"conflict\"}[5m]) * 60 or vector(0)",
           "legendFormat": "Conflicts/min"
         }
       ],
@@ -247,11 +247,11 @@
       },
       "targets": [
         {
-          "expr": "loopzero_releases_pending or vector(0)",
+          "expr": "loopruntime_releases_pending or vector(0)",
           "legendFormat": "Pending Releases"
         },
         {
-          "expr": "loopzero_argocd_circuit_state or vector(0)",
+          "expr": "loopruntime_argocd_circuit_state or vector(0)",
           "legendFormat": "Circuit Breaker (0=closed, 1=open)"
         }
       ],
@@ -280,7 +280,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[5m])) / sum(rate(loopzero_builds_total[5m])) * 100 or vector(0)",
+          "expr": "sum(rate(loopruntime_builds_total{status=\"succeeded\"}[5m])) / sum(rate(loopruntime_builds_total[5m])) * 100 or vector(0)",
           "legendFormat": ""
         }
       ],
@@ -322,7 +322,7 @@
       },
       "targets": [
         {
-          "expr": "sum(loopzero_api_leader_status) or vector(0)",
+          "expr": "sum(loopruntime_api_leader_status) or vector(0)",
           "legendFormat": ""
         }
       ],
@@ -359,7 +359,7 @@
       },
       "targets": [
         {
-          "expr": "loopzero_sse_connections_active or vector(0)",
+          "expr": "loopruntime_sse_connections_active or vector(0)",
           "legendFormat": ""
         }
       ],
@@ -401,7 +401,7 @@
       },
       "targets": [
         {
-          "expr": "sum(loopzero_cfkv_drift_detected) or vector(0)",
+          "expr": "sum(loopruntime_cfkv_drift_detected) or vector(0)",
           "legendFormat": ""
         }
       ],
@@ -430,7 +430,7 @@
   ],
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loopruntime",
     "load-test"
   ],
   "templating": {
@@ -455,6 +455,6 @@
     "from": "now-1h",
     "to": "now"
   },
-  "title": "LoopZero — Load Test",
-  "uid": "loopzero-load-test"
+  "title": "LoopRuntime — Load Test",
+  "uid": "loopruntime-load-test"
 }

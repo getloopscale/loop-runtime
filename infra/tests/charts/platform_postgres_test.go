@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -122,9 +122,9 @@ func TestPlatformPostgres_AdmitsOnlyItsClientsTheOperatorAndTheScraper(t *testin
 	}
 	raw := renderPlatformPostgres(t, "")
 	for _, want := range []string{
-		"kubernetes.io/metadata.name: cnpg-system",       // the operator: status and SQL
-		"app.kubernetes.io/part-of: loopzero-data-plane", // the services that keep data here
-		"kubernetes.io/metadata.name: monitoring",        // the metrics scraper
+		"kubernetes.io/metadata.name: cnpg-system",          // the operator: status and SQL
+		"app.kubernetes.io/part-of: loopruntime-data-plane", // the services that keep data here
+		"kubernetes.io/metadata.name: monitoring",           // the metrics scraper
 		"port: 8000", "port: 5432", "port: 9187",
 	} {
 		if !strings.Contains(raw, want) {
@@ -155,8 +155,8 @@ func TestPlatformPostgres_ResizesWithoutRestartingTheInstance(t *testing.T) {
 
 const platformPostgresBackupValues = `
 backup:
-  bucket: loopzero-test-postgres-backups
-  roleArn: arn:aws:iam::000000000000:role/loopzero-test-core-platform-postgres
+  bucket: loopruntime-test-postgres-backups
+  roleArn: arn:aws:iam::000000000000:role/loopruntime-test-core-platform-postgres
 `
 
 func TestPlatformPostgres_WithoutABucketRendersNoBackup(t *testing.T) {
@@ -180,7 +180,7 @@ func TestPlatformPostgres_ArchivesWALAndBacksUpToTheBucket(t *testing.T) {
 	if store == nil {
 		t.Fatal("the chart renders no ObjectStore")
 	}
-	if got := dig(store, "spec", "configuration", "destinationPath"); got != "s3://loopzero-test-postgres-backups/" {
+	if got := dig(store, "spec", "configuration", "destinationPath"); got != "s3://loopruntime-test-postgres-backups/" {
 		t.Errorf("destinationPath = %v", got)
 	}
 	if got := dig(store, "spec", "retentionPolicy"); got != "30d" {
@@ -225,7 +225,7 @@ func TestPlatformPostgres_ReachesTheBucketAsItsRoleWithoutAKey(t *testing.T) {
 
 	cluster := renderedObject(t, out, "Cluster", "platform-postgres")
 	annotations, _ := dig(cluster, "spec", "serviceAccountTemplate", "metadata", "annotations").(map[string]any)
-	if got := annotations["eks.amazonaws.com/role-arn"]; got != "arn:aws:iam::000000000000:role/loopzero-test-core-platform-postgres" {
+	if got := annotations["eks.amazonaws.com/role-arn"]; got != "arn:aws:iam::000000000000:role/loopruntime-test-core-platform-postgres" {
 		t.Errorf("the instances' service account assumes %v", got)
 	}
 	store := renderedObject(t, out, "ObjectStore", "platform-postgres")

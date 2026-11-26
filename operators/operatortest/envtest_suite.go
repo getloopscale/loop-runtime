@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package operatortest
 
@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/environment"
 )
 
@@ -264,8 +264,8 @@ func newEnvtestHandle(ctx context.Context, cancel context.CancelFunc, testEnv *e
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("client-go scheme: %w", err)
 	}
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
-		return nil, fmt.Errorf("loopzerov1 scheme: %w", err)
+	if err := loopruntimev1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("loopruntimev1 scheme: %w", err)
 	}
 
 	newClient := func(role string) (client.Client, error) {

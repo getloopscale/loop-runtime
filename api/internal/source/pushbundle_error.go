@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/getloopscale/loop-runtime/api/internal/scrub"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // MaxBundleBytes is the size ceiling for source bundles. Larger payloads
@@ -21,7 +21,7 @@ const MaxBundleBytes = 64 << 20
 
 // PushBundleErrorReason discriminates failure modes returned by PushBundle.
 //
-// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.2 (closes loopzero-cloud#31):
+// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.2 (closes loopruntime-cloud#31):
 // the legacy untyped fmt.Errorf chain collapsed every failure mode into the
 // canonical "Ensure your git history is clean and try again." Message —
 // actively misleading because the user's git history was clean. Typed reasons
@@ -53,7 +53,7 @@ const (
 	ReasonArchiveReadError PushBundleErrorReason = 5
 	// ReasonSourceBackendAuthFailure: the backend rejected authentication
 	// (401 / 403 / "authentication required" / "permission denied" patterns).
-	// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T1.1 (closes loopzero-cloud#33).
+	// Sprint 5 plan qa-sprint5-cleanup-2026-06-25 T1.1 (closes loopruntime-cloud#33).
 	ReasonSourceBackendAuthFailure PushBundleErrorReason = 6
 	// ReasonSourceBackendCapacity: the backend ran out of capacity (507 /
 	// "quota exceeded" / "no space left on device" patterns).
@@ -91,13 +91,13 @@ func (r PushBundleErrorReason) String() string {
 }
 
 // reasonSummaries is the operator-actionable summary of each reason, composed
-// with the verbatim cause by loopzeroerrors.NewComposed ("<summary>: <detail>").
+// with the verbatim cause by loopruntimeerrors.NewComposed ("<summary>: <detail>").
 // It lives beside the enum so a new reason and its copy change together.
 // Product language only (Rule 3): "source backend", never the component name.
 var reasonSummaries = map[PushBundleErrorReason]string{
 	ReasonSourceBackendUnreachable: "Source backend is unreachable (network or DNS failure)",
 	ReasonRemoteRejectedPush:       "The remote rejected the push",
-	ReasonBundleMalformed:          "The source bundle is malformed. Re-run `loopzero deploy` from your project root",
+	ReasonBundleMalformed:          "The source bundle is malformed. Re-run `loopruntime deploy` from your project root",
 	ReasonBundleTooLarge:           "The source bundle exceeds the size limit. Reduce the size of your source tree",
 	ReasonArchiveReadError:         "Could not read the source archive. Check your project files and try again",
 	ReasonSourceBackendAuthFailure: "Source backend rejected authentication",
@@ -114,12 +114,12 @@ func (r PushBundleErrorReason) Summary() string {
 // UserError is the SOURCE_UPLOAD_FAILED error shown to the user: the reason's
 // summary composed with the scrubbed detail, or a trace reference when the
 // detail says nothing useful.
-func (e *PushBundleError) UserError(traceID string) *loopzeroerrors.LoopZeroError {
-	return loopzeroerrors.NewComposed(loopzeroerrors.ErrSourceUploadFailed, e.Reason.Summary(), e.Detail, traceID)
+func (e *PushBundleError) UserError(traceID string) *loopruntimeerrors.LoopRuntimeError {
+	return loopruntimeerrors.NewComposed(loopruntimeerrors.ErrSourceUploadFailed, e.Reason.Summary(), e.Detail, traceID)
 }
 
 // PushBundleError is the discriminated typed error returned by PushBundle.
-// Sprint 4 T3.2 closes loopzero-cloud#31: replaces the untyped fmt.Errorf chain
+// Sprint 4 T3.2 closes loopruntime-cloud#31: replaces the untyped fmt.Errorf chain
 // so SourceHandler.Upload can map each reason to a specific actionable Message
 // instead of the misleading legacy "Ensure your git history is clean" string.
 type PushBundleError struct {
@@ -152,7 +152,7 @@ func (e *PushBundleError) Unwrap() error { return e.Cause }
 //
 // The substring set was empirically determined from real gitea-race scenarios
 // observed in dogfood iterations and is documented in
-// loopzero/.claude/knowledge-base/audits/F-03-concurrent-deploy-2026-05-14.md.
+// loopruntime/.claude/knowledge-base/audits/F-03-concurrent-deploy-2026-05-14.md.
 func IsGiteaRaceCondition(err error) bool {
 	if err == nil {
 		return false

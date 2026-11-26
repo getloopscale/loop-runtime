@@ -1,0 +1,7 @@
+LoopRuntime Cloud (auth/billing) has been installed.
+
+Service: {{ include "loopruntime-common.fullname" . }}:{{ .Values.service.port }}
+Health:  http://{{ include "loopruntime-common.fullname" . }}:{{ .Values.service.port }}/health
+
+Run helm test to verify:
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

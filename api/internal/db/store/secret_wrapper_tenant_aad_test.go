@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -14,7 +14,7 @@ import (
 // dropped into a row labeled as Tenant B and decryptFromStore would happily
 // return Tenant A's plaintext — wrong-tenant decryption with no failure
 // signal. Post-fix, the tenantAAD binding makes the AES-GCM auth tag depend
-// on the canonical "loopzero-secret-v1|tenant=<id>" label, so cross-tenant
+// on the canonical "loopruntime-secret-v1|tenant=<id>" label, so cross-tenant
 // transplant fails the dual-decrypt window (AAD-tag mismatch on the v1
 // path AND the nil-fallback path also fails because the tag was
 // computed with AAD).
@@ -94,7 +94,7 @@ func TestSecretTenantAAD_DualDecryptWindowAcceptsLegacy(t *testing.T) {
 func TestSecretTenantAAD_AADFormatIsStable(t *testing.T) {
 	const tenantID = "tn-acme-12345"
 	got := tenantAAD(tenantID)
-	want := "loopzero-secret-v1|tenant=" + tenantID
+	want := "loopruntime-secret-v1|tenant=" + tenantID
 	if string(got) != want {
 		t.Errorf("AAD format drifted: got %q, want %q", got, want)
 	}

@@ -1,7 +1,0 @@
-LoopZero Cloud (auth/billing) has been installed.
-
-Service: {{ include "loopzero-common.fullname" . }}:{{ .Values.service.port }}
-Health:  http://{{ include "loopzero-common.fullname" . }}:{{ .Values.service.port }}/health
-
-Run helm test to verify:
-  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

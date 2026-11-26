@@ -1,6 +1,6 @@
 {{- define "dps.labels" -}}
 app.kubernetes.io/name: {{ .Release.Name }}
-app.kubernetes.io/part-of: loopzero-data-plane
+app.kubernetes.io/part-of: loopruntime-data-plane
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 

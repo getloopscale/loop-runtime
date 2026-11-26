@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package billinghttp
 
@@ -33,11 +33,11 @@ func getBillingBody(t *testing.T, h *BillingHandler) []byte {
 
 // An empty counter table must not be served as measured zero usage.
 //
-// B-033, re-measured live on 2026-09-05 against k3d-loopzero-core: `cost_counters`
-// holds **0 rows**, the running `loopzero-cloud` Deployment carries 19 environment
+// B-033, re-measured live on 2026-09-05 against k3d-loopruntime-core: `cost_counters`
+// holds **0 rows**, the running `loopruntime-cloud` Deployment carries 19 environment
 // variables and none matching `PROM|COST`, and the three PromQL queries the
-// aggregator would run return empty vectors because `loopzero_egress_bytes_total`
-// and `loopzero_docr_pulls_total` are emitted by no repository. Nothing fills the
+// aggregator would run return empty vectors because `loopruntime_egress_bytes_total`
+// and `loopruntime_docr_pulls_total` are emitted by no repository. Nothing fills the
 // table, and on the present code nothing will.
 //
 // The enforcement gate has told the two cases apart since `reason="unmeasured"`

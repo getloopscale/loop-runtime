@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package stepwatch
 
@@ -17,16 +17,16 @@ type ErrorClass string
 // Canonical error classes. Order matters in Classify (most specific
 // wins). Frontend mirrors this list in sse-events.ts.
 const (
-	ErrorClassOOM                 ErrorClass = "OOM"
-	ErrorClassBuildTimeout        ErrorClass = "BUILD_TIMEOUT"
-	ErrorClassImagePullFail       ErrorClass = "IMAGE_PULL_FAILED"
-	ErrorClassCosignFailed        ErrorClass = "COSIGN_FAILED"
-	ErrorClassRegistryAuth        ErrorClass = "REGISTRY_AUTH"
-	ErrorClassDockerfileLint      ErrorClass = "DOCKERFILE_LINT"
-	ErrorClassLoopZeroYAMLInvalid ErrorClass = "LOOPZERO_YAML_INVALID"
-	ErrorClassCancelledByUser     ErrorClass = "CANCELLED_BY_USER"
-	ErrorClassWorkflowDeleted     ErrorClass = "WORKFLOW_DELETED"
-	ErrorClassUnknown             ErrorClass = "UNKNOWN"
+	ErrorClassOOM                    ErrorClass = "OOM"
+	ErrorClassBuildTimeout           ErrorClass = "BUILD_TIMEOUT"
+	ErrorClassImagePullFail          ErrorClass = "IMAGE_PULL_FAILED"
+	ErrorClassCosignFailed           ErrorClass = "COSIGN_FAILED"
+	ErrorClassRegistryAuth           ErrorClass = "REGISTRY_AUTH"
+	ErrorClassDockerfileLint         ErrorClass = "DOCKERFILE_LINT"
+	ErrorClassLoopRuntimeYAMLInvalid ErrorClass = "LOOPRUNTIME_YAML_INVALID"
+	ErrorClassCancelledByUser        ErrorClass = "CANCELLED_BY_USER"
+	ErrorClassWorkflowDeleted        ErrorClass = "WORKFLOW_DELETED"
+	ErrorClassUnknown                ErrorClass = "UNKNOWN"
 )
 
 // suggestions maps an error class to a user-facing actionable hint. Rule 3:
@@ -39,15 +39,15 @@ var suggestions = map[ErrorClass]string{
 	ErrorClassCosignFailed:   "Image signing failed. Operator may need to rotate the signing key.",
 	ErrorClassRegistryAuth:   "Could not push to image registry. Verify pull secret and registry credentials.",
 	ErrorClassDockerfileLint: "Dockerfile failed validation. See lint output for the specific violation.",
-	// Red Team loopzero-cloud#123 — guide the customer to the canonical manifest
-	// (loopzerokit v2 emits `.loopzero/services.json`; the legacy `loopzero.yaml` has
-	// been retired). The class name stays `LOOPZERO_YAML_INVALID` for engine
+	// Red Team loopruntime-cloud#123 — guide the customer to the canonical manifest
+	// (loopzerokit v2 emits `.loopruntime/services.json`; the legacy `loopzero.yaml` has
+	// been retired). The class name stays `LOOPRUNTIME_YAML_INVALID` for engine
 	// compat — Classify() still matches "loopzero.yaml" substrings upstream — but
 	// the user-visible suggestion is honest.
-	ErrorClassLoopZeroYAMLInvalid: "Project manifest could not be parsed. Check your `.loopzero/services.json` and run `loopzero validate` locally.",
-	ErrorClassCancelledByUser:     "Deploy was cancelled. Trigger a new deploy when ready.",
-	ErrorClassWorkflowDeleted:     "Build was interrupted by an operator. Trigger a new deploy.",
-	ErrorClassUnknown:             "Build step failed. See build logs for details.",
+	ErrorClassLoopRuntimeYAMLInvalid: "Project manifest could not be parsed. Check your `.loopruntime/services.json` and run `loopruntime validate` locally.",
+	ErrorClassCancelledByUser:        "Deploy was cancelled. Trigger a new deploy when ready.",
+	ErrorClassWorkflowDeleted:        "Build was interrupted by an operator. Trigger a new deploy.",
+	ErrorClassUnknown:                "Build step failed. See build logs for details.",
 }
 
 // SuggestionFor returns the user-facing actionable hint for an error class.
@@ -105,8 +105,8 @@ func Classify(rawError string, logPreview string) ErrorClass {
 		strings.Contains(combined, "from_registry_not_allowed"):
 		return ErrorClassDockerfileLint
 	case strings.Contains(combined, "loopzero.yaml"),
-		strings.Contains(combined, "invalid loopzero yaml"):
-		return ErrorClassLoopZeroYAMLInvalid
+		strings.Contains(combined, "invalid loopruntime yaml"):
+		return ErrorClassLoopRuntimeYAMLInvalid
 	}
 	return ErrorClassUnknown
 }

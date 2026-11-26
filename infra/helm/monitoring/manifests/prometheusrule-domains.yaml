@@ -1,28 +1,28 @@
-# Custom domain alerting rules for LoopZero platform.
+# Custom domain alerting rules for LoopRuntime platform.
 # MEET-2026-04-05-033: Custom Domains feature.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-domain-alerts
+  name: loopruntime-domain-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopzero.domains
+    - name: loopruntime.domains
       rules:
-        - alert: LoopZeroDomainTLSExpiringSoon
-          expr: loopzero_domain_tls_expiry_days < 14
+        - alert: LoopRuntimeDomainTLSExpiringSoon
+          expr: loopruntime_domain_tls_expiry_days < 14
           for: 1h
           labels:
             severity: warning
           annotations:
             summary: "Custom domain TLS certificate expiring soon"
-            description: "TLS certificate for {{ $labels.domain }} expires in {{ $value }} days. Tenant attribution: query audit_log by domain or join loopzero_custom_domains_total{tenant=...}. (Label `tenant` removed for cardinality cap — audit gap M08 #19.)"
+            description: "TLS certificate for {{ $labels.domain }} expires in {{ $value }} days. Tenant attribution: query audit_log by domain or join loopruntime_custom_domains_total{tenant=...}. (Label `tenant` removed for cardinality cap — audit gap M08 #19.)"
             runbook: "cert-manager should auto-renew. If not, check cert-manager logs and Certificate CR status. The domain CNAME must still resolve for HTTP-01 challenge."
 
-        - alert: LoopZeroDomainVerificationStale
-          expr: loopzero_custom_domains_total{status="pending_verification"} > 0
+        - alert: LoopRuntimeDomainVerificationStale
+          expr: loopruntime_custom_domains_total{status="pending_verification"} > 0
           for: 48h
           labels:
             severity: info
@@ -31,8 +31,8 @@ spec:
             description: "Tenant {{ $labels.tenant }} has {{ $value }} domain(s) pending DNS verification for over 48 hours."
             runbook: "Domains pending > 7 days are auto-cleaned by DomainHealthChecker. No action needed unless tenant reports issues."
 
-        - alert: LoopZeroDomainProvisioningStuck
-          expr: loopzero_custom_domains_total{status="provisioning"} > 0
+        - alert: LoopRuntimeDomainProvisioningStuck
+          expr: loopruntime_custom_domains_total{status="provisioning"} > 0
           for: 1h
           labels:
             severity: warning
@@ -41,8 +41,8 @@ spec:
             description: "Tenant {{ $labels.tenant }} has {{ $value }} domain(s) in provisioning state for over 1 hour."
             runbook: "Check DomainProvisioner logs. Verify ArgoCD sync is working. Check cert-manager for pending Certificate CRs. If HTTP-01 challenge fails, verify CNAME resolves through CF Tunnel."
 
-        - alert: LoopZeroDomainCNAMELost
-          expr: increase(loopzero_domain_cname_check_failures_total[24h]) > 0
+        - alert: LoopRuntimeDomainCNAMELost
+          expr: increase(loopruntime_domain_cname_check_failures_total[24h]) > 0
           for: 24h
           labels:
             severity: warning
@@ -51,8 +51,8 @@ spec:
             description: "Tenant {{ $labels.tenant }} has domain(s) with CNAME check failures in the last 24 hours."
             runbook: "DomainHealthChecker weekly CNAME re-verification failed. After 14 days (2 consecutive failures), the domain degrades to failed and IngressRoute is removed. Contact tenant if pattern persists."
 
-        - alert: LoopZeroDomainHealthCheckerDown
-          expr: increase(loopzero_domain_health_checker_errors_total[30m]) > 5
+        - alert: LoopRuntimeDomainHealthCheckerDown
+          expr: increase(loopruntime_domain_health_checker_errors_total[30m]) > 5
           for: 15m
           labels:
             severity: warning
@@ -61,9 +61,9 @@ spec:
             description: "Domain health checker has 5+ errors in {{ $labels.check }} check in the last 30 minutes."
             runbook: "Check API leader pod logs for DomainHealthChecker errors. Verify database connectivity."
 
-    - name: loopzero.certificates
+    - name: loopruntime.certificates
       rules:
-        - alert: LoopZeroCertificateIssuanceFailed
+        - alert: LoopRuntimeCertificateIssuanceFailed
           expr: certmanager_certificate_ready_status == 0
           for: 10m
           labels:
@@ -73,7 +73,7 @@ spec:
             description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} has not been issued for 10+ minutes."
             runbook: "Check cert-manager logs and the Certificate CR status. For HTTP-01: verify CNAME resolves through CF Tunnel. For DNS-01: verify Cloudflare API token. Run: kubectl describe certificate {{ $labels.name }} -n {{ $labels.namespace }}"
 
-        - alert: LoopZeroCertificateExpiryUrgent
+        - alert: LoopRuntimeCertificateExpiryUrgent
           expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 7 * 24 * 3600
           for: 1h
           labels:

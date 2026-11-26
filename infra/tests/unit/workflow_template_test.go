@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -14,12 +14,12 @@ import (
 
 // cwtDir returns the path to the ClusterWorkflowTemplate YAML files.
 // F27 (M23 audit 2026-07-10): CWTs migrated from `infra/helm/argo-workflows/
-// templates/` to `charts/loopzero-build-cwts/templates/` when Argo Workflows moved
+// templates/` to `charts/loopruntime-build-cwts/templates/` when Argo Workflows moved
 // to the published-chart tier. Fall back to legacy path only if new path absent
 // (both paths tolerated).
 func cwtDir() string {
-	// New canonical location (charts/loopzero-build-cwts/templates/)
-	newPath := filepath.Join(helmDir(), "..", "..", "charts", "loopzero-build-cwts", "templates")
+	// New canonical location (charts/loopruntime-build-cwts/templates/)
+	newPath := filepath.Join(helmDir(), "..", "..", "charts", "loopruntime-build-cwts", "templates")
 	if info, err := os.Stat(newPath); err == nil && info.IsDir() {
 		if matches, _ := filepath.Glob(filepath.Join(newPath, "cwt-*.yaml")); len(matches) > 0 {
 			return newPath
@@ -126,7 +126,7 @@ func TestCWTs_AllAreClusterWorkflowTemplates(t *testing.T) {
 	}
 }
 
-func TestCWTs_AllHaveLoopZeroPrefix(t *testing.T) {
+func TestCWTs_AllHaveLoopRuntimePrefix(t *testing.T) {
 	cwts := loadAllCWTs(t)
 
 	for name, tmpl := range cwts {
@@ -136,8 +136,8 @@ func TestCWTs_AllHaveLoopZeroPrefix(t *testing.T) {
 			continue
 		}
 		cwtName, _ := metadata["name"].(string)
-		if !strings.HasPrefix(cwtName, "loopzero-") {
-			t.Errorf("%s: metadata.name = %q, want loopzero-* prefix", name, cwtName)
+		if !strings.HasPrefix(cwtName, "loopruntime-") {
+			t.Errorf("%s: metadata.name = %q, want loopruntime-* prefix", name, cwtName)
 		}
 	}
 }

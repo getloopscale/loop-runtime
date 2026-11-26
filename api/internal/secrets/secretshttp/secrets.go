@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package secretshttp serves the tenant secret endpoints: /api/v1/secrets and its
 // bulk sibling, plus the internal secret-fetch endpoint the build plane calls.
@@ -38,7 +38,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 	"github.com/getloopscale/loop-runtime/api/internal/manifests"
 	"github.com/getloopscale/loop-runtime/api/internal/secrets"
-	loopzerovault "github.com/getloopscale/loop-runtime/pkg/vault"
+	loopruntimevault "github.com/getloopscale/loop-runtime/pkg/vault"
 
 	"github.com/go-chi/chi/v5"
 
@@ -49,7 +49,7 @@ import (
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
 	"github.com/getloopscale/loop-runtime/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
@@ -130,7 +130,7 @@ type SecretHandler struct {
 // Extracted as a function so the classification is testable without staging a
 // whole bulk upload — the branch shipped untested in its first version.
 func transitFailureStatus(err error) string {
-	if errors.Is(err, loopzerovault.ErrTransitKeyCreateFailed) {
+	if errors.Is(err, loopruntimevault.ErrTransitKeyCreateFailed) {
 		return "denied"
 	}
 	return "failed"
@@ -299,7 +299,7 @@ func secretValueTooLargeMessage(name string) string {
 // of the typed error in the chain, or a generic sentence. The wrapped causes
 // (package prefixes, the store's path, the tenant key name) go to the log.
 func publicSecretError(err error) string {
-	var typed *loopzeroerrors.LoopZeroError
+	var typed *loopruntimeerrors.LoopRuntimeError
 	if errors.As(err, &typed) {
 		return typed.Message
 	}
@@ -333,7 +333,7 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -366,7 +366,7 @@ func (h *SecretHandler) Bulk(w http.ResponseWriter, r *http.Request) {
 func decodeAndValidateBulkRequest(w http.ResponseWriter, r *http.Request) (secretBulkRequest, bool) {
 	var req secretBulkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("invalid request body"))
 		return req, false
 	}
 	if len(req.Secrets) > secretBulkMaxKeys {
@@ -464,7 +464,7 @@ func (h *SecretHandler) assertSecretPlanLimit(
 		if err != nil {
 			slog.Error("secret bulk: cannot count existing secrets for the plan gate",
 				"tenant", tenantID, "project", project, "env", env, "error", err)
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 			return false
 		}
 		requested := len(existing) + countNewNames(existing, names)
@@ -474,11 +474,11 @@ func (h *SecretHandler) assertSecretPlanLimit(
 			// never a pass and never a guessed 402.
 			slog.Error("secret bulk: plan limit cannot be read; refusing the batch",
 				"tenant", tenantID, "project", project, "env", env, "error", err)
-			var te *loopzeroerrors.LoopZeroError
+			var te *loopruntimeerrors.LoopRuntimeError
 			if !errors.As(err, &te) {
-				te = loopzeroerrors.ErrPlatformDegraded
+				te = loopruntimeerrors.ErrPlatformDegraded
 			}
-			httpio.WriteLoopZeroError(w, te)
+			httpio.WriteLoopRuntimeError(w, te)
 			return false
 		}
 		if res.Allowed {
@@ -668,7 +668,7 @@ func (h *SecretHandler) persistEnvGroup(ctx context.Context, tenantID, project, 
 // (D2 ADR). Without a workload sync the row stays canonical in PG and is
 // reported "pending"; B-176 requires the same skip metric the single-set
 // path emits, once per persisted row, because
-// sum(loopzero_secret_externalsecret_total) is the trigger docs/decisions.md § 2
+// sum(loopruntime_secret_externalsecret_total) is the trigger docs/decisions.md § 2
 // relies on to notice the secrets table stopped being empty.
 func (h *SecretHandler) syncBulkWrite(ctx context.Context, tenantID, project string, wr *bulkWrite) {
 	aggs := &wr.state.aggs
@@ -780,14 +780,14 @@ func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	env := r.URL.Query().Get("env")
 	project := r.URL.Query().Get("project")
 
-	// Red Team loopzero-cloud#92 absorption (2026-06-27): missing-parent-guard.
+	// Red Team loopruntime-cloud#92 absorption (2026-06-27): missing-parent-guard.
 	// Without this check, GET /api/v1/secrets?project=<nonexistent> returned
 	// 200 with an empty list. CWE-204 defense + UX: the dashboard's Secrets
 	// page rendered an "Add secret" form on top of a deleted project. Same
@@ -800,7 +800,7 @@ func (h *SecretHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	secrets, err := h.store.ListNames(ctx, uc.TenantID, project, env)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
@@ -819,13 +819,13 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	var req secretSetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("invalid request body"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("invalid request body"))
 		return
 	}
 
@@ -848,7 +848,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if req.Value == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("value is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("value is required"))
 		return
 	}
 	if len(req.Value) > secretValueMaxBytes {
@@ -859,11 +859,11 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Environment == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("environment is required"))
 		return
 	}
 	if req.App == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("app is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("app is required"))
 		return
 	}
 
@@ -875,7 +875,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	auditctx.SetResourceID(ctx, project)
 
 	// T1.1 of deep-review-2026-05-10-remediation-plan: serialize mutations
-	// per (tenant, project, env) so concurrent `loopzero secret set` + a deploy
+	// per (tenant, project, env) so concurrent `loopruntime secret set` + a deploy
 	// capturing config cannot race.
 	var created bool
 	err := h.locker.WithLock(ctx, uc.TenantID, project, req.Environment, func(_ dbtx.DBTX) error {
@@ -884,7 +884,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 		return setErr
 	})
 	if err != nil {
-		if errors.Is(err, loopzeroerrors.ErrLockTimeout) {
+		if errors.Is(err, loopruntimeerrors.ErrLockTimeout) {
 			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"code":    "DEPLOY_IN_PROGRESS",
 				"message": "Another operation is in progress for this environment. Retry shortly.",
@@ -896,7 +896,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 		// collapsing it into INTERNAL_ERROR is what forced the issue author
 		// to guess at the subsystem from which project happened to work.
 		// 503, not 500: the request was valid and a dependency was down.
-		if errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+		if errors.Is(err, loopruntimeerrors.ErrSecretsBackendUnavailable) {
 			slog.Error("secrets backend unavailable on set",
 				"error", err.Error(),
 				"tenant_id", uc.TenantID,
@@ -904,7 +904,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 				"environment", req.Environment,
 				"secret_name", req.Name,
 			)
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrSecretsBackendUnavailable)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrSecretsBackendUnavailable)
 			return
 		}
 		// V9 L18: mirror mapBuildError + promote.go pattern — log unexpected
@@ -919,7 +919,7 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 			"app", req.App,
 			"secret_name", req.Name,
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
@@ -939,8 +939,8 @@ func (h *SecretHandler) Set(w http.ResponseWriter, r *http.Request) {
 	// Create K8s Secret on mgmt + ExternalSecret CR on workload for ESO sync.
 	// dogfood-2026-05-08-fixes T2.3 (F-2): emit "skip" metric when k8sSync is
 	// nil — that path was the silent-failure cause, formerly invisible. Now
-	// `rate(loopzero_secret_externalsecret_total{result="skip"}[5m]) > 0` alerts
-	// that the API is silently no-opping `loopzero secret set`.
+	// `rate(loopruntime_secret_externalsecret_total{result="skip"}[5m]) > 0` alerts
+	// that the API is silently no-opping `loopruntime secret set`.
 	//
 	// B-176: bulkProcessEnvs handles the same condition and must emit the same
 	// series. It did not, and the gap was found by reading the two paths side
@@ -980,13 +980,13 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("secret name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("secret name is required"))
 		return
 	}
 
@@ -1001,7 +1001,7 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	// 409s, and the store.Delete matches L19 PK rows that include the
 	// empty-env slot. Mirror the Set handler validation pattern.
 	if env == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("environment is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("environment is required"))
 		return
 	}
 
@@ -1013,14 +1013,14 @@ func (h *SecretHandler) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 		return delErr
 	})
 	if err != nil {
-		if errors.Is(err, loopzeroerrors.ErrLockTimeout) {
+		if errors.Is(err, loopruntimeerrors.ErrLockTimeout) {
 			httpio.WriteJSON(w, http.StatusConflict, map[string]string{
 				"code":    "DEPLOY_IN_PROGRESS",
 				"message": "Another operation is in progress for this environment. Retry shortly.",
 			})
 			return
 		}
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 

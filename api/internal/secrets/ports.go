@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package secrets is the secret-management feature: storing a tenant's secrets
 // and delivering them to its workloads. Its handlers live in secretshttp.
@@ -22,7 +22,7 @@ type SecretStore interface {
 // SecretK8sSync abstracts K8s Secret + ExternalSecret CR creation (DIP).
 // ref.Project is the canonical M2 namespace segment (per
 // pkg/naming.Namespace); the runtime ExternalSecret CR lives at
-// loopzero-{tenant}-{project}-{env}.
+// loopruntime-{tenant}-{project}-{env}.
 type SecretK8sSync interface {
 	CreateSecret(ctx context.Context, ref ports.SecretRef, value string) error
 	DeleteSecret(ctx context.Context, ref ports.SecretRef) error

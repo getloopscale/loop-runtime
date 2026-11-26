@@ -20,7 +20,7 @@
 #   bash infra/scripts/openbao/enable-vault-backup.sh \
 #     --env vault-local \
 #     [--creds-file ~/.openbao-vault-local-resources.env] \
-#     [--vault-context k3d-loopzero-secrets] \
+#     [--vault-context k3d-loopruntime-secrets] \
 #     [--vault-namespace secrets-system] \
 #     [--helmfile-path infra/helmfile/secrets.helmfile.yaml.gotmpl] \
 #     [--dry-run] \
@@ -31,7 +31,7 @@
 #   - Creds file has OPENBAO_BACKUP_ACCESS_KEY_ID + OPENBAO_BACKUP_SECRET_ACCESS_KEY
 #   - env vars snapshotAgentEnabled=true em env values OR sponsor override
 #
-# Plan: 2026-06-02-loopzero-api-vault-integration v1.8 Runbook P4 codification.
+# Plan: 2026-06-02-loopruntime-api-vault-integration v1.8 Runbook P4 codification.
 # SPDX-License-Identifier: Apache-2.0
 
 set -uo pipefail
@@ -41,7 +41,7 @@ set -uo pipefail
 # ----------------------------------------------------------------------------
 ENV=""
 CREDS_FILE=""
-SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
+SECRETS_CONTEXT="${LOOPRUNTIME_SECRETS_CONTEXT:-k3d-loopruntime-secrets}"
 VAULT_NAMESPACE="secrets-system"
 HELMFILE_PATH="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}/infra/helmfile/secrets.helmfile.yaml.gotmpl"
 DRY_RUN=0
@@ -56,11 +56,11 @@ USAGE
   $0 --env <env> [options]
 
 REQUIRED
-  --env <env>          LoopZero env (vault-local|dev|drill|staging|prod)
+  --env <env>          LoopRuntime env (vault-local|dev|drill|staging|prod)
 
 OPTIONAL
   --creds-file <path>  Operator creds file (default: ~/.openbao-<env>-resources.env)
-  --vault-context <ctx>   kubectl context (default: k3d-loopzero-secrets; env LOOPZERO_SECRETS_CONTEXT)
+  --vault-context <ctx>   kubectl context (default: k3d-loopruntime-secrets; env LOOPRUNTIME_SECRETS_CONTEXT)
   --vault-namespace <ns>  Vault NS (default: secrets-system)
   --helmfile-path <p>  Path to secrets.helmfile (default: infra/helmfile/secrets.helmfile.yaml.gotmpl)
   --skip-helmfile      Sync Secret only; skip helmfile sync (operator does it manually)

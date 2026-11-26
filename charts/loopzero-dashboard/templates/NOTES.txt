@@ -1,6 +1,0 @@
-LoopZero Dashboard has been installed.
-
-Service: {{ include "loopzero-common.fullname" . }}:{{ .Values.service.port }}
-
-Run helm test to verify:
-  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

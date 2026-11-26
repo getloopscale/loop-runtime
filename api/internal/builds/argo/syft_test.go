@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -64,7 +64,7 @@ func TestSyftScanTemplate_OutputsOnLocalTmp(t *testing.T) {
 // CLI flag. Now must use SYFT_REGISTRY_INSECURE_USE_HTTP env var.
 func TestSyftScanTemplate_Insecure_EmitsFlag(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"k3d-loopzero-registry:5000/tn-1/proj-1/api:abc", true, "", objectStore{})
+		"k3d-loopruntime-registry:5000/tn-1/proj-1/api:abc", true, "", objectStore{})
 	script := c.Source
 	if !strings.Contains(script, "SYFT_REGISTRY_INSECURE_USE_HTTP=true") {
 		t.Errorf("insecure registry MUST export SYFT_REGISTRY_INSECURE_USE_HTTP=true:\n%s", script)
@@ -80,7 +80,7 @@ func TestSyftScanTemplate_Insecure_EmitsFlag(t *testing.T) {
 
 func TestSyftScanTemplate_Secure_NoInsecureFlag(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.digitalocean.com/loopzero/api:abc", false, "", objectStore{})
+		"registry.digitalocean.com/loopruntime/api:abc", false, "", objectStore{})
 	script := c.Source
 	if strings.Contains(script, "--source-registry-insecure") {
 		t.Errorf("secure registry must NOT emit --source-registry-insecure:\n%s", script)
@@ -118,7 +118,7 @@ func TestSyftScanTemplate_UploadsToS3(t *testing.T) {
 }
 
 // TestSyftScanTemplate_UsesPreBuiltImage — SEC-006 requires the syft
-// binary to come from the pre-built loopzero-syft-scanner image, not a
+// binary to come from the pre-built loopruntime-syft-scanner image, not a
 // runtime download.
 func TestSyftScanTemplate_UsesPreBuiltImage(t *testing.T) {
 	c := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",

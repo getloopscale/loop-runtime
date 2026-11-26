@@ -1,5 +1,5 @@
-name: loopzero-infra
+name: loopruntime-infra
 runtime: nodejs
 description: >
-  LoopZero cloud primitives — VPC, K8s clusters, PostgreSQL, Spaces buckets, CDN, Container Registry.
+  LoopRuntime cloud primitives — VPC, K8s clusters, PostgreSQL, Spaces buckets, CDN, Container Registry.
   Changes rarely (cluster upgrades, scaling). All stateful resources live here.

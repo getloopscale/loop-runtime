@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package platform
 
@@ -24,7 +24,7 @@ import (
 
 	"k8s.io/client-go/rest"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 	"github.com/getloopscale/loop-runtime/operators/internal/metrics"
@@ -40,10 +40,10 @@ const (
 //
 // ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers.
 //
-// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=clustercredentials/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=clustercredentials/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",namespace=loopruntime-system,resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",namespace=argocd,resources=secrets,verbs=get;list;watch;create;update;delete
 type ClusterCredentialReconciler struct {
 	client.Client
@@ -62,7 +62,7 @@ type ClusterCredentialReconciler struct {
 // TypeArgoCDSecretSynced when the credential feeds ArgoCD — a cell ArgoCD
 // cannot deploy to is not Ready. TypeSecretNotFound has inverted polarity
 // (True = bad) per ADR-0025 condition #3 and is deliberately excluded.
-func clusterCredentialDetailTypes(cr *loopzerov1.ClusterCredential) []string {
+func clusterCredentialDetailTypes(cr *loopruntimev1.ClusterCredential) []string {
 	if cr.Spec.Scope.ArgoCD {
 		return []string{conditions.TypeConnected, conditions.TypeArgoCDSecretSynced}
 	}
@@ -85,7 +85,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	logger := log.FromContext(ctx)
 
-	var cr loopzerov1.ClusterCredential
+	var cr loopruntimev1.ClusterCredential
 	if err := r.Get(ctx, req.NamespacedName, &cr); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -95,7 +95,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
 	// correlation-id from CR annotation into reconcile context (no-op when absent).
-	ctx = correlation.WithID(ctx, cr.GetAnnotations()["loopzero.io/correlation-id"])
+	ctx = correlation.WithID(ctx, cr.GetAnnotations()["runtime.getloopscale.com/correlation-id"])
 
 	if !cr.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &cr)
@@ -177,7 +177,7 @@ func (r *ClusterCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // rotated token reaches ArgoCD even while the cell is unreachable
 // (fix-all-platform-issues-plan T1.2). The error is returned so the caller
 // can requeue; the connectivity check still runs, because it is independent.
-func (r *ClusterCredentialReconciler) syncArgoCDClusterSecret(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) error {
+func (r *ClusterCredentialReconciler) syncArgoCDClusterSecret(ctx context.Context, cr *loopruntimev1.ClusterCredential, kubeconfigData []byte) error {
 	if !cr.Spec.Scope.ArgoCD {
 		return nil
 	}
@@ -194,7 +194,7 @@ func (r *ClusterCredentialReconciler) syncArgoCDClusterSecret(ctx context.Contex
 
 // resolveKubeconfig reads and parses the kubeconfig from the referenced Secret.
 // Returns (nil, result, nil) if the kubeconfig is not yet available (status updated, requeue set).
-func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr, base *loopzerov1.ClusterCredential) ([]byte, ctrl.Result, error) {
+func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr, base *loopruntimev1.ClusterCredential) ([]byte, ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	secretKey := client.ObjectKey{
@@ -241,7 +241,7 @@ func (r *ClusterCredentialReconciler) resolveKubeconfig(ctx context.Context, cr,
 
 // checkConnectivity validates that the cluster is reachable via /healthz.
 // Returns (false, result, nil) if unreachable (status updated, requeue set).
-func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr, base *loopzerov1.ClusterCredential, kubeconfigData []byte) (bool, ctrl.Result, error) {
+func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr, base *loopruntimev1.ClusterCredential, kubeconfigData []byte) (bool, ctrl.Result, error) {
 	ctx, span := reconcileloop.StartChildSpan(ctx, "clustercredential.connectivity.check")
 	defer span.End()
 	logger := log.FromContext(ctx)
@@ -300,7 +300,7 @@ func (r *ClusterCredentialReconciler) checkConnectivity(ctx context.Context, cr,
 // 2 inline 11-line copies (kubeconfig-parse + client-create error paths).
 // The third "Unreachable / healthz fail" path is NOT consolidated here
 // because it additionally writes Status.LastCheckedAt.
-func (r *ClusterCredentialReconciler) markDisconnected(ctx context.Context, cr, base *loopzerov1.ClusterCredential, reason, msg string) (bool, ctrl.Result, error) {
+func (r *ClusterCredentialReconciler) markDisconnected(ctx context.Context, cr, base *loopruntimev1.ClusterCredential, reason, msg string) (bool, ctrl.Result, error) {
 	cr.Status.Connected = false
 	conditions.SetCondition(&cr.Status.Conditions, conditions.TypeConnected,
 		metav1.ConditionFalse, reason, msg, cr.Generation)
@@ -327,7 +327,7 @@ type argoCDTLSConfig struct {
 // Stores only the bearer token + CA certificate in the "config" field (ArgoCD's
 // preferred auth method). The raw kubeconfig is NOT stored to minimize credential
 // exposure -- a compromised ArgoCD namespace only leaks a scoped bearer token.
-func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.Context, cr *loopzerov1.ClusterCredential, kubeconfigData []byte) error {
+func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.Context, cr *loopruntimev1.ClusterCredential, kubeconfigData []byte) error {
 	secretName := constants.ArgoCDClusterSecretName(cr.Spec.ClusterName)
 
 	// MEET-053 A-02: Extract credentials via clientcmd (replaces naive string parser).
@@ -442,10 +442,10 @@ func (r *ClusterCredentialReconciler) reconcileArgoCDClusterSecret(ctx context.C
 // 5s fetch budget keeps reconcile under its 30s deadline even when fetch hangs.
 //
 // ADR D2 (graceful fallback): never returns error — degrades to existing
-// behavior. SRE detects degradation via loopzero_clustercredential_ca_fetch_total{result="fallback"}.
+// behavior. SRE detects degradation via loopruntime_clustercredential_ca_fetch_total{result="fallback"}.
 func (r *ClusterCredentialReconciler) resolveCAData(
 	ctx context.Context,
-	cr *loopzerov1.ClusterCredential,
+	cr *loopruntimev1.ClusterCredential,
 	restConfig *rest.Config,
 ) (caDataB64, source string) {
 	// D4: Op A precedence — short-circuit when insecure. ArgoCD ignores
@@ -495,7 +495,7 @@ func (r *ClusterCredentialReconciler) resolveCAData(
 }
 
 // reconcileDelete handles cleanup when a ClusterCredential is being deleted.
-func (r *ClusterCredentialReconciler) reconcileDelete(ctx context.Context, cr *loopzerov1.ClusterCredential) (ctrl.Result, error) {
+func (r *ClusterCredentialReconciler) reconcileDelete(ctx context.Context, cr *loopruntimev1.ClusterCredential) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	if !controllerutil.ContainsFinalizer(cr, clusterCredentialFinalizer) {
@@ -541,7 +541,7 @@ func SetupClusterCredentialController(mgr ctrl.Manager, argoCDNamespace string) 
 		CAFetcher:       newKubeRootCAFetcher(),
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.ClusterCredential{}, reconcileloop.ForOption()).
+		For(&loopruntimev1.ClusterCredential{}, reconcileloop.ForOption()).
 		// D-02: Watch Secrets -- when a kubeconfig Secret is updated (e.g.,
 		// rotated by Pulumi), find the ClusterCredentials that reference it
 		// and requeue them immediately.
@@ -558,7 +558,7 @@ func (r *ClusterCredentialReconciler) findCredentialsForSecret(ctx context.Conte
 	secret := obj.(*corev1.Secret)
 
 	// List all ClusterCredentials and find those referencing this Secret.
-	var credList loopzerov1.ClusterCredentialList
+	var credList loopruntimev1.ClusterCredentialList
 	if err := r.List(ctx, &credList); err != nil {
 		// A mapper cannot return an error; the lost enqueue is recovered by the
 		// next event or resync, and this log is the only trace of it.
@@ -583,7 +583,7 @@ func (r *ClusterCredentialReconciler) findCredentialsForSecret(ctx context.Conte
 // kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
 // with a merge patch off base, so every write carries a Ready condition that
 // agrees with the conditions written beside it.
-func (r *ClusterCredentialReconciler) patchStatus(ctx context.Context, cr, base *loopzerov1.ClusterCredential) error {
+func (r *ClusterCredentialReconciler) patchStatus(ctx context.Context, cr, base *loopruntimev1.ClusterCredential) error {
 	conditions.SetReadinessSummaryViaPkg(&cr.Status.Conditions, cr.Generation, clusterCredentialDetailTypes(cr))
 	return r.Status().Patch(ctx, cr, client.MergeFrom(base))
 }

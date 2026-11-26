@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package webhook handles incoming GitHub App webhook events.
 // Validates HMAC-SHA256 signatures, parses event types, and dispatches
@@ -140,10 +140,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, span := otel.Tracer("loopzero-api").Start(r.Context(), "loopzero.api.webhook.github.receive",
+	_, span := otel.Tracer("loopruntime-api").Start(r.Context(), "loopruntime.api.webhook.github.receive",
 		trace.WithAttributes(
-			attribute.String("loopzero.webhook.event_type", eventType),
-			attribute.String("loopzero.webhook.delivery_id", deliveryID),
+			attribute.String("loopruntime.webhook.event_type", eventType),
+			attribute.String("loopruntime.webhook.delivery_id", deliveryID),
 		))
 	defer span.End()
 

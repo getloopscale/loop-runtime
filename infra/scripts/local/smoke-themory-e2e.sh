@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # smoke-themory-e2e.sh — observable proof of the Dashboard → Go proxy → TheMemory chain.
 #
-# Per plan v1.3 § Phase 5 / T5.1 of loopzero-cloud-themory-e2e-finalize-plan.md.
+# Per plan v1.3 § Phase 5 / T5.1 of loopruntime-cloud-themory-e2e-finalize-plan.md.
 # Companion: create-test-api-key.sh (T5.2) mints the bearer.
 #
 # Sequence (5 steps + cleanup trap):
 #   1. POST /v1/remember to TheMemory direct (sanity baseline)
-#   2. GET /v1/memory/list via Go proxy with loopzero_live_* Bearer + owner_user_id query
+#   2. GET /v1/memory/list via Go proxy with loopruntime_live_* Bearer + owner_user_id query
 #   3. Assert remembered fact id appears in list (10s poll, 500ms interval)
 #   4. POST /v1/memory/forget/{memoryID} via Go proxy
 #   5. List again — assert id absent
@@ -14,7 +14,7 @@
 # Cleanup (trap EXIT + SIGINT/SIGTERM): best-effort forget of the captured
 # memoryID. EC-10: guards against empty memoryID (would 405/404 noise log).
 #
-# EC-6 GRAVE: LOOPZERO_TEST_BEARER MUST be a loopzero_live_* with memory:read|write|delete
+# EC-6 GRAVE: LOOPRUNTIME_TEST_BEARER MUST be a loopruntime_live_* with memory:read|write|delete
 # scopes (mint via create-test-api-key.sh T5.2). JWT session tokens 401 against
 # requireScope middleware.
 
@@ -22,10 +22,10 @@ set -euo pipefail
 
 readonly THEMORY_URL="${THEMORY_URL:-http://localhost:8080}"
 readonly CLOUD_URL="${CLOUD_URL:-http://localhost:13002}"
-readonly BEARER_FILE="${BEARER_FILE:-${HOME}/.loopzero/local-test-memory-bearer.txt}"
+readonly BEARER_FILE="${BEARER_FILE:-${HOME}/.loopruntime/local-test-memory-bearer.txt}"
 
-# TEST_USER MUST match the `subject` field of the loopzero_api_keys row backing
-# LOOPZERO_TEST_BEARER. Cloud proxy enforces D1 invariant: userID upstream comes
+# TEST_USER MUST match the `subject` field of the loopruntime_api_keys row backing
+# LOOPRUNTIME_TEST_BEARER. Cloud proxy enforces D1 invariant: userID upstream comes
 # from authenticated subject, NOT from any query param. Override via env to
 # match your bearer's subject (defaults to smoke-user-${RANDOM} for
 # operator-minted bearers via create-test-api-key.sh whose subject is the
@@ -50,10 +50,10 @@ MEMORY_ID=""
 cleanup() {
   local exit_code=$?
   # EC-10: guard empty memoryID (no curl noise + no false 404 log)
-  if [ -n "$MEMORY_ID" ] && [ -n "${LOOPZERO_TEST_BEARER:-}" ]; then
+  if [ -n "$MEMORY_ID" ] && [ -n "${LOOPRUNTIME_TEST_BEARER:-}" ]; then
     log_warn "Cleanup: best-effort forget of $MEMORY_ID"
     curl -fsS -X DELETE "${CLOUD_URL}/v1/memory/forget/${MEMORY_ID}" \
-      -H "Authorization: Bearer ${LOOPZERO_TEST_BEARER}" \
+      -H "Authorization: Bearer ${LOOPRUNTIME_TEST_BEARER}" \
       --max-time "$CURL_TIMEOUT" >/dev/null 2>&1 || true
   fi
   exit "$exit_code"
@@ -66,17 +66,17 @@ ensure_jq_present() {
 }
 
 ensure_bearer() {
-  if [ -z "${LOOPZERO_TEST_BEARER:-}" ]; then
+  if [ -z "${LOOPRUNTIME_TEST_BEARER:-}" ]; then
     [ -f "$BEARER_FILE" ] \
-      || log_fatal "LOOPZERO_TEST_BEARER unset AND $BEARER_FILE absent — run create-test-api-key.sh (T5.2) first"
-    LOOPZERO_TEST_BEARER="$(cat "$BEARER_FILE")"
-    export LOOPZERO_TEST_BEARER
+      || log_fatal "LOOPRUNTIME_TEST_BEARER unset AND $BEARER_FILE absent — run create-test-api-key.sh (T5.2) first"
+    LOOPRUNTIME_TEST_BEARER="$(cat "$BEARER_FILE")"
+    export LOOPRUNTIME_TEST_BEARER
   fi
-  # EC-6 GRAVE: bearer MUST be loopzero_live_* — JWT (eyJ...) would 401 vs requireScope middleware
-  if [[ ! "$LOOPZERO_TEST_BEARER" =~ ^loopzero_live_ ]]; then
-    log_fatal "LOOPZERO_TEST_BEARER does not match ^loopzero_live_ — must be a scoped API key (NOT a JWT). Run create-test-api-key.sh OR check Dashboard /settings/tokens."
+  # EC-6 GRAVE: bearer MUST be loopruntime_live_* — JWT (eyJ...) would 401 vs requireScope middleware
+  if [[ ! "$LOOPRUNTIME_TEST_BEARER" =~ ^loopruntime_live_ ]]; then
+    log_fatal "LOOPRUNTIME_TEST_BEARER does not match ^loopruntime_live_ — must be a scoped API key (NOT a JWT). Run create-test-api-key.sh OR check Dashboard /settings/tokens."
   fi
-  log_info "Bearer loaded (prefix=${LOOPZERO_TEST_BEARER:0:11}, length=${#LOOPZERO_TEST_BEARER})"
+  log_info "Bearer loaded (prefix=${LOOPRUNTIME_TEST_BEARER:0:11}, length=${#LOOPRUNTIME_TEST_BEARER})"
 }
 
 step1_remember_direct() {
@@ -101,7 +101,7 @@ step2_3_list_via_proxy() {
   while [ "$elapsed" -lt "$POLL_TIMEOUT" ]; do
     local response
     response="$(curl -fsS "${CLOUD_URL}/v1/memory/list?owner_user_id=${TEST_USER}" \
-      -H "Authorization: Bearer ${LOOPZERO_TEST_BEARER}" \
+      -H "Authorization: Bearer ${LOOPRUNTIME_TEST_BEARER}" \
       --max-time "$CURL_TIMEOUT" 2>&1)" || response=""
     if echo "$response" | jq -e ".memories[] | select(.id == \"$MEMORY_ID\")" >/dev/null 2>&1; then
       log_info "step 2 OK — fact appeared in proxy list"
@@ -116,7 +116,7 @@ step2_3_list_via_proxy() {
 step4_forget_via_proxy() {
   log_step 4 "POST /v1/memory/forget/{id} via Go proxy"
   curl -fsS -X DELETE "${CLOUD_URL}/v1/memory/forget/${MEMORY_ID}" \
-    -H "Authorization: Bearer ${LOOPZERO_TEST_BEARER}" \
+    -H "Authorization: Bearer ${LOOPRUNTIME_TEST_BEARER}" \
     --max-time "$CURL_TIMEOUT" >/dev/null 2>&1 \
     || log_fatal "step 4: proxy forget FAILED for memoryID=$MEMORY_ID"
   log_info "step 4 OK — forget request accepted"
@@ -127,7 +127,7 @@ step5_assert_absent() {
   sleep 1  # eventual consistency window
   local response
   response="$(curl -fsS "${CLOUD_URL}/v1/memory/list?owner_user_id=${TEST_USER}" \
-    -H "Authorization: Bearer ${LOOPZERO_TEST_BEARER}" \
+    -H "Authorization: Bearer ${LOOPRUNTIME_TEST_BEARER}" \
     --max-time "$CURL_TIMEOUT" 2>&1)" \
     || log_fatal "step 5: proxy list FAILED — response: $response"
   if echo "$response" | jq -e ".memories[] | select(.id == \"$MEMORY_ID\")" >/dev/null 2>&1; then

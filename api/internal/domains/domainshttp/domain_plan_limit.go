@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domainshttp
 
@@ -14,7 +14,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 	"github.com/getloopscale/loop-runtime/pkg/domain"
 	"github.com/getloopscale/loop-runtime/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // DomainPlanLimiter is the plan question a new custom domain asks, answered
@@ -66,7 +66,7 @@ func (h *DomainHandler) allowedByPlan(ctx context.Context, w http.ResponseWriter
 	if err != nil {
 		slog.ErrorContext(ctx, "domain create: cannot count the environment's domains for the plan gate",
 			"tenant", tenantID, "project", req.Project, "env", req.Environment, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return false
 	}
 	result, err := h.planLimits.CheckValue(ctx, tenantID, customDomainsLimitMetric, existing+1)
@@ -74,11 +74,11 @@ func (h *DomainHandler) allowedByPlan(ctx context.Context, w http.ResponseWriter
 		// An unreadable plan is a refusal, never a pass and never a guessed 402.
 		slog.ErrorContext(ctx, "domain create: plan limit cannot be read; refusing the domain",
 			"tenant", tenantID, "project", req.Project, "env", req.Environment, "error", err)
-		var typed *loopzeroerrors.LoopZeroError
+		var typed *loopruntimeerrors.LoopRuntimeError
 		if !errors.As(err, &typed) {
-			typed = loopzeroerrors.ErrPlatformDegraded
+			typed = loopruntimeerrors.ErrPlatformDegraded
 		}
-		httpio.WriteLoopZeroError(w, typed)
+		httpio.WriteLoopRuntimeError(w, typed)
 		return false
 	}
 	if result.Allowed {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argocd
 
@@ -176,7 +176,7 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 			"metadata": map[string]interface{}{
 				"name": spec.Name,
 				"labels": func() map[string]interface{} {
-					// Sprint B B3 prep (code-005): emit loopzero.io/environment label
+					// Sprint B B3 prep (code-005): emit runtime.getloopscale.com/environment label
 					// when spec.Environment is non-empty so the label-based
 					// parser path (future activator iteration) can disambiguate
 					// hyphenated env names. Backward-compat: empty Environment
@@ -194,7 +194,7 @@ func buildApplicationObject(spec ApplicationSpec) *unstructured.Unstructured {
 					// ArgoCD Notifications: subscribe to sync-completed trigger.
 					// When Synced + Healthy, ArgoCD calls POST /internal/argocd-callback
 					// on the API to activate the release (push-based, replaces polling).
-					"notifications.argoproj.io/subscribe.on-sync-healthy.loopzero-api": "",
+					"notifications.argoproj.io/subscribe.on-sync-healthy.loopruntime-api": "",
 					// MEET-2026-04-22-058 (B12): skip-reconcile REMOVED. The annotation
 					// coupled two writers (operator sets, API removes via broken PATCH)
 					// and required Casbin RBAC scope that doesn't exist. Amplification
@@ -332,7 +332,7 @@ func (p *RealProvisioner) EnsureApplication(ctx context.Context, spec Applicatio
 // (`kubectl get crd applications.argoproj.io -o jsonpath='{.spec.versions[*].subresources}'`
 // returns `{}`), so `.status` is an ordinary field and a whole-object Update replaces it.
 // Dropping it made sync/health flap to empty every few seconds, and every reader — including
-// `loopzero platform status` — saw false drift (issue #271). If ArgoCD upstream ever enables the
+// `loopruntime platform status` — saw false drift (issue #271). If ArgoCD upstream ever enables the
 // subresource, this clause becomes inert and can go.
 //
 // The .status copy runs BEFORE the metadata guard on purpose: preserving status must not

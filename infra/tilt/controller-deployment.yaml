@@ -3,7 +3,7 @@
 # This is the dedicated controller binary that owns all background
 # reconciliation loops (build reconcile, release convergence, reapers,
 # event pruning, idempotency cleanup). The API binary runs with
-# LOOPZERO_DISABLE_LEGACY_LOOPS=true and serves only HTTP.
+# LOOPRUNTIME_DISABLE_LEGACY_LOOPS=true and serves only HTTP.
 #
 # Leader election is via PG generation fencing (api/internal/leader),
 # not K8s Lease objects.
@@ -11,60 +11,60 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: loopzero-controller
-  namespace: loopzero-system
+  name: loopruntime-controller
+  namespace: loopruntime-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: loopzero-controller
+  name: loopruntime-controller
 rules:
   # Tenant CRs: read for status checks
-  - apiGroups: ["loopzero.io"]
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["tenants", "tenants/status"]
     verbs: ["get", "list", "watch"]
   # ClusterCredentials for DynamicRouter/cell discovery
-  - apiGroups: ["loopzero.io"]
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["clustercredentials"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: loopzero-controller
+  name: loopruntime-controller
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: loopzero-controller
+  name: loopruntime-controller
 subjects:
   - kind: ServiceAccount
-    name: loopzero-controller
-    namespace: loopzero-system
+    name: loopruntime-controller
+    namespace: loopruntime-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: loopzero-controller
-  namespace: loopzero-system
+  name: loopruntime-controller
+  namespace: loopruntime-system
   labels:
-    app: loopzero-controller
-    loopzero.io/component: control-plane
+    app: loopruntime-controller
+    runtime.getloopscale.com/component: control-plane
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: loopzero-controller
+      app: loopruntime-controller
   template:
     metadata:
       labels:
-        app: loopzero-controller
-        loopzero.io/component: control-plane
+        app: loopruntime-controller
+        runtime.getloopscale.com/component: control-plane
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9091"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: loopzero-controller
+      serviceAccountName: loopruntime-controller
       terminationGracePeriodSeconds: 60
       securityContext:
         runAsNonRoot: true
@@ -72,33 +72,33 @@ spec:
         fsGroup: 1000
       containers:
         - name: controller
-          image: loopzero-api
-          command: ["/loopzero-controller"]
+          image: loopruntime-api
+          command: ["/loopruntime-controller"]
           args:
             - "-health-port=9091"
           env:
             - name: DATABASE_URL
-              value: "postgres://loopzero:loopzero-dev-password@postgresql.loopzero-system.svc.cluster.local:5432/loopzero?sslmode=disable"
+              value: "postgres://loopruntime:loopruntime-dev-password@postgresql.loopruntime-system.svc.cluster.local:5432/loopruntime?sslmode=disable"
             - name: LOG_LEVEL
               value: "debug"
             # MinIO for source operations
             - name: MINIO_ENDPOINT
-              value: "http://minio.loopzero-system.svc.cluster.local:9000"
+              value: "http://minio.loopruntime-system.svc.cluster.local:9000"
             - name: MINIO_CROSS_CLUSTER_ENDPOINT
               value: "http://172.18.0.3:32000"
             - name: MINIO_ACCESS_KEY
-              value: "loopzero-admin"
+              value: "loopruntime-admin"
             - name: MINIO_SECRET_KEY
-              value: "loopzero-dev-password"
+              value: "loopruntime-dev-password"
             # Gitea for gitops operations
             - name: GITEA_URL
-              value: "http://gitea-http.loopzero-system.svc.cluster.local:3000"
+              value: "http://gitea-http.loopruntime-system.svc.cluster.local:3000"
             - name: GITEA_CROSS_CLUSTER_URL
               value: "http://172.18.0.3:30000"
             - name: GITEA_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: loopzero-api-tokens
+                  name: loopruntime-api-tokens
                   key: gitea-token
                   optional: true
             # ArgoCD for sync operations
@@ -107,25 +107,25 @@ spec:
             - name: ARGOCD_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: loopzero-api-tokens
+                  name: loopruntime-api-tokens
                   key: argocd-token
                   optional: true
             # Build cluster for Argo Workflows
             - name: BUILD_KUBECONFIG
-              value: "/etc/loopzero/build-kubeconfig"
+              value: "/etc/loopruntime/build-kubeconfig"
             - name: BUILD_KUBE_CONTEXT
               value: "build"
             - name: REGISTRY_URL
-              value: "k3d-loopzero-registry:5000"
+              value: "k3d-loopruntime-registry:5000"
             - name: REGISTRY_INSECURE
               value: "true"
             # Workload cluster
             - name: WORKLOAD_INGRESS_URL
               value: "http://172.18.0.14:80"
             - name: BASE_DOMAIN
-              value: "loopzero.local"
+              value: "loopruntime.local"
             # PG claims for cross-replica dedup
-            - name: LOOPZERO_USE_PG_CLAIMS
+            - name: LOOPRUNTIME_USE_PG_CLAIMS
               value: "true"
             # Pod name for claim holder identity
             - name: POD_NAME
@@ -158,7 +158,7 @@ spec:
               memory: "512Mi"
           volumeMounts:
             - name: build-kubeconfig
-              mountPath: /etc/loopzero
+              mountPath: /etc/loopruntime
               readOnly: true
             - name: tmp
               mountPath: /tmp
@@ -174,7 +174,7 @@ spec:
             sizeLimit: 256Mi
         - name: build-kubeconfig
           configMap:
-            name: loopzero-build-kubeconfig
+            name: loopruntime-build-kubeconfig
             items:
               - key: config
                 path: build-kubeconfig
@@ -183,14 +183,14 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: loopzero-controller
-  namespace: loopzero-system
+  name: loopruntime-controller
+  namespace: loopruntime-system
   labels:
-    app: loopzero-controller
+    app: loopruntime-controller
 spec:
   selector:
     matchLabels:
-      app: loopzero-controller
+      app: loopruntime-controller
   endpoints:
     - port: health
       path: /metrics
@@ -199,14 +199,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: loopzero-controller
-  namespace: loopzero-system
+  name: loopruntime-controller
+  namespace: loopruntime-system
   labels:
-    app: loopzero-controller
+    app: loopruntime-controller
 spec:
   type: ClusterIP
   selector:
-    app: loopzero-controller
+    app: loopruntime-controller
   ports:
     - port: 9091
       targetPort: 9091

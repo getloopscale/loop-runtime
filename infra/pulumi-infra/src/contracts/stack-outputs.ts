@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
  * Stack output contracts for the 3-project split.
  *
  * These interfaces define the stable API between Pulumi projects.
- * loopzero-infra exports → loopzero-platform and loopzero-control-plane consume.
- * loopzero-platform exports → loopzero-control-plane consumes.
+ * loopruntime-infra exports → loopruntime-platform and loopruntime-control-plane consume.
+ * loopruntime-platform exports → loopruntime-control-plane consumes.
  *
  * Field additions are backwards-compatible.
  * Field removals or type changes require coordinated migration.
@@ -15,7 +15,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// loopzero-infra outputs (consumed by loopzero-platform + loopzero-control-plane)
+// loopruntime-infra outputs (consumed by loopruntime-platform + loopruntime-control-plane)
 // ---------------------------------------------------------------------------
 
 export interface InfraStackOutputs {
@@ -69,7 +69,7 @@ export interface InfraStackOutputs {
 }
 
 // ---------------------------------------------------------------------------
-// loopzero-platform outputs (consumed by loopzero-control-plane)
+// loopruntime-platform outputs (consumed by loopruntime-control-plane)
 // ---------------------------------------------------------------------------
 
 export interface PlatformStackOutputs {
@@ -98,7 +98,7 @@ export interface PlatformStackOutputs {
 }
 
 // ---------------------------------------------------------------------------
-// loopzero-control-plane outputs (operational, not consumed by other projects)
+// loopruntime-control-plane outputs (operational, not consumed by other projects)
 // ---------------------------------------------------------------------------
 
 // NOT REFERENCED (measured 2026-09-07): no module names ControlPlaneStackOutputs.
@@ -106,7 +106,7 @@ export interface PlatformStackOutputs {
 // consumers that exist read outputs untyped via requireOutput(name).
 export interface ControlPlaneStackOutputs {
   // Service readiness
-  readonly loopzeroApiReady: boolean;
+  readonly loopruntimeApiReady: boolean;
   readonly tenantControllerReady: boolean;
   readonly oryKratosReady: boolean;
   readonly oryHydraReady: boolean;

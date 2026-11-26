@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package load
 
@@ -16,7 +16,7 @@ import (
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
-// BuildAPI is the one client of the LoopZero build contract the load scenarios
+// BuildAPI is the one client of the LoopRuntime build contract the load scenarios
 // speak — api/internal/builds/buildshttp:
 //
 //	POST /api/v1/builds       202 {"build_id": ..., "stream_url": ...}
@@ -164,19 +164,19 @@ func (b BuildAPI) status(ctx context.Context, buildID string) (string, bool) {
 func ServiceAuthHeaders(secret string, t TenantIdentity) func(*http.Request) {
 	return func(req *http.Request) {
 		req.Header.Set("X-Service-Auth", secret)
-		req.Header.Set("X-LoopZero-User-ID", t.UserID)
-		req.Header.Set("X-LoopZero-Tenant", t.TenantID)
-		req.Header.Set("X-LoopZero-Email", t.Email)
+		req.Header.Set("X-LoopRuntime-User-ID", t.UserID)
+		req.Header.Set("X-LoopRuntime-Tenant", t.TenantID)
+		req.Header.Set("X-LoopRuntime-Email", t.Email)
 	}
 }
 
 // UploadSource posts a source bundle with its manifest to
 // POST /api/v1/source/upload and returns the commit SHA the API recorded.
-func UploadSource(ctx context.Context, client *http.Client, apiURL string, auth func(*http.Request), loopzeroYAML string, bundle []byte) (string, error) {
+func UploadSource(ctx context.Context, client *http.Client, apiURL string, auth func(*http.Request), loopruntimeYAML string, bundle []byte) (string, error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	if err := writer.WriteField("loopzero_yaml", loopzeroYAML); err != nil {
-		return "", fmt.Errorf("write loopzero_yaml field: %w", err)
+	if err := writer.WriteField("loopruntime_yaml", loopruntimeYAML); err != nil {
+		return "", fmt.Errorf("write loopruntime_yaml field: %w", err)
 	}
 	bundlePart, err := writer.CreateFormFile("bundle", "source.bundle")
 	if err != nil {

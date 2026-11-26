@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
@@ -25,7 +25,7 @@ export class ArgoCD extends pulumi.ComponentResource {
   public readonly ready: pulumi.Output<boolean>;
 
   constructor(name: string, args: ArgoCDArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopzero:platform:ArgoCD", name, {}, opts);
+    super("loopruntime:platform:ArgoCD", name, {}, opts);
 
     this.release = new k8s.helm.v3.Release(
       "argocd",
@@ -62,12 +62,12 @@ export class ArgoCD extends pulumi.ComponentResource {
               "controller.operation.processing.timeout": "300",
             },
             rbac: {
-              "policy.csv": `p, loopzero-api, applications, sync, */*, allow
-p, loopzero-api, applications, get, */*, allow
-p, loopzero-api, applications, action/*, */*, allow`,
+              "policy.csv": `p, loopruntime-api, applications, sync, */*, allow
+p, loopruntime-api, applications, get, */*, allow
+p, loopruntime-api, applications, action/*, */*, allow`,
             },
             cm: {
-              "accounts.loopzero-api": "apiKey",
+              "accounts.loopruntime-api": "apiKey",
               "resource.customizations.health.argoproj.io_Application": `hs = {}
 hs.status = "Progressing"
 hs.message = ""
@@ -85,7 +85,7 @@ return hs`,
           notificationsController: { enabled: true },
           notifications: {
             notifiers: {
-              "service.webhook.loopzero-api": pulumi.interpolate`url: http://loopzero-api.${args.namespace}.svc.cluster.local:8080/internal/argocd-callback
+              "service.webhook.loopruntime-api": pulumi.interpolate`url: http://loopruntime-api.${args.namespace}.svc.cluster.local:8080/internal/argocd-callback
 headers:
 - name: Content-Type
   value: application/json
@@ -94,7 +94,7 @@ headers:
             },
             templates: {
               "template.sync-completed": `webhook:
-  loopzero-api:
+  loopruntime-api:
     method: POST
     body: |
       {"app_name": "{{.app.metadata.name}}", "sync_status": "{{.app.status.sync.status}}", "health_status": "{{.app.status.health.status}}", "revision": "{{.app.status.sync.revision}}"}`,

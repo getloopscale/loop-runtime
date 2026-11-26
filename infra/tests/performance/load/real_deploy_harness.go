@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package load provides load testing infrastructure for the LoopZero platform.
+// Package load provides load testing infrastructure for the LoopRuntime platform.
 //
 // This file implements the REAL deploy harness described in
 // scale-50k-plan Phase 0.0. It replaces the fake-bundle
@@ -33,7 +33,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// RealDeployHarness exercises the complete LoopZero deploy pipeline using
+// RealDeployHarness exercises the complete LoopRuntime deploy pipeline using
 // real git bundles built from fixture directories. Unlike DeploySimulator
 // which uploads a fake git header (builds always fail), this harness
 // produces REAL running apps that respond to HTTP requests.
@@ -49,7 +49,7 @@ type RealDeployHarness struct {
 
 // fixtureApp captures one app entry from the fixture's loopzero.yaml so the
 // harness can build a faithful POST /v1/builds payload that matches what
-// the LoopZero API would receive from a real `loopzero deploy` command.
+// the LoopRuntime API would receive from a real `loopruntime deploy` command.
 //
 // CHG-002b 2026-04-27: previously the harness hardcoded apps=[{api,node,3000}]
 // which silently dropped 3 of 4 apps when the fixture was dogfood-monorepo.
@@ -66,7 +66,7 @@ type fixtureApp struct {
 
 // RealDeployConfig configures the harness.
 type RealDeployConfig struct {
-	// APIURL is the LoopZero API endpoint (e.g., "https://api.dev.getloopscale.com").
+	// APIURL is the LoopRuntime API endpoint (e.g., "https://api.dev.getloopscale.com").
 	APIURL string
 	// AppDomain is the base domain for deployed apps (e.g., "dev.getloopscale.com").
 	// App URLs are constructed as: {project}-{app}-{env}.{AppDomain}
@@ -74,7 +74,7 @@ type RealDeployConfig struct {
 	// ServiceAuth is the X-Service-Auth bypass token.
 	ServiceAuth string
 	// BootstrapSecret is the shared secret for POST /internal/bootstrap.
-	// Default: "loopzero-dev-bootstrap-secret" (dev mode).
+	// Default: "loopruntime-dev-bootstrap-secret" (dev mode).
 	BootstrapSecret string
 	// FixturePath is the path to the fixture directory to bundle
 	// (e.g., "infra/tests/e2e/fixtures/hello-server").
@@ -104,7 +104,7 @@ func NewRealDeployHarness(cfg RealDeployConfig) (*RealDeployHarness, error) {
 	}
 	bootstrapSecret := cfg.BootstrapSecret
 	if bootstrapSecret == "" {
-		bootstrapSecret = "loopzero-dev-bootstrap-secret"
+		bootstrapSecret = "loopruntime-dev-bootstrap-secret"
 	}
 	return &RealDeployHarness{
 		apiURL:          cfg.APIURL,
@@ -118,7 +118,7 @@ func NewRealDeployHarness(cfg RealDeployConfig) (*RealDeployHarness, error) {
 }
 
 // buildAppsPayload converts parsed fixture apps into the JSON shape the
-// LoopZero /v1/builds endpoint expects. Render derives from app type:
+// LoopRuntime /v1/builds endpoint expects. Render derives from app type:
 //   - server / frontend / nextjs => "server" (HTTP-fronted container)
 //   - worker => "worker" (no HTTP, no port mapping)
 //   - frontend with framework=nextjs is still "server" because Next runs
@@ -183,7 +183,7 @@ func parseFixtureApps(fixturePath string) ([]fixtureApp, error) {
 	out := make([]fixtureApp, 0, len(names))
 	for _, name := range names {
 		a := raw.Apps[name]
-		// LoopZero defaults to port 3000 for server/frontend when omitted.
+		// LoopRuntime defaults to port 3000 for server/frontend when omitted.
 		port := a.Port
 		if port == 0 && (a.Type == "server" || a.Type == "frontend" || a.Type == "") {
 			port = 3000
@@ -224,7 +224,7 @@ func PrepareFixtureBundle(fixturePath string) ([]byte, error) {
 		return nil, fmt.Errorf("fixture not found at %s: %w", abs, err)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "loopzero-fixture-*")
+	tmpDir, err := os.MkdirTemp("", "loopruntime-fixture-*")
 	if err != nil {
 		return nil, fmt.Errorf("create temp dir: %w", err)
 	}
@@ -241,7 +241,7 @@ func PrepareFixtureBundle(fixturePath string) ([]byte, error) {
 	// git init + add + commit
 	cmds := [][]string{
 		{"git", "init", "-q", "."},
-		{"git", "config", "user.email", "loadtest@loopzero.test"},
+		{"git", "config", "user.email", "loadtest@loopruntime.test"},
 		{"git", "config", "user.name", "Load Test"},
 		{"git", "add", "-A"},
 		{"git", "commit", "-q", "-m", "load test fixture"},
@@ -278,11 +278,11 @@ type TenantIdentity struct {
 func NewTenantIdentity(level string, i int) TenantIdentity {
 	slug := fmt.Sprintf("lt-%s-tn-%d", level, i)
 	return TenantIdentity{
-		// Bootstrap creates tenant_id = "tn-" + slug. The X-LoopZero-Tenant
+		// Bootstrap creates tenant_id = "tn-" + slug. The X-LoopRuntime-Tenant
 		// header must match the DB value exactly.
 		TenantID:    fmt.Sprintf("tn-%s", slug),
 		UserID:      fmt.Sprintf("github-lt-%s-user-%d", level, i),
-		Email:       fmt.Sprintf("lt-%s-%d@loadtest.loopzero.dev", level, i),
+		Email:       fmt.Sprintf("lt-%s-%d@loadtest.loopruntime.dev", level, i),
 		ProjectName: fmt.Sprintf("lt-%s-app-%d", level, i),
 	}
 }
@@ -542,7 +542,7 @@ func (h *RealDeployHarness) setAuth(req *http.Request, t TenantIdentity) {
 
 func (h *RealDeployHarness) uploadRealBundle(ctx context.Context, t TenantIdentity) (string, time.Duration, error) {
 	start := time.Now()
-	loopzeroYAML := fmt.Sprintf(`version: 2
+	loopruntimeYAML := fmt.Sprintf(`version: 2
 project: %s
 apps:
   api:
@@ -551,7 +551,7 @@ apps:
     render: server
     port: 3000
 `, t.ProjectName)
-	sha, err := UploadSource(ctx, h.client, h.apiURL, ServiceAuthHeaders(h.serviceAuth, t), loopzeroYAML, h.bundleBytes)
+	sha, err := UploadSource(ctx, h.client, h.apiURL, ServiceAuthHeaders(h.serviceAuth, t), loopruntimeYAML, h.bundleBytes)
 	return sha, time.Since(start), err
 }
 
@@ -572,7 +572,7 @@ func (h *RealDeployHarness) buildsFor(t TenantIdentity) BuildAPI {
 func (h *RealDeployHarness) SubmitBuild(ctx context.Context, t TenantIdentity, commitSHA string) (string, time.Duration, error) {
 	start := time.Now()
 	// CHG-002b 2026-04-27: build apps array from parsed loopzero.yaml so the
-	// payload mirrors what `loopzero deploy` would send. Previously hardcoded
+	// payload mirrors what `loopruntime deploy` would send. Previously hardcoded
 	// to [{api,node,3000}] and silently dropped 3 of 4 apps for
 	// dogfood-monorepo, breaking L3-realistic.
 	payload := map[string]any{
@@ -622,7 +622,7 @@ func (h *RealDeployHarness) verifyAppLive(ctx context.Context, appURL string) (b
 func (h *RealDeployHarness) appURL(t TenantIdentity) string {
 	// App URLs follow the pattern: {tenant}-{project}-{app}-{env}.{domain}
 	// For the hello-server fixture with app name "api" and env "production":
-	appName := os.Getenv("LOOPZERO_VERIFY_APP_NAME")
+	appName := os.Getenv("LOOPRUNTIME_VERIFY_APP_NAME")
 	if appName == "" {
 		appName = "api"
 	}

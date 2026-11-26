@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Cloudflare static frontend delivery (Sprint 10).
 // Provisions: KV namespace, Worker script, Worker route.
@@ -21,7 +21,7 @@ export interface StaticDeliveryConfig {
   readonly environment: string;
   /** Base domain for app hostnames (e.g., "dev.getloopscale.com") */
   readonly baseDomain: string;
-  /** DO Spaces endpoint for static assets (e.g., "https://loopzero-static-assets.sfo3.digitaloceanspaces.com") */
+  /** DO Spaces endpoint for static assets (e.g., "https://loopruntime-static-assets.sfo3.digitaloceanspaces.com") */
   readonly s3Endpoint: pulumi.Input<string>;
   /** Import IDs for adopt-or-create pattern (orphan resolution). */
   readonly importIds?: {
@@ -48,8 +48,8 @@ export function createStaticDelivery(
   config: StaticDeliveryConfig,
 ): StaticDeliveryOutput {
   // 1. KV namespace — routing table read by the Worker on every request
-  const kvTitle = `loopzero-routing-${config.environment}`;
-  const kvNamespace = new cloudflare.WorkersKvNamespace(`loopzero-routing-${config.environment}`, {
+  const kvTitle = `loopruntime-routing-${config.environment}`;
+  const kvNamespace = new cloudflare.WorkersKvNamespace(`loopruntime-routing-${config.environment}`, {
     accountId: config.accountId,
     title: kvTitle,
   }, config.importIds?.kvNamespace ? { import: config.importIds.kvNamespace } : undefined);
@@ -124,7 +124,7 @@ export function createStaticDelivery(
         );
     });
 
-  const scriptName = `loopzero-static-delivery-${config.environment}`;
+  const scriptName = `loopruntime-static-delivery-${config.environment}`;
 
   const workerScript = new cloudflare.WorkersScript(scriptName, {
     accountId: config.accountId,
@@ -133,7 +133,7 @@ export function createStaticDelivery(
     compatibilityDate: "2025-01-17",
     bindings: [
       {
-        name: "LOOPZERO_ROUTING",
+        name: "LOOPRUNTIME_ROUTING",
         type: "kv_namespace",
         namespaceId: kvNamespace.id,
       },
@@ -149,7 +149,7 @@ export function createStaticDelivery(
 
   // 3. Worker route — intercept all requests on *.{baseDomain}/*
   new cloudflare.WorkersRoute(
-    `loopzero-static-delivery-route-${config.environment}`,
+    `loopruntime-static-delivery-route-${config.environment}`,
     {
       zoneId: config.zoneId,
       pattern: `*.${config.baseDomain}/*`,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	loopzerodb "github.com/getloopscale/loop-runtime/api/internal/db"
+	loopruntimedb "github.com/getloopscale/loop-runtime/api/internal/db"
 	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
 )
@@ -34,7 +34,7 @@ import (
 // @see internal/db/migrations/000066_idempotency_key_per_tenant.up.sql
 func TestIdempotencyKey_SameKeyTwoTenants(t *testing.T) {
 	ctx := context.Background()
-	pool := poolFor(t, dsnOrSkip(t, "LOOPZERO_WORKER_DATABASE_URL"))
+	pool := poolFor(t, dsnOrSkip(t, "LOOPRUNTIME_WORKER_DATABASE_URL"))
 
 	const (
 		key     = "deploy-1" // exactly the shape a human picks
@@ -50,7 +50,7 @@ func TestIdempotencyKey_SameKeyTwoTenants(t *testing.T) {
 
 	// The cross-tenant connection is what a test fixture spanning two tenants
 	// needs — the same rule production follows for workspace-spanning work.
-	st := &store.PostgresIdempotencyStore{DB: &loopzerodb.PgxAdapter{Pool: pool}}
+	st := &store.PostgresIdempotencyStore{DB: &loopruntimedb.PgxAdapter{Pool: pool}}
 
 	for _, tenant := range []string{tenantA, tenantB} {
 		rec := &policy.IdempotencyRecord{

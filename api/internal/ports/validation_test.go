@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package ports
 
@@ -121,7 +121,7 @@ func TestValidator_AllowedSimilarDomains(t *testing.T) {
 
 	// These look similar but should be allowed
 	allowed := []string{
-		"loopzero.com",        // different TLD
+		"loopruntime.com",     // different TLD
 		"notgetloopscale.com", // different domain
 		"mygetloopscale.com",  // different domain
 		"api.mycompany.dev",   // different domain, same TLD

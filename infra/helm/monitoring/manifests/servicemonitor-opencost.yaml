@@ -7,18 +7,18 @@
 #   - kubecost_namespace_cost_per_hour (per-tenant attribution via namespace)
 #
 # Query per-tenant cost via Prometheus federation:
-#   sum by (namespace) (kubecost_namespace_cost_per_hour{label_loopzero_io_tenant!=""})
+#   sum by (namespace) (kubecost_namespace_cost_per_hour{label_runtime_getloopscale_com_tenant!=""})
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: loopzero-opencost
+  name: loopruntime-opencost
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   namespaceSelector:
     matchNames:
-      - loopzero-system
+      - loopruntime-system
   selector:
     matchLabels:
       app.kubernetes.io/name: opencost

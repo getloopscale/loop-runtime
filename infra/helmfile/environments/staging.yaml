@@ -10,12 +10,12 @@
 # `aws.accountId`, the hostnames) and the outputs of its own infra-live units, which
 # `task staging:platform` reads with `terragrunt output` and exports before every sync:
 #
-#   LOOPZERO_DB_HOST, LOOPZERO_DB_PORT, LOOPZERO_DB_NAME   data/rds address, port, db_name
-#   LOOPZERO_DB_MASTER_SECRET                              data/rds master_user_secret_arn
-#   LOOPZERO_CACHE_HOST, LOOPZERO_CACHE_PORT               data/valkey primary_endpoint_address, port
-#   LOOPZERO_CACHE_AUTH_SECRET                             data/valkey auth_token_secret_arn
-#   LOOPZERO_VPC_ID                                        networking/vpc vpc_id
-#   LOOPZERO_EDGE_KVS_ARN                                  edge/app-routes arn
+#   LOOPRUNTIME_DB_HOST, LOOPRUNTIME_DB_PORT, LOOPRUNTIME_DB_NAME   data/rds address, port, db_name
+#   LOOPRUNTIME_DB_MASTER_SECRET                              data/rds master_user_secret_arn
+#   LOOPRUNTIME_CACHE_HOST, LOOPRUNTIME_CACHE_PORT               data/valkey primary_endpoint_address, port
+#   LOOPRUNTIME_CACHE_AUTH_SECRET                             data/valkey auth_token_secret_arn
+#   LOOPRUNTIME_VPC_ID                                        networking/vpc vpc_id
+#   LOOPRUNTIME_EDGE_KVS_ARN                                  edge/app-routes arn
 #
 # Nothing in the charts knows about the emulator. The emulator's EKS layer does what EKS
 # does for a pod whose ServiceAccount carries `eks.amazonaws.com/role-arn`: it injects the
@@ -62,32 +62,32 @@ certIssuer:
 aws:
   accountId: "000000000000"
   region: us-east-1
-  namePrefix: loopzero-staging
+  namePrefix: loopruntime-staging
   # security/secrets: the secret holding what the platform generates for itself (database
   # role passwords, internal call secrets, identity cookie keys), as one JSON object.
   # `infra/helmfile/scripts/seed-aws-platform-secret.sh` fills in the keys it lacks.
-  platformSecret: loopzero/staging/platform
+  platformSecret: loopruntime/staging/platform
   # The key pair the build signs tenant images with ({"cosign.key", "cosign.pub",
   # "cosign.password"}), created once by `infra/helmfile/scripts/seed-aws-cosign-key.sh`
   # and written into the build cluster as argo/cosign-signing-key.
-  signingKeySecret: loopzero/staging/cosign-signing-key
-  # Staging only: the registry login for the private GHCR images (loopzero-cloud,
-  # loopzero-dashboard), a JSON object {"username": ..., "password": <token with
-  # read:packages>}. The aws-secrets-manager release writes it into loopzero-system as the
+  signingKeySecret: loopruntime/staging/cosign-signing-key
+  # Staging only: the registry login for the private GHCR images (loopruntime-cloud,
+  # loopruntime-dashboard), a JSON object {"username": ..., "password": <token with
+  # read:packages>}. The aws-secrets-manager release writes it into loopruntime-system as the
   # kubernetes.io/dockerconfigjson Secret `ghcr-pull`. A production environment pulls
   # from ECR with the node role and has no such secret.
-  imagePullSecret: loopzero/staging/ghcr-pull
+  imagePullSecret: loopruntime/staging/ghcr-pull
   # The credentials third parties issue, kept on the staging host in
-  # /etc/loopzero-staging/<name>.json and seeded into these secrets by `task
+  # /etc/loopruntime-staging/<name>.json and seeded into these secrets by `task
   # staging:platform`: Resend's key ({"api-key"}) for Kratos's courier, and Stripe's
   # test-mode keys and plan prices ({"api-key", "webhook-secret", "price-starter",
-  # "price-pro", "price-team"}) for loopzero-cloud.
-  resendSecret: loopzero/staging/resend
-  stripeSecret: loopzero/staging/stripe
+  # "price-pro", "price-team"}) for loopruntime-cloud.
+  resendSecret: loopruntime/staging/resend
+  stripeSecret: loopruntime/staging/stripe
   # The staging GitHub App ({"app-id", "private-key", "webhook-secret", "client-id",
   # "client-secret"}), the one the console installs on a repository and whose push
   # deliveries deploy it.
-  githubAppSecret: loopzero/staging/github-app
+  githubAppSecret: loopruntime/staging/github-app
 
 # Platform images. The emulator's ECR answers the registry API for reads but refuses
 # blob uploads (POST /v2/<repo>/blobs/uploads/ -> 405, measured 2026-11-22 against
@@ -99,19 +99,19 @@ platformImages:
   tags:
     # The first build that marks a failed push deploy on GitHub and refuses an app
     # the build cannot make (#91, #92, #93).
-    loopzero-api: "develop-913d75c"
-    loopzero-tenant-operator: "develop-7a34191"
-    loopzero-app-operator: "develop-7a34191"
-    loopzero-preview-operator: "develop-7a34191"
-    loopzero-platform-operator: "develop-7a34191"
-    loopzero-minio: "develop-7a34191"
-    loopzero-clone-runner: "develop-7a34191"
-    loopzero-syft-scanner: "develop-7a34191"
-    loopzero-cosign-signer: "develop-7a34191"
+    loopruntime-api: "develop-913d75c"
+    loopruntime-tenant-operator: "develop-7a34191"
+    loopruntime-app-operator: "develop-7a34191"
+    loopruntime-preview-operator: "develop-7a34191"
+    loopruntime-platform-operator: "develop-7a34191"
+    loopruntime-minio: "develop-7a34191"
+    loopruntime-clone-runner: "develop-7a34191"
+    loopruntime-syft-scanner: "develop-7a34191"
+    loopruntime-cosign-signer: "develop-7a34191"
     # getloopscale/console publishes these two (private on GHCR, pulled with
-    # aws.imagePullSecret). Required while profile.loopzeroCloud is on.
-    loopzero-cloud: "develop-5ccea0d"
-    loopzero-dashboard: "develop-5ccea0d"
+    # aws.imagePullSecret). Required while profile.loopruntimeCloud is on.
+    loopruntime-cloud: "develop-5ccea0d"
+    loopruntime-dashboard: "develop-5ccea0d"
     # getloopscale/looptrace publishes this one, public on GHCR.
     looptrace: "develop-e98ec23"
 
@@ -163,7 +163,7 @@ registries:
 # pods reach it; its ECR names repositories `localhost:9597/...`, which from a pod is the pod.
 tenantRegistry:
   host: "172.29.0.1:9597"
-  repositoryPrefix: loopzero-tenants
+  repositoryPrefix: loopruntime-tenants
 
 # No pushUrl: the build cluster's Loki is published through an internal ALB
 # (profile.awsLoadBalancerController), whose DNSName `task staging:platform` reads after
@@ -196,14 +196,14 @@ cells:
 dynamicRouter: true
 
 # storage/s3: source bundles are staged in the builds bucket.
-sourceBucket: loopzero-staging-builds-000000000000
+sourceBucket: loopruntime-staging-builds-000000000000
 # storage/s3: build dependency caches and SBOMs go to buckets the build role can write.
-artifactsBucket: loopzero-staging-artifacts-000000000000
-staticAssetsBucket: loopzero-staging-static-assets-000000000000
+artifactsBucket: loopruntime-staging-artifacts-000000000000
+staticAssetsBucket: loopruntime-staging-static-assets-000000000000
 
 # storage/s3 velero-backups. No s3Url: the AWS SDK resolves the S3 endpoint.
 velero:
-  bucket: loopzero-staging-velero-backups-000000000000
+  bucket: loopruntime-staging-velero-backups-000000000000
   region: us-east-1
   s3Url: ""
 
@@ -221,8 +221,8 @@ allowedReturnUrls:
   - "https://cloud.staging.getloopscale.com"
   - "https://cloud.staging.getloopscale.com/"
 # Login and the console through Traefik: the public-routes release serves the auth host
-# (Hydra and Kratos public APIs) and, with profile.loopzeroCloud, the app host; the cloud
-# host is loopzero-cloud's own route. taskfiles/staging.yml EDGE_HOSTS lists the same
+# (Hydra and Kratos public APIs) and, with profile.loopruntimeCloud, the app host; the cloud
+# host is loopruntime-cloud's own route. taskfiles/staging.yml EDGE_HOSTS lists the same
 # hostnames for the edge.
 publicRoutes:
   enabled: true
@@ -249,22 +249,22 @@ profile:
   managedRedis: true            # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: false          # install the KEDA HTTP add-on on the cells
   staticAssets: false           # install the static-assets server on the cells
-  # Turning it on installs loopzero-cloud and loopzero-dashboard and routes the app and
+  # Turning it on installs loopruntime-cloud and loopruntime-dashboard and routes the app and
   # cloud hosts. It needs the two image tags above and the Secrets Manager secret
   # aws.imagePullSecret names.
-  loopzeroCloud: true           # install the control plane (loopzero-cloud), unless clusterRole is standalone
+  loopruntimeCloud: true           # install the control plane (loopruntime-cloud), unless clusterRole is standalone
   smokeTest: false              # run the post-install smoke-test release
   localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
   inClusterObjectStore: false   # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
   awsSecretsManager: true       # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
   awsLoadBalancerController: true  # install the AWS Load Balancer Controller and publish the edge through an ALB; the build Loki and each remote cluster's federation Prometheus through internal ALBs
-  localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
-  secretFetchBroker: true       # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public. Here the cells reach core's internal secret-fetch ALB through the emulator (LOOPZERO_CORE_API_ALB_DNS_NAME)
+  localRegistry: false          # cells admit images from the local k3d registry (k3d-loopruntime-registry:5000)
+  secretFetchBroker: true       # install the ESO secret-fetch broker (loopruntime-broker) on the cells; its chart allows a plaintext bearer only in dev-public. Here the cells reach core's internal secret-fetch ALB through the emulator (LOOPRUNTIME_CORE_API_ALB_DNS_NAME)
 
 # The secrets plane (secrets.helmfile, on the `secrets` cluster): OpenBao, whose transit
 # engine encrypts tenant secrets (ADR 2026-11-25 tenant secrets on OpenBao). One Raft
 # voter; production runs three. clientCidr is the VPC (infra-live networking/vpc), where
-# the core cluster's loopzero-api reaches the NodePort from.
+# the core cluster's loopruntime-api reaches the NodePort from.
 openbaoEnabled: true
 openbao:
   replicas: 1

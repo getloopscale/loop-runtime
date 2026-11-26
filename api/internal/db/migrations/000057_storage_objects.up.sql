@@ -1,5 +1,5 @@
 -- M7 tenant blob storage: object metadata (bytes live in S3-compatible storage).
--- Engine-owned schema; loopzero-cloud reads/writes this table via the storage vertical.
+-- Engine-owned schema; loopruntime-cloud reads/writes this table via the storage vertical.
 -- Tenant isolation at the metadata layer is UNIQUE(tenant_id, name) — the bytes-
 -- layer counterpart is the server-derived S3 key {tenant_id}/{name} (plan EC-1).
 CREATE TABLE storage_objects (
@@ -21,10 +21,10 @@ CREATE INDEX storage_objects_tenant_prefix ON storage_objects (tenant_id, name t
 CREATE INDEX storage_objects_tenant_usage ON storage_objects (tenant_id) INCLUDE (size_bytes);
 
 -- NOTE (M7 metering scope): storage usage is metered via the Prometheus counter
--- loopzero_storage_bytes_written_total ONLY in the MVP. It is deliberately NOT written
+-- loopruntime_storage_bytes_written_total ONLY in the MVP. It is deliberately NOT written
 -- to cost_counters yet — that would require a `storage_bytes` value in the engine's
--- contract-guarded cost_counters.metric CHECK (asserted == loopzero-contracts
+-- contract-guarded cost_counters.metric CHECK (asserted == loopruntime-contracts
 -- plan.CostMetric constants by metric_check_drift_test.go). Coupling a storage
 -- metric into the shared billing contract before storage billing exists is
 -- premature (YAGNI + blueprint ADR D4). Deferred: when storage billing lands, add
--- MetricStorageBytes to loopzero-contracts + widen this CHECK in a follow-up migration.
+-- MetricStorageBytes to loopruntime-contracts + widen this CHECK in a follow-up migration.

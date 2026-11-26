@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -58,7 +58,7 @@ type CosignSignParams struct {
 // (written to /workspace/metadata-{appName}.json) and signs by digest,
 // ensuring the signature is pinned to the exact image content.
 //
-// Image choice: Uses pre-built loopzero-cosign-signer image with cosign baked in.
+// Image choice: Uses pre-built loopruntime-cosign-signer image with cosign baked in.
 // SEC-006: No runtime binary downloads — cosign is checksum-verified at image build time.
 //
 // B7 (CHG-2026-04-22-001): insecureRegistry mirrors the same toggle used by BuildKit
@@ -131,7 +131,7 @@ echo "Signing image: %s@${DIGEST}"
 # LOCAL ONLY (LP-003): public Fulcio does not accept k3d service account tokens.
 # Production GHA path (helm-charts.yml) uses keyless. Track-2 (in-cluster Argo) deferred to Sprint 9+ per MEET-2026-05-03-063.
 cosign sign --yes%s --key %s/cosign.key \
-  -a "build-system=loopzero" \
+  -a "build-system=loopruntime" \
   -a "app=%s" \
   "%s@${DIGEST}"
 
@@ -293,7 +293,7 @@ cosign sign --yes%s \
   --identity-token="$SIGSTORE_ID_TOKEN" \
   --fulcio-url="$FULCIO_URL" \
   --rekor-url="$REKOR_URL" \
-%s  -a "build-system=loopzero" \
+%s  -a "build-system=loopruntime" \
   -a "app=%s" \
   -a "mode=keyless" \
   "%s@${DIGEST}"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # Shared library for bootstrap-cell-{default,1,2}-cc-drill.sh scripts.
 # Plan 2026-05-16 T2.3.
@@ -35,10 +35,10 @@ set -euo pipefail
 # Env:
 #   DRILL_KUBECONFIG  — path to drill mgmt cluster kubeconfig (REQUIRED)
 #   DRILL_PULUMI_DIR  — path to pulumi-drill dir (default infra/pulumi-drill)
-#   LOOPZERO_NS           — namespace for CR (default loopzero-system)
+#   LOOPRUNTIME_NS           — namespace for CR (default loopruntime-system)
 #
 # Outputs (when not dry-run):
-#   - Secret loopzero-system/<cell_id>-kubeconfig (bearer-token kubeconfig
+#   - Secret loopruntime-system/<cell_id>-kubeconfig (bearer-token kubeconfig
 #     for the target drill runtime cluster)
 #   - ClusterCredential <cell_id> (spec.cellID=<cell_id>,
 #     spec.apiServer=https://<uuid>.k8s.ondigitalocean.com)
@@ -52,7 +52,7 @@ bootstrap_cell_cc_drill() {
   local PULUMI_KEY="${2:?bootstrap_cell_cc_drill requires PULUMI_OUTPUT_KEY}"
   local DRY_RUN="${3:-}"
 
-  local NS="${LOOPZERO_NS:-loopzero-system}"
+  local NS="${LOOPRUNTIME_NS:-loopruntime-system}"
   local PULUMI_DIR="${DRILL_PULUMI_DIR:-infra/pulumi-drill}"
 
   log_drill() { printf '[bootstrap-cell-cc-drill:%s] %s\n' "$CELL_ID" "$*" >&2; }
@@ -103,9 +103,9 @@ bootstrap_cell_cc_drill() {
 
   # 2. Secret + ClusterCredential in the drill mgmt cluster — through the one
   #    ClusterCredential constructor, so a drill cell carries the same canonical
-  #    labels (loopzero.io/cell, which the multi-cell runbook selects on) as a local
-  #    one. This used to be a heredoc copy labelled loopzero.dev/cell-id +
-  #    loopzero.dev/drill, invisible to that selector.
+  #    labels (runtime.getloopscale.com/cell, which the multi-cell runbook selects on) as a local
+  #    one. This used to be a heredoc copy labelled loopruntime.dev/cell-id +
+  #    loopruntime.dev/drill, invisible to that selector.
   local CC_CREATE TARGET_KC_FILE
   CC_CREATE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../helmfile/scripts/lib/clustercredential-create.sh"
   TARGET_KC_FILE="$(mktemp)"
@@ -118,7 +118,7 @@ bootstrap_cell_cc_drill() {
     log_drill "DRY-RUN — manifests would be applied:"
     DRY="true"
   fi
-  MGMT_KUBECONFIG="$DRILL_KUBECONFIG" LOOPZERO_NS="$NS" API_SERVER="$TARGET_ENDPOINT" \
+  MGMT_KUBECONFIG="$DRILL_KUBECONFIG" LOOPRUNTIME_NS="$NS" API_SERVER="$TARGET_ENDPOINT" \
     MANAGED_BY="bootstrap-cell-cc-drill" DRY_RUN="$DRY" \
     bash "$CC_CREATE" "$CELL_ID" "$CELL_ID" "$TARGET_KC_FILE" || return 2
   [[ "$DRY" == "true" ]] && return 0

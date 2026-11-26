@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package repositorieshttp
 
@@ -440,7 +440,7 @@ func TestRepositories_Connect_BranchNotFound_400(t *testing.T) {
 	}
 }
 
-func TestRepositories_Connect_MissingLoopZeroYaml_400(t *testing.T) {
+func TestRepositories_Connect_MissingLoopRuntimeYaml_400(t *testing.T) {
 	intro := &fakeIntrospector{fileErr: &github.FileNotFoundError{Path: "loopzero.yaml"}}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
@@ -455,7 +455,7 @@ func TestRepositories_Connect_MissingLoopZeroYaml_400(t *testing.T) {
 	}
 }
 
-func TestRepositories_Connect_EmptyLoopZeroYaml_400(t *testing.T) {
+func TestRepositories_Connect_EmptyLoopRuntimeYaml_400(t *testing.T) {
 	intro := &fakeIntrospector{fileBytes: []byte("   \n\t  ")}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
@@ -485,11 +485,11 @@ func TestRepositories_Connect_InvalidYaml_400(t *testing.T) {
 	}
 }
 
-const deployableLoopZeroYaml = "project: my-app\napps:\n  api:\n    type: server\n    runtime: node\n    start: node server.js\n"
+const deployableLoopRuntimeYaml = "project: my-app\napps:\n  api:\n    type: server\n    runtime: node\n    start: node server.js\n"
 
 // Connect refuses the descriptor a push could not deploy: a loopzero.yaml that
 // declares no app used to link fine and then build nothing on every push.
-func TestRepositories_Connect_LoopZeroYamlWithoutApps_400(t *testing.T) {
+func TestRepositories_Connect_LoopRuntimeYamlWithoutApps_400(t *testing.T) {
 	intro := &fakeIntrospector{fileBytes: []byte("name: my-app\nframework: node\n")}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
@@ -504,8 +504,8 @@ func TestRepositories_Connect_LoopZeroYamlWithoutApps_400(t *testing.T) {
 	}
 }
 
-func TestRepositories_Connect_LoopZeroYamlExists_200(t *testing.T) {
-	intro := &fakeIntrospector{fileBytes: []byte(deployableLoopZeroYaml)}
+func TestRepositories_Connect_LoopRuntimeYamlExists_200(t *testing.T) {
+	intro := &fakeIntrospector{fileBytes: []byte(deployableLoopRuntimeYaml)}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
 	w := httptest.NewRecorder()
@@ -551,7 +551,7 @@ func TestRepositories_Connect_DeployIsBoundToTheServerLifetime(t *testing.T) {
 	serverCtx, stopServer := context.WithCancel(context.Background())
 	stopServer() // the server is already shutting down
 	deployer := recordingDeployer{ctxErr: make(chan error, 1)}
-	intro := &fakeIntrospector{fileBytes: []byte(deployableLoopZeroYaml), head: &github.HeadCommitInfo{SHA: "abc123"}}
+	intro := &fakeIntrospector{fileBytes: []byte(deployableLoopRuntimeYaml), head: &github.HeadCommitInfo{SHA: "abc123"}}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro).WithAutoDeployer(deployer, serverCtx)
 
 	body := `{"repo":"owner/r","installation_id":42}`
@@ -576,7 +576,7 @@ func TestRepositories_Connect_DeployIsBoundToTheServerLifetime(t *testing.T) {
 func TestRepositories_Connect_AcceptsEveryDescriptorName(t *testing.T) {
 	for _, name := range []string{"loopscale.yaml", "loopzero.yaml", "theo.yaml"} {
 		t.Run(name, func(t *testing.T) {
-			intro := &fakeIntrospector{files: map[string]string{name: deployableLoopZeroYaml}}
+			intro := &fakeIntrospector{files: map[string]string{name: deployableLoopRuntimeYaml}}
 			h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
 			w := httptest.NewRecorder()

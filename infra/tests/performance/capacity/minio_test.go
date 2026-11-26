@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package capacity
 
@@ -24,20 +24,20 @@ import (
 //
 // Run:
 //
-//	LOOPZERO_CAPACITY=1 LOOPZERO_MINIO_ENDPOINT=http://localhost:19000 \
-//	LOOPZERO_MINIO_ACCESS_KEY=... LOOPZERO_MINIO_SECRET_KEY=... \
-//	LOOPZERO_MINIO_BUCKET=loopzero-artifacts \
+//	LOOPRUNTIME_CAPACITY=1 LOOPRUNTIME_MINIO_ENDPOINT=http://localhost:19000 \
+//	LOOPRUNTIME_MINIO_ACCESS_KEY=... LOOPRUNTIME_MINIO_SECRET_KEY=... \
+//	LOOPRUNTIME_MINIO_BUCKET=loopruntime-artifacts \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityMinIO -v \
 //	  -args -rps=50 -duration=60s -workers=20
 func TestCapacityMinIOPut(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	endpoint := os.Getenv("LOOPZERO_MINIO_ENDPOINT")
-	accessKey := os.Getenv("LOOPZERO_MINIO_ACCESS_KEY")
-	secretKey := os.Getenv("LOOPZERO_MINIO_SECRET_KEY")
-	bucket := os.Getenv("LOOPZERO_MINIO_BUCKET")
+	endpoint := os.Getenv("LOOPRUNTIME_MINIO_ENDPOINT")
+	accessKey := os.Getenv("LOOPRUNTIME_MINIO_ACCESS_KEY")
+	secretKey := os.Getenv("LOOPRUNTIME_MINIO_SECRET_KEY")
+	bucket := os.Getenv("LOOPRUNTIME_MINIO_BUCKET")
 	if endpoint == "" || accessKey == "" || secretKey == "" || bucket == "" {
-		t.Fatal("LOOPZERO_MINIO_ENDPOINT, _ACCESS_KEY, _SECRET_KEY, _BUCKET required")
+		t.Fatal("LOOPRUNTIME_MINIO_ENDPOINT, _ACCESS_KEY, _SECRET_KEY, _BUCKET required")
 	}
 
 	cfg := NewConfig("minio-put")

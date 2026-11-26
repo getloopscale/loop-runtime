@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -32,8 +32,8 @@ const (
 func stagingMonitoringOutputs(extra ...string) []string {
 	env := append([]string{}, stagingOutputs...)
 	env = append(env,
-		"LOOPZERO_LOKI_ALB_DNS_NAME="+stagingLokiALB,
-		"LOOPZERO_METRICS_ALB_DNS_NAMES=build="+stagingBuildALB+",cell-0="+stagingCell0ALB+",cell-1="+stagingCell1ALB,
+		"LOOPRUNTIME_LOKI_ALB_DNS_NAME="+stagingLokiALB,
+		"LOOPRUNTIME_METRICS_ALB_DNS_NAMES=build="+stagingBuildALB+",cell-0="+stagingCell0ALB+",cell-1="+stagingCell1ALB,
 	)
 	return append(env, extra...)
 }
@@ -60,7 +60,7 @@ func TestStagingPromtailPushesToTheBuildLokiThroughItsALB(t *testing.T) {
 	}{
 		{"core.helmfile.yaml.gotmpl", "core", stagingMonitoringOutputs()},
 		{"cell.helmfile.yaml.gotmpl", "cell-0", stagingMonitoringOutputs()},
-		{"cell.helmfile.yaml.gotmpl", "cell-1", stagingMonitoringOutputs("LOOPZERO_CELL_CONTEXT=cell-1")},
+		{"cell.helmfile.yaml.gotmpl", "cell-1", stagingMonitoringOutputs("LOOPRUNTIME_CELL_CONTEXT=cell-1")},
 	}
 	for _, c := range cases {
 		t.Run(c.cluster, func(t *testing.T) {
@@ -242,7 +242,7 @@ func TestStagingCorePrometheusFederatesEveryRemoteCluster(t *testing.T) {
 }
 
 // The k3d cell's kube-state-metrics NodePort is a dev topology; on staging it can only
-// fail (`lookup k3d-loopzero-cell-0-server-0 ... server misbehaving`). It is not rendered,
+// fail (`lookup k3d-loopruntime-cell-0-server-0 ... server misbehaving`). It is not rendered,
 // also on the first core sync of a rebuild, before the remote ALBs exist.
 func TestStagingCorePrometheusHasNoK3dTarget(t *testing.T) {
 	for name, env := range map[string][]string{
@@ -265,8 +265,8 @@ func TestStagingCorePrometheusHasNoK3dTarget(t *testing.T) {
 func TestDevCorePrometheusKeepsTheK3dCellTarget(t *testing.T) {
 	for _, job := range coreScrapeJobs(t, "dev") {
 		if job["job_name"] == "cell-0-cluster-kube-state-metrics" {
-			if got := staticTargets(job); len(got) != 1 || got[0] != "k3d-loopzero-cell-0-server-0:30030" {
-				t.Errorf("targets = %v, want [k3d-loopzero-cell-0-server-0:30030]", got)
+			if got := staticTargets(job); len(got) != 1 || got[0] != "k3d-loopruntime-cell-0-server-0:30030" {
+				t.Errorf("targets = %v, want [k3d-loopruntime-cell-0-server-0:30030]", got)
 			}
 			return
 		}
@@ -309,7 +309,7 @@ func promtailJobs(t *testing.T, helmfile, env string, extraEnv []string) map[str
 	return byName
 }
 
-// The other jobs select workload pods (Argo workflows, tenants, loopzero components),
+// The other jobs select workload pods (Argo workflows, tenants, loopruntime components),
 // which an idle cell or build cluster does not run: on 2026-11-23 the Promtail of build,
 // cell-0 and cell-1 pushed through the ALB with 0 active targets. Each cluster's platform
 // pods (ingress, controllers, monitoring) are collected too, without the pods the other
@@ -348,7 +348,7 @@ func TestStagingPromtailCollectsEachClustersPlatformPods(t *testing.T) {
 			}
 			for _, label := range []string{
 				"__meta_kubernetes_pod_label_workflows_argoproj_io_workflow",
-				"__meta_kubernetes_pod_label_loopzero_io_component",
+				"__meta_kubernetes_pod_label_runtime_getloopscale_com_component",
 			} {
 				if !dropped[label] {
 					t.Errorf("platform-pods does not drop pods by %s, which another job already tails", label)
@@ -368,12 +368,12 @@ func TestDevPromtailHasNoPlatformPodsJob(t *testing.T) {
 // left in, a quote) fails the core render instead of ending up in a scrape path.
 func TestStagingCorePrometheusRefusesAMalformedALBName(t *testing.T) {
 	env := append(append([]string{}, stagingOutputs...),
-		`LOOPZERO_METRICS_ALB_DNS_NAMES=build=`+stagingBuildALB+`\,cell-0=`+stagingCell0ALB+`\,cell-1=`+stagingCell1ALB)
+		`LOOPRUNTIME_METRICS_ALB_DNS_NAMES=build=`+stagingBuildALB+`\,cell-0=`+stagingCell0ALB+`\,cell-1=`+stagingCell1ALB)
 	_, stderr, err := helmfileRunResult(t, env, "-f", "infra/helmfile/core.helmfile.yaml.gotmpl", "-e", "staging",
 		"--selector", "name=prometheus", "--output-file-template", filepath.Join(t.TempDir(), "{{ .Release.Name }}.yaml"), "write-values")
 	out := stderr
 	if err == nil {
-		t.Fatal("the core prometheus rendered with backslashes in LOOPZERO_METRICS_ALB_DNS_NAMES")
+		t.Fatal("the core prometheus rendered with backslashes in LOOPRUNTIME_METRICS_ALB_DNS_NAMES")
 	}
 	if !strings.Contains(out, "is not <cluster>=<DNSName>") {
 		t.Errorf("render failed without naming the malformed pair:\n%s", truncate(out, 800))
@@ -384,7 +384,7 @@ func TestStagingCorePrometheusRefusesAMalformedALBName(t *testing.T) {
 // the cells; the staging API named none and the Status page answered
 // prometheus_not_configured (getloopscale/loop-runtime#102).
 func TestStagingAPIQueriesTheCorePrometheus(t *testing.T) {
-	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "staging", "loopzero-api", stagingOutputs...)
+	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "staging", "loopruntime-api", stagingOutputs...)
 	if got := dig(values, "dataPlanePoller", "enabled"); got != true {
 		t.Errorf("dataPlanePoller.enabled = %v, want true", got)
 	}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domains
 
@@ -27,8 +27,8 @@ func TestDomainProvisionerRendersWithTheConfiguredDeliverySwitches(t *testing.T)
 		{"legacy deployment, default sizing", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("LOOPZERO_PROGRESSIVE_DELIVERY", "false")
-			t.Setenv("LOOPZERO_LEAN_RESOURCES", "true")
+			t.Setenv("LOOPRUNTIME_PROGRESSIVE_DELIVERY", "false")
+			t.Setenv("LOOPRUNTIME_LEAN_RESOURCES", "true")
 			store := newFakeDomainProvisionerStore()
 			store.verifiedDomains = []ports.CustomDomain{{
 				ID: "dom-1", Domain: "example.com", TenantID: "tn-1",

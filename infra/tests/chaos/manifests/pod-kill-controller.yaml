@@ -1,4 +1,4 @@
-# Chaos Experiment: kill loopzero-controller pod
+# Chaos Experiment: kill loopruntime-controller pod
 #
 # Roadmap 02 DoD: TestController_CrashRecovery
 #
@@ -10,8 +10,8 @@
 # controller's reconcile loop detects them on its first tick.
 #
 # Steady-state SLO (enforced by Prometheus rule):
-#   - loopzero_build_reconcile_loop_last_success seconds-since < 60
-#   - loopzero_leader_status{name="loopzero-controller"} == 1 within 30s of kill
+#   - loopruntime_build_reconcile_loop_last_success seconds-since < 60
+#   - loopruntime_leader_status{name="loopruntime-controller"} == 1 within 30s of kill
 #   - NO build transitions from RUNNING to FAILED during the window
 #
 # Experiment window: 120s. The controller is killed every 60s twice
@@ -20,30 +20,30 @@
 apiVersion: chaos-mesh.org/v1alpha1
 kind: PodChaos
 metadata:
-  name: kill-loopzero-controller
-  namespace: loopzero-system
+  name: kill-loopruntime-controller
+  namespace: loopruntime-system
   annotations:
-    loopzero.io/roadmap: "02"
-    loopzero.io/dod-test: "TestController_CrashRecovery"
-    loopzero.io/hypothesis: "Controller kill does not lose in-flight builds; new leader resumes within 30s"
+    runtime.getloopscale.com/roadmap: "02"
+    runtime.getloopscale.com/dod-test: "TestController_CrashRecovery"
+    runtime.getloopscale.com/hypothesis: "Controller kill does not lose in-flight builds; new leader resumes within 30s"
     # SLO query post-decomposition (2026-06-29). Legacy
-    # loopzero_leader_status{name="loopzero-controller"} +
-    # loopzero_builds_total{reason="controller_crash"} were monolith-only;
-    # post-split we use kube-state-metrics restart signal + loopzero_api
+    # loopruntime_leader_status{name="loopruntime-controller"} +
+    # loopruntime_builds_total{reason="controller_crash"} were monolith-only;
+    # post-split we use kube-state-metrics restart signal + loopruntime_api
     # leader health proxy. `and on()` joins heterogeneous vectors;
     # `or vector(0)` defaults the LHS when restart series is briefly
     # empty post-cleanup; `max_over_time` absorbs Service-DNS scrape
-    # rotation across the 2 loopzero-api pods.
-    loopzero.io/slo-query: |
-      ((sum(increase(kube_pod_container_status_restarts_total{pod=~"loopzero-tenant-operator-.*"}[2m])) or vector(0)) == 0) and on() (max_over_time(loopzero_api_leader_status[2m]) == 1)
+    # rotation across the 2 loopruntime-api pods.
+    runtime.getloopscale.com/slo-query: |
+      ((sum(increase(kube_pod_container_status_restarts_total{pod=~"loopruntime-tenant-operator-.*"}[2m])) or vector(0)) == 0) and on() (max_over_time(loopruntime_api_leader_status[2m]) == 1)
 spec:
   action: pod-kill
   mode: one
   selector:
     namespaces:
-      - loopzero-system
+      - loopruntime-system
     labelSelectors:
-      # ADR-0023 / plan v1.1 T1.5: legacy `app: loopzero-controller` label
+      # ADR-0023 / plan v1.1 T1.5: legacy `app: loopruntime-controller` label
       # gone with the monolith deletion. Targets the tenant-operator
       # (heaviest of the 4 split binaries: handles Tenant + Environment
       # reconcile + ArgoCD sync + Gitea push). Same crash-recovery

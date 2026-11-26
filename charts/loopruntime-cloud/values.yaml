@@ -1,0 +1,253 @@
+global:
+  registry: registry.digitalocean.com/loopruntime-system
+  imagePullSecrets: []
+
+image:
+  repository: loopruntime-cloud
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# install-config-contract Slice 1 (ADR D1 — anti-lock-in secret floor).
+# Name of a pre-existing K8s Secret supplying the cloud-API's referenced secrets
+# (STRIPE_API_KEY, SESSION_TOKEN_SECRET, THEMORY_API_KEY, ...). When set, the chart
+# adds it as an envFrom secretRef. The operator populates it however they choose —
+# ESO (see examples/eso-*.yaml), CSI, sops, kubectl — so the secret backend is never
+# locked in. Empty = legacy behavior (secrets injected by the per-env overlay/seed).
+# See SECRETS.md.
+existingSecret: ""
+
+# Cross-capability wiring ConfigMap (loopruntime-cloud#249) mounted via envFrom. Supplies
+# data-plane base URLs (e.g. THEMORY_BASE_URL) resolved per-environment. Empty by
+# default; set to a ConfigMap name (e.g. "loopruntime-platform-topology") to front memory.
+wiringConfigMap: ""
+
+# install-config-contract Slice 2 (ADR D1 — day-2 rotation-aware, opt-in).
+# When true (and the Stakater Reloader controller is installed in the cluster),
+# the Deployment gets reloader.stakater.com/auto so a rotated secret (re-synced
+# by ESO into the referenced Secret) triggers a rolling restart — the cloud-API
+# reads config only at boot. Operator-installed (recommended-not-required); OFF
+# by default so the render is unchanged for clusters without Reloader.
+reloader:
+  enabled: false
+
+# HA for the auth control plane (find_infra_011): a single pod means an
+# eviction during node maintenance takes consent/session flows offline.
+# Safe with the shared LOOPRUNTIME_SERVICE_AUTH_SECRET requirement (T1.6) — both
+# replicas validate dashboard-proxied requests identically. replicaCount > 1
+# also activates the PDB template (pdb.yaml minAvailable: 1).
+replicaCount: 2
+revisionHistoryLimit: 3
+priorityClassName: system-cluster-critical
+
+nameOverride: ""
+fullnameOverride: ""
+
+podLabels: {}
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  port: 13002
+  # Fixed node port for the http port when type is NodePort; null lets the
+  # cluster pick one. The Helmfile dev-public install pins 30002, the port the
+  # k3d serverlb publishes to the host, so the edge on the host can reach it.
+  nodePort: null
+
+# Non-secret settings, one ConfigMap key each. The keys from kratosInternalUrl
+# down are rendered only when non-empty: the binary treats an unset variable
+# as "use my default" or "feature off", so an empty value would say nothing a
+# missing key does not.
+config:
+  listenAddr: ":13002"
+  kratosPublicUrl: "http://ory-kratos-public.ory.svc.cluster.local:80"
+  kratosAdminUrl: "http://ory-kratos-admin.ory.svc.cluster.local:80"
+  hydraPublicUrl: "http://ory-hydra-public.ory.svc.cluster.local:4444"
+  hydraAdminUrl: "http://ory-hydra-admin.ory.svc.cluster.local:4445"
+  hydraClientId: "loopruntime-cli"
+  engineApiUrl: "http://loopruntime-api.loopruntime-system.svc.cluster.local:3001"
+  loopruntimeEnv: "dev"
+  # Plan J-09 T1.1 (2026-06-05) — GitHub App install handshake.
+  # Operator overrides per env. The cloud binary reads them via
+  # cloud/internal/config/config.go.
+  githubAppSlug: "loopruntime-platform"
+  # OAuth client id of the GitHub App (GITHUB_APP_CLIENT_ID): the connect flow sends
+  # the browser to GitHub's user authorization page with it. It is public, not a secret;
+  # the client secret is configuration of loopruntime-api only. Empty leaves the flow off.
+  # GitHub returns the browser to <appPublicUrl>/v1/integrations/github/callback, which
+  # must be a callback URL of the App.
+  githubAppClientId: ""
+  appPublicUrl: "http://localhost:3000"
+  authCookieDomain: ""
+  # Cluster-internal Kratos URL for server-side calls (session whoami, cookie
+  # verification); the browser-facing one is kratosPublicUrl. Unset, the binary
+  # falls back to kratosPublicUrl (KRATOS_INTERNAL_URL).
+  kratosInternalUrl: ""
+  # Issuer the JWT `iss` claim must equal byte for byte — no normalisation, so
+  # a trailing slash matters (JWT_ISSUER).
+  jwtIssuer: ""
+  # Where Stripe checkout returns the browser (BILLING_RETURN_URL).
+  billingReturnUrl: ""
+  # The OTLP gRPC collector traces are exported to, host:port (OTEL_EXPORTER_OTLP_ENDPOINT).
+  # Unset, the console dials its built-in default.
+  otelExporterOtlpEndpoint: ""
+  # Data-plane base URLs. Each one unset leaves its dashboard surface off
+  # (THEMORY_BASE_URL, RAG_BASE_URL, LENS_BASE_URL, TRAEFIK_MCP_BASE_URL). The memory,
+  # RAG and lens ones also register the edge's forward-auth for /v1/{memory,rag,lens}/*.
+  # A wiringConfigMap may still supply THEMORY_BASE_URL; set only one of the two.
+  memoryBaseUrl: ""
+  ragBaseUrl: ""
+  lensBaseUrl: ""
+  traefikMcpBaseUrl: ""
+  # Prometheus the cost aggregator reads; unset, the aggregator does not start
+  # (LOOPRUNTIME_PROMETHEUS_URL).
+  prometheusUrl: ""
+
+# Secrets this chart does not create, provisioned by ESO, a bootstrap task or an
+# operator. Rendered after the chart's own envFrom sources and existingSecret.
+# `optional: true` lets the pod start without the Secret, which is how a
+# dependency disappears without the startup saying anything (B-104), so the
+# schema requires a `reason` on every optional entry. Empty by default: an
+# install that provides everything through existingSecret needs neither list.
+secrets:
+  # envFrom secretRef entries: {name, optional, reason}.
+  additionalSources: []
+  # One key of an external Secret mapped onto a variable:
+  # {name, secretName, key, optional, reason}. An explicit variable outranks
+  # every envFrom source.
+  keyRefs: []
+
+# writable /tmp for a read-only root filesystem — data exports are staged under
+# /tmp/loopruntime-exports (LOOPRUNTIME_EXPORT_DIR default).
+tmpVolume:
+  sizeLimit: 512Mi
+
+# Traefik IngressRoute to the Service (loopruntime-common.ingressRoute). Off: a published
+# chart does not assume an ingress controller. The Helmfile bootstrap turns it on.
+ingressRoute:
+  enabled: false
+  host: ""
+  entryPoints:
+    - websecure
+  middlewares: []
+  # CFManaged — TLS terminates at the Cloudflare edge, no Certificate is emitted.
+  certIssuer: CFManaged
+
+# Data-plane platform-admin keys (loopruntime-rag, loopruntime-lens) materialised by ESO from
+# OpenBao into Secrets loopruntime-rag-admin-key / loopruntime-lens-admin-key, key
+# RAG_PLATFORM_ADMIN_KEY / LENS_PLATFORM_ADMIN_KEY. Off by default: they need an
+# ESO controller and a ClusterSecretStore. The pod reads them through
+# secrets.keyRefs; rotation is `bao kv patch secret/<openBaoPath> <property>=<new>`,
+# then an ESO refresh and a rollout restart.
+rag:
+  externalSecretEnabled: false
+  secretStoreName: "loopruntime-secrets-secrets"
+  openBaoPath: "loopruntime/cloud"
+  openBaoProperty: "rag_platform_admin_key"
+  externalSecretRefreshInterval: "1h"
+lens:
+  externalSecretEnabled: false
+  secretStoreName: "loopruntime-secrets-secrets"
+  openBaoPath: "loopruntime/cloud"
+  openBaoProperty: "lens_platform_admin_key"
+  externalSecretRefreshInterval: "1h"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 300m
+    memory: 128Mi
+
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: false
+
+startupProbe:
+  enabled: true
+  path: /health
+  port: http
+  failureThreshold: 30
+  periodSeconds: 2
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 5
+  timeoutSeconds: 3
+
+metrics:
+  serviceMonitor:
+    enabled: false
+    # The Service exposes one named port, `http`, and /metrics is served on it —
+    # a ServiceMonitor naming `metrics` would select no endpoint.
+    port: http
+    interval: 30s
+    scrapeTimeout: 10s
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik
+      ports:
+        - protocol: TCP
+          port: 13002
+  extraEgress:
+    # Ory Kratos + Hydra
+    - ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 4444
+        - protocol: TCP
+          port: 4445
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ory
+    # LoopRuntime API
+    - ports:
+        - protocol: TCP
+          port: 3001
+
+topologySpreadConstraints:
+  enabled: false
+
+affinity:
+  podAntiAffinity:
+    enabled: false
+
+tolerations: []
+nodeSelector: {}
+
+# billing.required declares that THIS environment really charges.
+#
+# Measured 2026-08-11: the dashboard ran 20h without the billing Secrets, `Running`, with
+# not one event — because the optionality was a literal `true`, the same in every
+# environment. A literal cannot diverge; a value can, and that divergence is what separates
+# the hermetic install (which runs without Stripe on purpose) from the public one (which
+# shows plan and price on screen).
+#
+# False by default: keeps the boot path without Stripe. The environment that promises to
+# charge turns it on explicitly — declaring is the conscious act, not the omission.
+billing:
+  required: false
+  # Secret holding the Stripe API keys (STRIPE_API_KEY and the price ids), separate from
+  # the webhook secret because the two rotate on different triggers. Empty: not mounted
+  # (an install passing them through existingSecret). Set, it is mounted with the same
+  # optionality as loopruntime-stripe-webhook — required exactly when billing.required is.
+  apiKeysSecret: ""

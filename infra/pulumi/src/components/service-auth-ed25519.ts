@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 
@@ -37,30 +37,30 @@ export interface ServiceAuthEd25519Args {
 
   /**
    * Namespace where the cloud proxy runs and consumes the PRIVATE key.
-   * Defaults to "loopzero-system".
+   * Defaults to "loopruntime-system".
    */
   readonly cloudNamespace?: string;
 
   /**
    * Namespace where the API engine runs and consumes the PUBLIC key.
-   * Defaults to "loopzero-system".
+   * Defaults to "loopruntime-system".
    */
   readonly apiNamespace?: string;
 
   /**
    * Name of the K8s Secret that holds the private key on the cloud side.
-   * Defaults to "loopzero-service-auth-ed25519".
+   * Defaults to "loopruntime-service-auth-ed25519".
    */
   readonly privateSecretName?: string;
 
   /**
    * Name of the K8s Secret that holds the public key(s) on the API side.
-   * Defaults to "loopzero-service-auth-ed25519-pub" (separate from the
+   * Defaults to "loopruntime-service-auth-ed25519-pub" (separate from the
    * private secret to make defense-in-depth visible at the kubectl level).
    */
   readonly publicConfigMapName?: string;
 
-  /** ESO SecretStore reference name. Defaults to "loopzero-pulumi-secrets". */
+  /** ESO SecretStore reference name. Defaults to "loopruntime-pulumi-secrets". */
   readonly secretStoreName?: string;
 
   /** ESO refresh interval. Defaults to "5m". */
@@ -105,11 +105,11 @@ export function createServiceAuthEd25519(
   args: ServiceAuthEd25519Args,
 ): ServiceAuthEd25519Outputs {
   const cfg = new pulumi.Config();
-  const cloudNs = args.cloudNamespace ?? "loopzero-system";
-  const apiNs = args.apiNamespace ?? "loopzero-system";
-  const privateSecretName = args.privateSecretName ?? "loopzero-service-auth-ed25519";
-  const publicSecretName = args.publicConfigMapName ?? "loopzero-service-auth-ed25519-pub";
-  const storeName = args.secretStoreName ?? "loopzero-pulumi-secrets";
+  const cloudNs = args.cloudNamespace ?? "loopruntime-system";
+  const apiNs = args.apiNamespace ?? "loopruntime-system";
+  const privateSecretName = args.privateSecretName ?? "loopruntime-service-auth-ed25519";
+  const publicSecretName = args.publicConfigMapName ?? "loopruntime-service-auth-ed25519-pub";
+  const storeName = args.secretStoreName ?? "loopruntime-pulumi-secrets";
   const refreshInterval = args.refreshInterval ?? "5m";
 
   const privateKey = cfg.requireSecret("serviceAuthEd25519Private");
@@ -139,7 +139,7 @@ export function createServiceAuthEd25519(
     );
 
   const urn = pulumi.output(
-    `urn:pulumi:${args.stackName}::loopzero-infra::custom:ServiceAuthEd25519::loopzero-service-auth-ed25519`,
+    `urn:pulumi:${args.stackName}::loopruntime-infra::custom:ServiceAuthEd25519::loopruntime-service-auth-ed25519`,
   );
 
   return {
@@ -165,11 +165,11 @@ export function computeServiceAuthGenerationMarker(privKey: string): string {
  * Two documents separated by `---`:
  *   1. ExternalSecret of the PRIVATE key, in the cloud namespace ONLY.
  *      `secretKey: private` → cloud reads via env var
- *      LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY.
+ *      LOOPRUNTIME_SERVICE_AUTH_ED25519_PRIVATE_KEY.
  *   2. ExternalSecret of the PUBLIC keys (current + previous), in the
  *      API namespace. `secretKey: current` + `secretKey: previous` →
- *      API reads via env vars LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT
- *      + LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS.
+ *      API reads via env vars LOOPRUNTIME_SERVICE_AUTH_ED25519_PUBLIC_CURRENT
+ *      + LOOPRUNTIME_SERVICE_AUTH_ED25519_PUBLIC_PREVIOUS.
  *
  * Defense in depth: the private key ExternalSecret targets ONLY the
  * cloud namespace; the public key ExternalSecret targets ONLY the API
@@ -192,9 +192,9 @@ metadata:
   name: ${input.privateSecretName}
   namespace: ${input.cloudNamespace}
   annotations:
-    loopzero.io/component: service-auth-ed25519-private
-    loopzero.io/stack: ${input.stackName}
-    loopzero.io/generation-marker: ${input.generationMarker}
+    runtime.getloopscale.com/component: service-auth-ed25519-private
+    runtime.getloopscale.com/stack: ${input.stackName}
+    runtime.getloopscale.com/generation-marker: ${input.generationMarker}
 spec:
   refreshInterval: ${input.refreshInterval}
   secretStoreRef:
@@ -214,9 +214,9 @@ metadata:
   name: ${input.publicConfigMapName}
   namespace: ${input.apiNamespace}
   annotations:
-    loopzero.io/component: service-auth-ed25519-public
-    loopzero.io/stack: ${input.stackName}
-    loopzero.io/generation-marker: ${input.generationMarker}
+    runtime.getloopscale.com/component: service-auth-ed25519-public
+    runtime.getloopscale.com/stack: ${input.stackName}
+    runtime.getloopscale.com/generation-marker: ${input.generationMarker}
 spec:
   refreshInterval: ${input.refreshInterval}
   secretStoreRef:

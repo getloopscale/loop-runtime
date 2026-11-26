@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# loopzero pre-push hook — cheap CI substitute (no CI platform; M8 1.5).
+# loopruntime pre-push hook — cheap CI substitute (no CI platform; M8 1.5).
 # Runs the aggregate quality gates before code leaves the machine.
-# Escapes: `git push --no-verify` OR `LOOPZERO_SKIP_PREPUSH=1 git push`.
+# Escapes: `git push --no-verify` OR `LOOPRUNTIME_SKIP_PREPUSH=1 git push`.
 set -euo pipefail
-[ -n "${LOOPZERO_SKIP_PREPUSH:-}" ] && { echo "pre-push: skipped (LOOPZERO_SKIP_PREPUSH set)"; exit 0; }
+[ -n "${LOOPRUNTIME_SKIP_PREPUSH:-}" ] && { echo "pre-push: skipped (LOOPRUNTIME_SKIP_PREPUSH set)"; exit 0; }
 cd "$(git rev-parse --show-toplevel)"
 if ! command -v task >/dev/null 2>&1; then
-  echo "pre-push: 'task' not found — install go-task or use LOOPZERO_SKIP_PREPUSH=1 to bypass" >&2
+  echo "pre-push: 'task' not found — install go-task or use LOOPRUNTIME_SKIP_PREPUSH=1 to bypass" >&2
   exit 1
 fi
 echo "pre-push: running 'task quality:gates' ..."

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts
 
@@ -50,7 +50,7 @@ func TestDrillBootstrap_CreatesEachCellWithAnIDBootstrapAccepts(t *testing.T) {
 // (operators/internal/platform/clustercredential_controller.go), which sets
 // status.connected from a live /healthz probe on every reconcile and overwrites
 // anything else wrote there. The drill used to write connected=true itself
-// (Bug #22) so loopzero-api would find cells before the operator ran; loopzero-api's
+// (Bug #22) so loopruntime-api would find cells before the operator ran; loopruntime-api's
 // release is wait:false (core.helmfile), so it restarts until the operator,
 // installed by the same sync, connects the cells — no bootstrap write needed.
 func TestDrillBootstrap_WritesNoClusterCredentialStatus(t *testing.T) {
@@ -67,10 +67,10 @@ func TestDrillBootstrap_WritesNoClusterCredentialStatus(t *testing.T) {
 func TestDrillBootstrap_PatchesNoChartRenderedObject(t *testing.T) {
 	drill := readDrillBootstrap(t)
 	for name, pattern := range map[string]string{
-		"loopzero-api env (Bugs #52, #65/#73/#79)": `set env deployment/loopzero-api`,
-		"operator env (Bug #57)":                   `set env deployment/"\$OP"`,
-		"operator NetworkPolicy (Bug #59)":         `patch networkpolicy`,
-		"loopzero-clone template (Bug #64)":        `clusterworkflowtemplate loopzero-clone`,
+		"loopruntime-api env (Bugs #52, #65/#73/#79)": `set env deployment/loopruntime-api`,
+		"operator env (Bug #57)":                      `set env deployment/"\$OP"`,
+		"operator NetworkPolicy (Bug #59)":            `patch networkpolicy`,
+		"loopruntime-clone template (Bug #64)":        `clusterworkflowtemplate loopruntime-clone`,
 	} {
 		if regexp.MustCompile(pattern).MatchString(drill) {
 			t.Errorf("the drill still patches the %s instead of rendering it", name)

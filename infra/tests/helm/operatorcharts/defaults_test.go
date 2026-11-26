@@ -5,12 +5,12 @@
 //
 // They share one Deployment shape — controller binary, health :8081, metrics
 // :8443, --leader-elect=true, a fully hardened container securityContext from
-// the loopzero-common library, no service-facing port — so they share one suite,
+// the loopruntime-common library, no service-facing port — so they share one suite,
 // table-driven over {chart, release}. It replaces four per-chart copies that
 // differed only in those two constants; a fifth operator is one table row, and
 // a new invariant reaches all four at once instead of drifting across copies.
 //
-// Run one chart: go test -tags helm_render ./helm/operatorcharts/ -run 'TestOperatorChartDefaults/loopzero-app-operator'
+// Run one chart: go test -tags helm_render ./helm/operatorcharts/ -run 'TestOperatorChartDefaults/loopruntime-app-operator'
 package operatorcharts_test
 
 import (
@@ -29,10 +29,10 @@ type operatorChart struct {
 }
 
 var operatorCharts = []operatorChart{
-	{chart: "loopzero-tenant-operator", release: "tnt-op"},
-	{chart: "loopzero-app-operator", release: "app-op"},
-	{chart: "loopzero-platform-operator", release: "pla-op"},
-	{chart: "loopzero-preview-operator", release: "pre-op"},
+	{chart: "loopruntime-tenant-operator", release: "tnt-op"},
+	{chart: "loopruntime-app-operator", release: "app-op"},
+	{chart: "loopruntime-platform-operator", release: "pla-op"},
+	{chart: "loopruntime-preview-operator", release: "pre-op"},
 }
 
 const (

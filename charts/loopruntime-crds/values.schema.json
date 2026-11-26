@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "loopruntime-crds values",
+  "description": "Schema for loopruntime-crds chart. Mostly toggles for which CRDs to install. Per INF-G17.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "crds": {
+      "type": "object",
+      "description": "Per-CRD enable toggles",
+      "properties": {
+        "tenant": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "environment": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "loopruntimeApplication": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "exposedRoute": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "platformBootstrap": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "previewEnvironment": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "gitRepositoryBinding": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "clusterCredential": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "appSecret": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "reconciliationReport": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "controllerGenVersion": {
+      "type": "string"
+    },
+    "loopruntime-common": {
+      "type": "object",
+      "description": "Values block consumed by the loopruntime-common library subchart."
+    }
+  }
+}

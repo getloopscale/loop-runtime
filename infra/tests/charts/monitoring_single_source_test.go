@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts_test
 
@@ -14,7 +14,7 @@ import (
 )
 
 // Dashboards and alert rules have ONE source: infra/helm/monitoring. The published
-// charts/loopzero-monitoring reaches them through symlinks that `helm package` resolves.
+// charts/loopruntime-monitoring reaches them through symlinks that `helm package` resolves.
 //
 // Measured 2026-09-23, before this: all 21 published dashboards differed from their
 // infra/helm twins, and 10 PrometheusRules existed in both trees — the published side
@@ -22,8 +22,8 @@ import (
 // earlier, and one rule queried a metric name the operators do not export.
 func TestMonitoring_PublishedChartReadsTheInfraArtifacts(t *testing.T) {
 	for link, want := range map[string]string{
-		"../../../charts/loopzero-monitoring/dashboards": "../../infra/helm/monitoring/dashboards",
-		"../../../charts/loopzero-monitoring/rules":      "../../infra/helm/monitoring/manifests",
+		"../../../charts/loopruntime-monitoring/dashboards": "../../infra/helm/monitoring/dashboards",
+		"../../../charts/loopruntime-monitoring/rules":      "../../infra/helm/monitoring/manifests",
 	} {
 		got, err := os.Readlink(link)
 		if err != nil {

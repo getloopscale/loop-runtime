@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package gitea
 
@@ -17,9 +17,9 @@ func TestRealProvisioner_CreatesTheTenantRepoAutoInitialisedOnTheTenantBranch(t 
 	var created map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + r.URL.Path {
-		case "GET /api/v1/repos/loopzero/tn-acme-gitops":
+		case "GET /api/v1/repos/loopruntime/tn-acme-gitops":
 			w.WriteHeader(http.StatusNotFound)
-		case "POST /api/v1/orgs/loopzero/repos":
+		case "POST /api/v1/orgs/loopruntime/repos":
 			if err := json.NewDecoder(r.Body).Decode(&created); err != nil {
 				t.Errorf("decode create body: %v", err)
 			}
@@ -30,11 +30,11 @@ func TestRealProvisioner_CreatesTheTenantRepoAutoInitialisedOnTheTenantBranch(t 
 	}))
 	defer srv.Close()
 
-	url, err := NewRealProvisioner(srv.URL, "tok", "loopzero").EnsureRepo(context.Background(), "tn-acme-gitops", "release")
+	url, err := NewRealProvisioner(srv.URL, "tok", "loopruntime").EnsureRepo(context.Background(), "tn-acme-gitops", "release")
 	if err != nil {
 		t.Fatalf("EnsureRepo: %v", err)
 	}
-	if want := srv.URL + "/loopzero/tn-acme-gitops.git"; url != want {
+	if want := srv.URL + "/loopruntime/tn-acme-gitops.git"; url != want {
 		t.Errorf("repoURL = %q, want %q", url, want)
 	}
 	if created["auto_init"] != true || created["default_branch"] != "release" {
@@ -48,9 +48,9 @@ func TestRealProvisioner_UnarchivesTheRepoOfARecreatedTenant(t *testing.T) {
 	var unarchived bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + r.URL.Path {
-		case "GET /api/v1/repos/loopzero/tn-acme-gitops":
+		case "GET /api/v1/repos/loopruntime/tn-acme-gitops":
 			_, _ = w.Write([]byte(`{"archived":true}`))
-		case "PATCH /api/v1/repos/loopzero/tn-acme-gitops":
+		case "PATCH /api/v1/repos/loopruntime/tn-acme-gitops":
 			unarchived = true
 			_, _ = w.Write([]byte(`{"archived":false}`))
 		default:
@@ -59,7 +59,7 @@ func TestRealProvisioner_UnarchivesTheRepoOfARecreatedTenant(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, err := NewRealProvisioner(srv.URL, "tok", "loopzero").EnsureRepo(context.Background(), "tn-acme-gitops", "main"); err != nil {
+	if _, err := NewRealProvisioner(srv.URL, "tok", "loopruntime").EnsureRepo(context.Background(), "tn-acme-gitops", "main"); err != nil {
 		t.Fatalf("EnsureRepo: %v", err)
 	}
 	if !unarchived {

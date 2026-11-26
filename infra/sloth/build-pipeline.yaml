@@ -2,7 +2,7 @@
 # Measures the ratio of successful builds to total build attempts.
 # Target: 99% — build failures due to platform issues (not user code) should be rare.
 version: "prometheus/v1"
-service: "loopzero-builds"
+service: "loopruntime-builds"
 labels:
   owner: "platform-team"
   tier: "infrastructure"
@@ -12,10 +12,10 @@ slos:
     description: "Percentage of builds that complete successfully (SUCCEEDED state)."
     sli:
       events:
-        error_query: sum(rate(loopzero_builds_total{status=~"FAILED|CANCELLED"}[{{.window}}]))
-        total_query: sum(rate(loopzero_builds_total[{{.window}}]))
+        error_query: sum(rate(loopruntime_builds_total{status=~"FAILED|CANCELLED"}[{{.window}}]))
+        total_query: sum(rate(loopruntime_builds_total[{{.window}}]))
     alerting:
-      name: LoopZeroBuildPipelineBudgetBurn
+      name: LoopRuntimeBuildPipelineBudgetBurn
       labels:
         category: build
       annotations:

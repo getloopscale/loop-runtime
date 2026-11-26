@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package e2e provides shared test helpers for all E2E test suites.
 package e2e
@@ -19,7 +19,7 @@ import (
 
 // e2eNamespace is the workload namespace of the E2E tenant's (project, env),
 // derived by the platform's own naming rule. Specs never spell it by hand: the
-// two-segment "loopzero-<tenant>-<env>" they used to build names a namespace no
+// two-segment "loopruntime-<tenant>-<env>" they used to build names a namespace no
 // deploy creates, and an absence check there passes vacuously.
 func e2eNamespace(project, env string) (string, error) {
 	return naming.Namespace(seed.TenantID, project, env)
@@ -33,7 +33,7 @@ func mustE2ENamespace(project, env string) string {
 }
 
 // proveDead verifies that all resources for a project are cleaned up
-// (namespace gone or zero resources with loopzero.io/project label).
+// (namespace gone or zero resources with runtime.getloopscale.com/project label).
 // This is the "proof of death" assertion from the bash journeys.
 // 2026-05-20 drill-parity: uses kubectlForCluster(ClusterWorkload, ...).
 func proveDead(tenant, project, env string) {
@@ -56,7 +56,7 @@ func proveDead(tenant, project, env string) {
 		// Include both Deployment (legacy) and Rollout (progressive
 		// delivery, default-on per argo-rollouts plan) so a stuck
 		// Rollout/TraefikService doesn't yield a false-positive "cleaned".
-		label := fmt.Sprintf("loopzero.io/project=%s", project)
+		label := fmt.Sprintf("runtime.getloopscale.com/project=%s", project)
 		for _, resource := range []string{
 			"deployment",
 			"rollout.argoproj.io",
@@ -100,7 +100,7 @@ func proveDead(tenant, project, env string) {
 //   - Distroless/scratch base image (port-forward works regardless)
 //
 // V9 Final fix (post-L11): kubectl exec assumed wget/curl exist in the
-// app image, but loopzero-packs uses distroless base → exit 127. port-forward
+// app image, but loopruntime-packs uses distroless base → exit 127. port-forward
 // works for any image because the kubelet tunnel runs OUTSIDE the
 // container's filesystem.
 func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Duration) {
@@ -141,7 +141,7 @@ func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Durat
 			return fmt.Errorf("no Running+Ready pod for app=%s in %s (status: %s)", resName, ns, lines[0])
 		}
 
-		// Discover the container port the app listens on. loopzero-packs
+		// Discover the container port the app listens on. loopruntime-packs
 		// app images typically expose 3000 (node) or 8080 (other). We
 		// try the first containerPort declared.
 		portOut, perr := kubectlForCluster(ClusterWorkload,
@@ -150,7 +150,7 @@ func waitAppHealthyViaKubectl(project, app, env, path string, timeout time.Durat
 		).CombinedOutput()
 		appPort := strings.TrimSpace(string(portOut))
 		if perr != nil || appPort == "" {
-			appPort = "3000" // safe default for loopzero-packs node template
+			appPort = "3000" // safe default for loopruntime-packs node template
 		}
 
 		// kubectl port-forward to a random local port, run HTTP GET,

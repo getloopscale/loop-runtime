@@ -18,7 +18,7 @@ argo-rollouts:
     # router queries to the LEGACY traefik.containo.us API group despite
     # docs/features/traffic-management/traefik.md claiming v3/traefik.io
     # is the default (the docs describe the LATEST master, not 1.7.x).
-    # LoopZero runs Traefik v3 which only serves traefik.io. Without these
+    # LoopRuntime runs Traefik v3 which only serves traefik.io. Without these
     # flags the controller fails with 'the server could not find the
     # requested resource' on TrafficRouting reconcile.
     extraArgs:
@@ -63,8 +63,8 @@ argo-rollouts:
       readOnlyRootFilesystem: true
 
   # Dashboard DISABLED (same policy as Chaos Mesh: attack surface
-  # not justified for LoopZero's deployment model). All status/info accessed
-  # via kubectl + loopzero CLI, never via dashboard.
+  # not justified for LoopRuntime's deployment model). All status/info accessed
+  # via kubectl + loopruntime CLI, never via dashboard.
   dashboard:
     enabled: false
 
@@ -75,7 +75,7 @@ argo-rollouts:
   crds:
     install: true
 
-  # Notifications — disabled. LoopZero SSE pipeline emits canary events
+  # Notifications — disabled. LoopRuntime SSE pipeline emits canary events
   # (rollout.step / rollout.aborted) via API, not Argo notifications.
   notifications:
     enabled: false

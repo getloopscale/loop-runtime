@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package httpio
 
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // The move was byte for byte, and these assert the rendered shape rather than
@@ -46,9 +46,9 @@ func TestWriteJSON_HeaderPrecedesTheStatusWrite(t *testing.T) {
 
 // The CLI reads `body.code` and Unbreakable Rule 5 makes that a stability
 // contract, so the typed code must reach the wire unchanged.
-func TestWriteLoopZeroError_PreservesTheTypedCode(t *testing.T) {
+func TestWriteLoopRuntimeError_PreservesTheTypedCode(t *testing.T) {
 	rec := httptest.NewRecorder()
-	WriteLoopZeroError(rec, loopzeroerrors.NewProjectNotFound("meu-projeto"))
+	WriteLoopRuntimeError(rec, loopruntimeerrors.NewProjectNotFound("meu-projeto"))
 
 	if rec.Code < 400 {
 		t.Errorf("an error must not render as a success status; got %d", rec.Code)
@@ -65,7 +65,7 @@ func TestWriteLoopZeroError_PreservesTheTypedCode(t *testing.T) {
 // Rule 3 lives at the CALL SITES, not here. This test says so out loud, because
 // the version it replaces did not.
 //
-// `WriteLoopZeroError` is a pure pass-through to errorshttp.WriteJSON. It neither
+// `WriteLoopRuntimeError` is a pure pass-through to errorshttp.WriteJSON. It neither
 // invents vocabulary nor filters it, so a test that feeds a clean message and
 // asserts the output is clean asserts a property no implementation could
 // violate — theatre, and it was measured as such: fed
@@ -77,10 +77,10 @@ func TestWriteLoopZeroError_PreservesTheTypedCode(t *testing.T) {
 // at the call sites are the real surface, and there is NO gate over them among
 // the 122 today. Registered as B-081. This test asserts only what a
 // pass-through can be held to — that it is faithful, in both directions.
-func TestWriteLoopZeroError_IsFaithfulPassThrough_AndDoesNotFilter(t *testing.T) {
+func TestWriteLoopRuntimeError_IsFaithfulPassThrough_AndDoesNotFilter(t *testing.T) {
 	const dirty = "ArgoCD sync failed for tenant_id tn-1"
 	rec := httptest.NewRecorder()
-	WriteLoopZeroError(rec, &loopzeroerrors.LoopZeroError{Code: "INTERNAL_ERROR", Message: dirty})
+	WriteLoopRuntimeError(rec, &loopruntimeerrors.LoopRuntimeError{Code: "INTERNAL_ERROR", Message: dirty})
 
 	if !strings.Contains(rec.Body.String(), dirty) {
 		t.Errorf("the writer must transmit the message it was given, unchanged — a writer that quietly rewrote it would make every error message a lie: %s", rec.Body.String())
@@ -88,7 +88,7 @@ func TestWriteLoopZeroError_IsFaithfulPassThrough_AndDoesNotFilter(t *testing.T)
 
 	clean := "could not apply the configuration — café, naïve, 設定"
 	rec2 := httptest.NewRecorder()
-	WriteLoopZeroError(rec2, &loopzeroerrors.LoopZeroError{Code: "INTERNAL_ERROR", Message: clean})
+	WriteLoopRuntimeError(rec2, &loopruntimeerrors.LoopRuntimeError{Code: "INTERNAL_ERROR", Message: clean})
 	if !strings.Contains(rec2.Body.String(), clean) {
 		t.Errorf("and the same in the clean direction; got %s", rec2.Body.String())
 	}

@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- ============================================================================
 -- 000033_consolidate_pending_migrations
@@ -82,7 +82,7 @@ COMMENT ON COLUMN memory_webhooks.secret IS
     'HMAC-SHA256 signing secret. Format: whsec_<43 chars base64url> = 48 chars total. '
     'Persisted raw — the dispatcher signs at delivery time. '
     'NULL means a pre-delivery-plan webhook (Plan 3 demo-only era): the dispatcher '
-    'logs a warning and omits the X-LoopZero-Signature header. Customer must revoke + '
+    'logs a warning and omits the X-LoopRuntime-Signature header. Customer must revoke + '
     'recreate to obtain a signed webhook.';
 
 -- ----------------------------------------------------------------------------

@@ -1,15 +1,15 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- ============================================================================
 -- 000055_lens_dashboards
 --
--- loopzero-lens M66 — per-workspace custom dashboards for the /v1/dashboard/lens BFF.
+-- loopruntime-lens M66 — per-workspace custom dashboards for the /v1/dashboard/lens BFF.
 -- A dashboard is an ordered list of widgets (KPI tile / trend chart / top-N table)
 -- each bound to an existing M51/M60 observability series; the whole board is stored
 -- as ONE JSONB `config` blob (KISS — the handler validates the widget palette + caps
 -- at the write boundary; opik's single-config-blob precedent). Consumed/queried by the
--- loopzero-cloud LensDashboardsHandler (raw database/sql) — loopzero-cloud does not run
+-- loopruntime-cloud LensDashboardsHandler (raw database/sql) — loopruntime-cloud does not run
 -- migrations, the engine owns schema.
 --
 -- Tenancy DIVERGES from 000053_lens_saved_views: a custom dashboard is a SHARED team

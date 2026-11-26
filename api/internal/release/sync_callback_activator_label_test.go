@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -33,15 +33,15 @@ func newActivatorForLookupTest() *SyncCallbackActivator {
 // tenant and environment labels.
 func labelsFor(appName, tenant, env string) *fakeLabelReader {
 	return &fakeLabelReader{labels: map[string]map[string]string{
-		appName: {"loopzero.io/tenant": tenant, "loopzero.io/environment": env},
+		appName: {"runtime.getloopscale.com/tenant": tenant, "runtime.getloopscale.com/environment": env},
 	}}
 }
 
 // The labels are authoritative even where every segment of the name contains a
 // hyphen — the case a positional parse of the name gets wrong.
 func TestLookupTenantEnv_ReadsTheIdentityFromTheLabels(t *testing.T) {
-	const appName = "tn-loopzero-web-j-rollout-a"
-	reader := labelsFor(appName, "tn-loopzero", "j-rollout-a")
+	const appName = "tn-loopruntime-web-j-rollout-a"
+	reader := labelsFor(appName, "tn-loopruntime", "j-rollout-a")
 	a := newActivatorForLookupTest().WithAppLabelReader(reader)
 
 	tenant, env, err := a.lookupTenantEnv(context.Background(), appName)
@@ -49,8 +49,8 @@ func TestLookupTenantEnv_ReadsTheIdentityFromTheLabels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if tenant != "tn-loopzero" || env != "j-rollout-a" {
-		t.Errorf("got (%q, %q), want (tn-loopzero, j-rollout-a)", tenant, env)
+	if tenant != "tn-loopruntime" || env != "j-rollout-a" {
+		t.Errorf("got (%q, %q), want (tn-loopruntime, j-rollout-a)", tenant, env)
 	}
 	if reader.calls != 1 {
 		t.Errorf("expected exactly 1 reader call, got %d", reader.calls)
@@ -72,7 +72,7 @@ func TestLookupTenantEnv_FailsWhenTheApplicationHasNoLabels(t *testing.T) {
 // no release.
 func TestLookupTenantEnv_FailsWhenTheEnvironmentLabelIsMissing(t *testing.T) {
 	const appName = "tn-acme-web-production"
-	reader := &fakeLabelReader{labels: map[string]map[string]string{appName: {"loopzero.io/tenant": "tn-acme"}}}
+	reader := &fakeLabelReader{labels: map[string]map[string]string{appName: {"runtime.getloopscale.com/tenant": "tn-acme"}}}
 	a := newActivatorForLookupTest().WithAppLabelReader(reader)
 
 	_, _, err := a.lookupTenantEnv(context.Background(), appName)

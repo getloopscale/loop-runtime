@@ -1,4 +1,4 @@
-# Edge exposure registry — read by `loopzero-ops quality proxy-exposure`.
+# Edge exposure registry — read by `loopruntime-ops quality proxy-exposure`.
 #
 # Every `reverse_proxy` in infra/local/Caddyfile must have a row here. A proxy
 # inherits its response contract from whatever sits behind it, so what reaches
@@ -28,7 +28,7 @@
 # authentication_methods, while devices[].ip_address, devices[].user_agent and
 # recovery_addresses reached the browser with no consumer.
 #
-# CLOSED ON THE CLIENT SIDE (loopzero-cloud eb81cb6, 2026-08-07): the dashboard no
+# CLOSED ON THE CLIENT SIDE (loopruntime-cloud eb81cb6, 2026-08-07): the dashboard no
 # longer calls Kratos at all. POST /v1/auth/session/token already validated the
 # cookie server-side, so it now returns the minimal identity alongside the JWT,
 # and the browser's only remaining Kratos paths are /self-service/*.
@@ -37,17 +37,17 @@
 # AFTER the new dashboard bundle is deployed to dev-public. Removing it first
 # would break login for the bundle currently served there. That ordering is the
 # one thing this row is here to record.
-app-dev.getloopscale.com /sessions/whoami | reviewed | narrowed from /sessions/*; body still over-exposes devices[].ip_address + recovery_addresses, but the dashboard stopped reading it (loopzero-cloud eb81cb6) — DELETE this proxy once the new bundle is deployed
+app-dev.getloopscale.com /sessions/whoami | reviewed | narrowed from /sessions/*; body still over-exposes devices[].ip_address + recovery_addresses, but the dashboard stopped reading it (loopruntime-cloud eb81cb6) — DELETE this proxy once the new bundle is deployed
 app-dev.getloopscale.com /self-service/* | reviewed | Kratos self-service flow UI; the browser drives these flows and needs the flow body
-app-dev.getloopscale.com /v1/* | reviewed | loopzero-cloud BFF; authenticated, returns only the caller's own tenant data
-app-dev.getloopscale.com /v1/integrations/github/* | reviewed | loopzero-cloud BFF; GitHub installation data scoped to the caller's tenant
-app-dev.getloopscale.com /v1/memory/* | reviewed | data-plane loopzero-memory (core NodePort :18081) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
-app-dev.getloopscale.com /v1/rag/* | reviewed | data-plane loopzero-rag (core NodePort :18082) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
-app-dev.getloopscale.com /v1/lens/* | reviewed | data-plane loopzero-lens (core NodePort :18084) behind forward_auth to the core loopzero-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
+app-dev.getloopscale.com /v1/* | reviewed | loopruntime-cloud BFF; authenticated, returns only the caller's own tenant data
+app-dev.getloopscale.com /v1/integrations/github/* | reviewed | loopruntime-cloud BFF; GitHub installation data scoped to the caller's tenant
+app-dev.getloopscale.com /v1/memory/* | reviewed | data-plane loopruntime-memory (core NodePort :18081) behind forward_auth to the core loopruntime-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
+app-dev.getloopscale.com /v1/rag/* | reviewed | data-plane loopruntime-rag (core NodePort :18082) behind forward_auth to the core loopruntime-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
+app-dev.getloopscale.com /v1/lens/* | reviewed | data-plane loopruntime-lens (core NodePort :18084) behind forward_auth to the core loopruntime-cloud; its 401/403/503 reach the client and carry no data, and an ALLOW reaches the service with a per-tenant key (#470)
 app-dev.getloopscale.com /mcp/* | reviewed | MCP gateway (core NodePort :18091, infra/helm/mcp-gateway); the gateway and each MCP server validate a Hydra token whose audience is that server, and a tool result is the caller's own tenant data; without a valid token the 401 carries only the metadata link (#470)
 app-dev.getloopscale.com /.well-known/oauth-protected-resource/mcp/* | internal | RFC 9728 metadata served by the MCP gateway: the resource URI and its authorization server, public by design, no user data (#470)
 app-dev.getloopscale.com /.well-known/oauth-authorization-server/mcp/* | internal | RFC 8414 metadata the MCP gateway proxies from Hydra: endpoints and supported algorithms, public by design, no user data (#470)
-app-dev.getloopscale.com @auth_bff | reviewed | loopzero-cloud BFF auth exchange; mints the caller's own token
+app-dev.getloopscale.com @auth_bff | reviewed | loopruntime-cloud BFF auth exchange; mints the caller's own token
 app-dev.getloopscale.com /engine/* | reviewed | engine API via BFF; tenant-scoped by the same auth the CLI uses
 app-dev.getloopscale.com /api/v1/webhooks/github | internal | inbound GitHub webhook; the response is consumed by GitHub, never rendered in a browser
 
@@ -67,7 +67,7 @@ auth-dev.getloopscale.com /userinfo | reviewed | OIDC UserInfo; returns the bear
 # fail the gate without removing the route. When Hydra implements the draft, this
 # row already covers the surface.
 auth-dev.getloopscale.com /credentials | reviewed | OAuth draft that Hydra announces and does not implement in this version — 404 measured 2026-08-10; the edge route exists, so it stays declared
-auth-dev.getloopscale.com /self-service/registration | reviewed | routed to the loopzero-cloud BFF for the anti-enumeration unifier (Red Team #43)
+auth-dev.getloopscale.com /self-service/registration | reviewed | routed to the loopruntime-cloud BFF for the anti-enumeration unifier (Red Team #43)
 auth-dev.getloopscale.com /self-service/registration/methods/password | reviewed | same BFF unifier as above; byte-identical response for new vs existing email
 
 # cloud-dev.getloopscale.com was REMOVED on 2026-08-10 — it was a second name for the

@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package load implements progressive load tests for the LoopZero platform.
+// Package load implements progressive load tests for the LoopRuntime platform.
 //
 // Usage:
 //
 //	# L0 — Baseline (current 2 tenants, single deploy)
-//	LOOPZERO_LOAD_TEST=1 LOOPZERO_DRILL_API_URL=https://api.drill.getloopscale.com LOOPZERO_AUTH_TOKEN=<token> \
+//	LOOPRUNTIME_LOAD_TEST=1 LOOPRUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOPRUNTIME_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL0_Baseline -timeout 10m
 //
 //	# L1 — 10 tenants, concurrent deploys
-//	LOOPZERO_LOAD_TEST=1 LOOPZERO_DRILL_API_URL=https://api.drill.getloopscale.com LOOPZERO_AUTH_TOKEN=<token> \
+//	LOOPRUNTIME_LOAD_TEST=1 LOOPRUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOPRUNTIME_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL1_10Tenants -timeout 30m
 //
 //	# L2 — 50 tenants, sustained load
-//	LOOPZERO_LOAD_TEST=1 LOOPZERO_DRILL_API_URL=https://api.drill.getloopscale.com LOOPZERO_AUTH_TOKEN=<token> \
+//	LOOPRUNTIME_LOAD_TEST=1 LOOPRUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOPRUNTIME_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL2_50Tenants -timeout 60m
 //
-// This test is SKIPPED unless LOOPZERO_LOAD_TEST=1 is set.
+// This test is SKIPPED unless LOOPRUNTIME_LOAD_TEST=1 is set.
 package load
 
 import (
@@ -67,7 +67,7 @@ type LoadTestResult struct {
 }
 
 // ---------------------------------------------------------------------------
-// DeploySimulator — real HTTP calls to LoopZero API
+// DeploySimulator — real HTTP calls to LoopRuntime API
 // ---------------------------------------------------------------------------
 
 type DeploySimulator struct {
@@ -116,9 +116,9 @@ func newDeploySimulator(s *DeploySimulator) *DeploySimulator {
 func (s *DeploySimulator) setAuth(req *http.Request) {
 	if s.serviceAuth != "" {
 		req.Header.Set("X-Service-Auth", s.serviceAuth)
-		req.Header.Set("X-LoopZero-User-ID", s.userID)
-		req.Header.Set("X-LoopZero-Tenant", s.tenantID)
-		req.Header.Set("X-LoopZero-Email", s.email)
+		req.Header.Set("X-LoopRuntime-User-ID", s.userID)
+		req.Header.Set("X-LoopRuntime-Tenant", s.tenantID)
+		req.Header.Set("X-LoopRuntime-Email", s.email)
 	} else if s.authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+s.authToken)
 	}
@@ -157,7 +157,7 @@ func (s *DeploySimulator) UploadBundle(ctx context.Context, projectName string) 
 	start := time.Now()
 
 	// Create minimal loopzero.yaml
-	loopzeroYAML := fmt.Sprintf(`version: "2"
+	loopruntimeYAML := fmt.Sprintf(`version: "2"
 project: %s
 apps:
   api:
@@ -170,12 +170,12 @@ apps:
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 
-	// loopzero_yaml field
-	yamlPart, err := writer.CreateFormFile("loopzero_yaml", "loopzero.yaml")
+	// loopruntime_yaml field
+	yamlPart, err := writer.CreateFormFile("loopruntime_yaml", "loopzero.yaml")
 	if err != nil {
 		return "", 0, err
 	}
-	if _, err := yamlPart.Write([]byte(loopzeroYAML)); err != nil {
+	if _, err := yamlPart.Write([]byte(loopruntimeYAML)); err != nil {
 		return "", 0, err
 	}
 
@@ -325,42 +325,42 @@ func printReport(t *testing.T, result *LoadTestResult) {
 
 // requireLoadTestEnv returns API URL and a configured DeploySimulator.
 // Supports two auth modes:
-//   - LOOPZERO_AUTH_TOKEN: Bearer token (GitHub OAuth)
-//   - LOOPZERO_SERVICE_AUTH: X-Service-Auth bypass (recommended for load tests)
+//   - LOOPRUNTIME_AUTH_TOKEN: Bearer token (GitHub OAuth)
+//   - LOOPRUNTIME_SERVICE_AUTH: X-Service-Auth bypass (recommended for load tests)
 func requireLoadTestEnv(t *testing.T) (string, *DeploySimulator) {
 	t.Helper()
-	if os.Getenv("LOOPZERO_LOAD_TEST") != "1" {
-		t.Skip("skipping load test: set LOOPZERO_LOAD_TEST=1 to run")
+	if os.Getenv("LOOPRUNTIME_LOAD_TEST") != "1" {
+		t.Skip("skipping load test: set LOOPRUNTIME_LOAD_TEST=1 to run")
 	}
-	// Plan 2026-05-16 T3.1: prefer LOOPZERO_DRILL_API_URL when running against
+	// Plan 2026-05-16 T3.1: prefer LOOPRUNTIME_DRILL_API_URL when running against
 	// drill prod-identical stack (per skill /drill-test). Fallback to
-	// LOOPZERO_API_URL for backward compat with dev cluster runs.
-	apiURL := os.Getenv("LOOPZERO_DRILL_API_URL")
+	// LOOPRUNTIME_API_URL for backward compat with dev cluster runs.
+	apiURL := os.Getenv("LOOPRUNTIME_DRILL_API_URL")
 	if apiURL == "" {
-		apiURL = os.Getenv("LOOPZERO_API_URL")
+		apiURL = os.Getenv("LOOPRUNTIME_API_URL")
 	}
 	if apiURL == "" {
-		t.Fatal("LOOPZERO_DRILL_API_URL or LOOPZERO_API_URL required")
+		t.Fatal("LOOPRUNTIME_DRILL_API_URL or LOOPRUNTIME_API_URL required")
 	}
-	if drillURL := os.Getenv("LOOPZERO_DRILL_API_URL"); drillURL != "" {
+	if drillURL := os.Getenv("LOOPRUNTIME_DRILL_API_URL"); drillURL != "" {
 		t.Logf("Running against drill prod-identical stack: %s", drillURL)
 	}
 
 	// Prefer service auth (no GitHub token needed)
-	if serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH"); serviceAuth != "" {
-		tenantID := os.Getenv("LOOPZERO_LOAD_TENANT")
+	if serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH"); serviceAuth != "" {
+		tenantID := os.Getenv("LOOPRUNTIME_LOAD_TENANT")
 		if tenantID == "" {
 			tenantID = "loadtest-tn-0"
 		}
 		t.Logf("Using X-Service-Auth (tenant=%s)", tenantID)
 		return apiURL, NewServiceAuthSimulator(apiURL, serviceAuth,
-			"loadtest-user-0", tenantID, "loadtest-0@loadtest.loopzero.dev")
+			"loadtest-user-0", tenantID, "loadtest-0@loadtest.loopruntime.dev")
 	}
 
 	// Fallback to Bearer token
-	authToken := os.Getenv("LOOPZERO_AUTH_TOKEN")
+	authToken := os.Getenv("LOOPRUNTIME_AUTH_TOKEN")
 	if authToken == "" {
-		t.Fatal("LOOPZERO_AUTH_TOKEN or LOOPZERO_SERVICE_AUTH required")
+		t.Fatal("LOOPRUNTIME_AUTH_TOKEN or LOOPRUNTIME_SERVICE_AUTH required")
 	}
 	return apiURL, NewDeploySimulator(apiURL, authToken)
 }

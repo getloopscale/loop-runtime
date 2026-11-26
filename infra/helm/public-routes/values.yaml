@@ -23,7 +23,7 @@ certIssuer: CFManaged
 identity:
   enabled: false
   host: ""
-  namespace: loopzero-auth
+  namespace: loopruntime-auth
   hydra:
     service: ory-hydra-public
     port: 4444
@@ -32,19 +32,19 @@ identity:
     port: 80
 
 # The console on the app host: the dashboard bundle, with the browser-facing APIs it
-# calls on the same origin. Turned on with loopzero-cloud. While it is off, Kratos
-# registration is not routed at all: it must go through the loopzero-cloud handler that
+# calls on the same origin. Turned on with loopruntime-cloud. While it is off, Kratos
+# registration is not routed at all: it must go through the loopruntime-cloud handler that
 # gives existing and new emails the same response (account enumeration).
 console:
   enabled: false
   host: ""
-  namespace: loopzero-system
+  namespace: loopruntime-system
   dashboard:
-    service: loopzero-dashboard
+    service: loopruntime-dashboard
     port: 8080
   cloud:
-    service: loopzero-cloud
+    service: loopruntime-cloud
     port: 13002
   api:
-    service: loopzero-api
+    service: loopruntime-api
     port: 3001

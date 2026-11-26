@@ -1,0 +1,51 @@
+# ESO example — materialize the loopruntime-build-cwts referenced secret from a backend.
+# Recommended (not required): loopruntime-build-cwts consumes `loopruntime-minio-credentials` by
+# reference (envFrom secretRef). ESO is one backend-agnostic way to supply it; CSI /
+# sops / `kubectl create secret` work equally. Pick ONE backend below.
+#
+# Apply order: ClusterSecretStore first, then ExternalSecret. ESO then creates/refreshes
+# the K8s Secret named `loopruntime-minio-credentials` (= .Values.minio.existingSecret) in the
+# build namespace with the keys from SECRETS.md.
+---
+# OpenBao / Vault backend (kv-v2). Swap provider block for AWS SM / GCP SM as needed.
+apiVersion: external-secrets.io/v1beta1
+kind: ClusterSecretStore
+metadata:
+  name: loopruntime-build-minio
+spec:
+  provider:
+    vault:
+      server: "http://openbao.openbao.svc.cluster.local:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "loopruntime-build"
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: loopruntime-minio-credentials
+  # namespace: <build namespace> — where the CWTs run
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: loopruntime-build-minio
+    kind: ClusterSecretStore
+  target:
+    name: loopruntime-minio-credentials   # must equal .Values.minio.existingSecret
+    creationPolicy: Owner
+  data:
+    - secretKey: AWS_ACCESS_KEY_ID
+      remoteRef:
+        key: loopruntime/build/minio
+        property: access_key_id
+    - secretKey: AWS_SECRET_ACCESS_KEY
+      remoteRef:
+        key: loopruntime/build/minio
+        property: secret_access_key
+    - secretKey: MINIO_ENDPOINT
+      remoteRef:
+        key: loopruntime/build/minio
+        property: endpoint

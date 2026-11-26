@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -25,7 +25,7 @@ import (
 // behaviour where DELETE returned nil regardless of rows affected.
 var ErrRepositoryNotLinked = ports.ErrRepositoryNotLinked
 
-// ProjectRepository links a LoopZero project to a GitHub repository.
+// ProjectRepository links a LoopRuntime project to a GitHub repository.
 // Distinct from generated.ProjectRepository (sqlc-emitted row type
 // with pgtype-based timestamp fields). Wrapper converts between
 // them.

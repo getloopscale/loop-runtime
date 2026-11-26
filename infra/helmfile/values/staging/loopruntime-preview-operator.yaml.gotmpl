@@ -1,0 +1,45 @@
+# staging overlay for charts/loopruntime-preview-operator: the image from the environment's
+# platform registry, pinned by the commit CI built it from.
+global:
+  registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" }}
+  imagePullSecrets: []
+
+image:
+  tag: {{ required "platformImages.tags.loopruntime-preview-operator is not set" (index .Values.platformImages.tags "loopruntime-preview-operator") | quote }}
+  pullPolicy: IfNotPresent
+
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8443
+  extraEgress:
+    # The cluster API servers (6443) and AWS (443).
+    - ports:
+        - protocol: TCP
+          port: 6443
+        - protocol: TCP
+          port: 443
+    - ports:
+        - protocol: TCP
+          port: 3000
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loopruntime-system
+    - ports:
+        - protocol: TCP
+          port: 8080
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: argocd
+
+kubeconfig:
+  cell0:
+    existingConfigMap: loopruntime-cell-0-kubeconfig

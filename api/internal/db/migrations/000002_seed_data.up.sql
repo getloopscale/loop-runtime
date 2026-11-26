@@ -1,4 +1,4 @@
--- LoopZero PaaS — Seed data for plan limits and circuit breakers.
+-- LoopRuntime PaaS — Seed data for plan limits and circuit breakers.
 -- These are platform configuration, not user data.
 
 -- Circuit breaker defaults

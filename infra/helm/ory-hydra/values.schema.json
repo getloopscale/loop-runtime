@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://loopzero.platform/schemas/ory-hydra/values.schema.json",
-  "title": "Ory Hydra LoopZero wrapper values schema",
+  "$id": "https://loopruntime.platform/schemas/ory-hydra/values.schema.json",
+  "title": "Ory Hydra LoopRuntime wrapper values schema",
   "description": "Plan v1.2 T2.5 / D4 — fail-fast on missing keys per ADR.",
   "type": "object",
   "required": ["uiBaseUrl"],

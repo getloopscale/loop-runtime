@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package rollbackhttp
 
@@ -14,7 +14,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // RollbackEntry is one recorded rollback as the store holds it. Status is the
@@ -94,19 +94,19 @@ func NewRollbackHistoryHandler(history RollbackHistory) *RollbackHistoryHandler 
 func (h *RollbackHistoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 	limit := rollbackListDefaultLimit
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
 		if err != nil || parsed < 1 {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("limit must be a positive integer"))
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("limit must be a positive integer"))
 			return
 		}
 		limit = min(parsed, rollbackListMaxLimit)
@@ -116,7 +116,7 @@ func (h *RollbackHistoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	entries, err := h.history.ListRollbacks(r.Context(), uc.TenantID, name, limit)
 	if err != nil {
 		slog.Error("rollback history: list failed", "error", err, "tenant_id", uc.TenantID, "project", name)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 

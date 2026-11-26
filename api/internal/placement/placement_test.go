@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placement
 
@@ -23,10 +23,10 @@ func TestPassthroughRouter_Resolve(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
 		CellID:        "cell-0",
 		KubeConfig:    "/path/to/kubeconfig",
-		KubeContext:   "k3d-loopzero-cell-0",
+		KubeContext:   "k3d-loopruntime-cell-0",
 		ArgocdURL:     "http://argocd:80",
 		ArgocdToken:   "test-token",
-		IngressDomain: "loopzero.local",
+		IngressDomain: "loopruntime.local",
 	})
 
 	cfg, err := router.Resolve(context.Background(), "cell-0")
@@ -72,7 +72,7 @@ func TestPassthroughRouter_Resolve_EmptyCellID(t *testing.T) {
 func TestPassthroughRouter_ListCells(t *testing.T) {
 	router := NewPassthroughRouter(CellConfig{
 		CellID:      "cell-0",
-		KubeContext: "k3d-loopzero-cell-0",
+		KubeContext: "k3d-loopruntime-cell-0",
 	})
 
 	cells, err := router.ListCells(context.Background())
@@ -898,9 +898,9 @@ func TestRoundRobinEngine_WithSerializer_PropagatesError(t *testing.T) {
 func TestDynamicRouter_Resolve_DeterministicAcrossCalls(t *testing.T) {
 	store := &fakeCellStore{
 		cells: []CellConfig{
-			{CellID: "cell-0", APIServer: "https://default.example", IngressDomain: "loopzero.local"},
-			{CellID: "cell-0", APIServer: "https://cell-0.example", IngressDomain: "loopzero.local", SecretRefName: "cell-0-kubeconfig", SecretRefNamespace: "loopzero-system"},
-			{CellID: "cell-1", APIServer: "https://cell-1.example", IngressDomain: "loopzero.local", SecretRefName: "cell-1-kubeconfig", SecretRefNamespace: "loopzero-system"},
+			{CellID: "cell-0", APIServer: "https://default.example", IngressDomain: "loopruntime.local"},
+			{CellID: "cell-0", APIServer: "https://cell-0.example", IngressDomain: "loopruntime.local", SecretRefName: "cell-0-kubeconfig", SecretRefNamespace: "loopruntime-system"},
+			{CellID: "cell-1", APIServer: "https://cell-1.example", IngressDomain: "loopruntime.local", SecretRefName: "cell-1-kubeconfig", SecretRefNamespace: "loopruntime-system"},
 		},
 	}
 	// 24h interval so the ticker cannot fire during the test (we never
@@ -944,7 +944,7 @@ func TestDynamicRouter_Resolve_DeterministicAcrossCalls(t *testing.T) {
 func TestDynamicRouter_Resolve_DeterministicConcurrent(t *testing.T) {
 	store := &fakeCellStore{
 		cells: []CellConfig{
-			{CellID: "cell-1", APIServer: "https://cell-1.example", IngressDomain: "loopzero.local", SecretRefName: "cell-1-kubeconfig", SecretRefNamespace: "loopzero-system"},
+			{CellID: "cell-1", APIServer: "https://cell-1.example", IngressDomain: "loopruntime.local", SecretRefName: "cell-1-kubeconfig", SecretRefNamespace: "loopruntime-system"},
 		},
 	}
 	router := NewDynamicRouter(store, 24*time.Hour, slog.Default())

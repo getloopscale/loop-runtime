@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import { describe, expect, it } from "vitest";
 import {
@@ -10,9 +10,9 @@ import {
 
 describe("do-spaces-openbao-backups component (F1.2)", () => {
   describe("buildBackupResourceTags", () => {
-    it("returns canonical tags with project=loopzero + component=openbao", () => {
+    it("returns canonical tags with project=loopruntime + component=openbao", () => {
       const tags = buildBackupResourceTags("prod");
-      expect(tags.project).toBe("loopzero");
+      expect(tags.project).toBe("loopruntime");
       expect(tags.component).toBe("openbao");
       expect(tags.stack).toBe("prod");
       expect(tags.purpose).toBe("openbao-raft-snapshot-backup");

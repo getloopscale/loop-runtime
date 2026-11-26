@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Plan v1.2 T6.1 (cutover-deep-review-hardening) — multipart per-field
 // limits + field-order tests for POST /api/v1/source/upload.

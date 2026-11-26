@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
-// T3.6 / ARCH-002: LoopZeroApplication lifecycle state machine.
+// T3.6 / ARCH-002: LoopRuntimeApplication lifecycle state machine.
 //
 // String values match operators/api/v1.ApplicationPhase constants
 // (Progressing, Serving, Reachable, Degraded, Down, Cleaned) so the
 // controller can cast Transition results directly to ApplicationPhase.
 //
-// Unlike most LoopZero state machines (Build, Tenant, Preview), the
+// Unlike most LoopRuntime state machines (Build, Tenant, Preview), the
 // Application machine is CYCLIC — apps can move Reachable → Degraded
 // → Reachable across many reconciles in their lifetime. The Cleaned
 // state IS terminal (added 2026-05-03 by fix-all-platform-issues-plan
@@ -36,7 +36,7 @@ const (
 	ApplicationCleaned     State = "Cleaned"
 )
 
-// LoopZeroApplication events.
+// LoopRuntimeApplication events.
 const (
 	ApplicationCreate         Event = "Create"         // initial reconcile
 	ApplicationEndpointsReady Event = "EndpointsReady" // Service has ≥1 ready endpoint
@@ -47,7 +47,7 @@ const (
 	ApplicationOrphaned       Event = "Orphaned"       // The manifest left the GitOps source; no code emits it since the reaper was deleted
 )
 
-// NewApplicationMachine returns the LoopZeroApplication state machine.
+// NewApplicationMachine returns the LoopRuntimeApplication state machine.
 //
 // Lifecycle (typical):
 //
@@ -66,7 +66,7 @@ const (
 // deciding who owns orphan cleanup replaces or removes them.
 func NewApplicationMachine() *Machine {
 	return NewMachine(MachineConfig{
-		Name: "LoopZeroApplication",
+		Name: "LoopRuntimeApplication",
 		Transitions: []transition{
 			// Initial creation
 			{From: ApplicationEmpty, Event: ApplicationCreate, To: ApplicationProgressing},

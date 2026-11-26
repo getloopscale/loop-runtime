@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // tenant_evictor.go implements T-02 bulk tenant
 // teardown service (50k-immediate-focus).
@@ -11,7 +11,7 @@
 // Scope:
 //   - DELETE from 8 DB tables (FK-ordered transaction)
 //   - Force-null finalizers on mgmt CRs (Tenant, Environment,
-//     LoopZeroApplication, ExposedRoute, ArgoCD Application)
+//     LoopRuntimeApplication, ExposedRoute, ArgoCD Application)
 //   - Runtime namespace finalize via /api/v1/namespaces/{name}/finalize
 //   - Argo Workflow cleanup
 //

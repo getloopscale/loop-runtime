@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // SSE deploy stream test — validates real-time event delivery during deploys.
 //
-// Objective: verify that `loopzero logs --follow` / build progress SSE
+// Objective: verify that `loopruntime logs --follow` / build progress SSE
 // streaming works reliably under concurrent deploy load. Specifically:
 //
 //   1. SSE connections establish quickly (first event within 5s)
@@ -40,17 +40,17 @@ import {
   healthCheck,
   API_URL,
   SVC_AUTH,
-} from './lib/loopzero-api.js';
+} from './lib/loopruntime-api.js';
 import { loadBundleBytes } from '../fixtures/bundle-builder.js';
 
 // -----------------------------------------------------------------------
 // Custom SSE metrics
 // -----------------------------------------------------------------------
 
-const sseConnectDuration = new Trend('loopzero_sse_connect_duration_ms', true);
-const sseEventsReceived = new Counter('loopzero_sse_events_received');
-const sseConnectionDrops = new Counter('loopzero_sse_connection_drops');
-const sseBuildTerminalReceived = new Rate('loopzero_sse_build_terminal_received');
+const sseConnectDuration = new Trend('loopruntime_sse_connect_duration_ms', true);
+const sseEventsReceived = new Counter('loopruntime_sse_events_received');
+const sseConnectionDrops = new Counter('loopruntime_sse_connection_drops');
+const sseBuildTerminalReceived = new Rate('loopruntime_sse_build_terminal_received');
 
 // -----------------------------------------------------------------------
 // Options
@@ -70,9 +70,9 @@ export const options = {
   },
   thresholds: {
     // SSE-specific SLOs
-    'loopzero_sse_connect_duration_ms': ['p(95)<5000'],   // first event within 5s
-    'loopzero_sse_connection_drops':    ['count<5'],       // near-zero unexpected drops
-    'loopzero_sse_build_terminal_received': ['rate>0.95'], // 95% get terminal via SSE
+    'loopruntime_sse_connect_duration_ms': ['p(95)<5000'],   // first event within 5s
+    'loopruntime_sse_connection_drops':    ['count<5'],       // near-zero unexpected drops
+    'loopruntime_sse_build_terminal_received': ['rate>0.95'], // 95% get terminal via SSE
 
     // Basic reliability (we still care about deploys succeeding)
     'http_req_failed': ['rate<0.05'],                 // < 5% HTTP errors
@@ -103,7 +103,7 @@ export function setup() {
   for (let i = 0; i < TENANT_COUNT; i++) {
     const tenantID = `k6-sse-tn-${i}`;
     const userID = `k6-sse-user-${i}`;
-    const email = `k6-sse-${i}@loopzero.test`;
+    const email = `k6-sse-${i}@loopruntime.test`;
     const projectName = `k6-sse-app-${i}`;
     createProject(tenantID, projectName, userID, email);
     sleep(0.2);
@@ -122,7 +122,7 @@ export default function (data) {
 
   const tenantID = `k6-sse-tn-${tenantIdx}`;
   const userID = `k6-sse-user-${tenantIdx}`;
-  const email = `k6-sse-${tenantIdx}@loopzero.test`;
+  const email = `k6-sse-${tenantIdx}@loopruntime.test`;
   const projectName = `k6-sse-app-${tenantIdx}`;
 
   let buildID = null;
@@ -154,9 +154,9 @@ export default function (data) {
     const sseRes = http.get(sseURL, {
       headers: {
         'X-Service-Auth': SVC_AUTH,
-        'X-LoopZero-User-ID': userID,
-        'X-LoopZero-Tenant': tenantID,
-        'X-LoopZero-Email': email,
+        'X-LoopRuntime-User-ID': userID,
+        'X-LoopRuntime-Tenant': tenantID,
+        'X-LoopRuntime-Email': email,
         'Accept': 'text/event-stream',
         'Cache-Control': 'no-cache',
       },
@@ -262,7 +262,7 @@ function parseSSEEvents(body) {
 
 /**
  * Polls build status until terminal. Used when SSE connection fails.
- * Does NOT emit deploy metrics (that is loopzero-api.js's job) — only
+ * Does NOT emit deploy metrics (that is loopruntime-api.js's job) — only
  * ensures the VU finishes gracefully.
  */
 function pollUntilTerminal(tenantID, buildID, userID, email) {
@@ -295,10 +295,10 @@ export function teardown() {
 
 export function handleSummary(data) {
   const m = data.metrics;
-  const sseDur = (m.loopzero_sse_connect_duration_ms || {}).values || {};
-  const sseEvents = (m.loopzero_sse_events_received || {}).values || {};
-  const sseDrops = (m.loopzero_sse_connection_drops || {}).values || {};
-  const sseTerminal = (m.loopzero_sse_build_terminal_received || {}).values || {};
+  const sseDur = (m.loopruntime_sse_connect_duration_ms || {}).values || {};
+  const sseEvents = (m.loopruntime_sse_events_received || {}).values || {};
+  const sseDrops = (m.loopruntime_sse_connection_drops || {}).values || {};
+  const sseTerminal = (m.loopruntime_sse_build_terminal_received || {}).values || {};
   const httpDur = (m.http_req_duration || {}).values || {};
 
   const terminalRate = sseTerminal.rate !== undefined

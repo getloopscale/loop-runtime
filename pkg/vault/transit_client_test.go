@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package vault
 
@@ -197,7 +197,7 @@ func TestTransitClient_Encrypt_PerTenantKeyRoute(t *testing.T) {
 	}
 
 	_, _ = c.Encrypt(context.Background(), "tn-XYZ", []byte("x"))
-	want := "/v1/transit/encrypt/loopzero-tenants-tn-XYZ"
+	want := "/v1/transit/encrypt/loopruntime-tenants-tn-XYZ"
 	if capturedPath != want {
 		t.Errorf("path: got %q want %q (per-tenant key route violated)", capturedPath, want)
 	}

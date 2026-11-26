@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# create-test-api-key.sh — mint a memory-scoped loopzero_live_* API key for E2E smoke bearer.
+# create-test-api-key.sh — mint a memory-scoped loopruntime_live_* API key for E2E smoke bearer.
 #
-# Per plan v1.3 § Phase 5 / T5.2 (EC-6 absorption) of loopzero-cloud-themory-e2e-finalize-plan.md.
+# Per plan v1.3 § Phase 5 / T5.2 (EC-6 absorption) of loopruntime-cloud-themory-e2e-finalize-plan.md.
 #
-# EC-6 GRAVE FIX context: the smoke-themory-e2e.sh bearer MUST be a loopzero_live_*
+# EC-6 GRAVE FIX context: the smoke-themory-e2e.sh bearer MUST be a loopruntime_live_*
 # key with memory:read|write|delete scopes (recognized by the Go proxy's
 # requireScope middleware), NOT a JWT session cookie from local-dogfood-token.txt
 # (which would 401 against scoped middleware).
@@ -14,15 +14,15 @@
 # cycle re-audits.
 #
 # Sequence:
-#   1. Pre-flight: require ~/.loopzero/local-dogfood-token.txt (admin JWT for the call itself)
+#   1. Pre-flight: require ~/.loopruntime/local-dogfood-token.txt (admin JWT for the call itself)
 #   2. POST localhost:13002/v1/api-keys with Bearer JWT + body { name, scopes }
-#   3. Parse .secret via jq → write to ~/.loopzero/local-test-memory-bearer.txt chmod 600
+#   3. Parse .secret via jq → write to ~/.loopruntime/local-test-memory-bearer.txt chmod 600
 #   4. Print short confirmation (NEVER print the secret to stdout/stderr)
 
 set -euo pipefail
 
-readonly ADMIN_JWT_FILE="${ADMIN_JWT_FILE:-${HOME}/.loopzero/local-dogfood-token.txt}"
-readonly OUTPUT_FILE="${OUTPUT_FILE:-${HOME}/.loopzero/local-test-memory-bearer.txt}"
+readonly ADMIN_JWT_FILE="${ADMIN_JWT_FILE:-${HOME}/.loopruntime/local-dogfood-token.txt}"
+readonly OUTPUT_FILE="${OUTPUT_FILE:-${HOME}/.loopruntime/local-test-memory-bearer.txt}"
 readonly CLOUD_BASE_URL="${CLOUD_BASE_URL:-http://localhost:13002}"
 readonly KEY_NAME_DEFAULT="${KEY_NAME:-local-test-memory-$(date +%s)}"
 
@@ -72,7 +72,7 @@ mint_key() {
 }
 
 main() {
-  printf "create-test-api-key.sh — mint memory-scoped loopzero_live_* key for smoke bearer\n\n"
+  printf "create-test-api-key.sh — mint memory-scoped loopruntime_live_* key for smoke bearer\n\n"
   ensure_jq_present
   ensure_output_dir
   local admin_jwt
@@ -82,7 +82,7 @@ main() {
   printf "%s\n" "$secret" > "$OUTPUT_FILE"
   chmod 600 "$OUTPUT_FILE"
   log_info "Test bearer saved at $OUTPUT_FILE (chmod 600, prefix=${secret:0:11})"
-  printf "\n%b✓ Memory-scoped loopzero_live_* key ready%b\n" "$C_GREEN" "$C_RESET"
+  printf "\n%b✓ Memory-scoped loopruntime_live_* key ready%b\n" "$C_GREEN" "$C_RESET"
   printf "Next: bash infra/scripts/local/smoke-themory-e2e.sh\n"
 }
 

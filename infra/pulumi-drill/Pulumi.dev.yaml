@@ -1,13 +1,13 @@
 config:
-  loopzero-drill:domain:
+  loopruntime-drill:domain:
     value: drill.getloopscale.com
-  loopzero-drill:doProject:
-    value: loopzero-drill
-  loopzero-drill:region:
+  loopruntime-drill:doProject:
+    value: loopruntime-drill
+  loopruntime-drill:region:
     value: sfo3  # Same region as prod for realistic latency comparison
-  loopzero-drill:cellName:
+  loopruntime-drill:cellName:
     value: cell-drill
-  loopzero-drill:nodeCount:
+  loopruntime-drill:nodeCount:
     value: "2"  # Match prod node count for realistic drill
-  loopzero-drill:k8sVersion:
+  loopruntime-drill:k8sVersion:
     value: "1.32.13"  # Match prod K8s version

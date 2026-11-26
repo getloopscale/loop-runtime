@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package config
 
@@ -12,23 +12,23 @@ import (
 // (LD_PRELOAD, PATH...). Warn mode lets those keys through, so production
 // must refuse to start with it.
 func TestValidateRejectsTheEnvBlocklistWarnModeInProduction(t *testing.T) {
-	t.Setenv("LOOPZERO_ENV", "production")
-	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "warn")
+	t.Setenv("LOOPRUNTIME_ENV", "production")
+	t.Setenv("LOOPRUNTIME_ENV_BLOCKLIST_MODE", "warn")
 
 	err := Load().Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "LOOPZERO_ENV_BLOCKLIST_MODE") {
-		t.Fatalf("Validate() = %v, want a refusal naming LOOPZERO_ENV_BLOCKLIST_MODE", err)
+	if err == nil || !strings.Contains(err.Error(), "LOOPRUNTIME_ENV_BLOCKLIST_MODE") {
+		t.Fatalf("Validate() = %v, want a refusal naming LOOPRUNTIME_ENV_BLOCKLIST_MODE", err)
 	}
 }
 
 func TestValidateRejectsAnUnknownEnvBlocklistMode(t *testing.T) {
-	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "off")
+	t.Setenv("LOOPRUNTIME_ENV_BLOCKLIST_MODE", "off")
 
 	err := Load().Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "LOOPZERO_ENV_BLOCKLIST_MODE") {
-		t.Fatalf("Validate() = %v, want a refusal naming LOOPZERO_ENV_BLOCKLIST_MODE", err)
+	if err == nil || !strings.Contains(err.Error(), "LOOPRUNTIME_ENV_BLOCKLIST_MODE") {
+		t.Fatalf("Validate() = %v, want a refusal naming LOOPRUNTIME_ENV_BLOCKLIST_MODE", err)
 	}
 }
 

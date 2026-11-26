@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package reconcileloop
 
@@ -61,8 +61,8 @@ func Test_OperatorPredicates_GenerationChange_Reconciled(t *testing.T) {
 }
 
 // Test_OperatorPredicates_AnnotationChange_Reconciled — annotation
-// mutation triggers reconcile (e.g., loopzero.io/heal-trigger,
-// loopzero.io/cell-id pin).
+// mutation triggers reconcile (e.g., runtime.getloopscale.com/heal-trigger,
+// runtime.getloopscale.com/cell-id pin).
 func Test_OperatorPredicates_AnnotationChange_Reconciled(t *testing.T) {
 	p := OperatorPredicates()
 
@@ -73,7 +73,7 @@ func Test_OperatorPredicates_AnnotationChange_Reconciled(t *testing.T) {
 		},
 	}
 	updated := old.DeepCopy()
-	updated.Annotations["loopzero.io/heal-trigger"] = "1234567890"
+	updated.Annotations["runtime.getloopscale.com/heal-trigger"] = "1234567890"
 
 	if !p.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}) {
 		t.Errorf("OperatorPredicates.Update returned false on annotation add; expected true")
@@ -81,7 +81,7 @@ func Test_OperatorPredicates_AnnotationChange_Reconciled(t *testing.T) {
 }
 
 // Test_OperatorPredicates_LabelChange_Reconciled — label mutation
-// triggers reconcile (e.g., loopzero.io/managed-by, app.kubernetes.io/name
+// triggers reconcile (e.g., runtime.getloopscale.com/managed-by, app.kubernetes.io/name
 // during chart upgrade).
 func Test_OperatorPredicates_LabelChange_Reconciled(t *testing.T) {
 	p := OperatorPredicates()
@@ -93,7 +93,7 @@ func Test_OperatorPredicates_LabelChange_Reconciled(t *testing.T) {
 		},
 	}
 	updated := old.DeepCopy()
-	updated.Labels["loopzero.io/cell-id"] = "cell-0"
+	updated.Labels["runtime.getloopscale.com/cell-id"] = "cell-0"
 
 	if !p.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: updated}) {
 		t.Errorf("OperatorPredicates.Update returned false on label add; expected true")

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Plan m37-tenant-cr-project-sync-canonical-fix v1.0 T3.1 — LIVE 4-scenario
-# E2E for `loopzero-cloud#37` scenario 4 (BUILD → RELEASE → URL chain). The
+# E2E for `loopruntime-cloud#37` scenario 4 (BUILD → RELEASE → URL chain). The
 # Sprint 8 #37 close shipped the watcher namespace-scoped LIST but missed
-# the per-(project,env) tuple shallow-check gap that prevents `loopzero deploy`
+# the per-(project,env) tuple shallow-check gap that prevents `loopruntime deploy`
 # from extending a tenant's Tenant CR `spec.environments[]` when a NEW
 # project is deployed against an existing tenant.
 #
@@ -13,15 +13,15 @@
 #
 # OPERATOR HARD STOP per .claude/rules/cleanroom-up-live-test-mandate.md
 # UNBREAKABLE for full --live coverage (requires valid JWT + dev-public
-# reachable + kubectl context k3d-loopzero-core). The hermetic --skip-live
+# reachable + kubectl context k3d-loopruntime-core). The hermetic --skip-live
 # path is the CI-safe entry.
 set -euo pipefail
 
 PLAN_SLUG="m37-tenant-cr-project-sync-canonical-fix"
-CLOUD_BASE="${LOOPZERO_CLOUD_URL:?LOOPZERO_CLOUD_URL must be set (e.g. https://app-dev.getloopscale.com)}"
-MGMT_CTX="${LOOPZERO_MGMT_KUBECONTEXT:-k3d-loopzero-core}"
-JWT_PATH="${LOOPZERO_SESSION_JWT_PATH:-$HOME/.loopzero/local-dogfood-session-jwt.txt}"
-WAIT_BUDGET_SECONDS="${LOOPZERO_DEPLOY_LIVE_URL_WAIT_BUDGET:-1800}"  # 30min CLI ceiling
+CLOUD_BASE="${LOOPRUNTIME_CLOUD_URL:?LOOPRUNTIME_CLOUD_URL must be set (e.g. https://app-dev.getloopscale.com)}"
+MGMT_CTX="${LOOPRUNTIME_MGMT_KUBECONTEXT:-k3d-loopruntime-core}"
+JWT_PATH="${LOOPRUNTIME_SESSION_JWT_PATH:-$HOME/.loopruntime/local-dogfood-session-jwt.txt}"
+WAIT_BUDGET_SECONDS="${LOOPRUNTIME_DEPLOY_LIVE_URL_WAIT_BUDGET:-1800}"  # 30min CLI ceiling
 SKIP_LIVE=0
 SCENARIO=""
 JSON_OUTPUT=0
@@ -30,9 +30,9 @@ RESULTS=()
 # Probe project name — UNIQUE per run for scenarios A+B (m37-specific
 # assertions: Tenant CR tuple + AppProject destinations on a NEW project
 # against an existing tenant). Caller can override.
-PROBE_PROJECT="${LOOPZERO_DEPLOY_LIVE_URL_PROJECT:-m37-probe-$(date +%s)}"
-PROBE_ENV="${LOOPZERO_DEPLOY_LIVE_URL_ENV:-preview}"
-PROBE_COMMIT_SHA="${LOOPZERO_DEPLOY_LIVE_URL_COMMIT:-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef}"
+PROBE_PROJECT="${LOOPRUNTIME_DEPLOY_LIVE_URL_PROJECT:-m37-probe-$(date +%s)}"
+PROBE_ENV="${LOOPRUNTIME_DEPLOY_LIVE_URL_ENV:-preview}"
+PROBE_COMMIT_SHA="${LOOPRUNTIME_DEPLOY_LIVE_URL_COMMIT:-deadbeefdeadbeefdeadbeefdeadbeefdeadbeef}"
 
 # Canonical fixture project for scenarios C+D (BUILD → RELEASE → URL
 # end-to-end). Scenarios C+D probe an EXISTING active release because the
@@ -41,22 +41,22 @@ PROBE_COMMIT_SHA="${LOOPZERO_DEPLOY_LIVE_URL_COMMIT:-deadbeefdeadbeefdeadbeefdea
 # project_canonical_dev_user_credentials + reference seed scripts).
 # Operator can override; setting empty string SKIPs C+D with a SKIP verdict
 # (not a FAIL).
-CANONICAL_PROJECT="${LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_PROJECT:-sample}"
-CANONICAL_ENV="${LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_ENV:-production}"
+CANONICAL_PROJECT="${LOOPRUNTIME_DEPLOY_LIVE_URL_CANONICAL_PROJECT:-sample}"
+CANONICAL_ENV="${LOOPRUNTIME_DEPLOY_LIVE_URL_CANONICAL_ENV:-production}"
 
 usage() {
     cat <<EOF
 Usage: $(basename "$0") [--skip-live] [--scenario=A|B|C|D] [--json] [--help]
 
-LIVE 4-scenario test for loopzero-cloud#37 scenario 4 (BUILD → RELEASE → URL).
+LIVE 4-scenario test for loopruntime-cloud#37 scenario 4 (BUILD → RELEASE → URL).
 
   A — Tenant CR \`spec.environments[]\` gains the (project, env) tuple
       after POST /api/v1/builds for a NEW project on existing tenant
       (the m37 fix that closes the silent no-op).
   B — ArgoCD AppProject \`<tenant>\` gains a \`destinations[].namespace\`
-      matching \`loopzero-<tenant>-<project>-<env>\` within 60s.
+      matching \`loopruntime-<tenant>-<project>-<env>\` within 60s.
   C — Release reaches ACTIVE within $WAIT_BUDGET_SECONDS seconds AND
-      \`release.url\` is non-empty (\`loopzero status --json\` view).
+      \`release.url\` is non-empty (\`loopruntime status --json\` view).
   D — HTTP probe of the Live URL returns 200..399 (workload responds).
 
 Operator HARD STOP per cleanroom-up-live-test-mandate.md.
@@ -93,7 +93,7 @@ preflight() {
         return 1
     fi
     if [ ! -f "$JWT_PATH" ]; then
-        record "preflight" "FAIL" "JWT seed missing at $JWT_PATH; run seed-admin-loopzero-dev.sh --refresh-only"
+        record "preflight" "FAIL" "JWT seed missing at $JWT_PATH; run seed-admin-loopruntime-dev.sh --refresh-only"
         return 1
     fi
     if ! command -v kubectl >/dev/null 2>&1; then
@@ -134,13 +134,13 @@ except Exception:
 # chain ceiling is 30min (Sprint 8 #38 contract). Long-poll scenarios MUST
 # refresh JWT periodically OR the C/D probes degrade to 401. We call the
 # canonical seed-admin --refresh-only flow (mints a fresh session via the
-# Kratos admin API + propagates to ~/.loopzero/local-dogfood-session-jwt.txt).
+# Kratos admin API + propagates to ~/.loopruntime/local-dogfood-session-jwt.txt).
 # Skipped when SKIP_LIVE=1; failure is non-fatal (log + continue with stale).
 refresh_jwt_if_needed() {
     if [ "$SKIP_LIVE" -eq 1 ]; then
         return 0
     fi
-    local refresh_script="${LOOPZERO_REPO_ROOT:-$(cd "$(dirname "$0")/../../../.." && pwd)}/infra/scripts/local/seed-admin-loopzero-dev.sh"
+    local refresh_script="${LOOPRUNTIME_REPO_ROOT:-$(cd "$(dirname "$0")/../../../.." && pwd)}/infra/scripts/local/seed-admin-loopruntime-dev.sh"
     if [ -x "$refresh_script" ]; then
         bash "$refresh_script" --refresh-only >/dev/null 2>&1 || true
     fi
@@ -183,7 +183,7 @@ scenario_a() {
     # Poll Tenant CR for the new tuple. Up to 60s — operator reconcile is fast.
     local deadline=$((SECONDS + 60))
     while [ $SECONDS -lt $deadline ]; do
-        if kubectl --context "$MGMT_CTX" -n loopzero-system get tenant "$tenant_id" -o json 2>/dev/null \
+        if kubectl --context "$MGMT_CTX" -n loopruntime-system get tenant "$tenant_id" -o json 2>/dev/null \
             | python3 -c "
 import sys, json
 t = json.load(sys.stdin)
@@ -218,7 +218,7 @@ scenario_b() {
         record "B-appproject-destinations-extended" "FAIL" "could not resolve tenant_id"
         return 1
     fi
-    local expected_ns="loopzero-${tenant_id}-${PROBE_PROJECT}-${PROBE_ENV}"
+    local expected_ns="loopruntime-${tenant_id}-${PROBE_PROJECT}-${PROBE_ENV}"
     local deadline=$((SECONDS + 60))
     while [ $SECONDS -lt $deadline ]; do
         if kubectl --context "$MGMT_CTX" -n argocd get appproject "$tenant_id" -o json 2>/dev/null \
@@ -253,7 +253,7 @@ scenario_c() {
         return 0
     fi
     if [ -z "$CANONICAL_PROJECT" ]; then
-        record "C-release-active-with-url" "SKIP" "CANONICAL_PROJECT empty — set LOOPZERO_DEPLOY_LIVE_URL_CANONICAL_PROJECT to enable"
+        record "C-release-active-with-url" "SKIP" "CANONICAL_PROJECT empty — set LOOPRUNTIME_DEPLOY_LIVE_URL_CANONICAL_PROJECT to enable"
         return 0
     fi
     local deadline=$((SECONDS + WAIT_BUDGET_SECONDS))

@@ -1,4 +1,4 @@
-# loopzero-minio: the MinIO server, built from source (#394).
+# loopruntime-minio: the MinIO server, built from source (#394).
 #
 # MinIO withdrew every binary channel of its community edition: dl.min.io answers
 # 410, quay.io/minio/minio and Docker Hub minio/minio no longer serve images, and
@@ -63,7 +63,7 @@ ARG MINIO_TAG=RELEASE.2025-10-15T17-29-55Z
 ARG MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a
 
 LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime" \
-      org.opencontainers.image.title="loopzero-minio" \
+      org.opencontainers.image.title="loopruntime-minio" \
       org.opencontainers.image.version="${MINIO_TAG}" \
       org.opencontainers.image.revision="${MINIO_COMMIT}" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \

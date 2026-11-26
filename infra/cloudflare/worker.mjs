@@ -1,4 +1,4 @@
-const S3_ENDPOINT = "https://loopzero-static-assets.sfo3.digitaloceanspaces.com";
+const S3_ENDPOINT = "https://loopruntime-static-assets.sfo3.digitaloceanspaces.com";
 const BASE_DOMAIN = "dev.getloopscale.com";
 
 const SECURITY_HEADERS = {
@@ -21,7 +21,7 @@ const SECURITY_HEADERS = {
   // execute code, and bundling the two would have let the urgent problem be
   // deferred alongside the cosmetic one. Hardening it is its own change.
   //
-  // Guarded by `loopzero-ops quality worker-csp`.
+  // Guarded by `loopruntime-ops quality worker-csp`.
   "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.dev.getloopscale.com",
 };
 
@@ -46,11 +46,11 @@ function getCacheControl(pathname) {
 // IP. Returns null when no route is published; a published route whose cell has no
 // ingress is refused with 503 rather than sent anywhere else.
 async function routeToCell(request, routeKey) {
-  var route = await LOOPZERO_ROUTING.get("route:" + routeKey, { type: "json" });
+  var route = await LOOPRUNTIME_ROUTING.get("route:" + routeKey, { type: "json" });
   if (!route || !route.cellId) {
     return null;
   }
-  var ingress = await LOOPZERO_ROUTING.get("ingress:" + route.cellId, { type: "json" });
+  var ingress = await LOOPRUNTIME_ROUTING.get("ingress:" + route.cellId, { type: "json" });
   if (!ingress || !ingress.resolveOverride) {
     return new Response("Service temporarily unavailable", { status: 503, headers: SECURITY_HEADERS });
   }
@@ -74,7 +74,7 @@ async function handleRequest(request) {
   }
 
   // 1. Static app routing (S3/CDN delivery).
-  var routingData = await LOOPZERO_ROUTING.get(subdomain, { type: "json" });
+  var routingData = await LOOPRUNTIME_ROUTING.get(subdomain, { type: "json" });
   if (!routingData) {
     // 2. Dynamic app routing by cell (#448).
     var routed = await routeToCell(request, subdomain);

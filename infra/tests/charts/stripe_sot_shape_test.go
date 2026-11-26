@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T1.2 of plan m5-stripe-sot-canonical-closure v1.0 — hermetic guard
 // locking the Stripe SoT shape canonical contract:
@@ -9,7 +9,7 @@
 //	(sk_test_ / pk_test_ / whsec_).
 //
 // Per ADR D1 of the plan: schema validated against committed fixture
-// (hermetic, runs in any env; CI never touches real ~/.loopzero/dev-
+// (hermetic, runs in any env; CI never touches real ~/.loopruntime/dev-
 // credentials.json). The optional --check-live-sot operator path is
 // kept as a separate concern (not in this Go test; would belong in a
 // future operator-side tool).
@@ -47,7 +47,7 @@ const (
 	fixturePath = "../fixtures/dev-credentials-stripe-schema-test-mode.json"
 )
 
-// stripeSchema mirrors the relevant slice of ~/.loopzero/dev-credentials.json.
+// stripeSchema mirrors the relevant slice of ~/.loopruntime/dev-credentials.json.
 type stripeSchema struct {
 	Stripe map[string]any `json:"stripe"`
 }

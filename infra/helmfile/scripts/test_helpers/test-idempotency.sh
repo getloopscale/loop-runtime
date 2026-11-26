@@ -13,7 +13,7 @@
 #
 # Run: bash infra/helmfile/scripts/test_helpers/test-idempotency.sh
 #
-# Requires: k3d-loopzero-test cluster reachable + the real generate-*.sh scripts.
+# Requires: k3d-loopruntime-test cluster reachable + the real generate-*.sh scripts.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -156,14 +156,14 @@ ORIG_PATH="$PATH"
 export PATH="${MOCK_STATE}:$PATH"
 
 # Provide minimal env vars so script runs all paths
-export LOOPZERO_DB_HOST="db.example.com"
-export LOOPZERO_DB_PORT="5432"
-export LOOPZERO_DB_USER="loopzero"
-export LOOPZERO_DB_NAME="loopzero"
-export LOOPZERO_DB_PASSWORD="db-pwd-from-pulumi"
-export LOOPZERO_SPACES_KEY="ACCESS"
-export LOOPZERO_SPACES_SECRET="SECRET"
-export LOOPZERO_REGISTRY_ENDPOINT="registry.digitalocean.com/loopzero"
+export LOOPRUNTIME_DB_HOST="db.example.com"
+export LOOPRUNTIME_DB_PORT="5432"
+export LOOPRUNTIME_DB_USER="loopruntime"
+export LOOPRUNTIME_DB_NAME="loopruntime"
+export LOOPRUNTIME_DB_PASSWORD="db-pwd-from-pulumi"
+export LOOPRUNTIME_SPACES_KEY="ACCESS"
+export LOOPRUNTIME_SPACES_SECRET="SECRET"
+export LOOPRUNTIME_REGISTRY_ENDPOINT="registry.digitalocean.com/loopruntime"
 
 # === First run — should generate randoms ===
 log ""
@@ -171,19 +171,19 @@ log "=== Run 1 (initial install) ==="
 bash "$SECRETS_SCRIPT" dev core 2>/dev/null
 
 # Capture generated values
-GITEA_PWD_1=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/gitea-admin/password" 2>/dev/null || echo "MISSING")
-GITEA_TOKEN_1=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/gitea-admin/token" 2>/dev/null || echo "MISSING")
+GITEA_PWD_1=$(cat "${MOCK_KUBECTL_STATE}/loopruntime-system/gitea-admin/password" 2>/dev/null || echo "MISSING")
+GITEA_TOKEN_1=$(cat "${MOCK_KUBECTL_STATE}/loopruntime-system/gitea-admin/token" 2>/dev/null || echo "MISSING")
 
 log "  Generated GITEA_PWD: ${GITEA_PWD_1:0:8}..."
 
 # === Second run — should reuse same values ===
 log ""
 log "=== Run 2 (re-run / sync) ==="
-unset LOOPZERO_GITEA_ADMIN_PASSWORD
+unset LOOPRUNTIME_GITEA_ADMIN_PASSWORD
 bash "$SECRETS_SCRIPT" dev core 2>/dev/null
 
-GITEA_PWD_2=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/gitea-admin/password" 2>/dev/null || echo "MISSING")
-GITEA_TOKEN_2=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/gitea-admin/token" 2>/dev/null || echo "MISSING")
+GITEA_PWD_2=$(cat "${MOCK_KUBECTL_STATE}/loopruntime-system/gitea-admin/password" 2>/dev/null || echo "MISSING")
+GITEA_TOKEN_2=$(cat "${MOCK_KUBECTL_STATE}/loopruntime-system/gitea-admin/token" 2>/dev/null || echo "MISSING")
 
 # === Assertions ===
 export PATH="$ORIG_PATH"
@@ -211,7 +211,7 @@ TOKEN_LEN=${#GITEA_TOKEN_2}
   || fail "B4" "token length $TOKEN_LEN suspicious"
 
 # DB password from env should override
-DB_PWD_2=$(cat "${MOCK_KUBECTL_STATE}/loopzero-system/loopzero-db-credentials/password" 2>/dev/null || echo "")
+DB_PWD_2=$(cat "${MOCK_KUBECTL_STATE}/loopruntime-system/loopruntime-db-credentials/password" 2>/dev/null || echo "")
 [[ "$DB_PWD_2" == "db-pwd-from-pulumi" ]] && ok "DB password from env (Pulumi L1) honored" \
   || fail "DB_PWD" "expected 'db-pwd-from-pulumi', got '$DB_PWD_2'"
 

@@ -20,10 +20,10 @@ import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 const CHARTS = [
-  "loopzero-tenant-operator",
-  "loopzero-app-operator",
-  "loopzero-preview-operator",
-  "loopzero-platform-operator",
+  "loopruntime-tenant-operator",
+  "loopruntime-app-operator",
+  "loopruntime-preview-operator",
+  "loopruntime-platform-operator",
 ] as const;
 
 function helmTemplate(chart: string): string {
@@ -70,8 +70,8 @@ describe("split operator chart invariants (T2.1)", () => {
     // not in the chart. Read the source and confirm uniqueness.
     const ids = new Set<string>();
     for (const chart of CHARTS) {
-      // chart name → binary dir: loopzero-tenant-operator → tenant-operator
-      const binary = chart.replace(/^loopzero-/, "");
+      // chart name → binary dir: loopruntime-tenant-operator → tenant-operator
+      const binary = chart.replace(/^loopruntime-/, "");
       const main = readFileSync(
         resolve(REPO_ROOT, "operators", "cmd", binary, "main.go"),
         "utf-8",
@@ -81,10 +81,10 @@ describe("split operator chart invariants (T2.1)", () => {
       ids.add(m![1]);
     }
     expect(ids.size, "all 4 LeaderElectionIDs must be unique").toBe(CHARTS.length);
-    // Spot-check the canonical loopzero.io domain pattern (ADR-0021 §C13).
+    // Spot-check the canonical runtime.getloopscale.com domain pattern (ADR-0021 §C13).
     for (const id of ids) {
-      expect(id, `LeaderElectionID must use loopzero.io scope: ${id}`).toMatch(
-        /^loopzero-[a-z]+-operator\.loopzero\.io$/,
+      expect(id, `LeaderElectionID must use runtime.getloopscale.com scope: ${id}`).toMatch(
+        /^loopruntime-[a-z]+-operator\.runtime\.getloopscale\.com$/,
       );
     }
   });

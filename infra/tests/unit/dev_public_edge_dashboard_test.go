@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// The edge serves the dashboard from LOOPZERO_DASHBOARD_DIST, defaulting to a sibling
+// The edge serves the dashboard from LOOPRUNTIME_DASHBOARD_DIST, defaulting to a sibling
 // checkout's build that the dev droplet does not have. Reloading the live edge without it
 // swapped the dashboard's root for a directory that does not exist: app-dev answered 404
 // on every page, and --verify logged it as "upstream UP" because it accepted 404
@@ -29,8 +29,8 @@ func runCaddyUp(t *testing.T, dashboard string) (string, string, error) {
 	cmd := exec.Command("bash", filepath.Join(repoRoot(), "infra", "scripts", "local", "caddy-up-dev-public.sh"), "--dry-run")
 	cmd.Env = append(os.Environ(),
 		"PATH="+bin+":"+os.Getenv("PATH"),
-		"LOOPZERO_DASHBOARD_DIST="+dashboard,
-		"LOOPZERO_EDGE_ROUTE_TOKEN=test",
+		"LOOPRUNTIME_DASHBOARD_DIST="+dashboard,
+		"LOOPRUNTIME_EDGE_ROUTE_TOKEN=test",
 	)
 	out, err := cmd.CombinedOutput()
 	recorded, _ := os.ReadFile(calls)
@@ -42,8 +42,8 @@ func TestTheEdgeRefusesToServeADashboardThatIsNotBuilt(t *testing.T) {
 	if err == nil {
 		t.Fatalf("the script accepted a dashboard directory with no build:\n%s", out)
 	}
-	if !strings.Contains(out, "LOOPZERO_DASHBOARD_DIST") {
-		t.Errorf("the refusal does not name LOOPZERO_DASHBOARD_DIST:\n%s", out)
+	if !strings.Contains(out, "LOOPRUNTIME_DASHBOARD_DIST") {
+		t.Errorf("the refusal does not name LOOPRUNTIME_DASHBOARD_DIST:\n%s", out)
 	}
 	if strings.Contains(calls, "reload") || strings.Contains(calls, "start") {
 		t.Errorf("caddy was reloaded or started despite the refusal: %q", calls)
@@ -72,8 +72,8 @@ func TestTheEdgeVerifyTreatsADashboard404AsAFailure(t *testing.T) {
 }
 
 // The dashboard used to be served from a directory copied by hand, with no record of the
-// commit it was built from (#462). The edge now takes it from the pinned loopzero-dashboard
-// image: when LOOPZERO_DASHBOARD_IMAGE is given and no LOOPZERO_DASHBOARD_DIST overrides it, the
+// commit it was built from (#462). The edge now takes it from the pinned loopruntime-dashboard
+// image: when LOOPRUNTIME_DASHBOARD_IMAGE is given and no LOOPRUNTIME_DASHBOARD_DIST overrides it, the
 // bundle is copied out of a short-lived pod on the core cluster — which already
 // authenticates to the registry — into a directory named after the tag, and the edge
 // serves that.
@@ -92,11 +92,11 @@ func TestTheEdgeServesTheDashboardFromItsPinnedImage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	image := "registry.example/loopzero-dashboard:0123456789abcdef0123456789abcdef01234567"
+	image := "registry.example/loopruntime-dashboard:0123456789abcdef0123456789abcdef01234567"
 	cmd := exec.Command("bash", filepath.Join(repoRoot(), "infra", "scripts", "local", "caddy-up-dev-public.sh"))
-	env := []string{"PATH=" + bin + ":" + os.Getenv("PATH"), "HOME=" + home, "LOOPZERO_DASHBOARD_IMAGE=" + image, "LOOPZERO_EDGE_ROUTE_TOKEN=test"}
+	env := []string{"PATH=" + bin + ":" + os.Getenv("PATH"), "HOME=" + home, "LOOPRUNTIME_DASHBOARD_IMAGE=" + image, "LOOPRUNTIME_EDGE_ROUTE_TOKEN=test"}
 	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "LOOPZERO_DASHBOARD_DIST=") && !strings.HasPrefix(e, "PATH=") && !strings.HasPrefix(e, "HOME=") {
+		if !strings.HasPrefix(e, "LOOPRUNTIME_DASHBOARD_DIST=") && !strings.HasPrefix(e, "PATH=") && !strings.HasPrefix(e, "HOME=") {
 			env = append(env, e)
 		}
 	}
@@ -107,7 +107,7 @@ func TestTheEdgeServesTheDashboardFromItsPinnedImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the edge did not come up from the pinned image: %v\n%s", err, out)
 	}
-	dist := filepath.Join(home, ".cache", "loopzero", "dashboard", "0123456789abcdef0123456789abcdef01234567")
+	dist := filepath.Join(home, ".cache", "loopruntime", "dashboard", "0123456789abcdef0123456789abcdef01234567")
 	if _, err := os.Stat(filepath.Join(dist, "index.html")); err != nil {
 		t.Errorf("no bundle at %s: %v", dist, err)
 	}

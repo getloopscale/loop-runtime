@@ -1,12 +1,12 @@
 # Helmfile environment: vault-local
-# Per VK.4 of sponsor-direct decision 2026-06-02 — k3d loopzero-secrets cluster
+# Per VK.4 of sponsor-direct decision 2026-06-02 — k3d loopruntime-secrets cluster
 # for validating vault cluster isolation topology before DOKS prod.
 #
 # Used ONLY by infra/helmfile/secrets.helmfile.yaml.gotmpl.
 # Not consumed by mgmt/runtime/build helmfiles (vault cluster is isolated).
 
-domain: vault.loopzero.local
-dnsZone: loopzero.local
+domain: vault.loopruntime.local
+dnsZone: loopruntime.local
 
 clusterRole: vault
 clusterTopology: single-cluster
@@ -18,7 +18,7 @@ certIssuer:
   name: self-signed-issuer
 
 # cluster-issuer chart values (creates ClusterIssuer self-signed-issuer).
-loopzeroCaIssuerName: self-signed-issuer
+loopruntimeCaIssuerName: self-signed-issuer
 issuerKind: selfsigned
 
 # Trigger flag — secrets.helmfile reads .Values.openbaoEnabled to gate
@@ -28,7 +28,7 @@ openbaoEnabled: true
 
 # Phase 8 D12 — snapshot-agent opt-in. Default false in vault-local
 # (k3d Raft in-memory standalone — snapshot ephemeral). Set true in
-# prod env values, where DOKS loopzero-secrets-prod has persistent Raft + a DO
+# prod env values, where DOKS loopruntime-secrets-prod has persistent Raft + a DO
 # Spaces bucket configured.
 snapshotAgentEnabled: false
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statusadapter
 
@@ -52,7 +52,7 @@ func TestPrometheusStatusMetrics_ReadyReplicas_SumsTheRecordedSeriesOfTheEnviron
 	if err != nil || ready == nil || *ready != 2 {
 		t.Fatalf("ready = %v, err = %v, want 2", ready, err)
 	}
-	if want := `sum(loopzero_app:kube_pod_status_ready:sum{` + stagingMatcher + `})`; *query != want {
+	if want := `sum(loopruntime_app:kube_pod_status_ready:sum{` + stagingMatcher + `})`; *query != want {
 		t.Errorf("query = %s\n want = %s", *query, want)
 	}
 }
@@ -94,8 +94,8 @@ func TestPrometheusStatusMetrics_ServerErrorPercent_IsTheShareOf5xxOverTheWindow
 		t.Fatalf("pct = %v, err = %v, want 0.25", pct, err)
 	}
 	for _, want := range []string{
-		`avg_over_time(loopzero_app_status_class:traefik_service_requests:rate5m{status_class="5xx",` + stagingMatcher + `}[1h])`,
-		`avg_over_time(loopzero_app:traefik_service_requests:rate5m{` + stagingMatcher + `}[1h])`,
+		`avg_over_time(loopruntime_app_status_class:traefik_service_requests:rate5m{status_class="5xx",` + stagingMatcher + `}[1h])`,
+		`avg_over_time(loopruntime_app:traefik_service_requests:rate5m{` + stagingMatcher + `}[1h])`,
 		`or vector(0)`,
 		`* 100`,
 	} {
@@ -132,7 +132,7 @@ func TestPrometheusStatusMetrics_ReadyReplicas_CountsOnlyTheNamedApps(t *testing
 	if err != nil || ready == nil || *ready != 1 {
 		t.Fatalf("ready = %v, err = %v, want 1", ready, err)
 	}
-	if want := `sum(loopzero_app:kube_pod_status_ready:sum{` + stagingMatcher + `,app=~"app|worker\\.v2"})`; *query != want {
+	if want := `sum(loopruntime_app:kube_pod_status_ready:sum{` + stagingMatcher + `,app=~"app|worker\\.v2"})`; *query != want {
 		t.Errorf("query = %s\n want = %s", *query, want)
 	}
 }

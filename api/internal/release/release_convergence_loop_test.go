@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -17,7 +17,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
 	"github.com/getloopscale/loop-runtime/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
@@ -450,7 +450,7 @@ func (c *l21SyncClient) GetSyncRevision(_ context.Context, _ string) (string, er
 
 func TestRetriggerSync_L21_TerminatesAfterTwoConsecutiveLockStuck(t *testing.T) {
 	// Arrange: SyncClient that always returns ErrSyncOperationInProgress.
-	client := &l21SyncClient{triggerErr: loopzeroerrors.ErrSyncOperationInProgress}
+	client := &l21SyncClient{triggerErr: loopruntimeerrors.ErrSyncOperationInProgress}
 
 	loop := NewReleaseConvergenceLoop(
 		newFakeConvergenceReleaseStore(),
@@ -644,7 +644,7 @@ func TestL22_ForceReconcileDoesNotFireBeforeRetriggersExhausted(t *testing.T) {
 //
 // A schema-valid config whose workload SYNCS but never becomes HEALTHY (e.g. a
 // readiness path that always 404s) is the "valid-but-destructive config" class.
-// LoopZero's ACTIVE transition is HEALTH-GATED (release_convergence_loop.go:192,118),
+// LoopRuntime's ACTIVE transition is HEALTH-GATED (release_convergence_loop.go:192,118),
 // so such a release stays PENDING and is failed loud at the SyncTimeout
 // (release_convergence_loop.go:81,240). This test locks that fail-loud boundary
 // with TWO assertions — mirroring OLM's assert-phase-AND-reason rigor

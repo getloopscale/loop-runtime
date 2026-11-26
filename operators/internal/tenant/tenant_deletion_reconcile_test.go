@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // T3.5 of plan 2026-06-11-code-review-remediation v1.2 — closes #128
@@ -33,14 +33,14 @@ import (
 //      invariant that the annotation reflects retry attempts on the
 //      OBJECT, not just a derived value lost between reconciles.
 
-// scheme builds a minimal runtime.Scheme registering only loopzerov1 — the
+// scheme builds a minimal runtime.Scheme registering only loopruntimev1 — the
 // fake controller-runtime client needs the scheme to (de)serialize the
 // Tenant type. We do NOT register kubernetes core types here because
 // the tested paths don't touch them.
-func loopzeroOnlyScheme(t *testing.T) *runtime.Scheme {
+func loopruntimeOnlyScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	s := runtime.NewScheme()
-	if err := loopzerov1.AddToScheme(s); err != nil {
+	if err := loopruntimev1.AddToScheme(s); err != nil {
 		t.Fatalf("scheme: %v", err)
 	}
 	return s
@@ -55,11 +55,11 @@ func loopzeroOnlyScheme(t *testing.T) *runtime.Scheme {
 // deletion timestamps without orchestrating cleanup if there's nothing
 // to clean up.
 func TestReconcileDelete_NoFinalizer_ReturnsClean(t *testing.T) {
-	scheme := loopzeroOnlyScheme(t)
-	tenant := &loopzerov1.Tenant{
+	scheme := loopruntimeOnlyScheme(t)
+	tenant := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "no-finalizer-tenant",
-			Namespace:  "loopzero-system",
+			Namespace:  "loopruntime-system",
 			Finalizers: []string{}, // NO tenantFinalizer
 		},
 		// Deletion timestamp set so reconcile-delete would normally run.
@@ -98,10 +98,10 @@ func TestReconcileDelete_NoFinalizer_ReturnsClean(t *testing.T) {
 // where the annotations map starts nil (defense against nil-map panic
 // the helper guards against at lines 256-258 of tenant_deletion.go).
 func TestReconcileDelete_RetryCountAnnotation_Persists(t *testing.T) {
-	tenant := &loopzerov1.Tenant{
+	tenant := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "retry-tenant",
-			Namespace:   "loopzero-system",
+			Namespace:   "loopruntime-system",
 			Annotations: nil, // explicit — exercises the nil-map guard
 		},
 	}

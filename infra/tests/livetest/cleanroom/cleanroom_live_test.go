@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
@@ -36,7 +36,7 @@ var _ = Describe("Cleanroom canonical chain v2", Label("live", "cleanroom"), fun
 
 	BeforeEach(func() {
 		// Use repo root via env or cwd ascent
-		repoRoot = os.Getenv("LOOPZERO_REPO_ROOT")
+		repoRoot = os.Getenv("LOOPRUNTIME_REPO_ROOT")
 		if repoRoot == "" {
 			wd, err := os.Getwd()
 			Expect(err).ToNot(HaveOccurred())
@@ -48,7 +48,7 @@ var _ = Describe("Cleanroom canonical chain v2", Label("live", "cleanroom"), fun
 				}
 			}
 		}
-		Expect(repoRoot).ToNot(BeEmpty(), "could not locate repo root (set LOOPZERO_REPO_ROOT)")
+		Expect(repoRoot).ToNot(BeEmpty(), "could not locate repo root (set LOOPRUNTIME_REPO_ROOT)")
 		opts = DefaultOptions(repoRoot)
 
 		// 90min: setup alone is budgeted at 30-45min, then 4min of Tilt boot and up to

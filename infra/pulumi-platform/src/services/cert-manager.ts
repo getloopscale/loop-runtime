@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
@@ -25,7 +25,7 @@ export class CertManager extends pulumi.ComponentResource {
   public readonly ready: pulumi.Output<boolean>;
 
   constructor(name: string, args: CertManagerArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopzero:platform:CertManager", name, {}, opts);
+    super("loopruntime:platform:CertManager", name, {}, opts);
 
     this.release = new k8s.helm.v3.Release(
       `${args.role}-cert-manager`,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -9,7 +9,7 @@ import (
 )
 
 // The build-trigger message pairs the stage that failed with the verbatim
-// cause; the "Something went wrong" catchall (loopzero-cloud#34) never returns.
+// cause; the "Something went wrong" catchall (loopruntime-cloud#34) never returns.
 func TestSubmitBuildError_UserErrorComposesTheReasonSummaryWithTheCause(t *testing.T) {
 	cases := []struct {
 		reason   SubmitBuildErrorReason

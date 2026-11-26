@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: loopzero-cloud
-  namespace: loopzero-system
+  name: loopruntime-cloud
+  namespace: loopruntime-system
   labels:
-    app: loopzero-cloud
+    app: loopruntime-cloud
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: loopzero-cloud
+      app: loopruntime-cloud
   template:
     metadata:
       labels:
-        app: loopzero-cloud
+        app: loopruntime-cloud
       annotations:
         checksum/config: tilt-managed-placeholder-T1.1.c
     spec:
@@ -23,7 +23,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: cloud
-        image: loopzero-cloud
+        image: loopruntime-cloud
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 13002
@@ -54,21 +54,21 @@ spec:
           readOnlyRootFilesystem: true
         envFrom:
         - configMapRef:
-            name: loopzero-cloud-runtime-config
+            name: loopruntime-cloud-runtime-config
         - secretRef:
-            name: loopzero-cloud-runtime-secret
+            name: loopruntime-cloud-runtime-secret
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: loopzero-cloud
-  namespace: loopzero-system
+  name: loopruntime-cloud
+  namespace: loopruntime-system
   labels:
-    app: loopzero-cloud
+    app: loopruntime-cloud
 spec:
   type: NodePort
   selector:
-    app: loopzero-cloud
+    app: loopruntime-cloud
   ports:
   - port: 13002
     targetPort: 13002

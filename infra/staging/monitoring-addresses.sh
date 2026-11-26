@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # monitoring-addresses.sh <loki|metrics|core-api> [--wait <seconds>]
 #
@@ -9,15 +9,15 @@
 # the status of the Ingress it was made for, once the sync that created the Ingress is
 # done, so `task staging:platform` reads them between the syncs:
 #
-#   loki      LOOPZERO_LOKI_ALB_DNS_NAME: the build cluster's Loki (monitoring/loki-internal),
+#   loki      LOOPRUNTIME_LOKI_ALB_DNS_NAME: the build cluster's Loki (monitoring/loki-internal),
 #             read after the build sync, for the Promtail of the cells and of core.
-#   metrics   LOOPZERO_METRICS_ALB_DNS_NAMES: `<cluster>=<DNSName>,...`, the federation
+#   metrics   LOOPRUNTIME_METRICS_ALB_DNS_NAMES: `<cluster>=<DNSName>,...`, the federation
 #             Prometheus of the build cluster and of each cell
 #             (monitoring/prometheus-federation), read after the cells, for the core
 #             Prometheus.
-#   core-api  LOOPZERO_CORE_API_ALB_DNS_NAME: core's secret-fetch ALB
-#             (loopzero-system/loopzero-api-secret-fetch), read after the core sync, for
-#             the broker store of the cells (cell.helmfile release loopzero-broker).
+#   core-api  LOOPRUNTIME_CORE_API_ALB_DNS_NAME: core's secret-fetch ALB
+#             (loopruntime-system/loopruntime-api-secret-fetch), read after the core sync, for
+#             the broker store of the cells (cell.helmfile release loopruntime-broker).
 #
 # Each value is printed double-quoted and unescaped: `published` admits only DNS name
 # characters, and Task's shell interpreter keeps the backslashes `printf %q` would put
@@ -95,7 +95,7 @@ read_name() {
 case "$WHAT" in
   loki)
     read_name "$BUILD_CONTEXT" monitoring loki-internal
-    printf 'export LOOPZERO_LOKI_ALB_DNS_NAME="%s"\n' "$name"
+    printf 'export LOOPRUNTIME_LOKI_ALB_DNS_NAME="%s"\n' "$name"
     ;;
   metrics)
     pairs=()
@@ -103,11 +103,11 @@ case "$WHAT" in
       read_name "$ctx" monitoring prometheus-federation
       pairs+=("$ctx=$name")
     done
-    printf 'export LOOPZERO_METRICS_ALB_DNS_NAMES="%s"\n' "$(IFS=,; echo "${pairs[*]}")"
+    printf 'export LOOPRUNTIME_METRICS_ALB_DNS_NAMES="%s"\n' "$(IFS=,; echo "${pairs[*]}")"
     ;;
   core-api)
-    read_name "$CORE_CONTEXT" loopzero-system loopzero-api-secret-fetch
-    printf 'export LOOPZERO_CORE_API_ALB_DNS_NAME="%s"\n' "$name"
+    read_name "$CORE_CONTEXT" loopruntime-system loopruntime-api-secret-fetch
+    printf 'export LOOPRUNTIME_CORE_API_ALB_DNS_NAME="%s"\n' "$name"
     ;;
   *)
     echo "$USAGE" >&2

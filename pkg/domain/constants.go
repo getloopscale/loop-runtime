@@ -1,5 +1,5 @@
 // Package domain holds canonical product-level constants and Value Objects
-// for the LoopZero platform. This package is the single source of truth for
+// for the LoopRuntime platform. This package is the single source of truth for
 // domain vocabulary — names that are part of the customer-facing contract,
 // not deployment-specific configuration.
 //

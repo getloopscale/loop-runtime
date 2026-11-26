@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
 // Phase 3 of ADR `2026-05-15-T6-1-typed-state-machines.md`:
-// LoopZeroApplication typed wrapper. Coexists with untyped
+// LoopRuntimeApplication typed wrapper. Coexists with untyped
 // NewApplicationMachine().
 
-// ApplicationPhase is the typed state for the LoopZeroApplication
+// ApplicationPhase is the typed state for the LoopRuntimeApplication
 // lifecycle. The machine is CYCLIC (Reachable↔Degraded) — only
 // Cleaned is terminal (reaper-driven orphan cleanup).
 type ApplicationPhase string
 
-// ApplicationPhaseEvent is the typed event for the LoopZeroApplication lifecycle.
+// ApplicationPhaseEvent is the typed event for the LoopRuntimeApplication lifecycle.
 type ApplicationPhaseEvent string
 
 const (

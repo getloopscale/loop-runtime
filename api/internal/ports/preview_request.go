@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package ports
 
@@ -19,7 +19,7 @@ type CreatePreviewRequest struct {
 	InstallationID int64  `json:"installation_id,omitempty"`
 	TTLHours       int    `json:"ttl_hours,omitempty"` // 0 = use default (72h)
 
-	// LoopZeroYamlApps holds the raw `apps` map parsed from loopzero.yaml at the
+	// LoopRuntimeYamlApps holds the raw `apps` map parsed from loopzero.yaml at the
 	// PR commit. When set, the preview service uses it to populate
 	// SubmitBuildRequest.Apps with framework/path/build (fields stripped
 	// during BuildAppSpec persistence). Required for the build orchestrator
@@ -33,7 +33,7 @@ type CreatePreviewRequest struct {
 	// build steps).
 	//
 	// Excluded from JSON (only set by trusted webhook callers).
-	LoopZeroYamlApps map[string]map[string]interface{} `json:"-"`
+	LoopRuntimeYamlApps map[string]map[string]interface{} `json:"-"`
 
 	tenantID string // injected from middleware; never deserialized
 }

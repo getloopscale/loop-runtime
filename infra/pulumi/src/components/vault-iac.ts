@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
  * T9 of plan 2026-06-02-openbao-adoption v1.3 — Pulumi Vault provider for
@@ -17,12 +17,12 @@
  * Migration pattern (T9.4):
  *   BEFORE (Pulumi.dev.yaml):
  *     config:
- *       loopzero:cf-api-token:
+ *       loopruntime:cf-api-token:
  *         secure: v1:AAAA==
  *
  *   AFTER (Pulumi.dev.yaml):
  *     config:
- *       loopzero:cf-api-token-vault-path: api/secrets/cloudflare/api-token
+ *       loopruntime:cf-api-token-vault-path: api/secrets/cloudflare/api-token
  *
  *   AFTER (TS code):
  *     const cfToken = await VaultSecretReader.read("api/secrets/cloudflare/api-token");
@@ -44,7 +44,7 @@ export interface VaultSecretSource {
   /**
    * Read a single secret value at the given KV-v2 path with named key.
    *
-   * @param path  Full Vault path (e.g., `secret/data/loopzero/dev/api/secrets/cloudflare/api-token`)
+   * @param path  Full Vault path (e.g., `secret/data/loopruntime/dev/api/secrets/cloudflare/api-token`)
    * @param key   Sub-key within the kv-v2 secret data map
    */
   read(path: string, key: string): pulumi.Output<string>;

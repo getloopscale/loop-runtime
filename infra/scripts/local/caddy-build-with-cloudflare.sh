@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # DEPRECATION SHIM — superseded by `caddy-build-canonical.sh`
 # per T1.1 EC-1 of plan kratos-self-service-rate-limit-systemic v1.1.

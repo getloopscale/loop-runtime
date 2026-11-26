@@ -12,7 +12,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/id"
 
 	"go.opentelemetry.io/otel"
@@ -51,7 +51,7 @@ type RollbackOrchestratorDeps struct {
 	// reactivated release (scaling.ReleaseScaler). Optional: without it the
 	// environment keeps the replica count of the rolled back manifests.
 	SavedScale SavedScaleDeliverer
-	// PublicDomain is the operator's public wildcard (LOOPZERO_PUBLIC_DOMAIN). The
+	// PublicDomain is the operator's public wildcard (LOOPRUNTIME_PUBLIC_DOMAIN). The
 	// rollback URL is composed on it, falling back to the request's BaseDomain
 	// when it is unset — the same rule promotion and activation apply.
 	PublicDomain string
@@ -120,8 +120,8 @@ type RollbackResult struct {
 // errRollbackDeliveryNotWired is returned when the orchestrator was constructed
 // without a DeliveryActivator — a wiring bug, refused before any release state
 // changes rather than discovered as a nil-interface panic mid-rollback.
-var errRollbackDeliveryNotWired = &loopzeroerrors.LoopZeroError{
-	Code:    loopzeroerrors.ErrInternalError.Code,
+var errRollbackDeliveryNotWired = &loopruntimeerrors.LoopRuntimeError{
+	Code:    loopruntimeerrors.ErrInternalError.Code,
 	Message: "rollback orchestrator: no delivery activator wired; set RollbackOrchestratorDeps.Delivery at the composition root",
 }
 
@@ -156,11 +156,11 @@ func (o *RollbackOrchestrator) Wait() { o.completions.Wait() }
 // one active release: the target when the cluster runs it, and the release
 // rolled back from otherwise, with the failure recorded on it.
 func (o *RollbackOrchestrator) Rollback(ctx context.Context, req RollbackRequest) (*RollbackResult, error) {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.rollback.execute",
+	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.rollback.execute",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", req.TenantID),
-			attribute.String("loopzero.project", req.ProjectID),
-			attribute.String("loopzero.environment", req.Environment),
+			attribute.String("loopruntime.tenant", req.TenantID),
+			attribute.String("loopruntime.project", req.ProjectID),
+			attribute.String("loopruntime.environment", req.Environment),
 		))
 	defer span.End()
 
@@ -253,7 +253,7 @@ func (o *RollbackOrchestrator) beginRollback(ctx context.Context, req RollbackRe
 			return fmt.Errorf("rollback: get active release: %w", err)
 		}
 		if active == nil {
-			return loopzeroerrors.ErrNoActiveRelease
+			return loopruntimeerrors.ErrNoActiveRelease
 		}
 		current = active
 
@@ -266,7 +266,7 @@ func (o *RollbackOrchestrator) beginRollback(ctx context.Context, req RollbackRe
 			// here, whatever state it is in: answering as if it did not
 			// exist also keeps its existence from the caller.
 			if found == nil || found.ProjectID != req.ProjectID || found.Environment != req.Environment {
-				return loopzeroerrors.ErrReleaseNotFound
+				return loopruntimeerrors.ErrReleaseNotFound
 			}
 			target = found
 		} else {
@@ -275,7 +275,7 @@ func (o *RollbackOrchestrator) beginRollback(ctx context.Context, req RollbackRe
 				return fmt.Errorf("rollback: get previous release: %w", err)
 			}
 			if found == nil {
-				return loopzeroerrors.ErrNoPreviousRelease
+				return loopruntimeerrors.ErrNoPreviousRelease
 			}
 			target = found
 		}
@@ -389,10 +389,10 @@ func (o *RollbackOrchestrator) activateTarget(work context.Context, run rollback
 		}
 		if fresh == nil {
 			return fmt.Errorf("rollback: release %s disappeared before finalize: %w",
-				run.current.ID, loopzeroerrors.ErrReleaseNotFound)
+				run.current.ID, loopruntimeerrors.ErrReleaseNotFound)
 		}
 		if fresh.Status != string(statemachine.RPhRollingBack) {
-			return loopzeroerrors.NewInvalidTransition(fresh.Status, fmt.Sprintf(
+			return loopruntimeerrors.NewInvalidTransition(fresh.Status, fmt.Sprintf(
 				"%s: release %s is no longer in ROLLING_BACK state, aborting",
 				statemachine.RPEventRollbackCompleted, run.current.ID))
 		}

@@ -4,7 +4,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: loopzero-registry-auth-initial
+  name: loopruntime-registry-auth-initial
   namespace: {{ .Release.Namespace }}
   annotations:
     helm.sh/hook: post-install,post-upgrade

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 
@@ -10,7 +10,7 @@ import * as pulumi from "@pulumi/pulumi";
  */
 
 export interface ContainerRegistrySpec {
-  /** Registry name (e.g., "loopzero-system") */
+  /** Registry name (e.g., "loopruntime-system") */
   name: string;
 
   /** Subscription tier (e.g., "professional", "starter", "basic") */
@@ -21,7 +21,7 @@ export interface ContainerRegistrySpec {
 }
 
 export interface ContainerRegistryOutput {
-  /** The registry endpoint URL (e.g., "registry.digitalocean.com/loopzero-system") */
+  /** The registry endpoint URL (e.g., "registry.digitalocean.com/loopruntime-system") */
   endpoint: pulumi.Output<string>;
 
   /** The registry name */

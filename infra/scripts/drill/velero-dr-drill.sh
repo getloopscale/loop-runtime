@@ -25,7 +25,7 @@
 #
 # EC-5 fix: drill-test Tenant has a complete spec so the TenantController
 # does not crash if it reconciles before deletion. annotation
-# `loopzero.io/drill: "true"` marks the resource for cleanup automation.
+# `runtime.getloopscale.com/drill: "true"` marks the resource for cleanup automation.
 
 set -euo pipefail
 
@@ -34,10 +34,10 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 DRILL_TIMEOUT_SECS="${DRILL_TIMEOUT_SECS:-300}"
-KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-core}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopruntime-core}"
 DRY_RUN=false
 DRILL_TENANT_NAME="drill-test"
-DRILL_TENANT_NAMESPACE="loopzero-system"
+DRILL_TENANT_NAMESPACE="loopruntime-system"
 DRILL_BACKUP_NAME=""
 DRILL_RESTORE_NAME=""
 START_TS="$(date -u +%s)"
@@ -160,7 +160,7 @@ print(items[0].get("status", {}).get("phase", "Unknown"))
 
 phase_schedules_have_runs() {
   local out
-  if ! out=$($VELERO backup get --selector "velero.io/schedule-name=loopzero-crds-backup" -o json 2>&1); then
+  if ! out=$($VELERO backup get --selector "velero.io/schedule-name=loopruntime-crds-backup" -o json 2>&1); then
     emit_phase schedules_have_runs fail "$out"
     return 1
   fi
@@ -179,10 +179,10 @@ print(len([b for b in items if b.get("status", {}).get("phase") == "Completed"])
   if [[ "${count:-0}" -lt 1 ]]; then
     # In a fresh install no scheduled run has happened yet — this is OK
     # in dry-run mode. In live mode it's a soft warning, not a fail.
-    emit_phase schedules_have_runs warn "no completed loopzero-crds-backup runs yet (count=${count:-0})"
+    emit_phase schedules_have_runs warn "no completed loopruntime-crds-backup runs yet (count=${count:-0})"
     return 0
   fi
-  emit_phase schedules_have_runs pass "completed loopzero-crds-backup runs=$count"
+  emit_phase schedules_have_runs pass "completed loopruntime-crds-backup runs=$count"
 }
 
 # ---------------------------------------------------------------------------
@@ -194,7 +194,7 @@ phase_pre_cleanup() {
     emit_phase pre_cleanup skipped "dry-run mode"
     return 0
   fi
-  # The Tenant CRD has a finalizer (`loopzero.io/tenant-cleanup`) that blocks
+  # The Tenant CRD has a finalizer (`runtime.getloopscale.com/tenant-cleanup`) that blocks
   # delete until the controller finishes namespace teardown. Patching the
   # finalizer list to empty before delete avoids 30s waits on stale
   # drill-test resources from prior failed runs. This is safe because the
@@ -216,22 +216,22 @@ phase_create_drill_tenant() {
     return 0
   fi
   # EC-5: spec must be valid so TenantController does not panic if it
-  # reconciles between create and delete. annotation loopzero.io/drill=true
+  # reconciles between create and delete. annotation runtime.getloopscale.com/drill=true
   # marks resource for cleanup automation + audit forensics.
   local manifest
   # EC-5: spec must satisfy every required field of the Tenant CRD
-  # (loopzero.io/v1) so the TenantController does not panic if it
+  # (runtime.getloopscale.com/v1) so the TenantController does not panic if it
   # reconciles between create and delete. The fields below mirror
   # `pkg/naming` defaults and the seed Tenant in infra/tests/seed/seed.go.
   manifest=$(cat <<EOF
-apiVersion: loopzero.io/v1
+apiVersion: runtime.getloopscale.com/v1
 kind: Tenant
 metadata:
   name: $DRILL_TENANT_NAME
   namespace: $DRILL_TENANT_NAMESPACE
   annotations:
-    loopzero.io/drill: "true"
-    loopzero.io/drill-created-at: "$(date -u +%FT%TZ)"
+    runtime.getloopscale.com/drill: "true"
+    runtime.getloopscale.com/drill-created-at: "$(date -u +%FT%TZ)"
 spec:
   displayName: "Drill Test Tenant Velero DR"
   plan: starter
@@ -273,7 +273,7 @@ phase_take_backup() {
   fi
   DRILL_BACKUP_NAME="drill-crds-$(date +%s)"
   if ! $VELERO backup create "$DRILL_BACKUP_NAME" \
-       --include-resources tenants.loopzero.io \
+       --include-resources tenants.runtime.getloopscale.com \
        --wait >/dev/null 2>&1; then
     emit_phase take_backup fail "velero backup create $DRILL_BACKUP_NAME failed"
     return 1

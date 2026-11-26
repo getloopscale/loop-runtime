@@ -1,37 +1,37 @@
 config:
-  loopzero-infra:environment: staging
-  loopzero-infra:provider: digitalocean
-  loopzero-infra:region: nyc3
-  loopzero-infra:domain: staging.getloopscale.com
-  loopzero-infra:dnsZone: getloopscale.com
-  loopzero-infra:infraVersion: v1
+  loopruntime-infra:environment: staging
+  loopruntime-infra:provider: digitalocean
+  loopruntime-infra:region: nyc3
+  loopruntime-infra:domain: staging.getloopscale.com
+  loopruntime-infra:dnsZone: getloopscale.com
+  loopruntime-infra:infraVersion: v1
 
   # Management cluster — platform services
-  loopzero-infra:mgmtK8sVersion: "1.33.9-do.4"
-  loopzero-infra:mgmtNodeClass: small
-  loopzero-infra:mgmtMinNodes: "2"
-  loopzero-infra:mgmtMaxNodes: "3"
+  loopruntime-infra:mgmtK8sVersion: "1.33.9-do.4"
+  loopruntime-infra:mgmtNodeClass: small
+  loopruntime-infra:mgmtMinNodes: "2"
+  loopruntime-infra:mgmtMaxNodes: "3"
 
   # Runtime cluster — user applications
-  loopzero-infra:runtimeK8sVersion: "1.33.9-do.4"
-  loopzero-infra:runtimeNodeClass: small
-  loopzero-infra:runtimeMinNodes: "2"
-  loopzero-infra:runtimeMaxNodes: "3"
+  loopruntime-infra:runtimeK8sVersion: "1.33.9-do.4"
+  loopruntime-infra:runtimeNodeClass: small
+  loopruntime-infra:runtimeMinNodes: "2"
+  loopruntime-infra:runtimeMaxNodes: "3"
 
   # Build cluster — Argo Workflows + BuildKit
-  loopzero-infra:buildK8sVersion: "1.33.9-do.4"
-  loopzero-infra:buildNodeClass: small
-  loopzero-infra:buildMinNodes: "2"
-  loopzero-infra:buildMaxNodes: "3"
+  loopruntime-infra:buildK8sVersion: "1.33.9-do.4"
+  loopruntime-infra:buildNodeClass: small
+  loopruntime-infra:buildMinNodes: "2"
+  loopruntime-infra:buildMaxNodes: "3"
 
   # Database — managed PostgreSQL (single node for staging)
-  loopzero-infra:dbNodeClass: small
-  loopzero-infra:dbVersion: "16"
-  loopzero-infra:dbNodeCount: "1"
+  loopruntime-infra:dbNodeClass: small
+  loopruntime-infra:dbVersion: "16"
+  loopruntime-infra:dbNodeCount: "1"
 
   # Cloudflare — same zone, different subdomain (staging.getloopscale.com)
-  loopzero-infra:cfAccountId: "362767409c4de7fda7990c10103efdd9"
-  loopzero-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
+  loopruntime-infra:cfAccountId: "362767409c4de7fda7990c10103efdd9"
+  loopruntime-infra:cfZoneId: "9f9a41bef0bcb7adf15969c81c303bef"
 
   # Secrets — set at first deploy via infra-deploy.yml workflow:
   #   The workflow sets spacesAccessKeyId, spacesSecretAccessKey, digitaloceanToken

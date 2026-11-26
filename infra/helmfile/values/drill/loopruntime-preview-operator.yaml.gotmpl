@@ -1,0 +1,32 @@
+# Drill environment override for loopruntime-preview-operator chart.
+# Plan: 2026-05-16-drill-l2-unlock-phase2 — Bug #23 LIVE fix.
+#
+# Operator chart default: image.repository=loopruntime-preview-operator + tag=dev
+# (relative repo, used by local k3d via k3d-loopruntime-registry). Drill needs
+# global.registry + global.imagePullSecrets for DOCR pull.
+
+global:
+  registry: registry.digitalocean.com/loopruntime-system
+  imagePullSecrets:
+    - name: loopruntime-registry-pull
+
+image:
+  repository: loopruntime-preview-operator
+  tag: '{{ env "LOOPRUNTIME_PREVIEW_OPERATOR_TAG" | default "drill-phase2-ce4e90f0" }}'
+  pullPolicy: IfNotPresent
+
+# Bug #25 LIVE fix (2026-05-17 iter 18): operator chart auto-creates
+# Secret from .Values.secrets.giteaToken if needed.
+secrets:
+  create: true
+  giteaToken: '{{ env "GITEA_TOKEN_VAL" | default "drill-stub-token" }}'
+
+# Bug #26 LIVE fix (2026-05-17 iter 19): operator requires BUILD_KUBECONFIG +
+# CELL_0_KUBECONFIG env vars. Reference ConfigMaps pre-created by
+# drill-helmfile-bootstrap.sh Phase 2.7.
+kubeconfig:
+  build:
+    existingConfigMap: loopruntime-build-kubeconfig
+  cell0:
+    existingConfigMap: loopruntime-cell-0-kubeconfig
+

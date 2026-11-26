@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -61,11 +61,11 @@ func relabel(t *testing.T, configs []any, discovered map[string]string) (map[str
 	return labels, true
 }
 
-func loopzeroPodsRelabels(t *testing.T, helmfile, env string, extraEnv []string) []any {
+func loopruntimePodsRelabels(t *testing.T, helmfile, env string, extraEnv []string) []any {
 	t.Helper()
-	job := promtailJobs(t, helmfile, env, extraEnv)["loopzero-pods"]
+	job := promtailJobs(t, helmfile, env, extraEnv)["loopruntime-pods"]
 	if job == nil {
-		t.Fatal("no loopzero-pods job")
+		t.Fatal("no loopruntime-pods job")
 	}
 	configs, _ := job["relabel_configs"].([]any)
 	return configs
@@ -76,14 +76,14 @@ func loopzeroPodsRelabels(t *testing.T, helmfile, env string, extraEnv []string)
 // decide on, so every tenant pod was dropped and Runtime logs stayed empty
 // (getloopscale/loop-runtime#110).
 var tenantPodDiscovered = map[string]string{
-	"__meta_kubernetes_namespace":                         "loopzero-tn-acme-shop-production",
-	"__meta_kubernetes_pod_uid":                           "0e1d",
-	"__meta_kubernetes_pod_container_name":                "web",
-	"__meta_kubernetes_pod_label_app":                     "shop-web",
-	"__meta_kubernetes_pod_label_loopzero_io_tenant":      "tn-acme",
-	"__meta_kubernetes_pod_label_loopzero_io_project":     "shop",
-	"__meta_kubernetes_pod_label_loopzero_io_app_name":    "web",
-	"__meta_kubernetes_pod_label_loopzero_io_environment": "production",
+	"__meta_kubernetes_namespace":                            "loopruntime-tn-acme-shop-production",
+	"__meta_kubernetes_pod_uid":                              "0e1d",
+	"__meta_kubernetes_pod_container_name":                   "web",
+	"__meta_kubernetes_pod_label_app":                        "shop-web",
+	"__meta_kubernetes_pod_label_runtime_getloopscale_com_tenant":      "tn-acme",
+	"__meta_kubernetes_pod_label_runtime_getloopscale_com_project":     "shop",
+	"__meta_kubernetes_pod_label_runtime_getloopscale_com_app_name":    "web",
+	"__meta_kubernetes_pod_label_runtime_getloopscale_com_environment": "production",
 }
 
 func TestPromtailKeepsATenantPodByItsOwnLabels(t *testing.T) {
@@ -96,20 +96,20 @@ func TestPromtailKeepsATenantPodByItsOwnLabels(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			labels, kept := relabel(t, loopzeroPodsRelabels(t, c.helmfile, c.env, c.extraEnv), tenantPodDiscovered)
+			labels, kept := relabel(t, loopruntimePodsRelabels(t, c.helmfile, c.env, c.extraEnv), tenantPodDiscovered)
 			if !kept {
-				t.Fatal("the loopzero-pods job drops a pod labelled loopzero.io/tenant")
+				t.Fatal("the loopruntime-pods job drops a pod labelled runtime.getloopscale.com/tenant")
 			}
-			// namespace, app and container are what loopzero-api selects a project's runtime
+			// namespace, app and container are what loopruntime-api selects a project's runtime
 			// logs by (api/internal/logs/loki/client.go, buildRuntimeLogQL); app is the
 			// app's name, as the Runtime logs filter sends it.
 			for label, want := range map[string]string{
-				"namespace":            "loopzero-tn-acme-shop-production",
-				"container":            "web",
-				"app":                  "web",
-				"loopzero_tenant":      "tn-acme",
-				"loopzero_project":     "shop",
-				"loopzero_environment": "production",
+				"namespace":               "loopruntime-tn-acme-shop-production",
+				"container":               "web",
+				"app":                     "web",
+				"loopruntime_tenant":      "tn-acme",
+				"loopruntime_project":     "shop",
+				"loopruntime_environment": "production",
 			} {
 				if got := labels[label]; got != want {
 					t.Errorf("%s = %q, want %q", label, got, want)
@@ -123,17 +123,17 @@ func TestPromtailKeepsATenantPodByItsOwnLabels(t *testing.T) {
 }
 
 func TestPromtailKeepsAPlatformComponentPod(t *testing.T) {
-	labels, kept := relabel(t, loopzeroPodsRelabels(t, "cell.helmfile.yaml.gotmpl", "staging", stagingMonitoringOutputs()), map[string]string{
-		"__meta_kubernetes_namespace":                       "loopzero-system",
-		"__meta_kubernetes_pod_uid":                         "77aa",
-		"__meta_kubernetes_pod_container_name":              "manager",
-		"__meta_kubernetes_pod_label_loopzero_io_component": "app-operator",
-		"__meta_kubernetes_pod_label_loopzero_io_app":       "app-operator",
+	labels, kept := relabel(t, loopruntimePodsRelabels(t, "cell.helmfile.yaml.gotmpl", "staging", stagingMonitoringOutputs()), map[string]string{
+		"__meta_kubernetes_namespace":                          "loopruntime-system",
+		"__meta_kubernetes_pod_uid":                            "77aa",
+		"__meta_kubernetes_pod_container_name":                 "manager",
+		"__meta_kubernetes_pod_label_runtime_getloopscale_com_component": "app-operator",
+		"__meta_kubernetes_pod_label_runtime_getloopscale_com_app":       "app-operator",
 	})
 	if !kept {
-		t.Fatal("the loopzero-pods job drops a pod labelled loopzero.io/component")
+		t.Fatal("the loopruntime-pods job drops a pod labelled runtime.getloopscale.com/component")
 	}
-	for _, label := range []string{"loopzero_component", "app"} {
+	for _, label := range []string{"loopruntime_component", "app"} {
 		if got := labels[label]; got != "app-operator" {
 			t.Errorf("%s = %q, want app-operator", label, got)
 		}
@@ -160,14 +160,14 @@ func TestPromtailPlatformPodsCarryTheirAppName(t *testing.T) {
 	}
 }
 
-func TestPromtailLoopzeroPodsJobDropsAPodThatIsNeitherTenantNorComponent(t *testing.T) {
-	_, kept := relabel(t, loopzeroPodsRelabels(t, "cell.helmfile.yaml.gotmpl", "staging", stagingMonitoringOutputs()), map[string]string{
+func TestPromtailLoopruntimePodsJobDropsAPodThatIsNeitherTenantNorComponent(t *testing.T) {
+	_, kept := relabel(t, loopruntimePodsRelabels(t, "cell.helmfile.yaml.gotmpl", "staging", stagingMonitoringOutputs()), map[string]string{
 		"__meta_kubernetes_namespace":          "kube-system",
 		"__meta_kubernetes_pod_uid":            "9c9c",
 		"__meta_kubernetes_pod_container_name": "coredns",
 		"__meta_kubernetes_pod_label_k8s_app":  "kube-dns",
 	})
 	if kept {
-		t.Error("the loopzero-pods job keeps a pod with neither loopzero.io/tenant nor loopzero.io/component")
+		t.Error("the loopruntime-pods job keeps a pod with neither runtime.getloopscale.com/tenant nor runtime.getloopscale.com/component")
 	}
 }

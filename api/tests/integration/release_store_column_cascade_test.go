@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -47,7 +47,7 @@ func seedColumnCascadeRow(t *testing.T, pool *pgxpool.Pool) (*db.Release, string
 	buildID := "bld-cascade-" + suffix
 	releaseID := "rel-cascade-" + suffix
 	correlationID := "corr-cascade-" + suffix
-	url := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=" + suffix
+	url := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=" + suffix
 
 	// Same 000061 trigger debt described in release_attestation_url_test.go:
 	// the build only goes in if the tenant exists and has a cell.

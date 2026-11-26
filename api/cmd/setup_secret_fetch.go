@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // setup_secret_fetch.go — wires the Phase 4 broker endpoint
 // `/internal/v1/secret-fetch/{tenant_id}/{secret_name}` to its three
@@ -201,7 +201,7 @@ func newSecretFetchBroker(cfg config.Config, transit vault.Transit, dbAdapter, c
 		return nil
 	}
 	if len(cellTokens) == 0 {
-		logger.Warn("secret-fetch broker disabled: neither LOOPZERO_BROKER_TOKEN nor LOOPZERO_BROKER_TOKENS is set", "component", "broker")
+		logger.Warn("secret-fetch broker disabled: neither LOOPRUNTIME_BROKER_TOKEN nor LOOPRUNTIME_BROKER_TOKENS is set", "component", "broker")
 		return nil
 	}
 	logger.Info("secret-fetch broker serving cells", "component", "broker", "cells", len(cellTokens))

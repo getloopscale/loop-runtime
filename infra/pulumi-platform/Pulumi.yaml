@@ -1,6 +1,6 @@
-name: loopzero-platform
+name: loopruntime-platform
 runtime: nodejs
 description: >
-  LoopZero platform services — cert-manager, Traefik, ArgoCD, Gitea, MinIO, Loki,
+  LoopRuntime platform services — cert-manager, Traefik, ArgoCD, Gitea, MinIO, Loki,
   Prometheus, Grafana, ESO, Argo Workflows, CF Tunnel/Worker, DNS.
-  Consumes loopzero-infra outputs via StackReference.
+  Consumes loopruntime-infra outputs via StackReference.

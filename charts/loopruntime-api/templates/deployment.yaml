@@ -1,0 +1,164 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "loopruntime-common.fullname" . }}
+  labels:
+    {{- include "loopruntime-common.labels" . | nindent 4 }}
+  {{- if .Values.reloader.enabled }}
+  annotations:
+    reloader.stakater.com/auto: "true"
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit | default 3 }}
+  selector:
+    matchLabels:
+      {{- include "loopruntime-common.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- include "loopruntime-common.checksumAnnotations" . | nindent 8 }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "loopruntime-common.selectorLabels" . | nindent 8 }}
+        runtime.getloopscale.com/component: control-plane
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with (include "loopruntime-common.imagePullSecrets" .) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      serviceAccountName: {{ include "loopruntime-common.serviceAccountName" . }}
+      automountServiceAccountToken: {{ include "loopruntime-common.automountServiceAccountToken" . }}
+      # SSE streams (deploy.*, rollout.step) are served from this Deployment.
+      # Without this the Kubernetes default of 30s applies and a rolling update
+      # cuts a stream whose canary the renderer allows 300s to finish.
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 300 }}
+      securityContext:
+        {{- include "loopruntime-common.podSecurityContext" . | nindent 8 }}
+      {{- include "loopruntime-common.priorityClassName" . | nindent 6 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "loopruntime-common.affinity" . | nindent 6 }}
+      {{- include "loopruntime-common.topologySpreadConstraints" . | nindent 6 }}
+      containers:
+        - name: api
+          image: {{ include "loopruntime-common.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "loopruntime-common.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "loopruntime-common.fullname" . }}
+            - secretRef:
+                {{- if .Values.secrets.existingSecret }}
+                name: {{ .Values.secrets.existingSecret }}
+                {{- else if .Values.secrets.create }}
+                name: {{ include "loopruntime-common.fullname" . }}
+                {{- else }}
+                {{- fail "loopruntime-api: no secret source — set secrets.existingSecret OR secrets.create=true (review F3: secrets.create=false without existingSecret would leave a dangling secretRef)" }}
+                {{- end }}
+            # T1.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
+            # Shared with loopruntime-cloud — single source of truth for X-Service-Auth.
+            - secretRef:
+                name: loopruntime-service-auth
+                optional: true
+            {{- include "loopruntime-common.additionalSecretSources" . | nindent 12 }}
+          {{- with (include "loopruntime-api.env" . | trim) }}
+          env:
+            {{- . | nindent 12 }}
+          {{- end }}
+          {{- include "loopruntime-common.startupProbe" . | nindent 10 }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "loopruntime-common.tmpVolumeMount" . | nindent 12 }}
+            {{- with .Values.kubeconfig.clusterSecret.name }}
+            - name: cluster-kubeconfigs
+              mountPath: /etc/loopruntime/kubeconfigs
+              readOnly: true
+            {{- end }}
+            {{- if .Values.kubeconfig.build.existingConfigMap }}
+            - name: build-kubeconfig
+              mountPath: /etc/loopruntime/build-kubeconfig
+              subPath: config
+              readOnly: true
+            {{- end }}
+            {{- if .Values.kubeconfig.cell0.existingConfigMap }}
+            - name: cell-0-kubeconfig
+              mountPath: /etc/loopruntime/cell-0-kubeconfig
+              subPath: config
+              readOnly: true
+            {{- end }}
+            {{- if .Values.vault.enabled }}
+            # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — projected SA
+            # token with bounded audience + expiration, for a Kubernetes-auth Vault login
+            # at this path; sent to auth/k8s-core/login as JWT. TokenReview on
+            # Vault side validates audience claim matches `vault.runtime.getloopscale.com`,
+            # preventing token re-use against the K8s API or other audiences.
+            - name: vault-sa-token
+              mountPath: /var/run/secrets/vault.runtime.getloopscale.com
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- include "loopruntime-common.tmpVolume" . | nindent 8 }}
+        {{- with .Values.kubeconfig.clusterSecret.name }}
+        - name: cluster-kubeconfigs
+          secret:
+            secretName: {{ . | quote }}
+            optional: {{ $.Values.kubeconfig.clusterSecret.optional }}
+        {{- end }}
+        {{- if .Values.kubeconfig.build.existingConfigMap }}
+        - name: build-kubeconfig
+          configMap:
+            name: {{ .Values.kubeconfig.build.existingConfigMap }}
+            items:
+              - key: config
+                path: config
+        {{- end }}
+        {{- if .Values.kubeconfig.cell0.existingConfigMap }}
+        - name: cell-0-kubeconfig
+          configMap:
+            name: {{ .Values.kubeconfig.cell0.existingConfigMap }}
+            items:
+              - key: config
+                path: config
+        {{- end }}
+        {{- if .Values.vault.enabled }}
+        # T5.11 of plan 2026-06-02-openbao-adoption v1.3 — projected token.
+        # audience=vault.runtime.getloopscale.com binds the token cryptographically to the
+        # Vault TokenReview check; REDACTED_SECRET_043 (1h) caps blast
+        # radius if pod compromised + token exfiltrated. Kubelet auto-rotates
+        # token before expiry; a Kubernetes-auth client must re-read it at login.
+        - name: vault-sa-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: {{ .Values.vault.audience | default "vault.runtime.getloopscale.com" }}
+                  expirationSeconds: {{ .Values.vault.tokenExpirationSeconds | default 3600 }}
+        {{- end }}

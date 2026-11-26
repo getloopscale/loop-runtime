@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey: User Dockerfile Ignored (INVERTED by plan simplify-deploy-loopzerokit-only
 // v2.0 T2.4 — the BYO-Dockerfile build path was removed for security, D4).
@@ -7,7 +7,7 @@
 // Originally this journey asserted the BYO path (dockerfile-lint step, malicious
 // Dockerfile rejected by lint). That path is GONE: the platform always builds
 // from its canonical Dockerfile, and any user Dockerfile in the bundle is
-// ignored fail-closed (overwritten + a ::loopzero:: warning; never executed).
+// ignored fail-closed (overwritten + a ::loopruntime:: warning; never executed).
 //
 // Validates two scenarios under the new contract:
 //   T4.3 (inverted) — bundle with a Dockerfile: workflow has the canonical
@@ -16,7 +16,7 @@
 //          linted, never executed. The build runs from the canonical Dockerfile;
 //          there is NO dockerfile-lint step.
 //
-// Skip semantics: skipped when LOOPZERO_E2E unset (suite-level gate). LIVE run is
+// Skip semantics: skipped when LOOPRUNTIME_E2E unset (suite-level gate). LIVE run is
 // deferred to the plan's Final Phase (Cleanroom + LIVE).
 
 package e2e
@@ -140,9 +140,9 @@ func deployAndExpectBuildTerminal(dir, env, expectedStatus string, timeout time.
 	// Only a CLI that never started is a submission failure here: even a build
 	// destined to fail is SUBMITTED successfully (HTTP 202), and the build_id
 	// parse below is what proves it.
-	stdout, stderr, exitCode := execLoopZero(loopzeroInvocation{dir: dir},
+	stdout, stderr, exitCode := execLoopRuntime(loopruntimeInvocation{dir: dir},
 		"deploy", "--env", env, "--no-wait", "--json")
-	Expect(exitCode).NotTo(Equal(-1), "loopzero did not start: %s", stderr)
+	Expect(exitCode).NotTo(Equal(-1), "loopruntime did not start: %s", stderr)
 
 	// Parse build_id from JSON.
 	result := make(map[string]interface{})
@@ -178,11 +178,11 @@ func workflowStepsForBuild(buildID string) (hasLint, hasPacks bool) {
 	// Drill-aware via kubectlForCluster(ClusterBuild) (2026-05-20).
 	cmd := kubectlForCluster(ClusterBuild,
 		"-n", "argo", "get", "workflows",
-		"-l", fmt.Sprintf("loopzero.io/build-id=%s", buildID),
+		"-l", fmt.Sprintf("runtime.getloopscale.com/build-id=%s", buildID),
 		"-o", "jsonpath={range .items[*].status.nodes.*}{.displayName}{\"\\n\"}{end}")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// Fallback: name-based search (loopzero-build-build-<buildID>-...)
+		// Fallback: name-based search (loopruntime-build-build-<buildID>-...)
 		cmd = kubectlForCluster(ClusterBuild,
 			"-n", "argo", "get", "workflows",
 			"-o", "jsonpath={range .items[?(@.metadata.name)]}{.metadata.name}{\"\\n\"}{end}")

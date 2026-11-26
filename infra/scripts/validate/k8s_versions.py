@@ -52,7 +52,7 @@ def main() -> int:
             continue
 
         for key in ["mgmtK8sVersion", "runtimeK8sVersion", "buildK8sVersion"]:
-            slug = cfg.get(f"loopzero-infra:{key}")
+            slug = cfg.get(f"loopruntime-infra:{key}")
             if not slug:
                 continue
             if slug in supported:

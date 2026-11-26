@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server_test
 
@@ -162,7 +162,7 @@ func TestServer404Returns_JSON(t *testing.T) {
 	}
 	router := server.NewRouter(cfg)
 
-	t.Run("GET unknown route returns JSON 404 with LoopZeroError format", func(t *testing.T) {
+	t.Run("GET unknown route returns JSON 404 with LoopRuntimeError format", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/nonexistent", nil)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -252,10 +252,10 @@ func TestValidateProductionEnv(t *testing.T) {
 
 	t.Run("returns nil when all required vars are set", func(t *testing.T) {
 		vars := map[string]string{
-			"DATABASE_URL":                  "postgres://localhost:5432/loopzero",
-			"LOOPZERO_ARGO_CALLBACK_SECRET": "some-secret",
-			"GITEA_TOKEN":                   "tok-123",
-			"ARGOCD_TOKEN":                  "tok-456",
+			"DATABASE_URL":                     "postgres://localhost:5432/loopruntime",
+			"LOOPRUNTIME_ARGO_CALLBACK_SECRET": "some-secret",
+			"GITEA_TOKEN":                      "tok-123",
+			"ARGOCD_TOKEN":                     "tok-456",
 		}
 		err := server.ValidateProductionEnv(logger, vars)
 		if err != nil {
@@ -265,23 +265,23 @@ func TestValidateProductionEnv(t *testing.T) {
 
 	t.Run("returns error when a required var is empty", func(t *testing.T) {
 		vars := map[string]string{
-			"DATABASE_URL":                  "postgres://localhost:5432/loopzero",
-			"LOOPZERO_ARGO_CALLBACK_SECRET": "",
-			"GITEA_TOKEN":                   "tok-123",
-			"ARGOCD_TOKEN":                  "tok-456",
+			"DATABASE_URL":                     "postgres://localhost:5432/loopruntime",
+			"LOOPRUNTIME_ARGO_CALLBACK_SECRET": "",
+			"GITEA_TOKEN":                      "tok-123",
+			"ARGOCD_TOKEN":                     "tok-456",
 		}
 		err := server.ValidateProductionEnv(logger, vars)
 		if err == nil {
-			t.Fatal("expected error for missing LOOPZERO_ARGO_CALLBACK_SECRET, got nil")
+			t.Fatal("expected error for missing LOOPRUNTIME_ARGO_CALLBACK_SECRET, got nil")
 		}
 	})
 
 	t.Run("returns error listing all missing vars", func(t *testing.T) {
 		vars := map[string]string{
-			"DATABASE_URL":                  "",
-			"LOOPZERO_ARGO_CALLBACK_SECRET": "",
-			"GITEA_TOKEN":                   "",
-			"ARGOCD_TOKEN":                  "",
+			"DATABASE_URL":                     "",
+			"LOOPRUNTIME_ARGO_CALLBACK_SECRET": "",
+			"GITEA_TOKEN":                      "",
+			"ARGOCD_TOKEN":                     "",
 		}
 		err := server.ValidateProductionEnv(logger, vars)
 		if err == nil {

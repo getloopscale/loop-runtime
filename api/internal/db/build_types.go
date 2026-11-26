@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package db
 
@@ -83,7 +83,7 @@ type BuildAppSpec struct {
 	Rendering string `json:"rendering,omitempty"` // "server" or empty; older rows may say "static", which is no longer delivered
 	Port      int    `json:"port"`
 	// T0.2 (plan simplify-deploy-loopzerokit-only v2.0): persist the declared
-	// services.json start command + app path + build mode. Removing loopzero-packs
+	// services.json start command + app path + build mode. Removing loopruntime-packs
 	// (which auto-detected these at build time) means the canonical Dockerfile
 	// generator needs them from the stored spec, not from heuristics.
 	// JSONB back-compat: legacy rows omit these keys → decode as empty.

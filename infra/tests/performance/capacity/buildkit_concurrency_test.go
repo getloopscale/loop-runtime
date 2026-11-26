@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package capacity
 
@@ -19,38 +19,38 @@ import (
 // TestCapacityBuildKitConcurrency validates the cell-budget.md assumption:
 //
 //	"BuildKit concurrent-solve ceiling. The ~4 solves/node figure is a
-//	 community observation, not a LoopZero-measured value."
+//	 community observation, not a LoopRuntime-measured value."
 //
 // The test submits N builds simultaneously (N > projected ceiling) and
-// monitors loopzero_builds_active to find the actual peak concurrency. This
+// monitors loopruntime_builds_active to find the actual peak concurrency. This
 // reveals how many builds truly make forward progress at the same time
 // vs queueing at the BuildKit level.
 //
 // Run:
 //
-//	# Port-forward loopzero-api metrics:
-//	kubectl --context=$LOOPZERO_CORE_CONTEXT -n loopzero-system port-forward svc/loopzero-api-metrics 19090:9090 &
+//	# Port-forward loopruntime-api metrics:
+//	kubectl --context=$LOOPRUNTIME_CORE_CONTEXT -n loopruntime-system port-forward svc/loopruntime-api-metrics 19090:9090 &
 //
-//	LOOPZERO_CAPACITY=1 \
-//	LOOPZERO_API_URL=https://api.dev.getloopscale.com \
-//	LOOPZERO_API_METRICS_URL=http://localhost:19090 \
-//	LOOPZERO_SERVICE_AUTH=... \
-//	LOOPZERO_APP_DOMAIN=dev.getloopscale.com \
-//	LOOPZERO_BUILD_NODES=2 \
+//	LOOPRUNTIME_CAPACITY=1 \
+//	LOOPRUNTIME_API_URL=https://api.dev.getloopscale.com \
+//	LOOPRUNTIME_API_METRICS_URL=http://localhost:19090 \
+//	LOOPRUNTIME_SERVICE_AUTH=... \
+//	LOOPRUNTIME_APP_DOMAIN=dev.getloopscale.com \
+//	LOOPRUNTIME_BUILD_NODES=2 \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityBuildKitConcurrency -v -timeout 60m
 func TestCapacityBuildKitConcurrency(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
-	metricsURL := os.Getenv("LOOPZERO_API_METRICS_URL")
-	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
-	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
+	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
+	metricsURL := os.Getenv("LOOPRUNTIME_API_METRICS_URL")
+	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
+	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
 	if apiURL == "" || metricsURL == "" || serviceAuth == "" || appDomain == "" {
-		t.Fatal("LOOPZERO_API_URL, LOOPZERO_API_METRICS_URL, LOOPZERO_SERVICE_AUTH, LOOPZERO_APP_DOMAIN required")
+		t.Fatal("LOOPRUNTIME_API_URL, LOOPRUNTIME_API_METRICS_URL, LOOPRUNTIME_SERVICE_AUTH, LOOPRUNTIME_APP_DOMAIN required")
 	}
 
 	buildNodes := 2
-	if s := os.Getenv("LOOPZERO_BUILD_NODES"); s != "" {
+	if s := os.Getenv("LOOPRUNTIME_BUILD_NODES"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
 			buildNodes = n
 		}
@@ -59,7 +59,7 @@ func TestCapacityBuildKitConcurrency(t *testing.T) {
 	// Gap 4: Build cluster context for node-level CPU/memory monitoring.
 	// Without this, we only see API-level concurrency metrics and miss
 	// disk I/O and CPU saturation on the actual build nodes.
-	buildCtx := os.Getenv("LOOPZERO_BUILD_CONTEXT")
+	buildCtx := os.Getenv("LOOPRUNTIME_BUILD_CONTEXT")
 
 	const (
 		numBuilds        = 12 // Exceeds projected ceiling (2 nodes * 4 = 8)
@@ -75,7 +75,7 @@ func TestCapacityBuildKitConcurrency(t *testing.T) {
 	defer cancel()
 
 	// --- Step 1: Create deploy harness ---
-	fixturePath := os.Getenv("LOOPZERO_FIXTURE_PATH")
+	fixturePath := os.Getenv("LOOPRUNTIME_FIXTURE_PATH")
 	if fixturePath == "" {
 		fixturePath = "../../e2e/fixtures/hello-server"
 	}
@@ -126,7 +126,7 @@ func TestCapacityBuildKitConcurrency(t *testing.T) {
 			case <-monitorCtx.Done():
 				return
 			case <-ticker.C:
-				active, err := ScrapePrometheusMetricSum(metricsURL, "loopzero_builds_active")
+				active, err := ScrapePrometheusMetricSum(metricsURL, "loopruntime_builds_active")
 				if err != nil {
 					continue
 				}

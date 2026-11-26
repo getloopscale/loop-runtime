@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package objectstore is the platform's one entry point to S3-compatible
 // object storage (MinIO in-cluster, DigitalOcean Spaces, Amazon S3).
@@ -102,10 +102,10 @@ func parseEndpoint(endpoint string) (host string, secure bool, err error) {
 // Upload writes data to bucket/key: one signed PUT when the length is known,
 // otherwise a multipart upload in bounded parts.
 func (s *S3Store) Upload(ctx context.Context, bucket, key string, data io.Reader) error {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.source.upload",
+	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.source.upload",
 		trace.WithAttributes(
-			attribute.String("loopzero.s3.bucket", bucket),
-			attribute.String("loopzero.s3.key", key),
+			attribute.String("loopruntime.s3.bucket", bucket),
+			attribute.String("loopruntime.s3.key", key),
 		))
 	defer span.End()
 
@@ -120,7 +120,7 @@ func (s *S3Store) Upload(ctx context.Context, bucket, key string, data io.Reader
 		span.SetStatus(codes.Error, "upload failed")
 		return fmt.Errorf("objectstore: upload %s/%s: %w", bucket, key, err)
 	}
-	span.SetAttributes(attribute.Int64("loopzero.s3.size_bytes", info.Size))
+	span.SetAttributes(attribute.Int64("loopruntime.s3.size_bytes", info.Size))
 	return nil
 }
 

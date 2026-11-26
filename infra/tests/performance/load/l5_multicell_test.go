@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package load
 
@@ -20,27 +20,27 @@ import (
 //   - CrossCellAggregator returns merged results
 //   - Cell failure does not propagate (blast radius = 1 cell)
 //
-// Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l5 (or "all") +
-// LOOPZERO_MULTI_CELL=1.
+// Gated on LOOPRUNTIME_REAL_DEPLOY=1 + LOOPRUNTIME_LOAD_LEVEL=l5 (or "all") +
+// LOOPRUNTIME_MULTI_CELL=1.
 
 func requireL5Harness(t *testing.T) *RealDeployHarness {
 	t.Helper()
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
-	level := os.Getenv("LOOPZERO_LOAD_LEVEL")
+	level := os.Getenv("LOOPRUNTIME_LOAD_LEVEL")
 	if level != "l5" && level != "all" {
-		t.Skipf("set LOOPZERO_LOAD_LEVEL=l5 (got %q)", level)
+		t.Skipf("set LOOPRUNTIME_LOAD_LEVEL=l5 (got %q)", level)
 	}
-	if os.Getenv("LOOPZERO_MULTI_CELL") != "1" {
-		t.Skip("set LOOPZERO_MULTI_CELL=1 (requires provisioned cells)")
+	if os.Getenv("LOOPRUNTIME_MULTI_CELL") != "1" {
+		t.Skip("set LOOPRUNTIME_MULTI_CELL=1 (requires provisioned cells)")
 	}
 
 	harness, err := NewRealDeployHarness(RealDeployConfig{
-		APIURL:      os.Getenv("LOOPZERO_API_URL"),
-		AppDomain:   os.Getenv("LOOPZERO_APP_DOMAIN"),
-		ServiceAuth: os.Getenv("LOOPZERO_SERVICE_AUTH"),
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
+		APIURL:      os.Getenv("LOOPRUNTIME_API_URL"),
+		AppDomain:   os.Getenv("LOOPRUNTIME_APP_DOMAIN"),
+		ServiceAuth: os.Getenv("LOOPRUNTIME_SERVICE_AUTH"),
+		FixturePath: envOr("LOOPRUNTIME_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)

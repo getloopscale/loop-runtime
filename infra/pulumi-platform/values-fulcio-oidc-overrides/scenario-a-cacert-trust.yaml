@@ -13,14 +13,14 @@
 #
 # Apply via (after Phase -1 prereqs LIVE):
 #   # Step 1: extract K3s server CA
-#   docker exec k3d-loopzero-build-server-0 \
+#   docker exec k3d-loopruntime-build-server-0 \
 #     cat /var/lib/rancher/k3s/server/tls/server-ca.crt > /tmp/k3s-server-ca.pem
 #
 #   # Step 2: render this template with PEM inline (python — see plan T2.1)
 #   # Output: /tmp/scenario-a-cacert-trust-rendered.yaml
 #
 #   # Step 3: helm upgrade --install (upsert idempotent)
-#   helm --kubeconfig=$(k3d kubeconfig write loopzero-build) \
+#   helm --kubeconfig=$(k3d kubeconfig write loopruntime-build) \
 #     upgrade --install fulcio sigstore/fulcio --version 2.9.1 \
 #     -n fulcio-system -f /tmp/scenario-a-cacert-trust-rendered.yaml
 #

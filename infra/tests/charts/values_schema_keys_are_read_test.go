@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts_test
 
@@ -18,20 +18,20 @@ import (
 // allowed to set. A key the schema admits and no template reads is a setting that
 // validates and then does nothing.
 //
-// Measured before this test existed: the schemas of loopzero-api, loopzero-cloud,
-// loopzero-dashboard and the four operators each admitted 9-12 such keys (autoscaling,
+// Measured before this test existed: the schemas of loopruntime-api, loopruntime-cloud,
+// loopruntime-dashboard and the four operators each admitted 9-12 such keys (autoscaling,
 // ingress, env, envFrom, extraVolumes, extraVolumeMounts, podSecurityContext,
 // containerSecurityContext, monitoring, rbac), copied from a template schema rather than
 // derived from the chart. `ingress.enabled: true` passed validation and rendered nothing.
 //
 // A key is READ when a template of the chart references `.Values.<key>`, or — for a chart
-// that depends on loopzero-common — a loopzero-common helper does. A key naming a dependency
+// that depends on loopruntime-common — a loopruntime-common helper does. A key naming a dependency
 // (Helm hands it to the subchart) is read by definition.
 var valuesRefRe = regexp.MustCompile(`\.Values\.([A-Za-z0-9_]+)`)
 
 func TestPublishedChartSchemas_AdmitOnlyKeysTheTemplatesRead(t *testing.T) {
 	root := "../../../charts"
-	common := readKeys(t, filepath.Join(root, "loopzero-common", "templates"))
+	common := readKeys(t, filepath.Join(root, "loopruntime-common", "templates"))
 
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -61,7 +61,7 @@ func TestPublishedChartSchemas_AdmitOnlyKeysTheTemplatesRead(t *testing.T) {
 
 		read := readKeys(t, filepath.Join(chart, "templates"))
 		chartYAML, _ := os.ReadFile(filepath.Join(chart, "Chart.yaml"))
-		if strings.Contains(string(chartYAML), "name: loopzero-common") {
+		if strings.Contains(string(chartYAML), "name: loopruntime-common") {
 			for k := range common {
 				read[k] = true
 			}

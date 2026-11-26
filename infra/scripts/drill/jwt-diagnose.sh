@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # drill-jwt-diagnose.sh — Diagnose JWT 401 root cause between drill Hydra
-# OAuth2 server and loopzero-api validator.
+# OAuth2 server and loopruntime-api validator.
 #
 # Plan: 2026-05-19-drill-skills-rigor-restoration-plan T1.1
 #
@@ -11,21 +11,21 @@
 # Idempotent: re-runs do not corrupt state.
 #
 # Assumes drill stack is LIVE (cleanroom-drill PASS or operator-provisioned).
-# If API_URL is not set or loopzero-api unreachable, exits early with finding.
+# If API_URL is not set or loopruntime-api unreachable, exits early with finding.
 #
 # Output: /tmp/drill-jwt-diag-<timestamp>/
 #   header.json       — JWT header decoded
 #   payload.json      — JWT payload decoded
-#   api-config.txt    — loopzero-api JWT_ISSUER + JWKS_URL env vars
+#   api-config.txt    — loopruntime-api JWT_ISSUER + JWKS_URL env vars
 #   request.txt       — curl /projects status + correlation_id
-#   api-logs.txt      — loopzero-api logs grep by correlation_id
-#   jwks-probe.txt    — JWKS endpoint reachability from loopzero-api pod
+#   api-logs.txt      — loopruntime-api logs grep by correlation_id
+#   jwks-probe.txt    — JWKS endpoint reachability from loopruntime-api pod
 #   diagnosis.md      — side-by-side comparison + category A-F classification
 #
 # Categories (from plan T1.2):
-#   A — Issuer mismatch (payload.iss != loopzero-api JWT_ISSUER)
-#   B — Audience mismatch (payload.aud != "loopzero-engine")
-#   C — JWKS URL unreachable from loopzero-api pod
+#   A — Issuer mismatch (payload.iss != loopruntime-api JWT_ISSUER)
+#   B — Audience mismatch (payload.aud != "loopruntime-engine")
+#   C — JWKS URL unreachable from loopruntime-api pod
 #   D — Token expired (exp < now)
 #   E — Signature algorithm mismatch (RS256 vs ES256, etc.)
 #   F — Combination or novel
@@ -115,16 +115,16 @@ extract_jwt_claim() {
   decode_jwt_payload "$jwt" | jq -r ".${claim} // \"\"" 2>/dev/null
 }
 
-# --- get_loopzero_api_env_vars ---
-# Read JWT_ISSUER and JWKS_URL from the running loopzero-api pod.
-# Args: mgmt_context, namespace (default loopzero-system)
+# --- get_loopruntime_api_env_vars ---
+# Read JWT_ISSUER and JWKS_URL from the running loopruntime-api pod.
+# Args: mgmt_context, namespace (default loopruntime-system)
 # Stdout: KEY=value lines
-get_loopzero_api_env_vars() {
+get_loopruntime_api_env_vars() {
   local ctx="$1"
-  local ns="${2:-loopzero-system}"
+  local ns="${2:-loopruntime-system}"
   local keys=("JWT_ISSUER" "JWKS_URL")
   local pod
-  pod=$(kubectl --context "$ctx" get pod -n "$ns" -l app=loopzero-api \
+  pod=$(kubectl --context "$ctx" get pod -n "$ns" -l app=loopruntime-api \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || return 1
   if [[ -z "$pod" ]]; then
     return 1
@@ -137,7 +137,7 @@ get_loopzero_api_env_vars() {
 }
 
 # --- probe_jwks ---
-# Probe JWKS URL from inside the loopzero-api pod (validates DNS + reachability).
+# Probe JWKS URL from inside the loopruntime-api pod (validates DNS + reachability).
 # Args: mgmt_context, namespace, jwks_url
 # Stdout: HTTP status + body preview
 probe_jwks() {
@@ -145,10 +145,10 @@ probe_jwks() {
   local ns="$2"
   local url="$3"
   local pod
-  pod=$(kubectl --context "$ctx" get pod -n "$ns" -l app=loopzero-api \
+  pod=$(kubectl --context "$ctx" get pod -n "$ns" -l app=loopruntime-api \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || return 1
   if [[ -z "$pod" ]]; then
-    echo "ERROR: loopzero-api pod not found in $ns"
+    echo "ERROR: loopruntime-api pod not found in $ns"
     return 1
   fi
   kubectl --context "$ctx" exec -n "$ns" "$pod" -- \
@@ -156,7 +156,7 @@ probe_jwks() {
 }
 
 # --- capture_api_logs ---
-# Capture recent loopzero-api logs filtered by correlation_id.
+# Capture recent loopruntime-api logs filtered by correlation_id.
 # Args: mgmt_context, namespace, correlation_id, tail_lines (default 200)
 # Stdout: matching log lines
 capture_api_logs() {
@@ -164,7 +164,7 @@ capture_api_logs() {
   local ns="$2"
   local cid="$3"
   local tail_n="${4:-200}"
-  kubectl --context "$ctx" logs -n "$ns" -l app=loopzero-api --tail="$tail_n" 2>/dev/null | \
+  kubectl --context "$ctx" logs -n "$ns" -l app=loopruntime-api --tail="$tail_n" 2>/dev/null | \
     grep -F "$cid" 2>/dev/null || echo "(no log lines matched correlation_id=$cid)"
 }
 
@@ -201,13 +201,13 @@ classify_root_cause() {
 
   # Category A — issuer mismatch
   if [[ "$payload_iss" != "$api_issuer" ]]; then
-    echo "A: issuer mismatch (jwt.iss='$payload_iss' vs loopzero-api.JWT_ISSUER='$api_issuer')"
+    echo "A: issuer mismatch (jwt.iss='$payload_iss' vs loopruntime-api.JWT_ISSUER='$api_issuer')"
     return 0
   fi
 
   # Category B — audience mismatch
-  if [[ "$payload_aud" != "loopzero-engine" ]]; then
-    echo "B: audience mismatch (jwt.aud='$payload_aud' vs expected 'loopzero-engine')"
+  if [[ "$payload_aud" != "loopruntime-engine" ]]; then
+    echo "B: audience mismatch (jwt.aud='$payload_aud' vs expected 'loopruntime-engine')"
     return 0
   fi
 
@@ -249,7 +249,7 @@ emit_diagnosis_report() {
     cat "$payload_f" 2>/dev/null || echo "(payload capture failed)"
     echo '```'
     echo ""
-    echo "### loopzero-api env vars [MEASURED]"
+    echo "### loopruntime-api env vars [MEASURED]"
     echo '```'
     cat "$config_f" 2>/dev/null || echo "(api config capture failed)"
     echo '```'
@@ -257,9 +257,9 @@ emit_diagnosis_report() {
     echo "## Remediation path"
     echo ""
     echo "Refer to plan T2.1 file-mapping by category:"
-    echo "- **A (issuer):** edit \`infra/helmfile/values-ory-hydra-drill.yaml.gotmpl\` (urls.issuer) OR \`values-loopzero-api-drill.yaml.gotmpl\` (JWT_ISSUER env)"
-    echo "- **B (audience):** edit \`infra/scripts/drill/drill-mint-jwt.sh\` (audience param) — T3 if changing \`api/cmd/setup_auth.go:60\` hardcoded 'loopzero-engine'"
-    echo "- **C (JWKS):** edit \`infra/helmfile/values-loopzero-api-drill.yaml.gotmpl\` (JWKS_URL with cross-namespace FQDN)"
+    echo "- **A (issuer):** edit \`infra/helmfile/values-ory-hydra-drill.yaml.gotmpl\` (urls.issuer) OR \`values-loopruntime-api-drill.yaml.gotmpl\` (JWT_ISSUER env)"
+    echo "- **B (audience):** edit \`infra/scripts/drill/drill-mint-jwt.sh\` (audience param) — T3 if changing \`api/cmd/setup_auth.go:60\` hardcoded 'loopruntime-engine'"
+    echo "- **C (JWKS):** edit \`infra/helmfile/values-loopruntime-api-drill.yaml.gotmpl\` (JWKS_URL with cross-namespace FQDN)"
     echo "- **D (expired):** edit \`infra/scripts/drill/drill-mint-jwt.sh\` (expires_in)"
     echo "- **E (signature):** T3 — auth contract change requires meeting"
     echo "- **F:** manual review"
@@ -268,10 +268,10 @@ emit_diagnosis_report() {
     echo ""
     echo "- header.json — JWT header decoded"
     echo "- payload.json — JWT payload decoded"
-    echo "- api-config.txt — loopzero-api JWT_ISSUER + JWKS_URL"
+    echo "- api-config.txt — loopruntime-api JWT_ISSUER + JWKS_URL"
     echo "- request.txt — curl /projects status + correlation_id"
-    echo "- api-logs.txt — loopzero-api logs by correlation_id"
-    echo "- jwks-probe.txt — JWKS reachability from loopzero-api pod"
+    echo "- api-logs.txt — loopruntime-api logs by correlation_id"
+    echo "- jwks-probe.txt — JWKS reachability from loopruntime-api pod"
   } > "$diag_f"
 }
 
@@ -287,7 +287,7 @@ main() {
   fi
 
   local mgmt_ctx="${CORE_CONTEXT:-k8s-drill-mgmt}"
-  local mgmt_ns="${MGMT_NAMESPACE:-loopzero-system}"
+  local mgmt_ns="${MGMT_NAMESPACE:-loopruntime-system}"
 
   local ts
   ts=$(date -u +%Y%m%dT%H%M%SZ)
@@ -297,7 +297,7 @@ main() {
 
   # Step 1: mint JWT (no cache — fresh issuance)
   drill_skill_log "step 1: minting fresh JWT"
-  rm -f ~/.loopzero/drill-token.txt ~/.loopzero/drill-token-cache.json 2>/dev/null || true
+  rm -f ~/.loopruntime/drill-token.txt ~/.loopruntime/drill-token-cache.json 2>/dev/null || true
   local jwt
   jwt=$(bash "$SCRIPT_DIR/drill-mint-jwt.sh" 2>/dev/null) || {
     drill_skill_log "ERROR: drill-mint-jwt.sh failed"
@@ -313,9 +313,9 @@ main() {
   decode_jwt_header "$jwt" > "$out_dir/header.json" || true
   decode_jwt_payload "$jwt" > "$out_dir/payload.json" || true
 
-  # Step 3: capture loopzero-api env config
-  drill_skill_log "step 3: capturing loopzero-api env config"
-  get_loopzero_api_env_vars "$mgmt_ctx" "$mgmt_ns" > "$out_dir/api-config.txt" 2>&1 || \
+  # Step 3: capture loopruntime-api env config
+  drill_skill_log "step 3: capturing loopruntime-api env config"
+  get_loopruntime_api_env_vars "$mgmt_ctx" "$mgmt_ns" > "$out_dir/api-config.txt" 2>&1 || \
     echo "(env capture failed)" > "$out_dir/api-config.txt"
 
   # Step 4: curl /projects + capture
@@ -324,7 +324,7 @@ main() {
   req_body=$(mktemp)
   req_status=$(curl -sS -m 30 \
     -H "Authorization: Bearer $jwt" \
-    -H "X-LoopZero-Tenant: ${SEED_TENANT_ID:-tn-e2etest}" \
+    -H "X-LoopRuntime-Tenant: ${SEED_TENANT_ID:-tn-e2etest}" \
     -o "$req_body" -w "%{http_code}" \
     "${API_URL}/projects" 2>/dev/null || echo "000")
   cid=$(grep -oE 'correlation[-_]id["\:]*\s*[a-f0-9-]+' "$req_body" 2>/dev/null | head -1 | grep -oE '[a-f0-9-]{8,}' | head -1 || echo "")
@@ -342,11 +342,11 @@ main() {
     capture_api_logs "$mgmt_ctx" "$mgmt_ns" "$cid" 200 > "$out_dir/api-logs.txt" 2>&1
   else
     echo "(no correlation_id captured — fetching last 50 lines)" > "$out_dir/api-logs.txt"
-    kubectl --context "$mgmt_ctx" logs -n "$mgmt_ns" -l app=loopzero-api --tail=50 \
+    kubectl --context "$mgmt_ctx" logs -n "$mgmt_ns" -l app=loopruntime-api --tail=50 \
       >> "$out_dir/api-logs.txt" 2>&1 || true
   fi
 
-  # Step 6: probe JWKS from loopzero-api pod
+  # Step 6: probe JWKS from loopruntime-api pod
   drill_skill_log "step 6: probing JWKS reachability"
   local jwks_url
   jwks_url=$(grep "^JWKS_URL=" "$out_dir/api-config.txt" | cut -d= -f2-)

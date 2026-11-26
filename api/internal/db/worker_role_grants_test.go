@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package db_test
 
@@ -17,7 +17,7 @@ import (
 	"testing"
 )
 
-// loopzero_worker is the one role that may cross tenants under fail-closed Row
+// loopruntime_worker is the one role that may cross tenants under fail-closed Row
 // Level Security (migration 000062): the background loops and the lookups
 // that span tenants run on it. Migration 000023 granted it an explicit table
 // list, and every table created after it was left with no privilege at all —
@@ -25,7 +25,7 @@ import (
 // and was refused with `permission denied` (issue #385).
 //
 // This test confronts the two sources that must agree, without a database:
-// the privileges the migrations grant loopzero_worker, and the tables and verbs
+// the privileges the migrations grant loopruntime_worker, and the tables and verbs
 // the engine's SQL executes (the sqlc query files plus every SQL string
 // literal in the api module). The privileges are least privilege derived from
 // the code, so the rule is one-directional: every (table, verb) the engine
@@ -40,11 +40,11 @@ import (
 // store-level approximation flags tables no background path ever touches
 // (setupStores builds every store on the background pool, including ones no
 // loop receives). tests/integration/worker_role_grants_test.go exercises the
-// real paths as loopzero_worker.
+// real paths as loopruntime_worker.
 
 // requestPoolOnly lists the tables the engine queries but never on the
 // cross-tenant pool. Each carries the evidence; the test also requires that
-// loopzero_worker holds no privilege on it.
+// loopruntime_worker holds no privilege on it.
 var requestPoolOnly = map[string]string{
 	"preview_slot": "read and written only through StoreDeps.PreviewSlotStore of the request " +
 		"stores (cmd/setup_server.go newEnvironmentHandler and wirePreviews, cmd/setup_github.go " +
@@ -95,7 +95,7 @@ func TestTheCrossTenantRoleHoldsEveryPrivilegeTheEngineSQLNeeds(t *testing.T) {
 		}
 	}
 	for _, key := range sortedKeys(missing) {
-		t.Errorf("loopzero_worker lacks %s, which the engine runs (%s); grant it in a new migration, "+
+		t.Errorf("loopruntime_worker lacks %s, which the engine runs (%s); grant it in a new migration, "+
 			"or, if no cross-tenant path runs it, declare the table in requestPoolOnly with the evidence",
 			key, strings.Join(uniqueSorted(missing[key]), ", "))
 	}
@@ -122,7 +122,7 @@ func TestTheRequestOnlyTablesGrantTheCrossTenantRoleNothing(t *testing.T) {
 			t.Errorf("requestPoolOnly names %q, which no engine statement queries; remove the entry", table)
 		}
 		if granted := sortedKeys(schema.tableGrants[table]); len(granted) > 0 {
-			t.Errorf("loopzero_worker holds %v on %q, declared request-only; revoke it in a new migration", granted, table)
+			t.Errorf("loopruntime_worker holds %v on %q, declared request-only; revoke it in a new migration", granted, table)
 		}
 	}
 }
@@ -203,13 +203,13 @@ type workerSchema struct {
 var (
 	createTableRe = regexp.MustCompile(`(?i)\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?([a-z_][a-z0-9_]*)\s*\(`)
 	serialColRe   = regexp.MustCompile(`(?i)^\s*([a-z_][a-z0-9_]*)\s+(?:BIG|SMALL)?SERIAL\b`)
-	workerGrantRe = regexp.MustCompile(`(?is)\b(GRANT|REVOKE)\s+([a-z ,]+?)\s+ON\s+([^;']+?)\s+(?:TO|FROM)\s+loopzero_worker\b`)
+	workerGrantRe = regexp.MustCompile(`(?is)\b(GRANT|REVOKE)\s+([a-z ,]+?)\s+ON\s+([^;']+?)\s+(?:TO|FROM)\s+loopruntime_worker\b`)
 )
 
 var tableVerbs = []string{"SELECT", "INSERT", "UPDATE", "DELETE"}
 
 // replayWorkerGrants applies every up migration in order and returns what
-// loopzero_worker holds at the end. "ALL ... IN SCHEMA" grants resolve against
+// loopruntime_worker holds at the end. "ALL ... IN SCHEMA" grants resolve against
 // the objects that exist at that point of the replay, as PostgreSQL does.
 func replayWorkerGrants(t *testing.T, dir string) workerSchema {
 	t.Helper()

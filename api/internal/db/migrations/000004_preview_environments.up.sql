@@ -10,7 +10,7 @@
 -- source of truth for queries reachable from the developer plane (CLI/API)
 -- and provides history beyond the CR lifecycle.
 --
--- Forward-only migration (no DOWN file) per LoopZero conventions.
+-- Forward-only migration (no DOWN file) per LoopRuntime conventions.
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS preview_environments (

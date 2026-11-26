@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 	k "github.com/getloopscale/loop-runtime/operators/internal/constants"
 	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
@@ -36,7 +36,7 @@ var errSecretTypeMismatch = fmt.Errorf("secret type mismatch: deleted for recrea
 
 // reconcileBuildNamespace orchestrates the build-{tenantID} namespace provisioning.
 // Each step is idempotent via CreateOrUpdate. Steps are extracted into focused functions.
-func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *loopzerov1.Tenant) (err error) {
+func (r *TenantReconciler) reconcileBuildNamespace(ctx context.Context, tenant *loopruntimev1.Tenant) (err error) {
 	ctx, span := reconcileloop.StartChildSpan(ctx, "tenant.build.namespace")
 	defer span.End()
 	defer func() {
@@ -101,7 +101,7 @@ func (r *TenantReconciler) ensureBuildNs(ctx context.Context, buildNs, tenantNam
 }
 
 // ensureBuildQuota creates or updates the ResourceQuota for the build namespace.
-func (r *TenantReconciler) ensureBuildQuota(ctx context.Context, buildNs string, tenant *loopzerov1.Tenant) error {
+func (r *TenantReconciler) ensureBuildQuota(ctx context.Context, buildNs string, tenant *loopruntimev1.Tenant) error {
 	quota := &corev1.ResourceQuota{
 		ObjectMeta: metav1.ObjectMeta{Name: k.QuotaBuild, Namespace: buildNs},
 	}
@@ -152,7 +152,7 @@ func (r *TenantReconciler) ensureBuildServiceAccount(ctx context.Context, buildN
 }
 
 // ensureBuildStorageCredentials creates global MinIO/Spaces credentials when per-tenant
-// provisioner is disabled. CWTs reference Secret "loopzero-minio-credentials" via envFrom.
+// provisioner is disabled. CWTs reference Secret "loopruntime-minio-credentials" via envFrom.
 func (r *TenantReconciler) ensureBuildStorageCredentials(ctx context.Context, buildNs, tenantName string) error {
 	if r.MinIOProvisioner != nil || r.Credentials.MinIOEndpoint == "" {
 		return nil

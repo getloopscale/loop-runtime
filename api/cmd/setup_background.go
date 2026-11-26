@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -37,7 +37,7 @@ func setupCellRouter(
 	bgWg *sync.WaitGroup,
 	logger *slog.Logger,
 ) placement.Router {
-	k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "loopzero-system")
+	k8sCellStore, k8sErr := placement.NewK8sCellStore(nil, "loopruntime-system")
 	if k8sErr != nil {
 		logger.Error("cell router: K8sCellStore init failed — fatal, no fallback by design",
 			"error", k8sErr)
@@ -52,7 +52,7 @@ func setupCellRouter(
 	}
 	if len(cells) == 0 {
 		logger.Error("cell router: 0 ClusterCredentials discovered — fatal, no fallback by design",
-			"hint", "create at least one ClusterCredential CR with status.connected=true in loopzero-system",
+			"hint", "create at least one ClusterCredential CR with status.connected=true in loopruntime-system",
 			"hint_docs", "create at least one ClusterCredential CR with status.connected=true")
 		os.Exit(1)
 	}
@@ -83,7 +83,7 @@ func setupDomains(stores *StoreDeps, cfg config.Config, logger *slog.Logger) (*d
 }
 
 // setupReadinessSource builds the data-plane readiness poller's Prometheus
-// source when LOOPZERO_DATA_PLANE_POLLER_ENABLED is on, and refuses to start on a
+// source when LOOPRUNTIME_DATA_PLANE_POLLER_ENABLED is on, and refuses to start on a
 // source it cannot build: a poller silently absent leaves every dashboard
 // badge "Unknown" with no error anywhere.
 func setupReadinessSource(cfg config.Config, logger *slog.Logger) environments.ReplicasReadySource {
@@ -101,7 +101,7 @@ func setupReadinessSource(cfg config.Config, logger *slog.Logger) environments.R
 // startLeaderLoops starts the background loop graph (backgroundloops.Build)
 // over the BACKGROUND pool, each loop bound to ctx: they stop when the
 // election cancels it (lease fenced or shutdown). `bgAdapter` and `stores`
-// MUST come from the background pool (loopzero_worker); see backgroundloops.Deps.
+// MUST come from the background pool (loopruntime_worker); see backgroundloops.Deps.
 func startLeaderLoops(
 	ctx context.Context,
 	bgWg *sync.WaitGroup,

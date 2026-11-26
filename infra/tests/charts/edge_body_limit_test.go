@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts_test
 
@@ -62,10 +62,10 @@ func TestEdgeBodyLimit_IsNotBelowWhatTheAppAccepts(t *testing.T) {
 // cap to be correct, because attaching it at 10 MiB would have been worse than
 // leaving it off.
 func TestEdgeBodyLimit_IsAttachedToTheAPIRoute(t *testing.T) {
-	// The route is rendered by the loopzero-common ingressRoute helper from the
+	// The route is rendered by the loopruntime-common ingressRoute helper from the
 	// middlewares the bootstrap install declares, so that declaration is what
-	// attaches them (charts/loopzero-api/values-bootstrap.yaml).
-	route, err := os.ReadFile("../../../charts/loopzero-api/values-bootstrap.yaml")
+	// attaches them (charts/loopruntime-api/values-bootstrap.yaml).
+	route, err := os.ReadFile("../../../charts/loopruntime-api/values-bootstrap.yaml")
 	if err != nil {
 		t.Fatalf("read the bootstrap values: %v", err)
 	}

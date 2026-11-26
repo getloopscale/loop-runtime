@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -21,7 +21,7 @@ import (
 // tests pin which connection can count a cell — the composition root builds
 // the admission querier on the cross-tenant pool.
 //
-//	DATABASE_URL=<loopzero_api> LOOPZERO_WORKER_DATABASE_URL=<loopzero_worker> \
+//	DATABASE_URL=<loopruntime_api> LOOPRUNTIME_WORKER_DATABASE_URL=<loopruntime_worker> \
 //	  go test ./tests/integration/ -run AdmissionQuerier -v
 const (
 	admissionCell    = "cell-rls-admission"

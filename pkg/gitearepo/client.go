@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package gitearepo is the one client for the repository lifecycle on the
 // platform's Gitea: ensure a repository exists and is writable, archive it,

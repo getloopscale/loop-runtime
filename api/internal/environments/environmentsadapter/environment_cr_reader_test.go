@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environmentsadapter
 
@@ -66,7 +66,7 @@ func TestEnvCRName_CanonicalAndLegacy(t *testing.T) {
 func makeReadyEnvCR(name, namespace string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
-			"apiVersion": "loopzero.io/v1",
+			"apiVersion": "runtime.getloopscale.com/v1",
 			"kind":       "Environment",
 			"metadata": map[string]interface{}{
 				"name":      name,
@@ -94,11 +94,11 @@ func TestEnvironmentCRReader_IsReady_UsesCanonicalNamespace(t *testing.T) {
 	scheme := runtime.NewScheme()
 	// Pre-create the canonical CR. The fake client returns it when
 	// the lookup name matches.
-	canonical := makeReadyEnvCR("tn-x-web-staging", "loopzero-system")
+	canonical := makeReadyEnvCR("tn-x-web-staging", "loopruntime-system")
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		scheme, envCRGvrToListKind(), canonical,
 	)
-	r := NewEnvironmentCRReader(client, "loopzero-system")
+	r := NewEnvironmentCRReader(client, "loopruntime-system")
 
 	ready, err := r.IsReady(context.Background(), "tn-x", "web", "staging")
 	if err != nil {
@@ -124,11 +124,11 @@ func TestEnvironmentCRReader_IsReady_UsesCanonicalNamespace(t *testing.T) {
 func TestEnvironmentCRReader_IsReady_FallsBackLegacyWhenProjectEmpty(t *testing.T) {
 	scheme := runtime.NewScheme()
 	// Legacy production CR — no project segment.
-	legacy := makeReadyEnvCR("tn-x-production", "loopzero-system")
+	legacy := makeReadyEnvCR("tn-x-production", "loopruntime-system")
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		scheme, envCRGvrToListKind(), legacy,
 	)
-	r := NewEnvironmentCRReader(client, "loopzero-system")
+	r := NewEnvironmentCRReader(client, "loopruntime-system")
 
 	ready, err := r.IsReady(context.Background(), "tn-x", "", "production")
 	if err != nil {
@@ -148,7 +148,7 @@ func TestEnvironmentCRReader_IsReady_AbsentCRReturnsNotReadyNoError(t *testing.T
 		scheme, envCRGvrToListKind(),
 		// No objects — CR absent.
 	)
-	r := NewEnvironmentCRReader(client, "loopzero-system")
+	r := NewEnvironmentCRReader(client, "loopruntime-system")
 
 	ready, err := r.IsReady(context.Background(), "tn-x", "web", "missing")
 	if err != nil {
@@ -166,7 +166,7 @@ func TestEnvironmentCRReader_IsReady_RejectsEmptyTenantOrEnv(t *testing.T) {
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		scheme, envCRGvrToListKind(),
 	)
-	r := NewEnvironmentCRReader(client, "loopzero-system")
+	r := NewEnvironmentCRReader(client, "loopruntime-system")
 
 	if _, err := r.IsReady(context.Background(), "", "web", "staging"); err == nil {
 		t.Errorf("expected error for empty tenantID, got nil")

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // k6 traffic generator for §6.A.4 Phase 6 Dogfood Gate.
 //
-// Goal: sustain a realistic, gentle traffic profile against the LoopZero
+// Goal: sustain a realistic, gentle traffic profile against the LoopRuntime
 // API for the full 4h soak window so the SLO P95 assertion is
 // meaningful (an idle system trivially meets latency goals).
 //
 // Why k6: it's the standard for Go-ecosystem load testing; the binary
 // is statically linked, deps are zero, and Prometheus output via
-// `--out experimental-prometheus-rw` integrates with LoopZero's monitoring
+// `--out experimental-prometheus-rw` integrates with LoopRuntime's monitoring
 // stack out of the box.
 //
 // Usage:
@@ -17,7 +17,7 @@
 //          --vus 50 \
 //          --out experimental-prometheus-rw \
 //          -e API_URL=https://api.drill.drill.getloopscale.com \
-//          -e API_TOKEN="$(cat ~/.loopzero/drill-credentials.json | jq -r .token)" \
+//          -e API_TOKEN="$(cat ~/.loopruntime/drill-credentials.json | jq -r .token)" \
 //          infra/tests/livetest/dogfood/traffic.js
 //
 // Profile rationale:
@@ -26,7 +26,7 @@
 //   - 4h duration matches the §6.A.4 gate window — shorter than 4h
 //     and memory leaks / fd leaks / goroutine leaks don't surface.
 //   - Mix of read-heavy + write paths (3:1) mirrors Beta day-trial
-//     traffic (more `loopzero status` + `loopzero logs` than `loopzero deploy`).
+//     traffic (more `loopruntime status` + `loopruntime logs` than `loopruntime deploy`).
 //   - Inter-iteration sleep is `sleep(1)` so each VU pauses ~1s
 //     between iterations — total throughput ~50 req/s = gentle but
 //     non-trivial.
@@ -37,11 +37,11 @@ import { Counter, Trend } from 'k6/metrics';
 
 // ── Custom metrics emitted into Prometheus ─────────────────────────
 // These augment the built-in `http_req_duration` etc. with
-// LoopZero-specific naming so dashboards can target a stable label set.
-const phase6Errors = new Counter('loopzero_phase6_errors_total');
-const phase6Reads = new Counter('loopzero_phase6_reads_total');
-const phase6Writes = new Counter('loopzero_phase6_writes_total');
-const phase6LatencyMs = new Trend('loopzero_phase6_request_latency_ms');
+// LoopRuntime-specific naming so dashboards can target a stable label set.
+const phase6Errors = new Counter('loopruntime_phase6_errors_total');
+const phase6Reads = new Counter('loopruntime_phase6_reads_total');
+const phase6Writes = new Counter('loopruntime_phase6_writes_total');
+const phase6LatencyMs = new Trend('loopruntime_phase6_request_latency_ms');
 
 // ── Options ─────────────────────────────────────────────────────────
 // Default 4h duration + 50 VUs. Override via env vars to script
@@ -60,7 +60,7 @@ export const options = {
     // is only a fraction of traffic.
     http_req_duration: ['p(95)<1500'], // 1.5s p95 for API surface — generous
     http_req_failed: ['rate<0.01'], // <1% 5xx rate
-    loopzero_phase6_errors_total: ['count<100'], // absolute error cap over 4h
+    loopruntime_phase6_errors_total: ['count<100'], // absolute error cap over 4h
   },
 };
 
@@ -69,8 +69,8 @@ const TOKEN = __ENV.API_TOKEN || '';
 const TENANT = __ENV.TENANT_ID || 'phase6-soak-tenant';
 
 const authHeaders = TOKEN
-  ? { Authorization: `Bearer ${TOKEN}`, 'X-LoopZero-Tenant': TENANT }
-  : { 'X-LoopZero-Tenant': TENANT };
+  ? { Authorization: `Bearer ${TOKEN}`, 'X-LoopRuntime-Tenant': TENANT }
+  : { 'X-LoopRuntime-Tenant': TENANT };
 
 // ── Read-heavy operations (3 of every 4 iterations) ─────────────────
 function readPath() {

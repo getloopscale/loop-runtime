@@ -48,9 +48,9 @@ jobs:
         run: |
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
-      - name: Build loopzero-ops binary
+      - name: Build loopruntime-ops binary
         run: |
-          go build -o /tmp/loopzero-ops ./cmd/loopzero-ops
+          go build -o /tmp/loopruntime-ops ./cmd/loopruntime-ops
 
       - name: Run task quality:gates
         run: |

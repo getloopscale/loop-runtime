@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // These tests prove the claims migration 000061 makes about the database, instead of
 // trusting them. See docs/decisions/2026-08-09-cell-cluster-unification-adr.md and BACKLOG.md B-005.

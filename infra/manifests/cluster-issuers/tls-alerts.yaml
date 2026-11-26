@@ -16,20 +16,20 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: tls-loopzero-alerts
-  namespace: loopzero-system
+  name: tls-loopruntime-alerts
+  namespace: loopruntime-system
   labels:
-    app: loopzero
+    app: loopruntime
     role: alert-rules
 spec:
   groups:
-    - name: loopzero.tls
+    - name: loopruntime.tls
       interval: 1m
       rules:
         # Alert 1: Certificate approaching rotation cap (Origin CA 5y policy)
         # certmanager_certificate_expiration_timestamp_seconds is the cert's
         # notAfter. We alert when < 180 days to rotation (6 months warning).
-        - alert: LoopZeroCertApproachingRotationCap
+        - alert: LoopRuntimeCertApproachingRotationCap
           expr: |
             (
               certmanager_certificate_expiration_timestamp_seconds - time()
@@ -50,7 +50,7 @@ spec:
               Runbook: tls-strategy#rotation-policy
 
         # Alert 2: ClusterIssuer Not Ready for >15min
-        - alert: LoopZeroClusterIssuerNotReady
+        - alert: LoopRuntimeClusterIssuerNotReady
           expr: |
             certmanager_clusterissuer_ready_status{condition="True"} != 1
           for: 15m
@@ -69,7 +69,7 @@ spec:
 
         # Alert 3: Certificate stuck Not Ready > 30min (catches issuance race
         # conditions, DNS-01 challenges hanging, etc.)
-        - alert: LoopZeroCertStuckNotReady
+        - alert: LoopRuntimeCertStuckNotReady
           expr: |
             certmanager_certificate_ready_status{condition="True"} != 1
           for: 30m

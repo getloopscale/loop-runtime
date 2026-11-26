@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package dogfood
 
@@ -19,7 +19,7 @@ import (
 // KratosAdminEnv names the variable with the base URL of the Kratos admin API.
 // That API is never exposed: whoever runs the suite reaches it through a
 // port-forward and hands the local address here.
-const KratosAdminEnv = "LOOPZERO_DOGFOOD_KRATOS_ADMIN_URL"
+const KratosAdminEnv = "LOOPRUNTIME_DOGFOOD_KRATOS_ADMIN_URL"
 
 // KratosAdminURL is the Kratos admin API of the environment, "" when the run
 // has none.

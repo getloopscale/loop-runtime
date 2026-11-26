@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -65,9 +65,9 @@ func TestTunnelHasWildcardDnsRecord(t *testing.T) {
 			"This covers all subdomains including cname.{baseDomain} for custom domains.")
 	}
 
-	// The wildcard record must be named loopzero-tunnel-dns
-	if !strings.Contains(content, `"loopzero-tunnel-dns"`) {
-		t.Error("tunnel.ts missing loopzero-tunnel-dns DNS record resource")
+	// The wildcard record must be named loopruntime-tunnel-dns
+	if !strings.Contains(content, `"loopruntime-tunnel-dns"`) {
+		t.Error("tunnel.ts missing loopruntime-tunnel-dns DNS record resource")
 	}
 }
 

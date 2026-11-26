@@ -1,0 +1,345 @@
+# SPDX-License-Identifier: Apache-2.0
+# Phase 3.2 inventory — single source of truth for the Vault → K8s Secret mapping.
+#
+# Schema per entry:
+#   targetSecret:   string  K8s Secret name (matches existing secretKeyRef in Deployments)
+#   targetNamespace: string K8s namespace (default loopruntime-system)
+#   refreshInterval: string ESO pull interval (default 1h; faster for rotated secrets)
+#   vaultBinary:    string  binary owning the secret (api|cloud|operators|build|platform) for D6 path
+#                           (build added iter 26 per openbao-adoption T2.3 cosign-passphrase migration;
+#                            platform added iter 27 per openbao-adoption T2.5 SPKI pin extractor)
+#   vaultCategory:  string  secrets|config (D6 path)
+#   data:           []      list of {secretKey, vaultKey} pairs (multiple keys per Secret)
+#
+# Path constructed: secret/data/loopruntime/<env>/<vaultBinary>/<vaultCategory>/<vaultKey>
+# where <env> comes from Helmfile environment values (envName).
+
+# Environment name — injected via Helmfile per-env values (D5 + D6).
+# Required for all path constructions.
+envName: ""
+
+# ClusterSecretStore name (Phase 3.1 — loopruntime-secrets-secrets).
+secretStoreRef:
+  kind: ClusterSecretStore
+  name: loopruntime-secrets-secrets
+
+# Default refresh interval (override per-secret for high-rotation cases).
+defaultRefreshInterval: 1h
+
+# Inventory canonical of ExternalSecret → Vault mapping.
+# Each item creates 1 ExternalSecret CR + 1 K8s Secret. Group keys per
+# target Secret name to match existing Deployment secretKeyRef conventions.
+externalSecrets:
+
+  # === loopruntime-api binary (16 secrets total, grouped per existing K8s Secret name) ===
+
+  - targetSecret: gitea-admin
+    targetNamespace: loopruntime-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: token
+        vaultKey: gitea/token
+
+  - targetSecret: loopruntime-api-tokens
+    targetNamespace: loopruntime-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      # NOTE: loopruntime-api Deployment reads argocd-token + cf-api-token via
+      # per-key secretKeyRef (kebab-case OK). cf-api-token block added in
+      # deployment.yaml iter 10 (Phase 3.3 closure follow-up); previously
+      # config.go:417 read it via os.Getenv only.
+      - secretKey: argocd-token
+        vaultKey: argocd/token
+      - secretKey: cf-api-token
+        vaultKey: cf/api_token
+
+  # Phase 3.3 finding: loopruntime-api Deployment uses envFrom.secretRef pattern
+  # for bulk Secret consumption (existing: dbCredentialsSecret +
+  # loopruntime-service-auth). For the 5 NEW Secrets below (not existing pre-v1.8),
+  # we use UPPER_SNAKE keys matching env var names exactly — pods consume
+  # via a NEW envFrom.secretRef block in deployment.yaml (added Phase 3.3 closure).
+  - targetSecret: loopruntime-api-minio
+    targetNamespace: loopruntime-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: MINIO_ACCESS_KEY
+        vaultKey: minio/access_key
+      - secretKey: MINIO_SECRET_KEY
+        vaultKey: minio/secret_key
+
+  - targetSecret: loopruntime-api-internal
+    targetNamespace: loopruntime-system
+    vaultBinary: api
+    vaultCategory: secrets
+    refreshInterval: 24h  # rarely rotated; longer interval reduces Vault load
+    data:
+      - secretKey: LOOPRUNTIME_ARGO_CALLBACK_SECRET
+        vaultKey: argo/callback_secret
+      - secretKey: LOOPRUNTIME_BOOTSTRAP_SECRET
+        vaultKey: bootstrap_secret
+      - secretKey: LOOPRUNTIME_SECRET_ENCRYPTION_KEY
+        vaultKey: secret_encryption_key
+
+  - targetSecret: loopruntime-api-github
+    targetNamespace: loopruntime-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: GITHUB_APP_PRIVATE_KEY  # RSA PEM
+        vaultKey: github/app_private_key
+      - secretKey: GITHUB_WEBHOOK_SECRET
+        vaultKey: github/webhook_secret
+      # Plan J-09 T1.1 (2026-06-06): App ID is technically public but
+      # lives in the same Secret as the private key for atomic rotation
+      # semantics -- rotating the App means rotating BOTH artefacts in
+      # tandem, and one ExternalSecret keeps them synchronised. Vault
+      # stores it as a string at github/app_id.
+      - secretKey: GITHUB_APP_ID
+        vaultKey: github/app_id
+
+  - targetSecret: loopruntime-api-stripe
+    targetNamespace: loopruntime-system
+    vaultBinary: api
+    vaultCategory: secrets
+    refreshInterval: 6h  # billing — moderate cadence
+    data:
+      - secretKey: STRIPE_SECRET_KEY
+        vaultKey: stripe/secret_key
+
+  - targetSecret: loopruntime-service-auth
+    targetNamespace: loopruntime-system
+    vaultBinary: api
+    vaultCategory: secrets
+    refreshInterval: 5m  # frequently rotated (cross-binary shared per EC-22)
+    data:
+      - secretKey: secret
+        vaultKey: service_auth/secret
+      - secretKey: secret-previous
+        vaultKey: service_auth/secret_previous
+
+  - targetSecret: loopruntime-service-auth-ed25519-pub
+    targetNamespace: loopruntime-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: current
+        vaultKey: service_auth/ed25519_public_current
+      - secretKey: previous
+        vaultKey: service_auth/ed25519_public_previous
+
+  - targetSecret: loopruntime-api-admin
+    targetNamespace: loopruntime-system
+    vaultBinary: api
+    vaultCategory: secrets
+    refreshInterval: 5m  # admin keys — fast rotation needed
+    data:
+      - secretKey: LOOPRUNTIME_ADMIN_API_KEY
+        vaultKey: admin/api_key
+      - secretKey: LOOPRUNTIME_ADMIN_API_KEY_PREVIOUS
+        vaultKey: admin/api_key_previous
+      - secretKey: LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET
+        vaultKey: admin/service_auth_secret
+      - secretKey: LOOPRUNTIME_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS
+        vaultKey: admin/service_auth_secret_previous
+
+  - targetSecret: loopruntime-service-auth-redis
+    targetNamespace: loopruntime-system
+    vaultBinary: api
+    vaultCategory: secrets
+    data:
+      - secretKey: password
+        vaultKey: nonce_redis/password
+
+  # === loopruntime-cloud binary (3 secrets) ===
+
+  # Phase 3.3 ALIGN: loopruntime-cloud Deployment already references Secret
+  # `loopruntime-service-auth-ed25519` (singular, no `-signing` suffix).
+  # ESO target name MUST match existing reference — chose to align ESO →
+  # existing name (KISS: zero Deployment diff) rather than refactor cloud.
+  - targetSecret: loopruntime-service-auth-ed25519
+    targetNamespace: loopruntime-system
+    vaultBinary: cloud
+    vaultCategory: secrets
+    refreshInterval: 24h  # Ed25519 private key — rare rotation
+    data:
+      - secretKey: private  # matches existing secretKeyRef key naming pattern
+        vaultKey: service_auth/ed25519_private_key
+
+  - targetSecret: loopruntime-cloud-stripe
+    targetNamespace: loopruntime-system
+    vaultBinary: cloud
+    vaultCategory: secrets
+    refreshInterval: 6h
+    data:
+      - secretKey: api-key
+        vaultKey: stripe/api_key
+      - secretKey: webhook-secret
+        vaultKey: stripe/webhook_secret
+
+  # === tenant-operator binary (4 secrets + GITEA_TOKEN shared) ===
+  # Phase 3.3 finding: operators use the envFrom.secretRef pattern (not
+  # per-key secretKeyRef like loopruntime-api). Keys MUST be UPPER_SNAKE
+  # matching env var names exactly (kubelet exposes Secret data keys
+  # as env var names directly via envFrom).
+  #
+  # ALIGN: the target Secret name needs to match
+  # `.Values.secrets.existingSecret` (default "loopruntime-tenant-operator"
+  # per the `loopruntime-common.fullname` helper). The operator chart already has a Secret
+  # template for these; ESO replaces creation with a sync from Vault.
+
+  - targetSecret: loopruntime-tenant-operator  # matches charts/loopruntime-tenant-operator/templates/secret.yaml
+    targetNamespace: loopruntime-system
+    vaultBinary: operators
+    vaultCategory: secrets
+    data:
+      # ENV VAR NAMES (UPPER_SNAKE) — envFrom maps Secret keys → env vars 1:1
+      - secretKey: GITEA_TOKEN  # shared with loopruntime-api (D6 path: api/secrets/gitea/token)
+        vaultKey: gitea/token
+        vaultBinaryOverride: api  # explicit override: uses path api/secrets/gitea/token
+      - secretKey: MINIO_ACCESS_KEY
+        vaultKey: minio/access_key
+        vaultBinaryOverride: api
+      - secretKey: MINIO_SECRET_KEY
+        vaultKey: minio/secret_key
+        vaultBinaryOverride: api
+      - secretKey: DIGITALOCEAN_TOKEN
+        vaultKey: digitalocean/token
+      - secretKey: SPACES_ACCESS_KEY_ID
+        vaultKey: spaces/access_key_id
+      - secretKey: SPACES_SECRET_ACCESS_KEY
+        vaultKey: spaces/secret_access_key
+
+  # === platform binary — Vault SPKI cert pin (T2.5 of openbao-adoption v1.3) ===
+  # Written by openbao-init/templates/spki-extractor-cronjob.yaml every 5 min.
+  # loopruntime-api consumes via env LOOPRUNTIME_VAULT_SPKI_PIN, validates Vault server cert
+  # against pinned hash in pkg/vault VerifyPeerCertificate callback.
+  # Per EC-09 v1.1: 5m ESO refresh matches CronJob schedule — pin propagates
+  # to K8s Secret quickly after cert-manager renewal.
+  - targetSecret: vault-spki-pin
+    targetNamespace: loopruntime-system
+    vaultBinary: platform
+    vaultCategory: secrets
+    refreshInterval: 5m  # matches CronJob schedule per EC-09
+    data:
+      - secretKey: LOOPRUNTIME_VAULT_SPKI_PIN
+        vaultKey: vault-spki-pin/spki_hash
+
+  # === build binary — cosign signing passphrase (T2.3 of openbao-adoption v1.3) ===
+  # Migrated from co-located K8s Secret (cosign-signing-key.cosign.password)
+  # to Vault path secret/loopruntime/<env>/build/secrets/cosign/passphrase. cosign.key
+  # keypair stays in K8s Secret (until Fulcio keyless cutover); only the
+  # passphrase moves. Defense-in-depth: passphrase + key separately rotatable.
+  #
+  # NOTE: Build cluster NS = loopruntime-build (not loopruntime-system). Requires ESO operator
+  # install on the build cluster (separate helmfile release; tracked iter T2.3.bis).
+  # Argo Workflows cosign-sign template reads via secretKeyRef from this Secret.
+  - targetSecret: cosign-passphrase
+    targetNamespace: loopruntime-build
+    vaultBinary: build
+    vaultCategory: secrets
+    refreshInterval: 24h  # cosign key rotation cadence = quarterly drill (rare)
+    data:
+      - secretKey: cosign.password  # matches generate-build-secrets.sh existing key name
+        vaultKey: cosign/passphrase
+
+# === OpenBao Transit ClusterSecretStore (T2.4 of plan ===
+# === 2026-06-10-j22-openbao-transit-eso-sync v1.2) ===
+#
+# When enabled, renders the canonical "openbao-transit" CSS that workload
+# clusters consume to fetch transit-decrypted user secrets from OpenBao.
+# Disabled by default — opt-in per environment via helmfile values.
+#
+# Production wiring requires the AppRole role_id (durable, value-set in
+# the values override) + a K8s Secret holding the AppRole secret_id (short-
+# lived, generated by openbao-init OR by an operator-side rotation flow).
+# loopruntime-api per D6 ADR fail-loud refusal asserts OPENBAO_VAULT_ROLE_ID +
+# OPENBAO_VAULT_SECRET_ID are present at boot.
+openbaoTransit:
+  enabled: false
+  # OpenBao service URL — production points at the in-cluster service
+  # (https://openbao.secrets-system.svc:8200). NOT a public hostname.
+  # T1.2 of dev-public-cross-cluster-secrets (issue #111): for Approach A
+  # topology (OpenBao in separate loopruntime-secrets cluster), the URL stays at
+  # the canonical intra-cluster DNS name (preserves cert SAN); mgmt
+  # CoreDNS host-alias rewrites the DNS to the secrets-cluster NodePort
+  # at resolve time (T2.2).
+  server: ""
+  # T1.2 of dev-public-cross-cluster-secrets (issue #111): auth.kind
+  # selects between AppRole (legacy — static secret_id mounted as K8s
+  # Secret) and Kubernetes-auth (workload identity — TokenRequest API).
+  # Workload identity is preferred per blueprint D1 (no static credential)
+  # and translates 1:1 to IRSA on EKS later. Default kind=appRole
+  # preserves backwards compat with single-cluster overlays.
+  auth:
+    kind: "appRole"  # appRole | kubernetes
+    kubernetes:
+      # OpenBao role bound to the ESO controller ServiceAccount. Operator
+      # creates with: bao write auth/kubernetes/role/<role>
+      #   bound_service_account_names=external-secrets
+      #   bound_service_account_namespaces=external-secrets
+      #   bound_audiences=<aud> policies=loopruntime-eso ttl=1h
+      role: ""
+      # OpenBao auth mount path. Default upstream is "kubernetes" → login
+      # endpoint POST /v1/auth/kubernetes/login.
+      mountPath: "kubernetes"
+      serviceAccountRef:
+        # ESO controller's SA name. Default `external-secrets` matches the
+        # upstream External Secrets Operator chart.
+        name: "external-secrets"
+        namespace: "external-secrets"
+        # EC-5 contract: TokenRequest aud MUST match the OpenBao role's
+        # `bound_audiences`. Empty → 403 on every secret fetch.
+        audiences: []
+  # AppRole mount path on OpenBao. Default upstream is "approle".
+  # Consumed when auth.kind=appRole (legacy path).
+  authPath: "approle"
+  # AppRole role_id (DURABLE identity for loopruntime-api → OpenBao). Per D4 ADR
+  # the role's policy MUST permit transit/{encrypt,decrypt,keys}/loopruntime-tenants/*
+  # so EC-06 auto-create can self-heal first-secret-for-tenant races.
+  # Consumed when auth.kind=appRole.
+  roleId: ""
+  # K8s Secret holding the AppRole secret_id (SHORT-LIVED).
+  # Consumed when auth.kind=appRole.
+  secretRef:
+    name: "openbao-eso-secret-id"
+    namespace: "external-secrets"
+    key: "secret-id"
+  # Optional base64-encoded CA bundle for TLS validation when the
+  # OpenBao cert is signed by a private CA. Empty → ESO trusts the
+  # system cert pool. loopruntime-api uses the SPKI pin for its own
+  # OpenBao access (TransitClient SPKIPinSHA256); ESO's path is
+  # cluster-internal and may opt to skip pinning for simplicity.
+  caBundle: ""
+
+
+# === Layer 2 ESO sync broker (2026-06-10 J-22 walkthrough) ===========
+# Webhook ClusterSecretStore that calls loopruntime-api's broker endpoint to
+# resolve user secrets. ESO posts to
+#   {apiURL}/internal/v1/secret-fetch/{tenant_id}/{secret_name}
+# with `Authorization: Bearer <token-from-authSecret>`. loopruntime-api validates
+# the bearer + tenant↔cell binding, decrypts via OpenBao transit, and
+# returns {"plaintext_b64": "..."}. ESO base64-decodes into the materialized
+# K8s Secret in the tenant workload namespace.
+#
+# Plan v1.2 D3 + plan 2026-06-02-openbao-adoption v1.3 T4.1 cover the
+# loopruntime-api side; this CSS closes the ESO side. dev-public defaults below;
+# prod multi-cluster will override apiURL + cellID per cell.
+broker:
+  enabled: false
+  name: loopruntime-broker
+  # In-cluster Service URL for loopruntime-api. dev-public single-cluster default;
+  # prod will template per-cell.
+  apiURL: "http://loopruntime-api.loopruntime-system.svc.cluster.local:3001"
+  # Default single-cluster cell for dev-public.
+  cellID: "cell-0"
+  # K8s Secret holding the opaque Bearer token. Same value MUST be set in
+  # the loopruntime-api Deployment via envFrom: loopruntime-broker-token Secret in
+  # loopruntime-system ns. Rotate by re-rolling both sides simultaneously.
+  authSecretName: loopruntime-broker-token
+  authSecretNamespace: external-secrets
+  # ESO v1beta1 expects refreshInterval as integer seconds.
+  # 3600 = 1 hour.
+  refreshIntervalSeconds: 3600

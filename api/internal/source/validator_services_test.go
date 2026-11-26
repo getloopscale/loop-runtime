@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -183,7 +183,7 @@ func TestValidateServicesJSON_MultipleServices_PreservesNames(t *testing.T) {
 }
 
 // Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T2.1 — multi-field error aggregation.
-// Closes loopzero-cloud#29: ValidateServicesJSONNative previously walked only Causes[0]
+// Closes loopruntime-cloud#29: ValidateServicesJSONNative previously walked only Causes[0]
 // (the FIRST jsonschema leaf cause), so a payload with 3 simultaneous violations
 // would surface only the first one — forcing a cascading retry loop (fix violation 1,
 // re-upload, hit violation 2, repeat). EC-2 absorption: the new Errors slice is

@@ -1,8 +1,8 @@
-# LoopZero
+# LoopRuntime
 
 The managed runtime for AI agents and the apps around them.
 
-You describe your services in a `loopzero.yaml` file and push to Git. LoopZero builds each
+You describe your services in a `loopzero.yaml` file and push to Git. LoopRuntime builds each
 service, signs the image, writes the Kubernetes manifests to a GitOps repository and rolls the
 release out. API servers, background workers and static frontends from the same monorepo deploy
 together.
@@ -49,13 +49,13 @@ apps:
 | `api/` | The HTTP API in Go: projects, environments, builds, releases, secrets, domains, previews, billing and metering. The OpenAPI description is in `api/openapi/`. |
 | `operators/` | Four Kubernetes operators built with controller-runtime: tenant, app, preview and platform. |
 | `pkg/` | Go libraries shared by the API and the operators: typed errors, logging, naming, conditions, state machines, circuit breaker. |
-| `cmd/loopzero-ops/` | The operations and quality-gate binary used by the task runner. |
+| `cmd/loopruntime-ops/` | The operations and quality-gate binary used by the task runner. |
 | `charts/` | Twelve Helm charts for the API, the operators, the CRDs, the dashboard, monitoring and admission policies. |
 | `infra/` | Helmfile releases, bootstrap Helm charts, k3d cluster definitions, Tilt setup and the remaining Pulumi projects. |
 | `policies/`, `rules/` | Admission policies and the rules the quality gates check. |
 
-The operators manage eight custom resources in the `loopzero.io` API group: `Tenant`,
-`Environment`, `LoopZeroApplication`, `PreviewEnvironment`, `ExposedRoute`,
+The operators manage eight custom resources in the `runtime.getloopscale.com` API group: `Tenant`,
+`Environment`, `LoopRuntimeApplication`, `PreviewEnvironment`, `ExposedRoute`,
 `GitRepositoryBinding`, `ClusterCredential` and `PlatformBootstrap`.
 
 ## Stack
@@ -79,8 +79,8 @@ You need Go 1.26, Docker, [k3d](https://k3d.io), [Tilt](https://tilt.dev),
 and kubectl.
 
 The repository is a Go workspace with nine modules and no `go.mod` at the root. One of the
-modules is the sibling repository `loopzero-contracts`, which `go.work` expects at
-`../loopzero-contracts`. Clone it next to this one, or the workspace does not build.
+modules is the sibling repository `loopruntime-contracts`, which `go.work` expects at
+`../loopruntime-contracts`. Clone it next to this one, or the workspace does not build.
 
 ### Setup
 
@@ -101,7 +101,7 @@ task test                           # unit tests, lint and manifest validation
 cd api               && go test ./...
 cd pkg               && go test ./...
 cd operators         && go test ./...
-cd cmd/loopzero-ops  && go test ./...
+cd cmd/loopruntime-ops  && go test ./...
 ```
 
 ## Branches

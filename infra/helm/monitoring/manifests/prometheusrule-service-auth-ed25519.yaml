@@ -4,21 +4,21 @@
 # Plan: 2026-05-12-active-execution-plan.md §6.B.5
 #
 # Watches the 2 counters emitted by api/internal/middleware/service_auth_ed25519.go:
-#   - loopzero_service_auth_signature_present_total{outcome=present|absent}
-#   - loopzero_service_auth_signature_rejected_total{reason=invalid_signature|replay_window|replay_nonce|no_trusted_keys|malformed_input}
+#   - loopruntime_service_auth_signature_present_total{outcome=present|absent}
+#   - loopruntime_service_auth_signature_rejected_total{reason=invalid_signature|replay_window|replay_nonce|no_trusted_keys|malformed_input}
 #
 # Alert taxonomy (3 alerts + 1 cutover-gate recording rule):
-#   - LoopZeroServiceAuthSignatureUnsignedTraffic — Phase 1 progress tracker.
+#   - LoopRuntimeServiceAuthSignatureUnsignedTraffic — Phase 1 progress tracker.
 #     Operator watches this to time the Phase 1 → Phase 2 cutover.
 #     Goal: rate goes to zero over 7 days.
-#   - LoopZeroServiceAuthSignatureForgeryRate — security signal. Non-trivial
+#   - LoopRuntimeServiceAuthSignatureForgeryRate — security signal. Non-trivial
 #     rate of `invalid_signature` rejects indicates active forgery
 #     attempt OR rotation-window mismatch.
-#   - LoopZeroServiceAuthSignatureNoTrustedKeys — fail-closed misconfig.
+#   - LoopRuntimeServiceAuthSignatureNoTrustedKeys — fail-closed misconfig.
 #     If ANY signed request fails because the trust set is empty, the
 #     operator screwed up the bootstrap. CRITICAL.
 #
-# Cutover-gate recording rule: loopzero_service_auth_signature_phase1_ready
+# Cutover-gate recording rule: loopruntime_service_auth_signature_phase1_ready
 #   = 1 when the present rate is 100% over 7 days
 #   = 0 otherwise
 # Operator dashboard reads this to gate the Phase 2 flip.
@@ -26,57 +26,57 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-service-auth-ed25519
-  namespace: loopzero-system
+  name: loopruntime-service-auth-ed25519
+  namespace: loopruntime-system
   labels:
-    app: loopzero
+    app: loopruntime
     role: alert-rules
     prometheus: kube-prometheus
     release: monitoring
-    loopzero.io/task: 6.B.5
-    loopzero.io/plan: active-execution-plan
+    runtime.getloopscale.com/task: 6.B.5
+    runtime.getloopscale.com/plan: active-execution-plan
 spec:
   groups:
-    - name: loopzero.service-auth-ed25519.recording
+    - name: loopruntime.service-auth-ed25519.recording
       interval: 1m
       rules:
         # Phase 1 readiness gate: 100% present rate over the last 7d.
         # Operator dashboard reads this; the value is 1 iff every
         # observed service-auth request in the last 7 days carried a
         # signature header. When 1, the operator may flip
-        # LOOPZERO_SERVICE_AUTH_REQUIRE_SIGNATURE=true (Phase 2).
-        - record: loopzero_service_auth_signature_phase1_ready
+        # LOOPRUNTIME_SERVICE_AUTH_REQUIRE_SIGNATURE=true (Phase 2).
+        - record: loopruntime_service_auth_signature_phase1_ready
           expr: |
             (
-              sum(rate(loopzero_service_auth_signature_present_total{outcome="present"}[7d]))
+              sum(rate(loopruntime_service_auth_signature_present_total{outcome="present"}[7d]))
               /
               clamp_min(
-                sum(rate(loopzero_service_auth_signature_present_total[7d])),
+                sum(rate(loopruntime_service_auth_signature_present_total[7d])),
                 1
               )
             ) >= bool 1.0
 
         # Last-1h adoption rate. Used by the dashboard for moment-in-
         # time visibility (the 7d rate above moves slowly).
-        - record: loopzero_service_auth_signature_adoption_1h
+        - record: loopruntime_service_auth_signature_adoption_1h
           expr: |
-            sum(rate(loopzero_service_auth_signature_present_total{outcome="present"}[1h]))
+            sum(rate(loopruntime_service_auth_signature_present_total{outcome="present"}[1h]))
             /
             clamp_min(
-              sum(rate(loopzero_service_auth_signature_present_total[1h])),
+              sum(rate(loopruntime_service_auth_signature_present_total[1h])),
               0.001
             )
 
-    - name: loopzero.service-auth-ed25519.alerts
+    - name: loopruntime.service-auth-ed25519.alerts
       interval: 1m
       rules:
         # Phase 1 progress tracker. Fires WARN when unsigned traffic
         # persists past 48h — operator hasn't deployed the cloud
         # signer to all replicas yet. Default Phase 1 window is 2
         # weeks; after that, this alert escalates the conversation.
-        - alert: LoopZeroServiceAuthSignatureUnsignedTrafficLingering
+        - alert: LoopRuntimeServiceAuthSignatureUnsignedTrafficLingering
           expr: |
-            sum(rate(loopzero_service_auth_signature_present_total{outcome="absent"}[1h])) > 0
+            sum(rate(loopruntime_service_auth_signature_present_total{outcome="absent"}[1h])) > 0
           for: 48h
           labels:
             severity: warning
@@ -85,12 +85,12 @@ spec:
             summary: service-auth unsigned traffic still present after 48h
             description: |
               Some cloud→engine requests still arrive WITHOUT the
-              X-LoopZero-Signature header. Phase 1 (accept-both) tolerates
+              X-LoopRuntime-Signature header. Phase 1 (accept-both) tolerates
               this, but the Phase 1 → Phase 2 cutover (per ADR Q3)
               needs 100% present rate sustained over 7 days.
               Check `cloud` pod logs for "service-auth Ed25519 private
               key not configured" warning; ensure
-              LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY is mounted in all
+              LOOPRUNTIME_SERVICE_AUTH_ED25519_PRIVATE_KEY is mounted in all
               cloud replicas.
             runbook: concepts/operations/service-auth-ed25519-rollout-runbook.md
 
@@ -99,9 +99,9 @@ spec:
         # (caller has stale public key). Reason `invalid_signature`
         # specifically — not `replay_*` which are normal-noise during
         # client-side bugs.
-        - alert: LoopZeroServiceAuthSignatureForgeryRate
+        - alert: LoopRuntimeServiceAuthSignatureForgeryRate
           expr: |
-            sum(rate(loopzero_service_auth_signature_rejected_total{reason="invalid_signature"}[5m])) > 0.01
+            sum(rate(loopruntime_service_auth_signature_rejected_total{reason="invalid_signature"}[5m])) > 0.01
           for: 10m
           labels:
             severity: critical
@@ -109,7 +109,7 @@ spec:
           annotations:
             summary: service-auth signature forgery rate elevated
             description: |
-              `loopzero_service_auth_signature_rejected_total{reason="invalid_signature"}`
+              `loopruntime_service_auth_signature_rejected_total{reason="invalid_signature"}`
               rate > 0.01/s sustained 10m. Possible causes (in order
               of likelihood):
                 1. Rotation window mismatch — cloud is signing with
@@ -128,11 +128,11 @@ spec:
         # signed request arrives, it gets rejected with
         # `reason="no_trusted_keys"`. This means the operator deployed
         # the cloud signer but did NOT populate the API's
-        # LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT env var. Page
+        # LOOPRUNTIME_SERVICE_AUTH_ED25519_PUBLIC_CURRENT env var. Page
         # immediately — the gate is operationally broken.
-        - alert: LoopZeroServiceAuthSignatureNoTrustedKeys
+        - alert: LoopRuntimeServiceAuthSignatureNoTrustedKeys
           expr: |
-            sum(rate(loopzero_service_auth_signature_rejected_total{reason="no_trusted_keys"}[1m])) > 0
+            sum(rate(loopruntime_service_auth_signature_rejected_total{reason="no_trusted_keys"}[1m])) > 0
           for: 2m
           labels:
             severity: critical
@@ -144,12 +144,12 @@ spec:
               `ServiceAuthEd25519PublicKeys` is empty — every signed
               request is being rejected. Either:
                 1. ESO has not yet synced
-                   `loopzero-service-auth-ed25519-pub` Secret. Check
+                   `loopruntime-service-auth-ed25519-pub` Secret. Check
                    ExternalSecret status: kubectl get externalsecret
-                   loopzero-service-auth-ed25519-pub -n loopzero-system.
+                   loopruntime-service-auth-ed25519-pub -n loopruntime-system.
                 2. Pulumi component was not invoked (set
                    serviceAuthEd25519Enabled=true + run pulumi up).
-                3. LOOPZERO_SERVICE_AUTH_ED25519_PUBLIC_CURRENT was set to
+                3. LOOPRUNTIME_SERVICE_AUTH_ED25519_PUBLIC_CURRENT was set to
                    garbage and the loader fell back to empty rather
                    than crashing (would only happen if env was set
                    then cleared — unusual).
@@ -158,9 +158,9 @@ spec:
         # Replay-attack telemetry. Non-zero `replay_nonce` rate over
         # 5min is unusual (clients shouldn't reuse nonces); over 10min
         # sustained suggests either a buggy client OR replay attempt.
-        - alert: LoopZeroServiceAuthReplayNonceRate
+        - alert: LoopRuntimeServiceAuthReplayNonceRate
           expr: |
-            sum(rate(loopzero_service_auth_signature_rejected_total{reason="replay_nonce"}[5m])) > 0.01
+            sum(rate(loopruntime_service_auth_signature_rejected_total{reason="replay_nonce"}[5m])) > 0.01
           for: 10m
           labels:
             severity: warning
@@ -172,5 +172,5 @@ spec:
               Clients are reusing (user_id, nonce) tuples within the
               5-min TTL window. Either a client-side bug (nonce RNG
               broken) OR a replay attempt. Check
-              `loopzero_service_auth_signature_rejected_total{reason="replay_nonce"}`
+              `loopruntime_service_auth_signature_rejected_total{reason="replay_nonce"}`
               by source pod label to identify the buggy caller.

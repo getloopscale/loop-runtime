@@ -91,13 +91,13 @@ func TestNetworkPolicies_AllowPoliciesHavePodSelector(t *testing.T) {
 	}
 }
 
-func TestNetworkPolicies_AllInLoopZeroSystemNamespace(t *testing.T) {
+func TestNetworkPolicies_AllInLoopRuntimeSystemNamespace(t *testing.T) {
 	t.Parallel()
-	// This chart targets loopzero-system. Catches typos (e.g., loopzero-syste)
+	// This chart targets loopruntime-system. Catches typos (e.g., loopruntime-syste)
 	// that silently leave default-deny absent from the right namespace.
 	for _, np := range renderNPs(t) {
-		require.Equalf(t, "loopzero-system", np.Namespace,
-			"NP %q must be in loopzero-system (chart owns control-plane "+
+		require.Equalf(t, "loopruntime-system", np.Namespace,
+			"NP %q must be in loopruntime-system (chart owns control-plane "+
 				"policies); got %q", np.Name, np.Namespace)
 	}
 }

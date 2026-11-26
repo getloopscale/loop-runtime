@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Parity: Cell-2 Activation — Ginkgo home for the cell-1 multi-cell invariants
 // migrated from infra/tests/parity/cell2-activation-gates.sh +
@@ -18,7 +18,7 @@
 //
 // C1 divergence (finding-2026-05-24-cell2-gate-c1-pg-secret-key-fragility): the
 // bash c1 reads an empty `postgresql` Secret .data.password → false FAIL. This
-// spec uses the deterministic standalone password (loopzero-dev-password) so C1
+// spec uses the deterministic standalone password (loopruntime-dev-password) so C1
 // PASSes correctly — a faithful-port IMPROVEMENT, recorded in the finding.
 package e2e
 
@@ -33,11 +33,11 @@ import (
 )
 
 const (
-	cell1Ctx   = "k3d-loopzero-cell-0" // cell-0 target (per H12/CLAUDE.md)
-	cell2RtCtx = "k3d-loopzero-cell-1" // cell-1 target (per H14)
+	cell1Ctx   = "k3d-loopruntime-cell-0" // cell-0 target (per H12/CLAUDE.md)
+	cell2RtCtx = "k3d-loopruntime-cell-1" // cell-1 target (per H14)
 	// standalone deterministic PG password (chart pins it; bash c1's Secret
 	// lookup is empty — see finding-2026-05-24).
-	cell2PGPass = "loopzero-dev-password"
+	cell2PGPass = "loopruntime-dev-password"
 )
 
 // kmgmt runs kubectl against the mgmt cluster and returns trimmed stdout.
@@ -51,7 +51,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		skipIfNotE2E()
 		// Preflight (mirrors cell2-canary-stage1.sh:91-95 / H14): cell-1 must be
 		// connected, else the activation invariants are N/A.
-		connected, _ := kmgmt("-n", "loopzero-system", "get", "clustercredentials",
+		connected, _ := kmgmt("-n", "loopruntime-system", "get", "clustercredentials",
 			"-o", `jsonpath={.items[?(@.spec.cellID=="cell-1")].status.connected}`)
 		if !strings.Contains(connected, "true") {
 			Skip("cell-1 ClusterCredential not connected (run task k3d:heal — H12); activation invariants N/A")
@@ -61,25 +61,25 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 	// C1 — cells table has cell-1 row + DynamicRouter discovery >= 3.
 	It("C1: cells row + discovery count >= 3", func() {
 		// cells-table row (deterministic PG password per finding-2026-05-24).
-		count, err := kmgmt("-n", "loopzero-system", "exec", "pod/postgresql-0", "-c", "postgresql", "--",
-			"env", "PGPASSWORD="+cell2PGPass, "psql", "-U", "loopzero", "-d", "loopzero", "-tAc",
+		count, err := kmgmt("-n", "loopruntime-system", "exec", "pod/postgresql-0", "-c", "postgresql", "--",
+			"env", "PGPASSWORD="+cell2PGPass, "psql", "-U", "loopruntime", "-d", "loopruntime", "-tAc",
 			"SELECT COUNT(*) FROM cells WHERE cell_id='cell-1'")
 		Expect(err).NotTo(HaveOccurred(), "psql cells query: %s", count)
 		Expect(strings.TrimSpace(count)).To(Equal("1"), "cells table must have exactly one cell-1 row")
 
-		// DynamicRouter discovery >= 3 via loopzero-api /metrics (Prometheus may not
+		// DynamicRouter discovery >= 3 via loopruntime-api /metrics (Prometheus may not
 		// scrape locally — direct /metrics is authoritative).
-		metrics, err := kmgmt("-n", "loopzero-system", "exec", "deploy/loopzero-api", "--",
+		metrics, err := kmgmt("-n", "loopruntime-system", "exec", "deploy/loopruntime-api", "--",
 			"sh", "-c", "wget -qO- http://localhost:9090/metrics")
 		Expect(err).NotTo(HaveOccurred())
 		var discovery int
 		for _, line := range strings.Split(metrics, "\n") {
-			if strings.HasPrefix(line, "loopzero_cell_discovery_count ") {
+			if strings.HasPrefix(line, "loopruntime_cell_discovery_count ") {
 				f := strings.Fields(line)
 				discovery, _ = strconv.Atoi(f[len(f)-1])
 			}
 		}
-		Expect(discovery).To(BeNumerically(">=", 3), "loopzero_cell_discovery_count must be >= 3")
+		Expect(discovery).To(BeNumerically(">=", 3), "loopruntime_cell_discovery_count must be >= 3")
 	})
 
 	It("C2: routing determinism (go test -race ./internal/placement)", func() {
@@ -132,11 +132,11 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 
 	// C7 — cell-0 and cell-1 share the ingress-domain label (rollback needs no DNS change).
 	It("C7: cell-0 + cell-1 share ingress-domain label", func() {
-		d1, _ := kmgmt("-n", "loopzero-system", "get", "clustercredentials",
-			"-o", `jsonpath={.items[?(@.spec.cellID=="cell-0")].metadata.labels.loopzero\.io/ingress-domain}`)
-		d2, _ := kmgmt("-n", "loopzero-system", "get", "clustercredentials",
-			"-o", `jsonpath={.items[?(@.spec.cellID=="cell-1")].metadata.labels.loopzero\.io/ingress-domain}`)
-		Expect(d1).NotTo(BeEmpty(), "cell-0 missing loopzero.io/ingress-domain label (run task k3d:heal)")
+		d1, _ := kmgmt("-n", "loopruntime-system", "get", "clustercredentials",
+			"-o", `jsonpath={.items[?(@.spec.cellID=="cell-0")].metadata.labels.runtime\.getloopscale\.com/ingress-domain}`)
+		d2, _ := kmgmt("-n", "loopruntime-system", "get", "clustercredentials",
+			"-o", `jsonpath={.items[?(@.spec.cellID=="cell-1")].metadata.labels.runtime\.getloopscale\.com/ingress-domain}`)
+		Expect(d1).NotTo(BeEmpty(), "cell-0 missing runtime.getloopscale.com/ingress-domain label (run task k3d:heal)")
 		Expect(d2).To(Equal(d1), "cell-0 (%s) and cell-1 (%s) must share ingress-domain (rollback = no DNS change)", d1, d2)
 	})
 
@@ -149,7 +149,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 		if err := exec.Command("kubectl", "--context", cell1Ctx, "--request-timeout=5s", "cluster-info").Run(); err != nil {
 			Skip("cell-0 (workload) cluster unreachable — log-leak check N/A")
 		}
-		logs, _ := exec.Command("kubectl", "--context", cell1Ctx, "-n", "loopzero-system",
+		logs, _ := exec.Command("kubectl", "--context", cell1Ctx, "-n", "loopruntime-system",
 			"logs", "--tail=500", "-l", "app.kubernetes.io/component=runtime", "--all-containers=true").CombinedOutput()
 		hits := strings.Count(string(logs), "kubeconfig:")
 		Expect(hits).To(Equal(0), "cell-0 logs contain %d kubeconfig marker(s) — credential leak suspected", hits)
@@ -157,8 +157,8 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 
 	// C10 — a cell-1-pinned tenant's namespace exists ONLY on cell-1, not cell-0.
 	It("C10: cell-1 tenant namespace isolated from cell-0", func() {
-		tenant, err := kmgmt("-n", "loopzero-system", "exec", "pod/postgresql-0", "-c", "postgresql", "--",
-			"env", "PGPASSWORD="+cell2PGPass, "psql", "-U", "loopzero", "-d", "loopzero", "-tAc",
+		tenant, err := kmgmt("-n", "loopruntime-system", "exec", "pod/postgresql-0", "-c", "postgresql", "--",
+			"env", "PGPASSWORD="+cell2PGPass, "psql", "-U", "loopruntime", "-d", "loopruntime", "-tAc",
 			"SELECT id FROM tenants WHERE cell_id='cell-1' LIMIT 1")
 		Expect(err).NotTo(HaveOccurred())
 		tenant = strings.TrimSpace(tenant)
@@ -188,7 +188,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 
 	// C12 — every ClusterCredential Secret has base64(PEM) CA data (or insecure-skip-tls).
 	It("C12: every ClusterCredential Secret has valid CA data", func() {
-		names, err := kmgmt("-n", "loopzero-system", "get", "clustercredentials",
+		names, err := kmgmt("-n", "loopruntime-system", "get", "clustercredentials",
 			"-o", `jsonpath={range .items[*]}{.spec.cellID}={.spec.secretRef.name}{"\n"}{end}`)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(names).NotTo(BeEmpty(), "no ClusterCredentials found")
@@ -198,7 +198,7 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 				continue
 			}
 			secretName := parts[1]
-			kc, _ := kmgmt("-n", "loopzero-system", "get", "secret", secretName,
+			kc, _ := kmgmt("-n", "loopruntime-system", "get", "secret", secretName,
 				"-o", "jsonpath={.data.kubeconfig}")
 			Expect(kc).NotTo(BeEmpty(), fmt.Sprintf("ClusterCredential secret %s (cell %s) has no data.kubeconfig", secretName, parts[0]))
 		}
@@ -208,8 +208,8 @@ var _ = Describe("Parity: Cell-2 Activation", Ordered, Label("parity"), func() {
 	// rejects unauthed requests (port from cell2-gate-postflip.sh). Uses the
 	// deterministic standalone password (same C1 finding-2026-05-24 fix).
 	It("Post-flip: cell-1 status active + admin pin authz", func() {
-		status, err := kmgmt("-n", "loopzero-system", "exec", "pod/postgresql-0", "-c", "postgresql", "--",
-			"env", "PGPASSWORD="+cell2PGPass, "psql", "-U", "loopzero", "-d", "loopzero", "-tAc",
+		status, err := kmgmt("-n", "loopruntime-system", "exec", "pod/postgresql-0", "-c", "postgresql", "--",
+			"env", "PGPASSWORD="+cell2PGPass, "psql", "-U", "loopruntime", "-d", "loopruntime", "-tAc",
 			"SELECT status FROM cells WHERE cell_id='cell-1'")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(strings.TrimSpace(status)).To(Equal("active"), "cells.status for cell-1 must be 'active' (migration 000007)")

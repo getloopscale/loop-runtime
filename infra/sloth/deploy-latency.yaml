@@ -2,7 +2,7 @@
 # Measures the ratio of deploys completing within 5 minutes.
 # Target: 95% of deploys finish in under 300 seconds.
 version: "prometheus/v1"
-service: "loopzero-deploys"
+service: "loopruntime-deploys"
 labels:
   owner: "platform-team"
   tier: "product"
@@ -12,10 +12,10 @@ slos:
     description: "Percentage of deploys that complete (build to live URL) within 5 minutes."
     sli:
       events:
-        error_query: sum(rate(loopzero_deploy_duration_seconds_count[{{.window}}])) - sum(rate(loopzero_deploy_duration_seconds_bucket{le="300"}[{{.window}}]))
-        total_query: sum(rate(loopzero_deploy_duration_seconds_count[{{.window}}]))
+        error_query: sum(rate(loopruntime_deploy_duration_seconds_count[{{.window}}])) - sum(rate(loopruntime_deploy_duration_seconds_bucket{le="300"}[{{.window}}]))
+        total_query: sum(rate(loopruntime_deploy_duration_seconds_count[{{.window}}]))
     alerting:
-      name: LoopZeroDeployLatencyBudgetBurn
+      name: LoopRuntimeDeployLatencyBudgetBurn
       labels:
         category: deploy
       annotations:

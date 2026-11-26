@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package cleanroom implements T3.1 of plan canonical-tests-rewrite-v2 v1.0
 // per ADR-2026-06-17-T3 D1 (Ginkgo BDD + internal/livetest/ helpers).
@@ -38,7 +38,7 @@ import (
 // Options configures the cleanroom orchestrator's behavior. Mirrors the v1
 // script's flags: --skip-cleanroom, --skip-sponsor, --skip-baseline.
 type Options struct {
-	RepoRoot      string        // absolute path to loopzero repo root
+	RepoRoot      string        // absolute path to loopruntime repo root
 	SkipBaseline  bool          // skip Phase 0 + Phase 5 (back-compat escape hatch)
 	SkipCleanroom bool          // skip Phases 1-3 (when env is already up; debug iteration)
 	SkipDoctor    bool          // skip Phase 4 doctor gate (NOT recommended)
@@ -58,7 +58,7 @@ type Options struct {
 // recreates the k3d clusters. A spec that destroys infrastructure must not run by
 // accident, and it must not refuse unconditionally either: that was #393, where
 // every spec skipped and `task cleanroom:v2` reported SUCCESS having run nothing.
-const DestroyConsentEnv = "LOOPZERO_CLEANROOM_DESTROY"
+const DestroyConsentEnv = "LOOPRUNTIME_CLEANROOM_DESTROY"
 
 // DestroyConsented reports whether the caller granted DestroyConsentEnv. Only the
 // exact value "1" counts, so a stray "false" or "0" can never read as consent.
@@ -223,7 +223,7 @@ func TaskRun(ctx context.Context, opts Options, args ...string) error {
 // CURRENT context unless told otherwise, and a cleanroom leaves whichever context
 // was current before it — on the droplet that was the secrets cluster, so the
 // platform went there (#402).
-const TiltContext = "k3d-loopzero-core"
+const TiltContext = "k3d-loopruntime-core"
 
 // tiltUpArgs pins the context rather than inheriting it.
 func tiltUpArgs() []string {

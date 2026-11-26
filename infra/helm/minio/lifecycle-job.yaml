@@ -1,5 +1,5 @@
 # Post-install Job that configures MinIO lifecycle rules for automatic cache cleanup.
-# Applies ILM (Information Lifecycle Management) rules to the loopzero-builds bucket
+# Applies ILM (Information Lifecycle Management) rules to the loopruntime-builds bucket
 # so old cache entries expire automatically instead of growing unbounded.
 #
 # Applied by: task infra:install:core (after MinIO is ready)
@@ -7,11 +7,11 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: minio-lifecycle-setup
-  namespace: loopzero-system
+  namespace: loopruntime-system
   labels:
-    app.kubernetes.io/name: loopzero-build
+    app.kubernetes.io/name: loopruntime-build
     app.kubernetes.io/component: lifecycle
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loopruntime
 spec:
   backoffLimit: 3
   ttlSecondsAfterFinished: 300
@@ -36,7 +36,7 @@ spec:
             - -c
             - |
               echo "Waiting for MinIO to be ready..."
-              until wget -q -O /dev/null http://minio.loopzero-system.svc.cluster.local:9000/minio/health/ready 2>/dev/null; do
+              until wget -q -O /dev/null http://minio.loopruntime-system.svc.cluster.local:9000/minio/health/ready 2>/dev/null; do
                 echo "MinIO not ready, retrying in 5s..."
                 sleep 5
               done
@@ -53,9 +53,9 @@ spec:
             allowPrivilegeEscalation: false
       containers:
         - name: lifecycle-setup
-          # loopzero-clone-runner is the platform's one mc image, built from pinned
+          # loopruntime-clone-runner is the platform's one mc image, built from pinned
           # source: MinIO publishes no community mc image any more (#394).
-          image: k3d-loopzero-registry:5000/loopzero-clone-runner:v0.1.0
+          image: k3d-loopruntime-registry:5000/loopruntime-clone-runner:v0.1.0
           command:
             - sh
             - -c
@@ -65,7 +65,7 @@ spec:
               # Wait for MinIO to be ready (may still be starting during setup)
               echo "Waiting for MinIO..."
               for i in $(seq 1 30); do
-                if mc alias set local http://minio.loopzero-system.svc.cluster.local:9000 \
+                if mc alias set local http://minio.loopruntime-system.svc.cluster.local:9000 \
                   "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; then
                   echo "MinIO ready"
                   break
@@ -75,29 +75,29 @@ spec:
               done
 
               # Configure mc alias
-              mc alias set local http://minio.loopzero-system.svc.cluster.local:9000 \
+              mc alias set local http://minio.loopruntime-system.svc.cluster.local:9000 \
                 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
 
               # Ensure buckets exist (idempotent)
-              mc mb --ignore-existing local/loopzero-builds
-              mc mb --ignore-existing local/loopzero-artifacts
-              mc mb --ignore-existing local/loopzero-static-assets
+              mc mb --ignore-existing local/loopruntime-builds
+              mc mb --ignore-existing local/loopruntime-artifacts
+              mc mb --ignore-existing local/loopruntime-static-assets
 
               # Apply lifecycle rule: expire cache entries after 30 days
               # This prevents unbounded cache growth from lockfile hash changes.
               # Each new lockfile version creates a new cache key; old ones expire.
-              mc ilm rule add local/loopzero-builds \
+              mc ilm rule add local/loopruntime-builds \
                 --expire-days 30 \
                 --prefix "" \
                 --tags "" 2>/dev/null || echo "Lifecycle rule already exists or update not needed"
 
               echo "MinIO lifecycle rules configured successfully"
-              mc ilm rule ls local/loopzero-builds
+              mc ilm rule ls local/loopruntime-builds
           env:
             - name: HOME
               value: /tmp
             - name: MINIO_ROOT_USER
-              value: "loopzero-admin"
+              value: "loopruntime-admin"
             - name: MINIO_ROOT_PASSWORD
               value: ""  # T1.3: see docs/operations.md
           resources:

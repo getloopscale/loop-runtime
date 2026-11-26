@@ -1,8 +1,8 @@
 # CHG-2026-04-30-INFRA-NORMALIZE / Phase 3 condition C20.
 # Source: docs/decisions.md
 #
-# Pulumi state observability — pairs with loopzero_pulumi_archives_total +
-# loopzero_pulumi_stacks_total metrics in api/internal/metrics/cell_metrics.go.
+# Pulumi state observability — pairs with loopruntime_pulumi_archives_total +
+# loopruntime_pulumi_stacks_total metrics in api/internal/metrics/cell_metrics.go.
 #
 # Alerts:
 #   • PulumiArchiveStaleness — no Pulumi archive in 90d (rotation gap).
@@ -17,31 +17,31 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-pulumi-state-alerts
+  name: loopruntime-pulumi-state-alerts
   namespace: monitoring
   labels:
     release: monitoring
-    loopzero.io/component: pulumi-consolidation
+    runtime.getloopscale.com/component: pulumi-consolidation
 spec:
   groups:
-    - name: loopzero.pulumi-state
+    - name: loopruntime.pulumi-state
       rules:
         - alert: PulumiArchiveStaleness
           expr: |
-            loopzero_pulumi_archives_total
-              and on() (time() - (loopzero_pulumi_archives_total > 0)) > 90 * 86400
+            loopruntime_pulumi_archives_total
+              and on() (time() - (loopruntime_pulumi_archives_total > 0)) > 90 * 86400
           for: 1h
           labels:
             severity: warning
-            loopzero_component: pulumi-archive
+            loopruntime_component: pulumi-archive
           annotations:
             summary: "No Pulumi archive in 90 days (rotation gap)"
             runbook: "docs/runbooks.md"
             description: |
-              loopzero_pulumi_archives_total has not incremented in >90
-              days. The archive bucket s3://loopzero-archive/pulumi-state/
+              loopruntime_pulumi_archives_total has not incremented in >90
+              days. The archive bucket s3://loopruntime-archive/pulumi-state/
               should be receiving quarterly snapshots (condition C12,
-              `loopzero-ops pulumi archive`). Either:
+              `loopruntime-ops pulumi archive`). Either:
               (a) the archive job is not running — it was a GitHub workflow
                   until 2026-05-23; re-home to the real CI / a scheduled task;
               (b) Pulumi backend is producing 0 stacks (also fires
@@ -51,27 +51,27 @@ spec:
 
         - alert: PulumiOrphanStackDetected
           # Per condition C20 + C25: any stack outside the canonical
-          # `loopzero-infra` project name suggests a parallel project was re-introduced
+          # `loopruntime-infra` project name suggests a parallel project was re-introduced
           # OR an experimental stack that wasn't cleaned up. Either is
           # a process violation worth paging.
           #
           # The regex below assumes Pulumi stack names are exposed
-          # through loopzero_pulumi_stacks_total with a `stack` label
+          # through loopruntime_pulumi_stacks_total with a `stack` label
           # carrying the canonical project URI. Until a collector
           # ships that label, the alert relies on count comparison
           # against an expected baseline of 4 (dev, prod, staging,
           # homolog).
           expr: |
-            loopzero_pulumi_stacks_total > 4
+            loopruntime_pulumi_stacks_total > 4
           for: 6h
           labels:
             severity: critical
-            loopzero_component: pulumi-archive
+            loopruntime_component: pulumi-archive
           annotations:
             summary: "Pulumi stack count exceeds expected baseline (potential parallel-project regression)"
             runbook: "docs/runbooks.md"
             description: |
-              loopzero_pulumi_stacks_total = {{ $value }} for >6h, exceeds
+              loopruntime_pulumi_stacks_total = {{ $value }} for >6h, exceeds
               the expected baseline of 4 (dev/prod/staging/homolog).
               Unexpected stacks suggest a parallel project was re-introduced —
               an operator or workflow created a stack outside the

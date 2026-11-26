@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package manifests
 
@@ -7,7 +7,7 @@ import "testing"
 
 // Tests for the lean-resources fallback — T-08 contingency path. The switch
 // is RenderInput.LeanResources, filled by the caller from
-// config.Config.LeanResources (env LOOPZERO_LEAN_RESOURCES).
+// config.Config.LeanResources (env LOOPRUNTIME_LEAN_RESOURCES).
 
 func TestResources_DefaultFallback(t *testing.T) {
 	ri := RenderInput{}
@@ -45,7 +45,7 @@ func TestResources_LeanFallback_WhenInputIsLean(t *testing.T) {
 // function of RenderInput alone: the API process environment must not change
 // what the renderer produces for the same input.
 func TestResources_IgnoreTheProcessEnvironment(t *testing.T) {
-	t.Setenv("LOOPZERO_LEAN_RESOURCES", "true")
+	t.Setenv("LOOPRUNTIME_LEAN_RESOURCES", "true")
 	ri := RenderInput{}
 	if got := ri.memoryRequest(); got != "128Mi" {
 		t.Errorf("memory request = %q with LeanResources unset, want 128Mi regardless of the process env", got)

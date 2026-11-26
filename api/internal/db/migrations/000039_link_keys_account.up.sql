@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- ============================================================================
 -- 000039_link_keys_account
@@ -8,7 +8,7 @@
 -- the Account of its tenant). Only touches rows still NULL.
 -- ============================================================================
 
-UPDATE loopzero_api_keys k
+UPDATE loopruntime_api_keys k
 SET account_id = t.account_id
 FROM tenants t
 WHERE t.id = k.tenant_id

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // B-177 — one function, four exits, two of them counting.
 //
 // CreateSecret is called after routes/secrets has already persisted the row
 // via store.Set. Every way out of it therefore happens with a row already in
 // `secrets`. Two of those ways out moved
-// loopzero_secret_externalsecret_total: the ExternalSecret create/update failure
+// loopruntime_secret_externalsecret_total: the ExternalSecret create/update failure
 // ("fail") and the success ("success"). The other two returned before either
 // counter — the mgmt-cluster Secret create/update failure, and the
 // namespace-derivation failure — so a row could land in `secrets` with
-// sum(loopzero_secret_externalsecret_total) still at zero.
+// sum(loopruntime_secret_externalsecret_total) still at zero.
 //
 // That sum is the trigger the B-126 canary deferral
 // (docs/wiki/decisions/2026-09-04-secret-decrypt-canary-deferral.md § 2) names
@@ -61,7 +61,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 		app        = "api"
 		secretKey  = "API_KEY"
 		secretVal  = "value-never-asserted-on"
-		mgmtNS     = "loopzero-system"
+		mgmtNS     = "loopruntime-system"
 		wantResult = "fail"
 	)
 
@@ -89,7 +89,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 		got := externalSecretResult(wantResult) - before
 
 		if got != 1 {
-			t.Errorf("mgmt-write failure moved loopzero_secret_externalsecret_total{result=%q} by %v, want exactly 1 — B-177: store.Set has already persisted the row when CreateSecret is reached, so an exit that counts nothing leaves a row in `secrets` with sum(loopzero_secret_externalsecret_total) at zero, and the B-126 trigger misses it (err was: %v)",
+			t.Errorf("mgmt-write failure moved loopruntime_secret_externalsecret_total{result=%q} by %v, want exactly 1 — B-177: store.Set has already persisted the row when CreateSecret is reached, so an exit that counts nothing leaves a row in `secrets` with sum(loopruntime_secret_externalsecret_total) at zero, and the B-126 trigger misses it (err was: %v)",
 				wantResult, got, err)
 		}
 	})
@@ -104,7 +104,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 			t.Fatal("expected the placement check to refuse; the sub-test asserts nothing otherwise")
 		}
 		if got := externalSecretResult(wantResult) - before; got != 1 {
-			t.Errorf("placement refusal moved loopzero_secret_externalsecret_total{result=%q} by %v, want exactly 1 — the row is already persisted by the time CreateSecret runs (err was: %v)", wantResult, got, err)
+			t.Errorf("placement refusal moved loopruntime_secret_externalsecret_total{result=%q} by %v, want exactly 1 — the row is already persisted by the time CreateSecret runs (err was: %v)", wantResult, got, err)
 		}
 	})
 
@@ -124,7 +124,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 		got := externalSecretResult(wantResult) - before
 
 		if got != 1 {
-			t.Errorf("namespace-derivation failure moved loopzero_secret_externalsecret_total{result=%q} by %v, want exactly 1 — B-177: same reason as the sub-test above; the row is already persisted by the time this return is taken (err was: %v)",
+			t.Errorf("namespace-derivation failure moved loopruntime_secret_externalsecret_total{result=%q} by %v, want exactly 1 — B-177: same reason as the sub-test above; the row is already persisted by the time this return is taken (err was: %v)",
 				wantResult, got, err)
 		}
 	})
@@ -147,7 +147,7 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 			t.Fatal("expected the ExternalSecret write to fail; the sub-test asserts nothing otherwise")
 		}
 		if got := externalSecretResult("fail") - before; got != 1 {
-			t.Errorf("ExternalSecret-write failure moved loopzero_secret_externalsecret_total{result=\"fail\"} by %v, want exactly 1", got)
+			t.Errorf("ExternalSecret-write failure moved loopruntime_secret_externalsecret_total{result=\"fail\"} by %v, want exactly 1", got)
 		}
 	})
 
@@ -161,10 +161,10 @@ func TestCreateSecret_EveryExitMovesTheCounter(t *testing.T) {
 			t.Fatalf("expected the happy path to succeed against healthy fakes, got: %v", err)
 		}
 		if got := externalSecretResult("success") - beforeOK; got != 1 {
-			t.Errorf("success moved loopzero_secret_externalsecret_total{result=\"success\"} by %v, want exactly 1", got)
+			t.Errorf("success moved loopruntime_secret_externalsecret_total{result=\"success\"} by %v, want exactly 1", got)
 		}
 		if got := externalSecretResult("fail") - beforeFail; got != 0 {
-			t.Errorf("success also moved loopzero_secret_externalsecret_total{result=\"fail\"} by %v, want 0 — a success must not be counted as a failure too", got)
+			t.Errorf("success also moved loopruntime_secret_externalsecret_total{result=\"fail\"} by %v, want 0 — a success must not be counted as a failure too", got)
 		}
 	})
 }

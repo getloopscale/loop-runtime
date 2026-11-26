@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import { describe, it, expect } from "vitest";
 import { resolveProvider } from "../components/infra";
@@ -7,7 +7,7 @@ import { InfraError } from "../core/errors";
 import { CloudProvider } from "../core/types";
 
 // This stack is AS-IS legacy retired at AM10; AWS goes to Terraform in
-// ../loopzero-infra-live (CLAUDE.md, infrastructure section). The factory used to
+// ../loopruntime-infra-live (CLAUDE.md, infrastructure section). The factory used to
 // return an AwsProviderFactory stub whose every method threw, so a stack
 // configured with `provider: aws` got past config and failed resource by
 // resource. The only provider this stack will ever have is DigitalOcean, and

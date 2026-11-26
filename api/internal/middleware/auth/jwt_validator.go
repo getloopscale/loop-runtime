@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package auth
 
@@ -7,18 +7,18 @@ import (
 	"context"
 	"fmt"
 
-	loopzerojwt "github.com/getloopscale/contracts/jwt"
+	loopruntimejwt "github.com/getloopscale/contracts/jwt"
 )
 
 // JWTOnlyValidator validates JWT tokens — RSA (Hydra) + HMAC session (dashboard).
 // No GitHub PAT. Single source of truth: pkg/jwt.
 type JWTOnlyValidator struct {
-	rsaValidator  *loopzerojwt.Validator
-	sessValidator *loopzerojwt.SessionTokenIssuer
+	rsaValidator  *loopruntimejwt.Validator
+	sessValidator *loopruntimejwt.SessionTokenIssuer
 }
 
 // NewJWTOnlyValidator creates a validator that accepts RSA + HMAC JWTs.
-func NewJWTOnlyValidator(rsaValidator *loopzerojwt.Validator, sessValidator *loopzerojwt.SessionTokenIssuer) *JWTOnlyValidator {
+func NewJWTOnlyValidator(rsaValidator *loopruntimejwt.Validator, sessValidator *loopruntimejwt.SessionTokenIssuer) *JWTOnlyValidator {
 	return &JWTOnlyValidator{
 		rsaValidator:  rsaValidator,
 		sessValidator: sessValidator,

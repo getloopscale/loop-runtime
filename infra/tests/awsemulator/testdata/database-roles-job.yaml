@@ -1,4 +1,4 @@
-# Creates loopzero_api, loopzero_worker and loopzero_cloud from a pod, as the master user, with the
+# Creates loopruntime_api, loopruntime_worker and loopruntime_cloud from a pod, as the master user, with the
 # production script. The pod's connection goes through the RDS instance's security group.
 apiVersion: batch/v1
 kind: Job

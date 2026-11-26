@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metrics
 
@@ -16,14 +16,14 @@ var (
 	// them: recorded, no_target (no environment_targets row for the tuple),
 	// or failed (the write errored).
 	DataPlaneReadinessSnapshots = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_data_plane_readiness_snapshots_total",
+		Name: "loopruntime_data_plane_readiness_snapshots_total",
 		Help: "Data-plane readiness samples by outcome (recorded|no_target|failed).",
 	}, []string{"result"})
 
 	// DataPlaneReadinessScrapeFailures counts poller ticks whose Prometheus
 	// query failed; every stored snapshot keeps its last value.
 	DataPlaneReadinessScrapeFailures = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "loopzero_data_plane_readiness_scrape_failures_total",
+		Name: "loopruntime_data_plane_readiness_scrape_failures_total",
 		Help: "Readiness poller ticks whose Prometheus query failed.",
 	})
 )

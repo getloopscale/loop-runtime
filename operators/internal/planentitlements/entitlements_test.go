@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package planentitlements
 
@@ -8,12 +8,12 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 func TestFor_StarterGetsTheBaseTier(t *testing.T) {
-	e := For(loopzerov1.PlanStarter)
-	if e.PriorityClassName != "loopzero-tenant-starter" || e.PriorityValue != 100 || e.Preemption != corev1.PreemptNever {
+	e := For(loopruntimev1.PlanStarter)
+	if e.PriorityClassName != "loopruntime-tenant-starter" || e.PriorityValue != 100 || e.Preemption != corev1.PreemptNever {
 		t.Fatalf("starter priority = %+v", e)
 	}
 	if e.ManagesSecrets || e.ManagesNetworking {
@@ -24,8 +24,8 @@ func TestFor_StarterGetsTheBaseTier(t *testing.T) {
 // The api writes the canonical tiers (pkg/domain.PlanTier): a pro tenant must
 // get the paid mid tier, not fall through to starter.
 func TestFor_ProGetsThePaidMidTier(t *testing.T) {
-	e := For(loopzerov1.PlanPro)
-	if e.PriorityClassName != "loopzero-tenant-growth" || e.PriorityValue != 500 || e.Preemption != corev1.PreemptLowerPriority {
+	e := For(loopruntimev1.PlanPro)
+	if e.PriorityClassName != "loopruntime-tenant-growth" || e.PriorityValue != 500 || e.Preemption != corev1.PreemptLowerPriority {
 		t.Fatalf("pro priority = %+v", e)
 	}
 	if !e.ManagesSecrets || e.ManagesNetworking {
@@ -34,21 +34,21 @@ func TestFor_ProGetsThePaidMidTier(t *testing.T) {
 }
 
 func TestFor_TeamGetsThePaidMidTier(t *testing.T) {
-	if got, want := For(loopzerov1.PlanTeam), For(loopzerov1.PlanPro); got != want {
+	if got, want := For(loopruntimev1.PlanTeam), For(loopruntimev1.PlanPro); got != want {
 		t.Fatalf("team = %+v, want the pro entitlements %+v", got, want)
 	}
 }
 
 // "growth" is the pre-2026-05-12 name for pro; CRs stored with it keep their tier.
 func TestFor_LegacyGrowthMeansPro(t *testing.T) {
-	if got, want := For(loopzerov1.PlanGrowth), For(loopzerov1.PlanPro); got != want {
+	if got, want := For(loopruntimev1.PlanGrowth), For(loopruntimev1.PlanPro); got != want {
 		t.Fatalf("growth = %+v, want the pro entitlements %+v", got, want)
 	}
 }
 
 func TestFor_EnterpriseGetsEverything(t *testing.T) {
-	e := For(loopzerov1.PlanEnterprise)
-	if e.PriorityClassName != "loopzero-tenant-enterprise" || e.PriorityValue != 1000 {
+	e := For(loopruntimev1.PlanEnterprise)
+	if e.PriorityClassName != "loopruntime-tenant-enterprise" || e.PriorityValue != 1000 {
 		t.Fatalf("enterprise priority = %+v", e)
 	}
 	if !e.ManagesSecrets || !e.ManagesNetworking {
@@ -58,7 +58,7 @@ func TestFor_EnterpriseGetsEverything(t *testing.T) {
 
 // An unrecognised value never grants more than starter.
 func TestFor_UnknownPlanFallsBackToStarter(t *testing.T) {
-	if got, want := For(loopzerov1.PlanTier("platinum")), For(loopzerov1.PlanStarter); got != want {
+	if got, want := For(loopruntimev1.PlanTier("platinum")), For(loopruntimev1.PlanStarter); got != want {
 		t.Fatalf("unknown plan = %+v, want starter %+v", got, want)
 	}
 }

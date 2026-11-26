@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -57,16 +57,16 @@ func platformPostgresAlerts(t *testing.T) map[string]alertRule {
 func TestPlatformPostgresAlertsCoverDataLossAndWriteStops(t *testing.T) {
 	alerts := platformPostgresAlerts(t)
 	for name, metric := range map[string]string{
-		"LoopZeroPlatformPostgresDown":                 `up{job="platform-postgres"}`,
-		"LoopZeroPlatformPostgresWALArchiveFailing":    "cnpg_pg_stat_archiver_failed_count",
-		"LoopZeroPlatformPostgresWALArchiveBacklog":    `cnpg_collector_pg_wal_archive_status{value="ready"`,
-		"LoopZeroPlatformPostgresBackupStale":          "barman_cloud_cloudnative_pg_io_last_available_backup_timestamp",
-		"LoopZeroPlatformPostgresBackupFailed":         "barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp",
-		"LoopZeroPlatformPostgresVolumeFilling":        "kubelet_volume_stats_available_bytes",
-		"LoopZeroPlatformPostgresReplicaLagging":       "cnpg_pg_replication_lag",
-		"LoopZeroPlatformPostgresSyncReplicaMissing":   `cnpg_collector_sync_replicas{value="observed"`,
-		"LoopZeroPlatformPostgresTransactionIDAgeHigh": "cnpg_pg_database_xid_age",
-		"LoopZeroPlatformPostgresConnectionsNearLimit": "cnpg_backends_total",
+		"LoopRuntimePlatformPostgresDown":                 `up{job="platform-postgres"}`,
+		"LoopRuntimePlatformPostgresWALArchiveFailing":    "cnpg_pg_stat_archiver_failed_count",
+		"LoopRuntimePlatformPostgresWALArchiveBacklog":    `cnpg_collector_pg_wal_archive_status{value="ready"`,
+		"LoopRuntimePlatformPostgresBackupStale":          "barman_cloud_cloudnative_pg_io_last_available_backup_timestamp",
+		"LoopRuntimePlatformPostgresBackupFailed":         "barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp",
+		"LoopRuntimePlatformPostgresVolumeFilling":        "kubelet_volume_stats_available_bytes",
+		"LoopRuntimePlatformPostgresReplicaLagging":       "cnpg_pg_replication_lag",
+		"LoopRuntimePlatformPostgresSyncReplicaMissing":   `cnpg_collector_sync_replicas{value="observed"`,
+		"LoopRuntimePlatformPostgresTransactionIDAgeHigh": "cnpg_pg_database_xid_age",
+		"LoopRuntimePlatformPostgresConnectionsNearLimit": "cnpg_backends_total",
 	} {
 		rule, ok := alerts[name]
 		if !ok {
@@ -85,7 +85,7 @@ func TestPlatformPostgresAlertsCoverDataLossAndWriteStops(t *testing.T) {
 	}
 	// CloudNativePG 1.31 counts every attached standby as observed, so observed can
 	// exceed expected: only fewer than expected is a fault.
-	if expr := alerts["LoopZeroPlatformPostgresSyncReplicaMissing"].Expr; strings.Contains(expr, "!=") {
+	if expr := alerts["LoopRuntimePlatformPostgresSyncReplicaMissing"].Expr; strings.Contains(expr, "!=") {
 		t.Errorf("SyncReplicaMissing compares with !=, which fires when observed exceeds expected: %s", expr)
 	}
 }
@@ -125,7 +125,7 @@ func TestStagingCorePrometheusScrapesThePlatformPostgres(t *testing.T) {
 	}
 	for _, want := range []string{
 		"role: pod",
-		"- loopzero-data-plane", // where the cluster runs
+		"- loopruntime-data-plane", // where the cluster runs
 		"__meta_kubernetes_pod_label_cnpg_io_cluster", // every instance of every cluster there
 		"__meta_kubernetes_pod_container_port_name",   // the metrics port, not PostgreSQL's
 	} {
@@ -164,7 +164,7 @@ func TestStagingCorePrometheusLoadsThePlatformPostgresAlerts(t *testing.T) {
 	}
 }
 
-// The data plane's pods carry no loopzero.io label, so no other Promtail job tails them:
+// The data plane's pods carry no runtime.getloopscale.com label, so no other Promtail job tails them:
 // PostgreSQL's log, the operator's and the services' reach Loki through platform-pods.
 func TestStagingPromtailCollectsTheDataPlaneAndItsDatabaseOperator(t *testing.T) {
 	job := promtailJobs(t, "core.helmfile.yaml.gotmpl", "staging", stagingMonitoringOutputs())["platform-pods"]
@@ -172,7 +172,7 @@ func TestStagingPromtailCollectsTheDataPlaneAndItsDatabaseOperator(t *testing.T)
 		t.Fatal("no platform-pods job on the core cluster")
 	}
 	names, _ := dig(job, "kubernetes_sd_configs", 0, "namespaces", "names").([]any)
-	for _, want := range []string{"loopzero-data-plane", "cnpg-system"} {
+	for _, want := range []string{"loopruntime-data-plane", "cnpg-system"} {
 		found := false
 		for _, n := range names {
 			found = found || n == want

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// RED test for issue #138: `loopzero secret set` answers
+// RED test for issue #138: `loopruntime secret set` answers
 // `{"code":"INTERNAL_ERROR","error":"Something went wrong..."}` and nothing
-// persists, while `loopzero secret list` works.
+// persists, while `loopruntime secret list` works.
 //
 // The reported symptom is a 500. The defect this test locks is narrower and
 // more durable: the 500 is UNTYPED. `PostgresSecretStore.Set` encrypts before
@@ -39,7 +39,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // backendDownStore fails Set exactly the way the store layer does when the
@@ -50,7 +50,7 @@ type backendDownStore struct {
 
 func (s *backendDownStore) Set(_ context.Context, _, _, _, _, _ string, _ []byte) (bool, error) {
 	return false, fmt.Errorf("secret_store: encrypt: %w",
-		fmt.Errorf("secret_store: vault transit encrypt: %w", loopzeroerrors.ErrSecretsBackendUnavailable))
+		fmt.Errorf("secret_store: vault transit encrypt: %w", loopruntimeerrors.ErrSecretsBackendUnavailable))
 }
 
 func (s *backendDownStore) ListNames(_ context.Context, _, _, _ string) ([]SecretMetadata, error) {

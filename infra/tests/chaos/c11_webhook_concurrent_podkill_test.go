@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package chaos_test
 
@@ -14,7 +14,7 @@ import (
 // assertion, following the repo's established chaos-spec pattern
 // (rekor_down_during_attest_test.go / fulcio_down_during_sign_test.go).
 //
-// c11 scenario: inject a pod-kill on the loopzero-api leader CONCURRENTLY with a
+// c11 scenario: inject a pod-kill on the loopruntime-api leader CONCURRENTLY with a
 // GitHub webhook dispatch. The webhook MUST be durably queued (PG inbox/retry)
 // and the 9-link deploy chain MUST complete within 25 min (5 min chaos window +
 // 20 min chain budget), with SLO error rate < 1% over the window — the webhook
@@ -24,7 +24,7 @@ import (
 // fault as Scenario 11 in chaos_test.go); c11's distinctness is the concurrent
 // webhook dispatch + chain-completion + SLO assertion, not a new fault.
 
-var _ = Describe("c11: webhook dispatch concurrent with loopzero-api leader pod-kill", Label("chaos", "webhook", "c11"), func() {
+var _ = Describe("c11: webhook dispatch concurrent with loopruntime-api leader pod-kill", Label("chaos", "webhook", "c11"), func() {
 	BeforeEach(func() {
 		skipUnlessChaos()
 		if !chaosMeshAvailable() {
@@ -37,7 +37,7 @@ var _ = Describe("c11: webhook dispatch concurrent with loopzero-api leader pod-
 		//   1. checkAPIHealth() — API serving before chaos (EC-11 preflight:
 		//      chaos-mesh operator has >= 4 Running pods).
 		//   2. applyChaos("pod-kill-api-leader.yaml") — PodChaos pod-kill on
-		//      app=loopzero-api (reused manifest).
+		//      app=loopruntime-api (reused manifest).
 		//   3. CONCURRENTLY dispatch a GitHub webhook (gh api repository_dispatch)
 		//      during the chaos window.
 		//   4. after the pod restarts, assert the webhook was processed FROM the

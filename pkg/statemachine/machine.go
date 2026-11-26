@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package statemachine implements strict state machines for all LoopZero stateful
+// Package statemachine implements strict state machines for all LoopRuntime stateful
 // entities as defined in the system design spec section 5.
 //
 // Invalid transitions are programming errors and cause a panic with a

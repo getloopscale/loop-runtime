@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Cloudflare Tunnel provisioning (L1 / Pulumi).
 // CHG-2026-04-28-LAYERED-BOOTSTRAP — ADR D9.
@@ -8,7 +8,7 @@
 //                          Cloudflare API. Zero K8s resources.
 // L2 (Helmfile, infra/helm/cloudflared/): cloudflared Deployment + Secret
 //                          inside the runtime cluster. Token is consumed via
-//                          env var LOOPZERO_CF_TUNNEL_TOKEN sourced from
+//                          env var LOOPRUNTIME_CF_TUNNEL_TOKEN sourced from
 //                          `pulumi stack output cfTunnelToken --show-secrets`.
 //
 // Why this split: when the runtime cluster is destroyed, the cloudflared
@@ -70,8 +70,8 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
   const cfConfig = new pulumi.Config();
   const tunnelSecret = cfConfig.requireSecret("tunnelSecret");
 
-  const tunnelName = `loopzero-${config.environment}`;
-  const tunnel = new cloudflare.ZeroTrustTunnelCloudflared(`loopzero-tunnel-${config.environment}`, {
+  const tunnelName = `loopruntime-${config.environment}`;
+  const tunnel = new cloudflare.ZeroTrustTunnelCloudflared(`loopruntime-tunnel-${config.environment}`, {
     accountId: config.accountId,
     name: tunnelName,
     tunnelSecret: tunnelSecret,
@@ -87,7 +87,7 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
 
   // 2. Tunnel ingress config — route ALL traffic to Traefik
   new cloudflare.ZeroTrustTunnelCloudflaredConfig(
-    "loopzero-tunnel-config",
+    "loopruntime-tunnel-config",
     {
       accountId: config.accountId,
       tunnelId: tunnel.id,
@@ -111,7 +111,7 @@ export function createTunnel(config: TunnelConfig): TunnelOutput {
   );
 
   // 3. DNS — wildcard CNAME for all platform subdomains
-  new cloudflare.DnsRecord("loopzero-tunnel-dns", {
+  new cloudflare.DnsRecord("loopruntime-tunnel-dns", {
     zoneId: config.zoneId,
     name: `*.${config.baseDomain}`,
     type: "CNAME",

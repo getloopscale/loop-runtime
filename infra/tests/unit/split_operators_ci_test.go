@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C22.
 // Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
@@ -60,10 +60,10 @@ const releaseArtifactsWorkflow = ".github/workflows/release-artifacts.yml"
 // image each. Consolidating back to a single build — the refactor the original test
 // was written to catch — shows up here as a missing key.
 var splitOperatorDockerfiles = map[string]string{
-	"loopzero-tenant-operator":   "operators/Dockerfile.tenant-operator",
-	"loopzero-app-operator":      "operators/Dockerfile.app-operator",
-	"loopzero-preview-operator":  "operators/Dockerfile.preview-operator",
-	"loopzero-platform-operator": "operators/Dockerfile.platform-operator",
+	"loopruntime-tenant-operator":   "operators/Dockerfile.tenant-operator",
+	"loopruntime-app-operator":      "operators/Dockerfile.app-operator",
+	"loopruntime-preview-operator":  "operators/Dockerfile.preview-operator",
+	"loopruntime-platform-operator": "operators/Dockerfile.platform-operator",
 }
 
 // nonImageChangeFilters are paths-filter keys that legitimately have no matrix

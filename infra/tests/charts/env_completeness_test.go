@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T1.1 of plan dev-public-env-config-completeness (umbrella).
 //
@@ -42,7 +42,7 @@ const minRuntimeVars = 150
 // catching parser-drops of producers (orphan-FAIL canary).
 const minSecretProducers = 30
 
-// fixturesDir resolves loopzero/infra/tests/fixtures relative to this test
+// fixturesDir resolves loopruntime/infra/tests/fixtures relative to this test
 // file (`infra/tests/charts/`). Same convention as chartsRoot.
 func fixturesDir(t *testing.T) string {
 	t.Helper()
@@ -61,7 +61,7 @@ type manifestRow struct {
 	Var     string
 	Plane   string // CONFIG | SECRET
 	Req     string // Y | when-X | N | — | Y(...) variants
-	Section string // chart section, e.g. loopzero-cloud, loopzero-api, loopzero-{app,...}-operator
+	Section string // chart section, e.g. loopruntime-cloud, loopruntime-api, loopruntime-{app,...}-operator
 }
 
 // parseManifest reads runtime-env-manifest.txt. Skips comments + blank
@@ -182,19 +182,19 @@ func contractSurface(t *testing.T) map[string]bool {
 		t.Fatalf("resolve charts root: %v", err)
 	}
 	// The 7 install-config-contract charts (CONFIG.md and/or SECRETS.md
-	// shipped). loopzero-build-cwts ships only SECRETS.md (build-time
-	// secrets); loopzero-dashboard ships only CONFIG.md (camelCase keys);
-	// loopzero-cloud ships only SECRETS.md (CONFIG comes from cloud-cfg
+	// shipped). loopruntime-build-cwts ships only SECRETS.md (build-time
+	// secrets); loopruntime-dashboard ships only CONFIG.md (camelCase keys);
+	// loopruntime-cloud ships only SECRETS.md (CONFIG comes from cloud-cfg
 	// runtime).
 	charts := []string{
-		"loopzero-api",
-		"loopzero-app-operator",
-		"loopzero-build-cwts",
-		"loopzero-cloud",
-		"loopzero-dashboard",
-		"loopzero-platform-operator",
-		"loopzero-preview-operator",
-		"loopzero-tenant-operator",
+		"loopruntime-api",
+		"loopruntime-app-operator",
+		"loopruntime-build-cwts",
+		"loopruntime-cloud",
+		"loopruntime-dashboard",
+		"loopruntime-platform-operator",
+		"loopruntime-preview-operator",
+		"loopruntime-tenant-operator",
 	}
 	surface := map[string]bool{}
 	for _, c := range charts {

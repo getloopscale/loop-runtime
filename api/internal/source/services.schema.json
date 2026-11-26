@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://loopzerocloud.dev/schemas/services.json",
+  "$id": "https://loopruntimecloud.dev/schemas/services.json",
   "title": "LoopZeroKit services.json (v1 + v2)",
-  "description": "Platform-neutral services manifest emitted by `loopzerokit build`. Mirror of loopzerokit/packages/loopzero/src/services/adapters-bridge/manifest.ts ServicesManifest interface. Plan B v3.1 T-B.3 + ADR-0015 (platform-neutral). Plan v1.2 T2.1: v2 carries top-level `project` field (DNS-1123); v1 retained for backward compat with deprecation warning, falls back to `services-bundle` per ADR D10 (preserves Gitea repo lineage).",
+  "description": "Platform-neutral services manifest emitted by `loopzerokit build`. Mirror of loopzerokit/packages/loopruntime/src/services/adapters-bridge/manifest.ts ServicesManifest interface. Plan B v3.1 T-B.3 + ADR-0015 (platform-neutral). Plan v1.2 T2.1: v2 carries top-level `project` field (DNS-1123); v1 retained for backward compat with deprecation warning, falls back to `services-bundle` per ADR D10 (preserves Gitea repo lineage).",
   "type": "object",
   "oneOf": [
     {
@@ -26,7 +26,7 @@
         "project": {
           "type": "string",
           "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
-          "description": "DNS-1123 subdomain compatible project name. Required from v2. Drives Gitea repo (loopzero-source-{tenant}-{project}) and ArgoCD App naming."
+          "description": "DNS-1123 subdomain compatible project name. Required from v2. Drives Gitea repo (loopruntime-source-{tenant}-{project}) and ArgoCD App naming."
         },
         "services": {
           "type": "array",
@@ -83,7 +83,7 @@
         "cors": { "type": "boolean" },
         "env": {
           "type": "object",
-          "description": "Process environment variables passed to the running service. Keys MUST be POSIX-compliant (^[A-Z_][A-Z0-9_]*$); values are bounded to 4096 chars. Total entries capped at 64 to prevent manifest-bomb DoS. Plan v1.2 T1.3 — additional Go-side blocklist rejects reserved keys (PATH, HOME, LD_PRELOAD, LD_LIBRARY_PATH, KUBERNETES_*, LOOPZERO_*).",
+          "description": "Process environment variables passed to the running service. Keys MUST be POSIX-compliant (^[A-Z_][A-Z0-9_]*$); values are bounded to 4096 chars. Total entries capped at 64 to prevent manifest-bomb DoS. Plan v1.2 T1.3 — additional Go-side blocklist rejects reserved keys (PATH, HOME, LD_PRELOAD, LD_LIBRARY_PATH, KUBERNETES_*, LOOPRUNTIME_*).",
           "maxProperties": 64,
           "patternProperties": {
             "^[A-Z_][A-Z0-9_]*$": {

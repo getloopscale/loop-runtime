@@ -1,15 +1,15 @@
-# Chaos Experiment: partition mgmt (loopzero-system) <-> build (argo-system)
+# Chaos Experiment: partition mgmt (loopruntime-system) <-> build (argo-system)
 #
 # M13 (plan m13-chaos-declarative): the declarative reexpression of the c12
 # scenario, previously an inline heredoc in
 # infra/scripts/local/chaos-scenarios/c12-simul-prs-during-partition.sh.
 #
-# Scenario: cut the network between the mgmt cluster (where loopzero-api submits
+# Scenario: cut the network between the mgmt cluster (where loopruntime-api submits
 # builds + writes releases) and the build cluster (argo-workflows) while TWO
 # PRs for the same (tenant, project, environment) are dispatched simultaneously.
 #
 # EC-6 (INVARIANT, hermetically locked by TestC12Manifest_ScopedPartition):
-# the partition selector is EXPLICITLY scoped to [loopzero-system, argo-system].
+# the partition selector is EXPLICITLY scoped to [loopruntime-system, argo-system].
 # It is NEVER an unscoped all-namespace partition — that would also cut
 # operator port-forwards + browser sessions on shared dev-public infra
 # (out-of-scope blast radius).
@@ -25,21 +25,21 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
   name: c12-partition-mgmt-build
-  namespace: loopzero-system
+  namespace: loopruntime-system
   annotations:
-    loopzero.io/scenario: "c12"
-    loopzero.io/invariant: "withEnvironmentLock: no duplicate ACTIVE per commit_sha under mgmt<->build partition"
-    loopzero.io/ec: "EC-6 — scoped partition [loopzero-system, argo-system], NEVER unscoped/all"
+    runtime.getloopscale.com/scenario: "c12"
+    runtime.getloopscale.com/invariant: "withEnvironmentLock: no duplicate ACTIVE per commit_sha under mgmt<->build partition"
+    runtime.getloopscale.com/ec: "EC-6 — scoped partition [loopruntime-system, argo-system], NEVER unscoped/all"
 spec:
   action: partition
   mode: all
   selector:
     # EC-6 absorption — scoped blast radius (explicit namespaces, NOT all).
     namespaces:
-      - loopzero-system
+      - loopruntime-system
       - argo-system
     labelSelectors:
-      app: loopzero-api
+      app: loopruntime-api
   direction: both
   target:
     mode: all

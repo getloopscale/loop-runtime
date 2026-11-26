@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Smoke E2E test: loopzero platform install + loopzero deploy on a fresh k3d cluster.
+# Smoke E2E test: loopruntime platform install + loopruntime deploy on a fresh k3d cluster.
 #
 # Reproduces the full self-hosted install flow without any manual kubectl,
 # then deploys the hello-server fixture and asserts the URL responds 200.
 #
 # Pre-requisites on the host:
-#   - k3d, docker, kubectl, helm, doctl, loopzero CLI on PATH
+#   - k3d, docker, kubectl, helm, doctl, loopruntime CLI on PATH
 #   - mkcert (optional but recommended for browser-trusted certs)
 #   - DOCR token: `doctl registry login` already executed
 #
@@ -27,10 +27,10 @@ set -euo pipefail
 # ──────────────────────────────────────────────────────────────────────
 # Config
 # ──────────────────────────────────────────────────────────────────────
-CLUSTER_NAME="${CLUSTER_NAME:-loopzero-test}"
+CLUSTER_NAME="${CLUSTER_NAME:-loopruntime-test}"
 DOMAIN="${DOMAIN:-test.local}"
-LOG_DIR="${LOG_DIR:-/tmp/loopzero-e2e-logs}"
-VALUES_FILE="${VALUES_FILE:-/tmp/loopzero-e2e-values.yaml}"
+LOG_DIR="${LOG_DIR:-/tmp/loopruntime-e2e-logs}"
+VALUES_FILE="${VALUES_FILE:-/tmp/loopruntime-e2e-values.yaml}"
 APP_FIXTURE="${APP_FIXTURE:-$(cd "$(dirname "$0")/fixtures/hello-server" && pwd)}"
 # Hostname format derived from manifests/renderer.go:
 #   {tenant_id}-{project_id}-{app_name}-{environment}.{domain}
@@ -60,7 +60,7 @@ require_cmd() { command -v "$1" >/dev/null 2>&1 || fail "missing required comman
 # Phase 0: Pre-req check
 # ──────────────────────────────────────────────────────────────────────
 log "── Phase 0: pre-requisites"
-for cmd in k3d docker kubectl helm doctl loopzero curl jq python3; do
+for cmd in k3d docker kubectl helm doctl loopruntime curl jq python3; do
   require_cmd "$cmd"
 done
 log "  ✓ All required commands present"
@@ -85,7 +85,7 @@ log "── Phase 1: reset k3d cluster '$CLUSTER_NAME'"
 docker ps -aq --filter "name=k3d-$CLUSTER_NAME" | xargs -r docker rm -f >/dev/null 2>&1 || true
 docker network rm "k3d-$CLUSTER_NAME" 2>/dev/null || true
 docker volume ls -q | grep -i "$CLUSTER_NAME" | xargs -r docker volume rm 2>/dev/null || true
-rm -f "$HOME/.loopzero/config.json" "$HOME/.kube/config"
+rm -f "$HOME/.loopruntime/config.json" "$HOME/.kube/config"
 log "  ✓ Old state cleaned"
 
 k3d cluster create "$CLUSTER_NAME" \
@@ -109,7 +109,7 @@ log "  ✓ Cluster up: 1 server + 1 agent"
 log "  Pre-importing Docker Hub base images (rate-limit guard)..."
 HUB_IMAGES=(
   "node:20.11.1-alpine"
-  # mc is no longer a Hub image: it ships in loopzero-clone-runner, built from source (#394).
+  # mc is no longer a Hub image: it ships in loopruntime-clone-runner, built from source (#394).
 )
 for img in "${HUB_IMAGES[@]}"; do
   if ! docker image inspect "$img" >/dev/null 2>&1; then
@@ -122,9 +122,9 @@ for img in "${HUB_IMAGES[@]}"; do
 done
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase 2: loopzero platform install
+# Phase 2: loopruntime platform install
 # ──────────────────────────────────────────────────────────────────────
-log "── Phase 2: loopzero platform install"
+log "── Phase 2: loopruntime platform install"
 cat > "$VALUES_FILE" <<EOF
 domain: "$DOMAIN"
 
@@ -133,14 +133,14 @@ database:
 
 registry:
   type: docr
-  endpoint: registry.digitalocean.com/loopzero-system
+  endpoint: registry.digitalocean.com/loopruntime-system
 
 auth:
   type: bundled
 
 storage:
-  endpoint: minio.loopzero-system.svc.cluster.local:9000
-  bucket: loopzero-artifacts
+  endpoint: minio.loopruntime-system.svc.cluster.local:9000
+  bucket: loopruntime-artifacts
 
 profile: minimal
 EOF
@@ -149,18 +149,18 @@ doctl registry login >/dev/null
 log "  ✓ DOCR login fresh"
 
 # CHG-2026-04-25-E2E: until v0.2.1 charts are published to OCI, the
-# installer must use local chart paths. We export LOOPZERO_LOCAL_CHARTS
-# pointing at this repo's charts/ directory; loopzero platform install picks
+# installer must use local chart paths. We export LOOPRUNTIME_LOCAL_CHARTS
+# pointing at this repo's charts/ directory; loopruntime platform install picks
 # this up via the chartRef() helper in cli/src/installer/components.ts.
 # In production the env var is unset and OCI is used (Rule 10).
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-export LOOPZERO_LOCAL_CHARTS="$REPO_ROOT/charts"
-log "  Using LOCAL charts: $LOOPZERO_LOCAL_CHARTS (set LOOPZERO_LOCAL_CHARTS empty to use OCI)"
+export LOOPRUNTIME_LOCAL_CHARTS="$REPO_ROOT/charts"
+log "  Using LOCAL charts: $LOOPRUNTIME_LOCAL_CHARTS (set LOOPRUNTIME_LOCAL_CHARTS empty to use OCI)"
 
 INSTALL_LOG="$LOG_DIR/install.log"
 log "  Starting install (logs: $INSTALL_LOG)"
-if timeout "$INSTALL_TIMEOUT_SEC" loopzero platform install -f "$VALUES_FILE" > "$INSTALL_LOG" 2>&1; then
-  log "  ✓ loopzero platform install completed"
+if timeout "$INSTALL_TIMEOUT_SEC" loopruntime platform install -f "$VALUES_FILE" > "$INSTALL_LOG" 2>&1; then
+  log "  ✓ loopruntime platform install completed"
 else
   log "  ✗ install failed — last 30 lines:"
   tail -30 "$INSTALL_LOG"
@@ -172,9 +172,9 @@ BOOTSTRAP_SECRET="$(grep -A 1 'Bootstrap secret' "$INSTALL_LOG" | tail -1 | tr -
 [ -n "$BOOTSTRAP_SECRET" ] || fail "could not parse bootstrapSecret from install output" 2
 log "  ✓ Bootstrap secret captured: ${BOOTSTRAP_SECRET:0:8}..."
 
-# Verify all loopzero-* pods are Ready (modulo dashboard which may still be flaky)
+# Verify all loopruntime-* pods are Ready (modulo dashboard which may still be flaky)
 sleep 10
-NOT_READY=$(kubectl get pods -n loopzero-system -l 'app.kubernetes.io/instance=loopzero' \
+NOT_READY=$(kubectl get pods -n loopruntime-system -l 'app.kubernetes.io/instance=loopruntime' \
   -o jsonpath='{range .items[*]}{.metadata.name}{":"}{.status.containerStatuses[0].ready}{"\n"}{end}' \
   | grep -v ':true' | grep -v '^$' | grep -v dashboard || true)
 if [ -n "$NOT_READY" ]; then
@@ -185,12 +185,12 @@ fi
 # ──────────────────────────────────────────────────────────────────────
 # Phase 3: Bootstrap admin + login
 # ──────────────────────────────────────────────────────────────────────
-log "── Phase 3: bootstrap admin + loopzero login"
+log "── Phase 3: bootstrap admin + loopruntime login"
 
 # Port-forward API for the duration of the test
-pkill -9 -f "kubectl port-forward.*loopzero-loopzero-api" 2>/dev/null || true
+pkill -9 -f "kubectl port-forward.*loopruntime-loopruntime-api" 2>/dev/null || true
 sleep 2
-kubectl port-forward -n loopzero-system svc/loopzero-loopzero-api 3001:3001 > "$LOG_DIR/pf-api.log" 2>&1 &
+kubectl port-forward -n loopruntime-system svc/loopruntime-loopruntime-api 3001:3001 > "$LOG_DIR/pf-api.log" 2>&1 &
 PF_API_PID=$!
 trap 'kill $PF_API_PID 2>/dev/null || true; pkill -9 -f "port-forward" 2>/dev/null || true' EXIT
 sleep 5
@@ -203,7 +203,7 @@ curl -sf "$API_URL/api/v1/health" | grep -q '"status":"ok"' \
 BOOTSTRAP_RESP="$(curl -sf -X POST -H "Authorization: Bearer $BOOTSTRAP_SECRET" \
   -H 'Content-Type: application/json' \
   "$API_URL/internal/bootstrap" \
-  -d '{"admin_github_id":"1","admin_login":"admin","admin_email":"admin@loopzero.local","tenant_slug":"e2e","tenant_display_name":"E2E Test"}')"
+  -d '{"admin_github_id":"1","admin_login":"admin","admin_email":"admin@loopruntime.local","tenant_slug":"e2e","tenant_display_name":"E2E Test"}')"
 echo "$BOOTSTRAP_RESP" | grep -q '"created":true' \
   || fail "bootstrap returned unexpected: $BOOTSTRAP_RESP" 3
 log "  ✓ Admin user + tenant 'e2e' created"
@@ -215,11 +215,11 @@ kubectl port-forward -n ory svc/ory-hydra-admin 24445:4445 > /dev/null 2>&1 &
 kubectl port-forward -n ory svc/ory-hydra-public 24444:4444 > /dev/null 2>&1 &
 sleep 4
 
-# Find or create loopzero-cli OAuth2 client
+# Find or create loopruntime-cli OAuth2 client
 CLIENT_INFO="$(curl -sf http://localhost:24445/admin/clients \
-  | python3 -c "import sys,json; cs=json.load(sys.stdin); c=next((x for x in cs if x.get('client_name')=='loopzero-cli'),None); print(f\"{c['client_id']}\" if c else '')" || true)"
+  | python3 -c "import sys,json; cs=json.load(sys.stdin); c=next((x for x in cs if x.get('client_name')=='loopruntime-cli'),None); print(f\"{c['client_id']}\" if c else '')" || true)"
 if [ -z "$CLIENT_INFO" ]; then
-  fail "loopzero-cli OAuth2 client not registered (Step 6 of install) — check $INSTALL_LOG" 3
+  fail "loopruntime-cli OAuth2 client not registered (Step 6 of install) — check $INSTALL_LOG" 3
 fi
 CID="$CLIENT_INFO"
 
@@ -231,7 +231,7 @@ if [ -z "$CSEC" ]; then
   curl -sf -X DELETE "http://localhost:24445/admin/clients/$CID" >/dev/null 2>&1 || true
   NEWCLIENT="$(curl -sf -X POST http://localhost:24445/admin/clients \
     -H 'Content-Type: application/json' \
-    -d '{"client_name":"loopzero-cli","grant_types":["client_credentials"],"response_types":[],"scope":"openid offline_access","audience":["loopzero-engine"],"token_endpoint_auth_method":"client_secret_post"}')"
+    -d '{"client_name":"loopruntime-cli","grant_types":["client_credentials"],"response_types":[],"scope":"openid offline_access","audience":["loopruntime-engine"],"token_endpoint_auth_method":"client_secret_post"}')"
   CID="$(echo "$NEWCLIENT" | python3 -c "import sys,json; print(json.load(sys.stdin)['client_id'])")"
   CSEC="$(echo "$NEWCLIENT" | python3 -c "import sys,json; print(json.load(sys.stdin)['client_secret'])")"
 fi
@@ -240,28 +240,28 @@ TOKEN="$(curl -sf -X POST http://localhost:24444/oauth2/token \
   -d 'grant_type=client_credentials' \
   -d "client_id=$CID" \
   -d "client_secret=$CSEC" \
-  -d 'audience=loopzero-engine' \
+  -d 'audience=loopruntime-engine' \
   -d 'scope=openid' \
   | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))")"
 [ -n "$TOKEN" ] || fail "failed to obtain JWT from Hydra" 3
 log "  ✓ JWT obtained (${#TOKEN} chars)"
 
 # Bind CLI client_id to the bootstrapped tenant
-kubectl exec -n loopzero-system postgresql-cluster-1 -c postgres -- psql -U postgres -d loopzero \
-  -c "INSERT INTO users (id, email, display_name, username) VALUES ('$CID','cli@loopzero.local','CLI','cli') ON CONFLICT DO NOTHING; \
+kubectl exec -n loopruntime-system postgresql-cluster-1 -c postgres -- psql -U postgres -d loopruntime \
+  -c "INSERT INTO users (id, email, display_name, username) VALUES ('$CID','cli@loopruntime.local','CLI','cli') ON CONFLICT DO NOTHING; \
       INSERT INTO tenant_members (tenant_id, user_id, role) VALUES ('tn-e2e','$CID','owner') ON CONFLICT DO NOTHING;" \
   >/dev/null 2>&1
 log "  ✓ CLI user bound to tenant 'tn-e2e'"
 
-# loopzero login
-LOOPZERO_URL="$API_URL" loopzero login --token "$TOKEN" 2>&1 | grep -q "Authenticated" \
-  || fail "loopzero login failed" 3
-log "  ✓ loopzero login OK"
+# loopruntime login
+LOOPRUNTIME_URL="$API_URL" loopruntime login --token "$TOKEN" 2>&1 | grep -q "Authenticated" \
+  || fail "loopruntime login failed" 3
+log "  ✓ loopruntime login OK"
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase 4: loopzero deploy hello-server
+# Phase 4: loopruntime deploy hello-server
 # ──────────────────────────────────────────────────────────────────────
-log "── Phase 4: loopzero deploy hello-server"
+log "── Phase 4: loopruntime deploy hello-server"
 WORK="$(mktemp -d)"
 cp -r "$APP_FIXTURE/." "$WORK/"
 cd "$WORK"
@@ -273,7 +273,7 @@ git add . && git commit -q -m "init"
 # ArgoCD Application CR. Without this, the deploy submits a build but
 # the gitops sync target never exists and the release stays PENDING.
 #
-# We POST directly (not `loopzero init`) so we don't overwrite the fixture's
+# We POST directly (not `loopruntime init`) so we don't overwrite the fixture's
 # loopzero.yaml — the fixture defines the apps explicitly (api on port 3000).
 PROJECT_RESP="$(curl -sf -X POST -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
@@ -305,7 +305,7 @@ if ! kubectl get application -n argocd "tn-e2e-production" >/dev/null 2>&1; then
 fi
 
 DEPLOY_LOG="$LOG_DIR/deploy.log"
-if timeout "$DEPLOY_TIMEOUT_SEC" sh -c "cd '$WORK' && LOOPZERO_URL='$API_URL' loopzero deploy" > "$DEPLOY_LOG" 2>&1; then
+if timeout "$DEPLOY_TIMEOUT_SEC" sh -c "cd '$WORK' && LOOPRUNTIME_URL='$API_URL' loopruntime deploy" > "$DEPLOY_LOG" 2>&1; then
   if grep -q "release.*ACTIVE\|deploy.*succeeded\|Deployed" "$DEPLOY_LOG"; then
     log "  ✓ Deploy reached ACTIVE"
   else
@@ -314,7 +314,7 @@ if timeout "$DEPLOY_TIMEOUT_SEC" sh -c "cd '$WORK' && LOOPZERO_URL='$API_URL' lo
 else
   log "  ✗ Deploy failed or timed out — last 30 lines:"
   tail -30 "$DEPLOY_LOG"
-  fail "loopzero deploy did not reach ACTIVE in ${DEPLOY_TIMEOUT_SEC}s" 4
+  fail "loopruntime deploy did not reach ACTIVE in ${DEPLOY_TIMEOUT_SEC}s" 4
 fi
 
 # ──────────────────────────────────────────────────────────────────────
@@ -359,7 +359,7 @@ fi
 log "── Phase 6: attestation assertion"
 
 # Find the most recent build_id for this tenant from the API. We don't
-# have it from `loopzero deploy` output reliably, so we query the API.
+# have it from `loopruntime deploy` output reliably, so we query the API.
 BUILD_ID="$(curl -sf -H "Authorization: Bearer $TOKEN" \
   "$API_URL/api/v1/projects/e2e-project/builds?limit=1" 2>/dev/null \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['builds'][0].get('build_id') or d['builds'][0].get('id') or '' if d.get('builds') else '')" 2>/dev/null || true)"

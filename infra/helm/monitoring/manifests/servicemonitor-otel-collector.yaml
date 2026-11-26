@@ -3,14 +3,14 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: loopzero-otel-collector
+  name: loopruntime-otel-collector
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   namespaceSelector:
     matchNames:
-      - loopzero-system
+      - loopruntime-system
   selector:
     matchLabels:
       app.kubernetes.io/name: opentelemetry-collector

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package operatorboot
 
@@ -32,7 +32,7 @@ func TestPprofEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setEnv {
-				t.Setenv("LOOPZERO_PPROF_ENABLED", tt.envValue)
+				t.Setenv("LOOPRUNTIME_PPROF_ENABLED", tt.envValue)
 			}
 			if got := PprofEnabled(); got != tt.want {
 				t.Errorf("PprofEnabled() = %v, want %v (env=%q, set=%v)", got, tt.want, tt.envValue, tt.setEnv)

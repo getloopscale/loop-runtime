@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Cleanroom catch 2026-06-19 (cleanroom-mandate-run-2026-06-19 session):
 // the Slice 4 ISP remediation commit 52ccf8a6 (2026-06-18) tightened the
 // per-operator chart schemas (additionalProperties:false at /config) and
 // renamed config.insecureSkipTls → config.operatorInsecureSkipTls, but the
 // dev-public helmfile overlay files were not updated in the same commit.
-// `helmfile sync` then FAILed hard against `loopzero-platform-operator` AND
-// `loopzero-tenant-operator` with messages like:
+// `helmfile sync` then FAILed hard against `loopruntime-platform-operator` AND
+// `loopruntime-tenant-operator` with messages like:
 //
 //	values don't meet the specifications of the schema(s):
-//	loopzero-platform-operator:
+//	loopruntime-platform-operator:
 //	- at '/config': additional properties 'baseDomain' not allowed
 //
-//	loopzero-tenant-operator:
+//	loopruntime-tenant-operator:
 //	- at '/config': additional properties 'insecureSkipTls' not allowed
 //
 // Same canonical stale-helper-post-architecture-refactor class as the

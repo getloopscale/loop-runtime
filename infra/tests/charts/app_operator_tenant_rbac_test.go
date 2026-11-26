@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -12,19 +12,19 @@ import (
 
 // TestAppOperatorCanReadTenant — the ApplicationController reads the Tenant CR to
 // resolve the cellID before querying the workload (reconcileWorkloadStatus). The
-// chart's ClusterRole declared only loopzeroapplications and exposedroutes, so the Get
+// chart's ClusterRole declared only loopruntimeapplications and exposedroutes, so the Get
 // failed and the function returned — without counting replicas, leaving every
-// LoopZeroApplication in Progressing.
+// LoopRuntimeApplication in Progressing.
 //
 // Measured in app-dev 2026-08-09, in the operator's own log:
 //
-//	Failed to watch *v1.Tenant: tenants.loopzero.io is forbidden:
-//	User "system:serviceaccount:loopzero-system:loopzero-app-operator" cannot list resource "tenants"
+//	Failed to watch *v1.Tenant: tenants.runtime.getloopscale.com is forbidden:
+//	User "system:serviceaccount:loopruntime-system:loopruntime-app-operator" cannot list resource "tenants"
 //
 // Third layer of issue #274, after the namespace without a project and the nil
 // RuntimeFactory.
 func TestAppOperatorCanReadTenant(t *testing.T) {
-	out := renderChart(t, uniqueChart(t, "loopzero-app-operator"), "rbac-check", nil)
+	out := renderChart(t, uniqueChart(t, "loopruntime-app-operator"), "rbac-check", nil)
 
 	// Isolate the operator's ClusterRole: the tenants rule must be in it, not in
 	// any other document of the chart.
@@ -53,11 +53,11 @@ func TestAppOperatorCanReadTenant(t *testing.T) {
 // cell was forbidden: the fast-path Healthy and the TLS certificate check never
 // reached the workload. The Tilt manifest has carried the grant all along.
 func TestAppOperatorCanReadClusterCredentials(t *testing.T) {
-	docs := renderRBAC(t, "loopzero-app-operator", nil)
+	docs := renderRBAC(t, "loopruntime-app-operator", nil)
 	var verbs []string
 	for _, cr := range docs.clusterRoles {
 		for _, rule := range cr.Rules {
-			if slices.Contains(rule.APIGroups, "loopzero.io") && slices.Contains(rule.Resources, "clustercredentials") {
+			if slices.Contains(rule.APIGroups, "runtime.getloopscale.com") && slices.Contains(rule.Resources, "clustercredentials") {
 				verbs = append(verbs, rule.Verbs...)
 			}
 		}

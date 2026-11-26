@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // busyThenFreeSubmitter refuses with DEPLOY_IN_PROGRESS a number of times,
@@ -24,7 +24,7 @@ type busyThenFreeSubmitter struct {
 func (s *busyThenFreeSubmitter) SubmitBuildFromWebhook(_ context.Context, req WebhookBuildRequest) error {
 	s.attempts++
 	if s.attempts <= s.busyFor {
-		return fmt.Errorf("build submit failed: %w", loopzeroerrors.ErrDeployInProgress)
+		return fmt.Errorf("build submit failed: %w", loopruntimeerrors.ErrDeployInProgress)
 	}
 	s.accepted = &req
 	return nil

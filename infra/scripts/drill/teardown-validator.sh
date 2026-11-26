@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # Plan 2026-05-16 T4.1.bis (EC-05 fix) — Drill teardown validator + doctl fallback.
 #
@@ -16,7 +16,7 @@
 #
 # This script:
 #   1. Acquires file lock to prevent concurrent destroy race
-#   2. Lists DO resources tagged `loopzero-drill` via doctl
+#   2. Lists DO resources tagged `loopruntime-drill` via doctl
 #   3. If any found, force-deletes them per type
 #   4. Re-validates count is zero
 #   5. Emits audit-trail markdown report
@@ -109,7 +109,7 @@ log "Lock acquired: $LOCK_FILE"
 # --- Scan DO resources by tag ---
 # DO doctl filters: --tag-name not universal, so we list + jq-filter.
 
-log "Scanning DO resources tagged 'loopzero-drill'..."
+log "Scanning DO resources tagged 'loopruntime-drill'..."
 
 RESIDUAL_FOUND=0
 RESIDUAL_TOTAL=0
@@ -128,7 +128,7 @@ RESIDUAL_FAILED=0
 # Kubernetes clusters
 log "  - Listing DOKS clusters..."
 DOKS_LIST=$(list_or_fail "Kubernetes clusters" doctl kubernetes cluster list --format ID,Name,Tag --no-header)
-DOKS_DRILL=$(echo "$DOKS_LIST" | grep -E "loopzero-drill" || true)
+DOKS_DRILL=$(echo "$DOKS_LIST" | grep -E "loopruntime-drill" || true)
 if [[ -n "$DOKS_DRILL" ]]; then
   COUNT=$(echo "$DOKS_DRILL" | wc -l)
   RESIDUAL_TOTAL=$((RESIDUAL_TOTAL + COUNT))
@@ -159,7 +159,7 @@ fi
 # Managed databases
 log "  - Listing managed databases..."
 DB_LIST=$(list_or_fail "databases" doctl databases list --format ID,Name,Tags --no-header)
-DB_DRILL=$(echo "$DB_LIST" | grep -E "loopzero-drill" || true)
+DB_DRILL=$(echo "$DB_LIST" | grep -E "loopruntime-drill" || true)
 if [[ -n "$DB_DRILL" ]]; then
   COUNT=$(echo "$DB_DRILL" | wc -l)
   RESIDUAL_TOTAL=$((RESIDUAL_TOTAL + COUNT))
@@ -189,7 +189,7 @@ fi
 # VPCs (only delete after clusters + DBs gone — VPCs require empty deps)
 log "  - Listing VPCs..."
 VPC_LIST=$(list_or_fail "VPCs" doctl vpcs list --format ID,Name --no-header)
-VPC_DRILL=$(echo "$VPC_LIST" | grep -E "loopzero-drill" || true)
+VPC_DRILL=$(echo "$VPC_LIST" | grep -E "loopruntime-drill" || true)
 if [[ -n "$VPC_DRILL" ]]; then
   COUNT=$(echo "$VPC_DRILL" | wc -l)
   RESIDUAL_TOTAL=$((RESIDUAL_TOTAL + COUNT))

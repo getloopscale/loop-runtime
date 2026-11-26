@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -35,23 +35,23 @@ type BuildCompletionHandler interface {
 type BuildReconcileLoopConfig struct {
 	// Interval is how often the loop polls for non-terminal builds.
 	Interval time.Duration
-	// RegistryURL is used to compute image references (e.g., "k3d-loopzero-registry:5000").
+	// RegistryURL is used to compute image references (e.g., "k3d-loopruntime-registry:5000").
 	RegistryURL string
-	// BaseDomain is the base domain for app hostnames (e.g., "loopzero.local").
+	// BaseDomain is the base domain for app hostnames (e.g., "loopruntime.local").
 	BaseDomain string
 	// ClusterIssuer is the cert-manager ClusterIssuer used for TLS Certificates.
 	// B14 (MEET-2026-04-23-058): required, no fallback default. Sourced from
-	// Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER).
+	// Config.ClusterIssuer (env LOOPRUNTIME_CLUSTER_ISSUER).
 	ClusterIssuer string
 	// PrometheusAddress is the Prometheus URL canary AnalysisTemplate queries
 	// (argo-rollouts-progressive-delivery-plan T1.2 / D6). Empty disables
 	// Prometheus-based canary analysis steps. Sourced from
-	// Config.PrometheusAddress (env LOOPZERO_PROMETHEUS_ADDRESS).
+	// Config.PrometheusAddress (env LOOPRUNTIME_PROMETHEUS_ADDRESS).
 	PrometheusAddress string
 	// ProgressiveDelivery and LeanResources are copied into every RenderInput
 	// the loop builds. Sourced from Config.ProgressiveDelivery (env
-	// LOOPZERO_PROGRESSIVE_DELIVERY) and Config.LeanResources (env
-	// LOOPZERO_LEAN_RESOURCES).
+	// LOOPRUNTIME_PROGRESSIVE_DELIVERY) and Config.LeanResources (env
+	// LOOPRUNTIME_LEAN_RESOURCES).
 	ProgressiveDelivery bool
 	LeanResources       bool
 	// MaxConcurrent is the maximum number of builds reconciled concurrently.
@@ -93,13 +93,13 @@ type BuildReconcileLoopConfig struct {
 //   - build_reconcile_complete.go: onWorkflowSucceeded(), completeBuild(), ensureApplicationCRs()
 //   - build_reconcile_retry.go: retryReleaseActivation(), failBuild()
 
-// ApplicationCREnsurer creates LoopZeroApplication CRs on the mgmt cluster.
+// ApplicationCREnsurer creates LoopRuntimeApplication CRs on the mgmt cluster.
 // CHG-2026-04-08-001: Wires ApplicationController to the deploy flow.
 type ApplicationCREnsurer interface {
-	EnsureLoopZeroApplication(ctx context.Context, input ApplicationCRInput) error
+	EnsureLoopRuntimeApplication(ctx context.Context, input ApplicationCRInput) error
 }
 
-// ApplicationCRInput is the services-layer input for creating LoopZeroApplication CRs.
+// ApplicationCRInput is the services-layer input for creating LoopRuntimeApplication CRs.
 // Decoupled from the k8s package to follow DIP.
 type ApplicationCRInput struct {
 	TenantID    string

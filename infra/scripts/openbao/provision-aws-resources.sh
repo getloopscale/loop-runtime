@@ -3,10 +3,10 @@
 # provision-aws-resources.sh — OpenBao auto-unseal AWS resources (per-env)
 #
 # Provisions (idempotent, per-env):
-#   - AWS KMS CMK + alias  (alias/loopzero-openbao-${ENV})
-#   - AWS IAM user + inline policy (openbao-unseal-${ENV}, path /loopzero/)
+#   - AWS KMS CMK + alias  (alias/loopruntime-openbao-${ENV})
+#   - AWS IAM user + inline policy (openbao-unseal-${ENV}, path /loopruntime/)
 #   - AWS IAM access key (1 per user)
-#   - DigitalOcean Spaces bucket (loopzero-openbao-backups-${ENV}, per-env region)
+#   - DigitalOcean Spaces bucket (loopruntime-openbao-backups-${ENV}, per-env region)
 #
 # Output: $HOME/.openbao-${ENV}-resources.env  (chmod 600)
 #
@@ -33,7 +33,7 @@ readonly SCRIPT_NAME="$(basename "$0")"
 readonly REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 readonly ENV_FILE="${REPO_ROOT}/.env"
 readonly AWS_REGION="us-east-1"  # KMS HSM region (single region — KMS is regional)
-readonly IAM_PATH="/loopzero/"
+readonly IAM_PATH="/loopruntime/"
 readonly DO_ENDPOINT_TPL="https://%s.digitaloceanspaces.com"
 
 # Per-env DO Spaces region matrix (Q12 + EC-13 cross-region DR for prod).
@@ -116,10 +116,10 @@ readonly DO_REGION="${DO_REGION_MATRIX[$ENV]}"
 readonly DO_ENDPOINT="$(printf "$DO_ENDPOINT_TPL" "$DO_REGION")"
 
 # Per-env resource names (suffix = ENV; AWS IAM global, DO bucket global).
-readonly KMS_ALIAS="alias/loopzero-openbao-${ENV}"
+readonly KMS_ALIAS="alias/loopruntime-openbao-${ENV}"
 readonly IAM_USER="openbao-unseal-${ENV}"
 readonly IAM_POLICY_NAME="openbao-unseal-policy"
-readonly BUCKET="loopzero-openbao-backups-${ENV}"
+readonly BUCKET="loopruntime-openbao-backups-${ENV}"
 readonly OUTPUT_FILE="$HOME/.openbao-${ENV}-resources.env"
 
 # ---- dry-run helper ----------------------------------------------------------

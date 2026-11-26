@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package dogfood implements T3.2 of plan canonical-tests-rewrite-v2 v1.0
 // per ADR-2026-06-17-T3 D1 (Ginkgo BDD + helpers replacing the 16 v1 bash
@@ -28,26 +28,26 @@ type Env struct {
 	AppBaseURL    string // https://app-dev.getloopscale.com
 	AuthBaseURL   string // https://auth-dev.getloopscale.com
 	DeepHealthURL string // https://cloud-dev.getloopscale.com/health/deep
-	JWTPath       string // ~/.loopzero/local-dogfood-token.txt
+	JWTPath       string // ~/.loopruntime/local-dogfood-token.txt
 	HTTPClient    *http.Client
 }
 
 // The variables that point the suite at another environment than dev-public, such as
 // staging (infra/staging/validate.sh). Each one left unset keeps the dev-public value.
 const (
-	CloudURLEnv      = "LOOPZERO_DOGFOOD_CLOUD_URL"
-	AppURLEnv        = "LOOPZERO_DOGFOOD_APP_URL"
-	AuthURLEnv       = "LOOPZERO_DOGFOOD_AUTH_URL"
-	DeepHealthURLEnv = "LOOPZERO_DOGFOOD_DEEP_HEALTH_URL"
-	JWTPathEnv       = "LOOPZERO_DOGFOOD_JWT_PATH"
+	CloudURLEnv      = "LOOPRUNTIME_DOGFOOD_CLOUD_URL"
+	AppURLEnv        = "LOOPRUNTIME_DOGFOOD_APP_URL"
+	AuthURLEnv       = "LOOPRUNTIME_DOGFOOD_AUTH_URL"
+	DeepHealthURLEnv = "LOOPRUNTIME_DOGFOOD_DEEP_HEALTH_URL"
+	JWTPathEnv       = "LOOPRUNTIME_DOGFOOD_JWT_PATH"
 )
 
 // DefaultEnv returns the environment the variables above name, dev-public for each one
 // that is unset, with a 30s HTTP timeout.
 //
-// The deep health is a URL of its own because it is not served by loopzero-cloud
-// everywhere: on staging the deep health is loopzero-api's /api/v1/health/deep, and
-// loopzero-cloud answers 404 on /health/deep.
+// The deep health is a URL of its own because it is not served by loopruntime-cloud
+// everywhere: on staging the deep health is loopruntime-api's /api/v1/health/deep, and
+// loopruntime-cloud answers 404 on /health/deep.
 func DefaultEnv() Env {
 	cloud := envOr(CloudURLEnv, "https://cloud-dev.getloopscale.com")
 	return Env{
@@ -55,7 +55,7 @@ func DefaultEnv() Env {
 		AppBaseURL:    envOr(AppURLEnv, "https://app-dev.getloopscale.com"),
 		AuthBaseURL:   envOr(AuthURLEnv, "https://auth-dev.getloopscale.com"),
 		DeepHealthURL: envOr(DeepHealthURLEnv, cloud+"/health/deep"),
-		JWTPath:       envOr(JWTPathEnv, os.Getenv("HOME")+"/.loopzero/local-dogfood-token.txt"),
+		JWTPath:       envOr(JWTPathEnv, os.Getenv("HOME")+"/.loopruntime/local-dogfood-token.txt"),
 		HTTPClient:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -67,12 +67,12 @@ func envOr(name, fallback string) string {
 	return fallback
 }
 
-// LoadJWT reads the JWT seeded by infra/scripts/local/seed-admin-loopzero-dev.sh.
+// LoadJWT reads the JWT seeded by infra/scripts/local/seed-admin-loopruntime-dev.sh.
 // The file is canonical (mode 0600) per memory feedback_post_cleanroom_seed_admin_canonical.
 func LoadJWT(env Env) (string, error) {
 	data, err := os.ReadFile(env.JWTPath)
 	if err != nil {
-		return "", fmt.Errorf("read JWT at %s: %w (run seed-admin-loopzero-dev.sh)", env.JWTPath, err)
+		return "", fmt.Errorf("read JWT at %s: %w (run seed-admin-loopruntime-dev.sh)", env.JWTPath, err)
 	}
 	jwt := strings.TrimSpace(string(data))
 	if jwt == "" {

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
 // A secret a tenant sets reaches the app through the cells' External Secrets, which ask
-// loopzero-api on core for it (the loopzero-broker ClusterSecretStore, POST
+// loopruntime-api on core for it (the loopruntime-broker ClusterSecretStore, POST
 // /internal/v1/secret-fetch/...). On staging and in production the cells reach core
 // through an internal ALB that forwards that prefix alone, over HTTPS; dev-public keeps
 // its k3d host address.
@@ -16,19 +16,19 @@ import (
 )
 
 const (
-	stagingCoreAPIALB      = "internal-k8s-loopzero-loopzero-4444444444.us-east-1.elb.amazonaws.com"
+	stagingCoreAPIALB      = "internal-k8s-loopruntime-loopruntime-4444444444.us-east-1.elb.amazonaws.com"
 	prodCoreAPIInternalURL = "https://secret-fetch.core.internal.getloopscale.com"
 	prodCoreAPICertificate = "arn:aws:acm:us-east-1:123456789012:certificate/0f0e0d0c-0b0a-0908-0706-050403020100"
 )
 
-// brokerStoreURL renders the cell's loopzero-broker release and returns the webhook URL
+// brokerStoreURL renders the cell's loopruntime-broker release and returns the webhook URL
 // of its ClusterSecretStore.
 func brokerStoreURL(t *testing.T, env string, extraEnv ...string) string {
 	t.Helper()
-	rendered := helmfileTemplate(t, "cell.helmfile.yaml.gotmpl", env, "loopzero-broker", "infra/helm/loopzero-external-secrets", extraEnv...)
-	store := renderedObject(t, rendered, "ClusterSecretStore", "loopzero-broker")
+	rendered := helmfileTemplate(t, "cell.helmfile.yaml.gotmpl", env, "loopruntime-broker", "infra/helm/loopruntime-external-secrets", extraEnv...)
+	store := renderedObject(t, rendered, "ClusterSecretStore", "loopruntime-broker")
 	if store == nil {
-		t.Fatalf("the %s cell renders no ClusterSecretStore loopzero-broker", env)
+		t.Fatalf("the %s cell renders no ClusterSecretStore loopruntime-broker", env)
 	}
 	url, _ := dig(store, "spec", "provider", "webhook", "url").(string)
 	return url
@@ -57,28 +57,28 @@ func TestStagingCellsFetchSecretsFromCoreThroughTheEmulatorALBOverHTTPS(t *testi
 func TestStagingCellRenderRefusesWithoutTheCoreAPIALB(t *testing.T) {
 	var env []string
 	for _, kv := range stagingOutputs {
-		if !strings.HasPrefix(kv, "LOOPZERO_CORE_API_ALB_DNS_NAME=") {
+		if !strings.HasPrefix(kv, "LOOPRUNTIME_CORE_API_ALB_DNS_NAME=") {
 			env = append(env, kv)
 		}
 	}
-	stderr := renderFails(t, "cell.helmfile.yaml.gotmpl", "staging", "loopzero-broker", env...)
+	stderr := renderFails(t, "cell.helmfile.yaml.gotmpl", "staging", "loopruntime-broker", env...)
 
-	if !strings.Contains(stderr, "LOOPZERO_CORE_API_ALB_DNS_NAME") {
-		t.Errorf("the staging cell render failed without naming LOOPZERO_CORE_API_ALB_DNS_NAME:\n%s", truncate(stderr, 1200))
+	if !strings.Contains(stderr, "LOOPRUNTIME_CORE_API_ALB_DNS_NAME") {
+		t.Errorf("the staging cell render failed without naming LOOPRUNTIME_CORE_API_ALB_DNS_NAME:\n%s", truncate(stderr, 1200))
 	}
 }
 
 func TestProdCellsRefuseToRenderWithoutTheInternalHTTPSAddress(t *testing.T) {
-	stderr := renderFails(t, "cell.helmfile.yaml.gotmpl", "prod", "loopzero-broker", "LOOPZERO_CELL_CONTEXT=cell-0")
+	stderr := renderFails(t, "cell.helmfile.yaml.gotmpl", "prod", "loopruntime-broker", "LOOPRUNTIME_CELL_CONTEXT=cell-0")
 
-	if !strings.Contains(stderr, "LOOPZERO_CORE_API_INTERNAL_URL") {
-		t.Errorf("the prod cell render failed without naming LOOPZERO_CORE_API_INTERNAL_URL:\n%s", truncate(stderr, 1200))
+	if !strings.Contains(stderr, "LOOPRUNTIME_CORE_API_INTERNAL_URL") {
+		t.Errorf("the prod cell render failed without naming LOOPRUNTIME_CORE_API_INTERNAL_URL:\n%s", truncate(stderr, 1200))
 	}
 }
 
 func TestProdCellsRefuseAPlaintextCoreAPIAddress(t *testing.T) {
-	_, stderr, err := helmfileRunResult(t, []string{"LOOPZERO_CELL_CONTEXT=cell-0", "LOOPZERO_CORE_API_INTERNAL_URL=http://secret-fetch.core.internal"},
-		"-f", "infra/helmfile/cell.helmfile.yaml.gotmpl", "-e", "prod", "--selector", "name=loopzero-broker", "template")
+	_, stderr, err := helmfileRunResult(t, []string{"LOOPRUNTIME_CELL_CONTEXT=cell-0", "LOOPRUNTIME_CORE_API_INTERNAL_URL=http://secret-fetch.core.internal"},
+		"-f", "infra/helmfile/cell.helmfile.yaml.gotmpl", "-e", "prod", "--selector", "name=loopruntime-broker", "template")
 	if err == nil {
 		t.Fatal("the prod cell rendered a broker store that sends its bearer over http://")
 	}
@@ -88,7 +88,7 @@ func TestProdCellsRefuseAPlaintextCoreAPIAddress(t *testing.T) {
 }
 
 func TestProdCellsFetchSecretsFromTheInternalHTTPSAddress(t *testing.T) {
-	url := brokerStoreURL(t, "prod", "LOOPZERO_CELL_CONTEXT=cell-0", "LOOPZERO_CORE_API_INTERNAL_URL="+prodCoreAPIInternalURL)
+	url := brokerStoreURL(t, "prod", "LOOPRUNTIME_CELL_CONTEXT=cell-0", "LOOPRUNTIME_CORE_API_INTERNAL_URL="+prodCoreAPIInternalURL)
 
 	if !strings.HasPrefix(url, prodCoreAPIInternalURL+"/internal/v1/secret-fetch/") {
 		t.Errorf("the prod broker store calls %q, want %s/internal/v1/secret-fetch/...", url, prodCoreAPIInternalURL)
@@ -96,19 +96,19 @@ func TestProdCellsFetchSecretsFromTheInternalHTTPSAddress(t *testing.T) {
 }
 
 func TestDevPublicCellsStillFetchSecretsFromTheK3dHost(t *testing.T) {
-	url := brokerStoreURL(t, "dev-public", "LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0")
+	url := brokerStoreURL(t, "dev-public", "LOOPRUNTIME_CELL_CONTEXT=k3d-loopruntime-cell-0")
 
 	if !strings.HasPrefix(url, "http://host.k3d.internal:13001/internal/v1/secret-fetch/") {
 		t.Errorf("the dev-public broker store calls %q, want crossCluster.coreApi", url)
 	}
 }
 
-// secretFetchIngress renders core's loopzero-api release and returns the Ingress of the
+// secretFetchIngress renders core's loopruntime-api release and returns the Ingress of the
 // secret-fetch ALB and the Service it forwards to.
 func secretFetchIngress(t *testing.T, env string, extraEnv ...string) (ingress, service map[string]any) {
 	t.Helper()
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", env, "loopzero-api", "charts/loopzero-api", extraEnv...)
-	ingress = renderedObject(t, rendered, "Ingress", "loopzero-api-secret-fetch")
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", env, "loopruntime-api", "charts/loopruntime-api", extraEnv...)
+	ingress = renderedObject(t, rendered, "Ingress", "loopruntime-api-secret-fetch")
 	if ingress == nil {
 		return nil, nil
 	}
@@ -136,7 +136,7 @@ func assertOnlySecretFetchIsForwarded(t *testing.T, ingress map[string]any) {
 func TestStagingCorePublishesOnlySecretFetchOnAnInternalALB(t *testing.T) {
 	ingress, service := secretFetchIngress(t, "staging", stagingOutputs...)
 	if ingress == nil {
-		t.Fatal("staging's core renders no Ingress loopzero-api-secret-fetch: the cells have no way to reach the secret-fetch broker")
+		t.Fatal("staging's core renders no Ingress loopruntime-api-secret-fetch: the cells have no way to reach the secret-fetch broker")
 	}
 
 	assertInternalInstanceALB(t, ingress)
@@ -152,7 +152,7 @@ func TestStagingCorePublishesOnlySecretFetchOnAnInternalALB(t *testing.T) {
 
 func TestProdCoreRefusesTheSecretFetchALBWithoutACertificate(t *testing.T) {
 	_, stderr, err := helmfileRunResult(t, nil,
-		"-f", "infra/helmfile/core.helmfile.yaml.gotmpl", "-e", "prod", "--selector", "name=loopzero-api", "template")
+		"-f", "infra/helmfile/core.helmfile.yaml.gotmpl", "-e", "prod", "--selector", "name=loopruntime-api", "template")
 	if err == nil {
 		t.Fatal("prod's core rendered the secret-fetch ALB with no ACM certificate")
 	}
@@ -162,9 +162,9 @@ func TestProdCoreRefusesTheSecretFetchALBWithoutACertificate(t *testing.T) {
 }
 
 func TestProdCorePublishesSecretFetchOverHTTPSWithTheEnvironmentsCertificate(t *testing.T) {
-	ingress, _ := secretFetchIngress(t, "prod", "LOOPZERO_CORE_API_INTERNAL_CERTIFICATE_ARN="+prodCoreAPICertificate)
+	ingress, _ := secretFetchIngress(t, "prod", "LOOPRUNTIME_CORE_API_INTERNAL_CERTIFICATE_ARN="+prodCoreAPICertificate)
 	if ingress == nil {
-		t.Fatal("prod's core renders no Ingress loopzero-api-secret-fetch")
+		t.Fatal("prod's core renders no Ingress loopruntime-api-secret-fetch")
 	}
 
 	assertInternalInstanceALB(t, ingress)

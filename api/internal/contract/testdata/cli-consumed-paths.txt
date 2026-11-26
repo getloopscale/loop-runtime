@@ -1,4 +1,4 @@
-# Canonical /api/v1 paths the TS CLI (loopzero/cli/src) consumes, normalized to
+# Canonical /api/v1 paths the TS CLI (loopruntime/cli/src) consumes, normalized to
 # template form ({} = any path param). The engine spec (api/openapi/engine.yaml)
 # MUST cover every path here. Generated from `grep -rhoE '/api/v1/...' cli/src`
 # then normalized; kept in sync by the drift guard in cli_consumer_test.go.

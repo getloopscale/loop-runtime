@@ -1,0 +1,46 @@
+{{- if .Values.alerts.enabled }}
+# ADR-0018 v2 / C5 (MEET-ADR-0018) — Tenant SoT alerts.
+#
+# `loopruntime_misplaced_tenant_total{namespace}` is exported by tenant-operator
+# at startup (runMisplacedTenantScan in operators/cmd/tenant-operator/main.go)
+# and from any code path that detects a Tenant CR outside the canonical
+# namespace `loopruntime-system`. Sustained >0 indicates someone (admin, restored
+# backup, operator misconfiguration) bypassed the VAP — fail-loud per C2.
+#
+# Alert fires on any namespace label != "loopruntime-system" with value > 0 for
+# >5 min. Severity page (S1) — non-deterministic plan enforcement is the
+# original incident this ADR exists to prevent.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loopruntime-tenant-namespace-alerts
+  namespace: {{ .Values.alerts.namespace | quote }}
+  labels:
+    release: {{ .Values.alerts.prometheusReleaseLabel | quote }}
+    runtime.getloopscale.com/component: tenant-operator
+    runtime.getloopscale.com/sprint: "8"
+    runtime.getloopscale.com/adr: "0018"
+spec:
+  groups:
+    - name: loopruntime.tenant-namespace
+      interval: 60s
+      rules:
+        - alert: MisplacedTenantDetected
+          expr: |
+            sum by (namespace) (loopruntime_misplaced_tenant_total{namespace!="loopruntime-system"}) > 0
+          for: 5m
+          labels:
+            severity: page
+            loopruntime_invariant: tenant-namespace-sot
+            adr: "0018"
+          annotations:
+            summary: "Tenant CR detected outside canonical namespace `loopruntime-system` (ADR-0018 invariant violated)"
+            description: |
+              {{ "{{" }} $value {{ "}}" }} Tenant CR(s) found in namespace `{{ "{{" }} $labels.namespace {{ "}}" }}`.
+              Per ADR-0018 v2, all Tenant + Environment CRs MUST live in `loopruntime-system`.
+              Possible causes: restored backup with stale CRs, admin bypass via direct
+              kubectl apply, ValidatingAdmissionPolicy not active, or operator
+              misconfiguration.
+              Action: run `task migrate:tenants -- --apply` to reconcile, OR investigate
+              who created the misplaced CR via audit log.
+{{- end }}

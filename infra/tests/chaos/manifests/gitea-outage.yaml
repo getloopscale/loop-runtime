@@ -4,7 +4,7 @@
 # no silent data loss.
 #
 # Hypothesis: when Gitea is unreachable, source uploads and gitops
-# pushes fail immediately with typed LoopZeroError (not goroutine hangs),
+# pushes fail immediately with typed LoopRuntimeError (not goroutine hangs),
 # the API returns actionable 5xx errors to the CLI, and NO partial
 # state is written to PG.
 #
@@ -17,34 +17,34 @@ apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
   name: gitea-outage
-  namespace: loopzero-system
+  namespace: loopruntime-system
   annotations:
-    loopzero.io/roadmap: "08"
-    loopzero.io/hypothesis: "Gitea outage = fast-fail builds, typed errors, no stuck state, no deadlocks"
-    # SLO: loopzero-api scrape still alive post-outage AND release backlog
+    runtime.getloopscale.com/roadmap: "08"
+    runtime.getloopscale.com/hypothesis: "Gitea outage = fast-fail builds, typed errors, no stuck state, no deadlocks"
+    # SLO: loopruntime-api scrape still alive post-outage AND release backlog
     # under control. Canonical metric names per 2026-06-24 audit
-    # (post-decomposition rename): loopzero_api_requests_total (was
-    # loopzero_http_requests_total), loopzero_releases_pending (was
-    # loopzero_releases_ready_over_timeout — reaper now emits queue depth
-    # directly). Steady-state: ≥ 1 loopzero_api_requests_total series AND
+    # (post-decomposition rename): loopruntime_api_requests_total (was
+    # loopruntime_http_requests_total), loopruntime_releases_pending (was
+    # loopruntime_releases_ready_over_timeout — reaper now emits queue depth
+    # directly). Steady-state: ≥ 1 loopruntime_api_requests_total series AND
     # release queue ≤ 5. `and on()` joins heterogeneous vectors;
     # `or vector(...)` defaults when metrics scrape lag.
-    loopzero.io/slo-query: |
-      ((count(loopzero_api_requests_total) or vector(0)) > 0) and on() ((sum(loopzero_releases_pending) or vector(0)) <= 5)
+    runtime.getloopscale.com/slo-query: |
+      ((count(loopruntime_api_requests_total) or vector(0)) > 0) and on() ((sum(loopruntime_releases_pending) or vector(0)) <= 5)
 spec:
   action: partition
   mode: all
   selector:
     namespaces:
-      - loopzero-system
+      - loopruntime-system
     labelSelectors:
-      "app": "loopzero-api"
+      "app": "loopruntime-api"
   direction: to
   target:
     mode: all
     selector:
       namespaces:
-        - loopzero-system
+        - loopruntime-system
       labelSelectors:
         "app.kubernetes.io/name": "gitea"
   duration: "120s"

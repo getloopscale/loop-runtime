@@ -1,5 +1,5 @@
 # Drops the contract-consumers gate must not judge by their readers, because
-# the field never reached the wire. Read by `loopzero-ops quality contract-consumers`.
+# the field never reached the wire. Read by `loopruntime-ops quality contract-consumers`.
 #
 # Format: tag | file the declaration left | why no response ever carried it
 #

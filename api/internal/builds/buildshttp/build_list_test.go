@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -350,7 +350,7 @@ func TestBuildEnvs_CrossTenantBlockedWith404(t *testing.T) {
 	}
 }
 
-// Red Team loopzero-cloud#92 regression-protector (2026-06-27): the plain
+// Red Team loopruntime-cloud#92 regression-protector (2026-06-27): the plain
 // /api/v1/projects/{name}/builds endpoint (not /build-envs) MUST also
 // reject non-existent projects with 404 PROJECT_NOT_FOUND. Without this,
 // the dashboard's Deployments page rendered functional UI for a deleted

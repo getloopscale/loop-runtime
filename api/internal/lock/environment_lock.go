@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package lock provides concurrency control for environment mutations.
 //
@@ -23,7 +23,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/getloopscale/loop-runtime/api/internal/metrics"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Tx is an alias for pgx.Tx, exposed so callers don't need to import pgx directly.
@@ -46,11 +46,11 @@ type Tx = pgx.Tx
 func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant, project, env string, fn func(tx Tx) (T, error)) (T, error) {
 	// MEET-2026-03-30-020: Span wraps the entire lock lifecycle (acquire + fn + commit).
 	// Instrumented AROUND the lock, NOT inside the critical section (C3, meeting condition).
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.lock.acquire",
+	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.lock.acquire",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", tenant),
-			attribute.String("loopzero.project", project),
-			attribute.String("loopzero.environment", env),
+			attribute.String("loopruntime.tenant", tenant),
+			attribute.String("loopruntime.project", project),
+			attribute.String("loopruntime.environment", env),
 		))
 	defer span.End()
 
@@ -98,7 +98,7 @@ func WithEnvironmentLock[T any](ctx context.Context, pool *pgxpool.Pool, tenant,
 		if isLockTimeoutError(err) {
 			metrics.LockConflicts.WithLabelValues(tenant, env).Inc()
 			span.SetStatus(codes.Error, "lock timeout")
-			return zero, loopzeroerrors.ErrLockTimeout
+			return zero, loopruntimeerrors.ErrLockTimeout
 		}
 		return zero, fmt.Errorf("lock: acquire advisory lock: %w", err)
 	}

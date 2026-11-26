@@ -21,13 +21,13 @@
 #
 # Validated by: infra/tests/helm/ory-hydra-canonical-urls_test.sh (T3.1).
 #
-# === v3.0 addition (2026-06-24) — loopzero-cloud#14 CSRF cookie Secure attribute fix ===
+# === v3.0 addition (2026-06-24) — loopruntime-cloud#14 CSRF cookie Secure attribute fix ===
 #
 # Per blueprint hydra-v26-upgrade-canonical (SHIPPABLE_WITH_CAVEATS 89.0) Q2:
 # the CSRF cookie Secure attribute is controlled by Hydra's IsDevelopmentMode
 # (driver/config/provider.go:CookieSecure). When dev=false, CookieSecure returns
 # `true` UNCONDITIONALLY regardless of serve.cookies.secure — activating the
-# production-mode-always-Secure cookie semantic that closes loopzero-cloud#14
+# production-mode-always-Secure cookie semantic that closes loopruntime-cloud#14
 # (browsers reject SameSite=None without Secure per RFC 6265bis-12 §5.4.7).
 #
 # dev-public is production-shaped (HTTPS issuer via Caddy + Let's Encrypt prod
@@ -43,7 +43,7 @@
 #               + e2e/dev-public-device-flow_test.sh Scenario E (LIVE Set-Cookie probe).
 
 hydra:
-  # Production-mode cookie posture (loopzero-cloud#14 fix). DO NOT FLIP TO true
+  # Production-mode cookie posture (loopruntime-cloud#14 fix). DO NOT FLIP TO true
   # without reverting the ADR + CHANGELOG security entry.
   dev: false
 
@@ -55,7 +55,7 @@ hydra:
     # host, blocking cross-subdomain state propagation between /oauth2/*
     # (auth-dev) and the login/consent handlers (app-dev).
     #
-    # LIVE-caught 2026-07-02 when Red Team tester ran loopzero login --device-flow
+    # LIVE-caught 2026-07-02 when Red Team tester ran loopruntime login --device-flow
     # and got CSRF forbidden on the verification page. Fixed inline; overlay
     # updated so future Cleanrooms preserve the config.
     serve:
@@ -94,7 +94,7 @@ hydra:
       # Per qa-dogfood-cleanup-2026-06-21 refactor: canonical surface is
       # app-dev.getloopscale.com (cloud-dev.getloopscale.com is 301-redirected to
       # app-dev at the Caddy edge, so bypassing the redirect avoids the
-      # CSRF cookie loss during 301 follow). loopzero-cloud BFF handlers live
+      # CSRF cookie loss during 301 follow). loopruntime-cloud BFF handlers live
       # under /auth/* on the app-dev host post-#162 Caddyfile narrowing.
       # Overrides prior J-05 iter 4 amendment (cloud-dev.getloopscale.com/auth/*)
       # which pre-dated the 2026-06-22 Caddy canonical-surface refactor.

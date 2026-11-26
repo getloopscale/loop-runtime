@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package cfzone provides a client for the Cloudflare Zone Management API.
 // Used by the custom domain feature to create per-domain DNS zones on the
@@ -7,7 +7,7 @@
 // WAF/DDoS protection via CF edge.
 //
 // Architecture (validated 2026-04-08 with aquim.ai):
-//   - loopzero domain add empresa.com → CF API creates zone → returns nameservers
+//   - loopruntime domain add empresa.com → CF API creates zone → returns nameservers
 //   - User changes nameservers at registrar
 //   - CF activates zone → CNAME @ → cname.dev.getloopscale.com (proxied, flattened)
 //   - Traffic: CF edge (WAF/DDoS/TLS) → CF Tunnel → Traefik → Pod

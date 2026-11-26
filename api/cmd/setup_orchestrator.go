@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -93,7 +93,7 @@ type projectCapEnforcement struct {
 }
 
 // newProjectCapEnforcement builds the enforcement from the plan limiter and the
-// cross-tenant (loopzero_worker) connection. A nil limiter yields the zero value:
+// cross-tenant (loopruntime_worker) connection. A nil limiter yields the zero value:
 // no enforcement, which is the dev-without-pool path.
 func newProjectCapEnforcement(limiter *enforcement.PlanLimiter, crossTenant db.DBTX) projectCapEnforcement {
 	if limiter == nil {
@@ -184,7 +184,7 @@ func setupOrchestrator(
 	promotedApps release.PromotionAppExposer,
 ) *OrchestratorDeps {
 	// The orchestrator builds its OWN project store for the deploy-time
-	// EnsureProject path (`loopzero deploy <new-name>`). It is wired through the same
+	// EnsureProject path (`loopruntime deploy <new-name>`). It is wired through the same
 	// wireProjectCap and the same projectCapEnforcement as the API store, so the
 	// deploy path enforces the identical per-Account cap, counted across the
 	// Account's tenants. A zero projectCap (dev without a pool) leaves both the
@@ -252,7 +252,7 @@ func setupOrchestrator(
 		// Plan deploy-timeline-canonical-5-phases T5.1 — per-deploy
 		// 5-phase aggregator spawn hook. Wired to a release_db-only
 		// minimal source set as the canonical v1 — the other 4 source
-		// adapters (loki_markers + argocd_app + loopzeroapp_informer +
+		// adapters (loki_markers + argocd_app + loopruntimeapp_informer +
 		// status_url_probe) are documented as the v1.1 production
 		// follow-up per the plan's Open Questions section. Nil-safe.
 		DeployTimelineSpawn: makeDeployTimelineSpawn(stores.PgEventStore),
@@ -340,12 +340,12 @@ func setupOrchestrator(
 		Sync:       workflows.SyncClient,
 		Locker:     stores.Locker,
 		BaseDomain: cfg.BaseDomain,
-		// 2026-06-30 (closes Red Team loopzero-cloud#120 sub-finding 3 — #61
+		// 2026-06-30 (closes Red Team loopruntime-cloud#120 sub-finding 3 — #61
 		// regression): wire cfg.PublicDomain so the promote response URL is
 		// the canonical user-facing host (prod-dev.getloopscale.app) not the
-		// internal placeholder (loopzero.local). Empty PublicDomain falls back
+		// internal placeholder (loopruntime.local). Empty PublicDomain falls back
 		// to BaseDomain inside the orchestrator (back-compat for local
-		// Tilt dev where LOOPZERO_PUBLIC_DOMAIN is unset). Mirrors the canonical
+		// Tilt dev where LOOPRUNTIME_PUBLIC_DOMAIN is unset). Mirrors the canonical
 		// pattern already applied to ReleaseConvergenceLoop + SyncCallbackActivator.
 		Apps:         promotedApps,
 		PublicDomain: cfg.PublicDomain,
@@ -404,7 +404,7 @@ func setupOrchestrator(
 	// CLAUDE.md Rule 6 requires every (tenant, project, environment) mutation
 	// to acquire withEnvironmentLock. Previously, scaleApply called
 	// scalingStore.Upsert(dbAdapter, ...) directly, bypassing the lock.
-	// Two concurrent `loopzero scale` calls on the same env could TOCTOU-race the
+	// Two concurrent `loopruntime scale` calls on the same env could TOCTOU-race the
 	// read-current/write-new sequence inside Upsert. Now wrapped in WithLock
 	// so concurrent attempts serialize via pg_advisory_xact_lock.
 	scaleApply := func(ctx context.Context, in scalinghttp.ScaleConfigInput) (bool, error) {
@@ -442,7 +442,7 @@ func setupOrchestrator(
 	} else {
 		logger.Warn("scale: no GitOps pusher or sync client in this boot; a scale is stored and applied by the next deploy")
 	}
-	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
+	// Red Team loopruntime-cloud#101 absorption (2026-06-27): wire the same
 	// plan-cap checker the build path uses so the scale endpoint can
 	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
 	// Without this, the scale path silently bypassed the cap.
@@ -502,15 +502,15 @@ func setupOrchestrator(
 	// ArgoCD sync callback activator — processes webhook from ArgoCD Notifications.
 	// Push-based activation: ArgoCD notifies when sync completes instead of API polling.
 	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain is the
-	// canonical public wildcard (LOOPZERO_PUBLIC_DOMAIN) — same source
-	// status.go uses — so deploy.completed SSE URL matches `loopzero status`.
+	// canonical public wildcard (LOOPRUNTIME_PUBLIC_DOMAIN) — same source
+	// status.go uses — so deploy.completed SSE URL matches `loopruntime status`.
 	// Empty PublicDomain → fall back to BaseDomain (preserves pre-#61
 	// behavior for envs without a public override).
 	syncCallbackActivator := release.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 	).WithDeployEventStore(store.NewDeployEventStoreSqlc()) // J-16 slice 3 — deploy.succeeded outbox
 	// The activator identifies the Application's tenant and environment from its
-	// loopzero.io/{tenant,environment} labels — the only decoder, since the
+	// runtime.getloopscale.com/{tenant,environment} labels — the only decoder, since the
 	// "{tenant}-{project}-{env}" name cannot be split positionally. Without the
 	// mgmt dynamic client the callback cannot identify releases and activation
 	// falls to the convergence loop.
@@ -546,7 +546,7 @@ func setupOrchestrator(
 
 // metricsPrometheusURL is the Prometheus the Status page's metrics are queried on. The
 // API sends those queries itself, so it prefers the Prometheus the API pod reaches
-// (LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL) over LOOPZERO_PROMETHEUS_ADDRESS, which is
+// (LOOPRUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL) over LOOPRUNTIME_PROMETHEUS_ADDRESS, which is
 // written into canary analyses that run on the cells and may name a host only they
 // resolve.
 func metricsPrometheusURL(cfg config.Config) string {

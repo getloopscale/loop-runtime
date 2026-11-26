@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -30,7 +30,7 @@ postgres:
   dataPath: /var/lib/postgresql/data
   storage: 1Gi
   external:
-    host: platform-postgres-rw.loopzero-data-plane.svc.cluster.local
+    host: platform-postgres-rw.loopruntime-data-plane.svc.cluster.local
     port: 5432
 `
 
@@ -48,9 +48,9 @@ func TestDataPlaneService_ExternalPostgresRendersNoDatabase(t *testing.T) {
 
 func TestDataPlaneService_ExternalPostgresPointsTheServiceAtTheHost(t *testing.T) {
 	docs := renderDataPlane(t, externalPostgresValues)
-	w := asWorkload(t, findDoc(t, docs, "Deployment", "loopzero-memory"))
+	w := asWorkload(t, findDoc(t, docs, "Deployment", "loopruntime-memory"))
 
-	const want = "postgres://looptrace:$(POSTGRES_PASSWORD)@platform-postgres-rw.loopzero-data-plane.svc.cluster.local:5432/looptrace"
+	const want = "postgres://looptrace:$(POSTGRES_PASSWORD)@platform-postgres-rw.loopruntime-data-plane.svc.cluster.local:5432/looptrace"
 	var got string
 	for _, e := range w.Spec.Template.Spec.Containers[0].Env {
 		if e.Name == "LOOPTRACE_PG_URI" {
@@ -62,14 +62,14 @@ func TestDataPlaneService_ExternalPostgresPointsTheServiceAtTheHost(t *testing.T
 	}
 
 	wait := w.Spec.Template.Spec.InitContainers[0]
-	if cmd := strings.Join(wait.Command, " "); !strings.Contains(cmd, "-h platform-postgres-rw.loopzero-data-plane.svc.cluster.local -p 5432") {
+	if cmd := strings.Join(wait.Command, " "); !strings.Contains(cmd, "-h platform-postgres-rw.loopruntime-data-plane.svc.cluster.local -p 5432") {
 		t.Errorf("wait-for-postgres waits on the wrong address: %s", cmd)
 	}
 }
 
 func TestDataPlaneService_ExternalPostgresHonoursThePort(t *testing.T) {
 	docs := renderDataPlane(t, strings.Replace(externalPostgresValues, "port: 5432", "port: 6432", 1))
-	w := asWorkload(t, findDoc(t, docs, "Deployment", "loopzero-memory"))
+	w := asWorkload(t, findDoc(t, docs, "Deployment", "loopruntime-memory"))
 	for _, e := range w.Spec.Template.Spec.Containers[0].Env {
 		if e.Name == "LOOPTRACE_PG_URI" && !strings.Contains(e.Value, ":6432/looptrace") {
 			t.Errorf("LOOPTRACE_PG_URI ignores postgres.external.port: %q", e.Value)
@@ -79,8 +79,8 @@ func TestDataPlaneService_ExternalPostgresHonoursThePort(t *testing.T) {
 
 func TestDataPlaneService_WithoutExternalPostgresStillRunsItsOwn(t *testing.T) {
 	docs := renderDataPlane(t, dataPlaneValues)
-	findDoc(t, docs, "StatefulSet", "loopzero-memory-postgres")
-	findDoc(t, docs, "Service", "loopzero-memory-postgres")
+	findDoc(t, docs, "StatefulSet", "loopruntime-memory-postgres")
+	findDoc(t, docs, "Service", "loopruntime-memory-postgres")
 }
 
 // On an installation whose secrets live in a secret store, the chart asks External Secrets
@@ -91,7 +91,7 @@ func TestDataPlaneService_WithoutExternalPostgresStillRunsItsOwn(t *testing.T) {
 const externalSecretValues = externalPostgresValues + `
 externalSecret:
   store: aws-secrets-manager
-  remoteKey: loopzero/staging/platform
+  remoteKey: loopruntime/staging/platform
   keys:
     postgres-password: looptrace-db-password
     admin-bootstrap-token: looptrace-admin-bootstrap-token
@@ -103,7 +103,7 @@ func TestDataPlaneService_ExternalSecretWritesTheServiceSecret(t *testing.T) {
 	d := findDoc(t, docs, "ExternalSecret", "looptrace")
 	for _, want := range []string{
 		"name: aws-secrets-manager",
-		"key: loopzero/staging/platform",
+		"key: loopruntime/staging/platform",
 		"secretKey: postgres-password",
 		"property: looptrace-db-password",
 		"secretKey: admin-bootstrap-token",
@@ -142,23 +142,23 @@ func TestDataPlaneService_NoExternalSecretByDefault(t *testing.T) {
 func TestDataPlaneService_ImagePullSecretComesFromTheStore(t *testing.T) {
 	docs := renderDataPlane(t, externalSecretValues+`  imagePull:
     secretName: ghcr-pull
-    remoteKey: loopzero/staging/ghcr-pull
+    remoteKey: loopruntime/staging/ghcr-pull
     registry: ghcr.io
 `)
 	d := findDoc(t, docs, "ExternalSecret", "ghcr-pull")
-	for _, want := range []string{"type: kubernetes.io/dockerconfigjson", "loopzero/staging/ghcr-pull", "ghcr.io"} {
+	for _, want := range []string{"type: kubernetes.io/dockerconfigjson", "loopruntime/staging/ghcr-pull", "ghcr.io"} {
 		if !strings.Contains(d.raw, want) {
 			t.Errorf("ExternalSecret ghcr-pull lacks %q:\n%s", want, d.raw)
 		}
 	}
-	dep := findDoc(t, docs, "Deployment", "loopzero-memory")
+	dep := findDoc(t, docs, "Deployment", "loopruntime-memory")
 	if !strings.Contains(dep.raw, "imagePullSecrets:\n        - name: ghcr-pull") {
 		t.Errorf("the Deployment does not pull with ghcr-pull:\n%s", dep.raw)
 	}
 }
 
 func TestDataPlaneService_NoImagePullSecretByDefault(t *testing.T) {
-	dep := findDoc(t, renderDataPlane(t, externalSecretValues), "Deployment", "loopzero-memory")
+	dep := findDoc(t, renderDataPlane(t, externalSecretValues), "Deployment", "loopruntime-memory")
 	if strings.Contains(dep.raw, "imagePullSecrets") {
 		t.Errorf("the Deployment names a pull secret nothing writes:\n%s", dep.raw)
 	}
@@ -172,7 +172,7 @@ var externalPostgresTLSValues = strings.Replace(externalSecretValues,
 
 func TestDataPlaneService_ExternalPostgresVerifiesTheServerAgainstItsCA(t *testing.T) {
 	docs := renderDataPlane(t, externalPostgresTLSValues)
-	dep := findDoc(t, docs, "Deployment", "loopzero-memory")
+	dep := findDoc(t, docs, "Deployment", "loopruntime-memory")
 	w := asWorkload(t, dep)
 
 	var uri string
@@ -195,7 +195,7 @@ func TestDataPlaneService_ExternalPostgresVerifiesTheServerAgainstItsCA(t *testi
 }
 
 func TestDataPlaneService_ExternalPostgresWithoutACAKeepsThePlainURI(t *testing.T) {
-	dep := findDoc(t, renderDataPlane(t, externalSecretValues), "Deployment", "loopzero-memory")
+	dep := findDoc(t, renderDataPlane(t, externalSecretValues), "Deployment", "loopruntime-memory")
 	if strings.Contains(dep.raw, "sslmode") || strings.Contains(dep.raw, "postgres-ca") {
 		t.Errorf("TLS settings rendered with no postgres.external.caSecret:\n%s", dep.raw)
 	}
@@ -213,7 +213,7 @@ func TestDataPlaneService_PostgresRoleSecretAsksTheOperatorToReload(t *testing.T
 // A Service named after the product makes Kubernetes inject <NAME>_PORT=tcp://... into
 // every pod of the namespace, which is the variable the product reads its port from.
 func TestDataPlaneService_PodsTakeNoServiceLinks(t *testing.T) {
-	dep := findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopzero-memory")
+	dep := findDoc(t, renderDataPlane(t, dataPlaneValues), "Deployment", "loopruntime-memory")
 	if !strings.Contains(dep.raw, "enableServiceLinks: false") {
 		t.Errorf("the pod takes service links:\n%s", dep.raw)
 	}

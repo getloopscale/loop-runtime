@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -15,7 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // BuildListItem is the route-level representation of a build for listing.
@@ -95,17 +95,17 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
-	// Red Team loopzero-cloud#92 absorption (2026-06-27): missing-parent-guard.
+	// Red Team loopruntime-cloud#92 absorption (2026-06-27): missing-parent-guard.
 	// Without this check, GET /projects/<nonexistent>/builds returned 200
 	// with an empty list, so the dashboard's sub-views (Deployments page)
 	// rendered functional UI for a deleted/non-existent project. Same EC-2
@@ -116,11 +116,11 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h.projects != nil {
 		project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 		if err != nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 			return
 		}
 		if project == nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 			return
 		}
 	}
@@ -131,7 +131,7 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	builds, total, err := h.builds.ListByProjectAndEnv(ctx, uc.TenantID, name, env, limit, offset)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
@@ -145,7 +145,7 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		releaseStatuses, err = h.releases.LatestReleaseStatuses(ctx, uc.TenantID, ids)
 		if err != nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 			return
 		}
 	}
@@ -208,13 +208,13 @@ func (h *BuildListHandler) BuildEnvs(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -223,18 +223,18 @@ func (h *BuildListHandler) BuildEnvs(w http.ResponseWriter, r *http.Request) {
 	if h.projects != nil {
 		project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 		if err != nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 			return
 		}
 		if project == nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 			return
 		}
 	}
 
 	envs, err := h.builds.ListEnvsForProject(ctx, uc.TenantID, name)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if envs == nil {

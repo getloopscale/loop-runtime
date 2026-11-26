@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -34,7 +34,7 @@ import (
 //     network rather than on the content.
 //
 // extraEnv adds (never replaces) process environment: the helmfiles read
-// `requiredEnv` for LOOPZERO_DB_PASSWORD and LOOPZERO_CELL_CONTEXT, and a test must say
+// `requiredEnv` for LOOPRUNTIME_DB_PASSWORD and LOOPRUNTIME_CELL_CONTEXT, and a test must say
 // which it needed instead of inheriting whatever the shell exported.
 func helmfileRun(t *testing.T, extraEnv []string, args ...string) string {
 	t.Helper()
@@ -65,7 +65,7 @@ func helmfileRunResult(t *testing.T, extraEnv []string, args ...string) (stdout,
 
 // helmfileTemplate renders one release of a LOCAL chart. localChart is the
 // chart's directory relative to the repository root: its dependencies (the
-// file:// loopzero-common library, for the published charts) are resolved first
+// file:// loopruntime-common library, for the published charts) are resolved first
 // through chartrender, because `--skip-deps` also skips `helm dependency build`
 // and a fresh clone has no charts/ directory to render from.
 func helmfileTemplate(t *testing.T, helmfile, env, release, localChart string, extraEnv ...string) string {

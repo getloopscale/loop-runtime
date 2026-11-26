@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package dogfood
 
@@ -48,13 +48,13 @@ const (
 
 	// CellContextsEnv names the kubectl contexts of the cells, separated by
 	// spaces. The journey reads the app's Rollout from the one that has it.
-	CellContextsEnv = "LOOPZERO_DOGFOOD_CELL_CONTEXTS"
+	CellContextsEnv = "LOOPRUNTIME_DOGFOOD_CELL_CONTEXTS"
 
 	probeFixtureRoot  = "fixtures/env-probe"
-	probeManifestPath = ".loopzero/services.json"
+	probeManifestPath = ".loopruntime/services.json"
 )
 
-// all: so the embed includes .loopzero, which holds the manifest.
+// all: so the embed includes .loopruntime, which holds the manifest.
 //
 //go:embed all:fixtures/env-probe
 var probeFixture embed.FS
@@ -154,7 +154,7 @@ func SecretDigest(value string) string {
 
 // TenantNamespace is the namespace of a project's environment on its cell.
 func TenantNamespace(tenantID, project, environment string) string {
-	return "loopzero-" + tenantID + "-" + project + "-" + environment
+	return "loopruntime-" + tenantID + "-" + project + "-" + environment
 }
 
 // WaitFor calls check every interval until it reports true, and fails

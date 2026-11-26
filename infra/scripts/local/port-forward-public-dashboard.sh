@@ -8,7 +8,7 @@
 # pattern from the 2026-05-29 LIVE session.
 #
 # Ports:
-#   13002 → loopzero-cloud   (svc/loopzero-cloud:13002)
+#   13002 → loopruntime-cloud   (svc/loopruntime-cloud:13002)
 #   14444 → ory-hydra    (svc/ory-hydra-public:4444)
 #   14433 → ory-kratos   (svc/ory-kratos-public:80)
 #   14434 → ory-kratos-admin (svc/ory-kratos-admin:80)
@@ -25,8 +25,8 @@
 #   port-forward-public-dashboard.sh status   # show running children + ports
 set -euo pipefail
 
-CONTEXT="${CONTEXT:-k3d-loopzero-core}"
-PID_FILE="${PID_FILE:-/tmp/loopzero-port-forward-public.pids}"
+CONTEXT="${CONTEXT:-k3d-loopruntime-core}"
+PID_FILE="${PID_FILE:-/tmp/loopruntime-port-forward-public.pids}"
 LOG_DIR="${LOG_DIR:-/tmp}"
 
 # Each entry: namespace:resource:local_port:remote_port:log_suffix
@@ -38,12 +38,12 @@ LOG_DIR="${LOG_DIR:-/tmp}"
 # canonical-via-helmfile-overlay) — Hydra admin port-forward was missing
 # during sponsor walkthrough debug, requiring ad-hoc kubectl invocations.
 SERVICES=(
-  "loopzero-system:svc/loopzero-cloud:13002:13002:cloud"
-  "loopzero-auth:svc/ory-hydra-public:14444:4444:hydra-public"
-  "loopzero-auth:svc/ory-hydra-admin:14445:4445:hydra-admin"
-  "loopzero-auth:svc/ory-kratos-public:14433:80:kratos-public"
-  "loopzero-auth:svc/ory-kratos-admin:14434:80:kratos-admin"
-  "loopzero-dashboard:svc/loopzero-dashboard:5173:5173:dashboard-vite"
+  "loopruntime-system:svc/loopruntime-cloud:13002:13002:cloud"
+  "loopruntime-auth:svc/ory-hydra-public:14444:4444:hydra-public"
+  "loopruntime-auth:svc/ory-hydra-admin:14445:4445:hydra-admin"
+  "loopruntime-auth:svc/ory-kratos-public:14433:80:kratos-public"
+  "loopruntime-auth:svc/ory-kratos-admin:14434:80:kratos-admin"
+  "loopruntime-dashboard:svc/loopruntime-dashboard:5173:5173:dashboard-vite"
 )
 
 log() { printf '[port-fwd] %s\n' "$*" >&2; }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
@@ -55,7 +55,7 @@ const (
 	ReleaseRollbackTimeout    Event = "RollbackTimeout"
 	ReleaseManualResolve      Event = "ManualResolve"
 	ReleaseReactivated        Event = "Reactivated"    // Rollback reactivates a SUPERSEDED or ROLLED_BACK release
-	ReleaseProjectDeleted     Event = "ProjectDeleted" // Cascade from `loopzero project delete`. Transitions any non-terminal state to CANCELLED so future GetActiveByEnv lookups don't return zombie rows.
+	ReleaseProjectDeleted     Event = "ProjectDeleted" // Cascade from `loopruntime project delete`. Transitions any non-terminal state to CANCELLED so future GetActiveByEnv lookups don't return zombie rows.
 	// ReleaseArchiveEvent is fired by the (future) ReleaseArchiver service
 	// when a CANCELLED, SUPERSEDED, ROLLED_BACK, GIT_MIRROR_FAILED, or
 	// SYNC_FAILED release is older than the archive window (currently 7 days
@@ -137,7 +137,7 @@ func NewReleaseMachine() *Machine {
 			{From: ReleaseRolledBack, Event: ReleaseReactivated, To: ReleaseActive},
 
 			// Project delete cascade — every non-terminal state transitions to CANCELLED.
-			// Required so `loopzero project delete` doesn't leave zombie ACTIVE/PENDING rows
+			// Required so `loopruntime project delete` doesn't leave zombie ACTIVE/PENDING rows
 			// that would shadow fresh deploys via GetActiveByEnv.
 			{From: ReleaseReady, Event: ReleaseProjectDeleted, To: ReleaseCancelled},
 			{From: ReleasePending, Event: ReleaseProjectDeleted, To: ReleaseCancelled},

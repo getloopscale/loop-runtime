@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
  * Canonical stack output contracts for the 3-project split.
@@ -14,7 +14,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// loopzero-infra outputs (consumed by loopzero-platform + loopzero-control-plane + CI)
+// loopruntime-infra outputs (consumed by loopruntime-platform + loopruntime-control-plane + CI)
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ export interface ClusterRegistryEntry {
 export type ClusterRegistry = Record<string, ClusterRegistryEntry>;
 
 // ---------------------------------------------------------------------------
-// loopzero-infra outputs
+// loopruntime-infra outputs
 // ---------------------------------------------------------------------------
 
 export interface InfraStackOutputs {
@@ -75,7 +75,7 @@ export interface InfraStackOutputs {
 }
 
 // ---------------------------------------------------------------------------
-// loopzero-platform outputs (consumed by loopzero-control-plane)
+// loopruntime-platform outputs (consumed by loopruntime-control-plane)
 // ---------------------------------------------------------------------------
 
 export interface PlatformStackOutputs {

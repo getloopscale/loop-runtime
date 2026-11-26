@@ -1,28 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
 import (
 	"errors"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // wrapSubmitBuildError lifts an untyped error returned by a stage of
 // BuildOrchestrator.SubmitBuild into a typed *SubmitBuildError so
 // routes/builds.go::mapBuildError can dispatch via AsSubmitBuildError to a
 // reason-specific user-facing message (Sprint 6 plan qa-sprint6-cleanup-
-// 2026-06-25 T2.2 — closes loopzero-cloud#34).
+// 2026-06-25 T2.2 — closes loopruntime-cloud#34).
 //
 // EC-3 absorption (Sprint 5 mirror): typed sentinels that pre-existed Sprint
 // 6 MUST pass through unwrapped so the existing handler ladder ordering at
 // routes/builds.go:546-571 is preserved verbatim:
 //
-//   - loopzeroerrors.ErrDeployInProgress — the route handler ladder already
+//   - loopruntimeerrors.ErrDeployInProgress — the route handler ladder already
 //     short-circuits this at lines 549-557 (409 DEPLOY_IN_PROGRESS).
-//   - *loopzeroerrors.LoopZeroError (NewReplicasExceedPlan / ErrScalingAmbiguous /
-//     etc.) — the route handler ladder already dispatches typed LoopZeroError
+//   - *loopruntimeerrors.LoopRuntimeError (NewReplicasExceedPlan / ErrScalingAmbiguous /
+//     etc.) — the route handler ladder already dispatches typed LoopRuntimeError
 //     at lines 547-559.
 //
 // Only genuinely-untyped errors (the 6 fmt.Errorf wrap sites in
@@ -43,11 +43,11 @@ func wrapSubmitBuildError(stage SubmitBuildStage, err error) error {
 		return err
 	}
 	// EC-3: preserve typed sentinels so the route handler ladder still
-	// short-circuits DEPLOY_IN_PROGRESS + typed LoopZeroError paths.
-	if errors.Is(err, loopzeroerrors.ErrDeployInProgress) {
+	// short-circuits DEPLOY_IN_PROGRESS + typed LoopRuntimeError paths.
+	if errors.Is(err, loopruntimeerrors.ErrDeployInProgress) {
 		return err
 	}
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if errors.As(err, &te) {
 		return err
 	}

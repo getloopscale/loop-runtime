@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Renamed 2026-09-06 (B-067) from migration_memory_p3_test.go. The
 // migration-test-coverage gate credits a migration only when a test file starts with

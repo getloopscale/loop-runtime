@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -14,7 +14,7 @@ import (
 // continueOn.failed, and that hides the failure of what it depends on.
 func nodesOfAFailedInstall() map[string]forgemodel.NodeStatus {
 	return map[string]forgemodel.NodeStatus{
-		"wf":         {ID: "wf", DisplayName: "loopzero-build-x", Type: "DAG", Phase: "Succeeded"},
+		"wf":         {ID: "wf", DisplayName: "loopruntime-build-x", Type: "DAG", Phase: "Succeeded"},
 		"clone":      {ID: "clone", DisplayName: "clone-repo", Type: "Retry", Phase: "Succeeded", StartedAt: "2026-11-25T22:00:00Z", Children: []string{"clone0"}},
 		"clone0":     {ID: "clone0", DisplayName: "clone-repo(0)", Type: "Pod", Phase: "Succeeded", StartedAt: "2026-11-25T22:00:00Z"},
 		"install":    {ID: "install", DisplayName: "install-deps", Type: "Retry", Phase: "Failed", Message: "Max duration limit exceeded", StartedAt: "2026-11-25T22:00:20Z", Children: []string{"install0", "install1"}},

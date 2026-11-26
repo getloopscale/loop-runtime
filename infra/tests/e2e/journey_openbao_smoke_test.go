@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey: OpenBao Smoke (F1.10 of plan 2026-06-02-openbao-adoption v1.2)
 //
@@ -9,7 +9,7 @@
 // mgmt cluster.
 //
 // Skip semantics:
-//   - Skipped when LOOPZERO_E2E unset (suite-level gate via skipIfNotE2E)
+//   - Skipped when LOOPRUNTIME_E2E unset (suite-level gate via skipIfNotE2E)
 //   - Skipped when secrets-system namespace missing (chart not deployed)
 //   - Skipped when openbaoEnabled flag false in env (default; chart
 //     installed:false per F1.7 Helmfile gate)
@@ -20,7 +20,7 @@
 //   * OB-3: openbao Service ClusterIP exposes port 8200
 //   * OB-4: cert-manager Certificate openbao-tls Ready
 //   * OB-5: NetworkPolicy openbao-allow-egress exists with port 443 rule
-//   * OB-6: NetworkPolicy openbao-allow-ingress lists loopzero-system
+//   * OB-6: NetworkPolicy openbao-allow-ingress lists loopruntime-system
 //   * OB-7: ValidatingAdmissionPolicy openbao-no-devmode-in-prod exists
 //   * OB-8: BaoConfiguration CR `openbao` exists in secrets-system
 //   * OB-9: bao status returns Initialized=true Sealed=false (dev-mode)
@@ -167,14 +167,14 @@ var _ = Describe("Journey: OpenBao Smoke (F1.10)", Label("journey"), func() {
 				"prod boot loops dia 1 (EC-01 P0)")
 	})
 
-	It("OB-6: NetworkPolicy openbao-allow-ingress includes loopzero-system", func() {
-		// Broker pattern Q6: loopzero-api must reach OpenBao
+	It("OB-6: NetworkPolicy openbao-allow-ingress includes loopruntime-system", func() {
+		// Broker pattern Q6: loopruntime-api must reach OpenBao
 		cmd := openbaoNs("get", "networkpolicy", "openbao-allow-ingress",
 			"-o", "jsonpath={.spec.ingress[*].from[*].namespaceSelector.matchLabels}")
 		out, err := cmd.CombinedOutput()
 		Expect(err).ToNot(HaveOccurred())
-		Expect(string(out)).To(ContainSubstring("loopzero-system"),
-			"NetworkPolicy ingress must allow loopzero-system namespace (broker pattern Q6)")
+		Expect(string(out)).To(ContainSubstring("loopruntime-system"),
+			"NetworkPolicy ingress must allow loopruntime-system namespace (broker pattern Q6)")
 	})
 
 	It("OB-7: ValidatingAdmissionPolicy openbao-no-devmode-in-prod exists (EC-04)", func() {
@@ -252,7 +252,7 @@ var _ = Describe("Journey: OpenBao Smoke (F1.10)", Label("journey"), func() {
 			cmd := exec.Command("bao", "secrets", "list", "-format=json")
 			cmd.Env = append(cmd.Env,
 				"VAULT_ADDR=http://127.0.0.1:8200",
-				"VAULT_TOKEN=loopzero-dev-vault-root", // dev-mode well-known
+				"VAULT_TOKEN=loopruntime-dev-vault-root", // dev-mode well-known
 				"VAULT_SKIP_VERIFY=true",
 			)
 			out, _ := cmd.CombinedOutput()

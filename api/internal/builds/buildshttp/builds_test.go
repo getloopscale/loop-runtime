@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -15,7 +15,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 	"github.com/getloopscale/loop-runtime/api/internal/validation"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- Fake BuildOrchestratorService ---
@@ -148,17 +148,17 @@ func TestBuilds_Create_MissingApps(t *testing.T) {
 		t.Fatalf("want 'app is required' message hint; body=%s", w.Body.String())
 	}
 
-	// Red Team loopzero-cloud#123 — the error message must guide the customer to
-	// the canonical manifest (.loopzero/services.json v2 / services: []), not the
+	// Red Team loopruntime-cloud#123 — the error message must guide the customer to
+	// the canonical manifest (.loopruntime/services.json v2 / services: []), not the
 	// LEGACY loopzero.yaml / apps: section. Following the stale guidance leads the
 	// user to create/edit a loopzero.yaml that the build silently ignores
-	// (.loopzero/services.json is the only manifest loopzerokit emits and the engine
-	// consumes — see loopzero-cloud/CLAUDE.md § How loopzero-cloud connects).
+	// (.loopruntime/services.json is the only manifest loopzerokit emits and the engine
+	// consumes — see loopruntime-cloud/CLAUDE.md § How loopruntime-cloud connects).
 	if bytes.Contains(w.Body.Bytes(), []byte("loopzero.yaml")) {
 		t.Fatalf("RED #123: message must NOT reference legacy loopzero.yaml; body=%s", w.Body.String())
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte(".loopzero/services.json")) {
-		t.Fatalf("RED #123: message MUST reference canonical .loopzero/services.json; body=%s", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte(".loopruntime/services.json")) {
+		t.Fatalf("RED #123: message MUST reference canonical .loopruntime/services.json; body=%s", w.Body.String())
 	}
 	if !bytes.Contains(w.Body.Bytes(), []byte("services:")) {
 		t.Fatalf("RED #123: message MUST reference canonical `services:` array; body=%s", w.Body.String())
@@ -285,7 +285,7 @@ func TestBuilds_Create_InvalidJSON(t *testing.T) {
 
 func TestBuilds_Create_DeployInProgress(t *testing.T) {
 	orch := &fakeBuildOrch{
-		submitErr: loopzeroerrors.ErrDeployInProgress,
+		submitErr: loopruntimeerrors.ErrDeployInProgress,
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
@@ -340,7 +340,7 @@ func TestBuilds_Get_Found(t *testing.T) {
 
 func TestBuilds_Get_NotFound(t *testing.T) {
 	orch := &fakeBuildOrch{
-		tenantIDErr: loopzeroerrors.ErrBuildNotFound,
+		tenantIDErr: loopruntimeerrors.ErrBuildNotFound,
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
@@ -395,7 +395,7 @@ func TestBuilds_Cancel_Success(t *testing.T) {
 
 func TestBuilds_Cancel_NotFound(t *testing.T) {
 	orch := &fakeBuildOrch{
-		tenantIDErr: loopzeroerrors.ErrBuildNotFound,
+		tenantIDErr: loopruntimeerrors.ErrBuildNotFound,
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
@@ -414,7 +414,7 @@ func TestBuilds_Cancel_NotFound(t *testing.T) {
 func TestBuilds_Cancel_AlreadyCompleted(t *testing.T) {
 	orch := &fakeBuildOrch{
 		tenantID:  "tn-test-123",
-		cancelErr: loopzeroerrors.ErrBuildAlreadyCompleted,
+		cancelErr: loopruntimeerrors.ErrBuildAlreadyCompleted,
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
@@ -471,7 +471,7 @@ func TestBuilds_Redeploy_HappyPath(t *testing.T) {
 
 func TestBuilds_Redeploy_NotTerminalReturns409(t *testing.T) {
 	orch := &fakeBuildOrch{
-		redeployErr: loopzeroerrors.NewLoopZeroError(
+		redeployErr: loopruntimeerrors.NewLoopRuntimeError(
 			"BUILD_NOT_TERMINAL",
 			"Cannot redeploy a build that is still in progress"),
 	}
@@ -494,7 +494,7 @@ func TestBuilds_Redeploy_NotTerminalReturns409(t *testing.T) {
 
 func TestBuilds_Redeploy_NotFoundReturns404(t *testing.T) {
 	orch := &fakeBuildOrch{
-		redeployErr: loopzeroerrors.ErrBuildNotFound,
+		redeployErr: loopruntimeerrors.ErrBuildNotFound,
 	}
 	h := NewBuildHandler(orch, slog.Default())
 
@@ -554,15 +554,15 @@ func TestBuilds_Redeploy_BodyParamsIgnored(t *testing.T) {
 	}
 }
 
-// Red Team loopzero-cloud#126 — when redeploy_of points at a build whose source
+// Red Team loopruntime-cloud#126 — when redeploy_of points at a build whose source
 // has empty Apps (legacy seed data, synthetic test fixture, etc.), the
 // handler USED to return the generic missing-apps error message that tells
-// the user to "Check your `.loopzero/services.json` for a `services:` array."
+// the user to "Check your `.loopruntime/services.json` for a `services:` array."
 // That guidance is wrong for a redeploy: the user did not produce the build,
 // has no local manifest to edit, and the canonical fix is "use a different
 // source build that has apps." This test pins the redeploy-specific error
 // shape: typed 400 MISSING_FIELD, message names the empty source build, and
-// does NOT mention `.loopzero/services.json` (irrelevant in this code path).
+// does NOT mention `.loopruntime/services.json` (irrelevant in this code path).
 func TestBuilds_Redeploy_SourceWithoutAppsReturnsCanonicalRedeployError(t *testing.T) {
 	orch := &fakeBuildOrch{
 		redeploySource: &RedeploySource{
@@ -593,7 +593,7 @@ func TestBuilds_Redeploy_SourceWithoutAppsReturnsCanonicalRedeployError(t *testi
 	if !bytes.Contains(w.Body.Bytes(), []byte("bld-source-empty")) {
 		t.Fatalf("want source build id named in message for actionability; body=%s", w.Body.String())
 	}
-	if bytes.Contains(w.Body.Bytes(), []byte(".loopzero/services.json")) {
-		t.Fatalf("redeploy error MUST NOT mention .loopzero/services.json (irrelevant in redeploy path); body=%s", w.Body.String())
+	if bytes.Contains(w.Body.Bytes(), []byte(".loopruntime/services.json")) {
+		t.Fatalf("redeploy error MUST NOT mention .loopruntime/services.json (irrelevant in redeploy path); body=%s", w.Body.String())
 	}
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Shared constants for all E2E test suites.
 //
@@ -128,17 +128,17 @@ const (
 	e2eTraefikPortCell2 = "8444"
 
 	// e2eBaseDomainLocal is the local k3d base domain.
-	e2eBaseDomainLocal = "loopzero.local"
+	e2eBaseDomainLocal = "loopruntime.local"
 
 	// e2eBaseDomainDrill is the drill DOKS base domain (CF wildcard A record).
 	e2eBaseDomainDrill = "drill.getloopscale.com"
 
 	// mgmtKubeContext is the kubectl context for the management cluster.
-	mgmtKubeContext = "k3d-loopzero-core"
+	mgmtKubeContext = "k3d-loopruntime-core"
 
 	// buildKubeContext is the kubectl context for the build cluster.
-	buildKubeContext = "k3d-loopzero-build"
+	buildKubeContext = "k3d-loopruntime-build"
 
 	// workloadKubeContext is the kubectl context for the workload cluster.
-	workloadKubeContext = "k3d-loopzero-cell-0"
+	workloadKubeContext = "k3d-loopruntime-cell-0"
 )

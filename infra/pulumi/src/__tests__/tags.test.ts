@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import { describe, it, expect } from "vitest";
 import { standardTags, tagsToStringArray } from "../core/tags";
 
 describe("standardTags", () => {
   it("returns required labels with managedBy pulumi", () => {
-    const tags = standardTags("loopzero-infra", "dev");
+    const tags = standardTags("loopruntime-infra", "dev");
     expect(tags).toEqual({
-      project: "loopzero-infra",
+      project: "loopruntime-infra",
       environment: "dev",
       managedBy: "pulumi",
     });
@@ -23,12 +23,12 @@ describe("standardTags", () => {
 describe("tagsToStringArray", () => {
   it("converts base labels to key:value string array", () => {
     const arr = tagsToStringArray({
-      project: "loopzero-infra",
+      project: "loopruntime-infra",
       environment: "dev",
       managedBy: "pulumi",
     });
     expect(arr).toEqual([
-      "project:loopzero-infra",
+      "project:loopruntime-infra",
       "env:dev",
       "managed-by:pulumi",
     ]);
@@ -36,7 +36,7 @@ describe("tagsToStringArray", () => {
 
   it("includes owner when present", () => {
     const arr = tagsToStringArray({
-      project: "loopzero",
+      project: "loopruntime",
       environment: "prod",
       managedBy: "pulumi",
       owner: "platform-team",
@@ -46,7 +46,7 @@ describe("tagsToStringArray", () => {
 
   it("includes costCenter when present", () => {
     const arr = tagsToStringArray({
-      project: "loopzero",
+      project: "loopruntime",
       environment: "prod",
       managedBy: "pulumi",
       costCenter: "eng-123",
@@ -56,7 +56,7 @@ describe("tagsToStringArray", () => {
 
   it("excludes optional fields when absent", () => {
     const arr = tagsToStringArray({
-      project: "loopzero",
+      project: "loopruntime",
       environment: "dev",
       managedBy: "pulumi",
     });

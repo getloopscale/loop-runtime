@@ -1,7 +1,7 @@
 {{/* The pod both the install Job and the CronJob run: the AWS CLI mints the token into a
 memory volume as a Secret manifest, and kubectl applies it. The token never reaches a log. */}}
 {{- define "ecr-registry-auth.pod" -}}
-serviceAccountName: loopzero-registry-auth
+serviceAccountName: loopruntime-registry-auth
 restartPolicy: OnFailure
 securityContext:
   runAsNonRoot: true

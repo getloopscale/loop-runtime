@@ -15,17 +15,17 @@ metadata:
   name: "TENANT_PLACEHOLDER-PROJECT_PLACEHOLDER-ENVIRONMENT_PLACEHOLDER"
   namespace: argocd
   labels:
-    loopzero.io/tenant: "TENANT_PLACEHOLDER"
-    loopzero.io/project: "PROJECT_PLACEHOLDER"
-    loopzero.io/environment: "ENVIRONMENT_PLACEHOLDER"
-    app.kubernetes.io/part-of: loopzero
-    app.kubernetes.io/managed-by: loopzero-operator
+    runtime.getloopscale.com/tenant: "TENANT_PLACEHOLDER"
+    runtime.getloopscale.com/project: "PROJECT_PLACEHOLDER"
+    runtime.getloopscale.com/environment: "ENVIRONMENT_PLACEHOLDER"
+    app.kubernetes.io/part-of: loopruntime
+    app.kubernetes.io/managed-by: loopruntime-operator
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: "TENANT_PLACEHOLDER"
   source:
-    repoURL: "http://gitea-http.loopzero-system.svc.cluster.local:3000/TENANT_PLACEHOLDER/PROJECT_PLACEHOLDER-gitops.git"
+    repoURL: "http://gitea-http.loopruntime-system.svc.cluster.local:3000/TENANT_PLACEHOLDER/PROJECT_PLACEHOLDER-gitops.git"
     targetRevision: HEAD
     path: "environments/ENVIRONMENT_PLACEHOLDER"
   destination:

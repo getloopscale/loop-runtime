@@ -8,50 +8,50 @@
 #   wire-clusters.sh <env>
 #
 # Required env vars:
-#   LOOPZERO_CORE_KUBECONFIG, LOOPZERO_BUILD_KUBECONFIG, LOOPZERO_CELL_0_KUBECONFIG
-#   (optional) LOOPZERO_RUNTIME2_KUBECONFIG
+#   LOOPRUNTIME_CORE_KUBECONFIG, LOOPRUNTIME_BUILD_KUBECONFIG, LOOPRUNTIME_CELL_0_KUBECONFIG
+#   (optional) LOOPRUNTIME_RUNTIME2_KUBECONFIG
 set -euo pipefail
 ENV="${1:?usage: $0 <env>}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 log() { printf '[wire-clusters] %s\n' "$*" >&2; }
 
-if [[ -z "${LOOPZERO_CORE_KUBECONFIG:-}" ]]; then
-  log "ERROR: LOOPZERO_CORE_KUBECONFIG not set"
+if [[ -z "${LOOPRUNTIME_CORE_KUBECONFIG:-}" ]]; then
+  log "ERROR: LOOPRUNTIME_CORE_KUBECONFIG not set"
   exit 1
 fi
 
 # ArgoCD cluster registration (B6 fix in lib/argocd-register.sh).
-export KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG"
+export KUBECONFIG="$LOOPRUNTIME_CORE_KUBECONFIG"
 
-if [[ -n "${LOOPZERO_BUILD_KUBECONFIG:-}" ]]; then
+if [[ -n "${LOOPRUNTIME_BUILD_KUBECONFIG:-}" ]]; then
   log "wiring build cluster..."
-  SCOPED=$(KUBECONFIG="$LOOPZERO_BUILD_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" build "$LOOPZERO_BUILD_KUBECONFIG")
-  KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" build "$SCOPED"
+  SCOPED=$(KUBECONFIG="$LOOPRUNTIME_BUILD_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" build "$LOOPRUNTIME_BUILD_KUBECONFIG")
+  KUBECONFIG="$LOOPRUNTIME_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" build "$SCOPED"
 fi
 
 # cell-1-activation-plan T1.3 / ADR C7: shared ingress-domain across cells.
 # Default for production is dev.getloopscale.com (matches Pulumi infra). Override
-# via LOOPZERO_INGRESS_DOMAIN env var. Local k3d sets loopzero.local via heal script.
-INGRESS_DOMAIN_VAL="${LOOPZERO_INGRESS_DOMAIN:-dev.getloopscale.com}"
+# via LOOPRUNTIME_INGRESS_DOMAIN env var. Local k3d sets loopruntime.local via heal script.
+INGRESS_DOMAIN_VAL="${LOOPRUNTIME_INGRESS_DOMAIN:-dev.getloopscale.com}"
 
 # Issue #67: local k3d uses self-signed CAs that rotate across k3s container
 # restarts (server CA in /var/lib/rancher/k3s/server/tls/server-ca.crt is
-# regenerated). The signal for k3d-local is INGRESS_DOMAIN=loopzero.local (set
+# regenerated). The signal for k3d-local is INGRESS_DOMAIN=loopruntime.local (set
 # explicitly by the local heal script and never used in prod/dev). When local,
 # render the CR with spec.tls.insecure=true so the ArgoCD cluster Secret
 # doesn't bind to a CA that becomes stale. Prod (DOKS, Droplet) keeps
 # insecure=false to enforce TLS verification with the kubeconfig's CA.
 TLS_INSECURE_VAL="false"
-if [[ "$INGRESS_DOMAIN_VAL" == "loopzero.local" ]]; then
+if [[ "$INGRESS_DOMAIN_VAL" == "loopruntime.local" ]]; then
   TLS_INSECURE_VAL="true"
-  log "k3d-local detected (ingress-domain=loopzero.local) — rendering ClusterCredential CRs with spec.tls.insecure=true (issue #67)"
+  log "k3d-local detected (ingress-domain=loopruntime.local) — rendering ClusterCredential CRs with spec.tls.insecure=true (issue #67)"
 fi
 
-if [[ -n "${LOOPZERO_CELL_0_KUBECONFIG:-}" ]]; then
+if [[ -n "${LOOPRUNTIME_CELL_0_KUBECONFIG:-}" ]]; then
   log "wiring runtime cluster..."
-  SCOPED=$(KUBECONFIG="$LOOPZERO_CELL_0_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime "$LOOPZERO_CELL_0_KUBECONFIG")
-  KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime "$SCOPED"
+  SCOPED=$(KUBECONFIG="$LOOPRUNTIME_CELL_0_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime "$LOOPRUNTIME_CELL_0_KUBECONFIG")
+  KUBECONFIG="$LOOPRUNTIME_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime "$SCOPED"
   # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: REMOVED legacy
   # `clustercredential-create.sh cell-0 runtime` call. The ADR-0008
   # canonical path is `bootstrap-cell-cc.sh --cell 1 --env <env>` which
@@ -67,10 +67,10 @@ if [[ -n "${LOOPZERO_CELL_0_KUBECONFIG:-}" ]]; then
   # CRs + restart of argocd-application-controller statefulset.
 fi
 
-if [[ -n "${LOOPZERO_RUNTIME2_KUBECONFIG:-}" ]]; then
+if [[ -n "${LOOPRUNTIME_RUNTIME2_KUBECONFIG:-}" ]]; then
   log "wiring runtime-2 cluster..."
-  SCOPED=$(KUBECONFIG="$LOOPZERO_RUNTIME2_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime-2 "$LOOPZERO_RUNTIME2_KUBECONFIG")
-  KUBECONFIG="$LOOPZERO_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime-2 "$SCOPED"
+  SCOPED=$(KUBECONFIG="$LOOPRUNTIME_RUNTIME2_KUBECONFIG" "$SCRIPT_DIR/lib/scoped-kubeconfig.sh" runtime-2 "$LOOPRUNTIME_RUNTIME2_KUBECONFIG")
+  KUBECONFIG="$LOOPRUNTIME_CORE_KUBECONFIG" "$SCRIPT_DIR/lib/argocd-register.sh" runtime-2 "$SCOPED"
   # V9-CLEANROOM-FRESH-FAANG-FIX 2026-05-31: REMOVED legacy
   # `clustercredential-create.sh cell-1 runtime-2` call. Same root cause
   # as runtime above — the ADR-0008 canonical path is
@@ -80,17 +80,17 @@ fi
 
 # B11 fix — Gitea repos archived: re-activate any archived repos so tenant
 # delete-then-recreate works without manual unarchive.
-if [[ -n "${LOOPZERO_GITEA_TOKEN:-}" && -n "${LOOPZERO_GITEA_URL:-}" ]]; then
+if [[ -n "${LOOPRUNTIME_GITEA_TOKEN:-}" && -n "${LOOPRUNTIME_GITEA_URL:-}" ]]; then
   log "checking for archived gitea repos..."
-  ARCHIVED=$(curl -sf -H "Authorization: token $LOOPZERO_GITEA_TOKEN" \
-    "$LOOPZERO_GITEA_URL/api/v1/repos/search?archived=true&limit=50" 2>/dev/null \
+  ARCHIVED=$(curl -sf -H "Authorization: token $LOOPRUNTIME_GITEA_TOKEN" \
+    "$LOOPRUNTIME_GITEA_URL/api/v1/repos/search?archived=true&limit=50" 2>/dev/null \
     | python3 -c 'import sys,json; data=json.load(sys.stdin); [print(r["full_name"]) for r in data.get("data",[])]' 2>/dev/null || echo "")
   for repo in $ARCHIVED; do
     log "unarchiving $repo (B11)"
-    curl -sf -X PATCH -H "Authorization: token $LOOPZERO_GITEA_TOKEN" \
+    curl -sf -X PATCH -H "Authorization: token $LOOPRUNTIME_GITEA_TOKEN" \
       -H "Content-Type: application/json" \
       -d '{"archived":false}' \
-      "$LOOPZERO_GITEA_URL/api/v1/repos/$repo" >/dev/null || log "WARN: failed to unarchive $repo"
+      "$LOOPRUNTIME_GITEA_URL/api/v1/repos/$repo" >/dev/null || log "WARN: failed to unarchive $repo"
   done
 fi
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -14,7 +14,7 @@ import (
 // can be deployed from GitHub. Connect refuses what this refuses, and a push
 // deploys only what this accepts.
 func TestParseDeployDescriptor_AcceptsAMappingThatDeclaresApps(t *testing.T) {
-	d, err := ParseDeployDescriptor([]byte(minimalLoopZeroYaml))
+	d, err := ParseDeployDescriptor([]byte(minimalLoopRuntimeYaml))
 
 	if err != nil {
 		t.Fatalf("ParseDeployDescriptor: %v", err)

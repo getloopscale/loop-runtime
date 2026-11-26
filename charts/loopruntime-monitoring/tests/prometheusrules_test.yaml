@@ -1,0 +1,53 @@
+# helm-unittest: PrometheusRules rendering for loopruntime-monitoring.
+# Plan T1.5. The rules are the files of infra/helm/monitoring/manifests, published
+# through templates/prometheusrules.yaml (one document per enabled rule file).
+
+suite: prometheusrules rendering
+templates:
+  - prometheusrules.yaml
+
+tests:
+  - it: renders one PrometheusRule per rule file
+    asserts:
+      - hasDocuments:
+          count: 9
+      - isKind:
+          of: PrometheusRule
+      - isAPIVersion:
+          of: monitoring.coreos.com/v1
+
+  - it: critical rules contain at least one group with rules
+    documentSelector:
+      path: metadata.name
+      value: loopruntime-critical-alerts
+    asserts:
+      - exists:
+          path: spec.groups
+      - notEqual:
+          path: spec.groups
+          value: []
+
+  - it: publishes every rule in the release namespace
+    release:
+      namespace: observability
+    documentSelector:
+      path: metadata.name
+      value: loopruntime-warning-alerts
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: observability
+
+  - it: a disabled rule file is not published
+    set:
+      prometheusRules.database.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 8
+
+  - it: disabling all rules publishes none
+    set:
+      prometheusRules.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

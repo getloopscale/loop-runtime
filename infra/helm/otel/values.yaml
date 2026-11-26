@@ -75,7 +75,7 @@ config:
       endpoint: 0.0.0.0:8889
     # Traces to Tempo (MEET-020, was: debug exporter)
     otlp/tempo:
-      endpoint: "tempo.loopzero-system.svc:4317"
+      endpoint: "tempo.loopruntime-system.svc:4317"
       tls:
         insecure: true  # In-cluster communication, no TLS needed
 

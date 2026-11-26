@@ -1,4 +1,4 @@
-# chart-testing (ct) configuration for LoopZero Helm charts
+# chart-testing (ct) configuration for LoopRuntime Helm charts
 # T2.5 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap-plan.md
 #
 # chart-testing (ct) — https://github.com/helm/chart-testing
@@ -32,9 +32,9 @@ helm-extra-args: "--strict"
 check-version-increment: false
 
 # Excluded charts (do not run ct against these).
-# loopzero-common is a library chart — has no installable resources.
+# loopruntime-common is a library chart — has no installable resources.
 excluded-charts:
-  - loopzero-common
+  - loopruntime-common
 
 # Required validations (when ct install runs).
 validate-maintainers: false

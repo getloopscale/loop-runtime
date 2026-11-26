@@ -30,7 +30,7 @@
       "title": "← Home",
       "tooltip": "Back to System Home",
       "type": "link",
-      "url": "/d/loopzero-home/loopzero-system-home"
+      "url": "/d/loopruntime-home/loopruntime-system-home"
     }
   ],
   "panels": [
@@ -373,7 +373,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_pod_container_info{namespace=\"loopzero-system\"}",
+          "expr": "kube_pod_container_info{namespace=\"loopruntime-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -384,7 +384,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_pod_container_status_restarts_total{namespace=\"loopzero-system\"}",
+          "expr": "kube_pod_container_status_restarts_total{namespace=\"loopruntime-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -560,7 +560,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_deployment_spec_replicas{namespace=\"loopzero-system\"}",
+          "expr": "kube_deployment_spec_replicas{namespace=\"loopruntime-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -571,7 +571,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_deployment_status_replicas_ready{namespace=\"loopzero-system\"}",
+          "expr": "kube_deployment_status_replicas_ready{namespace=\"loopruntime-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -710,7 +710,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_statefulset_replicas{namespace=\"loopzero-system\"}",
+          "expr": "kube_statefulset_replicas{namespace=\"loopruntime-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -721,7 +721,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kube_statefulset_status_replicas_ready{namespace=\"loopzero-system\"}",
+          "expr": "kube_statefulset_status_replicas_ready{namespace=\"loopruntime-system\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -838,7 +838,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_pod_container_status_waiting{namespace=\"loopzero-system\"} == 1) or vector(0)",
+          "expr": "count(kube_pod_container_status_waiting{namespace=\"loopruntime-system\"} == 1) or vector(0)",
           "legendFormat": "Waiting",
           "refId": "A"
         }
@@ -896,7 +896,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_pod_container_status_waiting_reason{namespace=\"loopzero-system\",reason=\"CrashLoopBackOff\"} == 1) or vector(0)",
+          "expr": "count(kube_pod_container_status_waiting_reason{namespace=\"loopruntime-system\",reason=\"CrashLoopBackOff\"} == 1) or vector(0)",
           "legendFormat": "CrashLoop",
           "refId": "A"
         }
@@ -954,7 +954,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_pod_container_status_waiting_reason{namespace=\"loopzero-system\",reason=\"ImagePullBackOff\"} == 1) or vector(0)",
+          "expr": "count(kube_pod_container_status_waiting_reason{namespace=\"loopruntime-system\",reason=\"ImagePullBackOff\"} == 1) or vector(0)",
           "legendFormat": "ImagePull",
           "refId": "A"
         }
@@ -1016,7 +1016,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"loopzero-system\"}[1h])) or vector(0)",
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"loopruntime-system\"}[1h])) or vector(0)",
           "legendFormat": "Restarts",
           "refId": "A"
         }
@@ -1107,7 +1107,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"loopzero-system\"}[5m])",
+          "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"loopruntime-system\"}[5m])",
           "legendFormat": "{{container}}",
           "refId": "A"
         }
@@ -1122,7 +1122,7 @@
         "y": 56
       },
       "id": 600,
-      "title": "LoopZero Platform Signals",
+      "title": "LoopRuntime Platform Signals",
       "type": "row",
       "datasource": {
         "type": "prometheus",
@@ -1202,7 +1202,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(loopzero_api_leader_status)",
+          "expr": "max(loopruntime_api_leader_status)",
           "legendFormat": "Leader",
           "refId": "A"
         }
@@ -1281,7 +1281,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(loopzero_argocd_circuit_state)",
+          "expr": "max(loopruntime_argocd_circuit_state)",
           "legendFormat": "Circuit",
           "refId": "A"
         }
@@ -1343,7 +1343,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(loopzero_build_queue_depth)",
+          "expr": "max(loopruntime_build_queue_depth)",
           "legendFormat": "Queue",
           "refId": "A"
         }
@@ -1405,7 +1405,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(loopzero_releases_pending)",
+          "expr": "max(loopruntime_releases_pending)",
           "legendFormat": "Pending",
           "refId": "A"
         }
@@ -1467,7 +1467,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_postgres_connections_active)",
+          "expr": "sum(loopruntime_postgres_connections_active)",
           "legendFormat": "Active",
           "refId": "A"
         }
@@ -1530,7 +1530,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_postgres_connections_total)",
+          "expr": "sum(loopruntime_postgres_connections_total)",
           "legendFormat": "Total",
           "refId": "A"
         }
@@ -1609,7 +1609,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(loopzero_cfkv_drift_detected)",
+          "expr": "max(loopruntime_cfkv_drift_detected)",
           "legendFormat": "Drift",
           "refId": "A"
         }
@@ -1663,7 +1663,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_sse_connections_active)",
+          "expr": "sum(loopruntime_sse_connections_active)",
           "legendFormat": "SSE",
           "refId": "A"
         }
@@ -1770,7 +1770,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(loopzero_api_requests_total[5m])) by (method, path)",
+          "expr": "sum(rate(loopruntime_api_requests_total[5m])) by (method, path)",
           "legendFormat": "{{method}} {{path}}",
           "refId": "A"
         }
@@ -1865,7 +1865,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "histogram_quantile(0.99, sum(rate(loopzero_api_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(loopruntime_api_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "A"
         }
@@ -1950,7 +1950,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_postgres_connections_total) / max(loopzero_postgres_pool_max_conns)",
+          "expr": "sum(loopruntime_postgres_connections_total) / max(loopruntime_postgres_pool_max_conns)",
           "legendFormat": "Utilization",
           "refId": "A"
         }
@@ -2040,7 +2040,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_postgres_connections_active)",
+          "expr": "sum(loopruntime_postgres_connections_active)",
           "legendFormat": "Active",
           "refId": "A"
         },
@@ -2049,7 +2049,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_postgres_connections_idle)",
+          "expr": "sum(loopruntime_postgres_connections_idle)",
           "legendFormat": "Idle",
           "refId": "B"
         },
@@ -2058,7 +2058,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_postgres_connections_total)",
+          "expr": "sum(loopruntime_postgres_connections_total)",
           "legendFormat": "Total",
           "refId": "C"
         }
@@ -2068,7 +2068,7 @@
   "refresh": "30s",
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loopruntime",
     "inventory",
     "health"
   ],
@@ -2096,8 +2096,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "LoopZero — Component Inventory & Health",
-  "uid": "loopzero-component-inventory",
+  "title": "LoopRuntime — Component Inventory & Health",
+  "uid": "loopruntime-component-inventory",
   "version": 1,
   "weekStart": ""
 }

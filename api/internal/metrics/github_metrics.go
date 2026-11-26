@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metrics
 
@@ -11,12 +11,12 @@ import (
 // GitHub webhook metrics — MEET-044 P1.
 var (
 	WebhookPushTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_webhook_push_total",
+		Name: "loopruntime_webhook_push_total",
 		Help: "Total GitHub push webhook events by result.",
 	}, []string{"result"}) // result: "deployed", "skipped", "error"
 
 	WebhookProcessingDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "loopzero_webhook_processing_duration_seconds",
+		Name:    "loopruntime_webhook_processing_duration_seconds",
 		Help:    "Duration of webhook push processing (download + bundle + submit).",
 		Buckets: []float64{0.5, 1, 2, 5, 10, 30},
 	}, []string{"phase"}) // phase: "download", "bundle", "upload", "submit", "total"
@@ -31,7 +31,7 @@ var (
 	// that reach the auto-deployer -- deliveries_total counts the wire
 	// edge (the HMAC-validated payload arriving at the handler).
 	GitHubWebhookDeliveriesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_github_webhook_deliveries_total",
+		Name: "loopruntime_github_webhook_deliveries_total",
 		Help: "Total GitHub webhook deliveries received, labelled by event_type and handler outcome.",
 	}, []string{"event_type", "status"})
 
@@ -49,37 +49,37 @@ var (
 	//   - "time-to-deploy p95": measured client-side via build.started ->
 	//     last build.step.succeeded distance (not via this counter).
 	DeploymentsStepEventsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_deployments_step_events_total",
+		Name: "loopruntime_deployments_step_events_total",
 		Help: "Total deployment step events emitted to SSE, labelled by step name and outcome.",
 	}, []string{"step", "status"})
 
 	// EC-1 — Build cluster SA token expiry surface (Plan J-17 T1.1.bis).
 	// argo_step_watcher informer reconnects after a 401/403 from the
 	// build cluster API server bump this counter. Grafana alert
-	// rate(loopzero_argo_watcher_token_expired_total[5m]) > 0 pages the
+	// rate(loopruntime_argo_watcher_token_expired_total[5m]) > 0 pages the
 	// operator to rotate the SA token before events stop flowing.
 	ArgoWatcherTokenExpiredTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "loopzero_argo_watcher_token_expired_total",
+		Name: "loopruntime_argo_watcher_token_expired_total",
 		Help: "Total times argo_step_watcher received 401/403 from the build cluster API.",
 	})
 
 	// ArgoCD convergence observability — MEET-044 P1.
 	RevisionMismatchTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "loopzero_release_revision_mismatch_total",
+		Name: "loopruntime_release_revision_mismatch_total",
 		Help: "Total revision mismatches detected by convergence loop.",
 	})
 	RevisionResyncTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "loopzero_release_revision_resync_total",
+		Name: "loopruntime_release_revision_resync_total",
 		Help: "Total re-syncs triggered due to revision mismatch.",
 	})
 	RevisionResyncFailureTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "loopzero_release_revision_resync_failure_total",
+		Name: "loopruntime_release_revision_resync_failure_total",
 		Help: "Total re-sync failures after revision mismatch.",
 	})
 
 	// Superseded build cancellation — MEET-044 P0.
 	BuildsSupersededTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_builds_superseded_total",
+		Name: "loopruntime_builds_superseded_total",
 		Help: "Total QUEUED builds cancelled due to newer push.",
 	}, []string{"tenant"})
 )

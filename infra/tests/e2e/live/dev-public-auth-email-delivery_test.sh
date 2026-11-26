@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Red Team loopzero-cloud#117 closure LIVE test — proves Kratos auth email
+# Red Team loopruntime-cloud#117 closure LIVE test — proves Kratos auth email
 # delivery chain (Kratos → Resend → recipient) survives Cleanroom in
 # dev-public.
 #
@@ -13,7 +13,7 @@
 #       email (canonical Kratos behavior; was misread as "broken" in
 #       the report). Asserted via `was_notified:false` in Kratos logs.
 #   (2) Recovery for a KNOWN address (the canonical admin@getloopscale.com
-#       seeded by seed-admin-loopzero-dev.sh) MUST enqueue + dispatch
+#       seeded by seed-admin-loopruntime-dev.sh) MUST enqueue + dispatch
 #       through Resend, with Resend confirming `delivered` or `sent`.
 #   (3) Signup for a fresh email MUST create a Kratos identity,
 #       enqueue the verification mailer, and Resend MUST accept
@@ -21,15 +21,15 @@
 #        but Resend's acceptance proves the pipeline end-to-end).
 #
 # Pre-conditions:
-#   - dev-public canonical chain ran (seed-admin-loopzero-dev.sh, and
-#     helmfile sync of ory-kratos with LOOPZERO_RESEND_API_KEY exported —
+#   - dev-public canonical chain ran (seed-admin-loopruntime-dev.sh, and
+#     helmfile sync of ory-kratos with LOOPRUNTIME_RESEND_API_KEY exported —
 #     `task dev-public:sync-kratos`) — identity for admin@getloopscale.com
 #     present AND ConfigMap has the Bearer Resend key, NOT the
-#     placeholder REPLACE_VIA_LOOPZERO_RESEND_API_KEY string.
+#     placeholder REPLACE_VIA_LOOPRUNTIME_RESEND_API_KEY string.
 #   - $RESEND_API_KEY exported (the operator's Resend account API key
 #     — same one Kratos config uses). Probed against api.resend.com
 #     to confirm Resend received what Kratos sent.
-#   - kubectl context k3d-loopzero-core reachable.
+#   - kubectl context k3d-loopruntime-core reachable.
 #
 # OPERATOR HARD STOP per cleanroom-up-live-test-mandate.md UNBREAKABLE —
 # requires Cleanroom TOTAL precedence + the canonical seed chain.
@@ -48,7 +48,7 @@
 set -euo pipefail
 
 TARGET_HOST="${TARGET_HOST:-https://auth-dev.getloopscale.com}"
-KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-core}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopruntime-core}"
 KNOWN_EMAIL="${KNOWN_EMAIL:-admin@getloopscale.com}"
 UNKNOWN_EMAIL="${UNKNOWN_EMAIL:-unknown-redteam-117@example.invalid}"
 SKIP_LIVE=0
@@ -104,12 +104,12 @@ preflight() {
     exit 2
   fi
   if [[ -z "${RESEND_API_KEY:-}" ]]; then
-    # Try the canonical operator path (~/.loopzero/dev-credentials.json)
-    if [[ -f "$HOME/.loopzero/dev-credentials.json" ]]; then
+    # Try the canonical operator path (~/.loopruntime/dev-credentials.json)
+    if [[ -f "$HOME/.loopruntime/dev-credentials.json" ]]; then
       RESEND_API_KEY=$(python3 -c "
 import json, sys
 try:
-  d = json.load(open('$HOME/.loopzero/dev-credentials.json'))
+  d = json.load(open('$HOME/.loopruntime/dev-credentials.json'))
   print(d.get('resend', {}).get('api_key', ''))
 except Exception:
   pass
@@ -118,7 +118,7 @@ except Exception:
     if [[ -z "${RESEND_API_KEY:-}" ]]; then
       # Last resort: read from the live ConfigMap (helmfile substitutes the
       # real Bearer at template time).
-      RESEND_API_KEY=$(kubectl --context "$KUBE_CONTEXT" -n loopzero-auth get cm \
+      RESEND_API_KEY=$(kubectl --context "$KUBE_CONTEXT" -n loopruntime-auth get cm \
         ory-kratos-config -o jsonpath='{.data.kratos\.yaml}' 2>/dev/null \
         | grep -oE 'Bearer re_[A-Za-z0-9_]+' | head -1 | sed 's/Bearer //')
     fi
@@ -152,8 +152,8 @@ scenario_a() {
 
   # Assert NO courier message enqueued for unknown
   local new_msgs
-  new_msgs=$(kubectl --context "$KUBE_CONTEXT" -n loopzero-system exec postgresql-0 \
-    -c postgresql -- env PGPASSWORD=loopzero-dev-password psql -U loopzero -d kratos \
+  new_msgs=$(kubectl --context "$KUBE_CONTEXT" -n loopruntime-system exec postgresql-0 \
+    -c postgresql -- env PGPASSWORD=loopruntime-dev-password psql -U loopruntime -d kratos \
     -tAc "SELECT count(*) FROM courier_messages WHERE recipient='${UNKNOWN_EMAIL}' \
           AND created_at > NOW() - INTERVAL '30 seconds';" 2>/dev/null | tr -d ' ')
 
@@ -186,8 +186,8 @@ scenario_b() {
 
   # PG: courier message row exists for KNOWN_EMAIL with send_count >= 1
   local row
-  row=$(kubectl --context "$KUBE_CONTEXT" -n loopzero-system exec postgresql-0 \
-    -c postgresql -- env PGPASSWORD=loopzero-dev-password psql -U loopzero -d kratos \
+  row=$(kubectl --context "$KUBE_CONTEXT" -n loopruntime-system exec postgresql-0 \
+    -c postgresql -- env PGPASSWORD=loopruntime-dev-password psql -U loopruntime -d kratos \
     -tAc "SELECT id::text || '|' || status || '|' || send_count FROM courier_messages \
           WHERE recipient='${KNOWN_EMAIL}' \
           AND created_at > NOW() - INTERVAL '30 seconds' \
@@ -238,7 +238,7 @@ else:
 # Scenario C: signup for a fresh email MUST create identity + enqueue
 # verification + Resend MUST accept.
 scenario_c() {
-  local fresh_email="redteam-117-signup-$(date +%s)-${RANDOM}@loopzero.test"
+  local fresh_email="redteam-117-signup-$(date +%s)-${RANDOM}@loopruntime.test"
 
   local flow_id
   flow_id=$(curl -ks -X GET "${TARGET_HOST}/self-service/registration/api" \
@@ -252,7 +252,7 @@ scenario_c() {
   local resp
   resp=$(curl -ks -X POST "${TARGET_HOST}/self-service/registration?flow=${flow_id}" \
     -H "Content-Type: application/json" -H "Accept: application/json" \
-    -d "{\"method\":\"password\",\"password\":\"loopzero-dev-password-117-redteam\",\"traits\":{\"email\":\"${fresh_email}\"}}" 2>&1)
+    -d "{\"method\":\"password\",\"password\":\"loopruntime-dev-password-117-redteam\",\"traits\":{\"email\":\"${fresh_email}\"}}" 2>&1)
 
   # Look for `message` field (Kratos returns it on successful registration
   # awaiting verification) OR `identity` (api-flow returns the full identity)
@@ -278,8 +278,8 @@ else:
 
   # PG: courier_messages row for fresh_email
   local has_row
-  has_row=$(kubectl --context "$KUBE_CONTEXT" -n loopzero-system exec postgresql-0 \
-    -c postgresql -- env PGPASSWORD=loopzero-dev-password psql -U loopzero -d kratos \
+  has_row=$(kubectl --context "$KUBE_CONTEXT" -n loopruntime-system exec postgresql-0 \
+    -c postgresql -- env PGPASSWORD=loopruntime-dev-password psql -U loopruntime -d kratos \
     -tAc "SELECT count(*) FROM courier_messages WHERE recipient='${fresh_email}' \
           AND created_at > NOW() - INTERVAL '60 seconds';" 2>/dev/null | tr -d ' ')
 

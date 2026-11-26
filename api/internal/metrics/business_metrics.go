@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metrics
 
@@ -14,7 +14,7 @@ var (
 	// plus health probe success. This is the executive metric: "how long until the
 	// user's code is live?"
 	DeployLeadTime = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "loopzero_deploy_lead_time_seconds",
+		Name:    "loopruntime_deploy_lead_time_seconds",
 		Help:    "Total time from build creation to healthy URL (deploy lead time).",
 		Buckets: []float64{30, 60, 120, 180, 300, 600, 900, 1800},
 	}, []string{"tenant", "environment"})
@@ -23,14 +23,14 @@ var (
 	// as unhealthy by the convergence loop's health check. A non-zero rate indicates
 	// problems with health probes or deployment reliability.
 	FalseSuccessTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_false_success_total",
+		Name: "loopruntime_false_success_total",
 		Help: "Releases marked ACTIVE that later became unhealthy (false success).",
 	}, []string{"tenant", "environment"})
 
 	// RetryAmplificationTotal counts total retry attempts per operation type.
 	// High values indicate cascading failures or misconfigured timeouts.
 	RetryAmplificationTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_retry_amplification_total",
+		Name: "loopruntime_retry_amplification_total",
 		Help: "Total retry attempts by operation type.",
 	}, []string{"operation"})
 
@@ -58,18 +58,18 @@ var (
 	// exist: `POST /secrets` persists the row BEFORE any of this runs, so
 	// every way out of the sync path must move exactly one series. An exit
 	// that counts nothing leaves a row in `secrets` while
-	// sum(loopzero_secret_externalsecret_total) reads zero — and that sum is what
+	// sum(loopruntime_secret_externalsecret_total) reads zero — and that sum is what
 	// the B-126 canary deferral
 	// (docs/decisions.md § 2)
 	// uses as its trigger. Adding an early return here without an increment
 	// re-opens that hole. TestCreateSecret_EveryExitMovesTheCounter
 	// (api/internal/k8s/secretsync) is the guard.
 	//
-	// Alert opportunity: rate(loopzero_secret_externalsecret_total{result="skip"}[5m]) > 0
-	// indicates the API silently no-ops `loopzero secret set` calls.
+	// Alert opportunity: rate(loopruntime_secret_externalsecret_total{result="skip"}[5m]) > 0
+	// indicates the API silently no-ops `loopruntime secret set` calls.
 	SecretExternalSecretTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_secret_externalsecret_total",
-		Help: "ExternalSecret CR create/update outcomes from loopzero-api workload sync path.",
+		Name: "loopruntime_secret_externalsecret_total",
+		Help: "ExternalSecret CR create/update outcomes from loopruntime-api workload sync path.",
 	}, []string{"result"})
 
 	// SecretAuditWriteFailedTotal counts cases where the broker secret-fetch
@@ -86,11 +86,11 @@ var (
 	// (would be unbounded with N tenants).
 	//
 	// Alert opportunity:
-	//   rate(loopzero_secret_audit_write_failed_total{event_type="cross_tenant_attempt"}[5m]) > 0
+	//   rate(loopruntime_secret_audit_write_failed_total{event_type="cross_tenant_attempt"}[5m]) > 0
 	//   indicates the security audit trail is breaking for the very events
 	//   it exists to record. Page immediately.
 	SecretAuditWriteFailedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_secret_audit_write_failed_total",
+		Name: "loopruntime_secret_audit_write_failed_total",
 		Help: "Broker secret-fetch audit write failures (T2.3 closes HIGH #16).",
 	}, []string{"event_type"})
 
@@ -118,7 +118,7 @@ var (
 	//
 	// B-126: until this counter existed, a decrypt failure was reported ONLY
 	// as a per-request error. A revoked or rotated Transit key
-	// (transit/keys/loopzero-tenants-<id>) makes every ciphertext of that tenant
+	// (transit/keys/loopruntime-tenants-<id>) makes every ciphertext of that tenant
 	// undecryptable at once, and per-request errors do not add up into
 	// anything: the failure looked like one user's broken secret, not like a
 	// key that is gone. Aggregating the same failures turns that into a
@@ -156,12 +156,12 @@ var (
 	//     path in the tree can produce.
 	//
 	// Alert opportunity:
-	//   sum(rate(loopzero_secret_decrypt_failed_total{reason="vault_transit_error"}[5m])) > 0
+	//   sum(rate(loopruntime_secret_decrypt_failed_total{reason="vault_transit_error"}[5m])) > 0
 	//   means secrets that were readable are not readable now. Page: the
 	//   ciphertext is orphaned until the key comes back. The `sum` is what
 	//   makes the query cover both readers without naming either.
 	SecretDecryptFailedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_secret_decrypt_failed_total",
+		Name: "loopruntime_secret_decrypt_failed_total",
 		Help: "Secret read-path decrypt failures, by reason (B-126).",
 	}, []string{"reason"})
 
@@ -179,11 +179,11 @@ var (
 	//   - "fail"     — failed handler followed by FAILED Fail write
 	//                  (orphan rows accumulate in workqueue table)
 	//
-	// Alert opportunity: sum(rate(loopzero_workqueue_terminal_write_fail_total[5m])) > 0
+	// Alert opportunity: sum(rate(loopruntime_workqueue_terminal_write_fail_total[5m])) > 0
 	// indicates the queue is in an at-least-once-becomes-at-most-once degenerate
 	// state and operators should investigate immediately.
 	WorkqueueTerminalWriteFailTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_workqueue_terminal_write_fail_total",
+		Name: "loopruntime_workqueue_terminal_write_fail_total",
 		Help: "Workqueue consumer terminal-state DB write failures (Complete/Fail).",
 	}, []string{"terminal"})
 
@@ -198,7 +198,7 @@ var (
 	//
 	// Alert opportunity: any non-zero rate over 5min indicates divergence.
 	CellPinnerCRPatchFailTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "loopzero_cell_pinner_cr_patch_fail_total",
+		Name: "loopruntime_cell_pinner_cr_patch_fail_total",
 		Help: "CellPinner DB-updated-but-CR-patch-failed events (DB↔CR divergence window).",
 	})
 
@@ -211,7 +211,7 @@ var (
 	//
 	// T6.5 of deep-review-remediation-plan.
 	ReleaseAppAttestationSaveFailTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_release_attestation_save_fail_total",
+		Name: "loopruntime_release_attestation_save_fail_total",
 		Help: "Per-app attestation persistence failures during release container delivery.",
 	}, []string{"environment"})
 
@@ -220,15 +220,15 @@ var (
 	// ADR-0047. Use rate() to derive prunes/sec; sum() over scrape window to
 	// see total volume. Healthy state: trend in flat steps every nightly run.
 	AuditLogPrunerDeletedTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "loopzero_audit_log_pruner_deleted_total",
+		Name: "loopruntime_audit_log_pruner_deleted_total",
 		Help: "audit_log rows deleted by the retention pruner (1-year window per ADR-0047).",
 	})
 
 	// AuditLogPrunerFailTotal counts pruner runs that errored during a batch
 	// (DB error, missing trigger bypass var, deadlock). Alert opportunity:
-	//   increase(loopzero_audit_log_pruner_fail_total[24h]) > 0
+	//   increase(loopruntime_audit_log_pruner_fail_total[24h]) > 0
 	AuditLogPrunerFailTotal = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "loopzero_audit_log_pruner_fail_total",
+		Name: "loopruntime_audit_log_pruner_fail_total",
 		Help: "audit_log pruner run failures (per batch).",
 	})
 
@@ -238,7 +238,7 @@ var (
 	// Label cardinality bounded by tenant count (acceptable per existing
 	// metrics.go conventions; revisit at >10k tenants).
 	DomainVerifyRateLimitedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_domain_verify_rate_limited_total",
+		Name: "loopruntime_domain_verify_rate_limited_total",
 		Help: "Total POST /verify requests rejected by the per-(tenant, domain) rate limiter.",
 	}, []string{"tenant"})
 
@@ -248,7 +248,7 @@ var (
 	// pointing at it; a record it could not delete (operation="delete_record")
 	// is a conflicting or duplicate record left in the zone.
 	DomainZoneCleanupFailuresTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "loopzero_domain_zone_cleanup_failures_total",
+		Name: "loopruntime_domain_zone_cleanup_failures_total",
 		Help: "Total compensating DNS-provider deletes that failed during custom domain setup.",
 	}, []string{"operation"})
 )

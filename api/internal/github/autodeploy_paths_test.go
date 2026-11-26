@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -12,11 +12,11 @@ import (
 	"testing"
 )
 
-func newTestDeployer(t *testing.T, loopzeroYaml string, cfg AutoDeployConfig) *AutoDeployer {
+func newTestDeployer(t *testing.T, loopruntimeYaml string, cfg AutoDeployConfig) *AutoDeployer {
 	t.Helper()
 	files := map[string]string{"owner-repo-abc123/main.go": "package main"}
-	if loopzeroYaml != "" {
-		files["owner-repo-abc123/loopzero.yaml"] = loopzeroYaml
+	if loopruntimeYaml != "" {
+		files["owner-repo-abc123/loopzero.yaml"] = loopruntimeYaml
 	}
 	server := newGitHubTarballServerWithFiles(t, files)
 	t.Cleanup(server.Close)
@@ -27,11 +27,11 @@ func newTestDeployer(t *testing.T, loopzeroYaml string, cfg AutoDeployConfig) *A
 	return NewAutoDeployer(cfg)
 }
 
-const minimalLoopZeroYaml = "project: my-app\napps:\n  api:\n    runtime: node\n    start: node server.js\n"
+const minimalLoopRuntimeYaml = "project: my-app\napps:\n  api:\n    runtime: node\n    start: node server.js\n"
 
 func TestHandlePush_WithoutABuildSubmitterStillUploadsTheBundle(t *testing.T) {
 	uploader := &fakeObjectUploader{}
-	d := newTestDeployer(t, minimalLoopZeroYaml, AutoDeployConfig{ObjectStore: uploader})
+	d := newTestDeployer(t, minimalLoopRuntimeYaml, AutoDeployConfig{ObjectStore: uploader})
 
 	if err := d.HandlePush(context.Background(), PushRequest{
 		RepoFullName: "owner/repo", Branch: "main", CommitSHA: "sha1", InstallationID: 1,
@@ -44,9 +44,9 @@ func TestHandlePush_WithoutABuildSubmitterStillUploadsTheBundle(t *testing.T) {
 	}
 }
 
-func TestPrepareSourceBundle_UploadsAndReturnsLoopZeroYaml(t *testing.T) {
+func TestPrepareSourceBundle_UploadsAndReturnsLoopRuntimeYaml(t *testing.T) {
 	uploader := &fakeObjectUploader{}
-	d := newTestDeployer(t, minimalLoopZeroYaml, AutoDeployConfig{ObjectStore: uploader, SourceBucket: "b"})
+	d := newTestDeployer(t, minimalLoopRuntimeYaml, AutoDeployConfig{ObjectStore: uploader, SourceBucket: "b"})
 
 	y, err := d.PrepareSourceBundle(context.Background(), "owner/repo", "sha2", 1, "tenant-1")
 
@@ -61,7 +61,7 @@ func TestPrepareSourceBundle_UploadsAndReturnsLoopZeroYaml(t *testing.T) {
 	}
 }
 
-func TestPrepareSourceBundle_WithoutLoopZeroYamlStillUploads(t *testing.T) {
+func TestPrepareSourceBundle_WithoutLoopRuntimeYamlStillUploads(t *testing.T) {
 	uploader := &fakeObjectUploader{}
 	d := newTestDeployer(t, "", AutoDeployConfig{ObjectStore: uploader})
 
@@ -76,7 +76,7 @@ func TestPrepareSourceBundle_WithoutLoopZeroYamlStillUploads(t *testing.T) {
 }
 
 func TestPrepareSourceBundle_RejectsAnInvalidRepoName(t *testing.T) {
-	d := newTestDeployer(t, minimalLoopZeroYaml, AutoDeployConfig{ObjectStore: &fakeObjectUploader{}})
+	d := newTestDeployer(t, minimalLoopRuntimeYaml, AutoDeployConfig{ObjectStore: &fakeObjectUploader{}})
 	if _, err := d.PrepareSourceBundle(context.Background(), "no-slash", "sha", 1, "t"); err == nil {
 		t.Fatal("expected an error for a repo name without owner")
 	}

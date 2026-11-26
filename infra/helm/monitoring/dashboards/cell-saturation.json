@@ -9,7 +9,7 @@
   "uid": "cell-saturation",
   "description": "Per-cell capacity headroom. Yellow = warn, Red = admission control should start rejecting. Thresholds defined in cell-budget.",
   "tags": [
-    "loopzero",
+    "loopruntime",
     "cell",
     "saturation",
     "roadmap-04"
@@ -47,7 +47,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "query": "label_values(loopzero_cell_tenant_count, cell_id)",
+        "query": "label_values(loopruntime_cell_tenant_count, cell_id)",
         "refresh": 2,
         "includeAll": true,
         "multi": false,
@@ -62,7 +62,7 @@
     {
       "title": "PG pool — active connections",
       "type": "gauge",
-      "description": "Active PG connections from loopzero-api pool. Pool default max=25 (DB_MAX_CONNS). DO managed PG db-s-2vcpu-4gb max_connections=97. Yellow=15 (60%), Red=20 (80%).",
+      "description": "Active PG connections from loopruntime-api pool. Pool default max=25 (DB_MAX_CONNS). DO managed PG db-s-2vcpu-4gb max_connections=97. Yellow=15 (60%), Red=20 (80%).",
       "gridPos": {
         "h": 8,
         "w": 6,
@@ -75,7 +75,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "loopzero_postgres_connections_active",
+          "expr": "loopruntime_postgres_connections_active",
           "legendFormat": "active"
         }
       ],
@@ -134,7 +134,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "loopzero_build_queue_depth",
+          "expr": "loopruntime_build_queue_depth",
           "legendFormat": "queued"
         }
       ],
@@ -179,7 +179,7 @@
     {
       "title": "Active builds",
       "type": "gauge",
-      "description": "Builds currently RUNNING or RELEASING. RUNNING = loopzero_builds_active - loopzero_build_queue_depth, RELEASING = loopzero_releasing_builds. Yellow=8, Red=10.",
+      "description": "Builds currently RUNNING or RELEASING. RUNNING = loopruntime_builds_active - loopruntime_build_queue_depth, RELEASING = loopruntime_releasing_builds. Yellow=8, Red=10.",
       "gridPos": {
         "h": 8,
         "w": 6,
@@ -192,7 +192,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "(sum(loopzero_builds_active) or vector(0)) - (loopzero_build_queue_depth or vector(0)) + (loopzero_releasing_builds or vector(0))",
+          "expr": "(sum(loopruntime_builds_active) or vector(0)) - (loopruntime_build_queue_depth or vector(0)) + (loopruntime_releasing_builds or vector(0))",
           "legendFormat": "running+releasing"
         }
       ],
@@ -250,7 +250,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "loopzero_cell_tenant_count{cell_id=~\"$cell\"}",
+          "expr": "loopruntime_cell_tenant_count{cell_id=~\"$cell\"}",
           "legendFormat": "{{ cell_id }}"
         }
       ],
@@ -308,7 +308,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(loopzero_api_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(loopruntime_api_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p99"
         },
         {
@@ -316,7 +316,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(loopzero_api_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(loopruntime_api_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p50"
         }
       ],
@@ -368,7 +368,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(loopzero_gitops_operation_duration_seconds_bucket{operation=\"push\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(loopruntime_gitops_operation_duration_seconds_bucket{operation=\"push\"}[5m])))",
           "legendFormat": "p99"
         }
       ],
@@ -461,7 +461,7 @@
     {
       "title": "API leader status",
       "type": "stat",
-      "description": "Whether this API replica holds the leader advisory lock (pg_advisory_xact_lock). 1=LEADER, 0=NOT LEADER. Alert LoopZeroLeaderLost fires when all replicas report 0 for >2min.",
+      "description": "Whether this API replica holds the leader advisory lock (pg_advisory_xact_lock). 1=LEADER, 0=NOT LEADER. Alert LoopRuntimeLeaderLost fires when all replicas report 0 for >2min.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -474,7 +474,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "loopzero_api_leader_status",
+          "expr": "loopruntime_api_leader_status",
           "legendFormat": "leader"
         }
       ],

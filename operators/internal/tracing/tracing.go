@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package tracing provides OpenTelemetry distributed tracing bootstrap for operators.
 // Mirrors the API tracing package (api/internal/tracing/tracing.go) with identical
@@ -25,7 +25,7 @@ import (
 
 const (
 	// DefaultEndpoint is the in-cluster OTel Collector address.
-	DefaultEndpoint = "otel-collector.loopzero-system.svc.cluster.local:4317"
+	DefaultEndpoint = "otel-collector.loopruntime-system.svc.cluster.local:4317"
 
 	// exportTimeout is the maximum time for an export attempt.
 	// Default OTel SDK is 10s — too long, risks latency under failure.
@@ -39,14 +39,14 @@ const (
 // Init configures the OTel TracerProvider with OTLP gRPC exporter.
 // Returns a shutdown function for graceful shutdown.
 //
-// If LOOPZERO_TRACING_ENABLED is "false", returns a no-op shutdown
+// If LOOPRUNTIME_TRACING_ENABLED is "false", returns a no-op shutdown
 // with zero overhead — no TracerProvider is registered.
 //
 // If the Collector is unreachable, the operator continues normally.
 // Spans are dropped after queue exhaustion (graceful degradation).
 func Init(ctx context.Context, serviceName string) (shutdown func(context.Context) error, err error) {
 	if !isEnabled() {
-		slog.Info("tracing disabled via LOOPZERO_TRACING_ENABLED=false")
+		slog.Info("tracing disabled via LOOPRUNTIME_TRACING_ENABLED=false")
 		return func(context.Context) error { return nil }, nil
 	}
 
@@ -95,7 +95,7 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 		sdktrace.WithSpanProcessor(bsp),
 	)
 
-	// Register globally so otel.Tracer("loopzero-operator") works everywhere.
+	// Register globally so otel.Tracer("loopruntime-operator") works everywhere.
 	otel.SetTracerProvider(tp)
 
 	// W3C TraceContext propagation for cross-service trace correlation.
@@ -117,10 +117,10 @@ func Init(ctx context.Context, serviceName string) (shutdown func(context.Contex
 	return tp.Shutdown, nil
 }
 
-// isEnabled checks the LOOPZERO_TRACING_ENABLED feature flag.
+// isEnabled checks the LOOPRUNTIME_TRACING_ENABLED feature flag.
 // Default: "true" unless explicitly set to "false".
 func isEnabled() bool {
-	v := os.Getenv("LOOPZERO_TRACING_ENABLED")
+	v := os.Getenv("LOOPRUNTIME_TRACING_ENABLED")
 	if v == "" {
 		return true
 	}
@@ -129,7 +129,7 @@ func isEnabled() bool {
 
 // getEnv returns the deployment environment name for resource attributes.
 func getEnv() string {
-	env := os.Getenv("LOOPZERO_ENV")
+	env := os.Getenv("LOOPRUNTIME_ENV")
 	if env == "" {
 		return "development"
 	}

@@ -10,7 +10,7 @@ publicOrigin: ""
 # Where the gateway fetches Hydra's signing keys, in-cluster.
 jwks:
   service: ory-hydra-public
-  namespace: loopzero-auth
+  namespace: loopruntime-auth
   port: 4444
   path: /.well-known/jwks.json
 
@@ -25,7 +25,7 @@ gateway:
 # gateway is defence in depth, never the only check.
 #   - name: memory                     # kebab-case, names the backend, route and policy
 #     path: /mcp/memory                # public path; the resource URI is publicOrigin + path
-#     host: loopzero-memory.loopzero-data-plane.svc.cluster.local
+#     host: loopruntime-memory.loopruntime-data-plane.svc.cluster.local
 #     port: 8080
 #     upstreamPath: /mcp               # the server's own streamable-HTTP endpoint
 servers: []

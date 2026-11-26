@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -13,7 +13,7 @@ import (
 // scopeDatabaseToCaller confines the request's database work to the tenant the
 // authentication middleware resolved for the caller.
 //
-// The request pool runs as loopzero_api, and every tenant table is fail-closed
+// The request pool runs as loopruntime_api, and every tenant table is fail-closed
 // under Row Level Security (migration 000062): a connection sees only the rows
 // of the tenant `app.tenant_id` names. The pool sets that variable from the
 // context this middleware produces (db.PoolConfig.TenantScoped), so every store

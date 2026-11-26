@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
-// DP9 — loopzero-lens LIVE journey.
+// DP9 — loopruntime-lens LIVE journey.
 //
 // Blueprint OQ2 correction: POST /v1/replay-sessions accepts `{traceId}`
 // (packages/api/src/server/app.ts:399-415), NOT `{agent_id}`. The body is
 // validated at the boundary (fail-fast 400 on missing/empty traceId per
-// Rule 8). Also OQ4: loopzero-lens Model B twin path — MintKey signature matches
-// loopzero-memory/loopzero-promptly (POST /v1/admin/keys → FLAT
+// Rule 8). Also OQ4: loopruntime-lens Model B twin path — MintKey signature matches
+// loopruntime-memory/loopruntime-promptly (POST /v1/admin/keys → FLAT
 // {id, name, key_prefix, scopes, workspace_id, secret} @ 200), see
-// loopzero-cloud/internal/thelens/admin_client.go:14-20.
+// loopruntime-cloud/internal/thelens/admin_client.go:14-20.
 //
 // Why direct-host + edge fail-closed both matter (Rule 3 — honesty):
 //   - The Model B customer-key exchange through the edge broker is currently
@@ -32,7 +32,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("DP-lens loopzero-lens LIVE", Label("live", "dogfood", "dp-lens"), func() {
+var _ = Describe("DP-lens loopruntime-lens LIVE", Label("live", "dogfood", "dp-lens"), func() {
 	var (
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -120,15 +120,15 @@ var _ = Describe("DP-lens loopzero-lens LIVE", Label("live", "dogfood", "dp-lens
 })
 
 // mintLensCustomerKey provisions a per-tenant observability:{read,write} key
-// via the direct-host bootstrap OR falls back to LOOPZERO_DP9_LENS_KEY.
+// via the direct-host bootstrap OR falls back to LOOPRUNTIME_DP9_LENS_KEY.
 func mintLensCustomerKey(ctx context.Context, env Env, ep DataPlaneEndpoint) string {
-	if k := envKey("LOOPZERO_DP9_LENS_KEY"); k != "" {
+	if k := envKey("LOOPRUNTIME_DP9_LENS_KEY"); k != "" {
 		return k
 	}
 	key, err := MintDataPlaneCustomerKey(env, ep, "", "dp9-probe", "default",
 		[]string{"observability:read", "observability:write"})
 	Expect(err).ToNot(HaveOccurred(),
-		"lens bootstrap mint failed AND no LOOPZERO_DP9_LENS_KEY fallback in env — set the env or reset admin_bootstrap")
+		"lens bootstrap mint failed AND no LOOPRUNTIME_DP9_LENS_KEY fallback in env — set the env or reset admin_bootstrap")
 	_ = ctx
 	return key
 }

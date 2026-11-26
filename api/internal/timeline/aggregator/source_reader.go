@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package aggregator implements the per-deploy aggregator goroutine that
 // fan-ins phase-status events from N source-reader adapters (DIP boundary)
@@ -22,7 +22,7 @@ import (
 type SourceID string
 
 const (
-	// SourceLokiMarkers reads ::loopzero:: marker log lines via the Loki
+	// SourceLokiMarkers reads ::loopruntime:: marker log lines via the Loki
 	// HTTP API (workload+build clusters).
 	SourceLokiMarkers SourceID = "loki_markers"
 	// SourceReleaseDB tails the releases table for status transitions
@@ -30,8 +30,8 @@ const (
 	SourceReleaseDB SourceID = "release_db"
 	// SourceArgoCDApp polls ArgoCD Application sync_status + health_status.
 	SourceArgoCDApp SourceID = "argocd_app"
-	// SourceLoopZeroAppInformer watches LoopZeroApplication CRD via informer.
-	SourceLoopZeroAppInformer SourceID = "loopzeroapp_informer"
+	// SourceLoopRuntimeAppInformer watches LoopRuntimeApplication CRD via informer.
+	SourceLoopRuntimeAppInformer SourceID = "loopruntimeapp_informer"
 	// SourceStatusURLProbe HTTP-GETs the live URL with budget per ADR D6.
 	SourceStatusURLProbe SourceID = "status_url_probe"
 )

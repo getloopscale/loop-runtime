@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package config — regression suite for B1-B18 (CHG-2026-04-28-LAYERED-BOOTSTRAP T8.1).
 //
@@ -8,7 +8,7 @@
 //
 // Run:
 //
-//	LOOPZERO_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
+//	LOOPRUNTIME_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
 package config
 
 import (
@@ -29,7 +29,7 @@ func runRegressionScript(t *testing.T) (string, int) {
 		t.Fatalf("regression-checks.sh not found at %s", scriptPath)
 	}
 	cmd := exec.Command("bash", scriptPath)
-	cmd.Env = append(os.Environ(), "LOOPZERO_DOMAIN=dev.getloopscale.com")
+	cmd.Env = append(os.Environ(), "LOOPRUNTIME_DOMAIN=dev.getloopscale.com")
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
@@ -70,8 +70,8 @@ func TestRegressionScriptHasAllBugChecks(t *testing.T) {
 }
 
 func TestRegressionRunsAgainstLiveCluster(t *testing.T) {
-	if os.Getenv("LOOPZERO_REGRESSION_LIVE") == "" {
-		t.Skip("LOOPZERO_REGRESSION_LIVE not set — skipping live regression run")
+	if os.Getenv("LOOPRUNTIME_REGRESSION_LIVE") == "" {
+		t.Skip("LOOPRUNTIME_REGRESSION_LIVE not set — skipping live regression run")
 	}
 	out, exit := runRegressionScript(t)
 	t.Logf("regression-checks.sh exit=%d output:\n%s", exit, out)
@@ -163,7 +163,7 @@ func loadTaskCmds(t *testing.T, path, task string) []yaml.Node {
 // cluster there is created behind the same guard the deleted script used, in the
 // same idiom:
 //
-//	k3d cluster list -o json | grep -q '"name":"loopzero-core"' || k3d cluster create ...
+//	k3d cluster list -o json | grep -q '"name":"loopruntime-core"' || k3d cluster create ...
 //
 // That is what "idempotent" means here, and it is what this test asserts now, on
 // the live file. It is a stronger check than the one it replaces: the old test
@@ -222,8 +222,8 @@ func TestClusterCreateIsIdempotent(t *testing.T) {
 //
 // It asserted that `cli/tests/integration/exit-code-contract.test.ts` exists and
 // covers six commands plus --help/--version. That file moved to the sibling
-// `loopzero-cli` repository in the M5 decomposition; `cli/` is not in this tree and
-// `loopzero-cli` is not cloned beside it, so the stat always failed and the skip was
+// `loopruntime-cli` repository in the M5 decomposition; `cli/` is not in this tree and
+// `loopruntime-cli` is not cloned beside it, so the stat always failed and the skip was
 // the only branch ever taken. Everything below it -- the whole contract matrix --
 // had not run since M5 while the package reported `ok`.
 //
@@ -234,7 +234,7 @@ func TestClusterCreateIsIdempotent(t *testing.T) {
 // has its own executable guard, an index that says the guards exist adds no
 // signal and rots on its own schedule.
 //
-// What covers the exit-code contract now: loopzero-cli owns its own suite
+// What covers the exit-code contract now: loopruntime-cli owns its own suite
 // (`npm test -- tests/contract/engine-contract.test.ts`), invoked from this
 // repository by `task quality:contract:cross-repo`, which prints an explicit SKIP
 // when the sibling is absent instead of passing silently. The engine side of the
@@ -242,7 +242,7 @@ func TestClusterCreateIsIdempotent(t *testing.T) {
 // and runs here on every `task quality:contract`. The seam is tabulated in
 // `docs/cross-repo-contract-matrix.md`.
 //
-// The class is now guarded: `loopzero-ops quality test-skip-absent-path` fails when a
+// The class is now guarded: `loopruntime-ops quality test-skip-absent-path` fails when a
 // test under infra/tests/ skips on a path absent from this tree.
 
 func TestT61DogfoodLoopH1TestExists(t *testing.T) {
@@ -255,8 +255,8 @@ func TestT61DogfoodLoopH1TestExists(t *testing.T) {
 		t.Fatalf("read dogfood test: %v", err)
 	}
 	s := string(data)
-	if !strings.Contains(s, "LOOPZERO_E2E_DOGFOOD") {
-		t.Error("T6.1 regression: gating env var must be LOOPZERO_E2E_DOGFOOD")
+	if !strings.Contains(s, "LOOPRUNTIME_E2E_DOGFOOD") {
+		t.Error("T6.1 regression: gating env var must be LOOPRUNTIME_E2E_DOGFOOD")
 	}
 	if !strings.Contains(s, "func TestDogfoodLoopH1(") {
 		t.Error("T6.1 regression: TestDogfoodLoopH1 function must exist")

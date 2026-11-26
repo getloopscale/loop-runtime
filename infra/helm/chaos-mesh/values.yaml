@@ -4,7 +4,7 @@
 # policy-controller dry-run window per CHG-002c pre-condition).
 #
 # Deployed to mgmt + build + runtime + runtime-2 clusters via:
-#   helm upgrade --install loopzero-chaos-mesh infra/helm/chaos-mesh \
+#   helm upgrade --install loopruntime-chaos-mesh infra/helm/chaos-mesh \
 #     --kube-context <ctx> -n chaos-mesh --create-namespace
 #
 # Chaos test manifests live in infra/tests/chaos/manifests/ (9 scenarios).

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -64,8 +64,8 @@ func TestCellEdgeAsksTheEngineAndMapsEveryCell(t *testing.T) {
 	for _, want := range []string{
 		"forward_auth localhost:13001",
 		"uri /internal/edge/route",
-		"copy_headers X-LoopZero-Cell",
-		"{$LOOPZERO_EDGE_ROUTE_TOKEN}",
+		"copy_headers X-LoopRuntime-Cell",
+		"{$LOOPRUNTIME_EDGE_ROUTE_TOKEN}",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("cell_edge lacks %q", want)
@@ -76,14 +76,14 @@ func TestCellEdgeAsksTheEngineAndMapsEveryCell(t *testing.T) {
 			t.Errorf("cell_edge does not map %s to 127.0.0.1:%s", cell, port)
 		}
 	}
-	// A client-supplied X-LoopZero-Cell must never choose the upstream, and the strip must
+	// A client-supplied X-LoopRuntime-Cell must never choose the upstream, and the strip must
 	// run BEFORE the lookup. Caddy's default directive order runs forward_auth before
 	// request_header, which deleted the cell the lookup had just copied: every app
 	// answered 502. Only a `route` block executes directives in written order.
 	if !strings.Contains(body, "route {") {
 		t.Fatal("cell_edge is not a route block — Caddy would reorder its directives")
 	}
-	order := []string{"request_header -X-LoopZero-Cell", "forward_auth", "map {header.X-LoopZero-Cell}", "reverse_proxy {cell_ingress}"}
+	order := []string{"request_header -X-LoopRuntime-Cell", "forward_auth", "map {header.X-LoopRuntime-Cell}", "reverse_proxy {cell_ingress}"}
 	last := -1
 	for _, d := range order {
 		i := strings.Index(body, d)

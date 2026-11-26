@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domainshttp
 
@@ -14,7 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Verify checks DNS TXT records for domain ownership (POST /api/v1/domains/{domain}/verify).
@@ -25,7 +25,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	if h.cfZone != nil {
 		httpio.WriteJSON(w, http.StatusGone, map[string]string{
 			"code":    "DEPRECATED",
-			"message": "TXT verification is deprecated. Domains now use nameserver delegation. Use 'loopzero domain add' to register a new domain.",
+			"message": "TXT verification is deprecated. Domains now use nameserver delegation. Use 'loopruntime domain add' to register a new domain.",
 		})
 		return
 	}
@@ -33,7 +33,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		httpio.WriteJSON(w, http.StatusOK, domainVerifyResponse{
 			Domain:            d.Domain,
 			Status:            d.Status,
-			VerificationError: "TXT record not found for _loopzero-verify." + d.Domain,
+			VerificationError: "TXT record not found for _loopruntime-verify." + d.Domain,
 			Hint:              "DNS changes can take up to 48 hours to propagate. Most providers update within 5 minutes.",
 		})
 		return
@@ -107,6 +107,6 @@ func (h *DomainHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		Domain:     d.Domain,
 		Status:     string(next),
 		VerifiedAt: &now,
-		Message:    "Provisioning in progress. Check status with: loopzero domain status " + d.Domain,
+		Message:    "Provisioning in progress. Check status with: loopruntime domain status " + d.Domain,
 	})
 }

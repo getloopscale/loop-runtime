@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -18,23 +18,23 @@ import (
 // ready replicas, request rate, error rate and latency. A tenant app is an Argo Rollout
 // that LoopScale does not instrument, so no series described it
 // (getloopscale/loop-runtime#107). Each cell now builds them: kube-state-metrics exports the
-// loopzero.io labels of pods and Services, the cell's Prometheus records one series per
+// runtime.getloopscale.com labels of pods and Services, the cell's Prometheus records one series per
 // app from pod readiness and from the ingress, and the core Prometheus federates those.
 
 // tenantAppLabels are the labels every recorded series carries, and tenantKubeLabels the
 // Kubernetes labels they come from.
 var (
 	tenantAppLabels  = []string{"tenant_id", "project", "app", "environment"}
-	tenantKubeLabels = []string{"loopzero.io/tenant", "loopzero.io/project", "loopzero.io/app-name", "loopzero.io/environment"}
+	tenantKubeLabels = []string{"runtime.getloopscale.com/tenant", "runtime.getloopscale.com/project", "runtime.getloopscale.com/app-name", "runtime.getloopscale.com/environment"}
 )
 
 // tenantAppSeries are the series the API queries
 // (api/internal/projectmetrics/projectmetricshttp/metrics_proxy.go).
 var tenantAppSeries = []string{
-	"loopzero_app:kube_pod_status_ready:sum",
-	"loopzero_app:traefik_service_requests:rate5m",
-	"loopzero_app_status_class:traefik_service_requests:rate5m",
-	"loopzero_app_le:traefik_service_request_duration_seconds_bucket:rate5m",
+	"loopruntime_app:kube_pod_status_ready:sum",
+	"loopruntime_app:traefik_service_requests:rate5m",
+	"loopruntime_app_status_class:traefik_service_requests:rate5m",
+	"loopruntime_app_le:traefik_service_request_duration_seconds_bucket:rate5m",
 }
 
 type recordingRule struct {
@@ -169,7 +169,7 @@ func TestCorePrometheusFederatesTheRecordedTenantAppSeries(t *testing.T) {
 			}
 		}
 		for _, rule := range rules {
-			wanted := strings.HasPrefix(rule.Record, "loopzero_app")
+			wanted := strings.HasPrefix(rule.Record, "loopruntime_app")
 			if byRecordedName.MatchString(rule.Record) != wanted {
 				t.Errorf("%s: %v selecting %s = %v, want %v (only the per-app series leave the cell)",
 					name, byRecordedName, rule.Record, !wanted, wanted)

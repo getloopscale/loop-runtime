@@ -1,14 +1,14 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- ============================================================================
 -- 000053_lens_saved_views
 --
--- loopzero-lens M52 — per-tenant saved trace-list filter combinations for the
+-- loopruntime-lens M52 — per-tenant saved trace-list filter combinations for the
 -- /v1/dashboard/lens BFF. A saved view stores the nuqs-serialized filter query
 -- string verbatim; "apply" pushes it back onto the URL (the dashboard's nuqs
--- parsers hydrate it). Consumed/queried by the loopzero-cloud LensSavedViewsHandler
--- (raw database/sql) — loopzero-cloud does not run migrations, the engine owns schema.
+-- parsers hydrate it). Consumed/queried by the loopruntime-cloud LensSavedViewsHandler
+-- (raw database/sql) — loopruntime-cloud does not run migrations, the engine owns schema.
 --
 -- Mirrors 000050_workspace_webhooks tenancy: a (subject, tenant_id) discriminator
 -- scopes every row to the authenticated Principal (personal per-user views;

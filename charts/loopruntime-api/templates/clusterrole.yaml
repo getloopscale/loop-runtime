@@ -1,0 +1,61 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "loopruntime-common.fullname" . }}
+  labels:
+    {{- include "loopruntime-common.labels" . | nindent 4 }}
+rules:
+  # CHG-2026-04-25-E2E (Gap 3): loopruntime-api needs broad RBAC to drive deploys.
+  # Previously only Tenant CRs were granted, but the runtime also creates:
+  #   - LoopRuntimeApplication / ExposedRoute / PreviewEnvironment CRs (per deploy)
+  #   - Argo Workflows in the `argo` namespace (build pipeline)
+  #   - ClusterCredentials (multi-cluster mode)
+  #   - PlatformBootstrap (dev seed)
+  # Without these, `loopruntime deploy` fails at submit-workflow with 403 Forbidden.
+  - apiGroups: ["runtime.getloopscale.com"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["runtime.getloopscale.com"]
+    resources: ["*/status"]
+    verbs: ["get", "update", "patch"]
+  # Argo Workflows — submitting builds + reading status for SSE event stream
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows", "workflows/status", "workflowtemplates", "clusterworkflowtemplates"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- if .Values.rbac.argocdApplications }}
+  # ArgoCD Applications on the core cluster. The tenant operator owns their spec,
+  # so the API neither creates nor updates one. It READS an Application's labels to
+  # identify the release a sync notification belongs to
+  # (api/internal/adapters/argo_app_label_reader.go), and the administrative
+  # eviction LISTS, DELETES and clears the finalizers (PATCH) of a tenant's
+  # Applications (api/internal/k8s/tenancy/tenant_evictor.go). Without this rule
+  # both paths answer Forbidden. AppProjects: no API code path touches them, so
+  # they are not granted.
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "watch", "patch", "delete"]
+  {{- end }}
+  # Namespaces (creating tenant build/runtime namespaces)
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create"]
+  # T5.13 of plan 2026-06-02-openbao-adoption v1.3 — closes deep review
+  # finding #1 (cluster-wide secrets/configmaps grant = catastrophic blast
+  # radius). When .Values.rbac.legacyClusterWideSecrets is true (default
+  # backward compat for unreleased clusters), we still grant cluster-wide
+  # secrets/configmaps for compatibility with existing deploys. Setting
+  # to false (post per-tenant Role rollout via tenant-controller) removes
+  # the grant — loopruntime-api can then only read/write secrets in tenant
+  # namespaces it has been explicitly authorized via the per-namespace
+  # Role created by tenant-controller reconcile.
+  {{- if .Values.rbac.legacyClusterWideSecrets }}
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  {{- end }}
+  # Services + Pods read access (health checks, log collection)
+  - apiGroups: [""]
+    resources: ["services", "pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+{{- end }}

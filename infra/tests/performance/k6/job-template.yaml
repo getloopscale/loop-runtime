@@ -1,6 +1,6 @@
-# LoopZero — k6 Runner Job Template
+# LoopRuntime — k6 Runner Job Template
 #
-# Runs a k6 load test script inside the LoopZero platform cluster. Each
+# Runs a k6 load test script inside the LoopRuntime platform cluster. Each
 # run is a one-shot Job that:
 #   1. Seeds the DB with tenants/users/memberships for the target level
 #   2. Builds a fresh git bundle fixture (init container)
@@ -24,10 +24,10 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: k6-scripts
-  namespace: loopzero-system
+  namespace: loopruntime-system
   labels:
     app.kubernetes.io/name: k6-runner
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loopruntime
 data:
   # The scripts ConfigMap is populated by the Makefile / Taskfile from
   # the scripts/ directory before apply. See infra/tests/k6/Makefile.
@@ -43,7 +43,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: k6-fixture-builder
-  namespace: loopzero-system
+  namespace: loopruntime-system
 data:
   build-bundle.sh: |
     #!/bin/sh
@@ -79,7 +79,7 @@ data:
     }).listen(port, () => console.log("listening on " + port));
     EOF
 
-    git config --global user.email "k6@loopzero.test"
+    git config --global user.email "k6@loopruntime.test"
     git config --global user.name  "k6 runner"
     git init -q .
     git add -A
@@ -94,7 +94,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: k6-seed-sql
-  namespace: loopzero-system
+  namespace: loopruntime-system
 data:
   seed.sh: |
     #!/bin/sh
@@ -113,7 +113,7 @@ data:
     psql "$CLEAN_DB" -v ON_ERROR_STOP=1 -q <<SQL
     INSERT INTO users (id, email, github_id, display_name)
       SELECT format('k6-${LEVEL}-user-%s', i),
-             format('k6-${LEVEL}-%s@loopzero.test', i),
+             format('k6-${LEVEL}-%s@loopruntime.test', i),
              10000000 + i,
              format('k6 ${LEVEL} user %s', i)
       FROM generate_series(0, ${COUNT}-1) i
@@ -141,11 +141,11 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: k6-runner
-  namespace: loopzero-system
+  namespace: loopruntime-system
   labels:
     app.kubernetes.io/name: k6-runner
-    app.kubernetes.io/part-of: loopzero
-    loopzero.io/roadmap: "04-08"
+    app.kubernetes.io/part-of: loopruntime
+    runtime.getloopscale.com/roadmap: "04-08"
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 3600
@@ -173,7 +173,7 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: loopzero-api-secrets
+                  name: loopruntime-api-secrets
                   key: DATABASE_URL
             - name: K6_SEED_COUNT
               value: "${K6_SEED_COUNT}"
@@ -194,16 +194,16 @@ spec:
             - "${K6_SCRIPT}"
           env:
             - name: K6_API_URL
-              value: "http://loopzero-api.loopzero-system.svc.cluster.local:8080"
+              value: "http://loopruntime-api.loopruntime-system.svc.cluster.local:8080"
             - name: K6_SVC_AUTH
               valueFrom:
                 secretKeyRef:
-                  name: loopzero-api-secrets
-                  key: LOOPZERO_SERVICE_AUTH_SECRET
+                  name: loopruntime-api-secrets
+                  key: LOOPRUNTIME_SERVICE_AUTH_SECRET
             - name: K6_BUNDLE_PATH
               value: "/fixtures/bundle.bin"
             - name: K6_PROMETHEUS_RW_SERVER_URL
-              value: "http://prometheus-server.loopzero-system.svc.cluster.local/api/v1/write"
+              value: "http://prometheus-server.loopruntime-system.svc.cluster.local/api/v1/write"
             - name: K6_PROMETHEUS_RW_TREND_STATS
               value: "p(50),p(95),p(99)"
             - name: K6_PROMETHEUS_RW_PUSH_INTERVAL

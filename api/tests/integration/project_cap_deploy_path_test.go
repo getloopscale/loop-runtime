@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -17,11 +17,11 @@ import (
 
 // M5 T2.1 — the HERMETIC per-Account project cap on the DEPLOY path
 // (EnsureProject), proven against real PostgreSQL. Closes the #106 bypass where
-// `loopzero deploy <new-name>` created a project past the cap that M4 only enforced
+// `loopruntime deploy <new-name>` created a project past the cap that M4 only enforced
 // on POST /api/v1/projects. Reuses the M4 integration harness (projectCapStore / projectCapSeed /
 // projectCapCleanup / violationCount / isCapError) from project_cap_per_account_test.go.
 //
-//	DATABASE_URL=postgres://loopzero:loopzero@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapOnDeploy -race -v
+//	DATABASE_URL=postgres://loopruntime:loopruntime@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapOnDeploy -race -v
 
 // mustEnsure drives the deploy-time auto-create (nil tx → EnsureProject opens its
 // own tx and account-lock, the EC-1 own-tx branch). Mirrors what the build-submit

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -35,13 +35,13 @@ func dataPlaneLiterals(t *testing.T, env string, extraEnv ...string) map[string]
 	return got
 }
 
-var dataPlaneSecrets = []string{"loopzero-memory", "loopzero-rag", "loopzero-lens"}
+var dataPlaneSecrets = []string{"loopruntime-memory", "loopruntime-rag", "loopruntime-lens"}
 
 // dev-public's data plane runs from Helmfile (#446); each service reads its database
 // password, its admin bootstrap token and the model provider key from one Secret named
 // after its release.
 func TestGenerateSecretsGivesEachDataPlaneServiceItsSecret(t *testing.T) {
-	got := dataPlaneLiterals(t, "dev-public", "LOOPZERO_OPENAI_API_KEY=sk-test", "LOOPZERO_DATA_PLANE_ADMIN_BOOTSTRAP_TOKEN=dp-boot")
+	got := dataPlaneLiterals(t, "dev-public", "LOOPRUNTIME_OPENAI_API_KEY=sk-test", "LOOPRUNTIME_DATA_PLANE_ADMIN_BOOTSTRAP_TOKEN=dp-boot")
 	for _, name := range dataPlaneSecrets {
 		s := got[name]
 		if len(s["postgres-password"]) < 32 {
@@ -59,7 +59,7 @@ func TestGenerateSecretsGivesEachDataPlaneServiceItsSecret(t *testing.T) {
 // Without the operator's token each service still gets one, random — never empty,
 // which would leave the admin surface without a credential to check against.
 func TestGenerateSecretsGeneratesADataPlaneBootstrapTokenWhenNoneIsGiven(t *testing.T) {
-	got := dataPlaneLiterals(t, "dev-public", "LOOPZERO_OPENAI_API_KEY=sk-test")
+	got := dataPlaneLiterals(t, "dev-public", "LOOPRUNTIME_OPENAI_API_KEY=sk-test")
 	for _, name := range dataPlaneSecrets {
 		if v := got[name]["admin-bootstrap-token"]; len(v) < 32 {
 			t.Errorf("%s: admin-bootstrap-token missing or short (len %d)", name, len(v))
@@ -78,11 +78,11 @@ func TestGenerateSecretsLeavesTheDataPlaneOutOfOtherEnvironments(t *testing.T) {
 	}
 }
 
-// A service that serves requests through a non-owner role (loopzero-memory's themory_app,
+// A service that serves requests through a non-owner role (loopruntime-memory's themory_app,
 // which the data-plane chart creates) reads that role's password from its Secret,
 // generated and preserved like the database password.
 func TestGenerateSecretsGivesEachDataPlaneServiceAnApplicationRolePassword(t *testing.T) {
-	got := dataPlaneLiterals(t, "dev-public", "LOOPZERO_OPENAI_API_KEY=sk-test")
+	got := dataPlaneLiterals(t, "dev-public", "LOOPRUNTIME_OPENAI_API_KEY=sk-test")
 	for _, name := range dataPlaneSecrets {
 		pw := got[name]["app-role-password"]
 		if len(pw) < 32 {
@@ -94,10 +94,10 @@ func TestGenerateSecretsGivesEachDataPlaneServiceAnApplicationRolePassword(t *te
 	}
 }
 
-// A service whose worker connects as its own role (loopzero-rag's rag_worker, #474) reads that
+// A service whose worker connects as its own role (loopruntime-rag's rag_worker, #474) reads that
 // role's password from the same Secret, distinct from the app role's and the owner's.
 func TestGenerateSecretsGivesEachDataPlaneServiceAWorkerRolePassword(t *testing.T) {
-	got := dataPlaneLiterals(t, "dev-public", "LOOPZERO_OPENAI_API_KEY=sk-test")
+	got := dataPlaneLiterals(t, "dev-public", "LOOPRUNTIME_OPENAI_API_KEY=sk-test")
 	for _, name := range dataPlaneSecrets {
 		pw := got[name]["worker-role-password"]
 		if len(pw) < 32 {

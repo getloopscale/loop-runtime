@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metrics
 
@@ -29,17 +29,17 @@ import (
 // test's package dir.
 
 // metricNameRe captures Prometheus metric names of the canonical
-// LoopZero style: loopzero_<subsystem>_<name>. Tests that reference the
+// LoopRuntime style: loopruntime_<subsystem>_<name>. Tests that reference the
 // bucket / count / sum auto-suffixes (for histograms) are mapped
 // back to the parent metric name by trimming `_bucket`, `_count`,
 // `_sum`.
-var metricNameRe = regexp.MustCompile(`\bloopzero_[a-z][a-z0-9_]*\b`)
+var metricNameRe = regexp.MustCompile(`\bloopruntime_[a-z][a-z0-9_]*\b`)
 
-// declaredMetricRe captures `Name: "loopzero_<metric>"` declarations
+// declaredMetricRe captures `Name: "loopruntime_<metric>"` declarations
 // from sigstore_metrics.go promauto invocations.
-var declaredMetricRe = regexp.MustCompile(`Name:\s*"(loopzero_[a-z0-9_]+)"`)
+var declaredMetricRe = regexp.MustCompile(`Name:\s*"(loopruntime_[a-z0-9_]+)"`)
 
-// trimHistogramSuffix maps `loopzero_x_bucket` → `loopzero_x`. Idempotent
+// trimHistogramSuffix maps `loopruntime_x_bucket` → `loopruntime_x`. Idempotent
 // on non-histogram names.
 func trimHistogramSuffix(name string) string {
 	for _, suf := range []string{"_bucket", "_count", "_sum"} {
@@ -68,7 +68,7 @@ func trimHistogramSuffix(name string) string {
 // Split out of repoRoot so the discovery can be tested against both shapes
 // without chdir'ing the test process — see repo_root_test.go. The same
 // relaxation is applied in
-// cmd/loopzero-ops/internal/quality/quarantineprotect.RepoRootFromCwd, which is a
+// cmd/loopruntime-ops/internal/quality/quarantineprotect.RepoRootFromCwd, which is a
 // different Go module and therefore cannot share this function.
 func findRepoRoot(start string) (string, error) {
 	dir := start
@@ -103,7 +103,7 @@ func repoRoot(t *testing.T) string {
 	return root
 }
 
-// extractFromFile returns the unique loopzero_* metric names referenced
+// extractFromFile returns the unique loopruntime_* metric names referenced
 // in the file at path, with histogram suffixes trimmed. Returns
 // (nil, true) when the file is missing — caller decides whether to
 // treat that as a test skip or failure.
@@ -121,7 +121,7 @@ func extractFromFile(path string) (map[string]bool, bool) {
 }
 
 // extractDeclarations parses sigstore_metrics.go and returns the set
-// of metric names declared via promauto.New* with Name: "loopzero_*".
+// of metric names declared via promauto.New* with Name: "loopruntime_*".
 func extractDeclarations(t *testing.T, path string) map[string]bool {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -184,7 +184,7 @@ func TestSigstoreMetrics_AllDeclaredAreVisualized(t *testing.T) {
 }
 
 // TestSigstoreMetrics_DashboardRefsAreDeclared asserts the reverse:
-// every loopzero_cosign_*, loopzero_release_attestation_*, loopzero_fulcio_*
+// every loopruntime_cosign_*, loopruntime_release_attestation_*, loopruntime_fulcio_*
 // metric referenced by the dashboard must be a real declaration in
 // sigstore_metrics.go. Catches "dashboard panel pointing at a
 // metric we forgot to ship" — the failure mode where the dashboard
@@ -201,11 +201,11 @@ func TestSigstoreMetrics_DashboardRefsAreDeclared(t *testing.T) {
 	for m := range dashboard {
 		// Only check the T4.1 namespace; the dashboard may also
 		// reference older metrics from other plans (e.g.,
-		// loopzero_builds_total) that are declared elsewhere in
+		// loopruntime_builds_total) that are declared elsewhere in
 		// metrics.go. Restrict to the Sigstore namespace.
-		if !strings.HasPrefix(m, "loopzero_cosign_") &&
-			!strings.HasPrefix(m, "loopzero_release_attestation_") &&
-			!strings.HasPrefix(m, "loopzero_fulcio_") {
+		if !strings.HasPrefix(m, "loopruntime_cosign_") &&
+			!strings.HasPrefix(m, "loopruntime_release_attestation_") &&
+			!strings.HasPrefix(m, "loopruntime_fulcio_") {
 			continue
 		}
 		if !declared[m] {
@@ -235,17 +235,17 @@ var emissionCallRe = regexp.MustCompile(`(?m)\b([A-Z][A-Za-z0-9]+)\.(?:WithLabel
 
 // metricVarToName maps an exported Go variable name (e.g.
 // CosignSignTotal) back to its declared Prometheus name (e.g.
-// loopzero_cosign_sign_total). Used to cross-reference emission sites
+// loopruntime_cosign_sign_total). Used to cross-reference emission sites
 // against the declared-metric set.
 var metricVarToName = map[string]string{
-	"CosignSignDuration":                "loopzero_cosign_sign_duration_seconds",
-	"CosignAttestDuration":              "loopzero_cosign_attest_duration_seconds",
-	"CosignSignTotal":                   "loopzero_cosign_sign_total",
-	"CosignAttestTotal":                 "loopzero_cosign_attest_total",
-	"CosignSignErrors":                  "loopzero_cosign_sign_errors_total",
-	"CosignAttestErrors":                "loopzero_cosign_attest_errors_total",
-	"ReleaseAttestationRekorURLPersist": "loopzero_release_attestation_rekor_url_null_total",
-	"FulcioCertIssuanceDuration":        "loopzero_fulcio_cert_issuance_duration_seconds",
+	"CosignSignDuration":                "loopruntime_cosign_sign_duration_seconds",
+	"CosignAttestDuration":              "loopruntime_cosign_attest_duration_seconds",
+	"CosignSignTotal":                   "loopruntime_cosign_sign_total",
+	"CosignAttestTotal":                 "loopruntime_cosign_attest_total",
+	"CosignSignErrors":                  "loopruntime_cosign_sign_errors_total",
+	"CosignAttestErrors":                "loopruntime_cosign_attest_errors_total",
+	"ReleaseAttestationRekorURLPersist": "loopruntime_release_attestation_rekor_url_null_total",
+	"FulcioCertIssuanceDuration":        "loopruntime_fulcio_cert_issuance_duration_seconds",
 }
 
 // TestSigstoreMetrics_AllDeclaredHaveWrapper asserts every metric
@@ -257,7 +257,7 @@ var metricVarToName = map[string]string{
 // real load the platform sees.
 //
 // Found this case live during the 25th Ralph iteration (commit
-// 9e47759f run): `loopzero_fulcio_cert_issuance_duration_seconds` was
+// 9e47759f run): `loopruntime_fulcio_cert_issuance_duration_seconds` was
 // declared + dashboarded (T4.3 Panel 32) but had zero emission code
 // paths. Fixed in this commit by adding `ObserveFulcioCertIssuance`.
 //

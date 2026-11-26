@@ -5,7 +5,7 @@
 # Controller makes for the Ingress below, as production's Promtail pushes to one Loki
 # behind an internal load balancer. `task staging:platform` reads the ALB's DNSName from
 # this Ingress' status once the build cluster is synced (infra/staging/monitoring-addresses.sh)
-# and hands it to the syncs that render those Promtail (LOOPZERO_LOKI_ALB_DNS_NAME).
+# and hands it to the syncs that render those Promtail (LOOPRUNTIME_LOKI_ALB_DNS_NAME).
 #
 # Instance targets, as for the edge (../traefik/values-alb.yaml.gotmpl): the ALB registers
 # the node group's instances on a NodePort, which needs nothing of the CNI. The chart's

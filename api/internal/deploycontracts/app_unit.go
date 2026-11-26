@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package deploycontracts is the leaf shared-kernel of the services contexts:
 // cross-context deploy DTOs and consumer-defined DIP ports. It is the sink of the
@@ -83,7 +83,7 @@ type AppUnit struct {
 
 // Plan B v3.1 T-B.1 (2026-06-05) — `frontendFrameworks` map removed post
 // LoopZeroKit-only cutover. Apps now declare `type` explicitly em
-// `.loopzero/services.json` (or via the legacy `services_json` form-field path
+// `.loopruntime/services.json` (or via the legacy `services_json` form-field path
 // during transition). The framework-string heuristic no longer participates
 // em type inference; absent type defaults to "server" as the safe choice
 // (frontends are CDN-static per ADR D5 + explicit em services manifest).

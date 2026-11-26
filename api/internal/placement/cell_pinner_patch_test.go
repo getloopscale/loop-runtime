@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Coverage for CellPinner's Tenant CR patch path: the database move, the
 // patch retry and the all-or-nothing revert. The Kubernetes merge patch
@@ -26,7 +26,7 @@ func (f *fakeCRPatcher) PatchTenantCellID(_ context.Context, tenantID, cellID st
 	return f.err
 }
 
-func (f *fakeCRPatcher) Namespace() string { return "loopzero-system" }
+func (f *fakeCRPatcher) Namespace() string { return "loopruntime-system" }
 
 func noBackoff(int) time.Duration { return 0 }
 
@@ -106,7 +106,7 @@ func TestCellPinner_CRPatchFailure_WithFailedRevert_ReportsDivergence(t *testing
 	if !errors.Is(err, ErrCellPinDiverged) {
 		t.Fatalf("want ErrCellPinDiverged, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "loopzero-tenant-cr-shape") || !strings.Contains(err.Error(), "-n loopzero-system") {
+	if !strings.Contains(err.Error(), "loopruntime-tenant-cr-shape") || !strings.Contains(err.Error(), "-n loopruntime-system") {
 		t.Errorf("a divergence must carry the repair hint with the CR namespace; got %v", err)
 	}
 }

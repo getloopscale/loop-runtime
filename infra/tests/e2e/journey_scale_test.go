@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 04: Scale
 //
@@ -58,12 +58,12 @@ var _ = Describe("Journey 04: Scale", Ordered, Label("journey"), func() {
 	})
 
 	It("scales to 3 replicas", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "scale",
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "scale",
 			"--app", app, "--env", env, "--replicas", "3", "--json")
 
 		// Scale returns 0 or reports acknowledged/applied.
 		Expect(exitCode).To(Equal(0),
-			"loopzero scale --replicas 3 should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopruntime scale --replicas 3 should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"scale stdout": stdout,
@@ -72,7 +72,7 @@ var _ = Describe("Journey 04: Scale", Ordered, Label("journey"), func() {
 	})
 
 	It("over-cap scale is rejected or acknowledged", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "scale",
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "scale",
 			"--app", app, "--env", env, "--replicas", "11", "--json")
 
 		// Starter plan cap is 2, Pro is 5, Team is 10. 11 should be rejected.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placement
 
@@ -118,7 +118,7 @@ func (r *DynamicRouter) refresh(ctx context.Context) error {
 
 // Resolve returns the CellConfig for the given cell_id.
 //
-// Emits loopzero_cell_routing_decisions_total{cell, decision} per
+// Emits loopruntime_cell_routing_decisions_total{cell, decision} per
 // MEET-INFRA-NORMALIZE-T3-multi-cell C19 + ADR D6.
 //
 // Decisions:

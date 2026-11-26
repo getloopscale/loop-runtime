@@ -1,0 +1,12 @@
+apiVersion: v2
+name: loopruntime-common
+description: Shared Helm helpers for the LoopRuntimeCloud platform
+type: library
+version: 0.3.0
+home: https://github.com/getloopscale/loop-runtime
+sources:
+  - https://github.com/getloopscale/loop-runtime
+maintainers:
+  - name: LoopRuntime Team
+    url: https://getloopscale.com
+icon: https://getloopscale.com/icon.png

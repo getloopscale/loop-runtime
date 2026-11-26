@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CHG-2026-04-28-LAYERED-BOOTSTRAP — T8.1 — Regression Test Suite for B1-B18.
-# Runs after `loopzero platform install` to ensure the 18 known L3 bugs cannot
+# Runs after `loopruntime platform install` to ensure the 18 known L3 bugs cannot
 # silently return.
 #
 # Usage:
@@ -8,7 +8,7 @@
 #
 # Exits 0 if all 18/18 PASS. Exits 1 on any regression detected.
 set -euo pipefail
-DOMAIN="${1:-${LOOPZERO_DOMAIN:-dev.getloopscale.com}}"
+DOMAIN="${1:-${LOOPRUNTIME_DOMAIN:-dev.getloopscale.com}}"
 
 # Issue #117 (generalizing #115) — pin the target cluster BY CONSTRUCTION.
 # These checks assert platform invariants on MGMT. Reading them from whatever
@@ -16,17 +16,17 @@ DOMAIN="${1:-${LOOPZERO_DOMAIN:-dev.getloopscale.com}}"
 # suite pointed at the wrong cluster does not fail, it reports PASS about a
 # cluster nobody asked about — a green light with no meaning. Override
 # KUBECTL_CONTEXT for non-k3d targets (DOKS prod).
-KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-core}"
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopruntime-core}"
 kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 
 PASS=0
 FAIL=0
 SKIP=0
 # CHG-2026-04-28-LAYERED-BOOTSTRAP iter 27 — Profile-aware checks. Default
-# `multi-cluster` (LoopZero Cloud DOKS prod with mgmt+build+runtime clusters);
+# `multi-cluster` (LoopRuntime Cloud DOKS prod with mgmt+build+runtime clusters);
 # `standalone` (self-hosting single-cluster) skips checks that target
 # build/runtime cluster resources that don't exist when collapsed to mgmt.
-PROFILE="${LOOPZERO_REGRESSION_PROFILE:-${LOOPZERO_PROFILE:-multi-cluster}}"
+PROFILE="${LOOPRUNTIME_REGRESSION_PROFILE:-${LOOPRUNTIME_PROFILE:-multi-cluster}}"
 log() { printf '[regression] %s\n' "$*" >&2; }
 ok()   { log "  PASS  $1"; PASS=$((PASS+1)); }
 fail() { log "  FAIL  $1: $2"; FAIL=$((FAIL+1)); }
@@ -60,11 +60,11 @@ test_b2_local_path_rancher() {
   [[ "$prov" == "rancher.io/local-path" ]] && ok "B2 — local-path provisioner is rancher.io/local-path" || fail "B2" "provisioner=$prov"
 }
 
-# B3 — LOOPZERO_TENANT_MAX_CONCURRENT >= 20 (env var or ConfigMap)
+# B3 — LOOPRUNTIME_TENANT_MAX_CONCURRENT >= 20 (env var or ConfigMap)
 test_b3_max_concurrent_20() {
-  local val="${LOOPZERO_TENANT_MAX_CONCURRENT:-}"
+  local val="${LOOPRUNTIME_TENANT_MAX_CONCURRENT:-}"
   if [[ -z "$val" ]]; then
-    val=$(kubectl get cm -n loopzero-system loopzero-platform-topology -o jsonpath='{.data.LOOPZERO_TENANT_MAX_CONCURRENT}' 2>/dev/null || echo "")
+    val=$(kubectl get cm -n loopruntime-system loopruntime-platform-topology -o jsonpath='{.data.LOOPRUNTIME_TENANT_MAX_CONCURRENT}' 2>/dev/null || echo "")
   fi
   if [[ -z "$val" ]]; then
     val=20  # Default per Pulumi.dev.yaml
@@ -77,7 +77,7 @@ test_b4_gitea_token_no_newline() {
   # NOTE: set -o pipefail makes `|| echo 0` APPEND to pipe output rather than
   # replace it. Use { ... ;} || true and explicit zero default to avoid that.
   local raw len
-  raw=$(kubectl get secret gitea-admin -n loopzero-system -o jsonpath='{.data.token}' 2>/dev/null || true)
+  raw=$(kubectl get secret gitea-admin -n loopruntime-system -o jsonpath='{.data.token}' 2>/dev/null || true)
   if [[ -z "$raw" ]]; then
     fail "B4" "gitea-admin/token Secret missing"
     return
@@ -109,8 +109,8 @@ test_b6_cadata_encoding() {
 
 # B7 — ArgoCD ClusterRole has resources:["*"] (runtime cluster).
 test_b7_rbac_cluster_scoped() {
-  require_multi_cluster "B7" "ArgoCD loopzero-ctrl-runtime-rbac-admin lives on runtime cluster" || return 0
-  local resources=$(kubectl get clusterrole loopzero-ctrl-runtime-rbac-admin -o jsonpath='{.rules[0].resources}' 2>/dev/null || echo "")
+  require_multi_cluster "B7" "ArgoCD loopruntime-ctrl-runtime-rbac-admin lives on runtime cluster" || return 0
+  local resources=$(kubectl get clusterrole loopruntime-ctrl-runtime-rbac-admin -o jsonpath='{.rules[0].resources}' 2>/dev/null || echo "")
   if [[ "$resources" == *'"*"'* || "$resources" == *'[*]'* ]]; then
     ok "B7 — ClusterRole has resources:[*]"
   else
@@ -120,10 +120,10 @@ test_b7_rbac_cluster_scoped() {
 
 # B11 — no archived gitea repos.
 test_b11_no_archived_repos() {
-  if [[ -z "${LOOPZERO_GITEA_TOKEN:-}" || -z "${LOOPZERO_GITEA_URL:-}" ]]; then
-    log "  SKIP  B11 (LOOPZERO_GITEA_TOKEN/URL not set)"; return
+  if [[ -z "${LOOPRUNTIME_GITEA_TOKEN:-}" || -z "${LOOPRUNTIME_GITEA_URL:-}" ]]; then
+    log "  SKIP  B11 (LOOPRUNTIME_GITEA_TOKEN/URL not set)"; return
   fi
-  local count=$(curl -sf -H "Authorization: token $LOOPZERO_GITEA_TOKEN" "$LOOPZERO_GITEA_URL/api/v1/repos/search?archived=true&limit=1" 2>/dev/null \
+  local count=$(curl -sf -H "Authorization: token $LOOPRUNTIME_GITEA_TOKEN" "$LOOPRUNTIME_GITEA_URL/api/v1/repos/search?archived=true&limit=1" 2>/dev/null \
     | python3 -c 'import sys,json; print(len(json.load(sys.stdin).get("data",[])))' 2>/dev/null || echo "?")
   [[ "$count" == "0" ]] && ok "B11 — no archived gitea repos" || fail "B11" "$count archived repos exist"
 }

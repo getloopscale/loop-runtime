@@ -1,10 +1,10 @@
-# Canonical /api/v1 engine paths the LoopZeroCloud dashboard (loopzero-cloud/dashboard/src)
+# Canonical /api/v1 engine paths the LoopRuntimeCloud dashboard (loopruntime-cloud/dashboard/src)
 # consumes via the transparent /engine/* reverse proxy, normalized to template
 # form ({} = any path param). The engine spec (api/openapi/engine.yaml) MUST cover
 # every path here. Generated from `grep -rhoE '/engine/api/v1/...' dashboard/src`
 # then normalized; kept in sync by the drift guard in dashboard_consumer_test.go.
 #
-# M10 T2.1: the dashboard — NOT the loopzero-cloud Go BFF — is the real consumer of
+# M10 T2.1: the dashboard — NOT the loopruntime-cloud Go BFF — is the real consumer of
 # the engine REST contract, because the BFF is a transparent proxy (cmd/main.go
 # r.Route("/engine", ...) strips the prefix and forwards). Cloud-side /v1/* routes
 # (e.g. /v1/integrations/github/install OAuth) are NOT engine paths and are excluded.

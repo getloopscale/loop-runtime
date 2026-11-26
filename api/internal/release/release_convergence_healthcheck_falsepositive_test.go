@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -18,7 +18,7 @@ import (
 )
 
 // TestReleaseConvergenceLoop_HealthCheck_ConvergingNotFlagged locks the fix for
-// loopzero-cloud#242 follow-up (the promote-to-production "sem sucesso" false alarm).  // english-only: verbatim dashboard label, meaning without success
+// loopruntime-cloud#242 follow-up (the promote-to-production "sem sucesso" false alarm).  // english-only: verbatim dashboard label, meaning without success
 //
 // Root cause: healthCheckActiveReleases discarded the `synced` return of
 // GetAppStatus and flagged FalseSuccessTotal whenever `!healthy`. But during

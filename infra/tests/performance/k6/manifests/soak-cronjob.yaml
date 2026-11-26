@@ -7,10 +7,10 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: k6-soak-weekly
-  namespace: loopzero-system
+  namespace: loopruntime-system
   labels:
     app.kubernetes.io/name: k6-soak
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loopruntime
     app.kubernetes.io/component: load-testing
 spec:
   schedule: "0 2 * * 0"  # Every Sunday 02:00 UTC
@@ -53,7 +53,7 @@ spec:
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:
-                      name: loopzero-api-secrets
+                      name: loopruntime-api-secrets
                       key: DATABASE_URL
                 - name: K6_SEED_COUNT
                   value: "50"
@@ -79,16 +79,16 @@ spec:
                 - scripts/soak-6h.js
               env:
                 - name: K6_API_URL
-                  value: "http://loopzero-api.loopzero-system.svc.cluster.local:8080"
+                  value: "http://loopruntime-api.loopruntime-system.svc.cluster.local:8080"
                 - name: K6_SVC_AUTH
                   valueFrom:
                     secretKeyRef:
-                      name: loopzero-api-secrets
-                      key: LOOPZERO_SERVICE_AUTH_SECRET
+                      name: loopruntime-api-secrets
+                      key: LOOPRUNTIME_SERVICE_AUTH_SECRET
                 - name: K6_BUNDLE_PATH
                   value: "/fixtures/bundle.bin"
                 - name: K6_PROMETHEUS_RW_SERVER_URL
-                  value: "http://prometheus-server.loopzero-system.svc.cluster.local/api/v1/write"
+                  value: "http://prometheus-server.loopruntime-system.svc.cluster.local/api/v1/write"
                 - name: K6_PROMETHEUS_RW_TREND_STATS
                   value: "p(50),p(95),p(99)"
                 - name: K6_PROMETHEUS_RW_PUSH_INTERVAL

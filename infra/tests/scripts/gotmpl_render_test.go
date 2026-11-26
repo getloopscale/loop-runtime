@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts
 
@@ -19,7 +19,7 @@ import (
 // rather than the spelling that happens to be in the file.
 //
 // The overlays feed the published charts, whose image helper
-// (loopzero-common.image) pulls `<global.registry>/<image.repository>` when a
+// (loopruntime-common.image) pulls `<global.registry>/<image.repository>` when a
 // registry is set and `<image.repository>` alone otherwise. This function
 // composes the two the same way, so an overlay that moves the registry prefix
 // from image.repository to global.registry renders the same answer.
@@ -92,11 +92,11 @@ func renderedImageRepository(gotmpl string) (string, error) {
 //
 // # Why this exists
 //
-// `TestLoopZeroCloudImageOverlayUsesGHCRCanonical` T3 used to assert
-// `strings.Contains(overlay, "ghcr.io/getloopscale/loopzero-cloud")` against a file
+// `TestLoopRuntimeCloudImageOverlayUsesGHCRCanonical` T3 used to assert
+// `strings.Contains(overlay, "ghcr.io/getloopscale/loopruntime-cloud")` against a file
 // whose repository is BUILT rather than written:
 //
-//	repository: {{ env "LOOPZERO_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" }}loopzero-cloud
+//	repository: {{ env "LOOPRUNTIME_PLATFORM_IMAGE_PREFIX" | default "ghcr.io/getloopscale/" }}loopruntime-cloud
 //
 // The rendered value is exactly canonical on the default path. What does not
 // exist is the contiguous substring, because a template expression separates
@@ -108,7 +108,7 @@ func renderedImageRepository(gotmpl string) (string, error) {
 // correction B-110 asked of `helm-drift`, which compared file NAMES where it
 // meant to compare rendered resources. What is installed is not what is written.
 func TestRenderedImageRepository(t *testing.T) {
-	const canonical = "ghcr.io/getloopscale/loopzero-cloud"
+	const canonical = "ghcr.io/getloopscale/loopruntime-cloud"
 
 	cases := []struct {
 		name    string
@@ -119,12 +119,12 @@ func TestRenderedImageRepository(t *testing.T) {
 	}{
 		{
 			name: "templated registry with a default renders the canonical repository — the published-chart overlay shape",
-			yaml: "global:\n  registry: {{ env \"LOOPZERO_PLATFORM_IMAGE_PREFIX\" | default \"ghcr.io/getloopscale/\" | trimSuffix \"/\" }}\nimage:\n  repository: loopzero-cloud\n",
+			yaml: "global:\n  registry: {{ env \"LOOPRUNTIME_PLATFORM_IMAGE_PREFIX\" | default \"ghcr.io/getloopscale/\" | trimSuffix \"/\" }}\nimage:\n  repository: loopruntime-cloud\n",
 			want: canonical,
 		},
 		{
 			name: "templated prefix inside image.repository renders the canonical repository",
-			yaml: "image:\n  repository: {{ env \"LOOPZERO_PLATFORM_IMAGE_PREFIX\" | default \"ghcr.io/getloopscale/\" }}loopzero-cloud\n",
+			yaml: "image:\n  repository: {{ env \"LOOPRUNTIME_PLATFORM_IMAGE_PREFIX\" | default \"ghcr.io/getloopscale/\" }}loopruntime-cloud\n",
 			want: canonical,
 		},
 		{
@@ -134,20 +134,20 @@ func TestRenderedImageRepository(t *testing.T) {
 		},
 		{
 			name: "a set variable wins over the default, which is the point of the parameter",
-			yaml: "global:\n  registry: {{ env \"LOOPZERO_PLATFORM_IMAGE_PREFIX\" | default \"ghcr.io/getloopscale/\" | trimSuffix \"/\" }}\nimage:\n  repository: loopzero-cloud\n",
-			env:  map[string]string{"LOOPZERO_PLATFORM_IMAGE_PREFIX": "registry.example.test/"},
-			want: "registry.example.test/loopzero-cloud",
+			yaml: "global:\n  registry: {{ env \"LOOPRUNTIME_PLATFORM_IMAGE_PREFIX\" | default \"ghcr.io/getloopscale/\" | trimSuffix \"/\" }}\nimage:\n  repository: loopruntime-cloud\n",
+			env:  map[string]string{"LOOPRUNTIME_PLATFORM_IMAGE_PREFIX": "registry.example.test/"},
+			want: "registry.example.test/loopruntime-cloud",
 		},
 		{
 			name: "an empty variable falls back to the default — the empty string counts as absent",
-			yaml: "global:\n  registry: {{ env \"LOOPZERO_PLATFORM_IMAGE_PREFIX\" | default \"ghcr.io/getloopscale/\" | trimSuffix \"/\" }}\nimage:\n  repository: loopzero-cloud\n",
-			env:  map[string]string{"LOOPZERO_PLATFORM_IMAGE_PREFIX": ""},
+			yaml: "global:\n  registry: {{ env \"LOOPRUNTIME_PLATFORM_IMAGE_PREFIX\" | default \"ghcr.io/getloopscale/\" | trimSuffix \"/\" }}\nimage:\n  repository: loopruntime-cloud\n",
+			env:  map[string]string{"LOOPRUNTIME_PLATFORM_IMAGE_PREFIX": ""},
 			want: canonical,
 		},
 		{
 			name: "a non-canonical repository renders what it declares, and the caller judges it",
-			yaml: "image:\n  repository: k3d-loopzero-registry:5000/loopzero-cloud\n",
-			want: "k3d-loopzero-registry:5000/loopzero-cloud",
+			yaml: "image:\n  repository: k3d-loopruntime-registry:5000/loopruntime-cloud\n",
+			want: "k3d-loopruntime-registry:5000/loopruntime-cloud",
 		},
 		// The two negatives below are the FAIL-LOUD contract. A render returning
 		// an empty string here would make the caller's assertion fail with "not

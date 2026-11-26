@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package enforcement checks plan limits before allowing mutations.
 //
@@ -14,7 +14,7 @@ import (
 	"log/slog"
 
 	"github.com/getloopscale/loop-runtime/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // PlanLimiter checks if a tenant's operation is within their plan limits.
@@ -55,8 +55,8 @@ func (l *PlanLimiter) hasStore() bool {
 // callers can still tell a store outage from an unknown plan value
 // (domain.ErrUnknownPlanTier).
 func errLimitsUnavailable(tenantID, what string, cause error) error {
-	return &loopzeroerrors.LoopZeroError{
-		Code:    loopzeroerrors.ErrPlatformDegraded.Code,
+	return &loopruntimeerrors.LoopRuntimeError{
+		Code:    loopruntimeerrors.ErrPlatformDegraded.Code,
 		Message: "plan limits cannot be verified right now; retry shortly",
 		Cause:   fmt.Errorf("%s for tenant %s: %w", what, tenantID, cause),
 	}

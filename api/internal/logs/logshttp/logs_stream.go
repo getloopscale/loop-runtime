@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package logshttp
 
@@ -20,7 +20,7 @@ import (
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	"github.com/getloopscale/loop-runtime/api/internal/sse"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
@@ -89,13 +89,13 @@ type sseLogEvent struct {
 func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	buildID := chi.URLParam(r, "id")
 	if buildID == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("build ID is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("build ID is required"))
 		return
 	}
 
@@ -104,11 +104,11 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 	// pushed to DB layer via GetByIDForTenant.
 	build, err := h.builds.GetByIDForTenant(r.Context(), uc.TenantID, buildID)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if build == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrBuildNotFound)
 		return
 	}
 
@@ -124,24 +124,24 @@ func (h *LogStreamHandler) StreamBuildLogs(w http.ResponseWriter, r *http.Reques
 //   - app (optional, Beta Logs Gate Criterion 3): filter to a single
 //     app within the project. When omitted, returns logs from ALL
 //     apps in the namespace (legacy behavior). The app label is
-//     promoted by promtail's loopzero-pods scrape job from the pod's
-//     loopzero.io/app-name label.
+//     promoted by promtail's loopruntime-pods scrape job from the pod's
+//     runtime.getloopscale.com/app-name label.
 func (h *LogStreamHandler) StreamRuntimeLogs(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	projectName := chi.URLParam(r, "name")
 	if projectName == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
 	env := r.URL.Query().Get("env")
 	if env == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("env query parameter is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("env query parameter is required"))
 		return
 	}
 
@@ -213,7 +213,7 @@ func (h *LogStreamHandler) serve(w http.ResponseWriter, r *http.Request, queryKe
 	case errors.Is(ctx.Err(), context.DeadlineExceeded) && r.Context().Err() == nil:
 		h.logger.Info("log stream: max duration reached", "key", queryKey)
 		// Beta Logs Gate Criterion 6 — say why the stream ended and what to do.
-		_ = stream.Send("", "stream.timeout", []byte(`{"reason":"Stream open for 30 minutes — platform cap to prevent forgotten sessions from holding resources. Rerun `+"`"+`loopzero logs --build <id> --follow`+"`"+` to resume from the latest position; the stream picks up where this one ended."}`))
+		_ = stream.Send("", "stream.timeout", []byte(`{"reason":"Stream open for 30 minutes — platform cap to prevent forgotten sessions from holding resources. Rerun `+"`"+`loopruntime logs --build <id> --follow`+"`"+` to resume from the latest position; the stream picks up where this one ended."}`))
 	}
 }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-// operatorBuildLine matches the `go build ... -o /loopzero-<name> <target>` line of an
+// operatorBuildLine matches the `go build ... -o /loopruntime-<name> <target>` line of an
 // operator Dockerfile and captures the build target.
-var operatorBuildLine = regexp.MustCompile(`go build [^\n]*-o /loopzero-[a-z-]+ (\S+)`)
+var operatorBuildLine = regexp.MustCompile(`go build [^\n]*-o /loopruntime-[a-z-]+ (\S+)`)
 
 // Every operator image must compile its command PACKAGE, not a file inside it. `go
 // build ./cmd/x/main.go` compiles that one file as a package of its own, so the day a
@@ -34,7 +34,7 @@ func TestEveryOperatorImageBuildsItsCommandPackage(t *testing.T) {
 		}
 		m := operatorBuildLine.FindSubmatch(raw)
 		if m == nil {
-			t.Errorf("%s: no `go build -o /loopzero-<operator>` line found", filepath.Base(path))
+			t.Errorf("%s: no `go build -o /loopruntime-<operator>` line found", filepath.Base(path))
 			continue
 		}
 		if target := string(m[1]); filepath.Ext(target) == ".go" {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -21,7 +21,7 @@ import (
 // cross-tenant worker role can, the request role cannot — which is why the
 // composition root builds the store on the background pool.
 //
-//	DATABASE_URL=<loopzero_api> LOOPZERO_WORKER_DATABASE_URL=<loopzero_worker> \
+//	DATABASE_URL=<loopruntime_api> LOOPRUNTIME_WORKER_DATABASE_URL=<loopruntime_worker> \
 //	  go test ./tests/integration/ -run PlanLimitsStore -v
 func planLimitsSeed(t *testing.T, owner, acct, tn1, tn2, plan string) {
 	t.Helper()
@@ -86,7 +86,7 @@ func TestPlanLimitsStoreOnTheRequestRoleCannotSeeTheSubscription(t *testing.T) {
 	if bypasses {
 		// A role that bypasses RLS cannot reproduce https://github.com/getloopscale/loop-runtime/issues/382:
 		// every row is visible to it, so the test would pass whatever the wiring.
-		t.Skip("DATABASE_URL is not the isolated request role (it bypasses RLS); point it at loopzero_api")
+		t.Skip("DATABASE_URL is not the isolated request role (it bypasses RLS); point it at loopruntime_api")
 	}
 	const owner, acct, tn1, tn2 = "rls-req-uid", "acct-rls-req", "tn-rls-req-a", "tn-rls-req-b"
 	planLimitsSeed(t, owner, acct, tn1, tn2, "pro")

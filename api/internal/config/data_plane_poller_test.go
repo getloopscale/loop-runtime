@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package config
 
@@ -10,8 +10,8 @@ import (
 )
 
 func TestLoad_DataPlanePollerIsOffWithAThirtySecondIntervalByDefault(t *testing.T) {
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_ENABLED", "")
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_INTERVAL", "")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_ENABLED", "")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_INTERVAL", "")
 
 	cfg := Load()
 
@@ -24,9 +24,9 @@ func TestLoad_DataPlanePollerIsOffWithAThirtySecondIntervalByDefault(t *testing.
 }
 
 func TestValidate_AcceptsAnEnabledPollerWithAPrometheusURL(t *testing.T) {
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_ENABLED", "true")
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL", "http://prometheus-server.monitoring.svc.cluster.local:80")
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_INTERVAL", "15s")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_ENABLED", "true")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL", "http://prometheus-server.monitoring.svc.cluster.local:80")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_INTERVAL", "15s")
 
 	cfg := Load()
 
@@ -39,45 +39,45 @@ func TestValidate_AcceptsAnEnabledPollerWithAPrometheusURL(t *testing.T) {
 }
 
 func TestValidate_RefusesAnEnabledPollerWithoutAPrometheusURL(t *testing.T) {
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_ENABLED", "true")
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL", "")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_ENABLED", "true")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL", "")
 
 	err := Load().Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL") {
-		t.Fatalf("Validate err = %v, want it to name LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL", err)
+	if err == nil || !strings.Contains(err.Error(), "LOOPRUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL") {
+		t.Fatalf("Validate err = %v, want it to name LOOPRUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL", err)
 	}
 }
 
 func TestValidate_RefusesAPrometheusURLThatIsNotAbsoluteHTTP(t *testing.T) {
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_ENABLED", "true")
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL", "prometheus-server:80")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_ENABLED", "true")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL", "prometheus-server:80")
 
 	err := Load().Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL") {
+	if err == nil || !strings.Contains(err.Error(), "LOOPRUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL") {
 		t.Fatalf("Validate err = %v, want the URL refused", err)
 	}
 }
 
 func TestValidate_RefusesANonPositivePollerInterval(t *testing.T) {
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_ENABLED", "true")
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL", "http://prometheus:9090")
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_INTERVAL", "0s")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_ENABLED", "true")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL", "http://prometheus:9090")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_INTERVAL", "0s")
 
 	err := Load().Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "LOOPZERO_DATA_PLANE_POLLER_INTERVAL") {
-		t.Fatalf("Validate err = %v, want it to name LOOPZERO_DATA_PLANE_POLLER_INTERVAL", err)
+	if err == nil || !strings.Contains(err.Error(), "LOOPRUNTIME_DATA_PLANE_POLLER_INTERVAL") {
+		t.Fatalf("Validate err = %v, want it to name LOOPRUNTIME_DATA_PLANE_POLLER_INTERVAL", err)
 	}
 }
 
 func TestValidate_RefusesAMalformedPollerInterval(t *testing.T) {
-	t.Setenv("LOOPZERO_DATA_PLANE_POLLER_INTERVAL", "30")
+	t.Setenv("LOOPRUNTIME_DATA_PLANE_POLLER_INTERVAL", "30")
 
 	err := Load().Validate()
 
-	if err == nil || !strings.Contains(err.Error(), "LOOPZERO_DATA_PLANE_POLLER_INTERVAL") {
+	if err == nil || !strings.Contains(err.Error(), "LOOPRUNTIME_DATA_PLANE_POLLER_INTERVAL") {
 		t.Fatalf("Validate err = %v, want the unit-less interval refused", err)
 	}
 }

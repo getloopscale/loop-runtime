@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package lock_test
 
@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/getloopscale/loop-runtime/api/internal/lock"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // testPool creates a pgxpool.Pool for testing. Requires a running PostgreSQL
@@ -24,7 +24,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@localhost:5432/loopzero_test?sslmode=disable"
+		dbURL = "postgres://postgres:postgres@localhost:5432/loopruntime_test?sslmode=disable"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -175,7 +175,7 @@ func TestWithEnvironmentLock_Timeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected ErrLockTimeout, got nil")
 	}
-	if !errors.Is(err, loopzeroerrors.ErrLockTimeout) {
+	if !errors.Is(err, loopruntimeerrors.ErrLockTimeout) {
 		t.Fatalf("expected ErrLockTimeout, got: %v", err)
 	}
 
@@ -187,7 +187,7 @@ func TestWithEnvironmentLock_ErrorInFn(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
-	fnErr := loopzeroerrors.NewLoopZeroError("TEST_ERROR", "something went wrong")
+	fnErr := loopruntimeerrors.NewLoopRuntimeError("TEST_ERROR", "something went wrong")
 
 	// Act: fn returns an error.
 	_, err := lock.WithEnvironmentLock(ctx, pool, "tenant-1", "project-err", "dev",
@@ -308,7 +308,7 @@ func TestWithEnvironmentLock_TimeoutBoundedAt5Seconds(t *testing.T) {
 	elapsed := time.Since(start)
 
 	// Assert: error is timeout.
-	if !errors.Is(err, loopzeroerrors.ErrLockTimeout) {
+	if !errors.Is(err, loopruntimeerrors.ErrLockTimeout) {
 		t.Fatalf("expected ErrLockTimeout, got: %v", err)
 	}
 

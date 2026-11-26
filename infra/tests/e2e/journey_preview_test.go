@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 09: Preview Environments (CRUD via CLI)
 //
@@ -41,18 +41,18 @@ var _ = Describe("Journey 09: Preview", Ordered, Label("journey"), func() {
 
 		// Create a workspace with loopzero.yaml so CLI commands have project context.
 		var err error
-		workDir, err = os.MkdirTemp("", "loopzero-e2e-preview-")
+		workDir, err = os.MkdirTemp("", "loopruntime-e2e-preview-")
 		Expect(err).NotTo(HaveOccurred())
 
-		loopzeroYAML := fmt.Sprintf("version: 1\nproject: %s\napps:\n  api:\n    path: .\n    type: server\n    build: dockerfile\n", project)
-		err = os.WriteFile(workDir+"/loopzero.yaml", []byte(loopzeroYAML), 0644)
+		loopruntimeYAML := fmt.Sprintf("version: 1\nproject: %s\napps:\n  api:\n    path: .\n    type: server\n    build: dockerfile\n", project)
+		err = os.WriteFile(workDir+"/loopzero.yaml", []byte(loopruntimeYAML), 0644)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	AfterAll(func() {
 		// Cleanup: delete preview if still exists.
 		if previewID != "" {
-			runLoopZeroInDir(workDir, "preview", "delete", previewID, "--yes", "--json")
+			runLoopRuntimeInDir(workDir, "preview", "delete", previewID, "--yes", "--json")
 		}
 		ensureProjectDeleted(project)
 		if workDir != "" {
@@ -100,7 +100,7 @@ var _ = Describe("Journey 09: Preview", Ordered, Label("journey"), func() {
 	})
 
 	It("preview list shows the created preview", func() {
-		stdout, _, exitCode := runLoopZeroInDir(workDir, "preview", "list", "--json")
+		stdout, _, exitCode := runLoopRuntimeInDir(workDir, "preview", "list", "--json")
 		Expect(exitCode).To(Equal(0))
 		Expect(stdout).To(ContainSubstring(previewID),
 			"preview list should contain the created preview")
@@ -111,7 +111,7 @@ var _ = Describe("Journey 09: Preview", Ordered, Label("journey"), func() {
 	})
 
 	It("preview inspect returns details", func() {
-		stdout, _, exitCode := runLoopZeroInDir(workDir, "preview", "inspect", previewID, "--json")
+		stdout, _, exitCode := runLoopRuntimeInDir(workDir, "preview", "inspect", previewID, "--json")
 		Expect(exitCode).To(Equal(0))
 
 		result, err := parseJSON(stdout)
@@ -128,10 +128,10 @@ var _ = Describe("Journey 09: Preview", Ordered, Label("journey"), func() {
 	})
 
 	It("preview delete succeeds", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "preview", "delete", previewID, "--yes", "--json")
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "preview", "delete", previewID, "--yes", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopzero preview delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopruntime preview delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"preview delete stdout": stdout,
@@ -141,7 +141,7 @@ var _ = Describe("Journey 09: Preview", Ordered, Label("journey"), func() {
 
 	It("preview gone from list after delete", func() {
 		Eventually(func() bool {
-			stdout, _, _ := runLoopZeroInDir(workDir, "preview", "list", "--json")
+			stdout, _, _ := runLoopRuntimeInDir(workDir, "preview", "list", "--json")
 			result, err := parseJSON(stdout)
 			if err != nil {
 				return true

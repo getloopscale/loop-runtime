@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -18,14 +18,14 @@ import (
 // capability PlanLimiter uses for the per-Account project cap.
 //
 // It MUST be given a cross-tenant connection — the background pool, running as
-// loopzero_worker. `subscriptions` and `tenants` are under fail-closed Row Level
+// loopruntime_worker. `subscriptions` and `tenants` are under fail-closed Row Level
 // Security (migration 000062), and the plan lookups carry no tenant scope: over
-// the request pool (loopzero_api) every lookup sees no row, so every tenant reads
+// the request pool (loopruntime_api) every lookup sees no row, so every tenant reads
 // as Starter. Scoping the session to the tenant would not be enough either: an
 // Account has ONE subscription (UNIQUE(account_id)), held by one of its
 // tenants, so the Account plan of any sibling tenant is another tenant's row.
 // Measured against the migrated schema: a "pro" Account read "" through
-// loopzero_api and "pro" through loopzero_worker, for both lookups.
+// loopruntime_api and "pro" through loopruntime_worker, for both lookups.
 type PlanLimitsStore struct {
 	DB db.DBTX
 }

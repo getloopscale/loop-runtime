@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package scalinghttp serves the scaling endpoints under /api/v1/scale: reading and
 // changing the replica and resource envelope of a deployed service, bounded by
@@ -37,7 +37,7 @@ import (
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
 	"github.com/getloopscale/loop-runtime/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // J-20 Scale plan v1.1 T1.1 absorption — server-authoritative cost preview,
@@ -82,7 +82,7 @@ type ScaleApplyFunc func(ctx context.Context, cfg ScaleConfigInput) (changed boo
 // to avoid importing services here). Returns (allowed, planName, cap)
 // for the given tenant + requested replica count.
 //
-// Red Team loopzero-cloud#101 absorption (2026-06-27): the scale endpoint
+// Red Team loopruntime-cloud#101 absorption (2026-06-27): the scale endpoint
 // previously had ZERO max-replica enforcement. A Starter-tier tenant
 // could POST replicas:999 and the apply path would honor it (the
 // build path enforced via this same checker, but the LIVE scale path
@@ -152,7 +152,7 @@ func (h *ScaleHandler) SetPlanTierStore(s pkgdomain.PlanTierStore) {
 
 // SetReplicasChecker wires the per-plan replica cap checker used to
 // reject /scale requests that exceed the tenant's plan limit. Red Team
-// loopzero-cloud#101 (2026-06-27): scale endpoint had ZERO replica cap
+// loopruntime-cloud#101 (2026-06-27): scale endpoint had ZERO replica cap
 // enforcement before this wiring — Starter tier could set replicas:999.
 // Production setup at setup_orchestrator.go wires the same
 // planLimiterCapAdapter used by the build path so both paths share one
@@ -260,45 +260,45 @@ type scaleAutoscaling struct {
 func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
 	req, hasFixed, hasAuto, perr := parseScaleRequest(r)
 	if perr != nil {
-		httpio.WriteLoopZeroError(w, perr)
+		httpio.WriteLoopRuntimeError(w, perr)
 		return
 	}
 
 	planTier, terr := plantier.Resolve(r.Context(), h.planTierStore, uc.TenantID)
 	if terr != nil {
-		httpio.WriteLoopZeroError(w, terr)
+		httpio.WriteLoopRuntimeError(w, terr)
 		return
 	}
 
 	if lerr := h.enforceLimits(r.Context(), &req, planTier, hasAuto, uc.TenantID); lerr != nil {
-		httpio.WriteLoopZeroError(w, lerr)
+		httpio.WriteLoopRuntimeError(w, lerr)
 		return
 	}
 
 	// Verify project exists (cross-tenant safety: GetByName scoped to tenant).
 	project, gerr := h.projects.GetByName(r.Context(), uc.TenantID, name)
 	if gerr != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 		return
 	}
 	if aerr := h.checkDeclaredApp(r.Context(), uc.TenantID, name, &req); aerr != nil {
-		httpio.WriteLoopZeroError(w, aerr)
+		httpio.WriteLoopRuntimeError(w, aerr)
 		return
 	}
 
@@ -317,7 +317,7 @@ func (h *ScaleHandler) Scale(w http.ResponseWriter, r *http.Request) {
 // checkDeclaredApp refuses an app the environment's active release does not
 // declare, naming the apps it does. A config for an unknown app scales nothing
 // and still answers 200, which hides a typo or a client's wrong default.
-func (h *ScaleHandler) checkDeclaredApp(ctx context.Context, tenantID, projectName string, req *scaleRequest) *loopzeroerrors.LoopZeroError {
+func (h *ScaleHandler) checkDeclaredApp(ctx context.Context, tenantID, projectName string, req *scaleRequest) *loopruntimeerrors.LoopRuntimeError {
 	if h.appLookup == nil {
 		return nil
 	}
@@ -325,22 +325,22 @@ func (h *ScaleHandler) checkDeclaredApp(ctx context.Context, tenantID, projectNa
 	if err != nil {
 		slog.Error("scale: the project's apps cannot be read; refusing the request",
 			"tenant_id", tenantID, "project", projectName, "environment", req.Environment, "error", err)
-		return loopzeroerrors.ErrInternalError
+		return loopruntimeerrors.ErrInternalError
 	}
 	if len(names) == 0 || slices.Contains(names, req.App) {
 		return nil
 	}
-	return loopzeroerrors.NewLoopZeroError("APP_NOT_FOUND", fmt.Sprintf(
+	return loopruntimeerrors.NewLoopRuntimeError("APP_NOT_FOUND", fmt.Sprintf(
 		"app '%s' not found in project '%s' (%s); its apps are: %s",
 		req.App, projectName, req.Environment, strings.Join(names, ", ")))
 }
 
 // parseScaleRequest decodes the request body and validates its shape. It
 // returns the request (environment defaulted to production), which of the two
-// modes it asks for, and the LoopZeroError to write when it is refused.
-func parseScaleRequest(r *http.Request) (req scaleRequest, hasFixed, hasAuto bool, err *loopzeroerrors.LoopZeroError) {
+// modes it asks for, and the LoopRuntimeError to write when it is refused.
+func parseScaleRequest(r *http.Request) (req scaleRequest, hasFixed, hasAuto bool, err *loopruntimeerrors.LoopRuntimeError) {
 	if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
-		return req, false, false, loopzeroerrors.ErrInvalidRequest.Wrap("invalid JSON body")
+		return req, false, false, loopruntimeerrors.ErrInvalidRequest.Wrap("invalid JSON body")
 	}
 	if req.Environment == "" {
 		req.Environment = "production"
@@ -358,9 +358,9 @@ func (req *scaleRequest) mode() (fixed, auto bool) {
 }
 
 // validate returns the first reason the request is refused, or nil.
-func (req *scaleRequest) validate(fixed, auto bool) *loopzeroerrors.LoopZeroError {
+func (req *scaleRequest) validate(fixed, auto bool) *loopruntimeerrors.LoopRuntimeError {
 	if req.App == "" {
-		return loopzeroerrors.ErrMissingField.Wrap("app name is required")
+		return loopruntimeerrors.ErrMissingField.Wrap("app name is required")
 	}
 	if err := validateScaleMode(fixed, auto); err != nil {
 		return err
@@ -369,22 +369,22 @@ func (req *scaleRequest) validate(fixed, auto bool) *loopzeroerrors.LoopZeroErro
 }
 
 // validateScaleMode requires exactly one of the two modes.
-func validateScaleMode(fixed, auto bool) *loopzeroerrors.LoopZeroError {
+func validateScaleMode(fixed, auto bool) *loopruntimeerrors.LoopRuntimeError {
 	switch {
 	case fixed && auto:
-		return loopzeroerrors.ErrInvalidRequest.Wrap(
+		return loopruntimeerrors.ErrInvalidRequest.Wrap(
 			"cannot mix 'replicas' with 'min'/'max'/'cpu'/'memory': use 'replicas' for fixed scaling or autoscaling fields for autoscaling")
 	case !fixed && !auto:
-		return loopzeroerrors.ErrMissingField.Wrap(
+		return loopruntimeerrors.ErrMissingField.Wrap(
 			"specify 'replicas' for fixed scaling or 'min'/'max'/'cpu'/'memory' for autoscaling")
 	}
 	return nil
 }
 
 // validateReplicaBounds refuses replica counts outside what the mode allows.
-// Red Team loopzero-cloud#103: these are client input errors, answered as 400
+// Red Team loopruntime-cloud#103: these are client input errors, answered as 400
 // INVALID_REPLICAS, never as a 5xx.
-func (req *scaleRequest) validateReplicaBounds(fixed bool) *loopzeroerrors.LoopZeroError {
+func (req *scaleRequest) validateReplicaBounds(fixed bool) *loopruntimeerrors.LoopRuntimeError {
 	switch {
 	case fixed && *req.Replicas <= 0:
 		return invalidReplicas("replicas must be > 0 (use 0 only via 'min: 0' on autoscaling, not 'replicas')")
@@ -396,27 +396,27 @@ func (req *scaleRequest) validateReplicaBounds(fixed bool) *loopzeroerrors.LoopZ
 	return nil
 }
 
-func invalidReplicas(message string) *loopzeroerrors.LoopZeroError {
-	return loopzeroerrors.NewLoopZeroError("INVALID_REPLICAS", message)
+func invalidReplicas(message string) *loopruntimeerrors.LoopRuntimeError {
+	return loopruntimeerrors.NewLoopRuntimeError("INVALID_REPLICAS", message)
 }
 
 // enforceLimits applies the EC-3 KEDA tier gate + EC-4 HPA bounds. Server-
 // side enforcement at the handler boundary; client UI mirrors for UX.
-// Returns the first LoopZeroError to write, or nil when both gates pass.
+// Returns the first LoopRuntimeError to write, or nil when both gates pass.
 func (h *ScaleHandler) enforceLimits(
 	ctx context.Context,
 	req *scaleRequest,
 	planTier pkgdomain.PlanTier,
 	hasAuto bool,
 	tenantID string,
-) *loopzeroerrors.LoopZeroError {
+) *loopruntimeerrors.LoopRuntimeError {
 	if err := h.enforceKEDA(req, planTier); err != nil {
 		return err
 	}
-	// Red Team loopzero-cloud#101 absorption (2026-06-27): enforce the
+	// Red Team loopruntime-cloud#101 absorption (2026-06-27): enforce the
 	// per-plan max-replicas cap on EVERY mutation path, not just the
 	// build path. The cap is the same one services.enforceScaling
-	// already uses for loopzero deploy; wiring it here covers loopzero scale
+	// already uses for loopruntime deploy; wiring it here covers loopruntime scale
 	// + the dashboard scale form + any direct API client. Without
 	// this, Starter tier could set replicas:999 and the apply path
 	// honored it.
@@ -436,7 +436,7 @@ func (h *ScaleHandler) enforceLimits(
 // A nil checker disables enforcement (tests + legacy callsites). A cap that
 // cannot be read refuses the request: the checker fails closed, and an
 // unknown cap is never treated as no cap.
-func (h *ScaleHandler) enforceReplicaCap(ctx context.Context, req *scaleRequest, tenantID string) *loopzeroerrors.LoopZeroError {
+func (h *ScaleHandler) enforceReplicaCap(ctx context.Context, req *scaleRequest, tenantID string) *loopruntimeerrors.LoopRuntimeError {
 	if h.replicasChecker == nil {
 		return nil
 	}
@@ -453,9 +453,9 @@ func (h *ScaleHandler) enforceReplicaCap(ctx context.Context, req *scaleRequest,
 	if err != nil {
 		slog.Error("scale: replica cap cannot be read; refusing the request",
 			"tenant_id", tenantID, "app", req.App, "requested", requested, "error", err)
-		var te *loopzeroerrors.LoopZeroError
+		var te *loopruntimeerrors.LoopRuntimeError
 		if !errors.As(err, &te) {
-			te = loopzeroerrors.ErrPlatformDegraded
+			te = loopruntimeerrors.ErrPlatformDegraded
 		}
 		return te
 	}
@@ -463,21 +463,21 @@ func (h *ScaleHandler) enforceReplicaCap(ctx context.Context, req *scaleRequest,
 		return nil
 	}
 	metrics.PlanLimitViolations.WithLabelValues("max_replicas_per_service", plan).Inc()
-	return loopzeroerrors.NewReplicasExceedPlan(plan, cap, requested, req.App)
+	return loopruntimeerrors.NewReplicasExceedPlan(plan, cap, requested, req.App)
 }
 
 // enforceKEDA implements EC-3: scale-to-zero (min == 0) requires plan
 // tier ≥ Pro AND cluster KEDA enabled. Each check returns its own typed
-// LoopZeroError so callers map to canonical HTTP status codes.
-func (h *ScaleHandler) enforceKEDA(req *scaleRequest, planTier pkgdomain.PlanTier) *loopzeroerrors.LoopZeroError {
+// LoopRuntimeError so callers map to canonical HTTP status codes.
+func (h *ScaleHandler) enforceKEDA(req *scaleRequest, planTier pkgdomain.PlanTier) *loopruntimeerrors.LoopRuntimeError {
 	if req.Min == nil || *req.Min != 0 {
 		return nil
 	}
 	if err := enforcement.AssertKEDAAllowed(string(planTier)); err != nil {
-		return loopzeroerrors.NewPlanUpgradeRequired("pro", string(planTier), "KEDA scale-to-zero")
+		return loopruntimeerrors.NewPlanUpgradeRequired("pro", string(planTier), "KEDA scale-to-zero")
 	}
 	if !h.kedaEnabled {
-		return loopzeroerrors.ErrInvalidRequest.Wrap(
+		return loopruntimeerrors.ErrInvalidRequest.Wrap(
 			"scale-to-zero is not available on this cluster. Use min >= 1 for autoscaling, or contact support to enable scale-to-zero.")
 	}
 	return nil
@@ -486,7 +486,7 @@ func (h *ScaleHandler) enforceKEDA(req *scaleRequest, planTier pkgdomain.PlanTie
 // enforceHPABounds implements EC-4: cpu ∈ [10,95], memory ∈ [10,90]. Only
 // active when the user supplied at least one of cpu / memory; defaults
 // fall within the valid range and never trigger this gate.
-func enforceHPABounds(req *scaleRequest) *loopzeroerrors.LoopZeroError {
+func enforceHPABounds(req *scaleRequest) *loopruntimeerrors.LoopRuntimeError {
 	if req.CPU != nil {
 		if err := assertHPABounds(*req.CPU, valueOr(req.Memory, enforcement.DefaultHPAMemoryTarget)); err != nil {
 			return err
@@ -503,18 +503,18 @@ func enforceHPABounds(req *scaleRequest) *loopzeroerrors.LoopZeroError {
 }
 
 // assertHPABounds wraps enforcement.AssertHPATargetBounds + maps a typed
-// HPATargetBoundsError to the canonical loopzeroerrors factory (400). Generic
+// HPATargetBoundsError to the canonical loopruntimeerrors factory (400). Generic
 // enforcement errors degrade to ErrInvalidRequest.
-func assertHPABounds(cpu, memory int) *loopzeroerrors.LoopZeroError {
+func assertHPABounds(cpu, memory int) *loopruntimeerrors.LoopRuntimeError {
 	err := enforcement.AssertHPATargetBounds(cpu, memory)
 	if err == nil {
 		return nil
 	}
 	var be *enforcement.HPATargetBoundsError
 	if errors.As(err, &be) {
-		return loopzeroerrors.NewHPATargetBoundsViolated(be.Field, be.Min, be.Max, be.Got)
+		return loopruntimeerrors.NewHPATargetBoundsViolated(be.Field, be.Min, be.Max, be.Got)
 	}
-	return loopzeroerrors.ErrInvalidRequest.Wrap(err.Error())
+	return loopruntimeerrors.ErrInvalidRequest.Wrap(err.Error())
 }
 
 // scaleDecision is what a validated scale request resolves to: the config to
@@ -631,17 +631,17 @@ func buildAutoscaling(req *scaleRequest) *scaleAutoscaling {
 func (h *ScaleHandler) applyAndLog(w http.ResponseWriter, r *http.Request, d *scaleDecision) {
 	changed, err := h.apply(r.Context(), d.cfg)
 	if err != nil {
-		var te *loopzeroerrors.LoopZeroError
+		var te *loopruntimeerrors.LoopRuntimeError
 		if errors.As(err, &te) {
-			httpio.WriteLoopZeroError(w, te)
+			httpio.WriteLoopRuntimeError(w, te)
 			return
 		}
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	delivered, derr := h.deliver(r.Context(), d)
 	if derr != nil {
-		httpio.WriteLoopZeroError(w, derr)
+		httpio.WriteLoopRuntimeError(w, derr)
 		return
 	}
 	switch {
@@ -670,7 +670,7 @@ func (h *ScaleHandler) applyAndLog(w http.ResponseWriter, r *http.Request, d *sc
 // deliver carries the stored config to the running workloads and reports
 // whether there were any. It returns the error to answer with when the config
 // was stored and could not be delivered.
-func (h *ScaleHandler) deliver(ctx context.Context, d *scaleDecision) (bool, *loopzeroerrors.LoopZeroError) {
+func (h *ScaleHandler) deliver(ctx context.Context, d *scaleDecision) (bool, *loopruntimeerrors.LoopRuntimeError) {
 	if h.deliverer == nil {
 		return false, nil
 	}
@@ -682,10 +682,10 @@ func (h *ScaleHandler) deliver(ctx context.Context, d *scaleDecision) (bool, *lo
 		"tenant_id", d.cfg.TenantID, "project", d.cfg.ProjectID, "environment", d.cfg.Environment,
 		"app", d.cfg.AppName, "error", err)
 	if errors.Is(err, scaling.ErrDeployInFlight) {
-		return false, loopzeroerrors.NewLoopZeroError(loopzeroerrors.ErrDeployInProgress.Code,
+		return false, loopruntimeerrors.NewLoopRuntimeError(loopruntimeerrors.ErrDeployInProgress.Code,
 			"the scale was saved, but a deploy of this environment is in progress, so it was not applied; send the request again when the deploy finishes")
 	}
-	return false, loopzeroerrors.NewLoopZeroError(loopzeroerrors.ErrPlatformDegraded.Code,
+	return false, loopruntimeerrors.NewLoopRuntimeError(loopruntimeerrors.ErrPlatformDegraded.Code,
 		"the scale was saved but could not be applied to the running app; send the request again")
 }
 

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package errors defines typed error types for all LoopZero components.
+// Package errors defines typed error types for all LoopRuntime components.
 // All errors carry a code and message; HTTP transport mapping lives
 // in the sub-package pkg/errors/http (per ADR-0030 + gate PKG-G15).
 //
 // Stage C of the T2.3 staged rollout (CONDITION-2): the legacy
-// HTTPStatus field has been REMOVED from LoopZeroError. Callers that
+// HTTPStatus field has been REMOVED from LoopRuntimeError. Callers that
 // need the HTTP status code MUST use:
 //
 //	import errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
@@ -25,7 +25,7 @@ import (
 )
 
 // stackDepth bounds frame capture in WrapWithStack — 32 frames is
-// enough for any realistic LoopZero call chain (handler → service → store →
+// enough for any realistic LoopRuntime call chain (handler → service → store →
 // driver), and bounded so cost stays in the ~150ns range.
 const stackDepth = 32
 
@@ -36,17 +36,17 @@ var (
 	whitespaceRE  = regexp.MustCompile(`\s+`)
 )
 
-// LoopZeroError is a typed, transport-agnostic error.
+// LoopRuntimeError is a typed, transport-agnostic error.
 // It carries a machine-readable Code and a human Message; HTTP status
 // mapping is the responsibility of pkg/errors/http.Status (ADR-0030).
-type LoopZeroError struct {
+type LoopRuntimeError struct {
 	// Code is a machine-readable error code (e.g., "LOCK_TIMEOUT").
 	Code string
 
 	// Message is a human-readable error description with context.
 	Message string
 
-	// Cause is the underlying error that caused this LoopZeroError.
+	// Cause is the underlying error that caused this LoopRuntimeError.
 	// Exposed via Unwrap() for use with errors.Is/errors.As chains.
 	Cause error
 
@@ -58,19 +58,19 @@ type LoopZeroError struct {
 }
 
 // Error implements the error interface.
-func (e *LoopZeroError) Error() string {
+func (e *LoopRuntimeError) Error() string {
 	return fmt.Sprintf("[%s] %s", e.Code, e.Message)
 }
 
-// Is checks whether the target error has the same code as this LoopZeroError.
+// Is checks whether the target error has the same code as this LoopRuntimeError.
 // This enables errors.Is() support for comparing error codes.
 //
 // NOTE: Only the Code field is compared. HTTPStatus is intentionally excluded
 // because factory functions (e.g. NewLockTimeout) may return errors with the
 // same code but different messages/statuses. Callers that need the HTTP status
-// should use errors.As to extract the actual LoopZeroError, not the sentinel.
-func (e *LoopZeroError) Is(target error) bool {
-	t, ok := target.(*LoopZeroError)
+// should use errors.As to extract the actual LoopRuntimeError, not the sentinel.
+func (e *LoopRuntimeError) Is(target error) bool {
+	t, ok := target.(*LoopRuntimeError)
 	if !ok {
 		return false
 	}
@@ -78,27 +78,27 @@ func (e *LoopZeroError) Is(target error) bool {
 }
 
 // Unwrap returns the underlying cause, enabling errors.Is/errors.As chains.
-func (e *LoopZeroError) Unwrap() error {
+func (e *LoopRuntimeError) Unwrap() error {
 	return e.Cause
 }
 
-// NewLoopZeroError creates a new LoopZeroError with the given code and message.
+// NewLoopRuntimeError creates a new LoopRuntimeError with the given code and message.
 //
-// A LoopZeroError carries no HTTP status: it is resolved at the transport
+// A LoopRuntimeError carries no HTTP status: it is resolved at the transport
 // boundary by pkg/errors/http.Status from the code (ADR-0030).
-func NewLoopZeroError(code, message string) *LoopZeroError {
-	return &LoopZeroError{
+func NewLoopRuntimeError(code, message string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    code,
 		Message: message,
 	}
 }
 
-// Wrap returns a new LoopZeroError with the same code but with additional
+// Wrap returns a new LoopRuntimeError with the same code but with additional
 // context prepended to the message. HTTP status is resolved by the
 // registry at the transport boundary, so wrapping does not carry an
 // explicit status code (per ADR-0030 + gate PKG-G15).
-func (e *LoopZeroError) Wrap(context string) *LoopZeroError {
-	return &LoopZeroError{
+func (e *LoopRuntimeError) Wrap(context string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    e.Code,
 		Message: fmt.Sprintf("%s: %s", context, e.Message),
 		Cause:   e,
@@ -123,8 +123,8 @@ func (e *LoopZeroError) Wrap(context string) *LoopZeroError {
 // internals through API responses.
 //
 // Per pkg-sota-faang-grade-plan T1.6 + gate PKG-G08.
-func (e *LoopZeroError) WrapWithStack(context string) *LoopZeroError {
-	wrapped := &LoopZeroError{
+func (e *LoopRuntimeError) WrapWithStack(context string) *LoopRuntimeError {
+	wrapped := &LoopRuntimeError{
 		Code:    e.Code,
 		Message: fmt.Sprintf("%s: %s", context, e.Message),
 		Cause:   e,
@@ -139,7 +139,7 @@ func (e *LoopZeroError) WrapWithStack(context string) *LoopZeroError {
 // StackTrace returns a human-readable representation of the captured
 // stack. Returns "" when the receiver was not produced by
 // WrapWithStack.
-func (e *LoopZeroError) StackTrace() string {
+func (e *LoopRuntimeError) StackTrace() string {
 	if len(e.stack) == 0 {
 		return ""
 	}
@@ -165,7 +165,7 @@ func captureStack(skip int) []uintptr {
 }
 
 // ToJSON returns a map suitable for JSON serialization in API responses.
-func (e *LoopZeroError) ToJSON() map[string]string {
+func (e *LoopRuntimeError) ToJSON() map[string]string {
 	return map[string]string{
 		"code":    e.Code,
 		"message": e.Message,
@@ -176,45 +176,45 @@ func (e *LoopZeroError) ToJSON() map[string]string {
 var (
 	// ErrLockTimeout is returned when an environment lock cannot be acquired
 	// within the 5-second timeout (spec §4.2).
-	ErrLockTimeout = &LoopZeroError{
+	ErrLockTimeout = &LoopRuntimeError{
 		Code:    "LOCK_TIMEOUT",
 		Message: "could not acquire environment lock within timeout",
 	}
 
 	// ErrInvalidTransition is returned when a state machine transition is
 	// attempted that violates the defined state machine (spec §5).
-	ErrInvalidTransition = &LoopZeroError{
+	ErrInvalidTransition = &LoopRuntimeError{
 		Code:    "INVALID_TRANSITION",
 		Message: "invalid state transition",
 	}
 
 	// ErrTenantNotFound is returned when a referenced tenant does not exist.
-	ErrTenantNotFound = &LoopZeroError{
+	ErrTenantNotFound = &LoopRuntimeError{
 		Code:    "TENANT_NOT_FOUND",
 		Message: "tenant not found",
 	}
 
 	// ErrProjectNotFound is returned when a referenced project does not exist.
-	ErrProjectNotFound = &LoopZeroError{
+	ErrProjectNotFound = &LoopRuntimeError{
 		Code:    "PROJECT_NOT_FOUND",
 		Message: "project not found",
 	}
 
 	// ErrBuildNotFound is returned when a referenced build does not exist.
-	ErrBuildNotFound = &LoopZeroError{
+	ErrBuildNotFound = &LoopRuntimeError{
 		Code:    "BUILD_NOT_FOUND",
 		Message: "build not found",
 	}
 
 	// ErrReleaseNotFound is returned when a referenced release does not exist.
-	ErrReleaseNotFound = &LoopZeroError{
+	ErrReleaseNotFound = &LoopRuntimeError{
 		Code:    "RELEASE_NOT_FOUND",
 		Message: "release not found",
 	}
 
 	// ErrPreviewNotFound is returned when a referenced preview environment
 	// does not exist or has been soft-deleted (Sprint 5).
-	ErrPreviewNotFound = &LoopZeroError{
+	ErrPreviewNotFound = &LoopRuntimeError{
 		Code:    "PREVIEW_NOT_FOUND",
 		Message: "preview environment not found",
 	}
@@ -222,101 +222,101 @@ var (
 	// ErrNoActiveRelease is returned when rollback or promote is attempted but
 	// the target environment has no active release. Shared by both flows so the
 	// message must stay neutral (no "rollback"/"promote"/"source environment"
-	// wording). Regression: loopzero-cloud#166 (CRITICAL) — user hit the pre-fix
+	// wording). Regression: loopruntime-cloud#166 (CRITICAL) — user hit the pre-fix
 	// promote-flavored wording during a rollback path and mis-diagnosed the
 	// upstream cause. Test pin: TestErrNoActiveRelease_MessageIsOperationNeutral.
-	ErrNoActiveRelease = &LoopZeroError{
+	ErrNoActiveRelease = &LoopRuntimeError{
 		Code:    "NO_ACTIVE_RELEASE",
 		Message: "No active release found for this environment. Deploy at least once before running this operation.",
 	}
 
 	// ErrNoPreviousRelease is returned when rollback is attempted but no previous release exists.
-	ErrNoPreviousRelease = &LoopZeroError{
+	ErrNoPreviousRelease = &LoopRuntimeError{
 		Code:    "NO_PREVIOUS_RELEASE",
 		Message: "No previous release found to rollback to. Deploy at least twice before rolling back.",
 	}
 
 	// ErrBuildAlreadyCompleted is returned when attempting to cancel a build
 	// that is already in a terminal state (SUCCEEDED, FAILED, or CANCELLED).
-	ErrBuildAlreadyCompleted = &LoopZeroError{
+	ErrBuildAlreadyCompleted = &LoopRuntimeError{
 		Code:    "BUILD_ALREADY_COMPLETED",
 		Message: "Build already completed.",
 	}
 
 	// ErrDeployInProgress is returned when a deploy is already in progress
 	// for the same (tenant, project, environment).
-	ErrDeployInProgress = &LoopZeroError{
+	ErrDeployInProgress = &LoopRuntimeError{
 		Code:    "DEPLOY_IN_PROGRESS",
 		Message: "a deploy is already in progress for this environment",
 	}
 
 	// ErrInvalidName is returned when a resource name does not conform to
 	// Kubernetes naming rules (RFC 1123).
-	ErrInvalidName = &LoopZeroError{
+	ErrInvalidName = &LoopRuntimeError{
 		Code:    "INVALID_NAME",
 		Message: "resource name does not conform to RFC 1123",
 	}
 
 	// ErrIdempotencyConflict is returned when an idempotency key was already
 	// used with a different request payload.
-	ErrIdempotencyConflict = &LoopZeroError{
+	ErrIdempotencyConflict = &LoopRuntimeError{
 		Code:    "IDEMPOTENCY_CONFLICT",
 		Message: "idempotency key was already used with a different request payload",
 	}
 
 	// ErrUnauthorized is returned when a request lacks valid authentication.
-	ErrUnauthorized = &LoopZeroError{
+	ErrUnauthorized = &LoopRuntimeError{
 		Code:    "UNAUTHORIZED",
 		Message: "not authenticated",
 	}
 
 	// ErrInvalidRequest is returned when the request body cannot be parsed.
-	ErrInvalidRequest = &LoopZeroError{
+	ErrInvalidRequest = &LoopRuntimeError{
 		Code:    "INVALID_REQUEST",
 		Message: "invalid request body",
 	}
 
 	// ErrProjectExists is returned when a project with the same name
 	// already exists within a tenant.
-	ErrProjectExists = &LoopZeroError{
+	ErrProjectExists = &LoopRuntimeError{
 		Code:    "PROJECT_EXISTS",
 		Message: "a project with this name already exists in your team",
 	}
 
 	// ErrInternalError is returned for unexpected server-side failures.
-	ErrInternalError = &LoopZeroError{
+	ErrInternalError = &LoopRuntimeError{
 		Code:    "INTERNAL_ERROR",
-		Message: "Something went wrong. Try again, or check `loopzero status` for details. If the problem persists, contact support.",
+		Message: "Something went wrong. Try again, or check `loopruntime status` for details. If the problem persists, contact support.",
 	}
 
 	// ErrPayloadTooLarge is returned when the request body exceeds the size limit.
-	ErrPayloadTooLarge = &LoopZeroError{
+	ErrPayloadTooLarge = &LoopRuntimeError{
 		Code:    "PAYLOAD_TOO_LARGE",
 		Message: "request body exceeds the maximum allowed size",
 	}
 
 	// ErrValidationFailed is returned when input validation fails with field-specific details.
-	ErrValidationFailed = &LoopZeroError{
+	ErrValidationFailed = &LoopRuntimeError{
 		Code:    "VALIDATION_FAILED",
 		Message: "validation failed",
 	}
 
 	// ErrFrontendMustBeStatic is returned when a frontend app doesn't use render: static.
 	// MEET-2026-03-29-016: All frontends are served from CDN, zero pods.
-	ErrFrontendMustBeStatic = &LoopZeroError{
+	ErrFrontendMustBeStatic = &LoopRuntimeError{
 		Code:    "FRONTEND_MUST_BE_STATIC",
 		Message: "frontend apps must use static delivery. Add 'render: static' to your loopzero.yaml",
 	}
 
 	// ErrPodLimitExceeded is returned when a project has more than 1 server or 1 worker.
 	// MEET-2026-03-29-016: Max 1 API service + 1 background worker per project.
-	ErrPodLimitExceeded = &LoopZeroError{
+	ErrPodLimitExceeded = &LoopRuntimeError{
 		Code:    "POD_LIMIT_EXCEEDED",
 		Message: "project exceeds the maximum of 1 API service and 1 background worker",
 	}
 
 	// ErrMissingField is returned when a required field is missing from the request.
-	ErrMissingField = &LoopZeroError{
+	ErrMissingField = &LoopRuntimeError{
 		Code:    "MISSING_FIELD",
 		Message: "a required field is missing",
 	}
@@ -325,27 +325,27 @@ var (
 	// bundle to the source store fails AND the typed PushBundleError mapping
 	// (PushBundleErrorReason.Summary in api/internal/source) cannot identify a
 	// specific reason. Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3
-	// (closes loopzero-cloud#31): replaced the legacy actively-misleading
+	// (closes loopruntime-cloud#31): replaced the legacy actively-misleading
 	// "Ensure your git history is clean and try again." text (the user's git
 	// history WAS clean in the QA report; the real failure was elsewhere)
 	// with a neutral fallback. Specific actionable text is now emitted by
 	// reason-specific messages keyed off PushBundleError.Reason.
-	ErrSourceUploadFailed = &LoopZeroError{
+	ErrSourceUploadFailed = &LoopRuntimeError{
 		Code:    "SOURCE_UPLOAD_FAILED",
 		Message: "The source upload failed. Please retry; if the issue persists, contact support.",
 	}
 
 	// ErrInvalidTenantOrProject is returned when tenantID or projectID fails
 	// DNS-1123 validation (Plan v1.2 T1.2). The detailed message is filled in
-	// at the call site via NewLoopZeroError to surface which field + why.
-	ErrInvalidTenantOrProject = &LoopZeroError{
+	// at the call site via NewLoopRuntimeError to surface which field + why.
+	ErrInvalidTenantOrProject = &LoopRuntimeError{
 		Code:    "INVALID_TENANT_OR_PROJECT",
 		Message: "tenant or project ID must match DNS-1123 (1-63 chars, lowercase alphanumeric + hyphens, no leading/trailing hyphen)",
 	}
 
 	// ErrPlatformDegraded is returned when the deploy service circuit breaker is open.
 	// The platform is temporarily unable to process sync requests (DA-7).
-	ErrPlatformDegraded = &LoopZeroError{
+	ErrPlatformDegraded = &LoopRuntimeError{
 		Code:    "PLATFORM_DEGRADED",
 		Message: "deploy service is temporarily unavailable",
 	}
@@ -353,7 +353,7 @@ var (
 	// ErrDeployServiceAuthFailed is returned when the deploy service rejects its credentials (401/403).
 	// This is NOT a transient failure — the credentials are invalid and must be renewed.
 	// The circuit breaker MUST NOT count this toward the open threshold (MEET-013).
-	ErrDeployServiceAuthFailed = &LoopZeroError{
+	ErrDeployServiceAuthFailed = &LoopRuntimeError{
 		Code:    "DEPLOY_SERVICE_AUTH_FAILED",
 		Message: "deploy service credentials rejected — contact your platform administrator",
 	}
@@ -362,7 +362,7 @@ var (
 	// MEET-2026-03-29-019: This is NOT a transient failure — the previous operation must
 	// be terminated before a new sync can start. The circuit breaker MUST NOT count this
 	// toward the open threshold (same exclusion pattern as ErrDeployServiceAuthFailed).
-	ErrSyncOperationInProgress = &LoopZeroError{
+	ErrSyncOperationInProgress = &LoopRuntimeError{
 		Code:    "SYNC_OPERATION_IN_PROGRESS",
 		Message: "another sync operation is already in progress",
 	}
@@ -371,7 +371,7 @@ var (
 	// is full. Roadmap 07: the build admission gate returns 429 so clients
 	// know to retry after a bounded wait. The response MUST include a
 	// `Retry-After` header with a sensible duration.
-	ErrCellAtCapacity = &LoopZeroError{
+	ErrCellAtCapacity = &LoopRuntimeError{
 		Code:    "CELL_AT_CAPACITY",
 		Message: "the platform is currently busy — retry in a few seconds",
 	}
@@ -380,14 +380,14 @@ var (
 	// maximum allowed concurrent builds in flight. Enforces per-tenant
 	// fairness so one noisy tenant cannot starve others even when the cell
 	// has free capacity. Same Retry-After semantics as ErrCellAtCapacity.
-	ErrTenantBuildQuota = &LoopZeroError{
+	ErrTenantBuildQuota = &LoopRuntimeError{
 		Code:    "TENANT_BUILD_QUOTA",
 		Message: "your team has too many builds in progress — wait for one to finish",
 	}
 
 	// ErrSameEnvironment is returned when a promote request specifies the same
 	// source and target environment.
-	ErrSameEnvironment = &LoopZeroError{
+	ErrSameEnvironment = &LoopRuntimeError{
 		Code:    "SAME_ENVIRONMENT",
 		Message: "source and target environments must be different",
 	}
@@ -396,7 +396,7 @@ var (
 	// autoscaling.max) than the tenant's plan allows.
 	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
 	// Factory NewReplicasExceedPlan adds plan + cap + requested + app context.
-	ErrReplicasExceedPlan = &LoopZeroError{
+	ErrReplicasExceedPlan = &LoopRuntimeError{
 		Code:    "REPLICAS_EXCEED_PLAN",
 		Message: "requested replicas exceed your plan's limit",
 	}
@@ -404,7 +404,7 @@ var (
 	// ErrScalingAmbiguous is returned when both `replicas` and `autoscaling`
 	// are set on the same app. The two are mutually exclusive — pick one.
 	// B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
-	ErrScalingAmbiguous = &LoopZeroError{
+	ErrScalingAmbiguous = &LoopRuntimeError{
 		Code:    "SCALING_AMBIGUOUS",
 		Message: "'replicas' and 'autoscaling' are mutually exclusive — choose one",
 	}
@@ -413,7 +413,7 @@ var (
 	// already holds its plan's project cap. M4 (account-level tenancy, Phase 2):
 	// the cap is per-Account, enforced at the engine's project-creation path.
 	// Factory NewProjectsExceedPlan adds plan + cap + current + account context.
-	ErrProjectsExceedPlan = &LoopZeroError{
+	ErrProjectsExceedPlan = &LoopRuntimeError{
 		Code:    "PROJECTS_EXCEED_PLAN",
 		Message: "your account has reached its plan's project limit",
 	}
@@ -423,8 +423,8 @@ var (
 // the per-Account project cap, the account's current project count, and the
 // account id. M4 — mirrors NewReplicasExceedPlan; the message carries the upgrade
 // URL so the client has an actionable path (EC-4).
-func NewProjectsExceedPlan(plan string, limit, current int, accountID string) *LoopZeroError {
-	return &LoopZeroError{
+func NewProjectsExceedPlan(plan string, limit, current int, accountID string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code: "PROJECTS_EXCEED_PLAN",
 		Message: fmt.Sprintf(
 			"Account '%s' has %d projects — the %s plan allows up to %d. Upgrade at https://getloopscale.com/pricing or delete a project.",
@@ -436,8 +436,8 @@ func NewProjectsExceedPlan(plan string, limit, current int, accountID string) *L
 // NewReplicasExceedPlan creates a REPLICAS_EXCEED_PLAN error with plan name,
 // plan cap, requested replica count, and the offending app name.
 // B15 (CHG-2026-04-23-B15 / MEET-2026-04-23-059).
-func NewReplicasExceedPlan(plan string, limit, requested int, appName string) *LoopZeroError {
-	return &LoopZeroError{
+func NewReplicasExceedPlan(plan string, limit, requested int, appName string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code: "REPLICAS_EXCEED_PLAN",
 		Message: fmt.Sprintf(
 			"App '%s' requested %d replicas — the %s plan allows up to %d per service. Upgrade at https://getloopscale.com/pricing or lower the replica count.",
@@ -454,57 +454,57 @@ func displayPlanName(plan string) string {
 
 // NewLockTimeout creates a LOCK_TIMEOUT error with optional detail.
 // Always returns a fresh copy to prevent mutation of the global sentinel.
-func NewLockTimeout(detail string) *LoopZeroError {
+func NewLockTimeout(detail string) *LoopRuntimeError {
 	msg := ErrLockTimeout.Message
 	if detail != "" {
 		msg = detail
 	}
-	return &LoopZeroError{Code: "LOCK_TIMEOUT", Message: msg}
+	return &LoopRuntimeError{Code: "LOCK_TIMEOUT", Message: msg}
 }
 
 // NewInvalidTransition creates an INVALID_TRANSITION error with state context.
-func NewInvalidTransition(from, event string) *LoopZeroError {
-	return &LoopZeroError{
+func NewInvalidTransition(from, event string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    "INVALID_TRANSITION",
 		Message: fmt.Sprintf("invalid state transition: cannot apply '%s' in state '%s'", event, from),
 	}
 }
 
 // NewTenantNotFound creates a TENANT_NOT_FOUND error with tenant ID context.
-func NewTenantNotFound(tenantID string) *LoopZeroError {
-	return &LoopZeroError{
+func NewTenantNotFound(tenantID string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    "TENANT_NOT_FOUND",
 		Message: fmt.Sprintf("tenant '%s' not found", tenantID),
 	}
 }
 
 // NewBuildNotFound creates a BUILD_NOT_FOUND error with build ID context.
-func NewBuildNotFound(buildID string) *LoopZeroError {
-	return &LoopZeroError{
+func NewBuildNotFound(buildID string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    "BUILD_NOT_FOUND",
 		Message: fmt.Sprintf("build '%s' not found", buildID),
 	}
 }
 
 // NewReleaseNotFound creates a RELEASE_NOT_FOUND error with release ID context.
-func NewReleaseNotFound(releaseID string) *LoopZeroError {
-	return &LoopZeroError{
+func NewReleaseNotFound(releaseID string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    "RELEASE_NOT_FOUND",
 		Message: fmt.Sprintf("release '%s' not found", releaseID),
 	}
 }
 
 // NewProjectNotFound creates a PROJECT_NOT_FOUND error with project name context.
-func NewProjectNotFound(name string) *LoopZeroError {
-	return &LoopZeroError{
+func NewProjectNotFound(name string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    "PROJECT_NOT_FOUND",
 		Message: fmt.Sprintf("project '%s' not found", name),
 	}
 }
 
 // NewEnvironmentNotFound creates an ENVIRONMENT_NOT_FOUND error with environment name context.
-func NewEnvironmentNotFound(name string) *LoopZeroError {
-	return &LoopZeroError{
+func NewEnvironmentNotFound(name string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    "ENVIRONMENT_NOT_FOUND",
 		Message: fmt.Sprintf("environment '%s' not found", name),
 	}
@@ -513,8 +513,8 @@ func NewEnvironmentNotFound(name string) *LoopZeroError {
 // NewDomainNotFound creates a DOMAIN_NOT_FOUND error with domain context.
 // CHG-2026-04-23-AUDIT-13: brings domains handler into parity with other
 // NewXNotFound factories (uniform JSON shape {code, message}).
-func NewDomainNotFound(domain string) *LoopZeroError {
-	return &LoopZeroError{
+func NewDomainNotFound(domain string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    "DOMAIN_NOT_FOUND",
 		Message: fmt.Sprintf("domain '%s' not found", domain),
 	}
@@ -526,22 +526,22 @@ func NewDomainNotFound(domain string) *LoopZeroError {
 // the endpoint returned 200 OK even when there was nothing to disconnect,
 // identical to the bug fixed in AUDIT-6 (team member remove) and AUDIT-12
 // (environment delete).
-func NewRepositoryNotLinked(project string) *LoopZeroError {
-	return &LoopZeroError{
+func NewRepositoryNotLinked(project string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    "REPOSITORY_NOT_LINKED",
 		Message: fmt.Sprintf("no repository linked to project '%s'", project),
 	}
 }
 
 // ErrForbidden is returned when an operation is not permitted.
-var ErrForbidden = &LoopZeroError{
+var ErrForbidden = &LoopRuntimeError{
 	Code:    "FORBIDDEN",
 	Message: "this operation is not permitted",
 }
 
 // NewIdempotencyConflict creates an IDEMPOTENCY_CONFLICT error with key context.
-func NewIdempotencyConflict(key string) *LoopZeroError {
-	return &LoopZeroError{
+func NewIdempotencyConflict(key string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code:    "IDEMPOTENCY_CONFLICT",
 		Message: fmt.Sprintf("idempotency key '%s' was already used with a different request payload", key),
 	}
@@ -561,8 +561,8 @@ func NewIdempotencyConflict(key string) *LoopZeroError {
 // ACTIVE per env via the partial unique index; the second UPDATE hits
 // SQLSTATE 23505. Operator interpretation: race between sync_completion
 // callbacks; the loser retries on next reconcile tick (loop is idempotent).
-func NewConcurrentActivation(projectID, env string) *LoopZeroError {
-	return &LoopZeroError{
+func NewConcurrentActivation(projectID, env string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code: "CONCURRENT_ACTIVATION",
 		Message: fmt.Sprintf(
 			"another release activation is in progress for env '%s/%s'; retry on next convergence tick",
@@ -582,8 +582,8 @@ func NewConcurrentActivation(projectID, env string) *LoopZeroError {
 // Distinguished from REPLICAS_EXCEED_PLAN (422 — request shape is valid but
 // quantity exceeds cap): PLAN_UPGRADE_REQUIRED means the feature itself is
 // not available on this tier, not that a numeric cap was exceeded.
-func NewPlanUpgradeRequired(required, current, feature string) *LoopZeroError {
-	return &LoopZeroError{
+func NewPlanUpgradeRequired(required, current, feature string) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code: "PLAN_UPGRADE_REQUIRED",
 		Message: fmt.Sprintf(
 			"%s requires the %s plan or higher (your current plan is %s). Upgrade at https://getloopscale.com/pricing.",
@@ -602,8 +602,8 @@ func NewPlanUpgradeRequired(required, current, feature string) *LoopZeroError {
 // `field` is the offending request key ("cpu_target" or "memory_target") so
 // the dashboard can highlight the specific input. `min`/`max`/`got` echo the
 // constants from pkg/enforcement.HPACPUTargetMin/Max + ...Memory equivalents.
-func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *LoopZeroError {
-	return &LoopZeroError{
+func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *LoopRuntimeError {
+	return &LoopRuntimeError{
 		Code: "HPA_TARGET_OUT_OF_BOUNDS",
 		Message: fmt.Sprintf(
 			"HPA %s must be between %d%% and %d%% (got %d%%). Targets below the minimum trigger autoscaling before the pod warms up; above the maximum leave no headroom for transient spikes.",
@@ -612,14 +612,14 @@ func NewHPATargetBoundsViolated(field string, minBound, maxBound, got int) *Loop
 	}
 }
 
-// ErrBuildSubmitFailed is the canonical LoopZeroError for build-trigger failures
+// ErrBuildSubmitFailed is the canonical LoopRuntimeError for build-trigger failures
 // that REACH the orchestrator (vs INTERNAL_ERROR which stays for unexpected
 // failures outside the orchestrator's responsibility). Sprint 6 plan qa-
-// sprint6-cleanup-2026-06-25 ADR D3 (closes loopzero-cloud#34) — distinct code
-// so loopzero-cli + dashboards + telemetry can switch on it cleanly.
-var ErrBuildSubmitFailed = &LoopZeroError{
+// sprint6-cleanup-2026-06-25 ADR D3 (closes loopruntime-cloud#34) — distinct code
+// so loopruntime-cli + dashboards + telemetry can switch on it cleanly.
+var ErrBuildSubmitFailed = &LoopRuntimeError{
 	Code:    "BUILD_SUBMIT_FAILED",
-	Message: "The build could not be triggered. Try again, or check `loopzero status` for details.",
+	Message: "The build could not be triggered. Try again, or check `loopruntime status` for details.",
 }
 
 // NewComposed returns an error with base's code whose message pairs an
@@ -629,18 +629,18 @@ var ErrBuildSubmitFailed = &LoopZeroError{
 // placeholders by the caller's scrubbing — the message falls back to
 // "<summary>. Reference: <traceID>. Contact support if it persists." so the
 // operator still has a handle on the server-side log without the cause
-// leaking (Red Team loopzero-cloud#35). An empty summary (a reason no catalog
+// leaking (Red Team loopruntime-cloud#35). An empty summary (a reason no catalog
 // names) uses base.Message and never the detail.
 //
 // The reason → summary catalogs live next to the reason enums that own them
 // (api/internal/source PushBundleErrorReason, api/internal/builds
 // SubmitBuildErrorReason), so an enum and its copy change together; this
 // function is only the composition rule.
-func NewComposed(base *LoopZeroError, summary, detail, traceID string) *LoopZeroError {
+func NewComposed(base *LoopRuntimeError, summary, detail, traceID string) *LoopRuntimeError {
 	if summary == "" {
-		return &LoopZeroError{Code: base.Code, Message: appendTraceIDFallback(base.Message, traceID)}
+		return &LoopRuntimeError{Code: base.Code, Message: appendTraceIDFallback(base.Message, traceID)}
 	}
-	return &LoopZeroError{Code: base.Code, Message: composeMessageWithTraceID(summary, detail, traceID)}
+	return &LoopRuntimeError{Code: base.Code, Message: composeMessageWithTraceID(summary, detail, traceID)}
 }
 
 // Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1 — composition helpers.
@@ -705,8 +705,8 @@ func isUsefulDetail(detail string) bool {
 // secret writes depend on — issue #138.
 //
 // Before this sentinel, a backend that could not encrypt surfaced as the same
-// generic INTERNAL_ERROR as a database outage or any other 5xx. `loopzero secret
-// set` answered "Something went wrong" and nothing persisted, while `loopzero
+// generic INTERNAL_ERROR as a database outage or any other 5xx. `loopruntime secret
+// set` answered "Something went wrong" and nothing persisted, while `loopruntime
 // secret list` kept working (reads do not encrypt). The issue author had to
 // GUESS the cause from which project happened to work — their report offers a
 // hypothesis, not a diagnosis, because the API supplied nothing to diagnose.
@@ -723,7 +723,7 @@ func isUsefulDetail(detail string) bool {
 //
 // The 503 mapping lives in pkg/errors/http/mapping.go, not here — per ADR-0030
 // the transport boundary owns status resolution (gate PKG-G15).
-var ErrSecretsBackendUnavailable = &LoopZeroError{
+var ErrSecretsBackendUnavailable = &LoopRuntimeError{
 	Code:    "SECRETS_BACKEND_UNAVAILABLE",
 	Message: "The secrets backend is not available for this project right now, so the value was not saved. Nothing was partially written — retry, and if it persists ask an operator to check the secrets backend for this environment.",
 }

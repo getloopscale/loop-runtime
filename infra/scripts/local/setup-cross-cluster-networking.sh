@@ -4,7 +4,7 @@
 # Ensures all k3d cluster nodes can reach each other across Docker networks +
 # materializes the canonical `host.k3d.internal` resolution in mgmt CoreDNS.
 #
-# All k3d cluster configs use `network: k3d-loopzero` (shared network), so the
+# All k3d cluster configs use `network: k3d-loopruntime` (shared network), so the
 # clusters already see each other on the bridge. This script verifies that and
 # pins `host.k3d.internal` to the docker bridge GATEWAY — the canonical k3d
 # host-publish target shared by every `port: <host>:<nodePort>@loadbalancer`
@@ -32,15 +32,15 @@
 # This script is idempotent — safe to run multiple times.
 set -euo pipefail
 
-CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
-SHARED_NETWORK="k3d-loopzero"
+CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopruntime-core}"
+SHARED_NETWORK="k3d-loopruntime"
 
 echo "=== Cross-cluster networking setup ==="
 
 # --- Step 1: Verify all clusters are on the shared network ---
 echo ""
 echo "Verifying cluster connectivity on ${SHARED_NETWORK}..."
-for container in k3d-loopzero-core-server-0 k3d-loopzero-build-server-0 k3d-loopzero-cell-0-server-0; do
+for container in k3d-loopruntime-core-server-0 k3d-loopruntime-build-server-0 k3d-loopruntime-cell-0-server-0; do
   IP=$(docker inspect "$container" --format "{{(index .NetworkSettings.Networks \"${SHARED_NETWORK}\").IPAddress}}" 2>/dev/null || true)
   if [ -n "$IP" ]; then
     echo "  [OK] $container: $IP"
@@ -50,9 +50,9 @@ for container in k3d-loopzero-core-server-0 k3d-loopzero-build-server-0 k3d-loop
   fi
 done
 
-# --- Step 2: Resolve the k3d-loopzero bridge GATEWAY (canonical host-publish target) ---
+# --- Step 2: Resolve the k3d-loopruntime bridge GATEWAY (canonical host-publish target) ---
 echo ""
-echo "Resolving k3d-loopzero bridge gateway (canonical host.k3d.internal target per ADR D6)..."
+echo "Resolving k3d-loopruntime bridge gateway (canonical host.k3d.internal target per ADR D6)..."
 GATEWAY_IP=$(docker network inspect "${SHARED_NETWORK}" -f '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)
 
 if [ -z "$GATEWAY_IP" ]; then

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package http
 
@@ -11,11 +11,11 @@ import (
 	"regexp"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 func TestStatus_KnownCodeUsesRegistry(t *testing.T) {
-	got := Status(loopzeroerrors.ErrLockTimeout)
+	got := Status(loopruntimeerrors.ErrLockTimeout)
 	if got != http.StatusConflict {
 		t.Errorf("ErrLockTimeout should map to 409, got %d", got)
 	}
@@ -26,10 +26,10 @@ func TestStatus_NotFoundCodes(t *testing.T) {
 		err  error
 		want int
 	}{
-		{loopzeroerrors.ErrTenantNotFound, http.StatusNotFound},
-		{loopzeroerrors.ErrBuildNotFound, http.StatusNotFound},
-		{loopzeroerrors.ErrReleaseNotFound, http.StatusNotFound},
-		{loopzeroerrors.ErrPreviewNotFound, http.StatusNotFound},
+		{loopruntimeerrors.ErrTenantNotFound, http.StatusNotFound},
+		{loopruntimeerrors.ErrBuildNotFound, http.StatusNotFound},
+		{loopruntimeerrors.ErrReleaseNotFound, http.StatusNotFound},
+		{loopruntimeerrors.ErrPreviewNotFound, http.StatusNotFound},
 	}
 	for _, c := range cases {
 		if got := Status(c.err); got != c.want {
@@ -39,18 +39,18 @@ func TestStatus_NotFoundCodes(t *testing.T) {
 }
 
 // M4 T1.1 — the per-Account project-cap typed error maps to 422 (mirrors
-// REPLICAS_EXCEED_PLAN; the canonical loopzero cap status).
+// REPLICAS_EXCEED_PLAN; the canonical loopruntime cap status).
 func TestStatus_ProjectsExceedPlan_422(t *testing.T) {
-	if got := Status(loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-x")); got != 422 {
+	if got := Status(loopruntimeerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-x")); got != 422 {
 		t.Errorf("Status(PROJECTS_EXCEED_PLAN) = %d, want 422", got)
 	}
 }
 
 func TestStatus_UnauthorizedAndForbidden(t *testing.T) {
-	if got := Status(loopzeroerrors.ErrUnauthorized); got != http.StatusUnauthorized {
+	if got := Status(loopruntimeerrors.ErrUnauthorized); got != http.StatusUnauthorized {
 		t.Errorf("ErrUnauthorized should map to 401, got %d", got)
 	}
-	if got := Status(loopzeroerrors.ErrForbidden); got != http.StatusForbidden {
+	if got := Status(loopruntimeerrors.ErrForbidden); got != http.StatusForbidden {
 		t.Errorf("ErrForbidden should map to 403, got %d", got)
 	}
 }
@@ -61,16 +61,16 @@ func TestStatus_NilReturnsOK(t *testing.T) {
 	}
 }
 
-func TestStatus_NonLoopZeroErrorReturns500(t *testing.T) {
+func TestStatus_NonLoopRuntimeErrorReturns500(t *testing.T) {
 	if got := Status(stderrors.New("plain")); got != http.StatusInternalServerError {
-		t.Errorf("non-LoopZeroError should map to 500, got %d", got)
+		t.Errorf("non-LoopRuntimeError should map to 500, got %d", got)
 	}
 }
 
 func TestStatus_UnregisteredCodeReturns500(t *testing.T) {
 	// Stage C: HTTPStatus field removed; registry is now the only
 	// source of truth. Unregistered codes default to 500.
-	custom := &loopzeroerrors.LoopZeroError{Code: "NOT_REGISTERED_YET", Message: "x"}
+	custom := &loopruntimeerrors.LoopRuntimeError{Code: "NOT_REGISTERED_YET", Message: "x"}
 	if got := Status(custom); got != http.StatusInternalServerError {
 		t.Errorf("unregistered code must default to 500; got %d", got)
 	}
@@ -86,7 +86,7 @@ func TestIsRegistered(t *testing.T) {
 }
 
 func TestStatus_PreservesIsAsCompatibility(t *testing.T) {
-	wrapped := loopzeroerrors.ErrLockTimeout.WrapWithStack("submit")
+	wrapped := loopruntimeerrors.ErrLockTimeout.WrapWithStack("submit")
 	if got := Status(wrapped); got != http.StatusConflict {
 		t.Errorf("Status must traverse wrap chains; got %d", got)
 	}
@@ -105,7 +105,7 @@ func TestStatus_J20ScaleErrors(t *testing.T) {
 		{"HPA_TARGET_OUT_OF_BOUNDS", http.StatusBadRequest},
 	}
 	for _, tc := range tests {
-		err := &loopzeroerrors.LoopZeroError{Code: tc.code, Message: "x"}
+		err := &loopruntimeerrors.LoopRuntimeError{Code: tc.code, Message: "x"}
 		if got := Status(err); got != tc.want {
 			t.Errorf("Status(%s)=%d, want %d", tc.code, got, tc.want)
 		}
@@ -139,7 +139,7 @@ func TestRegister_AddsAStatusForACodeOwnedOutsidePkg(t *testing.T) {
 		t.Fatalf("Register: %v", err)
 	}
 
-	if got := Status(&loopzeroerrors.LoopZeroError{Code: "TEST_OWNED_ELSEWHERE"}); got != http.StatusGone {
+	if got := Status(&loopruntimeerrors.LoopRuntimeError{Code: "TEST_OWNED_ELSEWHERE"}); got != http.StatusGone {
 		t.Fatalf("Status = %d, want 410", got)
 	}
 	if err := Register("TEST_OWNED_ELSEWHERE", http.StatusGone); err != nil {
@@ -151,7 +151,7 @@ func TestRegister_RefusesAConflictingStatus(t *testing.T) {
 	if err := Register("LOCK_TIMEOUT", http.StatusTeapot); err == nil {
 		t.Fatal("re-mapping a registered code to another status must be refused")
 	}
-	if got := Status(&loopzeroerrors.LoopZeroError{Code: "LOCK_TIMEOUT"}); got != http.StatusConflict {
+	if got := Status(&loopruntimeerrors.LoopRuntimeError{Code: "LOCK_TIMEOUT"}); got != http.StatusConflict {
 		t.Fatalf("the original mapping must survive a refused registration, got %d", got)
 	}
 }

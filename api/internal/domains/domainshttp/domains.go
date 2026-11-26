@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package domainshttp serves the custom-domain surface: claiming a domain, verifying
 // ownership, and driving it to a state where traffic actually reaches the tenant.
@@ -27,7 +27,7 @@ import (
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
@@ -39,7 +39,7 @@ import (
 func generateVerificationToken() string {
 	b := make([]byte, 10)
 	_, _ = rand.Read(b)
-	return "loopzero-verify=" + hex.EncodeToString(b)
+	return "loopruntime-verify=" + hex.EncodeToString(b)
 }
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
@@ -197,7 +197,7 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -207,11 +207,11 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "domain lookup failed", "error", err)
 		// CHG-2026-04-23-AUDIT-13: typed error shape for contract uniformity.
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if d == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewDomainNotFound(domainName))
 		return
 	}
 
@@ -243,7 +243,7 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// v1: expose verification token to owner/admin for pending domains
 	if statemachine.DomainPhase(d.Status) == statemachine.DPhPendingVerification && auth.HasMinRole(uc.Role, "admin") {
 		resp.Verification = &domainVerificationInfo{
-			TXTName:  "_loopzero-verify." + d.Domain,
+			TXTName:  "_loopruntime-verify." + d.Domain,
 			TXTValue: d.VerificationToken,
 		}
 	}
@@ -257,7 +257,7 @@ func (h *DomainHandler) List(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -286,7 +286,7 @@ func (h *DomainHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "domain list failed", "error", err)
 		// CHG-2026-04-23-AUDIT-13: typed error shape.
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 

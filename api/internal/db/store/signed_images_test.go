@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/getloopscale/loop-runtime/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -21,19 +21,19 @@ func TestAppAttestationStoreSqlc_FindSignedImages_RejectsEmptyInputs(t *testing.
 	s := &AppAttestationStoreSqlc{}
 	for _, in := range [][3]string{{"", "p", "c"}, {"t", "", "c"}, {"t", "p", ""}} {
 		_, err := s.FindSignedImages(context.Background(), nil, in[0], in[1], in[2])
-		if !errors.Is(err, loopzeroerrors.ErrMissingField) {
+		if !errors.Is(err, loopruntimeerrors.ErrMissingField) {
 			t.Errorf("FindSignedImages(%q, %q, %q) error = %v, want ErrMissingField", in[0], in[1], in[2], err)
 		}
 	}
 }
 
 // TestAppAttestationStoreSqlc_FindSignedImages_RealPG runs the query against a
-// Postgres loaded with schema.gen.sql (LOOPZERO_E2E_DATABASE_URL). It seeds
+// Postgres loaded with schema.gen.sql (LOOPRUNTIME_E2E_DATABASE_URL). It seeds
 // inside a transaction it rolls back, so it leaves no rows behind.
 func TestAppAttestationStoreSqlc_FindSignedImages_RealPG(t *testing.T) {
-	dsn := os.Getenv("LOOPZERO_E2E_DATABASE_URL")
+	dsn := os.Getenv("LOOPRUNTIME_E2E_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("LOOPZERO_E2E_DATABASE_URL not set: real-PG query test skipped")
+		t.Skip("LOOPRUNTIME_E2E_DATABASE_URL not set: real-PG query test skipped")
 	}
 	ctx := context.Background()
 	conn, err := pgx.Connect(ctx, dsn)

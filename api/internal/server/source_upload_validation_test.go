@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Plan v1.2 T1.2 (cutover-deep-review-hardening): integration test that
 // POST /api/v1/source/upload returns HTTP 400 with code

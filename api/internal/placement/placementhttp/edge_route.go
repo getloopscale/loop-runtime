@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placementhttp
 
@@ -22,7 +22,7 @@ type EdgeResolver interface {
 // EdgeRouteHandler serves GET /internal/edge/route: the edge's subrequest before it
 // forwards a user's request, or before it issues a certificate for a host. It reads the
 // host from the domain query, else from X-Forwarded-Host, and answers with
-// the cell in X-LoopZero-Cell (200), or refuses (404 unknown host, 503 index unavailable).
+// the cell in X-LoopRuntime-Cell (200), or refuses (404 unknown host, 503 index unavailable).
 // A non-2xx answer is relayed to the user by the edge, so its body is product copy.
 type EdgeRouteHandler struct {
 	resolver EdgeResolver
@@ -63,7 +63,7 @@ func (h *EdgeRouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		metrics.EdgeRouteLookups.WithLabelValues("routed").Inc()
-		w.Header().Set("X-LoopZero-Cell", cell)
+		w.Header().Set("X-LoopRuntime-Cell", cell)
 		w.WriteHeader(http.StatusOK)
 	case errors.Is(err, placement.ErrEdgeRouteNotFound):
 		metrics.EdgeRouteLookups.WithLabelValues("not_found").Inc()

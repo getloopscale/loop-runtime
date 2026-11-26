@@ -1,0 +1,14 @@
+# Tears staging down and builds it again from the head of develop (infra/staging/rebuild.sh).
+[Unit]
+Description=Rebuild staging from the head of develop
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+Environment=PATH=/usr/local/bin:/usr/local/go/bin:/usr/bin:/bin
+# The lock a deploy takes too: the rebuild waits up to an hour for a running deploy.
+ExecStart=/usr/bin/flock --wait 3600 /run/loopruntime-staging-platform.lock /usr/local/lib/loopruntime-staging/rebuild.sh
+# The emulator, four clusters, the infrastructure and the platform, from nothing.
+TimeoutStartSec=4h

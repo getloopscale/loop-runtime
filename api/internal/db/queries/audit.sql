@@ -8,7 +8,7 @@
 -- (schema=schema.gen.sql) + EC-3 (snake_case JSON tags via sqlc.yaml).
 --
 -- Multi-tenant — every query carries `tenant_id = $1` (enforced by
--- cmd/loopzero-ops/internal/quality/tenantpredicate gate). audit_log is in TenantOwnedTables.
+-- cmd/loopruntime-ops/internal/quality/tenantpredicate gate). audit_log is in TenantOwnedTables.
 --
 -- Dynamic-filter pattern for ListAuditLog uses sqlc nullable arg form:
 -- (cast::type IS NULL OR column = cast::type). When the filter slot is

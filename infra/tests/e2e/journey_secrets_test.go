@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 03: Secrets Lifecycle
 //
@@ -48,12 +48,12 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 		workDir = copyFixture("secret-app")
 		initGitRepo(workDir)
 
-		// V9 L15: loopzero secret set requires project record in DB. With L8
+		// V9 L15: loopruntime secret set requires project record in DB. With L8
 		// env-per-journey isolation, each journey is now truly isolated, so
 		// the project must be created within the journey itself BEFORE
 		// attempting "sets secret before deploy". Pre-L8, journeys
 		// implicitly shared the project record from earlier specs.
-		runLoopZeroInDir(workDir, "project", "create", project, "--json")
+		runLoopRuntimeInDir(workDir, "project", "create", project, "--json")
 	})
 
 	AfterAll(func() {
@@ -65,11 +65,11 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 
 	It("sets secret before deploy", func() {
 		secretArg := fmt.Sprintf("%s=%s", secretName, secretValue)
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "secret", "set", secretArg,
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "secret", "set", secretArg,
 			"--env", env, "--app", app, "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopzero secret set should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopruntime secret set should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"secret set stdout": stdout,
@@ -96,7 +96,7 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 	})
 
 	It("secret list shows name but NEVER value", func() {
-		stdout, _, exitCode := runLoopZeroInDir(workDir, "secret", "list",
+		stdout, _, exitCode := runLoopRuntimeInDir(workDir, "secret", "list",
 			"--env", env, "--json")
 
 		Expect(exitCode).To(Equal(0))
@@ -107,11 +107,11 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 	})
 
 	It("deletes secret", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "secret", "delete", secretName,
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "secret", "delete", secretName,
 			"--env", env, "--app", app, "--yes", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopzero secret delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopruntime secret delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"secret delete stdout": stdout,
@@ -120,7 +120,7 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 	})
 
 	It("secret gone from list after delete", func() {
-		stdout, _, exitCode := runLoopZeroInDir(workDir, "secret", "list",
+		stdout, _, exitCode := runLoopRuntimeInDir(workDir, "secret", "list",
 			"--env", env, "--json")
 
 		Expect(exitCode).To(Equal(0))
@@ -130,8 +130,8 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 
 	It("redeploys after secret removal", func() {
 		// Remove secrets declaration from loopzero.yaml to avoid MISSING_SECRETS.
-		loopzeroYAML := workDir + "/loopzero.yaml"
-		content, err := os.ReadFile(loopzeroYAML)
+		loopruntimeYAML := workDir + "/loopzero.yaml"
+		content, err := os.ReadFile(loopruntimeYAML)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Remove the secrets: line from loopzero.yaml.
@@ -144,7 +144,7 @@ var _ = Describe("Journey 03: Secrets Lifecycle", Ordered, Label("journey"), fun
 			}
 			filtered = append(filtered, line)
 		}
-		err = os.WriteFile(loopzeroYAML, []byte(strings.Join(filtered, "\n")), 0644)
+		err = os.WriteFile(loopruntimeYAML, []byte(strings.Join(filtered, "\n")), 0644)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Commit the change.

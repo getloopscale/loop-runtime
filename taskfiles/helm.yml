@@ -39,7 +39,7 @@ tasks:
         echo "All dependencies updated"
 
   helm:sync-crds:
-    desc: Sync CRDs from operators/config/crd/bases/ to charts/loopzero-crds/templates/
+    desc: Sync CRDs from operators/config/crd/bases/ to charts/loopruntime-crds/templates/
     # NOTE ON THE ESCAPES BELOW — do not "simplify" them away.
     #
     # go-task renders every command as a Go template BEFORE the shell sees it.
@@ -51,20 +51,20 @@ tasks:
     # `crd-semantic-diff` gate prescribes — could not run at all, so the CRD
     # chart silently drifted three features behind kubebuilder (`project` on
     # environments, `cellId` on previewenvironments, the `Cleaned` terminal
-    # state on loopzeroapplications). The gate reported drift correctly and the fix
+    # state on loopruntimeapplications). The gate reported drift correctly and the fix
     # it pointed at was unavailable.
     #
     # `{{ "{{" }}` renders to a literal `{{` for the shell. Only the OPENING
     # braces need escaping — a bare `}}` starts no action.
-    # Guarded by cmd/loopzero-ops/internal/repoinvariants/taskfile_renders_test.go (`task --dry`).
+    # Guarded by cmd/loopruntime-ops/internal/repoinvariants/taskfile_renders_test.go (`task --dry`).
     cmds:
       - |
         SRC="operators/config/crd/bases"
-        DST="charts/loopzero-crds/templates"
+        DST="charts/loopruntime-crds/templates"
         COUNT=0
-        for crd_file in "$SRC"/loopzero.io_*.yaml; do
+        for crd_file in "$SRC"/runtime.getloopscale.com_*.yaml; do
           base=$(basename "$crd_file" .yaml)
-          short=${base#loopzero.io_}
+          short=${base#runtime.getloopscale.com_}
           template_file="$DST/${short}.yaml"
           crd_name=$(grep "^  name:" "$crd_file" | head -1 | awk '{print $2}')
           spec_content=$(sed -n '/^spec:/,$p' "$crd_file")
@@ -75,7 +75,7 @@ tasks:
         metadata:
           name: ${crd_name}
           labels:
-            {{ "{{" }}- include "loopzero-common.labels" . | nindent 4 }}
+            {{ "{{" }}- include "loopruntime-common.labels" . | nindent 4 }}
           annotations:
             "helm.sh/resource-policy": keep
             controller-gen.kubebuilder.io/version: {{ "{{" }} .Values.controllerGenVersion | default "v0.17.2" }}
@@ -90,21 +90,21 @@ tasks:
     desc: |
       Regenerate the strict kubeconform schemas under
       infra/kubeconform-schemas/master-standalone-strict/:
-        - loopzero.io, from operators/config/crd/bases/ (#389). Run it with
+        - runtime.getloopscale.com, from operators/config/crd/bases/ (#389). Run it with
           helm:sync-crds after any CRD change; the kubeconform-schemas-sync
           quality gate fails until you do.
         - velero.io, from the CRDs the Velero chart version pinned in
           infra/helm/velero/Chart.lock ships (#391). Run it after bumping that
           chart; validate:helmfile-templates fails until you do.
     cmds:
-      - go run ./cmd/loopzero-ops kubeconform-schemas
+      - go run ./cmd/loopruntime-ops kubeconform-schemas
       - helm dependency build infra/helm/velero >/dev/null
-      - go run ./cmd/loopzero-ops kubeconform-schemas --chart infra/helm/velero
+      - go run ./cmd/loopruntime-ops kubeconform-schemas --chart infra/helm/velero
 
   helm:install:test:
     desc: Run helm test hooks post-install
     cmds:
-      - helm test loopzero -n loopzero-system
+      - helm test loopruntime -n loopruntime-system
   helm:test:
     desc: |
       Run helm chart RENDER-TIME tests (Plan 2026-05-20 T4.2).
@@ -123,8 +123,8 @@ tasks:
   helm:test:chart:
     desc: |
       Run render-time tests for a SINGLE chart.
-      Usage: task helm:test:chart -- loopzero-api-published
-             task helm:test:chart -- loopzero-cloud-published
+      Usage: task helm:test:chart -- loopruntime-api-published
+             task helm:test:chart -- loopruntime-cloud-published
       Faster than full suite (~1-30s per chart). Useful while iterating
       on a chart change.
     dir: infra/tests

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package errors
 
@@ -10,42 +10,42 @@ import (
 	"testing"
 )
 
-func TestLoopZeroError_Error(t *testing.T) {
-	err := &LoopZeroError{Code: "TEST_CODE", Message: "test message"}
+func TestLoopRuntimeError_Error(t *testing.T) {
+	err := &LoopRuntimeError{Code: "TEST_CODE", Message: "test message"}
 	expected := "[TEST_CODE] test message"
 	if err.Error() != expected {
 		t.Errorf("expected %q, got %q", expected, err.Error())
 	}
 }
 
-func TestLoopZeroError_ImplementsError(t *testing.T) {
-	var _ error = &LoopZeroError{}
+func TestLoopRuntimeError_ImplementsError(t *testing.T) {
+	var _ error = &LoopRuntimeError{}
 }
 
-func TestLoopZeroError_Is(t *testing.T) {
+func TestLoopRuntimeError_Is(t *testing.T) {
 	t.Run("matches by code", func(t *testing.T) {
-		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom"}
+		err := &LoopRuntimeError{Code: "LOCK_TIMEOUT", Message: "custom"}
 		if !stderrors.Is(err, ErrLockTimeout) {
 			t.Error("expected errors.Is to match by code")
 		}
 	})
 
 	t.Run("does not match different code", func(t *testing.T) {
-		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom"}
+		err := &LoopRuntimeError{Code: "LOCK_TIMEOUT", Message: "custom"}
 		if stderrors.Is(err, ErrBuildNotFound) {
 			t.Error("expected errors.Is not to match different code")
 		}
 	})
 
-	t.Run("does not match non-LoopZeroError", func(t *testing.T) {
-		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom"}
+	t.Run("does not match non-LoopRuntimeError", func(t *testing.T) {
+		err := &LoopRuntimeError{Code: "LOCK_TIMEOUT", Message: "custom"}
 		if stderrors.Is(err, stderrors.New("some other error")) {
-			t.Error("expected errors.Is not to match non-LoopZeroError")
+			t.Error("expected errors.Is not to match non-LoopRuntimeError")
 		}
 	})
 }
 
-func TestLoopZeroError_Wrap(t *testing.T) {
+func TestLoopRuntimeError_Wrap(t *testing.T) {
 	original := ErrBuildNotFound
 	wrapped := original.Wrap("deploy-service")
 	if wrapped.Code != original.Code {
@@ -58,8 +58,8 @@ func TestLoopZeroError_Wrap(t *testing.T) {
 	// Wrap preserves Code so the registered status carries through.
 }
 
-func TestLoopZeroError_ToJSON(t *testing.T) {
-	err := &LoopZeroError{Code: "MY_CODE", Message: "details here"}
+func TestLoopRuntimeError_ToJSON(t *testing.T) {
+	err := &LoopRuntimeError{Code: "MY_CODE", Message: "details here"}
 	j := err.ToJSON()
 	if j["code"] != "MY_CODE" {
 		t.Errorf("expected code MY_CODE, got %q", j["code"])
@@ -69,11 +69,11 @@ func TestLoopZeroError_ToJSON(t *testing.T) {
 	}
 }
 
-func TestNewLoopZeroError(t *testing.T) {
-	// Stage C: NewLoopZeroError still accepts the int third parameter for
+func TestNewLoopRuntimeError(t *testing.T) {
+	// Stage C: NewLoopRuntimeError still accepts the int third parameter for
 	// backward compatibility with pre-T2.3 callers, but the value is
 	// ignored — HTTP status now resolves via pkg/errors/http.Status.
-	err := NewLoopZeroError("CUSTOM", "custom message")
+	err := NewLoopRuntimeError("CUSTOM", "custom message")
 	if err.Code != "CUSTOM" {
 		t.Errorf("expected code CUSTOM, got %q", err.Code)
 	}
@@ -89,7 +89,7 @@ func TestPredefinedErrors(t *testing.T) {
 	// belongs to errorshttp.Status, not to the domain struct.
 	tests := []struct {
 		name string
-		err  *LoopZeroError
+		err  *LoopRuntimeError
 		code string
 	}{
 		{"ErrLockTimeout", ErrLockTimeout, "LOCK_TIMEOUT"},
@@ -137,7 +137,7 @@ func TestPredefinedErrors(t *testing.T) {
 // NOT include the operation-specific verbs "promoting" or "rolling
 // back", nor the source-only noun "source environment".
 //
-// Regression protection for loopzero-cloud#166 (CRITICAL): user hit this
+// Regression protection for loopruntime-cloud#166 (CRITICAL): user hit this
 // misleading message during a rollback path — the promote-flavored
 // wording ("source environment", "promoting or rolling back") sent
 // operators looking for a promote-side problem when the actual
@@ -153,7 +153,7 @@ func TestErrNoActiveRelease_MessageIsOperationNeutral(t *testing.T) {
 	}
 	for _, term := range forbidden {
 		if strings.Contains(msg, term) {
-			t.Errorf("ErrNoActiveRelease.Message contains %q — docstring pins operation-neutral wording (loopzero-cloud#166). Full message: %q", term, msg)
+			t.Errorf("ErrNoActiveRelease.Message contains %q — docstring pins operation-neutral wording (loopruntime-cloud#166). Full message: %q", term, msg)
 		}
 	}
 	if msg == "" {
@@ -161,10 +161,10 @@ func TestErrNoActiveRelease_MessageIsOperationNeutral(t *testing.T) {
 	}
 }
 
-func TestLoopZeroErrorUnwrap(t *testing.T) {
+func TestLoopRuntimeErrorUnwrap(t *testing.T) {
 	t.Run("Unwrap returns the cause", func(t *testing.T) {
 		cause := fmt.Errorf("database connection refused")
-		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "lock timed out", Cause: cause}
+		err := &LoopRuntimeError{Code: "LOCK_TIMEOUT", Message: "lock timed out", Cause: cause}
 
 		if stderrors.Unwrap(err) != cause {
 			t.Error("Unwrap should return the cause")
@@ -173,7 +173,7 @@ func TestLoopZeroErrorUnwrap(t *testing.T) {
 
 	t.Run("errors.Is finds cause through Unwrap chain", func(t *testing.T) {
 		cause := fmt.Errorf("database connection refused")
-		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "lock timed out", Cause: cause}
+		err := &LoopRuntimeError{Code: "LOCK_TIMEOUT", Message: "lock timed out", Cause: cause}
 
 		if !stderrors.Is(err, cause) {
 			t.Error("errors.Is should find cause through Unwrap chain")
@@ -181,7 +181,7 @@ func TestLoopZeroErrorUnwrap(t *testing.T) {
 	})
 
 	t.Run("Unwrap returns nil when no cause", func(t *testing.T) {
-		err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "lock timed out"}
+		err := &LoopRuntimeError{Code: "LOCK_TIMEOUT", Message: "lock timed out"}
 
 		if stderrors.Unwrap(err) != nil {
 			t.Error("Unwrap should return nil when no cause is set")
@@ -189,7 +189,7 @@ func TestLoopZeroErrorUnwrap(t *testing.T) {
 	})
 }
 
-func TestLoopZeroErrorWrapPreservesCause(t *testing.T) {
+func TestLoopRuntimeErrorWrapPreservesCause(t *testing.T) {
 	original := NewLockTimeout("test-env")
 	wrapped := original.Wrap("during deploy")
 
@@ -267,16 +267,16 @@ func TestErrorFactories(t *testing.T) {
 	})
 }
 
-func TestLoopZeroError_Is_CodeOnlyComparison(t *testing.T) {
+func TestLoopRuntimeError_Is_CodeOnlyComparison(t *testing.T) {
 	// Is() compares only Code, which is the entire identity model after
-	// Stage C — HTTPStatus is no longer a LoopZeroError field.
-	err := &LoopZeroError{Code: "LOCK_TIMEOUT", Message: "custom"}
+	// Stage C — HTTPStatus is no longer a LoopRuntimeError field.
+	err := &LoopRuntimeError{Code: "LOCK_TIMEOUT", Message: "custom"}
 	if !stderrors.Is(err, ErrLockTimeout) {
 		t.Error("expected errors.Is to match by code")
 	}
 }
 
-func TestLoopZeroError_DoubleWrap_ErrorsIs(t *testing.T) {
+func TestLoopRuntimeError_DoubleWrap_ErrorsIs(t *testing.T) {
 	original := NewBuildNotFound("build-abc")
 	wrap1 := original.Wrap("service layer")
 	wrap2 := wrap1.Wrap("route handler")
@@ -286,13 +286,13 @@ func TestLoopZeroError_DoubleWrap_ErrorsIs(t *testing.T) {
 	}
 }
 
-func TestLoopZeroError_ErrorsAs(t *testing.T) {
+func TestLoopRuntimeError_ErrorsAs(t *testing.T) {
 	original := NewBuildNotFound("build-abc")
 	wrapped := original.Wrap("service layer")
 
-	var target *LoopZeroError
+	var target *LoopRuntimeError
 	if !stderrors.As(wrapped, &target) {
-		t.Fatal("errors.As should extract LoopZeroError from wrapped error")
+		t.Fatal("errors.As should extract LoopRuntimeError from wrapped error")
 	}
 	// errors.As returns the outermost match — the wrapped error, not the original
 	if target.Code != "BUILD_NOT_FOUND" {
@@ -305,11 +305,11 @@ func TestLoopZeroError_ErrorsAs(t *testing.T) {
 
 func TestNoInternalTermsInErrorMessages(t *testing.T) {
 	// CLAUDE.md Rule 3: no internal terms in user-facing output.
-	// LoopZeroError messages are sent to CLI via ToJSON().
+	// LoopRuntimeError messages are sent to CLI via ToJSON().
 	forbidden := []string{"ArgoCD", "argocd", "Gitea", "MinIO", "CRD",
 		"tenant_id", "advisory lock", "pg_advisory", "kubebuilder", "envtest", "Kaniko"}
 
-	allErrors := []*LoopZeroError{
+	allErrors := []*LoopRuntimeError{
 		ErrLockTimeout, ErrInvalidTransition, ErrTenantNotFound,
 		ErrProjectNotFound, ErrBuildNotFound, ErrReleaseNotFound,
 		ErrNoActiveRelease, ErrNoPreviousRelease, ErrBuildAlreadyCompleted,

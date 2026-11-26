@@ -1,0 +1,57 @@
+{{- if .Values.alerts.sigstoreEnabled }}
+# T1.1 of plan 2026-05-27-tenant-build-pipeline-gaps-closure.
+# Per ADR-2026-05-27-T2.2-OFFLINE-TUF § Engineering deliverables #4.
+#
+# PV usage alerts for Rekor + Trillian backend storage.
+# Thresholds: 80% warn (expand the volume), 95% critical (page).
+#
+# Metric source: kubelet exposes kubelet_volume_stats_used_bytes +
+# kubelet_volume_stats_capacity_bytes per PV.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loopruntime-sigstore-storage-alerts
+  namespace: {{ .Values.alerts.namespace | quote }}
+  labels:
+    release: {{ .Values.alerts.prometheusReleaseLabel | quote }}
+    runtime.getloopscale.com/component: sigstore
+    runtime.getloopscale.com/alert_class: storage
+spec:
+  groups:
+    - name: loopruntime.sigstore.storage
+      interval: 1m
+      rules:
+        - alert: LoopRuntimeSigstorePVUsageHigh
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes{namespace="sigstore-system"}
+              /
+              kubelet_volume_stats_capacity_bytes{namespace="sigstore-system"}
+            ) > 0.80
+          for: 30m
+          labels:
+            severity: warning
+            loopruntime_component: sigstore
+            loopruntime_alert_class: storage
+          annotations:
+            summary: "Sigstore PV usage > 80%"
+            description: {{ printf "PV {{ $labels.persistentvolumeclaim }} in sigstore-system at {{ $value | humanizePercentage }} usage. The log is append-only and nothing archives it: expand the volume before it fills. See docs/runbooks.md § Sigstore storage." | quote }}
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#sigstore-storage"
+
+        - alert: LoopRuntimeSigstorePVUsageCritical
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes{namespace="sigstore-system"}
+              /
+              kubelet_volume_stats_capacity_bytes{namespace="sigstore-system"}
+            ) > 0.95
+          for: 5m
+          labels:
+            severity: critical
+            loopruntime_component: sigstore
+            loopruntime_alert_class: storage
+          annotations:
+            summary: "Sigstore PV usage > 95% — URGENT"
+            description: {{ printf "PV {{ $labels.persistentvolumeclaim }} in sigstore-system at {{ $value | humanizePercentage }} usage. Rekor will stop accepting new entries when PV full → builds stall. Expand the volume now (docs/runbooks.md § Sigstore storage)." | quote }}
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#sigstore-storage"
+{{- end }}

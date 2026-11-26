@@ -1,7 +1,7 @@
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
-  name: loopzero-core
+  name: loopruntime-core
 # Pin to match production DOKS 1.32.13 (Rule 10: local equals production)
 image: rancher/k3s:v1.32.13-k3s1
 servers: 1
@@ -42,7 +42,7 @@ ports:
     nodeFilters:
       - loadbalancer
   # The data plane (#446), on the host port the edge and the seed chain reach each service
-  # at, paired with its nodePort in infra/helmfile/values/dev-public/loopzero-*.yaml.gotmpl. A
+  # at, paired with its nodePort in infra/helmfile/values/dev-public/loopruntime-*.yaml.gotmpl. A
   # service's mapping joins here with its entry in `dataPlane.services`: until then its
   # compose container holds the host port, and mapping it would fail cluster creation.
   - port: 18081:30181
@@ -61,17 +61,17 @@ ports:
     nodeFilters:
       - loadbalancer
   # 30094 exposes loki-cross-cluster so Promtail (build cluster) can ship workflow
-  # pod logs to Loki (mgmt cluster). Without this, `loopzero logs --build <id>` works
+  # pod logs to Loki (mgmt cluster). Without this, `loopruntime logs --build <id>` works
   # only if logs arrive via another path. F1.4 E2E validation 2026-04-23.
   - port: 30094:30094
     nodeFilters:
       - loadbalancer
-network: k3d-loopzero
+network: k3d-loopruntime
 registries:
   use:
-    - k3d-loopzero-registry:5000
+    - k3d-loopruntime-registry:5000
   # B6 fix (cleanroom iter 6, 2026-05-05): mirror docker.io and registry-1.docker.io
-  # through k3d-loopzero-registry's pull-through proxy. Eliminates the dependency on
+  # through k3d-loopruntime-registry's pull-through proxy. Eliminates the dependency on
   # public Docker Hub for repeat builds — first cleanroom run populates the cache,
   # subsequent destroy/recreate cycles serve from cache. Without this, anonymous
   # Docker Hub rate-limit (100 pulls/6h) blocks ~5 cleanroom cycles.
@@ -90,7 +90,7 @@ registries:
 # `platformImages`; everywhere else the directory is empty and nothing changes.
 # ${HOME} is expanded by k3d (it expands environment variables in this file).
 volumes:
-  - volume: ${HOME}/.loopzero/credentialprovider:/var/lib/rancher/credentialprovider
+  - volume: ${HOME}/.loopruntime/credentialprovider:/var/lib/rancher/credentialprovider
     nodeFilters:
       - server:*
       - agent:*

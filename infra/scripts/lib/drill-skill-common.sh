@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # drill-skill-common.sh — Shared library for /cleanroom-drill, /dogfood-drill, /chaos-test-drill
 #
@@ -122,24 +122,24 @@ DRILL_SKILL_AUDIT_BASE="/tmp/drill-audit"
 DRILL_SKILL_AUDIT_TTL_DAYS=30
 
 # --- D8: Sponsor accountability ---
-# Validates LOOPZERO_DRILL_SKILL_SPONSOR env (operator initials) OR CI bypass.
+# Validates LOOPRUNTIME_DRILL_SKILL_SPONSOR env (operator initials) OR CI bypass.
 drill_skill_sponsor_check() {
   if [[ "${CI:-false}" == "true" ]]; then
     drill_skill_log "CI=true — sponsor check bypassed (audit logs CI as sponsor)"
     export DRILL_SKILL_SPONSOR_VALUE="ci"
     return 0
   fi
-  if [[ -z "${LOOPZERO_DRILL_SKILL_SPONSOR:-}" ]]; then
-    drill_skill_log "✗ LOOPZERO_DRILL_SKILL_SPONSOR env not set (operator initials required)"
-    drill_skill_log "  hint: export LOOPZERO_DRILL_SKILL_SPONSOR=<your-initials>"
+  if [[ -z "${LOOPRUNTIME_DRILL_SKILL_SPONSOR:-}" ]]; then
+    drill_skill_log "✗ LOOPRUNTIME_DRILL_SKILL_SPONSOR env not set (operator initials required)"
+    drill_skill_log "  hint: export LOOPRUNTIME_DRILL_SKILL_SPONSOR=<your-initials>"
     return 2
   fi
   # Sanitize: max 8 chars alphanumeric
-  if ! [[ "$LOOPZERO_DRILL_SKILL_SPONSOR" =~ ^[A-Za-z0-9]{1,8}$ ]]; then
-    drill_skill_log "✗ LOOPZERO_DRILL_SKILL_SPONSOR invalid format (1-8 alphanumeric)"
+  if ! [[ "$LOOPRUNTIME_DRILL_SKILL_SPONSOR" =~ ^[A-Za-z0-9]{1,8}$ ]]; then
+    drill_skill_log "✗ LOOPRUNTIME_DRILL_SKILL_SPONSOR invalid format (1-8 alphanumeric)"
     return 2
   fi
-  export DRILL_SKILL_SPONSOR_VALUE="$LOOPZERO_DRILL_SKILL_SPONSOR"
+  export DRILL_SKILL_SPONSOR_VALUE="$LOOPRUNTIME_DRILL_SKILL_SPONSOR"
   return 0
 }
 
@@ -261,8 +261,8 @@ drill_skill_ensure_source_bundle() {
   (
     cd "$tmpgit" && \
     git init -q -b main && \
-    git -c user.email=drill@loopzero.local -c user.name=drill add . && \
-    git -c user.email=drill@loopzero.local -c user.name=drill commit -q -m "drill fixture" && \
+    git -c user.email=drill@loopruntime.local -c user.name=drill add . && \
+    git -c user.email=drill@loopruntime.local -c user.name=drill commit -q -m "drill fixture" && \
     git bundle create "$bundle_path" --all 2>&1
   ) >/dev/null
   rm -rf "$tmpgit"
@@ -286,9 +286,9 @@ drill_skill_check_invariants() {
 
   # Invariant 1: image registry = DOCR
   local image
-  image=$(kubectl --kubeconfig "$kubeconfig" -n "$tenant_ns" get pod -l loopzero.io/app-type=server \
+  image=$(kubectl --kubeconfig "$kubeconfig" -n "$tenant_ns" get pod -l runtime.getloopscale.com/app-type=server \
     -o jsonpath='{.items[0].spec.containers[0].image}' 2>/dev/null || echo "")
-  if [[ "$image" != registry.digitalocean.com/loopzero-system/* ]]; then
+  if [[ "$image" != registry.digitalocean.com/loopruntime-system/* ]]; then
     drill_skill_emit_finding "S0" "Invariant #1 FAIL: image not DOCR ($image)"
     violations=$((violations + 1))
   else
@@ -308,7 +308,7 @@ drill_skill_check_invariants() {
 
   # Invariant 3: PG host = DO Managed (firewall enabled)
   local pg_host
-  pg_host=$(kubectl --kubeconfig "$kubeconfig" -n loopzero-system get secret loopzero-db-credentials \
+  pg_host=$(kubectl --kubeconfig "$kubeconfig" -n loopruntime-system get secret loopruntime-db-credentials \
     -o jsonpath='{.data.host}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
   if [[ "$pg_host" != *.db.ondigitalocean.com ]]; then
     drill_skill_emit_finding "S0" "Invariant #3 FAIL: PG host not DO Managed ($pg_host)"
@@ -319,7 +319,7 @@ drill_skill_check_invariants() {
 
   # Invariant 4: Valkey TLS port 25061
   local valkey_port
-  valkey_port=$(kubectl --kubeconfig "$kubeconfig" -n loopzero-system get secret loopzero-db-credentials \
+  valkey_port=$(kubectl --kubeconfig "$kubeconfig" -n loopruntime-system get secret loopruntime-db-credentials \
     -o jsonpath='{.data.redis_port}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
   # Allow either explicit Valkey port secret OR omitted if non-applicable
   if [[ -n "$valkey_port" ]] && [[ "$valkey_port" != "25061" ]]; then
@@ -380,7 +380,7 @@ drill_skill_teardown() {
   # so by calling pulumi directly here we use the correct AWS_* env vars.
   # Includes refresh-then-destroy retry sequence to absorb state drift from
   # validator-only teardowns (real cloud deleted, Pulumi state out of sync).
-  local _backend="${DRILL_BACKEND_URL:-s3://loopzero-drill-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true}"
+  local _backend="${DRILL_BACKEND_URL:-s3://loopruntime-drill-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true}"
   drill_skill_log "  Step 2a: pulumi refresh (sync state with reality)"
   local _pr_log
   _pr_log=$(mktemp -t drill-pulumi-refresh-XXXXXX.log)

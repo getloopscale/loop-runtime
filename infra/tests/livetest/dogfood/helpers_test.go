@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package dogfood
 
@@ -35,11 +35,11 @@ func TestDefaultEnv_SetsCanonicalURLs(t *testing.T) {
 }
 
 func TestDefaultEnv_TargetsTheEnvironmentTheVariablesName(t *testing.T) {
-	t.Setenv("LOOPZERO_DOGFOOD_CLOUD_URL", "https://cloud.staging.example")
-	t.Setenv("LOOPZERO_DOGFOOD_APP_URL", "https://app.staging.example")
-	t.Setenv("LOOPZERO_DOGFOOD_AUTH_URL", "https://auth.staging.example")
-	t.Setenv("LOOPZERO_DOGFOOD_DEEP_HEALTH_URL", "https://api.staging.example/api/v1/health/deep")
-	t.Setenv("LOOPZERO_DOGFOOD_JWT_PATH", "/var/lib/staging/jwt")
+	t.Setenv("LOOPRUNTIME_DOGFOOD_CLOUD_URL", "https://cloud.staging.example")
+	t.Setenv("LOOPRUNTIME_DOGFOOD_APP_URL", "https://app.staging.example")
+	t.Setenv("LOOPRUNTIME_DOGFOOD_AUTH_URL", "https://auth.staging.example")
+	t.Setenv("LOOPRUNTIME_DOGFOOD_DEEP_HEALTH_URL", "https://api.staging.example/api/v1/health/deep")
+	t.Setenv("LOOPRUNTIME_DOGFOOD_JWT_PATH", "/var/lib/staging/jwt")
 
 	env := DefaultEnv()
 
@@ -109,7 +109,7 @@ func TestLoadJWT_RejectsMissingFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
-	if !strings.Contains(err.Error(), "seed-admin-loopzero-dev.sh") {
+	if !strings.Contains(err.Error(), "seed-admin-loopruntime-dev.sh") {
 		t.Errorf("error message should hint at seed script: %v", err)
 	}
 }

@@ -1,0 +1,9 @@
+# Raises the "disk" alarm when / is more than 80% full, and clears it below (infra/staging/alarm.sh).
+[Unit]
+Description=Check the disk use of the staging host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/loopruntime-staging/alarm.sh check-disk

@@ -1,4 +1,4 @@
-# T0.2 Scenario B POC — RBAC for loopzero-ci-runner ServiceAccount.
+# T0.2 Scenario B POC — RBAC for loopruntime-ci-runner ServiceAccount.
 # Per ADR-2026-05-27-T0.2-RATIFIED D3: namespace-scoped only
 # (RoleBinding, NOT ClusterRoleBinding).
 #
@@ -15,7 +15,7 @@ metadata:
   labels:
     app.kubernetes.io/name: argo-ci-namespace
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
-    loopzero.io/component: ci
+    runtime.getloopscale.com/component: ci
 rules:
   - apiGroups: ["argoproj.io"]
     resources: ["workflows", "workflows/finalizers"]
@@ -43,7 +43,7 @@ metadata:
   labels:
     app.kubernetes.io/name: argo-ci-namespace
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
-    loopzero.io/component: ci
+    runtime.getloopscale.com/component: ci
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

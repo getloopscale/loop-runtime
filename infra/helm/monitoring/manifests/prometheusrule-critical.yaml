@@ -1,18 +1,18 @@
-# Critical alerting rules for LoopZero platform (spec §15.5).
+# Critical alerting rules for LoopRuntime platform (spec §15.5).
 # These indicate service-impacting issues requiring immediate attention.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-critical-alerts
+  name: loopruntime-critical-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopzero.critical
+    - name: loopruntime.critical
       rules:
-        - alert: LoopZeroDriftDetected
-          expr: loopzero_drift_detected == 1
+        - alert: LoopRuntimeDriftDetected
+          expr: loopruntime_drift_detected == 1
           for: 5m
           labels:
             severity: critical
@@ -21,7 +21,7 @@ spec:
             description: "Cluster state diverges from desired state in Git for more than 5 minutes."
             runbook: "Check ArgoCD sync status. If auto-sync is enabled, investigate why it failed. If manual sync, trigger sync via API."
 
-        - alert: LoopZeroBuildClusterUnreachable
+        - alert: LoopRuntimeBuildClusterUnreachable
           expr: up{job="argo-workflows"} == 0
           for: 2m
           labels:
@@ -29,9 +29,9 @@ spec:
           annotations:
             summary: "Build cluster is unreachable"
             description: "Argo Workflows controller in the build cluster has been down for more than 2 minutes. No new builds can start."
-            runbook: "Check k3d-loopzero-build cluster health. Verify argo-workflows pods are running. Check network connectivity between clusters."
+            runbook: "Check k3d-loopruntime-build cluster health. Verify argo-workflows pods are running. Check network connectivity between clusters."
 
-        - alert: LoopZeroPostgresDown
+        - alert: LoopRuntimePostgresDown
           expr: pg_up == 0
           for: 1m
           labels:
@@ -41,7 +41,7 @@ spec:
             description: "PostgreSQL has been unreachable for more than 1 minute. All mutations are blocked."
             runbook: "Check PostgreSQL pod status. Verify PVC is bound. Check pod logs for crash reasons."
 
-        - alert: LoopZeroPostgresBackupStale
+        - alert: LoopRuntimePostgresBackupStale
           expr: time() - pg_last_backup_timestamp > 90000
           for: 0m
           labels:
@@ -51,7 +51,7 @@ spec:
             description: "Last PostgreSQL backup is older than 25 hours. Data loss risk in case of failure."
             runbook: "Check backup CronJob status. Verify MinIO connectivity. Trigger manual backup."
 
-        - alert: LoopZeroGiteaDown
+        - alert: LoopRuntimeGiteaDown
           expr: up{job=~".*gitea.*"} == 0
           for: 2m
           labels:
@@ -62,15 +62,15 @@ spec:
             runbook: "Check Gitea pod status. Verify PVC is bound. Check pod logs. If data loss, restore from MinIO backup (RPO: 6h)."
 
         # ORPHAN alert removed by velero-backup-dr-plan v1.0 / T3.1.
-        # The legacy `LoopZeroGiteaBackupStale` rule referenced a metric
-        # (`loopzero_gitea_last_backup_timestamp`) that was never emitted.
-        # Replaced by `LoopZeroVeleroBackupStale` in
+        # The legacy `LoopRuntimeGiteaBackupStale` rule referenced a metric
+        # (`loopruntime_gitea_last_backup_timestamp`) that was never emitted.
+        # Replaced by `LoopRuntimeVeleroBackupStale` in
         # infra/helm/monitoring/manifests/prometheusrule-velero.yaml,
         # which covers Gitea AND every other scheduled scope (CRDs,
         # ArgoCD, Secrets, full snapshot) via velero_backup_*.
 
-        - alert: LoopZeroArgoCDCircuitOpen
-          expr: loopzero_argocd_circuit_state == 1
+        - alert: LoopRuntimeArgoCDCircuitOpen
+          expr: loopruntime_argocd_circuit_state == 1
           for: 0m
           labels:
             severity: critical
@@ -79,7 +79,7 @@ spec:
             description: "ArgoCD health gate tripped after 3 consecutive failures. New deployments are rejected with 503."
             runbook: "Check ArgoCD server and controller health. Once ArgoCD recovers, circuit will close after 2 consecutive successful checks."
 
-        - alert: LoopZeroTraefikDown
+        - alert: LoopRuntimeTraefikDown
           expr: absent(up{job=~".*traefik.*"} == 1)
           for: 1m
           labels:
@@ -87,23 +87,23 @@ spec:
           annotations:
             summary: "Traefik ingress controller is down"
             description: "Traefik has been unreachable for 1+ minutes. ALL platform traffic (dashboard, API, auth, CLI) is blocked."
-            runbook: "Check Traefik pod status in loopzero-system namespace. Verify PDB (minAvailable: 1). Check node health. Restart deployment if needed."
+            runbook: "Check Traefik pod status in loopruntime-system namespace. Verify PDB (minAvailable: 1). Check node health. Restart deployment if needed."
 
         # MEET-053 A-05: Cell discovery alert.
         # DynamicRouter with 0 cells = platform-wide outage for all deploy operations.
-        - alert: LoopZeroCellDiscoveryEmpty
-          expr: loopzero_cell_discovery_count == 0
+        - alert: LoopRuntimeCellDiscoveryEmpty
+          expr: loopruntime_cell_discovery_count == 0
           for: 60s
           labels:
             severity: critical
           annotations:
             summary: "Zero cells discovered by DynamicRouter"
             description: "No ClusterCredential CRDs found or all disconnected. All deploy, rollback, and status operations will fail."
-            runbook: "1) Check ClusterCredential CRs: kubectl get clustercredentials -n loopzero-system. 2) Verify status.connected=true. 3) If missing, check Pulumi bootstrap. 4) Rollback: set LOOPZERO_SINGLE_CELL=true on loopzero-api deployment."
+            runbook: "1) Check ClusterCredential CRs: kubectl get clustercredentials -n loopruntime-system. 2) Verify status.connected=true. 3) If missing, check Pulumi bootstrap. 4) Rollback: set LOOPRUNTIME_SINGLE_CELL=true on loopruntime-api deployment."
 
         # Cloudflare Tunnel is the sole ingress path for all user traffic.
         # If disconnected, every deployed app and the platform API become unreachable.
-        - alert: LoopZeroCFTunnelDisconnected
+        - alert: LoopRuntimeCFTunnelDisconnected
           expr: absent(cloudflared_tunnel_connections{status="connected"}) or cloudflared_tunnel_connections{status="connected"} == 0
           for: 2m
           labels:

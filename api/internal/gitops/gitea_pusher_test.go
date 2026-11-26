@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package gitops
 
@@ -39,7 +39,7 @@ func newTestPusher(t *testing.T) *GiteaGitOpsPusher {
 	return NewGiteaGitOpsPusher(GiteaGitOpsPusherConfig{
 		BaseURL: url,
 		Token:   token,
-		OrgName: "loopzero",
+		OrgName: "loopruntime",
 	})
 }
 
@@ -114,13 +114,13 @@ func TestGiteaGitOpsPusher_PushCreatesCorrectPath(t *testing.T) {
 	}
 
 	// Clone and verify file path: staging/pathtest/manifests.yaml (BLOCKER-3: env-first hierarchy)
-	cloneDir, err := os.MkdirTemp("", "loopzero-gitops-verify-*")
+	cloneDir, err := os.MkdirTemp("", "loopruntime-gitops-verify-*")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.RemoveAll(cloneDir) }()
 
-	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/acme-gitops.git"
+	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopruntime/acme-gitops.git"
 	gitRun(t, cloneDir, "git", "clone", cloneURL, filepath.Join(cloneDir, "repo"))
 
 	content, err := os.ReadFile(filepath.Join(cloneDir, "repo", "staging", "pathtest", "manifests.yaml"))
@@ -151,13 +151,13 @@ func TestGiteaGitOpsPusher_PushHasGitTrailers(t *testing.T) {
 	}
 
 	// Clone and check commit message trailers
-	cloneDir, err := os.MkdirTemp("", "loopzero-gitops-trailers-*")
+	cloneDir, err := os.MkdirTemp("", "loopruntime-gitops-trailers-*")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.RemoveAll(cloneDir) }()
 
-	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopzero/acme-gitops.git"
+	cloneURL := strings.Replace(url, "://", fmt.Sprintf("://oauth2:%s@", token), 1) + "/loopruntime/acme-gitops.git"
 	gitRun(t, cloneDir, "git", "clone", cloneURL, filepath.Join(cloneDir, "repo"))
 
 	logOutput := gitRun(t, filepath.Join(cloneDir, "repo"), "git", "log", "-1", "--format=%B")
@@ -205,7 +205,7 @@ func TestGiteaGitOpsPusher_EmptyManifests(t *testing.T) {
 	pusher := NewGiteaGitOpsPusher(GiteaGitOpsPusherConfig{
 		BaseURL: "http://localhost:3000",
 		Token:   "fake",
-		OrgName: "loopzero",
+		OrgName: "loopruntime",
 	})
 	ctx := context.Background()
 
@@ -234,7 +234,7 @@ func TestGiteaGitOpsPusher_GetManifestsAtCommit_NotFound(t *testing.T) {
 	pusher := &GiteaGitOpsPusher{
 		baseURL: srv.URL,
 		token:   "test-token",
-		orgName: "loopzero",
+		orgName: "loopruntime",
 		client:  srv.Client(),
 	}
 
@@ -262,7 +262,7 @@ func TestGiteaGitOpsPusher_GetManifestsAtCommit_Success(t *testing.T) {
 	pusher := &GiteaGitOpsPusher{
 		baseURL: srv.URL,
 		token:   "test-token",
-		orgName: "loopzero",
+		orgName: "loopruntime",
 		client:  srv.Client(),
 	}
 
@@ -284,7 +284,7 @@ func TestGiteaGitOpsPusher_GetManifestsAtCommit_ServerError(t *testing.T) {
 	pusher := &GiteaGitOpsPusher{
 		baseURL: srv.URL,
 		token:   "test-token",
-		orgName: "loopzero",
+		orgName: "loopruntime",
 		client:  srv.Client(),
 	}
 
@@ -303,7 +303,7 @@ func TestGiteaGitOpsPusher_GetManifestsAtCommit_ContextCancelled(t *testing.T) {
 	pusher := &GiteaGitOpsPusher{
 		baseURL: srv.URL,
 		token:   "test-token",
-		orgName: "loopzero",
+		orgName: "loopruntime",
 		client:  srv.Client(),
 	}
 
@@ -322,7 +322,7 @@ func TestGiteaGitOpsPusher_Push_ForbiddenManifest(t *testing.T) {
 	pusher := NewGiteaGitOpsPusher(GiteaGitOpsPusherConfig{
 		BaseURL: "http://localhost:3000",
 		Token:   "fake",
-		OrgName: "loopzero",
+		OrgName: "loopruntime",
 	})
 
 	forbiddenManifest := "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: evil\n"

@@ -6,14 +6,14 @@
 # components into the management cluster with explicit `needs:` ordering.
 #
 # Invocation:
-#   helmfile -f infra/helmfile/core.helmfile.yaml -e dev sync       # LoopZero Cloud (multi-cluster)
+#   helmfile -f infra/helmfile/core.helmfile.yaml -e dev sync       # LoopRuntime Cloud (multi-cluster)
 #   helmfile -f infra/helmfile/core.helmfile.yaml -e standalone sync # Self-hosting (single cluster)
 #
-# Required env vars (injected by `loopzero platform install` from Pulumi outputs):
-#   LOOPZERO_DB_HOST, LOOPZERO_DB_PORT, LOOPZERO_DB_NAME, LOOPZERO_DB_USER, LOOPZERO_DB_PASSWORD
-#   LOOPZERO_REGISTRY_ENDPOINT, LOOPZERO_REGISTRY_NAME
-#   LOOPZERO_BUCKET_NAME, LOOPZERO_BUCKET_ENDPOINT, LOOPZERO_SPACES_KEY, LOOPZERO_SPACES_SECRET
-#   LOOPZERO_CF_KV_NAMESPACE, LOOPZERO_CF_TUNNEL_TOKEN
+# Required env vars (injected by `loopruntime platform install` from Pulumi outputs):
+#   LOOPRUNTIME_DB_HOST, LOOPRUNTIME_DB_PORT, LOOPRUNTIME_DB_NAME, LOOPRUNTIME_DB_USER, LOOPRUNTIME_DB_PASSWORD
+#   LOOPRUNTIME_REGISTRY_ENDPOINT, LOOPRUNTIME_REGISTRY_NAME
+#   LOOPRUNTIME_BUCKET_NAME, LOOPRUNTIME_BUCKET_ENDPOINT, LOOPRUNTIME_SPACES_KEY, LOOPRUNTIME_SPACES_SECRET
+#   LOOPRUNTIME_CF_KV_NAMESPACE, LOOPRUNTIME_CF_TUNNEL_TOKEN
 
 # The environments are declared once, in environments.yaml.
 bases:
@@ -32,9 +32,9 @@ helmDefaults:
   # error). What turns a divergence into a failure is the
   # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
   #
-  # LOOPZERO_CORE_CONTEXT names it where the core cluster is not the k3d one (staging's
-  # EKS context is `core`), the way LOOPZERO_BUILD_CONTEXT does for the build plane.
-  kubeContext: {{ env "LOOPZERO_CORE_CONTEXT" | default "k3d-loopzero-core" }}
+  # LOOPRUNTIME_CORE_CONTEXT names it where the core cluster is not the k3d one (staging's
+  # EKS context is `core`), the way LOOPRUNTIME_BUILD_CONTEXT does for the build plane.
+  kubeContext: {{ env "LOOPRUNTIME_CORE_CONTEXT" | default "k3d-loopruntime-core" }}
   wait: true
   waitForJobs: true
   timeout: 600
@@ -107,8 +107,8 @@ repositories:
 # Helmfile-level hooks were removed because they ran on every command (list,
 # lint, diff) and required cluster connectivity even in offline validation.
 # Required Secrets:
-#   loopzero-system/{loopzero-db-credentials,gitea-admin,minio-credentials,
-#                loopzero-registry-pull}
+#   loopruntime-system/{loopruntime-db-credentials,gitea-admin,minio-credentials,
+#                loopruntime-registry-pull}
 # Apply once: bash infra/helmfile/scripts/generate-secrets.sh <env> mgmt
 # ---------------------------------------------------------------------------
 
@@ -116,10 +116,10 @@ repositories:
 # Releases — ordered by sync wave via `needs:`
 # ---------------------------------------------------------------------------
 {{- /* Where this file installs Gitea, in every environment. Every release that
-       talks to Gitea (loopzero-api, the tenant and platform operators) is told from
+       talks to Gitea (loopruntime-api, the tenant and platform operators) is told from
        here, instead of each environment overlay restating the address and each
        drill or heal patching it into the running objects. */}}
-{{- $giteaNamespace := "loopzero-system" }}
+{{- $giteaNamespace := "loopruntime-system" }}
 {{- $giteaURL := printf "http://gitea-http.%s.svc.cluster.local:3000" $giteaNamespace }}
 {{- /* The OTLP gRPC address of the otel-collector release, where the control plane sends its traces. */ -}}
 {{- $otelCollector := "otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317" }}
@@ -162,12 +162,12 @@ releases:
   # spelled exactly as ory-hydra's values spell it — the gateway matches `iss` verbatim —
   # and a server joins through `mcp.servers` only once it validates tokens itself.
   - name: mcp-gateway
-    namespace: loopzero-mcp
+    namespace: loopruntime-mcp
     chart: ../helm/mcp-gateway
     needs:
       - agentgateway-system/agentgateway
     values:
-      - issuer: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loopzero-auth.svc.cluster.local:4444{{ end }}/"
+      - issuer: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}http://ory-hydra-public.loopruntime-auth.svc.cluster.local:4444{{ end }}/"
         publicOrigin: {{ .Values | get "publicCloudUrl" "" | trimSuffix "/" | quote }}
         servers: {{ .Values | get "mcp.servers" list | toJson }}
 
@@ -186,21 +186,21 @@ releases:
     values:
       - ../helm/monitoring/values-metrics-server.yaml
 
-  # B45 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — LoopZero CRDs (10 kinds:
-  # Tenant/Environment/LoopZeroApplication/ExposedRoute/PlatformBootstrap/
+  # B45 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — LoopRuntime CRDs (10 kinds:
+  # Tenant/Environment/LoopRuntimeApplication/ExposedRoute/PlatformBootstrap/
   # GitRepositoryBinding/ClusterCredential/PreviewEnvironment/AppSecret/
   # ReconciliationReport). Without this release, the 4 split operator
-  # binaries (loopzero-{tenant,app,preview,platform}-operator) crash at
-  # startup with `no matches for kind ... in version loopzero.io/v1`.
+  # binaries (loopruntime-{tenant,app,preview,platform}-operator) crash at
+  # startup with `no matches for kind ... in version runtime.getloopscale.com/v1`.
   # Detected on standalone bootstrap 2026-04-28.
   # Wave -3: must run BEFORE controllers register watches.
   # Lifecycle-independent: chart never deletes CRDs
   # (helm.sh/resource-policy: keep) so re-runs are idempotent.
-  - name: loopzero-crds
+  - name: loopruntime-crds
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
-    chart: ../../charts/loopzero-crds
+    namespace: loopruntime-system
+    chart: ../../charts/loopruntime-crds
     values:
       - {}
     # No `needs:` — CRDs are foundational, must install first.
@@ -239,38 +239,38 @@ releases:
 
   # Wave -1: Stateful core
   # In-cluster PostgreSQL — only for standalone profile (self-hosting).
-  # LoopZero Cloud (--provider digitalocean) uses DO Managed PG via Pulumi L1.
+  # LoopRuntime Cloud (--provider digitalocean) uses DO Managed PG via Pulumi L1.
   # iter 20: closes gap where standalone customers had no DB unless they
   # brought their own. Now standalone is truly self-contained.
   - name: postgresql
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
+    namespace: loopruntime-system
     chart: bitnami/postgresql
     # B21 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Bitnami removed chart 16.0.7
     # from the public index in 2025 (only the ~6 most recent versions are
     # kept). Bumped to 18.6.2 (latest stable). Production DO uses managed
-    # Postgres 16 — version skew is acceptable because LoopZero schema is
+    # Postgres 16 — version skew is acceptable because LoopRuntime schema is
     # forward-compatible (forward-only migrations, see CLAUDE.md Rule).
     version: 18.6.2
     installed: {{ .Values.inClusterPostgres | default false }}
     values:
       - ../helm/postgresql/values.yaml
-    # Consume the canonical loopzero-db-credentials secret (minted by
-    # generate-secrets.sh BEFORE this sync) so PG initializes the `loopzero` user
-    # with the SAME password kratos/hydra/loopzero-api read from that secret.
+    # Consume the canonical loopruntime-db-credentials secret (minted by
+    # generate-secrets.sh BEFORE this sync) so PG initializes the `loopruntime` user
+    # with the SAME password kratos/hydra/loopruntime-api read from that secret.
     # Without this, Bitnami auto-generates a divergent random password →
     # kratos SASL auth fails → helmfile --wait deadlocks. The secret carries
-    # both `postgres-password` (admin) and `password` (loopzero user) keys, which
+    # both `postgres-password` (admin) and `password` (loopruntime user) keys, which
     # are Bitnami's default secretKeys. Fix: finding-2026-05-22-pg-password-divergence.
     set:
       - name: auth.existingSecret
-        value: loopzero-db-credentials
+        value: loopruntime-db-credentials
 
   - name: gitea-redis
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
+    namespace: loopruntime-system
     chart: bitnami/redis
     version: 19.6.4
     # Bug #15 LIVE FIX: drill uses DO Managed Valkey (prod ADR-0016 D-6
@@ -296,7 +296,7 @@ releases:
 {{- end }}
 {{- if not .Values.profile.managedRedis }}
       # Drill uses DO Managed Valkey (Bug #15 fix) — no in-cluster gitea-redis.
-      - loopzero-system/gitea-redis
+      - loopruntime-system/gitea-redis
 {{- end }}
       # iter 16 audit: explicit needs:traefik because Gitea uses IngressRoute.
       # Without this, helmfile may install gitea before traefik (works by luck
@@ -304,11 +304,11 @@ releases:
       - traefik/traefik
 {{- if .Values.inClusterPostgres }}
       # B22: gitea backend uses Postgres. In standalone, must wait for in-cluster PG.
-      - loopzero-system/postgresql
+      - loopruntime-system/postgresql
 {{- end }}
 {{- if .Values.profile.awsSecretsManager }}
       # Its database on RDS, and the Secret with its database and Valkey credentials.
-      - loopzero-system/database-bootstrap
+      - loopruntime-system/database-bootstrap
 {{- end }}
     values:
       - ../helm/gitea/values.yaml
@@ -316,7 +316,7 @@ releases:
       # Non-drill envs have empty stub files; drill overrides DB connection → managed PG.
       - values/{{ .Environment.Name }}/gitea.yaml.gotmpl
       # B28 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Gitea HA (2 replicas + RWX
-      # NFS) is a LoopZero Cloud production posture (CHG-002a). Self-hosting
+      # NFS) is a LoopRuntime Cloud production posture (CHG-002a). Self-hosting
       # standalone runs single-replica + RWO (no NFS kernel module dep,
       # works on any K8s). HA on a single-cluster deploy adds operational
       # complexity without real availability gain (cluster failure = both
@@ -328,7 +328,7 @@ releases:
   - name: minio
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
+    namespace: loopruntime-system
     chart: minio/minio
     version: 5.4.0
     # An environment whose buckets are managed S3 runs no MinIO.
@@ -336,11 +336,11 @@ releases:
     values:
       - ../helm/minio/values.yaml
       # B25 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Distributed mode (4 pods × 4
-      # drives EC:2) is a LoopZero Cloud production posture (CHG-002a Phase D).
+      # drives EC:2) is a LoopRuntime Cloud production posture (CHG-002a Phase D).
       # Self-hosting (standalone) runs single-cluster on commodity hardware;
       # forcing 16 minio pods + 200Gi raw storage is anti-Rule-10 and causes
       # post-install hook timeouts on k3d (4 pods × 60s init > 60s helm wait).
-      # Distributed only applies to LoopZero Cloud profiles.
+      # Distributed only applies to LoopRuntime Cloud profiles.
 {{- if .Values.profile.highAvailability }}
       - ../helm/minio/values-distributed.yaml
 {{- end }}
@@ -359,39 +359,39 @@ releases:
 {{- $platformRegistry := .Values | get "platformImages.registry" "" }}
       - image:
 {{- if $platformRegistry }}
-          repository: "{{ $platformRegistry }}loopzero-minio"
-          tag: {{ index .Values.platformImages.tags "loopzero-minio" | quote }}
+          repository: "{{ $platformRegistry }}loopruntime-minio"
+          tag: {{ index .Values.platformImages.tags "loopruntime-minio" | quote }}
 {{- else if .Values.profile.localRegistry }}
-          repository: "k3d-loopzero-registry:5000/loopzero-minio"
+          repository: "k3d-loopruntime-registry:5000/loopruntime-minio"
           tag: "RELEASE.2024-12-18T13-15-44Z"
 {{- else }}
 {{- /* The same rule the platform charts follow: an environment that declares a
        registry prefix pulls from it; one that declares none (standalone self-host)
-       gets the bare image name, as loopzero-api's `repository: loopzero-api` does there. */}}
-          repository: "{{ .Values | get "registries.docrPrefix" "" }}loopzero-minio"
+       gets the bare image name, as loopruntime-api's `repository: loopruntime-api` does there. */}}
+          repository: "{{ .Values | get "registries.docrPrefix" "" }}loopruntime-minio"
           tag: "RELEASE.2024-12-18T13-15-44Z"
 {{- end }}
         mcImage:
 {{- if $platformRegistry }}
-          repository: "{{ $platformRegistry }}loopzero-clone-runner"
-          tag: {{ index .Values.platformImages.tags "loopzero-clone-runner" | quote }}
+          repository: "{{ $platformRegistry }}loopruntime-clone-runner"
+          tag: {{ index .Values.platformImages.tags "loopruntime-clone-runner" | quote }}
 {{- else if .Values.profile.localRegistry }}
-          repository: "k3d-loopzero-registry:5000/loopzero-clone-runner"
+          repository: "k3d-loopruntime-registry:5000/loopruntime-clone-runner"
           tag: "v0.1.0"
 {{- else }}
-          repository: "{{ .Values | get "registries.docrPrefix" "" }}loopzero-clone-runner"
+          repository: "{{ .Values | get "registries.docrPrefix" "" }}loopruntime-clone-runner"
           tag: "v0.1.0"
 {{- end }}
 {{- if .Values.profile.localObjectStore }}
     # Standalone: pin MinIO root password deterministically. The chart leaves
     # rootPassword empty (fail-fast for prod), which makes the official chart
-    # auto-generate a RANDOM password — but loopzero-api (infra/tilt/api-deployment.yaml)
-    # and static-assets consume the deterministic loopzero-dev-password. Random vs
+    # auto-generate a RANDOM password — but loopruntime-api (infra/tilt/api-deployment.yaml)
+    # and static-assets consume the deterministic loopruntime-dev-password. Random vs
     # hardcoded => SOURCE_UPLOAD_FAILED (access denied). Same deterministic-creds
-    # pattern as PG (T1.3). rootUser=loopzero-admin comes from values.yaml.
+    # pattern as PG (T1.3). rootUser=loopruntime-admin comes from values.yaml.
     set:
       - name: rootPassword
-        value: "loopzero-dev-password"
+        value: "loopruntime-dev-password"
 {{- end }}
 
   # velero-backup-dr-plan v1.0 / T1.2 — Velero server (Wave -1, infra
@@ -405,7 +405,7 @@ releases:
       - cert-manager/cert-manager
 {{- if .Values.profile.localObjectStore }}
       # BSL targets in-cluster MinIO. Wait for MinIO up first.
-      - loopzero-system/minio
+      - loopruntime-system/minio
 {{- end }}
     values:
       - ../helm/velero/values.yaml
@@ -481,9 +481,9 @@ releases:
   # which Grafana's dashboard sidecar loads (values-grafana.yaml). The chart's
   # PrometheusRules stay off: this Prometheus reads its rules from values-prometheus.yaml,
   # not from Prometheus Operator objects.
-  - name: loopzero-monitoring
+  - name: loopruntime-monitoring
     namespace: monitoring
-    chart: ../../charts/loopzero-monitoring
+    chart: ../../charts/loopruntime-monitoring
     needs:
       - monitoring/grafana
     values:
@@ -491,11 +491,11 @@ releases:
           enabled: false
 
   # Plan T7.2 (2026-05-22 v1.3) — OpenCost cost attribution per tenant.
-  # Adopts external opencost-charts upstream via LoopZero wrapper at
+  # Adopts external opencost-charts upstream via LoopRuntime wrapper at
   # infra/helm/opencost/. Per Anti-Pattern #8: NO Go gate reimplementation;
   # tool adopted as-is. Federation-friendly (single mgmt install covers all cells).
   - name: opencost
-    namespace: loopzero-system
+    namespace: loopruntime-system
     chart: ../helm/opencost
     version: 1.0.0
     needs:
@@ -532,21 +532,21 @@ releases:
   # B22 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — When inClusterPostgres=true
   # (standalone profile), ory-kratos must wait for postgresql release to
   # finish or its automigrate init container will retry forever resolving
-  # `postgresql.loopzero-system.svc.cluster.local`. In dev/prod the postgres
+  # `postgresql.loopruntime-system.svc.cluster.local`. In dev/prod the postgres
   # is external (DO managed), so the `needs:` is conditionally rendered.
   - name: ory-kratos
     labels:
       profile: dashboard-only
-    namespace: loopzero-auth
+    namespace: loopruntime-auth
     chart: ory/kratos
     version: 0.61.0
 {{- if .Values.inClusterPostgres }}
     needs:
-      - loopzero-system/postgresql
+      - loopruntime-system/postgresql
 {{- else if .Values.profile.awsSecretsManager }}
     # Its database exists and its credentials Secret is written.
     needs:
-      - loopzero-system/database-bootstrap
+      - loopruntime-system/database-bootstrap
 {{- end }}
     values:
       - ../helm/ory-kratos/values.yaml.gotmpl
@@ -556,37 +556,37 @@ releases:
   - name: ory-hydra
     labels:
       profile: dashboard-only
-    namespace: loopzero-auth
+    namespace: loopruntime-auth
     chart: ory/hydra
     version: 0.61.0
     needs:
-      - loopzero-auth/ory-kratos
+      - loopruntime-auth/ory-kratos
     values:
       - ../helm/ory-hydra/values.yaml.gotmpl
       # Layered values per env (T2.2). Drill env DSN override → managed PG.
       - values/{{ .Environment.Name }}/ory-hydra.yaml.gotmpl
 
-  # Wave 2: LoopZero platform
-  - name: loopzero-api
+  # Wave 2: LoopRuntime platform
+  - name: loopruntime-api
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
-    # The published chart, installed with charts/loopzero-api/values-bootstrap.yaml: there is
-    # one loopzero-api chart (docs/decisions.md, "One chart per bootstrap/published pair").
-    chart: ../../charts/loopzero-api
-    # STANDALONE (local k3d): loopzero-api is owned by `tilt up` (self-contained
+    namespace: loopruntime-system
+    # The published chart, installed with charts/loopruntime-api/values-bootstrap.yaml: there is
+    # one loopruntime-api chart (docs/decisions.md, "One chart per bootstrap/published pair").
+    chart: ../../charts/loopruntime-api
+    # STANDALONE (local k3d): loopruntime-api is owned by `tilt up` (self-contained
     # infra/tilt/api-deployment.yaml + docker_build hash-tagged image). The
     # helmfile chart uses image :latest which is NEVER built locally (only the
     # 5 build-pipeline images are), so installing it here produced a 2-container
-    # frankenstein pod (helmfile `loopzero-api` :latest unpullable + tilt `api`) and
+    # frankenstein pod (helmfile `loopruntime-api` :latest unpullable + tilt `api`) and
     # its --wait deadlocked `task setup` before the build/workload clusters
     # installed. Cloud/dev/prod/drill keep it installed (images from DOCR/CI).
     # See finding-2026-05-22-pg-password-divergence § helmfile<->tilt dual-ownership.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
     # CANONICAL FIX 2026-06-15 dev-public Cleanroom chain-gap closure:
     # `wait: false` overrides the global `wait: true` helmDefault for THIS
-    # release only. Reason: loopzero-api requires ClusterCredentials + several
-    # Secrets (argocd-refresh-credentials, loopzero-openbao-approle, etc.) that
+    # release only. Reason: loopruntime-api requires ClusterCredentials + several
+    # Secrets (argocd-refresh-credentials, loopruntime-openbao-approle, etc.) that
     # are provisioned by the LATER `task bootstrap:standalone` chain. With
     # the global `wait: true`, helm install timed out at 10min because pod
     # never reached Ready (CrashLoopBackOff on missing deps) BEFORE the
@@ -598,40 +598,40 @@ releases:
     wait: false
     needs:
       - argocd/argocd
-      - loopzero-system/gitea
+      - loopruntime-system/gitea
 {{- if .Values.profile.inClusterObjectStore }}
-      - loopzero-system/minio
+      - loopruntime-system/minio
 {{- end }}
 {{- if .Values.profile.awsSecretsManager }}
-      # The schema at the latest migration and the loopzero_api role it connects as.
-      - loopzero-system/database-bootstrap
+      # The schema at the latest migration and the loopruntime_api role it connects as.
+      - loopruntime-system/database-bootstrap
 {{- end }}
-      - loopzero-auth/ory-kratos
+      - loopruntime-auth/ory-kratos
     values:
-      - ../../charts/loopzero-api/values-bootstrap.yaml
+      - ../../charts/loopruntime-api/values-bootstrap.yaml
       - config:
           giteaUrl: {{ $giteaURL | quote }}
           # The otel-collector release below, which exports to Tempo.
           otelExporterOtlpEndpoint: {{ $otelCollector | quote }}
-          # One bucket name for the whole install: loopzero-build-cwts (build.helmfile)
+          # One bucket name for the whole install: loopruntime-build-cwts (build.helmfile)
           # clones from the same environment value.
-          sourceBucket: {{ .Values | get "sourceBucket" "loopzero-builds" | quote }}
+          sourceBucket: {{ .Values | get "sourceBucket" "loopruntime-builds" | quote }}
           staticAssetsBucket: {{ .Values | get "staticAssetsBucket" "" | quote }}
       # Layered values per env (T2.2): image channel, pull secret, per-environment
       # config. MUST be LAST in the values list to win merge precedence.
-      - values/{{ .Environment.Name }}/loopzero-api.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loopruntime-api.yaml.gotmpl
     set:
       # Finding 2026-05-12 — wire env-file `replicas.api` to chart
       # `replicaCount`. Before this, the env-file value was orphan config:
       # defined in prod.yaml (=3) + standalone-multi.yaml (=1) but never
-      # consumed, leaving loopzero-api at hardcoded 1 replica even in prod.
-      # See concepts/operations/finding-2026-05-12-loopzero-api-replica-orphan.md
+      # consumed, leaving loopruntime-api at hardcoded 1 replica even in prod.
+      # See concepts/operations/finding-2026-05-12-loopruntime-api-replica-orphan.md
       - name: replicaCount
         value: "{{ .Values | get "replicas" (dict) | get "api" 1 }}"
 
   # ADR-0023 / plan v1.1 T1.5 — 4 split operator charts replace the
   # deleted monolith chart `infra/helm/tenant-controller` and the
-  # redundant `infra/helm/loopzero-controller` (both pointed at the
+  # redundant `infra/helm/loopruntime-controller` (both pointed at the
   # operators monolith binary built from the deleted `cmd/main.go`).
   #
   # Each chart deploys its own operator binary built from
@@ -642,123 +642,123 @@ releases:
   # Production deployments are still on the legacy monolith image
   # (built from commit b1a8618a or earlier) and are governed by
   # CHG-NNNN-OPERATOR-SPLIT-PROD per ADR-0023 4-stage cutover.
-  - name: loopzero-tenant-operator
+  - name: loopruntime-tenant-operator
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
-    chart: ../../charts/loopzero-tenant-operator
+    namespace: loopruntime-system
+    chart: ../../charts/loopruntime-tenant-operator
     # STANDALONE: tilt owns operators (infra/tilt/*-operator-deployment.yaml).
-    # Same dual-ownership reason as loopzero-api. See finding-2026-05-22-pg-password-divergence.
+    # Same dual-ownership reason as loopruntime-api. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
     # CANONICAL FIX 2026-06-15 dev-public Cleanroom chain-gap (same family
-    # as loopzero-api at line 482): operator requires ClusterCredentials which
+    # as loopruntime-api at line 482): operator requires ClusterCredentials which
     # are provisioned by LATER task bootstrap:standalone. wait: false lets
     # helmfile sync complete; pod self-recovers when deps arrive.
     wait: false
     needs:
-      - loopzero-system/loopzero-api
-      # B45: LoopZero CRDs must exist before controller-runtime starts watches.
-      - loopzero-system/loopzero-crds
+      - loopruntime-system/loopruntime-api
+      # B45: LoopRuntime CRDs must exist before controller-runtime starts watches.
+      - loopruntime-system/loopruntime-crds
     values:
-      - ../../charts/loopzero-tenant-operator/values.yaml
+      - ../../charts/loopruntime-tenant-operator/values.yaml
       - config:
           giteaUrl: {{ $giteaURL | quote }}
         networkPolicy:
           giteaNamespace: {{ $giteaNamespace | quote }}
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../../charts/loopzero-tenant-operator/values-standalone-multi.yaml
+      - ../../charts/loopruntime-tenant-operator/values-standalone-multi.yaml
 {{- end }}
       # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets (Bug #23 fix).
-      - values/{{ .Environment.Name }}/loopzero-tenant-operator.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loopruntime-tenant-operator.yaml.gotmpl
 
-  - name: loopzero-app-operator
+  - name: loopruntime-app-operator
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
-    chart: ../../charts/loopzero-app-operator
+    namespace: loopruntime-system
+    chart: ../../charts/loopruntime-app-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
-    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopzero-api at line 482).
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopruntime-api at line 482).
     wait: false
     needs:
-      - loopzero-system/loopzero-api
-      - loopzero-system/loopzero-crds
+      - loopruntime-system/loopruntime-api
+      - loopruntime-system/loopruntime-crds
     values:
-      - ../../charts/loopzero-app-operator/values.yaml
+      - ../../charts/loopruntime-app-operator/values.yaml
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../../charts/loopzero-app-operator/values-standalone-multi.yaml
+      - ../../charts/loopruntime-app-operator/values-standalone-multi.yaml
 {{- end }}
       # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets.
-      - values/{{ .Environment.Name }}/loopzero-app-operator.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loopruntime-app-operator.yaml.gotmpl
 
-  - name: loopzero-preview-operator
+  - name: loopruntime-preview-operator
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
-    chart: ../../charts/loopzero-preview-operator
+    namespace: loopruntime-system
+    chart: ../../charts/loopruntime-preview-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
-    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopzero-api at line 482).
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopruntime-api at line 482).
     wait: false
     needs:
-      - loopzero-system/loopzero-api
-      - loopzero-system/loopzero-crds
+      - loopruntime-system/loopruntime-api
+      - loopruntime-system/loopruntime-crds
     values:
-      - ../../charts/loopzero-preview-operator/values.yaml
+      - ../../charts/loopruntime-preview-operator/values.yaml
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../../charts/loopzero-preview-operator/values-standalone-multi.yaml
+      - ../../charts/loopruntime-preview-operator/values-standalone-multi.yaml
 {{- end }}
       # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets.
-      - values/{{ .Environment.Name }}/loopzero-preview-operator.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loopruntime-preview-operator.yaml.gotmpl
 
-  - name: loopzero-platform-operator
+  - name: loopruntime-platform-operator
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
-    chart: ../../charts/loopzero-platform-operator
+    namespace: loopruntime-system
+    chart: ../../charts/loopruntime-platform-operator
     # STANDALONE: tilt owns operators. See finding-2026-05-22-pg-password-divergence.
     installed: {{ ne (.Values | get "clusterRole" "dev") "standalone" }}
-    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopzero-api at line 482).
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopruntime-api at line 482).
     wait: false
     needs:
-      - loopzero-system/loopzero-api
-      - loopzero-system/loopzero-crds
+      - loopruntime-system/loopruntime-api
+      - loopruntime-system/loopruntime-crds
     values:
-      - ../../charts/loopzero-platform-operator/values.yaml
+      - ../../charts/loopruntime-platform-operator/values.yaml
       - networkPolicy:
           giteaNamespace: {{ $giteaNamespace | quote }}
 {{- if eq (.Values | get "clusterRole" "dev") "standalone" }}
-      - ../../charts/loopzero-platform-operator/values-standalone-multi.yaml
+      - ../../charts/loopruntime-platform-operator/values-standalone-multi.yaml
 {{- end }}
       # Layered values per env (T2.2). Drill: DOCR registry + imagePullSecrets.
-      - values/{{ .Environment.Name }}/loopzero-platform-operator.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loopruntime-platform-operator.yaml.gotmpl
 
-  - name: loopzero-cloud
+  - name: loopruntime-cloud
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
-    # The published chart, installed with charts/loopzero-cloud/values-bootstrap.yaml:
-    # there is one loopzero-cloud chart (docs/decisions.md, "One chart per
+    namespace: loopruntime-system
+    # The published chart, installed with charts/loopruntime-cloud/values-bootstrap.yaml:
+    # there is one loopruntime-cloud chart (docs/decisions.md, "One chart per
     # bootstrap/published pair").
-    chart: ../../charts/loopzero-cloud
-    # Bug #29 LIVE fix (2026-05-17 iter 20): loopzero-cloud image not in DOCR
-    # for drill. Skip — drill L2 harness goes through loopzero-api directly,
-    # not loopzero-cloud dashboard. Production keeps loopzero-cloud installed.
-    # STANDALONE: tilt owns loopzero-cloud (dual-ownership, same as loopzero-api).
-    installed: {{ and .Values.profile.loopzeroCloud (ne (.Values | get "clusterRole" "dev") "standalone") }}
-    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopzero-api at line 482):
-    # depends on loopzero-api Ready + loopzero-service-auth Secret; same self-recovery
+    chart: ../../charts/loopruntime-cloud
+    # Bug #29 LIVE fix (2026-05-17 iter 20): loopruntime-cloud image not in DOCR
+    # for drill. Skip — drill L2 harness goes through loopruntime-api directly,
+    # not loopruntime-cloud dashboard. Production keeps loopruntime-cloud installed.
+    # STANDALONE: tilt owns loopruntime-cloud (dual-ownership, same as loopruntime-api).
+    installed: {{ and .Values.profile.loopruntimeCloud (ne (.Values | get "clusterRole" "dev") "standalone") }}
+    # CANONICAL FIX 2026-06-15 dev-public chain-gap (see loopruntime-api at line 482):
+    # depends on loopruntime-api Ready + loopruntime-service-auth Secret; same self-recovery
     # pattern. helmfile sync applies manifests; pod cycles in CrashLoopBackOff
     # until bootstrap chain completes.
     wait: false
     needs:
-      - loopzero-auth/ory-hydra
-      - loopzero-system/loopzero-api
+      - loopruntime-auth/ory-hydra
+      - loopruntime-system/loopruntime-api
     values:
-      - ../../charts/loopzero-cloud/values-bootstrap.yaml
+      - ../../charts/loopruntime-cloud/values-bootstrap.yaml
       # Plan 2026-06-04-dev-public-docr-fix-forward T2.1 — env-specific
       # overlay (image channel, pull secret, per-environment URLs).
-      - values/{{ .Environment.Name }}/loopzero-cloud.yaml.gotmpl
+      - values/{{ .Environment.Name }}/loopruntime-cloud.yaml.gotmpl
       # T3.1 of plan 2026-05-29-dashboard-public-integration-canonicalization.
       # When the environment provides publicAuthUrl (the browser-facing Kratos
       # host), the cloud API redirects the browser back to Kratos through it
@@ -778,15 +778,15 @@ releases:
   # The console bundle (nginx), behind the app host route of public-routes. Only where
   # Traefik serves the public hostnames (publicRoutes.enabled): dev-public's Caddy serves
   # the bundle from the image's files instead.
-  - name: loopzero-dashboard
+  - name: loopruntime-dashboard
     labels:
       profile: dashboard-only
-    namespace: loopzero-system
-    chart: ../../charts/loopzero-dashboard
-    installed: {{ and .Values.profile.loopzeroCloud (.Values | get "publicRoutes.enabled" false) }}
+    namespace: loopruntime-system
+    chart: ../../charts/loopruntime-dashboard
+    installed: {{ and .Values.profile.loopruntimeCloud (.Values | get "publicRoutes.enabled" false) }}
     wait: false
     values:
-{{- if and .Values.profile.loopzeroCloud (.Values | get "publicRoutes.enabled" false) }}
+{{- if and .Values.profile.loopruntimeCloud (.Values | get "publicRoutes.enabled" false) }}
       - global:
           registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" | quote }}
 {{- if .Values | get "aws.imagePullSecret" "" }}
@@ -795,8 +795,8 @@ releases:
             - name: ghcr-pull
 {{- end }}
         image:
-          repository: loopzero-dashboard
-          tag: {{ required "platformImages.tags.loopzero-dashboard is not set: pin the image CI published" (index .Values.platformImages.tags "loopzero-dashboard") | quote }}
+          repository: loopruntime-dashboard
+          tag: {{ required "platformImages.tags.loopruntime-dashboard is not set: pin the image CI published" (index .Values.platformImages.tags "loopruntime-dashboard") | quote }}
         config:
           # The SPA calls its own origin; public-routes proxies the APIs on the app host.
           viteApiUrl: ""
@@ -818,10 +818,10 @@ releases:
 {{- end }}
 
   # Traefik IngressRoutes for the public hostnames no chart owns: login on the auth host
-  # (Kratos and Hydra) and, with loopzero-cloud, the console on the app host. Where the
+  # (Kratos and Hydra) and, with loopruntime-cloud, the console on the app host. Where the
   # edge passes every hostname to Traefik (staging's ALB); see infra/helm/public-routes.
   - name: public-routes
-    namespace: loopzero-system
+    namespace: loopruntime-system
     chart: ../helm/public-routes
     installed: {{ .Values | get "publicRoutes.enabled" false }}
     needs:
@@ -832,7 +832,7 @@ releases:
           enabled: true
           host: {{ .Values | get "publicAuthUrl" "" | trimPrefix "https://" | trimSuffix "/" | quote }}
         console:
-          enabled: {{ .Values.profile.loopzeroCloud }}
+          enabled: {{ .Values.profile.loopruntimeCloud }}
           host: {{ .Values | get "uiBaseUrl" "" | trimPrefix "https://" | trimSuffix "/" | quote }}
 
   # The platform's own PostgreSQL for data-plane services (platformPostgres): the
@@ -859,7 +859,7 @@ releases:
       - cnpg-system/cloudnative-pg
 
   - name: platform-postgres
-    namespace: loopzero-data-plane
+    namespace: loopruntime-data-plane
     chart: ../helm/platform-postgres
     installed: {{ .Values | get "platformPostgres.enabled" false }}
     needs:
@@ -894,12 +894,12 @@ releases:
   # The data plane (#446): memory, RAG and lens, one release each of one chart, every
   # service with its own Postgres. dev-public ran them as compose containers started from
   # directories that no longer exist; this is their versioned definition. Secrets come from
-  # generate-secrets.sh (loopzero-data-plane namespace), images from `platformImages`.
+  # generate-secrets.sh (loopruntime-data-plane namespace), images from `platformImages`.
   # `looptrace` is the lens under its current name: staging runs it on platform-postgres,
   # with its Secrets written by External Secrets.
-{{- range $svc := list "loopzero-memory" "loopzero-rag" "loopzero-lens" "looptrace" }}
+{{- range $svc := list "loopruntime-memory" "loopruntime-rag" "loopruntime-lens" "looptrace" }}
   - name: {{ $svc }}
-    namespace: loopzero-data-plane
+    namespace: loopruntime-data-plane
     chart: ../helm/data-plane-service
     installed: {{ has $svc ($.Values | get "dataPlane.services" list) }}
     wait: false
@@ -909,7 +909,7 @@ releases:
 
   # Wave 90: Chaos engineering (active-execution-plan §3.A.4, iter 2)
   # Sprint 8 T0.3 installed CRDs via separate path; this release wires the
-  # controller via the `loopzero-chaos-mesh` wrapper chart (infra/helm/chaos-mesh)
+  # controller via the `loopruntime-chaos-mesh` wrapper chart (infra/helm/chaos-mesh)
   # so all clusters bootstrap the controller consistently. Opt-in: only
   # installs when `installChaosMesh: true` in environment values. Default
   # false so prod + dev don't carry the controller unnecessarily; chaos
@@ -956,14 +956,14 @@ releases:
         coreSecrets: true
         platformSecret: {{ .Values.aws.platformSecret | quote }}
         database:
-          host: {{ env "LOOPZERO_DB_HOST" | quote }}
-          port: {{ env "LOOPZERO_DB_PORT" | default "5432" }}
-          name: {{ env "LOOPZERO_DB_NAME" | default "loopzero" | quote }}
-          masterSecret: {{ env "LOOPZERO_DB_MASTER_SECRET" | quote }}
+          host: {{ env "LOOPRUNTIME_DB_HOST" | quote }}
+          port: {{ env "LOOPRUNTIME_DB_PORT" | default "5432" }}
+          name: {{ env "LOOPRUNTIME_DB_NAME" | default "loopruntime" | quote }}
+          masterSecret: {{ env "LOOPRUNTIME_DB_MASTER_SECRET" | quote }}
         cache:
-          host: {{ env "LOOPZERO_CACHE_HOST" | quote }}
-          port: {{ env "LOOPZERO_CACHE_PORT" | default "6379" }}
-          authTokenSecret: {{ env "LOOPZERO_CACHE_AUTH_SECRET" | quote }}
+          host: {{ env "LOOPRUNTIME_CACHE_HOST" | quote }}
+          port: {{ env "LOOPRUNTIME_CACHE_PORT" | default "6379" }}
+          authTokenSecret: {{ env "LOOPRUNTIME_CACHE_AUTH_SECRET" | quote }}
         resendSecret: {{ .Values | get "aws.resendSecret" "" | quote }}
         stripeSecret: {{ .Values | get "aws.stripeSecret" "" | quote }}
         githubAppSecret: {{ .Values | get "aws.githubAppSecret" "" | quote }}
@@ -971,20 +971,20 @@ releases:
         # Staging only: the registry login the nodes pull the private GHCR images with.
         imagePullSecret:
           secretsManagerKey: {{ . | quote }}
-          namespaces: [loopzero-system]
+          namespaces: [loopruntime-system]
 {{- end }}
 
-  # The managed database brought to what loopzero-api boots against: identity and Gitea
+  # The managed database brought to what loopruntime-api boots against: identity and Gitea
   # databases, the non-owner roles, the schema at the latest migration.
   - name: database-bootstrap
-    namespace: loopzero-system
+    namespace: loopruntime-system
     chart: ../helm/database-bootstrap
     needs:
       - external-secrets/aws-secrets-manager
     values:
       - rolesSql: {{ readFile "../scripts/production/provision-db-roles.sql" | toJson }}
         images:
-          migrate: "{{ .Values.platformImages.registry }}loopzero-api:{{ index .Values.platformImages.tags "loopzero-api" }}"
+          migrate: "{{ .Values.platformImages.registry }}loopruntime-api:{{ index .Values.platformImages.tags "loopruntime-api" }}"
 {{- end }}
 {{- if .Values.profile.awsLoadBalancerController }}
 
@@ -1032,17 +1032,17 @@ releases:
 
   # Wave 99: Validation
   - name: smoke-test
-    namespace: loopzero-system
+    namespace: loopruntime-system
     chart: ../helm/smoke-test
-    # Bug #29 LIVE fix: skip in drill — depends on loopzero-cloud (skipped).
+    # Bug #29 LIVE fix: skip in drill — depends on loopruntime-cloud (skipped).
     # Drill validates via Phase 6 L2 harness directly.
-    # STANDALONE: depends on the tilt-owned app tier (loopzero-api/cloud/operators),
+    # STANDALONE: depends on the tilt-owned app tier (loopruntime-api/cloud/operators),
     # so skip the helmfile smoke-test locally too. See finding-2026-05-22-pg-password-divergence.
     #
     # DEV-PUBLIC (2026-06-15 canonical chain-gap closure): smoke-test is a
     # Helm POST-INSTALL HOOK (`helm.sh/hook: post-install`), so `wait: false`
     # does NOT bypass it (hooks always block helm install). The Job's
-    # `init-wait` container probes loopzero-api /health which is CrashLoopBackOff
+    # `init-wait` container probes loopruntime-api /health which is CrashLoopBackOff
     # until LATER `task bootstrap:standalone` provisions argocd-refresh-credentials
     # + ClusterCredentials. The Job fails with BackoffLimitExceeded, taking
     # the whole helmfile sync with it. Canonical fix: skip smoke-test in
@@ -1052,14 +1052,14 @@ releases:
     # exist at sync time via External Secrets Operator + manual seeded SOPS).
     installed: {{ and .Values.profile.smokeTest (ne (.Values | get "clusterRole" "dev") "standalone") }}
     needs:
-      - loopzero-system/loopzero-api
-{{- if .Values.profile.loopzeroCloud }}
-      - loopzero-system/loopzero-cloud
+      - loopruntime-system/loopruntime-api
+{{- if .Values.profile.loopruntimeCloud }}
+      - loopruntime-system/loopruntime-cloud
 {{- end }}
-      - loopzero-system/loopzero-tenant-operator
-      - loopzero-system/loopzero-app-operator
-      - loopzero-system/loopzero-preview-operator
-      - loopzero-system/loopzero-platform-operator
+      - loopruntime-system/loopruntime-tenant-operator
+      - loopruntime-system/loopruntime-app-operator
+      - loopruntime-system/loopruntime-preview-operator
+      - loopruntime-system/loopruntime-platform-operator
     values:
       - ../helm/smoke-test/values.yaml
 
@@ -1076,8 +1076,8 @@ releases:
   # copying the runtime block wholesale would invent a dependency that does not exist on
   # this cluster and would block the sync.
   - name: admission-policies-mgmt
-    namespace: loopzero-system
-    chart: ../../charts/loopzero-admission-policies
+    namespace: loopruntime-system
+    chart: ../../charts/loopruntime-admission-policies
     values:
-      - ../../charts/loopzero-admission-policies/values.yaml
-      - ../../charts/loopzero-admission-policies/values-mgmt.yaml
+      - ../../charts/loopruntime-admission-policies/values.yaml
+      - ../../charts/loopruntime-admission-policies/values-mgmt.yaml

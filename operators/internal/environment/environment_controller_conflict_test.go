@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Deterministic unit proof for MEET-2026-07-02-002 (t31 flake fix).
 //
@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
 )
 
@@ -46,35 +46,35 @@ func environmentTestScheme(t *testing.T) *runtime.Scheme {
 	if err := clientgoscheme.AddToScheme(s); err != nil {
 		t.Fatalf("clientgoscheme.AddToScheme: %v", err)
 	}
-	if err := loopzerov1.AddToScheme(s); err != nil {
-		t.Fatalf("loopzerov1.AddToScheme: %v", err)
+	if err := loopruntimev1.AddToScheme(s); err != nil {
+		t.Fatalf("loopruntimev1.AddToScheme: %v", err)
 	}
 	return s
 }
 
 // overflowEnv builds an Environment whose canonical M2 namespace
-// (`loopzero-<tenant>-<project>-<env>`) exceeds the 63-char limit (85 chars),
+// (`loopruntime-<tenant>-<project>-<env>`) exceeds the 63-char limit (85 chars),
 // forcing the reconcile down the NameTooLong branch. The finalizer is
 // pre-seeded so EnsureFinalizer is a no-op and Generation stays stable.
-func overflowEnv() *loopzerov1.Environment {
-	return &loopzerov1.Environment{
+func overflowEnv() *loopruntimev1.Environment {
+	return &loopruntimev1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "tn-overflow-conflict",
 			Namespace:  "default",
 			Finalizers: []string{environmentFinalizer},
 			Generation: 7,
 		},
-		Spec: loopzerov1.EnvironmentCRSpec{
-			TenantRef:   loopzerov1.TenantRef{Name: "tn-very-long-tenant-name-h"},
+		Spec: loopruntimev1.EnvironmentCRSpec{
+			TenantRef:   loopruntimev1.TenantRef{Name: "tn-very-long-tenant-name-h"},
 			Project:     "production-data-pipeline-v2",
 			Environment: "staging-canary-experiment",
-			Namespace:   loopzerov1.NamespaceSpec{Name: "unused-when-project-set"},
-			Plan:        loopzerov1.PlanStarter,
+			Namespace:   loopruntimev1.NamespaceSpec{Name: "unused-when-project-set"},
+			Plan:        loopruntimev1.PlanStarter,
 		},
 	}
 }
 
-func assertNameTooLong(t *testing.T, env *loopzerov1.Environment) {
+func assertNameTooLong(t *testing.T, env *loopruntimev1.Environment) {
 	t.Helper()
 	for _, c := range env.Status.Conditions {
 		if c.Type == "NamespaceReady" && c.Status == metav1.ConditionFalse && c.Reason == "NameTooLong" {
@@ -91,7 +91,7 @@ func TestEnvironmentReconciler_NameTooLong_SetsObservedGeneration(t *testing.T) 
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
 		WithObjects(overflowEnv()).
-		WithStatusSubresource(&loopzerov1.Environment{}).
+		WithStatusSubresource(&loopruntimev1.Environment{}).
 		Build()
 
 	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
@@ -101,7 +101,7 @@ func TestEnvironmentReconciler_NameTooLong_SetsObservedGeneration(t *testing.T) 
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
 
-	var got loopzerov1.Environment
+	var got loopruntimev1.Environment
 	if err := cl.Get(context.Background(), key, &got); err != nil {
 		t.Fatalf("get after reconcile: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestEnvironmentReconciler_NameTooLong_RequeuesOnStatusConflict(t *testing.T
 	conflict := func(name string) error {
 		conflictArmed = false
 		return apierrors.NewConflict(
-			schema.GroupResource{Group: "loopzero.io", Resource: "environments"},
+			schema.GroupResource{Group: "runtime.getloopscale.com", Resource: "environments"},
 			name, fmt.Errorf("injected optimistic-concurrency conflict"))
 	}
 	ic := interceptor.Funcs{
@@ -146,7 +146,7 @@ func TestEnvironmentReconciler_NameTooLong_RequeuesOnStatusConflict(t *testing.T
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
 		WithObjects(overflowEnv()).
-		WithStatusSubresource(&loopzerov1.Environment{}).
+		WithStatusSubresource(&loopruntimev1.Environment{}).
 		WithInterceptorFuncs(ic).
 		Build()
 
@@ -160,7 +160,7 @@ func TestEnvironmentReconciler_NameTooLong_RequeuesOnStatusConflict(t *testing.T
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: key}); err != nil {
 		t.Fatalf("second reconcile (no conflict) returned error: %v", err)
 	}
-	var got loopzerov1.Environment
+	var got loopruntimev1.Environment
 	if err := cl.Get(context.Background(), key, &got); err != nil {
 		t.Fatalf("get after reconcile: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestEnvironmentReconciler_NameTooLong_RequeuesOnStatusConflict(t *testing.T
 func TestEnvironmentReconciler_DeleteFromEmpty_RemovesFinalizer(t *testing.T) {
 	s := environmentTestScheme(t)
 	now := metav1.Now()
-	env := &loopzerov1.Environment{
+	env := &loopruntimev1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "tn-del-empty",
 			Namespace:         "default",
@@ -181,16 +181,16 @@ func TestEnvironmentReconciler_DeleteFromEmpty_RemovesFinalizer(t *testing.T) {
 			// Phase intentionally left "" (Empty): the delete arrived before
 			// the first successful reconcile ever persisted a phase.
 		},
-		Spec: loopzerov1.EnvironmentCRSpec{
-			TenantRef: loopzerov1.TenantRef{Name: "tn-x"},
-			Namespace: loopzerov1.NamespaceSpec{Name: "loopzero-tn-x-default-project-production"},
+		Spec: loopruntimev1.EnvironmentCRSpec{
+			TenantRef: loopruntimev1.TenantRef{Name: "tn-x"},
+			Namespace: loopruntimev1.NamespaceSpec{Name: "loopruntime-tn-x-default-project-production"},
 		},
 	}
 
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
 		WithObjects(env).
-		WithStatusSubresource(&loopzerov1.Environment{}).
+		WithStatusSubresource(&loopruntimev1.Environment{}).
 		Build()
 
 	r := &EnvironmentReconciler{Client: cl, RuntimeFactory: cellrouting.NewStaticRuntimeClientFactory(cl), Scheme: s}
@@ -200,7 +200,7 @@ func TestEnvironmentReconciler_DeleteFromEmpty_RemovesFinalizer(t *testing.T) {
 		t.Fatalf("delete-from-Empty reconcile returned error: %v (MA-3 edge missing?)", err)
 	}
 
-	var got loopzerov1.Environment
+	var got loopruntimev1.Environment
 	err := cl.Get(context.Background(), key, &got)
 	if err == nil && len(got.Finalizers) > 0 {
 		t.Fatalf("expected finalizer removed (object GC'd); still present: %v", got.Finalizers)

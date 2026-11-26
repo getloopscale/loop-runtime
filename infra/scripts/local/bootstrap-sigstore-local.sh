@@ -22,7 +22,7 @@
 
 set -euo pipefail
 
-CONTEXT="${SIGSTORE_CONTEXT:-k3d-loopzero-build}"
+CONTEXT="${SIGSTORE_CONTEXT:-k3d-loopruntime-build}"
 SCAFFOLD_VERSION="${SIGSTORE_SCAFFOLD_VERSION:-0.6.108}"
 RELEASE_NAME="${SIGSTORE_RELEASE_NAME:-scaffold}"
 
@@ -41,7 +41,7 @@ kctl() { kubectl --context "$CONTEXT" "$@"; }
 # Authorizes this script ONLY for LOCAL k3d contexts (canonical build cluster
 # OR drill prod-identical ephemeral build cluster). Prod uses Pulumi
 # sigstore.ts per ADR-2026-05-27-T2.2-OFFLINE-TUF.
-ALLOWED_RE="${SIGSTORE_ALLOWED_CONTEXTS_REGEX:-^k3d-loopzero-(build|drill-build)$}"
+ALLOWED_RE="${SIGSTORE_ALLOWED_CONTEXTS_REGEX:-^k3d-loopruntime-(build|drill-build)$}"
 if [[ -n "${SIGSTORE_ALLOWED_CONTEXTS_REGEX:-}" ]]; then
   printf '[bootstrap-sigstore-local] WARN: SIGSTORE_ALLOWED_CONTEXTS_REGEX overridden to %s (audit signal)\n' "$ALLOWED_RE" >&2
 fi

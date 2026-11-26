@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -53,9 +53,9 @@ func makeTarGz(t *testing.T, files map[string]string) *bytes.Buffer {
 	return &buf
 }
 
-// --- extractLoopZeroYaml tests ---
+// --- extractLoopRuntimeYaml tests ---
 
-func TestExtractLoopZeroYaml_ValidTarball(t *testing.T) {
+func TestExtractLoopRuntimeYaml_ValidTarball(t *testing.T) {
 	// Arrange — GitHub tarball layout: "reponame-sha/loopzero.yaml"
 	yamlContent := `project: my-app
 apps:
@@ -70,7 +70,7 @@ apps:
 	})
 
 	// Act
-	cfg, err := extractLoopZeroYaml(tarball)
+	cfg, err := extractLoopRuntimeYaml(tarball)
 
 	// Assert
 	if err != nil {
@@ -87,7 +87,7 @@ apps:
 	}
 }
 
-func TestExtractLoopZeroYaml_MissingFile(t *testing.T) {
+func TestExtractLoopRuntimeYaml_MissingFile(t *testing.T) {
 	// Arrange — tarball without loopzero.yaml
 	tarball := makeTarGz(t, map[string]string{
 		"owner-repo-abc123/main.go": "package main",
@@ -95,7 +95,7 @@ func TestExtractLoopZeroYaml_MissingFile(t *testing.T) {
 	})
 
 	// Act
-	cfg, err := extractLoopZeroYaml(tarball)
+	cfg, err := extractLoopRuntimeYaml(tarball)
 
 	// Assert
 	if err == nil {
@@ -109,14 +109,14 @@ func TestExtractLoopZeroYaml_MissingFile(t *testing.T) {
 	}
 }
 
-func TestExtractLoopZeroYaml_MalformedYaml(t *testing.T) {
+func TestExtractLoopRuntimeYaml_MalformedYaml(t *testing.T) {
 	// Arrange — loopzero.yaml with invalid YAML
 	tarball := makeTarGz(t, map[string]string{
 		"owner-repo-abc123/loopzero.yaml": "{{invalid: yaml: [",
 	})
 
 	// Act
-	cfg, err := extractLoopZeroYaml(tarball)
+	cfg, err := extractLoopRuntimeYaml(tarball)
 
 	// Assert
 	if err == nil {
@@ -131,7 +131,7 @@ func TestExtractLoopZeroYaml_MalformedYaml(t *testing.T) {
 	}
 }
 
-func TestExtractLoopZeroYaml_NestedPath(t *testing.T) {
+func TestExtractLoopRuntimeYaml_NestedPath(t *testing.T) {
 	// Arrange — GitHub tarball: "reponame-sha/loopzero.yaml" at depth=2 (prefix/file)
 	tarball := makeTarGz(t, map[string]string{
 		"getloopscale-loopzerokit-example-abc123/loopzero.yaml": `project: nested-project
@@ -143,7 +143,7 @@ apps:
 	})
 
 	// Act
-	cfg, err := extractLoopZeroYaml(tarball)
+	cfg, err := extractLoopRuntimeYaml(tarball)
 
 	// Assert
 	if err != nil {
@@ -154,14 +154,14 @@ apps:
 	}
 }
 
-func TestExtractLoopZeroYaml_DeeplyNestedIgnored(t *testing.T) {
+func TestExtractLoopRuntimeYaml_DeeplyNestedIgnored(t *testing.T) {
 	// Arrange — loopzero.yaml at depth 3+ should NOT be found (only depth=2 is repo root)
 	tarball := makeTarGz(t, map[string]string{
 		"owner-repo-abc/subdir/loopzero.yaml": `project: deep`,
 	})
 
 	// Act
-	cfg, err := extractLoopZeroYaml(tarball)
+	cfg, err := extractLoopRuntimeYaml(tarball)
 
 	// Assert
 	if err == nil {
@@ -172,12 +172,12 @@ func TestExtractLoopZeroYaml_DeeplyNestedIgnored(t *testing.T) {
 	}
 }
 
-func TestExtractLoopZeroYaml_InvalidGzip(t *testing.T) {
+func TestExtractLoopRuntimeYaml_InvalidGzip(t *testing.T) {
 	// Arrange — not a valid gzip stream
 	buf := bytes.NewBufferString("this is not gzip data")
 
 	// Act
-	cfg, err := extractLoopZeroYaml(buf)
+	cfg, err := extractLoopRuntimeYaml(buf)
 
 	// Assert
 	if err == nil {
@@ -191,7 +191,7 @@ func TestExtractLoopZeroYaml_InvalidGzip(t *testing.T) {
 	}
 }
 
-func TestExtractLoopZeroYaml_EmptyProject(t *testing.T) {
+func TestExtractLoopRuntimeYaml_EmptyProject(t *testing.T) {
 	// Arrange — valid YAML but empty project name
 	tarball := makeTarGz(t, map[string]string{
 		"prefix/loopzero.yaml": `apps:
@@ -202,7 +202,7 @@ func TestExtractLoopZeroYaml_EmptyProject(t *testing.T) {
 	})
 
 	// Act
-	cfg, err := extractLoopZeroYaml(tarball)
+	cfg, err := extractLoopRuntimeYaml(tarball)
 
 	// Assert
 	if err != nil {
@@ -216,7 +216,7 @@ func TestExtractLoopZeroYaml_EmptyProject(t *testing.T) {
 	}
 }
 
-func TestExtractLoopZeroYaml_MultipleApps(t *testing.T) {
+func TestExtractLoopRuntimeYaml_MultipleApps(t *testing.T) {
 	// Arrange
 	tarball := makeTarGz(t, map[string]string{
 		"prefix/loopzero.yaml": `project: multi
@@ -234,7 +234,7 @@ apps:
 	})
 
 	// Act
-	cfg, err := extractLoopZeroYaml(tarball)
+	cfg, err := extractLoopRuntimeYaml(tarball)
 
 	// Assert
 	if err != nil {
@@ -283,10 +283,10 @@ func (f *fakeBuildCanceller) CancelQueuedBuilds(ctx context.Context, tenantID, p
 
 // newGitHubTarballServer creates a test HTTP server that serves a tarball with loopzero.yaml
 // at the GitHub API tarball download endpoint, and handles installation token requests.
-func newGitHubTarballServer(t *testing.T, loopzeroYamlContent string) *httptest.Server {
+func newGitHubTarballServer(t *testing.T, loopruntimeYamlContent string) *httptest.Server {
 	t.Helper()
 	return newGitHubTarballServerWithFiles(t, map[string]string{
-		"owner-repo-abc123/loopzero.yaml": loopzeroYamlContent,
+		"owner-repo-abc123/loopzero.yaml": loopruntimeYamlContent,
 		"owner-repo-abc123/main.go":       "package main",
 	})
 }
@@ -378,11 +378,11 @@ apps:
 	if submitter.submittedReq.Environment != "production" {
 		t.Errorf("expected environment 'production', got %q", submitter.submittedReq.Environment)
 	}
-	if submitter.submittedReq.LoopZeroYaml == nil {
-		t.Fatal("expected LoopZeroYaml to be set")
+	if submitter.submittedReq.LoopRuntimeYaml == nil {
+		t.Fatal("expected LoopRuntimeYaml to be set")
 	}
-	if submitter.submittedReq.LoopZeroYaml.Project != "my-app" {
-		t.Errorf("expected LoopZeroYaml.Project 'my-app', got %q", submitter.submittedReq.LoopZeroYaml.Project)
+	if submitter.submittedReq.LoopRuntimeYaml.Project != "my-app" {
+		t.Errorf("expected LoopRuntimeYaml.Project 'my-app', got %q", submitter.submittedReq.LoopRuntimeYaml.Project)
 	}
 }
 
@@ -425,7 +425,7 @@ func TestHandlePush_DownloadFailure(t *testing.T) {
 	}
 }
 
-func TestHandlePush_NoLoopZeroYaml_ReturnsNil(t *testing.T) {
+func TestHandlePush_NoLoopRuntimeYaml_ReturnsNil(t *testing.T) {
 	// Arrange — tarball WITHOUT loopzero.yaml
 	tarball := makeTarGz(t, map[string]string{
 		"owner-repo-abc123/main.go": "package main",
@@ -463,9 +463,9 @@ func TestHandlePush_NoLoopZeroYaml_ReturnsNil(t *testing.T) {
 		TenantID: "tenant-1", ProjectName: "project-1", CommitMessage: "msg", SenderLogin: "user",
 	})
 
-	// Assert — no loopzero.yaml means not a LoopZero project, returns nil (not error)
+	// Assert — no loopzero.yaml means not a LoopRuntime project, returns nil (not error)
 	if err != nil {
-		t.Fatalf("expected nil (not a LoopZero project), got %v", err)
+		t.Fatalf("expected nil (not a LoopRuntime project), got %v", err)
 	}
 	// Build should NOT have been submitted
 	if submitter.submittedReq != nil {
@@ -572,7 +572,7 @@ func TestHandlePush_InvalidRepoName(t *testing.T) {
 }
 
 func TestHandlePush_DefaultBucket(t *testing.T) {
-	// Arrange — no SourceBucket set, should default to "loopzero-builds"
+	// Arrange — no SourceBucket set, should default to "loopruntime-builds"
 	server := newGitHubTarballServer(t, `project: my-app
 apps:
   api:
@@ -603,8 +603,8 @@ apps:
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if uploader.uploadedBucket != "loopzero-builds" {
-		t.Errorf("expected default bucket 'loopzero-builds', got %q", uploader.uploadedBucket)
+	if uploader.uploadedBucket != "loopruntime-builds" {
+		t.Errorf("expected default bucket 'loopruntime-builds', got %q", uploader.uploadedBucket)
 	}
 }
 

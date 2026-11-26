@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- M2 Phase-2 enforce: account_id NOT NULL after the 000041 backfill. Pre-flight
 -- guard fails loudly if any NULL remains (never silently flip).

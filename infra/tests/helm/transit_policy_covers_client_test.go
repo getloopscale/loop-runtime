@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // B-072 / ADR 2026-08-13-transit-key-policy.
 //
 // The api encrypts tenant secrets with a per-tenant Transit key created LAZILY:
-// Encrypt reacts to a 404 by POSTing to /v1/transit/keys/loopzero-tenants-<id>.
+// Encrypt reacts to a 404 by POSTing to /v1/transit/keys/loopruntime-tenants-<id>.
 // Measured 2026-08-13: the VERSIONED policy — the one `helmfile sync` applies —
 // granted `transit/encrypt/+` and `transit/decrypt/+` and NOTHING on
 // `transit/keys/*`, so that create is denied by design in every environment that
@@ -32,7 +32,7 @@ import (
 )
 
 // clientKeyPrefix reads the prefix the Transit client actually uses, from the
-// client itself. Hard-coding "loopzero-tenants-" here would recreate the very drift
+// client itself. Hard-coding "loopruntime-tenants-" here would recreate the very drift
 // this test exists to catch.
 func clientKeyPrefix(t *testing.T) string {
 	t.Helper()
@@ -48,7 +48,7 @@ func clientKeyPrefix(t *testing.T) string {
 	return string(m[1])
 }
 
-// apiPolicy returns the `loopzero-api` policy body from the openbao-init values.
+// apiPolicy returns the `loopruntime-api` policy body from the openbao-init values.
 func apiPolicy(t *testing.T) string {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Join("..", "..", "helm", "openbao-init", "values.yaml"))
@@ -56,16 +56,16 @@ func apiPolicy(t *testing.T) string {
 		t.Fatalf("reading openbao-init values: %v", err)
 	}
 	text := string(body)
-	start := strings.Index(text, "- name: loopzero-api\n")
+	start := strings.Index(text, "- name: loopruntime-api\n")
 	if start < 0 {
-		t.Fatal("policy `loopzero-api` not found in infra/helm/openbao-init/values.yaml")
+		t.Fatal("policy `loopruntime-api` not found in infra/helm/openbao-init/values.yaml")
 	}
 	rest := text[start+1:]
 	if end := strings.Index(rest, "\n  - name: "); end >= 0 {
 		rest = rest[:end]
 	}
 	if strings.TrimSpace(rest) == "" {
-		t.Fatal("the loopzero-api policy body is empty; a check that read nothing verified nothing")
+		t.Fatal("the loopruntime-api policy body is empty; a check that read nothing verified nothing")
 	}
 	return rest
 }
@@ -78,7 +78,7 @@ func TestTransitPolicy_GrantsTheKeyPathTheClientCreates(t *testing.T) {
 
 	want := "transit/keys/" + prefix + "*"
 	if !strings.Contains(policy, want) {
-		t.Errorf("the versioned `loopzero-api` policy does not grant %q, but the client POSTs to "+
+		t.Errorf("the versioned `loopruntime-api` policy does not grant %q, but the client POSTs to "+
 			"/v1/transit/keys/%s<id> when a tenant key is missing (transit_client.go). Lazy key "+
 			"creation is denied by design in every environment that loads this chart (B-072).",
 			want, prefix)

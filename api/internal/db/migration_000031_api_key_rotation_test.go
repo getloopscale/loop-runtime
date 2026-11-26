@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // API Key Rotation plan, T6.2.
-// Structural validation of migration 000031_loopzero_api_keys_rotated_from.
+// Structural validation of migration 000031_loopruntime_api_keys_rotated_from.
 // Renumbered 2026-06-07 from 000029 after merge with develop — slots
 // 000027/000028 owned by preview_as_category + preview_slot_per_project
 // (M2 refactor LIVE in PG); 000029/000030 owned by memory_webhooks.
@@ -16,7 +16,7 @@ import (
 	"testing"
 )
 
-const pathMigration031 = "migrations/000031_loopzero_api_keys_rotated_from.up.sql"
+const pathMigration031 = "migrations/000031_loopruntime_api_keys_rotated_from.up.sql"
 
 func readRotationMigration(t *testing.T) string {
 	t.Helper()
@@ -31,14 +31,14 @@ func readRotationMigration(t *testing.T) string {
 	return string(b)
 }
 
-func TestMigration031_AltersLoopZeroApiKeys(t *testing.T) {
+func TestMigration031_AltersLoopRuntimeApiKeys(t *testing.T) {
 	sql := readRotationMigration(t)
 	upper := strings.ToUpper(sql)
 	if !strings.Contains(upper, "ALTER TABLE") {
 		t.Fatal("must ALTER TABLE")
 	}
-	if !strings.Contains(sql, "loopzero_api_keys") {
-		t.Fatal("must alter loopzero_api_keys")
+	if !strings.Contains(sql, "loopruntime_api_keys") {
+		t.Fatal("must alter loopruntime_api_keys")
 	}
 }
 
@@ -62,9 +62,9 @@ func TestMigration031_AddsRotatedFromColumnNullable(t *testing.T) {
 
 func TestMigration031_ReferencesSelf(t *testing.T) {
 	sql := readRotationMigration(t)
-	// Self-FK to loopzero_api_keys(id) so the audit pointer can't dangle.
-	if !strings.Contains(sql, "REFERENCES loopzero_api_keys(id)") {
-		t.Error("rotated_from must REFERENCES loopzero_api_keys(id) for audit integrity")
+	// Self-FK to loopruntime_api_keys(id) so the audit pointer can't dangle.
+	if !strings.Contains(sql, "REFERENCES loopruntime_api_keys(id)") {
+		t.Error("rotated_from must REFERENCES loopruntime_api_keys(id) for audit integrity")
 	}
 }
 
@@ -81,7 +81,7 @@ func TestMigration031_CommentDocumentsAudit(t *testing.T) {
 }
 
 func TestMigration031_NoDownFile(t *testing.T) {
-	abs, _ := filepath.Abs("migrations/000031_loopzero_api_keys_rotated_from.down.sql")
+	abs, _ := filepath.Abs("migrations/000031_loopruntime_api_keys_rotated_from.down.sql")
 	if _, err := os.Stat(abs); err == nil {
 		t.Errorf("forward-only convention violated: .down.sql exists at %s", abs)
 	}

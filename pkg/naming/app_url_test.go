@@ -32,8 +32,8 @@ func TestAppHostname_canonical_full_formula(t *testing.T) {
 			projectID: "sample",
 			appName:   "api",
 			envName:   "production",
-			base:      "loopzero.local",
-			want:      "tn-82988ea9aef248ef-sample-api-production.loopzero.local",
+			base:      "loopruntime.local",
+			want:      "tn-82988ea9aef248ef-sample-api-production.loopruntime.local",
 		},
 		{
 			name:      "public domain (dev-public prod-dev wildcard)",
@@ -50,8 +50,8 @@ func TestAppHostname_canonical_full_formula(t *testing.T) {
 			projectID: "foo",
 			appName:   "web",
 			envName:   "staging",
-			base:      "loopzero.local",
-			want:      "tn-abc-foo-web-staging.loopzero.local",
+			base:      "loopruntime.local",
+			want:      "tn-abc-foo-web-staging.loopruntime.local",
 		},
 	}
 	for _, tc := range cases {
@@ -74,7 +74,7 @@ func TestAppHostname_truncates_over_63_chars_rfc1123(t *testing.T) {
 		"verylongprojectnamethatpushespastthelimit",
 		"app",
 		"production",
-		"loopzero.local",
+		"loopruntime.local",
 	)
 	// Extract the label (everything before first dot)
 	dot := -1

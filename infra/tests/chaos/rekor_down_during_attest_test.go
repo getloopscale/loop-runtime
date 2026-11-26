@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package chaos_test
 
@@ -30,7 +30,7 @@ import (
 //   7. Restores Rekor + verifies the re-submitted build succeeds with
 //      a fully-populated Rekor URL.
 //
-// Skip gates (EC-5 of plan v1.1): LOOPZERO_CHAOS_TEST=1 + chaos-mesh CRDs
+// Skip gates (EC-5 of plan v1.1): LOOPRUNTIME_CHAOS_TEST=1 + chaos-mesh CRDs
 // present + Rekor deployment Ready in sigstore-system. All three must
 // be true for the scenario to run.
 
@@ -61,7 +61,7 @@ var _ = Describe("Rekor down during cosign attest", Label("chaos", "sigstore", "
 
 	It("FAILs the build cleanly + writes no fake URL when Rekor scales to 0 mid-attest", func() {
 		// Expected LIVE flow:
-		//   1. loopzero build submit (CosignKeyless=true, CosignAttestEnabled=true)
+		//   1. loopruntime build submit (CosignKeyless=true, CosignAttestEnabled=true)
 		//   2. await sign-image-* SUCCEEDED (sign completes before chaos)
 		//   3. await attest-image-* Running
 		//   4. kubectl scale deploy/rekor --replicas=0 -n sigstore-system

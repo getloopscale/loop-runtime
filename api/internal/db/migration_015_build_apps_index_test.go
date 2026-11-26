@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Migration 000015 regression test — text-level invariants for the
 // build_apps.build_id index (T3.2 of deep-review-2026-05-10-remediation-plan,

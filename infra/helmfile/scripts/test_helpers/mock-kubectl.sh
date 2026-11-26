@@ -32,7 +32,7 @@ case "$*" in
     echo "rancher.io/local-path"
     ;;
   *"get clusterimagepolicy"*)
-    echo "clusterimagepolicy/loopzero-images-warn"
+    echo "clusterimagepolicy/loopruntime-images-warn"
     ;;
   *"create namespace"*"--dry-run=client"*)
     echo "namespace/test-namespace created (mock)"

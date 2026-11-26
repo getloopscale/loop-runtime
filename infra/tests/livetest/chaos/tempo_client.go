@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Tempo OTel HTTP client implementing the AssertSpanCoverage helper
 // promised by T3.3 of plan canonical-tests-rewrite-v2 v1.0 per ADR D7.

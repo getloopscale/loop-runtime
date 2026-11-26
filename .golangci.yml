@@ -47,9 +47,9 @@ linters:
     # remains BAIXA severity per audit. Re-add when typed-per-machine
     # refactor lands.
     # === Disabled, with rationale (re-enable in dedicated PRs) ===
-    # - nilerr: LoopZero has intentional fail-open paths in cost_cap.go and
+    # - nilerr: LoopRuntime has intentional fail-open paths in cost_cap.go and
     #   admission middleware. Enabling triggers false positives.
-    # - misspell: LoopZero state machines use CANCELLED (British) per CLAUDE.md
+    # - misspell: LoopRuntime state machines use CANCELLED (British) per CLAUDE.md
     #   state-machine table. Misspell flags it as misspell of CANCELED.
 
   settings:

@@ -1,8 +1,8 @@
 {
-  "note": "Per-MODULE frozen counts of golangci-lint and gofmt, read by `loopzero-ops quality lint-coverage`. The ratchet refuses REGRESSION: a module at 0 that gains a finding fails, even with hundreds frozen beside it. Improving passes and shows up in the output, so that someone refreezes with `--write`. A module with no entry here is reported — it enters declared, never silently. See B-121, B-083 and B-148.",
+  "note": "Per-MODULE frozen counts of golangci-lint and gofmt, read by `loopruntime-ops quality lint-coverage`. The ratchet refuses REGRESSION: a module at 0 that gains a finding fails, even with hundreds frozen beside it. Improving passes and shows up in the output, so that someone refreezes with `--write`. A module with no entry here is reported — it enters declared, never silently. See B-121, B-083 and B-148.",
   "lint": {
     "api": 0,
-    "cmd/loopzero-ops": 137,
+    "cmd/loopruntime-ops": 137,
     "infra/scripts": 7,
     "infra/tests": 58,
     "operators": 0,
@@ -12,7 +12,7 @@
   },
   "gofmt": {
     "api": 0,
-    "cmd/loopzero-ops": 0,
+    "cmd/loopruntime-ops": 0,
     "infra/scripts": 0,
     "infra/tests": 22,
     "operators": 1,

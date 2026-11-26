@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # Plan 2026-05-16-drill-l2-unlock — Operator handoff Phase 4 pre-flight consolidator.
 #
@@ -147,7 +147,7 @@ if [[ -f "$ENV_FILE" ]]; then
   done
 
   # SPACES_* → AWS_* auto-mapping (iter 11 LIVE bug fix):
-  # Pulumi S3 backend (s3://loopzero-drill-pulumi-state) uses aws-sdk which
+  # Pulumi S3 backend (s3://loopruntime-drill-pulumi-state) uses aws-sdk which
   # looks for AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY env vars. DO Spaces
   # credentials are stored as SPACES_* in .env (per prod workflow pattern
   # infra-bootstrap.yml + infra-drift.yml + infra-destroy.yml). Auto-map
@@ -167,7 +167,7 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 # --- Check 1: credentials (D7' single-token model) ---
-# Backend-aware classification per Pulumi.yaml `s3://loopzero-drill-pulumi-state`:
+# Backend-aware classification per Pulumi.yaml `s3://loopruntime-drill-pulumi-state`:
 #   MANDATORY (S3 backend requires):
 #     - DIGITALOCEAN_TOKEN — DO API (clusters/PG/Spaces/VPC provisioning)
 #     - CLOUDFLARE_API_TOKEN — CF Zone provisioning
@@ -243,7 +243,7 @@ fi
 #
 # T0.5 (plan 2026-05-21-deep-review-remediation): D7' sponsor override (2026-05-16)
 # replaced the dual-token model with a single shared DIGITALOCEAN_TOKEN — isolation
-# is at DO project + tag (loopzero-drill-*) + state bucket level, NOT token level.
+# is at DO project + tag (loopruntime-drill-*) + state bucket level, NOT token level.
 # The legacy drill-prefixed DO token is deprecated; the collision case (exit 1)
 # is preserved only for operators migrating from the pre-D7' workflow.
 #
@@ -251,7 +251,7 @@ fi
 # isolation check would just re-report the same missing-token symptom with
 # misleading "collision" interpretation.
 log "Check 3/4: D7' advisory mode (credentials isolation)..."
-# Migrated to the Go gate `loopzero-ops quality drill-creds-isolation`
+# Migrated to the Go gate `loopruntime-ops quality drill-creds-isolation`
 # (pkg/quality/drillcredisolation) — same tri-state exit contract:
 # 0 OK / 1 catastrophic / 2 missing. The bash check-drill-credentials-isolation.sh
 # was deleted (MIGRATE-GO-PUREFN). See docs/operations.md.
@@ -261,10 +261,10 @@ if [[ "${MISSING_TOKENS[*]:-}" == *"DIGITALOCEAN_TOKEN"* ]]; then
 else
   PF_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
   set +e
-  if command -v loopzero-ops >/dev/null 2>&1; then
-    loopzero-ops quality drill-creds-isolation >/dev/null 2>&1
+  if command -v loopruntime-ops >/dev/null 2>&1; then
+    loopruntime-ops quality drill-creds-isolation >/dev/null 2>&1
   else
-    ( cd "$PF_REPO_ROOT/cmd/loopzero-ops" && go run . quality drill-creds-isolation ) >/dev/null 2>&1
+    ( cd "$PF_REPO_ROOT/cmd/loopruntime-ops" && go run . quality drill-creds-isolation ) >/dev/null 2>&1
   fi
   ISO_RC=$?
   set -e

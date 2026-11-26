@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
  * Topology loader — parses and validates the declarative topology
  * from Pulumi stack config.
  *
- * Config key: `loopzero-infra:topology` (YAML object in Pulumi.<stack>.yaml)
+ * Config key: `loopruntime-infra:topology` (YAML object in Pulumi.<stack>.yaml)
  *
  * If the topology key is absent, falls back to legacy singleton config
  * (mgmtNodeClass, runtimeNodeClass, etc.) for backwards compatibility

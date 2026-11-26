@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
@@ -21,7 +21,7 @@ export class Tempo extends pulumi.ComponentResource {
   public readonly release: k8s.helm.v3.Release;
 
   constructor(name: string, args: TempoArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopzero:platform:Tempo", name, {}, opts);
+    super("loopruntime:platform:Tempo", name, {}, opts);
 
     this.release = new k8s.helm.v3.Release(
       "tempo",
@@ -74,7 +74,7 @@ export class OtelCollector extends pulumi.ComponentResource {
   public readonly release: k8s.helm.v3.Release;
 
   constructor(name: string, args: OtelCollectorArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopzero:platform:OtelCollector", name, {}, opts);
+    super("loopruntime:platform:OtelCollector", name, {}, opts);
 
     this.release = new k8s.helm.v3.Release(
       "otel-collector",

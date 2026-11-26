@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -10,8 +10,8 @@ import (
 	"testing"
 )
 
-// The shared build-publish workflow is called from other repositories (loopzero-cloud,
-// loopzero-memory, loopzero-rag, loopzero-lens). A Fulcio certificate issued inside a reusable workflow
+// The shared build-publish workflow is called from other repositories (loopruntime-cloud,
+// loopruntime-memory, loopruntime-rag, loopruntime-lens). A Fulcio certificate issued inside a reusable workflow
 // names the REUSABLE in its SAN and the CALLER in its source-repository claim, so the
 // verify step must pin each half to the right thing (#460). Pinning the caller's repository
 // in the SAN, as it did, rejects every signature this workflow produces for another

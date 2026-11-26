@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -20,21 +20,21 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/db"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
-// newInvalidArgument wraps a string message as LoopZeroError so handler
+// newInvalidArgument wraps a string message as LoopRuntimeError so handler
 // validation produces actionable client feedback. Status 400 inferred
 // from INVALID_ARGUMENT code by the HTTP error mapper.
-func newInvalidArgument(msg string) *loopzeroerrors.LoopZeroError {
-	return loopzeroerrors.NewLoopZeroError("INVALID_ARGUMENT", msg)
+func newInvalidArgument(msg string) *loopruntimeerrors.LoopRuntimeError {
+	return loopruntimeerrors.NewLoopRuntimeError("INVALID_ARGUMENT", msg)
 }
 
 // ScalingConfig represents per-app scaling configuration persisted
 // in app_scaling_config.
 //
 // Plan T2.1 of `pre-launch-gaps-plan.md`. Replaces the previous
-// stub-202 path where `loopzero scale` returned acknowledged but did
+// stub-202 path where `loopruntime scale` returned acknowledged but did
 // nothing persistent.
 type ScalingConfig struct {
 	ID           string `json:"id"`
@@ -75,7 +75,7 @@ func (c *ScalingConfig) CanonicalHash() string {
 }
 
 // Validate checks invariants that DB CHECK constraints also enforce,
-// but surfaces them as LoopZeroError for actionable client feedback.
+// but surfaces them as LoopRuntimeError for actionable client feedback.
 func (c *ScalingConfig) Validate() error {
 	if c.MinReplicas < 0 {
 		return newInvalidArgument("min_replicas must be >= 0")
@@ -105,7 +105,7 @@ func (c *ScalingConfig) Validate() error {
 	}
 	// The environment is a segment of the workload namespace, so it must be
 	// the RFC 1123 label pkg/naming (the namespace builder's own validator)
-	// accepts. LoopZero supports arbitrary tenant-created environments; existence
+	// accepts. LoopRuntime supports arbitrary tenant-created environments; existence
 	// is enforced by withEnvironmentLock at the route, this is syntax only.
 	if err := naming.ValidateKubernetesName(c.Environment); err != nil {
 		return newInvalidArgument(fmt.Sprintf("environment %q: %v", c.Environment, err))

@@ -1,0 +1,92 @@
+# dev-public overlay for charts/loopruntime-api, layered on charts/loopruntime-api/values-bootstrap.yaml.
+# Plan 2026-06-04-dev-public-docr-fix-forward T2.1 (clusterRole=cloud-local).
+
+# Until 2026-09-28 this environment pulled `:develop` from GHCR with `pullPolicy: Always`
+# (#142), and before that from a DigitalOcean registry that no longer exists. A moving tag
+# cannot say which commit is running, and production pulls from ECR (#435).
+# Platform images come from Amazon ECR, pinned by the commit each was built from (#435):
+# the registry and the tag are `platformImages` in environments/dev-public.yaml, and a
+# missing entry fails the render instead of falling back to a moving tag. No pull
+# secret: the node's kubelet credential provider authenticates, as on EKS.
+global:
+  registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" }}
+
+image:
+  repository: loopruntime-api
+  tag: {{ required "platformImages.tags.loopruntime-api is not set" (index .Values.platformImages.tags "loopruntime-api") | quote }}
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# The k3d-loopruntime-core serverlb maps host port 13001 to node port 30001. Exposing loopruntime-api as
+# NodePort 30001 lets `curl localhost:13001/api/...` reach the cluster Service directly —
+# the canonical path for the CLI and dogfood from the host.
+service:
+  type: NodePort
+  nodePort: 30001
+
+config:
+  # The build workflow's sign-image and attest-image steps (Red Team #133) run these
+  # images on the build cluster, whose nodes authenticate to ECR the same way the core
+  # nodes do. Pinned by commit like every other platform image (#435).
+  loopruntimeCosignImage: "{{ .Values.platformImages.registry }}loopruntime-cosign-signer:{{ index .Values.platformImages.tags "loopruntime-cosign-signer" }}"
+  loopruntimeSyftImage: "{{ .Values.platformImages.registry }}loopruntime-syft-scanner:{{ index .Values.platformImages.tags "loopruntime-syft-scanner" }}"
+  # CANONICAL FIX 2026-06-15: the OpenBao Transit chain is on in dev-public. Both halves of
+  # the AppRole arrive from Secret `loopruntime-openbao-approle`: vault-bootstrap-dev.sh writes the
+  # secret_id and `loopruntime-ops seed vault-role-id-sync` the role_id, which OpenBao issues anew
+  # at every bootstrap and so cannot be a literal here. Without Transit, the dogfood secrets
+  # journey would validate its zero-leak property against unencrypted Postgres bytes — a
+  # bypass-PASS.
+  openbaoTransitEnabled: "true"
+  # T1.2 of dev-public-cross-cluster-secrets (issue #111): OpenBao runs in a SEPARATE
+  # k3d-loopruntime-secrets cluster. EC-2: the URL stays the canonical intra-cluster DNS name so
+  # the certificate SAN holds; the core CoreDNS host alias (T2.2) rewrites it to the
+  # loopruntime-secrets NodePort IP at resolve time. A single-cluster topology resolves the same
+  # literal normally — no per-environment split.
+  openbaoVaultAddr: "https://openbao.secrets-system.svc.cluster.local:8200"
+  # The build cluster's Loki, where the build pipeline logs land: the port the environment
+  # publishes on the build serverlb (crossCluster.lokiNodePort), reached through the docker
+  # network gateway that host.k3d.internal names in the core CoreDNS. It was the
+  # `loki-cross-cluster` seed's Deployment env patch until the value moved here.
+  lokiUrl: "http://host.k3d.internal:{{ .Values.crossCluster.lokiNodePort }}"
+  # The public Hydra serves the JWKS for JWT verification.
+  jwksUrl: "https://auth-dev.getloopscale.com/.well-known/jwks.json"
+  # CANONICAL FIX 2026-07-14 (2nd regression of loopruntime-cloud#131): the issuer MUST be
+  # byte-equal to Hydra's URLS_SELF_ISSUER (WITH the trailing slash). go-jwt.WithIssuer
+  # compares exactly — dropping the slash broke the CLI device flow on 2026-07-14. Changes
+  # in lockstep with the loopruntime-cloud overlay and the ory-hydra overlay.
+  jwtIssuer: "https://auth-dev.getloopscale.com/"
+  # BuildKit (in k3d-loopruntime-build) pushes tenant images to k3d-loopruntime-registry over plain HTTP;
+  # the build submitter writes `http = true, insecure = true` for it from this hint.
+  registryInsecure: "true"
+  # The workload cluster has `loopruntime-ca-issuer` (self-signed CA bootstrap) for tenant
+  # `*.loopruntime.local` hostnames — no public Let's Encrypt for internal domains.
+  loopruntimeClusterIssuer: "loopruntime-ca-issuer"
+  # J-23 wildcard preview URL convention: public preview URLs live under the Caddy/CF
+  # wildcard root, not the internal base domain. Caddy's `*.preview-dev.getloopscale.app` block
+  # reverse-proxies <internal-sni>.loopruntime.local to Traefik (infra/local/Caddyfile).
+  loopruntimePreviewPublicDomain: "preview-dev.getloopscale.app"
+  # Admin endpoints are gated by this defense-in-depth flag; without it the admin journeys
+  # (B38) get HTTP 404 for every /admin/* call.
+  loopruntimeAdminApi: "true"
+  # Plan J-09 T1.1 (2026-06-06): the GitHub App id is public, so it is a value; the private
+  # key is the sensitive half and comes from Secret `loopruntime-api-github`. Rotating the App in
+  # github.com means updating this value AND the Vault secret in tandem.
+  githubAppId: "3319955"
+  # J-25 Live URL discoverability (ADR D3 of plan 2026-06-12-dashboard-journey-j25):
+  #   baseDomain       = cluster-internal SNI the IngressRoute Host rule matches; Caddy
+  #                      rewrites the public Host to <sub>.loopruntime.local before Traefik.
+  #   loopruntimePublicDomain = wildcard root of the user-facing URL (status.url, dashboard
+  #                      "Visit"): https://<tenant>-<project>-<entryApp>-<env>.<root>.
+  # Mirrors the preview split above; single source of truth is pkg/naming.AppURL.
+  baseDomain: "loopruntime.local"
+  loopruntimePublicDomain: {{ .Values.publicAppDomain | quote }}
+
+# The readiness poller behind the dashboard's /projects badge (Red Team #128) runs in
+# the api, which owns environment_targets. It queries the core Prometheus, which
+# scrapes the cells' kube-state-metrics; the loopruntime-common NetworkPolicy helper adds
+# the monitoring/prometheus:9090 egress rule when enabled.
+dataPlanePoller:
+  enabled: true
+  prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local:80"
+  interval: "30s"

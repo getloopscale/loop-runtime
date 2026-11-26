@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // CHG-2026-04-30-INFRA-PARITY / T4.2 — image tag format enforcement.
 //
-// Helmfile-rendered LoopZero charts must use:
+// Helmfile-rendered LoopRuntime charts must use:
 //   (a) semver  — `v0.2.0`, `v1.10.3-rc1`
 //   (b) SHA     — `sha-{8..40 hex chars}` or just `[a-f0-9]{8,40}`
 //   (c) latest  — `latest` (allowed; production blocked by VAP
-//                 `loopzero-disallow-latest-tag` runtime; CI here only blocks
+//                 `loopruntime-disallow-latest-tag` runtime; CI here only blocks
 //                 branch-name tags from leaking).
 //
 // Branch-name tags like `f07-fix`, `REDACTED_SECRET_061`, `achado28` mask the
@@ -30,7 +30,7 @@ const ACCEPTED_TAG_RE =
 interface TagInstance {
   file: string;
   tag: string;
-  context: string; // e.g. "loopzero-api/values.yaml"
+  context: string; // e.g. "loopruntime-api/values.yaml"
 }
 
 function findHelmTagsInDir(dir: string): TagInstance[] {
@@ -66,15 +66,15 @@ describe('image tag format enforcement (ADR D1)', () => {
   const helmDir = path.join(REPO_ROOT, 'infra', 'helm');
   const tags = findHelmTagsInDir(helmDir);
 
-  // Filter only tags from LoopZero charts (not third-party). LoopZero charts include
-  // loopzero-* AND tenant-controller (sibling without prefix).
-  const loopzeroTags = tags.filter((t) => /infra\/helm\/(loopzero-|tenant-controller\/)/.test(t.context));
+  // Filter only tags from LoopRuntime charts (not third-party). LoopRuntime charts include
+  // loopruntime-* AND tenant-controller (sibling without prefix).
+  const loopruntimeTags = tags.filter((t) => /infra\/helm\/(loopruntime-|tenant-controller\/)/.test(t.context));
 
-  it('found at least one LoopZero chart tag to validate', () => {
-    expect(loopzeroTags.length).toBeGreaterThan(0);
+  it('found at least one LoopRuntime chart tag to validate', () => {
+    expect(loopruntimeTags.length).toBeGreaterThan(0);
   });
 
-  for (const t of loopzeroTags) {
+  for (const t of loopruntimeTags) {
     it(`tag in ${t.context} matches ADR D1 format (semver|sha|latest)`, () => {
       const ok = ACCEPTED_TAG_RE.test(t.tag);
       if (!ok) {

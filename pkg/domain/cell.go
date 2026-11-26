@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domain
 
 // DefaultCellID names the cell every installation starts with, and the cell a
 // row or resource belongs to when nothing assigned it one. It is the single
-// definition of the value in Go: api, operators and cmd/loopzero-ops all import it
+// definition of the value in Go: api, operators and cmd/loopruntime-ops all import it
 // from here, because pkg is the one module every other module already depends
 // on.
 //

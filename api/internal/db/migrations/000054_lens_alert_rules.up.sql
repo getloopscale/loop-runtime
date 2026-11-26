@@ -1,11 +1,11 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- ============================================================================
 -- 000054_lens_alert_rules
 --
--- loopzero-lens M53 — per-tenant threshold alert rules on observability metrics.
--- A background evaluator (loopzero-cloud lens_alert_evaluator) ticks periodically,
+-- loopruntime-lens M53 — per-tenant threshold alert rules on observability metrics.
+-- A background evaluator (loopruntime-cloud lens_alert_evaluator) ticks periodically,
 -- fetches each tenant's observability series via a broker-minted observability:read
 -- key, evaluates each rule, and on a breach INSERTs a workspace_webhook_deliveries
 -- row (dispatched SSRF-guarded by the existing J-16 workspace_webhook_worker).
@@ -17,7 +17,7 @@
 -- webhook_id references a customer-registered workspace_webhooks row (the only
 -- target the reused delivery worker can POST to).
 --
--- Owned/queried by loopzero-cloud (raw database/sql); engine owns the schema.
+-- Owned/queried by loopruntime-cloud (raw database/sql); engine owns the schema.
 -- Forward-only per CLAUDE.md convention.
 -- ============================================================================
 

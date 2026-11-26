@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
-# LoopZero Engine — public HTTP contract (OpenAPI 3.0.3).
+# LoopRuntime Engine — public HTTP contract (OpenAPI 3.0.3).
 # M1.4 (plan m1-4-openapi-contract-tests) started this CONSUMER-DRIVEN (cli/cloud
 # routes only). M11 (plan m11-api-validation) SUPERSEDES that scope: this spec now
 # documents 100% of the public /api/v1 router surface — enforced by
@@ -12,10 +12,10 @@
 # api/internal/server/router.go (+ helper registrations in api/internal/routes/).
 openapi: 3.0.3
 info:
-  title: LoopZero Engine API
+  title: LoopRuntime Engine API
   version: "1.0.0"
   description: >
-    Consumer-facing surface of the LoopZero engine consumed across the
+    Consumer-facing surface of the LoopRuntime engine consumed across the
     decomposition seams (cli ↔ engine, cloud ↔ engine). Frozen here so the
     M2/M3 extractions can be validated against a machine-checkable contract.
 
@@ -846,7 +846,7 @@ paths:
       - health
       summary: Readiness — the service can take traffic
       description: >-
-        The ecosystem-canonical readiness name (loopzero-contracts/httpsurface, D5). Checks the
+        The ecosystem-canonical readiness name (loopruntime-contracts/httpsurface, D5). Checks the
         database and every registered service; 200 when all are healthy, 503 when any is degraded.
         Shares the handler with /api/v1/health/deep, whose name describes how the check is
         implemented rather than what it answers.

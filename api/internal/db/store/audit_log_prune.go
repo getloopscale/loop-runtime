@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -20,7 +20,7 @@ type PostgresAuditLogPruneStore struct {
 // DeleteAuditLogBatch deletes up to limit rows created before cutoff, oldest
 // first, and returns how many it deleted.
 //
-// It runs in its own transaction with `SET LOCAL loopzero.audit_pruner = 'true'`,
+// It runs in its own transaction with `SET LOCAL loopruntime.audit_pruner = 'true'`,
 // the override the immutability trigger (migration 000014) recognizes. SET
 // LOCAL is transaction-scoped, so the bypass ends at COMMIT or ROLLBACK and
 // no other session — psql, app code, a runaway query — ever carries it.
@@ -31,7 +31,7 @@ func (s *PostgresAuditLogPruneStore) DeleteAuditLogBatch(ctx context.Context, cu
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx, "SET LOCAL loopzero.audit_pruner = 'true'"); err != nil {
+	if _, err := tx.Exec(ctx, "SET LOCAL loopruntime.audit_pruner = 'true'"); err != nil {
 		return 0, fmt.Errorf("set local: %w", err)
 	}
 	tag, err := tx.Exec(ctx,

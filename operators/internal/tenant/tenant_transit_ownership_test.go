@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/vault"
 )
 
@@ -30,18 +30,18 @@ import (
 // The PROVISIONING seam left. An accidental reintroduction — someone
 // "rewiring" the step believing the no-op was an oversight — recreates the
 // divergence that made the operator's fail-fast meaningless: the operator
-// names the key `tenant-<id>` and the `api` names it `loopzero-tenants-<id>`, so
+// names the key `tenant-<id>` and the `api` names it `loopruntime-tenants-<id>`, so
 // the operator would guarantee a key nobody uses.
 func TestTransitKeyProvisioning_IsNotAnOperatorReconcileStep(t *testing.T) {
 	r := &TenantReconciler{}
-	for _, step := range r.provisioningSteps(context.Background(), &loopzerov1.Tenant{}) {
+	for _, step := range r.provisioningSteps(context.Background(), &loopruntimev1.Tenant{}) {
 		name := step.condType
 		if strings.Contains(name, "TransitKey") {
 			t.Fatalf(
 				"step %q is back in the tenant-controller reconcile list.\n\n"+
 					"Provisioning is api-side (ADR 2026-08-12-tenant-transit-key-ownership, "+
 					"B-042). The operator names the key `tenant-<id>` and the api names it "+
-					"`loopzero-tenants-<id>` — a step here guarantees a key nobody uses.",
+					"`loopruntime-tenants-<id>` — a step here guarantees a key nobody uses.",
 				name,
 			)
 		}

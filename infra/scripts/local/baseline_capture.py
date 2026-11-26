@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 """Data-processing helper for baseline-capture.sh (de-costumed from inline
 python3 heredocs per plan home-unhomed-logic-suspect-keeps T1.1).
 

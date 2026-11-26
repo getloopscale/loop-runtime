@@ -29,8 +29,8 @@ set -euo pipefail
 
 set -uo pipefail
 
-CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopzero-core}"
-LOCK_FILE="/tmp/loopzero-regen-scoped-kubeconfig.lock"
+CORE_CONTEXT="${CORE_CONTEXT:-k3d-loopruntime-core}"
+LOCK_FILE="/tmp/loopruntime-regen-scoped-kubeconfig.lock"
 LOCK_FD=200
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_SCOPED_KUBECONFIG="$SCRIPT_DIR/../../helmfile/scripts/lib/scoped-kubeconfig.sh"
@@ -110,7 +110,7 @@ for item in data.get("items", []):
     cluster_name = spec.get("clusterName", "")
     api_server = spec.get("apiServer", "")
     secret_name = spec.get("secretRef", {}).get("name", "")
-    secret_ns = spec.get("secretRef", {}).get("namespace", "loopzero-system")
+    secret_ns = spec.get("secretRef", {}).get("namespace", "loopruntime-system")
     cr_name = item.get("metadata", {}).get("name", "")
     if not cluster_name or not secret_name:
         continue
@@ -155,19 +155,19 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secre
 
   # Resolve raw kubeconfig source (test or live).
   # CR spec.clusterName is the operator-friendly label (e.g., "workload",
-  # "runtime-2"). The actual k3d cluster name has a "loopzero-" prefix
-  # (e.g., "loopzero-cell-0", "loopzero-cell-1"). For `k3d kubeconfig get`,
-  # we need the k3d cluster name (loopzero-X). For scoped-kubeconfig.sh, we
-  # pass the BARE cluster_name (X) — the lib INTERNALLY prepends `k3d-loopzero-`
+  # "runtime-2"). The actual k3d cluster name has a "loopruntime-" prefix
+  # (e.g., "loopruntime-cell-0", "loopruntime-cell-1"). For `k3d kubeconfig get`,
+  # we need the k3d cluster name (loopruntime-X). For scoped-kubeconfig.sh, we
+  # pass the BARE cluster_name (X) — the lib INTERNALLY prepends `k3d-loopruntime-`
   # to find the docker container, per its B81/B82 logic.
   if [[ -n "${RAW_KUBECONFIG_OVERRIDE:-}" ]]; then
     cp "$RAW_KUBECONFIG_OVERRIDE" "$TMP_KC"
   elif command -v k3d >/dev/null 2>&1 && k3d cluster list 2>/dev/null | grep -q "^${cluster_name} "; then
     k3d kubeconfig get "${cluster_name}" > "$TMP_KC" 2>/dev/null || true
-  elif command -v k3d >/dev/null 2>&1 && k3d cluster list 2>/dev/null | grep -q "^loopzero-${cluster_name} "; then
-    k3d kubeconfig get "loopzero-${cluster_name}" > "$TMP_KC" 2>/dev/null || true
+  elif command -v k3d >/dev/null 2>&1 && k3d cluster list 2>/dev/null | grep -q "^loopruntime-${cluster_name} "; then
+    k3d kubeconfig get "loopruntime-${cluster_name}" > "$TMP_KC" 2>/dev/null || true
   else
-    log "  WARN: no raw kubeconfig source for $cluster_name (tried bare + loopzero-prefix; skipping)"
+    log "  WARN: no raw kubeconfig source for $cluster_name (tried bare + loopruntime-prefix; skipping)"
     FAILED=$((FAILED+1))
     continue
   fi
@@ -176,9 +176,9 @@ while IFS=$'\t' read -r cr_name cell_id cluster_name _api_server secret_ns secre
   TMP_FILES+=("$SCOPED_OUTPUT")
 
   # IMPORTANT (LIVE bug 2026-05-13): pass cluster_name (bare, e.g., "workload"),
-  # NOT cell_id ("cell-0") and NOT "loopzero-cell-0". The lib internally
-  # prepends `k3d-loopzero-` per its B81/B82 logic — passing "loopzero-cell-0"
-  # would produce double-prefix `k3d-loopzero-loopzero-cell-0-server-0` (does not exist).
+  # NOT cell_id ("cell-0") and NOT "loopruntime-cell-0". The lib internally
+  # prepends `k3d-loopruntime-` per its B81/B82 logic — passing "loopruntime-cell-0"
+  # would produce double-prefix `k3d-loopruntime-loopruntime-cell-0-server-0` (does not exist).
   if ! bash "$LIB_SCOPED_KUBECONFIG" "$cluster_name" "$TMP_KC" "$SCOPED_OUTPUT" 2>&1 | sed 's/^/    [lib] /'; then
     log "  ERROR: scoped-kubeconfig.sh failed for $cell_id (cluster=$cluster_name)"
     FAILED=$((FAILED+1))

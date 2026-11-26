@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package repositorieshttp serves the project↔repository link: connecting a GitHub
 // installation to a project and answering what a project is connected to.
@@ -26,7 +26,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/github"
 	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // ProjectRepository represents a project↔repo link (DIP — avoids db import).
@@ -131,7 +131,7 @@ type connectResponse struct {
 	AutoDeploy bool   `json:"auto_deploy"`
 }
 
-// Connect links a GitHub repository to a LoopZero project (POST /api/v1/projects/{name}/connect).
+// Connect links a GitHub repository to a LoopRuntime project (POST /api/v1/projects/{name}/connect).
 //
 // Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
 // CC 18 → ≤ 11 via 2 helper extracts (parseConnectRequest + checkRepoLinkConflict).
@@ -139,7 +139,7 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -186,8 +186,8 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	// (EC-10 + EC-4). Validation is skipped only when no introspector is
 	// wired (test/local without GitHub credentials).
 	if h.introspector != nil {
-		if !h.validateLoopZeroYamlOnRef(ctx, w, req, branch) {
-			return // validateLoopZeroYamlOnRef wrote the response
+		if !h.validateLoopRuntimeYamlOnRef(ctx, w, req, branch) {
+			return // validateLoopRuntimeYamlOnRef wrote the response
 		}
 	}
 
@@ -260,12 +260,12 @@ func (h *RepositoryHandler) checkRepoLinkConflict(
 	return true
 }
 
-// Disconnect unlinks a GitHub repository from a LoopZero project (DELETE /api/v1/projects/{name}/connect).
+// Disconnect unlinks a GitHub repository from a LoopRuntime project (DELETE /api/v1/projects/{name}/connect).
 func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -274,7 +274,7 @@ func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.UnlinkRepository(ctx, uc.TenantID, projectName); err != nil {
 		// AUDIT-21: map "not linked" to 404 instead of silent success.
 		if errors.Is(err, ports.ErrRepositoryNotLinked) {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewRepositoryNotLinked(projectName))
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewRepositoryNotLinked(projectName))
 			return
 		}
 		slog.ErrorContext(ctx, "unlink repository failed", "error", err)
@@ -295,7 +295,7 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -333,7 +333,7 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// validateLoopZeroYamlOnRef runs the pre-link introspector chain: branch
+// validateLoopRuntimeYamlOnRef runs the pre-link introspector chain: branch
 // existence + deploy descriptor presence + the descriptor passes
 // github.ParseDeployDescriptor, the rule every push deploy applies. Returns true when validation passed; false (and writes the
 // HTTP response) on any failure. Extracted from Connect for T4.2 of
@@ -347,7 +347,7 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 //   - MISSING_DEPLOY_DESCRIPTOR   (400) — file absent at that ref
 //   - INVALID_DEPLOY_DESCRIPTOR   (400) — refused by github.ParseDeployDescriptor
 //   - GITHUB_UNAVAILABLE      (502) — GitHub API transport failure
-func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w http.ResponseWriter, req connectRequest, branch string) bool {
+func (h *RepositoryHandler) validateLoopRuntimeYamlOnRef(ctx context.Context, w http.ResponseWriter, req connectRequest, branch string) bool {
 	parts := strings.SplitN(req.Repo, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
@@ -381,7 +381,7 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 		if errors.As(err, &fnf) {
 			httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 				"code":    "MISSING_DEPLOY_DESCRIPTOR",
-				"message": github.DeployDescriptorPath + " not found on branch \"" + branch + "\". Add it at the repository root, declaring the apps to deploy under `apps:`, and commit it. Docs: https://docs.getloopscale.com/config/loopzero-yaml",
+				"message": github.DeployDescriptorPath + " not found on branch \"" + branch + "\". Add it at the repository root, declaring the apps to deploy under `apps:`, and commit it. Docs: https://docs.getloopscale.com/config/loopruntime-yaml",
 			})
 			return false
 		}
@@ -398,7 +398,7 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 	if _, err := github.ParseDeployDescriptorFile(path, content); err != nil {
 		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
 			"code":    "INVALID_DEPLOY_DESCRIPTOR",
-			"message": err.Error() + " Docs: https://docs.getloopscale.com/config/loopzero-yaml",
+			"message": err.Error() + " Docs: https://docs.getloopscale.com/config/loopruntime-yaml",
 		})
 		return false
 	}

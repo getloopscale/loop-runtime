@@ -10,7 +10,7 @@
 #      https://auth-dev.getloopscale.com/self-service/methods/oidc/callback/{provider}
 #
 # This is a LIVE test (touches https://auth-dev.getloopscale.com). Run after
-# `task dev-public:bootstrap` + `LOOPZERO_HELMFILE_ENV=dev-public task setup`.
+# `task dev-public:bootstrap` + `LOOPRUNTIME_HELMFILE_ENV=dev-public task setup`.
 
 set -euo pipefail
 

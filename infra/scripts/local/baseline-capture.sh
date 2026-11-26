@@ -37,7 +37,7 @@
 set -euo pipefail
 
 OUTPUT=""
-CONTEXT="${CONTEXT:-k3d-loopzero-core}"
+CONTEXT="${CONTEXT:-k3d-loopruntime-core}"
 PUBLIC_APP_URL="${PUBLIC_APP_URL:-https://app-dev.getloopscale.com}"
 PUBLIC_CLOUD_URL="${PUBLIC_CLOUD_URL:-https://app-dev.getloopscale.com}"
 FIXTURE_DIR="${BASELINE_FIXTURE_DIR:-}"
@@ -98,7 +98,7 @@ capture_runtime_state() {
     kubectl --context="$CONTEXT" get pods -A -o json 2>/dev/null > "$tmp/pods.json" || echo '{"items":[]}' > "$tmp/pods.json"
     helm list -A --kube-context="$CONTEXT" -o json 2>/dev/null > "$tmp/helm.json" || echo '[]' > "$tmp/helm.json"
     kubectl --context="$CONTEXT" get applications.argoproj.io -n argocd -o json 2>/dev/null > "$tmp/apps.json" || echo '{"items":[]}' > "$tmp/apps.json"
-    kubectl --context="$CONTEXT" get tenants.loopzero.io -A -o json 2>/dev/null > "$tmp/tens.json" || echo '{"items":[]}' > "$tmp/tens.json"
+    kubectl --context="$CONTEXT" get tenants.runtime.getloopscale.com -A -o json 2>/dev/null > "$tmp/tens.json" || echo '{"items":[]}' > "$tmp/tens.json"
   fi
   TMP_DIR="$tmp" python3 "$(dirname "$0")/baseline_capture.py" runtime
 }
@@ -112,18 +112,18 @@ capture_config_state() {
     plan_limits_present="$(tr -d '[:space:]' < "$FIXTURE_DIR/plan_limits_present.txt" 2>/dev/null || echo "false")"
     cosign_mode="$(tr -d '[:space:]' < "$FIXTURE_DIR/cosign_mode.txt" 2>/dev/null || echo "keyed")"
   else
-    pg_max="$(kubectl --context="$CONTEXT" -n loopzero-system exec -i postgresql-0 -c postgresql -- \
-                env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -tAc \
+    pg_max="$(kubectl --context="$CONTEXT" -n loopruntime-system exec -i postgresql-0 -c postgresql -- \
+                env PGPASSWORD=loopruntime-dev-password psql -U loopruntime -d loopruntime -tAc \
                 "SELECT max(version) FROM schema_migrations" 2>/dev/null | tr -d '[:space:]' || echo "0")"
     if [ -z "$pg_max" ] ; then pg_max=0 ; fi
-    if kubectl --context="$CONTEXT" -n loopzero-system exec -i postgresql-0 -c postgresql -- \
-         env PGPASSWORD=loopzero-dev-password psql -U loopzero -d loopzero -tAc \
+    if kubectl --context="$CONTEXT" -n loopruntime-system exec -i postgresql-0 -c postgresql -- \
+         env PGPASSWORD=loopruntime-dev-password psql -U loopruntime -d loopruntime -tAc \
          "SELECT 1 FROM information_schema.tables WHERE table_name='plan_limits'" 2>/dev/null | grep -q 1 ; then
       plan_limits_present=true
     else
       plan_limits_present=false
     fi
-    cosign_mode="$(kubectl --context="$CONTEXT" -n loopzero-system get configmap loopzero-cosign-config \
+    cosign_mode="$(kubectl --context="$CONTEXT" -n loopruntime-system get configmap loopruntime-cosign-config \
                     -o jsonpath='{.data.mode}' 2>/dev/null || echo "keyed")"
     [ -n "$cosign_mode" ] || cosign_mode="keyed"
   fi

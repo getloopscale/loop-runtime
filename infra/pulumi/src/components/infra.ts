@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import { resourceName, bucketName } from "../core/naming";
@@ -46,7 +46,7 @@ export interface InfraOutputs {
   readonly staticCdnEndpoint: pulumi.Output<string>;
   /**
    * Bucket Velero stores K8s resource backups in. velero-backup-dr-plan T0.1.
-   * Versioned + protected in prod. Same LOOPZERO_SPACES_KEY/SECRET as other
+   * Versioned + protected in prod. Same LOOPRUNTIME_SPACES_KEY/SECRET as other
    * buckets (DO Spaces uses global API keys per account).
    */
   readonly veleroBackupsBucketName: pulumi.Output<string>;
@@ -69,7 +69,7 @@ export interface InfraOutputs {
  *
  * DigitalOcean is the only provider this stack has or will have: it is AS-IS
  * legacy retired at AM10, and the AWS re-platform lives in Terraform
- * (../loopzero-infra-live), not here. Any other name is a configuration error.
+ * (../loopruntime-infra-live), not here. Any other name is a configuration error.
  */
 export function resolveProvider(provider: CloudProvider): CloudProviderFactory {
   switch (provider) {
@@ -283,18 +283,18 @@ export function createInfra(config: PlatformStackConfig, orphans?: import("../co
   const storageEndpoints = factory.getStorageEndpoint({ region: config.region });
 
   // --- Container registry (platform images = DOCR) ---
-  // DOCR for platform and tenant images (loopzero-api, loopzero-tenant-controller, loopzero-cloud,
-  // loopzero-dashboard, and every tenant build).
+  // DOCR for platform and tenant images (loopruntime-api, loopruntime-tenant-controller, loopruntime-cloud,
+  // loopruntime-dashboard, and every tenant build).
   //
   // ADR-0015: Adopt-or-Create policy for live stateful resources. DO allows ONE
   // registry per account, so we adopt whatever name already exists rather than
   // recreating with a project-derived name. `lookupExistingRegistry()` returns
-  // the live registry name (e.g. "loopzero-system") which the provider uses as both
+  // the live registry name (e.g. "loopruntime-system") which the provider uses as both
   // the resource name and Pulumi import ID. Falls back to the canonical
-  // "loopzero-system" name for fresh accounts (matches bootstrap-registry.ts:44
+  // "loopruntime-system" name for fresh accounts (matches bootstrap-registry.ts:44
   // imagePullSecret name).
   const registry = factory.createContainerRegistry({
-    name: orphans?.registryImportId ?? "loopzero-system",
+    name: orphans?.registryImportId ?? "loopruntime-system",
     tier: "professional",
     region: config.region,
   });

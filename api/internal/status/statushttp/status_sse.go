@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statushttp
 
@@ -17,7 +17,7 @@ import (
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	"github.com/getloopscale/loop-runtime/api/internal/sse"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // T2.1 of plan 2026-06-15-j18-t1.3.b-sse-pg-notify-backend v1.1.
@@ -116,13 +116,13 @@ func NewStatusSSEHandler(projects StatusProjectStore, eventStore StatusSSEEventS
 func (h *StatusSSEHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -130,7 +130,7 @@ func (h *StatusSSEHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// feedback_j19_runtime_logs_stream_missing_env_param. Fail fast 400.
 	env := r.URL.Query().Get("env")
 	if env == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("env query parameter is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("env query parameter is required"))
 		return
 	}
 
@@ -138,11 +138,11 @@ func (h *StatusSSEHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// (existence-leak-prevention). Same pattern as status.go + metrics_proxy.go.
 	project, err := h.projects.GetByName(r.Context(), uc.TenantID, name)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 		return
 	}
 

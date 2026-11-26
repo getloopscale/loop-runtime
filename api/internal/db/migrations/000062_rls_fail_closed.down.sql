@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- Rollback of 000062. Drops the isolation policies and releases FORCE.
 --
@@ -11,7 +11,7 @@
 --
 -- If a query started returning zero rows after 000062, the cause is almost
 -- always a caller that never set `app.tenant_id`. The fix is to set it in
--- that caller, or to run the workload as `loopzero_worker` (which the
+-- that caller, or to run the workload as `loopruntime_worker` (which the
 -- cross-tenant policy covers). Reverting hides the bug and reopens the
 -- exposure for every other caller at the same time.
 
@@ -28,7 +28,7 @@ DECLARE
         'metering_cursor', 'preview_environments', 'preview_slot',
         'project_repositories', 'projects', 'release_app_attestations',
         'releases', 'secrets', 'subscriptions', 'tenant_members',
-        'tenant_tombstones', 'tenants_pending_deletion', 'loopzero_api_keys',
+        'tenant_tombstones', 'tenants_pending_deletion', 'loopruntime_api_keys',
         'usage_records', 'workspace_webhook_deliveries', 'workspace_webhooks'
     ];
 BEGIN

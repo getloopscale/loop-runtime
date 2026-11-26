@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package versionhttp serves the build-metadata endpoints — `/api/v1/version`,
 // `/v1/version` and the fleet variant.
@@ -53,7 +53,7 @@ type VersionResponse struct {
 // fleetVersionResponse is the schema the dashboard's status panel consumes.
 //
 // The field names are NOT ours to choose: they are the contract
-// loopzero-cloud/internal/serviceversions/probe.go already speaks with five services
+// loopruntime-cloud/internal/serviceversions/probe.go already speaks with five services
 // (`version` + `built_at`). The engine was left off the panel for diverging from
 // it in both path AND field name.
 type fleetVersionResponse struct {

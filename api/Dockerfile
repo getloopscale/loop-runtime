@@ -4,14 +4,14 @@ WORKDIR /workspace
 ENV GOWORK=off
 ENV GOPRIVATE=github.com/getloopscale/*
 
-# loopzero-contracts is a PINNED published module (M5 version-pin cutover — api/go.mod
+# loopruntime-contracts is a PINNED published module (M5 version-pin cutover — api/go.mod
 # requires github.com/getloopscale/contracts v0.6.0, NO replace). The private module
 #
 # FIXED 2026-08-08: this file authenticated for `getloopscale/` while api/go.mod
 # started requesting `getloopscale/` in commit f813b367 (2026-08-06). The URL rewrite did not
-# match the requested module, so git fetched loopzero-contracts WITHOUT authentication — and
+# match the requested module, so git fetched loopruntime-contracts WITHOUT authentication — and
 # GitHub answers an unauthenticated request for a private repo with "not found", the same
-# message as for a repo that does not exist. The loopzero-api image build broke on the first
+# message as for a repo that does not exist. The loopruntime-api image build broke on the first
 # push to develop after the migration. Both orgs stay covered while the redirect exists.
 # is fetched via a short-lived token mounted as a buildx secret (id=gomod_token); the
 # token is NEVER written to an image layer. git is required for the module VCS fetch.
@@ -46,7 +46,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
       echo "FATAL: go mod download failed." >&2; \
       if [ ! -s /run/secrets/gomod_token ]; then \
         echo "  PROBABLE CAUSE: the gomod_token secret arrived EMPTY, so the URL rewrite above was" >&2; \
-        echo "  SKIPPED (the if is silent by design) and git fetched loopzero-contracts WITHOUT authentication." >&2; \
+        echo "  SKIPPED (the if is silent by design) and git fetched loopruntime-contracts WITHOUT authentication." >&2; \
         echo "  GitHub answers an unauthenticated request for a PRIVATE repo with Repository-not-found —" >&2; \
         echo "  the SAME message as for a repo that does not exist. That is why the error sends you looking" >&2; \
         echo "  for a repository that EXISTS, and why this build failed 10 times in a row without the cause showing." >&2; \
@@ -70,9 +70,9 @@ COPY api/ ./api/
 # Defaults kept on purpose: a local build without args still compiles, and the
 # endpoint reports `unknown` instead of a plausible-but-false sha, which an external
 # verifier would read as "up to date".
-ARG LOOPZERO_VERSION=dev
-ARG LOOPZERO_COMMIT=unknown
-ARG LOOPZERO_BUILD_DATE=unknown
+ARG LOOPRUNTIME_VERSION=dev
+ARG LOOPRUNTIME_COMMIT=unknown
+ARG LOOPRUNTIME_BUILD_DATE=unknown
 
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -84,17 +84,17 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
     # `-X` on a nonexistent symbol is a NO-OP that exits 0 — the linker does not warn —
     # so the build passed and the binary kept the default. Measured live on
     # 2026-08-16: the engine answered `{"version":"dev","built_at":"unknown"}`, and the
-    # loopzero-cloud fleet status contract reads exactly those two values as the sentinel
+    # loopruntime-cloud fleet status contract reads exactly those two values as the sentinel
     # for "the deploy layer did not inject the provenance".
     #
     # The `ldflag-symbols` gate resolves these paths against the go.mod files and the
     # AST, so the next package move fails the gate instead of breaking silently.
     LDFLAGS="-s -w \
-      -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionTag=${LOOPZERO_VERSION} \
-      -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionCommit=${LOOPZERO_COMMIT} \
-      -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionBuildDate=${LOOPZERO_BUILD_DATE}" \
-    && cd api && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-api ./cmd/ \
-    && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopzero-controller ./cmd/controller/
+      -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionTag=${LOOPRUNTIME_VERSION} \
+      -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionCommit=${LOOPRUNTIME_COMMIT} \
+      -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionBuildDate=${LOOPRUNTIME_BUILD_DATE}" \
+    && cd api && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopruntime-api ./cmd/ \
+    && CGO_ENABLED=0 go build -trimpath -ldflags="$LDFLAGS" -o /loopruntime-controller ./cmd/controller/
 
 # Build migrate from source (same Go toolchain) to avoid CVEs in pre-compiled binary.
 FROM golang:1.26.11-alpine3.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a AS migrate-builder
@@ -106,12 +106,12 @@ RUN --mount=type=cache,target=/root/go/pkg/mod \
 FROM alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039b444be8e5d638f7abbada189971eb2
 
 LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime"
-LABEL org.opencontainers.image.title="loopzero-api"
-LABEL org.opencontainers.image.description="LoopZero PaaS API server"
+LABEL org.opencontainers.image.title="loopruntime-api"
+LABEL org.opencontainers.image.description="LoopRuntime PaaS API server"
 
-RUN apk add --no-cache ca-certificates git && adduser -D -u 1000 loopzero
-COPY --from=builder /loopzero-api /loopzero-api
-COPY --from=builder /loopzero-controller /loopzero-controller
+RUN apk add --no-cache ca-certificates git && adduser -D -u 1000 loopruntime
+COPY --from=builder /loopruntime-api /loopruntime-api
+COPY --from=builder /loopruntime-controller /loopruntime-controller
 COPY --from=migrate-builder /go/bin/migrate /usr/local/bin/migrate
 COPY --from=builder /workspace/api/internal/db/migrations/ /migrations/
 USER 1000
@@ -120,4 +120,4 @@ EXPOSE 8080 9090 9091
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:8080/healthz || exit 1
 
-CMD ["/loopzero-api"]
+CMD ["/loopruntime-api"]

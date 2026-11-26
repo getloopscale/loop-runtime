@@ -1,19 +1,19 @@
-# ServiceMonitor instructs Prometheus to scrape the LoopZero API /metrics endpoint.
+# ServiceMonitor instructs Prometheus to scrape the LoopRuntime API /metrics endpoint.
 # kube-prometheus-stack auto-discovers ServiceMonitors when the release label matches.
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: loopzero-api
+  name: loopruntime-api
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   namespaceSelector:
     matchNames:
-      - loopzero-system
+      - loopruntime-system
   selector:
     matchLabels:
-      app: loopzero-api
+      app: loopruntime-api
   endpoints:
     - port: metrics
       path: /metrics

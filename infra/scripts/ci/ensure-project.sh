@@ -13,7 +13,7 @@ PROJECT_NAME="${PROJECT_NAME:-acme-platform}"
 GH_TOKEN="${GH_TOKEN:-$(gh auth token 2>/dev/null || true)}"
 if [ -z "$GH_TOKEN" ]; then
   echo "WARNING: No GitHub token found. Run 'gh auth login' first."
-  echo "  Skipping project creation — 'loopzero deploy' will work after 'loopzero login' + manual project creation."
+  echo "  Skipping project creation — 'loopruntime deploy' will work after 'loopruntime login' + manual project creation."
   exit 0
 fi
 

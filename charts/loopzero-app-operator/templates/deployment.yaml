@@ -1,9 +1,0 @@
-{{- /* The Deployment skeleton is loopzero-common.operatorDeployment; this chart
-     supplies only its hooks (templates/_deployment_hooks.tpl). */ -}}
-{{- include "loopzero-common.operatorDeployment" (dict
-      "root" .
-      "checksum" "loopzero-common.checksumAnnotationsConfigOnly"
-      "envFrom" (include "loopzero-app-operator.envFrom" .)
-      "env" (include "loopzero-app-operator.env" .)
-      "volumeMounts" (include "loopzero-app-operator.volumeMounts" .)
-      "volumes" (include "loopzero-app-operator.volumes" .)) }}

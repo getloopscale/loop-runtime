@@ -9,14 +9,14 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-operator-cutover-alerts
+  name: loopruntime-operator-cutover-alerts
   namespace: monitoring
   labels:
     release: monitoring
-    loopzero.io/component: operator-split
+    runtime.getloopscale.com/component: operator-split
 spec:
   groups:
-    - name: loopzero.operator-cutover
+    - name: loopruntime.operator-cutover
       rules:
         # Restart rate watcher per split operator deployment. The metric
         # `kube_pod_container_status_restarts_total` is provided by
@@ -25,15 +25,15 @@ spec:
           expr: |
             sum by (deployment) (
               kube_deployment_status_replicas_ready{
-                namespace="loopzero-system",
-                deployment=~"loopzero-(tenant|app|preview|platform)-operator"
+                namespace="loopruntime-system",
+                deployment=~"loopruntime-(tenant|app|preview|platform)-operator"
               }
             ) == 0
           for: 30s
           labels:
             severity: critical
-            loopzero_component: operator-split
-            loopzero_phase: cutover-active
+            loopruntime_component: operator-split
+            loopruntime_phase: cutover-active
           annotations:
             summary: "Zero-Ready window for {{ $labels.deployment }} > 30s"
             runbook: "docs/runbooks.md"
@@ -45,5 +45,5 @@ spec:
               version of that invariant.
 
               Investigate as an OOM / CrashLoop of that operator:
-              `kubectl -n loopzero-system describe deploy {{ $labels.deployment }}`
+              `kubectl -n loopruntime-system describe deploy {{ $labels.deployment }}`
               and the previous container's logs.

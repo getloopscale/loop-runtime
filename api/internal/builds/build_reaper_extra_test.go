@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -49,8 +49,8 @@ func TestReaperReason_BuildTimeout(t *testing.T) {
 	if !strings.Contains(lower, "likely cause") {
 		t.Errorf("expected `Likely cause` phrase, got %q", reason)
 	}
-	if !strings.Contains(lower, "loopzero logs") {
-		t.Errorf("expected `loopzero logs` next-step hint, got %q", reason)
+	if !strings.Contains(lower, "loopruntime logs") {
+		t.Errorf("expected `loopruntime logs` next-step hint, got %q", reason)
 	}
 }
 
@@ -92,8 +92,8 @@ func TestReaperReason_UnknownEvent(t *testing.T) {
 		t.Errorf("expected generic timeout reason, got %q", reason)
 	}
 	// Even the fallback must still point at a CLI command.
-	if !strings.Contains(strings.ToLower(reason), "loopzero logs") {
-		t.Errorf("fallback must still suggest `loopzero logs`, got %q", reason)
+	if !strings.Contains(strings.ToLower(reason), "loopruntime logs") {
+		t.Errorf("fallback must still suggest `loopruntime logs`, got %q", reason)
 	}
 }
 

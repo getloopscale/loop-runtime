@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -24,7 +24,7 @@ func bootstrapRun(t *testing.T) []string {
 	if err := os.MkdirAll(lib, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "cmd", "loopzero-ops"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "cmd", "loopruntime-ops"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	src, err := os.ReadFile(filepath.Join(repoRoot(), "infra", "helmfile", "scripts", "bootstrap-aws-clusters.sh"))
@@ -46,7 +46,7 @@ func bootstrapRun(t *testing.T) []string {
 		t.Fatal(err)
 	}
 	writeExec(t, filepath.Join(bin, "kubectl"), "#!/usr/bin/env bash\ncat >/dev/null 2>&1 || true\necho apiVersion: v1\n")
-	// go build -o <bin> .: leaves a loopzero-ops that does nothing.
+	// go build -o <bin> .: leaves a loopruntime-ops that does nothing.
 	writeExec(t, filepath.Join(bin, "go"), "#!/usr/bin/env bash\nwhile [[ $# -gt 0 ]]; do if [[ $1 == -o ]]; then printf '#!/usr/bin/env bash\\n' >\"$2\"; chmod +x \"$2\"; fi; shift; done\n")
 
 	cmd := exec.Command("bash", filepath.Join(scripts, "bootstrap-aws-clusters.sh"), "post-core")
@@ -107,7 +107,7 @@ func writeExec(t *testing.T, path, content string) {
 	}
 }
 
-// The broker-tokens phase seeds one secret-fetch broker token per cell (`loopzero-ops
+// The broker-tokens phase seeds one secret-fetch broker token per cell (`loopruntime-ops
 // seed broker`) through the contexts this script names after the cell ids, not through
 // the k3d ones the seed defaults to.
 func TestBrokerTokensAreSeededThroughContextsNamedAfterTheCells(t *testing.T) {
@@ -116,7 +116,7 @@ func TestBrokerTokensAreSeededThroughContextsNamedAfterTheCells(t *testing.T) {
 	if err := os.MkdirAll(scripts, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "cmd", "loopzero-ops"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "cmd", "loopruntime-ops"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	src, err := os.ReadFile(filepath.Join(repoRoot(), "infra", "helmfile", "scripts", "bootstrap-aws-clusters.sh"))
@@ -129,10 +129,10 @@ func TestBrokerTokensAreSeededThroughContextsNamedAfterTheCells(t *testing.T) {
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// go build -o <bin> .: leaves a loopzero-ops that records its arguments and whether
-	// LOOPZERO_CELL_CONTEXT_PREFIX was set, and to what.
+	// go build -o <bin> .: leaves a loopruntime-ops that records its arguments and whether
+	// LOOPRUNTIME_CELL_CONTEXT_PREFIX was set, and to what.
 	opsRecorder := `#!/usr/bin/env bash
-echo "loopzero-ops prefix=${LOOPZERO_CELL_CONTEXT_PREFIX-unset} core=${CORE_CONTEXT-unset} $*" >>` + calls + `
+echo "loopruntime-ops prefix=${LOOPRUNTIME_CELL_CONTEXT_PREFIX-unset} core=${CORE_CONTEXT-unset} $*" >>` + calls + `
 `
 	opsFile := filepath.Join(root, "ops-recorder")
 	if err := os.WriteFile(opsFile, []byte(opsRecorder), 0o644); err != nil {
@@ -149,7 +149,7 @@ echo "loopzero-ops prefix=${LOOPZERO_CELL_CONTEXT_PREFIX-unset} core=${CORE_CONT
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.TrimSpace(string(data)); got != "loopzero-ops prefix= core=core seed broker" {
-		t.Errorf("broker-tokens ran %q, want `seed broker` with LOOPZERO_CELL_CONTEXT_PREFIX set empty and CORE_CONTEXT=core", got)
+	if got := strings.TrimSpace(string(data)); got != "loopruntime-ops prefix= core=core seed broker" {
+		t.Errorf("broker-tokens ran %q, want `seed broker` with LOOPRUNTIME_CELL_CONTEXT_PREFIX set empty and CORE_CONTEXT=core", got)
 	}
 }

@@ -20,19 +20,19 @@ metadata:
   name: cosign-fulcio-kill
   namespace: chaos-mesh
   labels:
-    loopzero.io/chaos-class: pod
-    loopzero.io/component: sigstore
-    loopzero.io/plan: tenant-build-pipeline-gaps-closure
+    runtime.getloopscale.com/chaos-class: pod
+    runtime.getloopscale.com/component: sigstore
+    runtime.getloopscale.com/plan: tenant-build-pipeline-gaps-closure
   annotations:
     # Mandatory chaos-test SKILL annotations
-    loopzero.io/hypothesis: |
+    runtime.getloopscale.com/hypothesis: |
       Killing Fulcio pod during active build causes cosign-sign step to fail
       CLEANLY with typed error CHAIN_BROKEN. Build Workflow exits non-zero,
       API marks build FAILED, NO image pushed to DOCR (silent unsigned push
       would be a security regression).
-    loopzero.io/slo-query: |
-      sum(rate(loopzero_cosign_sign_failure_total{reason="fulcio_unreachable"}[1m])) > 0
-    loopzero.io/dod-test: |
+    runtime.getloopscale.com/slo-query: |
+      sum(rate(loopruntime_cosign_sign_failure_total{reason="fulcio_unreachable"}[1m])) > 0
+    runtime.getloopscale.com/dod-test: |
       During chaos window: at least 1 build attempts cosign-sign + fails
       cleanly. No unsigned image appears in DOCR (verify via:
       cosign verify --certificate-identity ... registry/image:tag → fails).
@@ -41,8 +41,8 @@ metadata:
     # v1.1 EC-NEW-3: chaos-test SKILL pre-flight skips this scenario if
     # prerequisite not satisfied. Without this, manifest runs against empty
     # selector → "0 pods affected" → false-positive PASS (no signal).
-    loopzero.io/prerequisite: "sigstore-active"
-    loopzero.io/prerequisite-check: |
+    runtime.getloopscale.com/prerequisite: "sigstore-active"
+    runtime.getloopscale.com/prerequisite-check: |
       kubectl get pods -n sigstore-system -l app.kubernetes.io/name=fulcio \
         --field-selector=status.phase=Running --no-headers | wc -l
       # Expected: > 0 (Fulcio Running). If 0, skip with explicit log.

@@ -19,7 +19,7 @@ title: "Option B — Deploy ESO Controller in mgmt cluster"
 
 ## Background — iter 31 architectural finding
 
-LIVE pre-flight 2026-06-10 14:11Z discovered: `kubectl get pods -n external-secrets` in `k3d-loopzero-core` returns no resources. ESO controller deployed only in workload + runtime-2 clusters (per `infra/helmfile/cell.helmfile.yaml.gotmpl` line 108-110).
+LIVE pre-flight 2026-06-10 14:11Z discovered: `kubectl get pods -n external-secrets` in `k3d-loopruntime-core` returns no resources. ESO controller deployed only in workload + runtime-2 clusters (per `infra/helmfile/cell.helmfile.yaml.gotmpl` line 108-110).
 
 Plan T2.4 ESO ClusterSecretStore template + iter 25 dev-public overlay both assumed ESO would be in mgmt. The CSS reconcile flow requires ESO controller in the same cluster as the OpenBao server it reads from. Under Option (c) (OpenBao in mgmt), full T4.1 6/6 scenarios cannot succeed without ESO ALSO in mgmt.
 
@@ -33,7 +33,7 @@ Plan T2.4 ESO ClusterSecretStore template + iter 25 dev-public overlay both assu
 - Minimal helmfile diff (1 repo + 1 release)
 - Identical ESO version (0.14.3) across all clusters — no version drift
 - ESO upgrade path stays unified (Renovate PR bumps both)
-- Works with existing `loopzero-external-secrets` umbrella chart (the OCI-published chart that wraps ESO with LoopZero CRDs)
+- Works with existing `loopruntime-external-secrets` umbrella chart (the OCI-published chart that wraps ESO with LoopRuntime CRDs)
 
 **Cons:**
 - 2 ESO controllers running cluster-wide (mgmt + workload) — slight resource overhead (~50m CPU + ~64Mi RAM per controller, doubled)
@@ -62,14 +62,14 @@ Plan T2.4 ESO ClusterSecretStore template + iter 25 dev-public overlay both assu
 
 # Step B1.2 — Apply the new release ONLY (idempotent — no-op for
 # existing 44 releases under `-l name=external-secrets` filter)
-helmfile -e dev-public --kube-context k3d-loopzero-core --selector name=external-secrets sync
+helmfile -e dev-public --kube-context k3d-loopruntime-core --selector name=external-secrets sync
 
 # Step B1.3 — Wait for ESO controller pods Ready
-kubectl --context k3d-loopzero-core -n external-secrets wait \
+kubectl --context k3d-loopruntime-core -n external-secrets wait \
   --for=condition=Available deployment --all --timeout=120s
 
 # Step B1.4 — Verify CRDs installed (ClusterSecretStore, ExternalSecret)
-kubectl --context k3d-loopzero-core get crd \
+kubectl --context k3d-loopruntime-core get crd \
   clustersecretstores.external-secrets.io \
   externalsecrets.external-secrets.io
 ```
@@ -78,24 +78,24 @@ kubectl --context k3d-loopzero-core get crd \
 
 ```bash
 # Expected: 2 pods Running (controller + cert-controller)
-kubectl --context k3d-loopzero-core get pods -n external-secrets
+kubectl --context k3d-loopruntime-core get pods -n external-secrets
 
 # Expected: STATUS=Running 1/1 for both
 ```
 
 After B1 succeeds, proceed with runbook step 2.3.bis (ESO ClusterSecretStore enable) — which now CAN reconcile because ESO is local to the same cluster as OpenBao.
 
-### B2 — Deploy the `loopzero-external-secrets` umbrella chart in mgmt
+### B2 — Deploy the `loopruntime-external-secrets` umbrella chart in mgmt
 
-The OCI-published `loopzero-external-secrets` chart bundles ESO + LoopZero CRDs (vault-INT P0 closure). It exposes the iter 25 `openbaoTransit.*` values block directly + ships its own ExternalSecret CRs for loopzero-api/loopzero-cloud/operators.
+The OCI-published `loopruntime-external-secrets` chart bundles ESO + LoopRuntime CRDs (vault-INT P0 closure). It exposes the iter 25 `openbaoTransit.*` values block directly + ships its own ExternalSecret CRs for loopruntime-api/loopruntime-cloud/operators.
 
 **Pros:**
-- Integrates with the existing iter 25 dev-public overlay (`infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl`) without modification
+- Integrates with the existing iter 25 dev-public overlay (`infra/helmfile/values/dev-public/loopruntime-external-secrets.yaml.gotmpl`) without modification
 - Brings the J-22 ClusterSecretStore CR template along as part of the chart (no separate apply step)
 
 **Cons:**
-- The `loopzero-external-secrets` chart includes ESO as a subchart dependency — extra resource overhead than B1
-- Adds 13 ExternalSecret CRs that target loopzero-api/loopzero-cloud/operators — these will be PENDING until OpenBao paths are populated, may surface as noise
+- The `loopruntime-external-secrets` chart includes ESO as a subchart dependency — extra resource overhead than B1
+- Adds 13 ExternalSecret CRs that target loopruntime-api/loopruntime-cloud/operators — these will be PENDING until OpenBao paths are populated, may surface as noise
 
 **Time estimate:** ~10min (chart deploy + CR reconcile + cleanup of PENDING noise)
 
@@ -118,13 +118,13 @@ Keep ESO in workload cluster + design an ExternalSecret CR pattern where cell-0-
 
 ### B4 — Skip ESO entirely, dashboard reads PG directly (architectural pivot)
 
-Bypass the ESO sync entirely. Have loopzero-cloud read decrypted secrets directly from PG (with transit decrypt called server-side at deploy time, injecting plaintext into the Deployment spec at apply time).
+Bypass the ESO sync entirely. Have loopruntime-cloud read decrypted secrets directly from PG (with transit decrypt called server-side at deploy time, injecting plaintext into the Deployment spec at apply time).
 
 **Pros:** no ESO controller, no ClusterSecretStore, no cross-cluster anything.
 
 **Cons:**
 - Plaintext in K8s Deployment spec (rests in etcd) — violates the J-22 "no plaintext at rest" mandate
-- Deviation from the canonical ESO + CRD pattern the rest of LoopZero uses
+- Deviation from the canonical ESO + CRD pattern the rest of LoopRuntime uses
 - Adds decrypt call into the deploy hot path (latency)
 
 **Recommendation:** REJECTED — defeats the entire J-22 zero-leak design.
@@ -134,7 +134,7 @@ Bypass the ESO sync entirely. Have loopzero-cloud read decrypted secrets directl
 | Path | Time | Risk | Aligns with plan T2.4? | Recommended for dev-public iter 1? |
 |---|---|---|---|---|
 | B1 (upstream ESO in mgmt) | ~5min | Low | YES | **YES** |
-| B2 (loopzero-external-secrets in mgmt) | ~10min | Low-Medium | YES + extra noise | Prod cutover, not iter 1 |
+| B2 (loopruntime-external-secrets in mgmt) | ~10min | Low-Medium | YES + extra noise | Prod cutover, not iter 1 |
 | B3 (cross-cluster push) | ~3h+ | High | DEVIATION (re-design) | NO — future v2 |
 | B4 (skip ESO) | ~30min | CRITICAL | DEVIATION (mandate violation) | REJECTED |
 
@@ -161,13 +161,13 @@ If B1 deployment causes issues:
 
 ```bash
 # Remove ESO release
-helmfile -e dev-public --kube-context k3d-loopzero-core --selector name=external-secrets destroy
+helmfile -e dev-public --kube-context k3d-loopruntime-core --selector name=external-secrets destroy
 
 # Revert helmfile changes
 git restore infra/helmfile/core.helmfile.yaml.gotmpl
 
 # Verify clean state
-kubectl --context k3d-loopzero-core get ns external-secrets
+kubectl --context k3d-loopruntime-core get ns external-secrets
 # Expected: NotFound (or already-cleaning-up)
 ```
 
@@ -179,7 +179,7 @@ ESO controller in workload cluster is UNAFFECTED by this — the destroy is name
 - Operator runbook: [`docs/operations/openbao-transit-cutover-runbook.md`](./openbao-transit-cutover-runbook.md)
 - iter 31 architectural finding: runbook § "Architectural finding — ESO controller absent in mgmt"
 - iter 31 Option A subset LIVE script: `infra/tests/e2e/dev-public-secrets-write-path-subset_test.sh`
-- iter 25 dev-public ESO overlay: `infra/helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl`
+- iter 25 dev-public ESO overlay: `infra/helmfile/values/dev-public/loopruntime-external-secrets.yaml.gotmpl`
 - Runtime helmfile ESO release (canonical pattern source): `infra/helmfile/cell.helmfile.yaml.gotmpl` line 108-110
 - Productive-idle mandate: memory `feedback_productive_idle_runbook_preauthor_2026_06_10`
 - per-feature LIVE workflow mandate: memory `feedback_post_feature_live_regression_workflow_2026_06_09`

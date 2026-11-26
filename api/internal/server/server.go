@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -104,7 +104,7 @@ type Config struct {
 	ObjectUploader    sourceroutes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
 	SourceBucket      string                      // S3 bucket name for source bundles (env: SOURCE_BUCKET)
 	// EnvBlocklistMode is how a reserved services.json env key is handled on
-	// upload (config.Config.EnvBlocklistMode, env LOOPZERO_ENV_BLOCKLIST_MODE).
+	// upload (config.Config.EnvBlocklistMode, env LOOPRUNTIME_ENV_BLOCKLIST_MODE).
 	// The zero value enforces.
 	EnvBlocklistMode source.EnvBlocklistMode
 	EventStore       sse.EventStore
@@ -157,7 +157,7 @@ type Config struct {
 	GitHubWebhookHandler http.Handler
 	// Surfaces collects the router's registration decisions so a surface that
 	// was skipped for a missing dependency can be SEEN — via
-	// `loopzero_api_surface_enabled` — instead of only being discovered by whoever
+	// `loopruntime_api_surface_enabled` — instead of only being discovered by whoever
 	// hits the 404. Nil is legal and means "nobody is observing", which is what
 	// a focused unit test wants; the production path wires it. B-104.
 	Surfaces          *surfaces.Registry
@@ -189,7 +189,7 @@ type Config struct {
 	// through. Nil means an Authenticator with no secrets configured: user
 	// routes still validate tokens, and admin routes refuse everyone.
 	Auth *mwauth.Authenticator
-	// Maintenance is LOOPZERO_MAINTENANCE_MODE, parsed at boot. The zero value is off.
+	// Maintenance is LOOPRUNTIME_MAINTENANCE_MODE, parsed at boot. The zero value is off.
 	Maintenance policy.MaintenanceSetting
 }
 
@@ -269,7 +269,7 @@ type SecretsConfig struct {
 // AdminConfig carries the collaborators of the operator (admin) routes; each
 // route is mounted only when its collaborator is set.
 type AdminConfig struct {
-	// APIEnabled is the LOOPZERO_ADMIN_API feature flag: off, the admin routes
+	// APIEnabled is the LOOPRUNTIME_ADMIN_API feature flag: off, the admin routes
 	// answer 404 even to an authorized operator.
 	APIEnabled       bool
 	Evictor          placementhttp.TenantEvictor

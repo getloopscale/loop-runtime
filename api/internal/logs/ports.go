@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package logs is the build-log feature: reading a build's log lines, paged or
 // streamed. Its handlers live in logshttp and its Loki client in logs/loki; the
@@ -28,13 +28,13 @@ type LogQueryOpts struct {
 	// SinceSeconds restricts the query to entries newer than now()-SinceSeconds.
 	// Zero or negative means "no time-window restriction" — the Loki client
 	// applies its own default (last 1h). Beta Logs Gate Criterion 7: gives
-	// the operator a "--since 24h|7d|30d" knob on `loopzero logs`.
+	// the operator a "--since 24h|7d|30d" knob on `loopruntime logs`.
 	SinceSeconds int64
 	// Debug toggles the LogQL filter that hides non-user-facing log
 	// lines. Plan J-17 Layer 3 (2026-06-06): user view (Debug=false)
-	// shows only lines emitted with the `::loopzero::` marker via the
-	// pipeline's wrapper (see api/internal/builds/argo/loopzero_log.go) — those
-	// are tagged in Loki with the `loopzero_phase` label. Debug=true
+	// shows only lines emitted with the `::loopruntime::` marker via the
+	// pipeline's wrapper (see api/internal/builds/argo/loopruntime_log.go) — those
+	// are tagged in Loki with the `loopruntime_phase` label. Debug=true
 	// bypasses the filter and returns every container line including
 	// main-container raw stdout. Reserved for operator troubleshooting;
 	// route handler must gate this with admin auth.

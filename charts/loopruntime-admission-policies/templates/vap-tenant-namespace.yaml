@@ -1,0 +1,63 @@
+{{- if .Values.vaps.tenantNamespace }}
+# ValidatingAdmissionPolicy: Tenant + Environment CRs canonical namespace.
+#
+# ADR-0018 v2 / T3.2 (MEET-ADR-0018 condition C6).
+#
+# Native VAP (K8s 1.30+, mgmt cluster pin is 1.32). Rejects any CREATE or
+# UPDATE of `runtime.getloopscale.com/v1` Tenant or Environment resources outside namespace
+# `loopruntime-system`. Defense-in-depth complement to T3.1 (operator/API code
+# const) — closes the user-side write surface (kubectl apply by admins,
+# server-side apply, future operator drift).
+#
+# Critical condition C6: status subresource updates MUST pass through.
+# Tenant-controller writes Tenant/Environment .status every reconcile
+# cycle. If VAP intercepts status writes, the operator stops reconciling
+# (self-inflicted DoS — see production-design-reviewer Failure Mode #3).
+# We exclude status by checking `request.subResource` in the CEL
+# expression — empty string means main resource (CREATE/UPDATE of spec).
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: loopruntime-tenant-namespace-policy
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["runtime.getloopscale.com"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["tenants", "environments"]
+  matchConditions:
+    # C6 — status subresource bypass. CEL gotcha: `request.subResource`
+    # is OMITTED (not empty string) for main resource requests. Using
+    # `request.subResource == ""` raises `no such key: subResource`. The
+    # CEL-correct form is `!has(request.subResource)` for "main resource"
+    # detection (verified live against k3d 1.32.13 — see
+    # docs/decisions.md C6 amendment iter 6).
+    # We negate: match (run validation) only when there is NO subResource.
+    # Status/scale subresource updates by the controller pass through.
+    - name: skip-status-subresource
+      expression: '!has(request.subResource)'
+    # B-095 / anti-B33: never gate the platform's own controllers. Removing a
+    # finalizer is an UPDATE and this policy matches UPDATE, so without the
+    # exemption a CR whose namespace fails the validation becomes impossible to
+    # delete — the operator never finishes the deletion and the requeue never
+    # converges.
+    {{- include "loopruntime-admission.systemActorExemptions" . | nindent 4 }}
+  validations:
+    - expression: 'object.metadata.namespace == "loopruntime-system"'
+      messageExpression: '"LoopRuntime platform CRDs (Tenant, Environment) must be created in the platform namespace, not " + object.metadata.namespace + ". This is a protected namespace boundary; contact your platform admin."'
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: loopruntime-tenant-namespace-policy-binding
+spec:
+  policyName: loopruntime-tenant-namespace-policy
+  validationActions:
+    - Deny
+  # No namespaceSelector — policy applies cluster-wide. The CEL expression
+  # itself enforces the canonical namespace; we want the policy fired for
+  # ANY admission of these CRDs anywhere.
+{{- end }}

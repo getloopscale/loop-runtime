@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package buildshttp serves the build endpoints under /api/v1/builds: submitting a
 // build, listing and reading them, and the attestation, SBOM and statistics
@@ -36,7 +36,7 @@ import (
 	auditctx "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	"github.com/getloopscale/loop-runtime/api/internal/validation"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // AppAutoscalingInput mirrors the CLI autoscaling payload (field names match
@@ -146,7 +146,7 @@ type BuildStatusResponse struct {
 //
 // A `nil` AdmissionChecker is legal and means "no admission control" —
 // the handler will skip the check entirely, which is the current
-// production default until LOOPZERO_ADMISSION_CONTROL is flipped.
+// production default until LOOPRUNTIME_ADMISSION_CONTROL is flipped.
 type AdmissionChecker interface {
 	// Check returns (admitted, retryAfter, code, message). admitted=true
 	// means the build can proceed. When false, the handler returns a
@@ -182,7 +182,7 @@ type BuildHandler struct {
 // idempotent: existing envs return nil immediately; new envs create the
 // Environment CR + namespace + ArgoCD app and wait for phase=Active.
 // M2 v1.2 (2026-06-07): `project` propagates end-to-end so the
-// canonical 3-segment namespace `loopzero-<tenant>-<project>-<env>` is
+// canonical 3-segment namespace `loopruntime-<tenant>-<project>-<env>` is
 // computed and the Tenant CR spec.environments entry carries the
 // project field. Empty project preserves the legacy 2-segment path
 // for production-legacy callers (ADR D2).
@@ -271,7 +271,7 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -285,12 +285,12 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if terr := h.prepareEnvironment(ctx, uc.TenantID, req); terr != nil {
-		httpio.WriteLoopZeroError(w, terr)
+		httpio.WriteLoopRuntimeError(w, terr)
 		return
 	}
 	if refusal := h.admit(ctx, uc.TenantID); refusal != nil {
 		w.Header().Set("Retry-After", strconv.Itoa(refusal.retryAfterSeconds))
-		httpio.WriteLoopZeroError(w, refusal.err)
+		httpio.WriteLoopRuntimeError(w, refusal.err)
 		return
 	}
 
@@ -314,11 +314,11 @@ func (h *BuildHandler) Create(w http.ResponseWriter, r *http.Request) {
 // decodeBuildRequest decodes the body, resolves a redeploy into its source
 // build's parameters, and validates everything — at the system boundary,
 // before any environment is provisioned. A returned error is either a typed
-// *LoopZeroError or an orchestrator error; mapBuildError renders both.
+// *LoopRuntimeError or an orchestrator error; mapBuildError renders both.
 func (h *BuildHandler) decodeBuildRequest(ctx context.Context, r *http.Request, tenantID string) (createBuildRequest, error) {
 	var req createBuildRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return req, loopzeroerrors.ErrInvalidRequest
+		return req, loopruntimeerrors.ErrInvalidRequest
 	}
 	// Plan J-17 T6.4 — redeploy_of copies project, environment, commit and
 	// apps from the source build (tenant ownership and terminal status are
@@ -339,34 +339,34 @@ func (h *BuildHandler) decodeBuildRequest(ctx context.Context, r *http.Request, 
 // validateBuildRequest checks the request shape. App names and paths flow
 // into shell steps of the build pipeline, so they are validated here
 // (SEC-3 / CODE-001) against injection and traversal.
-func validateBuildRequest(req createBuildRequest) *loopzeroerrors.LoopZeroError {
+func validateBuildRequest(req createBuildRequest) *loopruntimeerrors.LoopRuntimeError {
 	if req.ProjectID == "" {
-		return loopzeroerrors.NewLoopZeroError("MISSING_FIELD", "Project name is required. Check your loopzero.yaml.")
+		return loopruntimeerrors.NewLoopRuntimeError("MISSING_FIELD", "Project name is required. Check your loopzero.yaml.")
 	}
 	if req.Environment == "" {
-		return loopzeroerrors.NewLoopZeroError("MISSING_FIELD", "Environment is required")
+		return loopruntimeerrors.NewLoopRuntimeError("MISSING_FIELD", "Environment is required")
 	}
 	// T1.3 follow-up (CR-2): an empty apps array would reach the workflow
 	// builder's invariant guard as a 500; it is a caller error.
 	if len(req.Apps) == 0 {
-		detail := "At least one app is required. Check your `.loopzero/services.json` for a `services:` array."
+		detail := "At least one app is required. Check your `.loopruntime/services.json` for a `services:` array."
 		if req.RedeployOf != "" {
-			// Red Team loopzero-cloud#126 — a redeploy has no local services.json
+			// Red Team loopruntime-cloud#126 — a redeploy has no local services.json
 			// to edit; name the source build instead.
 			detail = fmt.Sprintf("Source build %s has no apps to redeploy. Pick a build that completed with at least one app.", req.RedeployOf)
 		}
-		return loopzeroerrors.NewLoopZeroError("MISSING_FIELD", detail)
+		return loopruntimeerrors.NewLoopRuntimeError("MISSING_FIELD", detail)
 	}
 	// DA-10: the one environment-name rule.
 	if err := validation.ValidateEnvironmentName(req.Environment); err != nil {
-		return loopzeroerrors.NewLoopZeroError("INVALID_ENVIRONMENT", err.Error())
+		return loopruntimeerrors.NewLoopRuntimeError("INVALID_ENVIRONMENT", err.Error())
 	}
 	for _, app := range req.Apps {
 		if err := validation.ValidateAppName(app.Name); err != nil {
-			return loopzeroerrors.NewLoopZeroError("INVALID_APP_NAME", fmt.Sprintf("Invalid name for app: %s", err.Error()))
+			return loopruntimeerrors.NewLoopRuntimeError("INVALID_APP_NAME", fmt.Sprintf("Invalid name for app: %s", err.Error()))
 		}
 		if err := validation.ValidateAppPath(app.Path); err != nil {
-			return loopzeroerrors.NewLoopZeroError("INVALID_APP_PATH", fmt.Sprintf("Invalid path for app %q: %s", app.Name, err.Error()))
+			return loopruntimeerrors.NewLoopRuntimeError("INVALID_APP_PATH", fmt.Sprintf("Invalid path for app %q: %s", app.Name, err.Error()))
 		}
 	}
 	return nil
@@ -377,14 +377,14 @@ func validateBuildRequest(req createBuildRequest) *loopzeroerrors.LoopZeroError 
 // application) — a no-op for an existing one. V9 L20: secrets set before the
 // namespace existed are then resynced; a resync failure is logged, not fatal,
 // because a missing secret surfaces as a deploy failure the user can act on.
-func (h *BuildHandler) prepareEnvironment(ctx context.Context, tenantID string, req createBuildRequest) *loopzeroerrors.LoopZeroError {
+func (h *BuildHandler) prepareEnvironment(ctx context.Context, tenantID string, req createBuildRequest) *loopruntimeerrors.LoopRuntimeError {
 	if h.envEnsurer != nil {
 		if err := h.envEnsurer.EnsureEnvironment(ctx, tenantID, req.ProjectID, req.Environment); err != nil {
-			var te *loopzeroerrors.LoopZeroError
+			var te *loopruntimeerrors.LoopRuntimeError
 			if errors.As(err, &te) {
 				return te
 			}
-			return loopzeroerrors.NewLoopZeroError("ENV_PROVISION_FAILED",
+			return loopruntimeerrors.NewLoopRuntimeError("ENV_PROVISION_FAILED",
 				fmt.Sprintf("Failed to provision environment %q: %s", req.Environment, err.Error()))
 
 		}
@@ -400,7 +400,7 @@ func (h *BuildHandler) prepareEnvironment(ctx context.Context, tenantID string, 
 
 // admissionRefusal is a build the admission gate turned away.
 type admissionRefusal struct {
-	err               *loopzeroerrors.LoopZeroError
+	err               *loopruntimeerrors.LoopRuntimeError
 	retryAfterSeconds int
 }
 
@@ -432,7 +432,7 @@ func (h *BuildHandler) admit(ctx context.Context, tenantID string) *admissionRef
 	if secs < 1 {
 		secs = 1
 	}
-	return &admissionRefusal{err: loopzeroerrors.NewLoopZeroError(code, message), retryAfterSeconds: secs}
+	return &admissionRefusal{err: loopruntimeerrors.NewLoopRuntimeError(code, message), retryAfterSeconds: secs}
 }
 
 // Get handles GET /api/v1/builds/:id.
@@ -444,7 +444,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -458,7 +458,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if buildTenantID != uc.TenantID {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrBuildNotFound)
 		return
 	}
 
@@ -471,7 +471,7 @@ func (h *BuildHandler) Get(w http.ResponseWriter, r *http.Request) {
 		statuses, err := h.releases.LatestReleaseStatuses(ctx, uc.TenantID, []string{buildID})
 		if err != nil {
 			h.logger.Error("deploy status lookup failed", "build_id", buildID, "tenant_id", uc.TenantID, "error", err)
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 			return
 		}
 		resp.DeployStatus = DeployStatusOf(statuses[buildID])
@@ -490,7 +490,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -504,7 +504,7 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if buildTenantID != uc.TenantID {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrBuildNotFound)
 		return
 	}
 
@@ -520,29 +520,29 @@ func (h *BuildHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 
 // mapBuildError maps orchestrator errors to HTTP responses.
 //
-// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loopzero-cloud#34):
+// Sprint 6 plan qa-sprint6-cleanup-2026-06-25 T3.1 (closes loopruntime-cloud#34):
 // extends the ladder with build.AsSubmitBuildError dispatch BEFORE the
 // fallback so wrap-site discriminated errors from BuildOrchestrator.SubmitBuild
 // (workflow / project ensure / DB write / app normalize / unknown) surface
 // with reason-specific messages composed with the verbatim cause — instead
 // of the generic catchall "Something went wrong" that #34 complained about.
-// EC-3 preserved: DEPLOY_IN_PROGRESS short-circuit + typed *LoopZeroError
+// EC-3 preserved: DEPLOY_IN_PROGRESS short-circuit + typed *LoopRuntimeError
 // dispatch order unchanged.
 // Sprint 8 plan qa-sprint8-cleanup-2026-06-25 T1.1: signature takes the
 // *http.Request so the SubmitBuildError branch can thread the request's
 // correlation ID into the user-facing message (trace-id fallback). Other
-// branches (typed *LoopZeroError + generic catchall) ignore r.
+// branches (typed *LoopRuntimeError + generic catchall) ignore r.
 func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if errors.As(err, &loopzeroErr) {
+	var loopruntimeErr *loopruntimeerrors.LoopRuntimeError
+	if errors.As(err, &loopruntimeErr) {
 		// DA-18: Override message for DEPLOY_IN_PROGRESS
-		if errors.Is(err, loopzeroerrors.ErrDeployInProgress) {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		if errors.Is(err, loopruntimeerrors.ErrDeployInProgress) {
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
 				"DEPLOY_IN_PROGRESS",
 				"A deploy is already in progress for this environment."))
 			return
 		}
-		httpio.WriteLoopZeroError(w, loopzeroErr)
+		httpio.WriteLoopRuntimeError(w, loopruntimeErr)
 		return
 	}
 
@@ -563,7 +563,7 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 		// gets a "Reference: <id>. Contact support if it persists." handle
 		// to the server-side log (closes the #35 Red Team original
 		// suggestion of separating client-facing from server-side cause).
-		httpio.WriteLoopZeroError(w, se.UserError(correlation.Read(r)))
+		httpio.WriteLoopRuntimeError(w, se.UserError(correlation.Read(r)))
 		return
 	}
 
@@ -577,5 +577,5 @@ func mapBuildError(w http.ResponseWriter, r *http.Request, err error) {
 	// Fallback for genuinely-unexpected errors (request decode, etc.).
 	// Sprint 6 narrowed the orchestrator surface so this only fires for
 	// errors that genuinely came from outside BuildOrchestrator.SubmitBuild.
-	httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+	httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 }

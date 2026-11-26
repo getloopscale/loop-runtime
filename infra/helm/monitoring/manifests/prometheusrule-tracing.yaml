@@ -4,15 +4,15 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-tracing
+  name: loopruntime-tracing
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopzero-tracing
+    - name: loopruntime-tracing
       rules:
-        - alert: LoopZeroTempoDown
+        - alert: LoopRuntimeTempoDown
           expr: 'up{job="tempo"} == 0'
           for: 2m
           labels:
@@ -20,9 +20,9 @@ spec:
           annotations:
             summary: "Grafana Tempo is down"
             description: "Tempo trace backend unreachable for 2+ minutes. Traces are being lost."
-            runbook: "Check pod status: kubectl -n loopzero-system get pods -l app.kubernetes.io/name=tempo"
+            runbook: "Check pod status: kubectl -n loopruntime-system get pods -l app.kubernetes.io/name=tempo"
 
-        - alert: LoopZeroTempoStorageHigh
+        - alert: LoopRuntimeTempoStorageHigh
           expr: |
             kubelet_volume_stats_used_bytes{persistentvolumeclaim=~".*tempo.*"}
             / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~".*tempo.*"}
@@ -35,7 +35,7 @@ spec:
             runbook: "docs/runbooks.md"
             description: "Tempo storage at {{ $value | humanizePercentage }}. Reduce retention or increase PVC."
 
-        - alert: LoopZeroOTelCollectorDown
+        - alert: LoopRuntimeOTelCollectorDown
           expr: 'up{job="otel-collector"} == 0'
           for: 2m
           labels:
@@ -43,9 +43,9 @@ spec:
           annotations:
             summary: "OTel Collector is down"
             description: "OTel Collector unreachable for 2+ minutes. All traces and OTel metrics are being lost."
-            runbook: "Check pod: kubectl -n loopzero-system get pods -l app.kubernetes.io/name=opentelemetry-collector"
+            runbook: "Check pod: kubectl -n loopruntime-system get pods -l app.kubernetes.io/name=opentelemetry-collector"
 
-        - alert: LoopZeroCollectorExportErrors
+        - alert: LoopRuntimeCollectorExportErrors
           expr: 'increase(otelcol_exporter_send_failed_spans_total[5m]) > 0'
           for: 5m
           labels:

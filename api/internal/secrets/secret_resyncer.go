@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -14,7 +14,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // namespaceTerminatingRetryWindow bounds how long ResyncEnv waits for a
@@ -68,8 +68,8 @@ type SecretK8sCreator interface {
 
 // ErrSecretResyncerMisconfigured is returned by a resyncer wired without its
 // Store or K8s creator.
-var ErrSecretResyncerMisconfigured = &loopzeroerrors.LoopZeroError{
-	Code:    loopzeroerrors.ErrInternalError.Code,
+var ErrSecretResyncerMisconfigured = &loopruntimeerrors.LoopRuntimeError{
+	Code:    loopruntimeerrors.ErrInternalError.Code,
 	Message: "secret resyncer: Store and K8s are required",
 }
 

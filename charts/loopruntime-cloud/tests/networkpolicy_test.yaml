@@ -1,0 +1,32 @@
+# helm-unittest: NetworkPolicy conditional rendering for loopruntime-cloud.
+# Plan T1.5.
+
+suite: networkpolicy toggle
+templates:
+  - networkpolicy.yaml
+
+tests:
+  - it: does NOT render NetworkPolicy when disabled
+    set:
+      networkPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders NetworkPolicy when enabled
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NetworkPolicy
+
+  - it: NetworkPolicy is networking.k8s.io/v1
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - isAPIVersion:
+          of: networking.k8s.io/v1
+      - isKind:
+          of: NetworkPolicy

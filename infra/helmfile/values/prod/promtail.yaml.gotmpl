@@ -7,13 +7,13 @@
 #
 # Per-env contract:
 #   - prod: cross-cluster push to DOKS internal LB
-#           `loki.loopzero-platform.internal:3100` (resolves via VPC DNS)
+#           `loki.loopruntime-platform.internal:3100` (resolves via VPC DNS)
 #   - pipeline_stages canonical inherits from chart-base scrapeConfigs
-#     which already includes ::loopzero:: marker extraction per J-17.
+#     which already includes ::loopruntime:: marker extraction per J-17.
 
 config:
   clients:
-    - url: http://loki.loopzero-platform.internal:3100/loki/api/v1/push
+    - url: http://loki.loopruntime-platform.internal:3100/loki/api/v1/push
       batchwait: 5s
       batchsize: 1048576
 

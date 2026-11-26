@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
@@ -15,14 +15,14 @@ export interface PrometheusArgs {
 
 /**
  * Prometheus — metrics collection with kube-state-metrics, node-exporter,
- * and Alertmanager. Includes LoopZero-specific alert rules.
+ * and Alertmanager. Includes LoopRuntime-specific alert rules.
  */
 export class Prometheus extends pulumi.ComponentResource {
   public readonly release: k8s.helm.v3.Release;
   public readonly ready: pulumi.Output<boolean>;
 
   constructor(name: string, args: PrometheusArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopzero:platform:Prometheus", name, {}, opts);
+    super("loopruntime:platform:Prometheus", name, {}, opts);
 
     const extraScrape = args.argoMetricsEndpoint
       ? args.argoMetricsEndpoint.apply((target) => `
@@ -62,21 +62,21 @@ export class Prometheus extends pulumi.ComponentResource {
           serverFiles: {
             "alerting_rules.yml": {
               groups: [{
-                name: "loopzero-platform",
+                name: "loopruntime-platform",
                 rules: [
                   {
-                    alert: "LoopZeroAPIDown",
-                    expr: 'up{job="loopzero-api"} == 0',
+                    alert: "LoopRuntimeAPIDown",
+                    expr: 'up{job="loopruntime-api"} == 0',
                     for: "1m",
                     labels: { severity: "critical" },
                     annotations: {
-                      summary: "LoopZero API is down",
-                      description: "LoopZero API unreachable for 1+ minute.",
+                      summary: "LoopRuntime API is down",
+                      description: "LoopRuntime API unreachable for 1+ minute.",
                     },
                   },
                   {
-                    alert: "LoopZeroDeployFailing",
-                    expr: 'increase(loopzero_api_request_duration_seconds_count{path="/api/v1/builds",status=~"5.."}[10m]) > 3',
+                    alert: "LoopRuntimeDeployFailing",
+                    expr: 'increase(loopruntime_api_request_duration_seconds_count{path="/api/v1/builds",status=~"5.."}[10m]) > 3',
                     for: "2m",
                     labels: { severity: "warning" },
                     annotations: {
@@ -85,8 +85,8 @@ export class Prometheus extends pulumi.ComponentResource {
                     },
                   },
                   {
-                    alert: "LoopZeroHighAPILatency",
-                    expr: 'histogram_quantile(0.95, rate(loopzero_api_request_duration_seconds_bucket{path!~"/api/v1/health.*|/api/v1/builds/.*/stream"}[5m])) > 2',
+                    alert: "LoopRuntimeHighAPILatency",
+                    expr: 'histogram_quantile(0.95, rate(loopruntime_api_request_duration_seconds_bucket{path!~"/api/v1/health.*|/api/v1/builds/.*/stream"}[5m])) > 2',
                     for: "5m",
                     labels: { severity: "warning" },
                     annotations: {
@@ -95,8 +95,8 @@ export class Prometheus extends pulumi.ComponentResource {
                     },
                   },
                   {
-                    alert: "LoopZeroPodCrashLooping",
-                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopzero-.*|loopzero-system"}[15m]) > 0',
+                    alert: "LoopRuntimePodCrashLooping",
+                    expr: 'rate(kube_pod_container_status_restarts_total{namespace=~"loopruntime-.*|loopruntime-system"}[15m]) > 0',
                     for: "5m",
                     labels: { severity: "warning" },
                     annotations: {
@@ -105,8 +105,8 @@ export class Prometheus extends pulumi.ComponentResource {
                     },
                   },
                   {
-                    alert: "LoopZeroDBPoolSaturation",
-                    expr: "(loopzero_postgres_connections_active / loopzero_postgres_pool_max_conns) > 0.8",
+                    alert: "LoopRuntimeDBPoolSaturation",
+                    expr: "(loopruntime_postgres_connections_active / loopruntime_postgres_pool_max_conns) > 0.8",
                     for: "5m",
                     labels: { severity: "warning" },
                     annotations: {
@@ -128,7 +128,7 @@ export class Prometheus extends pulumi.ComponentResource {
           },
           "kube-state-metrics": { fullnameOverride: "kube-state-metrics" },
           // node-exporter needs hostNetwork/hostPID/hostPath — incompatible with PSA baseline.
-          // Disabled in loopzero-system namespace. Deploy separately in kube-system if needed.
+          // Disabled in loopruntime-system namespace. Deploy separately in kube-system if needed.
           "prometheus-node-exporter": { enabled: false },
         },
       },

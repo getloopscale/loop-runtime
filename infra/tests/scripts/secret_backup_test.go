@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts_test
 
@@ -65,7 +65,7 @@ func TestSecretBackupIsRestorableBecauseServerFieldsAreStripped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("backup failed: %v\n%s", err, out)
 	}
-	files, _ := filepath.Glob(filepath.Join(home, ".loopzero", "backups", "build-secrets-dev-*.yaml"))
+	files, _ := filepath.Glob(filepath.Join(home, ".loopruntime", "backups", "build-secrets-dev-*.yaml"))
 	if len(files) != 1 {
 		t.Fatalf("want one backup file, got %v\n%s", files, out)
 	}
@@ -89,13 +89,13 @@ func TestSecretBackupWritesNothingWhenNoSecretExists(t *testing.T) {
 	home := t.TempDir()
 
 	// Act
-	out, err := runBackup(t, home, "runtime-secrets-cell-0-dev", "loopzero-system/cloudflared-tunnel-token")
+	out, err := runBackup(t, home, "runtime-secrets-cell-0-dev", "loopruntime-system/cloudflared-tunnel-token")
 
 	// Assert — a first install has nothing to back up, and that is not an error.
 	if err != nil {
 		t.Fatalf("backup of absent Secrets failed: %v\n%s", err, out)
 	}
-	if files, _ := filepath.Glob(filepath.Join(home, ".loopzero", "backups", "*.yaml")); len(files) != 0 {
+	if files, _ := filepath.Glob(filepath.Join(home, ".loopruntime", "backups", "*.yaml")); len(files) != 0 {
 		t.Errorf("want no backup file, got %v", files)
 	}
 }

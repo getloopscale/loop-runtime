@@ -71,7 +71,7 @@
       "targetBlank": false,
       "title": "Platform Overview",
       "type": "link",
-      "url": "/d/loopzero-platform-overview"
+      "url": "/d/loopruntime-platform-overview"
     },
     {
       "asDropdown": false,
@@ -82,7 +82,7 @@
       "targetBlank": false,
       "title": "Build Pipeline",
       "type": "link",
-      "url": "/d/loopzero-build-pipeline"
+      "url": "/d/loopruntime-build-pipeline"
     },
     {
       "asDropdown": false,
@@ -93,7 +93,7 @@
       "targetBlank": false,
       "title": "Per-Tenant Health",
       "type": "link",
-      "url": "/d/loopzero-per-tenant"
+      "url": "/d/loopruntime-per-tenant"
     },
     {
       "asDropdown": false,
@@ -104,7 +104,7 @@
       "targetBlank": false,
       "title": "Drift Detection",
       "type": "link",
-      "url": "/d/loopzero-drift-detection"
+      "url": "/d/loopruntime-drift-detection"
     },
     {
       "asDropdown": false,
@@ -115,7 +115,7 @@
       "targetBlank": false,
       "title": "Failure Investigation",
       "type": "link",
-      "url": "/d/loopzero-failure-investigation"
+      "url": "/d/loopruntime-failure-investigation"
     },
     {
       "asDropdown": false,
@@ -126,7 +126,7 @@
       "targetBlank": false,
       "title": "Component Inventory",
       "type": "link",
-      "url": "/d/loopzero-component-inventory"
+      "url": "/d/loopruntime-component-inventory"
     },
     {
       "asDropdown": false,
@@ -137,7 +137,7 @@
       "targetBlank": false,
       "title": "Tenant Workloads",
       "type": "link",
-      "url": "/d/loopzero-tenant-workloads"
+      "url": "/d/loopruntime-tenant-workloads"
     },
     {
       "asDropdown": false,
@@ -148,7 +148,7 @@
       "targetBlank": false,
       "title": "Tenant Ecosystem",
       "type": "link",
-      "url": "/d/loopzero-tenant-ecosystem"
+      "url": "/d/loopruntime-tenant-ecosystem"
     }
   ],
   "panels": [
@@ -235,7 +235,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=\"kubernetes-pods\", app=\"loopzero-api\"}",
+          "expr": "up{job=\"kubernetes-pods\", app=\"loopruntime-api\"}",
           "legendFormat": "",
           "refId": "A"
         }
@@ -308,7 +308,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "clamp_max(loopzero_postgres_connections_active + loopzero_postgres_connections_idle, 1)",
+          "expr": "clamp_max(loopruntime_postgres_connections_active + loopruntime_postgres_connections_idle, 1)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -454,7 +454,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "clamp_max(count(kube_pod_status_phase{namespace=\"loopzero-system\", pod=~\"argocd-application-controller.*\", phase=\"Running\"}), 1)",
+          "expr": "clamp_max(count(kube_pod_status_phase{namespace=\"loopruntime-system\", pod=~\"argocd-application-controller.*\", phase=\"Running\"}), 1)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -717,7 +717,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_api_requests_total[5m])) by (status)",
+          "expr": "sum(rate(loopruntime_api_requests_total[5m])) by (status)",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
@@ -761,7 +761,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_api_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loopruntime_api_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -811,7 +811,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopzero_releasing_builds) or vector(0)",
+          "expr": "sum(loopruntime_releasing_builds) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -869,7 +869,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "loopzero_build_queue_depth or vector(0)",
+          "expr": "loopruntime_build_queue_depth or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -927,7 +927,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(loopzero_releases_pending) or vector(0)",
+          "expr": "sum(loopruntime_releases_pending) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1000,7 +1000,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "max(loopzero_api_leader_status)",
+          "expr": "max(loopruntime_api_leader_status)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1059,12 +1059,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_deploys_total[5m]))",
+          "expr": "sum(rate(loopruntime_deploys_total[5m]))",
           "legendFormat": "Deploys/s",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(loopzero_build_duration_seconds_count[5m]))",
+          "expr": "sum(rate(loopruntime_build_duration_seconds_count[5m]))",
           "legendFormat": "Builds completed/s",
           "refId": "B"
         }
@@ -1108,7 +1108,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_build_duration_seconds_bucket[5m])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.95, sum(rate(loopruntime_build_duration_seconds_bucket[5m])) by (le)) or vector(0)",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -1151,7 +1151,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_lock_acquired_total[5m]))",
+          "expr": "sum(rate(loopruntime_lock_acquired_total[5m]))",
           "legendFormat": "Acquisitions/s",
           "refId": "A"
         }
@@ -1194,7 +1194,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_idempotency_cache_misses_total[5m]))",
+          "expr": "sum(rate(loopruntime_idempotency_cache_misses_total[5m]))",
           "legendFormat": "Misses/s",
           "refId": "A"
         }
@@ -1253,22 +1253,22 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(loopzero_postgres_connections_active)",
+          "expr": "sum(loopruntime_postgres_connections_active)",
           "legendFormat": "Active",
           "refId": "A"
         },
         {
-          "expr": "sum(loopzero_postgres_connections_idle)",
+          "expr": "sum(loopruntime_postgres_connections_idle)",
           "legendFormat": "Idle",
           "refId": "B"
         },
         {
-          "expr": "sum(loopzero_postgres_connections_total)",
+          "expr": "sum(loopruntime_postgres_connections_total)",
           "legendFormat": "Total",
           "refId": "C"
         },
         {
-          "expr": "max(loopzero_postgres_pool_max_conns)",
+          "expr": "max(loopruntime_postgres_pool_max_conns)",
           "legendFormat": "Max",
           "refId": "D"
         }
@@ -1361,7 +1361,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "loopzero_sse_connections_active or vector(0)",
+          "expr": "loopruntime_sse_connections_active or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -1371,7 +1371,7 @@
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loopruntime",
     "home"
   ],
   "templating": {
@@ -1398,7 +1398,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "LoopZero — System Home",
-  "uid": "loopzero-home",
+  "title": "LoopRuntime — System Home",
+  "uid": "loopruntime-home",
   "version": 1
 }

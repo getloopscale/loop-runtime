@@ -7,7 +7,7 @@
 #
 #   - a push dying in SIGPIPE (#256) cannot tell "the gate refused" from "the connection
 #     dropped", and anyone with the hook uninstalled runs nothing at all;
-#   - `LOOPZERO_SKIP_PREPUSH` exists and nothing records that it was used;
+#   - `LOOPRUNTIME_SKIP_PREPUSH` exists and nothing records that it was used;
 #   - the operator's machine happens to have Go 1.26, helmfile, kubeconform, trivy and
 #     golangci-lint installed. A new contributor does not, and finds out after the merge.
 #
@@ -98,7 +98,7 @@ on:
   #     without them by design (see ESCOPO above);
   #   - it is RED, and has been. Runs 32084704925 through 32197072865 — the last
   #     fifteen — all failed, the failing step being `Test the hermetic modules`,
-  #     and `go test ./... -count=1` in cmd/loopzero-ops is red in a clean worktree
+  #     and `go test ./... -count=1` in cmd/loopruntime-ops is red in a clean worktree
   #     today on `trufflehogscan.TestRealTreeIsAdjudicated` (re-measured
   #     2026-09-06). Promoting a permanently-red job to a gate on the PR would
   #     block every promotion for a cause unrelated to the change under review,
@@ -116,7 +116,7 @@ on:
   #     "Upgrade to GitHub Pro or make this repository public to enable this
   #      feature."
   #
-  # The org `getloopscale` is on the `free` plan and `loopzero` is PRIVATE, and that
+  # The org `getloopscale` is on the `free` plan and `loopruntime` is PRIVATE, and that
   # combination is what the API is refusing. So "make the armed-check a required
   # check" is not a checkbox anyone forgot to tick — it is a purchase (org Team
   # plan) or a visibility change (make the repo public), and until one of those
@@ -152,7 +152,7 @@ on:
   # fires AFTER the merge.
   #
   # Measured 2026-09-16: of the 8 modules in go.work, only `api` and `pkg` need the
-  # PRIVATE sibling `loopzero-contracts`. The other six — including `cmd/loopzero-ops`, which
+  # PRIVATE sibling `loopruntime-contracts`. The other six — including `cmd/loopruntime-ops`, which
   # carries the gates — build with `GOWORK=off` and need no secret at all. That is what
   # makes a real gate for a fork possible: see `public-checks`.
   #
@@ -178,7 +178,7 @@ concurrency:
 jobs:
   build-and-test:
     # Skipped on a FORK PR, and the reason is mechanical rather than political: the steps
-    # below use a deploy key to fetch the PRIVATE sibling `loopzero-contracts`, and GitHub does
+    # below use a deploy key to fetch the PRIVATE sibling `loopruntime-contracts`, and GitHub does
     # not hand a secret to a workflow triggered by a fork's PR. Without this condition the
     # job RUNS and fails at the deploy-key step — a red that says nothing about the
     # contribution. `ci-gate` accepts the skip by name, for a fork only.
@@ -197,7 +197,7 @@ jobs:
     #   1. the repo belongs to an ORGANISATION (`owner.type=Organization`)
     #   2. the `blacksmith-sh` GitHub App is installed IN THE ORG that owns the repo
     # The second only becomes visible after solving the first, which is what cost three
-    # attempts during the loopzero-memory migration.
+    # attempts during the loopruntime-memory migration.
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -210,7 +210,7 @@ jobs:
       # `GOWORK=off` with a single checkout was tried first — it is what api/Dockerfile
       # does. It does NOT work for the whole repository, and the measurement was this:
       #
-      #   cmd/loopzero-ops  `go.mod` does not declare `jackc/pgx/v5` at all; the dependency
+      #   cmd/loopruntime-ops  `go.mod` does not declare `jackc/pgx/v5` at all; the dependency
       #                 resolves only through the workspace.
       #   api           `go.sum` carries the hash of the pgx module but NOT its `/go.mod`
       #                 line — exactly the form go.work supplies.
@@ -226,14 +226,14 @@ jobs:
       # developer exercises locally, which is the property a gate is wanted for.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin: supply-chain; issue #233)
         with:
-          # Full history: the cmd/loopzero-ops suite resolves commit SHAs cited in workflow
+          # Full history: the cmd/loopruntime-ops suite resolves commit SHAs cited in workflow
           # comments and scans history for secrets, and a shallow clone makes both refuse
           # to measure (they fail under CI rather than report a clean they did not see).
           fetch-depth: 0
           persist-credentials: false   # zizmor artipacked: no later step pushes
-          path: loopzero
+          path: loopruntime
 
-      # `loopzero-contracts` is PRIVATE and was transferred to `getloopscale` together with this
+      # `loopruntime-contracts` is PRIVATE and was transferred to `getloopscale` together with this
       # repo. Access comes from a read-only DEPLOY KEY registered on it (id 158891596),
       # with the private half in GOMOD_SSH_KEY.
       #
@@ -241,7 +241,7 @@ jobs:
       # 0b4bbd63d (2026-08-06) rewrote api/go.mod and pkg/go.mod to
       # `github.com/getloopscale/contracts v0.6.0`, reversing the premise above — but
       # this workflow stayed on `getloopscale` and stopped finding the version, failing with
-      # "pkg/go.mod does not declare loopzero-contracts". The last green run was 2026-07-31;
+      # "pkg/go.mod does not declare loopruntime-contracts". The last green run was 2026-07-31;
       # the whole pipeline was blocked from the migration onwards.
       #
       # Why a deploy key and not a PAT: the need is `Contents: read` on ONE repository. An
@@ -276,9 +276,9 @@ jobs:
           # key get used.
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
           git ls-remote git@github.com:getloopscale/contracts.git >/dev/null
-          echo "deploy key OK — loopzero-contracts reachable."
+          echo "deploy key OK — loopruntime-contracts reachable."
 
-      # WHICH version of loopzero-contracts to check out — derived from `go.mod`, never fixed
+      # WHICH version of loopruntime-contracts to check out — derived from `go.mod`, never fixed
       # here.
       #
       # THE DEFECT THIS CORRECTS (measured in run 30627506396): a checkout with no `ref:`
@@ -291,14 +291,14 @@ jobs:
       # dependency was correct the whole time. Pinning the version in the workflow would fix
       # today and lie at the next bump; deriving it from go.mod makes the gate exercise
       # exactly the version the repository declares.
-      - name: Resolve the loopzero-contracts version go.mod requires
+      - name: Resolve the loopruntime-contracts version go.mod requires
         id: contracts
         run: |
           set -euo pipefail
-          pkg_v=$(awk '/getloopscale\/contracts/ {print $2}' loopzero/pkg/go.mod | head -1)
-          api_v=$(awk '/getloopscale\/contracts/ {print $2}' loopzero/api/go.mod | head -1)
+          pkg_v=$(awk '/getloopscale\/contracts/ {print $2}' loopruntime/pkg/go.mod | head -1)
+          api_v=$(awk '/getloopscale\/contracts/ {print $2}' loopruntime/api/go.mod | head -1)
           if [ -z "$pkg_v" ]; then
-            echo "::error::loopzero/pkg/go.mod does not declare loopzero-contracts — the gate has no version to exercise."
+            echo "::error::loopruntime/pkg/go.mod does not declare loopruntime-contracts — the gate has no version to exercise."
             exit 1
           fi
           # A divergence between modules is real drift: go.work hides which of the two
@@ -308,7 +308,7 @@ jobs:
             echo "::error::pkg/go.mod asks for $pkg_v and api/go.mod asks for $api_v — align them before going on."
             exit 1
           fi
-          echo "loopzero-contracts: $pkg_v"
+          echo "loopruntime-contracts: $pkg_v"
           echo "ref=$pkg_v" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
@@ -316,27 +316,27 @@ jobs:
           persist-credentials: false   # zizmor artipacked: no later step pushes
           repository: getloopscale/contracts
           ref: ${{ steps.contracts.outputs.ref }}
-          path: loopzero-contracts
+          path: loopruntime-contracts
           ssh-key: ${{ secrets.GOMOD_SSH_KEY }}
 
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0 (SHA-pin; issue #233)
         with:
-          go-version-file: loopzero/api/go.mod
+          go-version-file: loopruntime/api/go.mod
           cache-dependency-path: |
-            loopzero/api/go.sum
-            loopzero/operators/go.sum
+            loopruntime/api/go.sum
+            loopruntime/operators/go.sum
 
-      - uses: ./loopzero/.github/actions/test-prerequisites
+      - uses: ./loopruntime/.github/actions/test-prerequisites
 
       # This repository is MULTI-MODULE and has no `go.mod` at the root: a `go build ./...`
       # there covers NOTHING. Each module is built explicitly. The list is `go.work`'s minus
-      # `../loopzero-contracts`, which has CI of its own in its repository — this gate validates
+      # `../loopruntime-contracts`, which has CI of its own in its repository — this gate validates
       # the consumption, not the production.
       - name: Build every module
         run: |
           set -euo pipefail
-          cd loopzero
-          for m in pkg api operators operators/api cmd/loopzero-ops infra/scripts; do
+          cd loopruntime
+          for m in pkg api operators operators/api cmd/loopruntime-ops infra/scripts; do
             echo "::group::build $m"
             (cd "$m" && go build ./...)
             echo "::endgroup::"
@@ -345,8 +345,8 @@ jobs:
       - name: Vet every module
         run: |
           set -euo pipefail
-          cd loopzero
-          for m in pkg api operators operators/api cmd/loopzero-ops infra/scripts; do
+          cd loopruntime
+          for m in pkg api operators operators/api cmd/loopruntime-ops infra/scripts; do
             echo "::group::vet $m"
             (cd "$m" && go vet ./...)
             echo "::endgroup::"
@@ -358,8 +358,8 @@ jobs:
       - name: Test the hermetic modules
         run: |
           set -euo pipefail
-          cd loopzero
-          for m in pkg api cmd/loopzero-ops; do
+          cd loopruntime
+          for m in pkg api cmd/loopruntime-ops; do
             echo "::group::test $m"
             (cd "$m" && go test ./... -count=1)
             echo "::endgroup::"
@@ -388,7 +388,7 @@ jobs:
       - name: Test the charts and the infra unit tests
         run: |
           set -euo pipefail
-          cd loopzero/infra/tests
+          cd loopruntime/infra/tests
           go test ./charts/ ./unit/ -count=1
 
   # ---------------------------------------------------------------------------
@@ -404,7 +404,7 @@ jobs:
   #
   # This job exists so that cannot recur silently. It provisions a real
   # PostgreSQL, applies the whole migration chain, and runs the isolation
-  # suite with LOOPZERO_RLS_AUDIT_REQUIRE=1 — which turns "cannot connect" from a
+  # suite with LOOPRUNTIME_RLS_AUDIT_REQUIRE=1 — which turns "cannot connect" from a
   # skip into a failure.
   #
   # SCOPE IS THE WHOLE SUITE, as of 2026-08-14. It used to run only the isolation
@@ -423,7 +423,7 @@ jobs:
   # ---------------------------------------------------------------------------
   tenant-isolation:
     # Skipped on a FORK's PR, and the reason is mechanical, not political: the steps below
-    # use a deploy key to fetch the PRIVATE sibling `loopzero-contracts`, and
+    # use a deploy key to fetch the PRIVATE sibling `loopruntime-contracts`, and
     # GitHub does not hand a secret to a workflow triggered by a fork's PR. Without this
     # condition the job RUNS and fails at the deploy-key step — a red that says nothing
     # about the contribution. `ci-gate` accepts the skip by name, for a fork only.
@@ -441,7 +441,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: loopzero_test
+          POSTGRES_DB: loopruntime_test
         ports:
           - 5432:5432
         options: >-
@@ -454,7 +454,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 (SHA-pin; issue #233)
         with:
           persist-credentials: false   # zizmor artipacked: no later step pushes
-          path: loopzero
+          path: loopruntime
 
       - name: Deploy key for the private module
         env:
@@ -477,13 +477,13 @@ jobs:
           SSHCFG
           git config --global url."git@github.com:getloopscale/".insteadOf "https://github.com/getloopscale/"
 
-      - name: Resolve the loopzero-contracts version go.mod requires
+      - name: Resolve the loopruntime-contracts version go.mod requires
         id: contracts
         run: |
           set -euo pipefail
-          api_v=$(awk '/getloopscale\/contracts/ {print $2}' loopzero/api/go.mod | head -1)
+          api_v=$(awk '/getloopscale\/contracts/ {print $2}' loopruntime/api/go.mod | head -1)
           if [ -z "$api_v" ]; then
-            echo "::error::loopzero/api/go.mod does not declare loopzero-contracts."
+            echo "::error::loopruntime/api/go.mod does not declare loopruntime-contracts."
             exit 1
           fi
           echo "ref=$api_v" >> "$GITHUB_OUTPUT"
@@ -493,15 +493,15 @@ jobs:
           persist-credentials: false   # zizmor artipacked: no later step pushes
           repository: getloopscale/contracts
           ref: ${{ steps.contracts.outputs.ref }}
-          path: loopzero-contracts
+          path: loopruntime-contracts
           ssh-key: ${{ secrets.GOMOD_SSH_KEY }}
 
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0 (SHA-pin; issue #233)
         with:
-          go-version-file: loopzero/api/go.mod
-          cache-dependency-path: loopzero/api/go.sum
+          go-version-file: loopruntime/api/go.mod
+          cache-dependency-path: loopruntime/api/go.sum
 
-      # The role split is the point. Applying the schema as `loopzero` makes that
+      # The role split is the point. Applying the schema as `loopruntime` makes that
       # role the table owner, exactly as in production, so the tests measure the
       # real posture instead of a convenient one.
       - name: Provision the database with production's separation of roles
@@ -513,12 +513,12 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
 
           echo "::group::roles"
-          PGPASSWORD=postgres psql -U postgres -d loopzero_test -v ON_ERROR_STOP=1 \
-            -f loopzero/api/internal/db/testdata/test-roles.sql
+          PGPASSWORD=postgres psql -U postgres -d loopruntime_test -v ON_ERROR_STOP=1 \
+            -f loopruntime/api/internal/db/testdata/test-roles.sql
           # The owner owns its database, as in production: the chain creates the
           # pgcrypto extension (000037), which needs CREATE on the database.
-          PGPASSWORD=postgres psql -U postgres -d loopzero_test -v ON_ERROR_STOP=1 \
-            -c "ALTER DATABASE loopzero_test OWNER TO loopzero"
+          PGPASSWORD=postgres psql -U postgres -d loopruntime_test -v ON_ERROR_STOP=1 \
+            -c "ALTER DATABASE loopruntime_test OWNER TO loopruntime"
           echo "::endgroup::"
 
           # THE WHOLE MIGRATION CHAIN, with the tool and version production runs
@@ -532,11 +532,11 @@ jobs:
           # ignored the errors — which also loaded the plan limits the project-cap
           # tests depend on. The chain removes both the list and the dependency:
           # a new migration is applied here the day it lands (issue #387).
-          echo "::group::migrations (as owner loopzero)"
+          echo "::group::migrations (as owner loopruntime)"
           GOBIN="${RUNNER_TEMP}/migrate" GOWORK=off go install -tags postgres \
             github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
-          "${RUNNER_TEMP}/migrate/migrate" -path loopzero/api/internal/db/migrations \
-            -database "postgres://loopzero:loopzero@localhost:5432/loopzero_test?sslmode=disable" up
+          "${RUNNER_TEMP}/migrate/migrate" -path loopruntime/api/internal/db/migrations \
+            -database "postgres://loopruntime:loopruntime@localhost:5432/loopruntime_test?sslmode=disable" up
           echo "::endgroup::"
 
       # Asserted before the tests run: if the migration silently did less than
@@ -545,7 +545,7 @@ jobs:
       - name: Check the posture in the catalogue
         run: |
           set -euo pipefail
-          read -r rls forced open <<< "$(PGPASSWORD=postgres psql -U postgres -h localhost -d loopzero_test -tAF' ' -c "
+          read -r rls forced open <<< "$(PGPASSWORD=postgres psql -U postgres -h localhost -d loopruntime_test -tAF' ' -c "
             SELECT
               (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
                 WHERE n.nspname='public' AND c.relkind='r' AND c.relrowsecurity),
@@ -566,26 +566,26 @@ jobs:
 
       - name: Integration against a real database (fails if the database vanishes, never skips)
         env:
-          DATABASE_URL: postgres://loopzero:loopzero@localhost:5432/loopzero_test?sslmode=disable
-          LOOPZERO_API_DATABASE_URL: postgres://loopzero_api:loopzero-api@localhost:5432/loopzero_test?sslmode=disable
-          LOOPZERO_WORKER_DATABASE_URL: postgres://loopzero_worker:loopzero-worker@localhost:5432/loopzero_test?sslmode=disable
-          LOOPZERO_RLS_AUDIT_SUPERUSER_URL: postgres://postgres:postgres@localhost:5432/loopzero_test?sslmode=disable
-          LOOPZERO_RLS_AUDIT_REQUIRE: "1"
+          DATABASE_URL: postgres://loopruntime:loopruntime@localhost:5432/loopruntime_test?sslmode=disable
+          LOOPRUNTIME_API_DATABASE_URL: postgres://loopruntime_api:loopruntime-api@localhost:5432/loopruntime_test?sslmode=disable
+          LOOPRUNTIME_WORKER_DATABASE_URL: postgres://loopruntime_worker:loopruntime-worker@localhost:5432/loopruntime_test?sslmode=disable
+          LOOPRUNTIME_RLS_AUDIT_SUPERUSER_URL: postgres://postgres:postgres@localhost:5432/loopruntime_test?sslmode=disable
+          LOOPRUNTIME_RLS_AUDIT_REQUIRE: "1"
         run: |
           set -euo pipefail
-          cd loopzero/api
+          cd loopruntime/api
           go test ./tests/integration/ -count=1 -v
 
   # ---------------------------------------------------------------------------
   # THE GATE AN OUTSIDE CONTRIBUTOR ACTUALLY MEETS.
   #
   # `build-and-test` and `tenant-isolation` above use a deploy key to fetch the PRIVATE
-  # sibling `loopzero-contracts`. A PR from a FORK receives NO secret at all — that is how
+  # sibling `loopruntime-contracts`. A PR from a FORK receives NO secret at all — that is how
   # GitHub works, not a configuration choice — so those two jobs cannot run for anyone
   # outside the organisation.
   #
   # This job uses no secret, by construction. Measured 2026-09-16: of the 8 modules in
-  # go.work, only `api` and `pkg` need the private one. `cmd/loopzero-ops` (the quality
+  # go.work, only `api` and `pkg` need the private one. `cmd/loopruntime-ops` (the quality
   # gates), `operators`, `operators/api`, `infra/scripts`, `infra/tests` and `tools/...`
   # build with `GOWORK=off` — verified by running `go build ./...` with the workspace
   # switched off, which is what simulates the private repo being absent.
@@ -604,39 +604,39 @@ jobs:
 
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0 (SHA-pin; issue #233)
         with:
-          go-version-file: cmd/loopzero-ops/go.mod
+          go-version-file: cmd/loopruntime-ops/go.mod
           cache-dependency-path: |
-            cmd/loopzero-ops/go.sum
+            cmd/loopruntime-ops/go.sum
             operators/go.sum
 
       - uses: ./.github/actions/test-prerequisites
 
       # `GOWORK=off` is the entire point of this job: with the workspace active Go tries to
-      # resolve `../loopzero-contracts` and fails without the deploy key. Switched off, each
+      # resolve `../loopruntime-contracts` and fails without the deploy key. Switched off, each
       # independent module resolves through its own go.mod.
       - name: Build and vet the independent modules
         env:
           GOWORK: off
         run: |
           set -euo pipefail
-          for m in cmd/loopzero-ops operators operators/api tools/gen-service-auth-ed25519; do
+          for m in cmd/loopruntime-ops operators operators/api tools/gen-service-auth-ed25519; do
             echo "::group::$m"
             (cd "$m" && go build ./... && go vet ./...)
             echo "::endgroup::"
           done
 
-      # LOOPZERO_NO_PRIVATE_MODULE_CREDENTIAL declares what this job is: it runs on forks and
-      # receives no credential for the private loopzero-contracts module, so the modules that
+      # LOOPRUNTIME_NO_PRIVATE_MODULE_CREDENTIAL declares what this job is: it runs on forks and
+      # receives no credential for the private loopruntime-contracts module, so the modules that
       # require it (api, pkg) cannot be built here. module-selfcontained reports them NOT
       # VERIFIED instead of failing them; build-and-test, which holds the deploy key,
       # verifies them.
       - name: Test the independent modules
         env:
           GOWORK: off
-          LOOPZERO_NO_PRIVATE_MODULE_CREDENTIAL: "1"
+          LOOPRUNTIME_NO_PRIVATE_MODULE_CREDENTIAL: "1"
         run: |
           set -euo pipefail
-          for m in cmd/loopzero-ops operators/api; do
+          for m in cmd/loopruntime-ops operators/api; do
             echo "::group::test $m"
             (cd "$m" && go test ./... -count=1)
             echo "::endgroup::"
@@ -665,7 +665,7 @@ jobs:
             echo "::error::base ${BASE_REF} (branch ${BASE_BRANCH}) is not in the checkout — the diff-scoped gates need it"
             exit 1
           fi
-          (cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)
+          (cd cmd/loopruntime-ops && go build -o /tmp/loopruntime-ops .)
           # `no-new-bash` is NOT here, and the absence is measured rather than forgotten.
           # Measured 2026-09-16: it exits 5 — "read allowlist
           # .claude/rules/shell-scripts-allowlist.md: no such file or directory". That
@@ -673,8 +673,8 @@ jobs:
           # no clone. The gate runs on the machine of whoever has the kit installed and
           # nowhere else; putting it here would be a guaranteed red on the first PR,
           # saying nothing about the contribution. Tracked in the backlog.
-          /tmp/loopzero-ops quality dangling-script-refs --base-ref "$BASE_REF" --head-ref HEAD
-          /tmp/loopzero-ops quality dangling-data-refs --base-ref "$BASE_REF" --head-ref HEAD
+          /tmp/loopruntime-ops quality dangling-script-refs --base-ref "$BASE_REF" --head-ref HEAD
+          /tmp/loopruntime-ops quality dangling-data-refs --base-ref "$BASE_REF" --head-ref HEAD
 
   # ---------------------------------------------------------------------------
   # ONE required check, not five. Two subtleties decide this block:

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -20,7 +20,7 @@ import (
 // when a non-NULL Rekor URL is persisted.
 //
 // These tests connect to a real PostgreSQL instance via DATABASE_URL
-// (default postgres://postgres:postgres@localhost:5432/loopzero_test) and
+// (default postgres://postgres:postgres@localhost:5432/loopruntime_test) and
 // skip gracefully when PG is unreachable or migration 000020 has not
 // been applied. The skip-on-pre-migration check is intentional: it
 // gives the RED-first signal during development without blocking
@@ -120,7 +120,7 @@ func TestReleaseStore_InsertWithRekorURL_WritesAuditLog(t *testing.T) {
 	requireRekorURLTriggers(t, pool)
 	ctx := context.Background()
 
-	url := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=42"
+	url := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=42"
 	releaseID, correlationID, tenantID := seedReleaseRow(t, pool, &url)
 
 	var (
@@ -193,7 +193,7 @@ func TestReleaseStore_UpdateSameRekorURL_NoException(t *testing.T) {
 	requireRekorURLTriggers(t, pool)
 	ctx := context.Background()
 
-	url := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=7"
+	url := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=7"
 	releaseID, _, _ := seedReleaseRow(t, pool, &url)
 
 	// Re-assert the same value via an unrelated UPDATE that touches
@@ -222,7 +222,7 @@ func TestReleaseStore_UpdateDifferentRekorURL_RaisesException(t *testing.T) {
 	requireRekorURLTriggers(t, pool)
 	ctx := context.Background()
 
-	orig := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=100"
+	orig := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=100"
 	releaseID, _, _ := seedReleaseRow(t, pool, &orig)
 
 	attacker := "https://attacker.example/log/entries?logIndex=100"
@@ -262,7 +262,7 @@ func TestReleaseStore_UpdateFirstSetFromNull_Allowed(t *testing.T) {
 
 	// First-set via UPDATE: trigger's `OLD IS NOT NULL` guard skips the
 	// raise, so this succeeds.
-	firstURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=200"
+	firstURL := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=200"
 	_, err := pool.Exec(ctx,
 		`UPDATE releases SET image_attestation_rekor_url = $1 WHERE id = $2`,
 		&firstURL, releaseID)
@@ -313,7 +313,7 @@ func TestReleaseStore_InsertRolledBack_AuditLogNotPersisted(t *testing.T) {
 	buildID := "bld-rekor-rb-" + suffix
 	releaseID := "rel-rekor-rb-" + suffix
 	correlationID := "corr-rekor-rb-" + suffix
-	rekorURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=666"
+	rekorURL := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=666"
 
 	// Same debt as the 000061 trigger: the tenant must exist before the build.
 	seedTenantForBuild(t, pool, tenantID)

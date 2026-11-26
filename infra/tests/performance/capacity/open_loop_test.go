@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package capacity
 
@@ -14,7 +14,7 @@ import (
 )
 
 // Hermetic tests for the open-loop runner every capacity bench shares. They run
-// without LOOPZERO_CAPACITY: the request is a fake, so nothing leaves the process.
+// without LOOPRUNTIME_CAPACITY: the request is a fake, so nothing leaves the process.
 
 func shortRun() Config {
 	return Config{RPS: 1000, Duration: 40 * time.Millisecond, Workers: 4}

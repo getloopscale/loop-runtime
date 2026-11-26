@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import { describe, expect, it } from "vitest";
 import {
@@ -33,11 +33,11 @@ describe("service-auth-ed25519 component", () => {
   describe("renderServiceAuthEd25519Manifests", () => {
     const baseInput = {
       stackName: "dev",
-      cloudNamespace: "loopzero-system",
-      apiNamespace: "loopzero-system",
-      privateSecretName: "loopzero-service-auth-ed25519",
-      publicConfigMapName: "loopzero-service-auth-ed25519-pub",
-      storeName: "loopzero-pulumi-secrets",
+      cloudNamespace: "loopruntime-system",
+      apiNamespace: "loopruntime-system",
+      privateSecretName: "loopruntime-service-auth-ed25519",
+      publicConfigMapName: "loopruntime-service-auth-ed25519-pub",
+      storeName: "loopruntime-pulumi-secrets",
       refreshInterval: "5m",
       generationMarker: "abc123def456",
     };
@@ -45,7 +45,7 @@ describe("service-auth-ed25519 component", () => {
     it("emits a private-key ExternalSecret targeting the cloud namespace", () => {
       const out = renderServiceAuthEd25519Manifests(baseInput);
       expect(out).toContain("kind: ExternalSecret");
-      expect(out).toContain("name: loopzero-service-auth-ed25519");
+      expect(out).toContain("name: loopruntime-service-auth-ed25519");
       expect(out).toContain(`namespace: ${baseInput.cloudNamespace}`);
       expect(out).toContain("secretKey: private");
       expect(out).toContain("key: serviceAuthEd25519Private");
@@ -56,7 +56,7 @@ describe("service-auth-ed25519 component", () => {
       // The public key is materialized as a Secret too (ESO doesn't
       // write directly to ConfigMaps in v1beta1) and the API reads
       // the Secret content via env var or file-mount.
-      expect(out).toContain("name: loopzero-service-auth-ed25519-pub");
+      expect(out).toContain("name: loopruntime-service-auth-ed25519-pub");
       expect(out).toContain(`namespace: ${baseInput.apiNamespace}`);
       expect(out).toContain("secretKey: current");
       expect(out).toContain("key: serviceAuthEd25519PublicCurrent");
@@ -72,10 +72,10 @@ describe("service-auth-ed25519 component", () => {
       expect(out).toContain("key: serviceAuthEd25519PublicPrevious");
     });
 
-    it("annotates with loopzero.io/generation-marker so audit-log can correlate rotations", () => {
+    it("annotates with runtime.getloopscale.com/generation-marker so audit-log can correlate rotations", () => {
       const out = renderServiceAuthEd25519Manifests(baseInput);
       expect(out).toContain(
-        `loopzero.io/generation-marker: ${baseInput.generationMarker}`,
+        `runtime.getloopscale.com/generation-marker: ${baseInput.generationMarker}`,
       );
     });
 
@@ -90,11 +90,11 @@ describe("service-auth-ed25519 component", () => {
     it("emits exactly two ExternalSecrets — one private (cloud) + one public (API)", () => {
       // Defense in depth: the rendered manifests must be exactly two
       // ExternalSecrets. The private key flows ONLY through the
-      // `loopzero-service-auth-ed25519` ExternalSecret; the public keys
-      // flow ONLY through `loopzero-service-auth-ed25519-pub`. Even if
+      // `loopruntime-service-auth-ed25519` ExternalSecret; the public keys
+      // flow ONLY through `loopruntime-service-auth-ed25519-pub`. Even if
       // the operator configures both ExternalSecrets in the same
       // namespace, the separation is at the K8s Secret name level —
-      // RoleBindings on `loopzero-service-auth-ed25519` grant access to
+      // RoleBindings on `loopruntime-service-auth-ed25519` grant access to
       // the cloud SA only; RoleBindings on `-pub` grant API SA only.
       const out = renderServiceAuthEd25519Manifests(baseInput);
       const blocks = out.split("---").filter((b) => b.trim().length > 0);

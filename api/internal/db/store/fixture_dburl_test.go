@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -10,11 +10,11 @@ import "os"
 // cross-tenant worker role admits — the owner lost its maintenance policies in 000064
 // (#387). DATABASE_URL remains the fallback for a database without the role split.
 func fixtureDBURL() string {
-	if u := os.Getenv("LOOPZERO_WORKER_DATABASE_URL"); u != "" {
+	if u := os.Getenv("LOOPRUNTIME_WORKER_DATABASE_URL"); u != "" {
 		return u
 	}
 	if u := os.Getenv("DATABASE_URL"); u != "" {
 		return u
 	}
-	return "postgres://postgres:postgres@localhost:5432/loopzero_test?sslmode=disable"
+	return "postgres://postgres:postgres@localhost:5432/loopruntime_test?sslmode=disable"
 }

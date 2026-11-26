@@ -5,9 +5,9 @@
 # auth to work end-to-end. In production (DOKS), this step is "Step 6"
 # of the install procedure — referenced in
 # `infra/tests/e2e/local-install-deploy.sh:222` as a fail-loud check
-# ("loopzero-cli OAuth2 client not registered (Step 6 of install)"). In
+# ("loopruntime-cli OAuth2 client not registered (Step 6 of install)"). In
 # standalone-multi the step did NOT exist, leaving Hydra empty and breaking
-# `loopzero login` (device flow → 502 AUTH_SERVICE_ERROR).
+# `loopruntime login` (device flow → 502 AUTH_SERVICE_ERROR).
 #
 # Idempotent: GET first, POST if absent, PUT if present. Without
 # touching product code — the whole flow goes through the Hydra admin REST API,
@@ -15,27 +15,27 @@
 # wire-clusters.sh).
 #
 # Clients registered:
-#   1. loopzero-cli — public client (token_endpoint_auth_method=none) with
+#   1. loopruntime-cli — public client (token_endpoint_auth_method=none) with
 #      grant_types: device_code + refresh_token + authorization_code.
-#      Used by the `loopzero login` device flow + dashboard PKCE.
-#   2. loopzero-bootstrap — confidential client with the client_credentials
+#      Used by the `loopruntime login` device flow + dashboard PKCE.
+#   2. loopruntime-bootstrap — confidential client with the client_credentials
 #      grant. Used by automation/CI/dogfood loops to obtain a
 #      machine-to-machine token without a browser.
 #
 # Usage (standalone):
-#   KUBECONFIG=$(k3d kubeconfig write loopzero-core) \
+#   KUBECONFIG=$(k3d kubeconfig write loopruntime-core) \
 #     bash infra/helmfile/scripts/bootstrap-oauth-clients.sh
 #
 # Usage (helmfile hook):
 #   called by the core.helmfile.yaml.gotmpl post-sync hook after Ory Hydra is ready.
 #
 # Outputs (only when bootstrap-oauth-clients runs for the first
-# time or after a delete): the loopzero-bootstrap client_secret in
-# Secret loopzero-system/loopzero-bootstrap-credentials for use by jobs/CI/CLI.
+# time or after a delete): the loopruntime-bootstrap client_secret in
+# Secret loopruntime-system/loopruntime-bootstrap-credentials for use by jobs/CI/CLI.
 set -euo pipefail
 
-NS_HYDRA="${HYDRA_NAMESPACE:-loopzero-auth}"
-NS_LOOPZERO="${LOOPZERO_NAMESPACE:-loopzero-system}"
+NS_HYDRA="${HYDRA_NAMESPACE:-loopruntime-auth}"
+NS_LOOPRUNTIME="${LOOPRUNTIME_NAMESPACE:-loopruntime-system}"
 HYDRA_ADMIN_SVC="${HYDRA_ADMIN_SVC:-ory-hydra-admin}"
 HYDRA_ADMIN_PORT="${HYDRA_ADMIN_PORT:-4445}"
 
@@ -43,7 +43,7 @@ log() { printf '[bootstrap-oauth-clients] %s\n' "$*" >&2; }
 
 # Wait for Hydra admin to be reachable. On a fresh install Hydra takes up to
 # ~60s to finish migrate + become Ready. Without this wait, RegisterClient
-# in loopzero-cloud (which fires at startup) runs first and produces a silent 404.
+# in loopruntime-cloud (which fires at startup) runs first and produces a silent 404.
 #
 # The port-forward is kept open by the caller (main()) to avoid a
 # race condition between two overlapping TCP connections (observed problem:
@@ -68,7 +68,7 @@ upsert_client() {
   local code
 
   # Probe directly by client_id (a stable key). client_name may vary
-  # ("loopzero-cli" vs "LoopZero CLI") across creation paths — do not use it as a
+  # ("loopruntime-cli" vs "LoopRuntime CLI") across creation paths — do not use it as a
   # discriminator. GET /admin/clients/{id} returns 404 if it does not exist.
   local existing=""
   if curl -sf --max-time 5 "http://localhost:14445/admin/clients/$name" -o /dev/null 2>/dev/null; then
@@ -116,17 +116,17 @@ main() {
   sleep 1
 
   # A single port-forward, kept open for the whole execution of main.
-  kubectl --context "${CORE_CONTEXT:-k3d-loopzero-core}" -n "$NS_HYDRA" port-forward "svc/$HYDRA_ADMIN_SVC" "14445:$HYDRA_ADMIN_PORT" >/dev/null 2>&1 &
+  kubectl --context "${CORE_CONTEXT:-k3d-loopruntime-core}" -n "$NS_HYDRA" port-forward "svc/$HYDRA_ADMIN_SVC" "14445:$HYDRA_ADMIN_PORT" >/dev/null 2>&1 &
   local pf_pid=$!
   trap "kill $pf_pid 2>/dev/null || true" EXIT
   sleep 4
 
   wait_for_hydra || exit 1
 
-  # 1) loopzero-cli — public client (device flow + PKCE).
-  local loopzero_cli_payload='{
-    "client_id": "loopzero-cli",
-    "client_name": "loopzero-cli",
+  # 1) loopruntime-cli — public client (device flow + PKCE).
+  local loopruntime_cli_payload='{
+    "client_id": "loopruntime-cli",
+    "client_name": "loopruntime-cli",
     "grant_types": ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token", "authorization_code"],
     "response_types": ["code"],
     "scope": "openid offline_access",
@@ -136,34 +136,34 @@ main() {
       "http://localhost:3000/login/callback"
     ]
   }'
-  upsert_client "loopzero-cli" "$loopzero_cli_payload" >/dev/null || exit 1
+  upsert_client "loopruntime-cli" "$loopruntime_cli_payload" >/dev/null || exit 1
 
-  # 2) loopzero-bootstrap — confidential client (client_credentials).
+  # 2) loopruntime-bootstrap — confidential client (client_credentials).
   # Used by dogfood loops, CI automation, maintenance scripts.
-  local loopzero_bootstrap_payload='{
-    "client_id": "loopzero-bootstrap",
-    "client_name": "loopzero-bootstrap",
+  local loopruntime_bootstrap_payload='{
+    "client_id": "loopruntime-bootstrap",
+    "client_name": "loopruntime-bootstrap",
     "grant_types": ["client_credentials"],
     "response_types": [],
     "scope": "openid offline_access",
-    "audience": ["loopzero-engine"],
+    "audience": ["loopruntime-engine"],
     "token_endpoint_auth_method": "client_secret_post"
   }'
   local resp
-  resp=$(upsert_client "loopzero-bootstrap" "$loopzero_bootstrap_payload") || exit 1
+  resp=$(upsert_client "loopruntime-bootstrap" "$loopruntime_bootstrap_payload") || exit 1
 
   # Persist client_secret if the client was newly created. PUT in Hydra returns 200
   # but does NOT return the existing secret — to rotate, use rotate-secret.
   local secret
   secret=$(printf '%s' "$resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("client_secret",""))' 2>/dev/null || true)
   if [[ -n "$secret" ]]; then
-    log "persisting loopzero-bootstrap client_secret to Secret $NS_LOOPZERO/loopzero-bootstrap-credentials"
-    kubectl --context "${CORE_CONTEXT:-k3d-loopzero-core}" -n "$NS_LOOPZERO" create secret generic loopzero-bootstrap-credentials \
-      --from-literal=client_id=loopzero-bootstrap \
+    log "persisting loopruntime-bootstrap client_secret to Secret $NS_LOOPRUNTIME/loopruntime-bootstrap-credentials"
+    kubectl --context "${CORE_CONTEXT:-k3d-loopruntime-core}" -n "$NS_LOOPRUNTIME" create secret generic loopruntime-bootstrap-credentials \
+      --from-literal=client_id=loopruntime-bootstrap \
       --from-literal=client_secret="$secret" \
-      --dry-run=client -o yaml | kubectl --context "${CORE_CONTEXT:-k3d-loopzero-core}" apply -f - >/dev/null
+      --dry-run=client -o yaml | kubectl --context "${CORE_CONTEXT:-k3d-loopruntime-core}" apply -f - >/dev/null
   else
-    log "loopzero-bootstrap client_secret not in response (PUT path) — Secret not updated; rotate via Hydra admin if needed"
+    log "loopruntime-bootstrap client_secret not in response (PUT path) — Secret not updated; rotate via Hydra admin if needed"
   fi
 
   log "bootstrap complete"

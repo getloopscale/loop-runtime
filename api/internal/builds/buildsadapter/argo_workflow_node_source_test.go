@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildsadapter
 
@@ -45,7 +45,7 @@ func sweepEvents(s *K8sWorkflowNodeSource) []stepwatch.ArgoNodeEvent {
 
 func TestK8sWorkflowNodeSource_EmitsPodNodesOfBuildWorkflows(t *testing.T) {
 	s, _ := nodeSource(
-		workflow("loopzero-build-build-abc123-x7k2p", map[string]interface{}{
+		workflow("loopruntime-build-build-abc123-x7k2p", map[string]interface{}{
 			"n1": map[string]interface{}{"type": "Pod", "phase": "Running", "displayName": "clone-repo",
 				"startedAt": "2026-09-25T10:00:00Z"},
 			"n2": map[string]interface{}{"type": "DAG", "phase": "Running"},

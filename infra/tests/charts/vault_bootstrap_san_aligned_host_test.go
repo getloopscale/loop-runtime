@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // F1 regression-lock — guards the SAN-aligned kubernetes_host fix landed in
-// loopzero commit `7c255524`. The fix derives `k3d-${cluster}-serverlb` (a name
+// loopruntime commit `7c255524`. The fix derives `k3d-${cluster}-serverlb` (a name
 // included in the k3d mgmt API cert SAN list) for the `kubernetes_host=`
 // value written to `auth/k8s-core/config` by `vault-bootstrap-dev.sh`.
 //
@@ -10,7 +10,7 @@
 // mismatch ("no alternative certificate subject name matches target
 // hostname 'host.k3d.internal'") that OpenBao's strict Go HTTP client
 // classifies as a generic blanket `permission denied` from
-// `auth/k8s-core/login` for EVERY role (eso, loopzero-api, loopzero-app-operator,
+// `auth/k8s-core/login` for EVERY role (eso, loopruntime-api, loopruntime-app-operator,
 // ...) — the F1 symptom of the dev-public T3.1 LIVE iteration 2026-06-20.
 //
 // SCOPE DISCIPLINE — read this before extending the guard:
@@ -27,7 +27,7 @@
 // guard that passes the negative control is theatre.
 //
 // Cross-references:
-//   - F1 root cause + fix commit: loopzero commit 7c255524
+//   - F1 root cause + fix commit: loopruntime commit 7c255524
 //   - Reach plan (host.k3d.internal canonical for vault reach): cb7cc254 (T1.2)
 //   - R3 bao_auth ordering canonical: 96ab943e
 //   - Mandate: .claude/rules/cleanroom-up-live-test-mandate.md UNBREAKABLE
@@ -79,13 +79,13 @@ func auditSANAlignedKubernetesHost(body string) []string {
 	// (a1) Script derives `CORE_CLUSTER` from `TARGET_CONTEXT` — the serverlb
 	//      name depends on this assignment.
 	if !reMgmtClusterDeriv.MatchString(body) {
-		errs = append(errs, "(a1) script does NOT derive `CORE_CLUSTER=\"${TARGET_CONTEXT#k3d-}\"` — the serverlb container name in the cert SAN depends on this derivation (F1 fix, loopzero commit 7c255524).")
+		errs = append(errs, "(a1) script does NOT derive `CORE_CLUSTER=\"${TARGET_CONTEXT#k3d-}\"` — the serverlb container name in the cert SAN depends on this derivation (F1 fix, loopruntime commit 7c255524).")
 	}
 	// (a2) Script derives `SERVERLB_HOST="k3d-${CORE_CLUSTER}-serverlb"` —
 	//      the SAN-aligned name `vault-bootstrap-dev.sh` writes into
 	//      `auth/k8s-core/config`.
 	if !reServerlbHostVar.MatchString(body) {
-		errs = append(errs, "(a2) script does NOT assign `SERVERLB_HOST=\"k3d-${CORE_CLUSTER}-serverlb\"` — required to produce a `kubernetes_host` whose hostname is in the k3d mgmt API cert SAN list (F1 fix, loopzero commit 7c255524).")
+		errs = append(errs, "(a2) script does NOT assign `SERVERLB_HOST=\"k3d-${CORE_CLUSTER}-serverlb\"` — required to produce a `kubernetes_host` whose hostname is in the k3d mgmt API cert SAN list (F1 fix, loopruntime commit 7c255524).")
 	}
 
 	// (b1) The MGMT_HOST rewrite sed expression MUST use `${SERVERLB_HOST}`
@@ -94,7 +94,7 @@ func auditSANAlignedKubernetesHost(body string) []string {
 	//      SAN; `host.k3d.internal` is NOT in the SAN and triggers the F1
 	//      blanket-403.
 	if !reSedTargetServ.MatchString(body) {
-		errs = append(errs, "(b1) MGMT_HOST rewrite sed replacement target is NOT `${SERVERLB_HOST}\\2` — auth/k8s-core/config `kubernetes_host` would not be SAN-aligned, re-introducing the F1 blanket-403 (loopzero commit 7c255524).")
+		errs = append(errs, "(b1) MGMT_HOST rewrite sed replacement target is NOT `${SERVERLB_HOST}\\2` — auth/k8s-core/config `kubernetes_host` would not be SAN-aligned, re-introducing the F1 blanket-403 (loopruntime commit 7c255524).")
 	}
 	// (b2) The MGMT_HOST rewrite sed alternation MUST include
 	//      `host.k3d.internal` in the FROM-set, so a kubeconfig variant whose
@@ -118,7 +118,7 @@ func auditSANAlignedKubernetesHost(body string) []string {
 		strings.Contains(body, "SAN mismatch") ||
 		strings.Contains(body, "SAN list")
 	if !hasCommit {
-		errs = append(errs, "(c) audit-trail comment does NOT cite loopzero commit `7c255524` (F1 fix) — operators reading this in 6 months won't know why the serverlb derivation matters.")
+		errs = append(errs, "(c) audit-trail comment does NOT cite loopruntime commit `7c255524` (F1 fix) — operators reading this in 6 months won't know why the serverlb derivation matters.")
 	}
 	if !hasSAN {
 		errs = append(errs, "(c) audit-trail comment does NOT cite SAN-aligned / SAN mismatch — operators reading this in 6 months won't know the root cause the rewrite addresses.")

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -62,7 +62,7 @@ func TestPreviewEnvironment_SpecFields(t *testing.T) {
 	pe := PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "preview-pr-42",
-			Namespace: "loopzero-system",
+			Namespace: "loopruntime-system",
 		},
 		Spec: PreviewEnvironmentSpec{
 			TenantID:  "tenant-abc",

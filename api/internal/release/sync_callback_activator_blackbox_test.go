@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release_test
 
@@ -27,16 +27,16 @@ func (l labelledApps) GetAppLabels(_ context.Context, appName string) (map[strin
 }
 
 var callbackTestApps = labelledApps{
-	"tn-loopzero-my-app-production":  {"tn-loopzero", "production"},
-	"other-tenant-my-app-production": {"other-tenant", "production"},
-	"acme-my-app-production":         {"acme", "production"},
+	"tn-loopruntime-my-app-production": {"tn-loopruntime", "production"},
+	"other-tenant-my-app-production":   {"other-tenant", "production"},
+	"acme-my-app-production":           {"acme", "production"},
 }
 
 func TestSyncCallbackActivator_ActivatesPendingRelease(t *testing.T) {
 	releaseStore := newFakeConvergenceReleaseStore()
 	releaseStore.pending = []db.Release{{
 		ID: "rel-cb-001", BuildID: "build-cb-001",
-		TenantID: "tn-loopzero", ProjectID: "my-app", Environment: "production",
+		TenantID: "tn-loopruntime", ProjectID: "my-app", Environment: "production",
 		Status: "PENDING", GitCommit: "abc123", CreatedAt: time.Now(),
 	}}
 	releaseStore.statuses["rel-cb-001"] = "PENDING"
@@ -50,7 +50,7 @@ func TestSyncCallbackActivator_ActivatesPendingRelease(t *testing.T) {
 	).WithAppLabelReader(callbackTestApps)
 
 	// Act: simulate the ArgoCD callback for the tenant's production application
-	err := activator.OnSyncCompleted("tn-loopzero-my-app-production", "abc123")
+	err := activator.OnSyncCompleted("tn-loopruntime-my-app-production", "abc123")
 
 	// Assert
 	if err != nil {
@@ -68,7 +68,7 @@ func TestSyncCallbackActivator_SkipsMismatchedRevision(t *testing.T) {
 	releaseStore := newFakeConvergenceReleaseStore()
 	releaseStore.pending = []db.Release{{
 		ID: "rel-cb-002", BuildID: "build-cb-002",
-		TenantID: "tn-loopzero", ProjectID: "my-app", Environment: "production",
+		TenantID: "tn-loopruntime", ProjectID: "my-app", Environment: "production",
 		Status: "PENDING", GitCommit: "abc123", CreatedAt: time.Now(),
 	}}
 	releaseStore.statuses["rel-cb-002"] = "PENDING"
@@ -82,7 +82,7 @@ func TestSyncCallbackActivator_SkipsMismatchedRevision(t *testing.T) {
 	).WithAppLabelReader(callbackTestApps)
 
 	// Act: callback with WRONG revision
-	err := activator.OnSyncCompleted("tn-loopzero-my-app-production", "wrong-sha")
+	err := activator.OnSyncCompleted("tn-loopruntime-my-app-production", "wrong-sha")
 
 	// Assert: release stays PENDING (revision mismatch)
 	if err != nil {
@@ -97,7 +97,7 @@ func TestSyncCallbackActivator_IgnoresOtherTenants(t *testing.T) {
 	releaseStore := newFakeConvergenceReleaseStore()
 	releaseStore.pending = []db.Release{{
 		ID: "rel-cb-003", BuildID: "build-cb-003",
-		TenantID: "tn-loopzero", ProjectID: "my-app", Environment: "production",
+		TenantID: "tn-loopruntime", ProjectID: "my-app", Environment: "production",
 		Status: "PENDING", CreatedAt: time.Now(),
 	}}
 	releaseStore.statuses["rel-cb-003"] = "PENDING"
@@ -129,7 +129,7 @@ func TestSyncCallbackActivator_SkipsEmptyGitCommit(t *testing.T) {
 	releaseStore := newFakeConvergenceReleaseStore()
 	releaseStore.pending = []db.Release{{
 		ID: "rel-cb-nocommit", BuildID: "build-cb-nocommit",
-		TenantID: "tn-loopzero", ProjectID: "my-app", Environment: "production",
+		TenantID: "tn-loopruntime", ProjectID: "my-app", Environment: "production",
 		Status: "PENDING", GitCommit: "", // Empty! BUG-03 defense
 		CreatedAt: time.Now(),
 	}}
@@ -144,7 +144,7 @@ func TestSyncCallbackActivator_SkipsEmptyGitCommit(t *testing.T) {
 	).WithAppLabelReader(callbackTestApps)
 
 	// Act: callback arrives — release should be skipped (deferred to convergence loop)
-	err := activator.OnSyncCompleted("tn-loopzero-my-app-production", "abc123")
+	err := activator.OnSyncCompleted("tn-loopruntime-my-app-production", "abc123")
 
 	// Assert: release stays PENDING, no activation
 	if err != nil {

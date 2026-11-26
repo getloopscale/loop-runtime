@@ -33,7 +33,7 @@ SCENARIO=""
 BASELINE_DURATION="5m"
 DRY_RUN=0
 NO_CLEANUP=0
-TARGET_CTX="${TARGET_CONTEXT:-k3d-loopzero-core}"
+TARGET_CTX="${TARGET_CONTEXT:-k3d-loopruntime-core}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -112,8 +112,8 @@ else
 fi
 
 # Extract hypothesis from manifest (FAANG-style metadata)
-HYPOTHESIS=$(grep "loopzero.io/hypothesis:" "$MANIFEST_PATH" | head -1 | sed 's/.*loopzero.io\/hypothesis: *//;s/^"//;s/"$//' || echo "(no hypothesis)")
-DOD_TEST=$(grep "loopzero.io/dod-test:" "$MANIFEST_PATH" | head -1 | sed 's/.*loopzero.io\/dod-test: *//;s/^"//;s/"$//' || echo "(no DoD)")
+HYPOTHESIS=$(grep "runtime.getloopscale.com/hypothesis:" "$MANIFEST_PATH" | head -1 | sed 's/.*runtime.getloopscale.com\/hypothesis: *//;s/^"//;s/"$//' || echo "(no hypothesis)")
+DOD_TEST=$(grep "runtime.getloopscale.com/dod-test:" "$MANIFEST_PATH" | head -1 | sed 's/.*runtime.getloopscale.com\/dod-test: *//;s/^"//;s/"$//' || echo "(no DoD)")
 
 log "  hypothesis: $HYPOTHESIS"
 log "  DoD test: $DOD_TEST"
@@ -136,7 +136,7 @@ log "  baseline saved: $RUN_DIR/baseline.json"
 # Extract pre-chaos metrics via jq (avoids regex-space-tolerance bugs)
 PRE_P95=$(jq -r '.api_health.latency_p95_ms' "$RUN_DIR/baseline.json")
 PRE_SUCCESS=$(jq -r '.api_health.success_rate_pct' "$RUN_DIR/baseline.json")
-PRE_LOOPZERO_API_RESTARTS=$(jq -r '.pod_restart_counts.loopzero_api' "$RUN_DIR/baseline.json")
+PRE_LOOPRUNTIME_API_RESTARTS=$(jq -r '.pod_restart_counts.loopruntime_api' "$RUN_DIR/baseline.json")
 
 # ---------------------------------------------------------------------------
 # Etapa 3 — Inject
@@ -207,7 +207,7 @@ cp "$POST_OUTPUT" "$RUN_DIR/post.json"
 
 POST_P95=$(jq -r '.api_health.latency_p95_ms' "$RUN_DIR/post.json")
 POST_SUCCESS=$(jq -r '.api_health.success_rate_pct' "$RUN_DIR/post.json")
-POST_LOOPZERO_API_RESTARTS=$(jq -r '.pod_restart_counts.loopzero_api' "$RUN_DIR/post.json")
+POST_LOOPRUNTIME_API_RESTARTS=$(jq -r '.pod_restart_counts.loopruntime_api' "$RUN_DIR/post.json")
 
 # ---------------------------------------------------------------------------
 # Etapa 7 — Cleanup (MANDATORY)
@@ -227,31 +227,31 @@ fi
 # ---------------------------------------------------------------------------
 log "=== Etapa 8: Verdict ==="
 
-# Verdict: delegated to `loopzero-ops chaos slo-compare` (pkg/quality/chaosslo,
+# Verdict: delegated to `loopruntime-ops chaos slo-compare` (pkg/quality/chaosslo,
 # Track C TC3.1) — the threshold arithmetic (success>=90, p95-degradation<=500ms,
 # post-drift<=100ms, restart-delta<=2) moved to Go, parity-proven byte-identical
 # to the prior inline if-blocks. Verdict comes from the subcommand EXIT CODE
 # (0=PASS / 2=FAIL / 5=INCONCLUSIVE); REASONS from its "  - <reason>" lines.
 # RESTART_DELTA is still computed here (report.sh + log line consume it).
-RESTART_DELTA=$((POST_LOOPZERO_API_RESTARTS - PRE_LOOPZERO_API_RESTARTS))
+RESTART_DELTA=$((POST_LOOPRUNTIME_API_RESTARTS - PRE_LOOPRUNTIME_API_RESTARTS))
 
 # `go run` collapses any non-zero subprocess exit to 1, which destroys the
 # 0/2/5 PASS/FAIL/INCONCLUSIVE semantics chaosslo.ExitCode() defines and turns
 # every real FAIL into a spurious INCONCLUSIVE. Prefer compiled binaries so
-# the exit code propagates verbatim. Canonical build path is bin/loopzero-ops
+# the exit code propagates verbatim. Canonical build path is bin/loopruntime-ops
 # (Taskfile `ops:build` D6 — same path used by `task quality:gates`).
-LOOPZERO_OPS_BIN=""
-if command -v loopzero-ops >/dev/null 2>&1; then
-  LOOPZERO_OPS_BIN="$(command -v loopzero-ops)"
-elif [[ -x "$REPO_ROOT/bin/loopzero-ops" ]]; then
-  LOOPZERO_OPS_BIN="$REPO_ROOT/bin/loopzero-ops"
+LOOPRUNTIME_OPS_BIN=""
+if command -v loopruntime-ops >/dev/null 2>&1; then
+  LOOPRUNTIME_OPS_BIN="$(command -v loopruntime-ops)"
+elif [[ -x "$REPO_ROOT/bin/loopruntime-ops" ]]; then
+  LOOPRUNTIME_OPS_BIN="$REPO_ROOT/bin/loopruntime-ops"
 else
-  ( cd "$REPO_ROOT" && go build -o bin/loopzero-ops ./cmd/loopzero-ops ) >/dev/null 2>&1
-  LOOPZERO_OPS_BIN="$REPO_ROOT/bin/loopzero-ops"
+  ( cd "$REPO_ROOT" && go build -o bin/loopruntime-ops ./cmd/loopruntime-ops ) >/dev/null 2>&1
+  LOOPRUNTIME_OPS_BIN="$REPO_ROOT/bin/loopruntime-ops"
 fi
 
 set +e
-SLO_OUT=$("$LOOPZERO_OPS_BIN" chaos slo-compare "$RUN_DIR/baseline.json" "$RUN_DIR/during.json" "$RUN_DIR/post.json")
+SLO_OUT=$("$LOOPRUNTIME_OPS_BIN" chaos slo-compare "$RUN_DIR/baseline.json" "$RUN_DIR/during.json" "$RUN_DIR/post.json")
 SLO_RC=$?
 set -e
 
@@ -282,7 +282,7 @@ log "=================================="
 log "SCENARIO $SCENARIO verdict: $VERDICT"
 log "  baseline p95: ${PRE_P95}ms / during p95: ${DURING_P95}ms / post p95: ${POST_P95}ms"
 log "  success rate: pre=${PRE_SUCCESS}% during=${DURING_SUCCESS}% post=${POST_SUCCESS}%"
-log "  loopzero-api restart delta: $RESTART_DELTA"
+log "  loopruntime-api restart delta: $RESTART_DELTA"
 log "  evidence: $RUN_DIR/"
 log "=================================="
 

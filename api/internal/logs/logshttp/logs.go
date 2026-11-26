@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package logshttp serves the build log endpoints: the paged read and the streaming
 // tail.
@@ -24,7 +24,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // parseSinceParam converts a `?since=<value>` query parameter into a
@@ -37,7 +37,7 @@ import (
 // "no override" and falls back to the default 7-day window).
 //
 // Beta Logs Gate Criterion 7 — the runbook documents this contract so
-// operators can write `loopzero logs --since 7d` without learning Go's
+// operators can write `loopruntime logs --since 7d` without learning Go's
 // idiosyncratic duration syntax (which lacks "d").
 var daySuffixRegex = regexp.MustCompile(`^(\d+)d$`)
 
@@ -111,7 +111,7 @@ type logsResponse struct {
 }
 
 // errLogsUnavailable answers a read whose log backend could not be reached.
-var errLogsUnavailable = loopzeroerrors.NewLoopZeroError("LOGS_UNAVAILABLE",
+var errLogsUnavailable = loopruntimeerrors.NewLoopRuntimeError("LOGS_UNAVAILABLE",
 	"Build logs are temporarily unavailable. Try again in a moment.")
 
 // LogsHandler provides HTTP handlers for build log operations.
@@ -144,26 +144,26 @@ func (h *LogsHandler) WithDebugAuthorizer(authorized func(*http.Request) bool) *
 func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	buildID := chi.URLParam(r, "id")
 	if buildID == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("build ID is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("build ID is required"))
 		return
 	}
 
 	// Verify build exists and enforce tenant isolation
 	build, err := h.builds.GetByIDForTenant(r.Context(), uc.TenantID, buildID)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	// T0.4: tenant filter is now at DB level — build==nil means NotFound
 	// OR cross-tenant access (indistinguishable to the caller by design).
 	if build == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrBuildNotFound)
 		return
 	}
 
@@ -191,12 +191,12 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Plan J-17 Layer 3 (2026-06-06): operator-only debug mode bypasses
 	// the user-facing filter. `?mode=debug` returns every container line
-	// including raw main-container stdout. Gated by the same LOOPZERO_ADMIN_API
+	// including raw main-container stdout. Gated by the same LOOPRUNTIME_ADMIN_API
 	// + X-Service-Auth pattern used by admin endpoints — a dashboard user
 	// JWT cannot enable it.
 	if r.URL.Query().Get("mode") == "debug" {
 		if h.debugAuthorized == nil || !h.debugAuthorized(r) {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrForbidden)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrForbidden)
 			return
 		}
 		opts.Debug = true
@@ -208,7 +208,7 @@ func (h *LogsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		// The log backend is unreachable. That is not "no logs": answering
 		// 200 with no entries would tell the caller the logs are gone.
 		slog.ErrorContext(r.Context(), "build logs query failed", "build_id", buildID, "error", err)
-		httpio.WriteLoopZeroError(w, errLogsUnavailable)
+		httpio.WriteLoopRuntimeError(w, errLogsUnavailable)
 		return
 	}
 

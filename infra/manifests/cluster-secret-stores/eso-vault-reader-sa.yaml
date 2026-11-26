@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
-# Phase 3.1 pre-req: SA `eso-vault-reader` (mgmt cluster, loopzero-system ns)
+# Phase 3.1 pre-req: SA `eso-vault-reader` (mgmt cluster, loopruntime-system ns)
 # with ClusterRoleBinding `system:auth-delegator` for cross-cluster
-# TokenReview (mirror of loopzero-secrets-reviewer pattern, VK.5 commit 41e7408f).
+# TokenReview (mirror of loopruntime-secrets-reviewer pattern, VK.5 commit 41e7408f).
 #
 # Vault validates ESO's SA token by calling TokenReview API back to mgmt
 # cluster's kube-apiserver — this SA's JWT is what ESO sends to Vault
 # at auth/kubernetes/login.
 #
-# Apply on MGMT cluster (k3d-loopzero-core OR DOKS loopzero-core-prod).
+# Apply on MGMT cluster (k3d-loopruntime-core OR DOKS loopruntime-core-prod).
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: eso-vault-reader
-  namespace: loopzero-system
+  namespace: loopruntime-system
   annotations:
-    loopzero.io/purpose: "ESO SA for loopzero-secrets cluster Vault auth/kubernetes login"
-    loopzero.io/cross-cluster: "true (validated against mgmt apiserver via auth-delegator)"
+    runtime.getloopscale.com/purpose: "ESO SA for loopruntime-secrets cluster Vault auth/kubernetes login"
+    runtime.getloopscale.com/cross-cluster: "true (validated against mgmt apiserver via auth-delegator)"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -29,4 +29,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: eso-vault-reader
-    namespace: loopzero-system
+    namespace: loopruntime-system

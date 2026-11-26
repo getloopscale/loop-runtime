@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metrics
 
@@ -105,7 +105,7 @@ func TestSigstoreMetrics_NullCounter_UnknownSentinelCountsAsNull(t *testing.T) {
 
 func TestSigstoreMetrics_PopulatedCounter_IncrementsOnNonEmpty(t *testing.T) {
 	ReleaseAttestationRekorURLPersist.Reset()
-	ObserveRekorURLPersist("https://rekor.loopzero.test/api/v1/log/entries?logIndex=1")
+	ObserveRekorURLPersist("https://rekor.loopruntime.test/api/v1/log/entries?logIndex=1")
 	if got := testutil.ToFloat64(ReleaseAttestationRekorURLPersist.WithLabelValues("populated")); got != 1 {
 		t.Errorf("rekor_url_null_total{populated} = %v, want 1", got)
 	}
@@ -177,21 +177,21 @@ func TestSigstoreMetrics_AllRegistered(t *testing.T) {
 	ObserveCosignAttest(true, "")
 	ObserveCosignSign(false, "fulcio")
 	ObserveCosignAttest(false, "rekor")
-	ObserveRekorURLPersist("https://rekor.loopzero.test/x")
+	ObserveRekorURLPersist("https://rekor.loopruntime.test/x")
 	ObserveRekorURLPersist("")
 	ObserveCosignSignDuration(true, 1.0)
 	ObserveCosignAttestDuration(true, 1.0)
 	FulcioCertIssuanceDuration.Observe(0.7)
 
 	wantSubstrings := []string{
-		"loopzero_cosign_sign_duration_seconds",
-		"loopzero_cosign_attest_duration_seconds",
-		"loopzero_cosign_sign_total",
-		"loopzero_cosign_attest_total",
-		"loopzero_cosign_sign_errors_total",
-		"loopzero_cosign_attest_errors_total",
-		"loopzero_release_attestation_rekor_url_null_total",
-		"loopzero_fulcio_cert_issuance_duration_seconds",
+		"loopruntime_cosign_sign_duration_seconds",
+		"loopruntime_cosign_attest_duration_seconds",
+		"loopruntime_cosign_sign_total",
+		"loopruntime_cosign_attest_total",
+		"loopruntime_cosign_sign_errors_total",
+		"loopruntime_cosign_attest_errors_total",
+		"loopruntime_release_attestation_rekor_url_null_total",
+		"loopruntime_fulcio_cert_issuance_duration_seconds",
 	}
 
 	// Collect across all metrics by emitting one of each then asking
@@ -199,7 +199,7 @@ func TestSigstoreMetrics_AllRegistered(t *testing.T) {
 	// CollectAndFormat for histograms via *.Desc but the simpler tactic
 	// is to render each separately.
 	render := []string{
-		testutil.CollectAndCompare(CosignSignDuration, strings.NewReader(""), "loopzero_cosign_sign_duration_seconds").Error(),
+		testutil.CollectAndCompare(CosignSignDuration, strings.NewReader(""), "loopruntime_cosign_sign_duration_seconds").Error(),
 		// The Error()-of-mismatch trick gives us the rendered text;
 		// we only need substrings, not equality, so we'll just rely
 		// on each metric existing per the Reset+Observe pattern above.

@@ -1,29 +1,29 @@
 config:
-  loopzero-infra:environment: prod
-  loopzero-infra:provider: digitalocean
-  loopzero-infra:region: nyc3
-  loopzero-infra:domain: getloopscale.com
-  loopzero-infra:dnsZone: getloopscale.com
-  loopzero-infra:infraVersion: v1
+  loopruntime-infra:environment: prod
+  loopruntime-infra:provider: digitalocean
+  loopruntime-infra:region: nyc3
+  loopruntime-infra:domain: getloopscale.com
+  loopruntime-infra:dnsZone: getloopscale.com
+  loopruntime-infra:infraVersion: v1
   # Management cluster — platform services (ArgoCD, API, Traefik, cert-manager)
-  loopzero-infra:mgmtK8sVersion: "1.33.9-do.4"
-  loopzero-infra:mgmtNodeClass: medium
-  loopzero-infra:mgmtMinNodes: "3"
-  loopzero-infra:mgmtMaxNodes: "5"
+  loopruntime-infra:mgmtK8sVersion: "1.33.9-do.4"
+  loopruntime-infra:mgmtNodeClass: medium
+  loopruntime-infra:mgmtMinNodes: "3"
+  loopruntime-infra:mgmtMaxNodes: "5"
   # Runtime cluster — user applications
-  loopzero-infra:runtimeK8sVersion: "1.33.9-do.4"
-  loopzero-infra:runtimeNodeClass: medium
-  loopzero-infra:runtimeMinNodes: "3"
-  loopzero-infra:runtimeMaxNodes: "6"
+  loopruntime-infra:runtimeK8sVersion: "1.33.9-do.4"
+  loopruntime-infra:runtimeNodeClass: medium
+  loopruntime-infra:runtimeMinNodes: "3"
+  loopruntime-infra:runtimeMaxNodes: "6"
   # Build cluster — Argo Workflows + BuildKit
-  loopzero-infra:buildK8sVersion: "1.33.9-do.4"
-  loopzero-infra:buildNodeClass: medium
-  loopzero-infra:buildMinNodes: "2"
-  loopzero-infra:buildMaxNodes: "4"
+  loopruntime-infra:buildK8sVersion: "1.33.9-do.4"
+  loopruntime-infra:buildNodeClass: medium
+  loopruntime-infra:buildMinNodes: "2"
+  loopruntime-infra:buildMaxNodes: "4"
   # Database — managed PostgreSQL HA
-  loopzero-infra:dbNodeClass: medium
-  loopzero-infra:dbVersion: "16"
-  loopzero-infra:dbNodeCount: "3"
+  loopruntime-infra:dbNodeClass: medium
+  loopruntime-infra:dbVersion: "16"
+  loopruntime-infra:dbNodeCount: "3"
   # Secrets — MUST be set before first deploy:
   #   pulumi config set --secret spacesAccessKeyId <value> --stack prod
   #   pulumi config set --secret spacesSecretAccessKey <value> --stack prod
@@ -31,7 +31,7 @@ config:
   #   pulumi config set --secret giteaAdminPassword <strong-password> --stack prod
   #   pulumi config set --secret minioRootPassword <strong-password> --stack prod
   # Observability — Tempo trace storage (MEET-020)
-  loopzero-infra:tempoStorageBucket: loopzero-traces
+  loopruntime-infra:tempoStorageBucket: loopruntime-traces
   # Cloudflare (required for CF Tunnel + static delivery):
   #   pulumi config set --secret cfApiToken <value> --stack prod
   #   pulumi config set cfAccountId <value> --stack prod
@@ -40,7 +40,7 @@ config:
   # OpenBao auto-unseal (F1.1 of plan 2026-06-02-openbao-adoption v1.2).
   # Opt-in. When enabled, creates AWS KMS key + IAM user openbao-unseal in
   # the AWS profile configured for this Pulumi run. Operator must have
-  # AWS_PROFILE=loopzero-openbao OR equivalent active. See:
+  # AWS_PROFILE=loopruntime-openbao OR equivalent active. See:
   #   MEET-ASYNC-AMENDMENT-2026-06-02-001-openbao-f1-execution.md (Q2-F1)
   # The bootstrap user openbao-pulumi-bootstrap (perms to create the
   # resources) is operator-time, NOT Pulumi-managed.
@@ -50,12 +50,12 @@ config:
   # Optional region override (default us-east-1):
   #   pulumi config set openbaoAwsRegion us-east-1 --stack prod
   # openbaoEnabled: false  # default — set via CLI when ready
-  loopzero-infra:spacesAccessKeyId:
+  loopruntime-infra:spacesAccessKeyId:
     secure: v1:YELG+/CfjKtksJaj:uCcqvIbxrcCMig/A3yc0wg6oKa4UxAEzYKB4H3X91z/wRc2R
-  loopzero-infra:spacesSecretAccessKey:
+  loopruntime-infra:spacesSecretAccessKey:
     secure: v1:/mxsWf7LEWCGOzSO:h5TyKQHT953kV8BgLkR+zplKs6SZRvyGcyNMc8MU0N8siqwDU9sBl3tLoAyNb8dnJ5t5yr6j3uYCXYg=
-  loopzero-infra:digitaloceanToken:
+  loopruntime-infra:digitaloceanToken:
     secure: v1:SFEFqglTquk0LvnJ:XHaI5dI65mH+r2wMOT22mflTItIHYilfLTMb671d+zkscbZb4xxv8smXckk2AzSJo++Cm84kSxKPJmdMETeDDayYAmtEIN2wtMnkp5x3fH0gnizx+IHe
-  loopzero-infra:cfApiToken:
+  loopruntime-infra:cfApiToken:
     secure: v1:pwfm0eDR0K/DnO1c:UnFrcx5ZJ8IfpDN4W6zt+1bdlKFdP68yPGUTZbYLl+HNuZ+UIE+ogGnIlPfcGPbS8Xi5MTASpEgBelDg+NuRBkzeVhDx
 encryptionsalt: v1:61WYd0xVlaQ=:v1:FWU8qAcf/IyAODRU:ucm7lhQepqVqbcvDZAMAogljf4/xBA==

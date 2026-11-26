@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
 // M7 tenant blob storage — J-26 dogfood journey. Proves the /v1/storage/* vertical
-// end-to-end over the real edge with a real loopzero_live_* key carrying storage:read/
+// end-to-end over the real edge with a real loopruntime_live_* key carrying storage:read/
 // storage:write.
 //
 // Build with: go test -tags=live ./infra/tests/livetest/dogfood/... -run J26Storage
 //
 // LIVE pre-conditions (operator-gated per plan ADR D5 + cleanroom-up-live-test-
-// mandate.md): dev-public infra UP + STORAGE_S3_* configured on loopzero-cloud + a
-// storage-scoped key exported as LOOPZERO_STORAGE_KEY (operator seeds it). Absent the
+// mandate.md): dev-public infra UP + STORAGE_S3_* configured on loopruntime-cloud + a
+// storage-scoped key exported as LOOPRUNTIME_STORAGE_KEY (operator seeds it). Absent the
 // key, Scenario B SKIPs (the spec still ENUMERATES — no 0-spec false-green).
 
 package dogfood
@@ -39,7 +39,7 @@ var _ = Describe("J-26 tenant blob storage LIVE", Label("live", "dogfood", "j26"
 	BeforeEach(func() {
 		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Minute)
 		env = DefaultEnv()
-		key = os.Getenv("LOOPZERO_STORAGE_KEY")
+		key = os.Getenv("LOOPRUNTIME_STORAGE_KEY")
 	})
 
 	AfterEach(func() { cancel() })
@@ -83,12 +83,12 @@ var _ = Describe("J-26 tenant blob storage LIVE", Label("live", "dogfood", "j26"
 	Context("Scenario B — core chain upload → stat → list → download → share → redeem → delete", func() {
 		It("round-trips a file through the storage vertical", func() {
 			if key == "" {
-				Skip("LOOPZERO_STORAGE_KEY not set — operator seeds a storage:read/write key for the LIVE run (plan ADR D5)")
+				Skip("LOOPRUNTIME_STORAGE_KEY not set — operator seeds a storage:read/write key for the LIVE run (plan ADR D5)")
 			}
 			Expect(HealthcheckCloud(ctx, env)).To(Succeed())
 
 			const objPath = "/v1/storage/objects/dogfood/j26-probe.txt"
-			payload := []byte("loopzero storage j26 probe")
+			payload := []byte("loopruntime storage j26 probe")
 
 			// upload
 			status, _ := storageReq(http.MethodPut, objPath, payload, "text/plain")

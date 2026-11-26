@@ -79,7 +79,7 @@ run_suite() {
 
 run_hermetic_suites() {
   run_suite "hermetic: dev-public-env (Go gate)" \
-    "/tmp/loopzero-ops quality dev-public-env"
+    "/tmp/loopruntime-ops quality dev-public-env"
 
   run_suite "hermetic: check-live-proof-syntax_test.sh" \
     "bash $REPO_ROOT/infra/tests/check-live-proof-syntax_test.sh"

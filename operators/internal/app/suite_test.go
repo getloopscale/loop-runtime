@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package app_test
 
@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/operatortest"
 )
 
@@ -66,7 +66,7 @@ var _ = AfterSuite(func() {
 // Each clears finalizers on a CR and deletes it. Idempotent — skip if NotFound.
 
 func deleteAppWithFinalizer(appName string) {
-	app := &loopzerov1.LoopZeroApplication{}
+	app := &loopruntimev1.LoopRuntimeApplication{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName, Namespace: "default"}, app); err == nil {
 		_ = operatortest.UpdateWithRetry(ctx, k8sClient, app, func() {
 			app.Finalizers = nil
@@ -81,7 +81,7 @@ func deleteAppWithFinalizer(appName string) {
 // tenant_test.expectEnvCondition / expectTenantCondition.
 func expectRouteCondition(routeName, condType string, want metav1.ConditionStatus) {
 	Eventually(func(g Gomega) {
-		var route loopzerov1.ExposedRoute
+		var route loopruntimev1.ExposedRoute
 		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 			Name: routeName, Namespace: "default",
 		}, &route)).To(Succeed())
@@ -96,12 +96,12 @@ func expectRouteCondition(routeName, condType string, want metav1.ConditionStatu
 	}, timeout, interval).Should(Succeed())
 }
 
-// expectAppCondition fetches the LoopZeroApplication CR identified by appName
+// expectAppCondition fetches the LoopRuntimeApplication CR identified by appName
 // in the default namespace and asserts a specific condition type appears
 // with the given status.
 func expectAppCondition(appName, condType string, want metav1.ConditionStatus) {
 	Eventually(func(g Gomega) {
-		var app loopzerov1.LoopZeroApplication
+		var app loopruntimev1.LoopRuntimeApplication
 		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 			Name: appName, Namespace: "default",
 		}, &app)).To(Succeed())
@@ -112,17 +112,17 @@ func expectAppCondition(appName, condType string, want metav1.ConditionStatus) {
 				g.Expect(c.Status).To(Equal(want))
 			}
 		}
-		g.Expect(found).To(BeTrue(), condType+" condition should exist on LoopZeroApplication CR")
+		g.Expect(found).To(BeTrue(), condType+" condition should exist on LoopRuntimeApplication CR")
 	}, timeout, interval).Should(Succeed())
 }
 
-// withApp fetches a LoopZeroApplication CR by name (in default namespace) inside
+// withApp fetches a LoopRuntimeApplication CR by name (in default namespace) inside
 // an Eventually loop and runs caller-supplied assertions against it. Phase 3
 // helper: collapses ~6 inline 7-line Eventually+Get scaffolds in
 // application_controller_test.go that vary only in the inner field assertion.
-func withApp(appName string, assertions func(g Gomega, app *loopzerov1.LoopZeroApplication)) {
+func withApp(appName string, assertions func(g Gomega, app *loopruntimev1.LoopRuntimeApplication)) {
 	Eventually(func(g Gomega) {
-		var app loopzerov1.LoopZeroApplication
+		var app loopruntimev1.LoopRuntimeApplication
 		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 			Name: appName, Namespace: "default",
 		}, &app)).To(Succeed())
@@ -133,9 +133,9 @@ func withApp(appName string, assertions func(g Gomega, app *loopzerov1.LoopZeroA
 // withRoute fetches an ExposedRoute CR by name (in default namespace) inside
 // an Eventually loop and runs caller-supplied assertions against it.
 // Phase 3 callback-style helper, sibling to withApp.
-func withRoute(routeName string, assertions func(g Gomega, route *loopzerov1.ExposedRoute)) {
+func withRoute(routeName string, assertions func(g Gomega, route *loopruntimev1.ExposedRoute)) {
 	Eventually(func(g Gomega) {
-		var route loopzerov1.ExposedRoute
+		var route loopruntimev1.ExposedRoute
 		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 			Name: routeName, Namespace: "default",
 		}, &route)).To(Succeed())
@@ -144,7 +144,7 @@ func withRoute(routeName string, assertions func(g Gomega, route *loopzerov1.Exp
 }
 
 func deleteRouteWithFinalizer(routeName string) {
-	route := &loopzerov1.ExposedRoute{}
+	route := &loopruntimev1.ExposedRoute{}
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: routeName, Namespace: "default"}, route); err == nil {
 		_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
 			route.Finalizers = nil

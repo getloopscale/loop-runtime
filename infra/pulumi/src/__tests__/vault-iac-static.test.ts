@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // T9.4 unit tests for vault-iac.ts WITHOUT loading the Pulumi runtime.
 // The existing tests in this repo (heal-script-H12, adopt-or-create) avoid

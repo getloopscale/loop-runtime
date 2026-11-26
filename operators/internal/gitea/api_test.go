@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package gitea
 
@@ -56,15 +56,15 @@ func TestCheckVersion_ServerError(t *testing.T) {
 func TestValidateToken_BearerHeaderSent(t *testing.T) {
 	c, _ := newClient(t, func(w http.ResponseWriter, r *http.Request) {
 		got := r.Header.Get("Authorization")
-		want := "token loopzero-test-token"
+		want := "token loopruntime-test-token"
 		if got != want {
 			t.Errorf("Authorization header = %q, want %q", got, want)
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"username":"loopzero"}`))
+		_, _ = w.Write([]byte(`{"username":"loopruntime"}`))
 	})
 
-	if err := c.ValidateToken(context.Background(), "loopzero-test-token"); err != nil {
+	if err := c.ValidateToken(context.Background(), "loopruntime-test-token"); err != nil {
 		t.Fatalf("ValidateToken() error = %v, want nil", err)
 	}
 }

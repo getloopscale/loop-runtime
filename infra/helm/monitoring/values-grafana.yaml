@@ -35,7 +35,7 @@ datasources:
         url: http://tempo.monitoring.svc.cluster.local:3200
         access: proxy
 # Loads every ConfigMap in this namespace labelled grafana_dashboard=1: the core helmfile's
-# loopzero-monitoring release renders one per infra/helm/monitoring/dashboards file.
+# loopruntime-monitoring release renders one per infra/helm/monitoring/dashboards file.
 sidecar:
   dashboards:
     enabled: true
@@ -45,7 +45,7 @@ sidecar:
     provider:
       name: sidecar
       orgId: 1
-      folder: LoopZero
+      folder: LoopRuntime
       type: file
       disableDeletion: false
       allowUiUpdates: true

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -105,7 +105,7 @@ func TestEnrichAttestation_AttestStepUnknownSentinel_NoOp(t *testing.T) {
 
 func TestEnrichAttestation_AttestStepValidURL_Propagates(t *testing.T) {
 	apps := []deploycontracts.AppRelease{{Name: "api"}}
-	url := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=42"
+	url := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=42"
 	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
@@ -122,8 +122,8 @@ func TestEnrichAttestation_MultiApp_PerAppIsolation(t *testing.T) {
 	// Two apps, two distinct attest step outputs. The enricher must
 	// scope each app's URL to its own step — no cross-app leak.
 	apps := []deploycontracts.AppRelease{{Name: "api"}, {Name: "worker"}}
-	apiURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=1"
-	workerURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=2"
+	apiURL := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=1"
+	workerURL := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=2"
 	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
@@ -145,7 +145,7 @@ func TestEnrichAttestation_MultiApp_OnlyOneSucceeds(t *testing.T) {
 	// step is absent from Outputs entirely. Worker URL must stay empty
 	// and api URL must propagate — no shared-state leak.
 	apps := []deploycontracts.AppRelease{{Name: "api"}, {Name: "worker"}}
-	apiURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=7"
+	apiURL := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=7"
 	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
@@ -168,7 +168,7 @@ func TestEnrichAttestation_DuplicateAttestStepName_LastWins(t *testing.T) {
 	// last value-by-iteration is canonical. This test pins that behavior
 	// by asserting we still get a single URL, not concatenation.
 	apps := []deploycontracts.AppRelease{{Name: "api"}}
-	url := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=99"
+	url := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=99"
 	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
@@ -197,8 +197,8 @@ func TestEnrichAttestation_DuplicateAttestStepName_LastWins(t *testing.T) {
 // If a future refactor introduces shared state, this test will surface
 // it loud at the next CI run.
 func TestEnrichAttestation_ConcurrentSlices_NoDataRace(t *testing.T) {
-	apiURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=1"
-	workerURL := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=2"
+	apiURL := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=1"
+	workerURL := "https://rekor.loopruntime.test/api/v1/log/entries?logIndex=2"
 	statusA := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
@@ -253,7 +253,7 @@ func TestEnrichAttestation_EmitsSignTotal_SuccessOnSignature(t *testing.T) {
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
 			"sign-image-api":   {"signature": "sig:abc"},
-			"attest-image-api": {"rekor-url": "https://rekor.loopzero.test/x"},
+			"attest-image-api": {"rekor-url": "https://rekor.loopruntime.test/x"},
 		},
 	}
 	enrichAppReleasesWithAttestation(apps, status)
@@ -309,7 +309,7 @@ func TestEnrichAttestation_EmitsRekorURLNullCounter(t *testing.T) {
 	status := &deploycontracts.WorkflowStatus{
 		Phase: "Succeeded",
 		Outputs: map[string]map[string]string{
-			"attest-image-api": {"rekor-url": "https://rekor.loopzero.test/x"},
+			"attest-image-api": {"rekor-url": "https://rekor.loopruntime.test/x"},
 			"attest-image-web": {"rekor-url": ""}, // empty → null bucket
 		},
 	}

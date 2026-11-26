@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package contract
 
@@ -15,8 +15,8 @@ import (
 
 // M10 T2.1 — consumer-driven contract (dashboard ↔ engine).
 //
-// The LoopZeroCloud dashboard (loopzero-cloud/dashboard/src) is the real consumer of the
-// engine REST contract: the loopzero-cloud Go BFF is a TRANSPARENT reverse proxy
+// The LoopRuntimeCloud dashboard (loopruntime-cloud/dashboard/src) is the real consumer of the
+// engine REST contract: the loopruntime-cloud Go BFF is a TRANSPARENT reverse proxy
 // (cmd/main.go `r.Route("/engine", ...)` strips the prefix and forwards), so it
 // enumerates no engine paths of its own. These tests assert the engine's published
 // spec (engine.yaml) covers every engine path the dashboard depends on, so a
@@ -29,7 +29,7 @@ import (
 
 const (
 	dashboardPathsFile = "testdata/dashboard-consumed-paths.txt"
-	dashboardSrcDir    = "../../../../loopzero-cloud/dashboard/src"
+	dashboardSrcDir    = "../../../../loopruntime-cloud/dashboard/src"
 )
 
 // enginePrefixedRE matches a /engine/api/v1/... literal (the proxied engine call
@@ -61,7 +61,7 @@ func readDashboardPathList(t *testing.T) map[string]bool {
 	return set
 }
 
-// dashboardSrcPresent reports whether the sibling loopzero-cloud dashboard tree is
+// dashboardSrcPresent reports whether the sibling loopruntime-cloud dashboard tree is
 // checked out next to this repo. When absent, the live drift guard SKIPs — the
 // static presence check (TestDashboardConsumer_AllPathsInSpec) still runs.
 func dashboardSrcPresent() bool {

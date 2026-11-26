@@ -33,9 +33,9 @@
 # Pre-flight:
 #   - aws CLI + kubectl in PATH
 #   - AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY env vars (DO Spaces creds)
-#   - Bucket: loopzero-openbao-backups-<env> em SFO3 region
+#   - Bucket: loopruntime-openbao-backups-<env> em SFO3 region
 #
-# Plan: 2026-06-02-loopzero-api-vault-integration v1.8 Runbook P5 codification.
+# Plan: 2026-06-02-loopruntime-api-vault-integration v1.8 Runbook P5 codification.
 # SPDX-License-Identifier: Apache-2.0
 
 set -uo pipefail
@@ -47,12 +47,12 @@ ENV=""
 SNAPSHOT_KEY=""
 LIST_MODE=0
 EXECUTE=0
-SECRETS_CONTEXT="${LOOPZERO_SECRETS_CONTEXT:-k3d-loopzero-secrets}"
+SECRETS_CONTEXT="${LOOPRUNTIME_SECRETS_CONTEXT:-k3d-loopruntime-secrets}"
 VAULT_NAMESPACE="secrets-system"
 VAULT_POD="openbao-0"
 DO_REGION="${OPENBAO_BACKUP_REGION:-sfo3}"
 S3_ENDPOINT="https://${DO_REGION}.digitaloceanspaces.com"
-BUCKET_PREFIX="loopzero-openbao-backups"
+BUCKET_PREFIX="loopruntime-openbao-backups"
 
 usage() {
   cat <<EOF
@@ -64,7 +64,7 @@ USAGE
   $0 --env <env> [--list | --snapshot-key <key>] [options]
 
 REQUIRED
-  --env <env>            LoopZero env (vault-local|dev|drill|staging|prod)
+  --env <env>            LoopRuntime env (vault-local|dev|drill|staging|prod)
 
 MODE (one of)
   --list                 List 10 most recent snapshots em bucket
@@ -72,7 +72,7 @@ MODE (one of)
 
 OPTIONAL
   --execute              ACTUALLY perform restore (default: dry-run only)
-  --vault-context <ctx>  kubectl context (default: k3d-loopzero-secrets)
+  --vault-context <ctx>  kubectl context (default: k3d-loopruntime-secrets)
   --vault-namespace <ns> Vault NS (default: secrets-system)
   --vault-pod <name>     Vault pod name (default: openbao-0)
   --do-region <r>        DO Spaces region (default: sfo3; env OPENBAO_BACKUP_REGION)

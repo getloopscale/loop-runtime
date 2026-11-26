@@ -3,14 +3,14 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: loopzero-tempo
+  name: loopruntime-tempo
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   namespaceSelector:
     matchNames:
-      - loopzero-system
+      - loopruntime-system
   selector:
     matchLabels:
       app.kubernetes.io/name: tempo

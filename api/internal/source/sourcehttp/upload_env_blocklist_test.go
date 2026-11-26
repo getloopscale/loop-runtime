@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package sourcehttp
 
@@ -50,7 +50,7 @@ func uploadWithReservedEnvKey(t *testing.T, h *SourceHandler) *httptest.Response
 // the process environment says, and warning only when the composition root
 // passes EnvBlocklistWarn.
 func TestUploadEnforcesTheReservedEnvBlocklistUnlessConfiguredToWarn(t *testing.T) {
-	t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "warn")
+	t.Setenv("LOOPRUNTIME_ENV_BLOCKLIST_MODE", "warn")
 
 	t.Run("default handler refuses", func(t *testing.T) {
 		store := &countingStore{}

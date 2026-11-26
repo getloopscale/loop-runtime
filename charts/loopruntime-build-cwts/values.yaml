@@ -1,0 +1,61 @@
+# Custom images used by CWT templates.
+# Override for local dev: task images:build pushes to k3d-loopruntime-registry:5000.
+# Production: CI builds and pushes to registry.digitalocean.com/loopruntime-system.
+images:
+  cloneRunner: "registry.digitalocean.com/loopruntime-system/loopruntime-clone-runner:v0.1.0"
+
+# S3 bucket name for source bundles and build cache.
+# Must match SOURCE_BUCKET env var in loopruntime-api and the bucket created by Pulumi.
+sourceBucket: "loopruntime-builds"
+
+# S3 bucket for the dependency cache (cache-restore, cache-save). Empty keeps it in
+# sourceBucket. On AWS the build role reads the builds bucket only, so the cache goes to
+# a bucket it can write (the artifacts bucket).
+cacheBucket: ""
+
+# How the clone and cache steps authenticate to the object store.
+#   secret: keys from the Secret minio.existingSecret (MinIO, local k3d).
+#   irsa:   the IRSA role of the workflow ServiceAccount (AWS S3). EKS injects
+#           AWS_ROLE_ARN and AWS_WEB_IDENTITY_TOKEN_FILE, and mc exchanges the token
+#           for credentials at STS.
+objectStorage:
+  credentials: secret
+
+# The Argo Workflows controller, server and workflow defaults (parallelism, probes,
+# podGC, volumeClaimGC) are configured where that chart is installed:
+# infra/helm/argo-workflows/values.yaml. This chart only ships the
+# ClusterWorkflowTemplates and the workflow ServiceAccount; keys for the controller
+# here were never read by any template.
+
+# Workflow execution ServiceAccount and RBAC.
+# The WorkflowTemplate (loopruntime-build-nodejs-v1) specifies serviceAccountName: loopruntime-build-sa.
+# This SA is created by Helm with RBAC for workflow task results.
+# The controller creates pods using its own ClusterRole — the workflow SA just needs to exist
+# and have workflowtaskresults permissions so step pods can report back.
+workflow:
+  serviceAccount:
+    create: true
+    name: loopruntime-build-sa
+  rbac:
+    create: true
+
+# MinIO object storage configuration.
+# Used by clone step (source bundles) and cache steps (dependency cache).
+# IMPORTANT: Set insecure=false in production overlays. This flag disables
+# TLS verification for the MinIO endpoint and is only appropriate for local
+# development with k3d (MinIO without TLS).
+#
+# BLOCKER-1 fix: Gitea section removed. Source code is now fetched from MinIO
+# (where the CLI uploads it) instead of cloning from Gitea cross-cluster.
+# Gitea is only used for GitOps manifests (ArgoCD watches it).
+minio:
+  insecure: true   # DEV ONLY — allows HTTP MinIO (no TLS)
+  # existingSecret floor (anti-lock-in): the operator-provided K8s Secret the build
+  # CWTs consume by reference (envFrom secretRef). Must provide the keys in SECRETS.md.
+  # Default preserves legacy behavior. See SECRETS.md + examples/eso-minio.yaml.
+  existingSecret: "loopruntime-minio-credentials"
+
+# Egress rules appended to build-pod-egress, the default-deny policy of the build pods,
+# for a destination only one environment has (staging's AWS emulator port).
+networkPolicy:
+  extraEgress: []

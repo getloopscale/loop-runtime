@@ -3,38 +3,38 @@
 # Roadmap 04 cell-budget.md: verify API stays within SLO under degraded
 # DB latency. 500ms per round-trip quadruples every PG query — if the
 # API's timeout strategy is correct, queries time out with clean errors
-# (typed LoopZeroError, not goroutine leaks) and user-facing latency degrades
+# (typed LoopRuntimeError, not goroutine leaks) and user-facing latency degrades
 # gracefully (p99 bumps into yellow but not red).
 #
 # Hypothesis:
 #   - API p99 HTTP latency stays below 30s (the request deadline)
 #   - Build reconcile loop's ticker keeps firing (no deadlock)
 #   - PG circuit breaker does NOT trip (latency ≠ pool saturation)
-#   - Zero 500 errors from the handler (only typed LoopZeroError paths)
+#   - Zero 500 errors from the handler (only typed LoopRuntimeError paths)
 ---
 apiVersion: chaos-mesh.org/v1alpha1
 kind: NetworkChaos
 metadata:
   name: pg-network-latency
-  namespace: loopzero-system
+  namespace: loopruntime-system
   annotations:
-    loopzero.io/roadmap: "04"
-    loopzero.io/hypothesis: "500ms PG latency degrades gracefully, no 500s, no deadlocks"
+    runtime.getloopscale.com/roadmap: "04"
+    runtime.getloopscale.com/hypothesis: "500ms PG latency degrades gracefully, no 500s, no deadlocks"
     # SLO query post-decomposition (2026-06-29). Canonical names
-    # loopzero_http_* → loopzero_api_*. Histogram + counter scraped via
-    # job=loopzero-api-metrics (infra/helm/monitoring/values-prometheus.yaml).
+    # loopruntime_http_* → loopruntime_api_*. Histogram + counter scraped via
+    # job=loopruntime-api-metrics (infra/helm/monitoring/values-prometheus.yaml).
     # `or vector(0)` defaults the 5xx rate to 0 when no 5xx series
     # exist (the desired steady state).
-    loopzero.io/slo-query: |
-      (histogram_quantile(0.99, sum by (le) (rate(loopzero_api_request_duration_seconds_bucket[2m]))) < 30) and on() ((sum(rate(loopzero_api_requests_total{status=~"5.."}[2m])) or vector(0)) == 0)
+    runtime.getloopscale.com/slo-query: |
+      (histogram_quantile(0.99, sum by (le) (rate(loopruntime_api_request_duration_seconds_bucket[2m]))) < 30) and on() ((sum(rate(loopruntime_api_requests_total{status=~"5.."}[2m])) or vector(0)) == 0)
 spec:
   action: delay
   mode: all
   selector:
     namespaces:
-      - loopzero-system
+      - loopruntime-system
     labelSelectors:
-      "app": "loopzero-api"
+      "app": "loopruntime-api"
   delay:
     latency: "500ms"
     correlation: "0"
@@ -46,9 +46,9 @@ spec:
     mode: all
     selector:
       namespaces:
-        - loopzero-system
+        - loopruntime-system
       labelSelectors:
-        "app": "loopzero-api"
+        "app": "loopruntime-api"
   direction: to
   # EC-6 fix (active-execution-plan §3.A.1, iter 2): the previous
   # `${PG_PRIVATE_HOST}` literal was never substituted (applyChaos uses
@@ -58,5 +58,5 @@ spec:
   # the in-cluster Service DNS. For production-equivalent chaos, deploy
   # a parameterized override (future work — Section 3.B follow-up).
   externalTargets:
-    - "postgresql.loopzero-system.svc.cluster.local"
+    - "postgresql.loopruntime-system.svc.cluster.local"
   duration: "180s"

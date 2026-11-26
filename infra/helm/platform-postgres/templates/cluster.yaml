@@ -15,7 +15,7 @@ metadata:
   name: {{ .Release.Name }}
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}
-    app.kubernetes.io/part-of: loopzero-data-plane
+    app.kubernetes.io/part-of: loopruntime-data-plane
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   instances: {{ .Values.instances }}
@@ -137,7 +137,7 @@ metadata:
   name: {{ $.Release.Name }}-{{ .name }}
   labels:
     app.kubernetes.io/name: {{ $.Release.Name }}
-    app.kubernetes.io/part-of: loopzero-data-plane
+    app.kubernetes.io/part-of: loopruntime-data-plane
     app.kubernetes.io/managed-by: {{ $.Release.Service }}
 spec:
   cluster:
@@ -157,7 +157,7 @@ metadata:
   name: {{ .Release.Name }}
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}
-    app.kubernetes.io/part-of: loopzero-data-plane
+    app.kubernetes.io/part-of: loopruntime-data-plane
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   podSelector:
@@ -197,7 +197,7 @@ metadata:
   name: {{ .Release.Name }}
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}
-    app.kubernetes.io/part-of: loopzero-data-plane
+    app.kubernetes.io/part-of: loopruntime-data-plane
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   # Base backups older than this, and the WAL only they need, are deleted by the plugin.
@@ -220,7 +220,7 @@ metadata:
   name: {{ .Release.Name }}
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}
-    app.kubernetes.io/part-of: loopzero-data-plane
+    app.kubernetes.io/part-of: loopruntime-data-plane
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   cluster:

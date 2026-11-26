@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -40,7 +40,7 @@ func runPythonScan(t *testing.T, bin string) (int, string) {
 	}
 	// Wrapped exactly as buildContainer wraps it, so the shell sees what the
 	// build container runs.
-	script := wrapWithLoopZeroMarkers("security-scan",
+	script := wrapWithLoopRuntimeMarkers("security-scan",
 		pythonScanScript(workspace, []deploycontracts.AppSpec{{Name: "api", Path: "api"}}))
 	cmd := exec.Command("sh", "-c", script)
 	cmd.Env = []string{"PATH=" + bin + ":/usr/bin:/bin", "HOME=" + t.TempDir()}

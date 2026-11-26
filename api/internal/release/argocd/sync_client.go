@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package argocd provides real ArgoCD integration for deployment sync operations.
 package argocd
@@ -25,7 +25,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // SyncClientConfig holds configuration for connecting to ArgoCD.
@@ -127,7 +127,7 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 		// Only a rejected token fails validation; any other status says the
 		// service answered, which is what this startup check establishes.
 		return nil
-	case errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed):
+	case errors.Is(err, loopruntimeerrors.ErrDeployServiceAuthFailed):
 		return err
 	case err != nil:
 		return fmt.Errorf("validate token: deployment sync service unreachable: %w", err)
@@ -146,15 +146,15 @@ func (c *SyncClient) ValidateToken(ctx context.Context) error {
 // before submitting the sync operation. ArgoCD repo-server caches manifest
 // generation errors (e.g., "app path does not exist") for ~5 minutes per
 // (repo, path, revision). When tenant-controller bootstraps a gitops repo
-// with an empty initial commit before `loopzero deploy` writes manifests, the
+// with an empty initial commit before `loopruntime deploy` writes manifests, the
 // first comparison caches the error. Subsequent syncs reuse the cache and
 // surface as "InvalidSpecError: Application referencing project X which does
 // not exist" — a misleading message that has nothing to do with the AppProject.
 // Hard-refresh (GET ?refresh=hard) drops the cache and forces re-clone.
 func (c *SyncClient) TriggerSync(ctx context.Context, appName string) error {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.argocd.sync_trigger",
+	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.argocd.sync_trigger",
 		trace.WithAttributes(
-			attribute.String("loopzero.argocd.app_name", appName),
+			attribute.String("loopruntime.argocd.app_name", appName),
 		))
 	defer span.End()
 
@@ -215,7 +215,7 @@ func syncError(appName string, err error) error {
 		// operation is already in progress"; the callers already retry with
 		// TerminateOperation on ErrSyncOperationInProgress.
 		statusErr.code == http.StatusBadRequest && strings.Contains(statusErr.body, "another operation is already in progress"):
-		return loopzeroerrors.ErrSyncOperationInProgress
+		return loopruntimeerrors.ErrSyncOperationInProgress
 	default:
 		return fmt.Errorf("argocd sync: %w", err)
 	}
@@ -505,7 +505,7 @@ func (c *SyncClient) do(ctx context.Context, method, path string, body io.Reader
 	}
 	token, err := c.tokenProvider.Token()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", loopzeroerrors.ErrDeployServiceAuthFailed, err)
+		return nil, fmt.Errorf("%w: %w", loopruntimeerrors.ErrDeployServiceAuthFailed, err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	// B11 (CHG-2026-04-23): ArgoCD rejects a DELETE without Content-Type with
@@ -526,7 +526,7 @@ func (c *SyncClient) do(ctx context.Context, method, path string, body io.Reader
 		if notifier, ok := c.tokenProvider.(AuthFailureNotifier); ok {
 			notifier.OnAuthFailure()
 		}
-		return nil, loopzeroerrors.ErrDeployServiceAuthFailed
+		return nil, loopruntimeerrors.ErrDeployServiceAuthFailed
 	}
 	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 	return nil, &apiStatusError{code: resp.StatusCode, body: string(snippet)}
@@ -541,7 +541,7 @@ func drainAndClose(resp *http.Response) {
 // withOp names the operation on an error, except the credential rejection,
 // which callers match by identity and is returned as-is.
 func withOp(op string, err error) error {
-	if errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
+	if errors.Is(err, loopruntimeerrors.ErrDeployServiceAuthFailed) {
 		return err
 	}
 	return fmt.Errorf("%s: %w", op, err)

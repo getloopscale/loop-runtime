@@ -1,14 +1,14 @@
-name: loopzero-drill
+name: loopruntime-drill
 runtime: nodejs
 description: >
-  LoopZero DR drill stack — SEPARATE from production per MEET-2026-05-12 D9 +
+  LoopRuntime DR drill stack — SEPARATE from production per MEET-2026-05-12 D9 +
   EC-NEW-5. Provisions a quarterly disaster-recovery validation cluster on
   *.drill.getloopscale.com (separate CF Zone) + dedicated DO project + isolated
-  Pulumi state at s3://loopzero-drill-pulumi-state.
+  Pulumi state at s3://loopruntime-drill-pulumi-state.
 
   This stack MUST NOT share credentials with production:
     - CF API token scoped only to drill.getloopscale.com
-    - DO API token scoped only to loopzero-drill project
+    - DO API token scoped only to loopruntime-drill project
     - Pulumi state backend bucket separate
 
   Lifecycle: provisioned + destroyed quarterly by the operator on-demand via
@@ -16,4 +16,4 @@ description: >
   2026-05-23 — re-home to the real CI if quarterly automation is wanted).
 
 template:
-  description: LoopZero DR drill — quarterly disaster recovery validation
+  description: LoopRuntime DR drill — quarterly disaster recovery validation

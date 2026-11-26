@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // kstatus compliance integration test per ADR-0025 D3 / plan T3.3 /
 // OP-G18.
 //
 // Verifies that sigs.k8s.io/cli-utils/pkg/kstatus.Compute correctly
-// classifies LoopZero CRDs after the controller emits the universal
+// classifies LoopRuntime CRDs after the controller emits the universal
 // summary conditions (Ready / Reconciling / Stalled). External tooling
-// (Argo Rollouts, Flux, ArgoCD health checks) consumes LoopZero CRDs via
+// (Argo Rollouts, Flux, ArgoCD health checks) consumes LoopRuntime CRDs via
 // this exact API; passing this test means consumers don't need
-// LoopZero-specific status mappers.
+// LoopRuntime-specific status mappers.
 
 package tenant_test
 
@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/cli-utils/pkg/kstatus/status"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
@@ -31,7 +31,7 @@ var _ = Describe("kstatus compliance — universal Ready/Reconciling/Stalled", f
 
 	Context("Tenant CR — controller emits summary conditions via defer", func() {
 		It("eventually sets Ready or Reconciling or Stalled after creation", func() {
-			tn := newTenant("kstatus-current", loopzerov1.PlanStarter, []string{"production"})
+			tn := newTenant("kstatus-current", loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tn)).To(Succeed())
 			defer func() {
 				_ = k8sClient.Delete(ctx, tn)
@@ -41,7 +41,7 @@ var _ = Describe("kstatus compliance — universal Ready/Reconciling/Stalled", f
 			// (per ADR-0025 D3 condition #1: defer ensures it runs even
 			// on early return/panic).
 			Eventually(func(g Gomega) {
-				var fresh loopzerov1.Tenant
+				var fresh loopruntimev1.Tenant
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tn.Name, Namespace: tn.Namespace,
 				}, &fresh)).To(Succeed())
@@ -59,7 +59,7 @@ var _ = Describe("kstatus compliance — universal Ready/Reconciling/Stalled", f
 		// per-CRD reconcile take envtest minutes per kind. This sub-suite
 		// is the type-name registration check; the lifecycle gates live in
 		// the per-CRD envtest specs.
-		DescribeTable("each LoopZero CRD has SetReadinessSummary detail types declared",
+		DescribeTable("each LoopRuntime CRD has SetReadinessSummary detail types declared",
 			func(detailTypes []string, expectedMin int) {
 				Expect(len(detailTypes)).To(BeNumerically(">=", expectedMin),
 					"controller must declare >= %d detail types for kstatus classification", expectedMin)
@@ -126,7 +126,7 @@ var _ = Describe("kstatus compliance — universal Ready/Reconciling/Stalled", f
 	})
 
 	Context("kstatus library unit-level classification", func() {
-		// These tests prove the kstatus library + LoopZero summary
+		// These tests prove the kstatus library + LoopRuntime summary
 		// semantics agree on (Ready/Reconciling/Stalled) → (Current/
 		// InProgress/Failed). Pure unit (no envtest spin-up).
 

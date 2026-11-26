@@ -2,7 +2,7 @@
   "title": "Capacity Elasticity",
   "uid": "capacity-elasticity",
   "tags": [
-    "loopzero",
+    "loopruntime",
     "capacity",
     "autoscaling",
     "T-07"
@@ -40,8 +40,8 @@
         },
         "query": "label_values(kube_horizontalpodautoscaler_spec_max_replicas, namespace)",
         "current": {
-          "text": "loopzero-system",
-          "value": "loopzero-system"
+          "text": "loopruntime-system",
+          "value": "loopruntime-system"
         }
       }
     ]
@@ -166,8 +166,8 @@
           "legendFormat": "argo 403 (quota)"
         },
         {
-          "expr": "sum(rate(loopzero_api_requests_total{status=\"429\"}[5m])) or vector(0)",
-          "legendFormat": "loopzero-api 429 (admission)"
+          "expr": "sum(rate(loopruntime_api_requests_total{status=\"429\"}[5m])) or vector(0)",
+          "legendFormat": "loopruntime-api 429 (admission)"
         }
       ]
     },
@@ -252,7 +252,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(loopzero_gitops_operation_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(loopruntime_gitops_operation_duration_seconds_bucket[5m])))",
           "legendFormat": "gitops p95 (includes gitea)"
         }
       ]
@@ -319,7 +319,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[5m])) / sum(rate(loopzero_builds_total[5m]))"
+          "expr": "sum(rate(loopruntime_builds_total{status=\"succeeded\"}[5m])) / sum(rate(loopruntime_builds_total[5m]))"
         }
       ]
     },
@@ -339,7 +339,7 @@
       },
       "targets": [
         {
-          "expr": "ALERTS{alertname=~\"GiteaAuthLatencyHigh|ArgoWorkflowQuotaExceeded|HPAAtMaxReplicas|PVCPendingSustained|TenantReconcileBacklog|BuildFailureRateHigh|LoopZeroPodCrashLooping|LoopZeroHighAPILatency\"}",
+          "expr": "ALERTS{alertname=~\"GiteaAuthLatencyHigh|ArgoWorkflowQuotaExceeded|HPAAtMaxReplicas|PVCPendingSustained|TenantReconcileBacklog|BuildFailureRateHigh|LoopRuntimePodCrashLooping|LoopRuntimeHighAPILatency\"}",
           "format": "table"
         }
       ]

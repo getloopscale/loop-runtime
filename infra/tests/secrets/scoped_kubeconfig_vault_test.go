@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
 import "testing"
 
-// scoped-kubeconfig.sh mints the kubeconfig loopzero-api uses to reach a peer cluster.
+// scoped-kubeconfig.sh mints the kubeconfig loopruntime-api uses to reach a peer cluster.
 // Since T7.3 of plan 2026-06-02-openbao-adoption it asks OpenBao's kubernetes
 // engine for the ServiceAccount token first, and falls back to a legacy
 // service-account-token Secret. The fallback is not dead code: a cleanroom has no
@@ -37,9 +37,9 @@ func TestScopedKubeconfigTriesVaultFirst(t *testing.T) {
 // that fell through to the default would mint a management token for a cell.
 func TestScopedKubeconfigMapsEveryClusterKindToItsVaultRole(t *testing.T) {
 	requireClauses(t, scopedKubeconfig,
-		clause(`loopzero-cell-0-build`, "build clusters have no Vault role"),
-		clause(`loopzero-cell-0-workload`, "workload clusters have no Vault role"),
-		clause(`loopzero-cell-0-mgmt`, "the management role — the default — is gone"),
+		clause(`loopruntime-cell-0-build`, "build clusters have no Vault role"),
+		clause(`loopruntime-cell-0-workload`, "workload clusters have no Vault role"),
+		clause(`loopruntime-cell-0-mgmt`, "the management role — the default — is gone"),
 		clause(`cell\*\|workload\*`, "cells no longer share the workload branch and fall through to the management role"),
 	)
 }

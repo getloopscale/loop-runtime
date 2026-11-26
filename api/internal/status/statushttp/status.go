@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package statushttp serves the project status endpoints: the point-in-time read and
 // the SSE stream that pushes changes as they happen.
@@ -27,7 +27,7 @@ import (
 
 	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
@@ -97,7 +97,7 @@ type StatusHandler struct {
 	releases       StatusReleaseStore
 	baseDomain     string
 	publicDomain   string                  // operator-configured public wildcard for status.url (FAANG canonical J-25; mirrors PreviewPublicDomain)
-	grafanaBaseURL string                  // T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1 — Grafana deep-link root (e.g. https://grafana.loopzero.local). Empty disables metrics_range_url emission.
+	grafanaBaseURL string                  // T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1 — Grafana deep-link root (e.g. https://grafana.loopruntime.local). Empty disables metrics_range_url emission.
 	metrics        StatusMetricsSource     // optional: source of replicas_ready and traffic_5xx_pct_1h
 	scale          StatusScaleReader       // optional: source of replicas_desired and of the scaling block
 	planTierStore  pkgdomain.PlanTierStore // #142 / #123 canonical — resolves tenant tier for dashboard pre-Apply slider ceiling (qa-dogfood-cleanup-2026-06-21). When nil, plan_tier echoes "starter" (matches pre-#142 fallback in ProjectHandler.Create + ScaleHandler.resolveTier).
@@ -112,8 +112,8 @@ type StatusHandler struct {
 // session addendum 2026-06-12 (J-25 sponsor walkthrough LIVE catch).
 //
 // grafanaBaseURL is the Grafana deep-link root (operator-configured via
-// LOOPZERO_GRAFANA_BASE_URL env var). When set, statusResponse.MetricsRangeURL
-// is populated with templated URL `${grafanaBaseURL}/d/loopzero-project?
+// LOOPRUNTIME_GRAFANA_BASE_URL env var). When set, statusResponse.MetricsRangeURL
+// is populated with templated URL `${grafanaBaseURL}/d/loopruntime-project?
 // var-project=<name>&var-env=<env>`. When empty, MetricsRangeURL is
 // empty and dashboard renders "Open in Grafana" link as disabled. T1.1
 // of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1.
@@ -188,7 +188,7 @@ type statusResponse struct {
 	ActiveRelease *activeReleaseResponse `json:"active_release"`
 	SyncStatus    string                 `json:"sync_status"`
 	URL           string                 `json:"url"`
-	// Red Team loopzero-cloud#70/#62 closure: when the queried env has no last
+	// Red Team loopruntime-cloud#70/#62 closure: when the queried env has no last
 	// build AND no active release, list any sibling envs that DO have a
 	// SUCCEEDED build so the CLI/dashboard can surface a hint instead of
 	// rendering the misleading empty-state view. Omitempty preserves the
@@ -198,9 +198,9 @@ type statusResponse struct {
 
 	// MetricsRangeURL is the Grafana deep-link templated URL for the J-18
 	// Status page "Open in Grafana" affordance. Format:
-	// `<grafanaBaseURL>/d/loopzero-project?var-project=<name>&var-env=<env>`.
+	// `<grafanaBaseURL>/d/loopruntime-project?var-project=<name>&var-env=<env>`.
 	// Empty when StatusHandler.grafanaBaseURL is unset (operator did not
-	// configure LOOPZERO_GRAFANA_BASE_URL). Dashboard renders the link as
+	// configure LOOPRUNTIME_GRAFANA_BASE_URL). Dashboard renders the link as
 	// disabled when empty. T1.1 of plan 2026-06-06-dashboard-journey-j18-
 	// status-runtime-health v1.1.
 	MetricsRangeURL string `json:"metrics_range_url"`
@@ -243,13 +243,13 @@ type statusResponse struct {
 func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -260,11 +260,11 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projects.GetByName(r.Context(), uc.TenantID, name)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -277,7 +277,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	builds, err := h.builds.ListByProject(r.Context(), uc.TenantID, name, 50, 0)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
@@ -285,7 +285,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	release, err := h.releases.GetActiveByEnv(r.Context(), uc.TenantID, name, env)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if release != nil {
@@ -309,7 +309,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		resp.Scaling = findScalingForEnv(builds, env)
 	}
 
-	// Red Team loopzero-cloud#70/#62 closure: when the queried env has neither
+	// Red Team loopruntime-cloud#70/#62 closure: when the queried env has neither
 	// a last_build nor an active release, surface sibling environments that
 	// DO have a SUCCEEDED build so the CLI / dashboard can replace the
 	// misleading empty-state with an honest "production is empty; preview
@@ -330,7 +330,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// "Visit" click in the dashboard hero card because no IngressRoute matched.
 	//
 	// Resolution order for the public-facing wildcard domain:
-	//   1. h.publicDomain (operator-configured LOOPZERO_PUBLIC_DOMAIN, e.g.
+	//   1. h.publicDomain (operator-configured LOOPRUNTIME_PUBLIC_DOMAIN, e.g.
 	//      `prod-dev.getloopscale.app` for dev-public). When set + release exists +
 	//      entryApp resolved, emit the canonical public URL routed by Caddy
 	//      wildcard block to Traefik with Host rewrite.
@@ -344,11 +344,11 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// v1.1 — Grafana deep-link + canonical prom_query_keys list.
 	//
 	// MetricsRangeURL: templated only when operator configured grafanaBaseURL
-	// (LOOPZERO_GRAFANA_BASE_URL). Empty otherwise so dashboard renders "Open in
+	// (LOOPRUNTIME_GRAFANA_BASE_URL). Empty otherwise so dashboard renders "Open in
 	// Grafana" affordance as disabled honest (per ADR D2 + EC-1 absorption
 	// pattern — never silent empty values pretending things work).
 	if h.grafanaBaseURL != "" {
-		resp.MetricsRangeURL = h.grafanaBaseURL + "/d/loopzero-project?var-project=" + name + "&var-env=" + env
+		resp.MetricsRangeURL = h.grafanaBaseURL + "/d/loopruntime-project?var-project=" + name + "&var-env=" + env
 	}
 
 	// PromQueryKeys: deterministic order from T0.2 eight-signals catalog.
@@ -400,7 +400,7 @@ func findLastBuildForEnv(builds []StatusBuild, env string) *lastBuildResponse {
 // collectOtherEnvsWithReleases returns the deterministic, deduplicated list
 // of sibling environments (≠ queriedEnv) that have at least one SUCCEEDED
 // build in the result set. Used by StatusHandler.Get to power the empty-env
-// hint (Red Team loopzero-cloud#70/#62).
+// hint (Red Team loopruntime-cloud#70/#62).
 //
 // Order: alphabetical for stability across CLI/dashboard renderings (the
 // `builds` slice is most-recent-first, so naive iteration would emit by
@@ -437,9 +437,9 @@ func collectOtherEnvsWithReleases(builds []StatusBuild, queriedEnv string) []env
 // buildActiveReleaseResponse converts the domain release record to the
 // canonical response shape.
 //
-// Red Team loopzero-cloud#85 closure: the user-facing `git_commit` field
+// Red Team loopruntime-cloud#85 closure: the user-facing `git_commit` field
 // is the APP commit (`build.commit_sha` — what the user pushed and
-// `loopzero deploy` printed in stdout), NOT the internal gitops repo
+// `loopruntime deploy` printed in stdout), NOT the internal gitops repo
 // commit (which is what `releases.git_commit` actually stores for
 // SyncCallbackActivator integrity per MEET-2026-03-31-024 BUG-03). When
 // the active release's build_id matches a build in the result set, we

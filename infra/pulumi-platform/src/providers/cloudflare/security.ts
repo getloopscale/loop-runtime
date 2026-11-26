@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
  * Cloudflare WAF, Rate Limiting, and Zero Trust Access — edge security layer.
@@ -9,7 +9,7 @@
  * exported and its only occurrence in the pulumi source trees is its own
  * declaration. What follows therefore describes an INTENDED design, not a
  * protection the deployment currently has — read it as a reference for the
- * AWS/Terraform port (`../loopzero-infra-modules`), not as a description of the
+ * AWS/Terraform port (`../loopruntime-infra-modules`), not as a description of the
  * running edge.
  *
  * The design, once wired, protects the platform BEFORE traffic reaches the
@@ -43,7 +43,7 @@ export interface EdgeSecurityConfig {
 export function createWafRuleset(config: EdgeSecurityConfig): cloudflare.Ruleset {
   return new cloudflare.Ruleset(`waf-managed-${config.environment}`, {
     zoneId: config.zoneId,
-    name: `loopzero-${config.environment}-waf-managed`,
+    name: `loopruntime-${config.environment}-waf-managed`,
     description: "Cloudflare Managed WAF — OWASP protection at edge",
     kind: "zone",
     phase: "http_request_firewall_managed",
@@ -77,7 +77,7 @@ export function createWafRuleset(config: EdgeSecurityConfig): cloudflare.Ruleset
 export function createRateLimitRules(config: EdgeSecurityConfig): cloudflare.Ruleset {
   return new cloudflare.Ruleset(`rate-limit-${config.environment}`, {
     zoneId: config.zoneId,
-    name: `loopzero-${config.environment}-rate-limits`,
+    name: `loopruntime-${config.environment}-rate-limits`,
     description: "Rate limiting for API and auth endpoints",
     kind: "zone",
     phase: "http_ratelimit",

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -19,7 +19,7 @@ import (
 // 403 NO_TENANT. These tests pin which connection can answer it — the
 // composition root builds the membership store on the cross-tenant pool.
 //
-//	DATABASE_URL=<loopzero_api> LOOPZERO_WORKER_DATABASE_URL=<loopzero_worker> \
+//	DATABASE_URL=<loopruntime_api> LOOPRUNTIME_WORKER_DATABASE_URL=<loopruntime_worker> \
 //	  go test ./tests/integration/ -run MembershipStore -v
 const membershipOwner = "rls-member-uid"
 

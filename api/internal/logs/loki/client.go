@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package loki provides an HTTP client for querying Grafana Loki.
 // Used by the logs handler to retrieve build output from Argo Workflows pods.
@@ -54,11 +54,11 @@ func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts logs.L
 
 	// Build LogQL query
 	// Argo Workflow names contain the build ID plus a random suffix:
-	// "loopzero-build-{buildID}-{suffix}". Use regex match to find by build ID.
+	// "loopruntime-build-{buildID}-{suffix}". Use regex match to find by build ID.
 	//
 	// Plan J-17 Layer 3 (2026-06-06): default (Debug=false) restricts
-	// the stream selector to lines that carry the `loopzero_phase` label —
-	// i.e. only lines emitted by the Argo pipeline's ::loopzero:: marker
+	// the stream selector to lines that carry the `loopruntime_phase` label —
+	// i.e. only lines emitted by the Argo pipeline's ::loopruntime:: marker
 	// wrappers. This excludes container=wait/init (already dropped by
 	// Promtail) AND raw main-container stdout from the user view,
 	// surfacing only curated user-facing milestones. Debug=true
@@ -66,7 +66,7 @@ func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts logs.L
 	// (operator-only — handler enforces auth gate).
 	selector := fmt.Sprintf(`workflow=~".*%s.*"`, buildID)
 	if !opts.Debug {
-		selector = selector + `, loopzero_phase=~".+"`
+		selector = selector + `, loopruntime_phase=~".+"`
 	}
 	query := fmt.Sprintf(`{%s}`, selector)
 	if opts.Step != "" {
@@ -82,7 +82,7 @@ func (c *Client) QueryBuildLogs(ctx context.Context, buildID string, opts logs.L
 	//   - Default: last 7 days (matches the chart's default retention,
 	//     and the operator's mental model "show me recent build logs").
 	//   - Beta Logs Gate Criterion 7: opts.SinceSeconds > 0 overrides
-	//     so `loopzero logs --since 30d` works for older builds (subject
+	//     so `loopruntime logs --since 30d` works for older builds (subject
 	//     to the cluster's actual Loki retention).
 	var startNano int64
 	if opts.SinceSeconds > 0 {
@@ -184,11 +184,11 @@ func buildRuntimeLogQL(queryKey string) (string, error) {
 		return "", fmt.Errorf("loki: invalid runtime query parameters")
 	}
 	// T2.2 of plan 2026-06-11-code-review-remediation: post-M2 canonical
-	// namespace formula is `loopzero-{tenant}-{project}-{env}` per
+	// namespace formula is `loopruntime-{tenant}-{project}-{env}` per
 	// pkg/naming.Namespace (sponsor verbatim 2026-06-07, meaning "EVERYTHING
 	// SHOULD be separated by project": "TUDO DEVERIA esta separado por projeto"). // english-only: verbatim sponsor quote, kept as evidence
 	// Pre-T2.2 this client emitted only the
-	// legacy `loopzero-{tenant}-{env}` form, so logs for any M2-shaped
+	// legacy `loopruntime-{tenant}-{env}` form, so logs for any M2-shaped
 	// namespace silently disappeared from /logs queries.
 	//
 	// The two-segment legacy alternative was deleted. It existed so pre-M2 logs stayed

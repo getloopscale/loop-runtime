@@ -1,0 +1,52 @@
+# loopruntime-common is a library chart.
+# It provides no templates of its own — only shared helpers.
+# Values here document the expected structure for dependent charts.
+#
+# Dependent charts should define these values in their own values.yaml:
+#
+# global:
+#   registry: ""              # Container registry (e.g., registry.digitalocean.com/loopruntime-system)
+#   imagePullSecrets: []
+#
+# image:
+#   repository: ""
+#   tag: ""
+#   pullPolicy: IfNotPresent
+#
+# replicaCount: 1
+# revisionHistoryLimit: 3
+# priorityClassName: system-cluster-critical
+#
+# podLabels: {}
+# podAnnotations: {}
+#
+# serviceAccount:
+#   create: true
+#   name: ""
+#   automountServiceAccountToken: false
+#
+# startupProbe:
+#   enabled: false
+#   path: /healthz
+#   port: http
+#   failureThreshold: 30
+#   periodSeconds: 2
+#
+# affinity:
+#   podAntiAffinity:
+#     enabled: false          # Auto-enabled when replicaCount > 1
+#
+# topologySpreadConstraints:
+#   enabled: false
+#
+# metrics:
+#   serviceMonitor:
+#     enabled: false
+#     port: metrics
+#     interval: 30s
+#     scrapeTimeout: 10s
+#
+# networkPolicy:
+#   enabled: false
+#   ingress: []
+#   extraEgress: []

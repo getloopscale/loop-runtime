@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -90,9 +90,9 @@ type deployHarness struct {
 const stagingPins = `platformImages:
   registry: "ghcr.io/getloopscale/"
   tags:
-    loopzero-api: "develop-1111111"
-    loopzero-minio: "develop-1111111"
-    loopzero-cloud: "develop-ccccccc"
+    loopruntime-api: "develop-1111111"
+    loopruntime-minio: "develop-1111111"
+    loopruntime-cloud: "develop-ccccccc"
 `
 
 func run(t *testing.T, dir string, name string, args ...string) string {
@@ -115,7 +115,7 @@ func newDeployHarness(t *testing.T) *deployHarness {
 		}
 	}
 	root := t.TempDir()
-	remote := filepath.Join(root, "loopzero")
+	remote := filepath.Join(root, "loopruntime")
 	if err := os.MkdirAll(filepath.Join(remote, "infra/helmfile/environments"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestStagingDeployPinsTheImagesTheCommitPublishedAndKeepsTheOthers(t *testin
 	h := newDeployHarness(t)
 	sha := h.commit(stagingPins + "# change\n")
 	h.artifactsRun("completed", "success")
-	h.github.published["loopzero-api:develop-"+sha[:7]] = true
+	h.github.published["loopruntime-api:develop-"+sha[:7]] = true
 
 	out, err := h.deploy()
 
@@ -224,7 +224,7 @@ func TestStagingDeployPinsTheImagesTheCommitPublishedAndKeepsTheOthers(t *testin
 	if len(calls) != 1 {
 		t.Fatalf("the platform ran %d times, want 1\n%s", len(calls), out)
 	}
-	want := map[string]string{"loopzero-api": "develop-" + sha[:7], "loopzero-minio": "develop-1111111", "loopzero-cloud": "develop-ccccccc"}
+	want := map[string]string{"loopruntime-api": "develop-" + sha[:7], "loopruntime-minio": "develop-1111111", "loopruntime-cloud": "develop-ccccccc"}
 	for image, tag := range want {
 		if calls[0][image] != tag {
 			t.Errorf("%s deployed as %q, want %q", image, calls[0][image], tag)
@@ -302,14 +302,14 @@ func TestStagingDeployKeepsTheConsolePinsFromGit(t *testing.T) {
 	h := newDeployHarness(t)
 	sha := h.commit(stagingPins + "# change\n")
 	h.artifactsRun("completed", "success")
-	h.github.published["loopzero-cloud:develop-"+sha[:7]] = true
+	h.github.published["loopruntime-cloud:develop-"+sha[:7]] = true
 
 	if out, err := h.deploy(); err != nil {
 		t.Fatalf("deploy failed: %v\n%s", err, out)
 	}
 
-	if got := h.deployedTags()[0]["loopzero-cloud"]; got != "develop-ccccccc" {
-		t.Errorf("loopzero-cloud deployed as %q: the console's images keep the pin in git", got)
+	if got := h.deployedTags()[0]["loopruntime-cloud"]; got != "develop-ccccccc" {
+		t.Errorf("loopruntime-cloud deployed as %q: the console's images keep the pin in git", got)
 	}
 }
 
@@ -342,12 +342,12 @@ func TestStagingDeployKeepsThePreviousDeploysTagForAnImageTheCommitDidNotBuild(t
 	h := newDeployHarness(t)
 	first := h.commit(stagingPins + "# first\n")
 	h.artifactsRun("completed", "success")
-	h.github.published["loopzero-api:develop-"+first[:7]] = true
+	h.github.published["loopruntime-api:develop-"+first[:7]] = true
 	if out, err := h.deploy(); err != nil {
 		t.Fatalf("first deploy failed: %v\n%s", err, out)
 	}
 	second := h.commit(stagingPins + "# second\n")
-	h.github.published["loopzero-minio:develop-"+second[:7]] = true
+	h.github.published["loopruntime-minio:develop-"+second[:7]] = true
 
 	if out, err := h.deploy(); err != nil {
 		t.Fatalf("second deploy failed: %v\n%s", err, out)
@@ -357,7 +357,7 @@ func TestStagingDeployKeepsThePreviousDeploysTagForAnImageTheCommitDidNotBuild(t
 	if len(calls) != 2 {
 		t.Fatalf("the platform ran %d times, want 2", len(calls))
 	}
-	if calls[1]["loopzero-api"] != "develop-"+first[:7] || calls[1]["loopzero-minio"] != "develop-"+second[:7] {
+	if calls[1]["loopruntime-api"] != "develop-"+first[:7] || calls[1]["loopruntime-minio"] != "develop-"+second[:7] {
 		t.Errorf("second deploy pinned %v", calls[1])
 	}
 }

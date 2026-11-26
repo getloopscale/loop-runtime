@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argocd
 
@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // newHTTPTestSyncClient creates a SyncClient pointing at a test server.
@@ -114,7 +114,7 @@ func TestTriggerSync_AuthFailed(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for 401")
 	}
-	if err != loopzeroerrors.ErrDeployServiceAuthFailed {
+	if err != loopruntimeerrors.ErrDeployServiceAuthFailed {
 		t.Errorf("expected ErrDeployServiceAuthFailed, got: %v", err)
 	}
 }
@@ -136,7 +136,7 @@ func TestTriggerSync_ConflictReturnsTypedError(t *testing.T) {
 	err := client.TriggerSync(context.Background(), "my-app")
 
 	// Assert
-	if err != loopzeroerrors.ErrSyncOperationInProgress {
+	if err != loopruntimeerrors.ErrSyncOperationInProgress {
 		t.Errorf("expected ErrSyncOperationInProgress, got: %v", err)
 	}
 }
@@ -353,7 +353,7 @@ func TestValidateToken_InvalidReturnsAuthError(t *testing.T) {
 	err := client.ValidateToken(context.Background())
 
 	// Assert
-	if err != loopzeroerrors.ErrDeployServiceAuthFailed {
+	if err != loopruntimeerrors.ErrDeployServiceAuthFailed {
 		t.Errorf("expected ErrDeployServiceAuthFailed, got: %v", err)
 	}
 }

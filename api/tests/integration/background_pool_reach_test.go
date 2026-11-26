@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -11,23 +11,23 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	loopzerodb "github.com/getloopscale/loop-runtime/api/internal/db"
+	loopruntimedb "github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // Background loops sweep ACROSS tenants by definition — a retention pruner, a
 // build reconciler and an idempotency cleaner all exist to look at every
 // tenant's rows. Migration 000062 made the tenant tables fail-closed, and the
-// request role (loopzero_api) holds no cross-tenant policy: over that connection a
+// request role (loopruntime_api) holds no cross-tenant policy: over that connection a
 // sweep does not error, it returns nothing. Deleting zero rows and reconciling
 // zero builds looks exactly like a quiet night.
 //
 // Measured 2026-08-14 against a real database with one audit_log row:
 //
-//	loopzero (owner, no context)  -> 0 rows
-//	loopzero_api  (request role)  -> 0 rows
-//	loopzero_worker               -> 1 row   (audit_log_worker_cross_tenant)
+//	loopruntime (owner, no context)  -> 0 rows
+//	loopruntime_api  (request role)  -> 0 rows
+//	loopruntime_worker               -> 1 row   (audit_log_worker_cross_tenant)
 //
-// These tests pin BOTH halves: that the reach exists for loopzero_worker, and that
+// These tests pin BOTH halves: that the reach exists for loopruntime_worker, and that
 // the guard refuses to let the process start background loops over a pool that
 // does not have it. The second half is what turns a silent no-op into a boot
 // failure someone can read.
@@ -40,13 +40,13 @@ func dsnOrSkip(t *testing.T, env string) string {
 	dsn := os.Getenv(env)
 	if dsn == "" {
 		if auditRequired() {
-			t.Fatalf("%s is unset and LOOPZERO_RLS_AUDIT_REQUIRE=1 forbids skipping — "+
+			t.Fatalf("%s is unset and LOOPRUNTIME_RLS_AUDIT_REQUIRE=1 forbids skipping — "+
 				"a green run here would assert nothing about background reach", env)
 		}
 		// Skipping on a machine without a database is the right decision; in CI,
-		// LOOPZERO_RLS_AUDIT_REQUIRE=1 turns this into a failure. Same tension tracked in:
+		// LOOPRUNTIME_RLS_AUDIT_REQUIRE=1 turns this into a failure. Same tension tracked in:
 		// https://github.com/getloopscale/loop-runtime/issues/289
-		t.Skipf("%s is unset (set LOOPZERO_RLS_AUDIT_REQUIRE=1 to make this a failure)", env)
+		t.Skipf("%s is unset (set LOOPRUNTIME_RLS_AUDIT_REQUIRE=1 to make this a failure)", env)
 	}
 	return dsn
 }
@@ -69,13 +69,13 @@ func poolFor(t *testing.T, dsn string) *pgxpool.Pool {
 }
 
 // TestBackgroundPoolReach_WorkerRoleAccepted proves the sanctioned mechanism is
-// intact: loopzero_worker crosses tenants through a NAMED policy, so the guard lets
+// intact: loopruntime_worker crosses tenants through a NAMED policy, so the guard lets
 // the loops start.
 func TestBackgroundPoolReach_WorkerRoleAccepted(t *testing.T) {
-	pool := poolFor(t, dsnOrSkip(t, "LOOPZERO_WORKER_DATABASE_URL"))
+	pool := poolFor(t, dsnOrSkip(t, "LOOPRUNTIME_WORKER_DATABASE_URL"))
 
-	if err := loopzerodb.AssertBackgroundPoolCrossTenant(context.Background(), pool); err != nil {
-		t.Fatalf("loopzero_worker should be accepted for background work, got: %v", err)
+	if err := loopruntimedb.AssertBackgroundPoolCrossTenant(context.Background(), pool); err != nil {
+		t.Fatalf("loopruntime_worker should be accepted for background work, got: %v", err)
 	}
 }
 
@@ -84,14 +84,14 @@ func TestBackgroundPoolReach_WorkerRoleAccepted(t *testing.T) {
 // enforces it), and background loops used to inherit that same pool. Over it a
 // sweep silently touches nothing.
 func TestBackgroundPoolReach_RequestRoleRefused(t *testing.T) {
-	pool := poolFor(t, dsnOrSkip(t, "LOOPZERO_API_DATABASE_URL"))
+	pool := poolFor(t, dsnOrSkip(t, "LOOPRUNTIME_API_DATABASE_URL"))
 
-	err := loopzerodb.AssertBackgroundPoolCrossTenant(context.Background(), pool)
+	err := loopruntimedb.AssertBackgroundPoolCrossTenant(context.Background(), pool)
 	if err == nil {
 		t.Fatal("the request role holds no cross-tenant policy — the guard MUST refuse it; " +
 			"accepting it is how a retention job deletes zero rows forever without a single log line")
 	}
-	for _, want := range []string{"loopzero_worker", "LOOPZERO_WORKER_DATABASE_URL"} {
+	for _, want := range []string{"loopruntime_worker", "LOOPRUNTIME_WORKER_DATABASE_URL"} {
 		if !contains(err.Error(), want) {
 			t.Errorf("the refusal must name the fix (%q), got: %v", want, err)
 		}
@@ -99,13 +99,13 @@ func TestBackgroundPoolReach_RequestRoleRefused(t *testing.T) {
 }
 
 // TestBackgroundPoolReach_OwnerRefused closes the other door. The owner is not
-// blocked by the policies in the way loopzero_api is — it is blocked by having a
+// blocked by the policies in the way loopruntime_api is — it is blocked by having a
 // privilege nobody declared, which is the shape migration 000063/000064 removed.
 // Accepting it would trade a silent no-op for a silent bypass.
 func TestBackgroundPoolReach_OwnerRefused(t *testing.T) {
 	pool := poolFor(t, dsnOrSkip(t, "DATABASE_URL"))
 
-	posture, err := loopzerodb.MeasureRLSPosture(context.Background(), pool, "builds")
+	posture, err := loopruntimedb.MeasureRLSPosture(context.Background(), pool, "builds")
 	if err != nil {
 		t.Fatalf("measure: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestBackgroundPoolReach_OwnerRefused(t *testing.T) {
 		t.Skipf("DATABASE_URL is not the owner (%s) — nothing to assert here", posture)
 	}
 
-	if err := loopzerodb.AssertBackgroundPoolCrossTenant(context.Background(), pool); err == nil {
+	if err := loopruntimedb.AssertBackgroundPoolCrossTenant(context.Background(), pool); err == nil {
 		t.Fatalf("the owner reaches every tenant through an UNNAMED privilege and MUST be refused: %s", posture)
 	}
 }

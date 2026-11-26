@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Test fakes for caFetcher injection in envtest specs.
 // Plan 2026-05-25-live-ca-fetch-clustercredential T3.1 — used by
@@ -19,7 +19,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	loopzerov1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // NewReconcilerForTesting constructs a standalone ClusterCredentialReconciler
@@ -41,7 +41,7 @@ func NewReconcilerForTesting(client ctrlclient.Client, argoCDNamespace string, f
 func RunReconcileArgoCDSecretForTesting(
 	ctx context.Context,
 	r *ClusterCredentialReconciler,
-	cr *loopzerov1.ClusterCredential,
+	cr *loopruntimev1.ClusterCredential,
 	kubeconfigData []byte,
 ) error {
 	return r.reconcileArgoCDClusterSecret(ctx, cr, kubeconfigData)

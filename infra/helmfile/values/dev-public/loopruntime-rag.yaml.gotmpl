@@ -1,0 +1,51 @@
+# dev-public overlay for infra/helm/data-plane-service: loopruntime-rag (#446).
+#
+# Same contract as loopruntime-memory.yaml.gotmpl. loopruntime-rag runs two processes from one image:
+# the API (the image's default command) and the ingestion worker.
+image:
+  repository: {{ required "platformImages.registry is not set" .Values.platformImages.registry }}loopruntime-rag
+  tag: {{ required "platformImages.tags.loopruntime-rag is not set" (index .Values.platformImages.tags "loopruntime-rag") | quote }}
+
+port: 8787
+# /v1/health requires a credential; /v1/healthz is the unauthenticated liveness endpoint
+# the image's own healthcheck uses.
+healthPath: /v1/healthz
+# Host port 18082 (infra/k3d/core-cluster.yaml).
+nodePort: 30182
+runAsUser: 1000
+
+existingSecret: loopruntime-rag
+env:
+  PORT: "8787"
+  NODE_ENV: production
+  LOOPRUNTIMERAG_REQUIRE_CREDENTIAL: "true"
+secretEnv:
+  - { name: OPENAI_API_KEY, key: openai-api-key }
+  - { name: LOOPRUNTIMERAG_ADMIN_BOOTSTRAP_TOKEN, key: admin-bootstrap-token }
+
+workers:
+  - name: worker
+    command: ["node_modules/.bin/tsx", "src/worker.ts"]
+
+# loopruntime-rag's tracked migrator (getloopscale/loopruntime-rag#244), as the owner, before the app serves.
+migrations:
+  command: ["node_modules/.bin/tsx", "src/migrate.ts"]
+
+postgres:
+  # loopruntime-rag's own database image (Postgres 18 with the `vector` compatibility layer rag
+  # creates). 0.140.0, which the compose deployment ran, is no longer published; rag needs
+  # only `vector`, which 0.167.0 provides (measured 2026-09-29).
+  image: ghcr.io/getloopscale/loopruntime-db:0.167.0@sha256:74af05709e17eb8dd1bc4a6d189ea24f30e52fd422df94760fdec9132b39d384
+  database: therag
+  user: therag
+  # The owner migrates. The server serves as rag_app, which row level security binds to one
+  # workspace; the worker as rag_worker, which crosses workspaces through named policies.
+  # Each refuses to boot as anything else (getloopscale/loopruntime-rag#244).
+  uriEnv: LOOPRUNTIMERAG_MIGRATE_PG_URI
+  roles:
+    - { name: rag_app, uriEnv: LOOPRUNTIMERAG_PG_URI, passwordKey: app-role-password, processes: [app] }
+    - { name: rag_worker, uriEnv: LOOPRUNTIMERAG_PG_URI, passwordKey: worker-role-password, processes: [worker] }
+  dataPath: /var/lib/postgresql
+  pgdata: /var/lib/postgresql/18/docker
+  storage: 5Gi
+  runAsUser: 999

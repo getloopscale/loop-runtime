@@ -2,15 +2,15 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-otel-pipeline-alerts
+  name: loopruntime-otel-pipeline-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopzero.telemetry-pipeline
+    - name: loopruntime.telemetry-pipeline
       rules:
-        - alert: LoopZeroOTelSpanDropRate
+        - alert: LoopRuntimeOTelSpanDropRate
           expr: rate(otelcol_processor_dropped_spans_total[5m]) > 0
           for: 5m
           labels:
@@ -20,7 +20,7 @@ spec:
             description: "{{ $value }} spans/s being dropped. Check Collector queue capacity and Tempo health."
             runbook: "Check OTel Collector logs. Verify Tempo is accepting traces. Consider increasing queue size."
 
-        - alert: LoopZeroOTelExportFailureRate
+        - alert: LoopRuntimeOTelExportFailureRate
           expr: rate(otelcol_exporter_send_failed_spans_total[5m]) / (rate(otelcol_exporter_sent_spans_total[5m]) + rate(otelcol_exporter_send_failed_spans_total[5m])) > 0.05
           for: 10m
           labels:
@@ -30,7 +30,7 @@ spec:
             description: "{{ $value | humanizePercentage }} of span exports failing."
             runbook: "Check Tempo connectivity. Verify Collector to Tempo network path. Check Tempo disk usage."
 
-        - alert: LoopZeroOTelQueueSaturation
+        - alert: LoopRuntimeOTelQueueSaturation
           expr: otelcol_exporter_queue_size / otelcol_exporter_queue_capacity > 0.8
           for: 5m
           labels:

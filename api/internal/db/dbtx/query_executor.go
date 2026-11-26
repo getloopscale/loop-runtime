@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package dbtx holds the SQL access port — the transaction handle and the
 // interfaces shaped around it — with no entity in sight.

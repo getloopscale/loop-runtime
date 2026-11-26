@@ -3,8 +3,8 @@
 # Pinned to 2.7.0 per ADR-0010 deliverable #8 (chaos validation gate).
 
 apiVersion: v2
-name: loopzero-chaos-mesh
-description: Chaos Mesh wrapper for LoopZero platform chaos testing (Phase 5)
+name: loopruntime-chaos-mesh
+description: Chaos Mesh wrapper for LoopRuntime platform chaos testing (Phase 5)
 type: application
 version: 0.1.0
 appVersion: "2.7.0"

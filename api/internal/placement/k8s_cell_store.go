@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placement
 
@@ -16,7 +16,7 @@ import (
 
 // ClusterCredentialGVR is the GroupVersionResource for ClusterCredential CRDs.
 var ClusterCredentialGVR = schema.GroupVersionResource{
-	Group:    "loopzero.io",
+	Group:    "runtime.getloopscale.com",
 	Version:  "v1",
 	Resource: "clustercredentials",
 }
@@ -90,7 +90,7 @@ func extractCellConfig(obj unstructured.Unstructured) (CellConfig, bool) {
 	secretNS, _, _ := unstructured.NestedString(obj.Object, "spec", "secretRef", "namespace")
 
 	// Ingress domain from label (operational metadata, not spec).
-	ingressDomain := obj.GetLabels()["loopzero.io/ingress-domain"]
+	ingressDomain := obj.GetLabels()["runtime.getloopscale.com/ingress-domain"]
 
 	return CellConfig{
 		CellID:             cellID,

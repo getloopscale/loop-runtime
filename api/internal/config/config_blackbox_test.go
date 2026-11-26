@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package config_test
 
@@ -11,7 +11,7 @@ import (
 	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
-// LOOPZERO_CLUSTER_ISSUER is seeded for every test in this binary by TestMain
+// LOOPRUNTIME_CLUSTER_ISSUER is seeded for every test in this binary by TestMain
 // in config_test.go.
 
 func TestConfig_Load_DefaultValues(t *testing.T) {
@@ -217,10 +217,10 @@ func TestConfig_IsProduction_Development(t *testing.T) {
 }
 
 func TestConfig_IsProduction_Production(t *testing.T) {
-	t.Setenv("LOOPZERO_ENV", "production")
+	t.Setenv("LOOPRUNTIME_ENV", "production")
 	cfg := config.Load()
 	if !cfg.IsProduction() {
-		t.Error("expected IsProduction()=true when LOOPZERO_ENV=production")
+		t.Error("expected IsProduction()=true when LOOPRUNTIME_ENV=production")
 	}
 }
 
@@ -261,11 +261,11 @@ func TestConfig_Validate_DefaultSecret_NoError(t *testing.T) {
 
 func TestConfig_Validate_RegistryInsecure_BlockedInProduction(t *testing.T) {
 	// Arrange: production + REGISTRY_INSECURE=true → must return error
-	t.Setenv("LOOPZERO_ENV", "production")
+	t.Setenv("LOOPRUNTIME_ENV", "production")
 	t.Setenv("REGISTRY_INSECURE", "true")
-	t.Setenv("REGISTRY_URL", "registry.example.com/loopzero-tenants")
+	t.Setenv("REGISTRY_URL", "registry.example.com/loopruntime-tenants")
 	// SEC-001: encryption key required in production — set a valid 32-byte hex key
-	t.Setenv("LOOPZERO_SECRET_ENCRYPTION_KEY", "REDACTED_SECRET_010")
+	t.Setenv("LOOPRUNTIME_SECRET_ENCRYPTION_KEY", "REDACTED_SECRET_010")
 
 	cfg := config.Load()
 
@@ -283,7 +283,7 @@ func TestConfig_Validate_RegistryInsecure_BlockedInProduction(t *testing.T) {
 
 func TestConfig_Validate_RegistryInsecure_AllowedInDevelopment(t *testing.T) {
 	// Arrange: development + REGISTRY_INSECURE=true → no error
-	t.Setenv("LOOPZERO_ENV", "development")
+	t.Setenv("LOOPRUNTIME_ENV", "development")
 	t.Setenv("REGISTRY_INSECURE", "true")
 
 	cfg := config.Load()
@@ -299,12 +299,12 @@ func TestConfig_Validate_RegistryInsecure_AllowedInDevelopment(t *testing.T) {
 
 func TestConfig_Validate_RegistryInsecure_FalseInProduction_OK(t *testing.T) {
 	// Arrange: production + REGISTRY_INSECURE=false → no error (from this check)
-	t.Setenv("LOOPZERO_ENV", "production")
+	t.Setenv("LOOPRUNTIME_ENV", "production")
 	t.Setenv("REGISTRY_INSECURE", "false")
 	// Also fix ArgoCD insecure to avoid that check failing
 	t.Setenv("ARGOCD_INSECURE", "false")
 	// SEC-001: encryption key required in production
-	t.Setenv("LOOPZERO_SECRET_ENCRYPTION_KEY", "REDACTED_SECRET_010")
+	t.Setenv("LOOPRUNTIME_SECRET_ENCRYPTION_KEY", "REDACTED_SECRET_010")
 
 	cfg := config.Load()
 
@@ -333,7 +333,7 @@ func searchSubstring(s, substr string) bool {
 
 func TestConfig_Validate_ProductionSecret(t *testing.T) {
 	// Arrange: non-default secret
-	t.Setenv("LOOPZERO_ARGO_CALLBACK_SECRET", "super-secret-production-key")
+	t.Setenv("LOOPRUNTIME_ARGO_CALLBACK_SECRET", "super-secret-production-key")
 
 	cfg := config.Load()
 
@@ -347,7 +347,7 @@ func TestConfig_Validate_ProductionSecret(t *testing.T) {
 }
 
 // Issue #354: with GITEA_URL unset the API must reach the Gitea the platform
-// installs (loopzero-system), not a namespace no environment creates.
+// installs (loopruntime-system), not a namespace no environment creates.
 func TestConfig_Load_GiteaURLDefaultsToThePlatformGitea(t *testing.T) {
 	t.Setenv("GITEA_URL", "")
 

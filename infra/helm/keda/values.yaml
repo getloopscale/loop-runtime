@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # KEDA values — every environment. Dev/prod layer values.production.yaml on top
 # (cell.helmfile.yaml.gotmpl).
@@ -48,9 +48,9 @@ resources:
       memory: "128Mi"
 
 # ScaledObjects are only ever created in tenant namespaces. KEDA has no
-# namespace-exclusion setting; the LoopZero API is what refuses a ScaledObject in
+# namespace-exclusion setting; the LoopRuntime API is what refuses a ScaledObject in
 # kube-system, kube-public, argocd, argo, traefik, cert-manager, monitoring or
-# loopzero-platform.
+# loopruntime-platform.
 
 # ---------------------------------------------------------------------------
 # Security context (non-root, read-only filesystem)

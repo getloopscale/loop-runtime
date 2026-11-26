@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argocd
 
@@ -115,7 +115,7 @@ func TestBuildApplicationObject_ManualSyncPolicy(t *testing.T) {
 		TargetRevision: "HEAD",
 		Path:           "production",
 		DestinationURL: "https://workload:6443",
-		DestinationNS:  "loopzero-acme-production",
+		DestinationNS:  "loopruntime-acme-production",
 	}
 
 	app := buildApplicationObject(spec)
@@ -164,7 +164,7 @@ func TestBuildApplicationObject_Labels(t *testing.T) {
 		TargetRevision: "HEAD",
 		Path:           "production",
 		DestinationURL: "https://workload:6443",
-		DestinationNS:  "loopzero-acme-production",
+		DestinationNS:  "loopruntime-acme-production",
 	}
 
 	app := buildApplicationObject(spec)
@@ -178,11 +178,11 @@ func TestBuildApplicationObject_Labels(t *testing.T) {
 		t.Fatal("missing labels")
 	}
 
-	if labels["loopzero.io/tenant"] != "acme" {
-		t.Errorf("expected tenant label 'acme', got %v", labels["loopzero.io/tenant"])
+	if labels["runtime.getloopscale.com/tenant"] != "acme" {
+		t.Errorf("expected tenant label 'acme', got %v", labels["runtime.getloopscale.com/tenant"])
 	}
-	if labels["loopzero.io/managed-by"] != "tenant-controller" {
-		t.Errorf("expected managed-by label 'tenant-controller', got %v", labels["loopzero.io/managed-by"])
+	if labels["runtime.getloopscale.com/managed-by"] != "tenant-controller" {
+		t.Errorf("expected managed-by label 'tenant-controller', got %v", labels["runtime.getloopscale.com/managed-by"])
 	}
 }
 
@@ -193,7 +193,7 @@ func TestBuildApplicationObject_HasNoSkipReconcile(t *testing.T) {
 	spec := ApplicationSpec{
 		Name:           "acme-production",
 		TenantID:       "acme",
-		RepoURL:        "http://gitea/loopzero/acme-gitops.git",
+		RepoURL:        "http://gitea/loopruntime/acme-gitops.git",
 		TargetRevision: "main",
 		Path:           "production",
 		DestinationURL: "https://cell-0-cluster:6443",
@@ -213,7 +213,7 @@ func TestBuildApplicationObject_KeepsNotificationSubscription(t *testing.T) {
 	obj := buildApplicationObject(spec)
 	meta := obj.Object["metadata"].(map[string]interface{})
 	annotations, _ := meta["annotations"].(map[string]interface{})
-	key := "notifications.argoproj.io/subscribe.on-sync-healthy.loopzero-api"
+	key := "notifications.argoproj.io/subscribe.on-sync-healthy.loopruntime-api"
 	if _, present := annotations[key]; !present {
 		t.Errorf("notification subscription annotation must be preserved; got %v", annotations)
 	}
@@ -306,7 +306,7 @@ func TestEnsureApplication_PreservesTheExistingStatus(t *testing.T) {
 	err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-production", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-0",
+		Path: "production", DestinationNS: "loopruntime-acme-web-production", CellID: "cell-0",
 	})
 	if err != nil {
 		t.Fatalf("EnsureApplication: %v", err)
@@ -349,7 +349,7 @@ func TestEnsureAppProject_PreservesTheExistingStatus(t *testing.T) {
 	err := p.EnsureAppProject(context.Background(), AppProjectSpec{
 		Name: "acme", Namespace: "argocd", TenantID: "acme",
 		SourceRepos:           []string{"http://gitea/acme-gitops.git"},
-		DestinationNamespaces: []string{"loopzero-acme-web-production"},
+		DestinationNamespaces: []string{"loopruntime-acme-web-production"},
 		CellID:                "cell-0",
 	})
 	if err != nil {
@@ -376,7 +376,7 @@ func TestEnsureApplication_KeepsAnEmptyStatusEmpty(t *testing.T) {
 	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-staging", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "staging", DestinationNS: "loopzero-acme-web-staging", CellID: "cell-0",
+		Path: "staging", DestinationNS: "loopruntime-acme-web-staging", CellID: "cell-0",
 	}); err != nil {
 		t.Fatalf("EnsureApplication: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestEnsureApplication_RetryUsesTheStatusOfTheReread(t *testing.T) {
 	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-production", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-0",
+		Path: "production", DestinationNS: "loopruntime-acme-web-production", CellID: "cell-0",
 	}); err != nil {
 		t.Fatalf("EnsureApplication sob conflito: %v", err)
 	}
@@ -455,7 +455,7 @@ func TestEnsureApplication_CreateDoesNotInventAStatus(t *testing.T) {
 	if err := p.EnsureApplication(context.Background(), ApplicationSpec{
 		Name: "acme-novo", Namespace: "argocd", TenantID: "acme",
 		RepoURL: "http://gitea/acme-gitops.git", TargetRevision: "main",
-		Path: "production", DestinationNS: "loopzero-acme-web-production", CellID: "cell-0",
+		Path: "production", DestinationNS: "loopruntime-acme-web-production", CellID: "cell-0",
 	}); err != nil {
 		t.Fatalf("EnsureApplication (create): %v", err)
 	}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // fk_explicit_on_delete_test.go — T7.2 of deep-review-remediation-plan.md.
 // Closes find_data_004 (HIGH): 15 FK references in migration 000001 lacked

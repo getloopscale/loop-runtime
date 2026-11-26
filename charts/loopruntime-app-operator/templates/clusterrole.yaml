@@ -1,0 +1,73 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "loopruntime-common.fullname" . }}
+  labels:
+    {{- include "loopruntime-common.labels" . | nindent 4 }}
+rules:
+  # --- LoopRuntime CRDs: loopruntimeapplications + exposedroutes ---
+  - apiGroups: ["runtime.getloopscale.com"]
+    resources: ["loopruntimeapplications", "exposedroutes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["runtime.getloopscale.com"]
+    resources: ["loopruntimeapplications/status", "exposedroutes/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["runtime.getloopscale.com"]
+    resources: ["loopruntimeapplications/finalizers", "exposedroutes/finalizers"]
+    verbs: ["update"]
+
+  # --- Tenant: read-only, to resolve the cellID ---
+  # reconcileWorkloadStatus Gets the Tenant CR before querying the workload, to
+  # find out which cell it runs in. Without this rule the Get fails and the
+  # function returns without counting replicas — every LoopRuntimeApplication stays
+  # Progressing forever (#274). The operator never writes a Tenant, so
+  # get/list/watch is enough.
+  - apiGroups: ["runtime.getloopscale.com"]
+    resources: ["tenants"]
+    verbs: ["get", "list", "watch"]
+
+  # --- ClusterCredentials: read-only, to reach a placed tenant's cell ---
+  # CellAwareRuntimeClientFactory lists the ClusterCredentials to find the
+  # kubeconfig Secret of a named cell. Without this rule every lookup for a
+  # placed tenant is forbidden, and neither the fast-path Healthy nor the TLS
+  # certificate check ever reaches the workload.
+  - apiGroups: ["runtime.getloopscale.com"]
+    resources: ["clustercredentials"]
+    verbs: ["get", "list", "watch"]
+
+  # --- Secrets: NOT here ---
+  # On this cluster the operator reads one kind of Secret — a cell's kubeconfig,
+  # in loopruntime-system — through a Secret cache scoped to that namespace. The grant
+  # is the namespaced Role in role-secret-access.yaml. The TLS Secret the
+  # ExposureController checks lives in the workload's cell and is read with the
+  # cell's own identity, not this chart's.
+  {{- if .Values.rbac.legacyClusterWideSecrets }}
+  # Cutover escape hatch (values.yaml rbac.legacyClusterWideSecrets): an
+  # operator image that predates the scoped Secret cache lists Secrets in
+  # every namespace. Read only; off by default.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  {{- end }}
+
+  # --- Services: read-only ---
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+
+  # --- Ingresses: read-only ---
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+
+  # --- Events: emit Kubernetes events for observability ---
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create"]
+
+  # --- Leader election: coordination lease for HA ---
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+{{- end }}

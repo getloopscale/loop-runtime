@@ -30,7 +30,7 @@
       "title": "← Home",
       "tooltip": "Back to System Home",
       "type": "link",
-      "url": "/d/loopzero-home/loopzero-system-home"
+      "url": "/d/loopruntime-home/loopruntime-system-home"
     }
   ],
   "panels": [
@@ -1112,7 +1112,7 @@
   ],
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loopruntime",
     "argo-workflows",
     "build"
   ],
@@ -1145,7 +1145,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "LoopZero — Argo Workflows (Build Cluster)",
-  "uid": "loopzero-argo-workflows",
+  "title": "LoopRuntime — Argo Workflows (Build Cluster)",
+  "uid": "loopruntime-argo-workflows",
   "version": 1
 }

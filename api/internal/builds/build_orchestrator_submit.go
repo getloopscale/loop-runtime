@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -12,7 +12,7 @@ import (
 	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 	"github.com/getloopscale/loop-runtime/api/internal/events"
 	"github.com/getloopscale/loop-runtime/api/internal/metrics"
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
@@ -41,11 +41,11 @@ import (
 // Returns ErrLockTimeout if the lock cannot be acquired within 5s.
 func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts.SubmitBuildRequest) (*deploycontracts.SubmitBuildResponse, error) {
 	// MEET-2026-03-30-020: distributed tracing (C3 naming convention)
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.submit",
+	ctx, span := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.build.submit",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", req.TenantID),
-			attribute.String("loopzero.project", req.ProjectID),
-			attribute.String("loopzero.environment", req.Environment),
+			attribute.String("loopruntime.tenant", req.TenantID),
+			attribute.String("loopruntime.project", req.ProjectID),
+			attribute.String("loopruntime.environment", req.Environment),
 		))
 	defer span.End()
 
@@ -62,7 +62,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 			return wrapSubmitBuildError(StageCheckActiveBuilds, err)
 		}
 		if hasActive {
-			return loopzeroerrors.ErrDeployInProgress
+			return loopruntimeerrors.ErrDeployInProgress
 		}
 
 		// Step 2.2: B40 — resolve scaling from app_scaling_config DB rows BEFORE
@@ -84,24 +84,24 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 		// enforcement hole (MEET-2026-04-23-059 Constraint 6). Operates on
 		// resolved AppSpec per B40 fix above.
 		//
-		// Sprint 6 /review CODE-003 LOW: enforceScaling returns a *LoopZeroError
+		// Sprint 6 /review CODE-003 LOW: enforceScaling returns a *LoopRuntimeError
 		// directly (ErrScalingAmbiguous / ErrReplicasExceedPlan / etc.) by
 		// design — bypassing wrapSubmitBuildError so mapBuildError dispatches
-		// it via the *LoopZeroError ladder branch with its own code, not as
+		// it via the *LoopRuntimeError ladder branch with its own code, not as
 		// SubmitBuildError. The wrap helper EC-3 guard also short-circuits
-		// any *LoopZeroError that reaches it (defense-in-depth).
+		// any *LoopRuntimeError that reaches it (defense-in-depth).
 		if err := enforceScaling(ctx, req.Apps, o.planCap, req.TenantID, o.kedaEnabled); err != nil {
 			return err
 		}
 
 		// Step 2.5: ensure project exists in projects table (idempotent).
-		// After `loopzero project delete` + redeploy, the build succeeds but the
-		// project doesn't appear in `loopzero project list` because it was hard-deleted.
+		// After `loopruntime project delete` + redeploy, the build succeeds but the
+		// project doesn't appear in `loopruntime project list` because it was hard-deleted.
 		if o.projectStore != nil {
-			ensureCtx, ensureSpan := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.project.ensure",
+			ensureCtx, ensureSpan := otel.Tracer("loopruntime-api").Start(ctx, "loopruntime.api.project.ensure",
 				trace.WithAttributes(
-					attribute.String("loopzero.tenant", req.TenantID),
-					attribute.String("loopzero.project", req.ProjectID),
+					attribute.String("loopruntime.tenant", req.TenantID),
+					attribute.String("loopruntime.project", req.ProjectID),
 				))
 			if err := o.projectStore.EnsureProject(ensureCtx, tx, req.TenantID, req.ProjectID, req.CreatedBy); err != nil {
 				ensureSpan.RecordError(err)
@@ -280,7 +280,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 	metrics.DeploysTotal.WithLabelValues(req.TenantID, req.Environment, "submitted").Inc()
 	metrics.BuildQueueDepth.Inc()
 
-	span.SetAttributes(attribute.String("loopzero.build_id", buildID))
+	span.SetAttributes(attribute.String("loopruntime.build_id", buildID))
 
 	streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", buildID)
 	return &deploycontracts.SubmitBuildResponse{
@@ -317,7 +317,7 @@ func enforceScaling(ctx context.Context, apps []deploycontracts.AppSpec, checker
 
 		// KEDA gate: scale-to-zero (min=0) requires KEDA to be enabled on the cluster.
 		if hasAutoscaling && a.Autoscaling.MinReplicas == 0 && a.Autoscaling.MaxReplicas > 0 && !kedaEnabled {
-			return loopzeroerrors.NewLoopZeroError(
+			return loopruntimeerrors.NewLoopRuntimeError(
 				"SCALE_TO_ZERO_UNAVAILABLE",
 				fmt.Sprintf("App '%s': scale-to-zero is not available on this cluster. Use min >= 1 for autoscaling, or contact support to enable scale-to-zero.", a.Name))
 		}
@@ -327,9 +327,9 @@ func enforceScaling(ctx context.Context, apps []deploycontracts.AppSpec, checker
 			// dashboards show a single plan-enforcement signal.
 			metrics.PlanLimitViolations.WithLabelValues("scaling_ambiguous", "").Inc()
 			// The HTTP status is resolved by errorshttp.Status from the code.
-			return loopzeroerrors.NewLoopZeroError(
-				loopzeroerrors.ErrScalingAmbiguous.Code,
-				fmt.Sprintf("App '%s': %s", a.Name, loopzeroerrors.ErrScalingAmbiguous.Message))
+			return loopruntimeerrors.NewLoopRuntimeError(
+				loopruntimeerrors.ErrScalingAmbiguous.Code,
+				fmt.Sprintf("App '%s': %s", a.Name, loopruntimeerrors.ErrScalingAmbiguous.Message))
 		}
 		if checker == nil {
 			continue
@@ -356,7 +356,7 @@ func enforceScaling(ctx context.Context, apps []deploycontracts.AppSpec, checker
 			// B15 MEET-059 action #9: emit counter so dashboards/alerts can
 			// surface plan-limit friction without scraping audit logs.
 			metrics.PlanLimitViolations.WithLabelValues("max_replicas_per_service", plan).Inc()
-			return loopzeroerrors.NewReplicasExceedPlan(plan, cap, requested, a.Name)
+			return loopruntimeerrors.NewReplicasExceedPlan(plan, cap, requested, a.Name)
 		}
 	}
 	return nil

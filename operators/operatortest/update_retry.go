@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package operatortest
 
@@ -20,7 +20,7 @@ import (
 //
 // therefore races the reconcile loop and loses on resourceVersion:
 //
-//	Operation cannot be fulfilled on tenants.loopzero.io "…": the object has been
+//	Operation cannot be fulfilled on tenants.runtime.getloopscale.com "…": the object has been
 //	modified; please apply your changes to the latest version and try again
 //
 // Measured 2026-08-06: 3 of 4 consecutive runs of internal/tenant failed this

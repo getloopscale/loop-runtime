@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T2.1 of plan 2026-06-10-j22-openbao-transit-eso-sync v1.2 — narrow HTTP
 // client for the OpenBao transit secrets engine, per-tenant key routing,
@@ -42,12 +42,12 @@ import (
 // read/write path) depends on. Production injects *TransitClient; tests
 // pass a fake.
 type Transit interface {
-	// Encrypt sends plaintext to /v1/transit/encrypt/loopzero-tenants-<tenantID>
+	// Encrypt sends plaintext to /v1/transit/encrypt/loopruntime-tenants-<tenantID>
 	// and returns the OpenBao-shaped ciphertext (prefix "vault:v1:").
 	// Caller retains ownership of plaintext; Zeroize is the caller's job.
 	Encrypt(ctx context.Context, tenantID string, plaintext []byte) (ciphertext string, err error)
 	// Decrypt sends a vault:v1:-prefixed ciphertext to
-	// /v1/transit/decrypt/loopzero-tenants-<tenantID> and returns the plaintext.
+	// /v1/transit/decrypt/loopruntime-tenants-<tenantID> and returns the plaintext.
 	// Caller MUST Zeroize the returned slice when done.
 	Decrypt(ctx context.Context, tenantID string, ciphertext string) (plaintext []byte, err error)
 }
@@ -117,17 +117,17 @@ var (
 // segment (slashes are interpreted as endpoint delimiters and return
 // 404 "unsupported path"), so the convention is hyphen-separated:
 //
-//	transit/keys/loopzero-tenants-<tenantID>
-//	transit/encrypt/loopzero-tenants-<tenantID>
-//	transit/decrypt/loopzero-tenants-<tenantID>
+//	transit/keys/loopruntime-tenants-<tenantID>
+//	transit/encrypt/loopruntime-tenants-<tenantID>
+//	transit/decrypt/loopruntime-tenants-<tenantID>
 //
 // LIVE-caught 2026-06-10 J-22 walkthrough: an earlier draft used
-// `loopzero-tenants/<tenantID>` (slash-separated). Root token + AppRole
-// both returned 4xx because OpenBao parses `loopzero-tenants` as the
+// `loopruntime-tenants/<tenantID>` (slash-separated). Root token + AppRole
+// both returned 4xx because OpenBao parses `loopruntime-tenants` as the
 // key name and `<tenantID>` as an unsupported sub-operation. The
-// hyphen convention keeps the namespacing intent ("loopzero-tenants" as
+// hyphen convention keeps the namespacing intent ("loopruntime-tenants" as
 // a logical group) while staying inside the single-segment grammar.
-const tenantKeyPrefix = "loopzero-tenants-"
+const tenantKeyPrefix = "loopruntime-tenants-"
 
 // TenantKeyName returns the canonical OpenBao transit key name for
 // a tenant: tenantKeyPrefix + tenantID, single-segment safe. It is the one
@@ -299,7 +299,7 @@ func (c *TransitClient) acquireRateToken(tenantID string) error {
 // Encrypt sends plaintext to OpenBao's transit/encrypt endpoint scoped
 // to the per-tenant key path. On a 404 (transit key missing for this
 // tenant), EC-06 absorption fires: POST to
-// /v1/transit/keys/loopzero-tenants-<tenantID> to create the key idempotently
+// /v1/transit/keys/loopruntime-tenants-<tenantID> to create the key idempotently
 // — HYPHEN, per the convention documented above — then retry the encrypt
 // exactly once. This self-heals the first-secret-for-tenant race where
 // the secret create call arrives before tenant-controller's transit key
@@ -391,11 +391,11 @@ func (c *TransitClient) tryEncrypt(ctx context.Context, tenantID string, reqBody
 	return "", status, nil
 }
 
-// createTransitKey POSTs to /v1/transit/keys/loopzero-tenants-<tenantID> with
+// createTransitKey POSTs to /v1/transit/keys/loopruntime-tenants-<tenantID> with
 // the standard aes256-gcm96 key type. Idempotent: when the key already
 // exists OpenBao returns 204. EC-06 absorption.
 //
-// The separator is a HYPHEN, and this comment said `loopzero-tenants/<id>` until
+// The separator is a HYPHEN, and this comment said `loopruntime-tenants/<id>` until
 // 2026-08-13. That form is not a typo with no consequence: transit reads the
 // slash as an endpoint delimiter and returns 404 "unsupported path" — the trap
 // the cutover runbook records as LIVE-caught on 2026-06-10. A reader trusting the

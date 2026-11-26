@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package versionhttp
 
@@ -14,7 +14,7 @@ import (
 //
 // WHY A SECOND ENDPOINT, rather than a change to /api/v1/version:
 //
-// The loopzero-cloud collector (internal/serviceversions/probe.go) calls
+// The loopruntime-cloud collector (internal/serviceversions/probe.go) calls
 // `GET {base}/v1/version` and reads `{version, built_at}`. Five services already
 // speak that contract. The engine spoke another — `/api/v1/version` with
 // `build_date` — so it was left off the panel for diverging in path AND field.

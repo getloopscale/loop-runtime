@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package vault is the engine's narrow client for the OpenBao Transit secrets
 // engine: per-tenant envelope encryption of secret values, authenticated with

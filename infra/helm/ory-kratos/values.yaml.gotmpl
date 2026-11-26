@@ -1,4 +1,4 @@
-# Ory Kratos — Identity Management for LoopZero Cloud
+# Ory Kratos — Identity Management for LoopRuntime Cloud
 # Chart: ory/kratos v0.59.0 (app: Kratos v1.3.1)
 #
 # LOCAL DEV ONLY — production overrides via Pulumi secrets.
@@ -11,14 +11,14 @@ kratos:
 
   config:
     # T1.3 (plan 2026-05-21-deep-review-remediation): DSN templated via helmfile
-    # env. LOOPZERO_DB_PASSWORD required (set by task setup OR generate-secrets.sh).
+    # env. LOOPRUNTIME_DB_PASSWORD required (set by task setup OR generate-secrets.sh).
     # Pulumi prod overrides this entire DSN via Secret reference.
     # EC-02 of plan 2026-05-22 v1.1 — single-quoted YAML allows unescaped
     # double quotes inside gotmpl template literal. Previous `"..."` form
     # with `\"` escape failed helmfile template render with
     # `unexpected "\\" in operand`. Cleanroom bug discovered 2026-05-21.
     {{- if not .Values.profile.awsSecretsManager }}
-    dsn: 'postgres://loopzero:{{ requiredEnv "LOOPZERO_DB_PASSWORD" }}@postgresql.loopzero-system.svc.cluster.local:5432/kratos?sslmode=disable'
+    dsn: 'postgres://loopruntime:{{ requiredEnv "LOOPRUNTIME_DB_PASSWORD" }}@postgresql.loopruntime-system.svc.cluster.local:5432/kratos?sslmode=disable'
     {{- end }}
 
     # --- Identity ---
@@ -83,7 +83,7 @@ kratos:
         totp:
           enabled: true
           config:
-            issuer: "LoopZero Platform"
+            issuer: "LoopRuntime Platform"
 
         lookup_secret:
           enabled: true
@@ -96,23 +96,23 @@ kratos:
             # v1.1 EC-05: trimSuffix prevents `//` in OIDC callback URLs.
             base_redirect_uri: "{{ if and (hasKey .Values "publicAuthUrl") (ne (.Values.publicAuthUrl | toString) "") }}{{ .Values.publicAuthUrl | trimSuffix "/" }}{{ else }}{{ .Values.uiBaseUrl | default "http://localhost:4455" | trimSuffix "/" }}{{ end }}/"
             providers:
-              # GitHub OAuth — reads from LOOPZERO_GITHUB_CLIENT_ID / SECRET env vars
+              # GitHub OAuth — reads from LOOPRUNTIME_GITHUB_CLIENT_ID / SECRET env vars
               # (canonical source: <repo>/.env locally; Pulumi Secret in
               # prod/drill). Empty strings disable the provider gracefully —
               # Kratos won't crash, the button just won't work.
               # Per "100% functional" mandate 2026-06-01.
               - id: github
                 provider: github
-                client_id: "{{ env "LOOPZERO_GITHUB_CLIENT_ID" | default "REPLACE_VIA_PULUMI" }}"
-                client_secret: "{{ env "LOOPZERO_GITHUB_CLIENT_SECRET" | default "REPLACE_VIA_PULUMI" }}"
+                client_id: "{{ env "LOOPRUNTIME_GITHUB_CLIENT_ID" | default "REPLACE_VIA_PULUMI" }}"
+                client_secret: "{{ env "LOOPRUNTIME_GITHUB_CLIENT_SECRET" | default "REPLACE_VIA_PULUMI" }}"
                 mapper_url: "base64://bG9jYWwgY2xhaW1zID0gc3RkLmV4dFZhcignY2xhaW1zJyk7CnsKICBpZGVudGl0eTogewogICAgdHJhaXRzOiB7CiAgICAgIGVtYWlsOiBjbGFpbXMuZW1haWwsCiAgICAgIFtpZiBzdGQub2JqZWN0SGFzKGNsYWltcywgJ25hbWUnKSAmJiBjbGFpbXMubmFtZSAhPSBudWxsIHRoZW4gJ25hbWUnXTogY2xhaW1zLm5hbWUsCiAgICB9LAogIH0sCn0K"
                 scope:
                   - user:email
-              # Google OAuth — reads from LOOPZERO_GOOGLE_CLIENT_ID / SECRET env vars.
+              # Google OAuth — reads from LOOPRUNTIME_GOOGLE_CLIENT_ID / SECRET env vars.
               - id: google
                 provider: google
-                client_id: "{{ env "LOOPZERO_GOOGLE_CLIENT_ID" | default "REPLACE_VIA_PULUMI" }}"
-                client_secret: "{{ env "LOOPZERO_GOOGLE_CLIENT_SECRET" | default "REPLACE_VIA_PULUMI" }}"
+                client_id: "{{ env "LOOPRUNTIME_GOOGLE_CLIENT_ID" | default "REPLACE_VIA_PULUMI" }}"
+                client_secret: "{{ env "LOOPRUNTIME_GOOGLE_CLIENT_SECRET" | default "REPLACE_VIA_PULUMI" }}"
                 mapper_url: "base64://bG9jYWwgY2xhaW1zID0gc3RkLmV4dFZhcignY2xhaW1zJyk7CnsKICBpZGVudGl0eTogewogICAgdHJhaXRzOiB7CiAgICAgIGVtYWlsOiBjbGFpbXMuZW1haWwsCiAgICAgIFtpZiBzdGQub2JqZWN0SGFzKGNsYWltcywgJ25hbWUnKSAmJiBjbGFpbXMubmFtZSAhPSBudWxsIHRoZW4gJ25hbWUnXTogY2xhaW1zLm5hbWUsCiAgICB9LAogIH0sCn0K"
                 scope:
                   - email
@@ -161,7 +161,7 @@ kratos:
           # T2.1 of plan kratos-self-service-rate-limit-systemic v1.1 — tighten
           # recovery flow lifespan from chart default (1h) to 15m. Slightly
           # longer than login/register because email delivery (Resend) can be
-          # slower on mobile networks. Closes Red Team loopzero-cloud#89 root cause:
+          # slower on mobile networks. Closes Red Team loopruntime-cloud#89 root cause:
           # natural cap on email-bomb attack — each new recovery flow per
           # identity blocked until previous expires (15min → 4 flows/hr/identity
           # max), defense-in-depth with edge recovery_flow_create_throttle
@@ -193,19 +193,19 @@ kratos:
     # MEET-2026-04-06-036: DigitalOcean blocks SMTP ports (25, 465, 587).
     # Uses Resend HTTP API instead.
     #
-    # The API key is sourced from the operator env var LOOPZERO_RESEND_API_KEY
+    # The API key is sourced from the operator env var LOOPRUNTIME_RESEND_API_KEY
     # at helmfile-template time. Kratos v26 does NOT perform env
     # interpolation on string values inside its config YAML (validated
     # 2026-06-01: courier with `Authorization: "Bearer ${RESEND_API_KEY}"`
     # produced 400 "API key is invalid" from Resend — header was sent
     # literal). We substitute at template-time instead so the rendered
     # ConfigMap holds the real key. Trade-off: key lands in ConfigMap
-    # (loopzero-auth namespace, RBAC-restricted) instead of Secret-only — same
+    # (loopruntime-auth namespace, RBAC-restricted) instead of Secret-only — same
     # blast radius as the Secret in practice since both require `get` on
     # the namespace. Cleaner state via init container + envsubst is a
     # follow-up refactor.
     #
-    # If LOOPZERO_RESEND_API_KEY is unset, the placeholder produces a 400 from
+    # If LOOPRUNTIME_RESEND_API_KEY is unset, the placeholder produces a 400 from
     # Resend on first send (loud failure, visible in courier logs),
     # NEVER silent.
     courier:
@@ -217,7 +217,7 @@ kratos:
           headers:
             Content-Type: "application/json"
 {{- if not (.Values | get "aws.resendSecret" "") }}
-            Authorization: "Bearer {{ env "LOOPZERO_RESEND_API_KEY" | default "REPLACE_VIA_LOOPZERO_RESEND_API_KEY" }}"
+            Authorization: "Bearer {{ env "LOOPRUNTIME_RESEND_API_KEY" | default "REPLACE_VIA_LOOPRUNTIME_RESEND_API_KEY" }}"
 {{- end }}
           # Jsonnet template: ctx.recipient, ctx.subject, ctx.html_body (lowercase snake_case)
           body: "base64://ZnVuY3Rpb24oY3R4KSB7CiAgZnJvbTogIlRoZW8gPG5vcmVwbHlAdXNldGhlby5kZXY+IiwKICB0bzogW2N0eC5yZWNpcGllbnRdLAogIHN1YmplY3Q6IGN0eC5zdWJqZWN0LAogIGh0bWw6IGN0eC5odG1sX2JvZHksCn0="
@@ -264,9 +264,9 @@ kratos:
     secrets:
       # LOCAL DEV ONLY — production overrides via Pulumi.
       cookie:
-        - "loopzero-dev-cookie-secret-32chars!!"
+        - "loopruntime-dev-cookie-secret-32chars!!"
       cipher:
-        - "loopzero-dev-cipher-secret-32chars!!"
+        - "loopruntime-dev-cipher-secret-32chars!!"
 
     # --- Hashers ---
     hashers:
@@ -283,7 +283,7 @@ kratos:
       {
         "$id": "https://schemas.getloopscale.com/identity.schema.json",
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "title": "LoopZero Identity",
+        "title": "LoopRuntime Identity",
         "type": "object",
         "properties": {
           "traits": {

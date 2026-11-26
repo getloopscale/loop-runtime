@@ -2,8 +2,8 @@
 # dev-public-seed-post-cleanroom-tenant-cr_test.sh
 #
 # Plan: seed-post-cleanroom-tenant-cr-provisioning (v1.0)
-# Closes: Red Team loopzero-cloud#118 — QA Red Team identity logs into dev-public but
-#         the tenant CR is absent in k3d-loopzero-core → deploys fail because
+# Closes: Red Team loopruntime-cloud#118 — QA Red Team identity logs into dev-public but
+#         the tenant CR is absent in k3d-loopruntime-core → deploys fail because
 #         tenant-operator cannot reconcile a nonexistent tenant.
 #
 # PER `feedback_issue_fix_requires_failing_e2e_test_2026_06_25` UNBREAKABLE:
@@ -12,7 +12,7 @@
 #
 # OPERATOR HARD STOP — per .claude/rules/cleanroom-up-live-test-mandate.md.
 # Requires:
-#   - k3d-loopzero-core cluster Ready (Cleanroom TOTAL → UP chain prior)
+#   - k3d-loopruntime-core cluster Ready (Cleanroom TOTAL → UP chain prior)
 #   - seed-post-cleanroom-all.sh just succeeded (this test is the post-condition)
 #
 # Scenarios:
@@ -32,16 +32,16 @@ set -euo pipefail
 
 # --- Constants --------------------------------------------------------------
 
-ISSUE_REF="loopzero-cloud#118"
+ISSUE_REF="loopruntime-cloud#118"
 PLAN_SLUG="seed-post-cleanroom-tenant-cr-provisioning"
 SCRIPT_NAME="$(basename "$0")"
 
-KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopzero-core}"
-NAMESPACE="${NAMESPACE:-loopzero-system}"
-APIVERSION_GROUP="tenants.loopzero.io"
+KUBE_CONTEXT="${KUBE_CONTEXT:-k3d-loopruntime-core}"
+NAMESPACE="${NAMESPACE:-loopruntime-system}"
+APIVERSION_GROUP="tenants.runtime.getloopscale.com"
 
 # Canonical tenant_ids — pinned LIVE 2026-06-29 against dev-public PG state.
-# These are the deterministic outputs of seed-admin-loopzero-dev.sh for the
+# These are the deterministic outputs of seed-admin-loopruntime-dev.sh for the
 # canonical EMAIL=admin@getloopscale.com and EMAIL=paulohenrique.java@gmail.com
 # seed runs respectively (per seed-admin script lines 230-280: tenant_id is
 # derived from the Kratos identity id via a stable canonical format).
@@ -121,8 +121,8 @@ fi
 
 # Probe API resource presence — if CRD itself missing, the cluster isn't
 # bootstrapped. Fail fast with operator-actionable message.
-if ! kubectl --context "$KUBE_CONTEXT" api-resources 2>/dev/null | grep -q "^tenants[[:space:]].*loopzero\.io"; then
-  log "FATAL: tenants.loopzero.io CRD not installed on $KUBE_CONTEXT"
+if ! kubectl --context "$KUBE_CONTEXT" api-resources 2>/dev/null | grep -q "^tenants[[:space:]].*runtime\.getloopscale\.com"; then
+  log "FATAL: tenants.runtime.getloopscale.com CRD not installed on $KUBE_CONTEXT"
   log "       run 'task setup' or 'task k3d:bootstrap-cells' to install CRDs"
   exit 2
 fi
@@ -134,13 +134,13 @@ scenario_a() {
   local label="A (admin@getloopscale.com tenant CR present)"
   log "Scenario $label — tenant=$tenant"
 
-  if ! kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get tenants.loopzero.io "$tenant" >/dev/null 2>&1; then
-    record_fail "A" "$tenant NotFound in $KUBE_CONTEXT/$NAMESPACE (seed-admin-loopzero-dev.sh did not provision it)"
+  if ! kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get tenants.runtime.getloopscale.com "$tenant" >/dev/null 2>&1; then
+    record_fail "A" "$tenant NotFound in $KUBE_CONTEXT/$NAMESPACE (seed-admin-loopruntime-dev.sh did not provision it)"
     return 1
   fi
 
   local phase
-  phase="$(kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get tenants.loopzero.io "$tenant" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  phase="$(kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get tenants.runtime.getloopscale.com "$tenant" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
   case "$phase" in
     Active|Provisioning) record_pass "A (phase=$phase)" ; return 0 ;;
     "") record_fail "A" "$tenant exists but status.phase is empty (controller not reconciling)" ; return 1 ;;
@@ -153,13 +153,13 @@ scenario_b() {
   local label="B (paulohenrique.java@gmail.com tenant CR present — closes #118)"
   log "Scenario $label — tenant=$tenant"
 
-  if ! kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get tenants.loopzero.io "$tenant" >/dev/null 2>&1; then
+  if ! kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get tenants.runtime.getloopscale.com "$tenant" >/dev/null 2>&1; then
     record_fail "B" "$tenant NotFound in $KUBE_CONTEXT/$NAMESPACE — this is the $ISSUE_REF bug (seed Step 3b did not fire EnsureTenant)"
     return 1
   fi
 
   local phase
-  phase="$(kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get tenants.loopzero.io "$tenant" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  phase="$(kubectl --context "$KUBE_CONTEXT" -n "$NAMESPACE" get tenants.runtime.getloopscale.com "$tenant" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
   case "$phase" in
     Active|Provisioning) record_pass "B (phase=$phase)" ; return 0 ;;
     "") record_fail "B" "$tenant exists but status.phase is empty (controller not reconciling)" ; return 1 ;;

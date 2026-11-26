@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -20,7 +20,7 @@ import (
 // makeDeployTimelineSpawn returns the canonical spawner callback wired
 // into BuildOrchestratorDeps. Per plan deploy-timeline-canonical-5-phases
 // T5.1 the v1 production set includes ONLY the release_db source — the
-// other 4 adapters (loki_markers, argocd_app, loopzeroapp_informer,
+// other 4 adapters (loki_markers, argocd_app, loopruntimeapp_informer,
 // status_url_probe) land in the v1.1 follow-up per Open Questions.
 //
 // The release_db source alone delivers ~60% of the canonical timeline

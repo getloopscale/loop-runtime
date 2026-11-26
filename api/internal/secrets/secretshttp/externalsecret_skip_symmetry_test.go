@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // B-176 — two write paths, one condition, one of them counting.
 //
 // `POST /secrets` and `POST /secrets/bulk` both persist a row and both then
 // look at h.k8sSync. The single-set path emits
-// loopzero_secret_externalsecret_total{result="skip"} when it is nil; the bulk
+// loopruntime_secret_externalsecret_total{result="skip"} when it is nil; the bulk
 // path recorded the entry as "pending" and returned without touching any
 // counter. A bulk write against a deployment with no workload sync therefore
-// landed rows in `secrets` and left sum(loopzero_secret_externalsecret_total) at
+// landed rows in `secrets` and left sum(loopruntime_secret_externalsecret_total) at
 // zero.
 //
 // That sum is not decoration. The B-126 canary deferral
@@ -100,7 +100,7 @@ func TestExternalSecretSkip_BothWritePathsEmitWhenSyncIsNil(t *testing.T) {
 		// once-per-row contract. A per-entry emission would under-count a
 		// multi-env write and reintroduce the same class of blind spot.
 		if delta := externalSecretSkips() - before; delta != float64(len(entry.Envs)) {
-			t.Fatalf("bulk path moved the skip counter by %v across %d envs, want exactly %d — B-176: a bulk write with no workload sync must not leave sum(loopzero_secret_externalsecret_total) at zero",
+			t.Fatalf("bulk path moved the skip counter by %v across %d envs, want exactly %d — B-176: a bulk write with no workload sync must not leave sum(loopruntime_secret_externalsecret_total) at zero",
 				delta, len(entry.Envs), len(entry.Envs))
 		}
 		// The API-facing status is unchanged by B-176: the caller still reads

@@ -21,17 +21,17 @@ metadata:
   name: drill-cert-renewal-under-network-fault
   namespace: cert-manager
   annotations:
-    loopzero.io/plan: "2026-05-18-drill-skills-trio"
-    loopzero.io/scenario-id: "drill-cert-renewal-under-network-fault"
-    loopzero.io/dod-test: "Certificate issuance completes within 10min post-heal; CF zone cleaned up"
-    loopzero.io/hypothesis: "cert-manager retries DNS-01 challenge after transient CF API fault; final cert valid LE prod"
-    loopzero.io/slo-query: |
+    runtime.getloopscale.com/plan: "2026-05-18-drill-skills-trio"
+    runtime.getloopscale.com/scenario-id: "drill-cert-renewal-under-network-fault"
+    runtime.getloopscale.com/dod-test: "Certificate issuance completes within 10min post-heal; CF zone cleaned up"
+    runtime.getloopscale.com/hypothesis: "cert-manager retries DNS-01 challenge after transient CF API fault; final cert valid LE prod"
+    runtime.getloopscale.com/slo-query: |
       # Certificate Ready condition transitions to True
       certmanager_certificate_ready_status{condition="Ready"} == 1
       and
       # No rate-limit errors in last 15min
       rate(certmanager_certificate_request_errors_total{reason="ratelimit"}[15m]) == 0
-    loopzero.io/recovery-budget-seconds: "600"
+    runtime.getloopscale.com/recovery-budget-seconds: "600"
 spec:
   action: partition
   mode: all

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package load
 
@@ -26,29 +26,29 @@ import (
 //
 // Environment variables:
 //
-//	LOOPZERO_REAL_DEPLOY=1         — gate (skip if unset)
-//	LOOPZERO_API_URL               — required (e.g., https://api.dev.getloopscale.com)
-//	LOOPZERO_APP_DOMAIN            — required (e.g., dev.getloopscale.com)
-//	LOOPZERO_SERVICE_AUTH          — required (service auth bypass token)
-//	LOOPZERO_FIXTURE_PATH          — optional (default: ../../e2e/fixtures/hello-server)
+//	LOOPRUNTIME_REAL_DEPLOY=1         — gate (skip if unset)
+//	LOOPRUNTIME_API_URL               — required (e.g., https://api.dev.getloopscale.com)
+//	LOOPRUNTIME_APP_DOMAIN            — required (e.g., dev.getloopscale.com)
+//	LOOPRUNTIME_SERVICE_AUTH          — required (service auth bypass token)
+//	LOOPRUNTIME_FIXTURE_PATH          — optional (default: ../../e2e/fixtures/hello-server)
 func TestRealDeploy_L1_10Tenants(t *testing.T) {
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("skipping real deploy test: set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("skipping real deploy test: set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
+	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
 	if apiURL == "" {
-		t.Fatal("LOOPZERO_API_URL required")
+		t.Fatal("LOOPRUNTIME_API_URL required")
 	}
-	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
+	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
 	if appDomain == "" {
-		t.Fatal("LOOPZERO_APP_DOMAIN required")
+		t.Fatal("LOOPRUNTIME_APP_DOMAIN required")
 	}
-	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
 	if serviceAuth == "" {
-		t.Fatal("LOOPZERO_SERVICE_AUTH required")
+		t.Fatal("LOOPRUNTIME_SERVICE_AUTH required")
 	}
-	fixturePath := os.Getenv("LOOPZERO_FIXTURE_PATH")
+	fixturePath := os.Getenv("LOOPRUNTIME_FIXTURE_PATH")
 	if fixturePath == "" {
 		fixturePath = "../../e2e/fixtures/hello-server"
 	}
@@ -168,26 +168,26 @@ func TestRealDeploy_L1_10Tenants(t *testing.T) {
 // TestRealDeploy_L2_50Tenants runs 50 real deploys with sustained arrival rate.
 // scale-50k-plan Phase 1.3: validates sustained throughput at 50 tenants.
 // Deploys 5 at a time (arrival rate) over ~30 minutes.
-// Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l2.
+// Gated on LOOPRUNTIME_REAL_DEPLOY=1 + LOOPRUNTIME_LOAD_LEVEL=l2.
 func TestRealDeploy_L2_50Tenants(t *testing.T) {
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("skipping real deploy test: set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("skipping real deploy test: set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
-	if os.Getenv("LOOPZERO_LOAD_LEVEL") != "l2" && os.Getenv("LOOPZERO_LOAD_LEVEL") != "all" {
-		t.Skip("skipping L2: set LOOPZERO_LOAD_LEVEL=l2 or LOOPZERO_LOAD_LEVEL=all")
+	if os.Getenv("LOOPRUNTIME_LOAD_LEVEL") != "l2" && os.Getenv("LOOPRUNTIME_LOAD_LEVEL") != "all" {
+		t.Skip("skipping L2: set LOOPRUNTIME_LOAD_LEVEL=l2 or LOOPRUNTIME_LOAD_LEVEL=all")
 	}
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
+	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
 	if apiURL == "" {
-		t.Fatal("LOOPZERO_API_URL required")
+		t.Fatal("LOOPRUNTIME_API_URL required")
 	}
-	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
+	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
 	if appDomain == "" {
-		t.Fatal("LOOPZERO_APP_DOMAIN required")
+		t.Fatal("LOOPRUNTIME_APP_DOMAIN required")
 	}
-	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
 	if serviceAuth == "" {
-		t.Fatal("LOOPZERO_SERVICE_AUTH required")
+		t.Fatal("LOOPRUNTIME_SERVICE_AUTH required")
 	}
 
 	const tenantCount = 50
@@ -199,7 +199,7 @@ func TestRealDeploy_L2_50Tenants(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
+		FixturePath: envOr("LOOPRUNTIME_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -272,26 +272,26 @@ func TestRealDeploy_L2_50Tenants(t *testing.T) {
 // TestRealDeploy_L3_100Tenants runs 100 real deploys with noisy neighbor.
 // scale-50k-plan Phase 2.1: validates cell capacity under contention.
 // Includes a noisy neighbor scenario (1 tenant doing 10 rapid deploys).
-// Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l3.
+// Gated on LOOPRUNTIME_REAL_DEPLOY=1 + LOOPRUNTIME_LOAD_LEVEL=l3.
 func TestRealDeploy_L3_100Tenants(t *testing.T) {
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("skipping real deploy test: set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("skipping real deploy test: set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
-	if os.Getenv("LOOPZERO_LOAD_LEVEL") != "l3" && os.Getenv("LOOPZERO_LOAD_LEVEL") != "all" {
-		t.Skip("skipping L3: set LOOPZERO_LOAD_LEVEL=l3 or LOOPZERO_LOAD_LEVEL=all")
+	if os.Getenv("LOOPRUNTIME_LOAD_LEVEL") != "l3" && os.Getenv("LOOPRUNTIME_LOAD_LEVEL") != "all" {
+		t.Skip("skipping L3: set LOOPRUNTIME_LOAD_LEVEL=l3 or LOOPRUNTIME_LOAD_LEVEL=all")
 	}
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
+	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
 	if apiURL == "" {
-		t.Fatal("LOOPZERO_API_URL required")
+		t.Fatal("LOOPRUNTIME_API_URL required")
 	}
-	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
+	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
 	if appDomain == "" {
-		t.Fatal("LOOPZERO_APP_DOMAIN required")
+		t.Fatal("LOOPRUNTIME_APP_DOMAIN required")
 	}
-	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
 	if serviceAuth == "" {
-		t.Fatal("LOOPZERO_SERVICE_AUTH required")
+		t.Fatal("LOOPRUNTIME_SERVICE_AUTH required")
 	}
 
 	const tenantCount = 100
@@ -307,7 +307,7 @@ func TestRealDeploy_L3_100Tenants(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
+		FixturePath: envOr("LOOPRUNTIME_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -414,7 +414,7 @@ func TestRealDeploy_L3_100Tenants(t *testing.T) {
 // TestRealDeploy_L3Realistic_100Tenants runs 100 real deploys against the
 // dogfood-monorepo fixture — a representative full-stack SaaS layout
 // (NestJS API + Next.js web + Express gateway + Node worker + 2 shared
-// packages, Turborepo). This validates that LoopZero cell capacity holds for
+// packages, Turborepo). This validates that LoopRuntime cell capacity holds for
 // realistic workloads, not just the hello-server smoke. Sprint 8 / CHG-002b
 // stabilization deliverable: hello-server only proved "the platform accepts
 // 100 trivial servers"; L3-realistic proves "the platform deploys 100 real
@@ -423,37 +423,37 @@ func TestRealDeploy_L3_100Tenants(t *testing.T) {
 // Trade-offs vs L3 hello-server:
 //   - 4 apps per tenant (vs 1) → up to 400 concurrent build images
 //   - Concurrency capped at 15 (vs 30) so build cluster does not saturate
-//     beyond observed L3 ceiling. Bump via LOOPZERO_L3REAL_CONCURRENCY.
+//     beyond observed L3 ceiling. Bump via LOOPRUNTIME_L3REAL_CONCURRENCY.
 //   - Verify URL targets gateway (Express public ingress) by default; use
-//     LOOPZERO_VERIFY_APP_NAME=api/web/gateway to switch.
+//     LOOPRUNTIME_VERIFY_APP_NAME=api/web/gateway to switch.
 //
-// Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l3-realistic.
+// Gated on LOOPRUNTIME_REAL_DEPLOY=1 + LOOPRUNTIME_LOAD_LEVEL=l3-realistic.
 // Default fixture: ../../e2e/fixtures/dogfood-monorepo (override via
-// LOOPZERO_FIXTURE_PATH).
+// LOOPRUNTIME_FIXTURE_PATH).
 func TestRealDeploy_L3Realistic_100Tenants(t *testing.T) {
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("skipping real deploy test: set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("skipping real deploy test: set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
-	if os.Getenv("LOOPZERO_LOAD_LEVEL") != "l3-realistic" && os.Getenv("LOOPZERO_LOAD_LEVEL") != "all" {
-		t.Skip("skipping L3-realistic: set LOOPZERO_LOAD_LEVEL=l3-realistic or LOOPZERO_LOAD_LEVEL=all")
+	if os.Getenv("LOOPRUNTIME_LOAD_LEVEL") != "l3-realistic" && os.Getenv("LOOPRUNTIME_LOAD_LEVEL") != "all" {
+		t.Skip("skipping L3-realistic: set LOOPRUNTIME_LOAD_LEVEL=l3-realistic or LOOPRUNTIME_LOAD_LEVEL=all")
 	}
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
+	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
 	if apiURL == "" {
-		t.Fatal("LOOPZERO_API_URL required")
+		t.Fatal("LOOPRUNTIME_API_URL required")
 	}
-	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
+	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
 	if appDomain == "" {
-		t.Fatal("LOOPZERO_APP_DOMAIN required")
+		t.Fatal("LOOPRUNTIME_APP_DOMAIN required")
 	}
-	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
 	if serviceAuth == "" {
-		t.Fatal("LOOPZERO_SERVICE_AUTH required")
+		t.Fatal("LOOPRUNTIME_SERVICE_AUTH required")
 	}
 
 	const tenantCount = 100
 	concurrency := 15
-	if v := os.Getenv("LOOPZERO_L3REAL_CONCURRENCY"); v != "" {
+	if v := os.Getenv("LOOPRUNTIME_L3REAL_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			concurrency = n
 		}
@@ -464,15 +464,15 @@ func TestRealDeploy_L3Realistic_100Tenants(t *testing.T) {
 	// Default to gateway (the Express HTTP entry point that proxies to api
 	// and serves health on root). hello-server's `api` does not exist in
 	// dogfood-monorepo's URL space; gateway is the public-facing app.
-	if os.Getenv("LOOPZERO_VERIFY_APP_NAME") == "" {
-		t.Setenv("LOOPZERO_VERIFY_APP_NAME", "gateway")
+	if os.Getenv("LOOPRUNTIME_VERIFY_APP_NAME") == "" {
+		t.Setenv("LOOPRUNTIME_VERIFY_APP_NAME", "gateway")
 	}
 
 	harness, err := NewRealDeployHarness(RealDeployConfig{
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/dogfood-monorepo"),
+		FixturePath: envOr("LOOPRUNTIME_FIXTURE_PATH", "../../e2e/fixtures/dogfood-monorepo"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)
@@ -520,7 +520,7 @@ func TestRealDeploy_L3Realistic_100Tenants(t *testing.T) {
 	t.Logf("  REAL DEPLOY L3-realistic — %d FULL-STACK TENANTS — RESULTS", tenantCount)
 	t.Log("═══════════════════════════════════════════════════════")
 	t.Logf("  Succeeded:     %d / %d", successCnt, tenantCount)
-	t.Logf("  Apps Live:     %d / %d (HTTP 200 verified on %s)", liveCnt, tenantCount, os.Getenv("LOOPZERO_VERIFY_APP_NAME"))
+	t.Logf("  Apps Live:     %d / %d (HTTP 200 verified on %s)", liveCnt, tenantCount, os.Getenv("LOOPRUNTIME_VERIFY_APP_NAME"))
 	t.Log("═══════════════════════════════════════════════════════")
 
 	// L3-realistic accepts >= 95% (Sprint 8 multi-cell Gate #1 progress
@@ -544,26 +544,26 @@ func TestRealDeploy_L3Realistic_100Tenants(t *testing.T) {
 
 // TestRealDeploy_L4_500Tenants runs 500 real deploys — pushes one cell
 // to its validated limit. scale-50k-plan Phase 2.2.
-// Gated on LOOPZERO_REAL_DEPLOY=1 + LOOPZERO_LOAD_LEVEL=l4.
+// Gated on LOOPRUNTIME_REAL_DEPLOY=1 + LOOPRUNTIME_LOAD_LEVEL=l4.
 func TestRealDeploy_L4_500Tenants(t *testing.T) {
-	if os.Getenv("LOOPZERO_REAL_DEPLOY") != "1" {
-		t.Skip("skipping real deploy test: set LOOPZERO_REAL_DEPLOY=1")
+	if os.Getenv("LOOPRUNTIME_REAL_DEPLOY") != "1" {
+		t.Skip("skipping real deploy test: set LOOPRUNTIME_REAL_DEPLOY=1")
 	}
-	if os.Getenv("LOOPZERO_LOAD_LEVEL") != "l4" && os.Getenv("LOOPZERO_LOAD_LEVEL") != "all" {
-		t.Skip("skipping L4: set LOOPZERO_LOAD_LEVEL=l4 or LOOPZERO_LOAD_LEVEL=all")
+	if os.Getenv("LOOPRUNTIME_LOAD_LEVEL") != "l4" && os.Getenv("LOOPRUNTIME_LOAD_LEVEL") != "all" {
+		t.Skip("skipping L4: set LOOPRUNTIME_LOAD_LEVEL=l4 or LOOPRUNTIME_LOAD_LEVEL=all")
 	}
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
+	apiURL := os.Getenv("LOOPRUNTIME_API_URL")
 	if apiURL == "" {
-		t.Fatal("LOOPZERO_API_URL required")
+		t.Fatal("LOOPRUNTIME_API_URL required")
 	}
-	appDomain := os.Getenv("LOOPZERO_APP_DOMAIN")
+	appDomain := os.Getenv("LOOPRUNTIME_APP_DOMAIN")
 	if appDomain == "" {
-		t.Fatal("LOOPZERO_APP_DOMAIN required")
+		t.Fatal("LOOPRUNTIME_APP_DOMAIN required")
 	}
-	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	serviceAuth := os.Getenv("LOOPRUNTIME_SERVICE_AUTH")
 	if serviceAuth == "" {
-		t.Fatal("LOOPZERO_SERVICE_AUTH required")
+		t.Fatal("LOOPRUNTIME_SERVICE_AUTH required")
 	}
 
 	const tenantCount = 500
@@ -575,7 +575,7 @@ func TestRealDeploy_L4_500Tenants(t *testing.T) {
 		APIURL:      apiURL,
 		AppDomain:   appDomain,
 		ServiceAuth: serviceAuth,
-		FixturePath: envOr("LOOPZERO_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
+		FixturePath: envOr("LOOPRUNTIME_FIXTURE_PATH", "../../e2e/fixtures/hello-server"),
 	})
 	if err != nil {
 		t.Fatalf("harness: %v", err)

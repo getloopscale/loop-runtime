@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package platform_test
 
@@ -23,7 +23,7 @@ var giteaInternalURLDefault = regexp.MustCompile(`(?ms)^\s+gitea:\n.*?^\s+intern
 // gitearepo.DefaultInternalURL, so a PlatformBootstrap created without an
 // address and a component running on its defaults reach the same Gitea.
 func TestCRDGiteaInternalURLDefaultIsTheDefaultInternalURL(t *testing.T) {
-	const crdPath = "../../config/crd/bases/loopzero.io_platformbootstraps.yaml"
+	const crdPath = "../../config/crd/bases/runtime.getloopscale.com_platformbootstraps.yaml"
 	content, err := os.ReadFile(crdPath)
 	if err != nil {
 		t.Fatalf("read CRD YAML: %v", err)

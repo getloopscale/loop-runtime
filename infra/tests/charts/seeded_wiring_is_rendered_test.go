@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // The values the post-Cleanroom seeds used to patch into live objects, proven to
 // be rendered by `helmfile sync` instead.
 //
 // Until this file, five seeds edited what Helmfile L2 renders
 // (principle_violations#67): `vault-cross-cluster-addr` and `vault-role-id-sync`
-// set env on the loopzero-api Deployment, `loki-cross-cluster` rewrote the Promtail
+// set env on the loopruntime-api Deployment, `loki-cross-cluster` rewrote the Promtail
 // Secret, flipped the chart's `loki` Service to NodePort and set LOKI_URL,
 // `patch-kratos` and `hydra-urls` rewrote the Ory ConfigMaps, and `broker` ran a
 // `helm upgrade --install` of its own. Cluster state then depended on the order
@@ -34,20 +34,20 @@ import (
 const lokiCrossClusterURL = "http://host.k3d.internal:30120"
 
 // The address the core cluster reaches the core serverlb at, from a cell: host port
-// 13001 is published to loopzero-api's NodePort 30001 (infra/k3d/core-cluster.yaml).
+// 13001 is published to loopruntime-api's NodePort 30001 (infra/k3d/core-cluster.yaml).
 // The broker seed recorded the core server-0 CONTAINER IP instead, which docker
-// reassigns on every restart (loopzero-workspace#23).
+// reassigns on every restart (loopruntime-workspace#23).
 const coreAPIFromCell = "http://host.k3d.internal:13001"
 
 // The in-cluster push URL of a Promtail that runs next to its Loki.
 const colocatedLokiPushURL = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
 
 // helmfileCoreEnv is what the core helmfile's releases require to render at all.
-var helmfileCoreEnv = []string{"LOOPZERO_DB_PASSWORD=render-test"}
+var helmfileCoreEnv = []string{"LOOPRUNTIME_DB_PASSWORD=render-test"}
 
-func renderDevPublicLoopZeroAPI(t *testing.T) string {
+func renderDevPublicLoopRuntimeAPI(t *testing.T) string {
 	t.Helper()
-	return helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopzero-api", "charts/loopzero-api", helmfileCoreEnv...)
+	return helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopruntime-api", "charts/loopruntime-api", helmfileCoreEnv...)
 }
 
 func configMapData(t *testing.T, rendered, name string) map[string]any {
@@ -61,8 +61,8 @@ func configMapData(t *testing.T, rendered, name string) map[string]any {
 }
 
 // Replaces the `loki-cross-cluster` seed's Layer 3 (setDeploymentContainerEnv LOKI_URL).
-func TestDevPublicLoopZeroAPIReadsLokiAtTheBuildClusterPublishedPort(t *testing.T) {
-	data := configMapData(t, renderDevPublicLoopZeroAPI(t), "loopzero-api")
+func TestDevPublicLoopRuntimeAPIReadsLokiAtTheBuildClusterPublishedPort(t *testing.T) {
+	data := configMapData(t, renderDevPublicLoopRuntimeAPI(t), "loopruntime-api")
 
 	if got := data["LOKI_URL"]; got != lokiCrossClusterURL {
 		t.Errorf("rendered LOKI_URL = %v, want %q — the address the loki-cross-cluster seed used to "+
@@ -78,8 +78,8 @@ func TestDevPublicLoopZeroAPIReadsLokiAtTheBuildClusterPublishedPort(t *testing.
 // Replaces the `vault-cross-cluster-addr` seed. The seed wrote https://<serverlb IP>:<NodePort>,
 // an address the OpenBao certificate carries no SAN for; the render keeps the Service
 // name the certificate does carry, and the core CoreDNS alias resolves it.
-func TestDevPublicLoopZeroAPIReachesOpenBaoByTheNameItsCertificateCarries(t *testing.T) {
-	data := configMapData(t, renderDevPublicLoopZeroAPI(t), "loopzero-api")
+func TestDevPublicLoopRuntimeAPIReachesOpenBaoByTheNameItsCertificateCarries(t *testing.T) {
+	data := configMapData(t, renderDevPublicLoopRuntimeAPI(t), "loopruntime-api")
 
 	const want = "https://openbao.secrets-system.svc.cluster.local:8200"
 	if got := data["OPENBAO_VAULT_ADDR"]; got != want {
@@ -91,29 +91,29 @@ func TestDevPublicLoopZeroAPIReachesOpenBaoByTheNameItsCertificateCarries(t *tes
 // OpenBao after every vault bootstrap and changes with it, so it cannot be a literal
 // in a values file (the one committed here was stale, and the seed's env override
 // is what hid that). It lives in the Secret that already carries the secret_id.
-func TestDevPublicLoopZeroAPIReadsTheRoleIDOnlyFromTheAppRoleSecret(t *testing.T) {
-	rendered := renderDevPublicLoopZeroAPI(t)
+func TestDevPublicLoopRuntimeAPIReadsTheRoleIDOnlyFromTheAppRoleSecret(t *testing.T) {
+	rendered := renderDevPublicLoopRuntimeAPI(t)
 
-	secret := renderedObject(t, rendered, "Secret", "loopzero-api")
+	secret := renderedObject(t, rendered, "Secret", "loopruntime-api")
 	if secret == nil {
-		t.Fatal("no Secret loopzero-api in the render")
+		t.Fatal("no Secret loopruntime-api in the render")
 	}
 	for _, field := range []string{"data", "stringData"} {
 		if v := dig(secret, field, "OPENBAO_VAULT_ROLE_ID"); v != nil {
 			t.Errorf("the chart's own Secret carries OPENBAO_VAULT_ROLE_ID (%s) — a committed role id goes stale "+
-				"at the next vault bootstrap; it must arrive only from Secret loopzero-openbao-approle", field)
+				"at the next vault bootstrap; it must arrive only from Secret loopruntime-openbao-approle", field)
 		}
 	}
 
-	deploy := renderedObject(t, rendered, "Deployment", "loopzero-api")
+	deploy := renderedObject(t, rendered, "Deployment", "loopruntime-api")
 	if deploy == nil {
-		t.Fatal("no Deployment loopzero-api in the render")
+		t.Fatal("no Deployment loopruntime-api in the render")
 	}
-	if !envFromNamesSecret(deploy, "loopzero-openbao-approle") {
-		t.Error("the loopzero-api container does not read Secret loopzero-openbao-approle through envFrom — the role id would reach no one")
+	if !envFromNamesSecret(deploy, "loopruntime-openbao-approle") {
+		t.Error("the loopruntime-api container does not read Secret loopruntime-openbao-approle through envFrom — the role id would reach no one")
 	}
 	if envSetsName(deploy, "OPENBAO_VAULT_ROLE_ID") {
-		t.Error("the loopzero-api container sets OPENBAO_VAULT_ROLE_ID in env, which overrides the Secret")
+		t.Error("the loopruntime-api container sets OPENBAO_VAULT_ROLE_ID in env, which overrides the Secret")
 	}
 }
 
@@ -142,22 +142,22 @@ func envSetsName(deploy map[string]any, name string) bool {
 	return false
 }
 
-// The Tilt-owned loopzero-api renders its ConfigMap and Secret from the same chart with
-// infra/tilt/loopzero-api-values.yaml, and the seeds patched that Deployment too. Its
+// The Tilt-owned loopruntime-api renders its ConfigMap and Secret from the same chart with
+// infra/tilt/loopruntime-api-values.yaml, and the seeds patched that Deployment too. Its
 // declared values must say what the seeds used to write.
-func TestTiltLoopZeroAPIValuesDeclareTheSeededAddressesAndNoRoleID(t *testing.T) {
-	values := filepath.Join(repoRoot(t), "infra/tilt/loopzero-api-values.yaml")
-	rendered := renderChart(t, publishedChart(t, "loopzero-api"), "loopzero-api", nil, values)
+func TestTiltLoopRuntimeAPIValuesDeclareTheSeededAddressesAndNoRoleID(t *testing.T) {
+	values := filepath.Join(repoRoot(t), "infra/tilt/loopruntime-api-values.yaml")
+	rendered := renderChart(t, publishedChart(t, "loopruntime-api"), "loopruntime-api", nil, values)
 
-	data := configMapData(t, rendered, "loopzero-api")
+	data := configMapData(t, rendered, "loopruntime-api")
 	if got := data["LOKI_URL"]; got != lokiCrossClusterURL {
 		t.Errorf("Tilt LOKI_URL = %v, want %q", got, lokiCrossClusterURL)
 	}
-	secret := renderedObject(t, rendered, "Secret", "loopzero-api")
+	secret := renderedObject(t, rendered, "Secret", "loopruntime-api")
 	for _, field := range []string{"data", "stringData"} {
 		if v := dig(secret, field, "OPENBAO_VAULT_ROLE_ID"); v != nil {
 			t.Errorf("the Tilt Secret carries a committed OPENBAO_VAULT_ROLE_ID (%s); the Tilt Deployment lists "+
-				"Secret loopzero-api AFTER loopzero-openbao-approle in envFrom, so the stale literal wins", field)
+				"Secret loopruntime-api AFTER loopruntime-openbao-approle in envFrom, so the stale literal wins", field)
 		}
 	}
 }
@@ -212,7 +212,7 @@ func TestBuildPromtailPushesToTheColocatedLoki(t *testing.T) {
 // pushing there: the colocated rule is a k3d topology fact and must not move prod.
 func TestProdBuildPromtailKeepsTheCentralPushURL(t *testing.T) {
 	values := helmfileValues(t, "build.helmfile.yaml.gotmpl", "prod", "promtail")
-	const want = "http://loki.loopzero-platform.internal:3100/loki/api/v1/push" // environments/prod.yaml loki.pushUrl
+	const want = "http://loki.loopruntime-platform.internal:3100/loki/api/v1/push" // environments/prod.yaml loki.pushUrl
 	if got := dig(values, "config", "clients", 0, "url"); got != want {
 		t.Errorf("prod build Promtail pushes to %v, want the central %q", got, want)
 	}
@@ -221,7 +221,7 @@ func TestProdBuildPromtailKeepsTheCentralPushURL(t *testing.T) {
 // A cell has no Loki of its own: its Promtail keeps the environment's push URL.
 // This pins the other half, so the build-only rule cannot leak onto the cells.
 func TestCellPromtailKeepsTheEnvironmentPushURL(t *testing.T) {
-	values := helmfileValues(t, "cell.helmfile.yaml.gotmpl", "dev", "promtail", "LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0")
+	values := helmfileValues(t, "cell.helmfile.yaml.gotmpl", "dev", "promtail", "LOOPRUNTIME_CELL_CONTEXT=k3d-loopruntime-cell-0")
 	const want = "http://172.18.0.3:30094/loki/api/v1/push" // infra/helmfile/environments/dev.yaml loki.pushUrl
 	if got := dig(values, "config", "clients", 0, "url"); got != want {
 		t.Errorf("cell Promtail pushes to %v, want the environment's loki.pushUrl %q", got, want)
@@ -235,7 +235,7 @@ func TestCellPromtailKeepsTheEnvironmentPushURL(t *testing.T) {
 func TestK3dCellPromtailPushesToTheBuildLokiPublishedPort(t *testing.T) {
 	for _, env := range []string{"dev-public", "standalone-public", "standalone-multi"} {
 		t.Run(env, func(t *testing.T) {
-			values := helmfileValues(t, "cell.helmfile.yaml.gotmpl", env, "promtail", "LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0")
+			values := helmfileValues(t, "cell.helmfile.yaml.gotmpl", env, "promtail", "LOOPRUNTIME_CELL_CONTEXT=k3d-loopruntime-cell-0")
 			const want = "http://host.k3d.internal:30120/loki/api/v1/push" // crossCluster.lokiNodePort
 			if got := dig(values, "config", "clients", 0, "url"); got != want {
 				t.Errorf("cell Promtail pushes to %v, want the build Loki's published port %q", got, want)
@@ -244,24 +244,24 @@ func TestK3dCellPromtailPushesToTheBuildLokiPublishedPort(t *testing.T) {
 	}
 }
 
-// Replaces the `broker` seed's `helm upgrade --install loopzero-broker` on the cell,
+// Replaces the `broker` seed's `helm upgrade --install loopruntime-broker` on the cell,
 // which Helmfile never saw.
 func TestDevPublicCellInstallsTheSecretFetchBroker(t *testing.T) {
-	for cell, ctx := range map[string]string{"cell-0": "k3d-loopzero-cell-0", "cell-1": "k3d-loopzero-cell-1"} {
+	for cell, ctx := range map[string]string{"cell-0": "k3d-loopruntime-cell-0", "cell-1": "k3d-loopruntime-cell-1"} {
 		t.Run(cell, func(t *testing.T) {
-			rendered := helmfileTemplate(t, "cell.helmfile.yaml.gotmpl", "dev-public", "loopzero-broker",
-				"infra/helm/loopzero-external-secrets", "LOOPZERO_CELL_CONTEXT="+ctx)
+			rendered := helmfileTemplate(t, "cell.helmfile.yaml.gotmpl", "dev-public", "loopruntime-broker",
+				"infra/helm/loopruntime-external-secrets", "LOOPRUNTIME_CELL_CONTEXT="+ctx)
 
-			store := renderedObject(t, rendered, "ClusterSecretStore", "loopzero-broker")
+			store := renderedObject(t, rendered, "ClusterSecretStore", "loopruntime-broker")
 			if store == nil {
-				t.Fatal("no ClusterSecretStore loopzero-broker in the cell render")
+				t.Fatal("no ClusterSecretStore loopruntime-broker in the cell render")
 			}
 			url, _ := dig(store, "spec", "provider", "webhook", "url").(string)
 			if !strings.HasPrefix(url, coreAPIFromCell+"/") {
 				t.Errorf("broker url = %q, want it under %q", url, coreAPIFromCell)
 			}
 			if got := dig(store, "spec", "provider", "webhook", "headers", "X-Cell-ID"); got != cell {
-				t.Errorf("the broker on %s sends X-Cell-ID %v — loopzero-api binds a secret fetch to the cell that asked", cell, got)
+				t.Errorf("the broker on %s sends X-Cell-ID %v — loopruntime-api binds a secret fetch to the cell that asked", cell, got)
 			}
 			if es := renderedObjectsOfKind(t, rendered, "ExternalSecret"); len(es) != 0 {
 				t.Errorf("the cell broker release renders %d platform ExternalSecrets; they belong to the core and "+
@@ -277,8 +277,8 @@ func TestDevPublicCellInstallsTheSecretFetchBroker(t *testing.T) {
 func TestSecretFetchBrokerIsNotRenderedOutsideDevPublic(t *testing.T) {
 	for _, env := range []string{"standalone-multi", "standalone-public"} {
 		t.Run(env, func(t *testing.T) {
-			rendered := helmfileTemplate(t, "cell.helmfile.yaml.gotmpl", env, "loopzero-broker",
-				"infra/helm/loopzero-external-secrets", "LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0")
+			rendered := helmfileTemplate(t, "cell.helmfile.yaml.gotmpl", env, "loopruntime-broker",
+				"infra/helm/loopruntime-external-secrets", "LOOPRUNTIME_CELL_CONTEXT=k3d-loopruntime-cell-0")
 			if stores := renderedObjectsOfKind(t, rendered, "ClusterSecretStore"); len(stores) != 0 {
 				t.Errorf("%s renders the broker store; its chart forbids a plaintext bearer there", env)
 			}
@@ -292,8 +292,8 @@ func TestSecretFetchBrokerIsNotRenderedOutsideDevPublic(t *testing.T) {
 // template time, which is the mechanism infra/helm/ory-kratos documents.
 func TestDevPublicKratosDeclaresTheURLsThePatchSeedWrote(t *testing.T) {
 	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "dev-public", "ory-kratos",
-		append(helmfileCoreEnv, "LOOPZERO_GITHUB_CLIENT_ID=gh-id", "LOOPZERO_GOOGLE_CLIENT_ID=google-id",
-			"LOOPZERO_RESEND_API_KEY=re_render_test")...)
+		append(helmfileCoreEnv, "LOOPRUNTIME_GITHUB_CLIENT_ID=gh-id", "LOOPRUNTIME_GOOGLE_CLIENT_ID=google-id",
+			"LOOPRUNTIME_RESEND_API_KEY=re_render_test")...)
 	cfg := dig(values, "kratos", "config")
 
 	want := map[string]string{
@@ -366,9 +366,9 @@ func dottedPath(path string) []any {
 }
 
 // The seeds whose patches this file replaces must not come back under the same
-// names: the registry is the one place `loopzero-ops seed` looks them up.
+// names: the registry is the one place `loopruntime-ops seed` looks them up.
 func TestNoSeedEditsAnObjectHelmfileRenders(t *testing.T) {
-	registry := mustRead(t, filepath.Join(repoRoot(t), "cmd/loopzero-ops/seed_wave1.go"))
+	registry := mustRead(t, filepath.Join(repoRoot(t), "cmd/loopruntime-ops/seed_wave1.go"))
 	for _, ctor := range []string{
 		"NewVaultCrossClusterAddrSeed", "NewLokiCrossClusterSeed", "NewPatchKratosSeed", "NewHydraURLsSeed",
 	} {
@@ -382,10 +382,10 @@ func TestNoSeedEditsAnObjectHelmfileRenders(t *testing.T) {
 			t.Errorf("seed-post-cleanroom-all.sh still runs %q", step)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(repoRoot(t), "cmd/loopzero-ops/internal/seed/broker.go")); err == nil {
-		broker := mustRead(t, filepath.Join(repoRoot(t), "cmd/loopzero-ops/internal/seed/broker.go"))
+	if _, err := os.Stat(filepath.Join(repoRoot(t), "cmd/loopruntime-ops/internal/seed/broker.go")); err == nil {
+		broker := mustRead(t, filepath.Join(repoRoot(t), "cmd/loopruntime-ops/internal/seed/broker.go"))
 		if strings.Contains(broker, `"helm"`) {
-			t.Error("the broker seed still executes helm — the loopzero-broker release belongs to the cell helmfile")
+			t.Error("the broker seed still executes helm — the loopruntime-broker release belongs to the cell helmfile")
 		}
 	}
 }

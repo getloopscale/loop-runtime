@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statushttp_test
 
@@ -377,7 +377,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 	releases := &fakeStatusReleaseStore{}
 
 	t.Run("metrics_range_url is templated when grafanaBaseURL set", func(t *testing.T) {
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "https://grafana.loopzero.local")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "https://grafana.loopruntime.local")
 		req := newStatusRequest("sample", "production", true)
 		rec := httptest.NewRecorder()
 
@@ -392,7 +392,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 			t.Fatalf("decode response: %v", err)
 		}
 
-		want := "https://grafana.loopzero.local/d/loopzero-project?var-project=sample&var-env=production"
+		want := "https://grafana.loopruntime.local/d/loopruntime-project?var-project=sample&var-env=production"
 		if got, _ := resp["metrics_range_url"].(string); got != want {
 			t.Errorf("metrics_range_url mismatch: got %q, want %q", got, want)
 		}
@@ -466,7 +466,7 @@ func TestStatusRoute_MetricsRangeURLAndPromQueryKeys(t *testing.T) {
 		// Defense: the prom_query_keys list is canonical and independent of
 		// grafanaBaseURL — dashboard consumers need the list to render
 		// signal pills regardless of whether Grafana link is available.
-		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "https://grafana.loopzero.local")
+		handler := statushttp.NewStatusHandler(projects, builds, releases, "dev.getloopscale.com", "", "https://grafana.loopruntime.local")
 		req := newStatusRequest("sample", "production", true)
 		rec := httptest.NewRecorder()
 

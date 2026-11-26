@@ -23,14 +23,14 @@ metadata:
   name: buildkit-io-pressure
   namespace: chaos-mesh
   annotations:
-    loopzero.io/plan: active-execution-plan
-    loopzero.io/section: "3.B.3"
-    loopzero.io/hypothesis: "500ms I/O latency on BuildKit: builds slow but complete"
-    loopzero.io/dod-test: "TestChaos_BuildKitIOPressure"
-    loopzero.io/slo-query: |
+    runtime.getloopscale.com/plan: active-execution-plan
+    runtime.getloopscale.com/section: "3.B.3"
+    runtime.getloopscale.com/hypothesis: "500ms I/O latency on BuildKit: builds slow but complete"
+    runtime.getloopscale.com/dod-test: "TestChaos_BuildKitIOPressure"
+    runtime.getloopscale.com/slo-query: |
       # Build duration p99 stays under 10 min
       histogram_quantile(0.99,
-        sum by (le) (rate(loopzero_build_duration_seconds_bucket[5m]))
+        sum by (le) (rate(loopruntime_build_duration_seconds_bucket[5m]))
       ) < 600
 spec:
   action: latency
@@ -46,7 +46,7 @@ spec:
   delay: "500ms"
   percent: 100
   # Mount path matches BuildKit's default cache + workspace location.
-  # If loopzero-chaos-mesh values override this, update here in lockstep.
+  # If loopruntime-chaos-mesh values override this, update here in lockstep.
   volumePath: "/var/lib/buildkit"
   # IOChaos hooks via fuse-overlayfs at the daemon level; requires
   # privileged=true on chaos daemon (set in infra/helm/chaos-mesh/

@@ -19,26 +19,26 @@
 # documented gaps — to be opened post-merge of the current plan).
 
 # === HARD ORPHANS (master table runtime Y(prod) but chart contract surface missing) ===
-# These auth URLs ARE runtime CONFIG per the master table but loopzero-cloud/SECRETS.md
+# These auth URLs ARE runtime CONFIG per the master table but loopruntime-cloud/SECRETS.md
 # describes them only in prose ("Admin URLs are rendered by the chart from .Values.config.*").
 # They live in values.example.yaml (CONFIG plane via helm values), NOT in CONFIG.md/SECRETS.md
-# tables. The cleanest GREEN requires either (a) loopzero-cloud chart adding CONFIG.md with
-# these keys + the chart rendering them as a ConfigMap (matches loopzero-api pattern) OR (b)
+# tables. The cleanest GREEN requires either (a) loopruntime-cloud chart adding CONFIG.md with
+# these keys + the chart rendering them as a ConfigMap (matches loopruntime-api pattern) OR (b)
 # extending the guard to also read values.example.yaml. Both are out-of-scope for the
 # current cycle; tracked as follow-up.
-orphan|HYDRA_ADMIN_URL|loopzero-cloud SECRETS.md prose mentions; values.example.yaml carries it; follow-up: add CONFIG.md to loopzero-cloud
+orphan|HYDRA_ADMIN_URL|loopruntime-cloud SECRETS.md prose mentions; values.example.yaml carries it; follow-up: add CONFIG.md to loopruntime-cloud
 orphan|HYDRA_PUBLIC_URL|same as HYDRA_ADMIN_URL — chart values.config.* not yet in CONFIG.md
 orphan|KRATOS_ADMIN_URL|same family; chart-rendered defense-in-depth Secret, not in CONFIG.md table
 orphan|KRATOS_PUBLIC_URL|same family
-orphan|LOOPZERO_SERVICE_AUTH_ED25519_PRIVATE_KEY|loopzero-cloud generates via generate-secrets.sh; documented in setup-config-and-secrets.md; follow-up: add to loopzero-cloud SECRETS.md table (currently described in prose only)
+orphan|LOOPRUNTIME_SERVICE_AUTH_ED25519_PRIVATE_KEY|loopruntime-cloud generates via generate-secrets.sh; documented in setup-config-and-secrets.md; follow-up: add to loopruntime-cloud SECRETS.md table (currently described in prose only)
 
 # === PHANTOMS (chart contract surface HAS the row but master table runtime section missing) ===
 # These ARE runtime vars chart-side; the master table simply doesn't enumerate them under
 # the runtime sections (they're consumed in non-engine, non-cloud, non-operator paths).
 # Adding rows to the master table is the cleanest GREEN; tracked as follow-up.
-phantom|AWS_ACCESS_KEY_ID|loopzero-build-cwts/SECRETS.md row; MinIO/S3 build-time auth used at runtime by Argo Workflows clone step; follow-up: add to master table § build-cwts
+phantom|AWS_ACCESS_KEY_ID|loopruntime-build-cwts/SECRETS.md row; MinIO/S3 build-time auth used at runtime by Argo Workflows clone step; follow-up: add to master table § build-cwts
 phantom|AWS_SECRET_ACCESS_KEY|same as AWS_ACCESS_KEY_ID — build runtime SECRET
-phantom|VITE_API_URL|loopzero-dashboard/CONFIG.md row (camelCase viteApiUrl); runtime config injected into __config.js; follow-up: add to master table § dashboard
-phantom|LOOPZERO_DATA_PLANE_POLLER_ENABLED|loopzero-api/CONFIG.md row (moved from loopzero-app-operator 2026-09-25, docs/decisions.md) — readiness-poller feature flag, dashboard badge #128; follow-up: add to master table § loopzero-api
-phantom|LOOPZERO_DATA_PLANE_POLLER_PROMETHEUS_URL|same family — Prometheus base URL the api's readiness poller queries; follow-up: add to master table § loopzero-api
-phantom|LOOPZERO_DATA_PLANE_POLLER_INTERVAL|same family — readiness poller cadence, default 30s; follow-up: add to master table § loopzero-api
+phantom|VITE_API_URL|loopruntime-dashboard/CONFIG.md row (camelCase viteApiUrl); runtime config injected into __config.js; follow-up: add to master table § dashboard
+phantom|LOOPRUNTIME_DATA_PLANE_POLLER_ENABLED|loopruntime-api/CONFIG.md row (moved from loopruntime-app-operator 2026-09-25, docs/decisions.md) — readiness-poller feature flag, dashboard badge #128; follow-up: add to master table § loopruntime-api
+phantom|LOOPRUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL|same family — Prometheus base URL the api's readiness poller queries; follow-up: add to master table § loopruntime-api
+phantom|LOOPRUNTIME_DATA_PLANE_POLLER_INTERVAL|same family — readiness poller cadence, default 30s; follow-up: add to master table § loopruntime-api

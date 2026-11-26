@@ -15,19 +15,19 @@ image:
   # tag: defaults to chart appVersion (verified available on Docker Hub)
 
 auth:
-  username: loopzero
+  username: loopruntime
   # Password is NOT set here. The helmfile postgresql release sets
-  # auth.existingSecret=loopzero-db-credentials (minted by generate-secrets.sh
-  # pre-sync) so PG initializes the `loopzero` user with the SAME password
-  # kratos/hydra/loopzero-api read. An inline value here would diverge from that
-  # secret. Earlier this was "" expecting a never-wired $LOOPZERO_DB_PASSWORD
+  # auth.existingSecret=loopruntime-db-credentials (minted by generate-secrets.sh
+  # pre-sync) so PG initializes the `loopruntime` user with the SAME password
+  # kratos/hydra/loopruntime-api read. An inline value here would diverge from that
+  # secret. Earlier this was "" expecting a never-wired $LOOPRUNTIME_DB_PASSWORD
   # override → Bitnami auto-generated a random password → kratos SASL auth
   # failed (finding-2026-05-22-pg-password-divergence). See docs/operations.md.
   password: ""
-  database: loopzero
+  database: loopruntime
 
 # Create additional databases required by platform components.
-# The 'loopzero' database is created by auth.database above.
+# The 'loopruntime' database is created by auth.database above.
 #
 # B27 (CHG-2026-04-28-LAYERED-BOOTSTRAP) — Each stateful component gets
 # its own DB for blast radius isolation:
@@ -58,9 +58,9 @@ primary:
   initdb:
     scripts:
       create-platform-dbs.sql: |
-        CREATE DATABASE gitea OWNER loopzero;
-        CREATE DATABASE kratos OWNER loopzero;
-        CREATE DATABASE hydra OWNER loopzero;
+        CREATE DATABASE gitea OWNER loopruntime;
+        CREATE DATABASE kratos OWNER loopruntime;
+        CREATE DATABASE hydra OWNER loopruntime;
   # B2 (real-paas-cleanroom-dogfood-loop-plan iter 2, 2026-05-05) — disable
   # Bitnami's chart-owned PDB. The Tiltfile applies a PDB at
   # infra/helm/postgresql/templates/pdb.yaml with `minAvailable: 1`. Bitnami

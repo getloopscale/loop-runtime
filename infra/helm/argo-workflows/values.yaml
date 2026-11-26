@@ -1,12 +1,12 @@
 # Custom images used by CWT templates.
-# Override for local dev: task images:build pushes to k3d-loopzero-registry:5000.
-# Production: CI builds and pushes to registry.digitalocean.com/loopzero-system.
+# Override for local dev: task images:build pushes to k3d-loopruntime-registry:5000.
+# Production: CI builds and pushes to registry.digitalocean.com/loopruntime-system.
 images:
-  cloneRunner: "registry.digitalocean.com/loopzero-system/loopzero-clone-runner:v0.1.0"
+  cloneRunner: "registry.digitalocean.com/loopruntime-system/loopruntime-clone-runner:v0.1.0"
 
 # S3 bucket name for source bundles and build cache.
-# Must match SOURCE_BUCKET env var in loopzero-api and the bucket created by Pulumi.
-sourceBucket: "loopzero-builds"
+# Must match SOURCE_BUCKET env var in loopruntime-api and the bucket created by Pulumi.
+sourceBucket: "loopruntime-builds"
 
 controller:
   securityContext:
@@ -45,14 +45,14 @@ controller:
     path: /metrics
 
 # Workflow execution ServiceAccount and RBAC.
-# The WorkflowTemplate (loopzero-build-nodejs-v1) specifies serviceAccountName: loopzero-build-sa.
+# The WorkflowTemplate (loopruntime-build-nodejs-v1) specifies serviceAccountName: loopruntime-build-sa.
 # This SA is created by Helm with RBAC for workflow task results.
 # The controller creates pods using its own ClusterRole — the workflow SA just needs to exist
 # and have workflowtaskresults permissions so step pods can report back.
 workflow:
   serviceAccount:
     create: true
-    name: loopzero-build-sa
+    name: loopruntime-build-sa
   rbac:
     create: true
 

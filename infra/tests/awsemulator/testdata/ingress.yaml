@@ -3,7 +3,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: loopzero-api
+  name: loopruntime-api
   annotations:
     alb.ingress.kubernetes.io/scheme: internal
     alb.ingress.kubernetes.io/target-type: instance
@@ -17,5 +17,5 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: loopzero-api
+                name: loopruntime-api
                 port: {number: 3001}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -11,7 +11,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/db"
 
-	loopzeroerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
@@ -41,7 +41,7 @@ func TestBuildUpdateStatusIfCurrent_InvalidTransitionRejected_Hermetic(t *testin
 	if err == nil {
 		t.Fatal("invalid transition (SUCCEEDED + BuildStarted) must return an error, no DB call")
 	}
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(err, &te) || te.Code != "INVALID_TRANSITION" {
 		t.Errorf("want typed INVALID_TRANSITION, got %v", err)
 	}
@@ -86,9 +86,9 @@ func TestReleaseUpdateStatus_RejectsNilTx_Hermetic(t *testing.T) {
 // (2) REAL-PG-GATED — applies-when-match + superseded-no-op. Honest-skip without
 // a live PG (there is no hermetic PG tier; the operator live run proves it).
 func TestBuildUpdateStatusIfCurrent_Behavior_RealPG(t *testing.T) {
-	dbURL := os.Getenv("LOOPZERO_E2E_DATABASE_URL")
+	dbURL := os.Getenv("LOOPRUNTIME_E2E_DATABASE_URL")
 	if dbURL == "" {
-		t.Skip("operator HARD STOP: requires live PG (LOOPZERO_E2E_DATABASE_URL) — the CAS 0-rows/applies behavior is single-statement SQL; honest-skip in the hermetic tier per cleanroom-up-live-test-mandate")
+		t.Skip("operator HARD STOP: requires live PG (LOOPRUNTIME_E2E_DATABASE_URL) — the CAS 0-rows/applies behavior is single-statement SQL; honest-skip in the hermetic tier per cleanroom-up-live-test-mandate")
 	}
 	// Wired for the operator live-PG run: construct a real *PgxAdapter via
 	// NewPool, seed a QUEUED build, assert UpdateStatusIfCurrent(QUEUED,Started)

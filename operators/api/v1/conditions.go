@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
 // This file is the home of the CRD status-condition CONTRACT: the condition
-// type-name vocabulary every LoopZero CRD exposes in its `status.conditions`, plus
+// type-name vocabulary every LoopRuntime CRD exposes in its `status.conditions`, plus
 // the generic metav1 condition helpers. It lives in the `operators/api` module
 // (the versioned CRD contract artifact, M6) and imports only k8s.io/apimachinery
 // so the module remains a clean base (acyclic-graph gate enforces this).

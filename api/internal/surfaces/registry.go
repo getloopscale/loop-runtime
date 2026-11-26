@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package surfaces records which HTTP surfaces the router chose to register and
 // which it chose to skip, so that a surface which is off can be SEEN.

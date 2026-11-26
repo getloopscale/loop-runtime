@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
 # Plan 2026-05-16 T4.1 — Drill auto-destroy watchdog.
 #
 # Operator-run periodically (~every 6h while a drill stack is active; the GitHub
 # cron was removed 2026-05-23 — run via `task drill:watchdog` or the real CI).
-# Scans DO for resources tagged with `loopzero-drill-expires-
+# Scans DO for resources tagged with `loopruntime-drill-expires-
 # at-<ISO>`, parses the expiration, and destroys any stack whose
 # expires-at < now via:
 #   1. pulumi destroy --stack drill (best effort)
@@ -69,16 +69,16 @@ log() { printf '[drill-watchdog] %s\n' "$*" >&2; }
 
 log "Scanning DO for drill resources with expires-at tag..."
 
-# Find any DOKS cluster tagged loopzero-drill (drill-mgmt, drill-build,
-# drill-runtime, drill-runtime-2 all have loopzero-drill base tag).
-# Then extract expires-at tag (loopzero-drill-expires-at-<ISO>).
+# Find any DOKS cluster tagged loopruntime-drill (drill-mgmt, drill-build,
+# drill-runtime, drill-runtime-2 all have loopruntime-drill base tag).
+# Then extract expires-at tag (loopruntime-drill-expires-at-<ISO>).
 # A failing list is not an empty one: reporting "no drill clusters" after a
 # failed call would switch off the cost net exactly when it cannot see.
 if ! DOKS_LIST=$(doctl kubernetes cluster list --format ID,Name,Tag --no-header 2>&1); then
   log "ERROR: could not list Kubernetes clusters — drill cost state unknown: $DOKS_LIST"
   exit 4
 fi
-DRILL_DOKS=$(echo "$DOKS_LIST" | grep -E "loopzero-drill" || true)
+DRILL_DOKS=$(echo "$DOKS_LIST" | grep -E "loopruntime-drill" || true)
 
 if [[ -z "$DRILL_DOKS" ]]; then
   log "✓ No drill clusters found — watchdog has nothing to do"
@@ -89,7 +89,7 @@ NOW_EPOCH=$(date +%s)
 EXPIRED_FOUND=0
 
 # Parse tags to find expires-at. The tag format is:
-#   loopzero-drill-expires-at-YYYY-MM-DDTHH-MM-SS (sanitized ISO, no colons)
+#   loopruntime-drill-expires-at-YYYY-MM-DDTHH-MM-SS (sanitized ISO, no colons)
 # We extract this, convert back to ISO with colons, parse to epoch.
 log "Inspecting tags for expires-at..."
 
@@ -102,13 +102,13 @@ while IFS= read -r line; do
     log "ERROR: could not read the tags of $NAME ($ID): $TAGS"
     exit 4
   fi
-  EXPIRES_TAG=$(echo "$TAGS" | grep -oE "loopzero-drill-expires-at-[0-9-]+" | head -1 || true)
+  EXPIRES_TAG=$(echo "$TAGS" | grep -oE "loopruntime-drill-expires-at-[0-9-]+" | head -1 || true)
   if [[ -z "$EXPIRES_TAG" ]]; then
     log "  $NAME: no expires-at tag found — skipping (untracked)"
     continue
   fi
   # Extract ISO portion (strip prefix)
-  EXPIRES_ISO_SAFE=${EXPIRES_TAG#loopzero-drill-expires-at-}
+  EXPIRES_ISO_SAFE=${EXPIRES_TAG#loopruntime-drill-expires-at-}
   # Restore colons in time portion: YYYY-MM-DDTHH-MM-SS → YYYY-MM-DDTHH:MM:SS
   EXPIRES_ISO=$(echo "$EXPIRES_ISO_SAFE" | sed -E 's/T([0-9]{2})-([0-9]{2})-([0-9]{2})/T\1:\2:\3/')
   # Parse to epoch

@@ -58,35 +58,35 @@ sync_runtime() {
   return 0
 }
 
-# The Caddyfile's cell edge substitutes {$LOOPZERO_EDGE_ROUTE_TOKEN} when the config is
+# The Caddyfile's cell edge substitutes {$LOOPRUNTIME_EDGE_ROUTE_TOKEN} when the config is
 # adapted, i.e. by this shell's `caddy reload` / `caddy run`. Read it from the Secret
 # generate-secrets.sh keeps, unless the caller already exported it. Without it the
 # engine refuses the lookup and every app URL answers 401 — the dashboard and auth
 # hosts keep working, so this warns rather than aborting.
-# The dashboard the edge serves at app-dev. The Caddyfile reads LOOPZERO_DASHBOARD_DIST and falls
-# back to a sibling loopzero-cloud checkout's build, relative to wherever Caddy runs. On the
+# The dashboard the edge serves at app-dev. The Caddyfile reads LOOPRUNTIME_DASHBOARD_DIST and falls
+# back to a sibling loopruntime-cloud checkout's build, relative to wherever Caddy runs. On the
 # droplet that directory does not exist: a reload without the variable replaced the
 # dashboard's root with nothing, and every page answered 404 (2026-09-29). Resolve it to an
 # absolute path here and refuse to touch the live edge when it holds no build.
 #
-# The bundle's source of record is the loopzero-dashboard image pinned in
-# environments/dev-public.yaml (#462): with LOOPZERO_DASHBOARD_IMAGE set and no
-# LOOPZERO_DASHBOARD_DIST override, it is extracted once per tag into ~/.cache.
+# The bundle's source of record is the loopruntime-dashboard image pinned in
+# environments/dev-public.yaml (#462): with LOOPRUNTIME_DASHBOARD_IMAGE set and no
+# LOOPRUNTIME_DASHBOARD_DIST override, it is extracted once per tag into ~/.cache.
 resolve_dashboard() {
-  if [[ -z "${LOOPZERO_DASHBOARD_DIST:-}" && -n "${LOOPZERO_DASHBOARD_IMAGE:-}" ]]; then
-    LOOPZERO_DASHBOARD_DIST="$HOME/.cache/loopzero/dashboard/${LOOPZERO_DASHBOARD_IMAGE##*:}"
-    if [[ ! -f "$LOOPZERO_DASHBOARD_DIST/index.html" ]]; then
-      extract_dashboard "$LOOPZERO_DASHBOARD_IMAGE" "$LOOPZERO_DASHBOARD_DIST"
+  if [[ -z "${LOOPRUNTIME_DASHBOARD_DIST:-}" && -n "${LOOPRUNTIME_DASHBOARD_IMAGE:-}" ]]; then
+    LOOPRUNTIME_DASHBOARD_DIST="$HOME/.cache/loopruntime/dashboard/${LOOPRUNTIME_DASHBOARD_IMAGE##*:}"
+    if [[ ! -f "$LOOPRUNTIME_DASHBOARD_DIST/index.html" ]]; then
+      extract_dashboard "$LOOPRUNTIME_DASHBOARD_IMAGE" "$LOOPRUNTIME_DASHBOARD_DIST"
       [[ $DRY_RUN -eq 1 ]] && return
     fi
   fi
-  local dir="${LOOPZERO_DASHBOARD_DIST:-$REPO_ROOT/../loopzero-cloud/dashboard/dist}"
+  local dir="${LOOPRUNTIME_DASHBOARD_DIST:-$REPO_ROOT/../loopruntime-cloud/dashboard/dist}"
   if [[ ! -f "$dir/index.html" ]]; then
-    log "ERROR: no dashboard build at $dir (index.html missing). Set LOOPZERO_DASHBOARD_DIST to the built dashboard; the live edge was not touched."
+    log "ERROR: no dashboard build at $dir (index.html missing). Set LOOPRUNTIME_DASHBOARD_DIST to the built dashboard; the live edge was not touched."
     exit 1
   fi
-  LOOPZERO_DASHBOARD_DIST="$(cd "$dir" && pwd)"
-  export LOOPZERO_DASHBOARD_DIST
+  LOOPRUNTIME_DASHBOARD_DIST="$(cd "$dir" && pwd)"
+  export LOOPRUNTIME_DASHBOARD_DIST
 }
 
 # extract_dashboard copies the static bundle out of the pinned image. It runs a
@@ -94,37 +94,37 @@ resolve_dashboard() {
 # nodes already authenticate to the registry (ECR, through the kubelet credential
 # provider), and this host's docker does not. The pod is removed however the copy ends.
 extract_dashboard() {
-  local image="$1" dest="$2" ctx="${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}"
-  local pod="loopzero-dashboard-dist-$$"
+  local image="$1" dest="$2" ctx="${LOOPRUNTIME_CORE_CONTEXT:-k3d-loopruntime-core}"
+  local pod="loopruntime-dashboard-dist-$$"
   if [[ $DRY_RUN -eq 1 ]]; then
     log "would extract the dashboard from $image into $dest"
     return
   fi
   log "extracting the dashboard from $image into $dest"
-  kubectl --context "$ctx" -n loopzero-system run "$pod" --image="$image" --restart=Never \
+  kubectl --context "$ctx" -n loopruntime-system run "$pod" --image="$image" --restart=Never \
     --command -- sleep 300 >/dev/null
   # shellcheck disable=SC2064 # expand now: the trap must name this pod
-  trap "kubectl --context '$ctx' -n loopzero-system delete pod '$pod' --wait=false >/dev/null 2>&1 || true" EXIT
-  kubectl --context "$ctx" -n loopzero-system wait --for=condition=Ready "pod/$pod" --timeout=180s >/dev/null
+  trap "kubectl --context '$ctx' -n loopruntime-system delete pod '$pod' --wait=false >/dev/null 2>&1 || true" EXIT
+  kubectl --context "$ctx" -n loopruntime-system wait --for=condition=Ready "pod/$pod" --timeout=180s >/dev/null
   local tmp="$dest.partial"
   rm -rf -- "$tmp"
-  kubectl --context "$ctx" -n loopzero-system cp "$pod:/usr/share/nginx/html" "$tmp" >/dev/null
+  kubectl --context "$ctx" -n loopruntime-system cp "$pod:/usr/share/nginx/html" "$tmp" >/dev/null
   [[ -f "$tmp/index.html" ]] || { log "ERROR: $image holds no dashboard at /usr/share/nginx/html"; exit 1; }
   mkdir -p "$(dirname "$dest")"
   mv -- "$tmp" "$dest"
-  kubectl --context "$ctx" -n loopzero-system delete pod "$pod" --wait=false >/dev/null
+  kubectl --context "$ctx" -n loopruntime-system delete pod "$pod" --wait=false >/dev/null
   trap - EXIT
 }
 
 load_edge_route_token() {
-  if [[ -z "${LOOPZERO_EDGE_ROUTE_TOKEN:-}" ]] && command -v kubectl >/dev/null 2>&1; then
-    LOOPZERO_EDGE_ROUTE_TOKEN="$(kubectl --context "${LOOPZERO_CORE_CONTEXT:-k3d-loopzero-core}" -n loopzero-system \
-      get secret loopzero-edge-route-token -o 'jsonpath={.data.LOOPZERO_EDGE_ROUTE_TOKEN}' 2>/dev/null \
+  if [[ -z "${LOOPRUNTIME_EDGE_ROUTE_TOKEN:-}" ]] && command -v kubectl >/dev/null 2>&1; then
+    LOOPRUNTIME_EDGE_ROUTE_TOKEN="$(kubectl --context "${LOOPRUNTIME_CORE_CONTEXT:-k3d-loopruntime-core}" -n loopruntime-system \
+      get secret loopruntime-edge-route-token -o 'jsonpath={.data.LOOPRUNTIME_EDGE_ROUTE_TOKEN}' 2>/dev/null \
       | base64 -d 2>/dev/null || true)"
   fi
-  export LOOPZERO_EDGE_ROUTE_TOKEN="${LOOPZERO_EDGE_ROUTE_TOKEN:-}"
-  if [[ -z "$LOOPZERO_EDGE_ROUTE_TOKEN" ]]; then
-    log "WARN: LOOPZERO_EDGE_ROUTE_TOKEN unavailable (no loopzero-edge-route-token Secret); app URLs will answer 401"
+  export LOOPRUNTIME_EDGE_ROUTE_TOKEN="${LOOPRUNTIME_EDGE_ROUTE_TOKEN:-}"
+  if [[ -z "$LOOPRUNTIME_EDGE_ROUTE_TOKEN" ]]; then
+    log "WARN: LOOPRUNTIME_EDGE_ROUTE_TOKEN unavailable (no loopruntime-edge-route-token Secret); app URLs will answer 401"
   fi
 }
 
@@ -189,7 +189,7 @@ verify_certs() {
   )
   # tls_ok if openssl handshake succeeds (cert issued + chain valid).
   # 200 means the page is served. 404 fails: at app-dev it is the dashboard missing, the
-  # outage resolve_dashboard now prevents. 502 is logged and tolerated — loopzero-cloud may
+  # outage resolve_dashboard now prevents. 502 is logged and tolerated — loopruntime-cloud may
   # not be deployed yet on a cold install.
   local all_tls_ok=1
   for h in "${hosts[@]}"; do
@@ -202,7 +202,7 @@ verify_certs() {
       case "$code" in
         200) log "  $h -> HTTP $code (TLS LE OK, upstream UP)" ;;
         404) log "  $h -> HTTP 404 (TLS LE OK, but nothing serves the page) FAIL"; all_tls_ok=0 ;;
-        502) log "  $h -> HTTP 502 (TLS LE OK, upstream DOWN — expected if loopzero-cloud absent)" ;;
+        502) log "  $h -> HTTP 502 (TLS LE OK, upstream DOWN — expected if loopruntime-cloud absent)" ;;
         *) log "  $h -> HTTP $code (TLS LE OK, upstream status: $code)" ;;
       esac
     else

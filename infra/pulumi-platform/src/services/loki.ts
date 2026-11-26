@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
@@ -31,7 +31,7 @@ export class Loki extends pulumi.ComponentResource {
   public readonly lokiEndpoint: pulumi.Output<string>;
 
   constructor(name: string, args: LokiArgs, opts?: pulumi.ComponentResourceOptions) {
-    super("loopzero:platform:Loki", name, {}, opts);
+    super("loopruntime:platform:Loki", name, {}, opts);
 
     const monitoringNs = new k8s.core.v1.Namespace(
       `${name}-monitoring`,
@@ -40,7 +40,7 @@ export class Loki extends pulumi.ComponentResource {
           name: args.namespace,
           labels: {
             "app.kubernetes.io/managed-by": "pulumi",
-            "app.kubernetes.io/part-of": "loopzero-platform",
+            "app.kubernetes.io/part-of": "loopruntime-platform",
             // Loki/Promtail need hostPath for log collection — privileged required.
             "pod-security.kubernetes.io/enforce": "privileged",
             "pod-security.kubernetes.io/warn": "restricted",

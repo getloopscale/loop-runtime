@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package load
 
@@ -176,8 +176,8 @@ func TestDeploySimulatorFollowsTheAPIBuildContract(t *testing.T) {
 
 func TestUploadSourceSendsTheBundleAndReturnsTheCommit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/source/upload" || r.Header.Get("X-LoopZero-Tenant") != "tn-1" {
-			t.Errorf("unexpected %s tenant=%q", r.URL.Path, r.Header.Get("X-LoopZero-Tenant"))
+		if r.URL.Path != "/api/v1/source/upload" || r.Header.Get("X-LoopRuntime-Tenant") != "tn-1" {
+			t.Errorf("unexpected %s tenant=%q", r.URL.Path, r.Header.Get("X-LoopRuntime-Tenant"))
 		}
 		if err := r.ParseMultipartForm(1 << 20); err != nil {
 			t.Fatalf("parse form: %v", err)
@@ -187,8 +187,8 @@ func TestUploadSourceSendsTheBundleAndReturnsTheCommit(t *testing.T) {
 			t.Fatalf("bundle part: %v", err)
 		}
 		got, _ := io.ReadAll(f)
-		if string(got) != "BUNDLE" || r.FormValue("loopzero_yaml") == "" {
-			t.Errorf("bundle=%q manifest=%q", got, r.FormValue("loopzero_yaml"))
+		if string(got) != "BUNDLE" || r.FormValue("loopruntime_yaml") == "" {
+			t.Errorf("bundle=%q manifest=%q", got, r.FormValue("loopruntime_yaml"))
 		}
 		_, _ = io.WriteString(w, `{"commit_sha":"abc123"}`)
 	}))

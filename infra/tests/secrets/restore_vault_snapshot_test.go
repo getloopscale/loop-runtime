@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// restore-vault-snapshot.sh (Runbook P5 of plan 2026-06-02-loopzero-api-vault-integration)
+// restore-vault-snapshot.sh (Runbook P5 of plan 2026-06-02-loopruntime-api-vault-integration)
 // restores OpenBao from a raft snapshot in object storage. Restoring overwrites the
 // live state, so the invariant that matters most is the default: without --execute
 // the script must neither copy the snapshot into the pod nor run the restore.

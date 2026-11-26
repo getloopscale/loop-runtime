@@ -1,0 +1,91 @@
+# staging overlay for charts/loopruntime-api, layered on charts/loopruntime-api/values-bootstrap.yaml.
+#
+# Credentials arrive from Secrets Manager: loopruntime-db-credentials, loopruntime-api-internal,
+# loopruntime-service-auth and loopruntime-edge-route-token are ExternalSecrets of the
+# aws-secrets-manager release. The ServiceAccount carries the IRSA role infra-live creates
+# for it (`identity/core-loopruntime-api`, trusting loopruntime-system:loopruntime-api).
+global:
+  registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" }}
+
+image:
+  repository: loopruntime-api
+  tag: {{ required "platformImages.tags.loopruntime-api is not set" (index .Values.platformImages.tags "loopruntime-api") | quote }}
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: {{ printf "arn:aws:iam::%s:role/%s-core-loopruntime-api" .Values.aws.accountId .Values.aws.namePrefix | quote }}
+
+ingressRoute:
+  host: {{ printf "api.%s" .Values.domain | quote }}
+  # Public TLS terminates at the edge in front of the ALB (CloudFront and ACM in
+  # production, Caddy on staging), and the ALB does not validate the certificate Traefik
+  # presents, so the route asks cert-manager for none and Traefik serves its default one.
+  # The value is named after Cloudflare, the first edge that worked this way.
+  certIssuer: CFManaged
+
+config:
+  loopruntimeEnv: "production"
+  # Tenant secrets are encrypted by OpenBao's transit engine on the secrets cluster (ADR
+  # 2026-11-25 tenant secrets on OpenBao). The name resolves on core to the selector-less
+  # Service infra/staging/openbao.sh points at the secrets cluster's NodePort, so the
+  # certificate's name holds. The AppRole and the SPKI pin arrive through the Secrets
+  # values-bootstrap.yaml names (loopruntime-openbao-approle, openbao-spki-pin).
+  openbaoTransitEnabled: "true"
+  openbaoVaultAddr: "https://openbao.secrets-system.svc.cluster.local:8200"
+  # environments/staging.yaml tenantRegistry: builds push tenant images there.
+  registryUrl: {{ printf "%s/%s" .Values.tenantRegistry.host .Values.tenantRegistry.repositoryPrefix | quote }}
+  # The build cluster's Loki, through its internal ALB (monitoring/loki-internal), which
+  # the emulator serves at its endpoint with the ALB's DNSName in the path. `task
+  # staging:platform` exports the DNSName (infra/staging/monitoring-addresses.sh loki);
+  # before the build sync of a rebuild there is none and the chart's default stands.
+{{- with env "LOOPRUNTIME_LOKI_ALB_DNS_NAME" }}
+  lokiUrl: {{ printf "%s/_aws/elasticloadbalancing/%s" $.Values.emulator.endpoint . | quote }}
+{{- end }}
+  # Tenant apps are public under the wildcard Caddy and the app-router distribution serve (#68).
+  loopruntimePublicDomain: "apps.staging.getloopscale.com"
+  baseDomain: {{ .Values.domain | quote }}
+  # The CloudFront KeyValueStore the API publishes the host to cell routes of tenant apps
+  # to (infra-live edge/app-routes), exported by `task staging:platform:outputs` (#68).
+  edgeKvsArn: {{ requiredEnv "LOOPRUNTIME_EDGE_KVS_ARN" | quote }}
+  corsAllowedOrigin: {{ .Values.dashboardOrigin | quote }}
+  # Where a plan limit refusal sends the person: the console's billing page.
+  billingUpgradeUrl: {{ printf "%s/billing" (.Values.uiBaseUrl | trimSuffix "/") | quote }}
+  # Empty: with no static key and the IRSA role above, the API signs with the AWS
+  # credential chain and takes the S3 endpoint from AWS_ENDPOINT_URL (the emulator, which
+  # the EKS layer injects) or the region. The bucket is environments/staging.yaml
+  # sourceBucket, which the role is granted.
+  minioEndpoint: ""
+  loopruntimeCosignImage: "{{ .Values.platformImages.registry }}loopruntime-cosign-signer:{{ index .Values.platformImages.tags "loopruntime-cosign-signer" }}"
+  loopruntimeSyftImage: "{{ .Values.platformImages.registry }}loopruntime-syft-scanner:{{ index .Values.platformImages.tags "loopruntime-syft-scanner" }}"
+  # The issuer Hydra emits (values/staging/ory-hydra.yaml.gotmpl); its keys are fetched
+  # in-cluster.
+  jwtIssuer: {{ printf "%s/" (.Values.publicAuthUrl | trimSuffix "/") | quote }}
+  jwksUrl: "http://ory-hydra-public.loopruntime-auth.svc.cluster.local:4444/.well-known/jwks.json"
+  # The contexts of loopruntime-cluster-kubeconfigs, written by the bootstrap: core is the
+  # in-cluster one, build and cell-0 are scoped ServiceAccount kubeconfigs.
+  mgmtKubeContext: "in-cluster"
+  buildKubeContext: "build"
+  runtimeKubeContext: "cell-0"
+
+# The Status page's metrics and the readiness badges come from the core Prometheus,
+# which federates the build cluster and the cells (monitoring/prometheus-server). The
+# API queries it from core; LOOPRUNTIME_PROMETHEUS_ADDRESS stays empty because canary
+# analysis runs on the cells, where that name does not resolve (#102).
+dataPlanePoller:
+  enabled: true
+  prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local:80"
+
+# The internal ALB the cells' External Secrets call the secret-fetch broker through
+# (cell.helmfile release loopruntime-broker). It forwards /internal/v1/secret-fetch alone.
+# Staging only: an HTTP 80 listener, where production serves HTTPS 443 with an ACM
+# certificate (values/prod/loopruntime-api.yaml.gotmpl). The emulator's ALB has no socket a
+# pod can reach; the cells call it through the emulator's HTTPS endpoint
+# (`<emulator.endpoint>/_aws/elasticloadbalancing/<DNSName>`), whose certificate their
+# External Secrets verify, so the bearer token crosses the network inside TLS and only
+# the emulator's hop to the target on the same host is plain HTTP.
+secretFetchLoadBalancer:
+  enabled: {{ .Values.profile.secretFetchBroker }}
+  plaintextListener: true

@@ -137,7 +137,7 @@ type ListSecretsForResyncRow struct {
 // Used by the deploy-side resync hook: after envEnsurer ensures the
 // workload namespace exists, the builds handler iterates these rows and
 // (re)creates ExternalSecrets on the workload cluster so pods can mount
-// secrets that were `loopzero secret set` BEFORE the namespace existed.
+// secrets that were `loopruntime secret set` BEFORE the namespace existed.
 //
 // Returns the encrypted column — the wrapper decrypts via SEC-001 AES-GCM
 // before passing values to the K8s sync. Caller MUST be on the resync

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package processing provides PG-backed deduplication claims for the
 // extracted controller loops (roadmap 02). See claim_store.go for the

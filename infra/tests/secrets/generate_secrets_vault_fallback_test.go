@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -10,7 +10,7 @@ import (
 
 // generate-secrets.sh sources the standalone database password from OpenBao's
 // database engine when a session exists (T6.5 of plan 2026-06-02-openbao-adoption),
-// and otherwise falls back to loopzero-dev-password. A cleanroom has no OpenBao yet, so
+// and otherwise falls back to loopruntime-dev-password. A cleanroom has no OpenBao yet, so
 // the fallback is what `task setup` runs on; if a refactor drops it, setup waits
 // forever for a Vault that does not exist.
 
@@ -28,8 +28,8 @@ func TestGenerateSecretsTakesTheVaultPathOnlyWithASession(t *testing.T) {
 
 func TestGenerateSecretsFallsBackToTheDevPassword(t *testing.T) {
 	requireClauses(t, generateSecrets,
-		clause(`LOOPZERO_DB_PASSWORD="\$\{LOOPZERO_DB_PASSWORD:-loopzero-dev-password\}"`,
-			"the cold-bootstrap assignment is gone; the standalone database password is pinned to loopzero-dev-password across the local stack"),
+		clause(`LOOPRUNTIME_DB_PASSWORD="\$\{LOOPRUNTIME_DB_PASSWORD:-loopruntime-dev-password\}"`,
+			"the cold-bootstrap assignment is gone; the standalone database password is pinned to loopruntime-dev-password across the local stack"),
 	)
 }
 
@@ -37,8 +37,8 @@ func TestGenerateSecretsFallsBackToTheDevPassword(t *testing.T) {
 // before, it would set the password first and the Vault answer would never be read.
 func TestGenerateSecretsAppliesTheFallbackAfterTheVaultBlock(t *testing.T) {
 	src := readSource(t, generateSecrets)
-	vault := lineOf(src, "database/creds/loopzero-api")
-	fallback := lineOf(src, "LOOPZERO_DB_PASSWORD:-loopzero-dev-password")
+	vault := lineOf(src, "database/creds/loopruntime-api")
+	fallback := lineOf(src, "LOOPRUNTIME_DB_PASSWORD:-loopruntime-dev-password")
 	if vault == 0 || fallback == 0 {
 		t.Fatalf("could not locate the Vault block (line %d) or the fallback (line %d)", vault, fallback)
 	}

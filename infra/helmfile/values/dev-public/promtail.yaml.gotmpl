@@ -10,7 +10,7 @@
 # Per-env contract:
 #   - dev-public: Loki + Promtail co-located on build cluster monitoring ns
 #                 → in-cluster ClusterIP Service `loki.monitoring.svc:3100`
-#   - pipeline_stages canonical for J-17 ::loopzero:: marker filtering
+#   - pipeline_stages canonical for J-17 ::loopruntime:: marker filtering
 #
 # Validated by: infra/tests/helm/promtail-canonical-pipeline_test.sh (T3.3).
 
@@ -21,11 +21,11 @@ config:
       batchsize: 1048576
 
   snippets:
-    # J-17 ::loopzero:: marker pipeline_stages canonical per memory
+    # J-17 ::loopruntime:: marker pipeline_stages canonical per memory
     # j17-aprendizado-promtail-loki-pipeline-canonical-via-helmfile.
-    # loopzero-api emits ::loopzero:: phase=X step=Y level=Z msg=... via
-    # api/internal/argo/loopzero_log.go wrapper. LogQL consumers filter on
-    # loopzero_phase label to surface only curated milestones.
+    # loopruntime-api emits ::loopruntime:: phase=X step=Y level=Z msg=... via
+    # api/internal/argo/loopruntime_log.go wrapper. LogQL consumers filter on
+    # loopruntime_phase label to surface only curated milestones.
     pipeline_stages:
       - cri: {}
       - json:

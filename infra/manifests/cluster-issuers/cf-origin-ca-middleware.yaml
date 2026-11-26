@@ -17,9 +17,9 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: require-cloudflare-proxy
-  namespace: loopzero-system
+  namespace: loopruntime-system
   annotations:
-    loopzero.io/purpose: "Reject requests not proxied via Cloudflare — protects Origin CA endpoints"
+    runtime.getloopscale.com/purpose: "Reject requests not proxied via Cloudflare — protects Origin CA endpoints"
 spec:
   # Only allow requests that have CF-Connecting-IP header.
   # CF sets this on every proxied request; absence means direct access attempt.
@@ -27,7 +27,7 @@ spec:
     customRequestHeaders:
       # This is validation, not a header we want to forward.
       # Traefik will deny if the header is absent via the plugin chain.
-      X-LoopZero-CF-Required: "true"
+      X-LoopRuntime-CF-Required: "true"
   # Additionally: restrict by CF IP ranges (updated quarterly)
   # https://www.cloudflare.com/ips/
 ---
@@ -38,7 +38,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: cloudflare-ip-allowlist
-  namespace: loopzero-system
+  namespace: loopruntime-system
 spec:
   ipAllowList:
     sourceRange:
