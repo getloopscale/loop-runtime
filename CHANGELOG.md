@@ -111,6 +111,7 @@ to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Staging runs the CloudNativePG operator 1.31.0-rc1, installed from the manifest of its release (`infra/helm/cloudnative-pg`) instead of the upstream chart. `platform-postgres` resizes a running instance in place when its CPU or memory change, and with standbys takes the synchronous one from another zone (#177).
 - The platform's PostgreSQL (`platform-postgres`) refuses connections without TLS, checksums its pages, runs with requests equal to limits, and admits only the operator, the data-plane services and the metrics scraper through a NetworkPolicy. `platformPostgres.walStorage`, `cpu`, `memory` and `parameters` size it per environment. With more than one instance it spreads them over zones, makes commits wait for one standby and protects them with a PodDisruptionBudget (#175).
 - The `data-plane-service` chart takes `postgres.external.caSecret` and then connects with `sslmode=verify-full` against that CA. Its pods no longer take service links, and the database role's Secret carries `cnpg.io/reload` so a rotated password is applied at once (#175).
 - The 402 that `POST /api/v1/secrets/bulk` answers when a plan allows no more secrets says what to do about it and carries `upgrade_url`, like the 402 of the other routes: `Plan limit reached: Starter allows 50 secrets per environment, and this change would bring production to 51. Upgrade your plan to continue.` It read `plan "starter" allows 50 secrets per environment; "production" would reach 51`.
