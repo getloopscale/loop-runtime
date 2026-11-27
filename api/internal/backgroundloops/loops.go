@@ -206,6 +206,7 @@ func newDomainHealthChecker(cfg config.Config, d Deps, logger *slog.Logger) *dom
 		StaleDays:   7,
 	})
 	checker.WithDeployedApps(domains.ReleaseDeployedApps{Releases: d.ReleaseStore, Builds: d.BuildStore})
+	checker.WithCertificates(domains.EdgeCertificateProber{})
 	return checker
 }
 

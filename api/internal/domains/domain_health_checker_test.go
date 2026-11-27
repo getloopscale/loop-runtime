@@ -26,6 +26,12 @@ type fakeDomainHealthStore struct {
 	statusUpdated     map[string]string
 	transitions       []struct{ Domain, From, To string }
 	deletedDomains    []string
+	tls               map[string]recordedTLS
+}
+
+type recordedTLS struct {
+	status    string
+	expiresAt time.Time
 }
 
 func newFakeDomainHealthStore() *fakeDomainHealthStore {
@@ -73,6 +79,17 @@ func (f *fakeDomainHealthStore) UpdateStatus(_ context.Context, domain, status s
 func (f *fakeDomainHealthStore) TransitionStatus(_ context.Context, domain, expected, next string) error {
 	f.transitions = append(f.transitions, struct{ Domain, From, To string }{domain, expected, next})
 	f.statusUpdated[domain] = next
+	return nil
+}
+func (f *fakeDomainHealthStore) UpdateTLS(_ context.Context, domain, status string, expiresAt *time.Time) error {
+	if f.tls == nil {
+		f.tls = make(map[string]recordedTLS)
+	}
+	rec := recordedTLS{status: status}
+	if expiresAt != nil {
+		rec.expiresAt = *expiresAt
+	}
+	f.tls[domain] = rec
 	return nil
 }
 func (f *fakeDomainHealthStore) Delete(_ context.Context, domain string) error {
