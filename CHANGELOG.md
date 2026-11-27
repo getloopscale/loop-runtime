@@ -435,6 +435,7 @@ to [Semantic Versioning](https://semver.org/).
   `.squad/wiki/decisions/B-022-health-prober-disposition.md` (B-022)
 
 ### Fixed
+- `GET /api/v1/domains` answers `cname_target` for every domain and `verification` for one that waits for DNS, as the single read does. The dashboard reads both from the list, so it showed no DNS record to create. (#210)
 - `GET /api/v1/projects/{name}/metrics` reads one environment for `replicas_ready`, `rps`, `p95_latency` and `error_rate`: the one named by the `env` query parameter, or production when none is named. It summed every environment of the project, so 2 replicas in production and 2 in preview read as 4. A value of `env` that is not an environment name is refused with 400 (#196)
 - Custom domains: a domain whose app is no longer part of the environment's running release moves to `failed`, with a reason that names the app and says to add the domain to an app that is deployed. It stayed `active` and answered 404 after a deploy replaced the app, and the provisioner marked a domain `active` for an app the release did not have (#184).
 - Secrets: a secret named `PORT` is refused with `SECRET_NAME_RESERVED`, by `POST /api/v1/secrets` and per entry by the bulk upload. The platform sets `PORT` on the app's container from the port the app declares, so the secret was saved and never reached the app (#185).
