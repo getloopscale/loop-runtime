@@ -114,6 +114,7 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+- The TXT record that verifies a custom domain is named `_loopscale-verify.<domain>` and its value starts with `loopscale-verify=`. It was `_loop-runtime-verify`, the name of an internal component in the customer's DNS. A domain added before this change keeps its value and is looked up under the new name, so its TXT record has to be created again. (getloopscale/loop-console#633)
 - The commit status a deploy posts on the customer's repository has the context `loopscale/deploy`. It was `loop-runtime/deploy`. A branch protection that requires the old context must name the new one.
 - The engine is named loop-runtime everywhere, because LoopZero is the name of the agent framework. Platform components follow one pattern, `loop-{name}`, written with a hyphen wherever the syntax allows one. What an operator has to change:
   - Images, charts and the ops binary: `loopzero-api` is `loop-runtime-api`, and so on for every `loopzero-*` name.

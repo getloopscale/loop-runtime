@@ -382,7 +382,7 @@ func (h *DomainHealthChecker) checkTLSExpiry(ctx context.Context) {
 // verifyTXT checks DNS TXT records.
 // CODE-007 fix: distinguishes NXDOMAIN from transient DNS errors.
 func verifyTXT(ctx context.Context, domain, expectedToken string) (bool, error) {
-	txtName := "_loop-runtime-verify." + domain
+	txtName := VerificationTXTName(domain)
 	records, err := net.DefaultResolver.LookupTXT(ctx, txtName)
 	if err != nil {
 		// CODE-007 fix: NXDOMAIN is not an error — record just doesn't exist yet

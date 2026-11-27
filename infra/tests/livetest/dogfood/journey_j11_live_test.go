@@ -72,9 +72,9 @@ var _ = Describe("J-11 Domains", Label("live", "dogfood", "j11"), func() {
 			})
 			Expect(created["status"]).To(Equal("pending_verification"))
 			verification, _ := created["verification"].(map[string]any)
-			record := "_loop-runtime-verify." + domain
+			record := "_loopscale-verify." + domain
 			Expect(verification["txt_name"]).To(Equal(record))
-			Expect(verification["txt_value"]).To(HavePrefix("loop-runtime-verify="))
+			Expect(verification["txt_value"]).To(HavePrefix("loopscale-verify="))
 			Expect(created["cname_target"]).ToNot(BeEmpty())
 
 			verified := call(ctx, "POST", "/api/v1/domains/"+domain+"/verify", nil)

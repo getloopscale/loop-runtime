@@ -27,8 +27,8 @@ func TestDNSTXTVerifier_FindsThePublishedToken(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("got (%v, %v), want (true, nil)", ok, err)
 	}
-	if r.lastName != "_loop-runtime-verify.api.acme.com" {
-		t.Errorf("looked up %q, want _loop-runtime-verify.api.acme.com", r.lastName)
+	if r.lastName != "_loopscale-verify.api.acme.com" {
+		t.Errorf("looked up %q, want _loopscale-verify.api.acme.com", r.lastName)
 	}
 }
 
