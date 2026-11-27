@@ -12,6 +12,10 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-27
+
+The first tagged release. It holds every change recorded since 2026-09-11.
+
 ### Added
 - `loop-edge`: a chart and an image for the Caddy fleet that serves tenants' custom domains in production. The fleet obtains certificates on demand after asking the API about the host, shares them through a Redis or Valkey, and proxies each host to its cell. (getloopscale/infra-live#39)
 - `GET /projects/{name}/metrics` answers five more signals for an environment of a project: `cpu_usage` and `cpu_limit` in cores, `memory_usage` and `memory_limit` in bytes, and `restarts_1h`. Each is summed over the pods of the app. The cells record the series from cAdvisor and kube-state-metrics.
