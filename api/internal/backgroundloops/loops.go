@@ -190,6 +190,9 @@ func newDomainProvisioner(cfg config.Config, d Deps, logger *slog.Logger) *domai
 	// host, and must write the saved scale, not the build's. On the background
 	// pool: it renders for every tenant.
 	p.WithSavedScaling(scaling.StoredScaling{Configs: store.NewPostgresScalingStore(d.WorkerPool)})
+	// A deploy's manifest is in the GitOps repository before its release is the
+	// active one; the provisioner must not render the previous one over it.
+	p.WithLatestReleases(d.ReleaseStore)
 	if d.Sync != nil {
 		p.WithSync(d.Sync)
 	}
