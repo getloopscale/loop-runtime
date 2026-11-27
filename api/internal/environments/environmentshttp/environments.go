@@ -105,6 +105,18 @@ type EnvKPI struct {
 	LastDeploySha string // git commit SHA (full)
 }
 
+// EnvReadinessLookup reads the ready replicas the readiness poller recorded for
+// the environments of the given projects of a tenant.
+type EnvReadinessLookup interface {
+	ReadyReplicasPerEnv(ctx context.Context, tenantID string, projects []string) (map[EnvRef]EnvReadiness, error)
+}
+
+// EnvReadiness is one observation of an environment's ready replicas.
+type EnvReadiness struct {
+	Replicas int
+	At       string // RFC 3339, UTC
+}
+
 // PreviewSlotLookup reads preview slots for a tenant.
 //
 // 2026-06-07 per-project model (migration 000028): a tenant can have
@@ -166,6 +178,7 @@ type EnvironmentHandler struct {
 	projectStore EnvProjectLookup       // M2: cross-tenant project gate (EC-1)
 	relLookup    EnvActiveReleaseLookup // M2: EC-7 orphan-warning lookup
 	gitopsPaths  GitOpsPathPreparer     // optional: nil leaves the directory to the first release
+	readiness    EnvReadinessLookup     // optional: nil leaves replicas_ready out of List
 }
 
 // GitOpsPathPreparer writes the directory the Argo CD Application of an
@@ -201,6 +214,43 @@ func (h *EnvironmentHandler) WithProjectLookup(p EnvProjectLookup) *EnvironmentH
 func (h *EnvironmentHandler) WithActiveReleaseLookup(l EnvActiveReleaseLookup) *EnvironmentHandler {
 	h.relLookup = l
 	return h
+}
+
+// WithReadiness makes List answer the ready replicas of each environment.
+func (h *EnvironmentHandler) WithReadiness(l EnvReadinessLookup) *EnvironmentHandler {
+	h.readiness = l
+	return h
+}
+
+// addReadyReplicas fills replicas_ready from the poller's snapshot. Best
+// effort, like the other KPI fields: the list answers without it.
+func (h *EnvironmentHandler) addReadyReplicas(ctx context.Context, tenantID string, envs []EnvironmentEntry) {
+	if h.readiness == nil {
+		return
+	}
+	var projects []string
+	seen := map[string]bool{}
+	for _, e := range envs {
+		if e.Project != "" && !seen[e.Project] {
+			seen[e.Project] = true
+			projects = append(projects, e.Project)
+		}
+	}
+	if len(projects) == 0 {
+		return
+	}
+	observed, err := h.readiness.ReadyReplicasPerEnv(ctx, tenantID, projects)
+	if err != nil {
+		slog.Warn("environment ready replicas not read; replicas_ready omitted", "tenant_id", tenantID, "error", err.Error())
+		return
+	}
+	for i := range envs {
+		if o, ok := observed[EnvRef{Project: envs[i].Project, Name: envs[i].Name}]; ok {
+			replicas := o.Replicas
+			envs[i].ReplicasReady = &replicas
+			envs[i].ReplicasReadyAt = o.At
+		}
+	}
 }
 
 // WithKPILookup wires an optional KPI lookup so List enriches the response
@@ -341,6 +391,8 @@ func (h *EnvironmentHandler) List(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	h.addReadyReplicas(ctx, uc.TenantID, envs)
 
 	// 2026-06-07 per-project preview model (migration 000028).
 	// Response shape when slot lookup is wired:

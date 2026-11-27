@@ -12,6 +12,9 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `GET /api/v1/environments` answers `replicas_ready` and `replicas_ready_at` for each environment the readiness poller has observed: the ready replicas and when they were read. The dashboard's Environments table had a cell for them and nothing to show. (getloopscale/loop-console#637)
+
 ## [0.1.0] - 2026-11-27
 
 The first tagged release. It holds every change recorded since 2026-09-11.

@@ -25,6 +25,10 @@ type EnvironmentEntry struct {
 	// means "no release ACTIVE yet"; dashboard renders honest "—".
 	LastDeploy    string `json:"last_deploy,omitempty"`     // ISO-8601 timestamp of latest ACTIVE release in env
 	LastDeploySha string `json:"last_deploy_sha,omitempty"` // git commit SHA (full)
+	// The ready replicas the readiness poller last observed, and when. Absent
+	// for an environment it never observed; a pointer, so that zero is answered.
+	ReplicasReady   *int   `json:"replicas_ready,omitempty"`
+	ReplicasReadyAt string `json:"replicas_ready_at,omitempty"` // RFC 3339, UTC
 }
 
 // EnvironmentDetail is the detailed representation of an environment.
