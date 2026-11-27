@@ -167,6 +167,7 @@ func newEnvironmentHandler(w serverWiring) *environmentshttp.EnvironmentHandler 
 	h := environmentshttp.NewEnvironmentHandler(w.k8sDeps.TenantCRMgr)
 	if w.dbAdapter != nil {
 		h = h.WithKPILookup(&environmentsadapter.EnvKPILookup{DB: w.dbAdapter})
+		h = h.WithReadiness(&environmentsadapter.EnvReadinessLookup{DB: w.dbAdapter})
 	}
 	if w.stores != nil {
 		h = h.WithPreviewSlotLookup(&environmentsadapter.PreviewSlotLookup{Store: w.stores.PreviewSlotStore})
