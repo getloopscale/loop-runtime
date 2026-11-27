@@ -385,11 +385,14 @@ jobs:
           helmfile --version
           helm version --short
 
-      - name: Test the charts and the infra unit tests
+      # The dogfood package holds the staging journeys. Without the `live` tag only its
+      # offline tests run: they check the probe app the journeys embed and the client
+      # they drive, so a broken fixture fails here and not on the staging host.
+      - name: Test the charts, the infra unit tests and the journeys' offline tests
         run: |
           set -euo pipefail
           cd loop-runtime/infra/tests
-          go test ./charts/ ./unit/ -count=1
+          go test ./charts/ ./unit/ ./livetest/dogfood/ -count=1
 
   # ---------------------------------------------------------------------------
   # Tenant isolation — the gate that did not exist.
