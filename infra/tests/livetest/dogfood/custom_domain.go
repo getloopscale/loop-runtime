@@ -25,7 +25,7 @@ import (
 // platform's zone, which the journey can write: the value changes with every run, and the
 // customer's zone stays as it is.
 const (
-	// CustomDomainEnv names the domain the journey attaches. Unset, the step is skipped.
+	// CustomDomainEnv names the domain the journey attaches. Unset, the step fails.
 	CustomDomainEnv = "LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN"
 	// VerifyZoneEnv names the zone that holds the record the verification name points to.
 	VerifyZoneEnv = "LOOP_RUNTIME_DOGFOOD_VERIFY_ZONE"

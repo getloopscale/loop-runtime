@@ -322,9 +322,7 @@ var _ = Describe("App lifecycle", Ordered, Label("live", "dogfood", "app-lifecyc
 
 	It("step 7: serves the app on a custom domain over HTTPS and stops when it is removed", func() {
 		setup, ok := CustomDomainFromEnv()
-		if !ok {
-			Skip("no custom domain is configured for this environment (" + CustomDomainEnv + ")")
-		}
+		Expect(ok).To(BeTrue(), "step 7: "+CustomDomainEnv+" names no domain; infra/staging/validate.sh sets it")
 		Expect(target.Name).ToNot(BeEmpty(), "step 7 needs the project of step 1")
 		domain := setup.Domain
 		// Certificates are checked against the system's authorities: a certificate the

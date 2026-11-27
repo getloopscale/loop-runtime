@@ -93,7 +93,7 @@ JOURNEYS="${VALIDATE_JOURNEYS:-j01 || j02 || j04 || j05 || j07 || j10 || j11 || 
 #   _loopscale-verify.<domain>  CNAME  $LOOP_RUNTIME_DOGFOOD_VERIFY_RECORD in the platform zone
 # The journey writes the TXT value of each run at that last name, with the token of the
 # platform zone's DNS API that the edge's wildcard certificate already uses.
-export LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN="${LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN-staging-validate.theokit.dev}"
+export LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN="${LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN:-staging-validate.theokit.dev}"
 export LOOP_RUNTIME_DOGFOOD_VERIFY_ZONE="${LOOP_RUNTIME_DOGFOOD_VERIFY_ZONE:-getloopscale.com}"
 export LOOP_RUNTIME_DOGFOOD_VERIFY_RECORD="${LOOP_RUNTIME_DOGFOOD_VERIFY_RECORD:-_loopscale-verify.staging-validate.staging}"
 export LOOP_RUNTIME_DOGFOOD_DNS_TOKEN_FILE="${LOOP_RUNTIME_DOGFOOD_DNS_TOKEN_FILE:-/etc/loop-runtime-edge/hostinger-api-token}"
