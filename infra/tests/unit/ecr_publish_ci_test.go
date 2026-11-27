@@ -116,6 +116,33 @@ func TestImagesJobPublishesToECRThroughOIDC(t *testing.T) {
 	}
 }
 
+// loop-edge is the Caddy that serves tenants' custom domains, built with the storage
+// module that lets a fleet share its certificates. It is published like the other images
+// and has no ECR repository yet (getloopscale/infra-live#39), so it is not in
+// engineImageDockerfiles.
+func TestReleaseMatrixBuildsTheCustomDomainEdge(t *testing.T) {
+	const image, dockerfile = "loop-edge", "infra/images/loop-edge/Dockerfile"
+	for _, img := range planMatrix(t, loadReleaseArtifactsPlan(t)) {
+		if img.Image != image {
+			continue
+		}
+		if img.Dockerfile != dockerfile {
+			t.Errorf("%s: %q builds from %q, want %q", releaseArtifactsWorkflow, image, img.Dockerfile, dockerfile)
+		}
+		data, err := os.ReadFile(filepath.Join(repoRoot(), dockerfile))
+		if err != nil {
+			t.Fatalf("%s: %v", dockerfile, err)
+		}
+		// Without the module, Caddy refuses the `storage redis` block the chart writes.
+		if !strings.Contains(string(data), "github.com/pberkel/caddy-storage-redis@") ||
+			!strings.Contains(string(data), "caddy.storage.redis") {
+			t.Errorf("%s does not build Caddy with the Redis storage module and check that it is there", dockerfile)
+		}
+		return
+	}
+	t.Errorf("%s: %q is not in the release matrix", releaseArtifactsWorkflow, image)
+}
+
 func buildPublishStep(t *testing.T, id string) workflowStep {
 	t.Helper()
 	for _, s := range loadWorkflow(t, buildPublishWorkflow).Jobs["build-publish"].Steps {
