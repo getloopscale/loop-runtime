@@ -40,6 +40,8 @@ type fakeDomainProvisionerStore struct {
 	deletedDomains    []string
 	cfZoneStatuses    map[string]string
 	activeByApp       map[string][]ports.CustomDomain
+	staleProvisioning []ports.CustomDomain
+	staleAge          time.Duration
 }
 
 func newFakeDomainProvisionerStore() *fakeDomainProvisionerStore {
@@ -56,6 +58,10 @@ func (f *fakeDomainProvisionerStore) FindAndClaimVerified(_ context.Context) ([]
 }
 func (f *fakeDomainProvisionerStore) FindRemoving(_ context.Context) ([]ports.CustomDomain, error) {
 	return f.removingDomains, nil
+}
+func (f *fakeDomainProvisionerStore) FindStaleProvisioning(_ context.Context, maxAge time.Duration) ([]ports.CustomDomain, error) {
+	f.staleAge = maxAge
+	return f.staleProvisioning, nil
 }
 func (f *fakeDomainProvisionerStore) ListActiveByApp(_ context.Context, tenant, project, app, env string) ([]ports.CustomDomain, error) {
 	key := tenant + "-" + project + "-" + app + "-" + env

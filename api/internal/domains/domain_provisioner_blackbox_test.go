@@ -60,6 +60,9 @@ func (f *fakeDomainProvisionerStore) FindAndClaimVerified(ctx context.Context) (
 func (f *fakeDomainProvisionerStore) FindRemoving(ctx context.Context) ([]ports.CustomDomain, error) {
 	return f.removing, nil
 }
+func (f *fakeDomainProvisionerStore) FindStaleProvisioning(context.Context, time.Duration) ([]ports.CustomDomain, error) {
+	return nil, nil
+}
 func (f *fakeDomainProvisionerStore) ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]ports.CustomDomain, error) {
 	if f.listActiveErr != nil {
 		return nil, f.listActiveErr
