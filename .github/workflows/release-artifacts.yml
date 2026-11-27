@@ -77,6 +77,7 @@ jobs:
             loop-runtime-clone-runner: ['infra/images/clone-runner/**']
             loop-runtime-syft-scanner: ['infra/images/syft-scanner/**']
             loop-runtime-cosign-signer: ['infra/images/cosign-signer/**']
+            loop-edge: ['infra/images/loop-edge/**']
             charts: ['charts/**']
       - id: set
         env:
@@ -85,7 +86,7 @@ jobs:
           CHANGES: ${{ steps.filter.outputs.changes }}
         run: |
           set -euo pipefail
-          ALL='[{"image":"loop-runtime-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loop-runtime-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loop-runtime-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loop-runtime-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loop-runtime-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."},{"image":"loop-runtime-minio","dockerfile":"infra/images/minio/Dockerfile","context":"infra/images/minio"},{"image":"loop-runtime-clone-runner","dockerfile":"infra/images/clone-runner/Dockerfile","context":"infra/images/clone-runner"},{"image":"loop-runtime-syft-scanner","dockerfile":"infra/images/syft-scanner/Dockerfile","context":"infra/images/syft-scanner"},{"image":"loop-runtime-cosign-signer","dockerfile":"infra/images/cosign-signer/Dockerfile","context":"infra/images/cosign-signer"}]'
+          ALL='[{"image":"loop-runtime-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loop-runtime-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loop-runtime-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loop-runtime-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loop-runtime-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."},{"image":"loop-runtime-minio","dockerfile":"infra/images/minio/Dockerfile","context":"infra/images/minio"},{"image":"loop-runtime-clone-runner","dockerfile":"infra/images/clone-runner/Dockerfile","context":"infra/images/clone-runner"},{"image":"loop-runtime-syft-scanner","dockerfile":"infra/images/syft-scanner/Dockerfile","context":"infra/images/syft-scanner"},{"image":"loop-runtime-cosign-signer","dockerfile":"infra/images/cosign-signer/Dockerfile","context":"infra/images/cosign-signer"},{"image":"loop-edge","dockerfile":"infra/images/loop-edge/Dockerfile","context":"infra/images/loop-edge"}]'
           # A grouped block instead of three `>>` (SC2129): one redirect opens the file
           # once. Beyond style, it avoids the class of bug where one of the redirects is
           # written `>` by mistake and truncates what the earlier ones wrote — in

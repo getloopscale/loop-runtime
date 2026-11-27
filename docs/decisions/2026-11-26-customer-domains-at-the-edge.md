@@ -44,6 +44,15 @@ by us, and nothing was created on AWS to test option C.
    `https://staging-app.theokit.dev/health` answered 200 with a Let's Encrypt certificate
    issued on demand, and an unregistered host was refused.
 
+5. On 2026-11-27 the maintainer settled where the fleet runs and what it shares. It runs as
+   pods on the core cluster behind a network load balancer Service, so it is deployed and
+   observed like the rest of the platform and reaches loop-runtime-api inside the cluster.
+   Its certificates live in the platform's Valkey through Caddy's Redis storage module,
+   which works outside AWS as well. The alternatives were instances of their own, a shared
+   EFS volume with stock Caddy, and an S3 storage module. None of the storage options was
+   measured by us; the choice rests on the modules' documentation. `charts/loop-edge` and
+   `infra/images/loop-edge` implement it.
+
 ## Consequences
 
 - A customer domain has no CDN and no WAF from CloudFront. If either becomes a product
@@ -55,8 +64,9 @@ by us, and nothing was created on AWS to test option C.
 - The loopback site that answers Caddy's question must name no host. `forward_auth` passes
   the viewer's Host along, and Caddy answers a Host no site names with an empty 200
   (getloopscale/loop-runtime#177).
-- Production's fleet is not built yet. Its Terraform, the load balancer and the shared
-  storage are work that follows this record.
+- Production's fleet is not applied yet: production has no environment to apply it to
+  (getloopscale/infra-live#39). The chart and the image exist, and the image is a custom
+  Caddy build that is ours to rebuild when Caddy or the storage module releases a fix.
 
 ## Related
 

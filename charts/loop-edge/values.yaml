@@ -1,0 +1,105 @@
+# loop-edge: the Caddy fleet in front of tenants' custom domains.
+#
+# A customer points a CNAME at the fleet's load balancer. At the first request for the
+# host, Caddy asks loop-runtime-api whether it is an active custom domain, obtains a
+# certificate for it, and from then on proxies the host to the cell that serves it.
+# Platform names (the console, the API, *.apps) are served elsewhere and never get a
+# certificate here.
+
+replicaCount: 2
+
+image:
+  # The registry the platform images are pulled from, without a trailing slash.
+  registry: ""
+  repository: loop-edge
+  # Required: the tag CI published. The chart has no default, so a release never runs an
+  # image nobody chose.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Required. Names equal to or under these domains are refused before a certificate is
+# asked for: the route lookup also knows the platform's own hosts, and a name of the
+# platform that reaches this fleet is not public.
+platformDomains: []
+
+acme:
+  # acme: certificates from the ACME authority below. internal: from Caddy's own
+  # authority, which no browser trusts; for an environment with no public address.
+  issuer: acme
+  # Required with issuer acme: the contact of the ACME account.
+  email: ""
+  # The ACME directory. Empty is Let's Encrypt's production directory.
+  directory: ""
+
+routeLookup:
+  # loop-runtime-api, reached inside the cluster.
+  url: http://loop-runtime-api.loop-runtime-system.svc.cluster.local:3001
+  # The Secret with the bearer the API expects on /internal/edge/route.
+  tokenSecret:
+    name: loop-runtime-edge-route-token
+    key: LOOP_RUNTIME_EDGE_ROUTE_TOKEN
+
+# Where the fleet keeps certificates, ACME accounts and the locks that stop two pods from
+# asking for the same certificate: a Redis or Valkey every pod reaches.
+storage:
+  # Required.
+  host: ""
+  port: 6379
+  tls: true
+  keyPrefix: loop-edge
+  # The Secret with the server's password or AUTH token. Empty name: no password.
+  passwordSecret:
+    name: ""
+    key: ""
+  # A Secret with a 32 character key that encrypts what is stored. Empty name: stored as
+  # the server keeps it.
+  encryptionKeySecret:
+    name: ""
+    key: ""
+
+# Required: each cell and the host its load balancer answers for.
+#   cells:
+#     cell-0: origin-cell-0.example.com
+cells: {}
+
+upstream:
+  # Empty: each request is sent to its cell's origin on port 443. Set to one address to
+  # send every cell's requests there, for an emulator that serves every load balancer at
+  # one endpoint and tells them apart by Host.
+  address: ""
+  # viewer: the cell receives the host the visitor asked for.
+  # origin: the cell's origin goes in Host and the visitor's host in X-Forwarded-Host.
+  hostHeader: viewer
+  tls:
+    enabled: true
+    # The name the upstream's certificate is checked against. Empty: the cell's origin.
+    serverName: ""
+    # A ConfigMap with the authority that signs the upstream's certificate. Empty name:
+    # the system's authorities.
+    caConfigMap:
+      name: ""
+      key: ""
+
+service:
+  type: LoadBalancer
+  # The defaults ask the AWS Load Balancer Controller for an internet-facing network load
+  # balancer that sends traffic to the pods.
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+  httpPort: 80
+  httpsPort: 443
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
