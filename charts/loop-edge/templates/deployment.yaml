@@ -112,6 +112,11 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.storage.caConfigMap.name }}
+            - name: storage-ca
+              mountPath: /etc/loop-edge/storage-ca
+              readOnly: true
+            {{- end }}
             {{- if .Values.upstream.tls.caConfigMap.name }}
             - name: upstream-ca
               mountPath: /etc/loop-edge/upstream-ca
@@ -123,6 +128,11 @@ spec:
             name: {{ .Release.Name }}
         - name: tmp
           emptyDir: {}
+        {{- if .Values.storage.caConfigMap.name }}
+        - name: storage-ca
+          configMap:
+            name: {{ .Values.storage.caConfigMap.name }}
+        {{- end }}
         {{- if .Values.upstream.tls.caConfigMap.name }}
         - name: upstream-ca
           configMap:

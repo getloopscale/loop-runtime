@@ -138,6 +138,13 @@ func TestReleaseMatrixBuildsTheCustomDomainEdge(t *testing.T) {
 			!strings.Contains(string(data), "caddy.storage.redis") {
 			t.Errorf("%s does not build Caddy with the Redis storage module and check that it is there", dockerfile)
 		}
+		// The chart runs the container with no capability and no privilege escalation. The
+		// Caddy builder image makes xcaddy give the binary a file capability, and the
+		// kernel then refuses to start it: "exec /usr/bin/caddy: operation not permitted"
+		// (measured on staging, 2026-11-27).
+		if !strings.Contains(string(data), "XCADDY_SETCAP=0") {
+			t.Errorf("%s lets xcaddy set a file capability on the binary, which a pod without privileges cannot run", dockerfile)
+		}
 		return
 	}
 	t.Errorf("%s: %q is not in the release matrix", releaseArtifactsWorkflow, image)

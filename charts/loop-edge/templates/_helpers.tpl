@@ -47,6 +47,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 	log {
 		format json
 	}
+{{- if eq $issuer "internal" }}
+	skip_install_trust
+{{- end }}
 {{- if eq $issuer "acme" }}
 	email {{ required "acme.email is not set: the ACME account needs a contact" .Values.acme.email }}
 {{- with .Values.acme.directory }}
@@ -66,6 +69,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 		encryption_key "{$EDGE_STORAGE_ENCRYPTION_KEY}"
 {{- end }}
 		tls_enabled {{ .Values.storage.tls }}
+{{- if .Values.storage.caConfigMap.name }}
+		tls_server_certs_path /etc/loop-edge/storage-ca/{{ required "storage.caConfigMap.key is not set" .Values.storage.caConfigMap.key }}
+{{- end }}
 	}
 	# A certificate is obtained at the first request for a host. Caddy asks first: anyone
 	# may point a name at this fleet.

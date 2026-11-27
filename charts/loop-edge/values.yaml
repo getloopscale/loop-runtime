@@ -58,6 +58,11 @@ storage:
   encryptionKeySecret:
     name: ""
     key: ""
+  # A ConfigMap with the authority that signs the store's certificate. Empty name: the
+  # system's authorities.
+  caConfigMap:
+    name: ""
+    key: ""
 
 # Required: each cell and the host its load balancer answers for.
 #   cells:

@@ -20,12 +20,12 @@ image:
 platformDomains: ["platform.example", "apps.example"]
 acme:
   email: ops@platform.example
-storage:
-  host: cache.internal.example
-  passwordSecret: { name: edge-cache, key: token }
 cells:
   cell-0: origin-cell-0.platform.example
   cell-1: origin-cell-1.platform.example
+storage:
+  host: cache.internal.example
+  passwordSecret: { name: edge-cache, key: token }
 `
 
 func renderLoopEdge(t *testing.T, values string) []workloadDoc {
@@ -96,6 +96,23 @@ func TestLoopEdgeKeepsCertificatesInTheSharedStore(t *testing.T) {
 	)
 	if strings.Contains(deployment, "EDGE_STORAGE_ENCRYPTION_KEY") {
 		t.Error("the Deployment reads an encryption key no value names")
+	}
+}
+
+// A store whose certificate a private authority signs: Caddy trusts that authority for the
+// store alone, and the system's authorities stay as they are for ACME.
+func TestLoopEdgeTrustsAPrivateAuthorityForTheStore(t *testing.T) {
+	docs := renderLoopEdge(t, loopEdgeValues+`
+  caConfigMap: { name: private-ca, key: ca.pem }
+`)
+	wantAll(t, "the Caddyfile", loopEdgeDoc(t, docs, "ConfigMap"),
+		"tls_server_certs_path /etc/loop-edge/storage-ca/ca.pem")
+	wantAll(t, "the Deployment", loopEdgeDoc(t, docs, "Deployment"),
+		"mountPath: /etc/loop-edge/storage-ca", "name: private-ca")
+
+	plain := loopEdgeDoc(t, renderLoopEdge(t, loopEdgeValues), "ConfigMap")
+	if strings.Contains(plain, "tls_server_certs_path") {
+		t.Error("the Caddyfile names an authority file no value asked for")
 	}
 }
 
@@ -181,5 +198,7 @@ func TestLoopEdgeRefusesToRenderWithoutWhatItCannotGuess(t *testing.T) {
 func TestLoopEdgeCanIssueFromItsOwnAuthority(t *testing.T) {
 	values := strings.Replace(loopEdgeValues, "email: ops@platform.example", "issuer: internal", 1)
 	caddyfile := loopEdgeDoc(t, renderLoopEdge(t, values), "ConfigMap")
-	wantAll(t, "the Caddyfile", caddyfile, "issuer internal")
+	// Caddy otherwise tries to add its authority to the system's trust store at start, which
+	// a read-only container refuses with an error in the log.
+	wantAll(t, "the Caddyfile", caddyfile, "issuer internal", "skip_install_trust")
 }
