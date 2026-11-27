@@ -113,7 +113,7 @@ platformImages:
     # getloopscale/loop-console publishes these two (private on GHCR, pulled with
     # aws.imagePullSecret). Required while profile.loopRuntimeCloud is on.
     loop-console: "develop-8d41c35"
-    loop-console-dashboard: "develop-145b37e"
+    loop-console-dashboard: "develop-d1f4951"
     # getloopscale/looptrace publishes this one, public on GHCR.
     looptrace: "develop-e98ec23"
 
